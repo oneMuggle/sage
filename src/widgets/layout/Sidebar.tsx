@@ -64,7 +64,7 @@ const moreNavItems: NavItem[] = [
   { path: '/skills', label: '技能', icon: Sparkles },
   { path: '/agents', label: '智能体', labelKey: 'sidebar.nav.agents', icon: Bot },
   { path: '/orchestration', label: '编排', icon: Network },
-  { path: '/arena-accounts', label: 'Arena 账号', icon: UserCog },
+  { path: '/arena', label: 'Arena', icon: UserCog },
   { path: '/help', label: '帮助', icon: HelpCircle },
 ];
 const navItems = [...primaryNavItems, ...moreNavItems];
@@ -86,12 +86,14 @@ function readMoreOpen(): boolean {
  * 只登记"多数用户不需要"的入口。`/skills` 曾在此处，但技能页是 SKILL.md 体系的
  * 唯一 UI 入口，门控它会形成自锁——入口可见性依赖"已经用过入口"。
  *
- * `/arena-accounts` 同样面向 Arena 自动化高级用户，普通用户用不到：
+ * Arena 自动化（P5 起入口为 `/arena`，旧路径 `/arena-accounts` 重定向并入）
+ * 同样面向高级用户，普通用户用不到：
  * 默认隐藏，直接访问 URL 或在设置页开启 Arena 自动化开关后永久解锁。
  */
 const ADVANCED_FEATURE_BY_PATH: Record<string, string> = {
   '/orchestration': 'orchestration',
   '/office': 'office',
+  '/arena': 'arena-accounts',
   '/arena-accounts': 'arena-accounts',
 };
 

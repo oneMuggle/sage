@@ -2,3 +2,4 @@ export { Chat } from './Chat';
 export { Settings } from './settings';
 export { Memory } from './Memory';
 export { Welcome } from './Welcome';
+export { default as Arena } from './Arena';

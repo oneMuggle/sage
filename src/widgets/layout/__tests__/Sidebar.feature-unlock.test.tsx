@@ -51,7 +51,7 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     // 高级入口隐藏
     expect(screen.queryByText('编排')).not.toBeInTheDocument();
     expect(screen.queryByText('Office')).not.toBeInTheDocument();
-    expect(screen.queryByText('Arena 账号')).not.toBeInTheDocument();
+    expect(screen.queryByText('Arena')).not.toBeInTheDocument();
   });
 
   it('unlocks the entry for the currently visited advanced route', () => {
@@ -60,7 +60,7 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     expect(screen.getByText('编排')).toBeInTheDocument();
     // 未访问的高级入口仍然隐藏
     expect(screen.queryByText('Office')).not.toBeInTheDocument();
-    expect(screen.queryByText('Arena 账号')).not.toBeInTheDocument();
+    expect(screen.queryByText('Arena')).not.toBeInTheDocument();
     // 解锁状态已持久化
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toContain('orchestration');
@@ -71,7 +71,7 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     renderSidebarAt('/chat');
     expect(screen.getByText('编排')).toBeInTheDocument();
     expect(screen.queryByText('Office')).not.toBeInTheDocument();
-    expect(screen.queryByText('Arena 账号')).not.toBeInTheDocument();
+    expect(screen.queryByText('Arena')).not.toBeInTheDocument();
   });
 
   it('shows all advanced entries when all are unlocked', () => {
@@ -82,14 +82,24 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     renderSidebarAt('/chat');
     expect(screen.getByText('编排')).toBeInTheDocument();
     expect(screen.getByText('Office')).toBeInTheDocument();
-    expect(screen.getByText('Arena 账号')).toBeInTheDocument();
+    // P5：入口并入 /arena 三页签控制台，label 从「Arena 账号」改为「Arena」
+    expect(screen.getByText('Arena')).toBeInTheDocument();
   });
 
-  it('unlocks arena-accounts when visiting /arena-accounts directly', () => {
-    renderSidebarAt('/arena-accounts');
-    expect(screen.getByText('Arena 账号')).toBeInTheDocument();
+  it('unlocks arena entry when visiting /arena directly (legacy /arena-accounts too)', () => {
+    // P5：规范路径 /arena 直接解锁
+    renderSidebarAt('/arena');
+    expect(screen.getByText('Arena')).toBeInTheDocument();
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toContain('arena-accounts');
+
+    // 旧路径 /arena-accounts（重定向到 /arena）同样保留解锁语义
+    localStorage.clear();
+    renderSidebarAt('/arena-accounts');
+    const storedLegacy = JSON.parse(
+      localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string,
+    );
+    expect(storedLegacy).toContain('arena-accounts');
   });
 });
 

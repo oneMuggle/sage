@@ -1,10 +1,18 @@
 #!/usr/bin/env node
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
-import { join, extname } from 'path';
+import { join, extname, sep } from 'path';
 
 const policy = JSON.parse(readFileSync('architecture-policy.json', 'utf-8'));
 const maxFileLines = policy.global.maxFileLines;
+
+// Baseline keys always use POSIX separators (repo-standard); on Windows
+// join() yields backslash paths, so normalize before any baseline lookup —
+// otherwise every file looks "not in baseline" and the ratchet silently
+// stops working on Windows dev machines.
+function toPosix(p) {
+  return p.split(sep).join('/');
+}
 
 // Load baseline if it exists. The baseline maps file paths to their
 // baselined line counts. Files in the baseline are only flagged if they
@@ -42,7 +50,7 @@ function checkMaxFileLines() {
   const files = walkDir('.');
   for (const file of files) {
     const lines = countLines(file);
-    const baselinedCount = baseline[file];
+    const baselinedCount = baseline[toPosix(file)];
 
     if (baselinedCount !== undefined) {
       // File is in baseline: only flag if it has GROWN

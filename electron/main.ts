@@ -91,6 +91,7 @@ import { showStartupFailureDialog } from './showStartupFailureDialog';
 import { cleanupOlderThan } from './logRotate';
 import { registerLogIpc } from './ipc/logIpc';
 import { registerModelDownloadIpc } from './modelDownloadIpc';
+import { registerArenaTokenWindow } from './arenaTokenWindow';
 import { registerUpdateIpc } from './updateIpc';
 import { UpdateManager } from './updateManager';
 import { ProviderStore } from './update/providerStore';
@@ -278,6 +279,14 @@ app.commandLine.appendSwitch(
   'VizDisplayCompositor,Vulkan,UseSkiaRenderer,CalculateNativeWinOcclusion,UseChromeOSDirectVideoDecoder',
 );
 app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${V8_MAX_OLD_SPACE_SIZE_MB}`);
+app.commandLine.appendSwitch('force-webrtc-ip-handling-policy', 'disable_non_proxied_udp');
+// P3 (plan §5.9): arena token 窗口反节流 —— 隐藏窗口被 Chromium 判为后台/
+// 被遮挡时会节流定时器, grecaptcha 长时间不回调 (reference token_server.py
+// 实测必需)。CalculateNativeWinOcclusion 已并入上面的 disable-features
+// (appendSwitch 同名后写覆盖, 不能二次单独追加)。
+app.commandLine.appendSwitch('disable-background-timer-throttling');
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
 // Win7 旧版 Windows 进一步降级: 关闭 GPU 合成 + GPU sandbox + /dev/shm
 // (Chromium 在 Win7 上 /dev/shm 不存在会 fallback 到 tmp, 提前关掉减少日志噪音)
 if (isLegacyWindows()) {
@@ -1208,7 +1217,7 @@ async function registerIpcHandlers(): Promise<void> {
         headers?: Record<string, string>;
         body?: unknown;
         timeoutMs?: number;
-        responseType?: 'json' | 'arraybuffer';
+        responseType?: 'json' | 'arraybuffer' | 'text';
       },
     ) => {
       if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
@@ -1266,6 +1275,10 @@ async function registerIpcHandlers(): Promise<void> {
         // Support binary responses (e.g., media files) via responseType: 'arraybuffer'
         if (request.responseType === 'arraybuffer') {
           return response.arrayBuffer();
+        }
+        // 2026-09-19 P5: NDJSON 等文本端点（arena 任务事件回放）经 relay 原样返回
+        if (request.responseType === 'text') {
+          return response.text();
         }
         return response.json();
       } finally {
@@ -1750,6 +1763,21 @@ async function registerIpcHandlers(): Promise<void> {
     },
     getWindow: () => mainWindow,
   });
+
+  // P3 (plan §5.9): arena token 窗口 —— 隐藏 BrowserWindow 出 reCAPTCHA V3
+  // token 推给后端缓存; 窗口由后端 state 驱动 (needed / want_proxy / enabled)。
+  registerArenaTokenWindow({
+    register: (channel, handler) => {
+      ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+        if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+        if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+        return handler(evt, ...args);
+      });
+    },
+    getBackendUrl: () => BACKEND_URL,
+    getAuthToken: () => backendAuthToken ?? undefined,
+  });
+
   // Lazy-init UpdateManager inside registerIpcHandlers (after app.whenReady)
   // to avoid constructing managers before the app is ready.
   // Task 1.9: wire pluggable provider system (ProviderStore + Registry + IPC).

@@ -56,6 +56,39 @@ export interface ImportResult {
 }
 
 /**
+ * Arena token window status (P3, plan §5.9) — mirrors the controller's
+ * status() payload; `window.electronAPI.arenaToken.status()` resolves to it.
+ */
+export interface ArenaTokenStatus {
+  running: boolean;
+  ready: boolean;
+  count: number;
+  error: string;
+  exitIp: string;
+  ua: string;
+  uptimeMs: number;
+  proxyUrl: string;
+  lastPushAgeMs: number | null;
+}
+
+/**
+ * Shape of `window.electronAPI.arenaToken` — populated by the preload bridge.
+ * Backs the Arena DrawTab token-window status card (plan §5.9/§6.2, P3).
+ */
+export interface ArenaTokenElectronApiBridge {
+  /** Current token-window status (window may not be running). */
+  status: () => Promise<ArenaTokenStatus>;
+  /** Open the hidden window, wait for readiness, warmup-mint, start polling. */
+  start: () => Promise<void>;
+  /** Destroy the window and stop polling (idempotent). */
+  stop: () => Promise<void>;
+  /** ensure_alive semantics: reload the page when grecaptcha dropped. */
+  reload: () => Promise<boolean>;
+  /** Manual proxy override; null reverts to the system proxy. */
+  pickProxy: (proxyUrl: string | null) => Promise<void>;
+}
+
+/**
  * Shape of `window.electronAPI.skills` — populated by the preload bridge.
  * Three methods back the Skills page Rescan + Import buttons (PR-C).
  */
@@ -220,7 +253,7 @@ export interface BackendRequest {
   /** Optional bounded cancellation timeout for the main-process relay. */
   timeoutMs?: number;
   /** Optional response type for binary data (default: 'json'). */
-  responseType?: 'json' | 'arraybuffer';
+  responseType?: 'json' | 'arraybuffer' | 'text';
 }
 
 export interface ProviderConfigSummary {
@@ -339,6 +372,7 @@ export interface ElectronAPI {
   ): Promise<UnlistenFn>;
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
+  arenaToken: ArenaTokenElectronApiBridge;
   office: OfficeElectronApiBridge;
   media: MediaElectronApiBridge;
   journal: JournalElectronApiBridge;
