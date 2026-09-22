@@ -28,8 +28,8 @@ import { useSettings } from '../manage-settings/useSettings';
 
 import { selectSessionSlots, useChatStreamStore, type TaskBoardState } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
-import { isValidSourcesPayload } from './sourcesPayload';
 import { notifySession, shouldNotify } from './sessionNotify';
+import { isValidSourcesPayload } from './sourcesPayload';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
 /**
