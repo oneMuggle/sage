@@ -199,6 +199,7 @@ export const zh = {
   'settings.tab.memory': '记忆',
   'settings.tab.network': '网络',
   'settings.tab.mcp': 'MCP',
+  'settings.tab.zotero': '文献库',
   'settings.tab.runtime': '开发环境',
   'settings.tab.providers': '更新源',
   'settings.search.placeholder': '搜索设置…',
@@ -343,6 +344,31 @@ export const zh = {
   'settings.mcp.tools.error': '工具列表加载失败',
   'settings.mcp.tools.hint': '取消勾选即禁用该工具，勾选即重新启用。',
   'settings.mcp.tools.disabled_tag': '已禁用',
+
+  // ─── 设置页 · Zotero 文献库 ────────────────
+  'settings.zotero.title': 'Zotero 文献库',
+  'settings.zotero.desc':
+    '以只读方式访问本地 Zotero 文献库。LLM 工具可在对话中检索和引用你的文献。',
+  'settings.zotero.status.connected': '已连接',
+  'settings.zotero.status.disconnected': '未连接',
+  'settings.zotero.status.checking': '检测中…',
+  'settings.zotero.path.label': '数据库路径',
+  'settings.zotero.path.placeholder': '留空则自动检测 ~/Zotero/zotero.sqlite',
+  'settings.zotero.path.save': '保存路径',
+  'settings.zotero.path.saved': '路径已保存',
+  'settings.zotero.stats.items': '条目',
+  'settings.zotero.stats.collections': '分类',
+  'settings.zotero.stats.tags': '标签',
+  'settings.zotero.stats.attachments': '附件',
+  'settings.zotero.collections.title': '分类浏览',
+  'settings.zotero.collections.empty': '暂无分类',
+  'settings.zotero.search.placeholder': '搜索文献（标题/摘要/作者）…',
+  'settings.zotero.search.empty': '无匹配结果',
+  'settings.zotero.item.annotations': '批注',
+  'settings.zotero.item.no_annotations': '无批注',
+  'settings.zotero.error.unavailable':
+    '未找到 Zotero 数据库。请确认 Zotero 已安装，或在上方手动指定路径。',
+  'settings.zotero.error.generic': '连接失败',
 
   // ─── 设置页 · 更新 ────────────────
   'updates.strategy': '更新策略',

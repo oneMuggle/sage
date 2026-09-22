@@ -204,6 +204,7 @@ export const en: Record<TranslationKey, string> = {
   'settings.tab.memory': 'Memory',
   'settings.tab.network': 'Network',
   'settings.tab.mcp': 'MCP',
+  'settings.tab.zotero': 'Library',
   'settings.tab.runtime': 'Dev Environment',
   'settings.tab.providers': 'Update Sources',
   'settings.search.placeholder': 'Search settings…',
@@ -355,6 +356,31 @@ export const en: Record<TranslationKey, string> = {
   'settings.mcp.tools.error': 'Failed to load tool list',
   'settings.mcp.tools.hint': 'Uncheck a tool to disable it; check to re-enable.',
   'settings.mcp.tools.disabled_tag': 'Disabled',
+
+  // ─── Settings · Zotero Library ────────────────
+  'settings.zotero.title': 'Zotero Library',
+  'settings.zotero.desc':
+    'Access your local Zotero library in read-only mode. LLM tools can search and cite your references in conversation.',
+  'settings.zotero.status.connected': 'Connected',
+  'settings.zotero.status.disconnected': 'Not connected',
+  'settings.zotero.status.checking': 'Checking…',
+  'settings.zotero.path.label': 'Database path',
+  'settings.zotero.path.placeholder': 'Leave blank to auto-detect ~/Zotero/zotero.sqlite',
+  'settings.zotero.path.save': 'Save path',
+  'settings.zotero.path.saved': 'Path saved',
+  'settings.zotero.stats.items': 'Items',
+  'settings.zotero.stats.collections': 'Collections',
+  'settings.zotero.stats.tags': 'Tags',
+  'settings.zotero.stats.attachments': 'Attachments',
+  'settings.zotero.collections.title': 'Collections',
+  'settings.zotero.collections.empty': 'No collections',
+  'settings.zotero.search.placeholder': 'Search references (title / abstract / author)…',
+  'settings.zotero.search.empty': 'No matching results',
+  'settings.zotero.item.annotations': 'Annotations',
+  'settings.zotero.item.no_annotations': 'No annotations',
+  'settings.zotero.error.unavailable':
+    'Zotero database not found. Please install Zotero or specify the path manually above.',
+  'settings.zotero.error.generic': 'Connection failed',
 
   // ─── Settings · Updates ────────────────
   'updates.strategy': 'Update strategy',

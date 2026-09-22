@@ -32,6 +32,7 @@ import json
 import logging
 import os
 import re
+import sys
 import tempfile
 import threading
 from dataclasses import dataclass, field
@@ -64,6 +65,7 @@ SERVER_NAME_REGEX = re.compile(r"^[a-z0-9_-]{1,64}$")
 
 #: Built-in server name that cannot be deleted via the REST API.
 BUILTIN_DRAWIO = "drawio"
+BUILTIN_ZOTERO = "zotero"
 
 
 class McpConfigError(ValueError):
@@ -231,9 +233,15 @@ def builtin_server_configs() -> List[ServerConfig]:
 
     drawio: wired only when the bundled server entry point exists —
     preserves the pre-M3 "enabled if built" behavior.
+
+    zotero: wired only when the zotero MCP server module exists. Reads
+    the local Zotero SQLite database read-only (``?mode=ro``) so the
+    user's running Zotero app is unaffected. ``ZOTERO_DB_PATH`` env var
+    overrides the default path search (``~/Zotero``, ``%APPDATA%/Zotero/Zotero``).
     """
     root = _project_root()
     mcp_server_entry = root / "packages" / "drawio-mcp-server" / "dist" / "index.js"
+    zotero_server_entry = root / "backend" / "mcp" / "servers" / "zotero" / "__main__.py"
 
     servers: List[ServerConfig] = []
     if mcp_server_entry.exists():
@@ -249,6 +257,19 @@ def builtin_server_configs() -> List[ServerConfig]:
                 command="node",
                 args=(str(mcp_server_entry),),
                 env=env,
+            )
+        )
+    if zotero_server_entry.exists():
+        zotero_env: Dict[str, str] = {}
+        zotero_db_path = os.environ.get("ZOTERO_DB_PATH", "")
+        if zotero_db_path:
+            zotero_env["ZOTERO_DB_PATH"] = zotero_db_path
+        servers.append(
+            ServerConfig(
+                name=BUILTIN_ZOTERO,
+                command=sys.executable,
+                args=("-m", "backend.mcp.servers.zotero"),
+                env=zotero_env,
             )
         )
     return servers
