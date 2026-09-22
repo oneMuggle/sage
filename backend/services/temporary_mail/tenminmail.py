@@ -84,8 +84,17 @@ class TenMinMailProvider(TemporaryMailProvider):
         self._jwt_attempts = max(1, int(jwt_attempts))
         self._client: Optional[httpx.AsyncClient] = None
         self._jwt = ""
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
         self._domain_cursor = 0
+
+    def _ensure_lock(self) -> asyncio.Lock:
+        # py3.8 的 asyncio.Lock() 在构造期调用 get_event_loop()——注册 job 的
+        # worker 线程没有 loop 会直接 RuntimeError（3.10+ 才推迟到首 await 绑定）。
+        # 与 orchestration/_lazy_lock.LazyLock 同策略：构造期不建锁，首次
+        # async with 时再建（彼时必在运行中的 loop 里）。
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
 
     # -- http plumbing ----------------------------------------------------
 
@@ -134,7 +143,7 @@ class TenMinMailProvider(TemporaryMailProvider):
     async def _ensure_jwt(self) -> str:
         if self._jwt:
             return self._jwt
-        async with self._lock:
+        async with self._ensure_lock():
             if not self._jwt:
                 await self._refresh_jwt()
         return self._jwt
@@ -165,7 +174,7 @@ class TenMinMailProvider(TemporaryMailProvider):
         response = await client.get(url, headers=self._headers())
         if response.status_code == 401:
             # JWT expired (23 h lifetime) — refresh once and retry.
-            async with self._lock:
+            async with self._ensure_lock():
                 await self._refresh_jwt()
             response = await client.get(url, headers=self._headers())
         if response.status_code != 200:
