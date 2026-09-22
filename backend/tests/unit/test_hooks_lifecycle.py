@@ -24,7 +24,10 @@ from backend.hooks.runner import (
     run_event_hooks_sync,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(sys.platform == "win32", reason="hooks shell 引用在 Windows cmd.exe 下不兼容（产品缺口）"),
+]
 
 PY = sys.executable
 
