@@ -1,5 +1,7 @@
 """Zotero integration exceptions."""
 
+from __future__ import annotations
+
 
 class ZoteroError(Exception):
     """Base exception for all Zotero operations."""
