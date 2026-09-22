@@ -45,7 +45,9 @@ CODE_SEARCH_TOOLS = ("grep_search", "glob_search", "file_summary", "codebase_sea
 # 出网工具
 WEB_SEARCH_TOOLS = ("web_search",)
 WEB_FETCH_TOOLS = ("web_fetch", "http_download")
-WEB_TOOLS = WEB_SEARCH_TOOLS + WEB_FETCH_TOOLS
+# DL2 (Round 21): 后台下载任务查询/取消（与 http_download 同权限面）
+WEB_DL_JOBS_TOOLS = ("download_status", "download_cancel")
+WEB_TOOLS = WEB_SEARCH_TOOLS + WEB_FETCH_TOOLS + WEB_DL_JOBS_TOOLS
 
 MEMORY_TOOLS = ("memory_search", "memory_save")
 
