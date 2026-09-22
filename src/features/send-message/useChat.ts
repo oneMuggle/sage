@@ -1176,6 +1176,23 @@ export function useChat() {
             onEvent: (evt) => {
               if (evt.state === 'content_delta' && evt.content) {
                 useBtwState.getState().appendDelta(evt.content);
+              } else if (evt.state === 'sources_used' && evt.sources) {
+                // R92: /btw 走同一 /chat/stream 管道 —— sources_used 同样到达，
+                // 载荷校验对齐主路径 MEDIUM-2 口径后写入 btw 状态（浮层渲染）。
+                const sources = evt.sources;
+                const isValidSources =
+                  Array.isArray(sources) &&
+                  sources.every(
+                    (s) =>
+                      typeof s === 'object' &&
+                      s !== null &&
+                      ['web', 'wiki', 'tool', 'memory'].includes(
+                        (s as { kind?: unknown }).kind as string,
+                      ),
+                  );
+                if (isValidSources && sources.length > 0) {
+                  useBtwState.getState().setSources(sources);
+                }
               } else if (evt.state === 'done') {
                 if (evt.content) {
                   useBtwState.getState().appendDelta(evt.content);
