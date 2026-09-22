@@ -266,7 +266,9 @@ class ArenaAccountService:
             ).fetchone()
             if row is None:
                 return None
-            acc: Dict[str, Any] = dict(zip(_ACCOUNT_COLUMNS, row, strict=True))
+            # noqa 下行 B905：zip strict= 是 3.10+ 形参（py38 运行时 TypeError）；
+            # cols 即 _ACCOUNT_COLUMNS 的 SELECT 投影，长度恒等，strict 检查冗余
+            acc: Dict[str, Any] = dict(zip(_ACCOUNT_COLUMNS, row))  # noqa: B905
             acc.pop("password_enc")
             if include_secret:
                 acc["password"] = self._decrypt_password(row[2])
