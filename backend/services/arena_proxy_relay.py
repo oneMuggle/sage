@@ -32,6 +32,7 @@ must not gain heavyweight dependencies.
 from __future__ import annotations
 
 import base64
+import contextlib
 import logging
 import re
 import socket
@@ -48,7 +49,7 @@ class Relay:
     """One local listening port per upstream proxy URL (reused per upstream)."""
 
     def __init__(self, log=None):
-        self._log = log or (lambda msg: None)
+        self._log = log or (lambda _msg: None)
         self._lock = threading.Lock()
         self._ports: Dict[str, int] = {}    # upstream url -> local port
         self._servers: Dict[int, socket.socket] = {}  # local port -> listener
@@ -87,10 +88,8 @@ class Relay:
             self._servers.clear()
             self._ports.clear()
         for server in servers:
-            try:
+            with contextlib.suppress(OSError):
                 server.close()
-            except OSError:
-                pass
 
     # -- internals ----------------------------------------------------------
 
@@ -151,10 +150,8 @@ class Relay:
                 response += piece
             first = response.split(b"\r\n", 1)[0] if response else b""
             if b" 200" not in first:
-                try:
+                with contextlib.suppress(OSError):
                     client.sendall(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
-                except OSError:
-                    pass
                 client.close()
                 upstream_sock.close()
                 return
@@ -164,15 +161,11 @@ class Relay:
             self._pipe(client, upstream_sock)
         except OSError as exc:
             self._log(f"[relay] connection failed: {exc}")
-            try:
+            with contextlib.suppress(OSError):
                 client.close()
-            except OSError:
-                pass
             if upstream_sock is not None:
-                try:
+                with contextlib.suppress(OSError):
                     upstream_sock.close()
-                except OSError:
-                    pass
 
     @staticmethod
     def _pipe(a: socket.socket, b: socket.socket) -> None:
@@ -187,14 +180,10 @@ class Relay:
                 pass
             finally:
                 for sock in (src, dst):
-                    try:
+                    with contextlib.suppress(OSError):
                         sock.shutdown(socket.SHUT_RDWR)
-                    except OSError:
-                        pass
-                    try:
+                    with contextlib.suppress(OSError):
                         sock.close()
-                    except OSError:
-                        pass
 
         threading.Thread(target=forward, args=(a, b), daemon=True).start()
         forward(b, a)

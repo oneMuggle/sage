@@ -23,6 +23,7 @@ appendix C #1) instead of reimplementing.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import random
 import re
@@ -90,7 +91,7 @@ class ArenaProtocolError(RuntimeError):
     """Protocol-level failure (bad status, missing field, timeout)."""
 
 
-class ArenaRateLimited(ArenaProtocolError):
+class ArenaRateLimited(ArenaProtocolError):  # noqa: N818 — 领域短名（429 语义自明）
     """HTTP 429. ``cf`` marks a Cloudflare challenge (waiting is useless —
     the exit IP is burned); the P4 engine decides whether to switch IP."""
 
@@ -99,7 +100,7 @@ class ArenaRateLimited(ArenaProtocolError):
         self.cf = cf
 
 
-class ArenaCaptchaRejected(ArenaProtocolError):
+class ArenaCaptchaRejected(ArenaProtocolError):  # noqa: N818 — 领域短名（与 RateLimited 对仗）
     """Server rejected the reCAPTCHA token (body mentions recaptcha)."""
 
 
@@ -174,7 +175,7 @@ class ArenaRegisterClient:
         self.email = email
         self.password = password
         self.timeout = timeout
-        self.log = log or (lambda msg: None)
+        self.log = log or (lambda _msg: None)
         self.session = session or make_session(timeout=timeout)
 
     def _headers(self, referer: Optional[str] = None) -> Dict[str, str]:
@@ -309,7 +310,7 @@ async def register_one(
     proxied — 10minutemail blacklists datacenter IPs), arena goes through the
     per-account session.
     """
-    log = log or (lambda msg: None)
+    log = log or (lambda _msg: None)
     result = RegisterResult()
 
     def stopped() -> bool:
@@ -398,7 +399,7 @@ class ArenaDrawClient:
         self.email = email
         self.password = password
         self.timeout = timeout
-        self.log = log or (lambda msg: None)
+        self.log = log or (lambda _msg: None)
         self.logged = False
         self.session = session or make_session(timeout=timeout)
 
@@ -455,10 +456,8 @@ class ArenaDrawClient:
                 f"create-chat HTTP {response.status_code}: {response.text[:160]}"
             )
         sid = ""
-        try:
+        with contextlib.suppress(ValueError):
             sid = str(response.json().get("id") or "")
-        except ValueError:
-            pass
         if not sid:
             raise ArenaProtocolError("create-chat 未返回会话 ID")
         return sid
@@ -475,10 +474,8 @@ class ArenaDrawClient:
                 f"trigger-token HTTP {response.status_code}: {response.text[:160]}"
             )
         token = ""
-        try:
+        with contextlib.suppress(ValueError):
             token = str(response.json().get("token") or "")
-        except ValueError:
-            pass
         if not token:
             raise ArenaProtocolError("trigger-token 未返回 token")
         return token
