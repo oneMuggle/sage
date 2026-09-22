@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import List, Optional
+
 
 class ZoteroError(Exception):
     """Base exception for all Zotero operations."""
@@ -10,7 +12,7 @@ class ZoteroError(Exception):
 class ZoteroDatabaseNotFoundError(ZoteroError):
     """Raised when the Zotero SQLite database cannot be located."""
 
-    def __init__(self, searched_paths: list[str]):
+    def __init__(self, searched_paths: List[str]):
         self.searched_paths = searched_paths
         paths_str = ", ".join(str(p) for p in searched_paths)
         super().__init__(
@@ -46,6 +48,6 @@ class ZoteroCollectionNotFoundError(ZoteroError):
 class ZoteroAttachmentNotFoundError(ZoteroError):
     """Raised when a requested attachment file does not exist."""
 
-    def __init__(self, item_key: str, path: str | None = None):
+    def __init__(self, item_key: str, path: Optional[str] = None):
         detail = f" at {path}" if path else ""
         super().__init__(f"Attachment not found for item {item_key}{detail}")

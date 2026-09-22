@@ -20,7 +20,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from backend.zotero.exceptions import (
     ZoteroCollectionNotFoundError,
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # Default search paths for the Zotero database
 # ---------------------------------------------------------------------------
 
-_DEFAULT_ZOTERO_DIRS: list[Path] = [
+_DEFAULT_ZOTERO_DIRS: List[Path] = [
     # Linux
     Path.home() / "Zotero",
     # macOS
@@ -45,7 +45,7 @@ _DEFAULT_ZOTERO_DIRS: list[Path] = [
 ]
 
 
-def _default_db_paths() -> list[Path]:
+def _default_db_paths() -> List[Path]:
     """Return candidate Zotero database paths (env var > defaults)."""
     env_path = os.environ.get("ZOTERO_DB_PATH")
     if env_path:
@@ -53,7 +53,7 @@ def _default_db_paths() -> list[Path]:
     return [p / "zotero.sqlite" for p in _DEFAULT_ZOTERO_DIRS]
 
 
-def _resolve_db_path(db_path: Path | None = None) -> Path:
+def _resolve_db_path(db_path: Optional[Path] = None) -> Path:
     """Resolve and validate the database path.
 
     Priority: explicit argument > ZOTERO_DB_PATH env var > default locations.
@@ -89,7 +89,7 @@ class ZoteroClient:
         :class:`ZoteroDatabaseLockedError` if the timeout elapses.
     """
 
-    def __init__(self, db_path: Path | str | None = None, timeout: float = 10.0) -> None:
+    def __init__(self, db_path: Optional[Path] = None, timeout: float = 10.0) -> None:
         self._resolved_path = _resolve_db_path(Path(db_path) if db_path else None)
         self._timeout = timeout
 
@@ -121,13 +121,13 @@ class ZoteroClient:
         finally:
             conn.close()
 
-    def _execute(self, query: str, params: tuple | tuple[()] = ()) -> list[sqlite3.Row]:
+    def _execute(self, query: str, params: tuple = ()) -> List[sqlite3.Row]:
         """Execute a query and return all rows."""
         with self._connect() as conn:
             cursor = conn.execute(query, params)
             return cursor.fetchall()
 
-    def _execute_one(self, query: str, params: tuple) -> sqlite3.Row | None:
+    def _execute_one(self, query: str, params: tuple) -> Optional[sqlite3.Row]:
         """Execute a query and return at most one row."""
         with self._connect() as conn:
             cursor = conn.execute(query, params)
@@ -137,7 +137,7 @@ class ZoteroClient:
     # Health
     # ------------------------------------------------------------------
 
-    def health_check(self) -> dict[str, Any]:
+    def health_check(self) -> Dict[str, Any]:
         """Check if the database is accessible and return basic stats."""
         try:
             row = self._execute_one(
@@ -157,7 +157,7 @@ class ZoteroClient:
                 "error": str(exc),
             }
 
-    def get_stats(self) -> dict[str, Any]:
+    def get_stats(self) -> Dict[str, Any]:
         """Return statistics about the library."""
         item_count = self._execute_one(
             "SELECT COUNT(*) as cnt FROM items WHERE itemTypeID NOT IN (14, 15, 16)",
@@ -186,10 +186,10 @@ class ZoteroClient:
     def search(
         self,
         query: str,
-        collection_key: str | None = None,
-        tag: str | None = None,
+        collection_key: Optional[str] = None,
+        tag: Optional[str] = None,
         limit: int = 20,
-    ) -> list[dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         """Search items by title, abstract, and author name.
 
         Parameters
@@ -278,7 +278,7 @@ class ZoteroClient:
     # Item retrieval
     # ------------------------------------------------------------------
 
-    def get_item(self, item_key: str) -> dict[str, Any]:
+    def get_item(self, item_key: str) -> Dict[str, Any]:
         """Retrieve full metadata for a single item.
 
         Returns a dict with: key, type, title, date, abstract, authors,
@@ -310,7 +310,7 @@ class ZoteroClient:
             """,
             (item_id,),
         )
-        fields: dict[str, str] = {r["fieldName"]: r["value"] for r in field_rows}
+        fields: Dict[str, str] = {r["fieldName"]: r["value"] for r in field_rows}
 
         # Fetch creators
         creator_rows = self._execute(
@@ -410,7 +410,7 @@ class ZoteroClient:
     # Annotations
     # ------------------------------------------------------------------
 
-    def get_annotations(self, item_key: str) -> list[dict[str, Any]]:
+    def get_annotations(self, item_key: str) -> List[Dict[str, Any]]:
         """Retrieve PDF annotations (highlights, notes, underlines) for an item.
 
         Zotero stores annotations as child items with ``itemAnnotation`` type.
@@ -444,7 +444,7 @@ class ZoteroClient:
             (*attachment_ids, anno_type_id),
         )
 
-        annotations: list[dict[str, Any]] = []
+        annotations: List[Dict[str, Any]] = []
         for row in rows:
             anno_id = row["itemID"]
             # Annotation fields are stored in itemData
@@ -479,7 +479,7 @@ class ZoteroClient:
     # Collections
     # ------------------------------------------------------------------
 
-    def list_collections(self, parent_key: str | None = None) -> list[dict[str, Any]]:
+    def list_collections(self, parent_key: Optional[str] = None) -> List[Dict[str, Any]]:
         """List collections (optionally filtered by parent collection).
 
         Returns a flat list with ``parentKey`` for tree reconstruction.
@@ -534,7 +534,7 @@ class ZoteroClient:
         chunk_offset: int = 0,
         chunk_size: int = 10000,
         max_chars: int = 50000,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         """Read PDF full text for an item (user-invoked, not automatic).
 
         Strategy:
@@ -595,13 +595,13 @@ class ZoteroClient:
     # BibTeX export
     # ------------------------------------------------------------------
 
-    def get_bibtex(self, item_keys: list[str]) -> str:
+    def get_bibtex(self, item_keys: List[str]) -> str:
         """Generate BibTeX entries for the given item keys.
 
         Produces output compatible with Sage's existing
         ``office_parse_bibtex`` tool.
         """
-        entries: list[str] = []
+        entries: List[str] = []
         for key in item_keys:
             item = self.get_item(key)
             entry = self._item_to_bibtex(item)
@@ -628,7 +628,7 @@ class ZoteroClient:
             raise ZoteroCollectionNotFoundError(collection_key)
         return row["collectionID"]
 
-    def _collection_item_ids(self, collection_key: str) -> set[int]:
+    def _collection_item_ids(self, collection_key: str) -> Set[int]:
         collection_id = self._collection_id_by_key(collection_key)
         rows = self._execute(
             "SELECT itemID FROM collectionItems WHERE collectionID = ?",
@@ -636,7 +636,7 @@ class ZoteroClient:
         )
         return {r["itemID"] for r in rows}
 
-    def _tag_item_ids(self, tag_name: str) -> set[int]:
+    def _tag_item_ids(self, tag_name: str) -> Set[int]:
         rows = self._execute(
             """
             SELECT it.itemID
@@ -648,7 +648,7 @@ class ZoteroClient:
         )
         return {r["itemID"] for r in rows}
 
-    def _row_to_summary(self, row: sqlite3.Row) -> dict[str, Any]:
+    def _row_to_summary(self, row: sqlite3.Row) -> Dict[str, Any]:
         """Convert a search result row to a summary dict."""
         # Fetch authors for this item
         author_rows = self._execute(
@@ -686,7 +686,7 @@ class ZoteroClient:
             "dateModified": row["dateModified"],
         }
 
-    def _get_fulltext_from_index(self, item_id: int) -> str | None:
+    def _get_fulltext_from_index(self, item_id: int) -> Optional[str]:
         """Retrieve full text from Zotero's FTS index, if available."""
         # Zotero stores full text in a separate table (varies by version).
         # Try common schemas.
@@ -715,7 +715,7 @@ class ZoteroClient:
 
         return None
 
-    def _find_pdf_attachment(self, item_id: int) -> str | None:
+    def _find_pdf_attachment(self, item_id: int) -> Optional[str]:
         """Find the local PDF file path for an item (via child attachments)."""
         rows = self._execute(
             """
@@ -748,7 +748,7 @@ class ZoteroClient:
         chunk_size: int,
         max_chars: int,
         source: str,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         total_chars = len(text)
         end = min(chunk_offset + max_chars, total_chars)
         chunk = text[chunk_offset:end]
@@ -761,7 +761,7 @@ class ZoteroClient:
             "source": source,
         }
 
-    def _item_to_bibtex(self, item: dict[str, Any]) -> str:
+    def _item_to_bibtex(self, item: Dict[str, Any]) -> str:
         """Convert a Zotero item dict to a BibTeX entry string."""
         item_type = item["item_type"]
         bibtex_type = self._zotero_type_to_bibtex(item_type)

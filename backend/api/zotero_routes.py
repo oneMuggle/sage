@@ -29,11 +29,11 @@ router = APIRouter(tags=["zotero"])
 
 # Lazy singleton — instantiated on first request to avoid startup cost when
 # Zotero is not used. Re-created when db_path changes (see /path POST).
-_client: Any | None = None
-_client_db_path: str | None = None
+_client: Optional[Any] = None
+_client_db_path: Optional[str] = None
 
 
-def _get_configured_db_path() -> str | None:
+def _get_configured_db_path() -> Optional[str]:
     """Return the user-configured Zotero DB path from settings_repo, if any."""
     try:
         from backend.services.settings_repo import SettingsRepo
@@ -44,7 +44,7 @@ def _get_configured_db_path() -> str | None:
         return os.environ.get("ZOTERO_DB_PATH")
 
 
-def _get_client(db_path_override: str | None = None) -> Any:
+def _get_client(db_path_override: Optional[str] = None) -> Any:
     """Return (or create) the ZoteroClient singleton.
 
     Raises HTTPException(503) if the database is not found or locked.

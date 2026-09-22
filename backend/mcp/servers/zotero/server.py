@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ else:
     _MCP_IMPORT_ERROR = None
 
 
-def _build_server() -> Server | None:  # type: ignore[valid-type]
+def _build_server() -> Optional[Server]:  # type: ignore[valid-type]
     if Server is None:
         return None
     try:
