@@ -1,0 +1,408 @@
+# CI Retry（对标总账优化建议 4 前半，round45 / SOP §4.2 流程化）
+# 用途：PR 的 pull_request 事件被 GitHub 静默丢弃（R28 实证，约 2 小时
+# 无 CI）时，对分支手动触发一次与 ci.yml 同语义的全量验证；All Checks
+# 会挂在分支头 SHA 上，令 PR 恢复可合并状态。
+# 用法：
+#   gh workflow run ci-rerun.yml -f ref=<分支名> -f target=<main|release/win7>
+# 语义差异（相对 ci.yml）：所有 job 的 if 以 inputs.target 判定，不再
+# 依赖 pull_request 事件上下文；frontend 与 electron-smoke 永远运行。
+name: CI Retry
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "要验证的分支名"
+        required: true
+        type: string
+      target:
+        description: "模拟的 PR 基线（决定 backend 套件）"
+        required: true
+        type: choice
+        options:
+          - main
+          - release/win7
+
+permissions:
+  contents: read
+  checks: write
+
+concurrency:
+  group: ci-rerun-${{ github.event.inputs.ref }}
+  cancel-in-progress: false
+
+jobs:
+
+  backend-py38:
+    name: Backend (Python 3.8, Win7 LTS)
+    if: inputs.target == 'release/win7'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Miniconda + Python 3.8
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.8'
+          channels: conda-forge
+
+      - name: Create py38 env
+        shell: bash -el {0}
+        run: |
+          conda create -n sage-backend-py38 python=3.8 -y
+          conda run -n sage-backend-py38 pip install --upgrade pip
+
+      - name: Install backend deps (py38, locked)
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend-py38 pip install -r backend/requirements-py38.txt
+          conda run -n sage-backend-py38 pip install -r backend/requirements-dev.txt
+
+      - name: Ruff check
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend-py38 ruff check backend/
+
+      # xdist 并行:同 main backend job(见其注释)。test_event_loop_blocking
+      # 的 P99 延迟断言对 CPU 争用敏感,单独串行跑(--cov-append 保持覆盖率合并)
+      # 与 release/win7 侧 ci.yml 对齐 —— 此前 main 副本漏了这段并行化,
+      # 串行全量跑时单 pytest 步即 13~15 min(见 win7 分支同 job 实测)
+      - name: Pytest (py38, hex mode) with coverage
+        shell: bash -el {0}
+        timeout-minutes: 40
+        run: |
+          # durations 全量采集（≥1s），与 main backend hex 步骤对齐：
+          # 为套件分片设计提供 per-file 耗时权重
+          conda run -n sage-backend-py38 bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80 --durations=500 --durations-min=1.0"
+
+      - name: Pytest serial (latency-sensitive file)
+        shell: bash -el {0}
+        timeout-minutes: 10
+        run: |
+          conda run -n sage-backend-py38 bash -c "cd backend && pytest tests/integration/test_event_loop_blocking.py --cov --cov-append --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
+
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          file: backend/coverage.xml
+          flags: backend-py38
+          fail_ci_if_error: false
+
+  backend:
+    name: Backend (Python)
+    if: inputs.target == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          environment-file: backend/environment.yml
+          python-version: '3.11'
+          activate-environment: sage-backend
+          channels: conda-forge
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: Install dev tools
+        shell: bash -el {0}
+        run: |
+          # 从仓库根运行: requirements.txt 中 -e ./packages/sage-core 路径
+          # 相对于仓库根 (packages/sage-core 不在 backend/ 下)
+          conda run -n sage-backend pip install -r backend/requirements.txt
+          conda run -n sage-backend pip install ruff mypy import-linter
+
+      - name: Ruff check
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend ruff check backend/
+
+      - name: Mypy (domain + ports)
+        shell: bash -el {0}
+        env:
+          # runner 镜像 20260831.293 起 pip 25 的 PEP 660 可编辑安装
+          # (sage-core) 生成 __editable__ finder, mypy 无法解析 →
+          # import-not-found。MYPYPATH 直指源码目录绕开。
+          MYPYPATH: packages/sage-core
+        run: |
+          conda run -n sage-backend mypy backend/domain backend/ports
+        continue-on-error: true # P0 期间允许，domain/ports 还没建
+
+      # PG2.11：5 层依赖图（hexagonal-architecture contract）
+      # - backend/ 是 import-linter 的 root_package
+      # - 必须 cd backend 让 import-linter 找到 pyproject.toml
+      # - PYTHONPATH=.. 让它能 import "backend.*" 模块
+      - name: Import linter (hexagonal architecture)
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend bash -c "cd backend && PYTHONPATH=.. lint-imports"
+
+      # PG2.12：hex 主路径回归
+      # - API_MODE=hex（默认），强制 coverage ≥ 80%，并上传 codecov
+      # - 兜底路径（API_MODE=legacy 冒烟）已拆到下方 backend-legacy 并行 job：
+      #   它是 continue-on-error 安全网不阻塞合并，但此前串行追加在本 job
+      #   里，一步独占 ~10 min，把 CI 关键路径顶到 ~26 min
+      # - xdist 并行：-n auto --dist loadfile —— 按文件分worker,避免跨文件
+      #   全局单例(App registry/DB)互踩; pytest-cov 自动合并各 worker 覆盖率
+      # - test_event_loop_blocking 除外：P99 延迟断言(500ms 阈值)在 CPU 争用
+      #   下必然失真(实测 505.3ms 差 5ms 翻车)，单独串行跑(--cov-append 保持
+      #   覆盖率合并评估)，见下一步
+      - name: Pytest hex (default) with coverage
+        shell: bash -el {0}
+        timeout-minutes: 40
+        run: |
+          # durations 全量采集（≥1s 的测试全部输出）：只报告不改变行为。
+          # 从 log 按 per-file 聚合耗时，为套件分片（shard）设计提供权重 ——
+          # loadfile 下总时长由最慢 worker 决定，均衡分片需要真实文件级数据
+          conda run -n sage-backend bash -c "cd backend && pytest -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --cov --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80 --durations=500 --durations-min=1.0"
+
+      - name: Pytest hex serial (latency-sensitive file)
+        shell: bash -el {0}
+        timeout-minutes: 10
+        run: |
+          conda run -n sage-backend bash -c "cd backend && pytest tests/integration/test_event_loop_blocking.py --cov --cov-append --cov-config=.coveragerc --cov-report=xml --cov-report=term --cov-fail-under=80"
+
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          file: backend/coverage.xml
+          flags: backend
+          fail_ci_if_error: false
+
+  # ========== Backend legacy 兜底冒烟（独立并行 job，非门禁信号） ==========
+  # - 原 PG2.12 兜底路径（API_MODE=legacy 冒烟）从 backend job 拆出
+  # - continue-on-error 安全网：单测双轨不一致不阻塞 PR（与拆分前语义一致）
+  # - 与 backend job 并行跑，墙钟 = max(hex, legacy) 而非两者之和
+  #   （拆分前 legacy 一步串行占 ~10 min，是 CI 关键路径的主要组成）
+  # - 与 backend-windows-unit 一致：非门禁信号 job，不进 all-green needs
+  # - 环境只需 requirements.txt + environment.yml 自带的 pytest 套件，
+  #   不装 ruff/mypy/import-linter（本 job 不跑 lint/type）
+  # ========== Backend (py38 collect gate): main PR 的 win7 地雷拦截 ==========
+  # - 只做 Python 3.8 下的「收集」（pytest --collect-only）+ backend.main 导入冒烟
+  #   —— 拦截 py39+/py310+ 语法（括号多上下文 with / PEP585 下标 / union 注解）
+  #     在合并进 main 前即失败，避免地雷随 win7 同步流到 release/win7
+  # - 不跑运行期断言：py38 行为差异由 release/win7 分支自己的 CI 兜底
+
+  dependency-audit:
+    name: Dependency audit (Node 22.12 + Python 3.11)
+    if: inputs.target == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 22.12
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12'
+          cache: 'npm'
+
+      - name: Pin npm
+        run: |
+          npm install --global npm@11.12.1
+          test "$(node --version)" = "v22.12.0"
+          test "$(npm --version)" = "11.12.1"
+
+      - name: Install npm dependencies
+        id: npm-ci
+        run: npm ci
+        continue-on-error: true
+
+      - name: npm audit (all dependencies)
+        id: npm-audit-all
+        if: always()
+        run: npm audit --json > npm-audit.json
+        continue-on-error: true
+
+      - name: npm audit (production dependencies)
+        id: npm-audit-prod
+        if: always()
+        run: npm audit --omit=dev --json > npm-audit-prod.json
+        continue-on-error: true
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create Python audit venv and install locked auditor
+        id: python-install
+        run: |
+          python -m venv .venv-dependency-audit
+          .venv-dependency-audit/bin/python -m pip install --disable-pip-version-check pip-audit==2.9.0
+          .venv-dependency-audit/bin/python -m pip install --disable-pip-version-check -r backend/requirements.txt
+        continue-on-error: true
+
+      - name: pip-audit (production requirements)
+        id: pip-audit
+        if: always()
+        run: |
+          if [ ! -x .venv-dependency-audit/bin/pip-audit ]; then
+            printf '%s\n' '{"error":"pip-audit environment was not created"}' > pip-audit.json
+            exit 1
+          fi
+          .venv-dependency-audit/bin/pip-audit -r backend/requirements.txt --format=json > pip-audit.json
+        continue-on-error: true
+
+      - name: Upload dependency audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-reports
+          path: |
+            npm-audit.json
+            npm-audit-prod.json
+            pip-audit.json
+          if-no-files-found: warn
+
+      - name: Enforce dependency audit gate
+        env:
+          NPM_CI_OUTCOME: ${{ steps.npm-ci.outcome }}
+          PYTHON_INSTALL_OUTCOME: ${{ steps.python-install.outcome }}
+          NPM_AUDIT_ALL_OUTCOME: ${{ steps.npm-audit-all.outcome }}
+          NPM_AUDIT_PROD_OUTCOME: ${{ steps.npm-audit-prod.outcome }}
+          PIP_AUDIT_OUTCOME: ${{ steps.pip-audit.outcome }}
+        run: |
+          python scripts/check_dependency_audit.py \
+            --npm npm-audit.json \
+            --npm-prod npm-audit-prod.json \
+            --pip pip-audit.json \
+            --policy .github/dependency-audit-policy.json
+
+  frontend:
+    name: Frontend (TypeScript)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --force --force
+
+      - name: Lint
+        # --cache: ESLint stores results in node_modules/.cache/eslint/ between
+        # runs. Subsequent CI invocations skip already-validated unchanged files,
+        # typically cutting lint time from ~25s to <5s on warm cache.
+        run: npm run lint -- --cache
+
+      - name: Type check
+        # --incremental: tsc writes .tsbuildinfo and only re-checks changed files.
+        # Cold ~40s → warm <15s on subsequent runs.
+        run: npm run typecheck -- --incremental
+
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage/coverage-final.json
+          flags: frontend
+          fail_ci_if_error: false
+
+  # ========== Desktop Build: Electron 21 + electron-builder 矩阵 ==========
+  # - 3 OS 矩阵：ubuntu (AppImage) / macos (DMG) / windows (NSIS)
+  # - Linux/macOS runner 不能跑 Windows NSIS 产物但能 cross-build；
+  #   windows-latest 直接产 NSIS 离线安装包
+
+  electron-smoke:
+    name: Electron smoke (playwright-electron)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci --force
+
+      - name: Build frontend + Electron
+        run: npm run electron:build
+
+      - name: Smoke test
+        env:
+          SAGE_SKIP_BACKEND: '1'
+          CI: 'true'
+          # Skip Win32 runtime checks (VC++ Redist / KB patches).
+          # GitHub's windows-latest runner has VC++ Redist preinstalled, so the
+          # checks currently pass — but if a runner image drifts (or if we later
+          # add service checks like release/win7 PR #1333), dialog.showMessageBox
+          # would block createMainWindow() and fail firstWindow. Opt out now to
+          # keep smoke focused on IPC bridge + frontend rendering only.
+          # See release/win7 run 35510214994 for the failure mode this prevents.
+          SAGE_RUNTIME_CHECK_ON_START: 'false'
+        run: npx playwright test e2e/electron/smoke.spec.ts --reporter=line
+
+      - name: Upload smoke screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-smoke-screenshot
+          path: e2e/electron/screenshots/*.png
+          if-no-files-found: ignore
+
+  # ========== Architecture check: file-size policy enforcement ==========
+  # - Runs scripts/architecture-check.mjs (zero-dep, stdlib-only)
+  # - Enforces 800-line max per source file
+
+  all-green:
+    name: All Checks
+    needs: [backend, backend-py38, frontend, electron-smoke, dependency-audit, architecture-check]
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Check all required jobs passed
+        run: |
+          set -e
+          # 必过项：frontend + electron-smoke 永远要过
+          [ "${{ needs.frontend.result }}" = "success" ]
+          [ "${{ needs.electron-smoke.result }}" = "success" ]
+          # Architecture check runs on every trigger; must pass.
+          [ "${{ needs.architecture-check.result }}" = "success" ]
+          # Dependency audit only runs for main/develop and their PRs; release/win7
+          # intentionally remains on its independent Python 3.8 dependency contract.
+          if [ "${{ needs.dependency-audit.result }}" != "success" ] && [ "${{ needs.dependency-audit.result }}" != "skipped" ]; then
+            echo "::error::Dependency audit failed: ${{ needs.dependency-audit.result }}"
+            exit 1
+          fi
+
+          backend_status="${{ needs.backend.result }}"
+          py38_status="${{ needs.backend-py38.result }}"
+
+          # 两个 backend 都失败/被 skip → 不通过
+          # 例外：两个都 skipped（PR 不在 main/win7/release win7 分支上，理论不会发生因为
+          #  workflow trigger 限定了，但保留防御性）
+          if [ "$backend_status" != "success" ] && [ "$py38_status" != "success" ]; then
+            if [ "$backend_status" = "skipped" ] && [ "$py38_status" = "skipped" ]; then
+              echo "Both backend jobs skipped (no relevant branch) — OK"
+            else
+              echo "::error::Backend CI failed: backend=$backend_status, backend-py38=$py38_status"
+              exit 1
+            fi
+          fi
+          echo "All required checks passed"

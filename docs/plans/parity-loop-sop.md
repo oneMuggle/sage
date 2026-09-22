@@ -69,6 +69,23 @@ worktree 被删除后，常驻 shell 的 cwd 失效 → 一切 spawn 报
 合并为单个 PR 减事件量；用 workflow_dispatch 做分支级验证（注意 job
 的 `if` 对非 PR 事件的语义）；push 恢复后必须补真 pull_request CI。
 
+**OPS2（round45）落地通道**：`.github/workflows/ci-rerun.yml` 提供
+与 ci.yml 同语义的手动全量重验（All Checks 挂分支头 SHA，恢复 PR 可
+合并判定）：
+
+```bash
+# main 目标分支（backend 跑 py3.11 套件）
+gh workflow run ci-rerun.yml -f ref=<分支名> -f target=main
+# release/win7 目标分支（backend 跑 py38 套件）
+gh workflow run ci-rerun.yml -f ref=<分支名> -f target=release/win7
+```
+
+语义约定：target=release/win7 时 backend-py38 全量运行（真 py38 验证），
+target=main 时 backend 跑 py3.11 套件；frontend 与 electron-smoke 永远
+运行；两个 backend 都 skip 时 all-green 按既定例外通过。**红线不变**：
+dispatch 绿只解"事件丢弃"的死锁，事件恢复后仍以真 pull_request CI 为准
+（R42 实证：dispatch 绿 + 后续真 PR CI 全绿才算闭环）。
+
 ### 4.3 分支命名碰撞
 多会话并行时 `docs/rXX-backfill` 这类通用名会被撞（R36 实证）。
 回填/工具分支用带域前缀的独占名：`docs/rXX-parity-backfill`。
