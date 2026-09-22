@@ -18,6 +18,8 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import type { WindowControlsBridge } from '../src/shared/api/windowControlsClient';
 import type {
+  ArenaTokenElectronApiBridge,
+  ArenaTokenStatus,
   DiagnosticElectronApiBridge,
   ImportResult,
   ImportedOfficeFile,
@@ -102,7 +104,7 @@ const electronAPI = {
     headers?: Record<string, string>;
     body?: unknown;
     timeoutMs?: number;
-    responseType?: 'json' | 'arraybuffer';
+    responseType?: 'json' | 'arraybuffer' | 'text';
   }): Promise<T> {
     return ipcRenderer.invoke('sage:backend-request', request) as Promise<T>;
   },
@@ -224,6 +226,20 @@ const electronAPI = {
     rescanSkills: () => ipcRenderer.invoke('skills:rescan') as Promise<RescanResult>,
     importSkills: () => ipcRenderer.invoke('skills:import') as Promise<ImportResult>,
   } satisfies SkillsElectronApiBridge,
+
+  /**
+   * Arena token window control (P3, plan §5.9/§6.2) — backs the DrawTab
+   * token-window status card. start/stop/reload drive the hidden window;
+   * pick-proxy switches its exit proxy (credential-less local proxies only).
+   */
+  arenaToken: {
+    status: () => ipcRenderer.invoke('sage:arena-token:status') as Promise<ArenaTokenStatus>,
+    start: () => ipcRenderer.invoke('sage:arena-token:start') as Promise<void>,
+    stop: () => ipcRenderer.invoke('sage:arena-token:stop') as Promise<void>,
+    reload: () => ipcRenderer.invoke('sage:arena-token:reload') as Promise<boolean>,
+    pickProxy: (proxyUrl: string | null) =>
+      ipcRenderer.invoke('sage:arena-token:pick-proxy', { proxyUrl }) as Promise<void>,
+  } satisfies ArenaTokenElectronApiBridge,
 
   /**
    * Office document bridge (Phase 1.3 + M0 Task 5).
