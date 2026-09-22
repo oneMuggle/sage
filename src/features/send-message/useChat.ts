@@ -27,8 +27,14 @@ import { useSettings } from '../manage-settings/useSettings';
 import { selectSessionSlots, useChatStreamStore, type TaskBoardState } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
 import { notifySession, shouldNotify } from './sessionNotify';
-import { isValidSourcesPayload } from './sourcesPayload';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
+import {
+  isValidCitationsPayload,
+  isValidCompactPayload,
+  isValidMemoriesPayload,
+  isValidSkillsPayload,
+  isValidSourcesPayload,
+} from './transparencyPayload';
 
 /**
  * 从 endpoint baseUrl 启发式推导 LLM provider 字符串。
@@ -590,90 +596,63 @@ export function useChat() {
               // 异常只跳过更新，绝不阻断聊天。
               // MEDIUM-2: 运行时载荷校验 — 防止伪造/畸形数据进入气泡文案。
               // 校验不通过时丢弃该事件（不更新 UI），而非按畸形值渲染。
+              // R97: 四类载荷校验收敛到 transparencyPayload.ts（主/重接/btw 共用）。
               if (evt.state === 'memory_used' && evt.memories) {
-                // memories: 必须是数组，每项必须有 id (string)
-                const memories = evt.memories;
-                const isValidMemories =
-                  Array.isArray(memories) &&
-                  memories.every(
-                    (m) =>
-                      typeof m === 'object' &&
-                      m !== null &&
-                      typeof (m as { id?: unknown }).id === 'string',
-                  );
-                if (isValidMemories) {
+                if (isValidMemoriesPayload(evt.memories)) {
                   updateMessage(assistantId, {
-                    memory_refs: memories,
-                    memory_applied: memories.length,
+                    memory_refs: evt.memories,
+                    memory_applied: evt.memories.length,
                   });
                 } else {
-                  logger.warn(requestId, 'R38.memory_used.malformed', memories);
+                  logger.warn(requestId, 'R38.memory_used.malformed', evt.memories);
                 }
               }
               if (evt.state === 'skill_activated' && evt.skills) {
-                // MEDIUM-2: skills 必须是数组，每项必须有 name (string)
-                const skills = evt.skills;
-                const isValidSkills =
-                  Array.isArray(skills) &&
-                  skills.every(
-                    (s) =>
-                      typeof s === 'object' &&
-                      s !== null &&
-                      typeof (s as { name?: unknown }).name === 'string',
-                  );
-                if (isValidSkills) {
-                  updateMessage(`u-${clientMessageId}`, { activated_skills: skills });
+                if (isValidSkillsPayload(evt.skills)) {
+                  updateMessage(`u-${clientMessageId}`, { activated_skills: evt.skills });
                 } else {
-                  logger.warn(requestId, 'R38.skill_activated.malformed', skills);
+                  logger.warn(requestId, 'R38.skill_activated.malformed', evt.skills);
                 }
               }
               if (evt.state === 'compact_triggered' && evt.compact) {
-                // compact: 必须有 before/after/removed 三个 number 字段
-                const compact = evt.compact as {
-                  before?: unknown;
-                  after?: unknown;
-                  removed?: unknown;
-                };
-                const { before, after, removed } = compact;
-                if (
-                  typeof before === 'number' &&
-                  typeof after === 'number' &&
-                  typeof removed === 'number'
-                ) {
+                if (isValidCompactPayload(evt.compact)) {
                   // 插入特殊系统消息气泡（非普通 assistant 气泡）
                   // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"
                   const compactMsg: Message = {
                     id: crypto.randomUUID(),
                     session_id: sid,
                     role: 'system',
-                    content: `📦 上下文已压缩：${before} → ${after} 条（${removed} 条历史已合并为摘要）`,
+                    content: `📦 上下文已压缩：${evt.compact.before} → ${evt.compact.after} 条（${evt.compact.removed} 条历史已合并为摘要）`,
                     created_at: Date.now(),
-                    compact_info: { before, after, removed },
+                    compact_info: { ...evt.compact },
                   };
                   addMessage(compactMsg);
                 } else {
-                  logger.warn(requestId, 'R38.compact_triggered.malformed', compact);
+                  logger.warn(requestId, 'R38.compact_triggered.malformed', evt.compact);
                 }
               }
               // r71: 附件检索注入溯源 → 引用明细随消息落库（气泡内展示）。
               // R81 修复: 多附件各推一个事件, 按 media_id 合并而非整体替换
               // （updateMessage 是浅合并, 直接赋值会丢掉前一个附件的引用）。
               // win7 后端暂无 r71 事件源, 处理器先行铺路, 空转无害。
+              // R97: 载荷校验对齐重接路径（每项须有字符串 media_id）。
               if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
-                const existing = useStore
-                  .getState()
-                  .messages.find((m) => m.id === assistantId)?.rag_citations;
-                const merged = [...(existing ?? [])];
-                for (const c of evt.citations) {
-                  const idx = merged.findIndex((x) => x.media_id === c.media_id);
-                  if (idx >= 0) merged[idx] = c;
-                  else merged.push(c);
+                if (isValidCitationsPayload(evt.citations)) {
+                  const existing = useStore
+                    .getState()
+                    .messages.find((m) => m.id === assistantId)?.rag_citations;
+                  const merged = [...(existing ?? [])];
+                  for (const c of evt.citations) {
+                    const idx = merged.findIndex((x) => x.media_id === c.media_id);
+                    if (idx >= 0) merged[idx] = c;
+                    else merged.push(c);
+                  }
+                  updateMessage(assistantId, { rag_citations: merged });
                 }
-                updateMessage(assistantId, { rag_citations: merged });
               }
               // R81: 统一参考来源 —— 检索类工具命中（web/wiki/MCP）done 前
               // 一次性推送。载荷校验对齐 MEDIUM-2: 数组且每项 kind 合法
-              // （R92: 校验收敛到 sourcesPayload.ts，主/重接/btw 三路径共用）。
+              // （R92: 校验收敛到 transparencyPayload.ts，主/重接/btw 三路径共用）。
               if (evt.state === 'sources_used' && evt.sources) {
                 if (isValidSourcesPayload(evt.sources)) {
                   updateMessage(assistantId, { sources: evt.sources });
@@ -989,42 +968,27 @@ export function useChat() {
               return;
             }
             // r77: 重接路径补 memory_used —— 重放时 memory_refs 不丢失（与主路径同口径）
-            // R87: 载荷校验对齐主路径 MEDIUM-2 口径（数组且每项 id 为字符串）
+            // R87/R97: 载荷校验走共享 helper（transparencyPayload.ts）
             if (evt.state === 'memory_used' && evt.memories) {
-              const memories = evt.memories;
-              const isValidMemories =
-                Array.isArray(memories) &&
-                memories.every(
-                  (m) =>
-                    typeof m === 'object' &&
-                    m !== null &&
-                    typeof (m as { id?: unknown }).id === 'string',
-                );
-              if (isValidMemories && memories.length > 0) {
+              if (
+                isValidMemoriesPayload(evt.memories) &&
+                evt.memories.length > 0
+              ) {
                 updateMessage(messageId, {
-                  memory_refs: memories,
-                  memory_applied: memories.length,
+                  memory_refs: evt.memories,
+                  memory_applied: evt.memories.length,
                 });
               }
             }
             // r71: 重接路径同主路径 —— 检索引用明细随消息落库
-            // R87: 条目校验对齐主路径（每项须有字符串 media_id）
+            // R87/R97: 载荷校验走共享 helper（每项须有字符串 media_id）
             if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
-              const citations = evt.citations;
-              const isValidCitations =
-                Array.isArray(citations) &&
-                citations.every(
-                  (c) =>
-                    typeof c === 'object' &&
-                    c !== null &&
-                    typeof (c as { media_id?: unknown }).media_id === 'string',
-                );
-              if (isValidCitations) {
+              if (isValidCitationsPayload(evt.citations)) {
                 const existing = useStore
                   .getState()
                   .messages.find((m) => m.id === messageId)?.rag_citations;
                 const merged = [...(existing ?? [])];
-                for (const c of citations) {
+                for (const c of evt.citations) {
                   const idx = merged.findIndex((x) => x.media_id === c.media_id);
                   if (idx >= 0) merged[idx] = c;
                   else merged.push(c);
