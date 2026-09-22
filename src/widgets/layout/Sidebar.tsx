@@ -36,10 +36,11 @@ import {
   CronJobSection,
   ProjectSection,
   TeamSection,
+  TodoSection,
   useSiderSections,
 } from '../sidebar';
 
-const SECTION_KEYS = ['conversations', 'cron', 'project', 'team'] as const;
+const SECTION_KEYS = ['conversations', 'todos', 'cron', 'project', 'team'] as const;
 
 // 导航项配置。
 // 对标 S3 (2026-09-13, 竞品对标 §2.2 导航收敛): 一级只保留高频 4 项，
@@ -238,6 +239,13 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
             onDelete={(id) => void deleteSessionCascade(id)}
             onNewSession={handleNewSession}
             onRename={handleRenameSession}
+          />
+        );
+      case 'todos':
+        return (
+          <TodoSection
+            collapsed={isCollapsed}
+            onToggleCollapsed={() => toggleCollapsed(key)}
           />
         );
       case 'cron':
