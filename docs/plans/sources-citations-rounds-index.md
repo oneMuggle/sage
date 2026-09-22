@@ -84,4 +84,18 @@ R83 增量推送在其上是沉睡代码（DONE 前全量兜底有效，功能�
 5. **orchestration 编排模式的来源聚合**：单 agent 模式已覆盖；多 agent
    编排如需 per-task 来源，需扩展 ChatDispatcher 事件投影。
 
+
+## 6. 回归记录（R94，2026-09-20）
+
+main `969b7d55` 本机全量回归（Windows 11 / py3.12 / node 24）：
+
+- **后端 unit（xdist loadfile）**：7447 passed / 8 failed / 548 skipped（25min）。
+  8 个失败复验后定性：2 例为双套件并行抢 CPU 的资源 flake（串行即过）；
+  其余为 Windows 本地特有失败，集中于 office（word_comments）/orchestrator
+  （dispatcher_cancel）等**非本专项改动面** —— 同代码 Linux CI 全量 Backend
+  全绿，证实非平台无关回归，属并行会话新合入域的 Windows 本地环境问题。
+- **前端全量（vitest run）**：2926 passed / 4 failed → 与后端并行时为资源
+  flake，串行重跑全绿（exit 0）。
+- **来源专项域（chat/memory/sources）零失败**。
+
 —— 本账本由参考来源专项循环维护，随轮次追加。
