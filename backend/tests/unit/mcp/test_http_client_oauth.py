@@ -66,7 +66,10 @@ def _make_client(config, store, responder):
     seen = []
 
     def handler(request: httpx.Request) -> httpx.Response:
-        method = json.loads(request.content).get("method")
+        try:
+            method = json.loads(request.content).get("method")
+        except ValueError:  # OAuth 刷新请求为 form 编码，非 JSON-RPC
+            method = "(oauth/token)"
         seen.append((method, request))
         return responder(method, request, seen)
 
@@ -159,9 +162,8 @@ def test_401_with_token_clears_record_and_names_reauth():
     state = {"count": 0}
 
     def responder(method, request, seen):
-        state["count"] += 1
-        if state["count"] == 1:
-            return _rpc({"serverInfo": {}})
+        if method == "initialize":
+            return _rpc({"serverInfo": {}}, session_id="SID-1")
         return httpx.Response(401, json={"error": "unauthorized"})
 
     client, _ = _make_client(_config(), store, responder)
@@ -202,9 +204,8 @@ def test_404_on_established_session_raises_expired():
     state = {"count": 0}
 
     def responder(method, request, seen):
-        state["count"] += 1
-        if state["count"] == 1:
-            return _rpc({"serverInfo": {}})
+        if method == "initialize":
+            return _rpc({"serverInfo": {}}, session_id="SID-1")
         return httpx.Response(404, json={"error": "gone"})
 
     client, _ = _make_client(_config(), store, responder)
