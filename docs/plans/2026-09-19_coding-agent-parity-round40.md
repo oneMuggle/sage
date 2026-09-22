@@ -47,6 +47,16 @@ PR**，且只能人工响应。本轮新增 `Audit Watch` 定时 workflow：每�
 
 （本轮为单批次交付，无批次 B）
 
+## 6. round44 扩展：覆盖 main 生产路径
+
+- **scripts/audit_watch.py**：`uncovered_findings` 改收
+  `[(标签, 报告)]` 多报告列表——各报告的 affected_path 按标签重贴
+  （pip_findings 硬编码 main 标签，py38 报告需改写），差集语义与强制门
+  完全同构。
+- **workflow**：新增 main requirements 的 pip-audit 步骤；
+  audit-watch 现在同时看护 main 与 win7 两条依赖契约。
+- **测试**：+3 例（多报告按标签区分 / CLI 参数形态迁移），7 例全绿。
+
 ## 5. 交付记录
 
 （各批次 PR 号与交付号于交付后回填；纯 main 侧交付，win7 共享同一

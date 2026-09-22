@@ -1,4 +1,4 @@
-"""audit_watch（round40）— 未覆盖发现求差的单元测试。
+"""audit_watch（round40/44）— 未覆盖发现求差的单元测试。
 
 pip_findings / validate_policy 的匹配语义由 test_check_dependency_audit.py
 覆盖；本文件只测 audit_watch 的差集、格式化与 CLI 退出码。
@@ -17,6 +17,9 @@ from audit_watch import uncovered_findings  # noqa: E402
 
 SCRIPT = Path(__file__).parents[1] / "audit_watch.py"
 
+MAIN_LABEL = "main Python 3.11 production path"
+PY38_LABEL = "Win7 LTS Python 3.8 production path"
+
 POLICY = {
     "default_action": "fail",
     "exceptions": [
@@ -28,7 +31,7 @@ POLICY = {
             "package_version": "3.7.1",
             "advisory": "GHSA-82r6-8w77-94w6",
             "advisory_url": "https://osv.dev/vulnerability/GHSA-82r6-8w77-94w6",
-            "affected_path": "main Python 3.11 production path",
+            "affected_path": MAIN_LABEL,
             "actual_reachability": "not reachable (documented)",
             "controls": "quarterly review",
         },
@@ -50,7 +53,8 @@ def pip_report(name, version, advisory):
 
 def test_uncovered_empty_when_policy_covers():
     uncovered, all_findings, failures = uncovered_findings(
-        pip_report("anyio", "3.7.1", "GHSA-82r6-8w77-94w6"), POLICY
+        [(MAIN_LABEL, pip_report("anyio", "3.7.1", "GHSA-82r6-8w77-94w6"))],
+        POLICY,
     )
     assert failures == []
     assert uncovered == []
@@ -59,7 +63,8 @@ def test_uncovered_empty_when_policy_covers():
 
 def test_uncovered_lists_finding_missing_from_policy():
     uncovered, _all, failures = uncovered_findings(
-        pip_report("anyio", "3.7.1", "GHSA-5p39-cfhj-2xmp"), POLICY
+        [(MAIN_LABEL, pip_report("anyio", "3.7.1", "GHSA-5p39-cfhj-2xmp"))],
+        POLICY,
     )
     assert failures == []
     assert len(uncovered) == 1
@@ -69,7 +74,20 @@ def test_uncovered_lists_finding_missing_from_policy():
         "3.7.1",
         "GHSA-5p39-cfhj-2xmp",
     )
-    assert affected  # affected_path 由 check_dependency_audit 赋标签
+    assert affected == MAIN_LABEL
+
+
+def test_uncovered_multi_report_relabels_py38_path():
+    """round44: 同公告在不同报告里按标签区分 affected_path。"""
+    reports = [
+        (MAIN_LABEL, pip_report("anyio", "3.7.1", "GHSA-82r6-8w77-94w6")),
+        (PY38_LABEL, pip_report("anyio", "3.7.1", "GHSA-82r6-8w77-94w6")),
+    ]
+    uncovered, _all, failures = uncovered_findings(reports, POLICY)
+    assert failures == []
+    # main 路径的发现被策略覆盖 → 未覆盖的只有 py38 标签那份
+    assert len(uncovered) == 1
+    assert uncovered[0][4] == PY38_LABEL
 
 
 def test_cli_exit_2_and_writes_outputs(tmp_path):
@@ -87,8 +105,8 @@ def test_cli_exit_2_and_writes_outputs(tmp_path):
         [
             sys.executable,
             str(SCRIPT),
-            "--pip",
-            str(report),
+            "--pip-report",
+            f"{MAIN_LABEL}={report}",
             "--policy",
             str(policy),
             "--out",
@@ -111,7 +129,14 @@ def test_cli_exit_0_when_clean(tmp_path):
     report.write_text(json.dumps([]), encoding="utf-8")
     policy.write_text(json.dumps(POLICY), encoding="utf-8")
     proc = subprocess.run(
-        [sys.executable, str(SCRIPT), "--pip", str(report), "--policy", str(policy)],
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--pip-report",
+            f"{MAIN_LABEL}={report}",
+            "--policy",
+            str(policy),
+        ],
         capture_output=True,
         text=True,
     )
@@ -127,8 +152,12 @@ def test_cli_exit_1_on_missing_input(tmp_path, missing):
     args = [
         sys.executable,
         str(SCRIPT),
-        "--pip",
-        str(report) if missing != "pip" else str(tmp_path / "nope.json"),
+        "--pip-report",
+        (
+            f"{MAIN_LABEL}={report}"
+            if missing != "pip"
+            else f"{MAIN_LABEL}={tmp_path / 'nope.json'}"
+        ),
         "--policy",
         str(policy) if missing != "policy" else str(tmp_path / "nope.json"),
     ]

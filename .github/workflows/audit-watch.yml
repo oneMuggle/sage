@@ -29,8 +29,14 @@ jobs:
       - name: Install pip-audit
         run: pip install --disable-pip-version-check pip-audit==2.9.0
 
+      - name: pip-audit (main requirements)
+        id: pip-audit-main
+        continue-on-error: true
+        run: |
+          pip-audit -r backend/requirements.txt --format=json > pip-audit-main.json
+
       - name: pip-audit (py38 requirements)
-        id: pip-audit
+        id: pip-audit-py38
         continue-on-error: true
         run: |
           pip-audit -r backend/requirements-py38.txt --format=json > pip-audit-py38.json
@@ -39,7 +45,8 @@ jobs:
         id: uncovered
         run: |
           python scripts/audit_watch.py \
-            --pip pip-audit-py38.json \
+            --pip-report "main Python 3.11 production path"=pip-audit-main.json \
+            --pip-report "Win7 LTS Python 3.8 production path"=pip-audit-py38.json \
             --policy .github/dependency-audit-policy.json \
             --out uncovered.txt \
             --json-out uncovered.json
