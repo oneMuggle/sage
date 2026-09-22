@@ -1,5 +1,7 @@
 import logging
+
 from backend.loggers import create_service_logger
+
 
 def test_create_service_logger_returns_logger():
     logger = create_service_logger("test")

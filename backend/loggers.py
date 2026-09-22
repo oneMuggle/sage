@@ -1,5 +1,6 @@
 import logging
 
+
 def create_service_logger(scope: str) -> logging.Logger:
     """Create a logger with a specific scope.
 
@@ -17,7 +18,7 @@ def create_service_logger(scope: str) -> logging.Logger:
     logger = logging.getLogger(scope)
     if not logger.handlers:
         handler = logging.StreamHandler()
-        formatter = logging.Formatter(f'[{scope}] %(levelname)s: %(message)s')
+        formatter = logging.Formatter(f"[{scope}] %(levelname)s: %(message)s")
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
