@@ -1,5 +1,6 @@
 // src/shared/__tests__/logger.test.ts
 import { describe, expect, it } from 'vitest';
+
 import { createLogger } from '../logger';
 
 describe('createLogger', () => {

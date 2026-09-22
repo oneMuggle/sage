@@ -1,5 +1,6 @@
 // electron/__tests__/loggers.test.ts
 import { describe, expect, it } from 'vitest';
+
 import { createLogger } from '../loggers';
 
 describe('createLogger', () => {
