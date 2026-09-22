@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -88,17 +88,17 @@ def _get_client(db_path_override: str | None = None) -> Any:
 #     extra, doi, url, attachments: list[{key, filename, path}] }
 #
 # GET /zotero/collections — list of:
-#   { key, name, parent_key, item_count, version }
+#   key, name, parent_key, item_count, version
 #
 # GET /zotero/items/{key}/annotations — list of:
-#   { key, type, text, comment, color, page_label, date_added }
+#   key, type, text, comment, color, page_label, date_added
 #
 # Dates: ISO 8601 UTC (Zotero SQLite dateAdded format).
 # ---------------------------------------------------------------------------
 
 
 @router.get("/status")
-def get_status() -> dict[str, Any]:
+def get_status() -> Dict[str, Any]:
     """Return Zotero connection status and library stats.
 
     Returns available=false (not 5xx) when the DB is missing or locked,
@@ -141,7 +141,7 @@ def search_items(
     collection_key: Optional[str] = Query(None, description="Filter by collection"),
     tag: Optional[str] = Query(None, description="Filter by tag"),
     limit: int = Query(20, ge=1, le=100, description="Max results"),
-) -> list[dict[str, Any]]:
+) -> List[Dict[str, Any]]:
     """Search library items."""
     client = _get_client()
     results = client.search(query=q, collection_key=collection_key, tag=tag, limit=limit)
@@ -149,7 +149,7 @@ def search_items(
 
 
 @router.get("/items/{item_key}")
-def get_item(item_key: str) -> dict[str, Any]:
+def get_item(item_key: str) -> Dict[str, Any]:
     """Get full item detail."""
     from backend.zotero.exceptions import ZoteroItemNotFoundError
 
@@ -162,7 +162,7 @@ def get_item(item_key: str) -> dict[str, Any]:
 
 
 @router.get("/items/{item_key}/annotations")
-def get_annotations(item_key: str) -> list[dict[str, Any]]:
+def get_annotations(item_key: str) -> List[Dict[str, Any]]:
     """Get annotations for an item."""
     from backend.zotero.exceptions import ZoteroItemNotFoundError
 
@@ -177,15 +177,14 @@ def get_annotations(item_key: str) -> list[dict[str, Any]]:
 @router.get("/collections")
 def list_collections(
     parent_key: Optional[str] = Query(None, description="Parent collection key (null=root)"),
-) -> list[dict[str, Any]]:
+) -> List[Dict[str, Any]]:
     """List collections (top-level or children of a parent)."""
     client = _get_client()
-    results = client.list_collections(parent_key=parent_key)
-    return results
+    return client.list_collections(parent_key=parent_key)
 
 
 @router.post("/path")
-def set_db_path(path: str = Query(..., description="Path to zotero.sqlite")) -> dict[str, Any]:
+def set_db_path(path: str = Query(..., description="Path to zotero.sqlite")) -> Dict[str, Any]:
     """Persist a custom Zotero DB path to settings_repo.
 
     Clears the cached client so the next request re-initializes with the new path.
@@ -210,7 +209,7 @@ def set_db_path(path: str = Query(..., description="Path to zotero.sqlite")) -> 
 # ---------------------------------------------------------------------------
 
 
-def _item_to_summary(row: dict[str, Any]) -> dict[str, Any]:
+def _item_to_summary(row: Dict[str, Any]) -> Dict[str, Any]:
     """Map a ZoteroClient.search() result to a summary dict."""
     return {
         "key": row.get("key", ""),
@@ -225,7 +224,7 @@ def _item_to_summary(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _item_to_detail(row: dict[str, Any]) -> dict[str, Any]:
+def _item_to_detail(row: Dict[str, Any]) -> Dict[str, Any]:
     """Map a ZoteroClient.get_item() result to a detail dict."""
     return {
         "key": row.get("key", ""),
