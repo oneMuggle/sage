@@ -3,10 +3,14 @@
 覆盖：无 token 直连、OAuth 覆盖静态 Authorization 头、过期 token 同步刷新
 回存、不可刷新按无 token 继续、401 带 token 清除记录并点名重授权、404 会话
 过期识别、initialize 握手的 Mcp-Session-Id 回传。
+
+注意：initialize 握手是两次 POST（initialize + notifications/initialized
+通知），responder 按 JSON-RPC method 键控响应，不做按序消费。
 """
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import httpx
@@ -58,54 +62,80 @@ class _FakeStore:
 
 
 def _make_client(config, store, responder):
+    """responder(method, request, seen) -> httpx.Response；seen 收 (method, request)。"""
     seen = []
-    transport = httpx.MockTransport(lambda request: responder(request, seen))
-    client = httpx.Client(transport=transport)
-    return HttpClientMcpClient(config, http_client=client, oauth_store=store), seen
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        method = json.loads(request.content).get("method")
+        seen.append((method, request))
+        return responder(method, request, seen)
+
+    transport = httpx.MockTransport(handler)
+    return HttpClientMcpClient(
+        config, http_client=httpx.Client(transport=transport), oauth_store=store
+    ), seen
 
 
-def _rpc_result(result: dict, session_id: str | None = None) -> httpx.Response:
+def _by_method(seen, method):
+    return [req for m, req in seen if m == method]
+
+
+def _rpc(result: dict, session_id: str | None = None) -> httpx.Response:
     headers = {"mcp-session-id": session_id} if session_id else {}
     return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": result}, headers=headers)
 
 
-def test_initialize_handshake_captures_and_replays_session_id():
-    responses = iter([
-        _rpc_result({"serverInfo": {"name": "srv"}}, session_id="SID-1"),
-        _rpc_result({"tools": [{"name": "t1"}]}),
-    ])
-    store = _FakeStore()
-    client, seen = _make_client(_config(), store, lambda req, seen: next(responses))
+def _handshake_responses():
+    """initialize → 带 serverInfo 的正常响应（捕获会话 ID）；通知 → 200 空体。"""
+    return {
+        "initialize": _rpc({"serverInfo": {"name": "srv"}}, session_id="SID-1"),
+        "notifications/initialized": httpx.Response(200),
+    }
 
+
+def test_initialize_handshake_captures_and_replays_session_id():
+    store = _FakeStore()
+
+    def responder(method, request, seen):
+        scripted = _handshake_responses()
+        if method in scripted:
+            return scripted[method]
+        return _rpc({"tools": [{"name": "t1"}]})
+
+    client, seen = _make_client(_config(), store, responder)
     client.start()
     client.list_tools()
 
     assert client.is_running
-    assert len(seen) == 2
-    assert "Mcp-Session-Id" not in seen[0].headers
-    assert seen[1].headers["Mcp-Session-Id"] == "SID-1"
-    assert seen[1].headers["Accept"] == "application/json, text/event-stream"
+    init_req = _by_method(seen, "initialize")[0]
+    tools_req = _by_method(seen, "tools/list")[0]
+    assert "Mcp-Session-Id" not in init_req.headers
+    assert tools_req.headers["Mcp-Session-Id"] == "SID-1"
+    assert tools_req.headers["Accept"] == "application/json, text/event-stream"
 
 
 def test_expired_token_refreshes_then_uses_new_token():
     expired = _record(expires_at=1.0, refresh_token="rt-1")
     store = _FakeStore(record=expired)
-    refresh_calls = []
+    refresh_requests = []
 
-    def responder(request, seen):
+    def responder(method, request, seen):
         if request.url.host == "auth.example":
-            refresh_calls.append(request)
-            return httpx.Response(200, json={"access_token": "tok-new", "token_type": "Bearer", "expires_in": 3600})
-        return _rpc_result({"serverInfo": {"name": "srv"}})
+            refresh_requests.append(request)
+            return httpx.Response(
+                200, json={"access_token": "tok-new", "token_type": "Bearer", "expires_in": 3600}
+            )
+        return _handshake_responses().get(method, _rpc({"tools": []}))
 
     config = _config(headers={"Authorization": "Bearer stale-static"})
     client, seen = _make_client(config, store, responder)
     client.start()
 
-    # 过期 → 刷新 → 新 token 覆盖静态 Authorization 头
-    assert len(refresh_calls) == 1
-    assert "application/x-www-form-urlencoded" in refresh_calls[0].headers["content-type"]
-    assert seen[0].headers["Authorization"] == "Bearer tok-new"
+    # 过期 → 刷新端点（form 编码）→ 新 token 覆盖静态 Authorization 头
+    assert len(refresh_requests) == 1
+    assert "application/x-www-form-urlencoded" in refresh_requests[0].headers["content-type"]
+    init_req = _by_method(seen, "initialize")[0]
+    assert init_req.headers["Authorization"] == "Bearer tok-new"
     assert store.saved, "刷新后应回存新记录"
     assert store.saved[-1].access_token == "tok-new"
     # 刷新令牌轮换：响应未带 refresh_token → 保留原值
@@ -114,20 +144,24 @@ def test_expired_token_refreshes_then_uses_new_token():
 
 def test_expired_token_not_refreshable_proceeds_anonymous():
     store = _FakeStore(record=_record(expires_at=1.0, refresh_token=""))
-    client, seen = _make_client(_config(), store, lambda req, seen: _rpc_result({"serverInfo": {}}))
+
+    def responder(method, request, seen):
+        return _handshake_responses().get(method, _rpc({"tools": []}))
+
+    client, seen = _make_client(_config(), store, responder)
     client.start()
-    assert "Authorization" not in seen[0].headers
+    assert "Authorization" not in _by_method(seen, "initialize")[0].headers
     assert store.saved == []
 
 
 def test_401_with_token_clears_record_and_names_reauth():
     store = _FakeStore(record=_record())
-    calls = []
+    state = {"count": 0}
 
-    def responder(request, seen):
-        calls.append(request)
-        if len(calls) == 1:
-            return _rpc_result({"serverInfo": {}})
+    def responder(method, request, seen):
+        state["count"] += 1
+        if state["count"] == 1:
+            return _rpc({"serverInfo": {}})
         return httpx.Response(401, json={"error": "unauthorized"})
 
     client, _ = _make_client(_config(), store, responder)
@@ -140,7 +174,7 @@ def test_401_with_token_clears_record_and_names_reauth():
 def test_401_without_token_is_generic_error():
     store = _FakeStore(record=None)
 
-    def responder(request, seen):
+    def responder(method, request, seen):
         return httpx.Response(401, json={"error": "unauthorized"})
 
     client, _ = _make_client(_config(), store, responder)
@@ -152,22 +186,28 @@ def test_401_without_token_is_generic_error():
 
 def test_static_authorization_used_when_no_oauth_record():
     store = _FakeStore(record=None)
+
+    def responder(method, request, seen):
+        return _handshake_responses().get(method, _rpc({"serverInfo": {}}))
+
     client, seen = _make_client(
-        _config(headers={"Authorization": "Bearer pat-123"}),
-        store,
-        lambda req, seen: _rpc_result({"serverInfo": {}}),
+        _config(headers={"Authorization": "Bearer pat-123"}), store, responder
     )
     client.start()
-    assert seen[0].headers["Authorization"] == "Bearer pat-123"
+    assert _by_method(seen, "initialize")[0].headers["Authorization"] == "Bearer pat-123"
 
 
 def test_404_on_established_session_raises_expired():
     store = _FakeStore(record=None)
-    responses = iter([
-        _rpc_result({"serverInfo": {}}),
-        httpx.Response(404, json={"error": "gone"}),
-    ])
-    client, _ = _make_client(_config(), store, lambda req, seen: next(responses))
+    state = {"count": 0}
+
+    def responder(method, request, seen):
+        state["count"] += 1
+        if state["count"] == 1:
+            return _rpc({"serverInfo": {}})
+        return httpx.Response(404, json={"error": "gone"})
+
+    client, _ = _make_client(_config(), store, responder)
     client.start()
     with pytest.raises(McpClientError, match="session expired"):
         client.list_tools()
