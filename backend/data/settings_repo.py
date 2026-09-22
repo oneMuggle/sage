@@ -80,6 +80,10 @@ class SettingsRepository:
             # Arena automation: 账号池 Fernet 主密钥（SecretBox 包装后落库，
             # 见 backend/services/arena_accounts.py:get_or_create_master_key）
             "arena_master_key",
+            # r94: Zotero 本地库 zotero.sqlite 绝对路径（设置页 ZoteroTab 配置，
+            # 见 backend/api/zotero_routes.py —— 写入 POST /zotero/path, 读取
+            # _get_configured_db_path, 环境变量 ZOTERO_DB_PATH 优先级兜底）
+            "zotero_db_path",
         }
     )
 
