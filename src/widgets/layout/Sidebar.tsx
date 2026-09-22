@@ -64,7 +64,7 @@ const moreNavItems: NavItem[] = [
   { path: '/skills', label: '技能', icon: Sparkles },
   { path: '/agents', label: '智能体', labelKey: 'sidebar.nav.agents', icon: Bot },
   { path: '/orchestration', label: '编排', icon: Network },
-  { path: '/arena-accounts', label: 'Arena 账号', icon: UserCog },
+  { path: '/arena', label: 'Arena', icon: UserCog },
   { path: '/help', label: '帮助', icon: HelpCircle },
 ];
 const navItems = [...primaryNavItems, ...moreNavItems];

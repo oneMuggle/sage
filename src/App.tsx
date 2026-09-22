@@ -44,10 +44,9 @@ const Help = lazy(() => import('./pages/Help').then((m) => ({ default: m.Help })
 const ModelCatalog = lazy(() =>
   import('./pages/ModelCatalog').then((m) => ({ default: m.default })),
 );
-// 2026-09-19: Arena 账号池 + 注册辅助 + 模型观测
-const ArenaAccounts = lazy(() =>
-  import('./pages/ArenaAccounts').then((m) => ({ default: m.default })),
-);
+// 2026-09-19 P5: Arena 控制台（账号池 / 批量注册 / 抽卡 三页签；
+// 原 /arena-accounts 页并入 /arena?tab=accounts）
+const Arena = lazy(() => import('./pages/Arena').then((m) => ({ default: m.default })));
 
 // Task 12 (2026-09-21): 待办子系统 - 完整管理页
 // 与 sidebar TodoSection（预览前 5 条）互补：列出全部待办、新建 / 完成 / 取消 / 删除。
@@ -198,8 +197,10 @@ function App() {
             <Route path="help" element={<Help />} />
             {/* Task 6 (2026-09-15): 模型目录管理 */}
             <Route path="model-catalog" element={<ModelCatalog />} />
-            {/* 2026-09-19: Arena 账号池 + 注册辅助 + 模型观测 */}
-            <Route path="arena-accounts" element={<ArenaAccounts />} />
+            {/* 2026-09-19: Arena 账号池 + 注册辅助 + 模型观测（P5 起并入 /arena） */}
+            <Route path="arena-accounts" element={<Navigate to="/arena" replace />} />
+            {/* 2026-09-19 P5: Arena 控制台三页签 */}
+            <Route path="arena" element={<Arena />} />
             {/* Task 12 (2026-09-21): 待办完整管理页（侧边栏 Plus 按钮跳转入口） */}
             <Route path="todos" element={<TodoPage />} />
           </Route>
