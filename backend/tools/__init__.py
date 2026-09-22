@@ -29,6 +29,7 @@ from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, Checkpoin
 from .codebase_search_tool import CodebaseSearchTool
 from .commit_message_tool import GitCommitMessageTool
 from .config_tool import ReadSageConfigTool, UpdateSageConfigTool
+from .download_status_tool import DownloadCancelTool, DownloadStatusTool
 from .download_tool import HttpDownloadTool
 from .edit_tool import EditTool
 from .execute_code_tool import ExecuteCodeTool
@@ -172,6 +173,9 @@ def register_all_tools(
     if network_policy.fetch_enabled():
         registry.register(WebFetchTool(policy=policy, network_policy=network_policy))
         registry.register(HttpDownloadTool(policy=policy, network_policy=network_policy))
+        # DL2 (Round 21): 后台下载任务查询/取消（与 http_download 同权限面）
+        registry.register(DownloadStatusTool())
+        registry.register(DownloadCancelTool())
     registry.register(MemorySearchTool(policy=policy))
     # Round 2 (session_search): 跨会话对话原文检索（READ 级）
     registry.register(SessionSearchTool(policy=policy))
