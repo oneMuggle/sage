@@ -32,6 +32,7 @@ import { ProvidersManager } from './ProvidersManager';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
 import { ToolsConnectionsTab } from './ToolsConnectionsTab';
 import { UpdatesTab } from './UpdatesTab';
+import { ZoteroTab } from './ZoteroTab';
 import { searchSettings, type SettingsSearchEntry, type SettingsTabKey } from './settingsSearchIndex';
 
 export type SettingsTab = SettingsTabKey;
@@ -65,6 +66,7 @@ export function Settings() {
     { key: 'memory', label: t('settings.tab.memory') },
     { key: 'network', label: t('settings.tab.network') },
     { key: 'mcp', label: t('settings.tab.mcp') },
+    { key: 'zotero', label: t('settings.tab.zotero') },
     { key: 'runtime', label: t('settings.tab.runtime') },
     { key: 'evolution', label: t('settings.tab.evolution') },
     { key: 'updates', label: t('settings.tab.updates') },
@@ -173,6 +175,7 @@ export function Settings() {
             {activeTab === 'memory' && <MemoryTab />}
             {activeTab === 'network' && <NetworkTab />}
             {activeTab === 'mcp' && <McpTab />}
+            {activeTab === 'zotero' && <ZoteroTab />}
             {activeTab === 'runtime' && <RuntimeEnvTab />}
             {activeTab === 'evolution' && (
               <div className="space-y-6">

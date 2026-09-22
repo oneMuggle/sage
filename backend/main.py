@@ -119,6 +119,7 @@ from backend.api.web_access_routes import router as web_access_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.api.worktree_routes import router as worktree_router
+from backend.api.zotero_routes import router as zotero_router
 from backend.application.services.chat_service import ChatService
 from backend.application.services.wake_store import get_wake_store
 from backend.data.database import Database, get_database
@@ -1016,6 +1017,9 @@ app.include_router(build_todo_router(get_todo_service), prefix="/api/v1")
 
 # M3: MCP multi-server management (status / servers CRUD)
 app.include_router(mcp_router, prefix="/api/v1")
+
+# Zotero: read-only library access for settings UI (status / search / items / collections)
+app.include_router(zotero_router, prefix="/api/v1/zotero")
 
 # LLM trace diagnostic preview (settings page card)
 app.include_router(diagnostic_router, prefix="/api/v1")

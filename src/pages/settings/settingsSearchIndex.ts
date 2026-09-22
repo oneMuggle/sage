@@ -17,6 +17,7 @@ export type SettingsTabKey =
   | 'memory'
   | 'network'
   | 'mcp'
+  | 'zotero'
   | 'runtime'
   | 'evolution'
   | 'updates'
@@ -104,6 +105,9 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
 
   // ── MCP ──
   { key: 'mcp', tab: 'mcp', label: 'MCP 服务器', labelEn: 'MCP servers', keywords: 'mcp server stdio sse oauth 工具 服务器' },
+
+  // ── Zotero ──
+  { key: 'zotero', tab: 'zotero', label: 'Zotero 文献库', labelEn: 'Zotero Library', keywords: 'zotero 文献 参考文献 library 文献库 引用 cite' },
 
   // ── 开发环境 ──
   { key: 'runtime', tab: 'runtime', label: '运行时探测与诊断', labelEn: 'Runtime probes', keywords: 'runtime python node 探测 诊断 试跑 开发环境' },
