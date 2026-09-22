@@ -144,7 +144,7 @@ def extract_usage(span_detail: Dict[str, Any], kind: str) -> Dict[str, Any]:
             value = props.get(key)
             if isinstance(value, bool):
                 continue
-            if isinstance(value, (int, float)):
+            if isinstance(value, (int, float)):  # noqa: UP038 — py38 运行时 isinstance 不支持 PEP604
                 out[key] = int(value)
             elif isinstance(value, str) and key not in out:
                 out[key] = value
@@ -153,7 +153,7 @@ def extract_usage(span_detail: Dict[str, Any], kind: str) -> Dict[str, Any]:
             value = _dig(props, path)
             if isinstance(value, bool):
                 continue
-            if isinstance(value, (int, float)):
+            if isinstance(value, (int, float)):  # noqa: UP038 — py38 运行时 isinstance 不支持 PEP604
                 out[name] = int(value)
             elif isinstance(value, str) and name not in out:
                 out[name] = value

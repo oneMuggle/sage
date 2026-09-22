@@ -19,11 +19,10 @@ from backend.services.arena_proxies import (
     rebind,
 )
 
-
 # ── 4 格式凭据解析 ────────────────────────────────────────────────────
 
 @pytest.mark.parametrize(
-    "raw,expected",
+    ("raw", "expected"),
     [
         ("gw.example.com:8080:user:pass", ("gw.example.com", "8080", "user", "pass")),
         ("user:pass:gw.example.com:8080", ("gw.example.com", "8080", "user", "pass")),

@@ -75,7 +75,9 @@ def test_finish_statuses():
     store.finish(job.id, "done", ok_count=2, failed_count=0)
     snap = store.get(job.id).snapshot()
     assert snap["status"] == "done"
-    assert snap["ok"] == 2 and snap["failed"] == 0 and snap["done"] == 2
+    assert snap["ok"] == 2
+    assert snap["failed"] == 0
+    assert snap["done"] == 2
     with pytest.raises(ValueError, match="invalid final status"):
         store.finish(job.id, "running")
 

@@ -27,7 +27,6 @@ from backend.services.arena_protocol import (
 )
 from backend.services.temporary_mail.base import Mailbox, TemporaryMailProvider
 
-
 # ── helpers ────────────────────────────────────────────────────────────
 
 def _b64url(obj) -> str:
@@ -116,7 +115,7 @@ def test_is_cf_challenge():
 def _register_handler(state):
     """Scripted arena backend for the registration flow."""
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0911 — 脚本化假后端：每个 return 一种路由
         url = str(request.url)
         method = request.method
         state["requests"].append((method, url))
@@ -292,7 +291,7 @@ def test_register_one_mail_timeout_is_error_not_crash():
 # ── 抽卡协议客户端 ─────────────────────────────────────────────────────
 
 def _draw_handler(state):
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx.Request) -> httpx.Response:  # noqa: PLR0911 — 脚本化假后端：每个 return 一种路由
         url = str(request.url)
         method = request.method
         state["requests"].append((method, url))
@@ -381,10 +380,9 @@ def test_draw_client_429_variants():
         client.create_chat("t")
     # cf flag asserted via second raise
     state["create_chat_mode"] = "429-cf"
-    try:
+    with pytest.raises(ArenaRateLimited) as exc_info:
         client.create_chat("t")
-    except ArenaRateLimited as exc:
-        assert exc.cf is True
+    assert exc_info.value.cf is True
 
 
 def test_draw_client_captcha_rejection():

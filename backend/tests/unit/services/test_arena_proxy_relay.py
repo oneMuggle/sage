@@ -5,9 +5,9 @@ proxy — no external network. The critical assertions mirror the P2
 acceptance items: minimal CONNECT (NO Host header) and system-assigned ports.
 """
 
+import contextlib
 import socket
 import threading
-import time
 
 import pytest
 
@@ -53,7 +53,7 @@ class FakeUpstream:
             head, _, rest = data.partition(b"\r\n\r\n")
             self.connect_requests.append(head.decode("latin-1"))
             lines = head.decode("latin-1").split("\r\n")
-            if self.reject_host and any(l.lower().startswith("host:") for l in lines[1:]):
+            if self.reject_host and any(ln.lower().startswith("host:") for ln in lines[1:]):
                 conn.sendall(b"HTTP/1.1 403 Forbidden\r\n\r\n")
                 conn.close()
                 return
@@ -61,7 +61,7 @@ class FakeUpstream:
                 wanted = "Proxy-Authorization: Basic " + __import__("base64").b64encode(
                     self.expect_auth.encode()
                 ).decode()
-                if not any(l == wanted for l in lines[1:]):
+                if not any(ln == wanted for ln in lines[1:]):
                     conn.sendall(b"HTTP/1.1 407 Proxy Authentication Required\r\n\r\n")
                     conn.close()
                     return
@@ -79,10 +79,8 @@ class FakeUpstream:
         except OSError:
             pass
         finally:
-            try:
+            with contextlib.suppress(OSError):
                 conn.close()
-            except OSError:
-                pass
 
     def url(self):
         base = f"127.0.0.1:{self.port}"

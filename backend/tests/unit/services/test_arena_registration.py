@@ -98,7 +98,9 @@ def test_job_registers_accounts_and_writes_pool(svc, store):
     )
     job = _wait_done(store, job_id)
     assert job.status == "done"
-    assert job.ok == 2 and job.failed == 1 and job.total == 3
+    assert job.ok == 2
+    assert job.failed == 1
+    assert job.total == 3
 
     accounts = svc.list_accounts()
     assert len(accounts) == 2
@@ -109,10 +111,12 @@ def test_job_registers_accounts_and_writes_pool(svc, store):
 
     kinds = [e.kind for e in store.events_after(job_id)]
     assert "register_result" in kinds
-    assert "progress" in kinds and "done" in kinds
+    assert "progress" in kinds
+    assert "done" in kinds
     # events never carry the password
     for event in store.events_after(job_id):
-        assert "Passw0rd!xy" not in str(event.data) and "Passw0rd!xy" not in event.message
+        assert "Passw0rd!xy" not in str(event.data)
+        assert "Passw0rd!xy" not in event.message
 
 
 def test_job_results_carry_plaintext_for_explicit_endpoints(svc, store):
@@ -227,7 +231,8 @@ def test_job_proxy_mode_binds_exit_and_keeps_mail_direct(svc, store):
         exit_ip_probe=lambda url: "203.0.113.9",
     )
     job = _wait_done(store, job_id)
-    assert job.status == "done" and job.ok == 1
+    assert job.status == "done"
+    assert job.ok == 1
 
     account = svc.list_accounts()[0]
     assert account["proxy_url"] == "http://cust-sid-Ab12Cd:pw@1.2.3.4:8080"
@@ -256,7 +261,8 @@ def test_job_proxy_mode_excludes_bound_sids(svc, store):
         proxy_provider=stub, exit_ip_probe=lambda url: "203.0.113.9",
     )
     _wait_done(store, job_id)
-    assert stub.seen_exclusions and "Taken1" in stub.seen_exclusions[0]
+    assert stub.seen_exclusions
+    assert "Taken1" in stub.seen_exclusions[0]
     new_accounts = [a for a in svc.list_accounts() if a["email"] != "existing@x.example"]
     assert new_accounts[0]["proxy_sid"] == "Free1"
 
@@ -275,7 +281,9 @@ def test_job_proxy_mode_no_proxy_available(svc, store):
         proxy_provider=Empty(),
     )
     job = _wait_done(store, job_id)
-    assert job.status == "done" and job.ok == 0 and job.failed == 1
+    assert job.status == "done"
+    assert job.ok == 0
+    assert job.failed == 1
     assert svc.count_accounts() == 0
     messages = " | ".join(e.message for e in store.events_after(job_id))
     assert "无可用代理" in messages
