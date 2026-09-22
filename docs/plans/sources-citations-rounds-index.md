@@ -97,5 +97,10 @@ main `969b7d55` 本机全量回归（Windows 11 / py3.12 / node 24）：
 - **前端全量（vitest run）**：2926 passed / 4 failed → 与后端并行时为资源
   flake，串行重跑全绿（exit 0）。
 - **来源专项域（chat/memory/sources）零失败**。
+- **R95 跟进定性**：① `test_chat_dispatcher_cancel` 为**真实取消竞态**——
+  merged 事件经 relay 任务异步汇入，cancel 与异常间无 await 时未置位，
+  任务被误判 failed；修复为异常分类并查源事件（本 PR）。
+  ② `word_comments` 为**本地环境漂移**——python-docx 1.2.0 下 `part._blob`
+  私有写回失效（锁定版本 1.1.2 正常）；锁回 1.1.2 后本地通过，代码无需改。
 
 —— 本账本由参考来源专项循环维护，随轮次追加。
