@@ -235,7 +235,7 @@ export function TaskTreeSection({
               tick，终态冻结为总时长；上限为 round25 透出的设置键。 */}
           {runStartedAt && (
             <span className="ml-1" data-testid="task-tree-run-elapsed">
-              已运行 {formatElapsed(now - runStartedAt)}
+              已运行 {formatElapsed((board.endedAt ?? now) - runStartedAt)}
               {runWallClockLimitMinutes > 0 ? ` · 上限 ${runWallClockLimitMinutes} 分钟` : ''}
             </span>
           )}

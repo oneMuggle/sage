@@ -10,6 +10,7 @@
  * 返回 true 表示事件已被本函数消费（调用方可 return）。
  */
 
+import type { OrchRunDetail } from '../../shared/api/orchRunClient';
 import type { AgentEvent } from '../../shared/api/types';
 import type {
   SubagentLiveEvent,
@@ -22,6 +23,7 @@ import { useChangesListStore } from '../changes/changesListStore';
 import { maybeAutoOpenArtifactPanel } from '../right-panel/rightPanelStore';
 
 import { mergeLiveEvent, useChatStreamStore } from './chatStreamStore';
+import type { TaskBoardState } from './chatStreamStore';
 
 export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): boolean {
   const board = useChatStreamStore.getState();
@@ -61,6 +63,7 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
     });
     return true;
   }
+
 
   // task_status → 按 run_id 匹配合并 + 重算 progress 5 元组。
   if (evt.state === 'task_status' && evt.run_id && evt.task_id) {
@@ -193,4 +196,63 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
   }
 
   return false;
+}
+
+
+// RD20 (round43): 历史编排 run → 任务板恢复（纯函数，供 Chat 会话切换时
+// 调用）。RT24 字段 used_tokens/duration_ms 一并映射；endedAt 取任务最大
+// finished_at（无终态任务时为 null）。无任务返回 null。
+export function restoreRunToBoard(
+  run: OrchRunDetail,
+): {
+  plan: TaskBoardState['plan'];
+  statuses: TaskBoardState['statuses'];
+  progress: TaskBoardState['progress'];
+  dispatchedAt: number;
+  endedAt: number | null;
+} | null {
+  if (run.tasks.length === 0) return null;
+  type PlanItem = TaskBoardState['plan'][number];
+  const plan = run.plan as unknown as PlanItem[];
+  const statuses: TaskBoardState['statuses'] = {};
+  const progress = { total: 0, done: 0, running: 0, queued: 0, failed: 0, cancelled: 0 };
+  progress.total = run.tasks.length;
+  let endedAt: number | null = null;
+  for (const task of run.tasks) {
+    const status = String(task.status ?? 'queued');
+    const taskId = String(task.task_id);
+    statuses[taskId] = {
+      state: 'task_status',
+      run_id: run.run_id,
+      task_id: taskId,
+      status: status as TaskBoardState['statuses'][string]['status'],
+      agent_id: String(task.agent_id ?? ''),
+      goal: String(task.goal ?? ''),
+      error: (task.error as string | null) ?? null,
+      output_preview: (task.output_preview as string | null) ?? null,
+      retry_count: (task.retry_count as number) ?? 0,
+      // RT24 (round32): 历史回看携带任务级用量/时长。
+      used_tokens: (task.used_tokens as number | undefined) ?? undefined,
+      duration_ms: (task.duration_ms as number | undefined) ?? undefined,
+    };
+    if (status in progress) progress[status as keyof typeof progress] += 1;
+    const finished = Number(task.finished_at ?? 0);
+    if (finished > (endedAt ?? 0)) endedAt = finished;
+  }
+  // 动态加任务的 run 可能 plan_json 为空 —— 从任务行反推 plan 保证任务树可渲染
+  const effPlan: PlanItem[] =
+    plan.length > 0
+      ? plan
+      : run.tasks.map((task) => ({
+          task_id: String(task.task_id),
+          agent_id: String(task.agent_id ?? ''),
+          goal: String(task.goal ?? ''),
+        }));
+  return {
+    plan: effPlan,
+    statuses,
+    progress,
+    dispatchedAt: run.created_at,
+    endedAt,
+  };
 }

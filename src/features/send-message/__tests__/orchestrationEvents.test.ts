@@ -7,6 +7,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { OrchRunDetail } from '../../../shared/api/orchRunClient';
 import type { AgentEvent } from '../../../shared/api/types';
 import { useStore } from '../../../shared/lib/store';
 import { useChangesListStore } from '../../changes/changesListStore';
@@ -15,7 +16,10 @@ import {
   selectSessionSlots,
   useChatStreamStore,
 } from '../chatStreamStore';
-import { applyOrchestrationEventToBoard } from '../orchestrationEvents';
+import {
+  applyOrchestrationEventToBoard,
+  restoreRunToBoard,
+} from '../orchestrationEvents';
 
 const SID = 'sess-r35';
 
@@ -322,5 +326,58 @@ describe('applyOrchestrationEventToBoard — orch_preflight (Round 3)', () => {
     );
     expect(handled).toBe(false);
     expect(slots().preflightPhase).toBeNull();
+  });
+});
+
+// ============================================================================
+// RD20 (round43): restoreRunToBoard —— 历史 run → 任务板恢复
+// ============================================================================
+
+describe('restoreRunToBoard — 历史 run 恢复 (RD20)', () => {
+  const baseRun: OrchRunDetail = {
+    run_id: 'orch-restore-1',
+    session_id: SID,
+    status: 'failed',
+    created_at: 1_000_000,
+    plan: [
+      { task_id: 'a', goal: 'GA', agent_id: 'primary', depends_on: [] },
+      { task_id: 'b', goal: 'GB', agent_id: 'primary' },
+    ],
+    tasks: [
+      {
+        task_id: 'a', agent_id: 'primary', goal: 'GA', status: 'done',
+        error: null, output_preview: '结果A', retry_count: 0,
+        started_at: 1_000_100, finished_at: 1_000_600,
+        used_tokens: 4321, duration_ms: 500,
+      },
+      {
+        task_id: 'b', agent_id: 'primary', goal: 'GB', status: 'failed',
+        error: 'boom', output_preview: null, retry_count: 1,
+        started_at: 1_000_700, finished_at: 1_000_900,
+        used_tokens: 0, duration_ms: 200,
+      },
+    ],
+  } as unknown as OrchRunDetail;
+
+  it('映射 statuses/plan/progress 与 RT24 字段，endedAt 取最大 finished_at', () => {
+    const restored = restoreRunToBoard(baseRun);
+    expect(restored).not.toBeNull();
+    expect(restored!.dispatchedAt).toBe(1_000_000);
+    expect(restored!.endedAt).toBe(1_000_900);
+    const sa = restored!.statuses.a!;
+    const sb = restored!.statuses.b!;
+    const prog = restored!.progress!;
+    expect(sa.used_tokens).toBe(4321);
+    expect(sa.duration_ms).toBe(500);
+    expect(sb.retry_count).toBe(1);
+    expect(prog.total).toBe(2);
+    expect(prog.done).toBe(1);
+    expect(prog.failed).toBe(1);
+  });
+
+  it('无任务的 run 返回 null', () => {
+    expect(
+      restoreRunToBoard({ ...baseRun, tasks: [], plan: [] }),
+    ).toBeNull();
   });
 });
