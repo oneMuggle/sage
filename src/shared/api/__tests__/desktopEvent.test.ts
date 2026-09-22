@@ -11,10 +11,10 @@ afterEach(() => {
 
 describe('desktopEvent.listen', () => {
   it('把 electronAPI 的 (payload) 还原为 Tauri 风格 ({ payload })', async () => {
-    let captured: ((payload: unknown) => void) | null = null;
+    const holder: { fn?: (payload: unknown) => void } = {};
     const unlisten = vi.fn();
     const apiListen = vi.fn((_event: string, fn: (payload: unknown) => void) => {
-      captured = fn;
+      holder.fn = fn;
       return unlisten;
     });
     vi.stubGlobal('window', { electronAPI: { listen: apiListen } });
@@ -22,7 +22,7 @@ describe('desktopEvent.listen', () => {
     const seen: Array<{ payload: string }> = [];
     const stop = await listen<string>('evt', (e) => seen.push(e));
 
-    captured?.('hello');
+    holder.fn?.('hello');
     expect(seen).toEqual([{ payload: 'hello' }]);
     expect(stop).toBe(unlisten);
     expect(apiListen).toHaveBeenCalledWith('evt', expect.any(Function), undefined);
