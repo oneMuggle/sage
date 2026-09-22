@@ -156,6 +156,16 @@
   /* Layout */
   --sidebar-width: 240px;
   --header-height: 48px;
+
+  /* ZCode-inspired semantic UI tokens */
+  --ui-font-size: 14px;
+  --color-background: #ffffff;
+  --color-card: #f8f9fa;
+  --color-surface: #f3f4f6;
+  --color-popover: #ffffff;
+  --color-border: #e5e7eb;
+  --color-foreground: #111827;
+  --color-foreground-subtle: #6b7280;
 }
 
 [data-theme='dark'] {
@@ -290,6 +300,16 @@
   /* Layout (same as light) */
   --sidebar-width: 240px;
   --header-height: 48px;
+
+  /* ZCode-inspired semantic UI tokens (dark) */
+  --ui-font-size: 14px;
+  --color-background: #0f172a;
+  --color-card: #1e293b;
+  --color-surface: #334155;
+  --color-popover: #1e293b;
+  --color-border: #334155;
+  --color-foreground: #f1f5f9;
+  --color-foreground-subtle: #94a3b8;
 }
 
 body {

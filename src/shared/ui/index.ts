@@ -2,6 +2,10 @@
 export { Button } from './Button';
 export type { ButtonProps } from './Button';
 
+// U-Card: DESIGN.md §7 标准卡片容器 (bg-ui-card + border-ui-border + rounded-xl)
+export { Card } from './Card';
+export type { CardProps } from './Card';
+
 export { Input } from './Input';
 export type { InputProps } from './Input';
 
