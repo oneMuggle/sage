@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **py38 对齐**：tenminmail 锁构造推迟到首 await、zip strict= 移除（#1228 惯例）；win7 全量 213 passed (#1383)
 - **P6 收口**：spec §1.4（批量注册限定用户显式发起）/§7.1（持久化 master.key）修订；审计 v1.1 增补 ArenCard 参考源；方案文档归档
 
+### Changed(perf)
+- **shiki 细粒度加载**：`import('shiki')` 全量 bundle → `shiki/core` + `@shikijs/langs|themes/*` 显式 26 语言 + JS 正则引擎（免 wasm）。渲染产物 dist/assets **18MB/450 chunk → 10MB/178**（-44%），Electron 安装包同步瘦身；语法包自带别名表，`js/ts/py/c++/sh` 等别名高亮行为不变
+
 > 🌐 **网页访问能力优化 Round 21：DL2 后台下载任务化**（方案 `docs/plans/2026-09-19_web-access-round21-dljobs.md`）
 
 ### Added(web-access)
