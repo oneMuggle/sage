@@ -1118,6 +1118,42 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,
   },
+
+  // Zotero: read-only library access (backend/api/zotero_routes.py).
+  // Settings UI uses these to show connection status, library stats, browse
+  // collections, and search items — all via the Zotero SQLite client.
+  zotero_status: { method: 'GET', path: () => '/api/v1/zotero/status' },
+  zotero_search: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a.q) params.set('q', String(a.q));
+      if (a.collection_key) params.set('collection_key', String(a.collection_key));
+      if (a.tag) params.set('tag', String(a.tag));
+      if (a.limit) params.set('limit', String(a.limit));
+      return `/api/v1/zotero/search?${params.toString()}`;
+    },
+  },
+  zotero_item: {
+    method: 'GET',
+    path: (a) => `/api/v1/zotero/items/${encodeURIComponent(String(a.item_key))}`,
+  },
+  zotero_annotations: {
+    method: 'GET',
+    path: (a) => `/api/v1/zotero/items/${encodeURIComponent(String(a.item_key))}/annotations`,
+  },
+  zotero_collections: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a.parent_key) params.set('parent_key', String(a.parent_key));
+      return `/api/v1/zotero/collections?${params.toString()}`;
+    },
+  },
+  zotero_set_path: {
+    method: 'POST',
+    path: (a) => `/api/v1/zotero/path?path=${encodeURIComponent(String(a.path ?? ''))}`,
+  },
   // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
   // L8 PR-A (2026-09-09): 支持 range=today|total 查询参数, 默认 today。
   // L8 PR-B (2026-09-09): range 扩到 today|7d|30d|total。
