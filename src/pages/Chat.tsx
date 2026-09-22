@@ -8,11 +8,13 @@ import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStor
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
+import { restoreRunToBoard } from '../features/send-message/orchestrationEvents';
 import { useChat } from '../features/send-message/useChat';
 import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
 import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
 import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
 import { orchRunClient } from '../shared/api/orchRunClient';
+// RD20 (round43): 历史 run → 任务板恢复映射。
 import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
@@ -316,43 +318,19 @@ export function Chat() {
       .then((resp) => {
         if (cancelled) return;
         const run = resp.runs[0];
-        if (!run || run.tasks.length === 0) return;
-        type PlanItem = TaskBoardState['plan'][number];
-        const plan = run.plan as unknown as PlanItem[];
-        const statuses: TaskBoardState['statuses'] = {};
-        const progress = { total: 0, done: 0, running: 0, queued: 0, failed: 0, cancelled: 0 };
-        progress.total = run.tasks.length;
-        for (const task of run.tasks) {
-          const status = String(task.status ?? 'queued');
-          const taskId = String(task.task_id);
-          statuses[taskId] = {
-            state: 'task_status',
-            run_id: run.run_id,
-            task_id: taskId,
-            status: status as TaskBoardState['statuses'][string]['status'],
-            agent_id: String(task.agent_id ?? ''),
-            goal: String(task.goal ?? ''),
-            error: (task.error as string | null) ?? null,
-            output_preview: (task.output_preview as string | null) ?? null,
-            retry_count: (task.retry_count as number) ?? 0,
-          };
-          if (status in progress) progress[status as keyof typeof progress] += 1;
-        }
-        // 动态加任务的 run 可能 plan_json 为空 —— 从任务行反推 plan 保证任务树可渲染
-        const effPlan: PlanItem[] =
-          plan.length > 0
-            ? plan
-            : run.tasks.map((task) => ({
-                task_id: String(task.task_id),
-                agent_id: String(task.agent_id ?? ''),
-                goal: String(task.goal ?? ''),
-              }));
+        if (!run) return;
+        // RD20 (round43): 映射抽取为纯函数 restoreRunToBoard —— RT24 字段
+        // used_tokens/duration_ms 与 endedAt 一并恢复（历史任务树可显示
+        // 量化徽章；BU16 时长显示原始总时长而非从恢复时刻起算）。
+        const restored = restoreRunToBoard(run);
+        if (!restored) return;
         const board: TaskBoardState = {
           runId: run.run_id,
-          plan: effPlan,
-          statuses,
-          progress,
-          dispatchedAt: run.created_at,
+          plan: restored.plan,
+          statuses: restored.statuses,
+          progress: restored.progress,
+          dispatchedAt: restored.dispatchedAt,
+          endedAt: restored.endedAt,
         };
         useChatStreamStore.getState().setTaskBoard(currentSessionId, board);
       })

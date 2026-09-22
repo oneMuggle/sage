@@ -856,3 +856,48 @@ describe('TaskTreeSection — run 触顶原因横幅 (RD21)', () => {
     expect(screen.queryByTestId('task-tree-trip-reason')).toBeNull();
   });
 });
+
+// ============================================================================
+// RD20 (round43): 历史 run 恢复态 —— BU16 时长显示原始总时长
+// ============================================================================
+
+describe('TaskTreeSection — 恢复态时长 (RD20)', () => {
+  it('endedAt 存在时 elapsed 冻结为原始总时长', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-09-18T12:00:00Z'));
+      render(
+        <TaskTreeSection
+          board={makeBoard({
+            dispatchedAt: Date.now() - 600_000,
+            endedAt: Date.now() - 300_000, // run 原始时长 5 分钟
+            statuses: {
+              t1: {
+                state: 'task_status',
+                run_id: 'orch-rerun-ui',
+                task_id: 't1',
+                status: 'done',
+                agent_id: 'primary',
+                goal: 'g1',
+                error: null,
+                output_preview: null,
+                retry_count: 0,
+              },
+            } as TaskBoardState['statuses'],
+            progress: { total: 1, done: 1, running: 0, queued: 0, failed: 0, cancelled: 0 },
+          })}
+        />,
+      );
+      expect(screen.getByTestId('task-tree-run-elapsed').textContent).toContain(
+        '已运行 5m',
+      );
+      // 时间前进后不重渲染（endedAt 冻结，无 tick）
+      vi.advanceTimersByTime(60_000);
+      expect(screen.getByTestId('task-tree-run-elapsed').textContent).toContain(
+        '已运行 5m',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
