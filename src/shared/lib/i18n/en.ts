@@ -392,8 +392,13 @@ export const en: Record<TranslationKey, string> = {
   'settings.zotero.stats.attachments': 'Attachments',
   'settings.zotero.collections.title': 'Collections',
   'settings.zotero.collections.empty': 'No collections',
+  'settings.zotero.collections.label': 'Browse by collection',
+  'settings.zotero.collections.all': 'All collections',
   'settings.zotero.search.placeholder': 'Search references (title / abstract / author)…',
   'settings.zotero.search.empty': 'No matching results',
+  'settings.zotero.annotations.title': 'Annotations',
+  'settings.zotero.annotations.loading': 'Loading annotations…',
+  'settings.zotero.annotations.more': 'more',
   'settings.zotero.item.annotations': 'Annotations',
   'settings.zotero.item.no_annotations': 'No annotations',
   'settings.zotero.error.unavailable':

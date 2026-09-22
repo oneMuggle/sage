@@ -379,8 +379,13 @@ export const zh = {
   'settings.zotero.stats.attachments': '附件',
   'settings.zotero.collections.title': '分类浏览',
   'settings.zotero.collections.empty': '暂无分类',
+  'settings.zotero.collections.label': '按分类浏览',
+  'settings.zotero.collections.all': '所有分类',
   'settings.zotero.search.placeholder': '搜索文献（标题/摘要/作者）…',
   'settings.zotero.search.empty': '无匹配结果',
+  'settings.zotero.annotations.title': '批注',
+  'settings.zotero.annotations.loading': '加载批注中…',
+  'settings.zotero.annotations.more': '更多',
   'settings.zotero.item.annotations': '批注',
   'settings.zotero.item.no_annotations': '无批注',
   'settings.zotero.error.unavailable':
