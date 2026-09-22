@@ -6,6 +6,7 @@ user JSON load/merge/corrupt-file fallback, atomic save round-trip.
 
 import dataclasses
 import json
+import sys
 
 import pytest
 
@@ -74,6 +75,32 @@ class TestBuiltins:
         assert drawio.command == "node"
         assert drawio.args == (str(entry),)
         assert "DRAWIO_BASE_URL" in drawio.env
+
+    def test_zotero_present_only_when_server_module_exists(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setattr(cfg, "_project_root", lambda: tmp_path)
+        assert cfg.builtin_server_configs() == []
+
+        zotero_entry = tmp_path / "backend" / "mcp" / "servers" / "zotero" / "__main__.py"
+        zotero_entry.parent.mkdir(parents=True)
+        zotero_entry.write_text("# entry")
+        builtins = cfg.builtin_server_configs()
+        assert [b.name for b in builtins] == [cfg.BUILTIN_ZOTERO]
+        zotero = builtins[0]
+        assert zotero.command == sys.executable
+        assert zotero.args == ("-m", "backend.mcp.servers.zotero")
+        assert zotero.enabled is True
+
+    def test_zotero_env_passes_zotero_db_path(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(cfg, "_project_root", lambda: tmp_path)
+        zotero_entry = tmp_path / "backend" / "mcp" / "servers" / "zotero" / "__main__.py"
+        zotero_entry.parent.mkdir(parents=True)
+        zotero_entry.write_text("# entry")
+        monkeypatch.setenv("ZOTERO_DB_PATH", "/custom/path/zotero.sqlite")
+        builtins = cfg.builtin_server_configs()
+        zotero = next(b for b in builtins if b.name == cfg.BUILTIN_ZOTERO)
+        assert zotero.env == {"ZOTERO_DB_PATH": "/custom/path/zotero.sqlite"}
 
 
 class TestUserFile:
