@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🌐 **网页访问能力优化 Round 21：DL2 后台下载任务化**（方案 `docs/plans/2026-09-19_web-access-round21-dljobs.md`）
+
+### Added(web-access)
+- **后台下载任务（DL2）**：`http_download` 新增 `background: bool`——true 时提交后台任务立即返回 `job_id`（双 worker 线程池执行，pending 队列可排队）；新增 `download_status`（查单任务/全部）与 `download_cancel`（仅 pending 可取消；running 不可中断如实报错）工具；完成后结果保留供查询（含最终 path/bytes/sha256）；任务表进程内存态（重启清零），终态 LRU 淘汰 200 上限
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21

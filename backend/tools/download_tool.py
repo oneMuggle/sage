@@ -420,6 +420,7 @@ class HttpDownloadTool(BaseTool):
         resume: bool = True,
         expected_sha256: str = "",
         referer: str = "",
+        background: bool = False,
         **kwargs,
     ) -> ToolResult:
         """下载 ``url`` 到工作区。
@@ -517,6 +518,22 @@ class HttpDownloadTool(BaseTool):
         host_rejection = network_policy.check_host(url)
         if host_rejection:
             return ToolResult(success=False, error=host_rejection)
+
+        # DL2：后台任务化——立即返回 job_id，线程池执行；status/cancel 工具查询
+        if background:
+            from backend.tools.download_jobs import get_download_job_manager
+
+            return get_download_job_manager().submit(
+                tool=self,
+                url=url,
+                filename=filename,
+                max_bytes=max_bytes,
+                credential_domain=credential_domain.strip(),
+                retries=retries,
+                resume=bool(resume),
+                expected_sha256=expected_sha256.strip(),
+                referer=referer.strip(),
+            )
 
         started = time.monotonic()
         attempts = 0
