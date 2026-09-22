@@ -114,9 +114,11 @@ describe('subscribeOrchEvents（direct fetch 兜底）', () => {
   it('携带 afterSeq 时请求对应 URL', async () => {
     const fetchMock = vi.fn().mockResolvedValue(ndjsonResponse(['']));
     vi.stubGlobal('fetch', fetchMock);
-    for await (const _ of subscribeOrchEvents({ runId: 'run/9', afterSeq: 42 })) {
-      // 无事件
+    const drained: RunEvent[] = [];
+    for await (const ev of subscribeOrchEvents({ runId: 'run/9', afterSeq: 42 })) {
+      drained.push(ev);
     }
+    expect(drained).toEqual([]);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/orch/runs/run%2F9/events?after_seq=42',
       expect.objectContaining({ headers: { Accept: 'application/x-ndjson' } }),
@@ -126,11 +128,13 @@ describe('subscribeOrchEvents（direct fetch 兜底）', () => {
   it('HTTP 非 2xx 触发 onError 并抛错', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ndjsonResponse([], { ok: false, status: 500, statusText: 'boom' })));
     const onError = vi.fn();
+    const got: RunEvent[] = [];
     await expect(async () => {
-      for await (const _ of subscribeOrchEvents({ runId: 'r', onError })) {
-        // 不产出
+      for await (const ev of subscribeOrchEvents({ runId: 'r', onError })) {
+        got.push(ev);
       }
     }).rejects.toThrow(/500 boom/);
+    expect(got).toEqual([]);
     expect(onError).toHaveBeenCalledTimes(1);
   });
 
@@ -147,11 +151,13 @@ describe('subscribeOrchEvents（direct fetch 兜底）', () => {
   it('普通 fetch 失败触发 onError 并抛出', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('net down')));
     const onError = vi.fn();
+    const got: RunEvent[] = [];
     await expect(async () => {
-      for await (const _ of subscribeOrchEvents({ runId: 'r', onError })) {
-        // 不产出
+      for await (const ev of subscribeOrchEvents({ runId: 'r', onError })) {
+        got.push(ev);
       }
     }).rejects.toThrow('net down');
+    expect(got).toEqual([]);
     expect(onError).toHaveBeenCalledTimes(1);
   });
 
@@ -159,10 +165,12 @@ describe('subscribeOrchEvents（direct fetch 兜底）', () => {
     const big = envelope({ payload: { pad: 'x'.repeat(256 * 1024 + 10) } });
     // 单块投递：避免默认 8 字节分块在超长行上的 O(n²) 缓冲拷贝拖垮测试
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ndjsonResponse([JSON.stringify(big) + '\n'], { bytesPerChunk: Number.POSITIVE_INFINITY })));
+    const got: RunEvent[] = [];
     await expect(async () => {
-      for await (const _ of subscribeOrchEvents({ runId: 'r' })) {
-        // 不产出
+      for await (const ev of subscribeOrchEvents({ runId: 'r' })) {
+        got.push(ev);
       }
     }).rejects.toThrow('line exceeded limit');
+    expect(got).toEqual([]);
   });
 });
