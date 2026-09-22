@@ -8,6 +8,11 @@
 #   mail_provider             临时邮箱 provider 名（见 temporary_mail/registry.py）
 #   mail_api_key              provider 需要的 key（mail.tm 免费层不需要）
 #   probe_backend             模型观测分类后端："python"（跨平台）/"node"（仅主通道）
+#
+# 子段（registration / draw / proxy / token_window，默认全关；字段见模型）：
+#   token_window.enabled          P3 token 窗口：隐藏 Electron 窗口铸造 reCAPTCHA V3
+#   token_window.max_age_sec      token 可用年龄上限（默认 110；V3 生命周期 ~120s）
+#   token_window.poll_interval_sec 窗口轮询间隔（默认 2s）
 enabled: false
 max_accounts: 5
 max_concurrent_sessions: 2

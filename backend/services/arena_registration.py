@@ -462,3 +462,294 @@ class ArenaRegistrationService:
                 logger.debug("关闭注册浏览器失败（忽略）: %s", exc)
             reg["session"] = None
             reg["adapter"] = None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 批量注册 job 编排（plan §5.8/§5.10；事件契约见 arena_jobs.py）
+# ═══════════════════════════════════════════════════════════════════════════
+
+from backend.services.arena_jobs import Job, JobStore  # noqa: E402
+from backend.services.arena_proxies import (  # noqa: E402,F401 — re-export 供路由/测试
+    ArenaProxyError,
+    display_proxy,
+    proxy_sid,
+)
+
+_JOB_STORE: Optional[JobStore] = None
+_JOB_STORE_LOCK = threading.Lock()
+
+
+def get_job_store() -> JobStore:
+    """Route-level job store singleton（路由层与编排层共用同一注册表）。"""
+    global _JOB_STORE
+    with _JOB_STORE_LOCK:
+        if _JOB_STORE is None:
+            _JOB_STORE = JobStore()
+        return _JOB_STORE
+
+
+def _reset_store_for_tests() -> None:
+    """Test hook: swap in a fresh singleton。"""
+    global _JOB_STORE
+    with _JOB_STORE_LOCK:
+        _JOB_STORE = JobStore()
+
+
+def export_accounts(job_id: str, out_dir: Any, job_store: Optional[JobStore] = None) -> Any:
+    """把 job 的成功注册结果导出为 ``email----password----credits`` 文本。
+
+    密码只在显式导出端点出现（事件/快照一律不含）。未知 job / 无成功
+    结果抛 ValueError（路由层映射 404/400）。
+    """
+    from pathlib import Path
+
+    store = job_store or get_job_store()
+    job = store.get(job_id)
+    if job is None:
+        raise ValueError(f"unknown job: {job_id}")
+    successes = [r for r in job.results if r.get("password")]
+    if not successes:
+        raise ValueError("no successful registrations to export")
+    out_path = Path(out_dir) / f"accounts_{job_id}.txt"
+    lines = [
+        "----".join(
+            [
+                str(r.get("email", "")),
+                str(r.get("password", "")),
+                str(r.get("credits", "")),
+            ]
+        )
+        for r in successes
+    ]
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return out_path
+
+
+def start_job(
+    count: int,
+    concurrency: int,
+    accounts_service: Any,
+    config: ArenaAutomationConfig,
+    register_fn: Optional[Callable[..., Any]] = None,
+    job_store: Optional[JobStore] = None,
+    proxy_provider: Any = None,
+    exit_ip_probe: Optional[Callable[[str], str]] = None,
+) -> str:
+    """Start a batch registration job; returns the job id (HTTP 202 语义)。
+
+    - count 按池剩余容量截断（max_accounts - 现有账号数）；容量 ≤ 0 抛
+      ValueError（路由层 400）。截断在 params.clamped_by_max_accounts 标记。
+    - ``register_fn`` 缺省用真实协议层 ``arena_protocol.register_one``；
+      测试注入假体。worker 数 = min(concurrency, total)，daemon 线程执行。
+    - ``proxy_provider`` 给出时每个账号先 acquire 代理出口（邮箱恒直连），
+      成功后把出口绑定到账号（proxy_url/proxy_sid/exit_ip）。
+    """
+    store = job_store or get_job_store()
+    if register_fn is None:
+        from backend.services.arena_protocol import register_one as register_fn  # noqa: F811
+
+    pool_size = accounts_service.count_accounts()
+    capacity = int(config.max_accounts) - int(pool_size)
+    total = min(int(count), capacity)
+    if total <= 0:
+        raise ValueError(
+            f"max_accounts ({config.max_accounts}) reached: "
+            f"账号池已有 {pool_size} 个账号，无法再注册"
+        )
+    params: Dict[str, Any] = {"count": int(count), "concurrency": int(concurrency)}
+    if total < int(count):
+        params["clamped_by_max_accounts"] = True
+    job = store.create("registration", total, params=params)
+    worker_count = max(1, min(int(concurrency), total))
+    threading.Thread(
+        target=_run_registration_job,
+        args=(job, store, accounts_service, config, register_fn,
+              proxy_provider, exit_ip_probe, total, worker_count),
+        name=f"arena-reg-job-{job.id}",
+        daemon=True,
+    ).start()
+    return job.id
+
+
+def _run_registration_job(
+    job: Job,
+    store: JobStore,
+    accounts_service: Any,
+    config: ArenaAutomationConfig,
+    register_fn: Callable[..., Any],
+    proxy_provider: Any,
+    exit_ip_probe: Optional[Callable[[str], str]],
+    total: int,
+    worker_count: int,
+) -> None:
+    """Worker pool 主循环：每个 worker 从队列取序号直到队列空 / 请求停止。"""
+    import queue as _queue
+
+    work: _queue.Queue[int] = _queue.Queue()
+    for index in range(total):
+        work.put(index)
+    counter = {"ok": 0, "failed": 0, "done": 0}
+    counter_lock = threading.Lock()
+    job_id = job.id
+
+    def make_log() -> Callable[..., None]:
+        def log(message: str, level: str = "info", kind: str = "log") -> None:
+            store.append_event(job_id, level, kind, message)
+
+        return log
+
+    def worker() -> None:
+        provider: Any = None
+        while True:
+            if store.is_stop_requested(job_id):
+                return
+            try:
+                _index = work.get_nowait()
+            except _queue.Empty:
+                return
+            try:
+                if provider is None:
+                    provider = create_provider(config.mail_provider, config.mail_api_key)
+            except Exception as exc:  # noqa: BLE001 — provider 挂了按失败计，不炸 worker
+                with counter_lock:
+                    counter["failed"] += 1
+                    counter["done"] += 1
+                store.append_event(
+                    job_id, "error", "register_result",
+                    f"邮箱 provider 创建失败：{exc}",
+                    data={"ok": False, "error": str(exc)},
+                )
+                continue
+            _register_unit(
+                job=job, store=store, accounts_service=accounts_service,
+                config=config, register_fn=register_fn, provider=provider,
+                proxy_provider=proxy_provider, exit_ip_probe=exit_ip_probe,
+                log=make_log(), counter=counter, counter_lock=counter_lock,
+            )
+
+    threads = [
+        threading.Thread(target=worker, name=f"arena-reg-worker-{job.id}-{i}", daemon=True)
+        for i in range(worker_count)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    final_status = "stopped" if store.is_stop_requested(job_id) else "done"
+    store.finish(job_id, final_status, counter["ok"], counter["failed"])
+    store.append_event(
+        job_id, "info", "done",
+        f"job {final_status}: 成功 {counter['ok']} / 失败 {counter['failed']} / 共 {total}",
+        data={"ok": counter["ok"], "failed": counter["failed"], "total": total},
+    )
+
+
+def _register_unit(
+    job: Job,
+    store: JobStore,
+    accounts_service: Any,
+    config: ArenaAutomationConfig,
+    register_fn: Callable[..., Any],
+    provider: Any,
+    proxy_provider: Any,
+    exit_ip_probe: Optional[Callable[[str], str]],
+    log: Callable[..., None],
+    counter: Dict[str, int],
+    counter_lock: threading.Lock,
+) -> None:
+    """注册单个账号：代理绑定 → 调协议层 → 入池 → 事件。永不抛出。"""
+    job_id = job.id
+    proxy_url: Optional[str] = None
+    proxy_sid_value: Optional[str] = None
+    exit_ip: Optional[str] = None
+    if proxy_provider is not None:
+        # 硬边界：临时邮箱流量恒直连，只有 arena 站点流量经代理
+        log("邮箱流量恒直连（临时邮箱不经代理）")
+        try:
+            proxy_url = proxy_provider.acquire(
+                exclude_sids=sorted(_bound_proxy_sids(accounts_service))
+            )
+        except ArenaProxyError as exc:
+            with counter_lock:
+                counter["failed"] += 1
+                counter["done"] += 1
+            store.append_event(job_id, "warn", "register_result", f"无可用代理：{exc}",
+                               data={"ok": False, "error": str(exc)})
+            return
+        proxy_sid_value = proxy_sid(proxy_url) or None
+        exit_ip = exit_ip_probe(proxy_url) if exit_ip_probe is not None else None
+        log(f"arena 走代理 {display_proxy(proxy_url)}（出口 IP {exit_ip or '未知'}）")
+
+    try:
+        # 协议层（与测试假体）是 async —— worker 线程无事件循环，逐次起一个
+        result = asyncio.run(
+            register_fn(
+                provider,
+                log=log,
+                cancel=job.stop_event.is_set,
+                mail_timeout=config.registration.mail_timeout_sec,
+                domain=(config.registration.domains[0] if config.registration.domains else None),
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 — 协议层异常按失败计，不炸 worker
+        from backend.services.arena_protocol import RegisterResult
+
+        result = RegisterResult(ok=False, error=str(exc))
+
+    if not getattr(result, "ok", False):
+        with counter_lock:
+            counter["failed"] += 1
+            counter["done"] += 1
+        error_text = str(getattr(result, "error", "") or "unknown error")
+        store.append_event(job_id, "warn", "register_result", f"注册失败：{error_text}",
+                           data={"ok": False, "error": error_text})
+        return
+
+    account = accounts_service.create_account(
+        email=result.email, password=result.password, notes="registered",
+        source="registered",
+    )
+    credits: Any = result.credits
+    with contextlib.suppress(TypeError, ValueError):
+        credits = int(credits)
+    accounts_service.update_credits(account["id"], credits, user_id=result.user_id)
+    if proxy_url is not None:
+        accounts_service.update_binding(
+            account["id"], proxy_url, proxy_sid=proxy_sid_value, exit_ip=exit_ip
+        )
+    entry = {
+        "email": result.email,
+        "password": result.password,
+        "user_id": result.user_id,
+        "credits": credits,
+        "account_id": account["id"],
+        "proxy_sid": proxy_sid_value,
+        "exit_ip": exit_ip,
+    }
+    with job._lock:
+        job.results.append(entry)
+    with counter_lock:
+        counter["ok"] += 1
+        counter["done"] += 1
+    # 事件/日志绝不携带密码（唯一出口是显式导出端点）
+    store.append_event(
+        job_id, "info", "register_result", f"注册成功 {result.email}",
+        data={"ok": True, "email": result.email, "user_id": result.user_id,
+              "account_id": account["id"], "credits": credits},
+    )
+    store.append_event(
+        job_id, "info", "progress",
+        f"进度 {counter['done']}/{job.total}",
+        data={"done": counter["done"], "ok": counter["ok"], "failed": counter["failed"]},
+    )
+
+
+def _bound_proxy_sids(accounts_service: Any) -> set:
+    """池中已绑定的代理 sid 集合（同 IP 复用排除）。"""
+    sids: set = set()
+    for account in accounts_service.list_accounts():
+        sid = account.get("proxy_sid")
+        if sid:
+            sids.add(sid)
+    return sids

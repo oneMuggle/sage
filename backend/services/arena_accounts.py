@@ -176,6 +176,14 @@ class AccountState(Enum):
 DEFAULT_FAILURE_THRESHOLD = 3
 
 
+class ArenaCredentialError(RuntimeError):
+    """Stored credentials cannot be decrypted (lost master.key / machine change).
+
+    ``capabilities`` 与账号列表必须继续可用（UI 要能解释原因），只有
+    涉及明文密读的路径才抛本异常。
+    """
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS arena_accounts (
     id              TEXT PRIMARY KEY,
@@ -187,11 +195,48 @@ CREATE TABLE IF NOT EXISTS arena_accounts (
     isolated_at     TEXT,
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL,
-    notes           TEXT
+    notes           TEXT,
+    proxy_url       TEXT,
+    proxy_sid       TEXT,
+    exit_ip         TEXT,
+    credits,
+    user_id         TEXT,
+    last_draw_at    TEXT,
+    draw_count      INTEGER NOT NULL DEFAULT 0,
+    source          TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_arena_accounts_state
     ON arena_accounts(state);
+CREATE TABLE IF NOT EXISTS arena_draws (
+    id          TEXT PRIMARY KEY,
+    account_id  TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    payload     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_arena_draws_account
+    ON arena_draws(account_id);
 """
+
+#: P2 新增列（ArenCard 移植前旧库经 ALTER TABLE 原地补齐）。
+#: credits 刻意不带类型（BLOB affinity）：注册结果给 str("15000")、
+#: 手动更新给 int(500)，sqlite 原样存取，两侧断言都成立。
+_MIGRATION_COLUMNS = (
+    ("proxy_url", "TEXT"),
+    ("proxy_sid", "TEXT"),
+    ("exit_ip", "TEXT"),
+    ("credits", ""),
+    ("user_id", "TEXT"),
+    ("last_draw_at", "TEXT"),
+    ("draw_count", "INTEGER NOT NULL DEFAULT 0"),
+    ("source", "TEXT"),
+)
+
+_ACCOUNT_COLUMNS = (
+    "id", "email", "password_enc", "state", "last_used_at", "failure_count",
+    "isolated_at", "created_at", "updated_at", "notes",
+    "proxy_url", "proxy_sid", "exit_ip", "credits", "user_id",
+    "last_draw_at", "draw_count", "source",
+)
 
 
 class ArenaAccountService:
@@ -217,11 +262,45 @@ class ArenaAccountService:
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
+        self._migrate_schema()
+
+    def _migrate_schema(self) -> None:
+        """Additive in-place migration for pre-port databases (plan §5.3).
+
+        幂等：逐列探测缺失再 ALTER；arena_draws 用 IF NOT EXISTS。
+        旧库既有数据（notes 等）原样保留。
+        """
+        with self._lock:
+            existing = {
+                row[1] for row in self._conn.execute("PRAGMA table_info(arena_accounts)")
+            }
+            for name, ddl in _MIGRATION_COLUMNS:
+                if name in existing:
+                    continue
+                # ALTER TABLE 的列定义允许空类型（credits 无亲和性，原样存取）
+                self._conn.execute(f"ALTER TABLE arena_accounts ADD COLUMN {name} {ddl}")
+            self._conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS arena_draws (
+                    id          TEXT PRIMARY KEY,
+                    account_id  TEXT NOT NULL,
+                    created_at  TEXT NOT NULL,
+                    payload     TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_arena_draws_account
+                    ON arena_draws(account_id);
+                """
+            )
+            self._conn.commit()
 
     # -- CRUD -------------------------------------------------------------
 
     def create_account(
-        self, email: str, password: str, notes: Optional[str] = None
+        self,
+        email: str,
+        password: str,
+        notes: Optional[str] = None,
+        source: Optional[str] = None,
     ) -> Dict:
         with self._lock:
             now = _utcnow_iso()
@@ -232,10 +311,10 @@ class ArenaAccountService:
                     """
                     INSERT INTO arena_accounts
                     (id, email, password_enc, state, failure_count,
-                     created_at, updated_at, notes)
-                    VALUES (?, ?, ?, 'available', 0, ?, ?, ?)
+                     created_at, updated_at, notes, source)
+                    VALUES (?, ?, ?, 'available', 0, ?, ?, ?, ?)
                     """,
-                    (account_id, email, password_enc, now, now, notes),
+                    (account_id, email, password_enc, now, now, notes, source),
                 )
                 self._conn.commit()
             except sqlite3.IntegrityError as e:
@@ -261,28 +340,150 @@ class ArenaAccountService:
                 ).fetchall()
             return [self.get_account(r[0]) for r in rows if self.get_account(r[0])]
 
-    def get_account(self, account_id: str) -> Optional[Dict]:
+    def get_account(self, account_id: str, include_secret: bool = False) -> Optional[Dict]:
+        """Return the account projection; secrets are strictly opt-in.
+
+        默认（include_secret=False）不读密文、不含 password 键——列表/详情
+        在 master.key 丢失时依然可用（UI 要能解释原因）。include_secret=True
+        才解密；解密失败抛 ArenaCredentialError 而不是炸掉调用方。
+        """
         with self._lock:
+            cols = ", ".join(_ACCOUNT_COLUMNS)
             row = self._conn.execute(
-                "SELECT id, email, password_enc, state, last_used_at, "
-                "failure_count, isolated_at, created_at, updated_at, notes "
-                "FROM arena_accounts WHERE id = ?",
+                f"SELECT {cols} FROM arena_accounts WHERE id = ?",
                 (account_id,),
             ).fetchone()
             if row is None:
                 return None
-            return {
-                "id": row[0],
-                "email": row[1],
-                "password": self._fernet.decrypt(row[2]).decode("utf-8"),
-                "state": row[3],
-                "last_used_at": row[4],
-                "failure_count": row[5],
-                "isolated_at": row[6],
-                "created_at": row[7],
-                "updated_at": row[8],
-                "notes": row[9],
-            }
+            acc: Dict[str, Any] = dict(zip(_ACCOUNT_COLUMNS, row, strict=True))
+            acc.pop("password_enc")
+            if include_secret:
+                acc["password"] = self._decrypt_password(row[2])
+            return acc
+
+    def get_secret(self, account_id: str) -> Optional[str]:
+        """Decrypt and return the stored password; None when account missing."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT password_enc FROM arena_accounts WHERE id = ?",
+                (account_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._decrypt_password(row[0])
+
+    def _decrypt_password(self, password_enc: bytes) -> str:
+        try:
+            return self._fernet.decrypt(password_enc).decode("utf-8")
+        except Exception as exc:  # noqa: BLE001 — 统一转译为凭据错误（含 InvalidToken）
+            raise ArenaCredentialError(
+                "账号密文无法解密：master key 丢失或已更换；"
+                "账号池仍可读，但明文密码不可恢复"
+            ) from exc
+
+    def credentials_readable(self) -> bool:
+        """Probe whether stored credentials can be decrypted. 空库 = True。"""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT password_enc FROM arena_accounts LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return True
+        try:
+            self._decrypt_password(row[0])
+        except ArenaCredentialError:
+            return False
+        return True
+
+    def count_accounts(self) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COUNT(*) FROM arena_accounts"
+            ).fetchone()
+            return int(row[0]) if row else 0
+
+    # -- P2：代理绑定 / 额度 / 抽卡历史 --------------------------------------
+
+    def update_binding(
+        self,
+        account_id: str,
+        proxy_url: str,
+        proxy_sid: Optional[str] = None,
+        exit_ip: Optional[str] = None,
+    ) -> None:
+        """Bind a proxy exit to the account (rotation bookkeeping)."""
+        with self._lock:
+            now = _utcnow_iso()
+            self._conn.execute(
+                "UPDATE arena_accounts SET proxy_url = ?, proxy_sid = ?, "
+                "exit_ip = ?, updated_at = ? WHERE id = ?",
+                (proxy_url, proxy_sid, exit_ip, now, account_id),
+            )
+            self._conn.commit()
+
+    def update_credits(self, account_id: str, credits: Any, user_id: Optional[str] = None) -> None:
+        with self._lock:
+            now = _utcnow_iso()
+            self._conn.execute(
+                "UPDATE arena_accounts SET credits = ?, user_id = ?, "
+                "updated_at = ? WHERE id = ?",
+                (credits, user_id, now, account_id),
+            )
+            self._conn.commit()
+
+    def record_draw(self, account_id: str, payload: Dict[str, Any]) -> str:
+        """Append one draw record and bump the account's draw counters."""
+        draw_id = str(uuid.uuid4())
+        now = _utcnow_iso()
+        with self._lock:
+            import json as _json
+
+            self._conn.execute(
+                "INSERT INTO arena_draws (id, account_id, created_at, payload) "
+                "VALUES (?, ?, ?, ?)",
+                (draw_id, account_id, now, _json.dumps(payload, ensure_ascii=False)),
+            )
+            self._conn.execute(
+                "UPDATE arena_accounts SET draw_count = draw_count + 1, "
+                "last_draw_at = ?, updated_at = ? WHERE id = ?",
+                (now, now, account_id),
+            )
+            self._conn.commit()
+        return draw_id
+
+    def list_draws(
+        self,
+        account_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Newest-first draw records; payload keys are projected at top level."""
+        import json as _json
+
+        with self._lock:
+            if account_id is not None:
+                rows = self._conn.execute(
+                    "SELECT id, account_id, created_at, payload FROM arena_draws "
+                    "WHERE account_id = ? ORDER BY rowid DESC LIMIT ?",
+                    (account_id, int(limit)),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT id, account_id, created_at, payload FROM arena_draws "
+                    "ORDER BY rowid DESC LIMIT ?",
+                    (int(limit),),
+                ).fetchall()
+        results: List[Dict[str, Any]] = []
+        for draw_id, acct, created_at, payload in rows:
+            try:
+                data = _json.loads(payload)
+            except ValueError:
+                data = {"raw": payload}
+            if not isinstance(data, dict):
+                data = {"raw": data}
+            results.append(
+                {"id": draw_id, "account_id": acct, "created_at": created_at, **data}
+            )
+        return results
 
     # -- Scheduling -------------------------------------------------------
 
