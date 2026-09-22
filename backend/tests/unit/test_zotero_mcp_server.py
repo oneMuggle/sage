@@ -127,7 +127,8 @@ async def test_search_missing_required_arg_falls_into_error_text(fake_client):
     out = await zotero_server.call_tool("zotero_search", {})
     text = _text(out)
     assert text.startswith("Error: Zotero tool 'zotero_search' failed:")
-    assert "KeyError" in text
+    # KeyError 的字符串化是缺失键本身（'query'），不含异常类名
+    assert "'query'" in text
 
 
 @pytest.mark.asyncio()
