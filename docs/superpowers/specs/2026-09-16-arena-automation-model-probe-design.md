@@ -41,6 +41,10 @@ Arena.ai routes conversations through opaque gateway endpoints that mask upstrea
 
 - ❌ **No CAPTCHA/MFA auto-bypass** — these require human intervention; the system pauses and waits
 - ❌ **No unauthorized account creation** — only accounts explicitly added by the user/org are managed
+  - *(revised 2026-09-22, #1381)*: batch registration, where supported, runs **only as a job explicitly
+    initiated by the user in the local UI** — a separate feature flag, default OFF, never autonomous,
+    never background-scheduled. The system itself never decides to create accounts. Accounts the user
+    registers elsewhere and imports manually remain the primary, always-supported path.
 - ❌ **No traffic interception outside Sage-managed browser sessions** — pure passive observation of tabs Sage itself opened
 - ❌ **No credential exfiltration** — all stored credentials encrypted at rest, never logged in plaintext
 
@@ -553,7 +557,13 @@ When an account hits `failure_isolation_threshold` (default 3) consecutive failu
 
 ### 7.1 Credential Storage
 
-- Passwords encrypted with Fernet key derived from `SAGE_LOCAL_AUTH_TOKEN`
+- Passwords encrypted with Fernet key derived from the **persisted Arena master key**
+  (`master.key` under the per-user data dir, created on first use by `arena_keystore`;
+  file written atomically with owner-only permissions)
+  - *(revised 2026-09-22, #1381)*: the original design derived the key from
+    `SAGE_LOCAL_AUTH_TOKEN`, but that token is regenerated on every backend restart —
+    any account created before a restart would have been permanently undecryptable.
+    The persisted master key decouples credential decryption from token rotation.
 - Key derivation: `PBKDF2HMAC(SHA256, salt=machine_id, iterations=480000)` → 32-byte key
 - `machine_id` = hash of hostname + username + machine GUID (Linux: `/etc/machine-id`, Windows: registry `MachineGuid`)
 - Encryption happens in-memory before DB write; decrypted only when needed for login

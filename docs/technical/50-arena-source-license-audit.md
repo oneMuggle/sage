@@ -302,3 +302,20 @@ head -20 <source_file>
 ---
 
 **审计结束** - 报告版本 v1.0 - 2026-09-16
+
+---
+
+## 10. 附录（2026-09-22 增补）：ArenCard 参考源
+
+方案 `docs/mcp-aren-card-port-plan.md`（§10.8 / D12）执行过程中新增第三个参考源，按本审计同等纪律处理：
+
+| 项 | 内容 |
+|---|---|
+| 参考源 | `reference/ArenCard`（Python + Tkinter + WebView2，Windows；**无 LICENSE**） |
+| 用途 | ArenCard 能力移植（账号池协议快路径：注册 6 步 / 抽卡 8 步 / TLS 指纹 / 代理中继 / token 窗口）的**逻辑与实测常量**参考（429 退避阶梯、CF_HOLD、邮箱轮询间隔等） |
+| 纪律 | 与 T5/T8 同约束：**代码从零重写，严禁逐字复制**；不带入其可执行文件、账号数据、`config.json`；`reference/` 目录不入库（.gitignore） |
+| 落地 | #1381（main）/ #1383（win7）；验收记录 `docs/verification/2026-09-19-aren-card-port.md` |
+
+**增补结论**：不改变原 VERDICT（⚠️ PROCEED WITH CONDITIONS）——"独立实现 + 算法参考"约束在 P0-P5 全程执行，后续 PR code review 继续保留 "no verbatim copy from source" 检查项。
+
+**增补版本**：v1.1 - 2026-09-22

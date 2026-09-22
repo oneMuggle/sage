@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+> 🎯 **Arena 能力移植收口：ArenCard 协议快路径 P0-P6 全链路**（方案 `archive/mcp-aren-card-port-plan-2026-09-19.md`，验收 `docs/verification/2026-09-19-aren-card-port.md`）
+
+### Added(arena)
+- **后端协议快路径（P0-P4）**：`arena_keystore`（master.key 持久化，修复重启后凭据不可解密）、`arena_http`（TLS 指纹会话，curl_cffi 可选降级）、`arena_protocol` + `arena_registration`（注册 6 步协议 + 批量注册 job，真实冒烟 3/3、17s）、`arena_proxies` + `arena_proxy_relay`（本地 CONNECT 中继、一号一 IP）、`arena_token_cache`（V3 票缓存/熔断）、`arena_draw_engine`（抽卡 8 步 job 引擎，复用 run_trace_resolver 解析）；`/api/v1/arena/capabilities|proxies|token-window` 契约与 yaml 门控（默认全关）
+- **token 窗口（P3）**：`arenaTokenWindow` 次级隐藏窗口（Chromium 106 出 reCAPTCHA V3 被受理，S0-B 闭环）+ 反节流开关 + preload/main 模块化接线
+- **前端控制台（P5）**：`/arena` 三页签（账号池/批量注册/抽卡）+ JobConsole（2s 轮询 + after_seq 续传）+ 命令面板/侧边栏入口；`/arena-accounts` 并入重定向
+- **py38 对齐**：tenminmail 锁构造推迟到首 await、zip strict= 移除（#1228 惯例）；win7 全量 213 passed (#1383)
+- **P6 收口**：spec §1.4（批量注册限定用户显式发起）/§7.1（持久化 master.key）修订；审计 v1.1 增补 ArenCard 参考源；方案文档归档
+
 > 🌐 **网页访问能力优化 Round 21：DL2 后台下载任务化**（方案 `docs/plans/2026-09-19_web-access-round21-dljobs.md`）
 
 ### Added(web-access)
