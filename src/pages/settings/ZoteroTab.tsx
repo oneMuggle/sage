@@ -4,13 +4,17 @@
  * 只读访问本地 Zotero 文献库。提供:
  * - 连接状态 + 库统计卡片
  * - 自定义 DB 路径配置(保存后刷新状态)
- * - 搜索框(防抖 300ms,可验证连通性)
- * - 搜索结果列表(点击展开详情)
+ * - Collection 浏览(下拉筛选)
+ * - 搜索框(防抖 300ms,可验证连通性;支持 tag 过滤)
+ * - 搜索结果列表(点击展开详情 + PDF 批注)
+ * - 常用 tag chips 快速筛选
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   zoteroClient,
+  type ZoteroAnnotation,
+  type ZoteroCollection,
   type ZoteroItemDetail,
   type ZoteroItemSummary,
   type ZoteroStatus,
@@ -18,6 +22,7 @@ import {
 import { useI18n } from '../../shared/lib/i18n';
 
 const DEBOUNCE_MS = 300;
+const TOP_TAGS_LIMIT = 12;
 
 export function ZoteroTab() {
   const { t } = useI18n();
@@ -40,13 +45,32 @@ export function ZoteroTab() {
   const [itemLoading, setItemLoading] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── load status on mount ─────────────────────────────────────────────────────
+  // ── collections ─────────────────────────────────────────────────────────────
+  const [collections, setCollections] = useState<ZoteroCollection[]>([]);
+  const [selectedCollectionKey, setSelectedCollectionKey] = useState<string | null>(null);
+
+  // ── annotations ─────────────────────────────────────────────────────────────
+  const [annotations, setAnnotations] = useState<ZoteroAnnotation[]>([]);
+  const [annotationsLoading, setAnnotationsLoading] = useState(false);
+
+  // ── tag filter ──────────────────────────────────────────────────────────────
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+
+  // ── load status + collections on mount ─────────────────────────────────────
   const loadStatus = useCallback(async () => {
     setStatusLoading(true);
     try {
       const s = await zoteroClient.status();
       setStatus(s);
       if (s.db_path) setPathInput(s.db_path);
+      if (s.available) {
+        try {
+          const cols = await zoteroClient.listCollections();
+          setCollections(cols);
+        } catch {
+          // non-fatal — search still works without collection filter
+        }
+      }
     } catch {
       setStatus({
         available: false,
@@ -83,7 +107,7 @@ export function ZoteroTab() {
     if (!status?.available) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      if (!query.trim()) {
+      if (!query.trim() && !selectedCollectionKey && !selectedTag) {
         setSearchResults([]);
         setSearchError(null);
         return;
@@ -91,7 +115,12 @@ export function ZoteroTab() {
       setSearchLoading(true);
       setSearchError(null);
       try {
-        const results = await zoteroClient.search({ q: query, limit: 30 });
+        const results = await zoteroClient.search({
+          q: query,
+          collection_key: selectedCollectionKey ?? undefined,
+          tag: selectedTag ?? undefined,
+          limit: 30,
+        });
         setSearchResults(results);
       } catch (err) {
         setSearchError(err instanceof Error ? err.message : t('settings.zotero.error.generic'));
@@ -103,24 +132,47 @@ export function ZoteroTab() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, status?.available, t]);
+  }, [query, status?.available, selectedCollectionKey, selectedTag, t]);
 
-  // ── item detail ──────────────────────────────────────────────────────────────
+  // ── item detail + annotations ──────────────────────────────────────────────
   const handleSelectItem = async (key: string) => {
     if (selectedItem?.key === key) {
       setSelectedItem(null);
+      setAnnotations([]);
       return;
     }
     setItemLoading(true);
+    setAnnotationsLoading(true);
+    setAnnotations([]);
     try {
-      const detail = await zoteroClient.getItem(key);
+      const [detail, annots] = await Promise.all([
+        zoteroClient.getItem(key),
+        zoteroClient.getAnnotations(key).catch(() => [] as ZoteroAnnotation[]),
+      ]);
       setSelectedItem(detail);
+      setAnnotations(annots);
     } catch {
       setSelectedItem(null);
+      setAnnotations([]);
     } finally {
       setItemLoading(false);
+      setAnnotationsLoading(false);
     }
   };
+
+  // ── derived: top tags from current results ──────────────────────────────────
+  const topTags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of searchResults) {
+      for (const tag of item.tags) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, TOP_TAGS_LIMIT)
+      .map(([tag]) => tag);
+  }, [searchResults]);
 
   // ── render ───────────────────────────────────────────────────────────────────
   const connected = status?.available ?? false;
@@ -211,6 +263,34 @@ export function ZoteroTab() {
       {/* Search + results (only when connected) */}
       {connected && (
         <>
+          {/* Collection filter */}
+          {collections.length > 0 && (
+            <div>
+              <label
+                className="mb-1 block text-xs font-medium text-secondary"
+                htmlFor="zotero-collection"
+              >
+                {t('settings.zotero.collections.label')}
+              </label>
+              <select
+                id="zotero-collection"
+                className="w-full rounded border border-line-subtle bg-surface px-3 py-1.5 text-sm text-primary focus:border-accent focus:outline-none"
+                value={selectedCollectionKey ?? ''}
+                onChange={(e) => setSelectedCollectionKey(e.target.value || null)}
+              >
+                <option value="">{t('settings.zotero.collections.all')}</option>
+                {collections
+                  .filter((c) => c.parent_key == null)
+                  .map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.name} ({c.item_count})
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+
+          {/* Search input */}
           <div>
             <input
               type="text"
@@ -221,6 +301,33 @@ export function ZoteroTab() {
             />
             {searchError && <p className="mt-1 text-xs text-red-400">{searchError}</p>}
           </div>
+
+          {/* Tag chips (from current results) */}
+          {topTags.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {selectedTag && (
+                <button
+                  type="button"
+                  className="rounded bg-accent/20 px-1.5 py-0.5 text-xs text-accent hover:bg-accent/30"
+                  onClick={() => setSelectedTag(null)}
+                >
+                  ✕ {selectedTag}
+                </button>
+              )}
+              {topTags
+                .filter((tag) => tag !== selectedTag)
+                .map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    className="rounded bg-surface-raised px-1.5 py-0.5 text-xs text-faint hover:text-accent hover:bg-accent/10 transition-colors"
+                    onClick={() => setSelectedTag(tag)}
+                  >
+                    {tag}
+                  </button>
+                ))}
+            </div>
+          )}
 
           {searchResults.length > 0 && (
             <div className="space-y-1">
@@ -267,6 +374,43 @@ export function ZoteroTab() {
                           {selectedItem.doi && (
                             <p className="text-accent truncate">DOI: {selectedItem.doi}</p>
                           )}
+                          {/* Annotations */}
+                          {annotationsLoading ? (
+                            <p className="text-faint">{t('settings.zotero.annotations.loading')}</p>
+                          ) : annotations.length > 0 ? (
+                            <div className="space-y-1.5">
+                              <p className="text-xs font-medium text-secondary">
+                                {t('settings.zotero.annotations.title')} ({annotations.length})
+                              </p>
+                              {annotations.slice(0, 10).map((a) => (
+                                <div
+                                  key={a.key}
+                                  className="rounded border-l-2 bg-surface px-2 py-1"
+                                  style={{ borderLeftColor: a.color ?? 'var(--accent)' }}
+                                >
+                                  {a.text && (
+                                    <p className="text-faint line-clamp-2 italic">
+                                      &ldquo;{a.text}&rdquo;
+                                    </p>
+                                  )}
+                                  {a.comment && (
+                                    <p className="text-secondary mt-0.5">{a.comment}</p>
+                                  )}
+                                  {a.page_label && (
+                                    <p className="text-faint text-[10px]">
+                                      p. {a.page_label}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                              {annotations.length > 10 && (
+                                <p className="text-faint text-[10px]">
+                                  +{annotations.length - 10}{' '}
+                                  {t('settings.zotero.annotations.more')}
+                                </p>
+                              )}
+                            </div>
+                          ) : null}
                         </>
                       )}
                     </div>
