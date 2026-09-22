@@ -159,6 +159,37 @@ class DownloadTracker:
         self._event.set()
 
 
+class NetworkResponseTracker:
+    """按 sessionId 记录最近一次主文档（type==Document）HTTP 响应（线程安全）。
+
+    render_page 在 createTarget 后 attach + Network.enable，导航完成后经
+    ``last_document(session_id)`` 取事件驱动的状态码。
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._by_session: Dict[str, Dict[str, Any]] = {}
+
+    def record(self, session_id: str, params: Dict[str, Any]) -> None:
+        response = params.get("response") or {}
+        if str(response.get("type") or "") != "Document":
+            return
+        with self._lock:
+            self._by_session[session_id] = {
+                "url": str(response.get("url") or ""),
+                "status": int(response.get("status") or 0),
+            }
+
+    def last_document(self, session_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            rec = self._by_session.get(session_id)
+            return dict(rec) if rec else None
+
+    def detach(self, session_id: str) -> None:
+        with self._lock:
+            self._by_session.pop(session_id, None)
+
+
 class _EventChannel:
     """常驻 WS 线程：建立 → 开启下载事件 → 循环分发到 tracker。"""
 
@@ -166,9 +197,12 @@ class _EventChannel:
         self._port = port
         self._ws_path = ws_path
         self.tracker = tracker
+        self.network_tracker: Optional[NetworkResponseTracker] = None
+        self._network_sessions: Dict[str, str] = {}  # session_id -> target_id
         self._sock: Any = None
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
+        self._msg_id = 0
 
     def start(self) -> bool:
         try:
@@ -214,6 +248,50 @@ class _EventChannel:
         method = data.get("method")
         if isinstance(method, str) and method.startswith("Browser.download"):
             self.tracker.handle_event(method, data.get("params") or {})
+        if method == "Network.responseReceived" and self.network_tracker is not None:
+            session_id = str(data.get("sessionId") or "")
+            if session_id:
+                self.network_tracker.record(session_id, data.get("params") or {})
+
+    def attach_network(self, target_id: str) -> Optional[str]:
+        """attach 到指定 target + Network.enable；返回 sessionId 或 None。
+
+        在常驻浏览器级 WS 上发送（flatten 模式），后续 Network 事件带
+        sessionId 到达并被 _dispatch 路由到 network_tracker。同步等待应答。
+        """
+        if self._sock is None:
+            return None
+        try:
+            self._msg_id += 1
+            attach_id = self._msg_id
+            ws_send_text(self._sock, json.dumps({
+                "id": attach_id,
+                "method": "Target.attachToTarget",
+                "params": {"targetId": target_id, "flatten": True},
+            }))
+            session_id: Optional[str] = None
+            import time as _t
+            deadline = _t.monotonic() + 5.0
+            while _t.monotonic() < deadline:
+                self._sock.settimeout(max(0.1, deadline - _t.monotonic()))
+                data = json.loads(ws_recv_text(self._sock))
+                if data.get("id") == attach_id:
+                    session_id = str((data.get("result") or {}).get("sessionId") or "") or None
+                    break
+                self._dispatch(data)
+            if not session_id:
+                return None
+            self._network_sessions[session_id] = target_id
+            self._msg_id += 1
+            ws_send_text(self._sock, json.dumps({
+                "id": self._msg_id,
+                "method": "Network.enable",
+                "sessionId": session_id,
+                "params": {},
+            }))
+            return session_id
+        except (WebSocketError, OSError):
+            return None
 
     def _loop(self) -> None:
         sock = self._sock

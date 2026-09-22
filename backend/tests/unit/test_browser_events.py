@@ -243,3 +243,33 @@ def test_event_channel_connect_refused(tmp_path):
     assert tracker.connected is False
     assert tracker.error
     browser_events.stop_all_tracking()
+
+
+# ---------- R22：NetworkResponseTracker ----------
+
+
+class TestNetworkResponseTracker:
+    def test_record_document_response(self):
+        from backend.tools.browser_events import NetworkResponseTracker
+
+        t = NetworkResponseTracker()
+        t.record("sess1", {"response": {"url": "https://x.com/", "status": 200, "type": "Document"}})
+        rec = t.last_document("sess1")
+        assert rec is not None
+        assert rec["url"] == "https://x.com/"
+        assert rec["status"] == 200
+
+    def test_non_document_ignored(self):
+        from backend.tools.browser_events import NetworkResponseTracker
+
+        t = NetworkResponseTracker()
+        t.record("s", {"response": {"url": "u", "status": 200, "type": "Script"}})
+        assert t.last_document("s") is None
+
+    def test_detach(self):
+        from backend.tools.browser_events import NetworkResponseTracker
+
+        t = NetworkResponseTracker()
+        t.record("s", {"response": {"url": "u", "status": 200, "type": "Document"}})
+        t.detach("s")
+        assert t.last_document("s") is None
