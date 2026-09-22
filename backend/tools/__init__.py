@@ -9,6 +9,7 @@ from typing import Callable, Optional
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
+from backend.services.todo_service import TodoService  # forward-ref for register_all_tools
 
 from .ask_user_tool import AskUserQuestionTool
 from .asr_tool import SpeechToTextTool
@@ -138,16 +139,23 @@ def register_all_tools(
     policy: Optional[ToolPolicy] = None,
     network_policy: Optional[NetworkPolicy] = None,
     scheduler_service_getter: Optional[Callable[[], Optional[SchedulerServicePort]]] = None,
+    todo_service_getter: Optional[Callable[[], Optional[TodoService]]] = None,
 ) -> None:
     """
     注册所有内置工具到注册表
 
     Args:
-        registry: 工具注册表
-        policy:   M2 工具策略（缺省 ``ToolPolicy()``）；透传给每个内置工具。
+        registry:   工具注册表
+        policy:     M2 工具策略（缺省 ``ToolPolicy()``）；透传给每个内置工具。
         network_policy: 网络策略；``None`` 时从 settings 读。决定三个出网工具
             是否注册 —— 内网/气隙模式下不注册比返回错误更省 token，因为 LLM
             看到工具就会试（与 ``get_schemas_for_llm`` 隐藏 office 工具同理）。
+        scheduler_service_getter:
+            定时任务服务延迟获取器（``ScheduleTaskTool`` 等需要）。``None`` 时
+            三个定时工具仍然注册，但内部 service 为空——调用时返回"未初始化"。
+        todo_service_getter:
+            待办服务延迟获取器（Task 5-13 的 add_todo/list_todos/... 需要）。
+            ``None`` 时五个待办工具仍然注册，但内部 service 为空——调用时返回"未初始化"。
     """
     policy = policy or ToolPolicy()
     network_policy = network_policy if network_policy is not None else load_network_policy()
@@ -319,6 +327,27 @@ def register_all_tools(
         import logging
 
         logging.getLogger(__name__).warning(f"Failed to register MCP tools: {exc}")
+
+    # Todo 持久化管理工具（Task 5-13）：依赖 TodoService（service-getter
+    # 延迟解析）。tools 始终注册（ALL_BUILTIN_TOOL_NAMES 已纳入，与
+    # schedule 工具一致）；``todo_service_getter`` 决定 execute() 时能否
+    # 取到 service —— ``None`` 时返回 NO_SERVICE_ERROR，不静默缺工具。
+    # 直接 import 而非延迟：register_all_tools 是启动期单次调用，且
+    # todo_mgmt_tool 依赖 TodoService（已被 todo_service_getter 调用方
+    # 拉起），不存在循环。
+    from backend.tools.todo_mgmt_tool import (
+        AddTodoTool,
+        CompleteTodoTool,
+        DeleteTodoTool,
+        ListTodosTool,
+        UpdateTodoTool,
+    )
+
+    registry.register(AddTodoTool(todo_service_getter=todo_service_getter, policy=policy))
+    registry.register(ListTodosTool(todo_service_getter=todo_service_getter, policy=policy))
+    registry.register(CompleteTodoTool(todo_service_getter=todo_service_getter, policy=policy))
+    registry.register(UpdateTodoTool(todo_service_getter=todo_service_getter, policy=policy))
+    registry.register(DeleteTodoTool(todo_service_getter=todo_service_getter, policy=policy))
 
 
 __all__ = [

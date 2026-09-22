@@ -39,6 +39,7 @@ from sage_core.repositories import ToolPort  # noqa: F401  (structural typing ta
 
 from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
+from backend.services.todo_service import get_todo_service
 from backend.tools.bash_validation import validate_bash
 from backend.tools.executor import (
     TIMEOUT_EXCEPTIONS,
@@ -86,6 +87,7 @@ class InprocToolAdapter:
                 self._registry,
                 policy=self._policy,
                 scheduler_service_getter=scheduler_service_getter,
+                todo_service_getter=get_todo_service,
             )
             # 注入共享 MemoryManager：register_all_tools 创建的 MemorySearchTool /
             # MemorySaveTool 默认 self.memory=None，runtime 调用会返回

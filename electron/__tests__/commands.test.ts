@@ -874,4 +874,64 @@ describe('agent_* IPC commands', () => {
     const plan = [{ task_id: 't1', agent_id: 'primary', goal: 'g' }];
     expect(route.body?.({ run_id: 'orch-abc', plan })).toEqual({ plan });
   });
+
+  // ===== Task 8: todo subsystem IPC routes =====
+  describe('todo IPC routes', () => {
+    const TODO_COMMANDS = [
+      'todo_list',
+      'todo_create',
+      'todo_get',
+      'todo_update',
+      'todo_delete',
+      'todo_complete',
+      'todo_cancel',
+      'todo_summary',
+      'todo_stats',
+    ];
+
+    it('registers all 9 todo commands', () => {
+      for (const cmd of TODO_COMMANDS) {
+        expect(COMMAND_ROUTES[cmd], `missing route for ${cmd}`).toBeDefined();
+      }
+    });
+
+    it('todo_list builds a query string from flat params', () => {
+      expect(COMMAND_ROUTES.todo_list.path({})).toBe('/api/v1/todos');
+      expect(
+        COMMAND_ROUTES.todo_list.path({
+          status: 'pending',
+          priority: 'high',
+          include_completed: true,
+          sort_by: 'priority',
+          sort_order: 'desc',
+          limit: 20,
+          offset: 5,
+        }),
+      ).toBe(
+        '/api/v1/todos?status=pending&priority=high&include_completed=true' +
+          '&sort_by=priority&sort_order=desc&limit=20&offset=5',
+      );
+    });
+
+    it('todo_list ignores false include_completed', () => {
+      expect(COMMAND_ROUTES.todo_list.path({ include_completed: false })).toBe('/api/v1/todos');
+    });
+
+    it('todo_update strips id from the body (UpdateTodoIn forbids extras)', () => {
+      expect(COMMAND_ROUTES.todo_update.method).toBe('PUT');
+      expect(COMMAND_ROUTES.todo_update.path({ id: 7 })).toBe('/api/v1/todos/7');
+      expect(COMMAND_ROUTES.todo_update.body?.({ id: 7, title: 'y' })).toEqual({ title: 'y' });
+    });
+
+    it('todo_complete / todo_cancel target the action sub-paths', () => {
+      expect(COMMAND_ROUTES.todo_complete.path({ id: 3 })).toBe('/api/v1/todos/3/complete');
+      expect(COMMAND_ROUTES.todo_cancel.path({ id: 3 })).toBe('/api/v1/todos/3/cancel');
+    });
+
+    it('todo_summary and todo_stats are distinct GET paths', () => {
+      expect(COMMAND_ROUTES.todo_summary.method).toBe('GET');
+      expect(COMMAND_ROUTES.todo_summary.path({})).toBe('/api/v1/todos/summary');
+      expect(COMMAND_ROUTES.todo_stats.path({})).toBe('/api/v1/todos/stats');
+    });
+  });
 });
