@@ -40,7 +40,12 @@ interface CommandPaletteProps {
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate();
-  const { sessions, setCurrentSessionId, createSession, loadSessions } = useStore();
+  // 2026-09-22 (ZCode-inspired optimization): Zustand selector pattern
+  // 避免解构整个 store 导致任何字段变化都触发重渲染
+  const sessions = useStore((s) => s.sessions);
+  const setCurrentSessionId = useStore((s) => s.setCurrentSessionId);
+  const createSession = useStore((s) => s.createSession);
+  const loadSessions = useStore((s) => s.loadSessions);
   const { resolved, setMode } = useTheme();
   const [search, setSearch] = useState('');
   const [globalResults, setGlobalResults] = useState<GlobalSearchResult | null>(null);

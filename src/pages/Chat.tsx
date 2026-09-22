@@ -100,6 +100,8 @@ export function Chat() {
   }, [tempChatSessions]);
 
   const {
+    // 2026-09-22 (ZCode-inspired optimization): Zustand selector pattern
+    // 避免解构整个 store — 只订阅需要的字段
     currentSessionId,
     setCurrentSessionId,
     createSession,
@@ -107,7 +109,15 @@ export function Chat() {
     sessions,
     isLoading: storeLoading,
     removeMessage,
-  } = useStore();
+  } = {
+    currentSessionId: useStore((s) => s.currentSessionId),
+    setCurrentSessionId: useStore((s) => s.setCurrentSessionId),
+    createSession: useStore((s) => s.createSession),
+    loadSessions: useStore((s) => s.loadSessions),
+    sessions: useStore((s) => s.sessions),
+    isLoading: useStore((s) => s.isLoading),
+    removeMessage: useStore((s) => s.removeMessage),
+  };
 
   // R25-D4: 挂载/切会话时探测后端活跃流并重接 —— renderer 重载（升级、
   // 崩溃恢复）后长任务输出不再丢失。内部有会话级去重守卫。

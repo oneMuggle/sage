@@ -95,6 +95,7 @@ from backend.api.local_auth import (
     is_ownership_health_valid,
     ownership_health_proof,
 )
+from backend.startup_profiler import get_profiler
 from backend.api.mcp_routes import router as mcp_router
 from backend.api.media_routes import router as media_router
 from backend.api.model_catalog_routes import build_router as build_model_catalog_router
@@ -313,40 +314,56 @@ def _build_lifecycle_extractor():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理。"""
+    """应用生命周期管理。
+
+    2026-09-22 (ZCode-inspired optimization): 引入 StartupProfiler 诊断启动瓶颈。
+    当前仍为串行初始化（隐式依赖过多），profiler 提供可视化数据以指导后续并行化。
+    """
+    profiler = get_profiler()
+
     # Local desktop capability: resolve the token before serving any sensitive route.
     # The value is intentionally never logged or returned by the health endpoint.
-    initialize_local_auth_token()
+    await profiler.phase("auth_token", initialize_local_auth_token)
 
     # R21-A: 应用待恢复备份（必须在 init_db 之前 —— 原子替换主库文件后
     # 再建连接，避免旧 WAL 污染恢复出的库）。fail-safe，不阻塞启动。
-    try:
-        from backend.services.backup_service import apply_pending_restore
+    async def _apply_pending_restore():
+        try:
+            from backend.services.backup_service import apply_pending_restore
 
-        if apply_pending_restore():
-            logger.info("pending backup restore applied at startup")
-    except Exception:
-        logger.exception("apply_pending_restore failed (ignored)")
+            if apply_pending_restore():
+                logger.info("pending backup restore applied at startup")
+        except Exception:
+            logger.exception("apply_pending_restore failed (ignored)")
+
+    await profiler.phase("backup_restore", _apply_pending_restore)
 
     # 启动时初始化
     # PR A §1.2 测试隔离修复：lifespan 通过 ``get_database()`` 拿全局
     # 单例，测试可以把 ``backend.data.database._db`` 提前指向临时库。
     # 直接 ``Database()`` 会忽略该 hook，导致测试污染生产 ``data/sage.db``。
     # ``init_db()`` 全部走 ``CREATE TABLE IF NOT EXISTS``，重复调用幂等。
-    db = get_database()
-    db.init_db()
-    app.state.db = db
-    app.state.catalog_repo = CatalogRepository(db)
+    async def _init_database():
+        db = get_database()
+        db.init_db()
+        app.state.db = db
+        app.state.catalog_repo = CatalogRepository(db)
+        return db
+
+    db = await profiler.phase("db_init", _init_database)
     # Task 4: load builtin seed data if catalog is empty (no network access)
     # fail-safe — must not crash startup if seed parsing or DB write fails
-    try:
-        from backend.model_catalog.seed import seed_if_empty
+    async def _seed_catalog():
+        try:
+            from backend.model_catalog.seed import seed_if_empty
 
-        seed_count = seed_if_empty(app.state.catalog_repo)
-        if seed_count:
-            logger.info("Loaded %d builtin seed records", seed_count)
-    except Exception:
-        logger.exception("builtin seed failed (ignored)")
+            seed_count = seed_if_empty(app.state.catalog_repo)
+            if seed_count:
+                logger.info("Loaded %d builtin seed records", seed_count)
+        except Exception:
+            logger.exception("builtin seed failed (ignored)")
+
+    await profiler.phase("seed_catalog", _seed_catalog, deps=["db_init"])
     if __name__ == "__main__":
         _elapsed_db = time.monotonic() - _startup_t0
         print(  # noqa: T201
@@ -358,34 +375,38 @@ async def lifespan(app: FastAPI):
     # ---------------------------------------------------------------
     # Task 4 / Gap A — wire memory lifecycle hooks + evolution scheduler.
     # ---------------------------------------------------------------
-    from backend.data.settings_repo import SettingsRepository
-    from backend.memory.hooks import HookRegistry
-    from backend.memory.lifecycle import MemoryLifecycleManager
+    async def _init_memory_lifecycle():
+        from backend.data.settings_repo import SettingsRepository
+        from backend.memory.hooks import HookRegistry
+        from backend.memory.lifecycle import MemoryLifecycleManager
 
-    class _AsyncSettingsAdapter:
-        """Thin async wrapper so MemoryLifecycleManager can ``await``
-        ``prefs.get(...)`` — the underlying SettingsRepository is sync."""
+        class _AsyncSettingsAdapter:
+            """Thin async wrapper so MemoryLifecycleManager can ``await``
+            ``prefs.get(...)`` — the underlying SettingsRepository is sync."""
 
-        def __init__(self, inner: SettingsRepository) -> None:
-            self._inner = inner
+            def __init__(self, inner: SettingsRepository) -> None:
+                self._inner = inner
 
-        async def get(self, key: str):
-            return self._inner.get(key)
+            async def get(self, key: str):
+                return self._inner.get(key)
 
-    hooks = HookRegistry()
-    preferences_repo = _AsyncSettingsAdapter(SettingsRepository(db=db))
-    lifecycle = MemoryLifecycleManager(
-        memory_manager=get_memory_manager(),
-        hooks=hooks,
-        preferences_repo=preferences_repo,
-        extractor=_build_lifecycle_extractor(),  # Important-3 — LLM-backed facts
-    )
-    app.state.hooks = hooks
-    app.state.lifecycle = lifecycle
-    # Gap E (Task 5) — cache the MemoryPort adapter so the by-turn / profile /
-    # summary endpoints don't rebuild (and re-init the VectorStore) per request.
-    app.state.memory_port = MemoryAdapter(get_memory_manager())
-    logger.info("MemoryLifecycleManager 已绑定 HookRegistry")
+        hooks = HookRegistry()
+        preferences_repo = _AsyncSettingsAdapter(SettingsRepository(db=db))
+        lifecycle = MemoryLifecycleManager(
+            memory_manager=get_memory_manager(),
+            hooks=hooks,
+            preferences_repo=preferences_repo,
+            extractor=_build_lifecycle_extractor(),  # Important-3 — LLM-backed facts
+        )
+        app.state.hooks = hooks
+        app.state.lifecycle = lifecycle
+        # Gap E (Task 5) — cache the MemoryPort adapter so the by-turn / profile /
+        # summary endpoints don't rebuild (and re-init the VectorStore) per request.
+        app.state.memory_port = MemoryAdapter(get_memory_manager())
+        logger.info("MemoryLifecycleManager 已绑定 HookRegistry")
+        return lifecycle
+
+    lifecycle = await profiler.phase("memory_lifecycle", _init_memory_lifecycle, deps=["db_init"])
 
     # Session-end watchdog — every 60s, find sessions whose updated_at
     # is older than 30 min and fire on_session_end.
@@ -538,26 +559,30 @@ async def lifespan(app: FastAPI):
     logger.info("MemoryExtractionQueue 已启动（记忆提取后台 worker）")
 
     # Phase 8: scheduled tasks service — load JSON, start APScheduler
-    from pathlib import Path
+    async def _init_scheduler():
+        from pathlib import Path
 
-    # Persist scheduled tasks JSON under SAGE_USER_DATA_DIR (per-user writable)
-    # rather than the bundled resources/backend/data/, which is system-protected
-    # under C:\Program Files\Sage and raised PermissionError on first write.
-    # Falls back to <cwd>/backend/data/scheduled_tasks.json for `npm run
-    # electron:dev` where SAGE_USER_DATA_DIR isn't injected.
-    user_data_dir = os.environ.get("SAGE_USER_DATA_DIR")
-    if user_data_dir:
-        store_path = Path(user_data_dir) / "scheduled_tasks.json"
-    else:
-        store_path = Path("backend/data/scheduled_tasks.json")
-    scheduler_service = init_scheduler_service(
-        store_path=store_path,
-        message_repo=MessageRepository(),
-        session_repo=SessionRepository(),
-    )
-    scheduler_service.start()
-    app.state.scheduler = scheduler_service
-    logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
+        # Persist scheduled tasks JSON under SAGE_USER_DATA_DIR (per-user writable)
+        # rather than the bundled resources/backend/data/, which is system-protected
+        # under C:\Program Files\Sage and raised PermissionError on first write.
+        # Falls back to <cwd>/backend/data/scheduled_tasks.json for `npm run
+        # electron:dev` where SAGE_USER_DATA_DIR isn't injected.
+        user_data_dir = os.environ.get("SAGE_USER_DATA_DIR")
+        if user_data_dir:
+            store_path = Path(user_data_dir) / "scheduled_tasks.json"
+        else:
+            store_path = Path("backend/data/scheduled_tasks.json")
+        scheduler_service = init_scheduler_service(
+            store_path=store_path,
+            message_repo=MessageRepository(),
+            session_repo=SessionRepository(),
+        )
+        scheduler_service.start()
+        app.state.scheduler = scheduler_service
+        logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
+        return scheduler_service
+
+    scheduler_service = await profiler.phase("scheduler", _init_scheduler, deps=["db_init"])
     _startup_mark("scheduler")
 
     # PR-C §5.1: 把 5 个 evolution 任务挂到 lifespan,按 cron 自动跑
@@ -829,19 +854,24 @@ async def lifespan(app: FastAPI):
     # 矛盾默认值的巧合而非设计); hex /chat 是否挂载由模块级 API_MODE 决定。
     # Wire the MemoryLifecycleManager into ChatService so run_turn drives
     # set_current_turn (F4 — production caller for source_turn_id).
-    from backend.api.hex_routes import get_chat_service
+    async def _build_chat_service_singleton():
+        from backend.api.hex_routes import get_chat_service
 
-    # 2026-09 修复 (同步 #957): 覆盖工厂此前每请求新建 ChatService ——
-    # prompt 快照缓存跨请求永不命中。注入单例访问器。
-    app.state.chat_service = _build_chat_service(lifecycle=lifecycle)
-    app.dependency_overrides[get_chat_service] = lambda: app.state.chat_service
-    # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
-    # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
-    app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
-    logger.info(
-        "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
-        API_MODE,
-    )
+        # 2026-09 修复 (同步 #957): 覆盖工厂此前每请求新建 ChatService ——
+        # prompt 快照缓存跨请求永不命中。注入单例访问器。
+        chat_service = _build_chat_service(lifecycle=lifecycle)
+        app.state.chat_service = chat_service
+        app.dependency_overrides[get_chat_service] = lambda: chat_service
+        # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
+        # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
+        app.state.memory_adapter = getattr(chat_service, "memory", None)
+        logger.info(
+            "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
+            API_MODE,
+        )
+        return chat_service
+
+    await profiler.phase("chat_service", _build_chat_service_singleton, deps=["memory_lifecycle", "scheduler"])
 
     # 浏览器一次性目录的启动兜底清扫（与下方 _shutdown_browser_sessions 对称）：
     # 进程被硬杀时 shutdown 钩子不会执行，遗留目录靠下次启动按 mtime 回收。
@@ -865,6 +895,14 @@ async def lifespan(app: FastAPI):
             file=sys.stderr,
             flush=True,
         )
+
+    # 完成启动分析，记录诊断数据
+    diagnostics = profiler.finish()
+    logger.info(
+        "Startup profiler complete: %.1fs total, groups=%s",
+        diagnostics.total_startup_time,
+        {k: f"{v:.1f}s" for k, v in diagnostics.group_timings.items()},
+    )
 
     yield
 

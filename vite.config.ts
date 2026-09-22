@@ -107,6 +107,11 @@ export default defineConfig({
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 500,
+    // 2026-09-22 (ZCode-inspired optimization): hidden sourcemap + no legal comments
+    // Generates .map files but doesn't expose sourceMappingURL in production bundles.
+    // Removes legal comments (/*! ... */) to reduce bundle size.
+    sourcemap: 'hidden',
+    legalComments: 'none',
     resolve: {
       // CRITICAL: dedupe react/react-dom so ReactDOM reads the SAME React
       // instance as React. Without this, ESM module resolution can produce
@@ -122,12 +127,18 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
+          // Core vendor chunks (existing)
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-query': ['@tanstack/react-query'],
           'vendor-ui': ['@headlessui/react', 'sonner', 'lucide-react'],
           'vendor-flow': ['@xyflow/react'],
           'vendor-markdown': ['react-markdown', 'remark-gfm'],
           'vendor-state': ['zustand'],
+          // 2026-09-22 (ZCode-inspired optimization): split heavy vendor chunks
+          // to reduce main chunk size and improve loading performance
+          'vendor-codemirror': ['@uiw/react-codemirror', 'codemirror'],
+          'vendor-katex': ['katex'],
+          'vendor-docx': ['docx-preview'],
         },
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',

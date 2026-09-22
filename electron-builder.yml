@@ -2,8 +2,10 @@ appId: com.sage.app
 productName: Sage
 copyright: Copyright © 2026 Sage Team
 asar: true
-asarUnpack:
-  # Phase 3 will add: '**/node_modules/sharp/**' if we ever embed heavy native modules
+asarUnpack: []
+# 2026-09-22 (ZCode-inspired optimization): no native .node modules detected,
+# asarUnpack left empty. If sharp/better-sqlite3/etc. are added later, unpack them:
+# asarUnpack: ['**/node_modules/sharp/**']
 directories:
   output: release/${version}
   buildResources: resources

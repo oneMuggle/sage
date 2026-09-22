@@ -244,3 +244,37 @@ def browser_check() -> dict:
     from backend.tools.browser_diagnostics import run_all_checks
 
     return run_all_checks()
+
+
+# ==================== 启动性能诊断（ZCode-inspired optimization） ====================
+
+
+@router.get("/startup")
+def startup_diagnostics() -> dict:
+    """返回后端启动性能诊断数据（2026-09-22 ZCode-inspired optimization）。
+
+    返回格式::
+
+        {
+            "total_startup_time_ms": 38420.5,
+            "parallel_groups": {"A": 1200.3, "B": 3400.8, "C": 12000.2},
+            "phases": [
+                {
+                    "name": "auth_token",
+                    "duration_ms": 12.4,
+                    "group": "A",
+                    "dependencies": [],
+                    "error": null
+                },
+                ...
+            ]
+        }
+
+    用于诊断启动瓶颈，指导后续并行化优化。
+    """
+    from backend.startup_profiler import get_diagnostics
+
+    diagnostics = get_diagnostics()
+    if diagnostics is None:
+        return {"error": "Startup profiler not initialized"}
+    return diagnostics

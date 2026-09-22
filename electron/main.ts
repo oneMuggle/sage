@@ -118,6 +118,13 @@ import {
   runDiagnosticPreview,
   runBrowserCheck,
 } from './diagnosticExport';
+// 2026-09-22 (ZCode-inspired optimization): memory diagnostics system
+import {
+  getMemoryDiagnostics,
+  startMemorySampling,
+  stopMemorySampling,
+  registerCounter,
+} from './memory-diagnostics';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -1836,6 +1843,13 @@ async function registerIpcHandlers(): Promise<void> {
     if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
     return runBrowserCheck();
   });
+
+  // 2026-09-22 (ZCode-inspired optimization): memory diagnostics
+  // 暴露 Electron 主进程内存快照到渲染进程（设置页可查看）
+  ipcMain.handle('diagnostics:memory', async (evt) => {
+    if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+    return getMemoryDiagnostics().toJSON();
+  });
 }
 
 /**
@@ -2168,6 +2182,9 @@ app.whenReady().then(async () => {
   // U12 (round4 批次 E): 系统托盘 + 全局快捷键唤起（Alt+Shift+S toggle）。
   // 内部全量降级:托盘/快捷键不可用只记日志,绝不阻断启动。
   setupTrayAndGlobalShortcut();
+  // 2026-09-22 (ZCode-inspired optimization): 启动内存诊断采样
+  // 60 秒采样一次 JS heap + 业务计数器，门控写入避免日志膨胀
+  startMemorySampling();
   // T11: inject backend URL + auth token getter so both the IPC handler
   // and the tray "导出诊断包…" menu can call the backend.
   initDiagnosticExport({
@@ -2561,6 +2578,8 @@ app.on('before-quit', () => {
   cleanupUpdateIpc = null;
   cleanupProviderIpc?.();
   cleanupProviderIpc = null;
+  // 2026-09-22 (ZCode-inspired optimization): stop memory sampling loop
+  stopMemorySampling();
   void shutdownBackend();
 });
 
