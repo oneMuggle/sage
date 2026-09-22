@@ -92,7 +92,7 @@ def test_zotero_db_path_in_settings_whitelist():
 
 
 def test_status_available(client, calls):
-    res = client.get("/zotero/status")
+    res = client.get("/status")
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["available"] is True
@@ -120,7 +120,7 @@ def test_status_unavailable_returns_200_with_error(monkeypatch):
 
 
 def test_search_passes_params_and_maps_summary(client, calls):
-    res = client.get("/zotero/search", params={"q": "paper", "collection_key": "CK1", "tag": "ml", "limit": 5})
+    res = client.get("/search", params={"q": "paper", "collection_key": "CK1", "tag": "ml", "limit": 5})
     assert res.status_code == 200, res.text
     assert calls["search"] == {"query": "paper", "collection_key": "CK1", "tag": "ml", "limit": 5}
     item = res.json()[0]
@@ -131,12 +131,12 @@ def test_search_passes_params_and_maps_summary(client, calls):
 
 
 def test_search_limit_out_of_range_rejected(client):
-    assert client.get("/zotero/search", params={"limit": 0}).status_code == 422
-    assert client.get("/zotero/search", params={"limit": 101}).status_code == 422
+    assert client.get("/search", params={"limit": 0}).status_code == 422
+    assert client.get("/search", params={"limit": 101}).status_code == 422
 
 
 def test_get_item_detail_mapping(client, calls):
-    res = client.get("/zotero/items/ITEM9")
+    res = client.get("/items/ITEM9")
     assert res.status_code == 200, res.text
     assert calls["get_item"] == "ITEM9"
     body = res.json()
@@ -146,25 +146,25 @@ def test_get_item_detail_mapping(client, calls):
 
 
 def test_get_item_missing_returns_404(client):
-    res = client.get("/zotero/items/MISSING")
+    res = client.get("/items/MISSING")
     assert res.status_code == 404, res.text
     assert "MISSING" in res.json()["detail"]
 
 
 def test_annotations_roundtrip_and_404(client, calls):
-    ok = client.get("/zotero/items/ITEM1/annotations")
+    ok = client.get("/items/ITEM1/annotations")
     assert ok.status_code == 200, ok.text
     ann = ok.json()[0]
     assert ann["type"] == "highlight"
     assert ann["page_label"] == "3"
-    missing = client.get("/zotero/items/MISSING/annotations")
+    missing = client.get("/items/MISSING/annotations")
     assert missing.status_code == 404
 
 
 def test_collections_parent_key_passthrough(client, calls):
-    assert client.get("/zotero/collections").status_code == 200
+    assert client.get("/collections").status_code == 200
     assert calls["list_collections"] is None
-    client.get("/zotero/collections", params={"parent_key": "P1"})
+    client.get("/collections", params={"parent_key": "P1"})
     assert calls["list_collections"] == "P1"
 
 
@@ -186,7 +186,7 @@ def test_set_db_path_responds_ok_and_clears_singleton(client, monkeypatch):
     monkeypatch.setattr(zotero_routes, "_client", object())
     monkeypatch.setattr(zotero_routes, "_client_db_path", "/old")
 
-    res = client.post("/zotero/path", params={"path": "C:/zotero.sqlite"})
+    res = client.post("/path", params={"path": "C:/zotero.sqlite"})
     assert res.status_code == 200, res.text
     body = res.json()
     assert body == {"ok": True, "db_path": "C:/zotero.sqlite"}
