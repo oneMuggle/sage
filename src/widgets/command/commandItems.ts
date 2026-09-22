@@ -8,6 +8,7 @@ import {
   Sparkles,
   Network,
   FileSpreadsheet,
+  Swords,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -39,6 +40,7 @@ export const navCommands: NavCommand[] = [
   { type: 'nav', path: '/skills', label: '技能', icon: Sparkles },
   // U10: sidebar 隐藏高级入口期间，命令面板作为发现路径（首次使用后解锁并固定到 sidebar）。
   { type: 'nav', path: '/orchestration', label: '编排', icon: Network },
+  { type: 'nav', path: '/arena', label: 'Arena 控制台', icon: Swords },
   { type: 'nav', path: '/office', label: 'Office', icon: FileSpreadsheet },
   { type: 'nav', path: '/settings', label: '设置', icon: Settings },
 ];

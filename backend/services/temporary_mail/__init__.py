@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from .base import DEFAULT_CODE_PATTERN, DEFAULT_SUBJECT_PATTERN, Mailbox, TemporaryMailProvider
-from .registry import UnknownProviderError, available_providers, create_provider
+from .registry import (
+    UnknownProviderError,
+    available_providers,
+    create_provider,
+    get_provider,
+)
 
 __all__ = [
     "DEFAULT_CODE_PATTERN",
@@ -13,4 +18,5 @@ __all__ = [
     "UnknownProviderError",
     "available_providers",
     "create_provider",
+    "get_provider",
 ]

@@ -47,7 +47,7 @@
     "backend/zotero/client.py": 818,
     "electron/__tests__/commands.test.ts": 981,
     "electron/commands.ts": 1300,
-    "electron/main.ts": 2512,
+    "electron/main.ts": 2539,
     "electron/tests/updateIntegration.test.ts": 865,
     "electron/tests/updateManager.test.ts": 1776,
     "electron/updateManager.ts": 1493,
@@ -67,6 +67,8 @@
     "src/widgets/chat/Message.tsx": 1067,
     "src/widgets/chat/progress/__tests__/TaskTreeSection.rerun.test.tsx": 904,
     "src/widgets/sidebar/sections/ProjectSection.tsx": 938,
-    "tests/electron/test_stub_backend.py": 896
+    "tests/electron/test_stub_backend.py": 896,
+    "backend/api/arena_routes.py": 873,
+    "backend/services/arena_draw_engine.py": 1054
   }
 }
