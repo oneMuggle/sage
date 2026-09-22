@@ -448,6 +448,7 @@ export const en: Record<TranslationKey, string> = {
 
   // ─── Sidebar sections ─────────────
   'sider.section.conversations': 'Conversations',
+  'sider.section.todos': 'Todos',
   'sider.section.cron': 'Scheduled Tasks',
   'sider.section.project': 'Projects',
   'sider.section.team': 'Team',
@@ -1193,4 +1194,9 @@ export const en: Record<TranslationKey, string> = {
 
   // ─── F12 Message full-text search (parity round 5 batch B) ─────
   'session.message_hits': '{count} message hits',
+
+  // ─── Todos sidebar preview ─────
+  'todos.title': 'Todos',
+  'todos.create': 'Add todo',
+  'todos.empty': 'No pending todos',
 };

@@ -112,6 +112,7 @@ from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.system_routes import router as system_router
 from backend.api.theme_router import router as theme_router
+from backend.api.todo_router import build_router as build_todo_router
 from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
 from backend.api.web_access_routes import router as web_access_router
@@ -120,15 +121,22 @@ from backend.api.workspace_routes import router as workspace_router
 from backend.api.worktree_routes import router as worktree_router
 from backend.application.services.chat_service import ChatService
 from backend.application.services.wake_store import get_wake_store
-from backend.data.database import Database
+from backend.data.database import Database, get_database
 from backend.data.session_repo import MessageRepository, SessionRepository
 from backend.domain.wake import Wake
 from backend.memory import get_memory_manager
 from backend.model_catalog.repository import CatalogRepository
 from backend.orchestration.wake_scheduler import WakeScheduler
+from backend.scheduler.todo_reminder import (
+    init_todo_reminder_scheduler,
+)
 from backend.services.scheduler import (
     get_scheduler_service,
     init_scheduler_service,
+)
+from backend.services.todo_service import (
+    get_todo_service,
+    init_todo_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -448,6 +456,18 @@ async def lifespan(app: FastAPI):
         list(_evo_registered.keys()),
     )
 
+    # Todo service — personal task management
+    todo_service = init_todo_service(get_database())
+    app.state.todo_service = todo_service
+    logger.info("TodoService initialised")
+    _startup_mark("todo_service")
+
+    # Todo reminder scheduler — hybrid scan + precise triggers (spec §6)
+    todo_reminder_scheduler = init_todo_reminder_scheduler(todo_service)
+    app.state.todo_reminder_scheduler = todo_reminder_scheduler
+    logger.info("TodoReminderScheduler started")
+    _startup_mark("todo_reminder_scheduler")
+
     # R19-B: SQLite 自动备份 —— 启动时后台线程备份一次（fail-safe, 不阻塞
     # 启动）+ 每日 03:10 定时备份（独立于 evolution 任务, 只做整库在线复制）。
     def _startup_backup() -> None:
@@ -689,7 +709,6 @@ async def lifespan(app: FastAPI):
     # 删除的会话 worktree → 标 discarded + prune 主仓 + 悬空绑定退回主仓。
     try:
         from backend.api.worktree_routes import sweep_registered_worktrees
-        from backend.data.database import get_database
 
         swept = sweep_registered_worktrees(get_database().get_connection())
         if swept:
@@ -740,6 +759,30 @@ async def lifespan(app: FastAPI):
     # Phase 8: stop APScheduler cleanly so jobs do not fire after shutdown
     if hasattr(app.state, "scheduler") and app.state.scheduler is not None:
         app.state.scheduler.shutdown()
+
+    # Phase 8b: stop todo reminder scheduler
+    if (
+        hasattr(app.state, "todo_reminder_scheduler")
+        and app.state.todo_reminder_scheduler is not None
+    ):
+        try:
+            app.state.todo_reminder_scheduler.stop()
+        except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+            logger.warning("TodoReminderScheduler stop failed: %s", exc)
+
+    # M1/M2 审批/提问闸口：关闭时重置全局单例。否则 TestClient（或多次
+    # lifespan 启停）之后 `_global_gate` 残留装配——后续 agent 循环对
+    # EXECUTE 工具调用会把审批挂起直到 300s 超时，测试间互相污染。
+    # （对齐上面 scheduler / HeartbeatMonitor 的 shutdown 清理模式。）
+    try:
+        from backend.services.permission_gate import reset_permission_gate
+        from backend.services.question_gate import reset_question_gate
+
+        reset_permission_gate()
+        reset_question_gate()
+        logger.info("PermissionGate / QuestionGate 单例已清理")
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("PermissionGate/QuestionGate reset failed: %s", exc)
 
     # A4: stop WakeScheduler before tearing down chat services
     if hasattr(app.state, "wake_scheduler") and app.state.wake_scheduler is not None:
@@ -967,6 +1010,9 @@ app.include_router(embedder_router, prefix="/api/v1")
 
 # Phase 8: scheduled tasks — mounted for both API modes (independent feature)
 app.include_router(build_scheduled_router(get_scheduler_service), prefix="/api/v1")
+
+# Todo personal task management
+app.include_router(build_todo_router(get_todo_service), prefix="/api/v1")
 
 # M3: MCP multi-server management (status / servers CRUD)
 app.include_router(mcp_router, prefix="/api/v1")

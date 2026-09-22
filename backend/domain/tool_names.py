@@ -174,6 +174,15 @@ CONFIG_TOOLS = ("read_sage_config", "update_sage_config")
 # 长期定时行为（与 CONFIG_TOOLS 同样的 coordinator-only 边界）。
 SCHEDULE_TOOLS = ("schedule_task", "list_scheduled_tasks", "cancel_scheduled_task")
 
+# 待办子系统（2026-09-21 todolist-subsystem）：五个 LLM 工具面（add / list /
+# update / complete / delete），均挂 TodoService（SQLite 持久化 + 会话 ID
+# 隔离）。与 SCHEDULE_TOOLS 同模式：工具无条件注册（对 LLM 可见），
+# ``todo_service_getter`` 在执行期解析 service 是否就绪。
+# ``add_todo`` / ``update_todo`` 为 WRITE_LOCAL（持久化副作用）；
+# ``list_todos`` / ``complete_todo`` / ``delete_todo`` 也均为 WRITE_LOCAL
+# （完成/删除同样改 SQLite）。ToolPolicy 层会按风险分级处理。
+TODO_TOOLS = ("add_todo", "list_todos", "update_todo", "complete_todo", "delete_todo")
+
 #: 全部静态注册的内置工具名（排序去重）。新增内置工具时把名字加进对应
 #: 分组即可；tests/unit/test_tool_names.py 会对照 register_all_tools 的
 #: 实际注册面校验本清单无遗漏、无多余。
@@ -199,6 +208,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(SANDBOX_TOOLS)
         | set(CONFIG_TOOLS)
         | set(SCHEDULE_TOOLS)
+        | set(TODO_TOOLS)
     )
 )
 
@@ -224,6 +234,7 @@ __all__ = [
     "SCHEDULE_TOOLS",
     "SKILL_TOOLS",
     "SYMBOL_TOOLS",
+    "TODO_TOOLS",
     "WEB_FETCH_TOOLS",
     "WEB_SEARCH_TOOLS",
     "WEB_TOOLS",

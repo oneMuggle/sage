@@ -708,6 +708,77 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/scheduled/evolution/${encodeURIComponent(String(a.name))}/run`,
   },
 
+  // todo subsystem (personal todolist)
+  todo_list: {
+    method: 'GET',
+    path: (a) => {
+      const params = new URLSearchParams();
+      if (a?.status !== undefined && a?.status !== null) {
+        params.set('status', String(a.status));
+      }
+      if (a?.project_tag !== undefined && a?.project_tag !== null) {
+        params.set('project_tag', String(a.project_tag));
+      }
+      if (a?.priority !== undefined && a?.priority !== null) {
+        params.set('priority', String(a.priority));
+      }
+      if (a?.include_completed) params.set('include_completed', 'true');
+      if (a?.sort_by !== undefined && a?.sort_by !== null) {
+        params.set('sort_by', String(a.sort_by));
+      }
+      if (a?.sort_order !== undefined && a?.sort_order !== null) {
+        params.set('sort_order', String(a.sort_order));
+      }
+      if (a?.limit !== undefined && a?.limit !== null) {
+        params.set('limit', String(a.limit));
+      }
+      if (a?.offset !== undefined && a?.offset !== null) {
+        params.set('offset', String(a.offset));
+      }
+      const qs = params.toString();
+      return `/api/v1/todos${qs ? `?${qs}` : ''}`;
+    },
+  },
+  todo_create: {
+    method: 'POST',
+    path: () => '/api/v1/todos',
+  },
+  todo_get: {
+    method: 'GET',
+    path: (a) => `/api/v1/todos/${encodeURIComponent(String(a.id))}`,
+  },
+  todo_update: {
+    method: 'PUT',
+    path: (a) => `/api/v1/todos/${encodeURIComponent(String(a.id))}`,
+    // UpdateTodoIn declares `extra = "forbid"` — `id` lives in the URL path,
+    // so the PUT body must not carry it (otherwise the backend returns 422).
+    body: (a) => {
+      const changes: Record<string, unknown> = { ...a };
+      delete changes.id;
+      return changes;
+    },
+  },
+  todo_delete: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/todos/${encodeURIComponent(String(a.id))}`,
+  },
+  todo_complete: {
+    method: 'POST',
+    path: (a) => `/api/v1/todos/${encodeURIComponent(String(a.id))}/complete`,
+  },
+  todo_cancel: {
+    method: 'POST',
+    path: (a) => `/api/v1/todos/${encodeURIComponent(String(a.id))}/cancel`,
+  },
+  todo_summary: {
+    method: 'GET',
+    path: () => '/api/v1/todos/summary',
+  },
+  todo_stats: {
+    method: 'GET',
+    path: () => '/api/v1/todos/stats',
+  },
+
   // custom CSS theme storage (themeCssClient)
   // Backend theme_router 挂在 /api/v1/theme (与其他 IPC 路由一致)
   theme_list: { method: 'GET', path: () => '/api/v1/theme/list' },
