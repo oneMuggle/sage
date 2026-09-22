@@ -46,10 +46,12 @@ export function Toggle({ value, onChange, disabled = false, testId }: ToggleProp
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={value}
       disabled={disabled}
       data-testid={testId}
       className={`w-9 h-5 rounded-full relative transition-colors ${
-        value ? 'bg-primary' : 'bg-border'
+        value ? 'bg-primary' : 'bg-line-strong'
       }`}
       onClick={() => onChange(!value)}
     >
