@@ -395,8 +395,17 @@ def test_get_startup_summary_buckets(todo_service):
     """Todos land in the correct summary bucket."""
     now = datetime.now()
     todo_service.create_todo(title="Overdue", due_at=(now - timedelta(hours=2)).isoformat())
-    # Use 1 hour instead of 2 to avoid date boundary issues when test runs near midnight
-    todo_service.create_todo(title="Today", due_at=(now + timedelta(hours=1)).isoformat())
+    # today 桶要求 now <= due_at <= 当日 23:59:59：`now + 1h` 在本地时间
+    # 23:00 之后会跨入明天（CI 在 UTC 跑，23:00 UTC = 北京 07:00，每天必踩，
+    # 实证 #1419 的 Backend job）。钳制到当日 23:58；若 clamp 后反而 <= now
+    # （23:58-23:59:59 运行），直接取 now 本身——桶判定含等号。
+    due_today = min(
+        now + timedelta(hours=1),
+        now.replace(hour=23, minute=58, second=0, microsecond=0),
+    )
+    if due_today <= now:
+        due_today = now
+    todo_service.create_todo(title="Today", due_at=due_today.isoformat())
     todo_service.create_todo(title="Upcoming", due_at=(now + timedelta(days=3)).isoformat())
     todo_service.create_todo(title="High", priority="high")
 
