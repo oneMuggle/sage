@@ -57,7 +57,7 @@ describe('ArenaAccountsToggle — unit', () => {
     render(<ArenaAccountsToggle />);
     expect(screen.getByText('Arena 自动化')).toBeInTheDocument();
     expect(screen.getByText(/侧边栏显示「Arena 账号」入口/)).toBeInTheDocument();
-    expect(screen.getByTestId('toggle-arena-accounts')).toHaveClass('bg-border');
+    expect(screen.getByTestId('toggle-arena-accounts')).toHaveClass('bg-line-strong');
   });
 
   it('hydrates the on state from localStorage', () => {
@@ -83,7 +83,7 @@ describe('ArenaAccountsToggle — unit', () => {
     const raw = localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY);
     const stored = raw == null ? [] : JSON.parse(raw);
     expect(stored).not.toContain('arena-accounts');
-    expect(toggle).toHaveClass('bg-border');
+    expect(toggle).toHaveClass('bg-line-strong');
   });
 });
 

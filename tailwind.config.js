@@ -51,6 +51,14 @@ export default {
           subtle: 'rgb(var(--color-mem-subtle-rgb) / <alpha-value>)',
         },
         overlay: 'var(--color-overlay)',
+        // ZCode-inspired semantic UI color tokens (plain CSS vars for theme switching)
+        'ui-bg': 'var(--color-background)',
+        'ui-card': 'var(--color-card)',
+        'ui-surface': 'var(--color-surface)',
+        'ui-popover': 'var(--color-popover)',
+        'ui-border': 'var(--color-border)',
+        'ui-foreground': 'var(--color-foreground)',
+        'ui-subtle': 'var(--color-foreground-subtle)',
         role: {
           blue: 'rgb(var(--color-role-blue-rgb) / <alpha-value>)',
           'blue-text': 'rgb(var(--color-role-blue-text-rgb) / <alpha-value>)',
@@ -82,6 +90,13 @@ export default {
         '8xl': ['calc(var(--font-size-ui) * 6.8571428571)', { lineHeight: '1' }],
         '9xl': ['calc(var(--font-size-ui) * 9.1428571429)', { lineHeight: '1' }],
         code: ['var(--font-size-code)', { lineHeight: '1.5' }],
+        // ZCode-inspired UI font-size scale (var-based, responsive to --ui-font-size)
+        'ui-xl': 'calc(var(--ui-font-size, 14px) + 4px)',
+        'ui-lg': 'calc(var(--ui-font-size, 14px) + 2px)',
+        'ui-base': 'var(--ui-font-size, 14px)',
+        'ui-caption': 'calc(var(--ui-font-size, 14px) - 1px)',
+        'ui-sm': 'calc(var(--ui-font-size, 14px) - 2px)',
+        'ui-xs': 'calc(var(--ui-font-size, 14px) - 4px)',
       },
       spacing: {
         'space-1': 'var(--space-1)',

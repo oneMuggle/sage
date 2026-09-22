@@ -279,7 +279,7 @@ describe('GeneralTab auto checkpoint (B-2, 默认开)', () => {
     );
     renderTab();
     await waitFor(() => {
-      expect(toggle().className).toContain('bg-border');
+      expect(toggle().className).toContain('bg-line-strong');
     });
   });
 });
