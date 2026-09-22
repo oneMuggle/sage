@@ -159,7 +159,6 @@ def test_expired_token_not_refreshable_proceeds_anonymous():
 
 def test_401_with_token_clears_record_and_names_reauth():
     store = _FakeStore(record=_record())
-    state = {"count": 0}
 
     def responder(method, request, seen):
         if method == "initialize":
@@ -201,7 +200,6 @@ def test_static_authorization_used_when_no_oauth_record():
 
 def test_404_on_established_session_raises_expired():
     store = _FakeStore(record=None)
-    state = {"count": 0}
 
     def responder(method, request, seen):
         if method == "initialize":
