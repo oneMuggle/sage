@@ -57,5 +57,8 @@ pull_request 上下文而整批 skip）；② 需要在事件恢复前对分支�
 
 ## 5. 交付记录
 
-（各批次 PR 号与交付号于交付后回填；workflow 属 main 基础设施，win7 对齐
-仅需文件落位使 cherry 分支可 dispatch，见 win7 对齐 PR）
+- **main**：PR #1395（squash `5f329e7a`，CI 14 项全绿）。
+- **win7 对齐**：PR #1399（squash `2f83510b`，win7 必过项全绿）。
+  同 PR 首次将 parity-loop-sop.md 落入 release/win7（含 §4.2 触发命令）；
+  Chat.tsx 导入冲突按 HEAD 侧落位（win7 无 useFileUpload 依赖）。
+- **回填分支**：`docs/r45-parity-backfill`（本提交）。
