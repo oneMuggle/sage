@@ -111,7 +111,7 @@ def test_status_unavailable_returns_200_with_error(monkeypatch):
     monkeypatch.setattr(zotero_routes, "_get_client", _boom)
     app = FastAPI()
     app.include_router(zotero_routes.router)
-    res = TestClient(app).get("/zotero/status")
+    res = TestClient(app).get("/status")
     assert res.status_code == 200, res.text
     body = res.json()
     assert body["available"] is False
@@ -206,6 +206,6 @@ def test_client_constructor_failure_raises_503(monkeypatch):
     monkeypatch.setattr(zotero_pkg, "ZoteroClient", _raising_client)
     app = FastAPI()
     app.include_router(zotero_routes.router)
-    res = TestClient(app).get("/zotero/search")
+    res = TestClient(app).get("/search")
     assert res.status_code == 503, res.text
     assert "not found" in res.json()["detail"]
