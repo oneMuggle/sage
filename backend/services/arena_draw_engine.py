@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Arena draw engine (plan §2.2/§2.3/§5.8, P4) — pure-protocol draw loop.
 
 One draw = one fresh arena.ai conversation (model assignment is
@@ -34,8 +33,7 @@ storm).
 
 from __future__ import annotations
 
-import base64
-import json
+import contextlib
 import threading
 import time
 import uuid
@@ -74,7 +72,7 @@ class DrawError(RuntimeError):
     """One draw round failed (counted, account stays in rotation)."""
 
 
-class RateLimited(DrawError):
+class RateLimited(DrawError):  # noqa: N818 — 短域名语义名，429 语义自明（同 ultragoal_store 惯例）
     """create-chat got a 429; ``switch`` tells the job layer to change IP."""
 
     def __init__(self, msg: str = "429 限流", cf: bool = False, switch: bool = False):
@@ -267,7 +265,7 @@ class DrawClient:
         #: 真实测量值而非手写 UA（纪律 2）：reCAPTCHA Enterprise 的评分
         #: 会比对解题浏览器与呈现请求的 UA 一致性。
         self.ua = str(ua or "")
-        self.log = log or (lambda *a, **k: None)
+        self.log = log or (lambda *_a, **_k: None)
         self.gate = gate or Gate()
         self._gate_key = gate_key(email, proxy)
         self.s = session if session is not None else make_session(
@@ -282,10 +280,8 @@ class DrawClient:
         return headers
 
     def close(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self.s.close()
-        except Exception:  # noqa: BLE001
-            pass
 
     def _req(self, method: str, url: str, retries: int = 3, **kw):
         """arena.ai 偶发读超时（参考实测一天 4 次），统一网络级重试。"""
@@ -487,7 +483,7 @@ def fetch_run_events(
     ``want_internal`` keeps retrying until an internal config name lands
     (usage is written later than the model label, reference read_usage note).
     """
-    log = log or (lambda *a, **k: None)
+    log = log or (lambda *_a, **_k: None)
     s = session
     url = f"{TRIGGER_API}/runs/{run_id}/events"
     h = {"Authorization": "Bearer " + run_token}
@@ -547,7 +543,7 @@ def read_usage(
     log: Optional[Callable[..., None]] = None,
 ) -> Dict[str, Any]:
     """Reasoning tokens etc. from span details (usage first, stream fallback)."""
-    log = log or (lambda *a, **k: None)
+    log = log or (lambda *_a, **_k: None)
     out: Dict[str, Any] = {}
     ids = span_ids(events, max_n=max_spans)
     for span_id in ids:
@@ -601,8 +597,8 @@ def draw_once(
     「token 窗口不可用」 rather than degrading to paid paths.
     """
     email = str(account.get("email") or "")
-    log = log or (lambda *a, **k: None)
-    stage = stage or (lambda *a, **k: None)
+    log = log or (lambda *_a, **_k: None)
+    stage = stage or (lambda *_a, **_k: None)
     proxy = str(account.get("proxy_url") or "")
     res: Dict[str, Any] = {
         "email": email,
@@ -689,10 +685,8 @@ def draw_once(
             )
             # reCAPTCHA 拒 → 回写 P3 cache（熔断输入）+ 退避换新 token
             if token_cache is not None and kind == "recaptcha":
-                try:
+                with contextlib.suppress(Exception):
                     token_cache.mark_rejected("create-chat recaptcha")
-                except Exception:  # noqa: BLE001
-                    pass
             if attempt < captcha_retries:
                 pause = 10 if kind == "recaptcha" else 20 if kind == "429" else 0
                 if pause:
@@ -811,12 +805,10 @@ def _reset_store_for_tests() -> None:
         _JOB_STORE = None
 
 
-def _stage_logger(job_store: "JobStore", job_id: str):
+def _stage_logger(job_store: JobStore, job_id: str):
     def log(message: str, level: str = "info", kind: str = "log") -> None:
-        try:
+        with contextlib.suppress(Exception):  # 事件失败不影响抽卡
             job_store.append_event(job_id, level=level, kind=kind, message=str(message))
-        except Exception:  # noqa: BLE001 — 事件失败不影响抽卡
-            pass
     return log
 
 
@@ -976,7 +968,9 @@ def start_draw_job(
                                 accounts_service.update_binding(
                                     account_id, proxy_url=new_proxy
                                 )
-                                account = dict(account, proxy_url=new_proxy)
+                                # PLW2901 有意为之：就地重绑本轮账号视图，
+                                # 让下方 redo 以新代理出站（不回写外层迭代变量语义）
+                                account = dict(account, proxy_url=new_proxy)  # noqa: PLW2901
                                 clients.pop(email, None)
                                 gate.gate_reset(gate_key(email, new_proxy))
                                 log("[*] 已换绑代理，重跑本轮")

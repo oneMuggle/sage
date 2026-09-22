@@ -31,7 +31,8 @@ JOB_STATUSES = ("running", "stopping", "done", "failed", "stopped")
 
 
 def _utcnow() -> str:
-    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")
+    # UP017 不改：datetime.UTC 别名是 3.11+，win7 py38 仍需 timezone.utc
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds")  # noqa: UP017
 
 
 @dataclass

@@ -146,7 +146,7 @@ class HttpxSession:
         with self._client.stream("GET", url, **kw) as response:
             yield _StreamResponse(
                 response.status_code,
-                lambda chunk_size: response.iter_bytes(),
+                lambda _chunk_size: response.iter_bytes(),
             )
 
     def close(self) -> None:

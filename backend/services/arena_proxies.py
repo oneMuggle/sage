@@ -27,7 +27,7 @@ import logging
 import re
 import threading
 import time
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Tuple
 from urllib.parse import quote, unquote, urlparse
 
 import httpx
@@ -87,7 +87,7 @@ class ProxyPool:
     # -- parsing -----------------------------------------------------------
 
     @staticmethod
-    def split_credentials(raw: str) -> Optional[Tuple[str, str, str, str]]:
+    def split_credentials(raw: str) -> Optional[Tuple[str, str, str, str]]:  # noqa: PLR0911 — 4 种粘贴格式×消歧分支，每条 return 即一种格式
         """Normalize the 4 chili paste formats to (host, port, user, password).
 
         hostname:port:username:password      <- default
@@ -322,7 +322,9 @@ def proxy_alive(proxy_url: str, timeout: float = 8.0, transport=None) -> bool:
     """
     if not proxy_url:
         return True
-    local = local_proxy(proxy_url)
+    # local_proxy() 有副作用（为该上游建立本地 relay 端口映射），需在此触发；
+    # 探测本身仍走原始 URL。F841 因仅取副作用而改名下划线。
+    _local = local_proxy(proxy_url)
     for url in ECHO_URLS:
         try:
             with _proxied_client(proxy_url, timeout, transport) as client:

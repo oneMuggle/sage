@@ -21,6 +21,7 @@ step (tracked in the plan) and intentionally not a hard dependency here.
 from __future__ import annotations
 
 import base64
+import contextlib
 import logging
 import os
 import secrets
@@ -76,18 +77,14 @@ def _atomic_write_private(path: Path, payload: bytes) -> None:
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(payload)
-        try:
-            # POSIX: owner-only. On Windows chmod only toggles the readonly bit,
-            # which is why the file also lives under the per-user profile.
-            os.chmod(tmp_name, stat.S_IRUSR | stat.S_IWUSR)
-        except OSError:
-            pass
-        os.replace(tmp_name, path)
+        # POSIX: owner-only. On Windows chmod only toggles the readonly bit,
+        # which is why the file also lives under the per-user profile.
+        with contextlib.suppress(OSError):
+            Path(tmp_name).chmod(stat.S_IRUSR | stat.S_IWUSR)
+        Path(tmp_name).replace(path)
     except BaseException:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_name)
-        except OSError:
-            pass
         raise
 
 
