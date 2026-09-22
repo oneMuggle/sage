@@ -79,6 +79,14 @@ backend/data/*.sqlite3
 # Runtime audit/JSONL ledgers written under backend/data/. These are
 # created by the runtime, not part of the source tree.
 backend/data/audit/*.jsonl
+# Arena automation runtime state: Fernet master key + SQLite WAL/SHM sidecars
+# (docs/mcp-aren-card-port-plan.md §10 — the master key must never be committed;
+# `backend/data/*.sqlite` above covers the DB file but not -wal/-shm).
+backend/data/arena/
+# Arena job exports (registration results media/downloads), runtime-generated.
+backend/data/media/
+# Local arena spike/probe/smoke evidence (S0, P1, ...), not part of the source tree.
+.tmp-arena-*/
 
 # Environment
 .env

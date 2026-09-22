@@ -26,7 +26,9 @@ def svc():
 def test_create_account_round_trip(svc):
     acc = svc.create_account(email="user@example.com", password="hunter2")
     assert acc["email"] == "user@example.com"
-    fetched = svc.get_account(acc["id"])
+    # P2 契约:默认投影不含密码,密文读取必须显式 include_secret
+    assert "password" not in svc.get_account(acc["id"])
+    fetched = svc.get_account(acc["id"], include_secret=True)
     assert fetched["password"] == "hunter2"
     assert fetched["state"] == AccountState.AVAILABLE.value
 
