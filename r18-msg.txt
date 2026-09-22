@@ -1,6 +1,0 @@
-feat(web-access): Round 18——web_search 纳入 per-host 指标 + 指标 UI 刷新/重置
-
-- S1：WebSearchTool 串行路径逐引擎埋点——伪域 search:<engine>，请求成功即 ok（Round 9 口径：0 条结果仍 ok）、异常记 fail；并行聚合模式暂不埋点（串行为默认路径，注释明示）
-- U1：设置页指标区块加"刷新"（重新拉取）与"重置"（PUT metrics/reset 后清空）按钮；i18n zh/en 补键
-- 方案：docs/plans/2026-09-18_web-access-optimization-round18.md
-- 测试：假引擎注入断言 search:<name> 指标（ok/fail 各一）1 例；web_tool 全量回归通过
