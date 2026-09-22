@@ -33,7 +33,11 @@ import { RuntimeEnvTab } from './RuntimeEnvTab';
 import { ToolsConnectionsTab } from './ToolsConnectionsTab';
 import { UpdatesTab } from './UpdatesTab';
 import { ZoteroTab } from './ZoteroTab';
-import { searchSettings, type SettingsSearchEntry, type SettingsTabKey } from './settingsSearchIndex';
+import {
+  searchSettings,
+  type SettingsSearchEntry,
+  type SettingsTabKey,
+} from './settingsSearchIndex';
 
 export type SettingsTab = SettingsTabKey;
 
@@ -43,14 +47,18 @@ export function Settings() {
     try {
       const saved = localStorage.getItem('sage:settings-tab');
       if (saved) return (saved === 'general' ? 'basic' : saved) as SettingsTab;
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     return 'general';
   });
   const setActiveTab = useCallback((tab: SettingsTab) => {
     setActiveTabState(tab);
     try {
       localStorage.setItem('sage:settings-tab', tab);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const { settings, updateSettings, resetSettings } = useSettings();
@@ -77,15 +85,10 @@ export function Settings() {
 
   // 设置项级搜索：命中项列表 + 其所属 tab（导航区仍按 tab 名过滤）
   const matchedItems = useMemo(() => searchSettings(searchQuery), [searchQuery]);
-  const matchingTabs = useMemo(
-    () => new Set(matchedItems.map((item) => item.tab)),
-    [matchedItems],
-  );
+  const matchingTabs = useMemo(() => new Set(matchedItems.map((item) => item.tab)), [matchedItems]);
   const query = searchQuery.trim().toLowerCase();
   const filteredTabs = query
-    ? tabs.filter(
-        (tab) => matchingTabs.has(tab.key) || tab.label.toLowerCase().includes(query),
-      )
+    ? tabs.filter((tab) => matchingTabs.has(tab.key) || tab.label.toLowerCase().includes(query))
     : tabs;
 
   const jumpToItem = (item: SettingsSearchEntry): void => {
