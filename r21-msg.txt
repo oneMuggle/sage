@@ -1,7 +1,0 @@
-feat(web-access): Round 21——DL2 后台下载任务化
-
-- J1：新增 backend/tools/download_jobs.py——DownloadJobManager（ThreadPoolExecutor 双 worker + 线程安全任务表 + 终态任务 LRU 淘汰 200 上限）
-- J2：http_download 增 background 参数（true 时提交后台任务立即返回 job_id）；新工具 download_status（查单/全部任务）与 download_cancel（仅 pending 可取消，running 不可中断如实报错）；tool_names 增 WEB_DL_JOBS_TOOLS
-- 安全口径不变：同 URL 校验 / check_host / 限速沿用 execute 现有路径（后台走同一线程池，串行队列语义一致）
-- 方案：docs/plans/2026-09-19_web-access-round21-dljobs.md
-- 测试：任务管理器生命周期 6 例（pending 取消 / running 不可取消 / 失败记 error / 终态 LRU 淘汰）；ruff/py38 过
