@@ -18,7 +18,9 @@
 | R87 | browser_navigate 纳入来源 + 重接路径 memory_used/attachment_rag_used 校验收口 | #1296 `6cf0ed89` | #1299 |
 | R88 | 专项总账（本文件） | #1301 `b6823cb7` | 文档无需对齐 |
 | R89 | merge_sources 去重改为补齐合并（navigate→fetch 同 url 摘要不丢）；附带 py38 replan 测试 loop 兜底 | #1304 `0c2a4de2` | #1305 `0c0548b1` |
-| R90 | 实体 wiki 来源补 score + browser_navigate 集成用例 + 本回填 | —（本 PR） | 文档随代码无需单独对齐 |
+| R90 | 实体 wiki 来源补 score + browser_navigate 集成用例 + 本回填 | #1313 `8e9b7c79` | #1317 `4bbeca87` |
+| R91 | 复活 test_chat_stream_persist（脱 skip/脱 DI）+ 会话元数据不变量 | #1320 `d506cc6d` | #1375 `5265aef1` |
+| R92 | /btw 浮层接入统一参考来源（sources_used → 紧凑折叠列表） | #1380 `0ffbe01c` | #1387 `4d7934ef` |
 
 ## 2. 专项方案要点（R81 管道全景）
 
@@ -81,5 +83,24 @@ R83 增量推送在其上是沉睡代码（DONE 前全量兜底有效，功能�
 4. **STEP_DONE 全量同步 win7**（见 §3，需拍板）。
 5. **orchestration 编排模式的来源聚合**：单 agent 模式已覆盖；多 agent
    编排如需 per-task 来源，需扩展 ChatDispatcher 事件投影。
+
+
+## 6. 回归记录（R94，2026-09-20）
+
+main `969b7d55` 本机全量回归（Windows 11 / py3.12 / node 24）：
+
+- **后端 unit（xdist loadfile）**：7447 passed / 8 failed / 548 skipped（25min）。
+  8 个失败复验后定性：2 例为双套件并行抢 CPU 的资源 flake（串行即过）；
+  其余为 Windows 本地特有失败，集中于 office（word_comments）/orchestrator
+  （dispatcher_cancel）等**非本专项改动面** —— 同代码 Linux CI 全量 Backend
+  全绿，证实非平台无关回归，属并行会话新合入域的 Windows 本地环境问题。
+- **前端全量（vitest run）**：2926 passed / 4 failed → 与后端并行时为资源
+  flake，串行重跑全绿（exit 0）。
+- **来源专项域（chat/memory/sources）零失败**。
+- **R95 跟进定性**：① `test_chat_dispatcher_cancel` 为**真实取消竞态**——
+  merged 事件经 relay 任务异步汇入，cancel 与异常间无 await 时未置位，
+  任务被误判 failed；修复为异常分类并查源事件（本 PR）。
+  ② `word_comments` 为**本地环境漂移**——python-docx 1.2.0 下 `part._blob`
+  私有写回失效（锁定版本 1.1.2 正常）；锁回 1.1.2 后本地通过，代码无需改。
 
 —— 本账本由参考来源专项循环维护，随轮次追加。
