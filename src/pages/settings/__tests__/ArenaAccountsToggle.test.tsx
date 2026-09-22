@@ -56,7 +56,7 @@ describe('ArenaAccountsToggle — unit', () => {
   it('renders off by default and shows the description', () => {
     render(<ArenaAccountsToggle />);
     expect(screen.getByText('Arena 自动化')).toBeInTheDocument();
-    expect(screen.getByText(/侧边栏显示「Arena 账号」入口/)).toBeInTheDocument();
+    expect(screen.getByText(/侧边栏显示「Arena」入口/)).toBeInTheDocument();
     expect(screen.getByTestId('toggle-arena-accounts')).toHaveClass('bg-line-strong');
   });
 
@@ -97,26 +97,26 @@ describe('ArenaAccountsToggle — Sidebar integration', () => {
     // 前置：先解锁让 Sidebar 显示入口
     localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['arena-accounts']));
     renderBoth('/chat');
-    expect(screen.getByText('Arena 账号')).toBeInTheDocument();
+    expect(screen.getByText('Arena')).toBeInTheDocument();
 
     // 设置页 toggle off → 侧边栏入口应当立刻消失
     act(() => {
       fireEvent.click(screen.getByTestId('toggle-arena-accounts'));
     });
-    expect(screen.queryByText('Arena 账号')).not.toBeInTheDocument();
+    expect(screen.queryByText('Arena')).not.toBeInTheDocument();
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).not.toContain('arena-accounts');
   });
 
   it('turning the toggle on in settings makes the sidebar entry appear immediately', () => {
     renderBoth('/chat');
-    expect(screen.queryByText('Arena 账号')).not.toBeInTheDocument();
+    expect(screen.queryByText('Arena')).not.toBeInTheDocument();
 
     // 设置页 toggle on → 侧边栏入口出现
     act(() => {
       fireEvent.click(screen.getByTestId('toggle-arena-accounts'));
     });
-    expect(screen.getByText('Arena 账号')).toBeInTheDocument();
+    expect(screen.getByText('Arena')).toBeInTheDocument();
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toContain('arena-accounts');
   });
@@ -124,7 +124,7 @@ describe('ArenaAccountsToggle — Sidebar integration', () => {
   it('visiting /arena-accounts directly hydrates the settings toggle as on', () => {
     // 路由直接访问 → Sidebar 自动 sticky-unlock
     renderBoth('/arena-accounts');
-    expect(screen.getByText('Arena 账号')).toBeInTheDocument();
+    expect(screen.getByText('Arena')).toBeInTheDocument();
 
     // 设置页 toggle 应 hydrate 为 ON
     expect(screen.getByTestId('toggle-arena-accounts')).toHaveClass('bg-primary');
