@@ -761,3 +761,9 @@ jobs:
             fi
           fi
           echo "All required checks passed"
+
+  count-lines:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/count-lines.sh
