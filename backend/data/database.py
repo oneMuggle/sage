@@ -1160,6 +1160,14 @@ class Database:
                 "ALTER TABLE usage_events ADD COLUMN task_id TEXT"
             )
             conn.commit()
+        # RT25 (round46): 任务级归因查询索引 —— task_usage_since 按
+        # (session_id, task_id, created_at) 过滤；无此索引时退化为
+        # session 前缀内的全行扫描（BU13/BU17 每终态任务各查一次）。
+        # 必须位于 task_id ALTER 之后（旧库先补列再建索引）。
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_usage_events_session_task
+            ON usage_events(session_id, task_id, created_at)
+        """)
         # 上下文分类明细快照 (backend/chat/context_breakdown.py) ——
         # JSON: {categories, estimated_total, prompt_tokens, calibrated}。
         if "context_breakdown" not in _usage_cols:

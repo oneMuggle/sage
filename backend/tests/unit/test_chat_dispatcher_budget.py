@@ -680,3 +680,28 @@ async def test_aggregate_budget_line_includes_recent_rate(tmp_path, monkeypatch)
     agg = d._aggregate(list(d._states.values()))
     # run 窗口（首派发起）本就排除 10 分钟前的旧行；速率段只含近 5 分钟
     assert "已消耗 120 / 预算 1000 tokens（12%），剩余 880，近5分钟 120。" in agg
+
+
+# ---- RT25 (round46): 任务归因查询索引 ------------------------------------------
+
+
+def test_usage_events_task_index_exists_and_used(tmp_path, monkeypatch):
+    """RT25: init_db 建 (session_id, task_id, created_at) 索引且查询命中。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    from backend.data.database import get_database
+
+    conn = get_database().get_connection()
+    indexes = {
+        row[1]
+        for row in conn.execute("PRAGMA index_list(usage_events)").fetchall()
+    }
+    assert "idx_usage_events_session_task" in indexes
+
+    plan = conn.execute(
+        "EXPLAIN QUERY PLAN SELECT COALESCE(SUM(total_tokens), 0) AS total"
+        " FROM usage_events WHERE session_id = ? AND task_id = ?"
+        " AND created_at >= ?",
+        ("sess-x", "t-x", 0),
+    ).fetchall()
+    plan_text = " ".join(str(row[-1]) for row in plan)
+    assert "idx_usage_events_session_task" in plan_text
