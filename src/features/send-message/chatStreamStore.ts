@@ -62,6 +62,9 @@ export interface TaskBoardState {
     cancelled: number;
   };
   dispatchedAt?: number | null;
+  // RD20 (round43): 历史 run 恢复时的终态时刻 —— BU16 时长在恢复态显示
+  // 原始总时长（直播态为 null，由 tick 冻结逻辑覆盖）。
+  endedAt?: number | null;
   /** P0-6 (2026-08-20): reviewer 复核结论（每 run 至多一条，后到覆盖先到）。 */
   review?: TaskReviewEvent | null;
   /**
