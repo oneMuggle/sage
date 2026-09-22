@@ -20,7 +20,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 from backend.zotero.exceptions import (
     ZoteroCollectionNotFoundError,
