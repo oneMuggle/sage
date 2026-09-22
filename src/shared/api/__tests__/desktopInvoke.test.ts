@@ -73,8 +73,10 @@ describe('invoke 真实通道', () => {
 describe('invoke 错误漏斗', () => {
   it('message 含 "→ 404:" 时附加 status_code=404 且保留原 message', async () => {
     stubApi(() => Promise.reject(new Error('GET /x → 404: Not Found')));
-    const err = await invoke('cmd_a').catch((e: unknown) => e as Error & { status_code?: number });
-    expect((err as { status_code?: number }).status_code).toBe(404);
+    const err = (await invoke('cmd_a').catch((e) => e)) as Error & {
+      status_code?: number;
+    };
+    expect(err.status_code).toBe(404);
     expect(err.message).toContain('404: Not Found');
   });
 
