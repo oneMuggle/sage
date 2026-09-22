@@ -36,9 +36,12 @@ _client_db_path: str | None = None
 def _get_configured_db_path() -> str | None:
     """Return the user-configured Zotero DB path from settings_repo, if any."""
     try:
-        from backend.services.settings_repo import SettingsRepo
+        # r94 修复: 原来的 backend.services.settings_repo.SettingsRepo 模块不存在
+        # (实际是 backend.data.settings_repo.SettingsRepository), import 静默失败
+        # 导致设置页配置的路径永远读不到, 只剩环境变量兜底。
+        from backend.data.settings_repo import SettingsRepository
 
-        repo = SettingsRepo()
+        repo = SettingsRepository()
         return repo.get("zotero_db_path") or os.environ.get("ZOTERO_DB_PATH")
     except Exception:
         return os.environ.get("ZOTERO_DB_PATH")
@@ -194,9 +197,10 @@ def set_db_path(path: str = Query(..., description="Path to zotero.sqlite")) -> 
     _client_db_path = None
 
     try:
-        from backend.services.settings_repo import SettingsRepo
+        # r94 修复: 同 _get_configured_db_path —— 模块与类名纠正后才能真正落库
+        from backend.data.settings_repo import SettingsRepository
 
-        repo = SettingsRepo()
+        repo = SettingsRepository()
         repo.set("zotero_db_path", path)
     except Exception as exc:
         logger.warning("Could not persist zotero_db_path: %s", exc)
