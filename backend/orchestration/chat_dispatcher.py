@@ -1207,8 +1207,18 @@ class ChatDispatcher:
                     # P0-3 (2026-08-20): cancel 触发的异常 → cancelled 而非 failed
                     # （SubagentRunner 已有 interrupt 通道，见 P0-1/P0-3）。
                     # B3: 单任务跳过（merged 置位但 run 未取消）同归 cancelled。
+                    # R95 (2026-09-22): merged 由 relay 任务异步汇入 —— 若
+                    # cancel()/skip 与子任务异常之间没有 await 让 relay 获得调度
+                    # （本测试即此场景），merged 尚未置位会被误判 failed。此处
+                    # 并查两个源事件，消除对 relay 调度时序的依赖。
                     state.status = (
-                        "cancelled" if merged_cancel.is_set() else "failed"
+                        "cancelled"
+                        if (
+                            merged_cancel.is_set()
+                            or self._cancelled.is_set()
+                            or task_skip.is_set()
+                        )
+                        else "failed"
                     )
                     state.error = str(exc)
                     logger.warning("subagent %s failed: %s", state.task_id, exc)
