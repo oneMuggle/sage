@@ -156,6 +156,19 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+    // 覆盖率棘轮门禁（2026-09-23）：基线为当日全量实测
+    // (stmts 61.81 / branch 80.6 / funcs 67.09 / lines 61.81)。
+    // 阈值留 ~2pt 余量，只防"大幅回退"，不为凑数写浅测试；
+    // 后续覆盖率提升时同步上调基线。
+    coverage: {
+      provider: 'v8',
+      thresholds: {
+        statements: 60,
+        branches: 79,
+        functions: 65,
+        lines: 60,
+      },
+    },
     // Phase 4: exclude Playwright Electron smoke tests (run separately via
     // `npx playwright test tests/electron/smoke.spec.ts`, not Vitest).
     // Phase 6 (2026-06-27): also exclude ./e2e/ (wiki-folder-picker Playwright spec).
