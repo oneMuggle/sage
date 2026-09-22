@@ -10,8 +10,10 @@
 
 用法::
 
-    python scripts/audit_watch.py --pip pip-audit.json \
-        --policy .github/dependency-audit-policy.json \
+    python scripts/audit_watch.py \\
+        --pip-report "main Python 3.11 production path"=pip-audit-main.json \\
+        --pip-report "Win7 LTS Python 3.8 production path"=pip-audit-py38.json \\
+        --policy .github/dependency-audit-policy.json \\
         --out uncovered.txt [--json-out uncovered.json]
 
 退出码：0 = 全部覆盖；2 = 存在未覆盖发现；1 = 输入/策略校验失败。
@@ -40,25 +42,31 @@ def read_json(path: str) -> Any:
 
 
 def uncovered_findings(
-    pip_report: Any, policy: Any
+    pip_reports: list[tuple[str, Any]], policy: Any
 ) -> tuple[list[Key], list[Key], list[str]]:
     """返回 (未覆盖发现, 全部发现, 校验失败列表)。
 
-    未覆盖 = pip_findings - validate_policy 给出的策略键集；校验失败列表
-    非空表示策略文件本身或报告格式有问题（同样应触发人工介入）。
+    未覆盖 = 各报告 pip_findings 之并 - validate_policy 策略键集。
+    每份报告的 affected_path 统一改写为调用方给定标签（round44：py38
+    报告内 pip_findings 硬编码 main 标签，需按报告来源重贴）。校验失败
+    列表非空表示策略文件本身或报告格式有问题（同样应触发人工介入）。
     """
     failures: list[str] = []
     policy_keys = validate_policy(policy, failures)
-    report_failures: list[str] = []
-    pip_keys = (
-        pip_findings(pip_report, report_failures)
-        if pip_report is not None
-        else set()
-    )
+    pip_keys: set[Key] = set()
+    for label, report in pip_reports:
+        report_failures: list[str] = []
+        found = (
+            pip_findings(report, report_failures)
+            if report is not None
+            else set()
+        )
+        pip_keys |= {(s, p, v, a, label) for (s, p, v, a, _old) in found}
+        failures.extend(report_failures)
     return (
         sorted(pip_keys - policy_keys),
         sorted(pip_keys),
-        failures + report_failures,
+        failures,
     )
 
 
@@ -81,7 +89,13 @@ def format_lines(findings: list[Key]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--pip", required=True, help="pip-audit JSON 报告路径")
+    parser.add_argument(
+        "--pip-report",
+        action="append",
+        required=True,
+        metavar="标签=报告路径",
+        help="pip-audit JSON 报告（标签=路径，可重复）",
+    )
     parser.add_argument("--policy", required=True, help="审计策略 JSON 路径")
     parser.add_argument(
         "--out", help="未覆盖清单文本输出路径（缺省仅打印 stdout）"
@@ -91,14 +105,23 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    reports: list[tuple[str, Any]] = []
     try:
-        pip_report = read_json(args.pip)
+        for pair in args.pip_report:
+            label, sep, path = pair.partition("=")
+            if not sep or not label.strip():
+                print(
+                    f"audit-watch: --pip-report 需为 标签=路径 形式: {pair}",
+                    file=sys.stderr,
+                )
+                return 1
+            reports.append((label.strip(), read_json(path.strip())))
         policy = read_json(args.policy)
     except (OSError, json.JSONDecodeError) as exc:
         print(f"audit-watch: 输入读取失败: {exc}", file=sys.stderr)
         return 1
 
-    uncovered, _all_findings, failures = uncovered_findings(pip_report, policy)
+    uncovered, _all_findings, failures = uncovered_findings(reports, policy)
     for failure in failures:
         print(f"audit-watch: {failure}", file=sys.stderr)
     if failures:
