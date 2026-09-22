@@ -1,5 +1,4 @@
 // src/widgets/chat/artifacts/ArtifactViewer.tsx
-import CodeMirror from '@uiw/react-codemirror';
 import {
   ArrowLeft,
   ClipboardCopy,
@@ -12,7 +11,7 @@ import {
   Save,
   X,
 } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
@@ -35,6 +34,13 @@ import { langFromPath } from '../../../shared/lib/fileLang';
 import { ShikiCodeBlock } from '../ShikiCodeBlock';
 
 import { VersionHistory } from './VersionHistory';
+
+// 2026-09-23 perf: CodeMirror（@uiw/react-codemirror + @codemirror/*，约
+// 400KB min）此前被 RightPanel → ArtifactViewer 的 eager 引用链拖进 index
+// 主 chunk（1.5MB）。编辑器只在「代码产物点编辑」时才需要——改 lazy 切片，
+// chunk 落在首次进入编辑态时从本地磁盘加载（file:// 近即时）。fallback 用
+// 同字体的只读 pre 承接，加载期内容不闪空。
+const CodeMirrorEditor = lazy(() => import('@uiw/react-codemirror'));
 
 interface ArtifactViewerProps {
   artifact: Artifact;
@@ -312,13 +318,21 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
             {/* R3 批次 B: textarea → CodeMirror（行号 + 语法高亮编辑），
                 value/onChange 与乐观并发 hash 保存逻辑完全兼容 */}
             <div className="flex-1 min-h-0 border border-border rounded overflow-auto bg-bg-input">
-              <CodeMirror
-                value={editContent}
-                height="100%"
-                theme={themeResolved}
-                basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
-                onChange={(value) => setEditContent(value)}
-              />
+              <Suspense
+                fallback={
+                  <pre className="h-full overflow-auto bg-bg-input p-3 text-code font-mono leading-relaxed">
+                    {editContent}
+                  </pre>
+                }
+              >
+                <CodeMirrorEditor
+                  value={editContent}
+                  height="100%"
+                  theme={themeResolved}
+                  basicSetup={{ lineNumbers: true, foldGutter: false, highlightActiveLine: true }}
+                  onChange={(value) => setEditContent(value)}
+                />
+              </Suspense>
             </div>
             {saveError && <div className="mt-2 text-xs text-error">{saveError}</div>}
           </div>
