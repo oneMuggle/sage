@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- 只暴露实例目录下 TaskSettingsStore.import 复制出来的附件副本；WebView 文件选择回调按 content:// 读取。 -->
-<paths>
-    <files-path name="attachments" path="." />
-</paths>
