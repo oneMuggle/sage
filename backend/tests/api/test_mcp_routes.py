@@ -48,6 +48,7 @@ class FakeMcpClient:
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("SAGE_USER_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(pool_mod, "load_server_configs", lambda: [])
     reset_pool(McpServerPool(client_factory=FakeMcpClient))
     yield TestClient(app)
     reset_pool(None)

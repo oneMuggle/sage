@@ -66,6 +66,7 @@
     "src/widgets/chat/Message.tsx": 1040,
     "src/widgets/chat/progress/__tests__/TaskTreeSection.rerun.test.tsx": 859,
     "src/widgets/sidebar/sections/ProjectSection.tsx": 938,
-    "tests/electron/test_stub_backend.py": 896
+    "tests/electron/test_stub_backend.py": 896,
+    "backend/zotero/client.py": 818
   }
 }
