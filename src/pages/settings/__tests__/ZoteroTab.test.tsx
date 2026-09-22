@@ -25,8 +25,8 @@ vi.mock('../../../shared/api/zoteroClient', () => ({
   },
 }));
 
-import { ZoteroTab } from '../ZoteroTab';
 import { I18nProvider } from '../../../shared/lib/i18n';
+import { ZoteroTab } from '../ZoteroTab';
 
 function availableStatus() {
   return {
