@@ -112,7 +112,10 @@ class Visitor(ast.NodeVisitor):
 
 
 def check_file(path: Path, root: Path) -> list[tuple[int, str]]:
-    rel = str(path.relative_to(root))
+    # R96 (2026-09-23): 归一化为 POSIX 分隔符 —— Windows 本地 rel 含反斜杠，
+    # "tests/" 片段永远匹配不上，注解检查在 Windows 本地多报（CI/Linux 正常
+    # 排除，两侧口径不一致）。
+    rel = str(path.relative_to(root)).replace("\\", "/")
     if any(frag in rel for frag in SKIP_PATH_FRAGMENTS):
         return []
     try:
