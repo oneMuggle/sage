@@ -365,6 +365,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      # environment.yml 是 conda 开发环境入口；其 pip 钉版若与
+      # requirements.txt 漂移，开发者会装到 CI 从未验证过的版本
+      # （曾发生：python-multipart 0.0.9 带着已修复的 PYSEC 公告）。
+      - name: Check environment.yml ↔ requirements.txt drift
+        run: python scripts/check_env_yml_drift.py
+
       - name: Create Python audit venv and install locked auditor
         id: python-install
         run: |
