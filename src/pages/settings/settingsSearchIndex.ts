@@ -445,9 +445,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'zotero 文献 参考文献 library 文献库 引用 cite',
   },
 
-  // ── Zotero ──
-  { key: 'zotero', tab: 'zotero', label: 'Zotero 文献库', labelEn: 'Zotero Library', keywords: 'zotero 文献 参考文献 library 文献库 引用 cite' },
-
   // ── 开发环境 ──
   {
     key: 'runtime',
