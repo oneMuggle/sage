@@ -9,7 +9,7 @@
 #   - 不构建:    Linux / macOS (Win7 LTS 不覆盖)
 #   - EOL:       2027-12-13 归档, 届时删除本 workflow + release/win7 分支
 #
-# 详见 docs/technical/21-win7-lts.md §2 LTS 策略 + §9 Release 工作流
+# 详见 docs/technical/31-win7-lts.md §2 LTS 策略 + §9 Release 工作流
 
 name: Release (Win7 LTS)
 
@@ -130,7 +130,7 @@ jobs:
             ### 风险声明
 
             ⚠️ 本分支基于 EOL 技术栈 (Electron 21.4.4 + Python 3.8 + Chromium 106)。
-            详见 [`docs/technical/21-win7-lts.md`](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/technical/21-win7-lts.md) §6。
+            详见 [`docs/technical/31-win7-lts.md`](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/technical/31-win7-lts.md) §6。
           # draft: true — 人工 review release notes 后再 publish
           draft: true
           generate_release_notes: true
