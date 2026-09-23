@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from backend.chat.event_projection import events_to_history
@@ -205,20 +207,29 @@ def test_parity_after_message_delete(setup_test_db):
 
 def test_parity_after_segment_retreat(setup_test_db):
     """retreat_segment 删 separator 后，事件投影不再在原处分段。"""
-    import time as _time
+    import time as _time  # 局部导入保留（其余用例用模块级 time）
 
     sid = "s-retreat-1"
     ensure_session(setup_test_db, sid)
     repo = MessageRepository()
     # 注意：advance_segment 内部用真实 wall clock 落 separator 的
-    # created_at，这里必须同基准，否则 messages 表按 created_at 排序
-    # 会把 separator 排到测试消息之后（投影按 seq 排序，二者会分叉）。
-    now = int(_time.time() * 1000)
+    # created_at；messages 表按 created_at 排序而投影按 seq 排序。
+    # 前两条消息的基线拨到 10 秒前 —— CI 上整个用例可在 1-2ms 内跑完，
+    # 真实时钟与合成时间戳撞毫秒会让 separator 排进历史中间（顺序被
+    # rowid 打乱，两端投影分叉）；回退基线后 separator 必然严格晚于它们。
+    base = int(_time.time() * 1000) - 10_000
 
-    repo.save(_msg(sid, 1, "user", "第一段问", now + 1))
-    repo.save(_msg(sid, 2, "assistant", "第一段答", now + 2))
+    repo.save(_msg(sid, 1, "user", "第一段问", base + 1))
+    repo.save(_msg(sid, 2, "assistant", "第一段答", base + 2))
     assert repo.advance_segment(sid) == 1
-    repo.save(_msg(sid, 4, "user", "第二段问", now + 4))
+    # 取 separator 的实际 created_at，让后续消息晚于它（时钟确定性）
+    separator = [
+        m
+        for m in repo.get_by_session(sid, limit=100000)
+        if m.subtype == "topic_separator"
+    ][0]
+    assert separator.created_at > base + 2
+    repo.save(_msg(sid, 4, "user", "第二段问", separator.created_at + 1))
     # 切分前：投影只看第二段
     _assert_parity(setup_test_db, sid)
     assert events_to_history(SessionEventRepository().get_by_session(sid)) == [
@@ -233,6 +244,75 @@ def test_parity_after_segment_retreat(setup_test_db):
         {"role": "assistant", "content": "第一段答"},
         {"role": "user", "content": "第二段问"},
     ]
+
+
+# ---- fork 路径 parity（SE2：fork 钩子收口）----
+
+
+def test_parity_after_fork(setup_test_db):
+    """fork_session 复制的行同事务落事件，子会话投影 parity 成立。"""
+    from backend.data.session_repo import SessionRepository, fork_session
+
+    src = "s-fork-src"
+    ensure_session(setup_test_db, src)
+    repo = MessageRepository()
+    now = int(time.time() * 1000)
+
+    m1 = _msg(src, 1, "user", "源问一", now + 1)
+    m2 = _msg(src, 2, "assistant", "源答一", now + 2)
+    m3 = _msg(src, 3, "user", "源问二", now + 3)
+    for m in (m1, m2, m3):
+        repo.save(m)
+
+    forked = fork_session(
+        SessionRepository(), repo, src, at_message_id=m2.id, title="fork 测试"
+    )
+
+    # 子会话：events 投影 ≡ messages 表投影
+    _assert_parity(setup_test_db, forked.id)
+    # 事件 id 与复制行 id 一致（payload.id 与 messages.id 逐条对应）
+    events = SessionEventRepository().get_by_session(forked.id)
+    forked_rows = repo.get_by_session(forked.id, limit=100000)
+    assert [e.payload["id"] for e in events] == [r.id for r in forked_rows]
+    # fork 复制行如实记录表默认值（无 subtype / segment 0）
+    assert all(e.payload["subtype"] is None for e in events)
+    assert all(e.payload["segment_id"] == 0 for e in events)
+
+
+# ---- 读取切换（SE2）：两条装配路径逐字节一致 ----
+
+
+def test_build_request_messages_events_vs_rows_parity(setup_test_db):
+    """build_request_messages_from_events ≡ build_request_messages（同数据）。"""
+    from backend.chat.history_context import (
+        build_request_messages,
+        build_request_messages_from_events,
+    )
+
+    sid = "s-cutover-1"
+    ensure_session(setup_test_db, sid)
+    repo = MessageRepository()
+    now = int(time.time() * 1000)
+    for i, (role, content) in enumerate(
+        [("user", "一问"), ("assistant", "一答"), ("user", "二问")], start=1
+    ):
+        repo.save(_msg(sid, i, role, content, now + i))
+
+    history_rows = repo.get_by_session(sid, limit=100000)
+    events = SessionEventRepository().get_by_session(sid)
+
+    common = {
+        "system_content": "你是测试系统提示",
+        "user_text": "新问题",
+        "attachment_block": None,
+        "budget_tokens": 100000,
+        "trailing_system": "动态上下文",
+        "turn_limit": None,
+    }
+    via_rows = build_request_messages(history_rows=history_rows, **common)
+    via_events = build_request_messages_from_events(events=events, **common)
+    assert via_events == via_rows
+    assert [m["role"] for m in via_events[0][-1:]] == ["user"]
 
 
 # ---- 纯函数边界 ----
