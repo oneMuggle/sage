@@ -1,7 +1,7 @@
 /**
  * r112: useFileUpload 单元测试——图片/文件分流、删除、粘贴与拖放。
  */
-import { act, fireEvent, renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useFileUpload } from '../useFileUpload';
