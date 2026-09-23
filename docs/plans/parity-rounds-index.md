@@ -61,15 +61,17 @@ R36 `#1281`、R38 `#1291`、R42 `#1316`、R43 `#1384`、R45 本 PR。
    ENOENT 易误诊为 bash.exe 损坏（R18/R36 各一次）。先用 Write 工具重建
    失效目录即可恢复，无需重装 Git。
 
-## 3. 后续优化建议（候选项，非承诺）
+## 3. 后续优化建议（状态更新 2026-09-24）
 
-1. **聚合头部速率感知**：BU8/BU18 行可加"近 5 分钟消耗速率"趋势，帮助
-   conductor 提前一轮判断触顶（数据源 usage_events 窗口聚合）。
-2. **orch_tasks 历史视图**：RT24 已持久化 used_tokens/duration_ms，若
-   历史编排 UI 回归（Wave 4 曾移除），可直接消费 `GET /orch/runs` 详情。
-3. **win7 审计门自动化**：新 advisory 出现时自动开 issue + 策略草稿
-   （本次 anyio 两条为人工响应），减少 win7 PR 阻塞窗口。
-4. **CI 事件去重**：批量轮次合并交付时，考虑 wait-for-CI 串行化，避免
-   并发 run 相互取消（concurrency 组按 ref）。
+1. ~~聚合头部速率感知~~ **已落地**：R38 BU21（#1287）——预算行追加
+   近 5 分钟消耗速率。
+2. **orch_tasks 历史视图**（唯一遗留）：RT24 已持久化
+   used_tokens/duration_ms；R43 已打通恢复映射（restoreRunToBoard）。
+   多 run 历史浏览器需要产品决策（Wave 4 曾移除），暂不启动。
+3. ~~win7 审计门自动化~~ **已落地**：R40 audit-watch（#1297）+
+   R44 扩展覆盖 main 生产路径（#1389）——每日定时求差，
+   未覆盖自动开 issue。
+4. ~~CI 事件去重~~ **已落地**：R45 ci-rerun.yml（#1395）——
+   workflow_dispatch 按 ref+target 手动全量重验，SOP §4.2 扩展触发命令。
 
 —— 本账本由对标循环维护，随轮次追加。
