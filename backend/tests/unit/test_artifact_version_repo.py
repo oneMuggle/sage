@@ -193,7 +193,7 @@ def test_apply_edit_success(tmp_artifact):
     base_hash = hashlib.sha256(original.encode()).hexdigest()
 
     new_content = "# Edited\n\nNew body\n"
-    result = asyncio.get_event_loop().run_until_complete(
+    result = asyncio.run(
         artifact_version_repo.apply_edit(
             artifact_id=artifact_id,
             artifact_path=str(content_file),
@@ -222,7 +222,7 @@ def test_apply_edit_conflict(tmp_artifact):
     wrong_hash = "a" * 64  # SHA-256 hex 长度
 
     with pytest.raises(artifact_version_repo.ConflictError):
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             artifact_version_repo.apply_edit(
                 artifact_id=artifact_id,
                 artifact_path=str(content_file),
@@ -246,7 +246,7 @@ def test_apply_edit_content_too_large(tmp_artifact):
     huge = "x" * (1024 * 1024 + 1)
 
     with pytest.raises(ValueError, match="1 MiB"):
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             artifact_version_repo.apply_edit(
                 artifact_id=artifact_id,
                 artifact_path=str(content_file),
@@ -266,7 +266,7 @@ def test_apply_edit_missing_file(tmp_artifact):
     content_file.unlink()
 
     with pytest.raises(FileNotFoundError):
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             artifact_version_repo.apply_edit(
                 artifact_id=artifact_id,
                 artifact_path=str(content_file),
