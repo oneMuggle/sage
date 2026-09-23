@@ -121,4 +121,19 @@ main（含 R95-R99 五轮代码改动）本机全量回归，**本轮前后端�
 - **前端全量（vitest run）**：3024 passed / 0 failed / 3 skipped —— 完全绿。
 - 来源专项域零失败。
 
+
+## 7. 边界结论与扫描记录（R110，2026-09-23）
+
+1. **透明度事件不接入 DSH session_events（设计边界澄清）**：DSH 的
+   session_events 是「模型可见历史」投影（message.appended /
+   compaction.performed / message.deleted 三类，SE1/SE2），语义为
+   "logged ⟺ model-visible"。memory_used / sources_used /
+   attachment_rag_used 属 UI 增强信息，非模型可见历史 —— 其持久化
+   归属是 messages 表列（memory_refs / rag_citations / sources），
+   不应写入 session_events。未来若做 UI 事件回放，另立存储。
+2. **编排域 relay 竞态扫描**：R95 修复的 ``asyncio.ensure_future
+   (_relay(...))`` 时序竞态在 chat_dispatcher 中仅 ``_run_one`` 一处，
+   全文扫描无同类残留；SubagentRunner 的 interrupt watcher 等待 merged
+   事件，错过中断只会延迟到迭代检查收口，不会误分类，无需改动。
+
 —— 本账本由参考来源专项循环维护，随轮次追加。
