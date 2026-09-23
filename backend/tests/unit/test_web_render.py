@@ -225,8 +225,8 @@ def test_render_page_truncation_flag(fake_time, monkeypatch):
 
 
 class _FakePoolSession:
-    def __init__(self, alive: bool = True):
-        self.browser_id = RENDER_POOL_ID
+    def __init__(self, alive: bool = True, browser_id: str = None):
+        self.browser_id = browser_id or RENDER_POOL_ID
         self.alive = alive
         self.user_data_dir = "/tmp/unused"
         self.process = SimpleNamespace(
@@ -237,27 +237,54 @@ class _FakePoolSession:
         return self.alive
 
 
-def test_renderer_pool_reuses_live_session(monkeypatch):
+def test_renderer_pool_spreads_and_reuses_across_slots(fake_time, monkeypatch):
+    """R24 多槽：并发 acquire 按 LRU 分散到不同实例；单槽复用、单槽重建。"""
     pool = web_render._RendererPool()
     created = []
 
     def _fake_launch(headless, browser_id=None, **kwargs):
         assert headless is True
-        assert browser_id == RENDER_POOL_ID  # 保留 id，用户实例解析不受干扰
-        session = _FakePoolSession()
+        assert browser_id in web_render.RENDER_POOL_IDS  # 保留前缀，用户实例解析不受干扰
+        session = _FakePoolSession(browser_id=browser_id)
         created.append(session)
         return session
 
     monkeypatch.setattr(web_render, "launch_browser", _fake_launch)
-    first = pool.acquire()
-    second = pool.acquire()
-    assert first is second
-    assert len(created) == 1
-
-    first.alive = False  # 进程死亡 → 下次 acquire 重建
-    third = pool.acquire()
-    assert third is not first
+    fake_time.now = 10  # 初始 last_used=0.0，先拨离 0 避免 tie 歧义
+    first = pool.acquire()  # 槽 1
+    fake_time.now += 1
+    second = pool.acquire()  # 槽 2
+    assert first is not second  # LRU 分散到不同槽位（崩溃隔离）
     assert len(created) == 2
+
+    fake_time.now += 1
+    third = pool.acquire()  # 槽 1 最久未用 → 复用
+    assert third is first
+    assert len(created) == 2
+
+    second.alive = False  # 槽 2 进程死亡 → LRU 选中该槽时重建，槽 1 不受波及
+    fake_time.now += 1
+    fourth = pool.acquire()
+    assert fourth is not second
+    assert len(created) == 3
+    assert first.alive
+
+
+def test_renderer_pool_falls_over_to_next_slot_on_launch_failure(monkeypatch):
+    """首选槽启动失败 → 降级试下一槽，全部失败才抛 RenderError。"""
+    pool = web_render._RendererPool()
+    calls = []
+
+    def _fake_launch(headless, browser_id=None, **kwargs):
+        calls.append(browser_id)
+        if browser_id == RENDER_POOL_ID:
+            raise browser_cdp.BrowserCDPError("boom")
+        return _FakePoolSession(browser_id=browser_id)
+
+    monkeypatch.setattr(web_render, "launch_browser", _fake_launch)
+    session = pool.acquire()
+    assert session.browser_id == f"{RENDER_POOL_ID}-2"
+    assert calls == [RENDER_POOL_ID, f"{RENDER_POOL_ID}-2"]
 
 
 def test_renderer_pool_rebuilds_after_idle_timeout(monkeypatch):
@@ -284,6 +311,9 @@ def test_reserved_id_excluded_from_user_instance_resolution():
     manager = browser_cdp.BrowserSessionManager()
     manager.register(_FakePoolSession())  # 仅渲染池在场
     assert manager.get(None) is None
+
+    manager.register(_FakePoolSession(browser_id=f"{RENDER_POOL_ID}-2"))  # R24 多槽
+    assert manager.get(None) is None  # 前缀槽位同样不算用户实例
 
     user = SimpleNamespace(browser_id="b1")
     manager.register(user)
@@ -423,6 +453,30 @@ def test_render_page_survives_channel_wire_failure(fake_time, monkeypatch):
     result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
 
     assert result["rendered"] is True
+
+
+def test_render_page_records_event_metrics(fake_time, monkeypatch):
+    """R24：渲染埋点事件命中率——通道就绪与事件状态被采用各计一次。"""
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])
+    monkeypatch.setattr(web_render, "_ensure_pool_channel", lambda session: True)
+    monkeypatch.setattr(web_render, "ensure_network_tracking", lambda bid, tid: "sess-e")
+    monkeypatch.setattr(
+        web_render,
+        "get_tracked_response",
+        lambda bid, sid: {"url": "https://a.example/", "status": 200}
+        if sid == "sess-e"
+        else None,
+    )
+    recorded: Any = []
+    monkeypatch.setattr(
+        web_render, "record_render_event", lambda c, t: recorded.append((c, t))
+    )
+
+    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
+
+    assert result["rendered_status"] == 200
+    assert recorded == [(True, True)]
 
 
 def test_render_page_survives_stealth_failure(fake_time, monkeypatch):

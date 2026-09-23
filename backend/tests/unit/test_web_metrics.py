@@ -33,7 +33,7 @@ def test_host_normalized_and_empty_ignored():
     web_metrics.record("Example.COM", True, 10)
     web_metrics.record("", True, 10)
     snap = web_metrics.snapshot()
-    assert list(snap) == ["example.com"]
+    assert [k for k in snap if k != "render_events"] == ["example.com"]
 
 
 def test_per_host_ring_capacity():
@@ -52,10 +52,24 @@ def test_global_host_lru_cap(monkeypatch):
     # 新域名挤掉最久未更新的 b.com
     web_metrics.record("d.com", True, 1)
     snap = web_metrics.snapshot()
-    assert set(snap) == {"a.com", "c.com", "d.com"}
+    assert set(snap) == {"a.com", "c.com", "d.com", "render_events"}
 
 
 def test_reset_clears():
     web_metrics.record("example.com", True, 1)
+    web_metrics.record_render_event(True, True)
     web_metrics.reset()
-    assert web_metrics.snapshot() == {}
+    snap = web_metrics.snapshot()
+    assert set(snap) == {"render_events"}
+    assert snap["render_events"] == {"renders": 0, "channel_ok": 0, "event_status_hits": 0}
+
+
+def test_record_render_event_counts():
+    web_metrics.record_render_event(True, True)
+    web_metrics.record_render_event(True, False)
+    web_metrics.record_render_event(False, False)
+    assert web_metrics.snapshot()["render_events"] == {
+        "renders": 3,
+        "channel_ok": 2,
+        "event_status_hits": 1,
+    }
