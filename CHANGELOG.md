@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added(web-access)
 - **Network 跟踪基建（批次 1，#1403）**：browser_events 常驻 WS 增加 `NetworkResponseTracker`（线程安全按 sessionId 记录 type=Document 响应）与 `_EventChannel.attach_network`（flatten attach + Network.enable）
 - **render_page 集成（批次 2）**：createTarget 后 `ensure_network_tracking` attach 渲染标签页（幂等，同 target 复用 sessionId）；就绪后 `get_tracked_response` 优先取事件状态——重定向链每个 hop 的 Document 状态码可见（多跳 302 中间被反爬拦截不再只见最终 200），Navigation Timing 保留为兜底；渲染结束 `detach_network_session` 清理；常驻 WS 应答帧改经 `_dispatch` 等待队列路由（`_call`），消除 attach 握手与读循环抢帧
+
+> 🌐 **网页访问能力优化 Round 23：渲染池事件通道接线**（方案 `docs/plans/2026-09-23_web-access-round23-renderchan.md`）
+
+### Added(web-access)
+- **渲染池纯事件通道（R23）**：browser_events 新增 `start_event_channel`（跳过 `setDownloadBehavior` 的常驻 WS，只服务 Network 事件）；render_page 在 `_pool.acquire()` 后经 `_ensure_pool_channel` 尽力接线——修复 R22 批次 2 的生产缺口（渲染池不经 browser_launch 工具、此前从未建通道，事件状态始终回退 Navigation Timing）；通道失败不影响渲染，池重建后自动重连
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21
