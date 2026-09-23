@@ -263,37 +263,40 @@ class _EventChannel:
         for waiter in waiters:
             waiter.put({"error": {"message": message}})
 
-    def start(self) -> bool:
+    def start(self, setup_download: bool = True) -> bool:
         try:
             self._sock = ws_connect(
                 "127.0.0.1", self._port, self._ws_path, timeout=EVENTS_CONNECT_TIMEOUT
             )
-            ws_send_text(
-                self._sock,
-                json.dumps(
-                    {
-                        "id": 1,
-                        "method": "Browser.setDownloadBehavior",
-                        "params": {
-                            "behavior": "allow",
-                            "downloadPath": self.tracker.download_dir,
-                            "eventsEnabled": True,
-                        },
-                    }
-                ),
-            )
-            deadline = time.monotonic() + EVENTS_CONNECT_TIMEOUT
-            while True:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise WebSocketError("setDownloadBehavior 应答超时")
-                self._sock.settimeout(remaining)
-                data = json.loads(ws_recv_text(self._sock))
-                if data.get("id") == 1:
-                    if "error" in data:
-                        raise WebSocketError(str(data["error"].get("message", "unknown")))
-                    break
-                self._dispatch(data)
+            if setup_download:
+                ws_send_text(
+                    self._sock,
+                    json.dumps(
+                        {
+                            "id": 1,
+                            "method": "Browser.setDownloadBehavior",
+                            "params": {
+                                "behavior": "allow",
+                                "downloadPath": self.tracker.download_dir,
+                                "eventsEnabled": True,
+                            },
+                        }
+                    ),
+                )
+                deadline = time.monotonic() + EVENTS_CONNECT_TIMEOUT
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise WebSocketError("setDownloadBehavior 应答超时")
+                    self._sock.settimeout(remaining)
+                    data = json.loads(ws_recv_text(self._sock))
+                    if data.get("id") == 1:
+                        if "error" in data:
+                            raise WebSocketError(
+                                str(data["error"].get("message", "unknown"))
+                            )
+                        break
+                    self._dispatch(data)
         except (OSError, WebSocketError, ValueError) as exc:
             self.tracker.mark_disconnected(f"{type(exc).__name__}: {exc}")
             self._close_sock()
@@ -385,6 +388,23 @@ def get_download_tracker(browser_id: str) -> Optional[DownloadTracker]:
     with _channels_lock:
         channel = _channels.get(browser_id)
     return channel.tracker if channel else None
+
+
+def start_event_channel(browser_id: str, port: int, ws_path: str) -> bool:
+    """为无下载需求的浏览器（渲染池）建立纯事件通道（R23）。
+
+    跳过 ``setDownloadBehavior``——渲染池不落下载，通道只服务 Network 事件
+    （R22 批次 2 的 render_page 事件状态由此在生产渲染路径生效）。幂等：
+    已连接复用；失败静默（返回 False，调用方回退 Navigation Timing）。
+    """
+    with _channels_lock:
+        existing = _channels.get(browser_id)
+        if existing is not None and existing.tracker.connected:
+            return True
+        tracker = DownloadTracker("")  # 渲染池不落下载，目录留空
+        channel = _EventChannel(port, ws_path, tracker)
+        _channels[browser_id] = channel
+    return channel.start(setup_download=False)
 
 
 # ---------- R22 批次 2：渲染分支 Network 事件化接口 ----------
@@ -481,6 +501,7 @@ __all__ = [
     "get_tracked_response",
     "list_download_dir",
     "start_download_tracking",
+    "start_event_channel",
     "stop_all_tracking",
     "stop_download_tracking",
 ]
