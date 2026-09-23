@@ -107,6 +107,10 @@ _PRIMARY_CORE_TOOLS = (
 _PRIMARY_SEED_TOOLS = (
     *_PRIMARY_CORE_TOOLS,
     *WEB_FETCH_TOOLS,
+    # 2026-09-23 feat/simplified-browser-login: 一键登录站点工具。primary 作为
+    # 用户交互入口，在网页被拦截（login_wall）时直接调用 browser_login 弹出浏览器
+    # 辅助用户登录并保存 cookie。EXTERNAL 风险分级受权限审批守护。
+    "browser_login",
     # PR-1 (office CRUD 闭环接线) + PR-2 (archive/restore): primary 代用户
     # 执行增/改/删/还原。office_* doc_id 模式走 session binding 守护。
     *OFFICE_TOOLS,
@@ -319,6 +323,7 @@ def create_default_agents() -> List[AgentProfile]:
                 "browser_interact",
                 "browser_cookies",
                 "browser_close",
+                "browser_login",
             ],
             memory_access=["episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.5),
