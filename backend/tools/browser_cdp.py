@@ -236,6 +236,11 @@ def _terminate_session(session: BrowserSession) -> None:
             stop_download_tracking(session.browser_id)
     except Exception:  # noqa: BLE001 — 事件通道清理失败不阻断终止
         logger.debug("停止下载事件通道失败", exc_info=True)
+    # R26：Windows 先在父进程存活时强杀整棵树 —— renderer/gpu/crashpad 等
+    # 子进程仍持有 user_data_dir 句柄，若先 terminate，父退出后子进程被
+    # 重派生（reparent），taskkill /T 找不到树，孤儿进程锁目录（实测单测
+    # 跑一轮泄漏一棵进程树）。非 Windows 本函数为 no-op，走下方优雅终止。
+    _kill_process_tree(session.process)
     try:
         session.process.terminate()
         try:
@@ -244,9 +249,6 @@ def _terminate_session(session: BrowserSession) -> None:
             session.process.kill()
     except OSError as exc:
         logger.warning("browser terminate 失败: %s", exc)
-    # Windows 上 terminate/kill 只作用于父进程；renderer/gpu/network 子进程
-    # 仍持有 user_data_dir 文件句柄，直接 rmtree 会失败 —— 强杀整棵进程树。
-    _kill_process_tree(session.process)
     if getattr(session, "persistent", False):
         return
     _remove_dir_with_retry(session.user_data_dir)
