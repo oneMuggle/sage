@@ -1950,6 +1950,8 @@ class ChatDispatcher:
                 started_at=int(state.started_at * 1000) if state.started_at else None,
                 finished_at=int(state.finished_at * 1000) if state.finished_at else None,
                 used_tokens=self._task_tokens_used(state.task_id) if _terminal else None,
+                # RT26 (round49): 重派来源持久化 —— 历史任务树"重派"徽章。
+                retry_of=state.retry_of,
                 duration_ms=(
                     int((state.finished_at - state.started_at) * 1000)
                     if _terminal and state.started_at and state.finished_at

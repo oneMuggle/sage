@@ -705,3 +705,52 @@ def test_usage_events_task_index_exists_and_used(tmp_path, monkeypatch):
     ).fetchall()
     plan_text = " ".join(str(row[-1]) for row in plan)
     assert "idx_usage_events_session_task" in plan_text
+
+
+# ---- RT26 (round49): 重派链历史持久化 ------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_persist_task_state_records_retry_of(tmp_path, monkeypatch):
+    """RT26: 重派任务终态落库 orch_tasks.retry_of；恢复可见。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    import json as _json
+
+    from backend.data.orch_run_repo import OrchRun, OrchRunRepository
+
+    OrchRunRepository().upsert(
+        OrchRun(
+            run_id="orch-rt26-1",
+            session_id="sess-rt26",
+            status="running",
+            created_at=int(time.time() * 1000),
+            plan_json=_json.dumps({"tasks": []}, ensure_ascii=False),
+            original_request="",
+        )
+    )
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1",
+        entry_queue=queue,
+        run_id="orch-rt26-1",
+        session_id="sess-rt26",
+    )
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        # 模拟重派任务 —— dispatch 时 retry_of 由 plan item 写入 state
+        if state.task_id == "t1":
+            state.retry_of = "t0"
+        state.status = "done"
+        state.output = "ok"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+
+    from backend.data.orch_task_repo import OrchTaskRepository
+
+    repo = OrchTaskRepository()
+    t1 = repo.get("t1")
+    assert t1 is not None
+    assert t1.retry_of == "t0"
