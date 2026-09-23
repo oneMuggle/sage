@@ -3420,6 +3420,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     turn_limit,
                     l9_budget,
                 )
+            # TM1 (DSH 对标 R4): 上下文水位计量 —— 确定性估算本请求的
+            # total/by_role/budget/pressure，结构化日志供观测与后续
+            # 状态栏/性能预算消费。纯计量，不影响任何阈值行为。
+            try:
+                from backend.chat.token_meter import measure_request_messages
+
+                _pressure = measure_request_messages(
+                    messages, effective_window=effective_window
+                )
+                logger.info(
+                    "[REQ %s] context_pressure: %s",
+                    request_id,
+                    _pressure.to_dict(),
+                )
+            except Exception as tm_err:  # noqa: BLE001 — 计量失败绝不阻断聊天
+                logger.debug("[REQ %s] context_pressure 计量失败: %s", request_id, tm_err)
 
             # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）。
             # 校验已在 attachment 之后提前完成,此处只做末条 user 消息的形态转换。
