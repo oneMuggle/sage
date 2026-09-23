@@ -569,6 +569,34 @@ class Database:
                 except sqlite3.OperationalError:
                     pass
 
+        # DSH 对标 R1 (SE1, 2026-09-23): 会话事件日志 —— append-only 的
+        # 会话事实源（对标 deepseek-harness "Model-visible ⟺ logged"）。
+        # messages 表会被 compaction 就地删行（replace_prefix_with_continuation），
+        # 依赖"从历史重建"的能力（投影/审计/回放）需要一份只增不删的日志。
+        # - (session_id, seq) UNIQUE：per-session 单调 seq，投影按 seq 升序回放；
+        # - surface_op：SE2 预留 —— compaction 以 replace(start_seq, end_seq)
+        #   的 surface 操作落日志，而非旁路改历史；
+        # - 写入方是 session_repo 三咽喉点的同事务双写（best-effort，
+        #   失败仅告警不阻断消息写入）。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                payload TEXT,
+                surface_op TEXT,
+                created_at INTEGER NOT NULL,
+                UNIQUE (session_id, seq),
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_session_events_session "
+            "ON session_events(session_id, seq)"
+        )
+        conn.commit()
+
         # 会话摘要表（批次三 step 3，spec §4.3）
         # Dedicated table for compressed session summaries; deliberately
         # separate from memories_episodic so a derived summary never gets

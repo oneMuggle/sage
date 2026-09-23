@@ -17,6 +17,30 @@ from backend.data.database import get_database
 logger = logging.getLogger(__name__)
 
 
+def _append_session_event(
+    cursor: Any,
+    session_id: str,
+    event_type: str,
+    payload: Optional[Dict[str, Any]] = None,
+    surface_op: Optional[Dict[str, Any]] = None,
+) -> None:
+    """DSH 对标 R1 (SE1)：在**当前未提交事务**里追加会话事件（best-effort）。
+
+    事件日志（session_events）是 append-only 事实源，与 messages 写入
+    同事务落盘（先于 commit），保证"凡进模型请求的内容能从日志重建"。
+    事件写入失败只告警不阻断业务写 —— 与 FTS 索引挂钩同一降级口径；
+    严格化（fail-closed）留待 SE2 评估。
+    """
+    try:
+        from backend.data.session_event_repo import SessionEventRepository
+
+        SessionEventRepository.append_with_cursor(
+            cursor, session_id, event_type, payload=payload, surface_op=surface_op
+        )
+    except Exception as exc:  # noqa: BLE001 — 事件日志故障不影响消息写入
+        logger.warning("会话事件双写失败 (%s): %s", event_type, exc)
+
+
 @dataclass
 class Session:
     """会话数据模型"""
@@ -587,6 +611,24 @@ class MessageRepository:
             ),
         )
 
+        # SE1 同事务事件双写（best-effort，失败仅告警）
+        from backend.data.session_event_repo import EVENT_MESSAGE_APPENDED
+
+        _append_session_event(
+            cursor,
+            message.session_id,
+            EVENT_MESSAGE_APPENDED,
+            payload={
+                "id": message.id,
+                "role": message.role,
+                "content": message.content,
+                "subtype": message.subtype,
+                "segment_id": seg,
+                "tool_calls": message.tool_calls,
+                "created_at": message.created_at,
+            },
+        )
+
         conn.commit()
         # Round 2: 同步消息全文索引（session_search 工具）。best-effort，
         # 索引故障不影响消息写入。
@@ -679,6 +721,41 @@ class MessageRepository:
                 "UPDATE sessions SET message_count = ?, updated_at = ? WHERE id = ?",
                 (new_message_count, now, session_id),
             )
+            # SE1 压缩事件：前缀删除以一等事件落日志（而非旁路消失），
+            # 与删除/续接插入同事务，杜绝"历史已删、事件未记"窗口。
+            # 续接消息本身也是模型可见行，同样落 message.appended 事件
+            # （它不走 save()，必须在此显式补事件）。
+            from backend.data.session_event_repo import (
+                EVENT_COMPACTION_PERFORMED,
+                EVENT_MESSAGE_APPENDED,
+            )
+
+            _append_session_event(
+                cursor,
+                session_id,
+                EVENT_COMPACTION_PERFORMED,
+                payload={
+                    "deleted_ids": list(delete_message_ids),
+                    "continuation_id": continuation_message.id,
+                    "removed_count": len(delete_message_ids),
+                    "reason": "compaction",
+                    "created_at": now,
+                },
+            )
+            _append_session_event(
+                cursor,
+                session_id,
+                EVENT_MESSAGE_APPENDED,
+                payload={
+                    "id": continuation_message.id,
+                    "role": continuation_message.role,
+                    "content": continuation_message.content,
+                    "subtype": getattr(continuation_message, "subtype", None),
+                    "segment_id": getattr(continuation_message, "segment_id", 0) or 0,
+                    "tool_calls": continuation_message.tool_calls,
+                    "created_at": continuation_message.created_at,
+                },
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -732,10 +809,28 @@ class MessageRepository:
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
+        # 先取 session_id（删后就查不到了），再删行
+        session_id = self._session_id_of(message_id, cursor)
         cursor.execute("DELETE FROM messages WHERE id = ?", (message_id,))
+        # SE1 同事务事件双写（best-effort，失败仅告警）
+        from backend.data.session_event_repo import EVENT_MESSAGE_DELETED
+
+        _append_session_event(
+            cursor,
+            session_id,
+            EVENT_MESSAGE_DELETED,
+            payload={"id": message_id, "reason": "message_delete"},
+        )
         conn.commit()
 
         return cursor.rowcount > 0
+
+    @staticmethod
+    def _session_id_of(message_id: str, cursor: Any) -> str:
+        """查消息所属会话（删除事件需要 session_id 定位日志）。"""
+        cursor.execute("SELECT session_id FROM messages WHERE id = ?", (message_id,))
+        row = cursor.fetchone()
+        return str(row[0]) if row and row[0] is not None else ""
 
     def delete_by_session(self, session_id: str) -> int:
         """删除会话的所有消息"""
@@ -775,6 +870,25 @@ class MessageRepository:
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (message_id, session_id, role, content, created_at, segment_id, subtype),
         )
+
+        # SE1 同事务事件双写（best-effort，失败仅告警）
+        from backend.data.session_event_repo import EVENT_MESSAGE_APPENDED
+
+        _append_session_event(
+            cursor,
+            session_id,
+            EVENT_MESSAGE_APPENDED,
+            payload={
+                "id": message_id,
+                "role": role,
+                "content": content,
+                "subtype": subtype,
+                "segment_id": segment_id,
+                "tool_calls": None,
+                "created_at": created_at,
+            },
+        )
+
         conn.commit()
         # Round 2: 定时消息同步全文索引（best-effort）
         try:
@@ -855,6 +969,16 @@ class MessageRepository:
                 conn = self.db.get_connection()
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM messages WHERE id = ?", (all_msgs[i].id,))
+                # SE1 同事务事件双写：separator 删除也要落事件，否则事件
+                # 投影仍会在已删除的 separator 处切片（与 messages 分叉）。
+                from backend.data.session_event_repo import EVENT_MESSAGE_DELETED
+
+                _append_session_event(
+                    cursor,
+                    session_id,
+                    EVENT_MESSAGE_DELETED,
+                    payload={"id": all_msgs[i].id, "reason": "segment_retreat"},
+                )
                 conn.commit()
                 return True
         return False
