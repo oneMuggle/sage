@@ -42,7 +42,7 @@ def _install_render(monkeypatch, evaluate_results: List[Any]) -> List[Dict[str, 
 
     class _StubPool:
         def acquire(self):
-            return SimpleNamespace()
+            return SimpleNamespace(browser_id="b-render")
 
     def _fake_cdp(session, method, params=None, target_id=None):
         calls.append({"method": method, "params": params or {}, "target": target_id})

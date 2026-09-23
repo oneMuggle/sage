@@ -23,6 +23,12 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ### Added(web-access)
 - **后台下载任务（DL2）**：`http_download` 新增 `background: bool`——true 时提交后台任务立即返回 `job_id`（双 worker 线程池执行，pending 队列可排队）；新增 `download_status`（查单任务/全部）与 `download_cancel`（仅 pending 可取消；running 不可中断如实报错）工具；完成后结果保留供查询（含最终 path/bytes/sha256）；任务表进程内存态（重启清零），终态 LRU 淘汰 200 上限
+
+> 🌐 **网页访问能力优化 Round 22：渲染分支 Network 事件化**（方案 `docs/plans/2026-09-23_web-access-round22-netevents.md`）
+
+### Added(web-access)
+- **Network 跟踪基建（批次 1，#1403）**：browser_events 常驻 WS 增加 `NetworkResponseTracker`（线程安全按 sessionId 记录 type=Document 响应）与 `_EventChannel.attach_network`（flatten attach + Network.enable）
+- **render_page 集成（批次 2）**：createTarget 后 `ensure_network_tracking` attach 渲染标签页（幂等，同 target 复用 sessionId）；就绪后 `get_tracked_response` 优先取事件状态——重定向链每个 hop 的 Document 状态码可见（多跳 302 中间被反爬拦截不再只见最终 200），Navigation Timing 保留为兜底；渲染结束 `detach_network_session` 清理；常驻 WS 应答帧改经 `_dispatch` 等待队列路由（`_call`），消除 attach 握手与读循环抢帧
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 > 🧹 **alpha.52-win7 暂无未发布变更**
