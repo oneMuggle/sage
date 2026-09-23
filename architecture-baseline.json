@@ -36,7 +36,7 @@
     "backend/tests/unit/test_skill_md_importer.py": 806,
     "backend/tests/unit/test_skill_md_script_runner.py": 818,
     "backend/tests/unit/test_web_tool.py": 1805,
-    "backend/tools/browser_cdp.py": 952,
+    "backend/tools/browser_cdp.py": 955,
     "backend/tools/browser_tool.py": 1010,
     "backend/tools/credential_vault.py": 897,
     "backend/tools/download_tool.py": 1116,

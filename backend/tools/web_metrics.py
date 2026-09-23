@@ -26,6 +26,24 @@ _hosts: Dict[str, deque] = {}
 _order: Dict[str, int] = {}
 _seq = 0
 
+# R24：渲染分支 Network 事件命中率（全局计数，诊断视角）——
+# renders=成功渲染次数；channel_ok=渲染池事件通道就绪次数；
+# event_status_hits=事件 Document 状态被采用（优先于 Navigation Timing）次数。
+_render_events = {"renders": 0, "channel_ok": 0, "event_status_hits": 0}
+
+
+def record_render_event(channel_ok: bool, tracked_hit: bool) -> None:
+    """记录一次渲染的事件状态可用性（R24）；异常静默，永不影响主流程。"""
+    try:
+        with _lock:
+            _render_events["renders"] += 1
+            if channel_ok:
+                _render_events["channel_ok"] += 1
+            if tracked_hit:
+                _render_events["event_status_hits"] += 1
+    except Exception:  # noqa: BLE001 — 指标静默
+        pass
+
 
 def record(host: str, ok: bool, elapsed_ms: int, escalated: bool = False) -> None:
     """记录一次出网结果。``host`` 为空时忽略；其余异常静默。"""
@@ -60,9 +78,11 @@ def record(host: str, ok: bool, elapsed_ms: int, escalated: bool = False) -> Non
 
 
 def snapshot() -> Dict[str, Dict[str, Any]]:
-    """聚合快照：``{host: {ok, fail, escalated, avg_elapsed_ms}}``（按域名排序）。"""
+    """聚合快照：``{host: {ok, fail, escalated, avg_elapsed_ms}}``（按域名排序）
+    外加 ``render_events``（R24 渲染事件命中率全局计数）。"""
     with _lock:
         items = sorted(_hosts.items())
+        render_events = dict(_render_events)
     out: Dict[str, Dict[str, Any]] = {}
     for host, dq in items:
         records = list(dq)
@@ -75,6 +95,7 @@ def snapshot() -> Dict[str, Dict[str, Any]]:
             "escalated": esc_n,
             "avg_elapsed_ms": int(sum(elapsed) / len(elapsed)) if elapsed else None,
         }
+    out["render_events"] = render_events
     return out
 
 
@@ -82,6 +103,7 @@ def reset() -> None:
     with _lock:
         _hosts.clear()
         _order.clear()
+        _render_events.update({"renders": 0, "channel_ok": 0, "event_status_hits": 0})
 
 
 def host_from_url(url: str) -> str:

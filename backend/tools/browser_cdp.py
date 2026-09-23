@@ -173,7 +173,9 @@ class BrowserSessionManager:
     def get(self, browser_id: Optional[str]) -> Optional[BrowserSession]:
         """按 id 取会话；None → 唯一"用户"实例（单实例场景免传 id）。
 
-        保留 id（RESERVED_BROWSER_ID，web_fetch 渲染池）不算用户实例。
+        保留 id（RESERVED_BROWSER_ID 及其 ``render-pool-`` 前缀槽位，web_fetch
+        渲染池）不算用户实例——否则多槽渲染池会挤掉单用户浏览器免传 id 的
+        便利解析（R24）。
         """
         if browser_id:
             return self._sessions.get(browser_id)
@@ -181,6 +183,7 @@ class BrowserSessionManager:
             session
             for session_id, session in self._sessions.items()
             if session_id != RESERVED_BROWSER_ID
+            and not session_id.startswith(RESERVED_BROWSER_ID + "-")
         ]
         if len(user_sessions) == 1:
             return user_sessions[0]
