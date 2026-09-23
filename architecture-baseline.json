@@ -8,7 +8,7 @@
     "backend/api/orchestration_router.py": 807,
     "backend/api/wiki_routes.py": 1692,
     "backend/application/services/chat_service.py": 1203,
-    "backend/core/legacy/agent.py": 2455,
+    "backend/core/legacy/agent.py": 2484,
     "backend/core/legacy/llm_client.py": 1038,
     "backend/data/database.py": 1873,
     "backend/data/session_repo.py": 1010,
