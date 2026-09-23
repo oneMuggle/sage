@@ -530,12 +530,16 @@ interface CredentialRecord {
 interface WebAccessConfig {
   render_persistent: boolean;
   auto_refresh_credentials: boolean;
+  render_pool_size?: number;
 }
 
 const DEFAULT_WEB_ACCESS_CONFIG: WebAccessConfig = {
   render_persistent: false,
   auto_refresh_credentials: false,
+  render_pool_size: 2,
 };
+
+const RENDER_POOL_SIZE_OPTIONS = [1, 2, 3, 4];
 
 /** dev 走 Vite 代理；Electron 产物直连后端（与 mediaApi 同口径） */
 function webAccessApiUrl(path: string): string {
@@ -560,6 +564,13 @@ type HostMetrics = Record<
   { ok: number; fail: number; escalated: number; avg_elapsed_ms: number | null }
 >;
 
+/** R24/R25：快照中非 host 的全局键——渲染事件命中率 */
+interface RenderEventMetrics {
+  renders: number;
+  channel_ok: number;
+  event_status_hits: number;
+}
+
 function CredentialsSection() {
   const { t } = useI18n();
   const [creds, setCreds] = useState<CredentialRecord[] | null>(null);
@@ -573,6 +584,7 @@ function CredentialsSection() {
   const [cookieValue, setCookieValue] = useState('');
   const [cookieError, setCookieError] = useState<TranslationKey | null>(null);
   const [cookieSaving, setCookieSaving] = useState(false);
+  const renderEvents = metrics?.render_events as unknown as RenderEventMetrics | undefined;
 
   const reload = (): void => {
     fetch(webAccessApiUrl('/api/v1/web-access/credentials'))
@@ -730,6 +742,26 @@ function CredentialsSection() {
             </span>
           </span>
         </label>
+        <label className="flex items-start gap-2 text-xs" data-testid="cred-pool-size-row">
+          <span>
+            {t('settings.network.creds.pool_size')}
+            <span className="block text-text-secondary">
+              {t('settings.network.creds.pool_size.desc')}
+            </span>
+          </span>
+          <select
+            data-testid="cred-pool-size-select"
+            className="mt-0.5 border border-border rounded-radius-sm bg-bg text-text"
+            value={config.render_pool_size ?? 2}
+            onChange={(e) => saveConfig({ ...config, render_pool_size: Number(e.target.value) })}
+          >
+            {RENDER_POOL_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
         {browser && (
           <div className="text-xs text-text-secondary" data-testid="browser-health">
             {browser.browserFound
@@ -759,33 +791,53 @@ function CredentialsSection() {
                 {t('settings.network.creds.metrics.reset')}
               </button>
             </div>
-            {Object.entries(metrics).map(([host, m]) => (
-              <div
-                key={host}
-                data-testid={`metric-row-${host}`}
-                className="flex items-center gap-2 text-xs"
-              >
-                <span className="font-medium">{host}</span>
-                <span className="text-text-secondary">
-                  {t('settings.network.creds.metrics.ok')}: {m.ok}
-                </span>
-                <span className="text-text-secondary">
-                  {t('settings.network.creds.metrics.fail')}: {m.fail}
-                </span>
-                {m.escalated > 0 && (
+            {Object.entries(metrics)
+              .filter(([host]) => host !== 'render_events')
+              .map(([host, m]) => (
+                <div
+                  key={host}
+                  data-testid={`metric-row-${host}`}
+                  className="flex items-center gap-2 text-xs"
+                >
+                  <span className="font-medium">{host}</span>
                   <span className="text-text-secondary">
-                    {t('settings.network.creds.metrics.escalated')}: {m.escalated}
+                    {t('settings.network.creds.metrics.ok')}: {m.ok}
                   </span>
-                )}
-                {m.avg_elapsed_ms !== null && (
                   <span className="text-text-secondary">
-                    {t('settings.network.creds.metrics.avg')}: {m.avg_elapsed_ms}ms
+                    {t('settings.network.creds.metrics.fail')}: {m.fail}
                   </span>
-                )}
-              </div>
-            ))}
+                  {m.escalated > 0 && (
+                    <span className="text-text-secondary">
+                      {t('settings.network.creds.metrics.escalated')}: {m.escalated}
+                    </span>
+                  )}
+                  {m.avg_elapsed_ms !== null && (
+                    <span className="text-text-secondary">
+                      {t('settings.network.creds.metrics.avg')}: {m.avg_elapsed_ms}ms
+                    </span>
+                  )}
+                </div>
+              ))}
             <div className="text-text-secondary text-xs">
               {t('settings.network.creds.metrics.hint')}
+            </div>
+          </div>
+        )}
+        {renderEvents && renderEvents.renders > 0 && (
+          <div className="flex flex-col gap-1 text-xs" data-testid="render-events-metrics">
+            <span>{t('settings.network.creds.metrics.render_events')}</span>
+            <div className="flex items-center gap-2 text-text-secondary">
+              <span>
+                {t('settings.network.creds.metrics.render_events.renders')}: {renderEvents.renders}
+              </span>
+              <span>
+                {t('settings.network.creds.metrics.render_events.channel')}:{' '}
+                {renderEvents.channel_ok}
+              </span>
+              <span>
+                {t('settings.network.creds.metrics.render_events.hits')}:{' '}
+                {renderEvents.event_status_hits}
+              </span>
             </div>
           </div>
         )}

@@ -711,3 +711,57 @@ def test_refresh_credentials_skip_injection_when_no_cookies(fake_time, monkeypat
     assert "Storage.setCookies" in methods
     assert ok is False  # Storage.getCookies 无 cookie → 失败
     assert refreshed == []
+
+
+# ---------- R25：渲染池槽位配置化 ----------
+
+
+def test_render_pool_size_clamped(monkeypatch):
+    import json as _json
+
+    from backend.data import settings_repo
+
+    cases = [
+        (None, web_render.RENDER_POOL_SIZE),
+        ("{}", web_render.RENDER_POOL_SIZE),
+        (_json.dumps({"render_pool_size": 3}), 3),
+        (_json.dumps({"render_pool_size": 99}), web_render.RENDER_POOL_SIZE_MAX),
+        (_json.dumps({"render_pool_size": 0}), web_render.RENDER_POOL_SIZE_MIN),
+        ("not-json", web_render.RENDER_POOL_SIZE),
+    ]
+    for raw, expected in cases:
+        monkeypatch.setattr(
+            settings_repo,
+            "SettingsRepository",
+            lambda raw=raw: _FakeSettingsRepo(raw),
+        )
+        assert web_render._render_pool_size() == expected
+
+
+def test_pool_grows_slots_from_config(monkeypatch):
+    import json as _json
+
+    from backend.data import settings_repo
+
+    created: Any = []
+
+    def _fake_launch(headless, browser_id=None, **kwargs):
+        assert headless is True
+        created.append(_FakePoolSession(browser_id=browser_id))
+        return created[-1]
+
+    monkeypatch.setattr(web_render, "launch_browser", _fake_launch)
+    monkeypatch.setattr(
+        settings_repo,
+        "SettingsRepository",
+        lambda: _FakeSettingsRepo(_json.dumps({"render_pool_size": 3})),
+    )
+    clock = _FakeClock()
+    monkeypatch.setattr(web_render, "time", clock)
+    pool = web_render._RendererPool()
+    ids = set()
+    for _ in range(3):
+        clock.now += 1
+        ids.add(pool.acquire().browser_id)
+    assert ids == set(web_render._render_pool_ids(3))
+    assert len(created) == 3
