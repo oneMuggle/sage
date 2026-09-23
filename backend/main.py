@@ -29,6 +29,11 @@ def _startup_mark(step: str) -> None:
 
 
 if __name__ == "__main__":
+    # 2026-09-23 Win7 exit-code-3 诊断：启用 faulthandler 以便在 C 扩展崩溃
+    # （DLL 加载失败、segfault）时也能在 stderr 看到 traceback。
+    import faulthandler
+
+    faulthandler.enable()
     print(  # noqa: T201
         f"[sage-startup] t=0.0s module load begin (pid={os.getpid()})",
         file=sys.stderr,
@@ -386,6 +391,12 @@ async def lifespan(app: FastAPI):
     # summary endpoints don't rebuild (and re-init the VectorStore) per request.
     app.state.memory_port = MemoryAdapter(get_memory_manager())
     logger.info("MemoryLifecycleManager 已绑定 HookRegistry")
+    if __name__ == "__main__":
+        print(  # noqa: T201
+            f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s memory-lifecycle wired",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # Session-end watchdog — every 60s, find sessions whose updated_at
     # is older than 30 min and fire on_session_end.
@@ -463,6 +474,12 @@ async def lifespan(app: FastAPI):
             logger.info("SecretBox 迁移完成: %s", _secret_report)
     except Exception:
         logger.exception("SecretBox 迁移失败(保留明文, 不影响启动)")
+    if __name__ == "__main__":
+        print(  # noqa: T201
+            f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s secret-box + watchdog done",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # S1 (2026-09-06): 会话运行态启动恢复 —— 上次进程被杀时 producer 的
     # finally 写库点没有机会执行，遗留 running 统一收口为 failed（与编排
@@ -523,6 +540,12 @@ async def lifespan(app: FastAPI):
             )
     except Exception as agents_files_exc:  # noqa: BLE001 — 增强面降级
         logger.warning("agents-files: 启动导入失败（忽略）: %s", agents_files_exc)
+    if __name__ == "__main__":
+        print(  # noqa: T201
+            f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s agents-profiles done",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # I2: chat 流注册表 — 拆分 /chat/stream 为 create + attach,避免 LLM 被调两次
     app.state.streams = StreamRegistry()
@@ -559,6 +582,12 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler_service
     logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
     _startup_mark("scheduler")
+    if __name__ == "__main__":
+        print(  # noqa: T201
+            f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s scheduler started",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # PR-C §5.1: 把 5 个 evolution 任务挂到 lifespan,按 cron 自动跑
     # (memory_pruning / memory_consolidation / daily_summary /
@@ -625,6 +654,12 @@ async def lifespan(app: FastAPI):
     get_review_queue().start()
     logger.info("ReviewQueue 协作对象已注入且 worker 已启动")
     _startup_mark("review-queue")
+    if __name__ == "__main__":
+        print(  # noqa: T201
+            f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s review-queue started",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # Arena 自动化装配（feature flag 默认关）：账号池 + 单账号注册辅助。
     # 修复既有缺口：arena 路由早已挂载但 init_arena_service 从未被调用，
@@ -795,6 +830,12 @@ async def lifespan(app: FastAPI):
     await app.state.heartbeat_monitor.start()
     logger.info("Multi-agent core 已装配（Planner + Router + HeartbeatMonitor 已启动）")
     _startup_mark("multi-agent")
+    if __name__ == "__main__":
+        print(  # noqa: T201
+            f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s multi-agent core done",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # Phase 1 observability: SnapshotStore + EventHub + REST endpoints
     from backend.api import orch_run_control
@@ -823,6 +864,12 @@ async def lifespan(app: FastAPI):
         "Phase 1 observability: SnapshotStore + EventHub + /orch/runs 已就绪，恢复 %s 个事件",
         restored_events,
     )
+    if __name__ == "__main__":
+        print(  # noqa: T201
+            f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s observability restored",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # S7-1 (P7): ChatService 无条件装配 —— runtime 路由复用其 tools 路径,
     # 与 API_MODE 无关 (此前 lifespan 默认 "hex" 恰好让 runtime 可用, 属于
@@ -842,6 +889,12 @@ async def lifespan(app: FastAPI):
         "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
         API_MODE,
     )
+    if __name__ == "__main__":
+        print(  # noqa: T201
+            f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s ChatService assembled",
+            file=sys.stderr,
+            flush=True,
+        )
 
     # 浏览器一次性目录的启动兜底清扫（与下方 _shutdown_browser_sessions 对称）：
     # 进程被硬杀时 shutdown 钩子不会执行，遗留目录靠下次启动按 mtime 回收。
@@ -1274,5 +1327,41 @@ if __name__ == "__main__":
         file=sys.stderr,
         flush=True,
     )
-    uvicorn.run(app, host="127.0.0.1", port=port, log_config=None)
+
+    # 2026-09-23 Win7 exit-code-3 诊断：atexit handler 在进程退出时输出诊断
+    # 断，帮助确认是 uvicorn.run() 内部退出还是更底层的原因。
+    import atexit
+
+    def _exit_diag():
+        elapsed = time.monotonic() - _startup_t0
+        print(  # noqa: T201
+            f"[sage-startup] atexit: pid={os.getpid()} t={elapsed:.1f}s",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    atexit.register(_exit_diag)
+
+    try:
+        uvicorn.run(app, host="127.0.0.1", port=port, log_config=None)
+    except SystemExit as exc:
+        # uvicorn 在 lifespan 失败时可能调 sys.exit() —— 捕获并写 stderr
+        print(  # noqa: T201
+            f"[sage-startup] uvicorn SystemExit: code={exc.code}",
+            file=sys.stderr,
+            flush=True,
+        )
+        raise
+    except BaseException as exc:
+        # 兜底：任何 Python 级异常都写 stderr，确保 Electron 能捕获到
+        import traceback
+
+        print(  # noqa: T201
+            f"[sage-startup] uvicorn crashed: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+            flush=True,
+        )
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        raise
 

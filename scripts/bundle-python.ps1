@@ -77,10 +77,15 @@ Write-Host "Using full Python at: $PythonExe" -ForegroundColor Cyan
 if ($LASTEXITCODE -ne 0) { throw "Python verification failed" }
 Write-Host ""
 
-# Clean up existing resources
-if (Test-Path $ResourcesDir) {
-    Write-Host "Cleaning existing resources directory..." -ForegroundColor Yellow
-    Remove-Item -Recurse -Force $ResourcesDir
+# Clean up Python-managed subdirectories only.
+# Do NOT remove the entire resources/ directory — it also contains win7-fix/
+# (service-fix scripts) and may contain tools/ (from bundle-git-bash.ps1 if
+# run before this script). Only clean the directories this script owns.
+foreach ($dir in @($PythonDir, $BackendDir)) {
+    if (Test-Path $dir) {
+        Write-Host "Cleaning $dir ..." -ForegroundColor Yellow
+        Remove-Item -Recurse -Force $dir
+    }
 }
 
 # Create directories
