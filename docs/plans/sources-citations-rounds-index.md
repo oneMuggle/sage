@@ -19,9 +19,14 @@
 | R88 | 专项总账（本文件） | #1301 `b6823cb7` | 文档无需对齐 |
 | R89 | merge_sources 去重改为补齐合并（navigate→fetch 同 url 摘要不丢）；附带 py38 replan 测试 loop 兜底 | #1304 `0c2a4de2` | #1305 `0c0548b1` |
 | R90 | 实体 wiki 来源补 score + browser_navigate 集成用例 + 本回填 | #1313 `8e9b7c79` | #1317 `4bbeca87` |
-| R95+ | 透明度事件载荷校验收口 transparencyPayload.ts（主/重接/btw 共用） | —（本 PR） | 文档随代码无需单独对齐 |
 | R91 | 复活 test_chat_stream_persist（脱 skip/脱 DI）+ 会话元数据不变量 | #1320 `d506cc6d` | #1375 `5265aef1` |
 | R92 | /btw 浮层接入统一参考来源（sources_used → 紧凑折叠列表） | #1380 `0ffbe01c` | #1387 `4d7934ef` |
+| R93 | 总账回填 R91/R92 行 | #1390 `969b7d55` | 文档无需对齐 |
+| R94 | 全量回归健康检查记录（§6） | #1394 `e1744a71` | 文档无需对齐 |
+| R95 | 编排取消竞态修复（cancel 与异常间无 await 时任务误判 failed）+ 回归定性回填 | #1398 `4cae4802` | #1402 `076438f4` |
+| R96 | check_py38_compat 路径归一化（Windows 本地 SKIP 匹配失效修复；win7-only 脚本） | —（win7-only） | #1407 `968d02d4` |
+| R97 | 透明度事件载荷校验收口 transparencyPayload.ts（主/重接/btw 共用） | #1411 `117b4d41` | #1414 `b223cbbd` |
+| R99 | memory 注入与召回合一：get_context_with_hits 单次检索，芯片与注入内容严格同源 | —（本 PR） | 文档随代码无需单独对齐 |
 
 ## 2. 专项方案要点（R81 管道全景）
 

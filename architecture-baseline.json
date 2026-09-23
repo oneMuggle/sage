@@ -69,6 +69,7 @@
     "src/widgets/sidebar/sections/ProjectSection.tsx": 938,
     "tests/electron/test_stub_backend.py": 896,
     "backend/api/arena_routes.py": 873,
-    "backend/services/arena_draw_engine.py": 1054
+    "backend/services/arena_draw_engine.py": 1054,
+    "backend/memory/manager.py": 848
   }
 }
