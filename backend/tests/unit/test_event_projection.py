@@ -213,12 +213,14 @@ def test_parity_after_segment_retreat(setup_test_db):
     ensure_session(setup_test_db, sid)
     repo = MessageRepository()
     # 注意：advance_segment 内部用真实 wall clock 落 separator 的
-    # created_at；messages 表按 created_at 排序而投影按 seq 排序，
-    # 测试消息的时间戳必须与 separator 的实际落库时间保序。
-    now = int(_time.time() * 1000)
+    # created_at；messages 表按 created_at 排序而投影按 seq 排序。
+    # 前两条消息的基线拨到 10 秒前 —— CI 上整个用例可在 1-2ms 内跑完，
+    # 真实时钟与合成时间戳撞毫秒会让 separator 排进历史中间（顺序被
+    # rowid 打乱，两端投影分叉）；回退基线后 separator 必然严格晚于它们。
+    base = int(_time.time() * 1000) - 10_000
 
-    repo.save(_msg(sid, 1, "user", "第一段问", now + 1))
-    repo.save(_msg(sid, 2, "assistant", "第一段答", now + 2))
+    repo.save(_msg(sid, 1, "user", "第一段问", base + 1))
+    repo.save(_msg(sid, 2, "assistant", "第一段答", base + 2))
     assert repo.advance_segment(sid) == 1
     # 取 separator 的实际 created_at，让后续消息晚于它（时钟确定性）
     separator = [
@@ -226,6 +228,7 @@ def test_parity_after_segment_retreat(setup_test_db):
         for m in repo.get_by_session(sid, limit=100000)
         if m.subtype == "topic_separator"
     ][0]
+    assert separator.created_at > base + 2
     repo.save(_msg(sid, 4, "user", "第二段问", separator.created_at + 1))
     # 切分前：投影只看第二段
     _assert_parity(setup_test_db, sid)
