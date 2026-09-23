@@ -35,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added(web-access)
 - **渲染池纯事件通道（R23）**：browser_events 新增 `start_event_channel`（跳过 `setDownloadBehavior` 的常驻 WS，只服务 Network 事件）；render_page 在 `_pool.acquire()` 后经 `_ensure_pool_channel` 尽力接线——修复 R22 批次 2 的生产缺口（渲染池不经 browser_launch 工具、此前从未建通道，事件状态始终回退 Navigation Timing）；通道失败不影响渲染，池重建后自动重连
+
+> 🌐 **网页访问能力优化 Round 24：渲染池生产化——多实例 + 事件命中率可观测**（方案 `docs/plans/2026-09-23_web-access-round24-pool.md`）
+
+### Added(web-access)
+- **多实例渲染池（R24）**：`_RendererPool` 扩为双槽 LRU（`RENDER_POOL_IDS`，槽 1 沿用保留 id、槽 2 `render-pool-2`）——并发渲染分散到不同浏览器实例，单实例崩溃不再波及全部 in-flight 渲染；首选槽启动失败按 LRU 序降级下一槽；`browser_cdp.get(None)` 用户实例解析同步排除 `render-pool-` 前缀槽位
+- **渲染事件命中率指标（R24）**：web_metrics 新增 `record_render_event`，`GET /api/v1/web-access/metrics` 快照增 `render_events`（renders/channel_ok/event_status_hits）——R22/R23 的事件状态接线效果生产可验证
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21
