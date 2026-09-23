@@ -66,8 +66,8 @@ sage 的上下文预算逻辑四处独立且只有单一总数（history 预算�
 ## 5. 交付记录
 
 - **main**：（PR 占位）
-- **win7 对齐**：（cherry-pick 占位）
+- **win7 对齐**：PR #1466（squash `bd35e989`，2026-09-23 merge，py38 全量绿）
 - **历史轮次回填（随本轮合入总账）**：
   - R1：main #1421（`1faaa49e`）/ win7 #1425（`8194fc78`）
   - R2：main #1435（`e45dc7be`）/ win7 #1445（`aea6cad4`）
-  - R3：main #1451（`67685820`）/ win7 #1459（SHA merge 后回填）
+  - R3：main #1451（`67685820`）/ win7 #1459（`c3feb150`）
