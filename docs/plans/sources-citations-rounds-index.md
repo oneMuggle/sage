@@ -109,4 +109,16 @@ main `969b7d55` 本机全量回归（Windows 11 / py3.12 / node 24）：
   ② `word_comments` 为**本地环境漂移**——python-docx 1.2.0 下 `part._blob`
   私有写回失效（锁定版本 1.1.2 正常）；锁回 1.1.2 后本地通过，代码无需改。
 
+
+## 6.1 回归记录（R100，2026-09-23）
+
+main（含 R95-R99 五轮代码改动）本机全量回归，**本轮前后端串行执行避免资源 flake**：
+
+- **后端 unit（xdist loadfile）**：7700 passed / 1 failed / 549 skipped（10min）。
+  唯一失败（office 模板填充）串行复跑通过 —— 并行负载 flake。
+  R94 时期的 8 个失败已全部消除：dispatcher_cancel 由 R95 竞态修复、
+  word_comments 由 python-docx 锁回 1.1.2 消除。
+- **前端全量（vitest run）**：3024 passed / 0 failed / 3 skipped —— 完全绿。
+- 来源专项域零失败。
+
 —— 本账本由参考来源专项循环维护，随轮次追加。
