@@ -243,7 +243,8 @@ def test_complete_todo(todo_service):
     assert completed is not None
     assert completed.status == "completed"
     assert completed.completed_at is not None
-    assert completed.updated_at != created.updated_at
+    # R97 跟进: != 断言依赖时钟前进，Windows 粒度下两操作可同微秒（脆弱）
+    assert completed.updated_at >= created.updated_at
 
 
 def test_complete_todo_missing_returns_none(todo_service):
@@ -391,13 +392,27 @@ def test_get_startup_summary_structure(todo_service):
     assert summary["total_completed_today"] == 0
 
 
-def test_get_startup_summary_buckets(todo_service):
-    """Todos land in the correct summary bucket."""
-    now = datetime.now()
-    todo_service.create_todo(title="Overdue", due_at=(now - timedelta(hours=2)).isoformat())
-    # Use 1 hour instead of 2 to avoid date boundary issues when test runs near midnight
-    todo_service.create_todo(title="Today", due_at=(now + timedelta(hours=1)).isoformat())
-    todo_service.create_todo(title="Upcoming", due_at=(now + timedelta(days=3)).isoformat())
+def test_get_startup_summary_buckets(todo_service, monkeypatch):
+    """Todos land in the correct summary bucket.
+
+    R97 跟进：冻结服务时钟到上午 10 点 —— 原实现用真实 now+1h 构造
+    today 桶条目，CI 在 23:00-23:59 运行时跨过午夜落入 upcoming
+    （today_end = 当日 23:59:59），today 断言必炸。冻结后彻底确定性。
+    """
+    import backend.services.todo_service as todo_service_module
+
+    # 与服务一致使用 tz-naive；本地裸 datetime 构造豁免 DTZ001
+    fixed_now = datetime(2026, 1, 15, 10, 0, 0)  # noqa: DTZ001
+
+    class _FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now
+
+    monkeypatch.setattr(todo_service_module, "datetime", _FixedDatetime)
+    todo_service.create_todo(title="Overdue", due_at=(fixed_now - timedelta(hours=2)).isoformat())
+    todo_service.create_todo(title="Today", due_at=(fixed_now + timedelta(hours=1)).isoformat())
+    todo_service.create_todo(title="Upcoming", due_at=(fixed_now + timedelta(days=3)).isoformat())
     todo_service.create_todo(title="High", priority="high")
 
     summary = todo_service.get_startup_summary()
