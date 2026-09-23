@@ -3360,7 +3360,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # SE2 (DSH 对标 R2): 历史从事件日志投影（"Model-visible ⟺ logged"）。
             # 事件为空且表里有历史（回填竞态/双写缺口）时防御性回退旧表投影。
             try:
-                _session_events = await asyncio.to_thread(
+                _session_events = await py_compat.to_thread(
                     lambda: _event_repo().get_by_session(data.session_id)
                 )
             except Exception as ev_err:  # noqa: BLE001 — 事件读取失败回退表投影
