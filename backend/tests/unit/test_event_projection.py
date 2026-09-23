@@ -226,8 +226,10 @@ def test_parity_after_segment_retreat(setup_test_db, monkeypatch):
     sid = "s-retreat-1"
     ensure_session(setup_test_db, sid)
     repo = MessageRepository()
-    repo.save(_msg(sid, 1, "user", "第一段问", int(_FakeTime.time() * 1000)))
-    repo.save(_msg(sid, 2, "assistant", "第一段答", int(_FakeTime.time() * 1000)))
+    m1 = _msg(sid, 1, "user", "第一段问", int(_FakeTime.time() * 1000))
+    repo.save(m1)
+    m2 = _msg(sid, 2, "assistant", "第一段答", int(_FakeTime.time() * 1000))
+    repo.save(m2)
     assert repo.advance_segment(sid) == 1
     # 取 separator 的实际 created_at，让后续消息晚于它（时钟确定性）
     separator = [
@@ -235,8 +237,9 @@ def test_parity_after_segment_retreat(setup_test_db, monkeypatch):
         for m in repo.get_by_session(sid, limit=100000)
         if m.subtype == "topic_separator"
     ][0]
-    assert separator.created_at > int(_FakeTime.time() * 1000) - 100
-    repo.save(_msg(sid, 4, "user", "第二段问", separator.created_at + 1))
+    # 断言不得调用 _FakeTime.time()（会推进共享时钟）
+    assert separator.created_at > m2.created_at
+    repo.save(_msg(sid, 4, "user", "第二段问", separator.created_at + 100))
     # 切分前：投影只看第二段
     _assert_parity(setup_test_db, sid)
     assert events_to_history(SessionEventRepository().get_by_session(sid)) == [
