@@ -185,7 +185,56 @@ def build_request_messages(
         ``(messages, omitted_count)``。任何失败都不抛错 —— 历史注入是
         best-effort 增强，绝不能阻断聊天。
     """
-    kept, omitted = truncate_history(db_rows_to_history(history_rows), budget_tokens)
+    return _assemble_request_messages(
+        system_content,
+        user_text,
+        db_rows_to_history(history_rows),
+        attachment_block=attachment_block,
+        budget_tokens=budget_tokens,
+        trailing_system=trailing_system,
+        turn_limit=turn_limit,
+    )
+
+
+def build_request_messages_from_events(
+    system_content: str,
+    user_text: str,
+    events: Sequence[Any],
+    attachment_block: Optional[str] = None,
+    budget_tokens: Optional[int] = None,
+    trailing_system: Optional[str] = None,
+    turn_limit: Optional[int] = None,
+) -> Tuple[List[Dict[str, Any]], int]:
+    """从事件日志投影组装请求消息（DSH 对标 R2，SE2 读取切换入口）。
+
+    与 :func:`build_request_messages` 装配语义逐字节一致，唯一差异是
+    历史来源：``events_to_history(events)`` 事件投影（parity 契约由
+    SE1 测试守门）取代 ``db_rows_to_history`` 表投影。
+    """
+    from backend.chat.event_projection import events_to_history
+
+    return _assemble_request_messages(
+        system_content,
+        user_text,
+        events_to_history(events),
+        attachment_block=attachment_block,
+        budget_tokens=budget_tokens,
+        trailing_system=trailing_system,
+        turn_limit=turn_limit,
+    )
+
+
+def _assemble_request_messages(
+    system_content: str,
+    user_text: str,
+    projected_history: Sequence[Dict[str, str]],
+    attachment_block: Optional[str] = None,
+    budget_tokens: Optional[int] = None,
+    trailing_system: Optional[str] = None,
+    turn_limit: Optional[int] = None,
+) -> Tuple[List[Dict[str, Any]], int]:
+    """装配内核（L1 / L4' / 方案 B 全在此）：已投影历史 → 完整请求消息。"""
+    kept, omitted = truncate_history(list(projected_history), budget_tokens)
     # 方案 B：滑动窗口（按 user 轮数）。
     # 在 token 截断后再砍,缺的轮数加到 running omitted 上,统一反映在 system 提示里。
     if turn_limit and turn_limit > 0:
@@ -246,6 +295,7 @@ def apply_turn_limit(
 __all__ = [
     "apply_turn_limit",
     "build_request_messages",
+    "build_request_messages_from_events",
     "db_rows_to_history",
     "history_token_budget",
     "truncate_history",

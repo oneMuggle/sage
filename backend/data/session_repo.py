@@ -395,19 +395,20 @@ class ForkSourceNotFoundError(LookupError):
         super().__init__(f"fork source {kind} not found: {ident}")
 
 
-def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -> None:
-    """在给定 cursor 的当前事务中插入一条 fork 复制的消息行。
+def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -> str:
+    """在给定 cursor 的当前事务中插入一条 fork 复制的消息行，返回新消息 id。
 
     独立成模块级函数是为了给测试留 seam：monkeypatch 本函数即可模拟
     "复制到一半失败"，验证 fork 事务的整体回滚（MEDIUM-2）。
     """
+    new_message_id = f"msg-{uuid.uuid4().hex[:12]}"  # 新 id，避免与源消息主键冲突
     cursor.execute(
         """
         INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
-            f"msg-{uuid.uuid4().hex[:12]}",  # 新 id，避免与源消息主键冲突
+            new_message_id,
             session_id,
             src_msg.role,
             src_msg.content,
@@ -426,6 +427,7 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
             src_msg.created_at,  # 保留原时间戳 → ORDER BY created_at ASC 保序
         ),
     )
+    return new_message_id
 
 
 def fork_session(
@@ -515,8 +517,30 @@ def fork_session(
         )
         # 逐条复制：插入顺序 = 源顺序，messages 表
         # ORDER BY created_at ASC（同值按 rowid）保持序。
+        # SE2: 每条复制行同事务补 message.appended 事件（fork 是最后一个
+        # 不落事件的原始 SQL 写入路径；复制行无 subtype/segment，如实记录
+        # 表默认值 0/NULL）。事件 payload 携带新 id —— 投影 parity 要求
+        # 事件 id 与 messages 行 id 一致。
+        from backend.data.session_event_repo import EVENT_MESSAGE_APPENDED
+
         for src_msg in prefix:
-            _insert_forked_message_row(cursor, new_session_id, src_msg)
+            forked_message_id = _insert_forked_message_row(
+                cursor, new_session_id, src_msg
+            )
+            _append_session_event(
+                cursor,
+                new_session_id,
+                EVENT_MESSAGE_APPENDED,
+                payload={
+                    "id": forked_message_id,
+                    "role": src_msg.role,
+                    "content": src_msg.content,
+                    "subtype": None,
+                    "segment_id": 0,
+                    "tool_calls": src_msg.tool_calls,
+                    "created_at": src_msg.created_at,
+                },
+            )
         # B1 (对标增强第五轮批次 A): fork 继承源会话的活跃工作区绑定——
         # 分叉的是"同一段工作在另一条分支上的延续"，丢了绑定 agent 就没有
         # 工作区。workspace_path 原样带走；generation 是 per-session 的

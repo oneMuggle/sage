@@ -12,7 +12,6 @@ import asyncio
 import contextlib
 import hashlib
 import sys
-from typing import List
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
 # 让前端能逐字渲染 (避免 LLM 一次返回完整字符串时 "砰一下" 全显示)。
@@ -25,7 +24,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, Optional, Sequence, Set, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Union
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
@@ -45,7 +44,11 @@ from backend.chat.compaction import (
     should_compact,
 )
 from backend.chat.executors import resolve_attachments
-from backend.chat.history_context import build_request_messages, history_token_budget
+from backend.chat.history_context import (
+    build_request_messages,
+    build_request_messages_from_events,
+    history_token_budget,
+)
 from backend.chat.sources_extractor import extract_sources_from_tool, merge_sources
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
@@ -228,6 +231,13 @@ from backend.skills.skill_md.frontmatter import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _event_repo():
+    """SE2: SessionEventRepository 惰性构造（避免模块级 import 环）。"""
+    from backend.data.session_event_repo import SessionEventRepository
+
+    return SessionEventRepository()
 
 
 # §1.2 修复（PR #294）配套：全局 SQLite 串行化锁。
@@ -3347,20 +3357,53 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     sl_err,
                 )
                 turn_limit = None
-            messages, omitted_history = build_request_messages(
-                system_content=system_content,
-                user_text=data.message,
-                history_rows=history_rows,
-                attachment_block=attachment_block or None,
-                budget_tokens=l9_budget,
-                # L4': 易变上下文(环境块/记忆)注入尾部,保前缀缓存
-                trailing_system=(
-                    "\n\n".join(dynamic_context_parts)
-                    if dynamic_context_parts
-                    else None
-                ),
-                turn_limit=turn_limit,
-            )
+            # SE2 (DSH 对标 R2): 历史从事件日志投影（"Model-visible ⟺ logged"）。
+            # 事件为空且表里有历史（回填竞态/双写缺口）时防御性回退旧表投影。
+            try:
+                _session_events = await asyncio.to_thread(
+                    lambda: _event_repo().get_by_session(data.session_id)
+                )
+            except Exception as ev_err:  # noqa: BLE001 — 事件读取失败回退表投影
+                logger.warning(
+                    "[REQ %s] 事件日志读取失败(回退表投影): %s", request_id, ev_err
+                )
+                _session_events = []
+            if _session_events or not history_rows:
+                messages, omitted_history = build_request_messages_from_events(
+                    system_content=system_content,
+                    user_text=data.message,
+                    events=_session_events,
+                    attachment_block=attachment_block or None,
+                    budget_tokens=l9_budget,
+                    # L4': 易变上下文(环境块/记忆)注入尾部,保前缀缓存
+                    trailing_system=(
+                        "\n\n".join(dynamic_context_parts)
+                        if dynamic_context_parts
+                        else None
+                    ),
+                    turn_limit=turn_limit,
+                )
+            else:
+                logger.warning(
+                    "[REQ %s] 会话 %s 无事件但有 %s 条表历史(疑似回填缺口)，回退表投影",
+                    request_id,
+                    data.session_id,
+                    len(history_rows),
+                )
+                messages, omitted_history = build_request_messages(
+                    system_content=system_content,
+                    user_text=data.message,
+                    history_rows=history_rows,
+                    attachment_block=attachment_block or None,
+                    budget_tokens=l9_budget,
+                    # L4': 易变上下文(环境块/记忆)注入尾部,保前缀缓存
+                    trailing_system=(
+                        "\n\n".join(dynamic_context_parts)
+                        if dynamic_context_parts
+                        else None
+                    ),
+                    turn_limit=turn_limit,
+                )
             if omitted_history > 0:
                 logger.info(
                     "[REQ %s] 历史已省略最早 %s 条 (turn_limit %s, token 预算 %s)",
