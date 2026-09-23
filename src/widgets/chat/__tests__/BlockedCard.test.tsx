@@ -74,8 +74,16 @@ describe('BlockedCard（R19-W1 拦截卡片）', () => {
   it('login_to_site 动作渲染为按钮且点击回调正确', () => {
     const onAction = vi.fn();
     const loginActions: BlockedAction[] = [
-      { action: 'login_to_site', label: '登录此站点', params: { url: 'https://platfm.agnes-ai.com' } },
-      { action: 'open_browser', label: '用浏览器打开', params: { url: 'https://platfm.agnes-ai.com' } },
+      {
+        action: 'login_to_site',
+        label: '登录此站点',
+        params: { url: 'https://platfm.agnes-ai.com' },
+      },
+      {
+        action: 'open_browser',
+        label: '用浏览器打开',
+        params: { url: 'https://platfm.agnes-ai.com' },
+      },
     ];
     renderWithI18n(
       <BlockedCard blockReason="login_wall" suggestedActions={loginActions} onAction={onAction} />,

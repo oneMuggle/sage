@@ -746,7 +746,10 @@ export function Chat() {
       const url = typeof action.params?.url === 'string' ? action.params.url : undefined;
       switch (action.action) {
         case 'login_to_site':
-          if (url) void sendMessage(`请用 browser_login 工具登录 ${url}，完成登录态保存后重新访问该页面。`);
+          if (url)
+            void sendMessage(
+              `请用 browser_login 工具登录 ${url}，完成登录态保存后重新访问该页面。`,
+            );
           break;
         case 'open_browser':
           if (url) void sendMessage(`请用 browser_navigate 工具打开 ${url} 并提取正文。`);
@@ -977,9 +980,8 @@ export function Chat() {
                         const sid = planApprovalFor;
                         if (!sid || planOrchBusyRef.current) return;
                         const planText =
-                          [...messages]
-                            .reverse()
-                            .find((m) => m.role === 'assistant')?.content ?? '';
+                          [...messages].reverse().find((m) => m.role === 'assistant')?.content ??
+                          '';
                         if (!planText.trim()) {
                           toast.error('找不到可结构化的计划内容');
                           return;

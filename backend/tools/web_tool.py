@@ -586,14 +586,16 @@ class WebFetchTool(BaseTool):
                 "raw 返回未处理的原始 HTML。"
                 "SPA/JS 动态页自动经受控 headless 浏览器渲染后取正文"
                 "（render=auto 默认；always 强制渲染；never 仅静态 HTML）。"
+                "**首次访问需要登录的站点时，请使用 browser_login 工具完成登录，"
+                "后续 web_fetch 会自动使用已保存的登录态**。"
                 "credential_domain 可携带 browser_cookies 导出的登录态"
                 "（仅附加到同域请求，跨域重定向自动剥离）。"
                 "静态请求被反爬拦截时默认自动升级到真浏览器通道重放（escalate）。"
                 "渲染分支内部会启动受控 headless 浏览器，不单独走启动审批。"
                 "失败结果仅在 web_fetch 返回 success=False 且结果 JSON 含 metadata.blockReason 时才按路由处理："
                 "反爬具体值为 antibot_cf 或 antibot_other（generic antibot 仅作统称），登录墙具体值为 login_wall；"
-                "命中这些值后用 browser_navigate 打开页面并用 browser_snapshot 读取，必要时通过 "
-                "credential_domain 提供登录态；不要反复重试 web_fetch。"
+                "命中这些值后用 browser_login 登录（首次）或 browser_navigate + browser_snapshot 读取页面，"
+                "必要时通过 credential_domain 提供登录态；不要反复重试 web_fetch。"
             ),
             parameters={
                 "type": "object",
@@ -891,8 +893,12 @@ class WebFetchTool(BaseTool):
             from .web_metrics import host_from_url
 
             web_metrics.record(host_from_url(url), False, int((time.monotonic() - _t0) * 1000))
-            # 渲染失败单独语义：明确指引手动路径，不吞成"获取网页失败"
-            return _blocked_result(BLOCK_REASON_RENDER, url, str(e))
+            # 渲染失败区分语义：登录相关 → login_wall（触发前端"登录此站点"按钮），
+            # 其他 → render（通用渲染失败指引）
+            err_msg = str(e)
+            if err_msg.startswith("login_required:") or err_msg.startswith("rendered_empty_shell:"):
+                return _blocked_result(BLOCK_REASON_LOGIN_WALL, url, err_msg)
+            return _blocked_result(BLOCK_REASON_RENDER, url, err_msg)
         except Exception as e:
             from . import web_metrics
             from .web_metrics import host_from_url
@@ -1455,7 +1461,7 @@ class WebFetchTool(BaseTool):
         if rendered.get("login_wall"):
             raise RenderError(
                 "login_required: 渲染通道访问被要求登录（凭据可能已失效）。"
-                "请重新登录后 browser_cookies action=export 再试；"
+                "请使用 browser_login 工具重新完成登录；"
                 "或开启 web_access_config.auto_refresh_credentials 用持久 profile 静默续期"
             )
         refreshed = rendered.pop("credential_refreshed", None)
@@ -1472,6 +1478,19 @@ class WebFetchTool(BaseTool):
             )
             content["note"] = f"{content['note']}；{note}" if content.get("note") else note
         content["content"] = str(rendered.get("content", ""))[:max_length]
+        # Post-render shell check: 渲染后仍是壳（SPA "Loading..." 等）→ 可能需要登录
+        # 首次访问无凭据时 login_wall 不会被设置（credential_cookies 为空），
+        # 但渲染后内容仍为空壳说明页面未正常加载，提示 browser_login。
+        rendered_text = str(rendered.get("content", "")).strip()
+        rendered_html = str(rendered.get("html", ""))
+        if (
+            len(rendered_text) < web_render.SHELL_TEXT_MIN_CHARS
+            and web_render.looks_like_js_shell(rendered_html, rendered_text)
+        ):
+            raise RenderError(
+                "rendered_empty_shell: 渲染后页面仍为空壳（可能是 SPA 需要登录）。"
+                "请使用 browser_login 工具完成登录后重试。"
+            )
         if mode == "links":
             content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
         elif mode == "tables":
