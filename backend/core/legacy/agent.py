@@ -1863,55 +1863,16 @@ class SageAgent:
                                         result_content = q_result.error or "工具执行失败"
 
                         if not ask_handled:
-                            # Profile 工具白名单不仅控制 schema 暴露，也必须在执行边界
-                            # 再校验，防止伪造/异常 tool call 直接从全局 registry 取到
-                            # profile 未授权的工具。
-                            allowed_profile_tools = (
-                                set(self.profile.get("tools") or [])
-                                if self.profile and self.profile.get("tools") is not None
-                                else None
+                            # B1 (GT1, DSH 对标 R5): 分发前门控链抽离 —— profile
+                            # 白名单 → M1 enforcer → S3 自动放行台账（见
+                            # _pre_dispatch_gate）。审批闸口（PERMISSION_REQUEST
+                            # yield + await）含事件/异步语义，仍留在本循环，GT2 收。
+                            decision, denial_content = self._pre_dispatch_gate(
+                                tc, args, enforcer, session_id
                             )
-                            if allowed_profile_tools is not None and tc.name not in allowed_profile_tools:
-                                logger.warning(
-                                    "工具调用被 profile 白名单拒绝: agent=%s tool=%s",
-                                    self.agent_id,
-                                    tc.name,
-                                )
-                                result_content = f"工具未对当前 Agent 开放: {tc.name}"
+                            if denial_content:
+                                result_content = denial_content
                                 is_error = True
-                                profile_denied = True
-                            else:
-                                profile_denied = False
-
-                            # M1: enforcement-before-dispatch — 每次工具调用先过权限
-                            # 执行器（deny/allow 规则 → 模式矩阵 → bash 风险升级）。
-                            # 被拒 → 注入错误 ToolResult，循环正常继续（不抛异常）。
-                            decision = enforcer.check(tc.name, args)
-                            if profile_denied:
-                                decision = PermissionDecision(
-                                    allowed=False,
-                                    needs_approval=False,
-                                    reason="当前 Agent profile 未授权此工具",
-                                )
-                            # S3 (2026-09-13): 未经用户确认即放行 → 记入会话自动放行
-                            # 台账（顶栏"已自动批准 N 次" + 审计列表）。fail-safe。
-                            if decision.allowed and not decision.needs_approval:
-                                try:
-                                    from backend.services.auto_approval_ledger import (
-                                        get_auto_approval_ledger,
-                                    )
-                                    from backend.tools.permissions import classify_tool
-
-                                    get_auto_approval_ledger().record(
-                                        session_id=session_id,
-                                        tool_name=tc.name,
-                                        capability=classify_tool(tc.name).value,
-                                        mode=getattr(getattr(enforcer, "mode", None), "value", ""),
-                                        reason=decision.reason,
-                                        args=args,
-                                    )
-                                except Exception:  # noqa: BLE001, S110
-                                    pass
                             if decision.needs_approval:
                                 # 先推 PERMISSION_REQUEST 事件给前端，再 await 审批闸口
                                 approval_req = self._build_approval_request(tc.name, args, decision)
@@ -2116,6 +2077,82 @@ class SageAgent:
                 bash_validator=validate_bash,
                 path_boundary_validator=validator,
             )
+
+    def _pre_dispatch_gate(
+        self,
+        tc: Any,
+        args: Dict[str, Any],
+        enforcer: Any,
+        session_id: str,
+    ) -> Tuple[PermissionDecision, str]:
+        """B1 (GT1, DSH 对标 R5): 分发前门控链 —— 白名单 → M1 → S3 台账。
+
+        对标 deepseek-harness 的 ``tools/pre-execute`` waterfall（allow/deny
+        阶段）：把工具分发前的策略判定从 run_loop 抽成可单测单元。
+
+        执行顺序（与抽离前逐行为一致）:
+        1. profile 工具白名单执行边界再校验（schema 暴露之外的二道闸）；
+        2. M1 enforcer.check（deny/allow 规则 → 模式矩阵 → bash 风险升级）
+           —— 白名单拒绝时仍调用（保留既有副作用顺序），随后覆盖判定；
+        3. S3 自动放行台账：免审放行才记录（fail-safe，台账故障不影响门控）。
+
+        Returns:
+            ``(decision, denial_content)``。``denial_content`` 非空表示白名单
+            拒绝（调用方注入 is_error 工具结果）；其余拒绝由调用方按
+            ``decision.reason`` 组装既有文案。审批（needs_approval）不在
+            本方法内——含 yield/await 语义，留在 run_loop（GT2 收）。
+        """
+        # 1) profile 白名单：不仅控制 schema 暴露，也必须在执行边界再校验，
+        # 防止伪造/异常 tool call 直接从全局 registry 取到未授权工具。
+        allowed_profile_tools = (
+            set(self.profile.get("tools") or [])
+            if self.profile and self.profile.get("tools") is not None
+            else None
+        )
+        profile_denied = (
+            allowed_profile_tools is not None and tc.name not in allowed_profile_tools
+        )
+        if profile_denied:
+            logger.warning(
+                "工具调用被 profile 白名单拒绝: agent=%s tool=%s",
+                self.agent_id,
+                tc.name,
+            )
+
+        # 2) M1 enforcement-before-dispatch。被拒 → 注入错误 ToolResult，
+        # 循环正常继续（不抛异常）。
+        decision = enforcer.check(tc.name, args)
+        if profile_denied:
+            decision = PermissionDecision(
+                allowed=False,
+                needs_approval=False,
+                reason="当前 Agent profile 未授权此工具",
+            )
+
+        # 3) S3 (2026-09-13): 未经用户确认即放行 → 记入会话自动放行台账
+        # （顶栏"已自动批准 N 次" + 审计列表）。fail-safe。
+        if decision.allowed and not decision.needs_approval:
+            try:
+                from backend.services.auto_approval_ledger import (
+                    get_auto_approval_ledger,
+                )
+                from backend.tools.permissions import classify_tool
+
+                get_auto_approval_ledger().record(
+                    session_id=session_id,
+                    tool_name=tc.name,
+                    capability=classify_tool(tc.name).value,
+                    mode=getattr(getattr(enforcer, "mode", None), "value", ""),
+                    reason=decision.reason,
+                    args=args,
+                )
+            except Exception:  # noqa: BLE001, S110
+                pass
+
+        denial_content = (
+            f"工具未对当前 Agent 开放: {tc.name}" if profile_denied else ""
+        )
+        return decision, denial_content
 
     def _build_approval_request(
         self, tool_name: str, args: Dict[str, Any], decision: PermissionDecision
