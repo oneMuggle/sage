@@ -82,6 +82,12 @@ DEFAULT_MAX_ITERATIONS = 10
 #: （保留最近 6 条），第 2 次用激进压缩（保留最近 2 条）；仍溢出则按
 #: 原错误面终止——同一请求盲目重试必然复现，压缩是唯一出路。
 _MAX_FIRST_AID_ATTEMPTS = 2
+
+#: DSH 对标 R3 (B2): 单个并发池组的工具数上限（有界滚动池）。超过即
+#: 开新池组——避免一次超大 READ 批把 executor 线程池占满（默认池仅
+#: min(32, cpu+4) 个 worker）。
+_PARALLEL_POOL_SIZE = 8
+
 from backend.tools.bash_validation import validate_bash
 from backend.tools.context import current_tool_context
 from backend.tools.permissions import (
@@ -648,6 +654,51 @@ class SageAgent:
         # 让 LLMError 透传给调用方，由 chat() 统一处理
         return await self.llm_client.chat(messages)
 
+    def _is_pool_eligible_call(  # noqa: PLR0911 — 守卫链逐条 return 可读性更好
+        self, tc: Any, enforcer: Any
+    ) -> bool:
+        """B2: 单条 tool_call 能否进并发池（逐条判定，供分组规划复用）。
+
+        判定链（任一不满足即 False）:
+        - 非特殊工具（ask_user / agent / dispatch_subagents）;
+        - 工具存在;
+        - 并发安全: 显式 ``concurrency_safe`` 声明优先，缺省回落
+          ``risk == READ``（与 L6 批级判定同口径）;
+        - 非阻塞;
+        - arguments 可解析为 dict;
+        - 权限预检免审放行（避免并行弹审批框）。
+        """
+        from backend.domain.risk import RiskClass
+
+        if tc.name in (
+            ASK_USER_QUESTION_TOOL_NAME,
+            "agent",
+            "dispatch_subagents",
+        ):
+            return False
+        tool = self.tool_registry.get(tc.name)
+        if tool is None:
+            return False
+        declared = getattr(tool, "concurrency_safe", None)
+        if declared is None:
+            declared = getattr(tool, "risk", RiskClass.READ) == RiskClass.READ
+        if not declared:
+            return False
+        if getattr(tool, "is_blocking", False):
+            return False
+        try:
+            args = (
+                json.loads(tc.arguments)
+                if isinstance(tc.arguments, str)
+                else tc.arguments
+            )
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(args, dict):
+            return False
+        decision = enforcer.check(tc.name, args)
+        return not (decision.needs_approval or not decision.allowed)
+
     def _is_parallel_eligible(  # noqa: PLR0911 — 守卫链逐条 return 可读性更好
         self,
         batch: List[Any],
@@ -655,21 +706,22 @@ class SageAgent:
         hooks: List[Any],
         tool_calls_used: int,
     ) -> bool:
-        """L6 (批次 C-3): 判断本批 tool_calls 能否并行执行。
+        """L6 (批次 C-3): 判断本批 tool_calls 能否整批并行执行。
 
-        全部满足才并行（否则回退串行, 语义与旧版完全一致）:
+        B2 起此方法仅作"整批单池"快路径判定（组规划
+        :meth:`_plan_execution_groups` 的全串行回退条件与之同源），语义
+        与旧版完全一致:
         - 批大小 >= 2, 且未处于中断;
         - 无 pre_tool_use 钩子（钩子的 deny/modify 是顺序语义）;
         - 预算余量足够整批;
-        - 每个工具: 存在、声明 READ、非阻塞、非特殊工具
-          (ask_user / agent / dispatch_subagents);
+        - 每个工具: 存在、并发安全声明（concurrency_safe / READ 回落）、
+          非阻塞、非特殊工具（ask_user / agent / dispatch_subagents）;
         - 权限预检全部免审放行（避免并行弹多个审批框）。
         """
         if len(batch) < 2 or self.is_interrupted() or hooks:
             return False
         if tool_calls_used + len(batch) > self._effective_max_tool_calls_per_run():
             return False
-        from backend.domain.risk import RiskClass
 
         # Phase 1: profile whitelist pre-pass (batch-level, no side effects).
         # Reject the whole batch BEFORE any enforcer.check call so a tool
@@ -685,34 +737,76 @@ class SageAgent:
         ):
             return False
         # Phase 2: per-tool invariants + enforcer pre-check.
+        return all(self._is_pool_eligible_call(tc, enforcer) for tc in batch)
+
+    def _plan_execution_groups(  # noqa: PLR0912 — 分组守卫逐条分支可读性优先
+        self,
+        batch: List[Any],
+        enforcer: Any,
+        hooks: List[Any],
+        tool_calls_used: int,
+    ) -> List[Tuple[str, List[Any]]]:
+        """B2: 把批次按模型顺序切成执行组 —— 声明式并行调度核心。
+
+        返回有序 ``[("pool", [tc, ...]), ("serial", [tc]), ...]``：
+        - 连续的并发安全调用合并为一个并发池组（上限
+          ``_PARALLEL_POOL_SIZE``，超出开新组）;
+        - 不满足池条件的调用成为**串行屏障**（单元素 serial 组）——相邻
+          调用的因果顺序严格保持（write → read 不会被重排）;
+        - 有 pre_tool_use 钩子 / 中断 / 单调用批次 → 全串行（与 L6 回退
+          语义一致）;
+        - 池组预算不足时整组降级为逐个 serial 组（让 per-call 预算守卫
+          在串行路径保持既有 tool_budget_exceeded 事件语义）。
+
+        事件与消息仍按模型顺序产出（pool 组先发全部 ACTING、并发执行、
+        按原序提交结果），对 LLM 与前端透明。
+        """
+        if len(batch) < 2 or self.is_interrupted() or hooks:
+            return [("serial", [tc]) for tc in batch]
+
+        # profile 白名单批级预检（与 L6 同款：任何越界工具即整批串行，
+        # 避免靠前面的白名单工具"带飞"越界工具通过 enforcer）。
+        allowed_profile_tools = (
+            set(self.profile.get("tools") or [])
+            if self.profile and self.profile.get("tools") is not None
+            else None
+        )
+        if allowed_profile_tools is not None and any(
+            tc.name not in allowed_profile_tools for tc in batch
+        ):
+            return [("serial", [tc]) for tc in batch]
+
+        budget_left = self._effective_max_tool_calls_per_run() - tool_calls_used
+        groups: List[Tuple[str, List[Any]]] = []
+        current_pool: List[Any] = []
+
+        def _flush_pool() -> None:
+            nonlocal current_pool
+            if not current_pool:
+                return
+            # 预算在入池时已逐条预扣（入池守卫 budget_left > 0），组必然
+            # 可执行；预算耗尽由循环的 budget_left <= 0 分支落 serial。
+            groups.append(("pool", current_pool))
+            current_pool = []
+
         for tc in batch:
-            if tc.name in (
-                ASK_USER_QUESTION_TOOL_NAME,
-                "agent",
-                "dispatch_subagents",
-            ):
-                return False
-            tool = self.tool_registry.get(tc.name)
-            if tool is None:
-                return False
-            if getattr(tool, "risk", RiskClass.READ) != RiskClass.READ:
-                return False
-            if getattr(tool, "is_blocking", False):
-                return False
-            try:
-                args = (
-                    json.loads(tc.arguments)
-                    if isinstance(tc.arguments, str)
-                    else tc.arguments
-                )
-            except json.JSONDecodeError:
-                return False
-            if not isinstance(args, dict):
-                return False
-            decision = enforcer.check(tc.name, args)
-            if decision.needs_approval or not decision.allowed:
-                return False
-        return True
+            if len(current_pool) >= _PARALLEL_POOL_SIZE:
+                # 池满：先收编当前池，新调用开新池（而非降级 serial）
+                _flush_pool()
+            if budget_left <= 0:
+                _flush_pool()
+                groups.append(("serial", [tc]))
+                budget_left -= 1
+                continue
+            if self._is_pool_eligible_call(tc, enforcer):
+                current_pool.append(tc)
+                budget_left -= 1
+            else:
+                _flush_pool()
+                groups.append(("serial", [tc]))
+                budget_left -= 1
+        _flush_pool()
+        return groups
 
     async def _await_tool_execution(
         self,
@@ -1185,291 +1279,197 @@ class SageAgent:
                 # tool call 都读一次 settings + 校验, 并行工具批次下 N 倍浪费)
                 m6_hooks = self._load_m6_hooks()
 
-                # ===== L6 并行只读批次 BEGIN (批次 C-3) =====
-                # 全只读/免审/无钩子的批次并发执行 —— 多文件读/多搜索场景
-                # 耗时从串行叠加降为最慢单工具。事件与消息仍按原顺序产出,
-                # 对 LLM 与前端完全透明。不满足严格条件即回退串行。
-                if self._is_parallel_eligible(
+                # ===== B2 分组调度 BEGIN（并发池 + 串行屏障，L6 全批并行为其特例）=====
+                execution_groups = self._plan_execution_groups(
                     response.tool_calls, enforcer, m6_hooks, tool_calls_used
-                ):
-                    tool_calls_used += len(response.tool_calls)
+                )
+                for group_kind, group_tcs in execution_groups:
+                    if group_kind == "pool":
+                        # ===== B2 并发池分支（源自 L6 全批并行，组内零副作用） =====
+                        # 全只读/免审/无钩子的批次并发执行 —— 多文件读/多搜索场景
+                        # 耗时从串行叠加降为最慢单工具。事件与消息仍按原顺序产出,
+                        # 对 LLM 与前端完全透明。不满足池条件即被规划器切成串行屏障。
+                        tool_calls_used += len(group_tcs)
 
-                    def _run_one(tc: Any) -> Tuple[str, bool]:
-                        try:
-                            args_p = json.loads(tc.arguments) if isinstance(tc.arguments, str) else tc.arguments
-                            tool_p = self.tool_registry.get(tc.name)
-                            if tool_p is None:
-                                return f"[错误] 工具不存在: {tc.name}", True
-                            result_p = tool_p.execute(**args_p)
-                            if hasattr(result_p, "success") and hasattr(result_p, "content"):
-                                if result_p.success:
-                                    value = (
-                                        result_p.output
-                                        if isinstance(result_p, ToolResult)
-                                        and result_p.output is not None
-                                        else result_p.content
-                                    )
-                                    return json.dumps(value, ensure_ascii=False), False
-                                # error 规范化: str 直通, None 退化为默认文案, 其他类型 JSON 序列化
-                                err_value = result_p.error
-                                normalized = (
-                                    err_value
-                                    if isinstance(err_value, str)
-                                    else (
-                                        "工具执行失败"
-                                        if err_value is None
-                                        else json.dumps(
-                                            err_value, ensure_ascii=False, default=str
+                        def _run_one(tc: Any) -> Tuple[str, bool]:
+                            try:
+                                args_p = json.loads(tc.arguments) if isinstance(tc.arguments, str) else tc.arguments
+                                tool_p = self.tool_registry.get(tc.name)
+                                if tool_p is None:
+                                    return f"[错误] 工具不存在: {tc.name}", True
+                                result_p = tool_p.execute(**args_p)
+                                if hasattr(result_p, "success") and hasattr(result_p, "content"):
+                                    if result_p.success:
+                                        value = (
+                                            result_p.output
+                                            if isinstance(result_p, ToolResult)
+                                            and result_p.output is not None
+                                            else result_p.content
+                                        )
+                                        return json.dumps(value, ensure_ascii=False), False
+                                    # error 规范化: str 直通, None 退化为默认文案, 其他类型 JSON 序列化
+                                    err_value = result_p.error
+                                    normalized = (
+                                        err_value
+                                        if isinstance(err_value, str)
+                                        else (
+                                            "工具执行失败"
+                                            if err_value is None
+                                            else json.dumps(
+                                                err_value, ensure_ascii=False, default=str
+                                            )
                                         )
                                     )
-                                )
-                                return (normalized or "工具执行失败"), True
-                            return json.dumps(result_p, ensure_ascii=False, default=str), False
-                        except Exception as exc:  # noqa: BLE001
-                            logger.error(f"并行工具执行失败: {tc.name}, error: {exc}")
-                            return f"[工具错误] {exc}", True
+                                    return (normalized or "工具执行失败"), True
+                                return json.dumps(result_p, ensure_ascii=False, default=str), False
+                            except Exception as exc:  # noqa: BLE001
+                                logger.error(f"并行工具执行失败: {tc.name}, error: {exc}")
+                                return f"[工具错误] {exc}", True
 
-                    for tc_p in response.tool_calls:
-                        yield AgentEvent(
-                            state=AgentState.ACTING,
-                            iteration=i,
-                            tool_call=ToolCallRequest(
-                                id=tc_p.id,
-                                name=tc_p.name,
-                                arguments=json.loads(tc_p.arguments)
-                                if isinstance(tc_p.arguments, str)
-                                else tc_p.arguments,
-                            ),
-                            agent_id=self.agent_id,
-                        )
-
-                    # 切片 A': 并行批次接入中心超时（与 hex InprocToolAdapter 同
-                    # policy.timeout_seconds / 同文案）—— 只读工具挂死不再拖死整轮。
-                    # wait_for 取消的只是 executor future 包装，残留线程无法强杀，
-                    # 但循环立即恢复；超时结果按错误观察事件落盘。
-                    parallel_timeout = getattr(
-                        self.tool_policy, "timeout_seconds", None
-                    )
-
-                    async def _run_one_with_timeout(tc_p, _timeout=parallel_timeout):
-                        fut = asyncio.get_running_loop().run_in_executor(
-                            None, functools.partial(_run_one, tc_p)
-                        )
-                        if _timeout and _timeout > 0:
-                            try:
-                                return await asyncio.wait_for(fut, timeout=_timeout)
-                            except TIMEOUT_EXCEPTIONS:
-                                logger.warning(
-                                    "并行只读批次工具超时: %s（%ss）",
-                                    tc_p.name,
-                                    _timeout,
-                                )
-                                return (tool_timeout_message(_timeout), True)
-                        return await fut
-
-                    results_p = await asyncio.gather(
-                        *(
-                            _run_one_with_timeout(tc_p)
-                            for tc_p in response.tool_calls
-                        )
-                    )
-
-                    for tc_p, (content_p, err_p) in zip(response.tool_calls, results_p):  # noqa: B905 — py3.8 兼容(两侧等长)
-                        args_p = json.loads(tc_p.arguments) if isinstance(tc_p.arguments, str) else tc_p.arguments
-                        yield AgentEvent(
-                            state=AgentState.OBSERVING,
-                            iteration=i,
-                            tool_call=ToolCallRequest(id=tc_p.id, name=tc_p.name, arguments=args_p),
-                            tool_result=ToolCallResult(
-                                tool_call_id=tc_p.id, content=content_p, is_error=err_p
-                            ),
-                            agent_id=self.agent_id,
-                        )
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tc_p.id,
-                                "content": cap_result_for_context(content_p),
-                            }
-                        )
-                        # Phase 3: 钩子反馈注入 (并行路径)
-                        parallel_outcome = await run_event_hooks(
-                            m6_hooks,
-                            "post_tool_use",
-                            tc_p.name,
-                            build_payload(
-                                "post_tool_use",
-                                tc_p.name,
-                                args_p,
-                                tool_output=content_p,
-                                is_error=err_p,
-                            ),
-                        )
-                        if parallel_outcome.has_feedback:
-                            severity_label = {
-                                "info": "提示",
-                                "warning": "警告",
-                                "error": "错误",
-                            }.get(parallel_outcome.severity, "提示")
-                            messages.append(
-                                {
-                                    "role": "system",
-                                    "content": (
-                                        f"[钩子反馈·{severity_label}] "
-                                        f"{parallel_outcome.additional_context}"
-                                    ),
-                                }
+                        for tc_p in group_tcs:
+                            yield AgentEvent(
+                                state=AgentState.ACTING,
+                                iteration=i,
+                                tool_call=ToolCallRequest(
+                                    id=tc_p.id,
+                                    name=tc_p.name,
+                                    arguments=json.loads(tc_p.arguments)
+                                    if isinstance(tc_p.arguments, str)
+                                    else tc_p.arguments,
+                                ),
+                                agent_id=self.agent_id,
                             )
-                        # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
-                        await self._maybe_fire_error_hook(
-                            m6_hooks, tc_p.name, content_p, err_p
-                        )
-                    # 2026-09 step-by-step: 并行迭代边界，legacy_routes 收到后
-                    # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
-                    # 消息，并重置累加器准备下一步。
-                    yield AgentEvent(
-                        state=AgentState.STEP_DONE,
-                        iteration=i,
-                        step_index=i,
-                        agent_id=self.agent_id,
-                    )
-                    continue
-                # ===== L6 并行只读批次 END =====
 
-                for tc in response.tool_calls:
-                    # L7 每-run 工具调用数守卫 (对标增强第二轮批次 B):
-                    # ToolPolicy.max_tool_calls_per_run 此前只在 hex 路径生效,
-                    # legacy run_loop 无刹车。超限时终止本次 run（与前端
-                    # mapAgentErrorToText 的 "tool_budget_exceeded" 文案对齐）。
-                    tool_calls_used += 1
-                    if tool_calls_used > self._effective_max_tool_calls_per_run():
-                        yield AgentEvent(
-                            state=AgentState.FAILED,
-                            iteration=i,
-                            error="tool_budget_exceeded",
-                            agent_id=self.agent_id,
+                        # 切片 A': 并行批次接入中心超时（与 hex InprocToolAdapter 同
+                        # policy.timeout_seconds / 同文案）—— 只读工具挂死不再拖死整轮。
+                        # wait_for 取消的只是 executor future 包装，残留线程无法强杀，
+                        # 但循环立即恢复；超时结果按错误观察事件落盘。
+                        parallel_timeout = getattr(
+                            self.tool_policy, "timeout_seconds", None
                         )
-                        return
 
-                    # B2 复读硬限拦截: 相同签名已达硬限时不执行, 返回合成错误
-                    # tool result 引导模型换路（与参数解析失败同一事件面:
-                    # 无 ACTING, 仅 OBSERVING is_error）。并行只读批次不拦截
-                    # （零副作用且受 run 级工具预算约束）。
-                    if repeat_hard > 0:
-                        sig = _tool_signature(tc)
-                        if tool_sig_counts.get(sig, 0) >= repeat_hard:
-                            repeat_content = (
-                                f"[拦截] 工具 {tc.name} 以相同参数重复调用已达 "
-                                f"{repeat_hard} 次，已停止执行。请调整参数、换用"
-                                "其他工具，或基于已有信息直接回答。"
+                        async def _run_one_with_timeout(tc_p, _timeout=parallel_timeout):
+                            fut = asyncio.get_running_loop().run_in_executor(
+                                None, functools.partial(_run_one, tc_p)
                             )
+                            if _timeout and _timeout > 0:
+                                try:
+                                    return await asyncio.wait_for(fut, timeout=_timeout)
+                                except TIMEOUT_EXCEPTIONS:
+                                    logger.warning(
+                                        "并行只读批次工具超时: %s（%ss）",
+                                        tc_p.name,
+                                        _timeout,
+                                    )
+                                    return (tool_timeout_message(_timeout), True)
+                            return await fut
+
+                        results_p = await asyncio.gather(
+
+                            *(
+                                _run_one_with_timeout(tc_p)
+                                for tc_p in group_tcs
+                            )
+                        )
+
+                        for tc_p, (content_p, err_p) in zip(group_tcs, results_p):  # noqa: B905 — py3.8 兼容(两侧等长)
+                            args_p = json.loads(tc_p.arguments) if isinstance(tc_p.arguments, str) else tc_p.arguments
                             yield AgentEvent(
                                 state=AgentState.OBSERVING,
                                 iteration=i,
-                                tool_call=ToolCallRequest(
-                                    id=tc.id, name=tc.name, arguments={}
-                                ),
+                                tool_call=ToolCallRequest(id=tc_p.id, name=tc_p.name, arguments=args_p),
                                 tool_result=ToolCallResult(
-                                    tool_call_id=tc.id,
-                                    content=repeat_content,
-                                    is_error=True,
+                                    tool_call_id=tc_p.id, content=content_p, is_error=err_p
                                 ),
                                 agent_id=self.agent_id,
                             )
                             messages.append(
                                 {
                                     "role": "tool",
-                                    "tool_call_id": tc.id,
-                                    "content": repeat_content,
+                                    "tool_call_id": tc_p.id,
+                                    "content": cap_result_for_context(content_p),
                                 }
                             )
-                            continue
-
-                    # L7: 参数解析失败回传 LLM——此前静默变 {}，LLM 无从得知
-                    # 参数错了会原样重犯。现在作为 is_error 工具结果回传，LLM
-                    # 可修正参数重试。不发 ACTING 事件（工具并未执行）。
-                    try:
-                        args = (
-                            json.loads(tc.arguments)
-                            if isinstance(tc.arguments, str)
-                            else tc.arguments
-                        )
-                    except json.JSONDecodeError as parse_err:
-                        parse_content = (
-                            f"[参数错误] 工具 {tc.name} 的 arguments 不是合法 JSON: {parse_err}。"
-                            "请修正参数后重新调用。"
-                        )
+                            # Phase 3: 钩子反馈注入 (并行路径)
+                            parallel_outcome = await run_event_hooks(
+                                m6_hooks,
+                                "post_tool_use",
+                                tc_p.name,
+                                build_payload(
+                                    "post_tool_use",
+                                    tc_p.name,
+                                    args_p,
+                                    tool_output=content_p,
+                                    is_error=err_p,
+                                ),
+                            )
+                            if parallel_outcome.has_feedback:
+                                severity_label = {
+                                    "info": "提示",
+                                    "warning": "警告",
+                                    "error": "错误",
+                                }.get(parallel_outcome.severity, "提示")
+                                messages.append(
+                                    {
+                                        "role": "system",
+                                        "content": (
+                                            f"[钩子反馈·{severity_label}] "
+                                            f"{parallel_outcome.additional_context}"
+                                        ),
+                                    }
+                                )
+                            # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
+                            await self._maybe_fire_error_hook(
+                                m6_hooks, tc_p.name, content_p, err_p
+                            )
+                        # 2026-09 step-by-step: 并行迭代边界，legacy_routes 收到后
+                        # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
+                        # 消息，并重置累加器准备下一步。
                         yield AgentEvent(
-                            state=AgentState.OBSERVING,
+                            state=AgentState.STEP_DONE,
                             iteration=i,
-                            tool_call=ToolCallRequest(id=tc.id, name=tc.name, arguments={}),
-                            tool_result=ToolCallResult(
-                                tool_call_id=tc.id,
-                                content=parse_content,
-                                is_error=True,
-                            ),
+                            step_index=i,
                             agent_id=self.agent_id,
                         )
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tc.id,
-                                "content": parse_content,
-                            }
-                        )
                         continue
+                    # 串行屏障：单元素组走既有全守卫串行管线（预算/复读/
+                    # 参数校验/M6 钩子/审批流全部仅在串行路径生效）
+                    for tc in group_tcs:
+                        # L7 每-run 工具调用数守卫 (对标增强第二轮批次 B):
+                        # ToolPolicy.max_tool_calls_per_run 此前只在 hex 路径生效,
+                        # legacy run_loop 无刹车。超限时终止本次 run（与前端
+                        # mapAgentErrorToText 的 "tool_budget_exceeded" 文案对齐）。
+                        tool_calls_used += 1
+                        if tool_calls_used > self._effective_max_tool_calls_per_run():
+                            yield AgentEvent(
+                                state=AgentState.FAILED,
+                                iteration=i,
+                                error="tool_budget_exceeded",
+                                agent_id=self.agent_id,
+                            )
+                            return
 
-                    # L7+: args 非 dict 防御——json.loads 成功但结果是 list/scalar
-                    # 时，后续 tool.execute(**args) 会 TypeError。与 JSON 解析失败
-                    # 同构处理：回传 is_error 工具结果，LLM 可修正重试。
-                    if not isinstance(args, dict):
-                        _type_content = (
-                            f"[参数错误] 工具 {tc.name} 的 arguments 必须是对象(object)，"
-                            f"实际为 {type(args).__name__}。请修正参数后重新调用。"
-                        )
-                        yield AgentEvent(
-                            state=AgentState.OBSERVING,
-                            iteration=i,
-                            tool_call=ToolCallRequest(id=tc.id, name=tc.name, arguments={}),
-                            tool_result=ToolCallResult(
-                                tool_call_id=tc.id,
-                                content=_type_content,
-                                is_error=True,
-                            ),
-                            agent_id=self.agent_id,
-                        )
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tc.id,
-                                "content": _type_content,
-                            }
-                        )
-                        continue
-
-                    # L8: required 参数存在性校验——工具执行前拦截缺失参数,
-                    # 避免 Python TypeError 被 except Exception 捕获后变成不友好的
-                    # [工具错误] execute() missing ... 消息。
-                    # 与 hooks/runner.py:validate_modified_args 同构的轻量检查。
-                    _schema_tool = self.tool_registry.get(tc.name)
-                    if _schema_tool is not None and hasattr(_schema_tool, "schema"):
-                        _schema_required = _schema_tool.schema.parameters.get("required", [])
-                        if isinstance(_schema_required, list):
-                            _missing = [k for k in _schema_required if k not in args]
-                            if _missing:
-                                _missing_content = (
-                                    f"[参数错误] 工具 {tc.name} 缺少必需参数: {_missing}。"
-                                    "请提供这些参数后重新调用。"
+                        # B2 复读硬限拦截: 相同签名已达硬限时不执行, 返回合成错误
+                        # tool result 引导模型换路（与参数解析失败同一事件面:
+                        # 无 ACTING, 仅 OBSERVING is_error）。并行只读批次不拦截
+                        # （零副作用且受 run 级工具预算约束）。
+                        if repeat_hard > 0:
+                            sig = _tool_signature(tc)
+                            if tool_sig_counts.get(sig, 0) >= repeat_hard:
+                                repeat_content = (
+                                    f"[拦截] 工具 {tc.name} 以相同参数重复调用已达 "
+                                    f"{repeat_hard} 次，已停止执行。请调整参数、换用"
+                                    "其他工具，或基于已有信息直接回答。"
                                 )
                                 yield AgentEvent(
                                     state=AgentState.OBSERVING,
                                     iteration=i,
                                     tool_call=ToolCallRequest(
-                                        id=tc.id, name=tc.name, arguments=args
+                                        id=tc.id, name=tc.name, arguments={}
                                     ),
                                     tool_result=ToolCallResult(
                                         tool_call_id=tc.id,
-                                        content=_missing_content,
+                                        content=repeat_content,
                                         is_error=True,
                                     ),
                                     agent_id=self.agent_id,
@@ -1478,374 +1478,473 @@ class SageAgent:
                                     {
                                         "role": "tool",
                                         "tool_call_id": tc.id,
-                                        "content": _missing_content,
+                                        "content": repeat_content,
                                     }
                                 )
                                 continue
 
-                    # ===== M6 HOOKS BEGIN: pre_tool_use (deny/modify) =====
-                    # 用户自定义钩子 (backend/hooks/)。Fail-open: 钩子故障
-                    # 永不阻断循环, 仅显式 "deny" 拦截执行; "modify" 经 schema
-                    # 再校验后替换参数。与 M1 enforcer 相互独立 — rebase 时
-                    # 两个标记块都保留。
-                    m6_pre = await run_event_hooks(
-                        m6_hooks,
-                        "pre_tool_use",
-                        tc.name,
-                        build_payload("pre_tool_use", tc.name, args),
-                    )
-                    if m6_pre.denied:
-                        m6_deny_content = "hook 拒绝: {}".format(
-                            m6_pre.reason or "denied by hook"
+                        # L7: 参数解析失败回传 LLM——此前静默变 {}，LLM 无从得知
+                        # 参数错了会原样重犯。现在作为 is_error 工具结果回传，LLM
+                        # 可修正参数重试。不发 ACTING 事件（工具并未执行）。
+                        try:
+                            args = (
+                                json.loads(tc.arguments)
+                                if isinstance(tc.arguments, str)
+                                else tc.arguments
+                            )
+                        except json.JSONDecodeError as parse_err:
+                            parse_content = (
+                                f"[参数错误] 工具 {tc.name} 的 arguments 不是合法 JSON: {parse_err}。"
+                                "请修正参数后重新调用。"
+                            )
+                            yield AgentEvent(
+                                state=AgentState.OBSERVING,
+                                iteration=i,
+                                tool_call=ToolCallRequest(id=tc.id, name=tc.name, arguments={}),
+                                tool_result=ToolCallResult(
+                                    tool_call_id=tc.id,
+                                    content=parse_content,
+                                    is_error=True,
+                                ),
+                                agent_id=self.agent_id,
+                            )
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc.id,
+                                    "content": parse_content,
+                                }
+                            )
+                            continue
+
+                        # L7+: args 非 dict 防御——json.loads 成功但结果是 list/scalar
+                        # 时，后续 tool.execute(**args) 会 TypeError。与 JSON 解析失败
+                        # 同构处理：回传 is_error 工具结果，LLM 可修正重试。
+                        if not isinstance(args, dict):
+                            _type_content = (
+                                f"[参数错误] 工具 {tc.name} 的 arguments 必须是对象(object)，"
+                                f"实际为 {type(args).__name__}。请修正参数后重新调用。"
+                            )
+                            yield AgentEvent(
+                                state=AgentState.OBSERVING,
+                                iteration=i,
+                                tool_call=ToolCallRequest(id=tc.id, name=tc.name, arguments={}),
+                                tool_result=ToolCallResult(
+                                    tool_call_id=tc.id,
+                                    content=_type_content,
+                                    is_error=True,
+                                ),
+                                agent_id=self.agent_id,
+                            )
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc.id,
+                                    "content": _type_content,
+                                }
+                            )
+                            continue
+
+                        # L8: required 参数存在性校验——工具执行前拦截缺失参数,
+                        # 避免 Python TypeError 被 except Exception 捕获后变成不友好的
+                        # [工具错误] execute() missing ... 消息。
+                        # 与 hooks/runner.py:validate_modified_args 同构的轻量检查。
+                        _schema_tool = self.tool_registry.get(tc.name)
+                        if _schema_tool is not None and hasattr(_schema_tool, "schema"):
+                            _schema_required = _schema_tool.schema.parameters.get("required", [])
+                            if isinstance(_schema_required, list):
+                                _missing = [k for k in _schema_required if k not in args]
+                                if _missing:
+                                    _missing_content = (
+                                        f"[参数错误] 工具 {tc.name} 缺少必需参数: {_missing}。"
+                                        "请提供这些参数后重新调用。"
+                                    )
+                                    yield AgentEvent(
+                                        state=AgentState.OBSERVING,
+                                        iteration=i,
+                                        tool_call=ToolCallRequest(
+                                            id=tc.id, name=tc.name, arguments=args
+                                        ),
+                                        tool_result=ToolCallResult(
+                                            tool_call_id=tc.id,
+                                            content=_missing_content,
+                                            is_error=True,
+                                        ),
+                                        agent_id=self.agent_id,
+                                    )
+                                    messages.append(
+                                        {
+                                            "role": "tool",
+                                            "tool_call_id": tc.id,
+                                            "content": _missing_content,
+                                        }
+                                    )
+                                    continue
+
+                        # ===== M6 HOOKS BEGIN: pre_tool_use (deny/modify) =====
+                        # 用户自定义钩子 (backend/hooks/)。Fail-open: 钩子故障
+                        # 永不阻断循环, 仅显式 "deny" 拦截执行; "modify" 经 schema
+                        # 再校验后替换参数。与 M1 enforcer 相互独立 — rebase 时
+                        # 两个标记块都保留。
+                        m6_pre = await run_event_hooks(
+                            m6_hooks,
+                            "pre_tool_use",
+                            tc.name,
+                            build_payload("pre_tool_use", tc.name, args),
                         )
-                        m6_deny_req = ToolCallRequest(id=tc.id, name=tc.name, arguments=args)
+                        if m6_pre.denied:
+                            m6_deny_content = "hook 拒绝: {}".format(
+                                m6_pre.reason or "denied by hook"
+                            )
+                            m6_deny_req = ToolCallRequest(id=tc.id, name=tc.name, arguments=args)
+                            yield AgentEvent(
+                                state=AgentState.ACTING,
+                                iteration=i,
+                                tool_call=m6_deny_req,
+                                agent_id=self.agent_id,
+                            )
+                            yield AgentEvent(
+                                state=AgentState.OBSERVING,
+                                iteration=i,
+                                tool_call=m6_deny_req,
+                                tool_result=ToolCallResult(
+                                    tool_call_id=tc.id,
+                                    content=m6_deny_content,
+                                    is_error=True,
+                                ),
+                                agent_id=self.agent_id,
+                            )
+                            messages.append(
+                                {
+                                    "role": "tool",
+                                    "tool_call_id": tc.id,
+                                    "content": m6_deny_content,
+                                }
+                            )
+                            continue
+                        if m6_pre.modified and m6_pre.updated_input is not None:
+                            m6_tool = self.tool_registry.get(tc.name)
+                            m6_params = m6_tool.schema.parameters if m6_tool else None
+                            m6_err = validate_modified_args(m6_pre.updated_input, m6_params)
+                            if m6_err is None:
+                                args = m6_pre.updated_input
+                            else:
+                                logger.warning(
+                                    "M6 hook modify ignored (schema re-validation failed): %s",
+                                    m6_err,
+                                )
+                        # ===== M6 HOOKS END =====
+
+                        tool_req = ToolCallRequest(id=tc.id, name=tc.name, arguments=args)
                         yield AgentEvent(
                             state=AgentState.ACTING,
                             iteration=i,
-                            tool_call=m6_deny_req,
+                            tool_call=tool_req,
                             agent_id=self.agent_id,
                         )
-                        yield AgentEvent(
-                            state=AgentState.OBSERVING,
-                            iteration=i,
-                            tool_call=m6_deny_req,
-                            tool_result=ToolCallResult(
-                                tool_call_id=tc.id,
-                                content=m6_deny_content,
-                                is_error=True,
-                            ),
-                            agent_id=self.agent_id,
-                        )
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tc.id,
-                                "content": m6_deny_content,
-                            }
-                        )
-                        continue
-                    if m6_pre.modified and m6_pre.updated_input is not None:
-                        m6_tool = self.tool_registry.get(tc.name)
-                        m6_params = m6_tool.schema.parameters if m6_tool else None
-                        m6_err = validate_modified_args(m6_pre.updated_input, m6_params)
-                        if m6_err is None:
-                            args = m6_pre.updated_input
-                        else:
-                            logger.warning(
-                                "M6 hook modify ignored (schema re-validation failed): %s",
-                                m6_err,
-                            )
-                    # ===== M6 HOOKS END =====
 
-                    tool_req = ToolCallRequest(id=tc.id, name=tc.name, arguments=args)
-                    yield AgentEvent(
-                        state=AgentState.ACTING,
-                        iteration=i,
-                        tool_call=tool_req,
-                        agent_id=self.agent_id,
-                    )
+                        is_error = False
+                        result_content = ""
 
-                    is_error = False
-                    result_content = ""
-
-                    # M2 part B: ask_user_question —— 分发前特判（与 M1 审批同构）。
-                    # 校验参数 → 发 ASK_USER_QUESTION 事件 → await 提问闸口 →
-                    # 把应答注入工具执行。超时 / 闸口缺失 → 空应答软结果，循环
-                    # 永不挂起。该工具有意跳过权限执行器（READ 且零副作用，
-                    # 避免与提问闸口双重卡点）——因此用户 deny 规则对其不生效。
-                    ask_handled = False
-                    if tc.name == ASK_USER_QUESTION_TOOL_NAME:
-                        ask_handled = True
-                        validation_error = validate_ask_user_args(args)
-                        if (
-                            self._consecutive_unanswered
-                            >= MAX_CONSECUTIVE_UNANSWERED_QUESTIONS
-                        ):
-                            # 审查加固: 防 LLM 循环提问骚扰用户
-                            result_content = (
-                                f"[错误] 已连续 {MAX_CONSECUTIVE_UNANSWERED_QUESTIONS} "
-                                "次提问未获应答，停止提问，请直接推进任务"
-                            )
-                            is_error = True
-                        elif validation_error is not None:
-                            result_content = (
-                                f"[参数错误] ask_user_question: {validation_error}"
-                            )
-                            is_error = True
-                        else:
-                            question_req = QuestionRequest.create(
-                                question=args["question"],
-                                options=args["options"],
-                                header=args.get("header"),
-                                multi_select=bool(args.get("multi_select", False)),
-                            )
-                            yield AgentEvent(
-                                state=AgentState.ASK_USER_QUESTION,
-                                iteration=i,
-                                user_question=question_req.to_dict(),
-                                agent_id=self.agent_id,
-                            )
-                            q_answer = await self._await_question_answer(question_req)
-                            # gui 应答(含 Escape 空提交)清零; 超时/缺 gate 累加
-                            if q_answer.answered_by == "gui":
-                                self._consecutive_unanswered = 0
-                            else:
-                                self._consecutive_unanswered += 1
-                            tool = self.tool_registry.get(tc.name)
-                            if tool is None:
-                                result_content = f"[错误] 工具不存在: {tc.name}"
+                        # M2 part B: ask_user_question —— 分发前特判（与 M1 审批同构）。
+                        # 校验参数 → 发 ASK_USER_QUESTION 事件 → await 提问闸口 →
+                        # 把应答注入工具执行。超时 / 闸口缺失 → 空应答软结果，循环
+                        # 永不挂起。该工具有意跳过权限执行器（READ 且零副作用，
+                        # 避免与提问闸口双重卡点）——因此用户 deny 规则对其不生效。
+                        ask_handled = False
+                        if tc.name == ASK_USER_QUESTION_TOOL_NAME:
+                            ask_handled = True
+                            validation_error = validate_ask_user_args(args)
+                            if (
+                                self._consecutive_unanswered
+                                >= MAX_CONSECUTIVE_UNANSWERED_QUESTIONS
+                            ):
+                                # 审查加固: 防 LLM 循环提问骚扰用户
+                                result_content = (
+                                    f"[错误] 已连续 {MAX_CONSECUTIVE_UNANSWERED_QUESTIONS} "
+                                    "次提问未获应答，停止提问，请直接推进任务"
+                                )
+                                is_error = True
+                            elif validation_error is not None:
+                                result_content = (
+                                    f"[参数错误] ask_user_question: {validation_error}"
+                                )
                                 is_error = True
                             else:
-                                # 注入应答前剔除同名键，防 LLM 原始参数与注入冲突
-                                injected_args = {
-                                    k: v
-                                    for k, v in args.items()
-                                    if k not in ("answers", "custom")
-                                }
-                                q_result = tool.execute(
-                                    **injected_args,
-                                    answers=list(q_answer.answers),
-                                    custom=q_answer.custom,
+                                question_req = QuestionRequest.create(
+                                    question=args["question"],
+                                    options=args["options"],
+                                    header=args.get("header"),
+                                    multi_select=bool(args.get("multi_select", False)),
                                 )
-                                is_error = not q_result.success
-                                if q_result.success:
-                                    result_content = str(q_result.content)
+                                yield AgentEvent(
+                                    state=AgentState.ASK_USER_QUESTION,
+                                    iteration=i,
+                                    user_question=question_req.to_dict(),
+                                    agent_id=self.agent_id,
+                                )
+                                q_answer = await self._await_question_answer(question_req)
+                                # gui 应答(含 Escape 空提交)清零; 超时/缺 gate 累加
+                                if q_answer.answered_by == "gui":
+                                    self._consecutive_unanswered = 0
                                 else:
-                                    result_content = q_result.error or "工具执行失败"
-
-                    if not ask_handled:
-                        # Profile 工具白名单不仅控制 schema 暴露，也必须在执行边界
-                        # 再校验，防止伪造/异常 tool call 直接从全局 registry 取到
-                        # profile 未授权的工具。
-                        allowed_profile_tools = (
-                            set(self.profile.get("tools") or [])
-                            if self.profile and self.profile.get("tools") is not None
-                            else None
-                        )
-                        if allowed_profile_tools is not None and tc.name not in allowed_profile_tools:
-                            logger.warning(
-                                "工具调用被 profile 白名单拒绝: agent=%s tool=%s",
-                                self.agent_id,
-                                tc.name,
-                            )
-                            result_content = f"工具未对当前 Agent 开放: {tc.name}"
-                            is_error = True
-                            profile_denied = True
-                        else:
-                            profile_denied = False
-
-                        # M1: enforcement-before-dispatch — 每次工具调用先过权限
-                        # 执行器（deny/allow 规则 → 模式矩阵 → bash 风险升级）。
-                        # 被拒 → 注入错误 ToolResult，循环正常继续（不抛异常）。
-                        decision = enforcer.check(tc.name, args)
-                        if profile_denied:
-                            decision = PermissionDecision(
-                                allowed=False,
-                                needs_approval=False,
-                                reason="当前 Agent profile 未授权此工具",
-                            )
-                        # S3 (2026-09-13): 未经用户确认即放行 → 记入会话自动放行
-                        # 台账（顶栏"已自动批准 N 次" + 审计列表）。fail-safe。
-                        if decision.allowed and not decision.needs_approval:
-                            try:
-                                from backend.services.auto_approval_ledger import (
-                                    get_auto_approval_ledger,
-                                )
-                                from backend.tools.permissions import classify_tool
-
-                                get_auto_approval_ledger().record(
-                                    session_id=session_id,
-                                    tool_name=tc.name,
-                                    capability=classify_tool(tc.name).value,
-                                    mode=getattr(getattr(enforcer, "mode", None), "value", ""),
-                                    reason=decision.reason,
-                                    args=args,
-                                )
-                            except Exception:  # noqa: BLE001, S110
-                                pass
-                        if decision.needs_approval:
-                            # 先推 PERMISSION_REQUEST 事件给前端，再 await 审批闸口
-                            approval_req = self._build_approval_request(tc.name, args, decision)
-                            yield AgentEvent(
-                                state=AgentState.PERMISSION_REQUEST,
-                                iteration=i,
-                                permission_request=approval_req.to_dict(),
-                                agent_id=self.agent_id,
-                            )
-                            answer = await self._await_approval_answer(approval_req)
-                            if answer.approved:
-                                decision = PermissionDecision(
-                                    allowed=True,
-                                    needs_approval=False,
-                                    reason=f"{decision.reason}（用户已批准）",
-                                )
-                            else:
-                                decision = PermissionDecision(
-                                    allowed=False,
-                                    needs_approval=False,
-                                    reason=f"{decision.reason}（未获批准: {answer.answered_by}）",
-                                )
-
-                        if not decision.allowed:
-                            logger.info(
-                                "工具调用被权限执行器拒绝: tool=%s reason=%s",
-                                tc.name,
-                                decision.reason,
-                            )
-                            result_content = f"权限拒绝: {decision.reason}"
-                            is_error = True
-                        else:
-                            try:
+                                    self._consecutive_unanswered += 1
                                 tool = self.tool_registry.get(tc.name)
                                 if tool is None:
                                     result_content = f"[错误] 工具不存在: {tc.name}"
                                     is_error = True
                                 else:
-                                    # L12-lite: 可等待执行统一走中断竞争,
-                                    # 中断先到即取消当前工具、事件循环立即恢复,
-                                    # 否则语义与旧版完全一致。
-                                    # live-events P0: dispatch_subagents 透传本工具
-                                    # 调用 ID（helper 内注入）—— dispatcher 给子
-                                    # 任务标 parent_tool_call_id，前端把子代理
-                                    # 实时步骤挂到 Delegate 卡片。
-                                    cancelled, result = await self._await_tool_execution(
-                                        tool, tc.name, args, tool_call_id=tc.id
+                                    # 注入应答前剔除同名键，防 LLM 原始参数与注入冲突
+                                    injected_args = {
+                                        k: v
+                                        for k, v in args.items()
+                                        if k not in ("answers", "custom")
+                                    }
+                                    q_result = tool.execute(
+                                        **injected_args,
+                                        answers=list(q_answer.answers),
+                                        custom=q_answer.custom,
                                     )
-                                    if cancelled:
-                                        result_content = "[中断] 工具执行被用户取消"
-                                        is_error = True
-                                    elif hasattr(result, "success") and hasattr(result, "content"):
-                                        is_error = not result.success
-                                        if result.success:
-                                            # ToolResult.output is the machine-readable
-                                            # value (e.g. memory ID); retain content
-                                            # fallback for legacy result objects.
-                                            if isinstance(result, ToolResult):
-                                                output_value = (
-                                                    result.output
-                                                    if result.output is not None
-                                                    else result.content
-                                                )
-                                            else:
-                                                output_value = result.content
-                                            result_content = json.dumps(
-                                                output_value, ensure_ascii=False, default=str
-                                            )
-                                        else:
-                                            # R19-W1：web_fetch 反爬/登录墙拦截时
-                                            # result.content 是结构化 block 载荷
-                                            # （block_reason/blocked_url/suggested_actions）。
-                                            # 失败路径默认只取 error 纯字符串，前端
-                                            # JSON.parse 会抛错、结构化通道断开。此处仅
-                                            # 对该载荷改用 JSON 信封（顶层 metadata 键，
-                                            # 见 useChat.ts 的 parsed.metadata 提取），
-                                            # 前端据此渲染拦截卡片。其余工具保持原样。
-                                            block_payload = (
-                                                result.content
-                                                if isinstance(
-                                                    getattr(result, "content", None), dict
-                                                )
-                                                and result.content.get("block_reason")
-                                                else None
-                                            )
-                                            if block_payload is not None:
-                                                result_content = json.dumps(
-                                                    {
-                                                        "content": result.error or "工具执行失败",
-                                                        "metadata": {
-                                                            "blockReason": block_payload.get(
-                                                                "block_reason"
-                                                            ),
-                                                            "blockedUrl": block_payload.get(
-                                                                "blocked_url"
-                                                            ),
-                                                            "suggestedActions": block_payload.get(
-                                                                "suggested_actions", []
-                                                            ),
-                                                        },
-                                                    },
-                                                    ensure_ascii=False,
-                                                    default=str,
-                                                )
-                                            else:
-                                                err_value = result.error
-                                                if isinstance(err_value, str):
-                                                    result_content = err_value or "工具执行失败"
-                                                elif err_value is None:
-                                                    result_content = "工具执行失败"
-                                                else:
-                                                    result_content = json.dumps(
-                                                        err_value, ensure_ascii=False, default=str
-                                                    )
+                                    is_error = not q_result.success
+                                    if q_result.success:
+                                        result_content = str(q_result.content)
                                     else:
-                                        is_error = False
-                                        result_content = json.dumps(
-                                            result, ensure_ascii=False, default=str
-                                        )
-                            except Exception as e:
-                                logger.error(f"工具执行失败: {tc.name}, error: {str(e)}")
-                                result_content = f"[工具错误] {str(e)}"
+                                        result_content = q_result.error or "工具执行失败"
+
+                        if not ask_handled:
+                            # Profile 工具白名单不仅控制 schema 暴露，也必须在执行边界
+                            # 再校验，防止伪造/异常 tool call 直接从全局 registry 取到
+                            # profile 未授权的工具。
+                            allowed_profile_tools = (
+                                set(self.profile.get("tools") or [])
+                                if self.profile and self.profile.get("tools") is not None
+                                else None
+                            )
+                            if allowed_profile_tools is not None and tc.name not in allowed_profile_tools:
+                                logger.warning(
+                                    "工具调用被 profile 白名单拒绝: agent=%s tool=%s",
+                                    self.agent_id,
+                                    tc.name,
+                                )
+                                result_content = f"工具未对当前 Agent 开放: {tc.name}"
                                 is_error = True
+                                profile_denied = True
+                            else:
+                                profile_denied = False
 
-                    tool_result = ToolCallResult(
-                        tool_call_id=tc.id,
-                        content=result_content,
-                        is_error=is_error,
-                    )
-                    yield AgentEvent(
-                        state=AgentState.OBSERVING,
-                        iteration=i,
-                        tool_call=tool_req,
-                        tool_result=tool_result,
-                        agent_id=self.agent_id,
-                    )
+                            # M1: enforcement-before-dispatch — 每次工具调用先过权限
+                            # 执行器（deny/allow 规则 → 模式矩阵 → bash 风险升级）。
+                            # 被拒 → 注入错误 ToolResult，循环正常继续（不抛异常）。
+                            decision = enforcer.check(tc.name, args)
+                            if profile_denied:
+                                decision = PermissionDecision(
+                                    allowed=False,
+                                    needs_approval=False,
+                                    reason="当前 Agent profile 未授权此工具",
+                                )
+                            # S3 (2026-09-13): 未经用户确认即放行 → 记入会话自动放行
+                            # 台账（顶栏"已自动批准 N 次" + 审计列表）。fail-safe。
+                            if decision.allowed and not decision.needs_approval:
+                                try:
+                                    from backend.services.auto_approval_ledger import (
+                                        get_auto_approval_ledger,
+                                    )
+                                    from backend.tools.permissions import classify_tool
 
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": tc.id,
-                            "content": cap_result_for_context(result_content),
-                        }
-                    )
+                                    get_auto_approval_ledger().record(
+                                        session_id=session_id,
+                                        tool_name=tc.name,
+                                        capability=classify_tool(tc.name).value,
+                                        mode=getattr(getattr(enforcer, "mode", None), "value", ""),
+                                        reason=decision.reason,
+                                        args=args,
+                                    )
+                                except Exception:  # noqa: BLE001, S110
+                                    pass
+                            if decision.needs_approval:
+                                # 先推 PERMISSION_REQUEST 事件给前端，再 await 审批闸口
+                                approval_req = self._build_approval_request(tc.name, args, decision)
+                                yield AgentEvent(
+                                    state=AgentState.PERMISSION_REQUEST,
+                                    iteration=i,
+                                    permission_request=approval_req.to_dict(),
+                                    agent_id=self.agent_id,
+                                )
+                                answer = await self._await_approval_answer(approval_req)
+                                if answer.approved:
+                                    decision = PermissionDecision(
+                                        allowed=True,
+                                        needs_approval=False,
+                                        reason=f"{decision.reason}（用户已批准）",
+                                    )
+                                else:
+                                    decision = PermissionDecision(
+                                        allowed=False,
+                                        needs_approval=False,
+                                        reason=f"{decision.reason}（未获批准: {answer.answered_by}）",
+                                    )
 
-                    # ===== M6 HOOKS BEGIN: post_tool_use (observe-only) =====
-                    # 观察/审计专用 — 无法修改工具结果。
-                    # Phase 3: 若钩子返回 ``additional_context``，以 system 角色
-                    # 注入对话历史，供 LLM 下一轮感知（如 lint 反馈 / 格式提醒）。
-                    hook_outcome = await run_event_hooks(
-                        m6_hooks,
-                        "post_tool_use",
-                        tc.name,
-                        build_payload(
-                            "post_tool_use",
-                            tc.name,
-                            args,
-                            tool_output=result_content,
+                            if not decision.allowed:
+                                logger.info(
+                                    "工具调用被权限执行器拒绝: tool=%s reason=%s",
+                                    tc.name,
+                                    decision.reason,
+                                )
+                                result_content = f"权限拒绝: {decision.reason}"
+                                is_error = True
+                            else:
+                                try:
+                                    tool = self.tool_registry.get(tc.name)
+                                    if tool is None:
+                                        result_content = f"[错误] 工具不存在: {tc.name}"
+                                        is_error = True
+                                    else:
+                                        # L12-lite: 可等待执行统一走中断竞争,
+                                        # 中断先到即取消当前工具、事件循环立即恢复,
+                                        # 否则语义与旧版完全一致。
+                                        # live-events P0: dispatch_subagents 透传本工具
+                                        # 调用 ID（helper 内注入）—— dispatcher 给子
+                                        # 任务标 parent_tool_call_id，前端把子代理
+                                        # 实时步骤挂到 Delegate 卡片。
+                                        cancelled, result = await self._await_tool_execution(
+                                            tool, tc.name, args, tool_call_id=tc.id
+                                        )
+                                        if cancelled:
+                                            result_content = "[中断] 工具执行被用户取消"
+                                            is_error = True
+                                        elif hasattr(result, "success") and hasattr(result, "content"):
+                                            is_error = not result.success
+                                            if result.success:
+                                                # ToolResult.output is the machine-readable
+                                                # value (e.g. memory ID); retain content
+                                                # fallback for legacy result objects.
+                                                if isinstance(result, ToolResult):
+                                                    output_value = (
+                                                        result.output
+                                                        if result.output is not None
+                                                        else result.content
+                                                    )
+                                                else:
+                                                    output_value = result.content
+                                                result_content = json.dumps(
+                                                    output_value, ensure_ascii=False, default=str
+                                                )
+                                            else:
+                                                # R19-W1：web_fetch 反爬/登录墙拦截时
+                                                # result.content 是结构化 block 载荷
+                                                # （block_reason/blocked_url/suggested_actions）。
+                                                # 失败路径默认只取 error 纯字符串，前端
+                                                # JSON.parse 会抛错、结构化通道断开。此处仅
+                                                # 对该载荷改用 JSON 信封（顶层 metadata 键，
+                                                # 见 useChat.ts 的 parsed.metadata 提取），
+                                                # 前端据此渲染拦截卡片。其余工具保持原样。
+                                                block_payload = (
+                                                    result.content
+                                                    if isinstance(
+                                                        getattr(result, "content", None), dict
+                                                    )
+                                                    and result.content.get("block_reason")
+                                                    else None
+                                                )
+                                                if block_payload is not None:
+                                                    result_content = json.dumps(
+                                                        {
+                                                            "content": result.error or "工具执行失败",
+                                                            "metadata": {
+                                                                "blockReason": block_payload.get(
+                                                                    "block_reason"
+                                                                ),
+                                                                "blockedUrl": block_payload.get(
+                                                                    "blocked_url"
+                                                                ),
+                                                                "suggestedActions": block_payload.get(
+                                                                    "suggested_actions", []
+                                                                ),
+                                                            },
+                                                        },
+                                                        ensure_ascii=False,
+                                                        default=str,
+                                                    )
+                                                else:
+                                                    err_value = result.error
+                                                    if isinstance(err_value, str):
+                                                        result_content = err_value or "工具执行失败"
+                                                    elif err_value is None:
+                                                        result_content = "工具执行失败"
+                                                    else:
+                                                        result_content = json.dumps(
+                                                            err_value, ensure_ascii=False, default=str
+                                                        )
+                                        else:
+                                            is_error = False
+                                            result_content = json.dumps(
+                                                result, ensure_ascii=False, default=str
+                                            )
+                                except Exception as e:
+                                    logger.error(f"工具执行失败: {tc.name}, error: {str(e)}")
+                                    result_content = f"[工具错误] {str(e)}"
+                                    is_error = True
+
+                        tool_result = ToolCallResult(
+                            tool_call_id=tc.id,
+                            content=result_content,
                             is_error=is_error,
-                        ),
-                    )
-                    if hook_outcome.has_feedback:
-                        severity_label = {
-                            "info": "提示",
-                            "warning": "警告",
-                            "error": "错误",
-                        }.get(hook_outcome.severity, "提示")
+                        )
+                        yield AgentEvent(
+                            state=AgentState.OBSERVING,
+                            iteration=i,
+                            tool_call=tool_req,
+                            tool_result=tool_result,
+                            agent_id=self.agent_id,
+                        )
+
                         messages.append(
                             {
-                                "role": "system",
-                                "content": (
-                                    f"[钩子反馈·{severity_label}] "
-                                    f"{hook_outcome.additional_context}"
-                                ),
+                                "role": "tool",
+                                "tool_call_id": tc.id,
+                                "content": cap_result_for_context(result_content),
                             }
                         )
-                    # ===== M6 HOOKS END =====
 
-                    # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
-                    await self._maybe_fire_error_hook(
-                        m6_hooks, tc.name, result_content, is_error
-                    )
+                        # ===== M6 HOOKS BEGIN: post_tool_use (observe-only) =====
+                        # 观察/审计专用 — 无法修改工具结果。
+                        # Phase 3: 若钩子返回 ``additional_context``，以 system 角色
+                        # 注入对话历史，供 LLM 下一轮感知（如 lint 反馈 / 格式提醒）。
+                        hook_outcome = await run_event_hooks(
+                            m6_hooks,
+                            "post_tool_use",
+                            tc.name,
+                            build_payload(
+                                "post_tool_use",
+                                tc.name,
+                                args,
+                                tool_output=result_content,
+                                is_error=is_error,
+                            ),
+                        )
+                        if hook_outcome.has_feedback:
+                            severity_label = {
+                                "info": "提示",
+                                "warning": "警告",
+                                "error": "错误",
+                            }.get(hook_outcome.severity, "提示")
+                            messages.append(
+                                {
+                                    "role": "system",
+                                    "content": (
+                                        f"[钩子反馈·{severity_label}] "
+                                        f"{hook_outcome.additional_context}"
+                                    ),
+                                }
+                            )
+                        # ===== M6 HOOKS END =====
 
+                        # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
+                        await self._maybe_fire_error_hook(
+                            m6_hooks, tc.name, result_content, is_error
+                        )
+
+                # ===== B2 分组调度 END =====
                 # 2026-09 step-by-step: 串行迭代边界，legacy_routes 收到后
                 # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
                 # 消息，并重置累加器准备下一步。
