@@ -136,4 +136,14 @@ main（含 R95-R99 五轮代码改动）本机全量回归，**本轮前后端�
    全文扫描无同类残留；SubagentRunner 的 interrupt watcher 等待 merged
    事件，错过中断只会延迟到迭代检查收口，不会误分类，无需改动。
 
+
+## 6.2 回归记录（R112，2026-09-24）
+
+main `612579e7`（SRC-1 后，含并行会话 DSH-R2 / web-access R23 / zotero 等合入）：
+
+- **后端 unit（xdist loadfile，串行执行）**：7747 passed / 0 failed /
+  558 skipped（10m53s）—— R94 时期 8 失败 → R95/R100 修复后 → 本轮完全绿。
+- **前端全量（vitest run，串行执行）**：335 个测试文件全部 ✓，零失败条目。
+- 来源专项域零失败。
+
 —— 本账本由参考来源专项循环维护，随轮次追加。
