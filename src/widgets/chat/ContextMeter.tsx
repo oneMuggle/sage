@@ -146,7 +146,7 @@ export function ContextMeter({ sessionId, refreshKey = 0 }: ContextMeterProps) {
 
       {open && (
         <span
-          className="absolute top-full right-0 z-50 mt-2 block w-80 rounded-lg border border-border bg-bg-primary p-3 text-left shadow-lg"
+          className="absolute top-full right-0 z-50 mt-2 block w-80 rounded-lg border border-border bg-surface-overlay p-3 text-left shadow-xl backdrop-blur-sm"
           data-testid="context-meter-popover"
         >
           <span className="mb-2 block text-xs font-medium text-text-primary">
