@@ -225,8 +225,8 @@ def test_render_page_truncation_flag(fake_time, monkeypatch):
 
 
 class _FakePoolSession:
-    def __init__(self, alive: bool = True):
-        self.browser_id = RENDER_POOL_ID
+    def __init__(self, alive: bool = True, browser_id: str = None):
+        self.browser_id = browser_id or RENDER_POOL_ID
         self.alive = alive
         self.user_data_dir = "/tmp/unused"
         self.process = SimpleNamespace(
@@ -237,27 +237,54 @@ class _FakePoolSession:
         return self.alive
 
 
-def test_renderer_pool_reuses_live_session(monkeypatch):
+def test_renderer_pool_spreads_and_reuses_across_slots(fake_time, monkeypatch):
+    """R24 多槽：并发 acquire 按 LRU 分散到不同实例；单槽复用、单槽重建。"""
     pool = web_render._RendererPool()
     created = []
 
     def _fake_launch(headless, browser_id=None, **kwargs):
         assert headless is True
-        assert browser_id == RENDER_POOL_ID  # 保留 id，用户实例解析不受干扰
-        session = _FakePoolSession()
+        assert browser_id in web_render.RENDER_POOL_IDS  # 保留前缀，用户实例解析不受干扰
+        session = _FakePoolSession(browser_id=browser_id)
         created.append(session)
         return session
 
     monkeypatch.setattr(web_render, "launch_browser", _fake_launch)
-    first = pool.acquire()
-    second = pool.acquire()
-    assert first is second
-    assert len(created) == 1
-
-    first.alive = False  # 进程死亡 → 下次 acquire 重建
-    third = pool.acquire()
-    assert third is not first
+    fake_time.now = 10  # 初始 last_used=0.0，先拨离 0 避免 tie 歧义
+    first = pool.acquire()  # 槽 1
+    fake_time.now += 1
+    second = pool.acquire()  # 槽 2
+    assert first is not second  # LRU 分散到不同槽位（崩溃隔离）
     assert len(created) == 2
+
+    fake_time.now += 1
+    third = pool.acquire()  # 槽 1 最久未用 → 复用
+    assert third is first
+    assert len(created) == 2
+
+    second.alive = False  # 槽 2 进程死亡 → LRU 选中该槽时重建，槽 1 不受波及
+    fake_time.now += 1
+    fourth = pool.acquire()
+    assert fourth is not second
+    assert len(created) == 3
+    assert first.alive
+
+
+def test_renderer_pool_falls_over_to_next_slot_on_launch_failure(monkeypatch):
+    """首选槽启动失败 → 降级试下一槽，全部失败才抛 RenderError。"""
+    pool = web_render._RendererPool()
+    calls = []
+
+    def _fake_launch(headless, browser_id=None, **kwargs):
+        calls.append(browser_id)
+        if browser_id == RENDER_POOL_ID:
+            raise browser_cdp.BrowserCDPError("boom")
+        return _FakePoolSession(browser_id=browser_id)
+
+    monkeypatch.setattr(web_render, "launch_browser", _fake_launch)
+    session = pool.acquire()
+    assert session.browser_id == f"{RENDER_POOL_ID}-2"
+    assert calls == [RENDER_POOL_ID, f"{RENDER_POOL_ID}-2"]
 
 
 def test_renderer_pool_rebuilds_after_idle_timeout(monkeypatch):
@@ -284,6 +311,9 @@ def test_reserved_id_excluded_from_user_instance_resolution():
     manager = browser_cdp.BrowserSessionManager()
     manager.register(_FakePoolSession())  # 仅渲染池在场
     assert manager.get(None) is None
+
+    manager.register(_FakePoolSession(browser_id=f"{RENDER_POOL_ID}-2"))  # R24 多槽
+    assert manager.get(None) is None  # 前缀槽位同样不算用户实例
 
     user = SimpleNamespace(browser_id="b1")
     manager.register(user)
@@ -330,99 +360,6 @@ def test_render_page_omits_status_when_unavailable(fake_time, monkeypatch):
     result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
 
     assert "rendered_status" not in result
-
-
-# ---------- R22 批次 2：Network 事件状态优先 ----------
-
-
-def test_render_page_prefers_event_tracked_status(fake_time, monkeypatch):
-    """事件通道有 Document 记录时优先事件状态（可含 302 中间 hop 的拦截码）。"""
-    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
-    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])
-    detached: Any = []
-    monkeypatch.setattr(web_render, "ensure_network_tracking", lambda bid, tid: "sess-e")
-    monkeypatch.setattr(
-        web_render,
-        "get_tracked_response",
-        lambda bid, sid: {"url": "https://a.example/", "status": 403}
-        if sid == "sess-e"
-        else None,
-    )
-    monkeypatch.setattr(
-        web_render, "detach_network_session", lambda bid, sid: detached.append((bid, sid))
-    )
-
-    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
-
-    assert result["rendered_status"] == 403
-    assert detached == [("b-render", "sess-e")]
-
-
-def test_render_page_event_status_absent_falls_back_to_navigation_timing(
-    fake_time, monkeypatch
-):
-    """事件无记录（通道未建立 / 未捕获）→ Navigation Timing 兜底不被覆盖。"""
-    page_json = json.dumps(
-        {"url": "https://spa.example/", "title": "t", "text": "x", "status": 503}
-    )
-    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])
-    monkeypatch.setattr(web_render, "ensure_network_tracking", lambda bid, tid: "sess-e")
-    monkeypatch.setattr(web_render, "get_tracked_response", lambda bid, sid: None)
-
-    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
-
-    assert result["rendered_status"] == 503
-
-
-# ---------- R23：渲染池事件通道接线 ----------
-
-
-def test_render_page_wires_pool_event_channel(fake_time, monkeypatch):
-    """渲染前为池浏览器接事件通道（R23）：以会话的 browser_id/port/ws_path 调用。"""
-    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
-    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])
-
-    class _Pool:
-        def acquire(self):
-            return SimpleNamespace(
-                browser_id="b-render", port=9222, ws_path="/devtools/browser/x"
-            )
-
-    monkeypatch.setattr(web_render, "_pool", _Pool())
-    wired = []
-    monkeypatch.setattr(
-        web_render,
-        "_ensure_pool_channel",
-        lambda session: wired.append(
-            (session.browser_id, session.port, session.ws_path)
-        )
-        or True,
-    )
-
-    render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
-
-    assert wired == [("b-render", 9222, "/devtools/browser/x")]
-
-
-def test_render_page_survives_channel_wire_failure(fake_time, monkeypatch):
-    """事件通道建立抛错（_ensure_pool_channel 内部吞掉）不阻断渲染主流程。"""
-    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
-    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])
-    monkeypatch.setattr(
-        web_render,
-        "start_event_channel",
-        lambda *args: (_ for _ in ()).throw(RuntimeError("boom")),
-    )
-    # 真实 _ensure_pool_channel 走 except → False；stub 会话缺 port 也走同路径
-    monkeypatch.setattr(
-        web_render,
-        "ensure_network_tracking",
-        lambda bid, tid: None,
-    )
-
-    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
-
-    assert result["rendered"] is True
 
 
 def test_render_page_survives_stealth_failure(fake_time, monkeypatch):

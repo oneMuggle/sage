@@ -4,7 +4,7 @@ web_fetch 静态抽取命中"JS 壳"特征（SPA 空根挂载点 / script 占比
 经 G7 的 CDP 基建（browser_cdp / browser_ws）驱动专用 headless 渲染实例
 取渲染后正文：
 
-- **实例池**：进程级懒初始化单个渲染实例（保留 id ``RENDER_POOL_ID``，
+- **实例池**：进程级懒初始化多槽渲染实例（保留 id ``RENDER_POOL_IDS``，
   BrowserSessionManager 的"唯一实例"解析跳过它，不干扰用户 browser_launch
   的实例），空闲超时或进程死亡时自动重建；每次渲染用独立标签页，并发
   渲染互不干扰；
@@ -41,9 +41,18 @@ from .browser_events import (
     get_tracked_response,
     start_event_channel,
 )
+from .web_metrics import record_render_event
 
 #: 渲染实例的保留 browser_id（web_fetch 专用，用户不可见）
 RENDER_POOL_ID = RESERVED_BROWSER_ID
+
+#: 渲染池槽位数与各槽 browser_id（R24 多实例：槽 1 沿用既有保留 id）。
+#: 槽 2+ 必须落在 ``render-pool-`` 前缀内——browser_cdp.get(None) 的"用户
+#: 实例"解析按该前缀排除，否则多槽会破坏单用户浏览器免传 id 的便利解析。
+RENDER_POOL_SIZE = 2
+RENDER_POOL_IDS = (RENDER_POOL_ID,) + tuple(
+    f"{RENDER_POOL_ID}-{i}" for i in range(2, RENDER_POOL_SIZE + 1)
+)
 
 #: 渲染正文上限（字符，对齐 browser_tool.SNAPSHOT_TEXT_CAP）
 RENDER_TEXT_CAP = 30 * 1024
@@ -282,41 +291,53 @@ def _scroll_for_lazy_load(session: BrowserSession, target_id: Optional[str]) -> 
 
 
 class _RendererPool:
-    """进程级渲染实例池：懒启动、复用、空闲/死亡重建（线程安全）。
+    """进程级渲染实例池：多槽 LRU、懒启动、复用、空闲/死亡重建（线程安全）。
 
     工具在 executor 线程执行，懒初始化必须持锁；渲染本身（cdp_command 短
-    连接 + 独立标签页）在锁外进行，并发渲染共用实例但互不干扰。
+    连接 + 独立标签页）在锁外进行。R24 起多槽（``RENDER_POOL_IDS``）：acquire
+    按 last_used LRU 选槽，并发渲染自然分散到不同浏览器实例——单实例崩溃
+    不再波及全部 in-flight 渲染。
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._session: Optional[BrowserSession] = None
-        self._last_used = 0.0
+        self._entries: Dict[str, Dict[str, Any]] = {
+            bid: {"session": None, "last_used": 0.0} for bid in RENDER_POOL_IDS
+        }
 
     def acquire(self) -> BrowserSession:
         with self._lock:
-            session = self._session
-            if (
-                session is not None
-                and session.is_alive()
-                and time.monotonic() - self._last_used <= RENDER_IDLE_TIMEOUT_SECONDS
-            ):
-                self._last_used = time.monotonic()
+            # LRU 序试槽：最久未用的优先；某槽启动失败降级下一槽，全部
+            # 失败才抛（部分实例不可用时渲染仍可用）。
+            order = sorted(self._entries, key=lambda k: self._entries[k]["last_used"])
+            last_error: Optional[BrowserCDPError] = None
+            for bid in order:
+                entry = self._entries[bid]
+                session = entry["session"]
+                if (
+                    session is not None
+                    and session.is_alive()
+                    and time.monotonic() - entry["last_used"] <= RENDER_IDLE_TIMEOUT_SECONDS
+                ):
+                    entry["last_used"] = time.monotonic()
+                    return session
+                if session is not None:
+                    self._discard(session)
+                    entry["session"] = None
+                try:
+                    session = launch_browser(
+                        headless=True,
+                        browser_id=bid,
+                        persistent=_render_persistent_enabled(),
+                        profile_name=RENDER_PROFILE_NAME,
+                    )
+                except BrowserCDPError as exc:
+                    last_error = exc
+                    continue
+                entry["session"] = session
+                entry["last_used"] = time.monotonic()
                 return session
-            if session is not None:
-                self._discard(session)
-            try:
-                session = launch_browser(
-                    headless=True,
-                    browser_id=RENDER_POOL_ID,
-                    persistent=_render_persistent_enabled(),
-                    profile_name=RENDER_PROFILE_NAME,
-                )
-            except BrowserCDPError as exc:
-                raise RenderError(f"渲染浏览器启动失败: {exc}") from exc
-            self._session = session
-            self._last_used = time.monotonic()
-            return session
+            raise RenderError(f"渲染浏览器启动失败: {last_error}")
 
     @staticmethod
     def _discard(session: BrowserSession) -> None:
@@ -328,8 +349,9 @@ class _RendererPool:
     def reset(self) -> None:
         """测试钩子：清空池状态（不触碰进程）。"""
         with self._lock:
-            self._session = None
-            self._last_used = 0.0
+            for entry in self._entries.values():
+                entry["session"] = None
+                entry["last_used"] = 0.0
 
 
 _pool = _RendererPool()
@@ -541,7 +563,7 @@ def render_page(
             credential_cookies = list(resolution.cookies or [])
 
     session = _pool.acquire()
-    _ensure_pool_channel(session)
+    channel_ok = _ensure_pool_channel(session)
     target_id: Optional[str] = None
     net_session: Optional[str] = None
     refreshed: Optional[List[str]] = None
@@ -626,11 +648,12 @@ def render_page(
     status = page.get("status")
     # R22：事件驱动的 Document 状态比 Navigation Timing（仅最终 hop）更准，
     # 多跳 302 中间被反爬拦截（403 盾页）时能看到中间状态码；取到才覆盖。
-    if (
-        tracked
-        and isinstance(tracked.get("status"), int)
-        and tracked["status"] > 0
-    ):
+    event_hit = bool(
+        tracked and isinstance(tracked.get("status"), int) and tracked["status"] > 0
+    )
+    # R24：渲染事件命中率（诊断视角）——成功渲染才计
+    record_render_event(channel_ok, event_hit)
+    if event_hit:
         status = tracked["status"]
     rendered: Dict[str, Any] = {
         "url": final_url,
@@ -664,6 +687,8 @@ __all__ = [
     "RENDER_HTML_CAP",
     "RENDER_IDLE_TIMEOUT_SECONDS",
     "RENDER_POOL_ID",
+    "RENDER_POOL_IDS",
+    "RENDER_POOL_SIZE",
     "RENDER_TEXT_CAP",
     "READY_TIMEOUT_SECONDS",
     "RenderError",
