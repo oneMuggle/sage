@@ -35,6 +35,11 @@ from .browser_cdp import (
     get_browser_manager,
     launch_browser,
 )
+from .browser_events import (
+    detach_network_session,
+    ensure_network_tracking,
+    get_tracked_response,
+)
 
 #: 渲染实例的保留 browser_id（web_fetch 专用，用户不可见）
 RENDER_POOL_ID = RESERVED_BROWSER_ID
@@ -517,12 +522,17 @@ def render_page(
 
     session = _pool.acquire()
     target_id: Optional[str] = None
+    net_session: Optional[str] = None
     refreshed: Optional[List[str]] = None
     try:
         created = cdp_command(session, "Target.createTarget", {"url": "about:blank"})
         target_id = created.get("targetId")
         if not target_id:
             raise RenderError("渲染标签页创建失败")
+        # R22：事件通道可用时 attach 渲染标签页 + Network.enable——主文档
+        # 响应（含 302 重定向链中间 hop）经事件记录，读状态优先取事件值；
+        # 通道未建立返回 None，状态仍走 Navigation Timing 兜底。
+        net_session = ensure_network_tracking(session.browser_id, target_id)
         # AU5：导航前注入档案 cookie（浏览器级命令，无需 attach；浏览器内
         # 重定向自动按域携带）。注入失败走 RenderError——显式带凭据渲染却
         # 拿到未登录正文会误导调用方。
@@ -535,6 +545,9 @@ def render_page(
             raise RenderError(f"渲染导航失败: {result['errorText']}")
         wait_page_ready(session, target_id, wait_for=wait_for)
         _scroll_for_lazy_load(session, target_id)
+        tracked = (
+            get_tracked_response(session.browser_id, net_session) if net_session else None
+        )
         # AB1：主文档 HTTP 状态经 Navigation Timing 读取（CDP 短连接收不到
         # Network 事件帧）——让 Cloudflare 403/503 盾页在渲染分支也可见。
         expression = (
@@ -555,6 +568,8 @@ def render_page(
             "或 web_fetch render=never 取静态内容）"
         ) from exc
     finally:
+        if net_session:
+            detach_network_session(session.browser_id, net_session)
         if target_id:
             with contextlib.suppress(BrowserCDPError):
                 cdp_command(session, "Target.closeTarget", {"targetId": target_id})
@@ -583,6 +598,14 @@ def render_page(
         tables = []
         truncated = len(content_text) >= RENDER_TEXT_CAP
     status = page.get("status")
+    # R22：事件驱动的 Document 状态比 Navigation Timing（仅最终 hop）更准，
+    # 多跳 302 中间被反爬拦截（403 盾页）时能看到中间状态码；取到才覆盖。
+    if (
+        tracked
+        and isinstance(tracked.get("status"), int)
+        and tracked["status"] > 0
+    ):
+        status = tracked["status"]
     rendered: Dict[str, Any] = {
         "url": final_url,
         "title": title,
