@@ -278,9 +278,11 @@ class TestNetworkResponseTracker:
 # ---------- R22 批次 2：attach + 事件状态查询链路 ----------
 
 
-def _serve_with_network(server, response_events, hold=None, attach_error=False):
+def _serve_with_network(server, response_events, hold=None, attach_error=False, seen=None):
     """握手 + setDownloadBehavior 后应答 attachToTarget / Network.enable，
-    Network.enable 应答后下发 ``response_events``（带 sessionId 的事件帧）。"""
+    Network.enable 应答后下发 ``response_events``（带 sessionId 的事件帧）。
+
+    ``seen`` 给定时记录收到的客户端 method（供断言"未发 setDownloadBehavior"）。"""
     conn, _ = server.accept()
     conn.settimeout(5)
     request = b""
@@ -298,15 +300,19 @@ def _serve_with_network(server, response_events, hold=None, attach_error=False):
             f"Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
         ).encode()
     )
-    message = json.loads(_ws_recv_client_text(conn))
-    _ws_send_server_text(conn, json.dumps({"id": message["id"], "result": {}}))
+    # 不预读首帧：纯事件通道（R23）不发 setDownloadBehavior，首帧可能直接
+    # 是 attachToTarget；统一在循环里按 method 应答。
     while True:
         try:
             client = json.loads(_ws_recv_client_text(conn))
         except (OSError, ValueError):
             break
         method = client.get("method")
-        if method == "Target.attachToTarget":
+        if seen is not None and method:
+            seen.append(method)
+        if method == "Browser.setDownloadBehavior":
+            _ws_send_server_text(conn, json.dumps({"id": client["id"], "result": {}}))
+        elif method == "Target.attachToTarget":
             if attach_error:
                 _ws_send_server_text(
                     conn,
@@ -401,3 +407,55 @@ def test_ensure_network_tracking_attach_error_returns_none(ws_server, tmp_path):
     assert browser_events.ensure_network_tracking("b-neterr", "t-1") is None
     hold.set()
     browser_events.stop_download_tracking("b-neterr")
+
+
+# ---------- R23：渲染池纯事件通道（跳过 setDownloadBehavior） ----------
+
+
+def test_start_event_channel_skips_download_setup(ws_server):
+    port = ws_server.getsockname()[1]
+    hold = threading.Event()
+    seen = []
+    events = [
+        {
+            "method": "Network.responseReceived",
+            "sessionId": "net-sess-1",
+            "params": {
+                "response": {"url": "https://r.example/", "status": 403, "type": "Document"}
+            },
+        }
+    ]
+    threading.Thread(
+        target=_serve_with_network,
+        args=(ws_server, events),
+        kwargs={"hold": hold, "seen": seen},
+        daemon=True,
+    ).start()
+
+    assert browser_events.start_event_channel("b-r23", port, "/devtools/browser/x") is True
+    # 幂等：已连接复用，不新建连接
+    assert browser_events.start_event_channel("b-r23", port, "/x") is True
+    assert browser_events.ensure_network_tracking("b-r23", "t-1") == "net-sess-1"
+    # 纯事件通道：从未发过下载行为命令，attach 正常
+    assert "Browser.setDownloadBehavior" not in seen
+    assert "Target.attachToTarget" in seen
+
+    record = None
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        record = browser_events.get_tracked_response("b-r23", "net-sess-1")
+        if record:
+            break
+        time.sleep(0.05)
+    assert record == {"url": "https://r.example/", "status": 403}
+    hold.set()
+    browser_events.stop_download_tracking("b-r23")
+
+
+def test_start_event_channel_connect_refused():
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+    assert browser_events.start_event_channel("b-r23-refused", port, "/x") is False
+    browser_events.stop_all_tracking()
