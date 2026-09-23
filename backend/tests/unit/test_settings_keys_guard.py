@@ -45,12 +45,13 @@ def _extract_settings_keys(tree: ast.Module) -> set[str]:
     tracked: set[str] = set()
     for node in ast.walk(tree):
         if (
-            isinstance(node, ast.Assign | ast.AnnAssign)
+            isinstance(node, (ast.Assign, ast.AnnAssign))  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
             and node.value is not None
             and isinstance(node.value, ast.Call)
-            and isinstance(node.value.func, ast.Name | ast.Attribute)
+            and isinstance(node.value.func, (ast.Name, ast.Attribute))  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
             and getattr(node.value.func, "id", None) in repo_classes
-            or isinstance(node, ast.Assign | ast.AnnAssign)
+        ) or (
+            isinstance(node, (ast.Assign, ast.AnnAssign))  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
             and node.value is not None
             and isinstance(node.value, ast.Call)
             and isinstance(node.value.func, ast.Attribute)
