@@ -85,12 +85,23 @@ if (totalViolations > 0) {
     for (const v of newViolations) {
       console.error(`  ${v.file}: ${v.lines} lines (+${v.over})`);
     }
+    console.error(
+      `Fix: refactor the file(s) below ${maxFileLines} lines. ` +
+        `If a file is pre-existing legacy that cannot be split in this PR, ` +
+        `add it to architecture-baseline.json with its current line count.`,
+    );
   }
   if (growthViolations.length > 0) {
     console.error(`${growthViolations.length} BASELINED files that have grown:`);
     for (const v of growthViolations) {
       console.error(`  ${v.file}: ${v.lines} lines (baseline: ${v.baselined}, +${v.over})`);
     }
+    console.error(
+      `Fix: if the growth is intentional, update the file's entry in ` +
+        `architecture-baseline.json to ${growthViolations.map((v) => v.lines).join(' / ')} ` +
+        `(ratchet protocol — do not lower existing entries). ` +
+        `Otherwise, shrink the file back to its baselined size.`,
+    );
   }
   process.exit(1);
 } else {
