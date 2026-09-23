@@ -536,3 +536,47 @@ class TestImportAllChecks:
         # Calling twice doesn't crash (may double-register; that's fine)
         d._import_all_checks()
         assert len(d.ALL_CHECKS) >= before
+
+    def test_probe_timeout_retries_once_then_succeeds(self, monkeypatch, tmp_path):
+        """OPS3 (round47): 首次 20s 超时 → 60s 重试 → 成功 True。"""
+        import subprocess
+        import sys
+
+        class _FakeCompleted:
+            def __init__(self, code):
+                self.returncode = code
+
+        calls = {"n": 0, "timeouts": []}
+
+        def _fake_run(argv, **kwargs):
+            calls["n"] += 1
+            calls["timeouts"].append(kwargs.get("timeout"))
+            if calls["n"] == 1:
+                raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs["timeout"])
+            return _FakeCompleted(0)
+
+        monkeypatch.setattr(subprocess, "run", _fake_run)
+
+        runtime = run_doctor(
+            interpreter=sys.executable,
+            package_root=tmp_path,
+        )
+        assert runtime.import_backend is True
+        assert calls["n"] == 2
+        assert calls["timeouts"] == [20, 60]
+
+    def test_probe_double_timeout_reports_false(self, monkeypatch, tmp_path):
+        """OPS3 (round47): 两次超时 → False（fail-open 保持）。"""
+        import subprocess
+        import sys
+
+        def _always_timeout(argv, **kwargs):
+            raise subprocess.TimeoutExpired(cmd=argv, timeout=kwargs["timeout"])
+
+        monkeypatch.setattr(subprocess, "run", _always_timeout)
+
+        runtime = run_doctor(
+            interpreter=sys.executable,
+            package_root=tmp_path,
+        )
+        assert runtime.import_backend is False
