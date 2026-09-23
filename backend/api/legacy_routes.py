@@ -12,7 +12,6 @@ import asyncio
 import contextlib
 import hashlib
 import sys
-from typing import List
 
 # I5: 流式视觉延迟 — DONE 事件的 content 拆成 chunk 逐个入队,
 # 让前端能逐字渲染 (避免 LLM 一次返回完整字符串时 "砰一下" 全显示)。
@@ -25,7 +24,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, Optional, Sequence, Set, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Union
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
@@ -45,7 +44,11 @@ from backend.chat.compaction import (
     should_compact,
 )
 from backend.chat.executors import resolve_attachments
-from backend.chat.history_context import build_request_messages, history_token_budget
+from backend.chat.history_context import (
+    build_request_messages,
+    build_request_messages_from_events,
+    history_token_budget,
+)
 from backend.chat.sources_extractor import extract_sources_from_tool, merge_sources
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
@@ -227,6 +230,13 @@ from backend.skills.skill_md.frontmatter import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _event_repo():
+    """SE2: SessionEventRepository 惰性构造（避免模块级 import 环）。"""
+    from backend.data.session_event_repo import SessionEventRepository
+
+    return SessionEventRepository()
 
 
 # §1.2 修复（PR #294）配套：全局 SQLite 串行化锁。
@@ -574,7 +584,7 @@ class InterruptRequest(BaseModel):
     stream_id: Optional[str] = None
 
 
-def interrupt_stream(stream_id: str | None) -> str:
+def interrupt_stream(stream_id: Optional[str]) -> str:
     """中断目标流：主 agent interrupt（+ multi 模式 cancel dispatcher）。
 
     返回命中标识（"stream"/"none"）供端点回传与测试断言。
@@ -632,7 +642,7 @@ def interrupt_run(run_id: str) -> str:
 
 
 def _finalize_orch_run(
-    run_id: str | None, status: str, final_summary: str | None
+    run_id: Optional[str], status: str, final_summary: Optional[str]
 ) -> None:
     """P0-4 (2026-08-20): orch run 生命周期闭环（降级型）。
 
@@ -654,10 +664,10 @@ def _build_orchestration_dispatcher(
     stream_id: str,
     entry_queue: Any,
     run_id: str,
-    llm_config: Dict[str, Any] | None,
-    total_tasks: int | None,
-    workspace_root: str | None,
-    session_id: str | None = None,
+    llm_config: Optional[Dict[str, Any]],
+    total_tasks: Optional[int],
+    workspace_root: Optional[str],
+    session_id: Optional[str] = None,
 ) -> ChatDispatcher:
     """构造 ChatDispatcher；非法 run_id 的 ValueError 重抛为前端可读文案。
 
@@ -871,7 +881,7 @@ def _persist_compaction(
     return after
 
 
-async def _maybe_auto_compact_session(session_id: str, llm_config: Dict | None) -> Dict[str, int] | None:
+async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict]) -> Dict[str, int] | None:
     """聊天请求层的自动压缩钩子（M4）。
 
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
@@ -1292,7 +1302,7 @@ def _get_skill_adapter():
 
 
 def _skill_to_dict(
-    ext: dict, enabled: bool, usage_count: int, pinned: bool | None = None
+    ext: dict, enabled: bool, usage_count: int, pinned: Optional[bool] = None
 ) -> dict:
     """把扩展 SkillSpec dict + 路由层 enabled/usage_count 序列化为响应 dict。
 
@@ -2943,7 +2953,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 而非 getattr(agent, "skills", None) (SageAgent 无 skills 属性, 恒 None)。
             # 首次调用 _get_skill_adapter() 会同步扫描文件系统, 用 asyncio.to_thread
             # 包裹避免阻塞事件循环。
-            r38_activated_skill_list: list[dict] = []
+            r38_activated_skill_list: List[dict] = []
             try:
                 from backend.application.services.chat_service import (
                     _skill_activation_block,
@@ -3364,20 +3374,53 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     sl_err,
                 )
                 turn_limit = None
-            messages, omitted_history = build_request_messages(
-                system_content=system_content,
-                user_text=data.message,
-                history_rows=history_rows,
-                attachment_block=attachment_block or None,
-                budget_tokens=l9_budget,
-                # L4': 易变上下文(环境块/记忆)注入尾部,保前缀缓存
-                trailing_system=(
-                    "\n\n".join(dynamic_context_parts)
-                    if dynamic_context_parts
-                    else None
-                ),
-                turn_limit=turn_limit,
-            )
+            # SE2 (DSH 对标 R2): 历史从事件日志投影（"Model-visible ⟺ logged"）。
+            # 事件为空且表里有历史（回填竞态/双写缺口）时防御性回退旧表投影。
+            try:
+                _session_events = await asyncio.to_thread(
+                    lambda: _event_repo().get_by_session(data.session_id)
+                )
+            except Exception as ev_err:  # noqa: BLE001 — 事件读取失败回退表投影
+                logger.warning(
+                    "[REQ %s] 事件日志读取失败(回退表投影): %s", request_id, ev_err
+                )
+                _session_events = []
+            if _session_events or not history_rows:
+                messages, omitted_history = build_request_messages_from_events(
+                    system_content=system_content,
+                    user_text=data.message,
+                    events=_session_events,
+                    attachment_block=attachment_block or None,
+                    budget_tokens=l9_budget,
+                    # L4': 易变上下文(环境块/记忆)注入尾部,保前缀缓存
+                    trailing_system=(
+                        "\n\n".join(dynamic_context_parts)
+                        if dynamic_context_parts
+                        else None
+                    ),
+                    turn_limit=turn_limit,
+                )
+            else:
+                logger.warning(
+                    "[REQ %s] 会话 %s 无事件但有 %s 条表历史(疑似回填缺口)，回退表投影",
+                    request_id,
+                    data.session_id,
+                    len(history_rows),
+                )
+                messages, omitted_history = build_request_messages(
+                    system_content=system_content,
+                    user_text=data.message,
+                    history_rows=history_rows,
+                    attachment_block=attachment_block or None,
+                    budget_tokens=l9_budget,
+                    # L4': 易变上下文(环境块/记忆)注入尾部,保前缀缓存
+                    trailing_system=(
+                        "\n\n".join(dynamic_context_parts)
+                        if dynamic_context_parts
+                        else None
+                    ),
+                    turn_limit=turn_limit,
+                )
             if omitted_history > 0:
                 logger.info(
                     "[REQ %s] 历史已省略最早 %s 条 (turn_limit %s, token 预算 %s)",
@@ -5332,7 +5375,7 @@ def _enrich_memory_records(
 
 
 def _enrich_working_records(
-    messages: List[Dict[str, Any]], session_id: str | None = None
+    messages: List[Dict[str, Any]], session_id: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """把工作记忆消息序列化成 ``/memory/list`` 的统一记录格式。
 
