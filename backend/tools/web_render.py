@@ -46,13 +46,39 @@ from .web_metrics import record_render_event
 #: 渲染实例的保留 browser_id（web_fetch 专用，用户不可见）
 RENDER_POOL_ID = RESERVED_BROWSER_ID
 
-#: 渲染池槽位数与各槽 browser_id（R24 多实例：槽 1 沿用既有保留 id）。
+#: 渲染池默认槽位数与各槽 browser_id（R24 多实例：槽 1 沿用既有保留 id）。
 #: 槽 2+ 必须落在 ``render-pool-`` 前缀内——browser_cdp.get(None) 的"用户
 #: 实例"解析按该前缀排除，否则多槽会破坏单用户浏览器免传 id 的便利解析。
+#: R25：实际槽位数可经 ``web_access_config.render_pool_size`` 配置（钳
+#: RENDER_POOL_SIZE_MIN..MAX，默认仍是常量值）。
 RENDER_POOL_SIZE = 2
-RENDER_POOL_IDS = (RENDER_POOL_ID,) + tuple(
-    f"{RENDER_POOL_ID}-{i}" for i in range(2, RENDER_POOL_SIZE + 1)
-)
+RENDER_POOL_SIZE_MIN = 1
+RENDER_POOL_SIZE_MAX = 4
+
+
+def _render_pool_ids(size: int) -> tuple:
+    """按槽位数生成保留 browser_id 元组（槽 1 无后缀，槽 2+ ``-n`` 后缀）。"""
+    return (RENDER_POOL_ID,) + tuple(f"{RENDER_POOL_ID}-{i}" for i in range(2, size + 1))
+
+
+RENDER_POOL_IDS = _render_pool_ids(RENDER_POOL_SIZE)
+
+
+def _render_pool_size() -> int:
+    """读 ``web_access_config.render_pool_size``（R25）；钳位/异常回退默认值。"""
+    try:
+        import json
+
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get(SETTINGS_KEY_WEB_ACCESS_CONFIG)
+        if not raw:
+            return RENDER_POOL_SIZE
+        parsed = json.loads(raw)
+        value = int(parsed.get("render_pool_size", RENDER_POOL_SIZE))
+        return max(RENDER_POOL_SIZE_MIN, min(RENDER_POOL_SIZE_MAX, value))
+    except Exception:  # noqa: BLE001 — 配置失败按默认处理（保持现状行为）
+        return RENDER_POOL_SIZE
 
 #: 渲染正文上限（字符，对齐 browser_tool.SNAPSHOT_TEXT_CAP）
 RENDER_TEXT_CAP = 30 * 1024
@@ -307,6 +333,11 @@ class _RendererPool:
 
     def acquire(self) -> BrowserSession:
         with self._lock:
+            # R25：配置的槽位数超过既有槽时懒增（缩小不回收已活实例，LRU
+            # 自然少用）；新增槽 last_used=0 会被优先选中。
+            for bid in _render_pool_ids(_render_pool_size()):
+                if bid not in self._entries:
+                    self._entries[bid] = {"session": None, "last_used": 0.0}
             # LRU 序试槽：最久未用的优先；某槽启动失败降级下一槽，全部
             # 失败才抛（部分实例不可用时渲染仍可用）。
             order = sorted(self._entries, key=lambda k: self._entries[k]["last_used"])

@@ -241,6 +241,13 @@ export const en: Record<TranslationKey, string> = {
   'settings.network.creds.metrics.hint': 'In-memory, reset on restart',
   'settings.network.creds.metrics.refresh': 'Refresh',
   'settings.network.creds.metrics.reset': 'Reset',
+  'settings.network.creds.metrics.render_events': 'Render event hit rate (R22-R24 wiring)',
+  'settings.network.creds.metrics.render_events.renders': 'Renders',
+  'settings.network.creds.metrics.render_events.channel': 'Channel ready',
+  'settings.network.creds.metrics.render_events.hits': 'Event hits',
+  'settings.network.creds.pool_size': 'Render pool size',
+  'settings.network.creds.pool_size.desc':
+    'Spread concurrent renders across headless instances (1-4, default 2; applies on next render)',
   'settings.network.creds.confirm': 'Delete credentials for this site? This cannot be undone.',
   'settings.network.creds.plaintext': 'plaintext',
   'settings.network.creds.profile': 'source',

@@ -40,6 +40,12 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Added(web-access)
 - **多实例渲染池（R24）**：`_RendererPool` 扩为双槽 LRU（`RENDER_POOL_IDS`，槽 1 沿用保留 id、槽 2 `render-pool-2`）——并发渲染分散到不同浏览器实例，单实例崩溃不再波及全部 in-flight 渲染；首选槽启动失败按 LRU 序降级下一槽；`browser_cdp.get(None)` 用户实例解析同步排除 `render-pool-` 前缀槽位
 - **渲染事件命中率指标（R24）**：web_metrics 新增 `record_render_event`，`GET /api/v1/web-access/metrics` 快照增 `render_events`（renders/channel_ok/event_status_hits）——R22/R23 的事件状态接线效果生产可验证
+> 🌐 **网页访问能力优化 Round 25：事件命中率可视化 + 槽位配置化**（方案 `docs/plans/2026-09-23_web-access-round25-observ.md`）
+
+### Added(web-access)
+- **渲染事件命中率可视化（R25）**：修复 NetworkTab 把 metrics 快照的 `render_events` 全局键当域名行渲染的回归；新增独立命中率块（渲染数/通道就绪/事件命中），i18n 全量补键 + vitest 契约测试
+- **渲染池槽位配置化（R25）**：`web_access_config.render_pool_size`（钳 1..4，默认 2），acquire 懒增槽位；设置页新增下拉控件，前后端同口径
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 > 🧹 **alpha.52-win7 暂无未发布变更**
