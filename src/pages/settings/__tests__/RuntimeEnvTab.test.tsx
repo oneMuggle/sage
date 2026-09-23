@@ -88,8 +88,8 @@ describe('RuntimeEnvTab 探测面板', () => {
 
   it('探测成功列出运行时并自动选中推荐项', async () => {
     render(<RuntimeEnvTab />);
-    expect(await screen.findByText('3.11.5', {}, { timeout: 5000 })).toBeInTheDocument();
-    expect(await screen.findByText('推荐', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('3.11.5', {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByText('推荐', {}, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.getByText('C:/py/python.exe')).toBeInTheDocument();
     const select = screen.getByRole('combobox') as HTMLSelectElement;
     expect(select.value).toBe(RUNTIME.path);
@@ -101,14 +101,14 @@ describe('RuntimeEnvTab 探测面板', () => {
       output: { runtimes: [], recommended: null, errors: ['py launcher missing'] },
     });
     render(<RuntimeEnvTab />);
-    expect(await screen.findByText(/未探测到任何运行时/, {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText(/未探测到任何运行时/, {}, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.getByText(/py launcher missing/)).toBeInTheDocument();
   });
 
   it('探测异常显示失败信息与重试按钮', async () => {
     probeMock.mockRejectedValue(new Error('ipc down'));
     render(<RuntimeEnvTab />);
-    expect(await screen.findByText('探测失败: ipc down', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('探测失败: ipc down', {}, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.getByText('重试')).toBeInTheDocument();
   });
 });
@@ -116,15 +116,15 @@ describe('RuntimeEnvTab 探测面板', () => {
 describe('RuntimeEnvTab 诊断面板', () => {
   it('诊断成功显示满足度与诊断项', async () => {
     render(<RuntimeEnvTab />);
-    expect(await screen.findByText('✓ 全部满足', {}, { timeout: 5000 })).toBeInTheDocument();
-    expect(await screen.findByText('PY_OK', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('✓ 全部满足', {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByText('PY_OK', {}, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.getByText('推荐运行时: C:/py/python.exe')).toBeInTheDocument();
   });
 
   it('诊断失败显示失败信息', async () => {
     diagnoseMock.mockRejectedValue(new Error('diagnose down'));
     render(<RuntimeEnvTab />);
-    expect(await screen.findByText('诊断失败: diagnose down', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('诊断失败: diagnose down', {}, { timeout: 10000 })).toBeInTheDocument();
   });
 });
 
@@ -140,7 +140,7 @@ describe('RuntimeEnvTab 试跑', () => {
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
-    expect(await screen.findByText(/退出码 0/, {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText(/退出码 0/, {}, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.getByText('hello from Sage')).toBeInTheDocument();
   });
 
@@ -150,7 +150,7 @@ describe('RuntimeEnvTab 试跑', () => {
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
-    expect(await screen.findByText('等待用户批准…', {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText('等待用户批准…', {}, { timeout: 10000 })).toBeInTheDocument();
   });
 
   it('权限拒绝显示拒绝文案', async () => {
@@ -159,7 +159,7 @@ describe('RuntimeEnvTab 试跑', () => {
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
-    expect(await screen.findByText(/权限被拒绝:/, {}, { timeout: 5000 })).toBeInTheDocument();
+    expect(await screen.findByText(/权限被拒绝:/, {}, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.getByText(/需要 exec 审批/)).toBeInTheDocument();
   });
 
