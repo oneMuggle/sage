@@ -737,6 +737,7 @@ export function Chat() {
   );
 
   // R19-W1: 网页访问拦截卡片动作 —— 把后端的建议动作翻译成前端语义。
+  // login_to_site: 发一条消息请 agent 用 browser_login 工具登录（用户只需在弹出浏览器中完成登录）；
   // open_browser: 发一条消息请 agent 用 browser_navigate 打开（走完整工具链）；
   // configure_credentials / configure_proxy: 跳设置网络 tab（凭据库 + 代理配置）；
   // view_docs: 新窗口打开文档。
@@ -744,6 +745,9 @@ export function Chat() {
     (action: BlockedAction) => {
       const url = typeof action.params?.url === 'string' ? action.params.url : undefined;
       switch (action.action) {
+        case 'login_to_site':
+          if (url) void sendMessage(`请用 browser_login 工具登录 ${url}，完成登录态保存后重新访问该页面。`);
+          break;
         case 'open_browser':
           if (url) void sendMessage(`请用 browser_navigate 工具打开 ${url} 并提取正文。`);
           break;

@@ -790,6 +790,51 @@ def delete_credential(domain: str, repo: Optional[Any] = None) -> bool:
     return True
 
 
+def find_credential_for_host(hostname: str, repo: Optional[Any] = None) -> Optional[str]:
+    """为给定 hostname 查找最匹配的凭据档案 domain。
+
+    遍历所有档案，用 ``cookie_domain_matches()`` 判定匹配；多候选时取域名最长者
+    （最具体匹配）。跳过已过期档案。无匹配返回 ``None``。
+
+    供 ``web_fetch`` 在未显式传 ``credential_domain`` 时自动推断使用。
+    """
+    hostname = (hostname or "").strip().lower()
+    if not hostname:
+        return None
+    store = _get_repo(repo)
+    vault = _load_vault(store)
+    now = time.time()
+
+    best_match: Optional[str] = None
+    best_len = -1
+
+    for domain, entry in vault.items():
+        if not cookie_domain_matches(hostname, domain):
+            continue
+        # 检查是否过期
+        kind = _entry_kind(entry)
+        if kind == KIND_HEADER:
+            expires_at = entry.get("expires_at") if isinstance(entry, dict) else None
+            if isinstance(expires_at, (int, float)) and expires_at > 0:
+                if expires_at / 1000 <= now:
+                    continue  # 已过期
+        else:
+            cookies = _decrypt_cookies(entry, domain) if isinstance(entry, dict) else None
+            if not cookies:
+                continue
+            usable, _ = _split_cookies(cookies, None, now)
+            if not usable:
+                continue  # 全部过期
+
+        # 取最具体匹配（域名最长）
+        domain_clean = domain.lstrip(".").rstrip(".")
+        if len(domain_clean) > best_len:
+            best_len = len(domain_clean)
+            best_match = domain
+
+    return best_match
+
+
 def list_credentials(repo: Optional[Any] = None) -> List[Dict[str, Any]]:
     """档案清单（脱敏：domain / kind / 名字列表 / 保存时间 / 最短剩余时效，不含值）。"""
     store = _get_repo(repo)
@@ -849,6 +894,7 @@ __all__ = [
     "cookie_header_for",
     "cookie_path_matches",
     "delete_credential",
+    "find_credential_for_host",
     "get_source_profile",
     "list_credentials",
     "load_credential",

@@ -1802,3 +1802,30 @@ def test_web_search_parallel_records_engine_metrics(monkeypatch):
     assert snap["search:good"]["ok"] == 1
     assert snap["search:bad"]["fail"] == 1
     web_metrics.reset()
+
+
+# ---------- 简化登录流程: _build_suggested_actions 新增 login_to_site ----------
+
+
+def test_build_suggested_actions_login_wall_includes_login_action():
+    """login_wall 时 _build_suggested_actions 包含 login_to_site。"""
+    from backend.tools.web_tool import _build_suggested_actions, BLOCK_REASON_LOGIN_WALL
+
+    actions = _build_suggested_actions(BLOCK_REASON_LOGIN_WALL, "https://platfm.agnes-ai.com/settings")
+    action_names = [a["action"] for a in actions]
+    # login_to_site 应排在首位
+    assert action_names[0] == "login_to_site"
+    assert "open_browser" in action_names
+    assert "configure_credentials" in action_names
+    # login_to_site 的 params 应包含目标 URL
+    login_action = next(a for a in actions if a["action"] == "login_to_site")
+    assert login_action["params"]["url"] == "https://platfm.agnes-ai.com/settings"
+
+
+def test_build_suggested_actions_no_login_action_for_antibot():
+    """非 login_wall 时 _build_suggested_actions 不包含 login_to_site。"""
+    from backend.tools.web_tool import _build_suggested_actions, BLOCK_REASON_ANTIBOT_CF
+
+    actions = _build_suggested_actions(BLOCK_REASON_ANTIBOT_CF, "https://example.com/")
+    action_names = [a["action"] for a in actions]
+    assert "login_to_site" not in action_names

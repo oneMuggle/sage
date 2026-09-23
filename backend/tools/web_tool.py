@@ -94,6 +94,16 @@ def _build_suggested_actions(block_reason: str, url: str) -> List[Dict[str, Any]
         })
     # 登录墙 → 引导到既有凭据管理入口（设置 → 网络）
     if block_reason == BLOCK_REASON_LOGIN_WALL:
+        # 首选：一键登录（browser_login 工具 —— 用户只需在弹出浏览器中完成登录）
+        actions.insert(
+            0,
+            {
+                "action": "login_to_site",
+                "label": "登录此站点",
+                "icon": "🔐",
+                "params": {"url": url},
+            },
+        )
         actions.append({
             "action": "configure_credentials",
             "label": "配置登录凭据",
@@ -677,6 +687,21 @@ class WebFetchTool(BaseTool):
             )
         if not url.startswith(("http://", "https://")):
             return ToolResult(success=False, error="无效的 URL，必须以 http:// 或 https:// 开头")
+
+        # 自动推断凭据域（browser_login 登录后 web_fetch 自动带态）：
+        # 用户/LLM 未显式传 credential_domain 时，从 URL hostname 在凭据档案中
+        # 查找最匹配的 domain。这样 browser_login 导出的 cookie 无需再手动
+        # 传参即可生效 —— 用户登录后再次访问同一站点"直接能用"。
+        if not credential_domain.strip():
+            from .credential_vault import find_credential_for_host
+
+            try:
+                _hostname = urlparse(url).hostname or ""
+            except ValueError:
+                _hostname = ""
+            _inferred = find_credential_for_host(_hostname)
+            if _inferred:
+                credential_domain = _inferred
 
         # C1：TTL 缓存。credential_domain（登录态时效）与 raw（原始 HTML）
         # 不参与缓存；命中即返回，cached 标记明示。

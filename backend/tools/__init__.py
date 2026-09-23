@@ -21,6 +21,7 @@ from .browser_tool import (
     BrowserDownloadsTool,
     BrowserInteractTool,
     BrowserLaunchTool,
+    BrowserLoginTool,
     BrowserNavigateTool,
     BrowserScreenshotTool,
     BrowserSnapshotTool,
@@ -305,6 +306,8 @@ def register_all_tools(
     # Round 5 SN3：浏览器内下载跟踪（READ，读事件通道状态表）
     registry.register(BrowserDownloadsTool(policy=policy))
     registry.register(BrowserCloseTool(policy=policy))
+    # 一键登录：打开可见浏览器 → 用户登录 → 自动保存 cookie（EXTERNAL，blocking）
+    registry.register(BrowserLoginTool(policy=policy))
     # Academic search skill: 显式触发技能沉淀（WRITE_LOCAL 写本地 SQLite）
     registry.register(SkillSaveTool(policy=policy))
 
