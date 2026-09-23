@@ -44,4 +44,8 @@ doctor 的 `import backend.main` 探针在 20s 超时后直接判 False——本
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1436（squash `1fa169a3`，2026-09-23 merge，CI 12 项全绿）。
+- **win7 对齐**：PR #1441（squash `f7eddc8f`，2026-09-24 merge，win7 必过项
+  全绿——py38 套件 20m20s）。cherry-pick 干净落位，win7 基底 doctor 40 例
+  本地全绿。
+- **回填分支**：`docs/r47-parity-backfill`（本提交）。
