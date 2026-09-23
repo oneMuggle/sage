@@ -615,3 +615,39 @@ def test_launch_tool_starts_download_tracking(monkeypatch, tmp_path):
 
 def test_browser_tool_names_include_downloads():
     assert "browser_downloads" in browser_tool.BROWSER_TOOL_NAMES
+
+
+def test_browser_login_check_status_confirmed():
+    """测试用户在悬浮条上点击确认后，_check_login_status 立即返回 logged_in。"""
+    session = _fake_session("b-login")
+
+    def _fake_cdp(sess, method, params=None, target_id=None):
+        if method == "Runtime.evaluate":
+            return {"result": {"value": {"confirmed": True}}}
+        return {}
+
+    from unittest.mock import patch
+    with patch.object(browser_tool, "cdp_command", side_effect=_fake_cdp):
+        status = browser_tool._check_login_status(session, "t1", "example.com")
+        assert status == "logged_in"
+
+
+def test_browser_login_execute_success_returns_instruction(monkeypatch):
+    """测试 browser_login 成功完成后返回给 LLM 的指令。"""
+    tool = browser_tool.BrowserLoginTool()
+    session = _fake_session("login-default")
+
+    monkeypatch.setattr(browser_tool, "get_browser_manager", lambda: SimpleNamespace(get=lambda _: session))
+    monkeypatch.setattr(session, "is_alive", lambda: True)
+    monkeypatch.setattr(browser_tool, "_wait_for_page_load", lambda *a, **kw: None)
+    monkeypatch.setattr(browser_tool, "_check_login_status", lambda *a, **kw: "logged_in")
+    monkeypatch.setattr(browser_tool, "cdp_command", lambda *a, **kw: {"targetId": "t-1"})
+    monkeypatch.setattr(tool, "_export_cookies", lambda sess, host: ["example.com"])
+
+    result = tool.execute(url="https://example.com/settings")
+    assert result.success is True
+    assert "example.com" in result.content["saved_domains"]
+    assert "instruction" in result.content
+    assert "web_fetch" in result.content["instruction"]
+    assert "https://example.com/settings" in result.content["instruction"]
+

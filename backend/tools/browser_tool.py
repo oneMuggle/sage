@@ -984,6 +984,81 @@ _LOGIN_POLL_INTERVAL = 2.0
 #: 默认登录超时（秒）
 _LOGIN_DEFAULT_TIMEOUT = 300
 
+#: 页面内注入的 Sage 登录辅助悬浮条（Shadow DOM 隔离）
+_LOGIN_BANNER_JS = """
+(function() {
+  if (window.__sage_login_confirmed) {
+    return { confirmed: true, url: location.href, hasPassword: false };
+  }
+  if (!document.getElementById('sage-login-helper-host') && document.body) {
+    try {
+      const host = document.createElement('div');
+      host.id = 'sage-login-helper-host';
+      host.style.cssText = 'position:fixed;top:0;left:0;width:100vw;z-index:2147483647;pointer-events:none;';
+      const shadow = host.attachShadow({ mode: 'open' });
+      const bar = document.createElement('div');
+      bar.id = 'sage-banner';
+      bar.style.cssText = (
+        'pointer-events:auto;background:#18181b;color:#f4f4f5;' +
+        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;' +
+        'font-size:13px;padding:9px 18px;display:flex;align-items:center;' +
+        'justify-content:space-between;box-shadow:0 4px 16px rgba(0,0,0,0.35);' +
+        'border-bottom:2px solid #3b82f6;'
+      );
+      bar.innerHTML = (
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<span style="font-size:16px;">🔐</span>' +
+        '<strong style="color:#60a5fa;">Sage 登录助手</strong>' +
+        '<span style="color:#d4d4d8;">请在下方完成登录。登录后会自动同步；您也可以随时点击右侧按钮立即同步。</span>' +
+        '</div>' +
+        '<button id="sage-btn" style="' +
+        'background:#2563eb;color:#fff;border:none;padding:6px 14px;border-radius:6px;' +
+        'font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;' +
+        '">已完成登录，点击同步 ➔</button>'
+      );
+      shadow.appendChild(bar);
+      document.documentElement.appendChild(host);
+      const btn = shadow.getElementById('sage-btn');
+      btn.onclick = () => {
+        window.__sage_login_confirmed = true;
+        btn.style.background = '#059669';
+        btn.textContent = '⏳ 正在同步并返回...';
+      };
+    } catch (e) {}
+  }
+  return {
+    confirmed: !!window.__sage_login_confirmed,
+    url: location.href,
+    hasPassword: !!document.querySelector('input[type=password]'),
+    htmlLen: document.documentElement ? document.documentElement.outerHTML.length : 0
+  };
+})()
+"""
+
+#: 登录成功时的页面提示动画
+_LOGIN_SUCCESS_JS = """
+(function() {
+  try {
+    const host = document.getElementById('sage-login-helper-host');
+    if (host && host.shadowRoot) {
+      const bar = host.shadowRoot.getElementById('sage-banner');
+      if (bar) {
+        bar.style.background = '#064e3b';
+        bar.style.borderBottomColor = '#10b981';
+        bar.innerHTML = (
+          '<div style="display:flex;align-items:center;justify-content:center;' +
+          'gap:8px;width:100%;font-size:14px;">' +
+          '<span style="font-size:18px;">🎉</span>' +
+          '<strong style="color:#a7f3d0;">' +
+          '登录成功！凭据已自动加密保存，窗口即将自动关闭并返回 Sage...' +
+          '</strong></div>'
+        );
+      }
+    }
+  } catch (e) {}
+})()
+"""
+
 
 class BrowserLoginTool(BaseTool):
     """一键登录站点：打开可见浏览器 → 用户登录 → 自动保存 cookie。
@@ -1103,9 +1178,18 @@ class BrowserLoginTool(BaseTool):
                     last_status = status
                 time.sleep(_LOGIN_POLL_INTERVAL)
 
-            if not login_completed:
-                # 超时但未登录 —— 仍尝试导出已有 cookie（用户可能已登录但检测未触发）
-                pass
+            # 登录成功：在页面上展示成功提示并稍作停留，让用户有明确的视觉反馈
+            if login_completed and target_id:
+                try:
+                    cdp_command(
+                        session,
+                        "Runtime.evaluate",
+                        {"expression": _LOGIN_SUCCESS_JS},
+                        target_id=target_id,
+                    )
+                    time.sleep(1.5)
+                except BrowserCDPError:
+                    pass
 
             # 导出并保存 cookie
             saved_domains = self._export_cookies(session, target_host)
@@ -1116,8 +1200,12 @@ class BrowserLoginTool(BaseTool):
                     content={
                         "saved_domains": saved_domains,
                         "note": (
-                            "登录成功，cookie 已加密存档。"
-                            "后续 web_fetch 访问该站点会自动携带登录态。"
+                            f"登录成功！站点 {target_host} 的登录凭据已加密保存到本地。"
+                            f"后续 web_fetch 访问该站点会自动携带登录态。"
+                        ),
+                        "instruction": (
+                            f"站点 {target_host} 登录态已成功保存！"
+                            f"请立即调用 web_fetch 工具重新访问目标页面 {url}，并将获取到的数据完整总结呈现给用户。"
                         ),
                         "browser_id": session.browser_id,
                         "reused": reuse,
@@ -1133,6 +1221,26 @@ class BrowserLoginTool(BaseTool):
                 )
 
         except BrowserCDPError as exc:
+            # 容错：若用户手动关闭了窗口/标签页，尝试检查是否已有保存的 cookies
+            try:
+                saved_domains = self._export_cookies(session, target_host)
+                if saved_domains:
+                    return ToolResult(
+                        success=True,
+                        content={
+                            "saved_domains": saved_domains,
+                            "note": (
+                                f"登录窗口已关闭，检测并成功保存了 {target_host} 的登录态。"
+                            ),
+                            "instruction": (
+                                f"请立即调用 web_fetch 工具访问 {url}，并将获取到的页面内容呈现给用户。"
+                            ),
+                            "browser_id": getattr(session, "browser_id", ""),
+                            "reused": reuse,
+                        },
+                    )
+            except Exception:
+                pass
             return ToolResult(
                 success=False,
                 error=f"browser_error: {exc}",
@@ -1215,45 +1323,42 @@ def _check_login_status(
     from .credential_vault import looks_like_login_html, looks_like_login_url
 
     try:
-        # 获取当前 URL 和 HTML
+        # 注入/维护悬浮条并获取当前状态
         result = cdp_command(
             session,
             "Runtime.evaluate",
             {
-                "expression": (
-                    "JSON.stringify({"
-                    "url: location.href,"
-                    "hasPassword: !!document.querySelector('input[type=password]'),"
-                    "htmlLen: document.documentElement.outerHTML.length"
-                    "})"
-                ),
+                "expression": _LOGIN_BANNER_JS,
                 "returnByValue": True,
             },
             target_id=target_id,
         )
-        value = (result.get("result") or {}).get("value")
-        if not isinstance(value, str):
+        info = (result.get("result") or {}).get("value")
+        if not isinstance(info, dict):
             return "loading"
-        info = json.loads(value)
-        current_url = info.get("url", "")
-        has_password = info.get("hasPassword", False)
 
-        # 判定逻辑：
-        # 1. URL 不再是登录页 + 没有密码框 → 已登录
-        # 2. 否则仍在登录页
+        # 1. 用户主动点击了悬浮条上的"已完成登录，点击同步"
+        if info.get("confirmed"):
+            return "logged_in"
+
+        current_url = str(info.get("url") or "")
+        has_password = bool(info.get("hasPassword", False))
+
+        # 2. 自动判定：当前 URL 离开了登录页且没有密码框
         if not looks_like_login_url(current_url) and not has_password:
-            # 额外验证：有 cookie 才算真正登录
-            cookies_result = cdp_command(session, "Network.getCookies", {})
-            cookies = cookies_result.get("cookies") or []
-            # 检查是否有目标域的 cookie
-            for c in cookies:
-                if isinstance(c, dict):
-                    cdomain = str(c.get("domain") or "").lower().lstrip(".")
-                    if cdomain and (
-                        target_host == cdomain or target_host.endswith("." + cdomain)
-                    ):
-                        return "logged_in"
-            # 没有目标域 cookie，可能还在登录流程中
+            # 额外验证：有目标域 cookie 才算真正登录
+            try:
+                cookies_result = cdp_command(session, "Network.getCookies", {})
+                cookies = cookies_result.get("cookies") or []
+                for c in cookies:
+                    if isinstance(c, dict):
+                        cdomain = str(c.get("domain") or "").lower().lstrip(".")
+                        if cdomain and (
+                            target_host == cdomain or target_host.endswith("." + cdomain)
+                        ):
+                            return "logged_in"
+            except BrowserCDPError:
+                pass
             return "loading"
 
         return "on_login_page"
