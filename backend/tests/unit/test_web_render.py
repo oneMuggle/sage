@@ -374,6 +374,57 @@ def test_render_page_event_status_absent_falls_back_to_navigation_timing(
     assert result["rendered_status"] == 503
 
 
+# ---------- R23：渲染池事件通道接线 ----------
+
+
+def test_render_page_wires_pool_event_channel(fake_time, monkeypatch):
+    """渲染前为池浏览器接事件通道（R23）：以会话的 browser_id/port/ws_path 调用。"""
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])
+
+    class _Pool:
+        def acquire(self):
+            return SimpleNamespace(
+                browser_id="b-render", port=9222, ws_path="/devtools/browser/x"
+            )
+
+    monkeypatch.setattr(web_render, "_pool", _Pool())
+    wired = []
+    monkeypatch.setattr(
+        web_render,
+        "_ensure_pool_channel",
+        lambda session: wired.append(
+            (session.browser_id, session.port, session.ws_path)
+        )
+        or True,
+    )
+
+    render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
+
+    assert wired == [("b-render", 9222, "/devtools/browser/x")]
+
+
+def test_render_page_survives_channel_wire_failure(fake_time, monkeypatch):
+    """事件通道建立抛错（_ensure_pool_channel 内部吞掉）不阻断渲染主流程。"""
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])
+    monkeypatch.setattr(
+        web_render,
+        "start_event_channel",
+        lambda *args: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    # 真实 _ensure_pool_channel 走 except → False；stub 会话缺 port 也走同路径
+    monkeypatch.setattr(
+        web_render,
+        "ensure_network_tracking",
+        lambda bid, tid: None,
+    )
+
+    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
+
+    assert result["rendered"] is True
+
+
 def test_render_page_survives_stealth_failure(fake_time, monkeypatch):
     """stealth 注入失败（apply_stealth 返回 False）不阻断渲染。"""
     page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
