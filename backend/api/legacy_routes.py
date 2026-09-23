@@ -3236,6 +3236,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # Task 14: 从 history_rows[-1].segment_id 推导当前活跃段 id,透传给
             # MemoryManager.get_context → WorkingMemory.get_context,避免把
             # 旧段的工作记忆残留混进当前段的 LLM 请求。
+            # R99: hits 先声明再进 try —— 注入抛错时下游事件块仍可安全判空
+            # （未绑定变量会让 producer 整个 run 崩掉,CI smoke 已抓到）。
+            l13_hits: list = []
             try:
                 l13_memory_manager = getattr(agent, "memory_manager", None)
                 if l13_memory_manager is not None and not memory_off:
