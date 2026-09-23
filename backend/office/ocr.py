@@ -146,12 +146,12 @@ def _recognize(pytesseract: Any, img: Any, lang: str, min_conf: int) -> str:
     try:
         data = pytesseract.image_to_data(img, lang=lang, output_type=pytesseract.Output.DICT)
         lines: dict = {}
-        for raw_word, conf, block, par, line in zip(
+        for raw_word, conf, block, par, line in zip(  # noqa: B905 — zip strict= 是 3.10+ 形参
             data.get("text", []),
             data.get("conf", []),
             data.get("block_num", []),
             data.get("par_num", []),
-            data.get("line_num", []), strict=False,
+            data.get("line_num", []),
         ):
             word = str(raw_word).strip()
             try:
