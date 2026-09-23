@@ -16,7 +16,7 @@ import time
 import uuid
 from collections import deque
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Tuple
 
 from backend.chat.empty_response_guard import (
     EMPTY_RESPONSE_FALLBACK_TEXT,
@@ -1723,27 +1723,17 @@ class SageAgent:
                                 result_content = denial_content
                                 is_error = True
                             if decision.needs_approval:
-                                # 先推 PERMISSION_REQUEST 事件给前端，再 await 审批闸口
-                                approval_req = self._build_approval_request(tc.name, args, decision)
-                                yield AgentEvent(
-                                    state=AgentState.PERMISSION_REQUEST,
-                                    iteration=i,
-                                    permission_request=approval_req.to_dict(),
-                                    agent_id=self.agent_id,
-                                )
-                                answer = await self._await_approval_answer(approval_req)
-                                if answer.approved:
-                                    decision = PermissionDecision(
-                                        allowed=True,
-                                        needs_approval=False,
-                                        reason=f"{decision.reason}（用户已批准）",
-                                    )
-                                else:
-                                    decision = PermissionDecision(
-                                        allowed=False,
-                                        needs_approval=False,
-                                        reason=f"{decision.reason}（未获批准: {answer.answered_by}）",
-                                    )
+                                # B1 (GT2, DSH 对标 R6): 审批闸口抽离 ——
+                                # ask 阶段（PERMISSION_REQUEST 流式转发 +
+                                # await 应答 → 决议）。事件先于 await 产出
+                                # （前端先看到请求），最终决议经 result box
+                                # 返回（async generator 只能 yield 不能 return 值）。
+                                gate_result: Dict[str, Any] = {}
+                                async for _gate_ev in self._approval_gate(
+                                    tc, args, decision, i, gate_result
+                                ):
+                                    yield _gate_ev
+                                decision = gate_result["decision"]
 
                             if not decision.allowed:
                                 logger.info(
@@ -2049,6 +2039,45 @@ class SageAgent:
             f"工具未对当前 Agent 开放: {tc.name}" if profile_denied else ""
         )
         return decision, denial_content
+
+    async def _approval_gate(
+        self,
+        tc: Any,
+        args: Dict[str, Any],
+        decision: PermissionDecision,
+        iteration: int,
+        result_box: Dict[str, Any],
+    ) -> AsyncIterator[AgentEvent]:
+        """B1 (GT2, DSH 对标 R6): 审批闸口 —— 五段管线的 ask 阶段。
+
+        对标 deepseek-harness ``pre-execute`` 的 ``ask`` 分支：needs_approval
+        时先流式产出 PERMISSION_REQUEST（前端先看到请求，再等应答），
+        await 审批闸口后把最终决议写入 ``result_box["decision"]``（async
+        generator 无法 return 值，box 由调用方读取）。
+
+        决议语义与抽离前逐行一致：approved → allowed=True；否则
+        allowed=False，reason 附 ``（未获批准: answered_by）``。
+        """
+        approval_req = self._build_approval_request(tc.name, args, decision)
+        yield AgentEvent(
+            state=AgentState.PERMISSION_REQUEST,
+            iteration=iteration,
+            permission_request=approval_req.to_dict(),
+            agent_id=self.agent_id,
+        )
+        answer = await self._await_approval_answer(approval_req)
+        if answer.approved:
+            result_box["decision"] = PermissionDecision(
+                allowed=True,
+                needs_approval=False,
+                reason=f"{decision.reason}（用户已批准）",
+            )
+        else:
+            result_box["decision"] = PermissionDecision(
+                allowed=False,
+                needs_approval=False,
+                reason=f"{decision.reason}（未获批准: {answer.answered_by}）",
+            )
 
     def _build_approval_request(
         self, tool_name: str, args: Dict[str, Any], decision: PermissionDecision
