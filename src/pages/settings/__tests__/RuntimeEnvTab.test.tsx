@@ -88,11 +88,15 @@ describe('RuntimeEnvTab 探测面板', () => {
 
   it('探测成功列出运行时并自动选中推荐项', async () => {
     render(<RuntimeEnvTab />);
-    expect(await screen.findByText('3.11.5', {}, { timeout: 10000 })).toBeInTheDocument();
-    expect(await screen.findByText('推荐', {}, { timeout: 10000 })).toBeInTheDocument();
-    expect(screen.getByText('C:/py/python.exe')).toBeInTheDocument();
-    const select = screen.getByRole('combobox') as HTMLSelectElement;
-    expect(select.value).toBe(RUNTIME.path);
+    // effect 重跑会让面板短暂回 loading——全部用 waitFor 重查询，禁用
+    // findBy-then-assert 模式（findBy 抓到的元素可能在断言前被重挂卸载）
+    await waitFor(() => expect(screen.getByText('3.11.5')).toBeInTheDocument(), { timeout: 10000 });
+    await waitFor(() => expect(screen.getByText('推荐')).toBeInTheDocument(), { timeout: 10000 });
+    await waitFor(() => expect(screen.getByText('C:/py/python.exe')).toBeInTheDocument(), { timeout: 10000 });
+    await waitFor(() => {
+      const select = screen.getByRole('combobox') as HTMLSelectElement;
+      expect(select.value).toBe(RUNTIME.path);
+    }, { timeout: 10000 });
   });
 
   it('空运行时显示未探测到提示与错误详情', async () => {
@@ -116,8 +120,8 @@ describe('RuntimeEnvTab 探测面板', () => {
 describe('RuntimeEnvTab 诊断面板', () => {
   it('诊断成功显示满足度与诊断项', async () => {
     render(<RuntimeEnvTab />);
-    expect(await screen.findByText('✓ 全部满足', {}, { timeout: 10000 })).toBeInTheDocument();
-    expect(await screen.findByText('PY_OK', {}, { timeout: 10000 })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('✓ 全部满足')).toBeInTheDocument(), { timeout: 10000 });
+    await waitFor(() => expect(screen.getByText('PY_OK')).toBeInTheDocument(), { timeout: 10000 });
     expect(screen.getByText('推荐运行时: C:/py/python.exe')).toBeInTheDocument();
   });
 
