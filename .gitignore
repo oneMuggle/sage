@@ -90,6 +90,21 @@ backend/data/media/
 # Local arena spike/probe/smoke evidence (S0, P1, ...), not part of the source tree.
 .tmp-arena-*/
 
+# ── 本地会话/过程产物（2026-09-22 housekeeping：多会话并行开发遗留）──────
+# 会话级工具目录与状态文件——运行期产物，不属于源码
+.zcode/
+.tmp-auth-device/
+.tmp-audit/
+.arena_q.tmp
+recent.json
+logs/
+# Windows `> nul` 重定向误产物（0 字节）
+nul
+# 轮次 PR/commit message 草稿与过程 plan（内容已随对应 PR 落库）
+r[0-9]*-msg.txt
+.r*-plan-draft.md
+.r*-pr-body.md
+
 # Environment
 .env
 .env.local
