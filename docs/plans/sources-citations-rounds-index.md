@@ -26,6 +26,7 @@
 | R95 | 编排取消竞态修复（cancel 与异常间无 await 时任务误判 failed）+ 回归定性回填 | #1398 `4cae4802` | #1402 `076438f4` |
 | R96 | check_py38_compat 路径归一化（Windows 本地 SKIP 匹配失效修复；win7-only 脚本） | —（win7-only） | #1407 `968d02d4` |
 | R97 | 透明度事件载荷校验收口 transparencyPayload.ts（主/重接/btw 共用） | #1411 `117b4d41` | #1414 `b223cbbd` |
+| R99 | memory 注入与召回合一：get_context_with_hits 单次检索，芯片与注入内容严格同源 | —（本 PR） | 文档随代码无需单独对齐 |
 
 ## 2. 专项方案要点（R81 管道全景）
 

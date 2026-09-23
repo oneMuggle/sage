@@ -359,8 +359,23 @@ class MemoryManager:
         session_id: Optional[str] = None,
         segment_id: Optional[int] = None,
     ) -> str:
+        """获取上下文用于 Agent（仅文本；需结构化命中用
+        :meth:`get_context_with_hits`）。"""
+        text, _ = self.get_context_with_hits(limit, session_id, segment_id)
+        return text
+
+    def get_context_with_hits(
+        self,
+        limit: int = 10,
+        session_id: Optional[str] = None,
+        segment_id: Optional[int] = None,
+    ) -> Tuple[str, List[Dict[str, str]]]:
         """
-        获取上下文用于 Agent
+        获取上下文用于 Agent，同时返回实际注入的结构化记忆命中。
+
+        R99 (2026-09-23): 供调用方（legacy producer 的 memory_used 事件）
+        复用同一次检索，替代原先独立的 ``recall()`` 第二次查询 —— 召回
+        展示从此与注入内容严格同源。
 
         Args:
             limit: 上下文消息数量限制
@@ -370,9 +385,13 @@ class MemoryManager:
                 ``None`` → 返回该会话全部段（向后兼容）。
 
         Returns:
-            格式化的上下文字符串
+            ``(格式化的上下文字符串, 实际注入的结构化记忆命中列表)`` ——
+            命中条目形如 ``{"id": str, "memory_type": str, "preview": str}``。
         """
         parts = []
+        # R99: 与 parts 同步收集实际注入的记忆条目（id 缺失的来源合成稳定 id，
+        # 前端 memory_used 校验要求每项有字符串 id）。
+        hits: List[Dict[str, str]] = []
 
         # 用户画像（USER.md 概念）: 持久画像快照置于上下文顶部（best-effort）。
         # 让 legacy SageAgent（经 memory_manager.get_context）与 hex
@@ -412,6 +431,13 @@ class MemoryManager:
                 role = msg.get("role", "unknown")
                 content = msg.get("content", "")
                 parts.append(f"- [{role}]: {content[:100]}...")
+                hits.append(
+                    {
+                        "id": f"working-{len(hits)}",
+                        "memory_type": "working",
+                        "preview": f"[{role}]: {content[:100]}",
+                    }
+                )
 
         # 批次三 step 5：会话摘要，介于 working 与 episodic/semantic 之间。
         # 只注入当前 session 的 READY 摘要，FAILED / PENDING 不注入
@@ -427,6 +453,13 @@ class MemoryManager:
             if latest_ready is not None and latest_ready.content:
                 parts.append("\n【会话摘要】")
                 parts.append(f"- {latest_ready.content}")
+                hits.append(
+                    {
+                        "id": f"summary-{getattr(latest_ready, 'id', len(hits))}",
+                        "memory_type": "summary",
+                        "preview": latest_ready.content[:100],
+                    }
+                )
 
         # 获取最近的 episodic 记忆
         try:
@@ -439,6 +472,15 @@ class MemoryManager:
                 for mem in recent_episodic:
                     summary = mem.get("summary", mem.get("content", ""))[:100]
                     parts.append(f"- {summary}...")
+                    hits.append(
+                        {
+                            "id": str(mem.get("id") or f"episodic-{len(hits)}"),
+                            "memory_type": str(
+                                mem.get("memory_type") or "episodic"
+                            ),
+                            "preview": summary,
+                        }
+                    )
         except Exception as e:
             logger.warning(f"获取情景记忆失败: {e}")
 
@@ -450,10 +492,19 @@ class MemoryManager:
                 for mem in recent_semantic:
                     summary = mem.get("summary", mem.get("content", ""))[:100]
                     parts.append(f"- {summary}...")
+                    hits.append(
+                        {
+                            "id": str(mem.get("id") or f"semantic-{len(hits)}"),
+                            "memory_type": str(
+                                mem.get("memory_type") or "semantic"
+                            ),
+                            "preview": summary,
+                        }
+                    )
         except Exception as e:
             logger.warning(f"获取语义记忆失败: {e}")
 
-        return "\n".join(parts) if parts else ""
+        return ("\n".join(parts) if parts else ""), hits
 
     def compress(
         self,

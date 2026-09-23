@@ -1960,50 +1960,38 @@ async def chat(
         }
 
 
-def _build_memory_used_event(
-    memory_manager: Any,
-    query: str,
+def _memory_used_event_from_hits(
+    hits: List[Dict[str, str]],
     session_id: str,
-) -> Dict[str, Any] | None:
-    """R17-E: 构造 memory_used 流事件（记忆召回展示）。
+) -> Dict[str, Any]:
+    """R17-E/R99: 由注入命中的结构化条目构造 memory_used 流事件。
 
-    用 ``MemoryManager.recall`` 取本次消息命中的结构化记忆条目（每类
-    top3，总体截断 5 条、preview 截 80 字），供前端消息气泡展示
-    "N 条记忆已应用"。任何失败返回 ``None``（事件属增强信息，绝不
-    影响对话主流程）。
+    R99 起条目直接来自 ``get_context_with_hits`` 的实际注入内容（芯片
+    展示与注入上下文严格同源，不再单独跑 recall）；每类总体截断 5 条、
+    preview 由 MemoryManager 侧截 100 字。空命中返回 ``None``（事件属
+    增强信息，绝不影响对话主流程）。
     """
-    if memory_manager is None:
+    memories: List[Dict[str, Any]] = []
+    for hit in hits or []:
+        if not isinstance(hit, dict):
+            continue
+        preview = str(hit.get("preview", ""))
+        if not preview.strip():
+            continue
+        memories.append(
+            {
+                "id": str(hit.get("id") or preview),
+                "memory_type": str(hit.get("memory_type") or "memory"),
+                "preview": preview,
+            }
+        )
+    if not memories:
         return None
-    try:
-        recall_fn = getattr(memory_manager, "recall", None)
-        if not callable(recall_fn):
-            return None
-        hits = recall_fn(query=query, limit=3, session_id=session_id) or {}
-        memories: List[Dict[str, Any]] = []
-        for mem_type, entries in hits.items():
-            for entry_item in (entries or [])[:3]:
-                if not isinstance(entry_item, dict):
-                    continue
-                preview = str(entry_item.get("content", ""))[:80]
-                if not preview.strip():
-                    continue
-                memories.append(
-                    {
-                        "id": str(entry_item.get("id") or preview),
-                        "memory_type": str(entry_item.get("memory_type") or mem_type),
-                        "preview": preview,
-                    }
-                )
-        if not memories:
-            return None
-        return {
-            "state": "memory_used",
-            "session_id": session_id,
-            "memories": memories[:5],
-        }
-    except Exception as exc:  # noqa: BLE001 — 降级铁律
-        logger.debug(f"memory_used event build skipped: {exc}")
-        return None
+    return {
+        "state": "memory_used",
+        "session_id": session_id,
+        "memories": memories[:5],
+    }
 
 
 def _clear_working_segment(agent: Any, session_id: str, segment_id: int) -> None:
@@ -3252,7 +3240,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 l13_memory_manager = getattr(agent, "memory_manager", None)
                 if l13_memory_manager is not None and not memory_off:
                     active_segment_id = repo.get_active_segment_id(data.session_id)
-                    l13_memory = l13_memory_manager.get_context(
+                    # R99: get_context_with_hits —— 一次检索同时产出注入文本
+                    # 与结构化命中（替代原先独立的 recall() 第二次查询）。
+                    l13_memory, l13_hits = l13_memory_manager.get_context_with_hits(
                         limit=10,
                         session_id=data.session_id,
                         segment_id=active_segment_id,
@@ -3269,26 +3259,24 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
             # ===== R17-E 记忆召回展示事件 BEGIN =====
             # L13 注入是静默的 —— 用户无法知道回答用了哪些记忆。注入成功
-            # 后用 recall() 取结构化命中（top3），推送 memory_used 流事件；
-            # 前端 Message 气泡显示"N 条记忆已应用"并可展开查看明细。
+            # 后推送 memory_used 流事件；前端 Message 气泡显示"N 条记忆已
+            # 应用"并可展开查看明细。
             # fail-safe：任何异常只跳过事件，绝不影响注入与对话主流程。
             # R82 (2026-09-19): 本事件唯一推送点（原上方无段隔离的重复推送
-            # 已删除）；r38_memories 捕获同步收敛至此 —— 落库条目与实际注入
-            # 上下文（段隔离召回）同源。
-            if dynamic_context_parts and not memory_off:
-                l13_evt = _build_memory_used_event(
-                    getattr(agent, "memory_manager", None),
-                    query=data.message,
-                    session_id=data.session_id,
+            # 已删除）。
+            # R99 (2026-09-23): r38_memories 直接取注入命中的 hits —— 芯片
+            # 展示与实际注入上下文严格同源，且不再单独跑 recall()。
+            if dynamic_context_parts and not memory_off and l13_hits:
+                l13_evt = _memory_used_event_from_hits(
+                    l13_hits, session_id=data.session_id
                 )
-                if l13_evt is not None:
-                    r38_memories = l13_evt.get("memories", []) or []
-                    try:
-                        entry.queue.put_nowait(l13_evt)
-                    except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
-                        logger.debug(
-                            f"[REQ {request_id}] memory_used event push failed, ignored"
-                        )
+                r38_memories = l13_evt["memories"]
+                try:
+                    entry.queue.put_nowait(l13_evt)
+                except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                    logger.debug(
+                        f"[REQ {request_id}] memory_used event push failed, ignored"
+                    )
             # ===== R17-E 记忆召回展示事件 END =====
             # Task 5 (2026-09-15): catalog-based context budget.
             # Resolve effective window from model catalog, then compute budget
