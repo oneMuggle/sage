@@ -42,7 +42,16 @@ export function loadBuildManifest(path: string, fallback: BuildManifestInputs = 
     if (typeof parsed !== 'object' || parsed === null) return createBuildManifest(fallback);
     const value = parsed as Partial<BuildManifest>;
     if (value.manifestVersion !== BUILD_MANIFEST_VERSION) return createBuildManifest(fallback);
-    if (![value.buildId, value.commit, value.branch, value.version, value.electronVersion, value.pythonVersion].every((item) => typeof item === 'string' && item.length > 0)) {
+    if (
+      ![
+        value.buildId,
+        value.commit,
+        value.branch,
+        value.version,
+        value.electronVersion,
+        value.pythonVersion,
+      ].every((item) => typeof item === 'string' && item.length > 0)
+    ) {
       return createBuildManifest(fallback);
     }
     return value as BuildManifest;
@@ -74,14 +83,21 @@ export function expectedHealthProof(
 }
 
 export function ownsBackend(
-  health: Partial<BackendHealthEnvelope>,
+  health: Partial<BackendHealthEnvelope> | null,
   ownership: BackendOwnership,
   manifest: BuildManifest,
 ): health is BackendHealthEnvelope {
   return (
+    health != null &&
     health.status === 'ok' &&
     typeof health.proof === 'string' &&
-    health.proof === expectedHealthProof(ownership.ownershipToken, manifest.buildId, ownership.generation, ownership.pid) &&
+    health.proof ===
+      expectedHealthProof(
+        ownership.ownershipToken,
+        manifest.buildId,
+        ownership.generation,
+        ownership.pid,
+      ) &&
     health.pid === ownership.pid &&
     health.generation === ownership.generation &&
     health.buildId === manifest.buildId

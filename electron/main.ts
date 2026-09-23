@@ -772,7 +772,9 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
           resolve(null);
         });
       });
-      if (ownsBackend(health as Partial<BackendHealthEnvelope>, expectedBackend, buildManifest)) {
+      if (
+        ownsBackend(health as Partial<BackendHealthEnvelope> | null, expectedBackend, buildManifest)
+      ) {
         // ── Race-fix recheck ─────────────────────────────────────────────
         // 1. Generation/PID/token still match the live supervisor state.
         // 2. The ChildProcess is still alive and not exited.
