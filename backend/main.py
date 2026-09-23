@@ -342,6 +342,21 @@ async def lifespan(app: FastAPI):
     db.init_db()
     app.state.db = db
     app.state.catalog_repo = CatalogRepository(db)
+    # SE2 (DSH 对标 R2): 存量会话事件回填 —— SE1 之前的会话没有
+    # session_events 记录，读取切换（历史从事件投影）前必须补齐。
+    # 幂等（有事件即跳过）、fail-safe（失败仅告警，不阻断启动）。
+    try:
+        from backend.data.session_event_backfill import backfill_session_events
+
+        _backfill = backfill_session_events(db)
+        if _backfill["sessions_backfilled"]:
+            logger.info(
+                "session event backfill: %s sessions / %s events",
+                _backfill["sessions_backfilled"],
+                _backfill["events_written"],
+            )
+    except Exception:
+        logger.exception("session event backfill failed (ignored)")
     # Task 4: load builtin seed data if catalog is empty (no network access)
     # fail-safe — must not crash startup if seed parsing or DB write fails
     try:
