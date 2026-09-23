@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **渲染事件命中率可视化（R25）**：修复 NetworkTab 把 metrics 快照的 `render_events` 全局键当域名行渲染的回归；新增独立命中率块（渲染数/通道就绪/事件命中），i18n 全量补键 + vitest 契约测试
 - **渲染池槽位配置化（R25）**：`web_access_config.render_pool_size`（钳 1..4，默认 2），acquire 懒增槽位；设置页新增下拉控件，前后端同口径
 
+> 🧹 **浏览器生命周期 R26：进程树回收时序修复**（方案 `docs/plans/2026-09-24_browser-treekill-order.md`）
+
+### Fixed(browser)
+- **进程树回收时序（R26）**：`_terminate_session` 先 terminate 父进程再 taskkill /T，父退出后子进程被重派生、`/T` 遍历不到树 —— crashpad/gpu 等孤儿进程锁住 profile 目录（单测每轮泄漏一棵进程树）。修复为父进程存活时先树杀、后优雅终止兜底；POSIX 行为不变
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21
