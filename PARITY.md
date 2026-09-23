@@ -2,271 +2,135 @@
 
 > 定义 Sage 各子系统间的状态一致性标准和验证机制。
 
+> **ⓘ 状态（2026-09-23 事实核对）**：本文最初为 2026-06-20（Tauri 时代）的
+> 设计草案，其中「WebSocket 推送」「多设备同步」「parity/health 端点」等
+> 内容**从未实现**。本次已按真实实现重写 §1 与 §4，未实施的远期设计集中
+> 移入 §5 并明确标注。引用本文时以 §1 为准。
+
 ---
 
 ## 概述
 
-PARITY.md 定义了 Sage 项目中不同子系统之间必须保持的一致性约束。这些约束确保：
+PARITY.md 定义了 Sage 项目中不同子系统之间必须保持的一致性约束：
 
 - **前后端状态同步**：前端 UI 状态与后端数据保持一致
-- **数据完整性**：跨模块操作保持数据一致性
-- **冲突可检测**：自动检测状态不一致并提供解决机制
 - **可验证性**：所有对齐标准都可自动化验证
+
+**真实通信拓扑**（三条链路，无 WebSocket）：
+
+| 链路 | 通道 | 实现 |
+|---|---|---|
+| 渲染层 → 主进程 | IPC `sage:invoke`（请求）/ `sage:listen`（事件订阅，`sage:event:` 前缀通道） | `electron/preload.ts` 经 contextBridge 暴露 |
+| 主进程 → 后端 | HTTP `127.0.0.1:8765`（`PYTHON_BACKEND_PORT` 可覆写） | `electron/backendLauncher.ts` + `backendSupervisor.ts` |
+| chat 流式响应 | POST `/chat/stream` 取 streamId → GET NDJSON → `webContents.send` 转发 | `electron/relay.ts` + `eventRouting.ts` |
 
 ---
 
-## 1. 后端与前端状态一致性
+## 1. 后端与前端状态一致性（现行实现）
 
 ### 1.1 记忆条目
 
-| 对齐项 | 后端状态 | 前端状态 | 验证方法 |
+| 对齐项 | 后端状态 | 前端状态 | 同步机制（真实） |
 |--------|----------|----------|----------|
-| 记忆列表 | `MemoryManager.list()` | Zustand store `memories[]` | WebSocket 推送 + 轮询校验 |
-| 记忆详情 | `MemoryManager.get(id)` | Zustand store `currentMemory` | WebSocket 推送 |
-| 记忆删除 | `MemoryManager.delete(id)` | 从 store 移除 | WebSocket 推送 |
-| 记忆创建 | `MemoryManager.create()` | 添加到 store | WebSocket 推送 |
-
-**验证机制**：
-```python
-# 后端：状态变更时推送
-async def update_memory(memory_id: str, updates: dict):
-    memory = await memory_manager.update(memory_id, updates)
-    await websocket.broadcast("memory_updated", memory.to_dict())
-
-# 前端：接收推送并更新 store
-websocket.on("memory_updated", (data) => {
-  store.updateMemory(data);
-});
-```
+| 记忆列表 | `backend/memory/manager.py`（REST `/api/v1/memory/*`） | `memoryApi.getMemories()` → 页面级加载 | REST 拉取 + 变更后重新拉取/回填 |
+| 记忆创建/更新/删除 | 同上 REST 变更端点 | 变更成功后本地 store/页面状态更新 | REST 响应回填，无服务端推送 |
+| 记忆召回（chat 内） | 注入/召回在 chat 流内完成 | `store.memory_refs` / `memory_applied`（流事件携带） | NDJSON 流事件经 relay 转发 |
 
 ### 1.2 会话状态
 
-| 对齐项 | 后端状态 | 前端状态 | 验证方法 |
+| 对齐项 | 后端状态 | 前端状态 | 同步机制（真实） |
 |--------|----------|----------|----------|
-| 活跃会话 | `SessionManager.active_session` | Zustand store `activeSession` | WebSocket 推送 |
-| 会话列表 | `SessionManager.list()` | Zustand store `sessions[]` | WebSocket 推送 |
-| 消息历史 | `SessionManager.get_messages()` | Zustand store `messages[]` | 分页加载 + WebSocket 推送 |
+| 会话列表 | `SessionRepository.list()`（REST） | Zustand store `sessions[]`（`loadSessions()`） | REST 拉取；排序在后端 SQL（pinned > running > 新序） |
+| 活跃会话 | 由前端持有（`currentSessionId`） | Zustand store | 前端单一事实源，切换即 IPC 调用后端读写消息 |
+| 消息历史 | `SessionRepository` 分页（REST） | store `messages[]` | REST 分页加载 |
+| 流式输出 | NDJSON 事件流 | `chatStreamStore` | relay：`/chat/stream` NDJSON → 主进程 → `webContents.send` |
 
 ### 1.3 配置状态
 
-| 对齐项 | 后端状态 | 前端状态 | 验证方法 |
+| 对齐项 | 后端状态 | 前端状态 | 同步机制（真实） |
 |--------|----------|----------|----------|
-| API 配置 | `config.api_base_url` | Zustand store `config.apiBaseUrl` | 配置变更事件 |
-| 主题设置 | `config.theme` | Zustand store `config.theme` | 配置变更事件 |
-| 语言设置 | `config.language` | Zustand store `config.language` | 配置变更事件 |
+| 模型端点/偏好 | `settings` REST + SQLite | `settingsStore`（`useSettings`） | REST 读写；变更经 `settingsClient` 持久化 |
+| 主题/语言 | 前端持有（theme_storage / i18n） | Zustand store + localStorage | 前端单一事实源 |
 
 ---
 
-## 2. 本地与云端一致性（未来）
+## 2. 验证机制（现行实现）
 
-### 2.1 离线记忆
+### 2.1 自动化测试
 
-**场景**：用户在离线状态下创建/修改记忆
+| 层 | 通道 | 覆盖的状态契约 |
+|---|---|---|
+| Vitest（jsdom） | `src/**/*.test.tsx`（~405 文件） | store 更新、API envelope 契约、组件状态渲染 |
+| Playwright stub | `electron-stub-smoke/deep`（PR 门禁） | UI 流程 × stub 后端（不真连模型） |
+| Playwright live | `electron-live-boot/deep`（nightly/release） | 真实后端启动 + 冒烟 |
+| 后端 pytest | coverage ≥ 80% 强门禁；win7 线另有 py38 job | 服务层契约 |
 
-**对齐策略**：
-1. 离线时本地缓存变更（IndexedDB）
-2. 上线后自动同步到云端
-3. 冲突检测：比较本地和云端的时间戳
-4. 冲突解决：用户选择保留版本
+> 原 §4.1 的 `tests/parity/` 目录与 §4.3 的 `GET /api/v1/parity/health`
+> 端点**未实施**；状态契约验证由上表通道承担。
 
-**验证方法**：
-```python
-# 离线缓存
-class OfflineCache:
-    async def save_change(self, change: Change):
-        await indexeddb.save(change)
-    
-    async def sync_when_online(self):
-        changes = await indexeddb.get_all()
-        for change in changes:
-            conflict = await detect_conflict(change)
-            if conflict:
-                await resolve_conflict(conflict)
-            else:
-                await apply_change(change)
-```
+### 2.2 运行时监控
 
-### 2.2 配置同步
-
-**场景**：用户在多个设备间同步配置
-
-**对齐策略**：
-1. 配置变更时推送到云端
-2. 其他设备拉取最新配置
-3. 冲突解决：最后写入优先（last-write-wins）
+- 后端启动埋点（R22-D7）与结构化日志（`electron/logRotate.ts` 分级轮转）
+- 依赖契约审计：CI `dependency-audit` job（npm audit + pip-audit + environment.yml 漂移校验）
 
 ---
 
-## 3. 多设备同步
+## 3. 冲突解决策略（现行实现）
 
-### 3.1 设备发现
-
-**机制**：
-1. 局域网广播（mDNS/DNS-SD）
-2. 云端注册中心
-3. 手动输入设备 ID
-
-### 3.2 数据同步
-
-**同步协议**：
-```python
-class SyncProtocol:
-    async def sync(self, device_id: str):
-        # 1. 交换版本号
-        local_version = await self.get_version()
-        remote_version = await remote.get_version()
-        
-        # 2. 计算差异
-        if local_version > remote_version:
-            diff = await self.compute_diff(remote_version)
-            await remote.apply_diff(diff)
-        elif remote_version > local_version:
-            diff = await remote.compute_diff(local_version)
-            await self.apply_diff(diff)
-        
-        # 3. 确认同步完成
-        await self.acknowledge_sync(device_id)
-```
+- **会话/消息**：乐观并发 hash 保存（ArtifactViewer 编辑路径），冲突以服务端最新为准并提示刷新
+- **配置**：last-write-wins（设置页单项写入即生效）
+- **多设备/离线同步**：见 §5（未实施）
 
 ---
 
-## 4. 验证机制
+## 4. 实施检查清单（现状）
 
-### 4.1 自动化测试
+### 已落地
+- [x] REST 契约测试（前端 vitest + 后端 pytest 双侧）
+- [x] chat NDJSON 流断连续传（`after_seq` 游标，orch 与 arena JobConsole）
+- [x] 依赖契约审计（CI dependency-audit）
+- [x] 分层 E2E 门禁（stub-smoke/deep + live-boot 分 PR/nightly/release 通道）
 
-**位置**：`tests/parity/`
-
-**测试用例**：
-```python
-# tests/parity/test_backend_frontend_sync.py
-@pytest.mark.asyncio
-async def test_memory_update_syncs_to_frontend():
-    """测试记忆更新同步到前端"""
-    # 1. 后端更新记忆
-    await memory_manager.update(memory_id, {"content": "new content"})
-    
-    # 2. 等待 WebSocket 推送
-    await asyncio.sleep(0.1)
-    
-    # 3. 验证前端状态
-    frontend_state = await get_frontend_state()
-    assert frontend_state.memories[memory_id].content == "new content"
-```
-
-### 4.2 运行时监控
-
-**指标**：
-- 状态不一致检测次数
-- 同步延迟 P95
-- 冲突发生率
-
-**告警阈值**：
-- 不一致检测 > 10 次/小时 → 警告
-- 同步延迟 P95 > 500ms → 警告
-- 冲突率 > 5% → 警告
-
-### 4.3 健康检查端点
-
-**端点**：`GET /api/v1/parity/health`
-
-**响应**：
-```json
-{
-  "status": "healthy",
-  "checks": {
-    "memory_sync": {
-      "status": "ok",
-      "last_sync": "2026-06-20T10:00:00Z",
-      "inconsistencies": 0
-    },
-    "session_sync": {
-      "status": "ok",
-      "last_sync": "2026-06-20T10:00:00Z",
-      "inconsistencies": 0
-    }
-  }
-}
-```
+### 未实施（远期设计，见 §5）
+- [ ] WebSocket/服务端推送（当前为 REST 拉取 + 流式 relay，够用）
+- [ ] `/api/v1/parity/health` 聚合健康端点
+- [ ] 多设备发现与同步（mDNS / 云端注册）
+- [ ] 离线缓存（IndexedDB）与同步冲突解决 UI
 
 ---
 
-## 5. 冲突解决策略
+## 5. 未实施的远期设计（原 §2/§3/§4.3 保留备查）
 
-### 5.1 自动解决
+> 以下为 2026-06-20 草案的远期设想，**当前代码库中不存在对应实现**，
+> 引用前务必核对。若未来启动多设备/离线方向，从这里接续。
 
-**策略 1：时间戳优先（last-write-wins）**
-```python
-def resolve_by_timestamp(local: dict, remote: dict) -> dict:
-    if local["updated_at"] > remote["updated_at"]:
-        return local
-    else:
-        return remote
-```
+### 5.1 离线记忆（原 §2.1）
+IndexedDB 本地缓存变更、上线同步、时间戳冲突检测与用户裁决。
 
-**策略 2：版本号优先**
-```python
-def resolve_by_version(local: dict, remote: dict) -> dict:
-    if local["version"] > remote["version"]:
-        return local
-    else:
-        return remote
-```
+### 5.2 多设备同步（原 §3）
+mDNS/DNS-SD 设备发现、云端注册中心、版本号 diff 同步协议。
 
-### 5.2 手动解决
-
-**场景**：自动策略无法解决（如双方都修改了同一字段）
-
-**流程**：
-1. 检测冲突
-2. 通知用户
-3. 用户选择保留版本
-4. 应用用户选择
+### 5.3 parity/health 聚合端点（原 §4.3）
+`GET /api/v1/parity/health` 返回 memory_sync/session_sync 一致性检查结果。
 
 ---
 
-## 6. 实施检查清单
-
-### 后端
-- [ ] 实现 WebSocket 推送机制
-- [ ] 所有状态变更都推送事件
-- [ ] 实现 `/api/v1/parity/health` 端点
-- [ ] 编写状态同步测试
-
-### 前端
-- [ ] 实现 WebSocket 客户端
-- [ ] 所有 store 更新都监听 WebSocket
-- [ ] 实现离线缓存（IndexedDB）
-- [ ] 编写状态同步测试
-
-### 集成
-- [ ] 端到端状态同步测试
-- [ ] 冲突检测和解决测试
-- [ ] 性能测试（同步延迟）
-- [ ] 压力测试（高并发同步）
-
----
-
-## 7. 故障排查
+## 6. 故障排查（按真实链路）
 
 ### 问题 1：前端状态不同步
+1. 渲染层 → 主进程：确认 `sage:invoke` 通道有响应（DevTools console 看 electronAPI 错误）
+2. 主进程 → 后端：确认 8765 端口进程存活（`backendSupervisor` 世代管理 + `orphanBackendKiller` 清理）
+3. 流式路径：`electron/relay.ts` 的 NDJSON 拉取是否断流（`after_seq` 续传语义兜底）
+4. store 更新逻辑：变更后是否触发重新拉取（页面级加载模型，无服务端推送）
 
-**排查步骤**：
-1. 检查 WebSocket 连接是否正常
-2. 检查后端是否推送了事件
-3. 检查前端是否接收并处理了事件
-4. 检查 store 更新逻辑是否正确
-
-### 问题 2：状态冲突
-
-**排查步骤**：
-1. 查看冲突日志
-2. 分析冲突原因（并发修改？）
-3. 检查时间戳/版本号逻辑
-4. 验证冲突解决策略
+### 问题 2：流式输出中断
+1. 看 relay 日志（`sage:event:` 通道是否持续收到帧）
+2. 后端 job 事件端点为批量回放型 NDJSON——断连后靠 `after_seq` 游标续传
+3. 长任务挂起参考 arena JobConsole 的 2s 轮询模式
 
 ---
 
-## 8. 参考
+## 7. 参考
 
 - [设计哲学](./PHILOSOPHY.md) - 透明可控原则
 - [验证映射 g005](./docs/verification/g005-frontend-state.md) - 前端状态契约
@@ -274,6 +138,6 @@ def resolve_by_version(local: dict, remote: dict) -> dict:
 
 ---
 
-**创建时间**：2026-06-20  
-**维护者**：Sage 团队  
-**最后更新**：2026-06-20
+**创建时间**：2026-06-20
+**事实核对与重写**：2026-09-23
+**维护者**：Sage 团队
