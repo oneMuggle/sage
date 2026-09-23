@@ -108,6 +108,13 @@ class BaseTool(ABC):
     # risk，并同步扩充 test_risk.py 的内置工具验收表。
     risk: RiskClass = RiskClass.READ
 
+    # DSH 对标 R3 (B2): 并发安全自声明 —— True 显式声明可与任意工具并发
+    # 执行（rolling pool），False 显式压制（即使 risk==READ 也不进并发池，
+    # 如依赖共享游标/临时态的 READ 工具）；None 缺省回落 risk==READ 判定
+    # （与既有批级并行同口径，存量工具零注册成本）。对齐 deepseek-harness
+    # 的 isConcurrencySafe 声明式调度。
+    concurrency_safe: Optional[bool] = None
+
     # 阻塞型工具声明：execute() 可能长时间不返回（bash 默认超时 120s、
     # 上限 600s；repl 同量级）。run_loop 分发点据此把这类工具卸载到
     # executor 线程执行，避免一条慢命令卡死整个 asyncio 事件循环
