@@ -2947,7 +2947,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     _skill_activation_block,
                 )
 
-                r38_skills_port = await asyncio.to_thread(_get_skill_adapter)
+                r38_skills_port = await to_thread(_get_skill_adapter)
                 r38_block, r38_activated_skill_list = _skill_activation_block(
                     data.message or "", r38_skills_port
                 )
@@ -3169,13 +3169,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # Task 14 (context-isolation): 记录旧段 id,advance 后只清旧段
                     # 工作记忆,避免 clear() 把其他段一并擦掉破坏段隔离语义。
                     _old_seg = repo.get_active_segment_id(data.session_id)
-                    await asyncio.to_thread(repo.advance_segment, data.session_id)
+                    await to_thread(repo.advance_segment, data.session_id)
                     try:
                         _clear_working_segment(agent, data.session_id, _old_seg)
                     except Exception as mem_err:
                         logger.warning("working memory clear_segment failed: %s", mem_err)
 
-                history_rows = await asyncio.to_thread(
+                history_rows = await to_thread(
                     repo.get_active_segment, data.session_id
                 )
             except Exception as hist_err:
@@ -3220,12 +3220,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # Task 14 (context-isolation): 记录旧段 id,advance 后清旧段
                     # 工作记忆,与显式 context_reset 路径保持一致清理口径。
                     _old_seg_auto = repo.get_active_segment_id(data.session_id)
-                    new_seg = await asyncio.to_thread(repo.advance_segment, data.session_id)
+                    new_seg = await to_thread(repo.advance_segment, data.session_id)
                     try:
                         _clear_working_segment(agent, data.session_id, _old_seg_auto)
                     except Exception as wm_err:
                         logger.warning("working memory clear_segment (auto) failed: %s", wm_err)
-                    history_rows = await asyncio.to_thread(
+                    history_rows = await to_thread(
                         repo.get_active_segment, data.session_id
                     )
                     try:
@@ -3368,7 +3368,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # SE2 (DSH 对标 R2): 历史从事件日志投影（"Model-visible ⟺ logged"）。
             # 事件为空且表里有历史（回填竞态/双写缺口）时防御性回退旧表投影。
             try:
-                _session_events = await asyncio.to_thread(
+                _session_events = await to_thread(
                     lambda: _event_repo().get_by_session(data.session_id)
                 )
             except Exception as ev_err:  # noqa: BLE001 — 事件读取失败回退表投影
@@ -3486,7 +3486,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 # 告警与重复行。仅在带 cmid 的路径检查 (UUID 路径天然唯一)。
                 reuse_existing = False
                 if data.client_message_id:
-                    existing_user = await asyncio.to_thread(
+                    existing_user = await to_thread(
                         message_repo.get, user_message_id
                     )
                     reuse_existing = (
