@@ -205,22 +205,29 @@ def test_parity_after_message_delete(setup_test_db):
     )
 
 
-def test_parity_after_segment_retreat(setup_test_db):
+def test_parity_after_segment_retreat(setup_test_db, monkeypatch):
     """retreat_segment 删 separator 后，事件投影不再在原处分段。"""
-    import time as _time  # 局部导入保留（其余用例用模块级 time）
+    import backend.data.session_repo as session_repo_module
+
+    # R110（#1465）: advance_segment 内部用真实 wall clock 落 separator 的
+    # created_at，测试侧合成时间戳与它只隔 1ms 窄缝 —— CI 负载/时钟抖动下
+    # 偶发同毫秒撞值（messages 按 created_at 排序、事件按 seq 排序，两端
+    # 分叉）。冻结 session_repo 的 time 引用并让时钟每次 +100ms 严格单调。
+    clock = {"ms": 1_000_000_000}
+
+    class _FakeTime:
+        @staticmethod
+        def time():
+            clock["ms"] += 100
+            return clock["ms"] / 1000
+
+    monkeypatch.setattr(session_repo_module, "time", _FakeTime)
 
     sid = "s-retreat-1"
     ensure_session(setup_test_db, sid)
     repo = MessageRepository()
-    # 注意：advance_segment 内部用真实 wall clock 落 separator 的
-    # created_at；messages 表按 created_at 排序而投影按 seq 排序。
-    # 前两条消息的基线拨到 10 秒前 —— CI 上整个用例可在 1-2ms 内跑完，
-    # 真实时钟与合成时间戳撞毫秒会让 separator 排进历史中间（顺序被
-    # rowid 打乱，两端投影分叉）；回退基线后 separator 必然严格晚于它们。
-    base = int(_time.time() * 1000) - 10_000
-
-    repo.save(_msg(sid, 1, "user", "第一段问", base + 1))
-    repo.save(_msg(sid, 2, "assistant", "第一段答", base + 2))
+    repo.save(_msg(sid, 1, "user", "第一段问", int(_FakeTime.time() * 1000)))
+    repo.save(_msg(sid, 2, "assistant", "第一段答", int(_FakeTime.time() * 1000)))
     assert repo.advance_segment(sid) == 1
     # 取 separator 的实际 created_at，让后续消息晚于它（时钟确定性）
     separator = [
@@ -228,7 +235,7 @@ def test_parity_after_segment_retreat(setup_test_db):
         for m in repo.get_by_session(sid, limit=100000)
         if m.subtype == "topic_separator"
     ][0]
-    assert separator.created_at > base + 2
+    assert separator.created_at > int(_FakeTime.time() * 1000) - 100
     repo.save(_msg(sid, 4, "user", "第二段问", separator.created_at + 1))
     # 切分前：投影只看第二段
     _assert_parity(setup_test_db, sid)
