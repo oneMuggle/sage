@@ -326,19 +326,39 @@ def _try_import_backend(
             if supervisor_pp:
                 probe_env["PYTHONPATH"] = str(supervisor_pp)
 
-        result = subprocess.run(
-            [str(interpreter_path), "-c", "import backend.main"],
-            cwd=str(package_root_path),
-            check=False,
-            env=probe_env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            # baseline 实测: 冷启动 import backend.main 约 5-6s (jieba 词典 1s +
-            # FastAPI/Pydantic 装配 + 路由注册). 5s timeout 在冷环境下 flaky,
-            # 放到 20s 留足裕量, 仍属 fail-open (不影响用户体感).
-            timeout=20,
-        )
-        return result.returncode == 0
+        probe_cmd = [str(interpreter_path), "-c", "import backend.main"]
+        # OPS3 (round47): 超时重试一次 —— 重负载机器（或 8000+ 测试连续
+        # 运行后的本会话全量套件）下 import 可能超过 20s，属瞬时资源
+        # 抖动而非环境损坏；二次尝试放宽到 60s。确定性失败（binary
+        # 缺失等 OSError）不重试。语义仍为 fail-open。
+        try:
+            result = subprocess.run(
+                probe_cmd,
+                cwd=str(package_root_path),
+                check=False,
+                env=probe_env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                # baseline 实测: 冷启动 import backend.main 约 5-6s (jieba 词典 1s +
+                # FastAPI/Pydantic 装配 + 路由注册). 5s timeout 在冷环境下 flaky,
+                # 放到 20s 留足裕量, 仍属 fail-open (不影响用户体感).
+                timeout=20,
+            )
+            return result.returncode == 0
+        except subprocess.TimeoutExpired:
+            try:
+                result = subprocess.run(
+                    probe_cmd,
+                    cwd=str(package_root_path),
+                    check=False,
+                    env=probe_env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=60,
+                )
+            except subprocess.SubprocessError:
+                return False
+            return result.returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
 
