@@ -265,6 +265,13 @@ export const zh = {
   'settings.network.creds.metrics.hint': '进程内存态，重启清零',
   'settings.network.creds.metrics.refresh': '刷新',
   'settings.network.creds.metrics.reset': '重置',
+  'settings.network.creds.metrics.render_events': '渲染事件命中率（R22-R24 接线效果）',
+  'settings.network.creds.metrics.render_events.renders': '渲染',
+  'settings.network.creds.metrics.render_events.channel': '通道就绪',
+  'settings.network.creds.metrics.render_events.hits': '事件命中',
+  'settings.network.creds.pool_size': '渲染池实例数',
+  'settings.network.creds.pool_size.desc':
+    '并发渲染分散到多个 headless 实例（1-4，默认 2；改动后下次渲染生效）',
   'settings.network.creds.confirm': '确认删除该站点的凭据？此操作不可恢复。',
   'settings.network.creds.plaintext': '明文',
   'settings.network.creds.profile': '来源',

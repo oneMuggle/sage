@@ -402,3 +402,61 @@ describe('NetworkTab cookie credential import', () => {
     ).toBe(false);
   });
 });
+
+describe('NetworkTab render events metrics (R25)', () => {
+  beforeEach(() => {
+    mocks.getPreference.mockReset();
+    mocks.setPreference.mockReset();
+    mocks.getPreference.mockResolvedValue(null);
+    mocks.setPreference.mockResolvedValue(undefined);
+  });
+
+  function metricsFetchMock(): ReturnType<typeof vi.fn> {
+    return vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      let payload: unknown = {};
+      if (url.includes('/web-access/metrics')) {
+        payload = {
+          metrics: {
+            'a.example': { ok: 3, fail: 1, escalated: 1, avg_elapsed_ms: 120 },
+            render_events: { renders: 5, channel_ok: 4, event_status_hits: 2 },
+          },
+        };
+      } else if (url.includes('/web-access/credentials')) {
+        payload = { credentials: [] };
+      } else if (url.includes('/diagnostic/browser')) {
+        payload = null;
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => payload,
+      });
+    });
+  }
+
+  it('keeps render_events out of host rows and shows the hit-rate block', async () => {
+    vi.stubGlobal('fetch', metricsFetchMock());
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('render-events-metrics')).toHaveTextContent('5');
+    });
+    expect(screen.queryByTestId('metric-row-render_events')).toBeNull();
+    expect(screen.getByTestId('metric-row-a.example')).toHaveTextContent('a.example');
+    expect(screen.getByTestId('render-events-metrics')).toHaveTextContent('2');
+  });
+
+  it('persists pool size selection into web_access_config', async () => {
+    vi.stubGlobal('fetch', metricsFetchMock());
+    renderTab();
+
+    const select = await screen.findByTestId('cred-pool-size-select');
+    fireEvent.change(select, { target: { value: '3' } });
+
+    await waitFor(() => {
+      const call = mocks.setPreference.mock.calls.find(([key]) => key === 'web_access_config');
+      expect(call).toBeDefined();
+      expect(JSON.parse(call![1] as string).render_pool_size).toBe(3);
+    });
+  });
+});
