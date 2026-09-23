@@ -243,3 +243,161 @@ def test_event_channel_connect_refused(tmp_path):
     assert tracker.connected is False
     assert tracker.error
     browser_events.stop_all_tracking()
+
+
+# ---------- R22：NetworkResponseTracker ----------
+
+
+class TestNetworkResponseTracker:
+    def test_record_document_response(self):
+        from backend.tools.browser_events import NetworkResponseTracker
+
+        t = NetworkResponseTracker()
+        t.record("sess1", {"response": {"url": "https://x.com/", "status": 200, "type": "Document"}})
+        rec = t.last_document("sess1")
+        assert rec is not None
+        assert rec["url"] == "https://x.com/"
+        assert rec["status"] == 200
+
+    def test_non_document_ignored(self):
+        from backend.tools.browser_events import NetworkResponseTracker
+
+        t = NetworkResponseTracker()
+        t.record("s", {"response": {"url": "u", "status": 200, "type": "Script"}})
+        assert t.last_document("s") is None
+
+    def test_detach(self):
+        from backend.tools.browser_events import NetworkResponseTracker
+
+        t = NetworkResponseTracker()
+        t.record("s", {"response": {"url": "u", "status": 200, "type": "Document"}})
+        t.detach("s")
+        assert t.last_document("s") is None
+
+
+# ---------- R22 批次 2：attach + 事件状态查询链路 ----------
+
+
+def _serve_with_network(server, response_events, hold=None, attach_error=False):
+    """握手 + setDownloadBehavior 后应答 attachToTarget / Network.enable，
+    Network.enable 应答后下发 ``response_events``（带 sessionId 的事件帧）。"""
+    conn, _ = server.accept()
+    conn.settimeout(5)
+    request = b""
+    while b"\r\n\r\n" not in request:
+        request += conn.recv(4096)
+    key = next(
+        line.split(":", 1)[1].strip()
+        for line in request.decode("latin-1").split("\r\n")
+        if line.lower().startswith("sec-websocket-key")
+    )
+    accept = base64.b64encode(hashlib.sha1((key + _WS_GUID).encode()).digest()).decode()
+    conn.sendall(
+        (
+            "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+            f"Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+        ).encode()
+    )
+    message = json.loads(_ws_recv_client_text(conn))
+    _ws_send_server_text(conn, json.dumps({"id": message["id"], "result": {}}))
+    while True:
+        try:
+            client = json.loads(_ws_recv_client_text(conn))
+        except (OSError, ValueError):
+            break
+        method = client.get("method")
+        if method == "Target.attachToTarget":
+            if attach_error:
+                _ws_send_server_text(
+                    conn,
+                    json.dumps({"id": client["id"], "error": {"message": "no target"}}),
+                )
+                continue
+            _ws_send_server_text(
+                conn,
+                json.dumps({"id": client["id"], "result": {"sessionId": "net-sess-1"}}),
+            )
+        elif method == "Network.enable":
+            _ws_send_server_text(conn, json.dumps({"id": client["id"], "result": {}}))
+            for event in response_events:
+                _ws_send_server_text(conn, json.dumps(event))
+                time.sleep(0.02)
+    if hold is not None:
+        hold.wait(5)
+    conn.close()
+
+
+def test_ensure_attach_and_get_tracked_response(ws_server, tmp_path):
+    port = ws_server.getsockname()[1]
+    hold = threading.Event()
+    events = [
+        {
+            "method": "Network.responseReceived",
+            "sessionId": "net-sess-1",
+            "params": {
+                "response": {"url": "https://a.example/", "status": 302, "type": "Document"}
+            },
+        },
+        {
+            "method": "Network.responseReceived",
+            "sessionId": "other-sess",
+            "params": {"response": {"url": "https://b.example/", "status": 500, "type": "Document"}},
+        },
+    ]
+    threading.Thread(
+        target=_serve_with_network, args=(ws_server, events), kwargs={"hold": hold}, daemon=True
+    ).start()
+    tracker = browser_events.start_download_tracking(
+        "b-net", port, "/devtools/browser/x", str(tmp_path)
+    )
+    assert tracker.connected is True
+
+    session_id = browser_events.ensure_network_tracking("b-net", "t-1")
+    assert session_id == "net-sess-1"
+    # 幂等：同 target 复用既有 sessionId，不重复 attach
+    assert browser_events.ensure_network_tracking("b-net", "t-1") == "net-sess-1"
+
+    record = None
+    other = None
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        record = browser_events.get_tracked_response("b-net", "net-sess-1")
+        other = browser_events.get_tracked_response("b-net", "other-sess")
+        if record and other:
+            break
+        time.sleep(0.05)
+    assert record == {"url": "https://a.example/", "status": 302}
+    # 其他 sessionId 的事件按其自身 id 记录，不污染本会话记录
+    assert other == {"url": "https://b.example/", "status": 500}
+    assert record == {"url": "https://a.example/", "status": 302}
+
+    browser_events.detach_network_session("b-net", "net-sess-1")
+    assert browser_events.get_tracked_response("b-net", "net-sess-1") is None
+    hold.set()
+    browser_events.stop_download_tracking("b-net")
+
+
+def test_ensure_network_tracking_without_channel_is_noop():
+    browser_events.stop_all_tracking()
+    assert browser_events.ensure_network_tracking("b-missing", "t") is None
+    assert browser_events.get_tracked_response("b-missing", "s") is None
+    # 清理接口对未知会话同样不抛
+    browser_events.detach_network_session("b-missing", "s")
+
+
+def test_ensure_network_tracking_attach_error_returns_none(ws_server, tmp_path):
+    port = ws_server.getsockname()[1]
+    hold = threading.Event()
+    threading.Thread(
+        target=_serve_with_network,
+        args=(ws_server, []),
+        kwargs={"hold": hold, "attach_error": True},
+        daemon=True,
+    ).start()
+    tracker = browser_events.start_download_tracking(
+        "b-neterr", port, "/devtools/browser/x", str(tmp_path)
+    )
+    assert tracker.connected is True
+    assert browser_events.ensure_network_tracking("b-neterr", "t-1") is None
+    hold.set()
+    browser_events.stop_download_tracking("b-neterr")

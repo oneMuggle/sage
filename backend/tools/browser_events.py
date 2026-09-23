@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
 import threading
 import time
 from pathlib import Path
@@ -159,6 +160,37 @@ class DownloadTracker:
         self._event.set()
 
 
+class NetworkResponseTracker:
+    """按 sessionId 记录最近一次主文档（type==Document）HTTP 响应（线程安全）。
+
+    render_page 在 createTarget 后 attach + Network.enable，导航完成后经
+    ``last_document(session_id)`` 取事件驱动的状态码。
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._by_session: Dict[str, Dict[str, Any]] = {}
+
+    def record(self, session_id: str, params: Dict[str, Any]) -> None:
+        response = params.get("response") or {}
+        if str(response.get("type") or "") != "Document":
+            return
+        with self._lock:
+            self._by_session[session_id] = {
+                "url": str(response.get("url") or ""),
+                "status": int(response.get("status") or 0),
+            }
+
+    def last_document(self, session_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            rec = self._by_session.get(session_id)
+            return dict(rec) if rec else None
+
+    def detach(self, session_id: str) -> None:
+        with self._lock:
+            self._by_session.pop(session_id, None)
+
+
 class _EventChannel:
     """常驻 WS 线程：建立 → 开启下载事件 → 循环分发到 tracker。"""
 
@@ -166,9 +198,70 @@ class _EventChannel:
         self._port = port
         self._ws_path = ws_path
         self.tracker = tracker
+        self.network_tracker: Optional[NetworkResponseTracker] = None
+        self._network_sessions: Dict[str, str] = {}  # session_id -> target_id
         self._sock: Any = None
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
+        self._msg_id = 0
+        self._id_lock = threading.Lock()
+        self._pending_lock = threading.Lock()
+        self._pending: Dict[int, queue.Queue] = {}  # 应答 id -> 等待队列
+
+    def _next_id(self) -> int:
+        with self._id_lock:
+            self._msg_id += 1
+            return self._msg_id
+
+    def _call(
+        self,
+        method: str,
+        params: Dict[str, Any],
+        session_id: str = "",
+        timeout: float = 5.0,
+    ) -> Optional[Dict[str, Any]]:
+        """在常驻 WS 上发命令并同步等应答（应答帧经 _dispatch 路由回来）。
+
+        不直接 recv —— 常驻读线程是唯一的帧读者，避免双读者抢帧；应答帧带
+        命令 id 到达时投递到对应等待队列。出错 / 超时返回 None（尽力而为
+        语义，由调用方决定降级路径）。
+        """
+        sock = self._sock
+        if sock is None:
+            return None
+        msg_id = self._next_id()
+        waiter: queue.Queue = queue.Queue()
+        with self._pending_lock:
+            self._pending[msg_id] = waiter
+        try:
+            frame: Dict[str, Any] = {"id": msg_id, "method": method, "params": params}
+            if session_id:
+                frame["sessionId"] = session_id
+            ws_send_text(sock, json.dumps(frame))
+            deadline = time.monotonic() + max(0.1, timeout)
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                try:
+                    data = waiter.get(timeout=remaining)
+                except queue.Empty:
+                    return None
+                if "error" in data:
+                    return None
+                return data
+        except (OSError, WebSocketError):
+            return None
+        finally:
+            with self._pending_lock:
+                self._pending.pop(msg_id, None)
+
+    def _wake_pending(self, message: str) -> None:
+        """通道断开时唤醒所有在等应答的调用方（拿到 error 帧 → 返回 None）。"""
+        with self._pending_lock:
+            waiters = list(self._pending.values())
+        for waiter in waiters:
+            waiter.put({"error": {"message": message}})
 
     def start(self) -> bool:
         try:
@@ -211,9 +304,39 @@ class _EventChannel:
         return True
 
     def _dispatch(self, data: Dict[str, Any]) -> None:
+        # 应答帧（带 id）：路由到等待队列；无人等待（含 start() 握手期的
+        # 迟到应答）则忽略。
+        mid = data.get("id")
+        if mid is not None:
+            with self._pending_lock:
+                waiter = self._pending.get(mid)
+            if waiter is not None:
+                waiter.put(data)
+                return
         method = data.get("method")
         if isinstance(method, str) and method.startswith("Browser.download"):
             self.tracker.handle_event(method, data.get("params") or {})
+        if method == "Network.responseReceived" and self.network_tracker is not None:
+            session_id = str(data.get("sessionId") or "")
+            if session_id:
+                self.network_tracker.record(session_id, data.get("params") or {})
+
+    def attach_network(self, target_id: str) -> Optional[str]:
+        """attach 到指定 target + Network.enable；返回 sessionId 或 None。
+
+        在常驻浏览器级 WS 上发送（flatten 模式）：应答帧由常驻读线程经
+        ``_dispatch`` 路由回 ``_call``，不与读循环抢帧；后续 Network 事件带
+        sessionId 到达并被 ``_dispatch`` 分发到 network_tracker。
+        """
+        resp = self._call("Target.attachToTarget", {"targetId": target_id, "flatten": True})
+        if not resp:
+            return None
+        session_id = str((resp.get("result") or {}).get("sessionId") or "") or None
+        if not session_id:
+            return None
+        self._network_sessions[session_id] = target_id
+        self._call("Network.enable", {}, session_id=session_id)
+        return session_id
 
     def _loop(self) -> None:
         sock = self._sock
@@ -225,6 +348,7 @@ class _EventChannel:
         except (OSError, WebSocketError, ValueError) as exc:
             if not self._stop.is_set():
                 self.tracker.mark_disconnected(f"{type(exc).__name__}: {exc}")
+            self._wake_pending("channel closed")
         finally:
             self._close_sock()
 
@@ -261,6 +385,47 @@ def get_download_tracker(browser_id: str) -> Optional[DownloadTracker]:
     with _channels_lock:
         channel = _channels.get(browser_id)
     return channel.tracker if channel else None
+
+
+# ---------- R22 批次 2：渲染分支 Network 事件化接口 ----------
+
+
+def ensure_network_tracking(browser_id: str, target_id: str) -> Optional[str]:
+    """render_page 用：确保事件通道 attach 到渲染标签页并开启 Network 事件。
+
+    幂等（同 target 复用既有 sessionId）；通道未建立 / attach 失败返回
+    None —— 调用方回退 Navigation Timing 读状态，不影响渲染主流程。
+    """
+    with _channels_lock:
+        channel = _channels.get(browser_id)
+        if channel is None:
+            return None
+        if channel.network_tracker is None:
+            channel.network_tracker = NetworkResponseTracker()
+        for session_id, tid in channel._network_sessions.items():
+            if tid == target_id:
+                return session_id
+    return channel.attach_network(target_id)
+
+
+def get_tracked_response(browser_id: str, session_id: str) -> Optional[Dict[str, Any]]:
+    """取该渲染会话最近一次主文档响应（事件驱动，含 302 中间 hop 状态）。"""
+    with _channels_lock:
+        channel = _channels.get(browser_id)
+    if channel is None or channel.network_tracker is None:
+        return None
+    return channel.network_tracker.last_document(session_id)
+
+
+def detach_network_session(browser_id: str, session_id: str) -> None:
+    """渲染结束清理：丢掉该 sessionId 的 target 映射与响应记录（尽力而为）。"""
+    with _channels_lock:
+        channel = _channels.get(browser_id)
+    if channel is None:
+        return
+    channel._network_sessions.pop(session_id, None)
+    if channel.network_tracker is not None:
+        channel.network_tracker.detach(session_id)
 
 
 def stop_download_tracking(browser_id: str) -> None:
@@ -308,8 +473,12 @@ def list_download_dir(download_dir: str) -> List[Dict[str, Any]]:
 __all__ = [
     "DEFAULT_WAIT_TIMEOUT",
     "MAX_WAIT_TIMEOUT",
+    "NetworkResponseTracker",
     "DownloadTracker",
+    "detach_network_session",
+    "ensure_network_tracking",
     "get_download_tracker",
+    "get_tracked_response",
     "list_download_dir",
     "start_download_tracking",
     "stop_all_tracking",

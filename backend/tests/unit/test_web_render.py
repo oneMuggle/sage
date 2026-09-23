@@ -124,7 +124,7 @@ def _install_render(monkeypatch, page_json: str, lengths: List[int] = None) -> L
 
     class _StubPool:
         def acquire(self):
-            return SimpleNamespace()  # 绝不真启动浏览器
+            return SimpleNamespace(browser_id="b-render")  # 绝不真启动浏览器
 
     def _fake_cdp(session, method, params=None, target_id=None):
         calls.append({"method": method, "params": params or {}, "target": target_id})
@@ -179,7 +179,7 @@ def test_render_page_policy_rejected():
 def test_render_page_navigation_error_text(fake_time, monkeypatch):
     class _StubPool:
         def acquire(self):
-            return SimpleNamespace()
+            return SimpleNamespace(browser_id="b-render")
 
     def _fake_cdp(session, method, params=None, target_id=None):
         if method == "Target.createTarget":
@@ -332,6 +332,48 @@ def test_render_page_omits_status_when_unavailable(fake_time, monkeypatch):
     assert "rendered_status" not in result
 
 
+# ---------- R22 批次 2：Network 事件状态优先 ----------
+
+
+def test_render_page_prefers_event_tracked_status(fake_time, monkeypatch):
+    """事件通道有 Document 记录时优先事件状态（可含 302 中间 hop 的拦截码）。"""
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])
+    detached: Any = []
+    monkeypatch.setattr(web_render, "ensure_network_tracking", lambda bid, tid: "sess-e")
+    monkeypatch.setattr(
+        web_render,
+        "get_tracked_response",
+        lambda bid, sid: {"url": "https://a.example/", "status": 403}
+        if sid == "sess-e"
+        else None,
+    )
+    monkeypatch.setattr(
+        web_render, "detach_network_session", lambda bid, sid: detached.append((bid, sid))
+    )
+
+    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
+
+    assert result["rendered_status"] == 403
+    assert detached == [("b-render", "sess-e")]
+
+
+def test_render_page_event_status_absent_falls_back_to_navigation_timing(
+    fake_time, monkeypatch
+):
+    """事件无记录（通道未建立 / 未捕获）→ Navigation Timing 兜底不被覆盖。"""
+    page_json = json.dumps(
+        {"url": "https://spa.example/", "title": "t", "text": "x", "status": 503}
+    )
+    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])
+    monkeypatch.setattr(web_render, "ensure_network_tracking", lambda bid, tid: "sess-e")
+    monkeypatch.setattr(web_render, "get_tracked_response", lambda bid, sid: None)
+
+    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
+
+    assert result["rendered_status"] == 503
+
+
 def test_render_page_survives_stealth_failure(fake_time, monkeypatch):
     """stealth 注入失败（apply_stealth 返回 False）不阻断渲染。"""
     page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
@@ -373,7 +415,7 @@ def _install_au5_render(
 
     class _StubPool:
         def acquire(self):
-            return SimpleNamespace()
+            return SimpleNamespace(browser_id="b-render")
 
     def _fake_cdp(session, method, params=None, target_id=None):
         calls.append({"method": method, "params": params or {}, "target": target_id})
