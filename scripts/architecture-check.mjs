@@ -79,6 +79,17 @@ function checkMaxFileLines() {
 const { newViolations, growthViolations } = checkMaxFileLines();
 const totalViolations = newViolations.length + growthViolations.length;
 
+// --json mode: emit machine-readable violations (used by the CI
+// ratchet-hint step to post a ready-to-paste baseline bump comment).
+// Exit code is still 0 in --json mode so the hint step can decide
+// for itself; the normal run below keeps the enforcing exit code.
+if (process.argv.includes('--json')) {
+  process.stdout.write(
+    JSON.stringify({ newViolations, growthViolations }, null, 2) + '\n',
+  );
+  process.exit(0);
+}
+
 if (totalViolations > 0) {
   if (newViolations.length > 0) {
     console.error(`${newViolations.length} NEW files exceeding ${maxFileLines} lines:`);

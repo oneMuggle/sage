@@ -724,6 +724,62 @@ jobs:
         with:
           node-version: '22.12'
       - run: node scripts/architecture-check.mjs
+      # 失败时把"现成可粘贴"的基线补账 JSON 行贴到 PR 评论——补账遗忘是
+      # 高频问题（连续多个 feature PR 带红 Architecture check 被合并）。
+      # 提示评论以 marker 开头，重复运行时先删旧提示再发新的（去重）。
+      - name: Ratchet bump hint (comment on failure)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const out = execSync('node scripts/architecture-check.mjs --json', { encoding: 'utf-8' });
+            const { newViolations, growthViolations } = JSON.parse(out);
+            if (!newViolations.length && !growthViolations.length) return;
+
+            const marker = '<!-- ratchet-auto-hint -->';
+            const lines = [];
+            if (growthViolations.length) {
+              lines.push('**基线补账（ratchet protocol：只升不降）**——把 `architecture-baseline.json` 里这些条目改成当前行数：');
+              lines.push('');
+              lines.push('```json');
+              for (const v of growthViolations) {
+                lines.push(`  "${v.file.replace(/\\/g, '/').replace(/^\.\//, '')}": ${v.lines},`);
+              }
+              lines.push('```');
+            }
+            if (newViolations.length) {
+              lines.push('**新超限文件**（超过全局上限，无法拆分时按同格式加入 baseline）：');
+              lines.push('');
+              lines.push('```json');
+              for (const v of newViolations) {
+                lines.push(`  "${v.file.replace(/\\/g, '/').replace(/^\.\//, '')}": ${v.lines},`);
+              }
+              lines.push('```');
+            }
+            const body = `${marker}\n## 📐 Architecture check 失败——补账提示\n\n${lines.join('\n')}\n\n<sub>自动化提示：若本次增长并非本 PR 所为（例如基线被上游合并先动），请核对后合并；若增长可避免，请优先拆分文件。</sub>\n`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            for (const c of comments) {
+              if (c.body && c.body.startsWith(marker)) {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: c.id,
+                });
+              }
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
 
   # ========== All-checks aggregator ==========
   # - 强门禁：backend + frontend + electron-smoke 全部 success 才算通过
