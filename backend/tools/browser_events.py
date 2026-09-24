@@ -377,6 +377,8 @@ def start_download_tracking(
         existing = _channels.get(browser_id)
         if existing is not None and existing.tracker.connected:
             return existing.tracker
+        if existing is not None:
+            existing.stop()  # R29：断连旧通道先停读线程，防 socket 半开滞留
         tracker = DownloadTracker(download_dir)
         channel = _EventChannel(port, ws_path, tracker)
         _channels[browser_id] = channel
@@ -401,6 +403,8 @@ def start_event_channel(browser_id: str, port: int, ws_path: str) -> bool:
         existing = _channels.get(browser_id)
         if existing is not None and existing.tracker.connected:
             return True
+        if existing is not None:
+            existing.stop()  # R29：断连旧通道先停读线程，防 socket 半开滞留
         tracker = DownloadTracker("")  # 渲染池不落下载，目录留空
         channel = _EventChannel(port, ws_path, tracker)
         _channels[browser_id] = channel

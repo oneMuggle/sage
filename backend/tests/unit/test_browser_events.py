@@ -12,6 +12,7 @@ import socket
 import struct
 import threading
 import time
+from typing import List
 
 import pytest
 
@@ -458,4 +459,24 @@ def test_start_event_channel_connect_refused():
     port = probe.getsockname()[1]
     probe.close()
     assert browser_events.start_event_channel("b-r23-refused", port, "/x") is False
+    browser_events.stop_all_tracking()
+
+
+def test_start_event_channel_stops_disconnected_channel(monkeypatch):
+    """R29：替换断连旧通道前先 stop 其读线程，防 socket 半开滞留。"""
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    port = probe.getsockname()[1]
+    probe.close()
+
+    tracker = browser_events.DownloadTracker("")
+    channel = browser_events._EventChannel(port, "/x", tracker)
+    channel.tracker.connected = False  # 模拟半开断连
+    stops: List[int] = []
+    monkeypatch.setattr(channel, "stop", lambda: stops.append(1))
+    browser_events._channels["b-dup"] = channel
+
+    ok = browser_events.start_event_channel("b-dup", port, "/x")  # 连接拒绝也仅返回 False
+    assert ok is False
+    assert stops == [1]  # 旧通道被 stop 后才替换
     browser_events.stop_all_tracking()
