@@ -229,6 +229,13 @@ jobs:
         run: |
           conda run -n sage-collect-py38 python -m pytest backend/tests/unit --collect-only -q -p no:cacheprovider
 
+      # integration/ 曾潜伏括号化 with（py39+ 语法）而 unit 收集网够不到；
+      # collect-only 只 import 不执行，能拦语法/导入期错误（见 T1 #1500）
+      - name: Collect integration suite (py38) — zero collection errors
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-collect-py38 python -m pytest backend/tests/integration --collect-only -q -p no:cacheprovider
+
 
   backend-legacy:
     name: Backend legacy smoke (non-blocking)
