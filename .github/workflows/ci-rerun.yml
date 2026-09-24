@@ -372,7 +372,10 @@ jobs:
 
   all-green:
     name: All Checks
-    needs: [backend, backend-py38, frontend, electron-smoke, dependency-audit, architecture-check]
+    # 2026-09-24 修复：needs 引用了本文件未定义的 architecture-check
+    # （该 job 只存在于 ci.yml，ci-rerun 从未定义它）→ workflow_dispatch
+    # 解析直接 422，SOP 补跑通道整体不可用。改为仅依赖本文件实有的 job。
+    needs: [backend, backend-py38, frontend, electron-smoke, dependency-audit]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
@@ -383,7 +386,8 @@ jobs:
           [ "${{ needs.frontend.result }}" = "success" ]
           [ "${{ needs.electron-smoke.result }}" = "success" ]
           # Architecture check runs on every trigger; must pass.
-          [ "${{ needs.architecture-check.result }}" = "success" ]
+          # （ci-rerun 未定义该 job——单文件行数属静态检查，与运行时无关，
+          #   跳过；如需覆盖请在上方补一个等价 job 再恢复此行）
           # Dependency audit only runs for main/develop and their PRs; release/win7
           # intentionally remains on its independent Python 3.8 dependency contract.
           if [ "${{ needs.dependency-audit.result }}" != "success" ] && [ "${{ needs.dependency-audit.result }}" != "skipped" ]; then
