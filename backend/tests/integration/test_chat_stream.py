@@ -130,12 +130,19 @@ async def test_chat_stream_attach_streams_ndjson_events():
             # I5: DONE 事件的 content 现在会被 producer 拆成 content_delta chunks
             # 逐个入队 (逐字流式效果)。所以 events 是 [thinking, acting, observing,
             # content_delta*, done]。
-            delta_events = [e for e in events if e["state"] == "content_delta"]
-            done_events = [e for e in events if e["state"] == "done"]
-            assert events[0]["state"] == "thinking"
-            assert events[1]["state"] == "acting"
-            assert events[1]["tool_call"]["function"]["name"] == "list_dir"
-            assert events[2]["state"] == "observing"
+            # TM2 (DSH 对标 R11): 事件首个可能是 context_pressure（producer
+            # 装配请求后、进入 agent loop 前推送的水位计量）—— 过滤后再断言
+            # ReAct 事件序。
+            core_events = [e for e in events if e["state"] != "context_pressure"]
+            cp_events = [e for e in events if e["state"] == "context_pressure"]
+            for e in cp_events:
+                assert isinstance(e["context_pressure"]["pressure"], (int, float))
+            delta_events = [e for e in core_events if e["state"] == "content_delta"]
+            done_events = [e for e in core_events if e["state"] == "done"]
+            assert core_events[0]["state"] == "thinking"
+            assert core_events[1]["state"] == "acting"
+            assert core_events[1]["tool_call"]["function"]["name"] == "list_dir"
+            assert core_events[2]["state"] == "observing"
             # content_delta 累积 = 完整 content
             accumulated = "".join(e["content"] for e in delta_events)
             assert accumulated == "答案是 2", f"accumulated {accumulated!r} != '答案是 2'"
