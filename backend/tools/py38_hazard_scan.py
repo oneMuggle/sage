@@ -38,6 +38,11 @@ LINE_EXEMPT_MARK = "py38-ok"
 
 # 3.10+ 才有的 Path 方法（3.8 运行即 AttributeError）
 PY310_PATH_METHODS = {"hardlink_to"}
+# 3.9+ 才有的 Path 方法
+PY39_PATH_METHODS = {"is_relative_to"}
+
+# 3.11+ 才有的 datetime 属性（UTC；3.11 以下用 timezone.utc）
+PY311_DATETIME_ATTRS = {"UTC"}
 
 # 3.10+ 才有的关键字参数
 PY310_KWARGS = {"write_text": {"newline"}, "read_text": {"newline"},
@@ -92,13 +97,29 @@ def visit_node(node, rel, hits):
     ):
         hits.append((rel, node.lineno, "zip(strict=...)（3.10+）"))
 
-    # R4/R5: Path 3.10+ 方法与关键字参数
+    # R4/R5: Path 3.10+/3.9+ 方法与关键字参数
     if isinstance(node, ast.Attribute) and node.attr in PY310_PATH_METHODS:
         hits.append((rel, node.lineno, f"Path.{node.attr}（3.10+）"))
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in PY39_PATH_METHODS
+        and isinstance(node.func.value, (ast.Name, ast.Attribute, ast.Constant))  # noqa: UP038 — 脚本自身须 py38 可运行
+    ):
+        hits.append((rel, node.lineno, "Path.is_relative_to（3.9+），用 os.path.commonpath / 路径解析比较替代"))
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
         banned = PY310_KWARGS.get(node.func.attr)
         if banned and any(kw.arg in banned for kw in node.keywords):
             hits.append((rel, node.lineno, f"{node.func.attr}(newline=...)（3.10+）"))
+
+    # R12: datetime.UTC（3.11+），用 timezone.utc 替代
+    if (
+        isinstance(node, ast.Attribute)
+        and node.attr in PY311_DATETIME_ATTRS
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "datetime"
+    ):
+        hits.append((rel, node.lineno, "datetime.UTC（3.11+），用 datetime.timezone.utc 替代"))
 
     # R7: str.removeprefix/removesuffix（3.9+）。限定接收者是 Name/Attribute/
     # 常量字符串——避免把同名自由函数误报进来。
