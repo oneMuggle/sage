@@ -975,6 +975,397 @@ class BrowserCookiesTool(BaseTool):
         )
 
 
+#: browser_login 使用的持久 profile 名（区别于 render pool 的 "render-default"）
+_LOGIN_PROFILE_NAME = "login-default"
+
+#: 登录完成检测轮询间隔（秒）
+_LOGIN_POLL_INTERVAL = 2.0
+
+#: 默认登录超时（秒）
+_LOGIN_DEFAULT_TIMEOUT = 300
+
+#: 页面内注入的 Sage 登录辅助悬浮条（Shadow DOM 隔离）
+_LOGIN_BANNER_JS = """
+(function() {
+  if (window.__sage_login_confirmed) {
+    return { confirmed: true, url: location.href, hasPassword: false };
+  }
+  if (!document.getElementById('sage-login-helper-host') && document.body) {
+    try {
+      const host = document.createElement('div');
+      host.id = 'sage-login-helper-host';
+      host.style.cssText = 'position:fixed;top:0;left:0;width:100vw;z-index:2147483647;pointer-events:none;';
+      const shadow = host.attachShadow({ mode: 'open' });
+      const bar = document.createElement('div');
+      bar.id = 'sage-banner';
+      bar.style.cssText = (
+        'pointer-events:auto;background:#18181b;color:#f4f4f5;' +
+        'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;' +
+        'font-size:13px;padding:9px 18px;display:flex;align-items:center;' +
+        'justify-content:space-between;box-shadow:0 4px 16px rgba(0,0,0,0.35);' +
+        'border-bottom:2px solid #3b82f6;'
+      );
+      bar.innerHTML = (
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<span style="font-size:16px;">🔐</span>' +
+        '<strong style="color:#60a5fa;">Sage 登录助手</strong>' +
+        '<span style="color:#d4d4d8;">请在下方完成登录。登录后会自动同步；您也可以随时点击右侧按钮立即同步。</span>' +
+        '</div>' +
+        '<button id="sage-btn" style="' +
+        'background:#2563eb;color:#fff;border:none;padding:6px 14px;border-radius:6px;' +
+        'font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;' +
+        '">已完成登录，点击同步 ➔</button>'
+      );
+      shadow.appendChild(bar);
+      document.documentElement.appendChild(host);
+      const btn = shadow.getElementById('sage-btn');
+      btn.onclick = () => {
+        window.__sage_login_confirmed = true;
+        btn.style.background = '#059669';
+        btn.textContent = '⏳ 正在同步并返回...';
+      };
+    } catch (e) {}
+  }
+  return {
+    confirmed: !!window.__sage_login_confirmed,
+    url: location.href,
+    hasPassword: !!document.querySelector('input[type=password]'),
+    htmlLen: document.documentElement ? document.documentElement.outerHTML.length : 0
+  };
+})()
+"""
+
+#: 登录成功时的页面提示动画
+_LOGIN_SUCCESS_JS = """
+(function() {
+  try {
+    const host = document.getElementById('sage-login-helper-host');
+    if (host && host.shadowRoot) {
+      const bar = host.shadowRoot.getElementById('sage-banner');
+      if (bar) {
+        bar.style.background = '#064e3b';
+        bar.style.borderBottomColor = '#10b981';
+        bar.innerHTML = (
+          '<div style="display:flex;align-items:center;justify-content:center;' +
+          'gap:8px;width:100%;font-size:14px;">' +
+          '<span style="font-size:18px;">🎉</span>' +
+          '<strong style="color:#a7f3d0;">' +
+          '登录成功！凭据已自动加密保存，窗口即将自动关闭并返回 Sage...' +
+          '</strong></div>'
+        );
+      }
+    }
+  } catch (e) {}
+})()
+"""
+
+
+class BrowserLoginTool(BaseTool):
+    """一键登录站点：打开可见浏览器 → 用户登录 → 自动保存 cookie。
+
+    把 ``browser_launch`` + ``browser_navigate`` + 用户手动登录 +
+    ``browser_cookies(action=export)`` 四步合为单一工具调用。用户无需理解
+    cookie/导出等概念，只需在弹出的浏览器窗口完成登录即可。
+
+    登录完成检测（轮询）：
+    - 当前 URL 不再是登录页（``looks_like_login_url()`` 返回 False）
+    - 页面没有密码输入框（``looks_like_login_html()`` 返回 False）
+    - 浏览器有目标域的 cookie（``Network.getCookies`` 返回列表）
+
+    风险分级 EXTERNAL：导航到外部 URL 拉取内容；is_blocking=True 因为需要
+    等待用户完成登录（可能几分钟）。
+    """
+
+    risk = RiskClass.EXTERNAL
+    is_blocking = True
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="browser_login",
+            description=(
+                "一键登录站点：打开可见浏览器窗口，导航到指定 URL，等待用户完成"
+                "登录后自动保存 cookie 到加密档案。之后 web_fetch 访问该站点会"
+                "自动携带登录态，无需手动传 credential_domain。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "要登录的站点 URL（如 https://example.com/login）",
+                    },
+                    "timeout_seconds": {
+                        "type": "integer",
+                        "description": "等待登录完成的超时秒数（默认 300 = 5 分钟）",
+                    },
+                },
+                "required": ["url"],
+            },
+        )
+
+    def execute(  # noqa: PLR0911
+        self,
+        url: str = "",
+        timeout_seconds: int = _LOGIN_DEFAULT_TIMEOUT,
+        **kwargs: Any,
+    ) -> ToolResult:
+        if kwargs:
+            return ToolResult(
+                success=False,
+                error=(
+                    f"未知参数: {', '.join(sorted(kwargs))}"
+                    "（合法参数: url, timeout_seconds）"
+                ),
+            )
+        url = (url or "").strip()
+        if not url:
+            return ToolResult(success=False, error="url 不能为空")
+        if not url.startswith(("http://", "https://")):
+            return ToolResult(success=False, error="url 必须以 http:// 或 https:// 开头")
+
+        # 提取目标域名用于后续 cookie 匹配
+        parsed = urlsplit(url)
+        target_host = (parsed.hostname or "").lower()
+        if not target_host:
+            return ToolResult(success=False, error="无法从 url 解析出域名")
+
+        # 检查是否已有活跃的登录浏览器（避免重复启动）
+        manager = get_browser_manager()
+        existing = manager.get(_LOGIN_PROFILE_NAME)
+        if existing is not None and existing.is_alive():
+            # 复用已有浏览器，直接导航到目标 URL
+            session = existing
+            reuse = True
+        else:
+            # 启动新的可见持久浏览器
+            try:
+                session = launch_browser(
+                    headless=False,
+                    browser_id=_LOGIN_PROFILE_NAME,
+                    persistent=True,
+                    profile_name=_LOGIN_PROFILE_NAME,
+                )
+            except BrowserCDPError as exc:
+                return ToolResult(
+                    success=False,
+                    error=f"browser_launch_failed: 无法启动浏览器（{exc}）",
+                )
+            reuse = False
+
+        # 创建新标签页并导航到目标 URL
+        target_id: Optional[str] = None
+        try:
+            created = cdp_command(session, "Target.createTarget", {"url": url})
+            target_id = created.get("targetId")
+            if not target_id:
+                return ToolResult(success=False, error="导航失败：无法创建标签页")
+
+            # 等待页面初始加载
+            _wait_for_page_load(session, target_id, timeout=15.0)
+
+            # 轮询等待用户完成登录
+            timeout_secs = max(30, int(timeout_seconds))
+            deadline = time.monotonic() + timeout_secs
+            login_completed = False
+            last_status = ""
+
+            while time.monotonic() < deadline:
+                status = _check_login_status(session, target_id, target_host)
+                if status == "logged_in":
+                    login_completed = True
+                    break
+                if status != last_status:
+                    last_status = status
+                time.sleep(_LOGIN_POLL_INTERVAL)
+
+            # 登录成功：在页面上展示成功提示并稍作停留，让用户有明确的视觉反馈
+            if login_completed and target_id:
+                try:
+                    cdp_command(
+                        session,
+                        "Runtime.evaluate",
+                        {"expression": _LOGIN_SUCCESS_JS},
+                        target_id=target_id,
+                    )
+                    time.sleep(1.5)
+                except BrowserCDPError:
+                    pass
+
+            # 导出并保存 cookie
+            saved_domains = self._export_cookies(session, target_host)
+
+            if saved_domains:
+                return ToolResult(
+                    success=True,
+                    content={
+                        "saved_domains": saved_domains,
+                        "note": (
+                            f"登录成功！站点 {target_host} 的登录凭据已加密保存到本地。"
+                            f"后续 web_fetch 访问该站点会自动携带登录态。"
+                        ),
+                        "instruction": (
+                            f"站点 {target_host} 登录态已成功保存！"
+                            f"请立即调用 web_fetch 工具重新访问目标页面 {url}，并将获取到的数据完整总结呈现给用户。"
+                        ),
+                        "browser_id": session.browser_id,
+                        "reused": reuse,
+                    },
+                )
+            else:
+                return ToolResult(
+                    success=False,
+                    error=(
+                        "no_cookies_saved: 未找到可保存的 cookie。"
+                        "请确认已经在浏览器窗口中完成登录。"
+                    ),
+                )
+
+        except BrowserCDPError as exc:
+            # 容错：若用户手动关闭了窗口/标签页，尝试检查是否已有保存的 cookies
+            try:
+                saved_domains = self._export_cookies(session, target_host)
+                if saved_domains:
+                    return ToolResult(
+                        success=True,
+                        content={
+                            "saved_domains": saved_domains,
+                            "note": (
+                                f"登录窗口已关闭，检测并成功保存了 {target_host} 的登录态。"
+                            ),
+                            "instruction": (
+                                f"请立即调用 web_fetch 工具访问 {url}，并将获取到的页面内容呈现给用户。"
+                            ),
+                            "browser_id": getattr(session, "browser_id", ""),
+                            "reused": reuse,
+                        },
+                    )
+            except Exception:
+                pass
+            return ToolResult(
+                success=False,
+                error=f"browser_error: {exc}",
+            )
+        finally:
+            # 关闭标签页但保持浏览器运行（用户可能还要操作其他页面）
+            if target_id:
+                import contextlib
+                with contextlib.suppress(BrowserCDPError):
+                    cdp_command(session, "Target.closeTarget", {"targetId": target_id})
+
+    def _export_cookies(
+        self, session: BrowserSession, target_host: str
+    ) -> list:
+        """从浏览器获取 cookie 并按 domain 分组保存。返回已保存的 domain 列表。"""
+        from .credential_vault import save_credential
+
+        try:
+            result = cdp_command(session, "Network.getCookies", {})
+        except BrowserCDPError:
+            return []
+
+        raw_cookies = result.get("cookies") or []
+        if not raw_cookies:
+            return []
+
+        # 按 domain 分组
+        by_domain: Dict[str, list] = {}
+        for item in raw_cookies:
+            if not isinstance(item, dict) or not item.get("name"):
+                continue
+            cookie_domain = str(item.get("domain") or "").lower()
+            if not cookie_domain:
+                continue
+            by_domain.setdefault(cookie_domain, []).append(item)
+
+        saved = []
+        profile_name = getattr(session, "profile_name", "") or ""
+        for cookie_domain, cookies in sorted(by_domain.items()):
+            try:
+                save_credential(
+                    cookie_domain,
+                    cookies,
+                    source_profile=str(profile_name),
+                )
+                saved.append(cookie_domain)
+            except Exception:
+                # 单个 domain 保存失败不影响其他
+                pass
+
+        return saved
+
+
+def _wait_for_page_load(
+    session: BrowserSession, target_id: str, timeout: float = 15.0
+) -> None:
+    """等待页面 readyState 变为 complete 或 interactive。"""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            result = cdp_command(
+                session,
+                "Runtime.evaluate",
+                {"expression": "document.readyState", "returnByValue": True},
+                target_id=target_id,
+            )
+            state = (result.get("result") or {}).get("value")
+            if state in ("complete", "interactive"):
+                return
+        except BrowserCDPError:
+            return
+        time.sleep(0.3)
+
+
+def _check_login_status(
+    session: BrowserSession, target_id: str, target_host: str
+) -> str:
+    """检查登录状态。返回 'logged_in' / 'on_login_page' / 'loading'。"""
+    from .credential_vault import looks_like_login_url
+
+    try:
+        # 注入/维护悬浮条并获取当前状态
+        result = cdp_command(
+            session,
+            "Runtime.evaluate",
+            {
+                "expression": _LOGIN_BANNER_JS,
+                "returnByValue": True,
+            },
+            target_id=target_id,
+        )
+        info = (result.get("result") or {}).get("value")
+        if not isinstance(info, dict):
+            return "loading"
+
+        # 1. 用户主动点击了悬浮条上的"已完成登录，点击同步"
+        if info.get("confirmed"):
+            return "logged_in"
+
+        current_url = str(info.get("url") or "")
+        has_password = bool(info.get("hasPassword", False))
+
+        # 2. 自动判定：当前 URL 离开了登录页且没有密码框
+        if not looks_like_login_url(current_url) and not has_password:
+            # 额外验证：有目标域 cookie 才算真正登录
+            try:
+                cookies_result = cdp_command(session, "Network.getCookies", {})
+                cookies = cookies_result.get("cookies") or []
+                for c in cookies:
+                    if isinstance(c, dict):
+                        cdomain = str(c.get("domain") or "").lower().lstrip(".")
+                        if cdomain and (
+                            target_host == cdomain or target_host.endswith("." + cdomain)
+                        ):
+                            return "logged_in"
+            except BrowserCDPError:
+                pass
+            return "loading"
+
+        return "on_login_page"
+
+    except (BrowserCDPError, json.JSONDecodeError, KeyError):
+        return "loading"
+
+
 __all__ = [
     "BROWSER_TOOL_NAMES",
     "BrowserCloseTool",
@@ -982,6 +1373,7 @@ __all__ = [
     "BrowserDownloadsTool",
     "BrowserInteractTool",
     "BrowserLaunchTool",
+    "BrowserLoginTool",
     "BrowserNavigateTool",
     "BrowserScreenshotTool",
     "BrowserSnapshotTool",
@@ -998,4 +1390,5 @@ BROWSER_TOOL_NAMES = (
     "browser_cookies",
     "browser_downloads",
     "browser_close",
+    "browser_login",
 )

@@ -66,3 +66,22 @@ def test_all_builtin_tool_names_still_includes_sandbox_tools():
         assert name in ALL_BUILTIN_TOOL_NAMES, (
             f"ALL_BUILTIN_TOOL_NAMES 漏 {name} — 防漂移校验失效"
         )
+
+
+def test_primary_and_researcher_profiles_include_browser_login():
+    """primary 和 researcher 的白名单必须包含 browser_login 工具。
+
+    用户在主聊天界面与 primary agent 交互，当网页被拦截（login_wall）时，
+    primary 必须能看见并调用 browser_login 弹出浏览器辅助用户登录。
+    """
+    from backend.agents.profiles import _PRIMARY_SEED_TOOLS, create_default_agents
+
+    assert "browser_login" in _PRIMARY_SEED_TOOLS, (
+        "primary 白名单缺 browser_login — LLM 在主聊天界面无法协助用户登录站点"
+    )
+
+    defaults = {a.id: a for a in create_default_agents()}
+    assert "browser_login" in defaults["primary"].tools
+    assert "browser_login" in defaults["researcher"].tools
+    assert "browser_login" in defaults["coder"].tools
+

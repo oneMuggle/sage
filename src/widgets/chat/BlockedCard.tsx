@@ -1,4 +1,4 @@
-import { AlertTriangle, ExternalLink, Globe, KeyRound, Settings } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Globe, KeyRound, LogIn, Settings } from 'lucide-react';
 
 import { useI18n } from '../../shared/lib/i18n';
 import type { BlockedAction } from '../../shared/lib/store';
@@ -18,6 +18,7 @@ const REASON_I18N_KEYS: Record<string, string> = {
 
 /** action id → 图标 */
 const ACTION_ICONS: Record<string, React.ReactNode> = {
+  login_to_site: <LogIn className="w-3.5 h-3.5" />,
   open_browser: <Globe className="w-3.5 h-3.5" />,
   configure_credentials: <KeyRound className="w-3.5 h-3.5" />,
   configure_proxy: <Settings className="w-3.5 h-3.5" />,
@@ -26,6 +27,7 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
 
 /** action id → 按钮样式 */
 const ACTION_STYLES: Record<string, string> = {
+  login_to_site: 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/20',
   open_browser: 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/20',
   configure_credentials: 'border-border bg-surface hover:bg-bg-hover text-text-secondary',
   configure_proxy: 'border-border bg-surface hover:bg-bg-hover text-text-secondary',
