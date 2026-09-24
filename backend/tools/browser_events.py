@@ -200,6 +200,9 @@ class _EventChannel:
         self.tracker = tracker
         self.network_tracker: Optional[NetworkResponseTracker] = None
         self._network_sessions: Dict[str, str] = {}  # session_id -> target_id
+        # R33：Page.loadEventFired 就绪信号（session_id -> Event），attach 时
+        # Page.enable；render_page 用它短路 readyState 轮询
+        self._page_loads: Dict[str, threading.Event] = {}
         self._sock: Any = None
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
@@ -323,6 +326,12 @@ class _EventChannel:
             session_id = str(data.get("sessionId") or "")
             if session_id:
                 self.network_tracker.record(session_id, data.get("params") or {})
+        if method == "Page.loadEventFired":
+            session_id = str(data.get("sessionId") or "")
+            with self._pending_lock:
+                event = self._page_loads.get(session_id)
+            if event is not None:
+                event.set()
 
     def attach_network(self, target_id: str) -> Optional[str]:
         """attach 到指定 target + Network.enable；返回 sessionId 或 None。
@@ -339,6 +348,7 @@ class _EventChannel:
             return None
         self._network_sessions[session_id] = target_id
         self._call("Network.enable", {}, session_id=session_id)
+        self._call("Page.enable", {}, session_id=session_id)
         return session_id
 
     def _loop(self) -> None:
@@ -448,8 +458,36 @@ def detach_network_session(browser_id: str, session_id: str) -> None:
     if channel is None:
         return
     channel._network_sessions.pop(session_id, None)
+    with channel._pending_lock:
+        channel._page_loads.pop(session_id, None)
     if channel.network_tracker is not None:
         channel.network_tracker.detach(session_id)
+
+
+def arm_page_load(browser_id: str, session_id: str) -> None:
+    """R33：为该渲染会话布防 loadEventFired 信号（导航前调用，无竞态）。"""
+    with _channels_lock:
+        channel = _channels.get(browser_id)
+    if channel is None:
+        return
+    with channel._pending_lock:
+        channel._page_loads[session_id] = threading.Event()
+
+
+def wait_page_load(browser_id: str, session_id: str, timeout: float) -> bool:
+    """R33：等该会话 loadEventFired（导航提交后调用）；超时/通道不在返回 False。"""
+    with _channels_lock:
+        channel = _channels.get(browser_id)
+    if channel is None:
+        return False
+    with channel._pending_lock:
+        event = channel._page_loads.get(session_id)
+    if event is None:
+        return False
+    fired = event.wait(timeout=max(0.0, timeout))
+    with channel._pending_lock:
+        channel._page_loads.pop(session_id, None)
+    return fired
 
 
 def stop_download_tracking(browser_id: str) -> None:
@@ -503,6 +541,8 @@ __all__ = [
     "ensure_network_tracking",
     "get_download_tracker",
     "get_tracked_response",
+    "arm_page_load",
+    "wait_page_load",
     "list_download_dir",
     "start_download_tracking",
     "start_event_channel",

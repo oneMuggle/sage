@@ -36,10 +36,12 @@ from .browser_cdp import (
     launch_browser,
 )
 from .browser_events import (
+    arm_page_load,
     detach_network_session,
     ensure_network_tracking,
     get_tracked_response,
     start_event_channel,
+    wait_page_load,
 )
 from .web_metrics import record_render_event
 
@@ -622,6 +624,10 @@ def render_page(
         # 响应（含 302 重定向链中间 hop）经事件记录，读状态优先取事件值；
         # 通道未建立返回 None，状态仍走 Navigation Timing 兜底。
         net_session = ensure_network_tracking(session.browser_id, target_id)
+        # R33：导航前布防 loadEventFired——wait_page_ready 的 readyState 轮询
+        # 可被事件短路（attach 先于导航，事件不会漏）。
+        if net_session:
+            arm_page_load(session.browser_id, net_session)
         # AU5：导航前注入档案 cookie（浏览器级命令，无需 attach；浏览器内
         # 重定向自动按域携带）。注入失败走 RenderError——显式带凭据渲染却
         # 拿到未登录正文会误导调用方。
@@ -637,6 +643,9 @@ def render_page(
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
         if result.get("errorText"):
             raise RenderError(f"渲染导航失败: {result['errorText']}")
+        if net_session:
+            # R33：load 事件就绪即返回（典型 <2s；超时与 readyState 轮询同窗）
+            wait_page_load(session.browser_id, net_session, READY_TIMEOUT_SECONDS)
         wait_for_satisfied = wait_page_ready(session, target_id, wait_for=wait_for)
         _scroll_for_lazy_load(session, target_id)
         tracked = (
