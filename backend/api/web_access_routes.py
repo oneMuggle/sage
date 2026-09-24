@@ -90,9 +90,12 @@ def _origin_guard(request: Request) -> Optional[JSONResponse]:
 
 
 def _metrics_snapshot() -> Dict[str, Any]:
-    from backend.tools import web_metrics
+    from backend.tools import tls_transport, web_metrics
 
-    return web_metrics.snapshot()
+    snapshot = web_metrics.snapshot()
+    # R28：AB3 指纹通道使用计数（未启用/未使用时计数为 0，键恒存在）
+    snapshot["tls_fingerprint"] = tls_transport.stats()
+    return snapshot
 
 
 def _load_config_dict() -> Dict[str, Any]:
