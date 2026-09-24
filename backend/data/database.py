@@ -1698,6 +1698,10 @@ class Database:
             cursor.execute(
                 "ALTER TABLE orch_tasks ADD COLUMN depth INTEGER NOT NULL DEFAULT 0"
             )
+        # RT26 (round49): 重派来源持久化 —— 历史任务树恢复"重派"徽章。
+        # 必须位于 orch_tasks 表创建之后（旧库先建表/补列再 ALTER）。
+        if "retry_of" not in _task_cols:
+            cursor.execute("ALTER TABLE orch_tasks ADD COLUMN retry_of TEXT")
 
         # Subagent 实时可观测性 schema (run-events@1.0)。全部 DDL 幂等，兼容旧库。
         cursor.execute(

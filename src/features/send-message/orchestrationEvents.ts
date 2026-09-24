@@ -234,6 +234,8 @@ export function restoreRunToBoard(
       // RT24 (round32): 历史回看携带任务级用量/时长。
       used_tokens: (task.used_tokens as number | undefined) ?? undefined,
       duration_ms: (task.duration_ms as number | undefined) ?? undefined,
+      // RT26 (round49): 历史回看携带重派来源（恢复"重派"徽章）。
+      retry_of: (task.retry_of as string | undefined) ?? undefined,
     };
     if (status in progress) progress[status as keyof typeof progress] += 1;
     const finished = Number(task.finished_at ?? 0);
