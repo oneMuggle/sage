@@ -248,6 +248,10 @@ export const en: Record<TranslationKey, string> = {
   'settings.network.creds.pool_size': 'Render pool size',
   'settings.network.creds.pool_size.desc':
     'Spread concurrent renders across headless instances (1-4, default 2; applies on next render)',
+  'settings.network.creds.tls_fingerprint':
+    'TLS fingerprint impersonation for static fetch (experimental)',
+  'settings.network.creds.tls_fingerprint.desc':
+    'Requires optional curl_cffi; falls back to standard httpx transport when off or missing',
   'settings.network.creds.confirm': 'Delete credentials for this site? This cannot be undone.',
   'settings.network.creds.plaintext': 'plaintext',
   'settings.network.creds.profile': 'source',

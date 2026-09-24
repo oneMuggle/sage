@@ -51,6 +51,11 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Fixed(browser)
 - **进程树回收时序（R26）**：`_terminate_session` 先 terminate 父进程再 taskkill /T，父退出后子进程被重派生、`/T` 遍历不到树 —— crashpad/gpu 等孤儿进程锁住 profile 目录（单测每轮泄漏一棵进程树）。修复为父进程存活时先树杀、后优雅终止兜底；POSIX 行为不变
 
+> 🌐 **网页访问能力优化 Round 27：AB3 TLS/HTTP2 指纹**（方案 `docs/plans/2026-09-24_web-access-round27-tls-fingerprint.md`）
+
+### Added(web-access)
+- **TLS 指纹传输器（R27/AB3，可选依赖）**：新模块 `tls_transport`——`web_access_config.tls_fingerprint` 开启且 `curl_cffi` 可导入时，静态抓取经 httpx 自定义传输走 Chrome TLS/HTTP2 指纹（JA3 等握手指纹不再暴露脚本客户端），策略校验/重定向编排/AB5 重试零改动；curl_cffi 缺失或关闭时回落标准 httpx；requirements-optional 新增 `curl_cffi>=0.7`（release/win7 不装）；设置页实验性开关 + i18n
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 > 🧹 **alpha.52-win7 暂无未发布变更**

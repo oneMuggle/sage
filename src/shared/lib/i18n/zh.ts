@@ -272,6 +272,9 @@ export const zh = {
   'settings.network.creds.pool_size': '渲染池实例数',
   'settings.network.creds.pool_size.desc':
     '并发渲染分散到多个 headless 实例（1-4，默认 2；改动后下次渲染生效）',
+  'settings.network.creds.tls_fingerprint': '静态抓取 TLS 指纹伪装（实验性）',
+  'settings.network.creds.tls_fingerprint.desc':
+    '需可选依赖 curl_cffi；未安装或关闭时走标准 httpx 传输，行为不变',
   'settings.network.creds.confirm': '确认删除该站点的凭据？此操作不可恢复。',
   'settings.network.creds.plaintext': '明文',
   'settings.network.creds.profile': '来源',

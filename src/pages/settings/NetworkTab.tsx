@@ -535,12 +535,14 @@ interface WebAccessConfig {
   render_persistent: boolean;
   auto_refresh_credentials: boolean;
   render_pool_size?: number;
+  tls_fingerprint?: boolean;
 }
 
 const DEFAULT_WEB_ACCESS_CONFIG: WebAccessConfig = {
   render_persistent: false,
   auto_refresh_credentials: false,
   render_pool_size: 2,
+  tls_fingerprint: false,
 };
 
 const RENDER_POOL_SIZE_OPTIONS = [1, 2, 3, 4];
@@ -765,6 +767,20 @@ function CredentialsSection() {
               </option>
             ))}
           </select>
+        </label>
+        <label className="flex items-start gap-2 text-xs" data-testid="cred-tls-fingerprint-row">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={config.tls_fingerprint ?? false}
+            onChange={(e) => saveConfig({ ...config, tls_fingerprint: e.target.checked })}
+          />
+          <span>
+            {t('settings.network.creds.tls_fingerprint')}
+            <span className="block text-text-secondary">
+              {t('settings.network.creds.tls_fingerprint.desc')}
+            </span>
+          </span>
         </label>
         {browser && (
           <div className="text-xs text-text-secondary" data-testid="browser-health">
