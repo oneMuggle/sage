@@ -17,8 +17,6 @@ from backend.orchestration.models import HeartbeatStatus, LaneStatus
 
 pytestmark = pytest.mark.unit
 
-DAY_S = 86_400
-
 
 def _make_lane(lane_id="lane-1", ping_ago_s=0.0, transport_alive=True,
                status=LaneStatus.RUNNING):
@@ -48,14 +46,15 @@ class _FakeRegistry:
 
 
 def _make_monitor(lanes, **kw):
+    """创建 HeartbeatMonitor 注入 fake registry。返回 (monitor, stalled, dead)。"""
     stalled = []
     dead = []
 
-    async def on_stalled(lane):
-        stalled.append(lane)
+    async def on_stalled(ln):
+        stalled.append(ln)
 
-    async def on_dead(lane):
-        dead.append(lane)
+    async def on_dead(ln):
+        dead.append(ln)
 
     monitor = HeartbeatMonitor(
         _FakeRegistry(lanes),
