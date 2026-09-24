@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sys
 from types import ModuleType, SimpleNamespace
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import httpx
 import pytest
@@ -187,3 +187,37 @@ def test_stats_counts_requests_and_returns_copy(monkeypatch):
     assert snapshot["requests"] == before + 2
     snapshot["requests"] = 999  # 拷贝语义：外部修改不污染内部计数
     assert tls_transport.stats()["requests"] == before + 2
+
+
+def test_get_with_redirects_closes_client_on_redirect_limit(monkeypatch):
+    """R29：重定向超限异常路径也要关闭 client（此前仅重建分支 close）。"""
+    import httpx as _httpx
+
+    close_calls: List[int] = []
+
+    class _Client:
+        def close(self):
+            close_calls.append(1)
+
+        def build_request(self, method, url, headers=None):
+            return _httpx.Request(method, url, headers=headers)
+
+    def _fake_build_client(**kwargs):
+        return _Client()
+
+    def _fake_retrying_send(client, request, stream=False):
+        return _httpx.Response(
+            302, headers={"location": "https://b.example/"}, request=request
+        )
+
+    monkeypatch.setattr(web_tool, "build_client", _fake_build_client)
+    monkeypatch.setattr(web_tool, "fingerprint_enabled", lambda: False)
+    monkeypatch.setattr(web_tool, "retrying_send", _fake_retrying_send)
+    tool = web_tool.WebFetchTool()
+    with pytest.raises(ValueError, match="redirect_limit_exceeded"):
+        tool._get_with_redirects(
+            "https://a.example/",
+            NetworkPolicy(mode=NetworkMode.ONLINE),
+            gated_by_whitelist=False,
+        )
+    assert close_calls  # finally 释放了连接池
