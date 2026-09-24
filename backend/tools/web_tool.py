@@ -20,10 +20,10 @@ from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.domain.risk import RiskClass
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools.http_factory import DEFAULT_HEADERS, build_client, default_headers, retrying_send
-from backend.tools.tls_transport import build_fingerprint_transport, fingerprint_enabled
 from backend.tools.network_config import load_network_policy
 from backend.tools.search_config import load_search_config
 from backend.tools.search_engines import SearchEngine, resolve_engine_chain
+from backend.tools.tls_transport import build_fingerprint_transport, fingerprint_enabled
 from backend.wiki.html_extract import decode_html, extract
 
 from . import content_sniff, file_links, web_render
@@ -936,13 +936,13 @@ class WebFetchTool(BaseTool):
             if client is None or verify != client_verify:
                 if client is not None:
                     client.close()
-                client_kwargs: Dict[str, Any] = dict(
-                    timeout=30.0,
-                    follow_redirects=False,
-                    verify=verify,
-                    trust_env=not self._policy.subagent_only,
-                    headers=default_headers(),
-                )
+                client_kwargs: Dict[str, Any] = {
+                    "timeout": 30.0,
+                    "follow_redirects": False,
+                    "verify": verify,
+                    "trust_env": not self._policy.subagent_only,
+                    "headers": default_headers(),
+                }
                 # AB3（R27）：配置开启且 curl_cffi 可用时，静态抓取走 Chrome
                 # TLS/HTTP2 指纹传输器（代理经传输器透传）；关闭/缺失回落标准。
                 if fingerprint_enabled():
