@@ -279,3 +279,39 @@ class TestRenderPersistentConfig:
             "backend.data.settings_repo.SettingsRepository", lambda: _Broken()
         )
         assert web_render._render_persistent_enabled() is False
+
+
+# ---------- R26：进程树回收时序 ----------
+
+
+def test_terminate_kills_tree_before_terminate(monkeypatch, tmp_path):
+    """R26：树杀必须先于优雅终止 —— 父进程退出后子进程被重派生，
+    taskkill /T 找不到树，孤儿进程锁住 profile 目录。"""
+    calls: List[str] = []
+    proc = SimpleNamespace(
+        terminate=lambda: calls.append("terminate"),
+        wait=lambda timeout=None: calls.append("wait"),
+        kill=lambda: calls.append("kill"),
+        pid=1234,
+    )
+    session = BrowserSession(
+        browser_id="b9",
+        executable="fake-browser",
+        headless=True,
+        user_data_dir=str(tmp_path / "temp"),
+        process=proc,
+        port=1,
+        ws_path="/devtools/browser/x",
+        persistent=False,
+    )
+    monkeypatch.setattr(
+        browser_cdp, "_kill_process_tree", lambda p: calls.append("tree-kill")
+    )
+    monkeypatch.setattr(
+        browser_cdp, "_remove_dir_with_retry", lambda path, attempts=5: None
+    )
+
+    browser_cdp._terminate_session(session)
+
+    assert calls[0] == "tree-kill"
+    assert "terminate" in calls

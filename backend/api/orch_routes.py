@@ -86,6 +86,7 @@ def _run_detail(run: OrchRun) -> OrchRunDetail:
             # RT24 (round32): 任务级用量/时长 —— 终态落库值，历史回看可见。
             "used_tokens": getattr(t, "used_tokens", None),
             "duration_ms": getattr(t, "duration_ms", None),
+            "retry_of": getattr(t, "retry_of", None),
             # 任务层级：历史回放需返回父子与深度（spec 2026-09-19）。
             "parent_task_id": getattr(t, "parent_task_id", None),
             "depth": getattr(t, "depth", 0),

@@ -3955,6 +3955,22 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             )
             # S1: finally 落库 failed + 原因
             _producer_error = e.message
+            # R120: 失败路径同样推送已收集的参考来源 —— 失败场景恰恰是
+            # 用户最需要核对"搜索到了什么"的时机（落库侧 partial 行已带
+            # sources，此处补齐前端实时可见性）。
+            if r81_turn_sources:
+                try:
+                    await entry.queue.put(
+                        {
+                            "state": "sources_used",
+                            "session_id": data.session_id,
+                            "sources": r81_turn_sources,
+                        }
+                    )
+                except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                    logger.debug(
+                        f"[REQ {request_id}] sources_used push on failed, ignored"
+                    )
             await entry.queue.put({"error": e.to_dict(), "state": "failed"})
         finally:
             # S1 (2026-09-06): 会话运行态终态落库。优先级：

@@ -853,32 +853,74 @@ async def lifespan(app: FastAPI):
         )
 
     # Phase 1 observability: SnapshotStore + EventHub + REST endpoints
-    from backend.api import orch_run_control
-    from backend.data.orch_context_repo import OrchestrationContextRepository
-    from backend.data.orch_events_repo import OrchEventRepository
-    from backend.data.orch_task_repo import OrchTaskRepository
-    from backend.orchestration.event_hub import EventHub
-    from backend.orchestration.snapshot_store import SnapshotStore
+    # 2026-09-24 Win7 exit-code-3 诊断: 细粒度 try/except 包裹每一步,
+    # 失败时 traceback 直接写 stderr, 确保 Electron 能捕获到精确失败位置.
+    try:
+        from backend.api import orch_run_control
+        from backend.data.orch_context_repo import OrchestrationContextRepository
+        from backend.data.orch_events_repo import OrchEventRepository
+        from backend.data.orch_task_repo import OrchTaskRepository
+        from backend.orchestration.event_hub import EventHub
+        from backend.orchestration.snapshot_store import SnapshotStore
 
-    app.state.snapshot_store = SnapshotStore()
-    app.state.orch_event_repository = OrchEventRepository()
-    app.state.orch_task_repository = OrchTaskRepository()
-    app.state.orch_context_repository = OrchestrationContextRepository()
-    app.state.event_hub = EventHub(
-        event_repository=app.state.orch_event_repository,
-        event_applier=app.state.snapshot_store.apply_event,
-    )
-    restored_events = await app.state.event_hub.restore_runs()
-    orch_run_control.configure(
-        app.state.snapshot_store,
-        app.state.event_hub,
-        context_repo=app.state.orch_context_repository,
-        task_repo=app.state.orch_task_repository,
-    )
-    logger.info(
-        "Phase 1 observability: SnapshotStore + EventHub + /orch/runs 已就绪，恢复 %s 个事件",
-        restored_events,
-    )
+        app.state.snapshot_store = SnapshotStore()
+        if __name__ == "__main__":
+            print(  # noqa: T201
+                f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s [diag] SnapshotStore created",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        app.state.orch_event_repository = OrchEventRepository()
+        app.state.orch_task_repository = OrchTaskRepository()
+        app.state.orch_context_repository = OrchestrationContextRepository()
+        if __name__ == "__main__":
+            print(  # noqa: T201
+                f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s [diag] repos created",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        app.state.event_hub = EventHub(
+            event_repository=app.state.orch_event_repository,
+            event_applier=app.state.snapshot_store.apply_event,
+        )
+        if __name__ == "__main__":
+            print(  # noqa: T201
+                f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s [diag] EventHub created",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        restored_events = await app.state.event_hub.restore_runs()
+        if __name__ == "__main__":
+            print(  # noqa: T201
+                f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s [diag] restore_runs done ({restored_events} events)",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        orch_run_control.configure(
+            app.state.snapshot_store,
+            app.state.event_hub,
+            context_repo=app.state.orch_context_repository,
+            task_repo=app.state.orch_task_repository,
+        )
+        logger.info(
+            "Phase 1 observability: SnapshotStore + EventHub + /orch/runs 已就绪，恢复 %s 个事件",
+            restored_events,
+        )
+    except Exception as _obs_err:  # noqa: BLE001 — 诊断: 不得让 observability 失败静默
+        import traceback
+
+        print(  # noqa: T201
+            f"[sage-startup] FATAL: observability setup failed: {type(_obs_err).__name__}: {_obs_err}",
+            file=sys.stderr,
+            flush=True,
+        )
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        raise
     if __name__ == "__main__":
         print(  # noqa: T201
             f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s observability restored",
@@ -891,19 +933,39 @@ async def lifespan(app: FastAPI):
     # 矛盾默认值的巧合而非设计); hex /chat 是否挂载由模块级 API_MODE 决定。
     # Wire the MemoryLifecycleManager into ChatService so run_turn drives
     # set_current_turn (F4 — production caller for source_turn_id).
-    from backend.api.hex_routes import get_chat_service
+    # 2026-09-24 Win7 exit-code-3 诊断: try/except 包裹, 失败写 stderr.
+    try:
+        from backend.api.hex_routes import get_chat_service
 
-    # 2026-09 修复 (同步 #957): 覆盖工厂此前每请求新建 ChatService ——
-    # prompt 快照缓存跨请求永不命中。注入单例访问器。
-    app.state.chat_service = _build_chat_service(lifecycle=lifecycle)
-    app.dependency_overrides[get_chat_service] = lambda: app.state.chat_service
-    # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
-    # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
-    app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
-    logger.info(
-        "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
-        API_MODE,
-    )
+        # 2026-09 修复 (同步 #957): 覆盖工厂此前每请求新建 ChatService ——
+        # prompt 快照缓存跨请求永不命中。注入单例访问器。
+        if __name__ == "__main__":
+            print(  # noqa: T201
+                f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s [diag] building ChatService...",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        app.state.chat_service = _build_chat_service(lifecycle=lifecycle)
+        app.dependency_overrides[get_chat_service] = lambda: app.state.chat_service
+        # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
+        # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
+        app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
+        logger.info(
+            "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
+            API_MODE,
+        )
+    except Exception as _cs_err:  # noqa: BLE001 — 诊断: 不得让 ChatService 失败静默
+        import traceback
+
+        print(  # noqa: T201
+            f"[sage-startup] FATAL: ChatService setup failed: {type(_cs_err).__name__}: {_cs_err}",
+            file=sys.stderr,
+            flush=True,
+        )
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        raise
     if __name__ == "__main__":
         print(  # noqa: T201
             f"[sage-startup] t={time.monotonic() - _startup_t0:.1f}s ChatService assembled",
@@ -913,7 +975,11 @@ async def lifespan(app: FastAPI):
 
     # 浏览器一次性目录的启动兜底清扫（与下方 _shutdown_browser_sessions 对称）：
     # 进程被硬杀时 shutdown 钩子不会执行，遗留目录靠下次启动按 mtime 回收。
-    _startup_browser_temp_sweep()
+    # 2026-09-24 Win7 诊断: 清扫失败不得阻塞启动.
+    try:
+        _startup_browser_temp_sweep()
+    except Exception:  # noqa: BLE001
+        logger.warning("browser temp sweep failed (ignored)", exc_info=True)
 
     # worktree 模式 (2026-09-18): 启动对账——登记为 active 但目录已被外部
     # 删除的会话 worktree → 标 discarded + prune 主仓 + 悬空绑定退回主仓。
@@ -1331,8 +1397,22 @@ if __name__ == "__main__":
     _log_tz = os.environ.get("SAGE_LOG_TIMEZONE", "UTC")
     set_log_timezone(_log_tz)
 
-    # uvicorn 自带 logger 默认 WARNING 且无 handler;显式放行到 INFO 并传播到
-    # 根 logger,否则 log_config=None 后 access log 会被 uvicorn 自身级别过滤。
+    # uvicorn 0.27 的 uvicorn.error logger 无自带 handlers, 依赖 propagate=True
+    # 传播到 uvicorn logger 的 "default" handler (stderr). 但 setup_logging() 已
+    # 替换根 logger handlers, 且 Windows 上 Electron 子进程 stderr 捕获依赖
+    # 直接 StreamHandler. 显式添加 stderr handler 确保 lifespan 失败的 traceback
+    # 一定能到达 stderr → Electron 日志.
+    _uv_err = logging.getLogger("uvicorn.error")
+    _has_stderr = any(
+        isinstance(h, logging.StreamHandler) and h.stream is sys.stderr
+        for h in _uv_err.handlers
+    )
+    if not _has_stderr:
+        _stderr_handler = logging.StreamHandler(sys.stderr)
+        _stderr_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+        _uv_err.addHandler(_stderr_handler)
+    _uv_err.propagate = True  # 保留向 uvicorn logger 传播
+
     for _name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         logging.getLogger(_name).setLevel(logging.INFO)
 

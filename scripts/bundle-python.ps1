@@ -319,6 +319,9 @@ set PYTHONPATH=%~dp0backend;%~dp0sage-core
 Set-Content -Path $StartBackendBat -Value $BatContent -Encoding ASCII
 
 # Write the same provenance contract consumed by packaged Electron.
+# `packagingMode` ("source" | "cython") is read by electron/backendDiagnostics.ts
+# at runtime to include in crash diagnostics, and by the dual-build release
+# workflow to distinguish the two installer variants uploaded to each release.
 $Manifest = [ordered]@{
     manifestVersion = 1
     buildId = if ($env:SAGE_BUILD_ID) { $env:SAGE_BUILD_ID } else { "local-$((Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))" }
@@ -327,6 +330,7 @@ $Manifest = [ordered]@{
     version = if ($env:SAGE_BUILD_VERSION) { $env:SAGE_BUILD_VERSION } else { "unknown" }
     electronVersion = if ($env:SAGE_ELECTRON_VERSION) { $env:SAGE_ELECTRON_VERSION } else { "21.4.4" }
     pythonVersion = $PythonVersion
+    packagingMode = if ($ProtectCode) { "cython" } else { "source" }
 }
 $Manifest | ConvertTo-Json -Depth 3 | Set-Content -Path $ManifestPath -Encoding UTF8
 Write-Host "Build manifest: $ManifestPath" -ForegroundColor Green

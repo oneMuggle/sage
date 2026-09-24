@@ -119,6 +119,13 @@ import {
   runDiagnosticPreview,
   runBrowserCheck,
 } from './diagnosticExport';
+import {
+  collectAndWriteDiagnostic,
+  recordBackendStderr,
+  recordLastPlan,
+  type BackendPlanSummary,
+  type BackendProcSummary,
+} from './backendDiagnostics';
 
 const BACKEND_PORT = Number(process.env.PYTHON_BACKEND_PORT ?? 8765);
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`;
@@ -299,6 +306,11 @@ let backendProc: ChildProcess | null = null;
 let backendGeneration = 0;
 let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
+// T2026-09-24: flipped to true the first time a backend generation reaches
+// the 'ready' lifecycle. Used by proc.on('exit') to distinguish an early
+// startup crash (worth snapshotting) from a normal post-ready exit (already
+// captured by the in-app logger; no diagnostic needed).
+let startedSuccessfully = false;
 let backendAuthToken: string | null = null;
 let updateManager: UpdateManager | null = null;
 async function reportUpdateStartupFailure(reason: string): Promise<boolean> {
@@ -457,8 +469,32 @@ function spawnBackend(): ChildProcess {
     // this, the user sees two stacked modal dialogs about the same problem.
     reportedBrokenInstaller = true;
     updateSplashStage('安装包不完整，无法启动后端');
+    const planSummary: BackendPlanSummary = {
+      kind: 'broken-installer',
+      reason: plan.reason,
+      title: plan.title,
+    };
+    recordLastPlan(planSummary);
+    // Kick off the diagnostic write in the background. spawnBackend() is
+    // sync (it must return a ChildProcess synchronously), so we cannot await
+    // here — instead we capture the Promise and resolve it inside the same
+    // fire-and-forget chain that calls showStartupFailureDialog. By the time
+    // the user clicks a button the file is on disk.
+    const diagPathPromise = collectAndWriteDiagnostic({
+      manifest: buildManifest,
+      plan: planSummary,
+      proc: null,
+      reason: 'broken-installer',
+      detail: `${plan.title}\n${plan.detail}`,
+    });
     void reportUpdateStartupFailure('broken-installer').then(async (rolledBack) => {
-      if (!rolledBack) await showStartupFailureDialog({ reason: plan.title, detail: plan.detail });
+      if (rolledBack) return;
+      const diagPath = await diagPathPromise;
+      await showStartupFailureDialog({
+        reason: plan.title,
+        detail: plan.detail,
+        diagnosticPath: diagPath || undefined,
+      });
     });
     // Return a no-op stub proc that exits immediately so the rest of the
     // startup flow (health probe → timeout) still works predictably.
@@ -474,6 +510,14 @@ function spawnBackend(): ChildProcess {
   backendAuthToken = process.env.SAGE_LOCAL_AUTH_TOKEN ?? randomBytes(32).toString('base64url');
   currentBackend = { generation, pid: -1, ownershipToken };
   backendLifecycle = 'starting';
+  // T2026-09-24: stash the resolved plan so the diagnostic writer can report
+  // which spawn reason was used when the backend later fails to come up.
+  recordLastPlan({
+    kind: 'spawn',
+    reason: plan.reason,
+    command: plan.cmd,
+    args: plan.args,
+  });
   // Task 0 review round 1, finding #6: tell the renderer the new lifecycle
   // state so BackendStatusBanner can show "starting…" before the first
   // health probe lands.
@@ -538,9 +582,14 @@ function spawnBackend(): ChildProcess {
   proc.stdout?.on('data', (b) =>
     logger.debug('backend: stdout', { line: stdoutDecoder.push(b).trim() }),
   );
-  proc.stderr?.on('data', (b) =>
-    logger.error('backend: stderr', { line: stderrDecoder.push(b).trim() }),
-  );
+  proc.stderr?.on('data', (b) => {
+    const line = stderrDecoder.push(b).trim();
+    logger.error('backend: stderr', { line });
+    // T2026-09-24: feed into the rolling stderr buffer so the diagnostic
+    // collector has the most recent backend output to embed in
+    // `${userData}/diagnostic-*.log` when startup fails.
+    recordBackendStderr(line + '\n');
+  });
   proc.on('exit', (code) => {
     if (!isCurrentGeneration({ generation, pid: proc.pid ?? -1, ownershipToken }, currentBackend)) {
       logger.debug('main: stale backend exit ignored', { generation, pid: proc.pid });
@@ -555,6 +604,32 @@ function spawnBackend(): ChildProcess {
     // would otherwise drop them silently.
     stdoutDecoder.close();
     stderrDecoder.close();
+    // T2026-09-24: capture a startup diagnostic on early non-zero exit so a
+    // crash before the health probe lands has a paper trail. We treat any
+    // exit BEFORE the health probe as a startup crash worth snapshotting.
+    // scheduleBackendRestart() below will replace the dead process; if the
+    // respawn succeeds the diagnostic still helps triage the original cause.
+    if (!appIsQuitting && code !== 0 && code !== null && !startedSuccessfully) {
+      const procSummary: BackendProcSummary = {
+        pid: proc.pid ?? null,
+        exitCode: code,
+        signalCode: proc.signalCode,
+        generation,
+        ownershipToken,
+      };
+      void collectAndWriteDiagnostic({
+        manifest: buildManifest,
+        plan: {
+          kind: 'spawn',
+          reason: plan.reason,
+          command: plan.cmd,
+          args: plan.args,
+        },
+        proc: procSummary,
+        reason: 'backend-exit-non-zero',
+        detail: `Backend exited with code=${code} signal=${proc.signalCode ?? 'null'} before becoming healthy.`,
+      });
+    }
     if (!appIsQuitting) {
       scheduleBackendRestart();
     }
@@ -809,6 +884,12 @@ async function waitForBackend(timeoutMs = BACKEND_HEALTH_TIMEOUT_MS): Promise<bo
         }
         logger.info('main: waitForBackend all checks passed', { pollAttempts });
         backendLifecycle = 'ready';
+        // T2026-09-24: mark this generation as having reached 'ready'. Once
+        // set, proc.on('exit') skips the startup-crash diagnostic path
+        // because the backend was healthy at least once. SKIP_BACKEND and
+        // demo mode do NOT flip this flag — there's no real backend to
+        // crash, so any exit from those branches is a non-event.
+        startedSuccessfully = true;
         // Task 0 review round 1, finding #6: tell the renderer the backend
         // is ready so BackendStatusBanner can clear the "starting…" state
         // (or never show it, if the spawn-to-ready window was sub-frame).
@@ -2525,9 +2606,28 @@ app.whenReady().then(async () => {
       : '\n\n后端进程状态: 进程不存在 (backendProc=null)';
     const baseDetail = `请检查端口 ${BACKEND_PORT} 是否被占用,或 conda 环境 sage-backend 是否已安装。${procStateLine}`;
     updateSplashStage('后端服务启动失败');
+    // T2026-09-24: snapshot the failure state BEFORE the dialog so the user
+    // can hit "打开诊断目录" and find a paper trail of the exact state we
+    // saw. The snapshot covers resources tree, env, process state, stderr
+    // tail (if any) and today's log tail.
+    const timeoutProc: BackendProcSummary = {
+      pid: backendProc?.pid ?? null,
+      exitCode: backendProc?.exitCode ?? null,
+      signalCode: backendProc?.signalCode ?? null,
+      generation: currentBackend?.generation ?? null,
+      ownershipToken: currentBackend?.ownershipToken ?? null,
+    };
+    const timeoutDiagPath = await collectAndWriteDiagnostic({
+      manifest: buildManifest,
+      plan: null,
+      proc: timeoutProc,
+      reason: 'backend-startup-timeout',
+      detail: baseDetail,
+    });
     const choice = await showStartupFailureDialog({
       reason: `后端服务在 ${Math.round(BACKEND_HEALTH_TIMEOUT_MS / 1000)} 秒内未响应 (已自动重试一次)`,
       detail: baseDetail,
+      diagnosticPath: timeoutDiagPath || undefined,
     });
     if (choice === 'retry') {
       updateSplashStage('正在重试启动后端服务…');

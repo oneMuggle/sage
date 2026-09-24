@@ -46,6 +46,24 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - **渲染事件命中率可视化（R25）**：修复 NetworkTab 把 metrics 快照的 `render_events` 全局键当域名行渲染的回归；新增独立命中率块（渲染数/通道就绪/事件命中），i18n 全量补键 + vitest 契约测试
 - **渲染池槽位配置化（R25）**：`web_access_config.render_pool_size`（钳 1..4，默认 2），acquire 懒增槽位；设置页新增下拉控件，前后端同口径
 
+> 🧹 **浏览器生命周期 R26：进程树回收时序修复**（方案 `docs/plans/2026-09-24_browser-treekill-order.md`）
+
+### Fixed(browser)
+- **进程树回收时序（R26）**：`_terminate_session` 先 terminate 父进程再 taskkill /T，父退出后子进程被重派生、`/T` 遍历不到树 —— crashpad/gpu 等孤儿进程锁住 profile 目录（单测每轮泄漏一棵进程树）。修复为父进程存活时先树杀、后优雅终止兜底；POSIX 行为不变
+
+> 🌐 **网页访问能力优化 Round 27：AB3 TLS/HTTP2 指纹**（方案 `docs/plans/2026-09-24_web-access-round27-tls-fingerprint.md`）
+
+### Added(web-access)
+- **TLS 指纹传输器（R27/AB3，可选依赖）**：新模块 `tls_transport`——`web_access_config.tls_fingerprint` 开启且 `curl_cffi` 可导入时，静态抓取经 httpx 自定义传输走 Chrome TLS/HTTP2 指纹（JA3 等握手指纹不再暴露脚本客户端），策略校验/重定向编排/AB5 重试零改动；curl_cffi 缺失或关闭时回落标准 httpx；requirements-optional 新增 `curl_cffi>=0.7`（release/win7 不装）；设置页实验性开关 + i18n
+
+> 🧹 **稳定收尾 R28：冷导入子进程超时加固 + AB3 使用计数可观测**（方案 `docs/plans/2026-09-24_stability-r28.md`）
+
+### Fixed(test)
+- **init_no_circular 子进程超时加固（R28）**：冷导入子进程超时 60→150s（-n auto 全量并发下 P99 逼近 60s，负载抖动误报为 issue #484 回归）；doctor 冒烟 30→90s
+
+### Added(web-access)
+- **AB3 使用计数（R28）**：tls_transport 增线程安全请求计数，`GET /api/v1/web-access/metrics` 快照增 `tls_fingerprint.requests` 键——指纹通道使用情况首次可观测
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 > 🧹 **alpha.52-win7 暂无未发布变更**

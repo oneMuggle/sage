@@ -794,6 +794,42 @@ class LLMClient:
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[str] = None,
     ) -> AsyncGenerator[Tuple[str, Any], None]:
+        """流式 chat（L2 真流式）拦截器（DSH 对标 R8，B3）。
+
+        三态（env 控制，均未设时完全旁路 —— 生产行为零变化）：
+
+        - ``SAGE_LLM_REPLAY_DIR``：回放模式 —— 不联网，从录制目录按序
+          重放事件流（录制/回放测试与离线开发用）；
+        - ``SAGE_LLM_RECORD_DIR``：录制模式 —— 真实请求照常发出，事件流
+          tee 到 NDJSON 录制文件；
+        - 其余：直接透传 ``_chat_stream_events_raw``。
+        """
+        replay_dir = os.getenv("SAGE_LLM_REPLAY_DIR")
+        if replay_dir:
+            from backend.core.legacy.llm_record_replay import replay_stream_events
+
+            async for event in replay_stream_events(replay_dir):
+                yield event
+            return
+        record_dir = os.getenv("SAGE_LLM_RECORD_DIR")
+        if record_dir:
+            from backend.core.legacy.llm_record_replay import record_stream_events
+
+            async for event in record_stream_events(
+                record_dir,
+                self._chat_stream_events_raw(messages, tools, tool_choice),
+            ):
+                yield event
+            return
+        async for event in self._chat_stream_events_raw(messages, tools, tool_choice):
+            yield event
+
+    async def _chat_stream_events_raw(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
+    ) -> AsyncGenerator[Tuple[str, Any], None]:
         """流式 chat（L2 真流式）：内容/推理增量实时产出，工具调用增量聚合。
 
         与 ``chat_stream``（纯文本、无 tools、无聚合）的区别：本方法发送
