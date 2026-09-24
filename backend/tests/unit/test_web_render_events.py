@@ -189,3 +189,60 @@ def test_render_page_records_event_metrics(fake_time, monkeypatch):
     assert result["rendered_status"] == 200
     assert recorded == [(True, True)]
 
+
+# ---------- R30：wait_for 完整度可观测 ----------
+
+
+def test_wait_page_ready_reports_wait_for_hit(fake_time, monkeypatch):
+    """wait_for 选择器在窗口内出现 → True。"""
+    evals = iter(["complete", True, 5, 5, 5])
+    monkeypatch.setattr(web_render, "_evaluate_json", lambda s, e, t: next(evals))
+    assert web_render.wait_page_ready(SimpleNamespace(), "t1", wait_for=".item") is True
+
+
+def test_wait_page_ready_reports_wait_for_miss(fake_time, monkeypatch):
+    """readyState 达标后选择器窗口耗尽 → False。"""
+    calls = {"n": 0}
+
+    def _eval(session, expression, target_id):
+        calls["n"] += 1
+        return "complete" if calls["n"] == 1 else 0  # 选择器永不出现
+
+    monkeypatch.setattr(web_render, "_evaluate_json", _eval)
+    assert web_render.wait_page_ready(SimpleNamespace(), "t1", wait_for=".never") is False
+
+
+def test_wait_page_ready_without_wait_for_is_true(fake_time, monkeypatch):
+    evals = iter(["complete", 5, 5, 5])
+    monkeypatch.setattr(web_render, "_evaluate_json", lambda s, e, t: next(evals))
+    assert web_render.wait_page_ready(SimpleNamespace(), "t1") is True
+
+
+def test_render_page_reports_wait_for_satisfied(fake_time, monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])
+    inner = web_render._evaluate_json
+
+    def _eval(session, expression, target_id):
+        if "querySelector" in expression:
+            return True
+        return inner(session, expression, target_id)
+
+    monkeypatch.setattr(web_render, "_evaluate_json", _eval)
+
+    result = render_page(
+        "https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE), wait_for=".item"
+    )
+
+    assert result["wait_for_satisfied"] is True
+
+
+def test_render_page_reports_wait_for_miss(fake_time, monkeypatch):
+    page_json = json.dumps({"url": "https://spa.example/", "title": "t", "text": "x"})
+    _install_render(monkeypatch, page_json, lengths=[0, 0, 0])  # querySelector 得 0 → 未命中
+
+    result = render_page(
+        "https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE), wait_for=".item"
+    )
+
+    assert result["wait_for_satisfied"] is False
