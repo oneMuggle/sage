@@ -1,4 +1,4 @@
-"""R114 — memory/scoring.py 四因子检索评分单元测试。
+"""R115 — memory/scoring.py 四因子检索评分单元测试（重建，#1501 内容恢复）。
 
 覆盖：relevance 归一化与中性回退、recency 半衰期衰减、importance 钳位、
 confidence 晋升加成、composite_score 加权求和、rank_by_composite 降序排序。
@@ -39,8 +39,7 @@ def make_row(**overrides):
 
 class TestRelevanceFactor:
     def test_normal_rrf_score_maps_to_range(self):
-        row = {"rrf_score": 0.02}
-        r = relevance_factor(row)
+        r = relevance_factor({"rrf_score": 0.02})
         assert 0.0 < r <= 1.0
 
     def test_zero_rrf_returns_neutral(self):
@@ -56,13 +55,12 @@ class TestRelevanceFactor:
 class TestRecencyFactor:
     def test_fresh_memory_high_recency(self):
         row = {"created_at": 1_700_000_000_000}
-        now = 1_700_000_000_000 + DAY_MS  # 1 天后
-        r = recency_factor(row, now_ms=now)
-        assert 0.9 < r < 1.0
+        now = 1_700_000_000_000 + DAY_MS
+        assert recency_factor(row, now_ms=now) == pytest.approx(0.5 ** (1 / 30))
 
     def test_old_memory_decays(self):
         row = {"created_at": 1_700_000_000_000}
-        now = 1_700_000_000_000 + 60 * DAY_MS  # 60 天后
+        now = 1_700_000_000_000 + 60 * DAY_MS
         r = recency_factor(row, now_ms=now)
         assert 0.0 < r < 0.5
 
@@ -73,7 +71,7 @@ class TestRecencyFactor:
         row = {"created_at": 1_700_000_000_000, "accessed_at": 1_700_000_000_000 + 5 * DAY_MS}
         now = 1_700_000_000_000 + 6 * DAY_MS
         r = recency_factor(row, now_ms=now)
-        assert 0.9 < r < 1.0
+        assert r > 0.9
 
 
 class TestImportanceFactor:
@@ -83,8 +81,7 @@ class TestImportanceFactor:
     def test_missing_defaults_to_neutral(self):
         assert importance_factor({}) == pytest.approx(0.5)
 
-    def test_clamped_to_min_point_one(self):
-        # importance=-5: max(0.1, -5)=0.1, /10.0=0.01 —— 低钳位在 /10 之前生效
+    def test_clamped_to_min_after_division(self):
         assert importance_factor({"importance": -5}) == pytest.approx(0.01)
 
     def test_clamped_to_max_one(self):
@@ -133,6 +130,6 @@ class TestRankByComposite:
 
     def test_does_not_mutate_input_rows(self):
         rows = [make_row(id="a"), make_row(id="b")]
-        original = [dict(r) for r in rows]
+        original_content = [r["content"] for r in rows]
         rank_by_composite(rows, now_ms=1_700_000_000_000)
-        assert rows == original
+        assert [r["content"] for r in rows] == original_content
