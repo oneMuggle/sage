@@ -567,6 +567,7 @@ def render_page(
     wait_for: str = "",
     credential_domain: str = "",
     repo: Any = None,
+    _retried: bool = False,
 ) -> Dict[str, Any]:
     """headless 渲染 ``url``，返回与 web_fetch._render 可拼接的 content 片段。
 
@@ -579,6 +580,9 @@ def render_page(
     注入渲染浏览器（导航前生效），渲染完成后经 ``Storage.getCookies`` 按域取回
     并合并回档案，结果带 ``credential_refreshed``（一次导出，静态 / 渲染 /
     交互三条通道共用）。header 型档案渲染通道不支持，跳过注入不报错。
+
+    R31：主文档状态 >= 500（瞬时上游错误，对齐静态路径 AB5 语义）时自动
+    整链重试一次；403 反爬盾页属持续态不重试（Round 5 口径：不无限重试）。
 
     Raises:
         RenderError: 门禁拒绝 / 浏览器不可用 / 导航失败 / 页面读取异常 /
@@ -725,6 +729,30 @@ def render_page(
         rendered["html"] = html
     # X2：渲染耗时（Round 15）
     rendered["net"] = {"elapsed_ms": int((time.monotonic() - _t0) * 1000)}
+
+    # R31：瞬时 5xx 整链重试一次（换标签页重走导航；cookie 注入/回写同样
+    # 重来）。重试仍失败则如实返回第二次结果；重试自身抛错则保留首次结果。
+    status_val = rendered.get("rendered_status")
+    if isinstance(status_val, int) and status_val >= 500 and not _retried:
+        try:
+            retried = render_page(
+                url,
+                network_policy,
+                wait_for=wait_for,
+                credential_domain=credential_domain,
+                repo=repo,
+                _retried=True,
+            )
+            prefix = f"render_retried: 首次渲染返回 {status_val}，已自动重试"
+            retried["note"] = (
+                prefix if not retried.get("note") else f"{prefix}；{retried['note']}"
+            )
+            return retried
+        except Exception:  # noqa: BLE001 — 重试失败保留首次结果（不掩盖真实状态）
+            prefix = f"render_retry_failed: 首次渲染返回 {status_val}，自动重试亦失败"
+            rendered["note"] = (
+                prefix if not rendered.get("note") else f"{rendered['note']}；{prefix}"
+            )
     return rendered
 
 
