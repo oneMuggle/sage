@@ -471,33 +471,33 @@ class BuiltinSnapshotService:
 
 ## 9. 实施步骤
 
-### Phase 1: 数据模型 + 基础 API (1-2 周)
+### Phase 1: 数据模型 + 基础 API (1-2 周) ✅ 已完成
 
-- [ ] 9.1.1 `projects` 表新增 `project_type` / `project_stage` / `vcs_mode` / `detected_type` 字段
-- [ ] 9.1.2 创建 `project_constraints` 表 + Repository
-- [ ] 9.1.3 创建 `project_milestones` 表 + Repository
-- [ ] 9.1.4 实现类型自动检测逻辑 (`detect_project_type()`)
-- [ ] 9.1.5 更新项目注册 API 支持 `project_type` 参数
-- [ ] 9.1.6 添加约束 CRUD API
-- [ ] 9.1.7 添加里程碑 CRUD API
-- [ ] 9.1.8 编写单元测试
+- [x] 9.1.1 `projects` 表新增 `project_type` / `project_stage` / `vcs_mode` / `detected_type` 字段
+- [x] 9.1.2 创建 `project_constraints` 表 + Repository
+- [x] 9.1.3 创建 `project_milestones` 表 + Repository
+- [x] 9.1.4 实现类型自动检测逻辑 (`detect_project_type()`)
+- [x] 9.1.5 更新项目注册 API 支持 `project_type` 参数
+- [x] 9.1.6 添加约束 CRUD API
+- [x] 9.1.7 添加里程碑 CRUD API
+- [x] 9.1.8 编写单元测试
 
-### Phase 2: 约束注入 + 系统集成 (1 周)
+### Phase 2: 约束注入 + 系统集成 (1 周) ✅ 已完成
 
-- [ ] 9.2.1 修改系统提示词构建逻辑，注入约束
-- [ ] 9.2.2 实现 `resolve_constraints()` 匹配逻辑
-- [ ] 9.2.3 预设约束模板数据（coding/research/business 各 3-5 个）
-- [ ] 9.2.4 约束导入模板 API
-- [ ] 9.2.5 集成测试
+- [x] 9.2.1 修改系统提示词构建逻辑，注入约束
+- [x] 9.2.2 实现 `resolve_constraints()` 匹配逻辑
+- [x] 9.2.3 预设约束模板数据（coding/research/business 各 3-5 个）
+- [x] 9.2.4 约束导入模板 API
+- [x] 9.2.5 集成测试
 
-### Phase 3: Git 只读集成 (1 周)
+### Phase 3: Git 只读集成 (1 周) ✅ 已完成
 
-- [ ] 9.3.1 实现 `GitIntegration` 类（status/log/diff/ignore/branch）
-- [ ] 9.3.2 项目打开时自动检测 git 状态
-- [ ] 9.3.3 当前分支注入到系统提示词
-- [ ] 9.3.4 Git status widget 后端 API
-- [ ] 9.3.5 索引时排除 .gitignore 中的文件
-- [ ] 9.3.6 集成测试
+- [x] 9.3.1 实现 `GitIntegration` 类（status/log/diff/ignore/branch）
+- [x] 9.3.2 项目打开时自动检测 git 状态
+- [x] 9.3.3 当前分支注入到系统提示词
+- [x] 9.3.4 Git status widget 后端 API
+- [x] 9.3.5 索引时排除 .gitignore 中的文件
+- [x] 9.3.6 集成测试
 
 ### Phase 4: 前端项目类型 UI (1-2 周)
 
