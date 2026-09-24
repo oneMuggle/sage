@@ -26,6 +26,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { arch, release } from 'node:os';
 import { join } from 'node:path';
 import { app } from 'electron';
 
@@ -193,8 +194,8 @@ function buildWin7Hint(platform: NodeJS.Platform, osRelease: string): string[] {
 }
 
 function render(snapshot: DiagnosticSnapshot): string {
-  const osRelease = require('node:os').release();
-  const arch = require('node:os').arch();
+  const osRelease = release();
+  const osArch = arch();
   const userData = app.getPath('userData');
   const logDir = getLogDir();
 
@@ -228,7 +229,7 @@ function render(snapshot: DiagnosticSnapshot): string {
   sections.push('## 2. Platform');
   sections.push('');
   sections.push(`  platform:    ${process.platform}`);
-  sections.push(`  arch:        ${arch}`);
+  sections.push(`  arch:        ${osArch}`);
   sections.push(`  os.release:  ${osRelease}`);
   sections.push(`  isPackaged:  ${app.isPackaged}`);
   sections.push(
@@ -240,14 +241,15 @@ function render(snapshot: DiagnosticSnapshot): string {
 
   sections.push('## 3. Plan');
   sections.push('');
-  if (snapshot.plan) {
-    sections.push(`  kind:    ${snapshot.plan.kind}`);
-    sections.push(`  reason:  ${snapshot.plan.reason}`);
-    if (snapshot.plan.kind === 'broken-installer') {
-      sections.push(`  title:   ${snapshot.plan.title ?? ''}`);
-    } else if (snapshot.plan.kind === 'spawn') {
-      sections.push(`  command: ${snapshot.plan.command ?? ''}`);
-      sections.push(`  args:    ${(snapshot.plan.args ?? []).join(' ')}`);
+  const plan = snapshot.plan ?? lastPlan;
+  if (plan) {
+    sections.push(`  kind:    ${plan.kind}`);
+    sections.push(`  reason:  ${plan.reason}`);
+    if (plan.kind === 'broken-installer') {
+      sections.push(`  title:   ${plan.title ?? ''}`);
+    } else if (plan.kind === 'spawn') {
+      sections.push(`  command: ${plan.command ?? ''}`);
+      sections.push(`  args:    ${(plan.args ?? []).join(' ')}`);
     }
   } else {
     sections.push('  (no plan recorded — likely failed before resolveBackendLaunchCommand)');
