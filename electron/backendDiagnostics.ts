@@ -167,8 +167,7 @@ function buildLogTailSection(): string[] {
   if (!existsSync(logFile)) return ['  (no log file yet)'];
   try {
     const buf = readFileSync(logFile);
-    const tail =
-      buf.length > LOG_TAIL_BYTES ? buf.subarray(buf.length - LOG_TAIL_BYTES) : buf;
+    const tail = buf.length > LOG_TAIL_BYTES ? buf.subarray(buf.length - LOG_TAIL_BYTES) : buf;
     const text = tail.toString('utf8');
     const lines = text.split(/\r?\n/);
     if (lines.length > 100) lines.splice(0, lines.length - 100);
@@ -218,7 +217,9 @@ function render(snapshot: DiagnosticSnapshot): string {
   sections.push(`  commit:           ${m.commit}`);
   sections.push(`  branch:           ${m.branch}`);
   sections.push(`  version:          ${m.version}`);
-  sections.push(`  packagingMode:    ${m.packagingMode ?? 'unknown'}  (source=源码版(推荐), cython=Cython 实验版, unknown=无此字段)`);
+  sections.push(
+    `  packagingMode:    ${m.packagingMode ?? 'unknown'}  (source=源码版(推荐), cython=Cython 实验版, unknown=无此字段)`,
+  );
   sections.push(`  electronVersion:  ${m.electronVersion}`);
   sections.push(`  pythonVersion:    ${m.pythonVersion}`);
   sections.push(`  manifestVersion:  ${m.manifestVersion}`);
@@ -230,7 +231,9 @@ function render(snapshot: DiagnosticSnapshot): string {
   sections.push(`  arch:        ${arch}`);
   sections.push(`  os.release:  ${osRelease}`);
   sections.push(`  isPackaged:  ${app.isPackaged}`);
-  sections.push(`  app version: ${typeof app.getVersion === 'function' ? app.getVersion() : 'unknown'}`);
+  sections.push(
+    `  app version: ${typeof app.getVersion === 'function' ? app.getVersion() : 'unknown'}`,
+  );
   sections.push(`  userData:    ${userData}`);
   sections.push(`  logDir:      ${logDir}`);
   sections.push('');
@@ -301,9 +304,7 @@ function render(snapshot: DiagnosticSnapshot): string {
   return sections.join('\n');
 }
 
-export async function collectAndWriteDiagnostic(
-  snapshot: DiagnosticSnapshot,
-): Promise<string> {
+export async function collectAndWriteDiagnostic(snapshot: DiagnosticSnapshot): Promise<string> {
   let userData = '';
   try {
     userData = app.getPath('userData');

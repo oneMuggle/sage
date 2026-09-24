@@ -76,19 +76,18 @@ export async function showStartupFailureDialog(opts: {
             ? 'retry'
             : 'quit';
   } else {
-    choice =
-      result.response === 0 ? 'open-logs' : result.response === 1 ? 'retry' : 'quit';
+    choice = result.response === 0 ? 'open-logs' : result.response === 1 ? 'retry' : 'quit';
   }
 
   if (choice === 'open-diagnostic' && opts.diagnosticPath) {
     logger.info('main: user chose open-diagnostic after startup failure');
     Promise.resolve(shell.openPath(dirname(opts.diagnosticPath))).catch((err) =>
-      logger.error('main: shell.openPath(diag dir) failed', { err: String(err) })
+      logger.error('main: shell.openPath(diag dir) failed', { err: String(err) }),
     );
   } else if (choice === 'open-logs') {
     logger.info('main: user chose open-logs after startup failure');
     Promise.resolve(shell.openPath(logDir)).catch((err) =>
-      logger.error('main: shell.openPath failed', { err: String(err) })
+      logger.error('main: shell.openPath failed', { err: String(err) }),
     );
   } else if (choice === 'retry') {
     logger.info('main: user chose retry after startup failure');
