@@ -9,7 +9,7 @@
 #   - 不构建:    Linux / macOS (Win7 LTS 不覆盖)
 #   - EOL:       2027-12-13 归档, 届时删除本 workflow + release/win7 分支
 #
-# 详见 docs/technical/21-win7-lts.md §2 LTS 策略 + §9 Release 工作流
+# 详见 docs/technical/31-win7-lts.md §2 LTS 策略 + §9 Release 工作流
 
 name: Release (Win7 LTS)
 
