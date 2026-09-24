@@ -2859,6 +2859,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 预算裁剪, 详见 backend/chat/project_context.py。独立标记块, rebase 友好。
             try:
                 from backend.chat.project_context import (
+                    build_constraints_block,
                     build_project_materials_block,
                     build_project_metadata_block,
                 )
@@ -2879,6 +2880,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     metadata_block = build_project_metadata_block(m3_project)
                     if metadata_block:
                         system_content += "\n\n" + metadata_block
+                    # ===== 项目约束注入 BEGIN (项目类型分类系统, 2026-09-24) =====
+                    # 约束作为行为指导规则，优先级高于资料（materials）
+                    if m3_project is not None:
+                        constraints_block = build_constraints_block(m3_project.id)
+                        if constraints_block:
+                            system_content += "\n\n" + constraints_block
+                    # ===== 项目约束注入 END =====
                     if m3_project is not None:
                         active_materials = (
                             ProjectMaterialRepository()
