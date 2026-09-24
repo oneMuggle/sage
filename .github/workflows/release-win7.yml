@@ -1,6 +1,6 @@
 # Release LTS Workflow — Windows 7 LTS 维护分支专用
 #
-# 触发: push tag v*-lts (如 v0.4.3-alpha.1-win7) 到 release/win7 分支
+# 触发: push tag v*-lts (如 v0.4.9-alpha.55-win7) 到 release/win7 分支
 # 目标: Windows 7 SP1 x64 only (Electron 21.4.4 冻结)
 #
 # 与 release.yml 差异:
@@ -9,7 +9,11 @@
 #   - 不构建:    Linux / macOS (Win7 LTS 不覆盖)
 #   - EOL:       2027-12-13 归档, 届时删除本 workflow + release/win7 分支
 #
-# 详见 docs/technical/21-win7-lts.md §2 LTS 策略 + §9 Release 工作流
+# 双版本流水线 (2026-09-24):
+#   - build-windows (Source mode):  SAGE_PROTECT_CODE=false, 默认推荐
+#   - build-windows-cython (Cython): SAGE_PROTECT_CODE=true,  实验性, 含 -cython 后缀
+#   - upload-release:               合并两 job 产物到同一 release
+# 详见 docs/superpowers/specs/2026-09-24-win7-dual-build-and-diagnostics-design.md
 
 name: Release (Win7 LTS)
 
@@ -23,15 +27,14 @@ permissions:
 
 jobs:
   build-windows:
-    name: Build Windows (Win7 LTS)
+    name: Build Windows (Win7 LTS - Source)
     # Only act on LTS-suffixed tags; non-LTS tags skip this job entirely
     if: "contains(github.ref_name, '-win7')"
 
     runs-on: windows-latest
 
     env:
-      # Force -win7 suffix via electron-builder.yml artifactName placeholder
-      ARTIFACT_SUFFIX: win7
+      SAGE_PROTECT_CODE: "false"
 
     steps:
       - name: Checkout
@@ -62,17 +65,16 @@ jobs:
             ~/.cache/electron-builder
           # -win7 suffix prevents cache collision with main release
           # prerelease- namespace prevents alpha/beta/rc vs stable cache pollution
-          key: ${{ runner.os }}-electron-win7-${{ contains(github.ref_name, '-') && 'prerelease-' || '' }}${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-electron-win7-source-${{ contains(github.ref_name, '-') && 'prerelease-' || '' }}${{ hashFiles('package-lock.json') }}
           restore-keys: |
+            ${{ runner.os }}-electron-win7-source-
             ${{ runner.os }}-electron-win7-
 
       - name: Install npm dependencies
         run: npm ci --force
 
-      - name: Bundle Python backend (Win7 LTS)
+      - name: Bundle Python backend (Source mode)
         shell: pwsh
-        env:
-          SAGE_PROTECT_CODE: "true"
         run: pwsh scripts/bundle-python.ps1
 
       - name: Bundle MSYS2 bash (Win7 LTS)
@@ -82,12 +84,13 @@ jobs:
         shell: pwsh
         run: pwsh scripts/bundle-git-bash.ps1
 
-      - name: Verify build manifest
+      - name: Verify build manifest (Source mode)
         shell: pwsh
         run: |
           $manifest = Get-Content resources/build-manifest.json | ConvertFrom-Json
           if ($manifest.manifestVersion -ne 1) { throw "Unsupported manifest version" }
-          foreach ($field in @('buildId','commit','branch','version','electronVersion','pythonVersion')) {
+          if ($manifest.packagingMode -ne 'source') { throw "Expected source mode, got $($manifest.packagingMode)" }
+          foreach ($field in @('buildId','commit','branch','version','electronVersion','pythonVersion','packagingMode')) {
             if ([string]::IsNullOrWhiteSpace($manifest.$field)) { throw "Missing manifest field: $field" }
           }
           Write-Host ($manifest | ConvertTo-Json -Compress)
@@ -99,23 +102,132 @@ jobs:
         shell: pwsh
         run: pwsh scripts/fetch-vcredist.ps1
 
-      # Note: previously had "Determine ARTIFACT_SUFFIX" step that ran
-      # scripts/release/determine_artifact_suffix.sh, but that script was
-      # deleted (commit ea3639e — orphan). Suffix is hardcoded 'win7' in
-      # env block above (line 34), so electron-builder artifactName resolves
-      # to Sage-Setup-${version}win7.${ext}.
-
-      - name: Build Windows NSIS (Win7 LTS)
+      - name: Build Windows NSIS (Win7 LTS - Source)
         run: npx electron-builder --win nsis --publish never
 
+      - name: Upload Source installer as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sage-setup-source
+          path: release/*/Sage-Setup-*.exe
+          if-no-files-found: error
+
+  build-windows-cython:
+    name: Build Windows (Win7 LTS - Cython)
+    # Only act on LTS-suffixed tags; non-LTS tags skip this job entirely
+    if: "contains(github.ref_name, '-win7')"
+
+    runs-on: windows-latest
+
+    env:
+      SAGE_PROTECT_CODE: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12'
+          cache: 'npm'
+
+      - name: Setup Python 3.8.10 (Win7 LTS bundling)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.8.10'
+
+      - name: Cache electron-builder downloads (LTS namespace)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          # Cython job uses separate cache key namespace; the two caches
+          # can diverge (e.g. Cython build pulls extra setuptools wheels).
+          key: ${{ runner.os }}-electron-win7-cython-${{ contains(github.ref_name, '-') && 'prerelease-' || '' }}${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-win7-cython-
+            ${{ runner.os }}-electron-win7-
+
+      - name: Install npm dependencies
+        run: npm ci --force
+
+      - name: Bundle Python backend (Cython mode)
+        shell: pwsh
+        env:
+          SAGE_PROTECT_CODE: "true"
+        run: pwsh scripts/bundle-python.ps1
+
+      - name: Bundle MSYS2 bash (Win7 LTS)
+        shell: pwsh
+        run: pwsh scripts/bundle-git-bash.ps1
+
+      - name: Verify build manifest (Cython mode)
+        shell: pwsh
+        run: |
+          $manifest = Get-Content resources/build-manifest.json | ConvertFrom-Json
+          if ($manifest.manifestVersion -ne 1) { throw "Unsupported manifest version" }
+          if ($manifest.packagingMode -ne 'cython') { throw "Expected cython mode, got $($manifest.packagingMode)" }
+          foreach ($field in @('buildId','commit','branch','version','electronVersion','pythonVersion','packagingMode')) {
+            if ([string]::IsNullOrWhiteSpace($manifest.$field)) { throw "Missing manifest field: $field" }
+          }
+          Write-Host ($manifest | ConvertTo-Json -Compress)
+
+      - name: Build frontend + Electron
+        run: npm run electron:build
+
+      - name: Fetch VC++ Redistributable (Windows)
+        shell: pwsh
+        run: pwsh scripts/fetch-vcredist.ps1
+
+      - name: Build Windows NSIS (Win7 LTS - Cython)
+        # Override artifactName to add -cython suffix, distinguishing
+        # this experimental build from the recommended Source version.
+        # The base name (Sage-Setup-${version}) is unchanged so version
+        # detection (electron-updater etc.) still works.
+        run: npx electron-builder --win nsis --publish never --config.win.artifactName='${productName}-Setup-${version}-cython.${ext}'
+
+      - name: Upload Cython installer as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sage-setup-cython
+          path: release/*/Sage-Setup-*-cython.exe
+          if-no-files-found: error
+
+  upload-release:
+    name: Upload to LTS GitHub Release
+    needs: [build-windows, build-windows-cython]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Source installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sage-setup-source
+          path: artifacts/source
+      - name: Download Cython installer artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sage-setup-cython
+          path: artifacts/cython
+      - name: Verify both installers downloaded
+        run: |
+          set -e
+          shopt -s nullglob
+          src=(artifacts/source/*.exe)
+          cython=(artifacts/cython/*.exe)
+          if [ ${#src[@]} -eq 0 ]; then echo "::error::No source installer found"; exit 1; fi
+          if [ ${#cython[@]} -eq 0 ]; then echo "::error::No cython installer found"; exit 1; fi
+          echo "Source:   ${src[0]##*/} ($(stat -c %s "${src[0]}") bytes)"
+          echo "Cython:   ${cython[0]##*/} ($(stat -c %s "${cython[0]}") bytes)"
       - name: Upload to LTS GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # Use the original tag (e.g. v0.4.3-alpha.1-win7) as the release identifier,
+          # Use the original tag (e.g. v0.4.9-alpha.55-win7) as the release identifier,
           # so it becomes a separate release page from main's v0.2.0
           tag_name: ${{ github.ref_name }}
           files: |
-            release/*/Sage-Setup-*.exe
+            artifacts/**/*.exe
           prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
           body: |
             ## Sage ${{ github.ref_name }} (Win7 LTS) — Windows 7 SP1 x64 ONLY
@@ -126,16 +238,24 @@ jobs:
             > **Tier**: ${{ contains(github.ref_name, '-alpha') && 'ALPHA' || contains(github.ref_name, '-beta') && 'BETA' || contains(github.ref_name, '-rc') && 'RELEASE CANDIDATE' || 'STABLE' }}
             > ${{ contains(github.ref_name, '-alpha') && '⚠️ 仅供 Sage 贡献者使用。' || contains(github.ref_name, '-beta') && '⚠️ 公开测试版。' || contains(github.ref_name, '-rc') && '✅ 准稳定版。' || '✅ 稳定版，推荐 Win7 用户升级。' }}
 
-            ### Downloads
+            ### Downloads — Win7 LTS 提供两个版本
 
-            | File | Notes |
-            | --- | --- |
-            | `Sage-Setup-*.exe` | NSIS, x64, VCRedist bundled |
+            | File | 模式 | 备注 |
+            | --- | --- | --- |
+            | `Sage-Setup-*-win7.exe` | 源码模式 | ✅ **推荐**，兼容性最佳，内网环境首选 |
+            | `Sage-Setup-*-win7-cython.exe` | Cython 代码保护 | ⚠️ **实验性**，代码保护但有打包风险 |
+
+            如果不确定该选哪个，请优先使用源码模式（`-win7.exe`，无 `-cython` 后缀）。
 
             ### Win7 前置
 
             - **KB3033929** (SHA-2 代码签名支持, 2016 年发布) — Win7 SP1 必装, 否则 Sage.exe 启动被拒
             - x64 only (Electron 21 不支持 Win7 32-bit)
+
+            ### 启动失败排查
+
+            启动后白屏/闪退？Sage 在 `%AppData%\Sage\diagnostic-*.log` 写入诊断报告，
+            请将最近一份附到 GitHub Issue。
 
             ### 风险声明
 
