@@ -1,4 +1,8 @@
-"""R116 — HeartbeatMonitor 车道心跳监控单元测试（秒级时间戳口径）。"""
+"""R116 — HeartbeatMonitor 车道心跳监控单元测试。
+
+覆盖 HEALTHY/STALLED/TRANSPORT_DEAD 状态转换、回调触发、
+transport_alive 检查、heartbeat=None 安全跳过、生命周期管理。
+"""
 
 from __future__ import annotations
 
@@ -13,9 +17,12 @@ from backend.orchestration.models import HeartbeatStatus, LaneStatus
 
 pytestmark = pytest.mark.unit
 
+DAY_S = 86_400
+
 
 def _make_lane(lane_id="lane-1", ping_ago_s=0.0, transport_alive=True,
                status=LaneStatus.RUNNING):
+    """创建带心跳的 fake lane（last_ping_at 用秒，与 time.time() 同单位）。"""
     return SimpleNamespace(
         id=lane_id,
         status=status,
@@ -43,13 +50,20 @@ class _FakeRegistry:
 def _make_monitor(lanes, **kw):
     stalled = []
     dead = []
+
+    async def on_stalled(lane):
+        stalled.append(lane)
+
+    async def on_dead(lane):
+        dead.append(lane)
+
     monitor = HeartbeatMonitor(
         _FakeRegistry(lanes),
         check_interval=kw.pop("check_interval", 0.1),
         stalled_after=kw.pop("stalled_after", 300.0),
         dead_after=kw.pop("dead_after", 600.0),
-        on_stalled=lambda ln: stalled.append(ln),
-        on_dead=lambda ln: dead.append(ln),
+        on_stalled=on_stalled,
+        on_dead=on_dead,
         **kw,
     )
     return monitor, stalled, dead
@@ -104,18 +118,18 @@ async def test_no_heartbeat_skipped():
 @pytest.mark.asyncio()
 async def test_mixed_lanes_each_get_correct_status():
     healthy = _make_lane("h", ping_ago_s=0)
-    stalled = _make_lane("s", ping_ago_s=400)
+    stale = _make_lane("s", ping_ago_s=400)
     dead = _make_lane("d", ping_ago_s=700)
-    monitor, stalled, dead = _make_monitor([healthy, stalled, dead])
+    monitor, stalled, dead = _make_monitor([healthy, stale, dead])
     await monitor.check_heartbeats()
     assert healthy.heartbeat.status == HeartbeatStatus.HEALTHY
-    assert stalled.heartbeat.status == HeartbeatStatus.STALLED
+    assert stale.heartbeat.status == HeartbeatStatus.STALLED
     assert dead.heartbeat.status == HeartbeatStatus.TRANSPORT_DEAD
 
 
 @pytest.mark.asyncio()
 async def test_non_running_lanes_not_checked():
-    done = _make_lane(status=LaneStatus.COMPLETED)
+    done = _make_lane(status=LaneStatus.SUCCEEDED)
     monitor, _ = _make_monitor([done])
     await monitor.check_heartbeats()
     assert done.heartbeat.status == HeartbeatStatus.HEALTHY
