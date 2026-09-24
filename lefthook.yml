@@ -1,4 +1,10 @@
 # lefthook.yml
+#
+# 环境弹性：hook 在部分检出的 git worktree（无 node_modules / 无 conda 环境）
+# 或 PATH 不含 node 的终端里会以 `/usr/bin/env: node: No such file or
+# directory` 之类的暗涩错误炸掉，阻塞 commit/push。这里对每条命令做环境
+# 前置检查，缺环境时打一行 skip 说明并放行——CI（ci.yml）才是硬门禁，
+# 本地 hook 只是快速反馈。
 pre-commit:
   parallel: true
   commands:
@@ -10,19 +16,41 @@ pre-commit:
       run: bash scripts/lint.sh format {staged_files}
     frontend-lint:
       glob: 'src/**/*.{ts,tsx}'
-      run: npx eslint --fix {staged_files}
+      run: |
+        if ! command -v node >/dev/null 2>&1 || [ ! -d node_modules ]; then
+          echo "skip frontend-lint: node 或 node_modules 不可用（worktree 部分检出？）"
+          exit 0
+        fi
+        npx eslint --fix {staged_files}
     frontend-format:
       glob: 'src/**/*.{ts,tsx}'
-      run: npx prettier --write {staged_files}
+      run: |
+        if ! command -v node >/dev/null 2>&1 || [ ! -d node_modules ]; then
+          echo "skip frontend-format: node 或 node_modules 不可用（worktree 部分检出？）"
+          exit 0
+        fi
+        npx prettier --write {staged_files}
 
 pre-push:
   commands:
+    # backend-test 不需要额外守卫：scripts/pytest.sh 自带"pytest 完全不可用
+    # 时 warning + exit 0"的降级逻辑（PYTEST_BIN → conda 默认路径 → PATH）
     backend-test:
       run: cd backend && bash ../scripts/pytest.sh -x --no-cov
     frontend-test:
-      run: npm run test:run -- --no-coverage
+      run: |
+        if ! command -v node >/dev/null 2>&1 || [ ! -d node_modules ]; then
+          echo "skip frontend-test: node 或 node_modules 不可用（worktree 部分检出？CI 已覆盖）"
+          exit 0
+        fi
+        npm run test:run -- --no-coverage
 
 post-merge:
   commands:
     deps-install:
-      run: npm install
+      run: |
+        if ! command -v node >/dev/null 2>&1; then
+          echo "skip deps-install: node 不可用"
+          exit 0
+        fi
+        npm install
