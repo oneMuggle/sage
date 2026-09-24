@@ -218,6 +218,12 @@ jobs:
         shell: bash -el {0}
         run: conda run -n sage-collect-py38 python -c "import backend.main; print('py38 import ok')"
 
+      # AST 扫描 py39+ 运行期写法（isinstance 联合 / asyncio.to_thread / zip strict=
+      # / Path.hardlink_to 等）——collect/import 拦不住函数体内的运行期地雷
+      - name: py38 runtime hazard AST scan
+        shell: bash -el {0}
+        run: conda run -n sage-collect-py38 python backend/tools/py38_hazard_scan.py backend
+
       - name: Collect unit suite (py38) — zero collection errors
         shell: bash -el {0}
         run: |

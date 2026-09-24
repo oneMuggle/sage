@@ -1,0 +1,128 @@
+# ruff: noqa: T201, ERA001 — CLI 扫描工具：print 输出即产品形态；docstring 规则示例非注释代码
+"""py38 运行期地雷 AST 扫描（win7 LTS 门禁）。
+
+背景：py38 collect 门禁只做 import + pytest --collect-only，能拦住 py39+ 的
+*语法*（ast.parse 即报错），但拦不住 py39+ 才有的 *运行期 API/写法*——例如
+``isinstance(x, A | B)``（3.10+）、``asyncio.to_thread``（3.9+）在函数体内，
+import 时毫发无损，跑到那一行才 TypeError。
+
+本脚本用 AST 静态扫描已知的地雷类别，供 CI py38 job 调用；也可本地运行：
+
+    python backend/tools/py38_hazard_scan.py backend
+
+规则（py38 不可用的运行期写法）：
+- isinstance 第二参数出现 ``A | B`` 联合（3.10+）
+- ``asyncio.to_thread``（3.9+；backend/utils/py_compat.py 垫片自身除外）
+- ``zip(..., strict=...)``（3.10+）
+- ``Path.write_text/read_text/write_bytes/readlink(..., newline=)``（3.10+）
+- ``Path.hardlink_to``（3.10+）
+
+行内写 ``# py38-ok`` 可对单行豁免（须注明原因）。
+
+脚本自身必须 py38 可运行（在 py38 CI job 里执行）。
+"""
+import ast
+import pathlib
+import sys
+
+# 整文件豁免（垫片/兼容层自身）
+FILE_EXEMPTS = {
+    pathlib.PurePosixPath("backend/utils/py_compat.py"),
+}
+
+LINE_EXEMPT_MARK = "py38-ok"
+
+# 3.10+ 才有的 Path 方法（3.8 运行即 AttributeError）
+PY310_PATH_METHODS = {"hardlink_to"}
+
+# 3.10+ 才有的关键字参数
+PY310_KWARGS = {"write_text": {"newline"}, "read_text": {"newline"},
+                "write_bytes": {"newline"}, "readlink": {"newline"}}
+
+
+def _is_asyncio_to_thread(node):
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "to_thread"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "asyncio"
+    )
+
+
+def visit_node(node, rel, hits):
+    # R1: isinstance(x, A | B)
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "isinstance"
+        and len(node.args) >= 2
+    ):
+        for arg in node.args[1:]:
+            for sub in ast.walk(arg):
+                if isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.BitOr):
+                    hits.append((rel, sub.lineno, "isinstance 联合类型 X | Y（3.10+），改元组 (X, Y)"))
+                    break
+
+    # R2: asyncio.to_thread
+    if _is_asyncio_to_thread(node):
+        hits.append((rel, getattr(node, "lineno", 0), "asyncio.to_thread（3.9+），改用 utils.py_compat.to_thread"))
+
+    # R3: zip(strict=...)
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "zip"
+        and any(kw.arg == "strict" for kw in node.keywords)
+    ):
+        hits.append((rel, node.lineno, "zip(strict=...)（3.10+）"))
+
+    # R4/R5: Path 3.10+ 方法与关键字参数
+    if isinstance(node, ast.Attribute) and node.attr in PY310_PATH_METHODS:
+        hits.append((rel, node.lineno, f"Path.{node.attr}（3.10+）"))
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        banned = PY310_KWARGS.get(node.func.attr)
+        if banned and any(kw.arg in banned for kw in node.keywords):
+            hits.append((rel, node.lineno, f"{node.func.attr}(newline=...)（3.10+）"))
+
+
+def scan_file(path, rel):
+    try:
+        src = path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return []
+    tree = ast.parse(src)
+    hits = []
+    lines = src.splitlines()
+    exempt = {i + 1 for i, ln in enumerate(lines) if LINE_EXEMPT_MARK in ln}
+    for node in ast.walk(tree):
+        visit_node(node, rel, hits)
+    return [h for h in hits if h[1] not in exempt]
+
+
+def main():
+    root = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path("backend")
+    all_hits = []
+    for p in sorted(root.rglob("*.py")):
+        rel = pathlib.PurePosixPath(p.as_posix())
+        if rel in FILE_EXEMPTS:
+            continue
+        if "__pycache__" in p.parts or "node_modules" in p.parts:
+            continue
+        try:
+            all_hits.extend(scan_file(p, rel))
+        except SyntaxError as e:
+            # py38 解释器解析 py39+ 语法在此直接报错——同样是地雷
+            all_hits.append((rel, e.lineno or 0, f"语法解析失败（py39+ 语法）: {e.msg}"))
+
+    if all_hits:
+        print(f"py38 运行期地雷 {len(all_hits)} 处：")
+        for rel, lineno, msg in all_hits:
+            print(f"  {rel}:{lineno} {msg}")
+        print("修复或在该行加 `# py38-ok <原因>` 豁免。")
+        return 1
+    print(f"py38 运行期地雷扫描：0（{root}）")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
