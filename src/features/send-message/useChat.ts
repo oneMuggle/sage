@@ -33,6 +33,7 @@ import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 import {
   isValidCitationsPayload,
   isValidCompactPayload,
+  isValidContextPressurePayload,
   isValidMemoriesPayload,
   isValidSkillsPayload,
   isValidSourcesPayload,
@@ -688,6 +689,24 @@ export function useChat() {
                   updateMessage(`u-${clientMessageId}`, { activated_skills: evt.skills });
                 } else {
                   logger.warn(requestId, 'R38.skill_activated.malformed', evt.skills);
+                }
+              }
+              // TM2 (DSH 对标 R11): 上下文水位 —— 写入 store 供输入区
+              // 水位徽章渲染（<0.6 徽章不渲染，默认安静）。
+              if (evt.state === 'context_pressure' && evt.context_pressure) {
+                if (isValidContextPressurePayload(evt.context_pressure)) {
+                  useStore.getState().setContextPressure({
+                    session_id: sid,
+                    pressure: evt.context_pressure.pressure,
+                    total_tokens: evt.context_pressure.total_tokens,
+                    budget_tokens: evt.context_pressure.budget_tokens,
+                  });
+                } else {
+                  logger.warn(
+                    requestId,
+                    'TM2.context_pressure.malformed',
+                    evt.context_pressure,
+                  );
                 }
               }
               if (evt.state === 'compact_triggered' && evt.compact) {

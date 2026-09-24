@@ -125,6 +125,7 @@ beforeEach(() => {
     currentSessionId: VALID_SESSION_ID,
     messages: [],
     isLoading: false,
+    contextPressure: null,
   });
   // M1: 隔离 permission store,避免用例间对话框状态串扰
   usePermissionState.setState({ currentRequest: null });
@@ -1832,6 +1833,53 @@ describe('useChat subagent_event synthesized board (agent tool)', () => {
       const compactMsg = result.current.messages.find((m) => m.compact_info);
       expect(compactMsg).toBeDefined();
       expect(compactMsg?.compact_info).toEqual({ before: 20, after: 8, removed: 12 });
+    });
+
+    it('TM2: context_pressure 合法 → 写入 store 供水位徽章渲染', async () => {
+      const { result, capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'context_pressure',
+            iteration: 0,
+            context_pressure: {
+              total_tokens: 1200,
+              budget_tokens: 3000,
+              pressure: 0.4,
+              by_role: { system: 200, user: 500, assistant: 500 },
+              estimator: 'estimate_messages_tokens',
+            },
+          },
+        });
+      });
+
+      const cp = useStore.getState().contextPressure;
+      expect(cp).not.toBeNull();
+      expect(cp?.pressure).toBe(0.4);
+      expect(cp?.total_tokens).toBe(1200);
+    });
+
+    it('TM2: context_pressure 载荷非法（pressure 非 number）→ 丢弃', async () => {
+      const { capturedCb } = await setupCapture();
+
+      act(() => {
+        capturedCb({
+          payload: {
+            state: 'context_pressure',
+            iteration: 0,
+            context_pressure: {
+              total_tokens: 'many',
+              budget_tokens: 3000,
+              pressure: 'high',
+              by_role: {},
+              estimator: 'estimate_messages_tokens',
+            },
+          },
+        });
+      });
+
+      expect(useStore.getState().contextPressure).toBeNull();
     });
 
     it('skill_activated 条目 name 非字符串 → 丢弃, 不写 activated_skills', async () => {

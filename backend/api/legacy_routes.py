@@ -3436,6 +3436,21 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             except Exception as tm_err:  # noqa: BLE001 — 计量失败绝不阻断聊天
                 logger.debug("[REQ %s] context_pressure 计量失败: %s", request_id, tm_err)
+            else:
+                # TM2: 水位随活跃流推送（duck-typed dict，与 compact_triggered
+                # 同构；队列满/关闭静默降级——水位是增强信息不阻断聊天）。
+                try:
+                    entry.queue.put_nowait(
+                        {
+                            "state": "context_pressure",
+                            "session_id": data.session_id,
+                            "context_pressure": _pressure.to_dict(),
+                        }
+                    )
+                except Exception:  # noqa: BLE001 — 队列满/关闭不阻断主流程
+                    logger.debug(
+                        "[REQ %s] context_pressure 事件推送失败，忽略", request_id
+                    )
 
             # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）。
             # 校验已在 attachment 之后提前完成,此处只做末条 user 消息的形态转换。
