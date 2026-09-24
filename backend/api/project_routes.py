@@ -54,6 +54,7 @@ from backend.services.project_type_detector import (
     DetectionResult,
     detect_project_type,
 )
+from backend.services.git_integration import GitIntegration
 
 logger = logging.getLogger(__name__)
 
@@ -286,6 +287,29 @@ class ProjectTypeConfigResponse(BaseModel):
     stage_enum: Dict[str, Optional[List[str]]]
     milestone_status: List[str]
     constraint_templates: List[str]
+
+
+# --- Git 状态模型 (项目类型分类系统, 2026-09-24) ---
+
+
+class GitCommitModel(BaseModel):
+    """Git 提交记录。"""
+    model_config = ConfigDict(extra="forbid")
+    sha: str
+    author: str
+    date: str
+    message: str
+
+
+class GitStatusResponse(BaseModel):
+    """Git 仓库状态响应。"""
+    model_config = ConfigDict(extra="forbid")
+    is_repo: bool
+    current_branch: Optional[str] = None
+    modified_files: List[str] = Field(default_factory=list)
+    staged_files: List[str] = Field(default_factory=list)
+    untracked_files: List[str] = Field(default_factory=list)
+    recent_commits: List[GitCommitModel] = Field(default_factory=list)
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
@@ -775,6 +799,38 @@ def get_project_type_config() -> ProjectTypeConfigResponse:
         stage_enum=PROJECT_STAGE_ENUM,
         milestone_status=MILESTONE_STATUS,
         constraint_templates=list(CONSTRAINT_TEMPLATES.keys()),
+    )
+
+
+# ── Git 状态 (项目类型分类系统, 2026-09-24) ───────────────────────────────────
+
+
+@router.get("/{project_id}/git-status", response_model=GitStatusResponse)
+def get_project_git_status(project_id: str) -> GitStatusResponse:
+    """获取项目 Git 仓库状态（分支、未提交变更、最近提交）。
+
+    仅对 coding 类型项目有意义，但 API 对所有类型项目可用（非 git 仓库返回
+    is_repo=False）。
+    """
+    project = _get_project_or_404(project_id)
+
+    git = GitIntegration(project.path)
+    if not git.is_git_repo():
+        return GitStatusResponse(is_repo=False)
+
+    status = git.get_status()
+    commits = git.get_log(limit=5)
+
+    return GitStatusResponse(
+        is_repo=True,
+        current_branch=status.current_branch,
+        modified_files=status.modified_files,
+        staged_files=status.staged_files,
+        untracked_files=status.untracked_files,
+        recent_commits=[
+            GitCommitModel(sha=c.sha, author=c.author, date=c.date, message=c.message)
+            for c in commits
+        ],
     )
 
 
