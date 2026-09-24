@@ -15,7 +15,7 @@ import pytest
 
 from backend.domain.network_policy import NetworkMode, NetworkPolicy
 from backend.tools import web_render
-from backend.tools.web_render import render_page
+from backend.tools.web_render import RenderError, render_page
 
 pytestmark = [pytest.mark.unit]
 
@@ -246,3 +246,76 @@ def test_render_page_reports_wait_for_miss(fake_time, monkeypatch):
     )
 
     assert result["wait_for_satisfied"] is False
+
+
+# ---------- R31：瞬时 5xx 单次重试 ----------
+
+
+def _install_5xx_sequence(monkeypatch, first_status: int, second_page: str):
+    """首次渲染返回 first_status，第二次返回 second_page 的渲染链。"""
+    calls: Any = {"navigate": 0}
+
+    class _SeqPool:
+        def __init__(self):
+            self.n = 0
+
+        def acquire(self):
+            return SimpleNamespace(browser_id="b-render")
+
+    def _fake_cdp(session, method, params=None, target_id=None):
+        if method == "Target.createTarget":
+            return {"targetId": f"t-{calls['navigate']}"}
+        if method in ("Page.navigate", "Target.closeTarget", "Page.addScriptToEvaluateOnNewDocument"):
+            if method == "Page.navigate":
+                calls["navigate"] += 1
+            return {}
+        raise AssertionError(method)
+
+    def _fake_eval(session, expression, target_id):
+        if "readyState" in expression:
+            return "complete"
+        if "JSON.stringify" in expression:
+            n = calls["navigate"]
+            if n <= 1:
+                return json.dumps({"url": "https://spa.example/", "title": "t", "text": "", "status": first_status})
+            return second_page
+        return 0
+
+    monkeypatch.setattr(web_render, "_pool", _SeqPool())
+    monkeypatch.setattr(web_render, "cdp_command", _fake_cdp)
+    monkeypatch.setattr(web_render, "_evaluate_json", _fake_eval)
+    monkeypatch.setattr(web_render, "_ensure_pool_channel", lambda session: False)
+    return calls
+
+
+def test_render_page_retries_once_on_5xx(fake_time, monkeypatch):
+    """首次 503 → 自动整链重试一次；重试成功返回第二次结果 + note。"""
+    second = json.dumps({"url": "https://spa.example/", "title": "t", "text": "恢复", "status": 200})
+    calls = _install_5xx_sequence(monkeypatch, 503, second)
+
+    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
+
+    assert result["content"] == "恢复"
+    assert result["rendered_status"] == 200
+    assert "render_retried" in result.get("note", "")
+    assert calls["navigate"] == 2
+
+
+def test_render_page_5xx_retry_failure_keeps_first_result(fake_time, monkeypatch):
+    """重试自身抛错（池耗尽等）→ 保留首次 503 结果，note 注明重试失败。"""
+    calls = _install_5xx_sequence(monkeypatch, 503, json.dumps({"text": "x"}))
+
+    # 第二次 acquire（重试链的池获取）抛错
+    orig_acquire = web_render._pool.acquire
+
+    def _acquire(self):
+        if calls["navigate"] >= 1:
+            raise RenderError("渲染浏览器启动失败: 全灭")
+        return orig_acquire()
+
+    monkeypatch.setattr(web_render._pool.__class__, "acquire", _acquire)
+
+    result = render_page("https://spa.example/", NetworkPolicy(mode=NetworkMode.ONLINE))
+
+    assert result["rendered_status"] == 503
+    assert "render_retry_failed" in result.get("note", "")
