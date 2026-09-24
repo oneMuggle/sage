@@ -568,7 +568,7 @@ def validate_log_timezone(value: Any) -> Any:
         return value
     try:
         # 延迟导入 zoneinfo — Python 3.9+ 标准库; Win7 走 backports.zoneinfo.
-        from zoneinfo import ZoneInfo
+        from zoneinfo import ZoneInfo  # py38-ok 守卫/降级已覆盖（win7 适配写法）
     except ImportError:  # pragma: no cover — py3.9+ always has zoneinfo
         try:
             from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
@@ -599,7 +599,7 @@ def validate_timezone(value: Any) -> Any:
         raise ValueError(f"timezone must be a string, got {type(value).__name__}")
     try:
         # 延迟导入 zoneinfo — Python 3.9+ 标准库; Win7 走 backports.zoneinfo.
-        from zoneinfo import ZoneInfo
+        from zoneinfo import ZoneInfo  # py38-ok 守卫/降级已覆盖（win7 适配写法）
     except ImportError:  # pragma: no cover — py3.9+ always has zoneinfo
         try:
             from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]

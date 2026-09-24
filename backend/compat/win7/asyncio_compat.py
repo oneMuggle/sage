@@ -25,7 +25,7 @@ def install() -> bool:
     """py3.8: 注入 ``asyncio.to_thread``；已存在则不动。返回是否执行了注入。"""
     if hasattr(asyncio, "to_thread"):
         return False
-    asyncio.to_thread = to_thread  # type: ignore[attr-defined]
+    asyncio.to_thread = to_thread  # type: ignore[attr-defined]  # py38-ok 守卫/降级已覆盖（win7 适配写法）
     return True
 
 
