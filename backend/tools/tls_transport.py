@@ -17,6 +17,7 @@ py3.8 纪律：主分支依赖可选（release/win7 不安装），import 全部
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Any, Dict, Optional
 
 import httpx
@@ -27,6 +28,17 @@ logger = logging.getLogger(__name__)
 IMPERSONATE_TARGET = "chrome"
 
 _import_failed = False
+
+# R28：指纹通道使用计数（诊断视角；线程安全）。仅统计经指纹传输器实际
+# 发出的请求；错误 / 未启用不计数。
+_stats_lock = threading.Lock()
+_stats = {"requests": 0}
+
+
+def stats() -> Dict[str, int]:
+    """指纹通道使用计数快照（拷贝；R28）。"""
+    with _stats_lock:
+        return dict(_stats)
 
 
 def fingerprint_enabled() -> bool:
@@ -81,6 +93,8 @@ class CurlImpersonateTransport(httpx.BaseTransport):
             data=body,
             **kwargs,
         )
+        with _stats_lock:
+            _stats["requests"] += 1
         return httpx.Response(
             response.status_code,
             headers=list(response.headers.items()),

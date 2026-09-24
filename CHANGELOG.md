@@ -57,6 +57,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added(web-access)
 - **TLS 指纹传输器（R27/AB3，可选依赖）**：新模块 `tls_transport`——`web_access_config.tls_fingerprint` 开启且 `curl_cffi` 可导入时，静态抓取经 httpx 自定义传输走 Chrome TLS/HTTP2 指纹（JA3 等握手指纹不再暴露脚本客户端），策略校验/重定向编排/AB5 重试零改动；curl_cffi 缺失或关闭时回落标准 httpx；requirements-optional 新增 `curl_cffi>=0.7`（release/win7 不装）；设置页实验性开关 + i18n
 
+> 🧹 **稳定收尾 R28：冷导入子进程超时加固 + AB3 使用计数可观测**（方案 `docs/plans/2026-09-24_stability-r28.md`）
+
+### Fixed(test)
+- **init_no_circular 子进程超时加固（R28）**：冷导入子进程超时 60→150s（-n auto 全量并发下 P99 逼近 60s，负载抖动误报为 issue #484 回归）；doctor 冒烟 30→90s
+
+### Added(web-access)
+- **AB3 使用计数（R28）**：tls_transport 增线程安全请求计数，`GET /api/v1/web-access/metrics` 快照增 `tls_fingerprint.requests` 键——指纹通道使用情况首次可观测
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21
