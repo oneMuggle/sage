@@ -24,6 +24,7 @@ import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
 import { ContextMeter } from '../widgets/chat/ContextMeter';
+import { ContextPressureBadge } from '../widgets/chat/ContextPressureBadge';
 import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../widgets/chat/InterruptedRunBanner';
 import { MemoryWriteHints } from '../widgets/chat/MemoryWriteHints';
 import { PermissionModeSwitch } from '../widgets/chat/PermissionModeSwitch';
@@ -1100,6 +1101,8 @@ export function Chat() {
             </div>
           )}
 
+          {/* TM2 (DSH 对标 R11): 上下文水位徽章（≥0.6 才渲染） */}
+          <ContextPressureBadge sessionId={currentSessionId} />
           <ChatInput
             onSend={handleSendMessageWithEditResend}
             onInterrupt={interrupt}
