@@ -67,3 +67,16 @@
 #   新功能不回流 release/win7，本条仅供老分支自装参考。
 #
 # pywin32>=306
+
+# =============================================================================
+# AB3 TLS/HTTP2 指纹 (Round 27) — curl_cffi
+# =============================================================================
+# 为什么单独放:
+#   curl_cffi 含平台二进制扩展（libcurl-impersonate），且属于"对抗性增强"
+#   而非基础能力 —— 未安装时静态抓取照常走标准 httpx 传输（行为与 R26 前
+#   完全一致）。release/win7（Python 3.8 依赖契约）不安装本包。
+# 启用: pip install curl_cffi
+#       并在 设置→网络→web_access_config 打开 tls_fingerprint（默认关）
+# 验证: python -c "import curl_cffi; print('curl_cffi OK')"
+#
+# curl_cffi>=0.7
