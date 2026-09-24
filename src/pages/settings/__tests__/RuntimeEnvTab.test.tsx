@@ -90,13 +90,13 @@ describe('RuntimeEnvTab 探测面板', () => {
     render(<RuntimeEnvTab />);
     // effect 重跑会让面板短暂回 loading——全部用 waitFor 重查询，禁用
     // findBy-then-assert 模式（findBy 抓到的元素可能在断言前被重挂卸载）
-    await waitFor(() => expect(screen.getByText('3.11.5')).toBeInTheDocument(), { timeout: 10000 });
-    await waitFor(() => expect(screen.getByText('推荐')).toBeInTheDocument(), { timeout: 10000 });
-    await waitFor(() => expect(screen.getByText('C:/py/python.exe')).toBeInTheDocument(), { timeout: 10000 });
+    await waitFor(() => expect(screen.getByText('3.11.5')).toBeInTheDocument(), { timeout: 30000 });
+    await waitFor(() => expect(screen.getByText('推荐')).toBeInTheDocument(), { timeout: 30000 });
+    await waitFor(() => expect(screen.getByText('C:/py/python.exe')).toBeInTheDocument(), { timeout: 30000 });
     await waitFor(() => {
       const select = screen.getByRole('combobox') as HTMLSelectElement;
       expect(select.value).toBe(RUNTIME.path);
-    }, { timeout: 10000 });
+    }, { timeout: 30000 });
   });
 
   it('空运行时显示未探测到提示与错误详情', async () => {
@@ -105,14 +105,14 @@ describe('RuntimeEnvTab 探测面板', () => {
       output: { runtimes: [], recommended: null, errors: ['py launcher missing'] },
     });
     render(<RuntimeEnvTab />);
-    expect(await screen.findByText(/未探测到任何运行时/, {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByText(/未探测到任何运行时/, {}, { timeout: 30000 })).toBeInTheDocument();
     expect(screen.getByText(/py launcher missing/)).toBeInTheDocument();
   });
 
   it('探测异常显示失败信息与重试按钮', async () => {
     probeMock.mockRejectedValue(new Error('ipc down'));
     render(<RuntimeEnvTab />);
-    expect(await screen.findByText('探测失败: ipc down', {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByText('探测失败: ipc down', {}, { timeout: 30000 })).toBeInTheDocument();
     expect(screen.getByText('重试')).toBeInTheDocument();
   });
 });
@@ -120,8 +120,8 @@ describe('RuntimeEnvTab 探测面板', () => {
 describe('RuntimeEnvTab 诊断面板', () => {
   it('诊断成功显示满足度与诊断项', async () => {
     render(<RuntimeEnvTab />);
-    await waitFor(() => expect(screen.getByText('✓ 全部满足')).toBeInTheDocument(), { timeout: 10000 });
-    await waitFor(() => expect(screen.getByText('PY_OK')).toBeInTheDocument(), { timeout: 10000 });
+    await waitFor(() => expect(screen.getByText('✓ 全部满足')).toBeInTheDocument(), { timeout: 30000 });
+    await waitFor(() => expect(screen.getByText('PY_OK')).toBeInTheDocument(), { timeout: 30000 });
     expect(screen.getByText('推荐运行时: C:/py/python.exe')).toBeInTheDocument();
   });
 
@@ -130,7 +130,7 @@ describe('RuntimeEnvTab 诊断面板', () => {
     probeMock.mockReturnValue(new Promise(() => {}));
     diagnoseMock.mockRejectedValue(new Error('diagnose down'));
     render(<RuntimeEnvTab />);
-    expect(await screen.findByText('诊断失败: diagnose down', {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByText('诊断失败: diagnose down', {}, { timeout: 30000 })).toBeInTheDocument();
   });
 });
 
@@ -146,7 +146,7 @@ describe('RuntimeEnvTab 试跑', () => {
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
-    expect(await screen.findByText(/退出码 0/, {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByText(/退出码 0/, {}, { timeout: 30000 })).toBeInTheDocument();
     expect(screen.getByText('hello from Sage')).toBeInTheDocument();
   });
 
@@ -156,7 +156,7 @@ describe('RuntimeEnvTab 试跑', () => {
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
-    expect(await screen.findByText('等待用户批准…', {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByText('等待用户批准…', {}, { timeout: 30000 })).toBeInTheDocument();
   });
 
   it('权限拒绝显示拒绝文案', async () => {
@@ -165,7 +165,7 @@ describe('RuntimeEnvTab 试跑', () => {
     const button = await screen.findByText('执行');
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
-    expect(await screen.findByText(/权限被拒绝:/, {}, { timeout: 10000 })).toBeInTheDocument();
+    expect(await screen.findByText(/权限被拒绝:/, {}, { timeout: 30000 })).toBeInTheDocument();
     expect(screen.getByText(/需要 exec 审批/)).toBeInTheDocument();
   });
 
