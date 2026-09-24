@@ -136,7 +136,8 @@ async def test_chat_stream_attach_streams_ndjson_events():
             core_events = [e for e in events if e["state"] != "context_pressure"]
             cp_events = [e for e in events if e["state"] == "context_pressure"]
             for e in cp_events:
-                assert isinstance(e["context_pressure"]["pressure"], (int, float))
+                cp = e["context_pressure"]["pressure"]
+                assert 0.0 <= cp <= 1.0
             delta_events = [e for e in core_events if e["state"] == "content_delta"]
             done_events = [e for e in core_events if e["state"] == "done"]
             assert core_events[0]["state"] == "thinking"
