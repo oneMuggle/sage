@@ -1849,50 +1849,18 @@ class SageAgent:
                             agent_id=self.agent_id,
                         )
 
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tc.id,
-                                "content": cap_result_for_context(result_content),
-                            }
-                        )
-
-                        # ===== M6 HOOKS BEGIN: post_tool_use (observe-only) =====
-                        # 观察/审计专用 — 无法修改工具结果。
-                        # Phase 3: 若钩子返回 ``additional_context``，以 system 角色
-                        # 注入对话历史，供 LLM 下一轮感知（如 lint 反馈 / 格式提醒）。
-                        hook_outcome = await run_event_hooks(
+                        # B1 (GT3, DSH 对标 R7): post-execute 段抽离 ——
+                        # tool 结果消息落历史 + post_tool_use 反馈注入 +
+                        # error_occurred 钩子（见 _post_tool_observe）。
+                        # OBSERVING 事件为 loop 专属（iteration 语义），仍在上方。
+                        await self._post_tool_observe(
+                            tc,
+                            args,
                             m6_hooks,
-                            "post_tool_use",
-                            tc.name,
-                            build_payload(
-                                "post_tool_use",
-                                tc.name,
-                                args,
-                                tool_output=result_content,
-                                is_error=is_error,
-                            ),
-                        )
-                        if hook_outcome.has_feedback:
-                            severity_label = {
-                                "info": "提示",
-                                "warning": "警告",
-                                "error": "错误",
-                            }.get(hook_outcome.severity, "提示")
-                            messages.append(
-                                {
-                                    "role": "system",
-                                    "content": (
-                                        f"[钩子反馈·{severity_label}] "
-                                        f"{hook_outcome.additional_context}"
-                                    ),
-                                }
-                            )
-                        # ===== M6 HOOKS END =====
-
-                        # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
-                        await self._maybe_fire_error_hook(
-                            m6_hooks, tc.name, result_content, is_error
+                            messages,
+                            result_content,
+                            is_error,
+                            cap_fn=cap_result_for_context,
                         )
 
                 # ===== B2 分组调度 END =====
@@ -2078,6 +2046,75 @@ class SageAgent:
                 needs_approval=False,
                 reason=f"{decision.reason}（未获批准: {answer.answered_by}）",
             )
+
+    async def _post_tool_observe(
+        self,
+        tc: Any,
+        args: Dict[str, Any],
+        m6_hooks: List[Any],
+        messages: List[Dict[str, Any]],
+        result_content: str,
+        is_error: bool,
+        cap_fn: Any,
+    ) -> None:
+        """B1 (GT3, DSH 对标 R7): post-execute 段 —— 观察与反馈注入。
+
+        对标 deepseek-harness 管线的 ``post-execute``（observe-only，
+        accept/block 语义后续轮次引入）与 ``result`` 快照事件。三件事：
+
+        1. tool 结果消息（capped）落对话历史；
+        2. ``post_tool_use`` 钩子（observe-only）：``additional_context``
+           以 system 角色注入，供 LLM 下一轮感知（lint 反馈 / 格式提醒）；
+        3. 工具失败 → ``error_occurred`` 钩子（observe-only）。
+
+        并行池分支走自己的变体（tc_p 语义 + parallel_outcome），本方法
+        仅服务串行屏障路径。``cap_fn`` 为 run_loop 内的
+        ``cap_result_for_context`` 闭包（捕获 run 级截断预算状态），由
+        调用方注入以保持预算语义。
+        """
+        messages.append(
+            {
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": cap_fn(result_content),
+            }
+        )
+
+        # ===== M6 HOOKS: post_tool_use (observe-only) =====
+        # 观察/审计专用 — 无法修改工具结果。
+        hook_outcome = await run_event_hooks(
+            m6_hooks,
+            "post_tool_use",
+            tc.name,
+            build_payload(
+                "post_tool_use",
+                tc.name,
+                args,
+                tool_output=result_content,
+                is_error=is_error,
+            ),
+        )
+        if hook_outcome.has_feedback:
+            severity_label = {
+                "info": "提示",
+                "warning": "警告",
+                "error": "错误",
+            }.get(hook_outcome.severity, "提示")
+            messages.append(
+                {
+                    "role": "system",
+                    "content": (
+                        f"[钩子反馈·{severity_label}] "
+                        f"{hook_outcome.additional_context}"
+                    ),
+                }
+            )
+        # ===== M6 HOOKS END =====
+
+        # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
+        await self._maybe_fire_error_hook(
+            m6_hooks, tc.name, result_content, is_error
+        )
 
     def _build_approval_request(
         self, tool_name: str, args: Dict[str, Any], decision: PermissionDecision
