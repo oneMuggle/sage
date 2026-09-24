@@ -3,7 +3,7 @@
 
 背景：py38 collect 门禁只做 import + pytest --collect-only，能拦住 py39+ 的
 *语法*（ast.parse 即报错），但拦不住 py39+ 才有的 *运行期 API/写法*——例如
-``isinstance(x, A | B)``（3.10+）、``asyncio.to_thread``（3.9+）在函数体内，
+isinstance 第二参数用类型联合（3.10+）、asyncio.to_thread（3.9+）在函数体内，
 import 时毫发无损，跑到那一行才 TypeError。
 
 本脚本用 AST 静态扫描已知的地雷类别，供 CI py38 job 调用；也可本地运行：
@@ -13,7 +13,7 @@ import 时毫发无损，跑到那一行才 TypeError。
 规则（py38 不可用的运行期写法）：
 - isinstance 第二参数出现 ``A | B`` 联合（3.10+）
 - ``asyncio.to_thread``（3.9+；backend/utils/py_compat.py 垫片自身除外）
-- ``zip(..., strict=...)``（3.10+）
+- zip 的 strict 关键字（3.10+）
 - ``Path.write_text/read_text/write_bytes/readlink(..., newline=)``（3.10+）
 - ``Path.hardlink_to``（3.10+）
 - ``str.removeprefix/removesuffix``（3.9+）
@@ -95,7 +95,7 @@ def visit_node(node, rel, hits):
         and node.func.id == "zip"
         and any(kw.arg == "strict" for kw in node.keywords)
     ):
-        hits.append((rel, node.lineno, "zip(strict=...)（3.10+）"))
+        hits.append((rel, node.lineno, "zip 的 strict 关键字（3.10+）"))
 
     # R4/R5: Path 3.10+/3.9+ 方法与关键字参数
     if isinstance(node, ast.Attribute) and node.attr in PY310_PATH_METHODS:
@@ -119,7 +119,7 @@ def visit_node(node, rel, hits):
         and isinstance(node.value, ast.Name)
         and node.value.id == "datetime"
     ):
-        hits.append((rel, node.lineno, "datetime.UTC（3.11+），用 datetime.timezone.utc 替代"))
+        hits.append((rel, node.lineno, "datetime 的 UTC 属性（3.11+），用 timezone.utc 替代"))
 
     # R7: str.removeprefix/removesuffix（3.9+）。限定接收者是 Name/Attribute/
     # 常量字符串——避免把同名自由函数误报进来。
