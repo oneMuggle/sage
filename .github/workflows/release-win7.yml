@@ -213,9 +213,11 @@ jobs:
       - name: Verify both installers downloaded
         run: |
           set -e
-          shopt -s nullglob
-          src=(artifacts/source/*.exe)
-          cython=(artifacts/cython/*.exe)
+          shopt -s nullglob globstar
+          # upload-artifact@v4 preserves the release/*/ directory structure,
+          # so we need a recursive glob (**) to find the .exe files.
+          src=(artifacts/source/**/*.exe)
+          cython=(artifacts/cython/**/*.exe)
           if [ ${#src[@]} -eq 0 ]; then echo "::error::No source installer found"; exit 1; fi
           if [ ${#cython[@]} -eq 0 ]; then echo "::error::No cython installer found"; exit 1; fi
           echo "Source:   ${src[0]##*/} ($(stat -c %s "${src[0]}") bytes)"
