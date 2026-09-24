@@ -23,8 +23,9 @@ import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
-import { ContextPressureBadge } from '../widgets/chat/ContextPressureBadge';
+
 import { ContextMeter } from '../widgets/chat/ContextMeter';
+import { ContextPressureBadge } from '../widgets/chat/ContextPressureBadge';
 import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../widgets/chat/InterruptedRunBanner';
 import { MemoryWriteHints } from '../widgets/chat/MemoryWriteHints';
 import { PermissionModeSwitch } from '../widgets/chat/PermissionModeSwitch';

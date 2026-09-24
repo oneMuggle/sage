@@ -1836,7 +1836,7 @@ describe('useChat subagent_event synthesized board (agent tool)', () => {
     });
 
     it('TM2: context_pressure 合法 → 写入 store 供水位徽章渲染', async () => {
-      const { result, capturedCb } = await setupCapture();
+      const { capturedCb } = await setupCapture();
 
       act(() => {
         capturedCb({
