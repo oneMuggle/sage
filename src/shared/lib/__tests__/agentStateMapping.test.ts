@@ -10,8 +10,6 @@ import { describe, expect, it } from 'vitest';
 import type { AgentState } from '../../api/types';
 import { agentStateToText } from '../agentStateMapping';
 
-import { agentStateToText } from '../agentStateMapping';
-
 const cases: Array<[AgentState, string | null, string?]> = [
   ['thinking', '🤔 思考中…'],
   ['acting', '🔧 行动中…'],
