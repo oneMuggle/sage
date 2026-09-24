@@ -84,7 +84,8 @@ class TestImportanceFactor:
         assert importance_factor({}) == pytest.approx(0.5)
 
     def test_clamped_to_min_point_one(self):
-        assert importance_factor({"importance": -5}) == pytest.approx(0.1)
+        # importance=-5: max(0.1, -5)=0.1, /10.0=0.01 —— 低钳位在 /10 之前生效
+        assert importance_factor({"importance": -5}) == pytest.approx(0.01)
 
     def test_clamped_to_max_one(self):
         assert importance_factor({"importance": 99}) == pytest.approx(1.0)
