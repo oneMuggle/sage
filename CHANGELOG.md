@@ -75,6 +75,11 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Added(web-access)
 - **wait_for 完整度可观测（R30）**：`wait_page_ready` 返回 wait_for 选择器命中与否（settle 语义不变）；`render_page` 指定 wait_for 时在结果中暴露 `wait_for_satisfied` 布尔——调用方（及模型）首次能区分"选择器已出现"与"半截内容"
 
+> 🌐 **网页访问 Round 31：渲染分支瞬时 5xx 单次重试**（方案 `docs/plans/2026-09-24_render-retry-r31.md`）
+
+### Added(web-access)
+- **渲染 5xx 单次重试（R31）**：`render_page` 主文档状态 >= 500 时自动整链重试一次（换标签页重走导航；cookie 注入/回写同步重来）——对齐静态路径 AB5 语义；403 反爬盾页属持续态不重试（Round 5 口径）；重试仍失败如实返回第二次结果，重试自身异常保留首次结果并 note 注明
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 > 🧹 **alpha.52-win7 暂无未发布变更**
