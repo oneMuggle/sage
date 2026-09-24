@@ -387,11 +387,13 @@ def test_get_startup_summary_structure(todo_service):
 
 def test_get_startup_summary_buckets(todo_service):
     """Todos land in the correct summary bucket."""
+    # 时间稳健化（TM2 轮实证 CI 在 UTC 23:43 触发 midnight 边界 flake）：
+    # 锚定"今日 00:00"推导 due_at，任何时钟时刻运行都不会跨界。
     now = datetime.now()
-    todo_service.create_todo(title="Overdue", due_at=(now - timedelta(hours=2)).isoformat())
-    # Use 1 hour instead of 2 to avoid date boundary issues when test runs near midnight
-    todo_service.create_todo(title="Today", due_at=(now + timedelta(hours=1)).isoformat())
-    todo_service.create_todo(title="Upcoming", due_at=(now + timedelta(days=3)).isoformat())
+    today_start = datetime.combine(now.date(), datetime.min.time())
+    todo_service.create_todo(title="Overdue", due_at=(today_start - timedelta(hours=1)).isoformat())
+    todo_service.create_todo(title="Today", due_at=(today_start + timedelta(hours=1)).isoformat())
+    todo_service.create_todo(title="Upcoming", due_at=(today_start + timedelta(days=3)).isoformat())
     todo_service.create_todo(title="High", priority="high")
 
     summary = todo_service.get_startup_summary()
