@@ -81,6 +81,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added(web-access)
 - **渲染 5xx 单次重试（R31）**：`render_page` 主文档状态 >= 500 时自动整链重试一次（换标签页重走导航；cookie 注入/回写同步重来）——对齐静态路径 AB5 语义；403 反爬盾页属持续态不重试（Round 5 口径）；重试仍失败如实返回第二次结果，重试自身异常保留首次结果并 note 注明
 
+> 🌐 **网页访问 Round 33：事件驱动就绪等待**（方案 `docs/plans/2026-09-24_pageload-r33.md`）
+
+### Added(web-access)
+- **Page.loadEventFired 就绪信号（R33）**：事件通道 attach 时加发 Page.enable 并按 sessionId 路由 loadEventFired；render_page 导航前布防（attach 先于导航，事件不漏）、导航后就绪等待优先等事件（典型 <2s），超时与未布防均回落 readyState 轮询——单次渲染省 0.3-0.9s 轮询开销
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21
