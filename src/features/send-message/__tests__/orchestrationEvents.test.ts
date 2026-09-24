@@ -381,3 +381,27 @@ describe('restoreRunToBoard — 历史 run 恢复 (RD20)', () => {
     ).toBeNull();
   });
 });
+
+// ============================================================================
+// RT26 (round49): restoreRunToBoard 映射 retry_of
+// ============================================================================
+
+describe('restoreRunToBoard — retry_of 映射 (RT26)', () => {
+  it('终态任务带 retry_of → 恢复后保留', () => {
+    const run: OrchRunDetail = {
+      run_id: 'orch-rt26', session_id: SID, status: 'failed',
+      created_at: 1_000, plan: [], original_request: '',
+      tasks: [
+        { task_id: 'a', agent_id: 'primary', goal: 'GA', status: 'done',
+          error: null, output_preview: 'OK', retry_count: 0 },
+        { task_id: 'b', agent_id: 'primary', goal: 'GB', status: 'done',
+          error: null, output_preview: 'ok', retry_count: 0,
+          retry_of: 't0' },
+      ],
+    } as unknown as OrchRunDetail;
+    const restored = restoreRunToBoard(run);
+    expect(restored).not.toBeNull();
+    expect(restored!.statuses.b.retry_of).toBe('t0');
+    expect(restored!.statuses.a.retry_of).toBeUndefined();
+  });
+});

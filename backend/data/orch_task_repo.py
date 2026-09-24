@@ -34,6 +34,8 @@ class OrchTask:
     duration_ms: Optional[int] = None
     parent_task_id: Optional[str] = None
     depth: int = 0
+    # RT26 (round49): 重派来源任务 ID —— 历史任务树"重派"徽章。
+    retry_of: Optional[str] = None
 
 
 class OrchTaskRepository:
@@ -60,6 +62,7 @@ class OrchTaskRepository:
         duration_ms: Optional[int] = None,
         parent_task_id: Optional[str] = None,
         depth: int = 0,
+        retry_of: Optional[str] = None,
     ) -> None:
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -69,9 +72,9 @@ class OrchTaskRepository:
                 task_id, run_id, agent_id, goal, status, retry_count,
                 error, output_preview, blocked_by, scratch_dir,
                 started_at, finished_at, used_tokens, duration_ms,
-                parent_task_id, depth
+                parent_task_id, depth, retry_of
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(task_id) DO UPDATE SET
                 status=excluded.status,
                 retry_count=excluded.retry_count,
@@ -82,7 +85,8 @@ class OrchTaskRepository:
                 used_tokens=excluded.used_tokens,
                 duration_ms=excluded.duration_ms,
                 parent_task_id=excluded.parent_task_id,
-                depth=excluded.depth
+                depth=excluded.depth,
+                retry_of=excluded.retry_of
                 -- revision is intentionally NOT touched here: it is an
                 -- append-only audit counter bumped only by
                 -- ``bump_revision_for_steer`` after a successful steer INSERT.
@@ -104,6 +108,7 @@ class OrchTaskRepository:
                 duration_ms,
                 parent_task_id,
                 depth,
+                retry_of,
             ),
         )
         conn.commit()
@@ -144,6 +149,7 @@ class OrchTaskRepository:
             duration_ms=row["duration_ms"] if "duration_ms" in _cols else None,
             parent_task_id=row["parent_task_id"] if "parent_task_id" in _cols else None,
             depth=row["depth"] if "depth" in _cols else 0,
+            retry_of=row["retry_of"] if "retry_of" in _cols else None,
             started_at=row["started_at"],
             finished_at=row["finished_at"],
         )
