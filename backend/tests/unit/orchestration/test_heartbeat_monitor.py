@@ -20,7 +20,6 @@ pytestmark = pytest.mark.unit
 
 def _make_lane(lane_id="lane-1", ping_ago_s=0.0, transport_alive=True,
                status=LaneStatus.RUNNING):
-    """创建带心跳的 fake lane（last_ping_at 用秒，与 time.time() 同单位）。"""
     return SimpleNamespace(
         id=lane_id,
         status=status,
@@ -45,72 +44,96 @@ class _FakeRegistry:
         return True
 
 
-def _make_monitor(lanes, **kw):
-    """创建 HeartbeatMonitor 注入 fake registry。返回 (monitor, stalled, dead)。"""
-    stalled = []
-    dead = []
+class _Callbacks:
+    def __init__(self):
+        self.stalled = []
+        self.dead = []
 
-    async def on_stalled(ln):
-        stalled.append(ln)
+    async def on_stalled(self, lane):
+        self.stalled.append(lane)
 
-    async def on_dead(ln):
-        dead.append(ln)
-
-    monitor = HeartbeatMonitor(
-        _FakeRegistry(lanes),
-        check_interval=kw.pop("check_interval", 0.1),
-        stalled_after=kw.pop("stalled_after", 300.0),
-        dead_after=kw.pop("dead_after", 600.0),
-        on_stalled=on_stalled,
-        on_dead=on_dead,
-        **kw,
-    )
-    return monitor, stalled, dead
+    async def on_dead(self, lane):
+        self.dead.append(lane)
 
 
 @pytest.mark.asyncio()
 async def test_healthy_lane_stays_healthy():
     fresh = _make_lane(ping_ago_s=0)
-    monitor, stalled, dead = _make_monitor([fresh])
+    registry = _FakeRegistry([fresh])
+    dead_calls = []
+    async def on_dead(ln):
+        dead_calls.append(ln)
+    monitor = HeartbeatMonitor(registry, stalled_after=300.0, dead_after=600.0, on_dead=on_dead)
     await monitor.check_heartbeats()
     assert fresh.heartbeat.status == HeartbeatStatus.HEALTHY
-    assert not stalled
-    assert not dead
+    assert not dead_calls
 
 
 @pytest.mark.asyncio()
 async def test_stalled_lane_triggers_on_stalled():
+    stalled_calls = []
     stale = _make_lane(ping_ago_s=400)
-    monitor, stalled, dead = _make_monitor([stale])
+
+    async def on_stalled(ln):
+        stalled_calls.append(ln)
+
+    async def on_dead(ln):
+        dead_calls.append(ln)
+
+    dead_calls = []
+    registry = _FakeRegistry([stale])
+    monitor = HeartbeatMonitor(
+        registry, stalled_after=300.0, dead_after=600.0,
+        on_stalled=on_stalled, on_dead=on_dead,
+    )
     await monitor.check_heartbeats()
     assert stale.heartbeat.status == HeartbeatStatus.STALLED
-    assert len(stalled) == 1
-    assert not dead
+    assert len(stalled_calls) == 1
+    assert not dead_calls
 
 
 @pytest.mark.asyncio()
 async def test_dead_lane_triggers_on_dead():
     dead_lane = _make_lane(ping_ago_s=700)
-    monitor, dead = _make_monitor([dead_lane])
+    dead_calls = []
+
+    async def on_dead(ln):
+        dead_calls.append(ln)
+
+    registry = _FakeRegistry([dead_lane])
+    monitor = HeartbeatMonitor(
+        registry, stalled_after=300.0, dead_after=600.0,
+        on_stalled=None, on_dead=on_dead,
+    )
     await monitor.check_heartbeats()
     assert dead_lane.heartbeat.status == HeartbeatStatus.TRANSPORT_DEAD
-    assert len(dead) == 1
+    assert len(dead_calls) == 1
 
 
 @pytest.mark.asyncio()
 async def test_transport_dead_immediately_triggers_on_dead():
     lane = _make_lane(transport_alive=False)
-    monitor, dead = _make_monitor([lane])
+    dead_calls = []
+
+    async def on_dead(ln):
+        dead_calls.append(ln)
+
+    registry = _FakeRegistry([lane])
+    monitor = HeartbeatMonitor(
+        registry, stalled_after=300.0, dead_after=600.0,
+        on_stalled=None, on_dead=on_dead,
+    )
     await monitor.check_heartbeats()
     assert lane.heartbeat.status == HeartbeatStatus.TRANSPORT_DEAD
-    assert len(dead) == 1
+    assert len(dead_calls) == 1
 
 
 @pytest.mark.asyncio()
 async def test_no_heartbeat_skipped():
     lane = _make_lane()
     lane.heartbeat = None
-    monitor, _ = _make_monitor([lane])
+    registry = _FakeRegistry([lane])
+    monitor = HeartbeatMonitor(registry, stalled_after=300.0, dead_after=600.0)
     await monitor.check_heartbeats()
 
 
@@ -119,7 +142,20 @@ async def test_mixed_lanes_each_get_correct_status():
     healthy = _make_lane("h", ping_ago_s=0)
     stale = _make_lane("s", ping_ago_s=400)
     dead = _make_lane("d", ping_ago_s=700)
-    monitor, stalled, dead = _make_monitor([healthy, stale, dead])
+    stalled_calls = []
+    dead_calls = []
+
+    async def on_stalled(ln):
+        stalled_calls.append(ln)
+
+    async def on_dead(ln):
+        dead_calls.append(ln)
+
+    registry = _FakeRegistry([healthy, stale, dead])
+    monitor = HeartbeatMonitor(
+        registry, stalled_after=300.0, dead_after=600.0,
+        on_stalled=on_stalled, on_dead=on_dead,
+    )
     await monitor.check_heartbeats()
     assert healthy.heartbeat.status == HeartbeatStatus.HEALTHY
     assert stale.heartbeat.status == HeartbeatStatus.STALLED
@@ -129,7 +165,8 @@ async def test_mixed_lanes_each_get_correct_status():
 @pytest.mark.asyncio()
 async def test_non_running_lanes_not_checked():
     done = _make_lane(status=LaneStatus.SUCCEEDED)
-    monitor, _ = _make_monitor([done])
+    registry = _FakeRegistry([done])
+    monitor = HeartbeatMonitor(registry, stalled_after=300.0, dead_after=600.0)
     await monitor.check_heartbeats()
     assert done.heartbeat.status == HeartbeatStatus.HEALTHY
 
