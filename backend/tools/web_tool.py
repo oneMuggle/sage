@@ -758,118 +758,125 @@ class WebFetchTool(BaseTool):
         # 仅当某 hop 的 TLS 校验口径与当前 client 不同（罕见）才重建。
         client: Optional[httpx.Client] = None
         client_verify: Optional[bool] = None
-        for redirect_count in range(self._MAX_REDIRECTS + 1):
-            url_error = self._validate_target_url(current_url)
-            if url_error:
-                raise ValueError(url_error)
-            host_rejection = network_policy.check_host(current_url)
-            if host_rejection:
-                raise ValueError(host_rejection)
-            if self._policy.subagent_only and not gated_by_whitelist:
-                validation_error = self._validate_subagent_url(current_url)
-                if validation_error:
-                    raise ValueError(validation_error)
+        # R29：try/finally 保证异常路径（重定向超限 / 响应超限 / 校验失败）
+        # 也释放连接池——此前仅重建分支 close，异常路径 client 滞留至 GC。
+        try:
+            for redirect_count in range(self._MAX_REDIRECTS + 1):
+                url_error = self._validate_target_url(current_url)
+                if url_error:
+                    raise ValueError(url_error)
+                host_rejection = network_policy.check_host(current_url)
+                if host_rejection:
+                    raise ValueError(host_rejection)
+                if self._policy.subagent_only and not gated_by_whitelist:
+                    validation_error = self._validate_subagent_url(current_url)
+                    if validation_error:
+                        raise ValueError(validation_error)
 
-            # 登录态 cookie 只附加到档案域命中的 hop；跨域重定向（如订阅源
-            # 302 到第三方 SSO/广告域）静默剥离，防止凭据外带。
-            hop_headers: Dict[str, str] = {"Accept-Encoding": "identity"}
-            credential_applied = False
-            if credential_headers:
-                from .credential_vault import cookie_domain_matches
+                # 登录态 cookie 只附加到档案域命中的 hop；跨域重定向（如订阅源
+                # 302 到第三方 SSO/广告域）静默剥离，防止凭据外带。
+                hop_headers: Dict[str, str] = {"Accept-Encoding": "identity"}
+                credential_applied = False
+                if credential_headers:
+                    from .credential_vault import cookie_domain_matches
 
-                hostname = urlparse(current_url).hostname or ""
-                if cookie_domain_matches(hostname, credential_domain):
-                    hop_headers.update(credential_headers)
-                    credential_applied = True
-                elif redirect_count > 0:
-                    credential_stripped = True
+                    hostname = urlparse(current_url).hostname or ""
+                    if cookie_domain_matches(hostname, credential_domain):
+                        hop_headers.update(credential_headers)
+                        credential_applied = True
+                    elif redirect_count > 0:
+                        credential_stripped = True
 
-            verify = not network_policy.allows_insecure_tls(current_url)
-            if client is None or verify != client_verify:
-                if client is not None:
-                    client.close()
-                client_kwargs: Dict[str, Any] = {
-                    "timeout": 30.0,
-                    "follow_redirects": False,
-                    "verify": verify,
-                    "trust_env": not self._policy.subagent_only,
-                    "headers": default_headers(),
-                }
-                # AB3（R27）：配置开启且 curl_cffi 可用时，静态抓取走 Chrome
-                # TLS/HTTP2 指纹传输器（代理经传输器透传）；关闭/缺失回落标准。
-                if fingerprint_enabled():
-                    transport = build_fingerprint_transport(verify=verify)
-                    if transport is not None:
-                        client_kwargs["transport"] = transport
-                client = build_client(**client_kwargs)
-                client_verify = verify
-            with contextlib.nullcontext(client) as client:  # noqa: PLW2901
-                # 强制 ``Accept-Encoding: identity`` 禁用 httpx 自动解压。
-                # 部分站点声明 ``Content-Encoding: gzip`` 但响应体实际不是合法
-                # gzip 流(常见于上游 CDN/反代),httpx 解压会抛
-                # ``zlib.error: Error -3 ... incorrect header check``。同款修复
-                # 已在 ``backend/api/llm_proxy_routes.py`` 应用,这里保持一致。
-                # 同时保留 UA 等默认头——重定向后站点只看 hop-by-hop,新 host
-                # 仍按默认头身份访问。
-                request = client.build_request(
-                    "GET",
-                    current_url,
-                    headers=hop_headers,
-                )
-                # AB5：连接错 / 超时 / 5xx / 429 重试 + Retry-After + 同 host 限速
-                response = retrying_send(client, request, stream=True)
-                try:
-                    # AU2：命中域的响应带 Set-Cookie → 合并回 cookie 档案（续期 token 不丢）
-                    if credential_applied and "Cookie" in credential_headers:
-                        refreshed_names.extend(
-                            self._writeback_set_cookies(response, current_url, credential_domain)
-                        )
-                    if response.is_redirect:
-                        location = response.headers.get("location")
-                        if redirect_count >= self._MAX_REDIRECTS:
-                            raise ValueError(
-                                f"redirect_limit_exceeded: 重定向次数超过 {self._MAX_REDIRECTS} 次"
+                verify = not network_policy.allows_insecure_tls(current_url)
+                if client is None or verify != client_verify:
+                    if client is not None:
+                        client.close()
+                    client_kwargs: Dict[str, Any] = {
+                        "timeout": 30.0,
+                        "follow_redirects": False,
+                        "verify": verify,
+                        "trust_env": not self._policy.subagent_only,
+                        "headers": default_headers(),
+                    }
+                    # AB3（R27）：配置开启且 curl_cffi 可用时，静态抓取走 Chrome
+                    # TLS/HTTP2 指纹传输器（代理经传输器透传）；关闭/缺失回落标准。
+                    if fingerprint_enabled():
+                        transport = build_fingerprint_transport(verify=verify)
+                        if transport is not None:
+                            client_kwargs["transport"] = transport
+                    client = build_client(**client_kwargs)
+                    client_verify = verify
+                with contextlib.nullcontext(client) as client:  # noqa: PLW2901
+                    # 强制 ``Accept-Encoding: identity`` 禁用 httpx 自动解压。
+                    # 部分站点声明 ``Content-Encoding: gzip`` 但响应体实际不是合法
+                    # gzip 流(常见于上游 CDN/反代),httpx 解压会抛
+                    # ``zlib.error: Error -3 ... incorrect header check``。同款修复
+                    # 已在 ``backend/api/llm_proxy_routes.py`` 应用,这里保持一致。
+                    # 同时保留 UA 等默认头——重定向后站点只看 hop-by-hop,新 host
+                    # 仍按默认头身份访问。
+                    request = client.build_request(
+                        "GET",
+                        current_url,
+                        headers=hop_headers,
+                    )
+                    # AB5：连接错 / 超时 / 5xx / 429 重试 + Retry-After + 同 host 限速
+                    response = retrying_send(client, request, stream=True)
+                    try:
+                        # AU2：命中域的响应带 Set-Cookie → 合并回 cookie 档案（续期 token 不丢）
+                        if credential_applied and "Cookie" in credential_headers:
+                            refreshed_names.extend(
+                                self._writeback_set_cookies(response, current_url, credential_domain)
                             )
-                        if not location:
-                            raise ValueError("invalid_redirect: 重定向缺少 Location")
-                        current_url = urljoin(current_url, location)
-                        continue
+                        if response.is_redirect:
+                            location = response.headers.get("location")
+                            if redirect_count >= self._MAX_REDIRECTS:
+                                raise ValueError(
+                                    f"redirect_limit_exceeded: 重定向次数超过 {self._MAX_REDIRECTS} 次"
+                                )
+                            if not location:
+                                raise ValueError("invalid_redirect: 重定向缺少 Location")
+                            current_url = urljoin(current_url, location)
+                            continue
 
-                    if response.status_code in _ANTIBOT_STATUS_CODES:
-                        # 拒绝类状态：不缓冲正文，直接交给 execute 判定升级
-                        response.close()
-                        return response, current_url, None
-                    response.raise_for_status()
-                    declared = response.headers.get("content-length", "")
-                    if declared.isdigit() and int(declared) > self._MAX_RESPONSE_BYTES:
-                        raise ValueError(
-                            f"response_exceeds_limit: 响应超过 {self._MAX_RESPONSE_BYTES} 字节"
-                        )
-                    content = bytearray()
-                    for chunk in response.iter_bytes(64 * 1024):
-                        content.extend(chunk)
-                        if len(content) > self._MAX_RESPONSE_BYTES:
+                        if response.status_code in _ANTIBOT_STATUS_CODES:
+                            # 拒绝类状态：不缓冲正文，直接交给 execute 判定升级
+                            response.close()
+                            return response, current_url, None
+                        response.raise_for_status()
+                        declared = response.headers.get("content-length", "")
+                        if declared.isdigit() and int(declared) > self._MAX_RESPONSE_BYTES:
                             raise ValueError(
                                 f"response_exceeds_limit: 响应超过 {self._MAX_RESPONSE_BYTES} 字节"
                             )
-                    buffered_response = httpx.Response(
-                        response.status_code,
-                        headers=response.headers,
-                        content=bytes(content),
-                        request=response.request,
+                        content = bytearray()
+                        for chunk in response.iter_bytes(64 * 1024):
+                            content.extend(chunk)
+                            if len(content) > self._MAX_RESPONSE_BYTES:
+                                raise ValueError(
+                                    f"response_exceeds_limit: 响应超过 {self._MAX_RESPONSE_BYTES} 字节"
+                                )
+                        buffered_response = httpx.Response(
+                            response.status_code,
+                            headers=response.headers,
+                            content=bytes(content),
+                            request=response.request,
+                        )
+                    finally:
+                        response.close()
+                    response = buffered_response
+                notes = []
+                if credential_stripped and not credential_applied:
+                    notes.append("credential_stripped: 重定向跨出凭据域，登录态凭据已剥离")
+                if refreshed_names:
+                    notes.append(
+                        "credential_refreshed: 服务器续期了 cookie，档案已回写"
+                        f"（{', '.join(sorted(set(refreshed_names))[:5])}）"
                     )
-                finally:
-                    response.close()
-                response = buffered_response
-            notes = []
-            if credential_stripped and not credential_applied:
-                notes.append("credential_stripped: 重定向跨出凭据域，登录态凭据已剥离")
-            if refreshed_names:
-                notes.append(
-                    "credential_refreshed: 服务器续期了 cookie，档案已回写"
-                    f"（{', '.join(sorted(set(refreshed_names))[:5])}）"
-                )
-            return response, current_url, ("；".join(notes) if notes else None)
+                return response, current_url, ("；".join(notes) if notes else None)
+
+        finally:
+            if client is not None:
+                client.close()
 
         raise ValueError("redirect_limit_exceeded: 重定向次数超限")
 
