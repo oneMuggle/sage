@@ -4,7 +4,7 @@
  * 默认安静：< 0.6 不渲染；≥ 0.6 琥珀提示；≥ 0.8 红色警示
  * （deepseek-harness Web UI 同款语义：pressure 对用户可见，透明可控）。
  */
-import { useStore } from '../../../shared/lib/store';
+import { useStore } from '../../shared/lib/store';
 
 const AMBER_THRESHOLD = 0.6;
 const RED_THRESHOLD = 0.8;
