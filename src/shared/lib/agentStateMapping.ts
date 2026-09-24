@@ -63,6 +63,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'memory_used': // R17-E: 记忆召回写入消息 memory_refs,不进气泡占位
     case 'skill_activated': // R38: 技能激活写入消息 activated_skills,不进气泡占位
     case 'compact_triggered': // R38: 自动压缩插入系统消息,不进气泡占位
+    case 'context_pressure': // TM2 (DSH 对标 R11): 水位写 store 供徽章渲染,不进气泡占位
     case 'attachment_rag_used': // r71: 附件检索溯源写入消息 rag_citations,不进气泡占位
     case 'workspace_changed': // right-panel R5: 变更信号进 changesListStore,不进气泡占位
     case 'sources_used': // R81: 参考来源写入消息 sources,不进气泡占位
@@ -128,6 +129,7 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'approval_mode': // live-events P1: 审批模式由任务树开关回显
     case 'step_done': // 2026-09 step-by-step: 步完成信号,无独立 UI 阶段(快照进 store 后)
     case 'topic_shifted': // Task 10 (2026-09-17): 自动话题切换事件,segment 边界进 store,无独立 UI 阶段
+    case 'context_pressure': // TM2 (DSH 对标 R11): 水位徽章自渲染,无独立 UI 阶段
     case 'orch_preflight': // Round 3 (2026-09-19): 前置阶段由任务板区域指示条展示
       return null;
     default:
