@@ -14,6 +14,7 @@
 #   - build-windows-cython (Cython): SAGE_PROTECT_CODE=true,  实验性, 含 -cython 后缀
 #   - upload-release:               合并两 job 产物到同一 release
 # 详见 docs/superpowers/specs/2026-09-24-win7-dual-build-and-diagnostics-design.md
+# LTS 策略与 Release 工作流详见 docs/technical/31-win7-lts.md §2 + §9
 
 name: Release (Win7 LTS)
 
@@ -262,7 +263,7 @@ jobs:
             ### 风险声明
 
             ⚠️ 本分支基于 EOL 技术栈 (Electron 21.4.4 + Python 3.8 + Chromium 106)。
-            详见 [`docs/technical/21-win7-lts.md`](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/technical/21-win7-lts.md) §6。
+            详见 [`docs/technical/31-win7-lts.md`](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/docs/technical/31-win7-lts.md) §6。
           # draft: true — 人工 review release notes 后再 publish
           draft: true
           generate_release_notes: true
