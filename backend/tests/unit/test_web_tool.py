@@ -1810,7 +1810,7 @@ def test_web_search_parallel_records_engine_metrics(monkeypatch):
 
 def test_build_suggested_actions_login_wall_includes_login_action():
     """login_wall 时 _build_suggested_actions 包含 login_to_site。"""
-    from backend.tools.web_tool import _build_suggested_actions, BLOCK_REASON_LOGIN_WALL
+    from backend.tools.web_tool import BLOCK_REASON_LOGIN_WALL, _build_suggested_actions
 
     actions = _build_suggested_actions(BLOCK_REASON_LOGIN_WALL, "https://platfm.agnes-ai.com/settings")
     action_names = [a["action"] for a in actions]
@@ -1825,7 +1825,7 @@ def test_build_suggested_actions_login_wall_includes_login_action():
 
 def test_build_suggested_actions_no_login_action_for_antibot():
     """非 login_wall 时 _build_suggested_actions 不包含 login_to_site。"""
-    from backend.tools.web_tool import _build_suggested_actions, BLOCK_REASON_ANTIBOT_CF
+    from backend.tools.web_tool import BLOCK_REASON_ANTIBOT_CF, _build_suggested_actions
 
     actions = _build_suggested_actions(BLOCK_REASON_ANTIBOT_CF, "https://example.com/")
     action_names = [a["action"] for a in actions]

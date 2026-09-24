@@ -815,9 +815,8 @@ def find_credential_for_host(hostname: str, repo: Optional[Any] = None) -> Optio
         kind = _entry_kind(entry)
         if kind == KIND_HEADER:
             expires_at = entry.get("expires_at") if isinstance(entry, dict) else None
-            if isinstance(expires_at, (int, float)) and expires_at > 0:
-                if expires_at / 1000 <= now:
-                    continue  # 已过期
+            if isinstance(expires_at, (int, float)) and expires_at > 0 and expires_at / 1000 <= now:
+                continue  # 已过期
         else:
             cookies = _decrypt_cookies(entry, domain) if isinstance(entry, dict) else None
             if not cookies:

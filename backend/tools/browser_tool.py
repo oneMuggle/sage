@@ -1103,7 +1103,7 @@ class BrowserLoginTool(BaseTool):
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911
         self,
         url: str = "",
         timeout_seconds: int = _LOGIN_DEFAULT_TIMEOUT,
@@ -1248,13 +1248,12 @@ class BrowserLoginTool(BaseTool):
         finally:
             # 关闭标签页但保持浏览器运行（用户可能还要操作其他页面）
             if target_id:
-                try:
+                import contextlib
+                with contextlib.suppress(BrowserCDPError):
                     cdp_command(session, "Target.closeTarget", {"targetId": target_id})
-                except BrowserCDPError:
-                    pass
 
     def _export_cookies(
-        self, session: "BrowserSession", target_host: str
+        self, session: BrowserSession, target_host: str
     ) -> list:
         """从浏览器获取 cookie 并按 domain 分组保存。返回已保存的 domain 列表。"""
         from .credential_vault import save_credential
@@ -1296,7 +1295,7 @@ class BrowserLoginTool(BaseTool):
 
 
 def _wait_for_page_load(
-    session: "BrowserSession", target_id: str, timeout: float = 15.0
+    session: BrowserSession, target_id: str, timeout: float = 15.0
 ) -> None:
     """等待页面 readyState 变为 complete 或 interactive。"""
     deadline = time.monotonic() + timeout
@@ -1317,10 +1316,10 @@ def _wait_for_page_load(
 
 
 def _check_login_status(
-    session: "BrowserSession", target_id: str, target_host: str
+    session: BrowserSession, target_id: str, target_host: str
 ) -> str:
     """检查登录状态。返回 'logged_in' / 'on_login_page' / 'loading'。"""
-    from .credential_vault import looks_like_login_html, looks_like_login_url
+    from .credential_vault import looks_like_login_url
 
     try:
         # 注入/维护悬浮条并获取当前状态
