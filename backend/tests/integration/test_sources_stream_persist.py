@@ -180,3 +180,50 @@ async def test_browser_navigate_sources_flow(client):
     assert persisted[0]["kind"] == "web"
     assert persisted[0]["url"] == "https://b.example.com"
     assert persisted[0]["title"] == "示例站"
+
+
+@pytest.mark.asyncio()
+async def test_sources_pushed_even_when_run_fails(client):
+    """R120: 搜索完成后 run 失败（如 LLMError）→ sources_used 仍推送。
+
+    失败场景恰是用户最需要核对"搜索到了什么"的时机 —— 已收集的来源
+    不应随 run 失败而丢失。
+    """
+    from backend.core.errors import LLMError, LLMErrorType
+
+    session = SessionRepository().create(title="r120-failed")
+
+    async def mock_run_loop(messages, max_iterations=5, **kwargs):
+        yield AgentEvent(state=AgentState.THINKING, iteration=0)
+        yield AgentEvent(
+            state=AgentState.ACTING,
+            iteration=0,
+            tool_call=ToolCallRequest(id="tc-1", name="web_search", arguments={"query": "sage"}),
+        )
+        yield AgentEvent(
+            state=AgentState.OBSERVING,
+            iteration=0,
+            tool_call=ToolCallRequest(id="tc-1", name="web_search", arguments={"query": "sage"}),
+            tool_result=ToolCallResult(tool_call_id="tc-1", content=WEB_RESULT_CONTENT, is_error=False),
+        )
+        raise LLMError(type=LLMErrorType.SERVER_ERROR, message="上游 5xx")
+
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+        MockAgent.return_value.run_loop = mock_run_loop
+        MockAgent.return_value.memory_manager = None
+
+        create_stream = await client.post(
+            CHAT_STREAM_PATH,
+            json={"session_id": session.id, "message": "搜一下但会失败"},
+        )
+        assert create_stream.status_code == 200
+        stream_id = create_stream.json()["streamId"]
+        events_seen = await _drain_stream(client, stream_id)
+
+    # failed 事件之前 sources_used 已推送
+    states = [e.get("state") for e in events_seen]
+    assert "sources_used" in states, f"states={states}"
+    sources_event = next(e for e in events_seen if e.get("state") == "sources_used")
+    assert sources_event["sources"][0]["url"] == "https://sage.example.com/"
+    # 失败事件在来源事件之后
+    assert states.index("failed") > states.index("sources_used")
