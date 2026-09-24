@@ -1828,6 +1828,20 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_todos_parent_id ON todos(parent_id)")
 
         conn.commit()
+
+        # C3 (DSH 对标 R9): schema 版本化迁移 —— 幂等应用所有未执行迁移。
+        # 既有 DDL（CREATE IF NOT EXISTS / ALTER 防御块）保持原位，本框架
+        # 服务于未来需要数据改写的迁移（纪律：只新增版本代，绝不覆写）。
+        # fail-fast：迁移失败向上抛，避免带病启动（与"半应用迁移留缺口
+        # 可定位"配套）。
+        try:
+            from backend.data.migrations.runner import run_pending_migrations
+
+            run_pending_migrations(conn)
+        except Exception:
+            logger.exception("schema 迁移失败")
+            raise
+
         logger.info("数据库初始化完成: %s", self.db_path)  # D4 (P6): 遗留 print 收敛到 logging
 
 
