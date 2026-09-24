@@ -16,6 +16,10 @@ import 时毫发无损，跑到那一行才 TypeError。
 - ``zip(..., strict=...)``（3.10+）
 - ``Path.write_text/read_text/write_bytes/readlink(..., newline=)``（3.10+）
 - ``Path.hardlink_to``（3.10+）
+- ``str.removeprefix/removesuffix``（3.9+）
+- ``import zoneinfo / graphlib``（3.9+）
+- ``functools.cache``（3.9+）
+- ``@dataclass(slots=True / kw_only=True)``（3.10+）
 
 行内写 ``# py38-ok`` 可对单行豁免（须注明原因）。
 
@@ -38,6 +42,18 @@ PY310_PATH_METHODS = {"hardlink_to"}
 # 3.10+ 才有的关键字参数
 PY310_KWARGS = {"write_text": {"newline"}, "read_text": {"newline"},
                 "write_bytes": {"newline"}, "readlink": {"newline"}}
+
+# 3.9+ 才有的 str 方法（3.8 运行即 AttributeError）
+PY39_STR_METHODS = {"removeprefix", "removesuffix"}
+
+# 3.9+ 才有的模块（import 即 ImportError）
+PY39_MODULES = {"zoneinfo", "graphlib"}
+
+# 3.9+ 才有的属性（functools.cache；3.8 只有 lru_cache）
+PY39_ATTRS = {"cache"}  # 限定 functools.cache 上下文，见 visit_node
+
+# 3.10+ 才有的 @dataclass 参数
+PY310_DATACLASS_KWARGS = {"slots", "kw_only"}
 
 
 def _is_asyncio_to_thread(node):
@@ -83,6 +99,45 @@ def visit_node(node, rel, hits):
         banned = PY310_KWARGS.get(node.func.attr)
         if banned and any(kw.arg in banned for kw in node.keywords):
             hits.append((rel, node.lineno, f"{node.func.attr}(newline=...)（3.10+）"))
+
+    # R7: str.removeprefix/removesuffix（3.9+）。限定接收者是 Name/Attribute/
+    # 常量字符串——避免把同名自由函数误报进来。
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in PY39_STR_METHODS
+        and isinstance(node.func.value, (ast.Name, ast.Attribute, ast.Constant))  # noqa: UP038 — 脚本自身须 py38 可运行
+    ):
+        hits.append((rel, node.lineno, f"str.{node.func.attr}（3.9+），用 str[start:] / endswith 切片替代"))
+
+    # R8: import zoneinfo / graphlib（3.9+）
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            root = alias.name.split(".")[0]
+            if root in PY39_MODULES:
+                hits.append((rel, node.lineno, f"import {root}（3.9+）"))
+    if isinstance(node, ast.ImportFrom) and node.module:
+        root = node.module.split(".")[0]
+        if root in PY39_MODULES:
+            hits.append((rel, node.lineno, f"from {node.module} import ...（3.9+）"))
+
+    # R9: functools.cache（3.9+；3.8 用 lru_cache）
+    if (
+        isinstance(node, ast.Attribute)
+        and node.attr in PY39_ATTRS
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "functools"
+    ):
+        hits.append((rel, node.lineno, "functools.cache（3.9+），用 functools.lru_cache(maxsize=None)"))
+
+    # R10: @dataclass(slots=True | kw_only=True)（3.10+）
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "dataclass"
+        and any(kw.arg in PY310_DATACLASS_KWARGS for kw in node.keywords)
+    ):
+        hits.append((rel, node.lineno, "@dataclass(slots=/kw_only=)（3.10+）"))
 
 
 def scan_file(path, rel):

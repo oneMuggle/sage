@@ -163,7 +163,9 @@ class SnapshotStore:
             task.current_step_id = payload.get("step_id", task.current_step_id)
             task.output_preview = payload.get("output_preview", task.output_preview)
         elif event.event_type in ("task.waiting_input", "task.waiting_approval"):
-            task.status = event.event_type.removeprefix("task.")
+            # py38 无 str.removeprefix（3.9+），等价切片实现
+            _p = "task."
+            task.status = event.event_type[len(_p):] if event.event_type.startswith(_p) else event.event_type
             task.waiting_reason = payload.get("reason")
 
     def _apply_step_event(self, run: _RunSnapshot, event: RunEvent) -> None:

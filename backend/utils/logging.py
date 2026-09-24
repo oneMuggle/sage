@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from zoneinfo import ZoneInfo  # Python 3.9+
+    from zoneinfo import ZoneInfo  # Python 3.9+  # py38-ok except ImportError 守卫 + backports 兜底
 except ImportError:  # pragma: no cover — py38 compat
     from backports.zoneinfo import ZoneInfo  # type: ignore[no-redef]
 
