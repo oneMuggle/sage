@@ -166,3 +166,24 @@ def test_get_with_redirects_injects_transport_when_enabled(monkeypatch):
 def test_get_with_redirects_no_transport_when_disabled(monkeypatch):
     captured = _run_get_with_redirects_capture(monkeypatch, enabled=False)
     assert "transport" not in captured
+
+
+def test_stats_counts_requests_and_returns_copy(monkeypatch):
+    response = SimpleNamespace(status_code=200, headers={}, content=b"")
+
+    def _fake_request(method, url, **kwargs):
+        return response
+
+    module = ModuleType("curl_cffi")
+    module.requests = SimpleNamespace(request=_fake_request)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "curl_cffi", module)
+
+    before = tls_transport.stats()["requests"]
+    transport = CurlImpersonateTransport()
+    transport.handle_request(httpx.Request("GET", "https://x.example/"))
+    transport.handle_request(httpx.Request("GET", "https://y.example/"))
+
+    snapshot = tls_transport.stats()
+    assert snapshot["requests"] == before + 2
+    snapshot["requests"] = 999  # 拷贝语义：外部修改不污染内部计数
+    assert tls_transport.stats()["requests"] == before + 2

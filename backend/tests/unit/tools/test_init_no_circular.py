@@ -55,7 +55,9 @@ REPO_ROOT = os.path.dirname(
 BACKEND_PARENT = os.path.dirname(REPO_ROOT)
 
 
-def _run_in_fresh_subprocess(*python_args: str, timeout: int = 60) -> subprocess.CompletedProcess:
+def _run_in_fresh_subprocess(*python_args: str, timeout: int = 150) -> subprocess.CompletedProcess:
+    # R28：-n auto 全量并发下冷导入（jieba 词典等）P99 逼近 60s，放宽到 150s
+    # 避免负载抖动误报为 issue #484 回归。
     """Spawn a clean interpreter with PYTHONPATH set so ``import backend.*``
     resolves from the worktree this test file lives in.
 
@@ -155,7 +157,7 @@ def test_python_m_backend_cli_doctor_succeeds():
     ``--json`` to make the output machine-greppable.
     """
     result = _run_in_fresh_subprocess(
-        "-m", "backend.cli.doctor", "--json", timeout=30
+        "-m", "backend.cli.doctor", "--json", timeout=90
     )
 
     # Pre-fix: returncode is 1 with stderr "ImportError: cannot import name
