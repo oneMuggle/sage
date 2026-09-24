@@ -116,6 +116,15 @@ jobs:
         run: |
           conda run -n sage-backend-py38 python scripts/check_py38_compat.py
 
+      # AST 扫描器（← main #1500/#1514/#1517 统一规则集）：
+      # isinstance 联合 / asyncio.to_thread / zip strict= / Path 系 /
+      # str.removeprefix / zoneinfo / graphlib / functools.cache /
+      # dataclass slots,kw_only / datetime.UTC。与 regex 版 guardrail 双保险。
+      - name: py38 runtime hazard AST scan
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend-py38 python backend/tools/py38_hazard_scan.py backend
+
       # xdist 并行:同 main(见 backend job 注释)。test_event_loop_blocking
       # 的 P99 延迟断言对 CPU 争用敏感,单独串行跑(--cov-append 保持覆盖率合并)
       - name: Pytest (py38, hex mode) with coverage

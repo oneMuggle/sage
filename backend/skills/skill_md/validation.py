@@ -55,7 +55,7 @@ def validate_base_dir(base_dir: Path, allowed_roots: List[Path]) -> Path:
         except OSError:
             continue
         try:
-            if resolved_base.is_relative_to(resolved_root):  # py38: guarded (AttributeError fallback below)
+            if resolved_base.is_relative_to(resolved_root):  # py38: guarded (AttributeError fallback below)  # py38-ok 守卫/降级已覆盖（win7 适配写法）
                 return resolved_base
         except AttributeError:
             # Python < 3.9 fallback (项目要求 3.8+, sage-backend 是 3.10, 通常不触发)
