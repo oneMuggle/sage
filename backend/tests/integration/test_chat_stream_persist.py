@@ -123,10 +123,9 @@ async def test_message_save_failure_does_not_break_stream(client):
     async def mock_run_loop(messages, max_iterations=5, **kwargs):
         yield AgentEvent(state=AgentState.DONE, iteration=0, content="done")
 
-    with (
-        patch("backend.api.legacy_routes.SageAgent") as MockAgent,
-        patch("backend.api.legacy_routes.MessageRepository") as MockMsgRepo,
-    ):
+    with patch("backend.api.legacy_routes.SageAgent") as MockAgent, patch(
+        "backend.api.legacy_routes.MessageRepository"
+    ) as MockMsgRepo:
         MockAgent.return_value.run_loop = mock_run_loop
         MockAgent.return_value.memory_manager = None
         MockMsgRepo.return_value.save.side_effect = RuntimeError("simulated db down")
