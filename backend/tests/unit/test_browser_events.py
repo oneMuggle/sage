@@ -480,3 +480,134 @@ def test_start_event_channel_stops_disconnected_channel(monkeypatch):
     assert ok is False
     assert stops == [1]  # 旧通道被 stop 后才替换
     browser_events.stop_all_tracking()
+
+
+# ---------- R33：Page.loadEventFired 就绪信号 ----------
+
+
+class _FakeChannelServer:
+    """在 _serve_with_network 基础上应答 Page.enable。"""
+
+    pass
+
+
+def test_arm_and_wait_page_load_signal(ws_server, tmp_path):
+    """布防 → 服务器发 loadEventFired → wait 返回 True；detach 后清理。"""
+    port = ws_server.getsockname()[1]
+    hold = threading.Event()
+
+    def _serve(server, hold):
+        conn, _ = server.accept()
+        conn.settimeout(5)
+        request = b""
+        while b"\r\n\r\n" not in request:
+            request += conn.recv(4096)
+        key = next(
+            line.split(":", 1)[1].strip()
+            for line in request.decode("latin-1").split("\r\n")
+            if line.lower().startswith("sec-websocket-key")
+        )
+        accept = base64.b64encode(hashlib.sha1((key + _WS_GUID).encode()).digest()).decode()
+        conn.sendall(
+            (
+                "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+                f"Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+            ).encode()
+        )
+        while True:
+            try:
+                client = json.loads(_ws_recv_client_text(conn))
+            except (OSError, ValueError):
+                break
+            method = client.get("method")
+            if method == "Browser.setDownloadBehavior":
+                _ws_send_server_text(conn, json.dumps({"id": client["id"], "result": {}}))
+            elif method in ("Target.attachToTarget", "Network.enable", "Page.enable"):
+                _ws_send_server_text(
+                    conn,
+                    json.dumps(
+                        {"id": client["id"], "result": {"sessionId": "pl-sess"}}
+                    )
+                    if method == "Target.attachToTarget"
+                    else json.dumps({"id": client["id"], "result": {}}),
+                )
+            if method == "Page.enable":
+                time.sleep(0.1)
+                _ws_send_server_text(
+                    conn,
+                    json.dumps(
+                        {
+                            "method": "Page.loadEventFired",
+                            "sessionId": "pl-sess",
+                            "params": {},
+                        }
+                    ),
+                )
+        conn.close()
+
+    threading.Thread(target=_serve, args=(ws_server, hold), daemon=True).start()
+    tracker = browser_events.start_download_tracking(
+        "b-pgload", port, "/devtools/browser/x", str(tmp_path)
+    )
+    assert tracker.connected is True
+
+    session_id = browser_events.ensure_network_tracking("b-pgload", "t-1")
+    assert session_id == "pl-sess"
+    browser_events.arm_page_load("b-pgload", session_id)
+    assert browser_events.wait_page_load("b-pgload", session_id, 5.0) is True
+    # wait 后布防已消费；再次 wait 无信号 → False（不悬挂）
+    assert browser_events.wait_page_load("b-pgload", session_id, 0.2) is False
+    browser_events.detach_network_session("b-pgload", session_id)
+    hold.set()
+    browser_events.stop_download_tracking("b-pgload")
+
+
+def test_wait_page_load_without_arm_returns_false(ws_server, tmp_path):
+    port = ws_server.getsockname()[1]
+    hold = threading.Event()
+
+    def _serve(server, hold):
+        conn, _ = server.accept()
+        conn.settimeout(5)
+        request = b""
+        while b"\r\n\r\n" not in request:
+            request += conn.recv(4096)
+        key = next(
+            line.split(":", 1)[1].strip()
+            for line in request.decode("latin-1").split("\r\n")
+            if line.lower().startswith("sec-websocket-key")
+        )
+        accept = base64.b64encode(hashlib.sha1((key + _WS_GUID).encode()).digest()).decode()
+        conn.sendall(
+            (
+                "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
+                f"Connection: Upgrade\r\nSec-WebSocket-Accept: {accept}\r\n\r\n"
+            ).encode()
+        )
+        while True:
+            try:
+                client = json.loads(_ws_recv_client_text(conn))
+            except (OSError, ValueError):
+                break
+            method = client.get("method")
+            if method == "Browser.setDownloadBehavior":
+                _ws_send_server_text(conn, json.dumps({"id": client["id"], "result": {}}))
+            elif method == "Target.attachToTarget":
+                _ws_send_server_text(
+                    conn,
+                    json.dumps({"id": client["id"], "result": {"sessionId": "pl-sess"}}),
+                )
+            elif client.get("method") in ("Network.enable", "Page.enable"):
+                _ws_send_server_text(conn, json.dumps({"id": client["id"], "result": {}}))
+
+    threading.Thread(target=_serve, args=(ws_server, hold), daemon=True).start()
+    tracker = browser_events.start_download_tracking(
+        "b-pgload2", port, "/devtools/browser/x", str(tmp_path)
+    )
+    assert tracker.connected is True
+    session_id = browser_events.ensure_network_tracking("b-pgload2", "t-1")
+    assert session_id == "pl-sess"
+    # 未布防：不悬挂，立即 False
+    assert browser_events.wait_page_load("b-pgload2", session_id, 0.2) is False
+    hold.set()
+    browser_events.stop_download_tracking("b-pgload2")
