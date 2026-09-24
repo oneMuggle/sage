@@ -35,6 +35,7 @@
 | R42 | RD21 run 触顶原因横幅 | #1306 `58d7b19e` | #1312 `ce086aff` |
 | R43 | RD20 历史 run 恢复增强（RT24 字段 + endedAt） | #1376 `ed3d546d` | #1379 `a7124d15` |
 | R44 | OPS1 扩展：audit-watch 覆盖 main 生产路径 | #1389 `4da49ab8` | 定时 workflow 属 main，无 win7 侧 |
+| R49 | RT26 重派链历史持久化（retry_of 列 + 恢复映射） | #1488 `bcdc77ef` | #1489 `54c97be6` |
 | R45 | OPS2 CI 事件去重流程化（ci-rerun + SOP §4.2） | #1395 `5f329e7a` | #1399 `2f83510b` |
 | R46 | RT25 usage_events 任务归因复合索引 | #1409 `6a177ae3` | #1413 `0738247d` |
 | R47 | OPS3 doctor 探针瞬时超时重试 | #1436 `1fa169a3` | #1441 `f7eddc8f` |
