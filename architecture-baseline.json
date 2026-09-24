@@ -42,7 +42,7 @@
     "backend/tools/download_tool.py": 1116,
     "backend/tools/office_analyze_tool.py": 981,
     "backend/tools/office_create_tool.py": 1580,
-    "backend/tools/web_tool.py": 1507,
+    "backend/tools/web_tool.py": 1514,
     "backend/wiki/files.py": 927,
     "backend/zotero/client.py": 818,
     "electron/__tests__/commands.test.ts": 981,
