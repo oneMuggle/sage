@@ -209,7 +209,9 @@ class RenderError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
-def wait_page_ready(session: BrowserSession, target_id: Optional[str], wait_for: str = "") -> None:
+def wait_page_ready(
+    session: BrowserSession, target_id: Optional[str], wait_for: str = ""
+) -> bool:
     """navigate 后等页面可用：readyState 达标 → (可选)等 wait_for → 正文稳定。
 
     SPA 的 hydrate 发生在 readyState=complete 之后，只等 readyState 会拿到
@@ -220,26 +222,34 @@ def wait_page_ready(session: BrowserSession, target_id: Optional[str], wait_for:
     READY_TIMEOUT_SECONDS；超时不失败（半截内容好过没有），继续走 settle。
 
     BrowserCDPError（导航引发的上下文销毁）直接返回 —— 交给后续调用自查。
+
+    Returns:
+        ``wait_for`` 命中与否（R30）：未指定 wait_for 时恒 True；指定时为
+        轮询窗口内选择器是否出现——调用方可据此标记内容完整度。
     """
     deadline = time.monotonic() + READY_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         try:
             state = _evaluate_json(session, "document.readyState", target_id)
         except BrowserCDPError:
-            return
+            return True
         if state in ("complete", "interactive"):
             break
         time.sleep(_READY_POLL_INTERVAL)
 
+    wait_for_satisfied = True
     if wait_for.strip():
         selector = json.dumps(wait_for.strip())
         deadline = time.monotonic() + READY_TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
+        while True:
             try:
                 found = _evaluate_json(session, f"!!document.querySelector({selector})", target_id)
             except BrowserCDPError:
-                return
+                return False
             if found:
+                break
+            if time.monotonic() >= deadline:
+                wait_for_satisfied = False
                 break
             time.sleep(_READY_POLL_INTERVAL)
 
@@ -254,16 +264,17 @@ def wait_page_ready(session: BrowserSession, target_id: Optional[str], wait_for:
                 target_id,
             )
         except BrowserCDPError:
-            return
+            return wait_for_satisfied
         if isinstance(length, int) and length == last_length:
             stable_rounds += 1
             if stable_rounds >= _SETTLE_STABLE_ROUNDS:
-                return
+                return wait_for_satisfied
         else:
             stable_rounds = 0
         if isinstance(length, int):
             last_length = length
         time.sleep(_SETTLE_POLL_INTERVAL)
+    return wait_for_satisfied
 
 
 def _evaluate_json(session: BrowserSession, expression: str, target_id: Optional[str]) -> Any:
@@ -622,7 +633,7 @@ def render_page(
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
         if result.get("errorText"):
             raise RenderError(f"渲染导航失败: {result['errorText']}")
-        wait_page_ready(session, target_id, wait_for=wait_for)
+        wait_for_satisfied = wait_page_ready(session, target_id, wait_for=wait_for)
         _scroll_for_lazy_load(session, target_id)
         tracked = (
             get_tracked_response(session.browser_id, net_session) if net_session else None
@@ -697,6 +708,9 @@ def render_page(
     }
     if isinstance(status, int) and status > 0:
         rendered["rendered_status"] = status
+    # R30：wait_for 选择器是否在就绪窗口内出现——调用方据此判断内容完整度
+    if wait_for.strip():
+        rendered["wait_for_satisfied"] = bool(wait_for_satisfied)
     if refreshed:
         rendered["credential_refreshed"] = refreshed
     # AU7：带凭据渲染却落在密码框页（正文极短）→ 登录墙标记

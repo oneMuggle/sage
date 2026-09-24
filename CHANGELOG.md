@@ -70,6 +70,11 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - **抓取客户端泄漏（R29）**：`_get_with_redirects` 循环包 try/finally——`redirect_limit_exceeded` / `response_exceeds_limit` / 校验失败等异常路径此前不关闭 httpx client，高频抓取 + 反爬站点（常见 3xx 超限）下连接池稳定泄漏
 - **事件通道替换滞留（R29）**：`start_event_channel` / `start_download_tracking` 替换断连旧通道前先 `stop()`——此前旧读线程在 socket 半开态可无限期滞留（每轮泄漏一个守护线程 + fd）
 
+> 🌐 **网页访问 Round 30：渲染内容完整度可观测**（方案 `docs/plans/2026-09-24_waitfor-r30.md`）
+
+### Added(web-access)
+- **wait_for 完整度可观测（R30）**：`wait_page_ready` 返回 wait_for 选择器命中与否（settle 语义不变）；`render_page` 指定 wait_for 时在结果中暴露 `wait_for_satisfied` 布尔——调用方（及模型）首次能区分"选择器已出现"与"半截内容"
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 > 🧹 **alpha.52-win7 暂无未发布变更**
