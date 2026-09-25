@@ -2068,6 +2068,26 @@ class ChatDispatcher:
                     f"- 已运行 {elapsed_min} 分钟 / 上限 {limit_min} 分钟。\n"
                 )
 
+        # BU22 (round53): 最耗时子任务排行 —— conductor 快速识别瓶颈。
+        # 仅统计有起止时间的终态任务，按耗时降序取前 3。
+        _terminal_durations: List[tuple[str, float]] = []
+        for state in states:
+            if (
+                state.status in ("done", "failed")
+                and state.started_at
+                and state.finished_at
+            ):
+                dur = state.finished_at - state.started_at
+                if dur > 0:
+                    _terminal_durations.append((state.task_id, dur))
+        if len(_terminal_durations) >= 2:
+            _terminal_durations.sort(key=lambda x: x[1], reverse=True)
+            top3 = _terminal_durations[:3]
+            desc = "、".join(
+                f"{tid}（{dur:.0f}s）" for tid, dur in top3
+            )
+            header += f"- 耗时排行：{desc}。\n"
+
         blocks: List[str] = []
         for state in states:
             header_item = f"## 子任务 {state.task_id}（{state.agent_id}）"
