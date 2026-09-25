@@ -235,6 +235,9 @@ export type AgentState =
   // R38 (2026-09-18): 自动上下文压缩展示 —— M4 达到阈值触发压缩后推送
   // 压缩统计,载荷见 AgentEvent.compact。
   | 'compact_triggered'
+  // TM2 (DSH 对标 R11): 上下文水位 —— producer 装配请求后推送确定性
+  // 计量(总量/分项/预算/pressure 0-1),载荷见 AgentEvent.context_pressure。
+  | 'context_pressure'
   // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
   | 'topic_shifted'
   // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）,
@@ -249,6 +252,19 @@ export type AgentState =
   // R81: 统一参考来源 —— 检索类工具命中（web/wiki/MCP）在 done 前
   // 一次性推送, 载荷见 AgentEvent.sources。
   | 'sources_used';
+
+/**
+ * TM2 (DSH 对标 R11): 上下文水位计量快照 —— 随 `state: 'context_pressure'`
+ * 流事件下发（backend/chat/token_meter.py ContextPressure.to_dict()）。
+ */
+export interface ContextPressurePayload {
+  total_tokens: number;
+  budget_tokens: number;
+  /** 0-1，已封顶；≥0.8 红 / ≥0.6 琥珀 */
+  pressure: number;
+  by_role: Record<string, number>;
+  estimator: string;
+}
 
 /**
  * 工具审批请求 — M1 工具安全加固。
@@ -565,6 +581,8 @@ export interface AgentEvent {
   skills?: { name: string; triggers_matched: string[] }[];
   // R38: compact_triggered 事件载荷（M4 自动压缩统计）。
   compact?: { before: number; after: number; removed: number };
+  // TM2 (DSH 对标 R11): context_pressure 事件载荷（确定性上下文计量）。
+  context_pressure?: ContextPressurePayload;
   // r71: attachment_rag_used 事件载荷（超长文档检索注入溯源）。
   citations?: {
     media_id: string;

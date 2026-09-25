@@ -97,6 +97,13 @@ interface StoreState {
   // 加载状态
   isLoading: boolean;
 
+  // TM2 (DSH 对标 R11): 上下文水位（随 context_pressure 流事件更新；
+  // 切换会话时清空——水位是 per-request 的临时量）
+  contextPressure: { session_id: string; pressure: number; total_tokens: number; budget_tokens: number } | null;
+  setContextPressure: (
+    cp: { session_id: string; pressure: number; total_tokens: number; budget_tokens: number } | null,
+  ) => void;
+
   // 操作方法
   loadSessions: () => Promise<void>;
   setCurrentSessionId: (id: string | null) => void;
@@ -170,6 +177,8 @@ export const useStore = create<StoreState>((set, _get) => ({
   sessions: [],
   currentSessionId: null,
   messages: [],
+  contextPressure: null,
+  setContextPressure: (cp) => set({ contextPressure: cp }),
   isLoading: false,
 
   // 加载会话列表
@@ -186,7 +195,8 @@ export const useStore = create<StoreState>((set, _get) => ({
   setCurrentSessionId: (id) => {
     if (_get().currentSessionId !== id) {
       latestMessageLoadToken += 1;
-      set({ currentSessionId: id, isLoading: false });
+      // TM2: 切换会话清空水位（per-request 临时量，不跨会话残留）
+      set({ currentSessionId: id, isLoading: false, contextPressure: null });
     }
     void saveCurrentSessionId(id);
   },

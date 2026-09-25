@@ -67,6 +67,36 @@ export function isValidCitationsPayload(
   );
 }
 
+/** TM2 (DSH 对标 R11): context_pressure —— 数值字段 + by_role 对象。 */
+export interface ContextPressurePayload {
+  total_tokens: number;
+  budget_tokens: number;
+  pressure: number;
+  by_role: Record<string, number>;
+  estimator: string;
+}
+
+export function isValidContextPressurePayload(
+  cp: unknown,
+): cp is ContextPressurePayload {
+  if (typeof cp !== 'object' || cp === null) return false;
+  const c = cp as {
+    total_tokens?: unknown;
+    budget_tokens?: unknown;
+    pressure?: unknown;
+    by_role?: unknown;
+    estimator?: unknown;
+  };
+  return (
+    typeof c.total_tokens === 'number' &&
+    typeof c.budget_tokens === 'number' &&
+    typeof c.pressure === 'number' &&
+    typeof c.estimator === 'string' &&
+    typeof c.by_role === 'object' &&
+    c.by_role !== null
+  );
+}
+
 /** R38: compact_triggered —— before/after/removed 必须均为 number。 */
 export function isValidCompactPayload(
   compact: unknown,
