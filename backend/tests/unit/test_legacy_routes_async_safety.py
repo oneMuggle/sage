@@ -23,6 +23,10 @@ LEGACY_ROUTES_PATH = Path(__file__).resolve().parent.parent.parent / "api" / "le
 LEGACY_SESSION_ROUTES_PATH = (
     Path(__file__).resolve().parent.parent.parent / "api" / "legacy_session_routes.py"
 )
+# C1b (DSH 对标 R15): 技能 API 迁出至本模块
+LEGACY_SKILLS_ROUTES_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "api" / "legacy_skills_routes.py"
+)
 
 # `async def` 但无 await 的 handler 是事件循环阻塞风险点。
 # 本测试维护一份"必须 keep_async"的精确白名单(7 个,L580/L974/1015/1105/1284/1400/1763)。
@@ -105,6 +109,9 @@ def test_keep_async_handlers_actually_async():
     # L1 (P8): compact_session 已拆至 legacy_session_routes —— 合并两个模块的顶层函数
     session_src = LEGACY_SESSION_ROUTES_PATH.read_text(encoding="utf-8")
     funcs += _load_top_level_functions(session_src)
+    # C1b (R15): 技能 API 已拆至 legacy_skills_routes
+    skills_src = LEGACY_SKILLS_ROUTES_PATH.read_text(encoding="utf-8")
+    funcs += _load_top_level_functions(skills_src)
     name_to_func = {f.name: f for f in funcs}
 
     for keep_name in KEEP_ASYNC_HANDLERS:
@@ -116,7 +123,7 @@ def test_keep_async_handlers_actually_async():
 
 
 def test_async_handler_count_matches_design():
-    """legacy_routes.py 应有 7 个 async def handler。
+    """legacy 路由族应有 4 个 async def handler（C1b：3 个技能端点迁至 legacy_skills_routes）。
 
     Round 5 (+1): scan_skill_consolidation —— LLM 巡检端点,
     async 因为需要 await LLM provider.complete()。
@@ -130,11 +137,11 @@ def test_async_handler_count_matches_design():
 
     # 6 个 keep_async (execute_skill, execute_slash_command,
     # import_skills, chat, chat_stream_create, chat_stream_attach)
-    # + Round 5: scan_skill_consolidation (LLM 巡检) = 7。
+    # C1b 后 = 4：execute_skill/execute_slash_command/import_skills 迁至 legacy_skills_routes。
     # compact_session 已拆至 legacy_session_routes (L1, P8), 在那里由
     # test_keep_async_handlers_actually_async 的合并扫描覆盖。
-    assert len(async_endpoints) == 7, (
-        f"legacy_routes 应有 7 个 async def handler,实际 {len(async_endpoints)}:\n"
+    assert len(async_endpoints) == 4, (
+        f"legacy 路由族应有 4 个 async def handler,实际 {len(async_endpoints)}:\n"
         + "\n".join(f"  {f.name} (line {f.lineno})" for f in async_endpoints)
     )
 
@@ -152,7 +159,7 @@ def test_async_handlers_count_invariant_against_internal_helpers():
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
     # 同样 7 个,跟 test_async_handler_count_matches_design 一致
-    assert len(async_endpoints) == 7
+    assert len(async_endpoints) == 4
 
 
 if __name__ == "__main__":
