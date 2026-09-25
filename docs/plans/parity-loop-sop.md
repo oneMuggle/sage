@@ -111,6 +111,33 @@ main 上下文覆盖（R23 三坑）。cherry-pick 失败时宁可手工解冲�
 冒烟，别等 CI（该 env 缺 `cryptography`，test_arena_routes 本地收集
 不了属既有环境缺口）。
 
+### 4.6 本机无 node/npm 时 pre-push 钩子必失败
+lefthook pre-push 跑 frontend-test（npm）——机器未装 node 时钩子
+exit 127 必拦 push。处置：`git push --no-verify` + 本地手动跑受影响
+pytest/ruff/py38 守护，**CI 全量套件仍是 merge 唯一门**（红线不变）。
+另：prepare-commit-msg 钩子同样会拦 cherry-pick —— 用
+`git -c core.hooksPath=/dev/null cherry-pick …`。
+
+### 4.7 午夜/时钟 flake 模式（DTZ）
+`now ± hours` 构造测试数据在 UTC 23:00-01:00 窗口跨界（R33/todo、
+R11 两轮实证）。根治：monkeypatch 冻结被测模块的 datetime（返回固定
+时刻），due/时间戳全部由冻结值推导；锚定"今日 00:00"只对单日边界
+有效，凌晨 01:00 后仍会翻车。冻结的 `datetime(...)` 需 DTZ001 noqa
+（刻意 naive，与服务 naive now 口径一致）。
+
+### 4.8 base 前进不会自动重跑 PR CI
+pull_request 工作流只在 head synchronize/opened 触发——main/release
+推进后 PR 检查不会自动重跑。处置：`git rebase origin/<base>` + push
+（force-with-lease），触发全新 run。另注意：`gh run list --limit 1`
+在 push 后 40s 内可能拿到旧 run——先 `sleep 45` 再查。
+
+### 4.9 网络抖动（SSL reset / GraphQL Head sha can't be blank）
+push / pr create 高频出现 SSL_read reset；"Head sha can't be blank"
+即分支没推上去。处置：带退出码判定的重试循环（管道 exit code 会骗人，
+用 `if git push …; then` 而非 `… | tail -1`）；gh 偶发路径丢失，用绝对
+路径 /d/software/Scoop/shims/gh.exe。远端分支删除失败可用
+`gh api -X DELETE repos/…/git/refs/heads/<branch>` 兜底。
+
 ## 5. 交付质量红线
 
 - 无绿不 merge（workflow_dispatch 的分支验证不能替代真 PR CI；
