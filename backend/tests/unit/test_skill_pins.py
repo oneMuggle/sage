@@ -68,7 +68,7 @@ class TestArchivePinGuard:
         adapter.set_archived.return_value = True
         adapter.list_skills_extended.return_value = [{"name": "guarded"}]
         monkeypatch.setattr(
-            "backend.api.legacy_routes._get_skill_adapter", lambda: adapter
+            "backend.api.legacy_skills_routes._get_skill_adapter", lambda: adapter
         )
 
         store.set_pinned("guarded", True)
@@ -91,7 +91,7 @@ class TestArchivePinGuard:
         adapter.is_enabled.return_value = True
         adapter.usage_count.return_value = 0
         monkeypatch.setattr(
-            "backend.api.legacy_routes._get_skill_adapter", lambda: adapter
+            "backend.api.legacy_skills_routes._get_skill_adapter", lambda: adapter
         )
 
         resp = client.post("/skills/p/pin", json={"pinned": True})
@@ -120,7 +120,7 @@ class TestPinnedSerialization:
         adapter.is_enabled.return_value = True
         adapter.usage_count.return_value = 0
         monkeypatch.setattr(
-            "backend.api.legacy_routes._get_skill_adapter", lambda: adapter
+            "backend.api.legacy_skills_routes._get_skill_adapter", lambda: adapter
         )
 
         store.set_pinned("p", True)
