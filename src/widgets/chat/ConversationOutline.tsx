@@ -7,7 +7,7 @@
 // 设计要点:
 // - 空状态友好:无标题时显示"暂无目录"提示
 // - 层级视觉区分:h2 字重 500,h3 字重 400 + 缩进
-// - 悬停高亮 + cursor-pointer (未来可扩展滚动定位)
+// - 悬停高亮 + 点击定位到对应消息的标题（对话阅读导航 A2）
 // - 长标题截断 (truncate) 防止撑破面板
 
 import { List } from 'lucide-react';
@@ -17,9 +17,14 @@ import type { OutlineItem } from '../../features/chat/useConversationOutline';
 interface ConversationOutlineProps {
   items: OutlineItem[];
   isLoading: boolean;
+  /**
+   * 对话阅读导航 A2: 点击条目定位到对应消息 / 标题。
+   * headingIndex = 该标题在所属消息内的序号（0 起），供按文本找不到标题时兜底。
+   */
+  onSelect?: (item: OutlineItem, headingIndex: number) => void;
 }
 
-export function ConversationOutline({ items, isLoading }: ConversationOutlineProps) {
+export function ConversationOutline({ items, isLoading, onSelect }: ConversationOutlineProps) {
   if (isLoading) {
     return <div className="p-3 text-sm text-muted">加载中…</div>;
   }
@@ -39,6 +44,7 @@ export function ConversationOutline({ items, isLoading }: ConversationOutlinePro
       {items.map((item, index) => (
         <button
           key={`${item.messageId}-${index}`}
+          type="button"
           className={
             'w-full text-left px-3 py-1.5 hover:bg-bg-hover transition-colors ' +
             'text-sm truncate ' +
@@ -46,7 +52,16 @@ export function ConversationOutline({ items, isLoading }: ConversationOutlinePro
           }
           title={item.text}
           data-testid={`outline-item-${index}`}
-          // 未来扩展: onClick={() => scrollToMessage(item.messageId)}
+          onClick={
+            onSelect
+              ? () =>
+                  onSelect(
+                    item,
+                    items.slice(0, index).filter((prev) => prev.messageId === item.messageId)
+                      .length,
+                  )
+              : undefined
+          }
         >
           {item.text}
         </button>

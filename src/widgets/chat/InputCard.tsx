@@ -126,6 +126,8 @@ export interface InputCardProps {
    * "↑（空输入时）编辑上一条发送过的消息" 的既有承诺。
    */
   inputHistory?: string[];
+  /** 对话阅读导航 A5: 值变化（递增）时聚焦输入框并把光标移到末尾 */
+  focusRequest?: number;
 }
 
 function InputCardInner({
@@ -168,6 +170,7 @@ function InputCardInner({
   orchModeBar,
   hint,
   inputHistory,
+  focusRequest,
 }: InputCardProps) {
   const { t } = useI18n();
   const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0;
@@ -190,6 +193,16 @@ function InputCardInner({
     const next = Math.min(el.scrollHeight, 200);
     el.style.height = `${next}px`;
   }, [value, emacsRef]);
+
+  // 对话阅读导航 A5: 引用追加后聚焦输入框，光标置于末尾便于直接续写追问。
+  useEffect(() => {
+    if (!focusRequest) return;
+    const el = emacsRef.current;
+    if (!el) return;
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  }, [focusRequest, emacsRef]);
 
   // R17-C: ↑/↓ 输入历史导航状态（ref 避免重渲染；仅空输入触发进入）
   const historyIdxRef = useRef(-1);

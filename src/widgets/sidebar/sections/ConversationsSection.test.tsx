@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { useMessageJumpStore } from '../../../features/chat/messageJumpStore';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Session } from '../../../shared/lib/store';
 
@@ -49,6 +50,7 @@ const baseProps = {
 describe('ConversationsSection', () => {
   beforeEach(() => {
     searchMessagesMock.mockReset();
+    useMessageJumpStore.setState({ pending: null });
   });
 
   it('renders section label and sessions', () => {
@@ -101,9 +103,16 @@ describe('ConversationsSection', () => {
     expect(screen.getAllByTestId('rename-session').length).toBe(sessions.length);
   });
 
-  it("F12: 消息命中会话并入列表并显示计数徽标", async () => {
+  it('F12: 消息命中会话并入列表并显示计数徽标', async () => {
     searchMessagesMock.mockResolvedValue([
-      { messageId: 'm1', sessionId: 's2', sessionTitle: 'second', role: 'user', snippet: '内容命中', createdAt: 1 },
+      {
+        messageId: 'm1',
+        sessionId: 's2',
+        sessionTitle: 'second',
+        role: 'user',
+        snippet: '内容命中',
+        createdAt: 1,
+      },
     ]);
     renderWithI18n(<ConversationsSection {...baseProps} />);
 
@@ -126,10 +135,50 @@ describe('ConversationsSection', () => {
     });
   });
 
-  it("F12: 少于 2 字符不触发消息搜索", async () => {
+  it('F12: 少于 2 字符不触发消息搜索', async () => {
     renderWithI18n(<ConversationsSection {...baseProps} />);
     fireEvent.change(screen.getByTestId('session-search'), { target: { value: 'a' } });
     await new Promise((r) => setTimeout(r, 400));
     expect(searchMessagesMock).not.toHaveBeenCalled();
+  });
+
+  it('A3: 点开消息命中的会话时登记定位到最新命中消息', async () => {
+    searchMessagesMock.mockResolvedValue([
+      {
+        messageId: 'm-new',
+        sessionId: 's2',
+        sessionTitle: 'second',
+        role: 'assistant',
+        snippet: '内容',
+        createdAt: 2,
+      },
+      {
+        messageId: 'm-old',
+        sessionId: 's2',
+        sessionTitle: 'second',
+        role: 'user',
+        snippet: '内容',
+        createdAt: 1,
+      },
+    ]);
+    const onSelect = vi.fn();
+    renderWithI18n(<ConversationsSection {...baseProps} onSelect={onSelect} />);
+
+    fireEvent.change(screen.getByTestId('session-search'), { target: { value: '内容' } });
+    await waitFor(() => {
+      expect(screen.getByTestId('session-message-hits')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('second'));
+    expect(onSelect).toHaveBeenCalledWith('s2');
+    expect(useMessageJumpStore.getState().pending?.messageId).toBe('m-new');
+  });
+
+  it('A3: 非搜索态点击会话不登记定位请求', () => {
+    const onSelect = vi.fn();
+    renderWithI18n(<ConversationsSection {...baseProps} onSelect={onSelect} />);
+    fireEvent.click(screen.getByText('first'));
+    expect(onSelect).toHaveBeenCalledWith('s1');
+    expect(useMessageJumpStore.getState().pending).toBeNull();
   });
 });
