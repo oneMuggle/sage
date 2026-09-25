@@ -102,7 +102,8 @@ async def resolve_and_validate_upstream_host(parsed) -> str:
                 loop.run_in_executor(executor, _resolve_addresses, host, port),
                 timeout=DNS_TIMEOUT_SECONDS,
             )
-        except (TimeoutError, socket.gaierror, OSError):
+        # py38: asyncio.wait_for 抛 asyncio.TimeoutError（与内建 TimeoutError 3.11 才合流）
+        except (asyncio.TimeoutError, TimeoutError, socket.gaierror, OSError):  # noqa: UP041
             raise ValueError("DNS resolution failed") from None
     finally:
         semaphore.release()
