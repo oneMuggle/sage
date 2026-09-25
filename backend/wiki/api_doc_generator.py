@@ -48,6 +48,40 @@ class ModuleDoc:
     classes: List[ClassInfo]
 
 
+def _ast_node_to_str(node: ast.AST) -> str:
+    """AST 节点转字符串（py3.8 兼容 fallback）。
+
+    ast.unparse 仅 py3.9+，此处处理常见 type annotation 节点。
+    """
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return f"{_ast_node_to_str(node.value)}.{node.attr}"
+    if isinstance(node, ast.Subscript):
+        value = _ast_node_to_str(node.value)
+        sl = _ast_node_to_str(node.slice)
+        return f"{value}[{sl}]"
+    if isinstance(node, ast.Index):  # py3.8 wraps in Index
+        return _ast_node_to_str(node.value)  # type: ignore[attr-defined]
+    if isinstance(node, ast.Tuple):
+        return ", ".join(_ast_node_to_str(e) for e in node.elts)
+    if isinstance(node, ast.List):
+        return "[" + ", ".join(_ast_node_to_str(e) for e in node.elts) + "]"
+    if isinstance(node, ast.Constant):
+        return repr(node.value)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        return f"{_ast_node_to_str(node.left)} | {_ast_node_to_str(node.right)}"
+    # 兜底: ast.dump 的子集
+    return ast.dump(node)  # pragma: no cover
+
+
+def _safe_unparse(node: ast.AST) -> str:
+    """ast.unparse 的 py3.8 兼容包装。"""
+    if hasattr(ast, "unparse"):
+        return ast.unparse(node)
+    return _ast_node_to_str(node)
+
+
 def extract_python_module(file_path: Path) -> Optional[ModuleDoc]:
     """从 Python 文件提取文档信息。"""
     try:
@@ -67,12 +101,12 @@ def extract_python_module(file_path: Path) -> Optional[ModuleDoc]:
                 if arg.arg != "self":
                     annotation = ""
                     if arg.annotation:
-                        annotation = ast.unparse(arg.annotation)
+                        annotation = _safe_unparse(arg.annotation)
                     params.append(f"{arg.arg}: {annotation}" if annotation else arg.arg)
 
             return_type = ""
             if node.returns:
-                return_type = ast.unparse(node.returns)
+                return_type = _safe_unparse(node.returns)
 
             functions.append(
                 FunctionSignature(
@@ -94,14 +128,14 @@ def extract_python_module(file_path: Path) -> Optional[ModuleDoc]:
                         if arg.arg != "self":
                             annotation = ""
                             if arg.annotation:
-                                annotation = ast.unparse(arg.annotation)
+                                annotation = _safe_unparse(arg.annotation)
                             params.append(
                                 f"{arg.arg}: {annotation}" if annotation else arg.arg
                             )
 
                     return_type = ""
                     if item.returns:
-                        return_type = ast.unparse(item.returns)
+                        return_type = _safe_unparse(item.returns)
 
                     methods.append(
                         FunctionSignature(
