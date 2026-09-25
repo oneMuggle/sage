@@ -7,5 +7,4 @@
  * Consumers should not reach into the context directly from this module —
  * use `useCurrentWorkspace` or `useWorkspaceContext` instead.
  */
-export { WorkspaceBindModal } from './WorkspaceBindModal';
-export type { WorkspaceBindModalProps } from './WorkspaceBindModal';
+export { WorkspaceBindModal } from './WorkspaceBindModal';
