@@ -109,6 +109,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   相等会偶发断言失败（win7 分支已有 0.02 修复，本 PR 对齐 main）；本机
   Windows 复现后验证 40/40 通过
 
+> 🧹 **R41：wiki 模板测试 Windows 路径归一化**（总账 §6 健康检查暴露项）
+
+### Fixed(test)
+- **wiki 模板测试 Windows 路径归一化（R41）**：`test_wiki_templates` /
+  `test_wiki_integration` 四例以 `"raw/sources"` 等正斜杠子串断言
+  `str(Path)`——Windows 下为反斜杠导致仅本地失败（CI ubuntu 不受影响，
+  #1394 同族）。归一化后再断言；生产代码无改动
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21

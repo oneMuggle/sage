@@ -33,7 +33,10 @@ class TestWikiTemplatesIntegration:
             write_file_fn=write_mock,
         )
 
-        created_dirs = [str(call.args[1]) for call in ensure_mock.call_args_list]
+        created_dirs = [
+            str(call.args[1]).replace("\\", "/")
+            for call in ensure_mock.call_args_list
+        ]
         assert any("wiki/api-docs" in d for d in created_dirs)
 
     def test_research_project_creates_literature_dir(self, tmp_path: Path) -> None:
@@ -50,7 +53,10 @@ class TestWikiTemplatesIntegration:
             write_file_fn=write_mock,
         )
 
-        created_dirs = [str(call.args[1]) for call in ensure_mock.call_args_list]
+        created_dirs = [
+            str(call.args[1]).replace("\\", "/")
+            for call in ensure_mock.call_args_list
+        ]
         assert any("wiki/literature" in d for d in created_dirs)
 
     def test_business_project_creates_meetings_dir(self, tmp_path: Path) -> None:
@@ -67,7 +73,10 @@ class TestWikiTemplatesIntegration:
             write_file_fn=write_mock,
         )
 
-        created_dirs = [str(call.args[1]) for call in ensure_mock.call_args_list]
+        created_dirs = [
+            str(call.args[1]).replace("\\", "/")
+            for call in ensure_mock.call_args_list
+        ]
         assert any("wiki/meetings" in d for d in created_dirs)
 
 
