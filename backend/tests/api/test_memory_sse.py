@@ -63,7 +63,7 @@ def _make_request() -> Request:
 
 async def test_sse_endpoint_streams_memory_written_events():
     """The endpoint yields a serialized data: line when memory_written fires."""
-    from backend.api.legacy_routes import memory_events
+    from backend.api.legacy_memory_list_routes import memory_events
     from backend.memory.hooks import HookRegistry
     from backend.memory.lifecycle import MemoryWriteEvent
 
@@ -111,7 +111,7 @@ async def test_sse_endpoint_streams_memory_written_events():
 
 async def test_sse_endpoint_removes_listener_on_disconnect():
     """Closing the stream (disconnect) removes the per-connection listener."""
-    from backend.api.legacy_routes import memory_events
+    from backend.api.legacy_memory_list_routes import memory_events
     from backend.memory.hooks import HookRegistry
 
     hooks = HookRegistry()
