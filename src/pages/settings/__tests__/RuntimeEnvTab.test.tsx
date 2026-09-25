@@ -126,6 +126,8 @@ describe('RuntimeEnvTab 诊断面板', () => {
   });
 
   it('诊断失败显示失败信息', async () => {
+    // probe 保持 pending，避免 selectedRuntime 变化触发 useEffect 重跑
+    probeMock.mockReturnValue(new Promise(() => {}));
     diagnoseMock.mockRejectedValue(new Error('diagnose down'));
     render(<RuntimeEnvTab />);
     expect(await screen.findByText('诊断失败: diagnose down', {}, { timeout: 10000 })).toBeInTheDocument();
