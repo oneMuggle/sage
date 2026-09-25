@@ -146,4 +146,17 @@ main `612579e7`（SRC-1 后，含并行会话 DSH-R2 / web-access R23 / zotero �
 - **前端全量（vitest run，串行执行）**：335 个测试文件全部 ✓，零失败条目。
 - 来源专项域零失败。
 
+
+## 6.3 回归记录（R113，2026-09-25）
+
+main `2a26696c`（R33 后，含并行会话 web-access R27-R33 / DSH-R11 / r116-r117 合入）：
+
+- **后端 unit（xdist loadfile，串行执行）**：7884 passed / 0 failed /
+  549 skipped（11min）—— 完全绿（较 R100 的 7700 净增 184 例）。
+- **前端全量（vitest run，串行执行）**：3109 passed / 4 failed /
+  3 skipped。4 个失败全部集中在 `ArenaAccounts.test.tsx`（arena 域，
+  并行会话在途工作）：纯净 origin/main 上即确定性复现（等待超时类），
+  与本专项零交集 —— 已知会 arena 域 owner，不在本专项代修。
+- 来源专项域零失败。
+
 —— 本账本由参考来源专项循环维护，随轮次追加。
