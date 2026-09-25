@@ -36,4 +36,7 @@
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1596（squash `56288ff6`，CI 12 项全绿）。
+- **win7 对齐**：PR #1599（squash `530537a6`，win7 必过项全绿）。
+  cherry-pick 干净落位，win7 基底 25 例本地全绿。
+- **回填分支**：`docs/r53-parity-backfill`（本提交）。
