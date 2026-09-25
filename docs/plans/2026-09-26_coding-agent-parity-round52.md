@@ -47,4 +47,6 @@ Chat.tsx 恢复路径仅取 `resp.runs[0]`（最新一条）——同一会话�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1582（squash `54271cfe`，CI 12 项全绿）。
+- **win7 对齐**：PR #1588（squash `e476c5e6`，win7 必过项全绿）。
+- **回填分支**：`docs/r52-parity-backfill2`（本提交）。
