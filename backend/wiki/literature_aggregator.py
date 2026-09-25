@@ -11,11 +11,10 @@
 
 from __future__ import annotations
 
-import contextlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 
 @dataclass
@@ -67,19 +66,20 @@ def extract_literature_entry(file_path: Path) -> Optional[LiteratureEntry]:
 
             # 简单 YAML 解析（不引入 PyYAML 依赖）
             for line in front_matter.split("\n"):
-                line = line.strip()  # noqa: PLW2901
-                if line.startswith("title:"):
-                    title = line[6:].strip().strip('"\'')
-                elif line.startswith("year:"):
+                stripped = line.strip()
+                if stripped.startswith("title:"):
+                    title = stripped[6:].strip().strip('"\'')
+                elif stripped.startswith("year:"):
+                    import contextlib
                     with contextlib.suppress(ValueError):
-                        year = int(line[5:].strip())
-                elif line.startswith("authors:"):
-                    authors_str = line[8:].strip()
+                        year = int(stripped[5:].strip())
+                elif stripped.startswith("authors:"):
+                    authors_str = stripped[8:].strip()
                     # 支持 [a, b] 或 "a, b" 格式
                     authors_str = authors_str.strip("[]\"'")
                     authors = [a.strip().strip('"\'') for a in authors_str.split(",")]
-                elif line.startswith("tags:"):
-                    tags_str = line[5:].strip()
+                elif stripped.startswith("tags:"):
+                    tags_str = stripped[5:].strip()
                     tags_str = tags_str.strip("[]\"'")
                     tags = [t.strip().strip('"\'') for t in tags_str.split(",")]
 
@@ -89,17 +89,17 @@ def extract_literature_entry(file_path: Path) -> Optional[LiteratureEntry]:
     if not title:
         lines = content.split("\n")
         for line in lines:
-            line = line.strip()  # noqa: PLW2901
-            if line.startswith("# "):
-                title = line[2:].strip()
+            stripped = line.strip()
+            if stripped.startswith("# "):
+                title = stripped[2:].strip()
                 break
 
     # 提取摘要（第一段非标题文本）
     lines = content.split("\n")
     for line in lines:
-        line = line.strip()  # noqa: PLW2901
-        if line and not line.startswith("#") and not line.startswith("---"):
-            summary = line[:200]  # 截取前 200 字符
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and not stripped.startswith("---"):
+            summary = stripped[:200]  # 截取前 200 字符
             break
 
     # 从文件名回退
@@ -173,7 +173,7 @@ def generate_literature_review(
     lines.append(f"共 {len(entries)} 篇文献。\n")
 
     # 按年份分组
-    by_year: Dict[int, List[LiteratureEntry]] = {}
+    by_year: dict[int, List[LiteratureEntry]] = {}
     no_year: List[LiteratureEntry] = []
     for entry in entries:
         if entry.year:

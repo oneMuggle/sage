@@ -361,6 +361,18 @@ export interface PtyElectronApiBridge {
   onExit: (handler: (payload: { id: string; exitCode: number }) => void) => UnlistenFn;
 }
 
+/**
+ * Phase 4 (2026-09-25): 文件操作桥 — 用系统默认编辑器打开文件。
+ * 仅桌面端可用；Web 端 `window.electronAPI.file` 为 undefined。
+ */
+export interface FileElectronApiBridge {
+  /** 用系统默认编辑器打开指定文件（相对工作区路径） */
+  openInEditor: (
+    sessionId: string,
+    path: string,
+  ) => Promise<{ success: true } | { error: string }>;
+}
+
 export interface ElectronAPI {
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
@@ -499,6 +511,11 @@ export interface ElectronAPI {
    * 仅桌面端可用；Web 端 electronAPI 缺失时组件应降级显示"仅桌面端可用"。
    */
   pty?: PtyElectronApiBridge;
+  /**
+   * Phase 4 (2026-09-25): 文件操作桥 — 用系统默认编辑器打开变更文件。
+   * 仅桌面端可用；Web 端 electronAPI 缺失时组件应降级显示提示。
+   */
+  file?: FileElectronApiBridge;
 }
 
 declare global {
