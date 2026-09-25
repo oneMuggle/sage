@@ -135,8 +135,11 @@ def shutdown_dns_executor() -> None:
 
 
 atexit.register(shutdown_dns_executor)
-# httpx==0.26.0 resolves to httpcore==1.0.9 in the supported environments.
-_SUPPORTED_HTTPCORE_VERSION = "1.0.9"
+# Gate on the (major, minor) series, not an exact version: httpx==0.26.0
+# allows any httpcore==1.*, and the pinned-pool private contract is identical
+# across 1.0.x patch releases (supported environments resolve to 1.0.9).
+# An exact-version check breaks on any patch bump; 1.1+ stays rejected.
+_SUPPORTED_HTTPCORE_SERIES = ("1", "0")
 
 # Local/private providers require an explicit host allowlist.  Public DNS names
 # are still resolved before connecting so a DNS-rebinding answer cannot turn an
@@ -255,7 +258,7 @@ class _FixedIPNetworkBackend(httpcore.AsyncNetworkBackend):
 def _client_for_resolved_address(address: str) -> httpx.AsyncClient:
     # Build through AsyncClient so respx and other transport instrumentation keep
     # working.  Mutate only the pinned httpcore pool's backend afterwards.
-    if httpcore.__version__ != _SUPPORTED_HTTPCORE_VERSION:
+    if tuple(httpcore.__version__.split(".")[:2]) != _SUPPORTED_HTTPCORE_SERIES:
         raise RuntimeError(
             "Unsupported httpcore version: fixed-IP transport unavailable"
         )

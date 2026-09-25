@@ -121,7 +121,11 @@ async def resolve_and_validate_upstream_host(parsed) -> str:
     return sorted(addresses)[0]
 
 
-_SUPPORTED_HTTPCORE_VERSION = "1.0.0"
+# AutoBackend/_network_backend is a private contract; it is identical across
+# the whole 1.0 series, so gate on (major, minor). A literal
+# startswith("1.0.0") would mis-reject patch releases such as the 1.0.9 that
+# httpx==0.26.0 resolves to in supported environments.
+_SUPPORTED_HTTPCORE_SERIES = ("1", "0")
 
 
 class _FixedIPNetworkBackend(httpcore.AsyncNetworkBackend):
@@ -165,8 +169,9 @@ def client_for_resolved_address(
     The client will always connect to ``address`` regardless of the hostname
     in the URL, preventing DNS rebinding attacks.
     """
-    # Check httpcore version compatibility
-    if not httpcore.__version__.startswith(_SUPPORTED_HTTPCORE_VERSION):
+    # Check httpcore series compatibility
+    series = tuple(httpcore.__version__.split(".")[:2])
+    if series != _SUPPORTED_HTTPCORE_SERIES:
         raise RuntimeError(
             f"Unsupported httpcore version {httpcore.__version__}: "
             "fixed-IP transport unavailable"
