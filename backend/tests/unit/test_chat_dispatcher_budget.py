@@ -754,3 +754,41 @@ async def test_persist_task_state_records_retry_of(tmp_path, monkeypatch):
     t1 = repo.get("t1")
     assert t1 is not None
     assert t1.retry_of == "t0"
+
+
+# ---- OPS4 (round51): cancel 时清理待决审批 --------------------------------------
+
+
+def test_cancel_clears_pending_approvals():
+    """OPS4: cancel 后 _pending_approvals 被清空。"""
+    from backend.orchestration.chat_dispatcher import ChatDispatcher
+    from backend.tests.unit.test_chat_dispatcher import _make_queue
+
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1", entry_queue=queue, run_id="orch-ops4-1", session_id="s-ops4"
+    )
+    d._pending_approvals["req-1"] = "t1"
+    d._pending_approvals["req-2"] = "t2"
+    assert len(d._pending_approvals) == 2
+    d.cancel()
+    assert len(d._pending_approvals) == 0
+
+
+def test_cancel_then_resolve_returns_false(tmp_path):
+    """OPS4: cancel 后 resolve_approval 不再误命中。"""
+    import asyncio
+
+    from backend.orchestration.chat_dispatcher import ChatDispatcher
+    from backend.tests.unit.test_chat_dispatcher import _make_queue
+
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1", entry_queue=queue, run_id="orch-ops4-2", session_id="s-ops4b"
+    )
+    d._pending_approvals["req-1"] = "t1"
+    d.cancel()
+    result = asyncio.get_event_loop().run_until_complete(
+        d.resolve_approval("req-1", approved=True)
+    )
+    assert result is False
