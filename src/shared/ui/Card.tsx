@@ -16,10 +16,37 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 export function Card({ className, children, ...props }: CardProps) {
   return (
-    <div
-      className={clsx('bg-ui-card border border-ui-border rounded-xl', className)}
-      {...props}
-    >
+    <div className={clsx('bg-ui-card border border-ui-border rounded-xl', className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export interface CardHeaderProps extends HTMLAttributes<HTMLDivElement> {}
+
+export function CardHeader({ className, children, ...props }: CardHeaderProps) {
+  return (
+    <div className={clsx('px-6 py-4', className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export interface CardTitleProps extends HTMLAttributes<HTMLHeadingElement> {}
+
+export function CardTitle({ className, children, ...props }: CardTitleProps) {
+  return (
+    <h3 className={clsx('text-lg font-semibold leading-none tracking-tight', className)} {...props}>
+      {children}
+    </h3>
+  );
+}
+
+export interface CardContentProps extends HTMLAttributes<HTMLDivElement> {}
+
+export function CardContent({ className, children, ...props }: CardContentProps) {
+  return (
+    <div className={clsx('px-6 pb-4', className)} {...props}>
       {children}
     </div>
   );

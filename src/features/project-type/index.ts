@@ -33,3 +33,9 @@ export type { MilestoneManagerProps } from './MilestoneManager';
 
 export { MilestoneEditor } from './MilestoneEditor';
 export type { MilestoneEditorProps } from './MilestoneEditor';
+
+export { TypeDetectionPreview } from './TypeDetectionPreview';
+export type { TypeDetectionPreviewProps } from './TypeDetectionPreview';
+
+export { ProjectCreationWizard } from './ProjectCreationWizard';
+export type { ProjectCreationWizardProps } from './ProjectCreationWizard';
