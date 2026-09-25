@@ -48,7 +48,7 @@ class ModuleDoc:
     classes: List[ClassInfo]
 
 
-def _ast_node_to_str(node: ast.AST) -> str:
+def _ast_node_to_str(node: ast.AST) -> str:  # noqa: PLR0911
     """AST 节点转字符串（py3.8 兼容 fallback）。
 
     ast.unparse 仅 py3.9+，此处处理常见 type annotation 节点。
