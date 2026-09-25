@@ -5,6 +5,7 @@ import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { ToolCall } from '../../../shared/lib/store';
 
 // Multi-Agent Orchestration: 编排任务板聚合状态
+import { SessionRunHistory } from './SessionRunHistory';
 import { TaskTreeSection } from './TaskTreeSection';
 // P1 todo 接线 (2026-08-21): agent 自维护任务清单
 import { TodoListSection } from './TodoListSection';
@@ -26,6 +27,8 @@ interface ProgressSectionProps {
   onRerunFailed?: (runId: string) => void;
   // RV4 (round27): 单任务重试入口透传。
   onRetryTask?: (runId: string, taskId: string) => void;
+  // RD23 (round52): 历史编排选取回调透传。
+  onSelectRun?: (run: import('../../../shared/api/orchRunClient').OrchRunDetail) => void;
 }
 
 const STATE_LABELS: Record<string, string> = {
@@ -44,6 +47,7 @@ export function ProgressSection({
   onCancelExecution,
   onRerunFailed,
   onRetryTask,
+  onSelectRun,
 }: ProgressSectionProps) {
   // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）。
   // S2: 按会话键控 —— 显示的是当前打开会话的清单。
@@ -99,6 +103,12 @@ export function ProgressSection({
           onCancel={() => onCancelExecution?.(taskBoard.runId)}
           onRerunFailed={() => onRerunFailed?.(taskBoard.runId)}
           onRetryTask={onRetryTask}
+        />
+      )}
+      {sessionId && onSelectRun && (
+        <SessionRunHistory
+          sessionId={sessionId}
+          onSelectRun={onSelectRun}
         />
       )}
     </div>
