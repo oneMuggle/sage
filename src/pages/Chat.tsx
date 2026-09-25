@@ -1151,6 +1151,21 @@ export function Chat() {
           onCancelExecution={(runId) => void handleCancelRun(runId)}
           onRerunFailed={(runId) => void handleRerunFailed(runId)}
           onRetryTask={(runId, taskId) => void handleRerunFailed(runId, [taskId])}
+          onSelectRun={(run) => {
+            // RD23 (round52): 历史 run 浏览器 —— 切换到所选 run 的任务板。
+            const restored = restoreRunToBoard(run);
+            if (restored && currentSessionId) {
+              useChatStreamStore.getState().setTaskBoard(currentSessionId, {
+                runId: run.run_id,
+                plan: restored.plan,
+                statuses: restored.statuses,
+                progress: restored.progress,
+                dispatchedAt: restored.dispatchedAt,
+                endedAt: restored.endedAt,
+              });
+            }
+          }}
+
         />
       </div>
       {/* /内容行 */}
