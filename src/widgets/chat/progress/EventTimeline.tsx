@@ -58,6 +58,15 @@ function formatTime(msTimestamp: number): string {
   return d.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
+/** RD22 (round50): 相对首事件的偏移量（+0.0s 起），便于一眼读出步骤间隔。 */
+function formatOffset(ms: number): string {
+  if (ms < 1000) return `+${ms}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `+${s.toFixed(1)}s`;
+  const m = Math.floor(s / 60);
+  return `+${m}m${(s % 60).toFixed(0)}s`;
+}
+
 function extractPreview(payload: Record<string, unknown>): string | null {
   const candidates = ['output_preview', 'error', 'reason', 'name', 'tool_name'];
   for (const key of candidates) {
@@ -84,6 +93,9 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
     <div className="space-y-0.5" data-testid="event-timeline">
       {visible.map((event) => {
         const preview = extractPreview(event.payload);
+        // RD22 (round50): 相对首事件的偏移量 —— 步骤间隔一目了然。
+        const base = visible[0]?.occurred_at ?? event.occurred_at;
+        const offset = event.occurred_at - base;
         return (
           <div
             key={event.event_id}
@@ -92,6 +104,9 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
           >
             <span className="text-text-tertiary shrink-0 w-16 tabular-nums">
               {formatTime(event.occurred_at)}
+            </span>
+            <span className="text-primary shrink-0 w-12 tabular-nums text-[10px]" data-testid={`event-timeline-offset-${event.event_id}`}>
+              {formatOffset(offset)}
             </span>
             <span className={`shrink-0 w-3 text-center ${eventColor(event)}`}>
               {eventIcon(event)}
