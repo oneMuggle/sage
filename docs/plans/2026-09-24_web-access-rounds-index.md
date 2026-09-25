@@ -88,6 +88,21 @@
   ——R26 修复树杀时序后待长期观察；如复发，排查对应用例的真实启动路径。
 - 指标均为进程内存态（重启清零），定位为诊断视角而非审计（Round 15 口径）。
 
+## 6. 全量回归健康检查记录（R40，2026-09-25）
+
+- 基线：origin/main `56288ff60`（R31 后，含并行会话 R113-R121 等合入）。
+- 后端全量单测（Windows 本地，`-n auto`）：**8294 passed / 558 skipped /
+  4 failed**。
+- 4 failed 均为 wiki 模板域（`test_wiki_templates` /
+  `test_wiki_integration` 的目录创建断言），裸 main 即复现、隔离运行亦失败
+  ——Windows 本地路径类问题，与 #1394 记录的"Windows 本地非专项域问题"
+  同族，非本专项回归（ubuntu CI 不受影响）。
+- flake 家族抽查（doctor 子进程 / init_no_circular / todo 时钟 /
+  review_queue 时序）：隔离运行全部通过；todo 时钟已由 R39（#1597，main
+  0.01→0.02）与并行修复（win7 0.02）双侧收口。
+- web-access 专项域（web_tool / web_render / browser_events /
+  tls_transport / credential_vault / download）：0 失败。
+
 ## 5. P4 收尾评估结论（R38）
 
 - **IO 懒加载**：推迟，理由见 §3 第 6 条。
