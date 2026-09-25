@@ -21,6 +21,7 @@ import { ConversationOutline } from './ConversationOutline';
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
 import { ArtifactsSection } from './artifacts/ArtifactsSection';
 import { ChangesSection } from './changes/ChangesSection';
+import { DocumentPreview } from './preview/DocumentPreview';
 import { ProgressSection } from './progress/ProgressSection';
 
 interface RightPanelProps {
@@ -47,6 +48,7 @@ const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   'progress',
   'outline',
   'changes',
+  'preview',
   'artifacts',
 ];
 
@@ -55,6 +57,7 @@ const TAB_LABELS: Record<RightPanelTab, string> = {
   artifacts: '产物',
   changes: '变更',
   outline: '目录',
+  preview: '预览',
 };
 
 /** 宽度档位（right-panel R1 批次 D，对齐 Claude 的小/中/大三档） */
@@ -362,6 +365,14 @@ function RightPanelInner({
           <ChangesSection sessionId={sessionId} />
         ) : tab === 'outline' ? (
           <ConversationOutline items={outlineItems} isLoading={outlineLoading} />
+        ) : tab === 'preview' ? (
+          useRightPanelStore.getState().previewFilePath ? (
+            <DocumentPreview filePath={useRightPanelStore.getState().previewFilePath!} />
+          ) : (
+            <div className="flex items-center justify-center py-8 text-sm text-text-muted">
+              从变更卡片点击「预览」打开文档
+            </div>
+          )
         ) : (
           <ArtifactsSection
             artifacts={artifacts}
@@ -382,18 +393,17 @@ function RightPanelInner({
 
   // R2 批次 B: overlay 模式半透明遮罩 —— 点击关闭 + 随面板淡入淡出；
   // push 模式无遮罩（面板参与布局，主区仍可见可点）。
-  const backdrop =
-    !isPush ? (
-      <div
-        className={
-          'fixed inset-0 z-20 bg-black/40 transition-opacity duration-200 ease-in-out ' +
-          (open ? 'opacity-100' : 'opacity-0 pointer-events-none')
-        }
-        onClick={() => useRightPanelStore.getState().setOpen(false)}
-        aria-hidden
-        data-testid="right-panel-overlay-backdrop"
-      />
-    ) : null;
+  const backdrop = !isPush ? (
+    <div
+      className={
+        'fixed inset-0 z-20 bg-black/40 transition-opacity duration-200 ease-in-out ' +
+        (open ? 'opacity-100' : 'opacity-0 pointer-events-none')
+      }
+      onClick={() => useRightPanelStore.getState().setOpen(false)}
+      aria-hidden
+      data-testid="right-panel-overlay-backdrop"
+    />
+  ) : null;
 
   return (
     <>
@@ -415,7 +425,11 @@ function RightPanelInner({
               'transform transition-transform duration-200 ease-in-out z-30 ' +
               (open ? 'translate-x-0' : 'translate-x-full')
         }
-        style={isPush ? { width: open ? (isMaximized ? '100%' : `${width}px`) : 0 } : { width: `${width}px` }}
+        style={
+          isPush
+            ? { width: open ? (isMaximized ? '100%' : `${width}px`) : 0 }
+            : { width: `${width}px` }
+        }
       >
         {isPush ? (
           // push 模式: 内容容器固定宽度，动画期间不被压扁；最大化时随面板铺满
