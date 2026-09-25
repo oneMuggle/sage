@@ -1947,6 +1947,118 @@ async function registerIpcHandlers(): Promise<void> {
     if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
     return runBrowserCheck();
   });
+
+  // ─── Phase 3 (2026-09-25): 终端面板 PTY IPC handlers ─────────────────────
+  // 在 Electron 主进程管理 node-pty 实例，renderer 通过 IPC 发送输入/接收输出。
+  // node-pty 是 native addon，惰性加载（首次 pty:create 时才 require），
+  // 避免启动期开销和测试环境缺少 native 模块时崩溃。
+  const ptyProcesses = new Map<string, import('node-pty').IPty>();
+
+  async function loadNodePty(): Promise<typeof import('node-pty')> {
+    // 惰性加载 node-pty：只在首次创建终端时 require，失败时抛出明确错误。
+    const mod = await import('node-pty');
+    return mod;
+  }
+
+  ipcMain.handle(
+    'pty:create',
+    async (
+      evt,
+      opts: { cols?: number; rows?: number; cwd?: string; shell?: string },
+    ): Promise<{ id: string } | { error: string }> => {
+      if (!isTrustedRenderer(evt.sender)) return { error: '未授权的窗口' };
+      try {
+        const pty = await loadNodePty();
+        const shell = opts.shell ?? (process.platform === 'win32' ? 'powershell.exe' : '/bin/bash');
+        const cwd = opts.cwd ?? app.getPath('home');
+        const id = randomUUID();
+        const ptyProcess = pty.spawn(shell, [], {
+          name: 'xterm-256color',
+          cols: opts.cols ?? 80,
+          rows: opts.rows ?? 24,
+          cwd,
+          env: process.env as Record<string, string>,
+        });
+        ptyProcesses.set(id, ptyProcess);
+        // 将 PTY 输出转发到 renderer（通过 webContents.send）
+        const win = getSenderWindow(evt);
+        ptyProcess.onData((data) => {
+          win?.webContents.send('pty:data', { id, data });
+        });
+        ptyProcess.onExit(({ exitCode }) => {
+          win?.webContents.send('pty:exit', { id, exitCode });
+          ptyProcesses.delete(id);
+        });
+        return { id };
+      } catch (err) {
+        logger.error('pty:create failed', { error: String(err) });
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    },
+  );
+
+  ipcMain.handle('pty:write', (evt, opts: { id: string; data: string }) => {
+    if (!isTrustedRenderer(evt.sender)) return;
+    const proc = ptyProcesses.get(opts.id);
+    proc?.write(opts.data);
+  });
+
+  ipcMain.handle('pty:resize', (evt, opts: { id: string; cols: number; rows: number }) => {
+    if (!isTrustedRenderer(evt.sender)) return;
+    const proc = ptyProcesses.get(opts.id);
+    proc?.resize(opts.cols, opts.rows);
+  });
+
+  ipcMain.handle('pty:destroy', (evt, opts: { id: string }) => {
+    if (!isTrustedRenderer(evt.sender)) return;
+    const proc = ptyProcesses.get(opts.id);
+    if (proc) {
+      proc.kill();
+      ptyProcesses.delete(opts.id);
+    }
+  });
+
+  // ─── Phase 4 (2026-09-25): "在编辑器中打开" IPC handler ─────────────────
+  // 接受 sessionId + 相对工作区路径，查询后端获取工作区根目录，
+  // 拼接绝对路径后调用 shell.openPath 用系统默认编辑器打开。
+  ipcMain.handle(
+    'file:open-in-editor',
+    async (evt, opts: { sessionId: string; path: string }) => {
+      if (!isTrustedRenderer(evt.sender)) return { error: '未授权的窗口请求' };
+      if (!opts?.sessionId || !opts?.path) {
+        return { error: '缺少 sessionId 或 path 参数' };
+      }
+      try {
+        const res = await fetch(
+          `${BACKEND_URL}/api/v1/workspace?session_id=${encodeURIComponent(opts.sessionId)}`,
+          {
+            headers: {
+              ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
+            },
+          },
+        );
+        if (!res.ok) {
+          return { error: `查询工作区失败 (HTTP ${res.status})` };
+        }
+        const data = (await res.json()) as {
+          binding: { workspace_path: string } | null;
+        };
+        if (!data.binding?.workspace_path) {
+          return { error: '此会话未绑定工作区' };
+        }
+        const absolutePath = join(data.binding.workspace_path, opts.path);
+        const openResult = await shell.openPath(absolutePath);
+        if (openResult) {
+          return { error: `打开失败：${openResult}` };
+        }
+        return { success: true };
+      } catch (err) {
+        return {
+          error: `打开文件失败：${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+    },
+  );
 }
 
 /**

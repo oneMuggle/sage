@@ -335,6 +335,44 @@ export interface UpdateElectronApiBridge {
   checkWith: (providerId: string, channel?: string) => Promise<CheckResult | null>;
 }
 
+/**
+ * Phase 3 (2026-09-25): 终端面板 PTY IPC 桥。
+ *
+ * 管理 Electron 主进程中的 node-pty 子进程。renderer 通过此桥：
+ * - create: 启动新 shell（bash/powershell）
+ * - write: 发送用户输入（按键/字符串）
+ * - resize: 调整终端列/行数（窗口 resize 时联动）
+ * - destroy: 终止 PTY 进程
+ * - onData / onExit: 订阅 PTY 输出/退出事件
+ *
+ * 仅桌面端可用；Web 端 `window.electronAPI.pty` 为 undefined。
+ */
+export interface PtyElectronApiBridge {
+  create: (opts?: {
+    cols?: number;
+    rows?: number;
+    cwd?: string;
+    shell?: string;
+  }) => Promise<{ id: string } | { error: string }>;
+  write: (opts: { id: string; data: string }) => Promise<void>;
+  resize: (opts: { id: string; cols: number; rows: number }) => Promise<void>;
+  destroy: (opts: { id: string }) => Promise<void>;
+  onData: (handler: (payload: { id: string; data: string }) => void) => UnlistenFn;
+  onExit: (handler: (payload: { id: string; exitCode: number }) => void) => UnlistenFn;
+}
+
+/**
+ * Phase 4 (2026-09-25): 文件操作桥 — 用系统默认编辑器打开文件。
+ * 仅桌面端可用；Web 端 `window.electronAPI.file` 为 undefined。
+ */
+export interface FileElectronApiBridge {
+  /** 用系统默认编辑器打开指定文件（相对工作区路径） */
+  openInEditor: (
+    sessionId: string,
+    path: string,
+  ) => Promise<{ success: true } | { error: string }>;
+}
+
 export interface ElectronAPI {
   /** Authenticated renderer-to-backend request; main injects the local capability. */
   backendRequest<T = unknown>(request: BackendRequest): Promise<T>;
@@ -467,6 +505,17 @@ export interface ElectronAPI {
   helpAPI?: {
     readUserManual: (filename: string) => Promise<string>;
   };
+  /**
+   * Phase 3 (2026-09-25): 终端面板 PTY 桥。
+   * 在 Electron 主进程管理 node-pty 子进程，renderer 通过此桥发送输入/接收输出。
+   * 仅桌面端可用；Web 端 electronAPI 缺失时组件应降级显示"仅桌面端可用"。
+   */
+  pty?: PtyElectronApiBridge;
+  /**
+   * Phase 4 (2026-09-25): 文件操作桥 — 用系统默认编辑器打开变更文件。
+   * 仅桌面端可用；Web 端 electronAPI 缺失时组件应降级显示提示。
+   */
+  file?: FileElectronApiBridge;
 }
 
 declare global {
