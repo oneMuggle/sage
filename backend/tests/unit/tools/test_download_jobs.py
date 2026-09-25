@@ -19,7 +19,6 @@ from backend.tools.download_jobs import (
     CANCELLED,
     FAILED,
     PENDING,
-    RUNNING,
     SUCCESS,
     DownloadJobManager,
     get_download_job_manager,
@@ -80,7 +79,8 @@ def test_submit_returns_hex_id_and_starts_pending(manager):
     assert len(job_id) == 12
     assert int(job_id, 16) >= 0
     snap = manager.status(job_id)
-    assert snap is not None and snap["job_id"] == job_id
+    assert snap is not None
+    assert snap["job_id"] == job_id
 
 
 def test_run_success_finishes_with_content(manager):
