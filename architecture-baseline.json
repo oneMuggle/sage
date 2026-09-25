@@ -2,7 +2,7 @@
   "version": 1,
   "files": {
     "backend/agents/profiles.py": 1010,
-    "backend/api/legacy_routes.py": 4788,
+    "backend/api/legacy_routes.py": 4400,
     "backend/api/llm_proxy_routes.py": 1169,
     "backend/api/office_routes.py": 1436,
     "backend/api/orchestration_router.py": 807,
@@ -21,7 +21,7 @@
     "backend/office/template_library.py": 1230,
     "backend/office/tool_service.py": 993,
     "backend/office/word.py": 1591,
-    "backend/orchestration/chat_dispatcher.py": 2206,
+    "backend/orchestration/chat_dispatcher.py": 2226,
     "backend/scheduler/evolution.py": 1825,
     "backend/services/usage_tracker.py": 902,
     "backend/tests/integration/test_llm_proxy_routes.py": 1154,
@@ -72,6 +72,7 @@
     "backend/services/arena_draw_engine.py": 1054,
     "backend/memory/manager.py": 848,
     "backend/api/project_routes.py": 839,
-    "backend/tools/web_render.py": 801
+    "backend/tools/web_render.py": 801,
+    "backend/tests/unit/test_chat_dispatcher_budget.py": 856
   }
 }
