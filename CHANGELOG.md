@@ -101,6 +101,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added(web-access)
 - **懒加载滚动快路径（R37）**：`_scroll_for_lazy_load` 先探测页面是否存在懒加载指示器（lazy 图 / data-src / lazy 类）——无标记页面直接跳过全部触底滚动（每轮 0.4s 暂停，典型省 ~1.2s/渲染）；有标记或探测失败保守走原滚动路径，行为只更好不更坏
 
+> 🧹 **R39：todo 时钟精度去 flake（main 侧对齐 win7 的 0.02 标准）**
+
+### Fixed(test)
+- **todo 时钟精度（R39）**：main 的 test_todo_service 两处 sleep(0.01) 低于
+  Windows 15.6ms 时钟粒度，updated_at/completed_at 与 created_at 同 tick
+  相等会偶发断言失败（win7 分支已有 0.02 修复，本 PR 对齐 main）；本机
+  Windows 复现后验证 40/40 通过
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21

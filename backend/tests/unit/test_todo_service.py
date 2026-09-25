@@ -125,7 +125,7 @@ def test_update_todo(todo_service):
     import time as _time
 
     created = todo_service.create_todo(title="Original")
-    _time.sleep(0.01)  # Windows clock resolution: ensure updated_at > created_at
+    _time.sleep(0.02)  # Windows clock resolution (15.6ms tick; 0.01 insufficient — R39, matches release/win7's 0.02)
     updated = todo_service.update_todo(created.id, title="Updated", priority="high")
 
     assert updated.title == "Updated"
@@ -565,7 +565,7 @@ def test_update_due_at_resets_both_latches(todo_service):
     # assertion false with *or* without the reset — vacuous. 23 h is inside
     # the 24 h window (reset observable) and outside the 1 h window (so the
     # companion ``== 0`` assertion still holds). See Ruling 12.
-    time.sleep(0.01)  # Windows clock resolution: ensure updated_at changes
+    time.sleep(0.02)  # Windows clock resolution (15.6ms tick; 0.01 insufficient — R39, matches release/win7's 0.02)
     todo_service.update_todo(
         created.id, due_at=(now + timedelta(hours=23)).isoformat()
     )
