@@ -38,4 +38,7 @@ run 取消（cancel）时 `_pending_approvals` 字典不清空——已撤销的
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1569（squash `5c7c45b7`，2026-09-24 merge，CI 12 项全绿）。
+- **win7 对齐**：PR #1572（squash `ae782696`，2026-09-24 merge，win7 必过项
+  全绿）。cherry-pick 干净落位，win7 基底 23 例本地全绿。
+- **回填分支**：`docs/r51-parity-backfill`（本提交）。
