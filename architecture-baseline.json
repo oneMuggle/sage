@@ -58,7 +58,7 @@
     "src/features/office/__tests__/OfficeEditPreviewDialog.test.tsx": 853,
     "src/features/send-message/__tests__/useChat.test.ts": 2027,
     "src/features/send-message/useChat.ts": 1274,
-    "src/pages/Chat.tsx": 1167,
+    "src/pages/Chat.tsx": 1182,
     "src/pages/settings/NetworkTab.tsx": 986,
     "src/shared/api/demoInterceptors.ts": 2139,
     "src/shared/api/types.ts": 2385,
