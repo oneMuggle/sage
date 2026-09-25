@@ -7,6 +7,7 @@ import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
 // '../../features/chat'，走 barrel 会拿到 undefined。
 import { AtEntityMenu } from '../../features/chat/AtEntityMenu';
 import { parseEntityRefQuery } from '../../features/chat/entityRefs';
+import { appendQuoteToDraft } from '../../features/chat/selectionQuote';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
 import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { type AtFileSelection } from '../../shared/api/fileSearchClient';
@@ -93,8 +94,10 @@ interface ChatInputProps {
   /**
    * U5' (对标增强第五轮批次 A): 编辑重发——外部注入输入框内容。
    * `nonce` 变化时用 `text` 覆盖当前草稿（点击同一条消息两次也能重注入）。
+   * 对话阅读导航 A5: `mode: 'append'`（引用）时追加到草稿尾部而不覆盖，
+   * 并把焦点移回输入框；缺省 / `'replace'`（编辑重发）保持覆盖语义。
    */
-  injectedDraft?: { text: string; nonce: number } | null;
+  injectedDraft?: { text: string; nonce: number; mode?: 'replace' | 'append' } | null;
   /**
    * U5': 编辑重发提示条。非 null 时在输入卡片上方渲染"正在编辑重发"
    * 横条，onCancel 由 Chat 页清除编辑态。
@@ -136,13 +139,21 @@ function ChatInputInner({
 
   // Per-session draft persistence (U13 from OpenWorker)
   const [value, setValue] = useSessionDraft(effectiveSessionId);
+  // 对话阅读导航 A5: 引用追加后请求 InputCard 聚焦输入框（递增即触发）
+  const [focusRequest, setFocusRequest] = useState(0);
 
   // U5': 编辑重发注入——nonce 变化时用外部文本覆盖当前草稿
   // （依赖只取 nonce：同一条消息重复点击也要重注入，text 变化不单独触发）。
+  // A5: 引用（mode='append'）追加到当前草稿尾部，不再覆盖已输入内容。
   const injectedNonce = injectedDraft?.nonce;
   useEffect(() => {
     if (injectedDraft && injectedNonce != null) {
-      setValue(injectedDraft.text);
+      if (injectedDraft.mode === 'append') {
+        setValue(appendQuoteToDraft(value, injectedDraft.text));
+        setFocusRequest((n) => n + 1);
+      } else {
+        setValue(injectedDraft.text);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只由 nonce 驱动
   }, [injectedNonce]);
@@ -731,6 +742,7 @@ function ChatInputInner({
         onSlashSelect={handleSlashSelect}
         onSlashHighlight={setSlashSelectedIndex}
         onSlashClose={() => setSlashMenuOpen(false)}
+        focusRequest={focusRequest}
         atFileMenu={
           atQuery.query !== null &&
           entityRef === null && (

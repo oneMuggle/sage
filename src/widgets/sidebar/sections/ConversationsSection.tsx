@@ -1,6 +1,7 @@
 import { MessageSquare, Plus, Search } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { requestMessageJump } from '../../../features/chat/messageJumpStore';
 import { sessionApi } from '../../../shared/api/sessionApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import type { Session } from '../../../shared/lib/store';
@@ -42,6 +43,8 @@ export function ConversationsSection({
   const [searchQuery, setSearchQuery] = useState('');
   // F12: 消息内容命中计数（≥2 字符时防抖搜索,会话 id → 命中条数）
   const [messageHits, setMessageHits] = useState<Map<string, number>>(new Map());
+  // 对话阅读导航 A3: 会话 id → 最新一条命中消息 id（后端按时间倒序返回，取首条）
+  const [hitTargets, setHitTargets] = useState<Map<string, string>>(new Map());
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   // R51: 归档会话显示切换
@@ -59,6 +62,7 @@ export function ConversationsSection({
   useEffect(() => {
     if (trimmedQuery.length < 2) {
       setMessageHits(new Map());
+      setHitTargets(new Map());
       return;
     }
     let cancelled = false;
@@ -68,12 +72,20 @@ export function ConversationsSection({
         .then((results) => {
           if (cancelled) return;
           const hits = new Map<string, number>();
-          for (const r of results) hits.set(r.sessionId, (hits.get(r.sessionId) ?? 0) + 1);
+          const targets = new Map<string, string>();
+          for (const r of results) {
+            hits.set(r.sessionId, (hits.get(r.sessionId) ?? 0) + 1);
+            if (!targets.has(r.sessionId)) targets.set(r.sessionId, r.messageId);
+          }
           setMessageHits(hits);
+          setHitTargets(targets);
         })
         .catch(() => {
           // 搜索失败静默降级为纯标题过滤
-          if (!cancelled) setMessageHits(new Map());
+          if (!cancelled) {
+            setMessageHits(new Map());
+            setHitTargets(new Map());
+          }
         });
     }, MESSAGE_SEARCH_DEBOUNCE_MS);
     return () => {
@@ -92,6 +104,17 @@ export function ConversationsSection({
     const messageMatches = base.filter((s) => !seen.has(s.id) && messageHits.has(s.id));
     return [...titleMatches, ...messageMatches];
   }, [sessions, trimmedQuery, messageHits, showArchived]);
+
+  // 对话阅读导航 A3: 搜索态下点开有消息命中的会话 → 先登记定位请求再切会话，
+  // 消息加载完成后 MessageList 自动滚到命中消息并高亮（对标"搜索命中直达"）。
+  const handleSelect = useCallback(
+    (sessionId: string) => {
+      const target = trimmedQuery.length >= 2 ? hitTargets.get(sessionId) : undefined;
+      if (target) requestMessageJump({ messageId: target });
+      onSelect(sessionId);
+    },
+    [hitTargets, onSelect, trimmedQuery],
+  );
 
   return (
     <SiderSection
@@ -155,7 +178,7 @@ export function ConversationsSection({
             <VirtualSessionList
               sessions={displaySessions}
               currentSessionId={currentSessionId}
-              onSelect={onSelect}
+              onSelect={handleSelect}
               onDelete={onDelete}
               onRename={onRename}
               messageHitsBySession={messageHits}
@@ -165,7 +188,7 @@ export function ConversationsSection({
             <SessionList
               sessions={displaySessions}
               currentSessionId={currentSessionId}
-              onSelect={onSelect}
+              onSelect={handleSelect}
               onDelete={onDelete}
               onRename={onRename}
               messageHitsBySession={messageHits}

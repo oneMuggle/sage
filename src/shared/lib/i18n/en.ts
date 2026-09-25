@@ -1230,6 +1230,8 @@ export const en: Record<TranslationKey, string> = {
   'chat.more_actions': 'More actions',
   'chat.regenerate_failed': 'Failed to regenerate: {message}',
   'chat.quote_to_chat': 'Quote to chat',
+  'chat.quote_selection': 'Quote',
+  'chat.quote_selection_hint': 'Quote the selected text into the input',
   'chat.save_to_memory': 'Save to memory',
   'chat.save_to_memory_success': 'Saved to memory',
   'chat.save_to_memory_failed': 'Failed to save to memory: {error}',
