@@ -149,7 +149,7 @@ MessageList（每次 messages / pending 变化）
 | 2 | 2026-09-26 00:23 | 新建 main 工作树 | ✅ 完成 | `scripts/worktree.sh new feat/chat-nav-quote-main --base origin/main` → `.worktrees/feat-chat-nav-quote-main`（端口 8782/1437；`node_modules` 以目录联接复用主检出，清理前需先 `rmdir` 联接） |
 | 3 | 2026-09-26 00:30 | 输出优化方案（本文 §0–§6） | ✅ 完成 | 本文件 |
 | 4 | 2026-09-26 00:46 | A1–A5 实施 + 本地验证 | ✅ 完成 | 见 §7.1；受影响目录 vitest 全绿，`tsc --noEmit` 0 错误，`npm run lint` 0 错误，`architecture-check` 通过 |
-| 5 | — | main PR → CI 全绿 → squash 合并 | ⏸ 待办 | — |
+| 5 | 2026-09-26 01:21 | main PR → CI 全绿 → squash 合并 | ⏳ 进行中 | PR [#1580](https://github.com/oneMuggle/sage/pull/1580) 已开（rebase 到 `c0a2513b7`），等待 CI |
 | 6 | — | win7 cherry-pick → PR → CI 全绿 → 合并 | ⏸ 待办 | — |
 | 7 | — | §8 回填 + 清理分支与工作树 | ⏸ 待办 | — |
 
