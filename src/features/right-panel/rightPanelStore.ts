@@ -15,12 +15,18 @@ import { create } from 'zustand';
 import { useStore } from '../../shared/lib/store';
 import { useArtifactEventsStore } from '../artifacts/artifactEventsStore';
 
-export type RightPanelTab = 'progress' | 'artifacts' | 'changes' | 'outline';
+export type RightPanelTab = 'progress' | 'artifacts' | 'changes' | 'outline' | 'preview';
 
 const TAB_KEY = 'right-panel-tab';
 const OPEN_KEY = 'right-panel-open';
 
-const VALID_TABS: readonly RightPanelTab[] = ['progress', 'artifacts', 'changes', 'outline'];
+const VALID_TABS: readonly RightPanelTab[] = [
+  'progress',
+  'artifacts',
+  'changes',
+  'outline',
+  'preview',
+];
 
 /** 产物创建时是否自动展开面板（Bell 开关写入；缺省 = 开）。 */
 export function isArtifactAutoOpenEnabled(): boolean {
@@ -65,6 +71,8 @@ interface RightPanelState {
   selectedArtifactId: string | null;
   /** right-panel R5: 待在变更 Tab 打开的文件路径（ChangesSection 消费后清除） */
   selectedChangePath: string | null;
+  /** Phase 2 (2026-09-25): 预览 Tab 待展示的文件路径（相对工作区根） */
+  previewFilePath: string | null;
   /** 每会话"已见过的产物事件计数"基线（未读徽标 = counts - seen） */
   seenArtifactCount: Record<string, number>;
   setOpen: (open: boolean) => void;
@@ -77,6 +85,9 @@ interface RightPanelState {
   /** right-panel R5: 直达变更 diff：开面板 + 切变更 Tab + 选中文件（内联卡片入口） */
   selectChange: (path: string) => void;
   clearSelectedChange: () => void;
+  /** Phase 2 (2026-09-25): 直达文档预览：开面板 + 切预览 Tab + 设置文件路径 */
+  selectPreview: (filePath: string) => void;
+  clearPreview: () => void;
   /** 面板打开时把当前会话的未读计数清零（读 artifactEventsStore 的计数作基线） */
   markArtifactsSeen: (sessionId: string) => void;
 }
@@ -87,6 +98,7 @@ export const useRightPanelStore = create<RightPanelState>((set, get) => ({
   maximized: false,
   selectedArtifactId: null,
   selectedChangePath: null,
+  previewFilePath: null,
   seenArtifactCount: {},
 
   setOpen: (open) => {
@@ -119,6 +131,10 @@ export const useRightPanelStore = create<RightPanelState>((set, get) => ({
   selectChange: (path) => set({ open: true, tab: 'changes', selectedChangePath: path }),
 
   clearSelectedChange: () => set({ selectedChangePath: null }),
+
+  selectPreview: (filePath) => set({ open: true, tab: 'preview', previewFilePath: filePath }),
+
+  clearPreview: () => set({ previewFilePath: null }),
 
   markArtifactsSeen: (sessionId) => {
     const counts = useArtifactEventsStore.getState().counts;

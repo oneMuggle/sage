@@ -8,6 +8,7 @@ import { useTheme } from '../../app/providers/useTheme';
 import { backendRequest } from '../../shared/api/backendRequest';
 import { projectApi, type ProjectSummary } from '../../shared/api/projectApi';
 import { getRecentWikiProjects } from '../../shared/api-client/wiki';
+import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { useStore } from '../../shared/lib/store';
 
 import { actionCommands, navCommands } from './commandItems';
@@ -134,6 +135,12 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     onOpenChange(false);
   }, [setMode, resolved, onOpenChange]);
 
+  // Phase 1 (2026-09-25): 快速切换右侧面板（ZCode 启发优化）
+  const handleToggleRightPanel = useCallback(() => {
+    useRightPanelStore.getState().toggle();
+    onOpenChange(false);
+  }, [onOpenChange]);
+
   const handleOpenSession = useCallback(
     (sessionId: string) => {
       setCurrentSessionId(sessionId);
@@ -197,8 +204,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       if (id === 'new-chat') void handleNewChat();
       else if (id === 'toggle-theme') handleToggleTheme();
       else if (id === 'add-project') void handleAddProject();
+      else if (id === 'toggle-right-panel') handleToggleRightPanel();
     },
-    [handleAddProject, handleNewChat, handleToggleTheme],
+    [handleAddProject, handleNewChat, handleToggleTheme, handleToggleRightPanel],
   );
 
   // 最近会话（按时间排序，取前 8 个）
