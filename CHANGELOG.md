@@ -90,6 +90,11 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Added(web-access)
 - **TLS 指纹使用按 host 细分（R34）**：`tls_fingerprint.requests` 之外增 `hosts` 映射（host → 次数，LRU 上限 100 超限清零保新弃旧）——可与 per-host 出网指标对照定位指纹受益站点
 
+> 🧹 **网页访问 Round 35：真实浏览器渲染链集成测试**（总账 §3 P3 第三项）
+
+### Added(web-access)
+- **真实渲染链 e2e（R35）**：本地 fixture HTTP 服务器（302 链 / wait_for 目标页 / 503）+ 真 Chrome/Edge 走完整渲染链——渲染池 → 事件通道 → 重定向 → wait_for 命中 → 状态码/完整度/503 重试 note 全部实测断言；无浏览器环境整体跳过（与 test_real_browser_smoke 同口径）；仅访问 127.0.0.1
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 > 🧹 **alpha.52-win7 暂无未发布变更**
