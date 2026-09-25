@@ -5,19 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## Release Tier Definitions
-
-| Tier | Tag Format | Audience | Channel |
-|------|-----------|----------|---------|
-| **alpha** | `vX.Y.Z-alpha.N` | Sage contributors only | GitHub Releases (prerelease) |
-| **beta** | `vX.Y.Z-beta.N` | Public beta testers | GitHub Releases (prerelease) |
-| **rc / preview** | `vX.Y.Z-rc.N` | Broad testing, recommended for early adopters | GitHub Releases (prerelease) |
-| **stable** | `vX.Y.Z` | All users | GitHub Releases (latest) |
-
-Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
-
 
 ## [Unreleased]
+
+> 🎯 **Arena 能力移植收口：ArenCard 协议快路径 P0-P6 全链路**（方案 `archive/mcp-aren-card-port-plan-2026-09-19.md`，验收 `docs/verification/2026-09-19-aren-card-port.md`）
+
+### Added(arena)
+- **后端协议快路径（P0-P4）**：`arena_keystore`（master.key 持久化，修复重启后凭据不可解密）、`arena_http`（TLS 指纹会话，curl_cffi 可选降级）、`arena_protocol` + `arena_registration`（注册 6 步协议 + 批量注册 job，真实冒烟 3/3、17s）、`arena_proxies` + `arena_proxy_relay`（本地 CONNECT 中继、一号一 IP）、`arena_token_cache`（V3 票缓存/熔断）、`arena_draw_engine`（抽卡 8 步 job 引擎，复用 run_trace_resolver 解析）；`/api/v1/arena/capabilities|proxies|token-window` 契约与 yaml 门控（默认全关）
+- **token 窗口（P3）**：`arenaTokenWindow` 次级隐藏窗口（Chromium 106 出 reCAPTCHA V3 被受理，S0-B 闭环）+ 反节流开关 + preload/main 模块化接线
+- **前端控制台（P5）**：`/arena` 三页签（账号池/批量注册/抽卡）+ JobConsole（2s 轮询 + after_seq 续传）+ 命令面板/侧边栏入口；`/arena-accounts` 并入重定向
+- **py38 对齐**：tenminmail 锁构造推迟到首 await、zip strict= 移除（#1228 惯例）；win7 全量 213 passed (#1383)
+- **P6 收口**：spec §1.4（批量注册限定用户显式发起）/§7.1（持久化 master.key）修订；审计 v1.1 增补 ArenCard 参考源；方案文档归档
+
+### Changed(perf)
+- **shiki 细粒度加载**：`import('shiki')` 全量 bundle → `shiki/core` + `@shikijs/langs|themes/*` 显式 26 语言 + JS 正则引擎（免 wasm）。渲染产物 dist/assets **18MB/450 chunk → 10MB/178**（-44%），Electron 安装包同步瘦身；语法包自带别名表，`js/ts/py/c++/sh` 等别名高亮行为不变
 
 > 🌐 **网页访问能力优化 Round 21：DL2 后台下载任务化**（方案 `docs/plans/2026-09-19_web-access-round21-dljobs.md`）
 
@@ -90,54 +91,46 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Added(web-access)
 - **TLS 指纹使用按 host 细分（R34）**：`tls_fingerprint.requests` 之外增 `hosts` 映射（host → 次数，LRU 上限 100 超限清零保新弃旧）——可与 per-host 出网指标对照定位指纹受益站点
 
-> 🧹 **网页访问 Round 35：真实浏览器渲染链集成测试**（总账 §3 P3 第三项）
-
-### Added(web-access)
-- **真实渲染链 e2e（R35）**：本地 fixture HTTP 服务器（302 链 / wait_for 目标页 / 503）+ 真 Chrome/Edge 走完整渲染链——渲染池 → 事件通道 → 重定向 → wait_for 命中 → 状态码/完整度/503 重试 note 全部实测断言；无浏览器环境整体跳过（与 test_real_browser_smoke 同口径）；仅访问 127.0.0.1
-
-> 🌐 **网页访问 Round 37：懒加载滚动快路径跳过**（方案 `docs/plans/2026-09-25_lazyskip-r37.md`）
-
-### Added(web-access)
-- **懒加载滚动快路径（R37）**：`_scroll_for_lazy_load` 先探测页面是否存在懒加载指示器（lazy 图 / data-src / lazy 类）——无标记页面直接跳过全部触底滚动（每轮 0.4s 暂停，典型省 ~1.2s/渲染）；有标记或探测失败保守走原滚动路径，行为只更好不更坏
-
-> 🧹 **R39：todo 时钟精度去 flake（main 侧对齐 win7 的 0.02 标准）**
-
-### Fixed(test)
-- **todo 时钟精度（R39）**：main 的 test_todo_service 两处 sleep(0.01) 低于
-  Windows 15.6ms 时钟粒度，updated_at/completed_at 与 created_at 同 tick
-  相等会偶发断言失败（win7 分支已有 0.02 修复，本 PR 对齐 main）；本机
-  Windows 复现后验证 40/40 通过
-
-> 🌐 **网页访问 Round 42：渲染池默认配置自动扩槽**（总账 §3 第 7 项 P4 落地）
-
-### Added(web-access)
-- **渲染池自动扩槽（R42）**：用户未显式配置 render_pool_size 时，槽位上限自动为
-  RENDER_POOL_SIZE_MAX=4（持续使用下懒增）；显式配置则钉死为配置值——化解 R38
-  记录的"自动调优与显式配置语义冲突"。配置读取失败按非自动处理
-> 🧹 **R41：wiki 模板测试 Windows 路径归一化**（总账 §6 健康检查暴露项）
-
-### Fixed(test)
-- **wiki 模板测试 Windows 路径归一化（R41）**：`test_wiki_templates` /
-  `test_wiki_integration` 四例以 `"raw/sources"` 等正斜杠子串断言
-  `str(Path)`——Windows 下为反斜杠导致仅本地失败（CI ubuntu 不受影响，
-  #1394 同族）。归一化后再断言；生产代码无改动
-
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
-> 🧹 **alpha.52-win7 暂无未发布变更**
-
-## [v0.4.9-alpha.52-win7] - 2026-09-21
+## [v0.4.9-alpha.47] - 2026-09-21
 
 ### Added
-- feat(settings): 默认隐藏 Arena 账号入口 (win7 cherry-pick) (#1349) (100fc924)
+- feat(settings): 默认隐藏 Arena 账号入口，设置页提供显式开关 (#1347) (418148e2)
+- feat(ui): session list auto-sort — pinned > active > newest first (#1351) (8f0c0dac)
 
 ### Fixed
-- fix(chat): subagent detail drawer no longer overlays RightPanel (#1352) (#1355) (cda22cbb)
-- fix(win7): lazy cryptography loading — backend resilient to crypto binary failure (#1348) (cc82bfc6)
-- fix(win7): REPL 资源清理失败误报（Windows 正常退出路径）(#1345) (9ad3e54f)
+- fix(chat): subagent detail drawer no longer overlays RightPanel (#1352) (0245a091)
+- fix(win7): REPL 资源清理失败误报（Windows 正常退出路径）(#1345) (#1346) (c02c467b)
+
+## [v0.4.9-alpha.46] - 2026-09-20
 
 
-> 🌐 **网页访问能力优化 Round 18：web_search 纳入 per-host 指标 + 指标 UI 刷新/重置**（方案 `docs/plans/2026-09-18_web-access-optimization-round18.md`）
+> 🧹 **Word 写作能力 Round 63：脚注/尾注引用一致性 lint**（方案 `docs/plans/2026-09-19_r63-ref-consistency-plan.md`）
+
+### Added(office)
+- **`footnote/broken_ref` / `endnote/broken_ref` lint 规则**：正文引用 run 的 id 对照 footnotes/endnotes part 的真实 note id 集合——损坏文档（引用无对应 note，Word 打开即报"内容有问题"）给出可定位的 error
+- 无引用文档零开销跳过；`ref_consistency` 无条件入 checked
+
+> 📝 **Word 写作能力 Round 62：用户手册补脚注/尾注/文档属性**（纯文档轮）
+
+### Changed(docs)
+- **用户手册 09-office.md**：图表与图片节补脚注（{{fn:}}）与尾注（{{en:}}）说明（含 office_update 追加续接编号）与文档属性（metadata）——R49-R61 能力的手册层收口
+
+> 📝 **Word 写作能力 Round 61：append_paragraphs 支持 {{fn:}}/{{en:}}**（方案 `docs/plans/2026-09-19_r61-append-fn-en-plan.md`）
+
+### Added(office)
+- **update 通路四类占位符全支持**：append_paragraphs 的 {{fn:}}/{{en:}} 写成 footnote/endnoteReference run 并把备注文本追加进对应 part——part 不存在时全量挂载（含样式注入），已存在时 blob 增补、编号从现有数+1 续接；与 fig/tbl 同段混用、预校验 all-or-nothing 语义不变
+
+> 🧹 **Word 写作能力 Round 60：residue 补全 + append_paragraphs 交叉引用**（方案 `docs/plans/2026-09-19_r60-residue-update-marks-plan.md`）
+
+### Fixed(office)
+- **`cross_ref/residue` lint 补 fn/en**：`{{fn:}}/{{en:}}` 残渍（R57/R59 引入）此前不告警——正则扩为四类占位符
+
+### Added(office)
+- **`append_paragraphs` 支持交叉引用占位符**（{{fig:}}/{{tbl:}} → REF 域）：追加段落复用生成期书签（题注扫描构建映射，`append_ref_field` 写 REF）；预校验 all-or-nothing——未知题注拒绝且零写入
+
+> 📝 **Word 写作能力 Round 59：尾注 endnotes（Phase C）**（方案 `docs/plans/2026-09-19_r59-endnotes-plan.md`）
 
 ### Added(office)
 - **`{{en:备注文本}}` 内联尾注**：镜像脚注实现——`w:endnoteReference` run（id 按出现顺序 1..N）+ `word/endnotes.xml` part（含系统尾注）+ EndnoteText/EndnoteReference 样式注入（幂等）
@@ -270,10 +263,6 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - **pywin32 进 requirements-optional.txt**（懒加载，与 Word COM 导出 PDF 共用通道；win7 手动启用钉 306）
 - report-writing 技能交付步骤接入刷新通道，并补上 R36 Word 表头行样式 header_style 的文档（搭车）
 
-### Changed(web-access)
-- **搜索指标（S1）**：WebSearchTool 串行路径逐引擎埋点——伪域 `search:<engine>`，请求成功即 ok（0 条结果按 Round 9 口径仍 ok）、异常记 fail；并行聚合模式暂不埋点（串行为默认路径）
-- **指标 UI（U1）**：设置页指标区块加"刷新"与"重置"（PUT /web-access/metrics/reset）按钮
-
 > 🌐 **网页访问能力优化 Round 16：设置页展示 per-host 出网指标**（方案 `docs/plans/2026-09-17_web-access-optimization-round16.md`）
 
 ### Added(web-access)
@@ -283,6 +272,7 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Changed(web-access)
 - **per-host 出网指标（M1/M3）**：新增 `backend/tools/web_metrics.py`——线程安全滚动指标（每域名 deque 100 条、全局 LRU 200 域名、进程内递增序号定 LRU 序），异常全静默；web_fetch 成功/失败路径与 download attempt 出口/成功埋点；`GET /api/v1/web-access/metrics` + `PUT /web-access/metrics/reset`（Origin 守卫同口径）
 - **渲染耗时（X2 对齐）**：render_page 结果补 `net: {elapsed_ms}`（与 web_fetch net 口径对齐，不进缓存）
+
 
 > 🌐 **网页访问能力优化 Round 14：浏览器健康自检 + 凭据 UI header 型新增**（方案 `docs/plans/2026-09-17_web-access-optimization-round14.md`）
 
@@ -325,64 +315,136 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 
 
-## [v0.4.9-alpha.43-win7] - 2026-09-17
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 main #1013（项目级 allowed_paths）：后端 allowed_paths 校验 + 新增 `allowed_paths` PUT 路由、Electron `sage-file` 协议层 registerAllowedPaths / unregisterAllowedPaths、前端 `AllowedPathsEditor` 编辑器、新增 67 单测 + 8 集成测试；Phase 5 文档延后合并（#1018 docs-only，等 main PR 整体定稿）。
+## [v0.4.9-alpha.45] - 2026-09-19
 
 ### Added
-- **Backend allowed_paths 模块**：新增 `backend/office/allowed_paths.py`，实现项目级附加允许访问路径规则（max 50 条 / path）；注册到 `PermissionEnforcer` 校验链：`file_tool` 拒绝 workspace 外、但命中项目 allowed_paths 列表的路径时直接放行，不走审批；路径必须规范化（含 cython / py3.8 不支持），用 `os.path.realpath` 兜底
-- **project_routes 新增 `PUT /api/v1/projects/{id}/allowed-paths`**：用 `_constrained_list(str, max_length=50)` 替换 v1 不支持的 `Field(max_length=)`；Pydantic v1/v2 双兼容走 `backend.compat.win7.pydantic_compat.ConfigDict`
-- **Electron sage-file 协议层 registerAllowedPaths**：解析器把项目级 allowed_paths 纳入 `resolveSageFileUrl` 的合法路径白名单（与 workspace 根并列）；渲染端在 `ProjectSection` 注册时调用 `ipcRenderer.invoke('sage-file:register-allowed-paths', projectId, paths)`，卸载时反向注销
-- **前端 `AllowedPathsEditor` 组件**：侧边栏项目详情面板新增「额外允许访问路径」区块——列表展示 / 单条添加 / 单条删除 / 失焦自动保存（PUT allowed-paths）；i18n 同步中英双语文案
-- **测试覆盖**：新增 `test_allowed_paths.py`（67 单测：路径规范化、realpath 兜底、长度上限、Unicode 路径、Windows 路径分隔符）+ `test_allowed_paths_integration.py`（8 集成测试：permission_gate 接入、file_tool 实际落盘、electron sage-file 协议层解析）
-
-### Changed
-- **Backend `file_tool`**：权限校验链路接入 `PermissionEnforcer.check_allowed_paths()`——workspace 外路径先查项目 allowed_paths 白名单，命中则跳过审批；未命中走原审批流（与 main 行为对齐）
-- **Backend `permission_gate.py`**：`extract_target_path` 改为项目级 allowed_paths 提示用，导出 `target_path` 字段供前端「项目级允许」按钮
-- **Backend `data/project_repo.py`**：`Project` 模型新增 `allowed_paths: List[str]` 字段（默认空），新增 `update_allowed_paths(id, paths)` 方法，DB schema 升级走 `data/database.py` 自适应迁移
-- **Electron `commands.ts` / `main.ts`**：commands 表新增 `projects_update_allowed_paths`（PUT allowed-paths），main.ts 注册 `sage-file:register-allowed-paths` / `unregister-allowed-paths` IPC handlers
-- **Frontend `projectApi.ts`**：`projects_update` 携带 `allowed_paths`，新增 `updateAllowedPaths(projectId, paths)` 方法
-- **Frontend `ProjectSection.tsx`**：render ProjectCard 时附加 `useEffect` 注册/注销 electron protocol allowed_paths；切换项目自动同步协议层白名单
+- feat(chat): RD18 级联跳过根因徽章——任务树失败行直读 blocked_by_failed 根因 (#1208)
+- feat(office): Round 57 — 内联脚注 Phase A（{{fn:}} + footnotes part 挂载 + 回读） (#1204)
+- feat(right-panel): R4——版本互比 + 变更预取 + 产物类型过滤 (#1198)
+- feat(p11): client_message_id 幂等复用 + 标题后台生成的前端补刷 (#1196)
+- feat(orch): RT24 编排任务持久化携带用量与时长——orch_tasks 增 used_tokens/duration_ms (#1195)
+- feat(chat): 引用溯源展示增强——附件名优先 + 溯源明细完善（r80） (#1194)
+- feat(orch): BU17 聚合块任务级消耗标注——终态块标题带（消耗 N tokens） (#1188)
+- feat(office): Round 53 — 分节页码格式与起始号（w:pgNumType） (#1185)
+- feat(chat): 文件选择器 accept 过滤——从源头防误选（r78） (#1184)
+- feat(chat): BU16 run 级耗时与上限提示——进度行实时计时，终态冻结 (#1183)
+- feat(p10): 回滚语义重做 Round 1——last-known-good 回滚数据 + RunOnce 交换执行 (#1180)
+- feat(office): Round 52 — PPT core properties 三件套对称（generate/read metadata） (#1181)
+- feat(right-panel): R3 - version diff view + CodeMirror editing + changes count badge (#1172)
+- feat(office): Round 51 — 读侧 core properties 回读（read_docx/read_xlsx metadata） (#1174)
+- feat(chat): BU15 运行中子任务实时耗时——任务树 running 行计时徽章 (#1169)
+- feat(office): Round 50 — Excel core properties 对称支持（generate_xlsx metadata） (#1170)
+- feat(chat): 聊天文档附件支持 pdf/docx——打通 R39/RAG UI 断点（r75） (#1167)
+- feat(office): Round 49 — 文档核心属性（WordMetadataSpec → docx core properties） (#1164)
+- feat(rag): 附件上传后自动建立检索索引——opt-in fire-and-forget（r74） (#1161)
+- feat(orch): BU14/BD8 守门状态透出——快照带 wall_clock_exceeded，partial 归因触顶 (#1160)
+- feat(office): Round 48 — repair 补 index 域插入 + SEQ 题注重排兼容（缺陷修复） (#1159)
+- feat(p9): client_message_id 消息身份协议——根治乐观 id 与服务端 id 失配的重复显示 (#1155)
+- feat(rag): 引用溯源明细增强——chunk 索引/相关度进事件与气泡（r73） (#1156)
+- feat(right-panel): R2——预览升级 + overlay 抽屉三件套 + 信息密度打磨 (#1153)
+- feat(orch): RV4 单任务重试——rerun-failed 支持 task_ids 子集 + 任务树行内重试按钮 (#1150)
+- feat(office): Round 46 — 交叉引用升级（REF 域 + 题注书签） (#1143)
+- feat(office): office-p5b 批次——ppt 生成表单版式选择 (#1148)
+- feat(chat): RAG 引用溯源事件 + R17-E memory_used 接线收尾（r71） (#1115)
+- feat(usage): 上下文占用分类明细统计 + ContextMeter 弹层 (#1128)
+- feat(office): Word/PPT 专用角色收口——ppt-maker 种子 + PPT 模板工具面 + writer 门禁 prompt (#1129)
+- feat(arena): automation + model probe (27 commits, evidence/JWT/retry hardening) (#1030)
+- feat(context-isolation): 三层上下文隔离 (#1032)
+- feat: /agents 侧边栏入口与 Sage 自省/配置工具 (#1126)
+- feat: 用户通知透明度增强 - 技能激活与上下文压缩可见化 (#1122)
+- feat: protect Python backend code in release builds (#1124)
+- feat(settings): RD16 编排设置全量收口——worktree 隔离开关 + scratch 根目录名 (#1113)
+- feat(right-panel): R1——面板状态全局化 + 自动唤起/内联产物卡片 + 上下文持久化 + 全屏/宽度档位 (#1112)
+- feat(office): expose staging quarantine over HTTP (plan/run/report/restore) (#1111)
+- feat(office): Round 45 — 交叉引用占位符（{{fig:}}/{{tbl:}} → 图N/表N + residue lint） (#1109)
+- feat(workspace): 三阶段 AI 工作区优化（来源/产物/项目上下文） (#857)
+- feat(office): Round 44 — lint 面补强（index 域在位校验 + lint schema 子集白名单） (#1102)
+- feat(office): honour Electron import sentinels as a cross-process lease (#1101)
+- feat(settings): RD15 编排守门键透出设置页——墙钟上限/单任务超时/重派链上限 (#1099)
+- feat(web-access): Round 18——web_search 纳入 per-host 指标 + 指标 UI 刷新/重置 (#1092)
+- feat(office): Round 42 — 图目录/表目录（TOF 域 + SEQ 题注升级） (#1090)
+- feat(orchestration): BU13 任务级消耗准确性 + 时长可见性——终态事件 per-task 归因 (#1088)
+- feat(office): Round 41 — office_update 修订后 TOC 刷新（refresh_toc）+ 横排宽表场景文档 (#1085)
+- feat(rag): RAG 切片 4b——附件检索注入前端配置与请求接线（r67） (#1079)
+- feat(office): Round 40 — office_create 一键 TOC 刷新（refresh_toc）+ rollback 遥测测试竞态修复 (#1083)
+- feat(office): Round 39 — Word 目录真页码（Word COM 刷新域可选通道） (#1073)
+- feat(web-access): Round 16——设置页展示 per-host 出网指标 (#1077)
+- feat(rag): RAG 切片 4a——producer 超长附件检索注入（opt-in 请求级嵌入）（r66） (#1069)
+- feat(office): office-p5a 批次——PPT 模板占位符分析与填充 (#1071)
+- feat(web-access): Round 15——per-host 出网指标 + 渲染 net 块 (#1068)
+- feat(mcp): OAuth 状态可见化——has_oauth_token + 授权角标（r65） (#1066)
+- feat(office): office-p4b 批次——OCR 语言/精度扩展 (#1062)
+- feat(mcp): OAuth 收口——授权 API 路由 + IPC + McpTab 授权按钮（r64） (#1056)
+- feat(office): office-p4c 批次——ppt 插入图片 UI 入口 (#1052)
+- feat(mcp): OAuth 切片 3a——授权编排层（发现→注册→授权→交换）（r62） (#998) (#1049)
+- feat(web-access): Round 14——浏览器健康自检 + 凭据 UI header 型新增 (#1047)
+- feat(office): Word 表头行样式（header_style，与 Excel header_style 对称） (#1048)
+- feat(office): quarantine-based staging cleanup with recoverable moves (#1044)
+- feat(mcp): OAuth 切片 3b——loopback 回听 + 浏览器拉起编排（r63） (#1039)
+- feat(office): office-p4b 批次——OCR 能力徽章 + word 插图入口 (#1042)
+- feat(mcp): OAuth 切片 3a——授权编排层（发现→注册→授权→交换）（r62） (#998)
 
 ### Fixed
-- **Pydantic v1 List 字段约束绕过**：原 `List[int] = Field(min_length=1, max_length=200)` 在 v1 下 silently 忽略长度约束——本次 `_constrained_list` helper 在 Pydantic v1 / v2 双路径强制 min/max_length 校验，避免越界输入打穿下游 storage
-- **项目级路径未走协议层白名单**：之前 `resolveSageFileUrl` 只接受 workspace 根，渲染端拉取项目目录外的文件（Office 文档外部引用等）一律被拒；本次 allowed_paths 接入后协议层允许经白名单放行
+- fix(py38): legacy_routes 新增 to_thread 调用对齐 py_compat——预铺 win7 同步 (#1205)
+- fix(r38): 修复用户通知透明度合并后审查发现的 6 项缺陷 (#1140)
+- fix(test): office_create 审批链测试 Windows 适配——LLM JSON 模板路径经 json.dumps 转义 (#1192)
+- fix(chat): InputCard 文件选择器补 accept=".txt,.md,.pdf,.docx"（r79） (#1189)
+- fix(chat): 重接路径补 memory_used——重放不丢记忆明细（r77） (#1178)
+- fix(chat): 补回 #1167 丢失的 pdf/docx 白名单 + 修正过时附件提示（r76） (#1171)
+- fix(py38): zip strict= 形参残留清零——chat/topic_detection._cosine + model_catalog 并发测试 (#1162)
+- fix(chat): skill_activated 明细写错消息目标——userId→assistantId（r72） (#1151)
+- fix(chat): 段级工作记忆清空改为经 agent.memory_manager 共享实例 (#1139)
+- fix(packaging): 保护模式 .pyc 被 filter 剔除 + 源码泄漏修复 (#1136)
+- fix(win7): Windows bash/REPL spawn_verified + kill_process_tree (#855)
+- fix(projects): restore allowed_paths support lost in workspace optimization (#1120)
+- fix(tools): bash/repl 中文编码乱码 + repl 资源清理覆盖成功结果 (#1118)
+- fix(py38): Round 23——行为类遗留修复（事件循环生命周期 + TimeoutError 双型 + 测试竞态） (#1106)
+- fix(mcp): OAuth 401 自愈——失效 token 清理 + 错误面点名重授权（r70） (#1105)
+- fix(p7): 第七批收尾二——mock 响应不落库 / 标题生成移出 DONE 关键路径 / 长会话分页 / 信封统一收尾 (#1100)
+- fix(llm): 直连模式 base_url 带 /v1 后缀去重——不再请求 /v1/v1/… 404 路径（r69） (#1089)
+- fix(office): Round 43 — office_create schema 漂移卫生修复（toc/section_breaks 可发现化 + 三方防漂移门禁） (#1095)
+- fix(win7): 内网闪退三层防御 — 运行时检测 + Chromium 开关 + 崩溃事件 (#1040)
+- fix(chat): pdf/docx 附件提取挪线程池——避免卡聊天事件循环（r68） (#1086)
+- fix(py38): py39+ 标准库 API 兜底——to_thread 垫片 + hardlink_to/write_text(newline) 适配 (#1070)
+- fix(doctor): 端口占用检测 Windows 语义修复——SO_EXCLUSIVEADDRUSE + 平台化修复提示 (#1057)
+- fix(chat): ignore skill loads after input unmount (#1035)
 
-### Skipped（Phase 5 docs 延后）
-- **allowed_paths 文档手册**（main PR #1018，仅 `docs/plans/` + `docs/technical/` + `docs/user-manual/` 文档变更）：与功能 PR #1013 拆分——功能先合并便于安装包内嵌测试，文档等 main 整套 #1014 / #1018 / #1020 PR 全绿后整体 cherry-pick。详见 `docs/plans/2026-09-17_allowed-paths-phase-5-windows.md` 后续步骤
+## [v0.4.9-alpha.43] - 2026-09-14
 
-
-## [v0.4.9-alpha.34-win7] - 2026-09-15
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 收口 7 commits：py3.8 后端 round 3 / Ruff lint 收口 / main 最大化对齐 B1-B6 / UI/Code 字体定制 / Windows bash 工具 + 工具 schema 校验。
-
-### Fixed
-- **Windows bash 工具** (#858): `spawn_verified` 在 Windows 走 `CREATE_NEW_PROCESS_GROUP` 建立独立进程组；`kill_process_tree` 走 `taskkill.exe /T /F` 递归终止进程树，taskkill 失败回退到 leader kill。修复 win7 安装包上 bash 工具报错 "平台不支持安全进程组回收" 的问题。
-- **工具 schema 校验** (#858): `execute_tool` / `_await_tool_execution` 分发前调用 `_validate_required_params` 读取 `tool.schema.parameters.required`，LLM 漏传 required 参数时返回友好错误而非 Python TypeError。修复 win7 安装包上 office_read 抛 "execute() missing 1 required positional argument: doc_id" 的问题。
-- **REPL pending cleanup** (#858): Windows `observed=None` 路径不再直接 return，改走 `kill_process_tree`，避免原 kill 失败的进程永远残留在 `_PENDING_CLEANUPS`。
-- **execute_code stderr buffering** (#850 round 3): py3.8 兼容路径，确保 stderr 不被吞
-- **hardlink_to**: py3.8 缺失 API 用 `os.link` 兜底
-- **Ruff 收口** (#850 round 3): py38 typing 回写产生的 I001/F811/F401 全部清零
-
-### Changed
-- **main 最大化对齐** (#850): B1-B6 + Phase 3 自动化（auto_sync + parity 分级守门 + win7-sync workflow），release/win7 与 main 差异 1937 → 226
-- **UI/Code 字体定制子系统** (#856): cherry-pick main PR #851
-
-## [v0.4.9-alpha.33-win7] - 2026-09-14
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 修复 LLM 代理响应编码错误。
-
-### Fixed
-- **LLM 代理响应编码**: `_read_response_body_limited()` 从 `aiter_raw()` 改为 `aiter_bytes()`，修复上游压缩响应（gzip/deflate）未解压导致前端 JSON 解析失败的问题。影响所有非流式 LLM 代理请求（如 `/v1/models` 列表查询）。
-
-## [v0.4.9-alpha.32-win7] - 2026-09-14
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #794 — 安装包日志错误修复 (3 bugs)。
+> 🐛 **win7 安装包日志错误修复** (PR #794)
 
 ### Fixed
 - **fetchModels 防御性检查**: 非标准 JSON 上游 (LM Studio 变体) 不再导致 `data.data.map()` TypeError
 - **settings_canonicalizer**: 新增 `local_model_path` → `localModelPath` alias，兼容旧数据迁移
 - **knowledgeApi 死代码清理**: 消除 `list_knowledge_docs` / `search_knowledge_docs` Unknown IPC command 错误日志；删除 4 个废弃组件
+
+> 🌐 **网页访问能力优化 Round 5 批次 3：登录态保持**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.4 AU1/AU2/AU4）
+
+### Added(web-access)
+- **cookie 元数据与过期判定（AU1）**：`browser_cookies export` 保留 `expires` / `secure` / `httpOnly` / `sameSite`；附加时已过期 cookie 不发送、`secure` cookie 只发 https、按 path 匹配；档案全部过期 → `web_fetch` / `http_download` 返回 `credential_expired`（区别于 `credential_not_found`）并指引重新登录导出；`export` 结果与 `list` 显示最短剩余时效 `expires_in_seconds` / `expired`
+- **Set-Cookie 回写 + 登录墙检测（AU2）**：带凭据请求在命中域收到 `Set-Cookie` 自动合并回档案（续期 token 不丢，`Max-Age=0` 视为删除，第三方域 cookie 不混入），结果 `note` 标 `credential_refreshed`；带凭据却被 302 到 `login|signin|sso|passport|auth|cas|oauth` 类 URL、或最终页只有密码框而无正文 → 返回 `login_required`（不再把登录页当正文）；`http_download` 期望文件却收到含密码框的 HTML 也改报 `login_required`
+- **头部型凭据（AU4）**：`browser_cookies action=set_header domain= header_name= header_value= [ttl_seconds=]` 保存 `Authorization: Bearer …` / API key 自定义头（禁 Cookie / Host 等传输头、拒换行注入，值不回显，可选 TTL）；`credential_domain` 命中头部档案时随请求附带、跨域重定向同样剥离；`list` 显示 `kind` / `header_names`
+
+> 🌐 **网页访问能力优化 Round 5 批次 2：反爬访问**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.3 AB1/AB2/AB4/AB5）
+
+### Added(web-access)
+- **web_fetch 自动升级链（AB1）**：静态抓取遇 403/429/503 或正文命中反爬盾特征（Cloudflare "Just a moment" / "Attention Required" / Akamai / PerimeterX / DataDome / 验证码页等，仅在正文极短时判定）→ 自动改走 headless 渲染池重抓；成功结果标 `escalated="render"` + `escalated_from`（原状态码 / `antibot_page`），`links` / `tables` 模式同样从渲染 DOM 抽取；渲染后仍是盾页或非 2xx 则返回带三条出路（浏览器通道 / 登录态 / 代理）的指引；新增参数 `escalate=false`、`render="never"`、`mode="raw"` 均关闭升级
+- **出网请求头拟真（AB2）**：`http_factory.default_headers()` 追加 `Sec-CH-UA` / `Sec-CH-UA-Mobile` / `Sec-CH-UA-Platform` / `Sec-Fetch-Dest|Mode|Site|User` / `Upgrade-Insecure-Requests`；UA 与 Client Hints 的 Chrome 大版本改为从本地内置 Chrome 探测（版本目录名 / `--version`，缓存），探测失败或低于基线时回退 126——win7 分支 Chrome 109 与 UA 版本不一致的问题一并消除
+- **浏览器去自动化痕迹（AB4）**：Chrome 启动增加 `--disable-blink-features=AutomationControlled` / `--disable-infobars`；渲染池导航前经 `Page.addScriptToEvaluateOnNewDocument` 注入 stealth 脚本（`navigator.webdriver` → undefined、补 `window.chrome`、`navigator.languages`），注入失败不阻断渲染；渲染结果新增 `rendered_status`（页面导航响应码）
+- **出网重试 / 限速（AB5）**：`http_factory.retrying_send` 统一给 web_fetch 每一跳与 web_search 各引擎请求做指数退避重试（默认 2 次，可重试：连接 / 读写超时 / 协议错 / 408 / 425 / 429 / 5xx，`Retry-After` 上限 30s）；新增按主机令牌桶 `HostRateLimiter`（2 req/s，突发 4）避免对同一站点连发触发 429；`build_client(client_class=...)` 允许注入带重试的 Client 子类
+
+> 🌐 **网页访问能力优化 Round 5 批次 1：下载可靠性 + 内容嗅探**（方案 `docs/plans/2026-09-14_web-access-download-analysis-round5.md` §2.1 DL1/DL3 + §2.2 SN1）
+
+### Added(web-access)
+- **http_download 重试 + 退避**：连接错误 / 读写超时 / 协议错 / 5xx / 408 / 429 指数退避重试（默认 3 次，`retries` 可调，上限 6）；429/503 尊重 `Retry-After`（上限 60s）；401/403/404 不重试——403 附登录态 / 浏览器通道 / 代理三条出路指引
+- **http_download 断点续传**：写 `<name>.part` + 旁车 `<name>.part.json`（url / etag / last_modified / total / accept_ranges），成功后原子改名；中断且服务器支持 Range 时保留半成品，重试或再次调用同 URL 自动 `Range: bytes=N-` + `If-Range` 续传（206 追加 / 200 重下 / 416 长度相符视为完成）；`resume=false` 关闭
+- **http_download 完整性**：`Content-Length` 已知而实际字节不足 → `incomplete_download`（可续传则保留 .part）；`expected_sha256` 给定则校验、不符删除；结果新增 `resumed / attempts / elapsed_ms / total_bytes / sha256`
+- **http_download 请求头与超时**：复用出网默认 UA / Accept-Language（无 UA 请求被文献站 403 是常态）+ `Accept: */*` + `Accept-Encoding: identity`（保证长度可比）+ `Referer`（默认目标 origin，`referer` 可覆盖）；超时拆分为 connect 15s / read 按块 / write 30s / pool 10s
+- **魔数嗅探（新模块 `backend/tools/content_sniff.py`）**：`http_download` 落盘前读首块，期望 PDF/ZIP/Office/压缩包而实际是 HTML（登录页 / 验证码 / 反爬盾 / 错误页）→ 立即中止返回 `html_instead_of_file` + 页面摘要 + 路由指引，不落盘、不重试
+- **web_fetch 二进制感知**：PDF / 压缩包 / Office / 图片 / octet-stream 等二进制响应不再以乱码正文返回，改给 `kind=binary` 结构化结果（detected_type / content_length / suggested_filename / hint 引导改用 http_download）；二进制结果不进 JS 渲染降级
+
+### Changed(web-access)
+- 出网默认请求头常量迁至 `http_factory.DEFAULT_HEADERS` / `default_headers()`（web_tool 保留 `_DEFAULT_HEADERS` 别名），三个出网工具共用，避免再出现"下载不发 UA"的漂移
 
 ## [v0.5.0-beta.1] - 2026-09-13
 
@@ -399,6 +461,9 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 > 🏢 **Office 对标系列**(PR #547/#554/#560/#561/#564/#569,方案 `docs/plans/2026-09-09_office-competitive-parity-optimization.md`)
 
 ### Added(office)
+- **Office 配置化(Round 31)**: ExcelSheetSpec.freeze_panes(A1 记法冻结窗格,与 freeze_header 同给时优先)+ SAGE_IMAGE_OPTIMIZE_THRESHOLD_BYTES 环境变量配置 Pillow 压缩阈值(0=禁用);工具 schema + 前端契约同步
+- **Word 奇偶页页眉页脚(Round 34)**: format_spec.odd_even_pages+even_page_header/footer——书籍排版场景,偶数页独立页眉页脚(python-docx settings.odd_and_even_pages_header_footer 全局开关)
+- **Word 首页不同页眉页脚(Round 33)**: format_spec.first_page_different+first_page_header/first_page_footer——封面页独立页眉页脚(文本/PAGE 域),python-docx different_first_page_header_footer 原生开关
 - **Excel 打印页边距(Round 31)**: print_setup.margins_cm(上/下/左/右,厘米,openpyxl 英寸自动换算)——部分给定只动给定边;工具 schema + 前端契约同步
 - **journal 结构化文献清洗(Round 30)**: generate_article 自纠检查与最终校验前先原地清洗 structured_references——次品条目(缺 title/字段非法)剔除+warning、key 冲突自动补唯一后缀;全为次品时回退 references 纯文本;不再让单条次品拖垮整体校验
 - **TOC 静态缓存回填(Round 29)**: 目录域升级为 fldChar 复杂域——打开文档即见按文档标题生成的静态目录行(逐级缩进/levels 过滤),更新域后被真实带页码目录替换;Linter toc/presence 升级为双载体兼容检测
@@ -435,6 +500,11 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - **归档视图批量操作**;前端纳入 PDF 全流程
 
 ### Added(projects)
+- **项目模块 P13**: 知识搜索范围支持"全部最近 wiki 项目"——knowledge_project 支持逗号分隔多根(逐根授权任一未授权 403 fail-closed;多根逐个 search_wiki 按 score 合并、root::path 去重、截取总 limit;单值向后兼容 P9),命令面板范围分组新增"全部最近 wiki 项目"选项(>=2 个项目时出现,选择持久化逗号拼接范围)(方案 docs/plans/2026-09-16_knowledge-multi-scope-plan.md)
+- **项目模块 P9**: 知识搜索默认域配置化——/search/global 新增可选 knowledge_project（经 authorize_registered_project 校验：未授权 403/非 wiki 404，与 wiki 域同契约），_search_knowledge 显式范围优先、缺省回退最近打开（默认行为零变化）；命令面板新增"知识范围"分组（默认+最近 wiki 项目 ≤5，localStorage 持久化 sage:knowledge-scope:v1，选择不关面板），搜索请求按范围携带参数(方案 docs/plans/2026-09-15_knowledge-scope-p9-plan.md)
+- **项目模块 P8**: wiki recent_projects 存储迁移到 projects 注册表(SQLite)——recent_projects.py 重写为只读投影适配器(公共 API 全保,消费方零改动);projects 表新增可空 intent 列(幂等迁移,NULL 读侧映射 open);MAX_RECENT 为投影截断而非注册表生命周期,save_recent 窗口重写只删上一窗口内行;旧 JSON 一次性导入后改名 .migrated 备份;单调毫秒保证同毫秒 record 顺序可判定;移除 wiki/files 平台原语依赖(方案 docs/plans/2026-09-15_wiki-recents-sqlite-p8-plan.md)
+- **项目模块 P7**: 全局搜索接入项目分组——/search/global 默认含 projects 组(ProjectRepository.search 按 name/path LIKE + 会话计数聚合,types=project 可单选),命令面板搜索模式命中项目名/路径片段可直达(复用 open 流,handleOpenProject 收敛为 {id} 签名)(方案 docs/plans/2026-09-14_projects-search-p7-plan.md)
+- **项目模块 W5**: wiki/files 全量 Windows 解锁——其余 12 个 secure_* 补 reparse-safe 分支(沿用 R32 原语),Windows 上 wiki 项目 create/open/list 从 500 恢复可用;修复两个 R32 原语缺陷(CREATE_ALWAYS 先截断后复核绕过多链接拒绝契约、校验失败句柄泄漏锁死同 inode 文件)+ secure_read_text `..` 逃逸缺口;测试解锁 path_security/security_final_paths/project_context/skill_md 回滚/P6 桥接集成的 Windows skip(symlink 夹具改能力探测);本机全量 unit 5539 过零新增失败(方案 docs/plans/2026-09-14_wiki-files-win-unlock-plan.md §7)
 - **项目模块 P6**: wiki 授权桥接 projects 注册表(recents ∪ registry 并集,约 24 个 wiki 端点门禁 fail-closed 语义不变;MCP 授权面同样并集;wiki open/create 双登记进侧栏清单;前置 #760 解除 POSIX-only 阻塞;全局搜索默认域明确不改,依据 docs/plans/2026-09-14_wiki-projects-bridge-plan.md)
 - **项目模块 P5**: 侧栏项目区块局部拖拽登记——拖文件夹到项目分组即批量登记(拖拽不自动打开,与 + 按钮登记即打开区分;路径取 Electron File.path 与 OfficeFilePicker 同判据,目录有效性走既有 validate_workspace 校验,零新增 IPC;dragOver 高亮提示)(方案 docs/plans/2026-09-13_projects-p5-drag-plan.md;Electron>=32 需迁移 webUtils.getPathForFile,已留注记)
 - **项目模块 P4**: 项目子行就地删除会话(hover 两步确认,联动刷新子列表/计数/会话区)+ 项目清单自动刷新(订阅 store 会话数量变化,400ms 防抖重查后端聚合计数,消除跨区增删后的陈旧显示)(方案 docs/plans/2026-09-13_projects-p4-plan.md)
@@ -452,106 +522,39 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 - Excel 编辑后公式缓存值丢失的提示缺失
 - 死参数 `OfficePptGenerateRequest.template` 移除;快照目录无保留策略(技术债 L3)
 
+## [v0.4.9-alpha.41] - 2026-09-11
 
-## [v0.4.9-alpha.31-win7] - 2026-09-14
+> 🔌 **可插拔更新源系统** — Phase 1–4 完整闭环。方案 `docs/superpowers/specs/2026-09-10-pluggable-update-providers-design.md`;技术文档 `docs/technical/56-update-providers.md`;用户手册 `docs/user-manual/14-update-providers.md`。
 
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #777 帮助系统修复。`src/pages/Help/HelpTab.tsx` 移除链接 `target="_blank"` 改为应用内跳转 + 新增 5 个 markdown 帮助文档导入 (chat/memory/skills/office/orchestration), `src/pages/Help/AboutTab.tsx` `process.*` 改为 `typeof process !== 'undefined'` guard 返回 'N/A' 兜底 (修复 `process is not defined`), `src/pages/Help/ChangelogTab.tsx` + `HelpTab.tsx` 把 `window.changelogAPI/helpAPI` 改为 `window.electronAPI?.changelogAPI/helpAPI`, `src/shared/types/electron-api.d.ts` 新增两个 IPC bridge 类型, `electron/main.ts` 新增 `sage:changelog:read` IPC handler (dev 走 `__dirname/../../CHANGELOG.md`,packaged 走 `process.resourcesPath/CHANGELOG.md`), `electron-builder.yml` 把 `CHANGELOG.md` 加入 `extraResources` (packaged 时随包分发)。零冲突自动合并;Frontend TS + Electron build 双绿。
+### Added(update-providers)
+- **Provider 抽象层** (`UpdateProvider` 接口 + `ProviderRegistry` + `ProviderStore`):更新源从硬编码 url 切换到「注册表 + 用户可配 provider 列表」;支持 generic-http / github / gitee / gitlab 4 种内置类型
+- **Provider 安全存储**:`electron-store` 持久化 provider 配置,token 经 Electron `safeStorage`(OS keychain 后端)加密后落盘;preload IPC bridge 仅暴露白名单方法
+- **GitHub Releases provider** (#616):`/repos/{owner}/{repo}/releases/latest` + `/releases?per_page=10`;pre-release 通过 `pickNewestPrerelease` 选最新 `published_at`
+- **Gitee Releases provider** (#617):Gitee API v5 + `?access_token=` query,镜像 GitHub 选版策略
+- **GitLab Releases provider** (#618):API v4 + `PRIVATE-TOKEN` header + `upcoming_release=true` flag
+- **Feature flag 全开** (#619,`ENABLE_UPDATE_PROVIDERS_UI`):Phase 3 默认 ON,`SAGE_EXPERIMENTAL_PROVIDERS=0` 紧急回滚 escape hatch
+- **E2E 闭环** (#620,Playwright hermetic journey):`providers-manager.e2e.ts`(列表→新增→编辑→测试→删除 6 步)
+- **Provider UI** (Phase 2 PR #613,已合并):`ProvidersManager` 设置面板;列表/新增/编辑/删除/设为默认/测试连接 6 个交互;按 `channelMap` 决定 stable/beta/alpha 是否预发布通过
+- **技术文档** (#621)`docs/technical/56-update-providers.md` + **用户手册** (#621)`docs/user-manual/14-update-providers.md`
 
-### Fixed
-- **fix(win7): cherry-pick main #777 帮助系统修复** — 链接改为应用内跳转;8 个 builtin 帮助项全部补齐内容;About/Changelog 页面正常加载
+### Changed(update-providers)
+- UpdateManager 重构:从单一 updater 切换到「active provider + builtin generic-http fallback」;存量用户无感
+- preload bridge 暴露 6 个 provider 方法(白名单 + 类型守卫):`providers.list / add / update / remove / setDefault / test`
 
-### Changed
-- **chore(release): bump version to 0.4.9-alpha.31-win7**
+### Fixed(update-providers)
+- 安全:token 全部经 `safeStorage.encryptString` 加密,文件权限 0o600
+- 多 provider 冲突:同 `isDefault=true` 时 UI 显示警告并要求二选一
 
-## [v0.4.9-alpha.30-win7] - 2026-09-13
+## Release Tier Definitions
 
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #765 Round 3 `search_config` key 静态加密落库 + `web_search` 查询缓存。`backend/security/key_store.py` 新模块 (AES-256-GCM 静态加密 + Win7 Py3.8 兼容),`backend/api/search_routes.py` 加缓存命中检查。11 unit + 3 integration test 引用。
+| Tier | Tag Format | Audience | Channel |
+|------|-----------|----------|---------|
+| **alpha** | `vX.Y.Z-alpha.N` | Sage contributors only | GitHub Releases (prerelease) |
+| **beta** | `vX.Y.Z-beta.N` | Public beta testers | GitHub Releases (prerelease) |
+| **rc / preview** | `vX.Y.Z-rc.N` | Broad testing, recommended for early adopters | GitHub Releases (prerelease) |
+| **stable** | `vX.Y.Z` | All users | GitHub Releases (latest) |
 
-### Added
-- **feat(win7): cherry-pick main #765 Round 3 search_config 加密落库 + web_search 缓存** — 密钥静态加密 + 查询缓存减少 LLM 重复请求
-
-### Changed
-- **chore(release): bump version to 0.4.9-alpha.30-win7**
-
-## [v0.4.9-alpha.29-win7] - 2026-09-12
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #759 Round 2 反爬路由指引 + UA 现代化 + `web_fetch` TTL 缓存。
-
-### Added
-- **feat(win7): cherry-pick main #759 Round 2 反爬路由 + UA + web_fetch 缓存**
-
-### Changed
-- **chore(release): bump version to 0.4.9-alpha.29-win7**
-
-## [v0.4.9-alpha.28-win7] - 2026-09-11
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #618 Phase 3 T3.3 GitLab release provider。`electron/update/providers/gitlab.ts` 145 行 (GitLab API v4 PRIVATE-TOKEN 鉴权 + 项目 ID URL-encode + upcoming_release prerelease 过滤 + assets.links 下载 + 401/404 错误本地化), `electron/update/__tests__/providers/gitlab.test.ts` 177 行 (7 测试:endpoint + token header / projectId encode / 自建 baseUrl / 401 凭证错 / 404 项目不存在 / 空数组 null / ping ok), `electron/main.ts` 注册 `providerRegistry.register('gitlab', ...)` 在 github/gitee 之后。同 main PR #629 已 cherry-pick 的 GitHub #616 + Gitee #617 一致风格。零新增依赖;7 vitest 全绿。
-
-### Added
-- **feat(win7): cherry-pick main #618 Phase 3 T3.3 (#632)** — GitLab Releases provider 支持 GitLab.com + 自建 GitLab + 私有部署;7 vitest tests 全绿
-
-### Changed
-- **chore(release): bump version to 0.4.9-alpha.28-win7**
-
-## [v0.4.9-alpha.27-win7] - 2026-09-11
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS cherry-pick of main PR #611 第十一批:嵌入器运行时切换/模型下载/设置页卡片 + A/B 权重变体。`backend/memory/embedder_factory.py` 加 `Embedder` 协议到 import block (Ruff F821 fix, follow-up from initial PR #623 attempt), `backend/adapters/out/memory/adapter.py` 加 `os` 导入支持 backfill, `electron/modelDownloadIpc.ts` 170 行新文件 (download progress events), `src/pages/settings/MemoryTab.tsx` 87 行嵌入器管理 UI + 卡片, `backend/api/embedder_routes.py` 73 行新 endpoints (list/select/download 嵌入器), `backend/main.py` 注册路由。Win7 独有:MemoryTab 补 `useNavigate` 导入 (frontend TS build 失败),`auto_memory`/`retrieval` 开关移植 (writer profile 默认值对齐 main)。73 unit + 4 integration test 引用;symspell 不变。
-
-### Added
-- **feat(win7): cherry-pick main #611 第十一批 (#623)** — `backend/memory/embedder_factory.py` runtime 切换;`backend/api/embedder_routes.py` 73 行 (list/select/download);`electron/modelDownloadIpc.ts` 170 行 (download progress events);`src/pages/settings/MemoryTab.tsx` 87 行 (嵌入器管理卡片 + 切换 UI)
-
-### Fixed
-- **fix(win7): add Embedder import to embedder_factory.py (Ruff F821)** — `create_embedder()` 返回 `Embedder` 协议但未 import,Ruff CI 红 → 1 行 import 加
-- **fix(win7): MemoryTab 补 useNavigate 导入 + auto_memory/retrieval 开关移植** — frontend TS build 红 → `import { useNavigate }` 加
-- **fix(win7): adapter 补 os 导入** — backfill path 用到 `os.path` 缺 import → 1 行加
-
-### Changed
-- **chore(release): bump version to 0.4.9-alpha.27-win7**
-
-## [v0.4.9-alpha.24-win7] - 2026-09-11
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 main PR #584 期刊模板子系统 (8-PR 系列 N1–N8):把 .docx 期刊模板解析为结构化 `JournalSpec`、起草结构化稿件、按 spec 校验、把素材填入模板生成可投搞稿件。8 个 backend 模块 (`backend/office/journal/{models,parser,validator,generator,persistence,llm_adapter,pandoc_adapter,errors}.py`)、4 个 office 路由、`OfficeJournalTool` 注册到 writer profile,前端 `src/features/journal/{JournalPanel, components/*, useJournalTemplates, index}`、`tests/e2e/journal.spec.ts` Playwright journey、文档 `docs/technical/55-journal-template-subsystem.md` + `docs/user-manual/13-journal-template-panel.md`。手动 port 而非 merge commit:剔除 main-only 的 7 个 office routes + `OfficeAnalyzeTool` + `OfficeEditPreviewDialog` + FTS backfill (PR #561/564/569 batch-2/3/round-2/3 依赖),保留 win7 现有 Pydantic v1 兼容;profile whitelist 删 orphan `office_analyze`。
-
-### Added
-- **feat(win7): cherry-pick PR #584 journal template subsystem (#625)** — 8 backend 模块 + 4 路由 + `OfficeJournalTool` + 8 前端组件 + 5 IPC commands + E2E journal Playwright + docs/technical/55 + docs/user-manual/13 + docs/technical/54 对标追踪
-- **feat(office): journal 4 路由 + tool** — `POST /office/journal/parse-template` / `GET /office/journal/specs` / `GET /office/journal/specs/{spec_id}` / `POST /office/journal/validate` / `POST /office/journal/fill-from-content`
-
-### Fixed
-- **fix(office): ruff CI failures** — `persistence.py` F821 lambda-exc closure 改 `len(exc.errors())` (v1/v2 双兼容);`models.py` PEP 604 `str | bytes` → `typing.Union`;`profiles.py` 删 orphan `office_analyze` 引用以满足 `test_profile_seeds_within_known_names`;`preload.ts` 删 5 个 unused Office 类型导入
-
-### Changed
-- **chore(release): bump version to 0.4.9-alpha.24-win7**
-
-## [v0.4.9-alpha.23-win7] - 2026-09-10
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS **启动诊断 + 自动重试** (port of release/win7 #585): 部分 Win7 机器首启 >90s 超时,后端 `backend/main.py` 加 6 个 `[sage-startup]` stderr checkpoint(`__name__=='__main__'` 守护),Electron `electron/main.ts` 第一次超时后自动重试一次 (再等 90s) + 日志 backendProc 状态;对话框 detail 显示 pid/exitCode/signalCode 便于诊断。本批累积同期未单独 changelog 的 win7 适配:PR #568 (alpha.19 HMAC fallback 路径)/ #580 (alpha.21 flat-split-bg 图标)/ #583 (alpha.22 圆角蒙版 transparent bg) — 同列于此便于追踪。
-
-### Fixed
-- **fix(electron): Win7 startup diagnostics + auto-retry (#585)** — 6 个 startup checkpoint + Electron 端超时自动重试一次;backend spawn 状态进对话框详情;ruff T201 用 `# noqa: T201` per-line
-
-### Changed
-- **chore(release): bump version to 0.4.9-alpha.23-win7**
-
-## [v0.4.9-alpha.9-win7] - 2026-08-29
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 main #381 bash-tool-parity:将 `TerminalTool` 替换为 `BashTool` / `BashOutputTool` / `KillShellTool` 三件套,与 Claude Code Bash 工具语义对齐。Cherry-pick 链路: main `81a20b0b` → win7 `00984167` (#382),37 文件 / +7481/-547。
-
-### Added
-- **feat(win7-tools): cherry-pick main bash-tool-parity (#382)** — main PR #381 (30 文件 / +3123/-630)。新增 `backend/tools/bash_session.py`(`BashSessionRegistry` 后台 shell 进程表,32 上限,内存态)、`bash_tool.py`(三件套实现 + 危险命令分级 → PermissionEnforcer)、`subprocess_util.py`(`BoundedOutputCollector` / `spawn_verified` / `kill_process_tree` 跨平台原语)、`shell_resolver.py`(POSIX bash→sh / Windows Git Bash→PowerShell 探测)。前端 `src/shared/lib/humanize.ts` 加 bash/bash_output/kill_shell 三工具的中文风险描述。docs `docs/technical/44-bash-tool.md` 新建章节。冲突解析 2 处:(1) `backend/tools/__init__.py` 的 `__all__` — win7 alpha.8 有重复/错位的 `AgentTool` 行 + 缺 BashTool trio,合并为单一完整列表;(2) `backend/tests/integration/test_lifespan_wiring.py` — 保留 win7 既有的 `test_lifespan_wires_hooks_and_evolution_scheduler` + `test_watchdog_fetch_runs_sql_off_event_loop` + PR 新增 `test_lifespan_health_metadata_uses_runtime_ownership_envelope` + 4 个 shutdown 测试 (`test_shutdown_bash_sessions_clears_registry`、`_swallows_cleanup_failure`、`test_shutdown_repl_cleanups_calls_pending_cleanup`、`_swallows_cleanup_failure`),补 `import os`。Python 3.8 兼容性已验证:`sage-backend-py38` (Python 3.8.20) 跑全量 backend 单测 `3522 passed`,Backend (Python 3.8, Win7 LTS) CI 8m10s pass。
-
-## [v0.4.9-alpha.7-win7] - 2026-08-25
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 同步 rightpanel 面板 × 关闭按钮 UI 改进:cherry-pick main 的 `5e43f8e6 feat(rightpanel): 面板内添加 × 关闭按钮 (closes #298)`。本批扫描 10 个 main 候选,核对发现仅 rightpanel × 按钮还未在 win7 适配 (其余 #345 / #350 / #363 / #339 / #349 / #310 / #352 / 331bd737 PR-B 等 9 个均已通过 #346 / #351 / #364 / #341 / #348 / #311 / alpha.5 / 756e165a 等 win7 适配版提前到位)。
-
-### Added
-- **fix(win7-rightpanel): cherry-pick main rightpanel × 关闭按钮 (#374)** — main `5e43f8e6` 5 文件 / +714/-18:`PanelHeader` 新组件封装 × 关闭按钮 + tab 切换两态,`RightPanel` 用 `PanelHeader` 替换原 inline tab/关闭 UI,新增 `PanelHeader.test.tsx` 7 用例覆盖 × 按钮调用。冲突解析:`RightPanel.tsx` 解构区 cherry-pick 含 `taskBoard?: TaskBoard | null` 字段,win7 未移植 main #318 编排计划卡前端接线,`RightPanelProps` 接口无该字段 → **直接移除 `taskBoard` 解构**,与 win7 当前接口对齐,避免 TS 报错 + 不引入 orchestrator 依赖。Plan / spec 文档一并 cherry-pick,便于未来 cherry-pick #318 时无缝衔接。
-
-## [v0.4.9-alpha.6-win7] - 2026-08-25
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 平台一致性 + Chat UI 补全回归测试落地:cherry-pick main 的 PR #305 (Chat 顶部 "+ 新对话" / Sidebar 跳转 / InputCard autosize 三处 UI 缺陷修复)。本批原本挑选了 4 个低风险 PR (#286 / #298 / #305 / #308),核对发现仅 #305 还有未 cherry-pick 内容(R1 autosize 回归测试),其余三个已被 PR #287 / #312+#313 / #324 等前置到位。
-
-### Fixed
-- **fix(win7-chat): cherry-pick main PR #305 三处 Chat UI 缺陷 (R1/R2/R3) 回归测试补全 (#372)** — main PR #305 R1 (InputCard autosize)、R2 (Sidebar 用 navigate 替代 window.location.href)、R3 (Chat 顶部 "+ 新对话" 跳 /welcome) 三处主代码已在 win7 通过 PR #324 等途径前置到位。本批 cherry-pick 仅追加 R1 autosize 回归测试 (`src/widgets/chat/__tests__/InputCard.test.tsx` +20 行),守护 `textarea.style.height` 在 value 变化时被 useEffect 更新、封顶 200px 的契约。冲突解析:`InputCard.tsx` 第 149-152 行 cherry-pick 想移除的注释实际是 win7 适配注解 (`emacsRef 同时服务 autosize, 与 main #252 最终形态一致`),保留并删冲突标记
+Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [v0.4.3-alpha.2] - 2026-07-07
 
@@ -583,24 +586,163 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Documentation
 - docs(wiki): 25-llm-wiki-integration.md 新增 "流式架构" section (10 章节) 描述 PR-114+115+116 架构 (PR-125)
 
-## [v0.4.9-alpha.3-win7] - 2026-08-23
+## [v0.4.9-alpha.29] - 2026-08-27
 
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 分支同步编排控制面、拓扑调度、agent todo、结构化返回、follow-up 续聊、worktree 隔离、legacy 清理和 LaneBoard 激活。
+> 🧪 **Alpha tier** — Sage 贡献者内测。**Main 分支累积发布**(v0.4.5-alpha.26 → v0.4.9-alpha.29),涵盖 50+ commit、四大块新能力:**Chat-Native 多 agent 编排** (#296+#314+#315+#316+#317+#318+#355+#356+#357+#361+#363),**Electron tier-based E2E 自动化基础设施** (#376),**事件循环阻塞根治 + 日志/医生扩容** (#293+#294+#295+#306),以及 §5.1/§5.2/§5.4 evolution/memory IPC 接线 (#339+#342)。Win10+Linux+Mac 验证用版本;Win7 LTS 用户请用 `v0.4.9-alpha.8-win7` 或更新 `-win7` 后缀的发布。
+
+### Added
+
+#### 多 agent 编排(Chat-Native Multi-Agent Orchestration)
+- **feat: Chat-Native 多 agent 编排 (#296)** — `orchestration_mode` 接入 chat 链路,run 级 task_plan/task_progress/task_review/lanes 全套数据模型与 SSE 推送
+- **Wave 1 编排执行控制 (#314)** — retry 策略、reviewer 异步评审、scratch 草稿空间
+- **Wave 2 编排计划生命周期 (#315)** — 计划持久化 / resume 恢复流 / 计划卡 UI / `depends_on` 拓扑依赖 / `task_review` 阶段产物
+- **Wave 3 PR A (#316)** — P2-7 计划权威 `task_id` 全局递增、P2-8 模板库、P2-9 配置化重试次数、P2-11 run 级 cancel
+- **Wave 3 PR B (#317)** — P2-10 休眠层:review 模块化拆分、lanes 真实执行(LaneBoard 监控)、board 实时面板
+- **编排计划卡前端接线 (#318)** — 三态视图(规划中/执行中/已结束)、取消执行、模板选择器、resume 恢复流
+- **depends_on 拓扑调度 (#355)** — 分波执行(同一 wave 内并发,跨 wave 串行)+ 级联取消(上游 cancel → 下游全部 cancel)
+- **agent todo 清单全链路接线 (#356)** — `todo_write` 后端暴露 + SSE 快照推送 + 前端 `TodoListCard` 渲染
+- **前端 mirror 编排计划到 todo 卡 (#357)** — read-only 镜像,主区域只读,左侧 todo 卡可勾选
+- **编排 P2 五项 (#361)** — schema 结构化返回 / followup 续聊 / worktree 隔离 / legacy 清理 / LaneBoard 激活
+- **编排 P2 fast-follow 五项遗留 (#363)** — task_id 串号修复 + 残留 plan 双调用链清理 + 5 处 UX 修复
+- **编排 control plane P0 修复 (#353)** — task_review 提交竞态 + plan lock 死锁 + cancel 信号丢失
+
+#### Electron E2E 自动化基础设施
+- **feat(electron-e2e): tier-based E2E automation infrastructure (#376, 20 commits / 49 files / +3047/-959)** — `tests/electron/` 全新目录,3-tier 架构:
+  - **Tier 1 stub-smoke**:Playwright + 自带 stub backend,3 个 spec(chat / sidebar / settings),无 LLM 真实调用,CI 默认跑
+  - **Tier 2 deep**:Playwright + 真实后端 + 真实 SQLite,跳过 wiki/evolution(需 LLM),`run-deep` tag 触发
+  - **Tier 3 live**:真人手动 + `__TAURI__` IPC hook,本地验证用
+  - 含 `stub-backend.ts` + `_real_backend.py` 复用 main `python backend/main.py` 启动逻辑,IPC 契约对齐(`/memory/save`、`/memory/list`、`/orchestration/lanes`、`/orchestration/board`),`data-testid` 选择器全覆盖,Windows NSIS 安装包 CI 红 6 项修复(import/order + session upsert + DevTools 窗口过滤 + portable Python resolver + settingsStore 顺序 + AppStartupSettings 死代码)
+  - 详见 `docs/superpowers/specs/2026-08-25-electron-e2e-automation-design.md` + `docs/superpowers/plans/2026-08-25-electron-e2e-automation.md`
+
+#### §5 章节 wiring(scheduler / memory / background review)
+- **feat(scheduler): evolution 任务 lifespan 接入 (§5.1) (#342)** — evolution scheduler 任务跨请求存活,重启后从 SQLite 恢复运行状态
+- **fix(memory): wire review collaborators + memory IPC (§5.2 + §5.4) (#339)** — memory 模块审阅协作 + IPC 通道补全
+
+#### Doctor 二期扩容
+- **feat(doctor): §1.5 二期扩容 (#293)** — 从 8 个 check 扩到 13 个(新增 5 项:sqlite_writable / config_integrity / port_frontend / py_version_match / disk_space),CI 中 doctor 报错可视化
+- **feat: add sage doctor CLI for installation/env self-check** — `python -m backend.cli.doctor` 命令入口,8 项 CRITICAL / WARN / INFO 三级检查,`--json` 输出机器可读报告,electron 启动前自动跑(`SAGE_DOCTOR_ON_START=false` 可跳过)。详见 `docs/technical/41-sage-doctor.md` + `docs/user-manual/11-sage-doctor.md`。
+
+#### 后端 / 前端杂项
+- **feat(electron+frontend): backend 异常退出自动重启 + ECONNREFUSED 友好翻译 + UI 横幅 (PR-B)** — 防止 backend crash 后 UI 永久卡死;中文化错误提示
+- **feat(orch+agent): 配置化 max_iterations + 子代理预算 + 中文错误提示 (#333)** — `DEFAULT_MAX_ITERATIONS` 5→10 + 子代理 6 次上限 + AGENT_RUNTIME_MESSAGES 全中文化
+- **feat(rightpanel): 面板内添加 × 关闭按钮 (closes #298) (#299)** — 之前只能拖动整个面板,不能单独关
+- **feat(orchestration): 进度可视化 (#300)** — `task_progress` 5 元组(stage / current / total / eta / message)+ UI 编排摘要卡片
+
+#### Win7 LTS parity + base CI
+- **feat(win7): complete Task 0-3 platform parity + base CI fixes (#368)** — 平台差异 Py3.8/Py3.11 适配 6 项(PEP 604 in shared models + certifi 回归 + LM Studio protocol/modelId/localModelPath + Asia/Shanghai + pydantic 1/2 model_dump_compat + streaming teardown),后续已通过 PR #377 cherry-pick 到 release/win7
 
 ### Fixed
 
-- fix(win7): 同步 orchestration control plane P0
-- fix(win7): 同步 P1 `depends_on` 拓扑调度与 agent todo 全链路
-- fix(win7): 同步 P2 schema 结构化返回、follow-up 续聊、worktree 隔离、legacy 清理和 LaneBoard
-- fix(win7): 完成 P2 fast-follow 五项遗留
+#### 事件循环阻塞根治(§1.2 PR-A + PR-B)
+- **fix(event-loop): §1.2 PR A (#294)** — `legacy_routes` 全部 `async→def`(34 handler)+ `threading.Lock` 替换 `asyncio.Lock` + jieba 热启动后台化
+- **fix(event-loop): §1.2 PR B (#295)** — `storage` 适配器改 `asyncio.to_thread` + 共享 `_SQLITE_LOCK`(`per-instance Lock` 会导致跨请求死锁)
 
-## [v0.4.9-alpha.5-win7] - 2026-08-25
+#### 日志 / 设置 / 编排 P0
+- **fix(logging): 日志基础设施修复 (#306)** — 6 类故障场景排查从 10-30min 降至 2-5min(`logging.py` 启动顺序 + SageLogger 路径优先级 + audit JSONL 落盘 + structured log JSON parse + threading name 标识 + NDJSON 启动日志)
+- **fix(settings): 恢复设置保存 + 测试连接用端点自身模型 (#323)** — `strip_unknown_fields` 净化残留 + `testEndpointConnection` 改用端点自身 model(避免空 model 422)
+- **fix(orchestration): task_id 全局递增修复 3/6 假象 + 普通聊天 artifacts 落库 (#302)** — 旧 `task_id = (run_id, sequence)` 导致同 run 内 hash 冲突;改为进程内单调递增 + DB 唯一约束
+- **fix(orch): §13.7 计划卡延后项收尾 (#322)** — 双击防重入 + 409 Conflict 区分 + resume 时 NULL plan_id 兜底
+- **fix(ci): remove stale Determine ARTIFACT_SUFFIX step in main's release-win7.yml (#352)** — main 分支 release workflow 残留 win7 死代码
 
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS 平台一致性 + base CI 修复落地:cherry-pick main 的 PR #368 (Task 0-3 platform parity) + PR #367 (base CI 修复) 合并成 PR #370。Win7 适配重点:`requirements-py38.txt` (Python 3.8 + pydantic 1.x) + `certifi` CA bundle 路径注入 + Pydantic v1/v2 `model_dump_compat` 兼容层 + LM Studio OpenAI-compatible protocol + memory session_id 跨层透传 + `office_create` binding-aware delegation 越界守卫。
+#### Chat 链路 + 后端 SSL / 内存
+- **fix(chat-stream): accept explicit null orchestration_mode from IPC (#297)** — 前端 `null` 被错误序列化为 `"null"` 字符串
+- **fix(chat-stream): CI 修复 (#345)** — `TS6133 runId` 未使用变量豁免 + import/order 空行修复
+- **fix(chat): 欢迎页/输入框/新对话 三处 UI 缺陷 (#305)** — 路由切换后欢迎页残留 + 输入框失焦 + 新对话按钮 race
+- **fix: preserve chat messages across route switches (#350)** — Memory / Wiki 路由切换时 Chat 缓存被清空
+- **fix(backend): inject memory manager + bootstrap SSL CA from certifi (#349)** — memory 模块未注入 manager 依赖 + certifi 缺失导致自签名 CA 校验失败
+- **fix(llm-proxy): dedupe /v1 when baseURL already ends with /v1 (#308)** — LM Studio 用户配置 `http://localhost:1234/v1` 时代理变成 `/v1/v1/chat/completions` 报 404
+
+#### 测试 / CI flake 治理
+- **fix(tests): bandaid two CI flakes (#299)** — Event-loop closed asyncio 警告 + §1.2 gate 阈值敏感度 100→200ms
+- **test: remove stale respx xfail markers (#310)** — 104 个测试从 mock fallback 改回真实验证(`respx` 升级后 httpx mock 行为变更)
+- **test(llm_client): align 2 chat_stream tests to LLMError (#309)** — 异常类型从 `httpx.HTTPError` 对齐到项目 `LLMError`
+- **test(event-loop): 5-round median P99 gate, 400ms threshold (CI-reality) (#312)** — §1.2 5 轮中位数 P99 守门,从单次 P99 升级
+- **fix(electron-e2e): portable Python resolver for stub_backend (CI ENOENT)** — Windows CI runner 无 `python` 在 PATH,resolver 走 `python.exe` 显式路径
+
+### Changed
+
+- **refactor(orch): M4 收口 — 删除 updatePlan 双调用链 (#321)** — `plan_router.update_plan` 与 `orchestration_service.update_plan` 双调用链收敛到单入口
+- **chore(plans): remove completed plan file (#334)** — `docs/plans/2026-08-13_orch-p0-execution-control.md` 已 merge 到 technical/42 §10,plans/ 不保留已完成
+- **chore(repo): §1.4 假功能/死设置清理 (#292)** — 30 文件删 + 12 改,清理未实现的假设置项
+
+### Documentation
+
+- **docs(orchestration): 归档编排修复 + 进度可视化 + Wave 3 编排 (#301+#303+#319+#320)** — 4 个 plans/ 文件删除,内容并入 `docs/technical/42-*.md` §9 / §10 / §11 / §13
+- **docs: 编排技术手册 §15(拓扑调度 + agent todo 全链路)+ README 章节简介更新 (#360)**
+- **docs(technical): §1.2 event-loop gate upgrade history — 5-round median P99 (#313)**
+- **docs(technical): 日志基础设施修复归档 (#307)** — 29 §修复记录 + 41 §日志路径优先级
+- **docs(spec): Electron E2E 自动化测试基础设施设计 + 实施计划 (15 任务) (#376 配套)**
+
+## [v0.4.9-alpha.37] - 2026-09-09
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**orchestration event-loop 修复** (#541):EventHub / SnapshotStore `__init__` 之前 eager 构造 `asyncio.Lock()`,在 Py3.8 (release/win7) 主线程无 running loop 时抛 `RuntimeError`;sync test fixture 用 `asyncio.get_event_loop().run_until_complete` 在 Py3.10+ 同样无 current loop。新 `backend/orchestration/_lazy_lock.py::LazyLock` descriptor 把 lock 构造延迟到第一次 `await`(此时 loop 已 active),并把 3 个测试文件 10 处 `run_until_complete` 迁到 `asyncio.run`。同时累积 #530/#535/#537/#538/#539/#540 主线工作(chat input UX、usage cache、office pandas、office_archive、alpha17 packaged-mode port、bundle pandas fix)。
 
 ### Added
-- feat(cli): add sage doctor for installation/env self-check (port of main PR #283; win7 适配: conda_env 跨平台路径匹配 + py_version_match 优先 requirements-py38.txt)
+- feat: 网络模式门禁（online/intranet/offline）+ 主机白名单，内网/气隙下搜索工具按模式不加载
+- feat: web_fetch 正文抽取（text/links/tables/raw 四模式）+ GBK/GB18030 编码嗅探，stdlib 栈式实现
+- feat: http_download 流式下载工具（工作区边界 + Content-Length/实际字节双重大小上限 + 文件名净化）
+
+### Fixed
+- fix(orchestration): #536 EventHub / SnapshotStore LazyLock descriptor + asyncio.run() in sync tests (#541)
+
+### Changed
+- chore(release): bump version to 0.4.9-alpha.37
+
+## [v0.4.9-alpha.40] - 2026-09-10
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**启动诊断 + 自动重试** (#586, port of release/win7 #585): 部分慢启动机器 (Win7 重灾区) 在 90s 健康检查超时内未响应 `python -m backend.main → uvicorn.run()`. 后端 ``[backend/main.py]`` 加 6 个 \`[sage-startup]\` stderr checkpoint (模块级 import 完成 / \`__main__\` 进入 / \`db.init_db()\` 完成 / \`lifespan\` 完成 / \`uvicorn.run()\` 调用), 由 \`__name__ == "__main__"\` 守护 (pytest 不触发). Electron `[electron/main.ts]` 在第一次 90s 超时后自动重试一次 (再等 90s), 日志记录 \`backendProc\` 状态 (pid/exitCode/signalCode) + \`currentBackend\` 代际, 对话框 detail 显示后端进程状态区分 crashed vs still-starting.
+
+### Fixed
+- fix(electron): startup diagnostics + auto-retry (port from win7 PR #585) (#586)
+
+### Changed
+- chore(release): bump version to 0.4.9-alpha.40
+
+
+
+## [v0.4.9-alpha.34] - 2026-09-09
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**Win7 安装包启动失败 P0 修复** (#513 → cherry-pick 到 win7 #514):doctor 自检在 packaged Win7 上误报 3 个 CRITICAL(SAGE_USER_DATA_DIR fallback 用了 `process.cwd()` 解析到 `C:\Program Files\Sage\` 只读目录),tray 图标因 `build/icon.ico` 不在 `electron-builder.yml` files 列表里而整个加载失败。新增 `electron/userDataPaths.ts` 统一 backend spawn + doctor spawn 的路径解析(6 vitest 测试);files 列表加 `build/icon.{ico,png}`,asar 内路径变 `<asar>/build/icon.ico` 与 `tray.ts` 期望一致。
+
+### Fixed
+- fix(electron): doctor spawn 改用 userData + tray 图标打包进 app.asar (#513)
+
+🔗 Milestone(s): Win7 启动崩溃 P0 修复
+
+## [v0.4.5-alpha.3] - 2026-07-11
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**SAGE_USER_DATA_DIR 修复**(PR #134):v0.4.5-alpha.2 NSIS installer 安装到 `C:\Program Files\Sage\` 后约 4-5 秒必崩(`PermissionError: [WinError 5] 拒绝访问`),因为 backend 写 themes/scheduled_tasks JSON/audit JSONL/logs 到 bundled `resources/backend/data/`,而程序目录对普通用户只读。新 `SAGE_USER_DATA_DIR` env 让 packaged Electron 注入 `<userData>` 作为运行时可变路径,dev 透传 `<project>/data`。4 个 backend 写路径(theme + scheduler JSON + audit JSONL + log)统一签名;`electron/main.ts` + `electron/backendLauncher.ts` 增加 `sageUserDataDir` 在所有 4 个 spawn 分支都注入。
+
+### Fixed
+- fix(scripts): v0.4.5-alpha.2 NSIS installer installs to `C:\Program Files\Sage\` (system-protected) crashed 4-5s after spawn with `PermissionError: [WinError 5] 拒绝访问: 'C:\Program Files\Sage\resources\backend\data\themes'`. Backend code wrote runtime-mutable files (themes, scheduled-tasks JSON, audit JSONL, logs) to the bundled `resources/backend/data/` directory, which is read-only when installed to a system directory. Introduced `SAGE_USER_DATA_DIR` env var; packaged Electron sets it to `<userData>` (`%AppData%/Sage`), dev mode sets it to `<project>/data`. Four runtime-mutable paths now honor the env: `backend/api/theme_router.py` (module-level `_storage = ThemeStorage()` no longer hardcodes `<services>/parent/data/themes`), `backend/services/theme_storage.py` (new `_default_storage_dir()` helper prefers `${SAGE_USER_DATA_DIR}/themes`, falls back to bundled), `backend/main.py:154` (lifespan scheduled_tasks.json resolves to `${SAGE_USER_DATA_DIR}/scheduled_tasks.json` when env set, else keeps the relative `backend/data/scheduled_tasks.json` dev convenience), `backend/utils/logging.py` (SageLogger.setup picks env-driven path when no log_dir/project_root is supplied), `backend/adapters/out/event/file_adapter.py` (new `_default_audit_log_path()` helper, `FileEventAdapter()` no longer hardcodes `backend/data/audit/audit.jsonl`; raised via AI review #H1 — same root cause class as the original PermissionError). Electron side: `electron/main.ts` computes `SAGE_USER_DATA_DIR` (`<userData>` in packaged, `<cwd>/data` in dev) and passes it through to the resolver; `electron/backendLauncher.ts` adds `sageUserDataDir` to `ResolveOpts` and includes it in `extraEnv` for all 4 spawn branches (dev-conda / dev-conda-overridden / packaged-win32 / packaged-linux). Caller-supplied `storage_dir=...` always wins (test/doc scenarios). 3 new unit tests in `TestThemeStorageDefaultDir` cover env-set / env-unset / explicit-overrides-env. All 18 theme tests + 13 backendLauncher tests + 691 vitest + backend pytest all pass; tsc clean.
+
+## [v0.4.5-alpha.2] - 2026-07-11
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**bundle python 修复 PR #132** 修复了 v0.4.5-alpha.1 NSIS installer 安装后启动 4-5 秒仍报 `ModuleNotFoundError: No module named 'sage_core'` 然后 30s "后端健康检查超时" 对话框的根因(7z 提取已确认每行 content 都是真正的 traceback)。
+
+### Fixed
+- fix(scripts): v0.4.5-alpha.1 packaged installer still crashed at startup with `ModuleNotFoundError: No module named 'sage_core'` (4-5s after spawn → 30s backend health timeout dialog). PR #130 carried forward the `_pth` `..` fix but DELETED the win7 LTS `pip install -e $SageCoreDest` step on the (incorrect) assumption that the hyphen-named `resources/sage-core/` directory would satisfy `import sage_core`. Python's import machinery is path-literal and rejects hyphen-named module dirs, so the inner `sage_core/` was never on sys.path. Now `bundle-python-main.ps1` ALSO copies `packages/sage-core/sage_core/` directly into `resources/python/Lib/site-packages/sage_core/`, where `import site` (enabled in `_pth`) puts it on `sys.path` unconditionally. `pip install -e` is intentionally NOT used because it bakes the build-machine's absolute path into the generated `.pth`, which does not exist on end-user machines. Verify step now also canary-imports `sage_core` + `from sage_core.entities import AgentDecision` to catch this regression at bundle time.
+
+### Changed
+- chore(release): bump version to 0.4.5-alpha.2
+
+## [v0.4.5-alpha.1] - 2026-07-10
+
+> 🧪 **Alpha tier** — Sage 贡献者内测。**spawn conda ENOENT 修复 + main-branch Python bundling** (PR #130, 6 commits / 8 files / +914 -75)。修复了 main 分支 Windows NSIS installer 因缺 Python bundling 步骤导致 end-user 启动时抛"a javascript error occurred in the main process"的根因。Resolver + bundling 双层修复，新 resolver 函数 13 个 vitest cases 覆盖全分支。
+
+### Added
 - feat(wiki): native folder picker for project create/open, recent projects memory, debounced backend pre-check (issue: llm-wiki-folder-picker)
+- feat(release): main-branch Python bundling (`scripts/bundle-python-main.ps1`) — wraps Python 3.11 embeddable + `backend/requirements.txt` (main, pydantic 2.x) + `packages/sage-core` into the same `resources/` tree that `electron-builder.yml` extraResources expects. Mirrors `scripts/bundle-python.ps1` (Win7 LTS, Py 3.8), with main-branch-specific fixes cherry-picked from release/win7 LTS commits 4cea570 / 2689cb8 / a20c061 / 973d44c (python311._pth `..` path import + `import backend.main` canary + `LASTEXITCODE` guards + no dead `start-backend.bat` + precise `resources/` cleanup).
+- feat(electron): `electron/backendLauncher.ts` — pure-function resolver that picks the right Python launcher (dev conda / SAGE_PYTHON override raw-python / packaged Win / packaged Linux / macOS unsupported / unknown platform). Replaces the inline `if (pyLauncher)` branch in `electron/main.ts#spawnBackend()` so the decision is unit-testable.
+
+### Fixed
+- **fix(electron): packaged Win installer crashed with "spawn conda ENOENT" at startup** — root cause was two-layer, fixed in this PR + review pass:
+  1. **Resolver layer** (`electron/main.ts` + new `electron/backendLauncher.ts`): previously `spawnBackend()` fell back to `spawn('conda', ...)` whenever bundled Python didn't exist. End-user Windows machines have no `conda`, so this surfaced as an opaque main-process JavaScript crash that buried the real cause. The resolver now refuses to call `conda` in `app.isPackaged` mode and instead surfaces a clear "Python 后端未找到 (安装包可能损坏)" dialog pointing users to the GitHub releases page to reinstall; macOS / unknown-platform packaged builds short-circuit to informative dialogs.
+  2. **CI layer** (`.github/workflows/release.yml`): previously the main release workflow was missing the `bundle-python` step that `release-win7.yml` had since the Win7 LTS split. `release.yml` now calls `pwsh scripts/bundle-python-main.ps1` on the Windows runner before `electron-builder`, so main-branch releases produce a self-contained installer.
+  3. **Hardening** (review pass after PR was opened): spawn-backend now has a `'error'` handler so AV/ACL/ENOEXEC failures don't crash the main process; the second misleading "30s 后端超时" dialog is suppressed when the broken-installer dialog already fired (`reportedBrokenInstaller` sentinel); `SAGE_PYTHON=python3` override no longer produces a broken `python3 run -n ...` spawn (the resolver now distinguishes conda-style vs raw-python commands).
+  4. **`electron-builder.yml` extraResources trimmed**: dropped the dead `resources/start-backend.bat` entry (main.ts spawns `python.exe` directly via the resolver, never invokes the .bat — same cleanup release/win7 applied in 973d44c).
+  - **Known follow-up**: Linux Python bundling (Ubuntu AppImage / deb) is still missing. No Python "embeddable" distribution exists for Linux; needs `python-build-standalone` or PyInstaller — out of scope for this bug-fix PR.
+  - **13 new vitest cases** cover both packaged branches + dev branch + SAGE_PYTHON override (incl. a regression guard that `python3` override does NOT emit conda-flavoured args).
 - feat(wiki): gate folder picker Browse button behind `appSettings.wiki.useFolderPicker` (default true; set false to fall back to plain text input — see §8 rollback in plan)
 - feat(skills): conform `backend/skills/skill_md/` to agentskills.io spec
   - Add optional fields: `license`, `compatibility` (≤500 chars), `allowed-tools`
@@ -610,27 +752,6 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
   - Emit warning when description lacks trigger keywords
   - All changes forward-compatible; existing SKILL.md files unaffected
   - Refs: docs/superpowers/specs/2026-06-29-agentskills-io-spec-conformance-design.md
-- feat(backend): packaged backend supervision + bundled supervisor for NSIS (#130 + #132 win7 port)
-- feat(llm): LM Studio OpenAI-compatible protocol support (modelId / localModelPath)
-- feat(llm): `Asia/Shanghai` 时区规范化作为 LLM 调用默认
-- feat(memory): `MemoryManager.add_to_working(role, content, session_id=)` → `WorkingMemory.add(message, session_id=)` → `get_context(session_id=)` 三层 session_id 透传,跨 session 严格隔离
-
-### Fixed
-- **fix(win7-bundling): sage_core inner-copy + backendLauncher error handling** (port of main PR #130 + #132)
-  - v0.4.5-alpha.2-win7 NSIS installer crashed at first launch with `ModuleNotFoundError: No module named 'sage_core'` 4-5s after spawn → 30s "backend health timeout" dialog. Root cause: `packages/sage-core/` is hyphen-named but the Python module is underscore-named `sage_core`; `pip install -e` only writes a .pth referencing the CI runner's absolute path (which doesn't exist on end-user machines).
-  - `scripts/bundle-python.ps1`: after `pip install -e sage-core`, also copy the inner `sage_core/` package into `Lib/site-packages/` where `import site` puts it unconditionally. Verify step now canary-imports both `sage_core` and `backend.main` (was just `backend.main`) so the regression is caught at bundle time.
-  - `electron/main.ts`: replace inline `existsSync` + conda fallback with `resolveBackendLaunchCommand()` from a new `electron/backendLauncher.ts` (ported from main). Adds broken-installer detection, `proc.on('error')` listener, `spawnStubProcess` placeholder, `reportedBrokenInstaller` flag (skips misleading 30s dialog), `SAGE_USER_DATA_DIR` env var (was missing).
-  - Adds 13 vitest cases in `electron/__tests__/backendLauncher.test.ts` and 3 Pester AST assertions in `scripts/bundle-python.Tests.ps1`.
-  - Bumps to v0.4.5-alpha.3-win7.
-- **fix(win7-py38): 跨 Pydantic v1 / v2 兼容** — `model_dump_compat()` helper 抹平 `.dict()` / `.model_dump()` 差异; 全部 e2e 测试在 py3.8 + pydantic 1.10 + py3.11 + pydantic 2.5 双轨绿
-- **fix(win7-tls): certifi CA bundle 路径注入 + 系统 bundle 兜底** — `_is_ca_bundle_available()` 优先探测 `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` / `CURL_CA_BUNDLE` 三个 env var(由 `main.configure_ssl_ca_bundle` 注入 certifi.where 路径),然后兜底探测 `ssl.get_default_verify_paths().cafile / capath`(OpenSSL 系统 certs 目录)。env var 显式设了但路径存在却不可用(0 字节空文件)→ 直接 False 不静默回落系统,避免掩盖 misconfig
-- **fix(win7-office): `office_create` binding-aware delegation 越界守卫** (T7.5) — 当用户显式把 `output_dir` 指到 binding workspace 之外(如桌面)时不再 delegation,留给 legacy `output_dir` 路径走 `_enforce_workspace` + ApprovalGate 触发"越界写"权限提示。否则文件会被静默改写到 managed workspace, 用户找不到且 doc 也只在 binding 内可见,双重反直觉
-- **fix(win7-test): `test_no_list_dir_hyphen_anywhere_in_source` cwd 来源去硬编码** — 改用 `git rev-parse --show-toplevel` 子进程动态定位仓库根,任意 worktree / 干净 CI runner 都能跑
-- **fix(ci): base CI 修复 cherry-pick (PR #367)** — `ci-write-manifest` 转 .mjs, `build-manifest` 路径校正, vitest 排除 .claude/worktrees
-
-## [v0.4.9-alpha.4-win7] - 2026-08-25
-
-> 🧪 **Alpha tier** — Sage 贡献者内测。Win7 LTS alpha 推进,代码基线与 v0.4.9-alpha.3-win7 一致;**无功能变更**(本轮仅为发布版本号 bump + NSIS 重打)。下一轮 `cherry-pick` main 的 PR #368 (Task 0-3 平台一致性) 后再发 v0.4.9-alpha.5-win7。
 
 ## [v0.3.0] - 2026-06-23
 
@@ -759,3 +880,5 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 [v0.1.2]: https://github.com/oneMuggle/sage/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/oneMuggle/sage/compare/v0.1.0...v0.1.1
 [v0.1.0]: https://github.com/oneMuggle/sage/releases/tag/v0.1.0
+
+
