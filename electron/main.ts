@@ -2017,7 +2017,6 @@ async function registerIpcHandlers(): Promise<void> {
       ptyProcesses.delete(opts.id);
     }
   });
-  });
 
   // ─── Phase 4 (2026-09-25): "在编辑器中打开" IPC handler ─────────────────
   // 接受 sessionId + 相对工作区路径，查询后端获取工作区根目录，
