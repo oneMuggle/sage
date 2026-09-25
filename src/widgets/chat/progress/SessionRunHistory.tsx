@@ -77,6 +77,11 @@ export function SessionRunHistory({ sessionId, onSelectRun }: SessionRunHistoryP
       {runs.map((run) => {
         const done = run.tasks.filter((t) => t.status === 'done').length;
         const total = run.tasks.length;
+        // RD24 (round54): run 级消耗汇总 —— RT24 持久化的 used_tokens 聚合。
+        const totalTokens = run.tasks.reduce(
+          (sum, t) => sum + (typeof t.used_tokens === 'number' ? t.used_tokens : 0),
+          0,
+        );
         return (
           <button
             key={run.run_id}
@@ -102,6 +107,12 @@ export function SessionRunHistory({ sessionId, onSelectRun }: SessionRunHistoryP
             {total > 0 && (
               <span className="text-text-tertiary shrink-0">
                 {done}/{total}
+              </span>
+            )}
+            {/* RD24: 消耗统计 */}
+            {totalTokens > 0 && (
+              <span className="text-text-tertiary shrink-0" data-testid={`run-history-tokens-${run.run_id}`}>
+                {totalTokens.toLocaleString()} tokens
               </span>
             )}
             <span className="text-text-tertiary shrink-0 text-[10px]">
