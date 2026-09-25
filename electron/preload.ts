@@ -29,6 +29,7 @@ import type {
   OfficeManagedRef,
   PickedOfficeFile,
   ProvidersElectronApiBridge,
+  PtyElectronApiBridge,
   RescanResult,
   SavedOfficeFile,
   SkillsElectronApiBridge,
@@ -558,6 +559,33 @@ const electronAPI = {
   changelogAPI: {
     read: (): Promise<string> => ipcRenderer.invoke('sage:changelog:read') as Promise<string>,
   },
+
+  /**
+   * Phase 3 (2026-09-25): 终端面板 PTY 桥。
+   * 在 Electron 主进程管理 node-pty 子进程，renderer 通过此桥发送输入/接收输出。
+   * onData / onExit 使用 ipcRenderer.on 监听 main 转发的 PTY 事件。
+   */
+  pty: {
+    create: (opts?: { cols?: number; rows?: number; cwd?: string; shell?: string }) =>
+      ipcRenderer.invoke('pty:create', opts ?? {}) as Promise<{ id: string } | { error: string }>,
+    write: (opts: { id: string; data: string }) =>
+      ipcRenderer.invoke('pty:write', opts) as Promise<void>,
+    resize: (opts: { id: string; cols: number; rows: number }) =>
+      ipcRenderer.invoke('pty:resize', opts) as Promise<void>,
+    destroy: (opts: { id: string }) => ipcRenderer.invoke('pty:destroy', opts) as Promise<void>,
+    onData: (handler: (payload: { id: string; data: string }) => void): UnlistenFn => {
+      const listener = (_e: IpcRendererEvent, payload: { id: string; data: string }) =>
+        handler(payload);
+      ipcRenderer.on('pty:data', listener);
+      return () => ipcRenderer.off('pty:data', listener);
+    },
+    onExit: (handler: (payload: { id: string; exitCode: number }) => void): UnlistenFn => {
+      const listener = (_e: IpcRendererEvent, payload: { id: string; exitCode: number }) =>
+        handler(payload);
+      ipcRenderer.on('pty:exit', listener);
+      return () => ipcRenderer.off('pty:exit', listener);
+    },
+  } satisfies PtyElectronApiBridge,
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

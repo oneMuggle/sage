@@ -10,6 +10,7 @@ import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
 import { restoreRunToBoard } from '../features/send-message/orchestrationEvents';
 import { useChat } from '../features/send-message/useChat';
+import { useTerminalPanelStore } from '../features/terminal-panel/terminalPanelStore';
 import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
 import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
 import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
@@ -33,6 +34,7 @@ import { RightPanel } from '../widgets/chat/RightPanel';
 import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
 import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
+import { TerminalPanel } from '../widgets/chat/TerminalPanel';
 import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
 import { WorkspaceBranchPicker } from '../widgets/chat/WorkspaceBranchPicker';
 import { ArchivesModal } from '../widgets/session';
@@ -607,6 +609,18 @@ export function Chat() {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleToggleRightPanel]);
 
+  // Phase 3 (2026-09-25): Ctrl+` 切换底部终端面板（VS Code 风格快捷键）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === '`') {
+        e.preventDefault();
+        useTerminalPanelStore.getState().toggle();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // messages 每 token 换新引用, 直接进 deps 会击穿 memo —— 经 ref 读取,
   // 回调引用保持恒定 (F1)。
   const messagesRef = useRef(messages);
@@ -1115,6 +1129,8 @@ export function Chat() {
             injectedDraft={editResendTarget ?? quotedDraft}
             editResendNotice={editResendNotice}
           />
+          {/* Phase 3 (2026-09-25): 底部终端面板（VS Code 风格），Ctrl+` 切换 */}
+          <TerminalPanel />
         </div>
         {/* /左列 */}
 

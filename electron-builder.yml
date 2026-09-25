@@ -3,7 +3,10 @@ productName: Sage
 copyright: Copyright © 2026 Sage Team
 asar: true
 asarUnpack:
-  # Phase 3 will add: '**/node_modules/sharp/**' if we ever embed heavy native modules
+  # Phase 3 (2026-09-25): node-pty 是 native addon（C++ binding），必须从 asar 中解包
+  # 才能在运行时加载 .node 二进制。asar 内文件无法被 dlopen。
+  - '**/node_modules/node-pty/**'
+  - '**/node_modules/node-pty-prebuilt-multiarch/**'
 directories:
   output: release/${version}
   buildResources: resources

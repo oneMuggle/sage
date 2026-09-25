@@ -7,7 +7,7 @@
 // diff 高亮）；右侧面板按钮经 rightPanelStore.selectChange 直达变更 Tab
 // 对应文件的 diff 视图（行内快看 / 右面板细审两层体验）。
 
-import { ChevronDown, ChevronRight, FileText, PanelRightOpen } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, FileText, PanelRightOpen } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useChangesListStore } from '../../../features/changes/changesListStore';
@@ -19,6 +19,15 @@ interface FileChangeCardProps {
   sessionId: string;
   /** 相对工作区根的文件路径（与 git status / diff 接口口径一致） */
   path: string;
+}
+
+/** Phase 2 (2026-09-25): 可在预览 Tab 渲染的文档扩展名（与 DocumentPreview 一致） */
+const PREVIEWABLE_EXTS = new Set(['docx', 'pdf', 'xlsx', 'xls', 'pptx', 'ppt']);
+
+function isPreviewable(filePath: string): boolean {
+  const dot = filePath.lastIndexOf('.');
+  if (dot === -1) return false;
+  return PREVIEWABLE_EXTS.has(filePath.slice(dot + 1).toLowerCase());
 }
 
 export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
@@ -65,8 +74,16 @@ export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
     useRightPanelStore.getState().selectChange(path);
   }, [path]);
 
+  // Phase 2 (2026-09-25): 在预览 Tab 打开 Office 文档
+  const previewInPanel = useCallback(() => {
+    useRightPanelStore.getState().selectPreview(path);
+  }, [path]);
+
   return (
-    <div className="mx-2 mb-1.5 rounded border border-border bg-surface" data-testid="file-change-card">
+    <div
+      className="mx-2 mb-1.5 rounded border border-border bg-surface"
+      data-testid="file-change-card"
+    >
       <div className="flex items-center gap-1 px-2 py-1">
         <button
           className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
@@ -89,9 +106,7 @@ export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
             </span>
           )}
           {stats?.deletions != null && stats.deletions > 0 && (
-            <span className="shrink-0 font-mono text-[11px] text-red-500">
-              −{stats.deletions}
-            </span>
+            <span className="shrink-0 font-mono text-[11px] text-red-500">−{stats.deletions}</span>
           )}
         </button>
         <button
@@ -103,6 +118,17 @@ export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
         >
           <PanelRightOpen className="w-3.5 h-3.5" />
         </button>
+        {isPreviewable(path) && (
+          <button
+            className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover"
+            onClick={previewInPanel}
+            title="在预览 Tab 中查看文档"
+            aria-label={`预览文档 ${path}`}
+            data-testid="file-change-preview-doc"
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       {expanded && (
         <div className="border-t border-border px-2 py-1.5">
