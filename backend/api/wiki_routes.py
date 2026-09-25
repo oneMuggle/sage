@@ -239,6 +239,7 @@ async def create_project(req: CreateProjectRequest) -> ProjectInfo:
 
     if not project_path.exists():
         try:
+            project_path.mkdir(parents=True, exist_ok=True)
             _create_wiki_structure(project_path)
         except Exception as e:
             logger.error(f"创建项目失败: {e}")
