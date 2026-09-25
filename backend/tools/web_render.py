@@ -293,13 +293,31 @@ def _evaluate_json(session: BrowserSession, expression: str, target_id: Optional
     return (result.get("result") or {}).get("value")
 
 
+#: 懒加载指示器探测表达式（R37 快路径）：页面无任何懒加载标记时跳过
+#: 触底滚动——多数静态页可直接省去全部滚动轮次（每轮 0.4s 暂停）。
+_HAS_LAZY_MARKER_EXPRESSION = (
+    "!!(document.querySelector("
+    "'img[loading=lazy],img[data-src],[data-src],.lazyload,.lazy-loading'"
+    "))"
+)
+
+
 def _scroll_for_lazy_load(session: BrowserSession, target_id: Optional[str]) -> None:
     """触底滚动触发懒加载（R3）：最多 ``_LAZY_SCROLL_MAX_ROUNDS`` 轮，
     scrollHeight 连续 ``_LAZY_SCROLL_STABLE_ROUNDS`` 轮不变即提前结束。
 
+    R37 快路径：页面无懒加载指示器（lazy 图片 / data-src / lazy 类）时
+    直接返回——滚动只为触发懒加载，无标记页面纯浪费时间。
+
     纯 Runtime.evaluate 实现（滚到底读 scrollHeight），兼容 CDP 短连接
     架构 —— 不依赖事件帧。滚动失败静默返回（不影响已渲染内容）。
     """
+    try:
+        has_marker = _evaluate_json(session, _HAS_LAZY_MARKER_EXPRESSION, target_id)
+    except (BrowserCDPError, OSError):
+        has_marker = True  # 探测失败按"可能有懒加载"保守处理，走原滚动路径
+    if not has_marker:
+        return
     expression = (
         "(function(){"
         "window.scrollTo(0,document.body?document.body.scrollHeight:0);"
