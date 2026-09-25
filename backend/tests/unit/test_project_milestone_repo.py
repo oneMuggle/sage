@@ -98,7 +98,7 @@ class TestMilestoneGet:
 
     def test_list_filter_by_status(self, milestone_repo, project):
         """按状态过滤。"""
-        m1 = milestone_repo.create(project_id=project.id, title="Pending")
+        milestone_repo.create(project_id=project.id, title="Pending")
         m2 = milestone_repo.create(project_id=project.id, title="Done")
         milestone_repo.mark_completed(m2.id)
 

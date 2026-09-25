@@ -23,11 +23,22 @@ from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database, make_with_db_lock
+from backend.data.project_constraint_repo import (
+    CONSTRAINT_TEMPLATES,
+    ProjectConstraint,
+    ProjectConstraintRepository,
+)
 from backend.data.project_material_repo import (
     MAX_MATERIAL_CONTENT_CHARS,
     ProjectMaterial,
     ProjectMaterialContentTooLargeError,
     ProjectMaterialRepository,
+)
+from backend.data.project_milestone_repo import (
+    MILESTONE_STATUS,
+    PROJECT_STAGE_ENUM,
+    ProjectMilestone,
+    ProjectMilestoneRepository,
 )
 from backend.data.project_repo import (
     Project,
@@ -36,26 +47,15 @@ from backend.data.project_repo import (
     ProjectRepository,
     open_project,
 )
-from backend.data.project_constraint_repo import (
-    CONSTRAINT_TEMPLATES,
-    ProjectConstraint,
-    ProjectConstraintRepository,
-)
-from backend.data.project_milestone_repo import (
-    MILESTONE_STATUS,
-    PROJECT_STAGE_ENUM,
-    ProjectMilestone,
-    ProjectMilestoneRepository,
-)
 from backend.data.session_repo import MessageRepository
 from backend.office.errors import OfficePathError
 from backend.office.models import _constrained_list
 from backend.office.session_workspace import get_workspace_binding
+from backend.services.git_integration import GitIntegration
 from backend.services.project_type_detector import (
     DetectionResult,
     detect_project_type,
 )
-from backend.services.git_integration import GitIntegration
 
 logger = logging.getLogger(__name__)
 
@@ -688,7 +688,7 @@ def import_constraint_template(
 def list_constraint_templates() -> ConstraintTemplatesResponse:
     """列出可用的约束模板。"""
     return ConstraintTemplatesResponse(
-        templates={name: items for name, items in CONSTRAINT_TEMPLATES.items()}
+        templates=dict(CONSTRAINT_TEMPLATES.items())
     )
 
 

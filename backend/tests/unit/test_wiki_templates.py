@@ -8,12 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
 from backend.wiki.wiki_templates import (
     TEMPLATES,
-    WikiPageTemplate,
-    WikiTemplate,
     create_wiki_structure,
     get_directories,
     get_pages,

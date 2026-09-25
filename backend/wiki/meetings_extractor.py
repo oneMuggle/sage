@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -67,7 +67,7 @@ def extract_meeting_entry(file_path: Path) -> Optional[MeetingEntry]:
             content_body = parts[2].strip()
 
             for line in front_matter.split("\n"):
-                line = line.strip()
+                line = line.strip()  # noqa: PLW2901
                 if line.startswith("title:"):
                     title = line[6:].strip().strip('"\'')
                 elif line.startswith("date:"):
@@ -82,7 +82,7 @@ def extract_meeting_entry(file_path: Path) -> Optional[MeetingEntry]:
     # 从第一行 H1 提取标题
     lines = content.split("\n")
     for line in lines:
-        line = line.strip()
+        line = line.strip()  # noqa: PLW2901
         if line.startswith("# "):
             if not title:
                 title = line[2:].strip()
@@ -129,7 +129,7 @@ def extract_meeting_entry(file_path: Path) -> Optional[MeetingEntry]:
 
     # 提取摘要（第一段非标题文本）
     for line in lines:
-        line = line.strip()
+        line = line.strip()  # noqa: PLW2901
         if line and not line.startswith("#") and not line.startswith("---"):
             summary = line[:200]
             break

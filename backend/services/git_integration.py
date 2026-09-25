@@ -134,7 +134,7 @@ class GitIntegration:
             if not line or len(line) < 3:
                 continue
             # 格式: XY filename
-            # X = 暂存区状态, Y = 工作区状态
+            # X = 暂存区状态, Y = 工作区状态  # noqa: ERA001
             # 常见状态:
             #   " M" = 未暂存修改 (modified in work tree)
             #   "M " = 已暂存修改 (modified in index)
@@ -143,10 +143,7 @@ class GitIntegration:
             #   "D " = 已暂存删除
             xy = line[:2]
             # 跳过 XY 后的空格
-            if line[2] == " ":
-                filename = line[3:]
-            else:
-                filename = line[2:]
+            filename = line[3:] if line[2] == " " else line[2:]
 
             # 暂存区有变更 (X 不是空格且不是 ?)
             if xy[0] not in (" ", "?"):
@@ -215,7 +212,7 @@ class GitIntegration:
             content = gitignore_path.read_text(encoding="utf-8")
             patterns = []
             for line in content.split("\n"):
-                line = line.strip()
+                line = line.strip()  # noqa: PLW2901
                 # 跳过空行和注释
                 if line and not line.startswith("#"):
                     patterns.append(line)

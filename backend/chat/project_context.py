@@ -339,10 +339,10 @@ def build_constraints_block(project_id: Optional[str]) -> str:
         parts: List[str] = [CONSTRAINTS_HEADER]
         used = 0
         for c in constraints:
-            # 单条约束: "[category] content"
+            # 单条约束: "[category] content"  # noqa: ERA001
             line = f"[{c.category}] {c.content}"
             if used + len(line) > TOTAL_CHAR_CAP:
-                parts.append(f"(另有约束超出预算被省略)")
+                parts.append("(另有约束超出预算被省略)")
                 break
             parts.append(line)
             used += len(line)

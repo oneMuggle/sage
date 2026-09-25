@@ -7,10 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from backend.wiki.meetings_extractor import (
-    MeetingEntry,
     extract_meeting_entry,
     generate_meetings_index,
     scan_meetings_directory,

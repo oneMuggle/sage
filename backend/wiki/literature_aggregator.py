@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -66,14 +67,12 @@ def extract_literature_entry(file_path: Path) -> Optional[LiteratureEntry]:
 
             # 简单 YAML 解析（不引入 PyYAML 依赖）
             for line in front_matter.split("\n"):
-                line = line.strip()
+                line = line.strip()  # noqa: PLW2901
                 if line.startswith("title:"):
                     title = line[6:].strip().strip('"\'')
                 elif line.startswith("year:"):
-                    try:
+                    with contextlib.suppress(ValueError):
                         year = int(line[5:].strip())
-                    except ValueError:
-                        pass
                 elif line.startswith("authors:"):
                     authors_str = line[8:].strip()
                     # 支持 [a, b] 或 "a, b" 格式
@@ -90,7 +89,7 @@ def extract_literature_entry(file_path: Path) -> Optional[LiteratureEntry]:
     if not title:
         lines = content.split("\n")
         for line in lines:
-            line = line.strip()
+            line = line.strip()  # noqa: PLW2901
             if line.startswith("# "):
                 title = line[2:].strip()
                 break
@@ -98,7 +97,7 @@ def extract_literature_entry(file_path: Path) -> Optional[LiteratureEntry]:
     # 提取摘要（第一段非标题文本）
     lines = content.split("\n")
     for line in lines:
-        line = line.strip()
+        line = line.strip()  # noqa: PLW2901
         if line and not line.startswith("#") and not line.startswith("---"):
             summary = line[:200]  # 截取前 200 字符
             break
