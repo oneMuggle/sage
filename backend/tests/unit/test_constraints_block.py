@@ -92,7 +92,7 @@ class TestBuildConstraintsBlock:
         block = build_constraints_block(project.id)
         lines = block.split("\n")
         # 跳过 header，找约束行
-        constraint_lines = [l for l in lines if l.startswith("[")]
+        constraint_lines = [ln for ln in lines if ln.startswith("[")]
         assert len(constraint_lines) == 3
         assert "[high]" in constraint_lines[0]
         assert "[mid]" in constraint_lines[1]
@@ -100,7 +100,7 @@ class TestBuildConstraintsBlock:
 
     def test_disabled_constraints_excluded(self, constraint_repo, project):
         """禁用的约束不输出。"""
-        c1 = constraint_repo.create(
+        _c1 = constraint_repo.create(
             project_id=project.id,
             category="enabled",
             content="enabled constraint",
