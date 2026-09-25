@@ -29,16 +29,22 @@ IMPERSONATE_TARGET = "chrome"
 
 _import_failed = False
 
-# R28：指纹通道使用计数（诊断视角；线程安全）。仅统计经指纹传输器实际
-# 发出的请求；错误 / 未启用不计数。
+# R28/R34：指纹通道使用计数（诊断视角；线程安全）。仅统计经指纹传输器
+# 实际发出的请求；错误 / 未启用不计数。R34 起按 host 细分（LRU 上限 100）。
 _stats_lock = threading.Lock()
 _stats = {"requests": 0}
+_stats_hosts: Dict[str, int] = {}
+MAX_TLS_STATS_HOSTS = 100
 
 
-def stats() -> Dict[str, int]:
-    """指纹通道使用计数快照（拷贝；R28）。"""
+def stats() -> Dict[str, Any]:
+    """指纹通道使用计数快照（拷贝；R28/R34）：
+    ``{"requests": N, "hosts": {host: count}}``。"""
     with _stats_lock:
-        return dict(_stats)
+        return {
+            "requests": _stats["requests"],
+            "hosts": dict(sorted(_stats_hosts.items())),
+        }
 
 
 def fingerprint_enabled() -> bool:
@@ -95,6 +101,13 @@ class CurlImpersonateTransport(httpx.BaseTransport):
         )
         with _stats_lock:
             _stats["requests"] += 1
+            from urllib.parse import urlparse
+
+            host = (urlparse(str(request.url)).hostname or "").lower()
+            if host:
+                if host not in _stats_hosts and len(_stats_hosts) >= MAX_TLS_STATS_HOSTS:
+                    _stats_hosts.clear()  # 超限整体清零（诊断视角，保新弃旧）
+                _stats_hosts[host] = _stats_hosts.get(host, 0) + 1
         return httpx.Response(
             response.status_code,
             headers=list(response.headers.items()),
