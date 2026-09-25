@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from backend.api import legacy_routes
+from backend.api import legacy_memory_routes as legacy_routes
 
 
 def test_memory_diagnostics_redacts_path_and_reports_identity(monkeypatch, tmp_path):

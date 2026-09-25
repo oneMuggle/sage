@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 import pytest
 from pydantic import ValidationError
 
-from backend.api import legacy_routes
+from backend.api import legacy_memory_routes as legacy_routes
 
 
 class _MemoryManager:
