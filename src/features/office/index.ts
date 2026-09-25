@@ -1,19 +1,12 @@
 export { useOfficeDocuments } from './useOfficeDocuments';
-export type {
-  UseOfficeDocumentsReturn,
-  OfficeReadResult,
-  OfficeListView,
-} from './useOfficeDocuments';
+export type { OfficeReadResult, OfficeListView } from './useOfficeDocuments';;
 export { OfficeFilePicker } from './OfficeFilePicker';
 export { OfficePreviewPanel } from './OfficePreviewPanel';
 export type { OfficePreviewData } from './OfficePreviewPanel';
 export { OfficeDocumentList } from './OfficeDocumentList';
 export { OfficeSnapshotPanel } from './OfficeSnapshotPanel';
 export { OfficeEditPreviewDialog } from './OfficeEditPreviewDialog';
-export type {
-  OfficeEditPreviewDialogProps,
-  OfficeEditPreviewPhase,
-} from './OfficeEditPreviewDialog';
+;
 export { buildUpdateOps } from './OfficeEditPreviewDialog';
 export { OfficeGenerateForm } from './OfficeGenerateForm';
 export { OfficeCapabilityBar } from './OfficeCapabilityBar';

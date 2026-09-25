@@ -1,12 +1,6 @@
 export { ChatInput } from './ChatInput';
 export { InputCard } from './InputCard';
-export type {
-  InputCardProps,
-  FileAttachmentType,
-  ImageAttachmentType,
-  KnowledgeRefType,
-  KnowledgeDocType,
-} from './InputCard';
+;
 export { MessageList } from './MessageList';
 export { MemoryWriteHints } from './MemoryWriteHints';
 export { Message } from './Message';
