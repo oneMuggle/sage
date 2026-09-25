@@ -22,7 +22,7 @@ export function Card({ className, children, ...props }: CardProps) {
   );
 }
 
-export interface CardHeaderProps extends HTMLAttributes<HTMLDivElement> {}
+export type CardHeaderProps = HTMLAttributes<HTMLDivElement>;
 
 export function CardHeader({ className, children, ...props }: CardHeaderProps) {
   return (
@@ -32,7 +32,7 @@ export function CardHeader({ className, children, ...props }: CardHeaderProps) {
   );
 }
 
-export interface CardTitleProps extends HTMLAttributes<HTMLHeadingElement> {}
+export type CardTitleProps = HTMLAttributes<HTMLHeadingElement>;
 
 export function CardTitle({ className, children, ...props }: CardTitleProps) {
   return (
@@ -42,7 +42,7 @@ export function CardTitle({ className, children, ...props }: CardTitleProps) {
   );
 }
 
-export interface CardContentProps extends HTMLAttributes<HTMLDivElement> {}
+export type CardContentProps = HTMLAttributes<HTMLDivElement>;
 
 export function CardContent({ className, children, ...props }: CardContentProps) {
   return (

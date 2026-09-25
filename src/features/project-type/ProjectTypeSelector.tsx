@@ -5,8 +5,10 @@
  * 用于在项目创建/编辑时选择项目类型，支持自动检测建议
  */
 
-import { useState, useEffect } from 'react';
 import { Code, BookOpen, Briefcase, User, Sparkles } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { projectApi, type ProjectType, type ProjectTypeDetectionResult } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
 import {
   Dialog,
@@ -16,7 +18,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from '../../shared/ui/Dialog/Dialog';
-import { projectApi, type ProjectType, type ProjectTypeDetectionResult } from '../../shared/api';
 
 export interface ProjectTypeSelectorProps {
   open: boolean;

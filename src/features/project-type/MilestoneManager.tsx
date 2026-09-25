@@ -5,12 +5,14 @@
  * 里程碑的 CRUD 界面：列表、创建、编辑、删除、状态更新
  */
 
-import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Target, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { projectApi, type ProjectMilestone } from '../../shared/api';
+import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
-import { Badge } from '../../shared/ui/Badge';
-import { projectApi, type ProjectMilestone } from '../../shared/api';
+
 import { MilestoneEditor } from './MilestoneEditor';
 
 export interface MilestoneManagerProps {

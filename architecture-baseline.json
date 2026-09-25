@@ -70,6 +70,10 @@
     "tests/electron/test_stub_backend.py": 896,
     "backend/api/arena_routes.py": 873,
     "backend/services/arena_draw_engine.py": 1054,
+<<<<<<< HEAD
     "backend/memory/manager.py": 848
+=======
+    "backend/api/project_routes.py": 838
+>>>>>>> 833762b4 (fix(ci): architecture baseline 更新 + lint 修复)
   }
 }

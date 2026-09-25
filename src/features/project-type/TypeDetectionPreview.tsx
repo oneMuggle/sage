@@ -7,6 +7,7 @@
  */
 
 import { Sparkles, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+
 import type { ProjectType, ProjectTypeDetectionResult } from '../../shared/api';
 
 export interface TypeDetectionPreviewProps {

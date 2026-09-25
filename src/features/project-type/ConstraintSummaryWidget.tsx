@@ -5,10 +5,11 @@
  * 显示项目的约束统计信息（启用数量、按类别分组）
  */
 
-import { useState, useEffect } from 'react';
 import { Shield, CheckCircle2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
+import { useState, useEffect } from 'react';
+
 import { projectApi, type ProjectConstraint, type ProjectType } from '../../shared/api';
+import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
 
 export interface ConstraintSummaryWidgetProps {
   projectId: string;

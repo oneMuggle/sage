@@ -9,7 +9,6 @@
  * 4. 确认创建（注册项目 + 设置类型）
  */
 
-import { useState, useCallback } from 'react';
 import {
   FolderOpen,
   Code,
@@ -22,6 +21,11 @@ import {
   Check,
   Loader2,
 } from 'lucide-react';
+import { useState, useCallback } from 'react';
+
+import { projectApi, type ProjectType, type ProjectTypeDetectionResult } from '../../shared/api';
+import { Badge } from '../../shared/ui/Badge';
+import { Button } from '../../shared/ui/Button';
 import {
   Dialog,
   DialogContent,
@@ -30,11 +34,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from '../../shared/ui/Dialog/Dialog';
-import { Button } from '../../shared/ui/Button';
 import { Input } from '../../shared/ui/Input';
-import { Badge } from '../../shared/ui/Badge';
+
 import { TypeDetectionPreview } from './TypeDetectionPreview';
-import { projectApi, type ProjectType, type ProjectTypeDetectionResult } from '../../shared/api';
+
 
 export interface ProjectCreationWizardProps {
   open: boolean;

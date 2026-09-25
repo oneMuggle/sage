@@ -5,8 +5,9 @@
  * 在侧边栏项目列表中显示项目类型标识
  */
 
-import { Code, BookOpen, Briefcase, User, HelpCircle } from 'lucide-react';
 import { clsx } from 'clsx';
+import { Code, BookOpen, Briefcase, User, HelpCircle } from 'lucide-react';
+
 import type { ProjectType } from '../../shared/api';
 
 export interface ProjectTypeBadgeProps {
