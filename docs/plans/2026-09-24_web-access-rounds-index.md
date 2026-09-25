@@ -41,6 +41,10 @@
 | R30 | 渲染内容完整度可观测（wait_for_satisfied） | #1524 `a83db4b8` | #1526 `3b3cf22a` |
 | R31 | 渲染分支瞬时 5xx 单次重试（对齐 AB5；403 盾页不重试） | #1529 `83b626f5` | #1530 `955d3ab9` |
 | R32 | 专项总账（本文件） | —（本 PR） | 文档无需对齐 |
+| R33 | 事件驱动就绪等待（Page.loadEventFired 短路 readyState 轮询） | #1534 `2a26696c` | #1536 `dadfdb54` |
+| R34 | AB3 指纹使用按 host 细分（hosts 映射，上限 100） | #1541 `95117ec3` | #1544 `dd9b46f7` |
+| R35 | 真实浏览器渲染链集成测试（fixture 302/wait_for/503；无浏览器 skip） | #1554 `dbfa5c5c` | #1570 `4c9086cf` |
+| R36 | 总账回填 R33-R35 行 + §3 建议状态更新（本 PR） | —（本 PR） | 文档无需对齐 |
 
 ## 2. 能力矩阵（截至 R31）
 
@@ -59,12 +63,12 @@
 
 ## 3. 后续优化建议（按优先级）
 
-1. **P3 事件驱动就绪等待**：`Page.loadEventFired` 替代 readyState 轮询
+1. ✅ **P3 事件驱动就绪等待**（已落地 R33 #1534/#1536）：`Page.loadEventFired` 替代 readyState 轮询
    （0.3s 粒度）——单次渲染约省 0.3-0.9s；事件通道基建已就位（R22/R23），
    需在 browser_events 增加 Page 事件按 sessionId 路由。
-2. **P3 AB3 命中率细分到 host**：`tls_fingerprint.requests` 目前是全局
+2. ✅ **P3 AB3 命中率细分到 host**（已落地 R34 #1541/#1544）：`tls_fingerprint.requests` 目前是全局
    计数；按域名聚合可与 per-host 出网指标对照，定位"哪些站点受益于指纹"。
-3. **P3 渲染 e2e 冒烟**：真实站点（含 302 链 + 盾页 fixture）的渲染链
+3. ✅ **P3 渲染 e2e 冒烟**（已落地 R35 #1554/#1570）：真实站点（含 302 链 + 盾页 fixture）的渲染链
    e2e 用例，补单测 stub 与真实 CDP 行为之间的缝隙。
 4. **P4 渲染池槽位自动调优**：按并发等待队列长度动态调整 render_pool_size
    （当前 1..4 手动配置，默认 2 已够用）。
