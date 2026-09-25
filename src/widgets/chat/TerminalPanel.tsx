@@ -12,11 +12,11 @@
 //
 // Web 端降级：window.electronAPI.pty 不存在时显示"仅桌面端可用"提示。
 
+import '@xterm/xterm/css/xterm.css';
+import { FitAddon } from '@xterm/addon-fit';
+import { Terminal } from '@xterm/xterm';
 import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef } from 'react';
-import { Terminal } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import '@xterm/xterm/css/xterm.css';
 
 import {
   useTerminalPanelStore,

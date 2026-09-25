@@ -4,11 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { useTheme } from '../../app/providers/useTheme';
 import { backendRequest } from '../../shared/api/backendRequest';
 import { projectApi, type ProjectSummary } from '../../shared/api/projectApi';
 import { getRecentWikiProjects } from '../../shared/api-client/wiki';
-import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { useStore } from '../../shared/lib/store';
 
 import { actionCommands, navCommands } from './commandItems';
