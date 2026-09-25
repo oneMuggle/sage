@@ -85,6 +85,11 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Added(web-access)
 - **Page.loadEventFired 就绪信号（R33）**：事件通道 attach 时加发 Page.enable 并按 sessionId 路由 loadEventFired；render_page 导航前布防（attach 先于导航，事件不漏）、导航后就绪等待优先等事件（典型 <2s），超时与未布防均回落 readyState 轮询——单次渲染省 0.3-0.9s 轮询开销
 
+> 🌐 **网页访问 Round 34：AB3 指纹使用按 host 细分**（总账 §3 P3 第二项）
+
+### Added(web-access)
+- **TLS 指纹使用按 host 细分（R34）**：`tls_fingerprint.requests` 之外增 `hosts` 映射（host → 次数，LRU 上限 100 超限清零保新弃旧）——可与 per-host 出网指标对照定位指纹受益站点
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 > 🧹 **alpha.52-win7 暂无未发布变更**

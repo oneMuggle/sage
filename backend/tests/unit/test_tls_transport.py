@@ -38,6 +38,9 @@ class _FakeRepo:
 @pytest.fixture(autouse=True)
 def _reset_import_cache(monkeypatch):
     monkeypatch.setattr(tls_transport, "_import_failed", False)
+    # R34：计数为模块级状态，逐用例重置避免跨用例污染
+    monkeypatch.setattr(tls_transport, "_stats", {"requests": 0})
+    monkeypatch.setattr(tls_transport, "_stats_hosts", {})
 
 
 def _install_repo(monkeypatch, raw):
@@ -187,6 +190,7 @@ def test_stats_counts_requests_and_returns_copy(monkeypatch):
     assert snapshot["requests"] == before + 2
     snapshot["requests"] = 999  # 拷贝语义：外部修改不污染内部计数
     assert tls_transport.stats()["requests"] == before + 2
+    assert snapshot["hosts"] == {"x.example": 1, "y.example": 1}  # R34 按 host 细分
 
 
 def test_get_with_redirects_closes_client_on_redirect_limit(monkeypatch):
@@ -221,3 +225,25 @@ def test_get_with_redirects_closes_client_on_redirect_limit(monkeypatch):
             gated_by_whitelist=False,
         )
     assert close_calls  # finally 释放了连接池
+
+
+def test_stats_hosts_cap_clears_when_full(monkeypatch):
+    """R34：host 细分超上限整体清零（诊断视角，保新弃旧）。"""
+    monkeypatch.setattr(tls_transport, "MAX_TLS_STATS_HOSTS", 2)
+    response = SimpleNamespace(status_code=200, headers={}, content=b"")
+
+    def _fake_request(method, url, **kwargs):
+        return response
+
+    module = ModuleType("curl_cffi")
+    module.requests = SimpleNamespace(request=_fake_request)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "curl_cffi", module)
+
+    transport = CurlImpersonateTransport()
+    transport.handle_request(httpx.Request("GET", "https://a.example/"))
+    transport.handle_request(httpx.Request("GET", "https://b.example/"))
+    transport.handle_request(httpx.Request("GET", "https://c.example/"))
+
+    snapshot = tls_transport.stats()
+    assert snapshot["requests"] == 3
+    assert snapshot["hosts"] == {"c.example": 1}  # 清零后仅剩最新
