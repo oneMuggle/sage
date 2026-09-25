@@ -109,6 +109,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   相等会偶发断言失败（win7 分支已有 0.02 修复，本 PR 对齐 main）；本机
   Windows 复现后验证 40/40 通过
 
+> 🌐 **网页访问 Round 42：渲染池默认配置自动扩槽**（总账 §3 第 7 项 P4 落地）
+
+### Added(web-access)
+- **渲染池自动扩槽（R42）**：用户未显式配置 render_pool_size 时，槽位上限自动为
+  RENDER_POOL_SIZE_MAX=4（持续使用下懒增）；显式配置则钉死为配置值——化解 R38
+  记录的"自动调优与显式配置语义冲突"。配置读取失败按非自动处理
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21

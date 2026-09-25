@@ -765,3 +765,60 @@ def test_pool_grows_slots_from_config(monkeypatch):
         ids.add(pool.acquire().browser_id)
     assert ids == set(web_render._render_pool_ids(3))
     assert len(created) == 3
+
+
+# ---------- R42：渲染池自动扩槽（默认配置语义） ----------
+
+
+def test_pool_auto_extends_to_max_when_unconfigured(fake_time, monkeypatch):
+    """未显式配置 → 自动模式上限 MAX=4；持续使用下懒增到 4 槽。"""
+    from backend.data import settings_repo
+
+    monkeypatch.setattr(settings_repo, "SettingsRepository", lambda: _FakeSettingsRepo("{}"))
+    created: Any = []
+
+    def _fake_launch(headless, browser_id=None, **kwargs):
+        created.append(_FakePoolSession(browser_id=browser_id))
+        return created[-1]
+
+    monkeypatch.setattr(web_render, "launch_browser", _fake_launch)
+    clock = _FakeClock()
+    monkeypatch.setattr(web_render, "time", clock)
+
+    pool = web_render._RendererPool()
+    ids = set()
+    for _ in range(4):
+        clock.now += 1
+        ids.add(pool.acquire().browser_id)
+    assert ids == set(web_render._render_pool_ids(web_render.RENDER_POOL_SIZE_MAX))
+    assert len(created) == 4
+
+
+def test_pool_explicit_config_caps_slots(fake_time, monkeypatch):
+    """显式配置 render_pool_size=3 → 上限 3，不自动扩到 MAX。"""
+    import json as _json
+
+    from backend.data import settings_repo
+
+    monkeypatch.setattr(
+        settings_repo,
+        "SettingsRepository",
+        lambda: _FakeSettingsRepo(_json.dumps({"render_pool_size": 3})),
+    )
+    created: Any = []
+
+    def _fake_launch(headless, browser_id=None, **kwargs):
+        created.append(_FakePoolSession(browser_id=browser_id))
+        return created[-1]
+
+    monkeypatch.setattr(web_render, "launch_browser", _fake_launch)
+    clock = _FakeClock()
+    monkeypatch.setattr(web_render, "time", clock)
+
+    pool = web_render._RendererPool()
+    ids = set()
+    for _ in range(4):
+        clock.now += 1
+        ids.add(pool.acquire().browser_id)
+    assert ids == set(web_render._render_pool_ids(3))
+    assert len(created) == 3
