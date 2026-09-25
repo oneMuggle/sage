@@ -200,10 +200,9 @@ def _create_wiki_structure(project_path: Path) -> None:
     Args:
         project_path: 项目根目录
     """
-    from backend.wiki.wiki_templates import create_wiki_structure as _create_from_template
-
     # 确保项目目录存在（旧代码兼容，py3.8 cherry-pick 适配）
     from backend.wiki.files import secure_ensure_directory
+    from backend.wiki.wiki_templates import create_wiki_structure as _create_from_template
 
     secure_ensure_directory(project_path.parent, project_path)
 
