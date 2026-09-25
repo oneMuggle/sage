@@ -5,8 +5,7 @@ import { toast } from 'sonner';
 import { PlanCard } from '../components/PlanCard';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
-// 直接从源文件导入（而非 barrel）：既有 Chat 页面测试整体 mock 了 '../features/chat'。
-import { formatQuoteBlock } from '../features/chat/selectionQuote';
+import { useQuoteDraft } from '../features/chat/useQuoteDraft';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
@@ -569,19 +568,9 @@ export function Chat() {
     nonce: number;
   } | null>(null);
   // P0-1: 引用到对话 —— 复用 editResendTarget 的 injectedDraft 通道把引用块
-  // 注入输入框（nonce 变化触发重放）。与编辑重发互斥时以编辑态优先。
-  // 对话阅读导航 A5: 引用以 mode='append' 追加到草稿，且为一次性事件 ——
-  // 输入框消费后下一帧清空，避免编辑重发结束时回落到旧引用而重复追加。
-  const [quotedDraft, setQuotedDraft] = useState<{
-    text: string;
-    nonce: number;
-    mode: 'append';
-  } | null>(null);
-  useEffect(() => {
-    if (!quotedDraft) return;
-    const frame = requestAnimationFrame(() => setQuotedDraft(null));
-    return () => cancelAnimationFrame(frame);
-  }, [quotedDraft]);
+  // 注入输入框。与编辑重发互斥时以编辑态优先。A4/A5: 追加而非覆盖草稿，
+  // 划词引用走同一通道（一次性事件，见 useQuoteDraft）。
+  const { quotedDraft, quoteText } = useQuoteDraft();
   // 传给 memo 组件的 props 引用需稳定: 内联箭头函数/对象字面量每次渲染
   // 都是新引用, 会击穿 React.memo (F1)。
   const cancelEditResend = useCallback(() => setEditResendTarget(null), []);
@@ -738,17 +727,11 @@ export function Chat() {
     [removeMessage],
   );
 
-  // P0-1: 引用到对话 —— 消息正文转 Markdown 引用块注入输入框。
-  // 对话阅读导航 A5: 追加到草稿尾部，不再覆盖用户已输入的内容。
-  const handleQuote = useCallback((message: MessageType) => {
-    setQuotedDraft({ text: formatQuoteBlock(message.content), nonce: Date.now(), mode: 'append' });
-  }, []);
-
-  // 对话阅读导航 A4: 划词引用 —— 选中片段转引用块追加到草稿（对标 ChatGPT 的
-  // "选中 → Ask ChatGPT"）。
-  const handleQuoteSelection = useCallback((text: string) => {
-    setQuotedDraft({ text: formatQuoteBlock(text), nonce: Date.now(), mode: 'append' });
-  }, []);
+  // P0-1: 引用到对话 —— 消息正文转 Markdown 引用块追加到输入框。
+  const handleQuote = useCallback(
+    (message: MessageType) => quoteText(message.content),
+    [quoteText],
+  );
 
   // P0-1: 保存到记忆 —— 消息正文写入长期记忆（semantic，标注来源便于检索）。
   const handleSaveToMemory = useCallback(
@@ -966,7 +949,7 @@ export function Chat() {
                 onRegenerate={handleRegenerate}
                 onDelete={handleDeleteMessage}
                 onQuote={handleQuote}
-                onQuoteSelection={handleQuoteSelection}
+                onQuoteSelection={quoteText}
                 onSaveToMemory={handleSaveToMemory}
                 onBlockedAction={handleBlockedAction}
               />
