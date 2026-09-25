@@ -159,4 +159,17 @@ main `2a26696c`（R33 后，含并行会话 web-access R27-R33 / DSH-R11 / r116-
   与本专项零交集 —— 已知会 arena 域 owner，不在本专项代修。
 - 来源专项域零失败。
 
+
+## 6.4 回归记录（R114，2026-09-25）
+
+main 最新（R112 后，含并行会话 r118/r119/R34/RD22 合入）串行全量回归：
+
+- **后端 unit（xdist loadfile）**：7929 passed / 1 failed（并行负载
+  flake，串行复跑通过）/ 558 skipped（19min）。
+- **前端全量（vitest run，串行执行）**：3113 passed / 3 failed（
+  backend auto-restart / logIpc 限速 / ArenaAccounts——全部并行负载
+  flake，三个文件串行复跑 13/13 全过）。
+- **结论：零真实失败**。两套件在负载下暴露的 flake 均为时间敏感
+  测试（限速窗口/自动重启/异步等待超时），已记录待域 owner 加固。
+
 —— 本账本由参考来源专项循环维护，随轮次追加。
