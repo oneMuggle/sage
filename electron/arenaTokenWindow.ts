@@ -37,7 +37,7 @@
 import { app, BrowserWindow, session } from 'electron';
 import { fetchCompat } from './fetchCompat';
 
-export const ARENA_TOKEN_PARTITION = 'persist:arena-token';
+const ARENA_TOKEN_PARTITION = 'persist:arena-token';
 
 // Measured constants (S0 spike + reference token_server.py).
 const V3_KEY = '6LeTGMcsAAAAALuIlkVwIxaAuZA8VledA6d3Nnb0';
