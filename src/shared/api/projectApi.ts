@@ -41,6 +41,99 @@ export interface ProjectSummary {
    * 默认 []，表示不扩展访问范围。
    */
   allowedPaths: string[];
+  /** 项目类型分类 (2026-09-24) */
+  projectType?: ProjectType | null;
+  /** 项目阶段 */
+  projectStage?: string | null;
+  /** 版本控制模式: 'git' | 'builtin' | 'svn' */
+  vcsMode?: string;
+  /** 自动检测的项目类型 */
+  detectedType?: ProjectType | null;
+}
+
+/** 项目类型枚举 */
+export type ProjectType = 'coding' | 'research' | 'business' | 'personal';
+
+/** 项目约束实体 (2026-09-24) */
+export interface ProjectConstraint {
+  id: string;
+  projectId: string;
+  /** 约束类别 */
+  category: string;
+  /** 约束内容（自然语言） */
+  content: string;
+  /** 触发条件（glob 模式或 'always'） */
+  triggerPattern?: string | null;
+  /** 优先级 1-10，高优先级覆盖低优先级 */
+  priority: number;
+  /** 是否启用 */
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** 创建约束请求 */
+export interface CreateConstraintPayload {
+  category: string;
+  content: string;
+  triggerPattern?: string;
+  priority?: number;
+}
+
+/** 更新约束请求 */
+export interface UpdateConstraintPayload {
+  category?: string;
+  content?: string;
+  triggerPattern?: string;
+  priority?: number;
+  enabled?: boolean;
+}
+
+/** 项目里程碑实体 (2026-09-24) */
+export interface ProjectMilestone {
+  id: string;
+  projectId: string;
+  title: string;
+  description?: string | null;
+  /** 所属阶段 */
+  stage?: string | null;
+  /** 截止日期 */
+  dueDate?: string | null;
+  /** 完成时间 */
+  completedAt?: number | null;
+  /** 状态: pending | in_progress | completed | blocked */
+  status: string;
+  /** 排序顺序 */
+  sortOrder: number;
+  createdAt: number;
+}
+
+/** 创建里程碑请求 */
+export interface CreateMilestonePayload {
+  title: string;
+  description?: string;
+  stage?: string;
+  dueDate?: string;
+  status?: string;
+  sortOrder?: number;
+}
+
+/** 更新里程碑请求 */
+export interface UpdateMilestonePayload {
+  title?: string;
+  description?: string;
+  stage?: string;
+  dueDate?: string;
+  completedAt?: number;
+  status?: string;
+  sortOrder?: number;
+}
+
+/** 项目类型检测结果 */
+export interface ProjectTypeDetectionResult {
+  detectedType: ProjectType;
+  confidence: number;
+  signals: string[];
 }
 
 /** POST /projects/{id}/open 响应：复用最近会话时 created=false */
@@ -86,6 +179,11 @@ interface ProjectWire {
   session_count?: number;
   last_session_id?: string | null;
   allowed_paths?: string[];
+  // Project type classification (2026-09-24)
+  project_type?: string | null;
+  project_stage?: string | null;
+  vcs_mode?: string;
+  detected_type?: string | null;
 }
 
 interface ProjectListWire {
@@ -135,6 +233,11 @@ function mapProject(p: ProjectWire): ProjectSummary {
     sessionCount: p.session_count ?? 0,
     lastSessionId: p.last_session_id ?? null,
     allowedPaths: p.allowed_paths ?? [],
+    // Project type classification (2026-09-24)
+    projectType: (p.project_type as ProjectType) ?? null,
+    projectStage: p.project_stage ?? null,
+    vcsMode: p.vcs_mode ?? 'builtin',
+    detectedType: (p.detected_type as ProjectType) ?? null,
   };
 }
 
@@ -205,11 +308,15 @@ export const projectApi = {
    *
    * 2026-09-17: 支持注册时携带 allowed_paths；登记后同步到主进程。
    */
-  async register(path: string, allowedPaths?: string[]): Promise<ProjectSummary> {
+  async register(
+    path: string,
+    options?: { allowedPaths?: string[]; projectType?: ProjectType },
+  ): Promise<ProjectSummary> {
     try {
       const project = await invoke<ProjectWire>('projects_register', {
         path,
-        allowed_paths: allowedPaths,
+        allowed_paths: options?.allowedPaths,
+        project_type: options?.projectType,
       });
       const mapped = mapProject(project);
       void syncAllowedPathsToMain(mapped.id, mapped.allowedPaths);
@@ -363,4 +470,223 @@ export const projectApi = {
       throw handleApiError(error);
     }
   },
+
+  // ===== Project Type Classification (2026-09-24) =====
+
+  /** 检测项目类型（基于文件特征） */
+  async detectType(path: string): Promise<ProjectTypeDetectionResult> {
+    try {
+      const response = await invoke<{
+        detected_type: string;
+        confidence: number;
+        signals: string[];
+      }>('projects_detect_type', { path });
+      return {
+        detectedType: response.detected_type as ProjectType,
+        confidence: response.confidence,
+        signals: response.signals,
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 更新项目类型（手动设置） */
+  async updateProjectType(id: string, projectType: ProjectType): Promise<ProjectSummary> {
+    try {
+      const project = await invoke<ProjectWire>('projects_update_type', {
+        id,
+        project_type: projectType,
+      });
+      return mapProject(project);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ===== Project Constraints (2026-09-24) =====
+
+  /** 列出项目的所有约束 */
+  async listConstraints(projectId: string): Promise<ProjectConstraint[]> {
+    try {
+      const response = await invoke<{ constraints: ConstraintWire[] }>(
+        'projects_list_constraints',
+        { projectId },
+      );
+      return response.constraints.map(mapConstraint);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 创建约束 */
+  async createConstraint(
+    projectId: string,
+    payload: CreateConstraintPayload,
+  ): Promise<ProjectConstraint> {
+    try {
+      const constraint = await invoke<ConstraintWire>('projects_create_constraint', {
+        projectId,
+        ...payload,
+      });
+      return mapConstraint(constraint);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 更新约束 */
+  async updateConstraint(
+    constraintId: string,
+    payload: UpdateConstraintPayload,
+  ): Promise<ProjectConstraint> {
+    try {
+      const constraint = await invoke<ConstraintWire>('projects_update_constraint', {
+        constraintId,
+        ...payload,
+      });
+      return mapConstraint(constraint);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 删除约束 */
+  async deleteConstraint(constraintId: string): Promise<boolean> {
+    try {
+      const response = await invoke<{ removed: boolean }>('projects_delete_constraint', {
+        constraintId,
+      });
+      return response.removed;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 批量导入约束模板 */
+  async importConstraints(projectId: string, category: string): Promise<ProjectConstraint[]> {
+    try {
+      const response = await invoke<{ constraints: ConstraintWire[] }>(
+        'projects_import_constraints',
+        { projectId, category },
+      );
+      return response.constraints.map(mapConstraint);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ===== Project Milestones (2026-09-24) =====
+
+  /** 列出项目的所有里程碑 */
+  async listMilestones(projectId: string): Promise<ProjectMilestone[]> {
+    try {
+      const response = await invoke<{ milestones: MilestoneWire[] }>('projects_list_milestones', {
+        projectId,
+      });
+      return response.milestones.map(mapMilestone);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 创建里程碑 */
+  async createMilestone(
+    projectId: string,
+    payload: CreateMilestonePayload,
+  ): Promise<ProjectMilestone> {
+    try {
+      const milestone = await invoke<MilestoneWire>('projects_create_milestone', {
+        projectId,
+        ...payload,
+      });
+      return mapMilestone(milestone);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 更新里程碑 */
+  async updateMilestone(
+    milestoneId: string,
+    payload: UpdateMilestonePayload,
+  ): Promise<ProjectMilestone> {
+    try {
+      const milestone = await invoke<MilestoneWire>('projects_update_milestone', {
+        milestoneId,
+        ...payload,
+      });
+      return mapMilestone(milestone);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 删除里程碑 */
+  async deleteMilestone(milestoneId: string): Promise<boolean> {
+    try {
+      const response = await invoke<{ removed: boolean }>('projects_delete_milestone', {
+        milestoneId,
+      });
+      return response.removed;
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
 };
+
+// ===== Wire types for constraints and milestones (2026-09-24) =====
+
+interface ConstraintWire {
+  id: string;
+  project_id: string;
+  category: string;
+  content: string;
+  trigger_pattern?: string | null;
+  priority: number;
+  enabled: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+interface MilestoneWire {
+  id: string;
+  project_id: string;
+  title: string;
+  description?: string | null;
+  stage?: string | null;
+  due_date?: string | null;
+  completed_at?: number | null;
+  status: string;
+  sort_order: number;
+  created_at: number;
+}
+
+function mapConstraint(c: ConstraintWire): ProjectConstraint {
+  return {
+    id: c.id,
+    projectId: c.project_id,
+    category: c.category,
+    content: c.content,
+    triggerPattern: c.trigger_pattern ?? null,
+    priority: c.priority,
+    enabled: c.enabled,
+    createdAt: c.created_at,
+    updatedAt: c.updated_at,
+  };
+}
+
+function mapMilestone(m: MilestoneWire): ProjectMilestone {
+  return {
+    id: m.id,
+    projectId: m.project_id,
+    title: m.title,
+    description: m.description ?? null,
+    stage: m.stage ?? null,
+    dueDate: m.due_date ?? null,
+    completedAt: m.completed_at ?? null,
+    status: m.status,
+    sortOrder: m.sort_order,
+    createdAt: m.created_at,
+  };
+}

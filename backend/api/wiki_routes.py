@@ -37,7 +37,6 @@ from backend.wiki.file_parser import parse_document
 from backend.wiki.files import (
     iter_wiki_markdown,
     secure_delete_path,
-    secure_ensure_directory,
     secure_list_directory,
     secure_open_file,
     secure_read_file,
@@ -45,7 +44,6 @@ from backend.wiki.files import (
     secure_read_text,
     secure_rename_path,
     secure_write_file,
-    secure_write_file_if_missing,
     secure_write_temp_bytes,
     secure_write_temp_file,
 )
@@ -196,65 +194,34 @@ class ProjectInfo(BaseModel):
 def _create_wiki_structure(project_path: Path) -> None:
     """创建 Wiki 项目的标准目录结构。
 
+    根据项目类型（从项目注册表查询）选择对应的 Wiki 模板。
+    如果无法确定类型，使用 coding 模板作为默认。
+
     Args:
         project_path: 项目根目录
     """
-    from datetime import datetime
+    # 确保项目目录存在（旧代码兼容，py3.8 cherry-pick 适配）
+    from backend.wiki.files import secure_ensure_directory
+    from backend.wiki.wiki_templates import create_wiki_structure as _create_from_template
 
     secure_ensure_directory(project_path.parent, project_path)
 
-    # 创建标准目录
-    for relative_dir in (
-        "raw/sources",
-        "raw/assets",
-        "wiki/entities",
-        "wiki/concepts",
-        "wiki/sources",
-        "wiki/queries",
-        ".llm-wiki",
-    ):
-        secure_ensure_directory(project_path, project_path / relative_dir)
+    # 尝试从项目注册表获取项目类型
+    project_type: Optional[str] = None
+    try:
+        from backend.data.project_repo import ProjectRepository
+        repo = ProjectRepository()
+        project = repo.get_project_for_workspace(str(project_path))
+        if project:
+            project_type = project.project_type
+    except Exception:
+        pass  # 查询失败不阻塞 Wiki 创建
 
-    # 创建 schema.md
-    schema_file = project_path / "wiki" / "schema.md"
-    if not schema_file.exists():
-        secure_write_file_if_missing(
-            project_path,
-            schema_file,
-            "# Schema\n\n"
-            "本项目的 Wiki 结构定义。\n\n"
-            "## 目录结构\n\n"
-            "- `raw/sources/` - 原始文档（不可变）\n"
-            "- `raw/assets/` - 附件资源\n"
-            "- `wiki/entities/` - 实体页面\n"
-            "- `wiki/concepts/` - 概念页面\n"
-            "- `wiki/sources/` - 源文档摘要页面\n"
-            "- `wiki/queries/` - 查询结果页面\n",
-        )
-
-    # 创建 overview.md
-    overview_file = project_path / "wiki" / "overview.md"
-    if not overview_file.exists():
-        secure_write_file_if_missing(
-            project_path,
-            overview_file,
-            f"# {project_path.name}\n\n"
-            f"创建于 {datetime.now(tz=timezone.utc).isoformat()}\n\n"  # noqa: UP017
-            "## 概述\n\n"
-            "这是一个新的 Wiki 项目。开始添加源文档来构建知识库。\n",
-        )
-
-    # 创建 index.md
-    index_file = project_path / "wiki" / "index.md"
-    if not index_file.exists():
-        secure_write_file_if_missing(
-            project_path,
-            index_file,
-            f"# Wiki 索引\n\n"
-            f"自动生成于 {datetime.now(tz=timezone.utc).isoformat()}\n\n"  # noqa: UP017
-            "## 页面\n\n"
-            "_暂无页面_\n",
-        )
+    _create_from_template(
+        project_path=project_path,
+        project_type=project_type,
+        project_name=project_path.name,
+    )
 
 
 @router.post("/project/create")

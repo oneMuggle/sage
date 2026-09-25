@@ -309,7 +309,52 @@ def build_project_materials_block(materials: List[ProjectMaterial]) -> str:
     return "\n".join(parts)
 
 
+CONSTRAINTS_HEADER = "项目约束 (行为指导规则):"
+
+
+def build_constraints_block(project_id: Optional[str]) -> str:
+    """渲染项目约束为可注入 system prompt 的文本块（项目类型分类系统，2026-09-24）。
+
+    从 project_constraints 表查询启用的约束，按优先级降序排列。
+    约束作为行为指导规则注入到 system prompt 中，影响 AI 在该项目中的行为。
+
+    设计要点:
+    - project_id 为 None → 空串;
+    - 无启用约束 → 空串;
+    - 按 priority DESC 排序（高优先级先注入）;
+    - 总量上限 TOTAL_CHAR_CAP，超出部分截断并标注;
+    - 任何失败永不抛（调用方已 try/except）。
+    """
+    if not project_id:
+        return ""
+    try:
+        from backend.data.project_constraint_repo import ProjectConstraintRepository
+
+        constraints = ProjectConstraintRepository().list_by_project(
+            project_id, enabled_only=True
+        )
+        if not constraints:
+            return ""
+
+        parts: List[str] = [CONSTRAINTS_HEADER]
+        used = 0
+        for c in constraints:
+            # 单条约束: "[category] content"  # noqa: ERA001
+            line = f"[{c.category}] {c.content}"
+            if used + len(line) > TOTAL_CHAR_CAP:
+                parts.append("(另有约束超出预算被省略)")
+                break
+            parts.append(line)
+            used += len(line)
+
+        return "\n".join(parts)
+    except Exception as exc:
+        logger.debug("build_constraints_block skip: %s", exc)
+        return ""
+
+
 __all__ = [
+    "CONSTRAINTS_HEADER",
     "MATERIALS_HEADER",
     "METADATA_HEADER",
     "PER_FILE_CHAR_CAP",
@@ -318,6 +363,7 @@ __all__ = [
     "SOURCE_CLAUDE_MD",
     "SOURCE_SAGE_MD",
     "TOTAL_CHAR_CAP",
+    "build_constraints_block",
     "build_project_materials_block",
     "build_project_metadata_block",
     "discover_project_context",

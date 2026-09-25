@@ -59,6 +59,15 @@ class Project:
     # 项目指令（注入 system prompt）。旧行兼容（NULL 允许）。
     description: Optional[str] = None
     instructions: Optional[str] = None
+    # Project type classification (2026-09-24): 项目类型、阶段、VCS 模式。
+    # project_type: "coding" | "research" | "business" | "personal" | None
+    # vcs_mode: "git" | "builtin" | "svn" (默认 "builtin")
+    # detected_type: 自动检测结果（不覆盖用户选择）
+    # project_stage: 按类型有不同枚举值
+    project_type: Optional[str] = None
+    project_stage: Optional[str] = None
+    vcs_mode: str = "builtin"
+    detected_type: Optional[str] = None
 
     def to_dict(self) -> dict:
         return {
@@ -70,6 +79,10 @@ class Project:
             "allowed_paths": self.allowed_paths,
             "description": self.description,
             "instructions": self.instructions,
+            "project_type": self.project_type,
+            "project_stage": self.project_stage,
+            "vcs_mode": self.vcs_mode,
+            "detected_type": self.detected_type,
         }
 
 
@@ -90,6 +103,11 @@ def _row_to_project(row) -> Project:  # noqa: ANN001 — sqlite3.Row
         # M3: 新列可能不存在（旧 schema）或为 NULL（旧行）
         description=row["description"] if "description" in row.keys() else None,
         instructions=row["instructions"] if "instructions" in row.keys() else None,
+        # Project type classification (2026-09-24): 新列可能不存在（旧 schema）
+        project_type=row["project_type"] if "project_type" in row.keys() else None,  # noqa: SIM118
+        project_stage=row["project_stage"] if "project_stage" in row.keys() else None,  # noqa: SIM118
+        vcs_mode=row["vcs_mode"] if "vcs_mode" in row.keys() and row["vcs_mode"] else "builtin",  # noqa: SIM118
+        detected_type=row["detected_type"] if "detected_type" in row.keys() else None,  # noqa: SIM118
     )
 
 
@@ -108,6 +126,8 @@ class ProjectRepository:
         path: str,
         now_ms: Optional[int] = None,
         allowed_paths: Optional[List[str]] = None,
+        project_type: Optional[str] = None,
+        detected_type: Optional[str] = None,
     ) -> Project:
         """登记（或重新打开）一个项目目录，返回规范化后的项目行。
 
@@ -115,6 +135,9 @@ class ProjectRepository:
             path: 项目目录路径
             now_ms: 时间戳（毫秒），默认当前时间
             allowed_paths: 额外允许访问的路径规则列表，默认空列表
+            project_type: 项目类型（"coding"/"research"/"business"/"personal"），
+                None 表示未指定（保留已有值或使用默认）
+            detected_type: 自动检测的项目类型，None 表示未检测
 
         Raises:
             OfficePathError: 目录不存在 / 不是目录 / 含 ``..`` 段。
@@ -128,13 +151,26 @@ class ProjectRepository:
         # allowed_paths 存为 JSON 字符串
         allowed_paths_json = json.dumps(allowed_paths or [])
 
+        # 推断 vcs_mode: 如果 project_type 是 "coding" 且存在 .git，用 "git"
+        vcs_mode = "git" if (
+            project_type == "coding" and (canonical / ".git").exists()
+        ) else "builtin"
+
         cursor.execute(
             """
-            INSERT INTO projects (id, path, name, created_at, last_opened_at, allowed_paths)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(path) DO UPDATE SET last_opened_at = excluded.last_opened_at
+            INSERT INTO projects
+                (id, path, name, created_at, last_opened_at, allowed_paths,
+                 project_type, vcs_mode, detected_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(path) DO UPDATE SET
+                last_opened_at = excluded.last_opened_at,
+                project_type = COALESCE(excluded.project_type, projects.project_type),
+                detected_type = COALESCE(excluded.detected_type, projects.detected_type)
             """,
-            (str(uuid.uuid4()), canonical_str, canonical.name, ts, ts, allowed_paths_json),
+            (
+                str(uuid.uuid4()), canonical_str, canonical.name, ts, ts,
+                allowed_paths_json, project_type, vcs_mode, detected_type,
+            ),
         )
         conn.commit()
 
@@ -283,6 +319,42 @@ class ProjectRepository:
         cursor.execute(
             "UPDATE projects SET allowed_paths = ? WHERE id = ?",
             (allowed_paths_json, project_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def update_project_type(
+        self, project_id: str, project_type: Optional[str]
+    ) -> bool:
+        """更新项目类型（不存在返回 False）。
+
+        Args:
+            project_id: 项目 ID
+            project_type: "coding" | "research" | "business" | "personal" | None
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET project_type = ? WHERE id = ?",
+            (project_type, project_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+    def update_project_stage(
+        self, project_id: str, project_stage: Optional[str]
+    ) -> bool:
+        """更新项目阶段（不存在返回 False）。
+
+        Args:
+            project_id: 项目 ID
+            project_stage: 按项目类型有不同枚举值
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET project_stage = ? WHERE id = ?",
+            (project_stage, project_id),
         )
         conn.commit()
         return cursor.rowcount > 0

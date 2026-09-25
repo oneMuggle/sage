@@ -978,6 +978,68 @@ class Database:
             cursor.execute(
                 "ALTER TABLE projects ADD COLUMN allowed_paths TEXT DEFAULT '[]'"
             )
+        # Project type classification (2026-09-24): 项目类型分类系统。
+        # project_type 区分编码/科研/事务/个人项目，决定可用工具集和约束模板。
+        # vcs_mode 控制版本管理策略（git/builtin/svn）。detected_type 保存自动
+        # 检测结果（不覆盖用户手动选择的 project_type）。project_stage 跟踪项目
+        # 所处阶段（按类型有不同枚举值）。旧行兼容（NULL 允许）。
+        if "project_type" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN project_type TEXT")
+        if "project_stage" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN project_stage TEXT")
+        if "vcs_mode" not in _projects_columns:
+            cursor.execute(
+                "ALTER TABLE projects ADD COLUMN vcs_mode TEXT DEFAULT 'builtin'"
+            )
+        if "detected_type" not in _projects_columns:
+            cursor.execute("ALTER TABLE projects ADD COLUMN detected_type TEXT")
+        conn.commit()
+
+        # Project constraints (2026-09-24): 结构化项目约束，替代纯文本
+        # instructions。按类别分类（coding_style/security/testing 等），支持
+        # 触发模式匹配（glob）和优先级排序。注入到系统提示词影响 AI 行为。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS project_constraints (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                category TEXT NOT NULL,
+                content TEXT NOT NULL,
+                trigger_pattern TEXT,
+                priority INTEGER NOT NULL DEFAULT 5,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_project_constraints_project "
+            "ON project_constraints(project_id, enabled)"
+        )
+        conn.commit()
+
+        # Project milestones (2026-09-24): 项目里程碑追踪。按项目类型有不
+        # 同的阶段枚举（coding: planning→deployment, research: proposal→
+        # submission, business: initiation→closure）。支持到期日和完成状态。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS project_milestones (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                stage TEXT,
+                due_date TEXT,
+                completed_at INTEGER,
+                status TEXT NOT NULL DEFAULT 'pending',
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_project_milestones_project "
+            "ON project_milestones(project_id, status)"
+        )
         conn.commit()
 
         # M3 (2026-09-15): 项目资料表——用户显式添加的参考资料，注入 system
