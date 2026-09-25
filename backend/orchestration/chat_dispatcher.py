@@ -486,6 +486,15 @@ class ChatDispatcher:
         if self._cancelled.is_set():
             return False
         self._cancelled.set()
+        # OPS4 (round51): 清理待决审批 —— 取消后残留条目会让后续
+        # resolve_approval 误返回 True（看似命中），且造成状态泄露。
+        if self._pending_approvals:
+            logger.debug(
+                "cancel: 清理 %d 条待决审批 run=%s",
+                len(self._pending_approvals),
+                self.run_id,
+            )
+            self._pending_approvals.clear()
         return True
 
     def cancel_task(self, task_id: str) -> bool:
