@@ -106,7 +106,7 @@ class TestCreateWikiStructure:
 
         # 验证目录创建
         assert ensure_mock.call_count >= 8  # 3 common + 5 coding-specific
-        created_dirs = [str(call.args[1]) for call in ensure_mock.call_args_list]
+        created_dirs = [str(call.args[1]).replace("\\", "/") for call in ensure_mock.call_args_list]
         assert any("raw/sources" in d for d in created_dirs)
         assert any("wiki/api-docs" in d for d in created_dirs)
 
