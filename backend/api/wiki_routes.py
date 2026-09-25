@@ -202,6 +202,11 @@ def _create_wiki_structure(project_path: Path) -> None:
     """
     from backend.wiki.wiki_templates import create_wiki_structure as _create_from_template
 
+    # 确保项目目录存在（旧代码兼容，py3.8 cherry-pick 适配）
+    from backend.wiki.files import secure_ensure_directory
+
+    secure_ensure_directory(project_path.parent, project_path)
+
     # 尝试从项目注册表获取项目类型
     project_type: Optional[str] = None
     try:
