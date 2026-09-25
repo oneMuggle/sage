@@ -2,7 +2,7 @@
   "version": 1,
   "files": {
     "backend/agents/profiles.py": 1015,
-    "backend/api/legacy_routes.py": 5545,
+    "backend/api/legacy_routes.py": 5552,
     "backend/api/llm_proxy_routes.py": 1171,
     "backend/api/office_routes.py": 1436,
     "backend/api/orchestration_router.py": 807,
@@ -10,7 +10,7 @@
     "backend/application/services/chat_service.py": 1071,
     "backend/core/legacy/agent.py": 2428,
     "backend/core/legacy/llm_client.py": 1074,
-    "backend/data/database.py": 1858,
+    "backend/data/database.py": 1919,
     "backend/data/session_repo.py": 1009,
     "backend/main.py": 1133,
     "backend/mcp/pool.py": 915,
@@ -69,6 +69,7 @@
     "src/widgets/sidebar/sections/ProjectSection.tsx": 938,
     "tests/electron/test_stub_backend.py": 896,
     "backend/api/arena_routes.py": 873,
-    "backend/services/arena_draw_engine.py": 1054
+    "backend/services/arena_draw_engine.py": 1054,
+    "backend/api/project_routes.py": 838
   }
 }

@@ -5,10 +5,11 @@
  * Coding 项目专属：显示 Git 仓库状态
  */
 
-import { useState, useEffect } from 'react';
 import { GitBranch, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
+import { useState, useEffect } from 'react';
+
 import { invoke } from '../../shared/api/desktopInvoke';
+import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
 
 export interface GitStatusWidgetProps {
   projectId: string;

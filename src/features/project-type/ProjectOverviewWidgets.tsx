@@ -6,8 +6,9 @@
  */
 
 import type { ProjectSummary } from '../../shared/api';
-import { GitStatusWidget } from './GitStatusWidget';
+
 import { ConstraintSummaryWidget } from './ConstraintSummaryWidget';
+import { GitStatusWidget } from './GitStatusWidget';
 import { MilestoneProgressWidget } from './MilestoneProgressWidget';
 
 export interface ProjectOverviewWidgetsProps {

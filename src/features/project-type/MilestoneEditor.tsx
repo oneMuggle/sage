@@ -6,6 +6,9 @@
  */
 
 import { useState, useEffect } from 'react';
+
+import { projectApi, type ProjectMilestone } from '../../shared/api';
+import { Button } from '../../shared/ui/Button';
 import {
   Dialog,
   DialogContent,
@@ -14,10 +17,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '../../shared/ui/Dialog/Dialog';
-import { Button } from '../../shared/ui/Button';
 import { Input } from '../../shared/ui/Input';
 import { Textarea } from '../../shared/ui/Textarea';
-import { projectApi, type ProjectMilestone } from '../../shared/api';
 
 export interface MilestoneEditorProps {
   open: boolean;

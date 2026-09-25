@@ -6,8 +6,10 @@
 
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ConstraintSummaryWidget } from './ConstraintSummaryWidget';
+
 import { projectApi } from '../../shared/api';
+
+import { ConstraintSummaryWidget } from './ConstraintSummaryWidget';
 
 // Mock projectApi
 vi.mock('../../shared/api', () => ({

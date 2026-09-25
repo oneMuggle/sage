@@ -5,11 +5,12 @@
  * 显示项目里程碑的进度统计
  */
 
-import { useState, useEffect } from 'react';
 import { Target, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { projectApi, type ProjectMilestone } from '../../shared/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
 import { Progress } from '../../shared/ui/Progress';
-import { projectApi, type ProjectMilestone } from '../../shared/api';
 
 export interface MilestoneProgressWidgetProps {
   projectId: string;

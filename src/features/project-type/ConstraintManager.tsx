@@ -5,12 +5,14 @@
  * 约束的 CRUD 界面：列表、创建、编辑、删除、导入模板
  */
 
-import { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Download, Shield, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { projectApi, type ProjectConstraint, type ProjectType } from '../../shared/api';
+import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
-import { Badge } from '../../shared/ui/Badge';
-import { projectApi, type ProjectConstraint, type ProjectType } from '../../shared/api';
+
 import { ConstraintEditor } from './ConstraintEditor';
 
 export interface ConstraintManagerProps {
