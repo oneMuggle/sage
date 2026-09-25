@@ -21,6 +21,7 @@ import type {
   ArenaTokenElectronApiBridge,
   ArenaTokenStatus,
   DiagnosticElectronApiBridge,
+  FileElectronApiBridge,
   ImportResult,
   ImportedOfficeFile,
   JournalElectronApiBridge,
@@ -586,6 +587,19 @@ const electronAPI = {
       return () => ipcRenderer.off('pty:exit', listener);
     },
   } satisfies PtyElectronApiBridge,
+
+  /**
+   * Phase 4 (2026-09-25): 文件操作桥 — 用系统默认编辑器打开变更文件。
+   * IPC 到主进程 file:open-in-editor handler，该 handler 查询后端
+   * 获取工作区根目录，拼接绝对路径后调用 shell.openPath。
+   */
+  file: {
+    openInEditor: (sessionId: string, path: string) =>
+      ipcRenderer.invoke('file:open-in-editor', {
+        sessionId,
+        path,
+      }) as Promise<{ success: true } | { error: string }>,
+  } satisfies FileElectronApiBridge,
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

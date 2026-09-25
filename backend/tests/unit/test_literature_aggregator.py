@@ -7,10 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from backend.wiki.literature_aggregator import (
-    LiteratureEntry,
     extract_literature_entry,
     generate_literature_review,
     scan_literature_directory,

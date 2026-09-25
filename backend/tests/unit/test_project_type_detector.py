@@ -10,13 +10,10 @@
 
 from __future__ import annotations
 
-import pytest
-from pathlib import Path
-
 from backend.services.project_type_detector import (
+    BUSINESS_SIGNALS,
     CODING_STRONG_SIGNALS,
     RESEARCH_SIGNALS,
-    BUSINESS_SIGNALS,
     DetectionResult,
     DetectionSignal,
     detect_project_type,

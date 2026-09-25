@@ -8,15 +8,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from backend.wiki.api_doc_generator import generate_wiki_api_docs
 from backend.wiki.literature_aggregator import generate_literature_review
 from backend.wiki.meetings_extractor import generate_meetings_index
 from backend.wiki.wiki_templates import (
     create_wiki_structure,
-    get_directories,
-    get_template,
 )
 
 

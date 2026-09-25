@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
@@ -67,13 +67,13 @@ def extract_meeting_entry(file_path: Path) -> Optional[MeetingEntry]:
             content_body = parts[2].strip()
 
             for line in front_matter.split("\n"):
-                line = line.strip()
-                if line.startswith("title:"):
-                    title = line[6:].strip().strip('"\'')
-                elif line.startswith("date:"):
-                    date = line[5:].strip().strip('"\'')
-                elif line.startswith("attendees:"):
-                    att_str = line[10:].strip()
+                stripped = line.strip()
+                if stripped.startswith("title:"):
+                    title = stripped[6:].strip().strip('"\'')
+                elif stripped.startswith("date:"):
+                    date = stripped[5:].strip().strip('"\'')
+                elif stripped.startswith("attendees:"):
+                    att_str = stripped[10:].strip()
                     att_str = att_str.strip("[]\"'")
                     attendees = [a.strip().strip('"\'') for a in att_str.split(",")]
 
@@ -82,10 +82,10 @@ def extract_meeting_entry(file_path: Path) -> Optional[MeetingEntry]:
     # 从第一行 H1 提取标题
     lines = content.split("\n")
     for line in lines:
-        line = line.strip()
-        if line.startswith("# "):
+        stripped = line.strip()
+        if stripped.startswith("# "):
             if not title:
-                title = line[2:].strip()
+                title = stripped[2:].strip()
             break
 
     # 从文件名或内容提取日期
@@ -129,9 +129,9 @@ def extract_meeting_entry(file_path: Path) -> Optional[MeetingEntry]:
 
     # 提取摘要（第一段非标题文本）
     for line in lines:
-        line = line.strip()
-        if line and not line.startswith("#") and not line.startswith("---"):
-            summary = line[:200]
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and not stripped.startswith("---"):
+            summary = stripped[:200]
             break
 
     return MeetingEntry(
