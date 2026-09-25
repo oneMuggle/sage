@@ -72,6 +72,7 @@
     "backend/services/arena_draw_engine.py": 1054,
     "backend/memory/manager.py": 848,
     "backend/api/project_routes.py": 839,
-    "backend/tools/web_render.py": 801
+    "backend/tools/web_render.py": 801,
+    "backend/tests/unit/test_chat_dispatcher_budget.py": 856
   }
 }
