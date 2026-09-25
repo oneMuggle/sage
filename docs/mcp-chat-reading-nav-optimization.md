@@ -149,9 +149,10 @@ MessageList（每次 messages / pending 变化）
 | 2 | 2026-09-26 00:23 | 新建 main 工作树 | ✅ 完成 | `scripts/worktree.sh new feat/chat-nav-quote-main --base origin/main` → `.worktrees/feat-chat-nav-quote-main`（端口 8782/1437；`node_modules` 以目录联接复用主检出，清理前需先 `rmdir` 联接） |
 | 3 | 2026-09-26 00:30 | 输出优化方案（本文 §0–§6） | ✅ 完成 | 本文件 |
 | 4 | 2026-09-26 00:46 | A1–A5 实施 + 本地验证 | ✅ 完成 | 见 §7.1；受影响目录 vitest 全绿，`tsc --noEmit` 0 错误，`npm run lint` 0 错误，`architecture-check` 通过 |
-| 5 | 2026-09-26 01:21 | main PR → CI 全绿 → squash 合并 | ⏳ 进行中 | PR [#1580](https://github.com/oneMuggle/sage/pull/1580) 已开（rebase 到 `c0a2513b7`），等待 CI |
-| 6 | — | win7 cherry-pick → PR → CI 全绿 → 合并 | ⏸ 待办 | — |
-| 7 | — | §8 回填 + 清理分支与工作树 | ⏸ 待办 | — |
+| 5 | 2026-09-26 01:47 | main PR → CI 全绿 → squash 合并 | ✅ 完成 | [#1580](https://github.com/oneMuggle/sage/pull/1580) 全部 14 项检查通过（2 项按条件跳过）→ squash 合并为 `c6fb3630a`；见 §7.2 |
+| 6 | 2026-09-26 02:33 | win7 cherry-pick → PR → CI 全绿 → 合并 | ✅ 完成 | [#1584](https://github.com/oneMuggle/sage/pull/1584) 必需的 5 项检查及 All Checks / Architecture check / count-lines 全部通过（3 项按条件跳过）→ squash 合并为 `eafaa4192`；见 §7.3 |
+| 7 | 2026-09-26 02:38 | 清理功能分支与工作树 | ✅ 完成 | 见 §7.4：两个工作树与本地 / 远端分支全部删除，临时文件已清理 |
+| 8 | 2026-09-26 02:40 | §8 回填（本 PR）→ CI → 合并 → 删除回填分支与工作树 | 🔄 本步骤 | 回填分支 `docs/chat-nav-quote-backfill`（工作树 `.worktrees/docs-chat-nav-quote-backfill`）；合并时 `--delete-branch` 删除远端分支，随后移除本地工作树与分支 |
 
 ### 7.1 实施记录（步骤 4）
 
@@ -209,14 +210,75 @@ MessageList（每次 messages / pending 变化）
   继续操作。`github.com:443` 直连频繁被重置：推送走本机系统代理（`http.proxy=127.0.0.1:7890`，
   仅命令级 `-c`），凭据用 `gh auth git-credential`，避免 Git Credential Manager 弹窗阻塞。
 
+### 7.2 main 合并记录（步骤 5）
+
+- PR 开出前按 `AGENTS.md` 先 `git fetch`：base 前进到 `c0a2513b7`（#1571），rebase 后再推。
+- CI（最终头 `94fa233ac`）：All Checks、Architecture check、Backend (Python)、Backend collect (py38)、
+  Backend legacy smoke、Dependency audit、Electron build ×2、Electron smoke、Frontend、count-lines，以及
+  必需的 `stub-smoke` / `stub-deep` / `live-boot` 全部通过；`Backend (Python 3.8, Win7 LTS)` 与
+  `Backend unit (Windows, non-blocking)` 在 main 目标的 PR 上按条件跳过。
+- 合并前复查：main 又前进了 2 个提交（#1577、#1578），都只改 `docs/plans/` 下的文档，与本 PR 零重叠；
+  main 分支保护是非严格模式（`strict: false`），因此没有再 rebase 重跑 CI。
+- `gh pr merge 1580 --squash --delete-branch` → squash 提交
+  `c6fb3630a986e75232d6e4432e6bb356fc368e93`（2026-09-26 01:47 UTC+8），远端分支已删除。
+
+### 7.3 win7 对齐记录（步骤 6）
+
+- `scripts/worktree.sh new feat/chat-nav-quote-win7 --base origin/release/win7` →
+  `.worktrees/feat-chat-nav-quote-win7`（端口 8783/1438）。
+- `git -c core.hooksPath=/dev/null cherry-pick c6fb3630a`：22 个文件自动合并，3 个文件冲突，按 SOP §4.4
+  手工解决（不整文件替换）：
+  - `MessageList.tsx`：win7 没有 R44 空态建议和 R19-W1 拦截卡片。保留 win7 的导入（无 `Sparkles` /
+    `BlockedAction`），采用新的 `data-message-id` 包裹层，去掉 `onBlockedAction` 透传。
+  - `Message.tsx`：win7 的气泡块没有流式光标和阅读宽度约束，缩进也不同。保留 win7 原块，只加
+    `data-quote-scope`。
+  - `architecture-baseline.json`：win7 基线余量足够（en 1228/1241、zh 1202/1217、Message 1040/1067、
+    Chat 1096/1167），保留 win7 数值，不改基线。
+- 推送前 `release/win7` 前进到 `2f542db3a`（AGENTS.md 的 win7 回移），已 rebase，无冲突。
+- win7 工作树独立 `npm ci --ignore-scripts --prefer-offline`（1189 个包）后本地验证：`tsc --noEmit`
+  0 错误；改动文件 `eslint` 0 错误；`architecture-check` 通过；新鲜度 behind 0；受影响目录 vitest
+  121 个文件 / 706 个用例全绿。改动只在前端，没有 py38 兼容面；CI 的 `Backend (Python 3.8, Win7 LTS)`
+  仍会全量跑。
+- PR [#1584](https://github.com/oneMuggle/sage/pull/1584)（base `release/win7`）CI：`Frontend (TypeScript)`、
+  `Electron smoke (playwright-electron)`、`Backend (Python 3.8, Win7 LTS)`（21 分钟全量）、
+  `Electron build (windows-latest)`、`Electron build (ubuntu-latest)` 这 5 项必需检查，以及 All Checks、
+  Architecture check、count-lines 全部通过；`Backend (Python)`、legacy smoke、Dependency audit 在 win7
+  目标上按条件跳过。
+- 合并前复查 base 没有移动（`release/win7` 仍在 `2f542db3a`），状态 MERGEABLE / CLEAN →
+  `gh pr merge 1584 --squash --delete-branch` → squash 提交 `eafaa4192dbb8cc521323727213a6eacf673d40e`
+  （2026-09-26 02:33 UTC+8）。
+
+### 7.4 清理记录（步骤 7）
+
+- 移除工作树：`.worktrees/feat-chat-nav-quote-main`、`.worktrees/feat-chat-nav-quote-win7`（`git worktree
+  remove --force` + `git worktree prune`；删除前在主仓库目录执行，规避 SOP §4.1 的 cwd 失效问题）。
+- 删除本地分支 `feat/chat-nav-quote-main`、`feat/chat-nav-quote-win7`（squash 合并，所以用 `-D`）。远端
+  同名分支已在合并时由 `--delete-branch` 删除，`gh api .../branches/<name>` 复核均为 404。
+- 删除临时文件 `.worktrees/pr_body_main.md`、`.worktrees/pr_body_w7.md`。
+- `node_modules`：main 工作树最初的目录联接在 `npm ci` 前已用 `rmdir` 解除，两个工作树里的独立
+  `node_modules` 随工作树一起删除；主检出的 `node_modules` 未受影响（复核仍为 804 项）。
+- 回填 PR [#1587](https://github.com/oneMuggle/sage/pull/1587) 首轮 CI 的 Architecture check 失败，原因不在本 PR：
+  本批合并后，main 又合入了 #1582（RD23 会话多 run 历史浏览器），`src/pages/Chat.tsx` 涨到 1182 行却没有更新
+  基线（1167），main 的 Architecture check 因此已经是红的（本批 #1580 当时 `Chat.tsx` 为 1166 行，在基线内）。
+  与之前 #1571 修复 #1569 的做法一致，按棘轮协议在本 PR 把该条目改为 1182。随后 main 合入的 #1586 也把
+  该条目改成了同一个值；rebase 到 `216da97a7` 后本 PR 不再包含基线改动，重新变回纯文档 PR。
+- 同一轮 CI 里，非阻断的 `Backend legacy smoke` 两次都因为步骤的 20 分钟超时而失败（21m23s / 21m32s，不是
+  用例失败）。同一基线 `2589a4cb0` 在 main 上跑这一项用了 19m45s，已经贴着上限，与本 PR 无关。
+- 主检出 `E:/ProgrammingData/electron/sage` 全程没有动过。清理时发现它已被其他会话切到
+  `feat-dshopt-r14-memory-split`，并处于冲突待解决状态；这属于该会话的现场，按 `AGENTS.md` 第 5 条不做处理。
+
 ---
 
 ## 8. 交付记录（§回填）
 
 | 分支 | PR | 合并提交 | 备注 |
 | --- | --- | --- | --- |
-| `main` | 待回填 | 待回填 | — |
-| `release/win7` | 待回填 | 待回填 | — |
+| `main` | [#1580](https://github.com/oneMuggle/sage/pull/1580) | `c6fb3630a986e75232d6e4432e6bb356fc368e93` | 2026-09-26 01:47 squash 合并 |
+| `release/win7` | [#1584](https://github.com/oneMuggle/sage/pull/1584) | `eafaa4192dbb8cc521323727213a6eacf673d40e` | 2026-09-26 02:33 squash 合并（← main #1580） |
+| `main`（回填） | 本 PR（`docs/chat-nav-quote-backfill`） | 合并后见 PR 页 | 只改本文档 |
+
+说明：`release/win7` 上的本文件停留在"步骤 6 进行中"的版本（随 #1584 带入）；完整进度以 main 为准，
+与 SOP 的"§回填只走 main"一致。
 
 ---
 
