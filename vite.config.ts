@@ -149,9 +149,10 @@ export default defineConfig({
   },
   test: {
     // Vitest UI/API is a separate server from Vite's dev server.
-    api: {
-      host: '127.0.0.1',
-    },
+    // R121 (2026-09-25): CLI 运行不需要 API server（仅 --ui 使用）。禁用后
+    // 消除崩溃/中断运行在 51204 端口残留僵尸进程、阻断后续运行的故障模式
+    // （Windows 本机已三次发生，PID 需手动 taskkill）。
+    api: false,
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
