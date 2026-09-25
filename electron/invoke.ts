@@ -54,7 +54,7 @@ export class BackendNotReadyError extends Error {
  * - 数组里 string 元素不动(只递归对象元素)
  * - null / undefined / 非 plain object 直接返回
  */
-export function camelToSnakeKeys(value: unknown): unknown {
+function camelToSnakeKeys(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => camelToSnakeKeys(item));
   }
