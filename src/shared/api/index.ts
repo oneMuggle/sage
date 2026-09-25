@@ -13,7 +13,19 @@ export { memoryApi } from './memoryApi';
 export { messageApi } from './messageApi';
 export { promptApi } from './promptApi';
 export type { PromptTemplate } from './promptApi';
-export type { ProjectOpenResult, ProjectSummary } from './projectApi';
+export { projectApi } from './projectApi';
+export type {
+  ProjectOpenResult,
+  ProjectSummary,
+  ProjectType,
+  ProjectConstraint,
+  ProjectMilestone,
+  ProjectTypeDetectionResult,
+  CreateConstraintPayload,
+  UpdateConstraintPayload,
+  CreateMilestonePayload,
+  UpdateMilestonePayload,
+} from './projectApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
 export { skillDraftsApi } from './skillDraftsApi';
