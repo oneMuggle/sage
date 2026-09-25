@@ -385,15 +385,22 @@ def test_get_startup_summary_structure(todo_service):
     assert summary["total_completed_today"] == 0
 
 
-def test_get_startup_summary_buckets(todo_service):
-    """Todos land in the correct summary bucket."""
-    # 时间稳健化（TM2 轮实证 CI 在 UTC 23:43 触发 midnight 边界 flake）：
-    # 锚定"今日 00:00"推导 due_at，任何时钟时刻运行都不会跨界。
-    now = datetime.now()
-    today_start = datetime.combine(now.date(), datetime.min.time())
-    todo_service.create_todo(title="Overdue", due_at=(today_start - timedelta(hours=1)).isoformat())
-    todo_service.create_todo(title="Today", due_at=(today_start + timedelta(hours=1)).isoformat())
-    todo_service.create_todo(title="Upcoming", due_at=(today_start + timedelta(days=3)).isoformat())
+def test_get_startup_summary_buckets(todo_service, monkeypatch):
+    """Todos land in the correct summary bucket.（冻结时间：杜绝时钟 flake）"""
+    from backend.services import todo_service as todo_service_module
+
+    frozen_now = datetime(2026, 6, 15, 10, 0, 0)
+
+    class _FrozenDatetime(datetime):
+        @classmethod
+        def now(cls):
+            return frozen_now
+
+    monkeypatch.setattr(todo_service_module, "datetime", _FrozenDatetime)
+
+    todo_service.create_todo(title="Overdue", due_at=(frozen_now - timedelta(hours=2)).isoformat())
+    todo_service.create_todo(title="Today", due_at=(frozen_now + timedelta(hours=1)).isoformat())
+    todo_service.create_todo(title="Upcoming", due_at=(frozen_now + timedelta(days=3)).isoformat())
     todo_service.create_todo(title="High", priority="high")
 
     summary = todo_service.get_startup_summary()
