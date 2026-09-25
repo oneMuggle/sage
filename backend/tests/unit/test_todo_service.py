@@ -389,7 +389,7 @@ def test_get_startup_summary_buckets(todo_service, monkeypatch):
     """Todos land in the correct summary bucket.（冻结时间：杜绝时钟 flake）"""
     from backend.services import todo_service as todo_service_module
 
-    frozen_now = datetime(2026, 6, 15, 10, 0, 0)
+    frozen_now = datetime(2026, 6, 15, 10, 0, 0)  # noqa: DTZ001 — 冻结时刻刻意用 naive，与服务的 naive now 口径一致
 
     class _FrozenDatetime(datetime):
         @classmethod
