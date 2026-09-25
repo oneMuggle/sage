@@ -122,11 +122,6 @@ def test_keep_async_handlers_actually_async():
     funcs += _load_top_level_functions(memory_src)
     memory_list_src = LEGACY_MEMORY_LIST_ROUTES_PATH.read_text(encoding="utf-8")
     funcs += _load_top_level_functions(memory_list_src)
-    async_endpoints = [
-        f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
-    ]
-    memory_list_src = LEGACY_MEMORY_LIST_ROUTES_PATH.read_text(encoding="utf-8")
-    funcs += _load_top_level_functions(memory_list_src)
     name_to_func = {f.name: f for f in funcs}
 
     for keep_name in KEEP_ASYNC_HANDLERS:
