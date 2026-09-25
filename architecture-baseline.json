@@ -21,7 +21,7 @@
     "backend/office/template_library.py": 1230,
     "backend/office/tool_service.py": 993,
     "backend/office/word.py": 1591,
-    "backend/orchestration/chat_dispatcher.py": 2197,
+    "backend/orchestration/chat_dispatcher.py": 2206,
     "backend/scheduler/evolution.py": 1673,
     "backend/services/usage_tracker.py": 902,
     "backend/tests/integration/test_llm_proxy_routes.py": 1154,
