@@ -1849,6 +1849,48 @@ async function registerIpcHandlers(): Promise<void> {
       ptyProcesses.delete(opts.id);
     }
   });
+
+  // ─── Phase 4 (2026-09-25): "在编辑器中打开" IPC handler ─────────────────
+  // 接受 sessionId + 相对工作区路径，查询后端获取工作区根目录，
+  // 拼接绝对路径后调用 shell.openPath 用系统默认编辑器打开。
+  ipcMain.handle(
+    'file:open-in-editor',
+    async (evt, opts: { sessionId: string; path: string }) => {
+      if (!isTrustedRenderer(evt.sender)) return { error: '未授权的窗口请求' };
+      if (!opts?.sessionId || !opts?.path) {
+        return { error: '缺少 sessionId 或 path 参数' };
+      }
+      try {
+        const res = await fetch(
+          `${BACKEND_URL}/api/v1/workspace?session_id=${encodeURIComponent(opts.sessionId)}`,
+          {
+            headers: {
+              ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
+            },
+          },
+        );
+        if (!res.ok) {
+          return { error: `查询工作区失败 (HTTP ${res.status})` };
+        }
+        const data = (await res.json()) as {
+          binding: { workspace_path: string } | null;
+        };
+        if (!data.binding?.workspace_path) {
+          return { error: '此会话未绑定工作区' };
+        }
+        const absolutePath = join(data.binding.workspace_path, opts.path);
+        const openResult = await shell.openPath(absolutePath);
+        if (openResult) {
+          return { error: `打开失败：${openResult}` };
+        }
+        return { success: true };
+      } catch (err) {
+        return {
+          error: `打开文件失败：${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+    },
+  );
 }
 
 /**
