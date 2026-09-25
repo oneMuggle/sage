@@ -1,5 +1,6 @@
 """Test TodoService"""
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -120,6 +121,9 @@ def test_list_todos(todo_service):
 def test_update_todo(todo_service):
     """Verify update_todo modifies fields"""
     created = todo_service.create_todo(title="Original")
+    # Windows 系统时钟粒度 ~15.6ms：不隔开会让 updated_at 与 created_at
+    # 同 tick 相等（本机 Windows 实证偶发失败）
+    time.sleep(0.02)
     updated = todo_service.update_todo(created.id, title="Updated", priority="high")
 
     assert updated.title == "Updated"
@@ -232,6 +236,7 @@ def test_naive_due_at_is_unchanged(todo_service):
 def test_complete_todo(todo_service):
     """Verify complete_todo marks as completed and returns updated Todo."""
     created = todo_service.create_todo(title="To complete")
+    time.sleep(0.02)  # 见 test_update_todo：Windows 时钟粒度
     completed = todo_service.complete_todo(created.id)
 
     assert completed is not None
