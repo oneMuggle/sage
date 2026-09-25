@@ -1184,6 +1184,8 @@ export const zh = {
   'chat.more_actions': '更多操作',
   'chat.regenerate_failed': '重新生成失败：{message}',
   'chat.quote_to_chat': '引用到对话',
+  'chat.quote_selection': '引用',
+  'chat.quote_selection_hint': '引用所选内容到输入框',
   'chat.save_to_memory': '保存到记忆',
   'chat.save_to_memory_success': '已保存到记忆',
   'chat.save_to_memory_failed': '保存到记忆失败：{error}',

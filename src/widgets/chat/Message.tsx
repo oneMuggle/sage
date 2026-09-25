@@ -667,6 +667,7 @@ function MessageComponent({
         {showBubble && (
         <div
           data-error={isError ? 'true' : undefined}
+          data-quote-scope="message-body"
           className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
             isUser
               ? 'bg-primary text-text-inverse'

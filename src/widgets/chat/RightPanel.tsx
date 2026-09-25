@@ -1,12 +1,16 @@
 // src/widgets/chat/RightPanel.tsx
 import { Bell, BellOff, Maximize2, Minimize2, X } from 'lucide-react';
-import { memo, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
 import { useChangesListStore } from '../../features/changes/changesListStore';
-import { useConversationOutline } from '../../features/chat/useConversationOutline';
+import { requestMessageJump } from '../../features/chat/messageJumpStore';
+import {
+  useConversationOutline,
+  type OutlineItem,
+} from '../../features/chat/useConversationOutline';
 import {
   isArtifactAutoOpenEnabled,
   setArtifactAutoOpenEnabled,
@@ -252,6 +256,17 @@ function RightPanelInner({
 
   const isPush = variant === 'push';
 
+  // 对话阅读导航 A2: 大纲条目 → 定位到对应标题。最大化 / overlay 模式下
+  // 面板遮住了对话区，先让出视图再定位。
+  const handleOutlineSelect = useCallback(
+    (item: OutlineItem, headingIndex: number) => {
+      if (maximized) setMaximized(false);
+      if (!isPush) useRightPanelStore.getState().setOpen(false);
+      requestMessageJump({ messageId: item.messageId, headingText: item.text, headingIndex });
+    },
+    [isPush, maximized, setMaximized],
+  );
+
   // 批次 C: 切会话清掉上一会话的选中产物，避免详情页跨会话串台。
   useEffect(() => {
     useRightPanelStore.getState().clearSelectedArtifact();
@@ -364,7 +379,11 @@ function RightPanelInner({
         ) : tab === 'changes' ? (
           <ChangesSection sessionId={sessionId} />
         ) : tab === 'outline' ? (
-          <ConversationOutline items={outlineItems} isLoading={outlineLoading} />
+          <ConversationOutline
+            items={outlineItems}
+            isLoading={outlineLoading}
+            onSelect={handleOutlineSelect}
+          />
         ) : tab === 'preview' ? (
           useRightPanelStore.getState().previewFilePath ? (
             <DocumentPreview filePath={useRightPanelStore.getState().previewFilePath!} />

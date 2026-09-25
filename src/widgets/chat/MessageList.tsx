@@ -1,16 +1,21 @@
 import { ChevronUp } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
 import { BtwOverlay } from '../../features/chat';
+import { useMessageJump } from '../../features/chat/useMessageJump';
 import type { Message as MessageType } from '../../shared/lib/store';
 
 import { Message } from './Message';
+import { SelectionQuoteButton } from './SelectionQuoteButton';
 import { TopicSeparator } from './TopicSeparator';
 
 /** U11 (批次 C-3): 尾窗渲染步长 —— "加载更早"每次多显示的条数 */
 const WINDOW_STEP = 60;
+
+/** 对话阅读导航 A1: 定位命中后的短暂高亮（JUMP_FLASH_MS 后移除） */
+const JUMP_FLASH_CLASS = 'rounded-radius-sm ring-2 ring-primary/50 bg-primary/5 transition-shadow';
 
 interface MessageListProps {
   messages: MessageType[];
@@ -31,6 +36,8 @@ interface MessageListProps {
   onDelete?: (messageId: string) => void;
   /** P0-1: 引用到对话回调（提供时 user/assistant 消息显示"引用到对话"） */
   onQuote?: (message: MessageType) => void;
+  /** 对话阅读导航 A4: 划词引用回调（提供时在消息正文选中文本会浮出"引用"按钮） */
+  onQuoteSelection?: (text: string) => void;
   /** P0-1: 保存此条消息到长期记忆（提供时 user/assistant 消息显示"保存到记忆"） */
   onSaveToMemory?: (message: MessageType) => void;
 }
@@ -46,6 +53,7 @@ export function MessageList({
   onRegenerate,
   onDelete,
   onQuote,
+  onQuoteSelection,
   onSaveToMemory,
 }: MessageListProps) {
   // U11: 只渲染最近 WINDOW_STEP 条, 更早的按需加载 —— 避免长会话全量
@@ -70,6 +78,16 @@ export function MessageList({
     setWindowSize(WINDOW_STEP);
   }, [firstId]);
 
+  // 对话阅读导航 A1: 消费"定位到消息"请求 —— 目标在尾窗外时临时扩窗，
+  // 定位后高亮并把窗口固化为扩大后的大小。
+  const rootRef = useRef<HTMLDivElement>(null);
+  const { effectiveWindow, flashId } = useMessageJump({
+    rootRef,
+    messages,
+    windowSize,
+    setWindowSize,
+  });
+
   if (messages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted">
@@ -79,12 +97,12 @@ export function MessageList({
     );
   }
 
-  const hiddenCount = Math.max(0, messages.length - windowSize);
-  const visible = messages.slice(messages.length - windowSize);
+  const hiddenCount = Math.max(0, messages.length - effectiveWindow);
+  const visible = messages.slice(messages.length - effectiveWindow);
 
   return (
     <>
-      <div className="p-4 space-y-4">
+      <div ref={rootRef} className="p-4 space-y-4">
         {hiddenCount > 0 && (
           <button
             data-testid="load-earlier"
@@ -95,28 +113,35 @@ export function MessageList({
             加载更早消息（还有 {hiddenCount} 条）
           </button>
         )}
-        {visible.map((message) =>
-          message.subtype === 'topic_separator' ? (
-            <TopicSeparator key={message.id} content={message.content} />
-          ) : (
-            <Message
-              key={message.id}
-              message={message}
-              knowledgeRefs={knowledgeRefs?.[message.id]}
-              attachments={attachments?.[message.id]}
-              isStreaming={message.id === streamingMessageId}
-              onFork={onFork}
-              onEditResend={onEditResend}
-              onRegenerate={onRegenerate}
-              onDelete={onDelete}
-              onQuote={onQuote}
-              onSaveToMemory={onSaveToMemory}
-              artifactsByToolCall={artifactsByToolCall}
-            />
-          ),
-        )}
+        {visible.map((message) => (
+          <div
+            key={message.id}
+            data-message-id={message.id}
+            data-jump-flash={flashId === message.id ? 'true' : undefined}
+            className={flashId === message.id ? JUMP_FLASH_CLASS : undefined}
+          >
+            {message.subtype === 'topic_separator' ? (
+              <TopicSeparator content={message.content} />
+            ) : (
+              <Message
+                message={message}
+                knowledgeRefs={knowledgeRefs?.[message.id]}
+                attachments={attachments?.[message.id]}
+                isStreaming={message.id === streamingMessageId}
+                onFork={onFork}
+                onEditResend={onEditResend}
+                onRegenerate={onRegenerate}
+                onDelete={onDelete}
+                onQuote={onQuote}
+                onSaveToMemory={onSaveToMemory}
+                artifactsByToolCall={artifactsByToolCall}
+              />
+            )}
+          </div>
+        ))}
       </div>
       <BtwOverlay />
+      {onQuoteSelection && <SelectionQuoteButton rootRef={rootRef} onQuote={onQuoteSelection} />}
     </>
   );
 }

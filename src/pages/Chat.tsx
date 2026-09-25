@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { PlanCard } from '../components/PlanCard';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
+import { useQuoteDraft } from '../features/chat/useQuoteDraft';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
@@ -548,8 +549,9 @@ export function Chat() {
     nonce: number;
   } | null>(null);
   // P0-1: 引用到对话 —— 复用 editResendTarget 的 injectedDraft 通道把引用块
-  // 注入输入框（nonce 变化触发重放）。与编辑重发互斥时以编辑态优先。
-  const [quotedDraft, setQuotedDraft] = useState<{ text: string; nonce: number } | null>(null);
+  // 注入输入框。与编辑重发互斥时以编辑态优先。A4/A5: 追加而非覆盖草稿，
+  // 划词引用走同一通道（一次性事件，见 useQuoteDraft）。
+  const { quotedDraft, quoteText } = useQuoteDraft();
   // 传给 memo 组件的 props 引用需稳定: 内联箭头函数/对象字面量每次渲染
   // 都是新引用, 会击穿 React.memo (F1)。
   const cancelEditResend = useCallback(() => setEditResendTarget(null), []);
@@ -706,14 +708,11 @@ export function Chat() {
     [removeMessage],
   );
 
-  // P0-1: 引用到对话 —— 消息正文转 Markdown 引用块注入输入框。
-  const handleQuote = useCallback((message: MessageType) => {
-    const quoted = message.content
-      .split('\n')
-      .map((line) => `> ${line}`)
-      .join('\n');
-    setQuotedDraft({ text: `${quoted}\n\n`, nonce: Date.now() });
-  }, []);
+  // P0-1: 引用到对话 —— 消息正文转 Markdown 引用块追加到输入框。
+  const handleQuote = useCallback(
+    (message: MessageType) => quoteText(message.content),
+    [quoteText],
+  );
 
   // P0-1: 保存到记忆 —— 消息正文写入长期记忆（semantic，标注来源便于检索）。
   const handleSaveToMemory = useCallback(
@@ -880,6 +879,7 @@ export function Chat() {
                 onRegenerate={handleRegenerate}
                 onDelete={handleDeleteMessage}
                 onQuote={handleQuote}
+                onQuoteSelection={quoteText}
                 onSaveToMemory={handleSaveToMemory}
               />
             )}
