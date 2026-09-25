@@ -308,11 +308,15 @@ export const projectApi = {
    *
    * 2026-09-17: 支持注册时携带 allowed_paths；登记后同步到主进程。
    */
-  async register(path: string, allowedPaths?: string[]): Promise<ProjectSummary> {
+  async register(
+    path: string,
+    options?: { allowedPaths?: string[]; projectType?: ProjectType },
+  ): Promise<ProjectSummary> {
     try {
       const project = await invoke<ProjectWire>('projects_register', {
         path,
-        allowed_paths: allowedPaths,
+        allowed_paths: options?.allowedPaths,
+        project_type: options?.projectType,
       });
       const mapped = mapProject(project);
       void syncAllowedPathsToMain(mapped.id, mapped.allowedPaths);
