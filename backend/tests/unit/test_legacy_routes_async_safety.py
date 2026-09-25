@@ -23,6 +23,13 @@ LEGACY_ROUTES_PATH = Path(__file__).resolve().parent.parent.parent / "api" / "le
 LEGACY_SESSION_ROUTES_PATH = (
     Path(__file__).resolve().parent.parent.parent / "api" / "legacy_session_routes.py"
 )
+# C1a (DSH 对标 R14): 记忆 API 迁出至双模块（核心 + list/summaries）
+LEGACY_MEMORY_ROUTES_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "api" / "legacy_memory_routes.py"
+)
+LEGACY_MEMORY_LIST_ROUTES_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "api" / "legacy_memory_list_routes.py"
+)
 
 # `async def` 但无 await 的 handler 是事件循环阻塞风险点。
 # 本测试维护一份"必须 keep_async"的精确白名单(10 个: main 7 + win7 memory 3)。
@@ -110,6 +117,16 @@ def test_keep_async_handlers_actually_async():
     # L1 (P8): compact_session 已拆至 legacy_session_routes —— 合并两个模块的顶层函数
     session_src = LEGACY_SESSION_ROUTES_PATH.read_text(encoding="utf-8")
     funcs += _load_top_level_functions(session_src)
+    # C1a (R14): 记忆 API 已拆至 legacy_memory_routes / legacy_memory_list_routes
+    memory_src = LEGACY_MEMORY_ROUTES_PATH.read_text(encoding="utf-8")
+    funcs += _load_top_level_functions(memory_src)
+    memory_list_src = LEGACY_MEMORY_LIST_ROUTES_PATH.read_text(encoding="utf-8")
+    funcs += _load_top_level_functions(memory_list_src)
+    async_endpoints = [
+        f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
+    ]
+    memory_list_src = LEGACY_MEMORY_LIST_ROUTES_PATH.read_text(encoding="utf-8")
+    funcs += _load_top_level_functions(memory_list_src)
     name_to_func = {f.name: f for f in funcs}
 
     for keep_name in KEEP_ASYNC_HANDLERS:
@@ -129,6 +146,14 @@ def test_async_handler_count_matches_design():
     src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
     funcs = _load_top_level_functions(src)
+    async_endpoints = [
+        f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
+    ]
+    # C1a (R14): 合并 memory 双模块（3 个 win7 memory async handler 已迁出）
+    memory_src = LEGACY_MEMORY_ROUTES_PATH.read_text(encoding="utf-8")
+    funcs += _load_top_level_functions(memory_src)
+    memory_list_src = LEGACY_MEMORY_LIST_ROUTES_PATH.read_text(encoding="utf-8")
+    funcs += _load_top_level_functions(memory_list_src)
     async_endpoints = [
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
@@ -157,7 +182,15 @@ def test_async_handlers_count_invariant_against_internal_helpers():
     async_endpoints = [
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
-    # 同样 10 个,跟 test_async_handler_count_matches_design 一致
+    # C1a (R14): 合并 memory 双模块（跟 test_async_handler_count_matches_design 一致）
+    memory_src = LEGACY_MEMORY_ROUTES_PATH.read_text(encoding="utf-8")
+    funcs += _load_top_level_functions(memory_src)
+    memory_list_src = LEGACY_MEMORY_LIST_ROUTES_PATH.read_text(encoding="utf-8")
+    funcs += _load_top_level_functions(memory_list_src)
+    async_endpoints = [
+        f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
+    ]
+    # 同样 10 个
     assert len(async_endpoints) == 10
 
 
