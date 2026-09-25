@@ -389,8 +389,13 @@ def test_get_startup_summary_buckets(todo_service):
     """Todos land in the correct summary bucket."""
     now = datetime.now()
     todo_service.create_todo(title="Overdue", due_at=(now - timedelta(hours=2)).isoformat())
-    # Use 1 hour instead of 2 to avoid date boundary issues when test runs near midnight
-    todo_service.create_todo(title="Today", due_at=(now + timedelta(hours=1)).isoformat())
+    # R33：now+1h 在临近午夜（UTC 23:00-00:00 窗口）会跨日导致 Today 桶为空
+    # （CI 实测连续两次失败）——改用"今天 23:59:59"，已过则退到 now+1s，
+    # 保证 due 恒为今天且不落入 overdue。
+    due_today = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    if due_today <= now:
+        due_today = now + timedelta(seconds=1)
+    todo_service.create_todo(title="Today", due_at=due_today.isoformat())
     todo_service.create_todo(title="Upcoming", due_at=(now + timedelta(days=3)).isoformat())
     todo_service.create_todo(title="High", priority="high")
 
