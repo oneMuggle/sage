@@ -6,7 +6,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Button } from '@/shared/ui/Button';
+import { Code, BookOpen, Briefcase, User, Sparkles } from 'lucide-react';
+import { Button } from '../../shared/ui/Button';
 import {
   Dialog,
   DialogContent,
@@ -14,9 +15,8 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '@/shared/ui/Dialog/Dialog';
-import { Code, BookOpen, Briefcase, User, Sparkles } from 'lucide-react';
-import { projectApi, type ProjectType, type ProjectTypeDetectionResult } from '@/shared/api';
+} from '../../shared/ui/Dialog/Dialog';
+import { projectApi, type ProjectType, type ProjectTypeDetectionResult } from '../../shared/api';
 
 export interface ProjectTypeSelectorProps {
   open: boolean;
@@ -181,7 +181,7 @@ export function ProjectTypeSelector({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
+          <Button variant="secondary" onClick={handleCancel}>
             取消
           </Button>
           <Button onClick={handleSelect} disabled={!selectedType}>

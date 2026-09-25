@@ -6,3 +6,6 @@
 
 export { ProjectTypeSelector } from './ProjectTypeSelector';
 export type { ProjectTypeSelectorProps } from './ProjectTypeSelector';
+
+export { ProjectTypeBadge } from './ProjectTypeBadge';
+export type { ProjectTypeBadgeProps } from './ProjectTypeBadge';
