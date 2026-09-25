@@ -792,3 +792,64 @@ def test_cancel_then_resolve_returns_false(tmp_path):
         d.resolve_approval("req-1", approved=True)
     )
     assert result is False
+
+
+# ---- BU22 (round53): 聚合头部最耗时子任务排行 ------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_shows_slowest_task_ranking(tmp_path, monkeypatch):
+    """BU22: 有 ≥2 个有耗时终态任务时头部显示耗时排行。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1", entry_queue=queue, run_id="orch-bu22-1", session_id="s-bu22"
+    )
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        if state.task_id == "t1":
+            state.started_at = time.time() - 10
+            state.finished_at = time.time()
+        elif state.task_id == "t2":
+            state.started_at = time.time() - 5
+            state.finished_at = time.time()
+        else:
+            state.started_at = time.time() - 1
+            state.finished_at = time.time()
+        state.status = "done"
+        state.output = f"产出 {state.task_id}"
+        return state.output
+
+    d._run_subagent = fake_run
+    await d.dispatch([
+        {"task_id": "t1", "agent_id": "primary", "goal": "g1"},
+        {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+        {"task_id": "t3", "agent_id": "primary", "goal": "g3"},
+    ])
+    agg = d._aggregate(list(d._states.values()))
+    assert "耗时排行" in agg
+    assert "t1" in agg  # t1 耗时最长排最前
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_no_ranking_when_single_task(tmp_path, monkeypatch):
+    """BU22: 仅 1 个有耗时任务时不显示排行（需 ≥2 才有对比意义）。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1", entry_queue=queue, run_id="orch-bu22-2", session_id="s-bu22b"
+    )
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        state.started_at = time.time() - 5
+        state.finished_at = time.time()
+        state.status = "done"
+        state.output = "ok"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
+    agg = d._aggregate(list(d._states.values()))
+    assert "耗时排行" not in agg
