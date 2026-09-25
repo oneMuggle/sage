@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 @dataclass
@@ -174,7 +174,7 @@ def generate_literature_review(
     lines.append(f"共 {len(entries)} 篇文献。\n")
 
     # 按年份分组
-    by_year: dict[int, List[LiteratureEntry]] = {}
+    by_year: Dict[int, List[LiteratureEntry]] = {}
     no_year: List[LiteratureEntry] = []
     for entry in entries:
         if entry.year:

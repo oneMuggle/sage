@@ -2,7 +2,7 @@
   "version": 1,
   "files": {
     "backend/agents/profiles.py": 1010,
-    "backend/api/legacy_routes.py": 5666,
+    "backend/api/legacy_routes.py": 5674,
     "backend/api/llm_proxy_routes.py": 1168,
     "backend/api/office_routes.py": 1436,
     "backend/api/orchestration_router.py": 807,
@@ -10,7 +10,7 @@
     "backend/application/services/chat_service.py": 1203,
     "backend/core/legacy/agent.py": 2521,
     "backend/core/legacy/llm_client.py": 1070,
-    "backend/data/database.py": 1891,
+    "backend/data/database.py": 1953,
     "backend/data/session_repo.py": 1010,
     "backend/main.py": 1463,
     "backend/mcp/pool.py": 915,
@@ -70,10 +70,7 @@
     "tests/electron/test_stub_backend.py": 896,
     "backend/api/arena_routes.py": 873,
     "backend/services/arena_draw_engine.py": 1054,
-<<<<<<< HEAD
-    "backend/memory/manager.py": 848
-=======
-    "backend/api/project_routes.py": 838
->>>>>>> 833762b4 (fix(ci): architecture baseline 更新 + lint 修复)
+    "backend/memory/manager.py": 848,
+    "backend/api/project_routes.py": 839
   }
 }

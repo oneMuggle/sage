@@ -203,7 +203,7 @@ def _create_wiki_structure(project_path: Path) -> None:
     from backend.wiki.wiki_templates import create_wiki_structure as _create_from_template
 
     # 尝试从项目注册表获取项目类型
-    project_type: str | None = None
+    project_type: Optional[str] = None
     try:
         from backend.data.project_repo import ProjectRepository
         repo = ProjectRepository()
