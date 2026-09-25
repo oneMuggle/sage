@@ -95,6 +95,11 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 ### Added(web-access)
 - **真实渲染链 e2e（R35）**：本地 fixture HTTP 服务器（302 链 / wait_for 目标页 / 503）+ 真 Chrome/Edge 走完整渲染链——渲染池 → 事件通道 → 重定向 → wait_for 命中 → 状态码/完整度/503 重试 note 全部实测断言；无浏览器环境整体跳过（与 test_real_browser_smoke 同口径）；仅访问 127.0.0.1
 
+> 🌐 **网页访问 Round 37：懒加载滚动快路径跳过**（方案 `docs/plans/2026-09-25_lazyskip-r37.md`）
+
+### Added(web-access)
+- **懒加载滚动快路径（R37）**：`_scroll_for_lazy_load` 先探测页面是否存在懒加载指示器（lazy 图 / data-src / lazy 类）——无标记页面直接跳过全部触底滚动（每轮 0.4s 暂停，典型省 ~1.2s/渲染）；有标记或探测失败保守走原滚动路径，行为只更好不更坏
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 > 🧹 **alpha.52-win7 暂无未发布变更**

@@ -71,6 +71,7 @@
     "backend/api/arena_routes.py": 873,
     "backend/services/arena_draw_engine.py": 1054,
     "backend/memory/manager.py": 848,
-    "backend/api/project_routes.py": 839
+    "backend/api/project_routes.py": 839,
+    "backend/tools/web_render.py": 801
   }
 }

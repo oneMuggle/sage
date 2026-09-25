@@ -61,6 +61,8 @@ def _install_render(monkeypatch, evaluate_results: List[Any]) -> List[Dict[str, 
         calls.append({"method": "Runtime.evaluate", "expression": expression})
         if "readyState" in expression:
             return "complete"
+        if "querySelector" in expression:
+            return True  # R37 探针：按"有懒加载"处理，不消耗回放序列
         if not queue:
             raise AssertionError("evaluate 序列耗尽")
         return queue.pop(0)
@@ -188,13 +190,15 @@ def test_scroll_stops_when_height_stabilises(fake_time, monkeypatch):
 
     def _fake_eval(session, expression, target_id):
         calls.append(expression)
+        if "querySelector" in expression:
+            return True  # R37 探测：有懒加载标记 → 进入滚动
         return heights.pop(0) if len(heights) > 1 else heights[0]
 
     monkeypatch.setattr(web_render, "_evaluate_json", _fake_eval)
     monkeypatch.setattr(web_render, "_LAZY_SCROLL_MAX_ROUNDS", 6)
     _scroll_for_lazy_load(SimpleNamespace(), None)
-    # 1000 → 2000（增长）→ 稳定 ×2 轮 → 第 4 次提前结束（上限 6 未触顶）
-    assert len(calls) == 4
+    # 探测 1 次 + 1000 → 2000（增长）→ 稳定 ×2 轮 → 第 4 次提前结束（上限 6 未触顶）
+    assert len(calls) == 5
 
 
 def test_scroll_caps_at_max_rounds(fake_time, monkeypatch):
@@ -202,11 +206,13 @@ def test_scroll_caps_at_max_rounds(fake_time, monkeypatch):
 
     def _fake_eval(session, expression, target_id):
         calls.append(expression)
+        if "querySelector" in expression:
+            return True  # R37 探测：有懒加载标记 → 进入滚动
         return len(calls) * 100  # 高度一直涨
 
     monkeypatch.setattr(web_render, "_evaluate_json", _fake_eval)
     _scroll_for_lazy_load(SimpleNamespace(), None)
-    assert len(calls) == web_render._LAZY_SCROLL_MAX_ROUNDS
+    assert len(calls) == web_render._LAZY_SCROLL_MAX_ROUNDS + 1
 
 
 def test_scroll_swallows_cdp_error(fake_time, monkeypatch):
@@ -215,3 +221,18 @@ def test_scroll_swallows_cdp_error(fake_time, monkeypatch):
 
     monkeypatch.setattr(web_render, "_evaluate_json", _fake_eval)
     _scroll_for_lazy_load(SimpleNamespace(), None)  # 不抛即通过
+
+
+# ---------- R37：无懒加载标记快路径跳过 ----------
+
+def test_scroll_skips_when_no_lazy_marker(fake_time, monkeypatch):
+    """页面无懒加载指示器 → 直接返回，不做任何触底滚动。"""
+    calls: List[str] = []
+
+    def _fake_eval(session, expression, target_id):
+        calls.append(expression)
+        return False  # 探测：无标记
+
+    monkeypatch.setattr(web_render, "_evaluate_json", _fake_eval)
+    _scroll_for_lazy_load(SimpleNamespace(), None)
+    assert len(calls) == 1  # 仅探测一次，无滚动求值
