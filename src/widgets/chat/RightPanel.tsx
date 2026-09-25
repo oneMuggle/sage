@@ -39,6 +39,8 @@ interface RightPanelProps {
   onRerunFailed?: (runId: string) => void;
   // RV4 (round27): 单任务重试入口（失败行内「重试」按钮）。
   onRetryTask?: (runId: string, taskId: string) => void;
+  // RD23 (round52): 历史编排选取回调。
+  onSelectRun?: (run: import('../../shared/api/orchRunClient').OrchRunDetail) => void;
   // P1 (UI 优化方案 2026-09-13): push = 参与 flex 挤压主区（Claude
   // artifacts 风格，桌面端）；overlay = fixed 覆盖层（窄屏/移动端回退）。
   variant?: 'overlay' | 'push';
@@ -215,6 +217,7 @@ function RightPanelInner({
   onCancelExecution,
   onRerunFailed,
   onRetryTask,
+  onSelectRun,
   variant = 'overlay',
 }: RightPanelProps) {
   // right-panel R1 批次 A: 开合/Tab/最大化/选中产物全部迁入全局 store ——
@@ -360,6 +363,7 @@ function RightPanelInner({
             onCancelExecution={onCancelExecution}
             onRerunFailed={onRerunFailed}
             onRetryTask={onRetryTask}
+            onSelectRun={onSelectRun}
           />
         ) : tab === 'changes' ? (
           <ChangesSection sessionId={sessionId} />
