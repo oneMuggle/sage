@@ -1,8 +1,8 @@
 // src/widgets/chat/__tests__/ConversationOutline.test.tsx
 //
 // P2-3.10: 验证对话目录组件的渲染逻辑。
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { OutlineItem } from '../../../features/chat/useConversationOutline';
 import { ConversationOutline } from '../ConversationOutline';
@@ -61,5 +61,26 @@ describe('ConversationOutline', () => {
     render(<ConversationOutline items={items} isLoading={false} />);
     const button = screen.getByText(/这是一个非常/);
     expect(button.className).toContain('truncate');
+  });
+
+  it('A2: clicking an item reports it with its heading index inside the message', () => {
+    const items: OutlineItem[] = [
+      { text: '第一项', messageId: 'm1', level: 2 },
+      { text: '第二项', messageId: 'm2', level: 2 },
+      { text: '子项', messageId: 'm1', level: 3 },
+    ];
+    const onSelect = vi.fn();
+    render(<ConversationOutline items={items} isLoading={false} onSelect={onSelect} />);
+
+    fireEvent.click(screen.getByTestId('outline-item-2'));
+    expect(onSelect).toHaveBeenLastCalledWith(items[2], 1);
+    fireEvent.click(screen.getByTestId('outline-item-1'));
+    expect(onSelect).toHaveBeenLastCalledWith(items[1], 0);
+  });
+
+  it('A2: items stay inert without onSelect', () => {
+    const items: OutlineItem[] = [{ text: '简介', messageId: 'm1', level: 2 }];
+    render(<ConversationOutline items={items} isLoading={false} />);
+    expect(() => fireEvent.click(screen.getByTestId('outline-item-0'))).not.toThrow();
   });
 });
