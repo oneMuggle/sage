@@ -28,7 +28,13 @@ from .edit_tool import (
     _validate_edit_params,
     _validate_target_file,
 )
-from .file_guard import check_expected_version, check_sensitive_path, compute_bytes_version
+from .file_guard import (
+    atomic_write,
+    check_expected_version,
+    check_sensitive_path,
+    compute_bytes_version,
+    file_write_lock,
+)
 from .file_tool import (
     MAX_WRITE_SIZE_BYTES,
     _notify_workspace_changed_safely,
@@ -106,7 +112,9 @@ class ApplyPatchTool(BaseTool):
             },
         )
 
-    def execute(self, patches: Optional[List[Dict[str, Any]]] = None, **kwargs: Any) -> ToolResult:
+    def execute(  # noqa: PLR0911 — 入口守卫式早返回
+        self, patches: Optional[List[Dict[str, Any]]] = None, **kwargs: Any
+    ) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
@@ -126,10 +134,23 @@ class ApplyPatchTool(BaseTool):
                 success=False, error="apply_patch 需要绑定工作区（workspace）"
             )
 
-        plan, rejection = self._validate_plan(root, patches)
-        if rejection is not None:
-            return rejection
-        return self._write_all(plan)
+        lock_paths = [
+            os.path.abspath(os.path.join(root, p["file_path"]))
+            for p in patches
+            if isinstance(p, dict) and isinstance(p.get("file_path"), str)
+        ]
+        with file_write_lock(lock_paths) as busy:
+            if busy is not None:
+                return busy
+            plan, rejection = self._validate_plan(root, patches)
+            if rejection is not None:
+                return rejection
+            versions = {
+                os.path.abspath(os.path.join(root, p["file_path"])): p["expected_version"]
+                for p in patches
+                if "expected_version" in p
+            }
+            return self._write_all(plan, versions)
 
     def _validate_plan(  # noqa: PLR0911 — 校验阶段逐项早返回，整批拒绝
         self, root: str, patches: List[Dict[str, Any]]
@@ -161,7 +182,7 @@ class ApplyPatchTool(BaseTool):
                 return [], self._with_index(index, blocked)
 
             # LocalBridge P0: 凭据路径拒写
-            blocked = check_sensitive_path(absolute, "编辑")
+            blocked = check_sensitive_path(absolute, "编辑", write=True)
             if blocked is not None:
                 return [], self._with_index(index, blocked)
 
@@ -290,7 +311,9 @@ class ApplyPatchTool(BaseTool):
             error=f"patches[{index}] 校验失败，整批未写入: {rejection.error}",
         )
 
-    def _write_all(self, plan: List[_PlannedEdit]) -> ToolResult:
+    def _write_all(
+        self, plan: List[_PlannedEdit], versions: Optional[Dict[str, str]] = None
+    ) -> ToolResult:
         """校验通过后的落盘阶段；写失败的文件如实上报（校验阶段已排除绝大多数风险）。"""
         written: List[Dict[str, Any]] = []
         for planned_edit in plan:
@@ -304,8 +327,13 @@ class ApplyPatchTool(BaseTool):
                         f"{MAX_WRITE_SIZE_BYTES} 字节 (10 MiB)"
                     ),
                 )
+            expected = (versions or {}).get(os.path.abspath(str(planned_edit.path)))
             try:
-                planned_edit.path.write_bytes(updated_bytes)
+                failed = atomic_write(
+                    str(planned_edit.path),
+                    lambda temp, data=updated_bytes: Path(temp).write_bytes(data),
+                    expected,
+                )
             except OSError as exc:
                 return ToolResult(
                     success=False,
@@ -313,6 +341,14 @@ class ApplyPatchTool(BaseTool):
                         f"写入失败（{planned_edit.path}）: {exc}；"
                         f"已写入 {len(written)}/{len(plan)} 个文件，"
                         "可用 checkpoint_restore 恢复"
+                    ),
+                )
+            if failed is not None:
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"{failed.error}（{planned_edit.path}；已写入 "
+                        f"{len(written)}/{len(plan)} 个文件，可用 checkpoint_restore 恢复）"
                     ),
                 )
             written.append(

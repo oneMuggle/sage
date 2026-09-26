@@ -233,3 +233,109 @@ def test_env_override_disables_guard(tmp_path, monkeypatch):
     env.write_text("A=1", encoding="utf-8")
     monkeypatch.setenv(ALLOW_SENSITIVE_ENV, "1")
     assert ReadFileTool().execute(path=str(env)).success
+
+
+# ── M0：段尾点/空格、ADS、保留名、.git、扩展目录规则 ─────────────────
+
+
+@pytest.mark.parametrize(
+    "path",
+    [".env ", ".env.", "id_rsa.", "id_rsa ", "x.pem.", "a/.ssh./x", "a/.aws/config",
+     "a/.azure/accessTokens.json", "deploy/credentials", "credentials."],
+)
+def test_trailing_dot_space_and_dir_rules_detected(path):
+    assert sensitive_path_reason(path) is not None
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["a.txt:hidden", "dir/nul", "dir/NUL.txt", "com1.log", "lpt9", "bad./x.txt",
+     "name .txt ", ".git/hooks/pre-commit", "sub/.git/config"],
+)
+def test_invalid_write_paths_rejected(tmp_path, path):
+    from backend.tools.file_guard import check_sensitive_path
+
+    result = check_sensitive_path(path, "写入", write=True)
+    assert result is not None
+    assert "path_denied" in result.error
+
+
+@pytest.mark.parametrize("path", ["C:/work/a.txt", "C:\\work\\.gitignore", "src/con_utils.py", "a/../b.txt"])
+def test_valid_write_paths_allowed(path):
+    from backend.tools.file_guard import check_sensitive_path
+
+    assert check_sensitive_path(path, "写入", write=True) is None
+
+
+def test_git_dir_readable_but_not_writable(tmp_path):
+    git = tmp_path / ".git"
+    git.mkdir()
+    cfg = git / "config"
+    cfg.write_text("[core]", encoding="utf-8")
+    assert ReadFileTool().execute(path=str(cfg)).success
+    result = WriteFileTool(policy=_policy(tmp_path)).execute(path=str(cfg), content="x")
+    assert "path_denied" in result.error
+
+
+def test_path_denied_ignores_env_override(tmp_path, monkeypatch):
+    monkeypatch.setenv(ALLOW_SENSITIVE_ENV, "1")
+    result = WriteFileTool(policy=_policy(tmp_path)).execute(
+        path=str(tmp_path / "a.txt:ads"), content="x"
+    )
+    assert not result.success
+    assert "path_denied" in result.error
+
+
+# ── M0：原子写入 + 写互斥 ───────────────────────────────────────────
+
+
+def test_atomic_write_leaves_no_temp_files(tmp_path):
+    target = tmp_path / "a.txt"
+    target.write_text("v1", encoding="utf-8")
+    assert WriteFileTool(policy=_policy(tmp_path)).execute(path=str(target), content="v2").success
+    assert EditTool(policy=_policy(tmp_path)).execute(
+        file_path=str(target), old_string="v2", new_string="v3"
+    ).success
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["a.txt"]
+    assert target.read_text(encoding="utf-8") == "v3"
+
+
+def test_atomic_write_recheck_detects_concurrent_change(tmp_path):
+    from backend.tools.file_guard import atomic_write
+
+    target = tmp_path / "a.txt"
+    target.write_text("v1", encoding="utf-8")
+    version = compute_file_version(str(target))
+
+    def writer(temp):
+        # 模拟写临时文件期间，他人改动了目标文件
+        target.write_text("someone else", encoding="utf-8")
+        with open(temp, "w", encoding="utf-8") as f:
+            f.write("mine")
+
+    result = atomic_write(str(target), writer, version)
+    assert result is not None
+    assert "version_conflict" in result.error
+    assert target.read_text(encoding="utf-8") == "someone else"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["a.txt"]
+
+
+def test_file_write_lock_rejects_concurrent_writer(tmp_path):
+    from backend.tools.file_guard import file_write_lock
+
+    target = tmp_path / "a.txt"
+    target.write_text("v1", encoding="utf-8")
+    with file_write_lock([str(target)]) as outer:
+        assert outer is None
+        busy = WriteFileTool(policy=_policy(tmp_path)).execute(path=str(target), content="x")
+        assert not busy.success
+        assert "file_busy" in busy.error
+    assert WriteFileTool(policy=_policy(tmp_path)).execute(path=str(target), content="x").success
+
+
+def test_write_file_preserves_text_mode_newlines(tmp_path):
+    import os
+
+    target = tmp_path / "a.txt"
+    WriteFileTool(policy=_policy(tmp_path)).execute(path=str(target), content="a\nb\n")
+    assert target.read_bytes() == ("a" + os.linesep + "b" + os.linesep).encode()

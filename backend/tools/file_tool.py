@@ -32,9 +32,11 @@ from backend.tools.context import current_tool_context
 
 from .base import BaseTool, ToolResult, ToolSchema
 from .file_guard import (
+    atomic_write,
     check_expected_version,
     check_sensitive_path,
     compute_file_version,
+    file_write_lock,
 )
 
 logger = logging.getLogger(__name__)
@@ -453,14 +455,22 @@ class WriteFileTool(BaseTool):
                 ),
             )
 
-        blocked = check_sensitive_path(path, "写入")
+        blocked = check_sensitive_path(path, "写入", write=True)
         if blocked is not None:
             return blocked
 
-        blocked = check_expected_version(str(Path(path).expanduser()), expected_version)
-        if blocked is not None:
-            return blocked
+        with file_write_lock([path]) as busy:
+            if busy is not None:
+                return busy
+            blocked = check_expected_version(str(Path(path).expanduser()), expected_version)
+            if blocked is not None:
+                return blocked
+            return self._write_locked(path, content, append, expected_version)
 
+    def _write_locked(  # noqa: PLR0911 — 守卫式早返回
+        self, path: str, content: str, append: bool, expected_version: Optional[str]
+    ) -> ToolResult:
+        """持有写锁、版本已校验后的写入主流程。"""
         try:
             # M1: 写入硬限额（按 UTF-8 编码后字节数计）
             content_bytes = len(content.encode("utf-8"))
@@ -478,8 +488,19 @@ class WriteFileTool(BaseTool):
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
             mode = "a" if append else "w"
-            with open(file_path, mode, encoding="utf-8") as f:
-                f.write(content)
+            if append:
+                with open(file_path, mode, encoding="utf-8") as f:
+                    f.write(content)
+            else:
+                # LocalBridge P0: 临时文件 + 替换前复核 + 原子 rename（文本模式
+                # 写临时文件，换行翻译行为与旧的直接 open("w") 一致）
+                def _write_temp(temp: str) -> None:
+                    with open(temp, "w", encoding="utf-8") as f:
+                        f.write(content)
+
+                failed = atomic_write(str(file_path), _write_temp, expected_version)
+                if failed is not None:
+                    return failed
 
             # A15: Auto syntax check for Python files
             syntax_error = None
