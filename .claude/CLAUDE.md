@@ -89,26 +89,29 @@ worktree 内用 `python -m venv .venv` 隔离。
 
 ## 双分支长期共存策略（强制）
 
-项目采用 **main + release/win7 双分支长期共存**架构,两个分支各自独立演进,**严禁删除或合并 release/win7 分支**。
+项目采用 **main + release/win7 双分支长期共存**架构。**两个分支都处于开发模式**，应尽可能保持功能对齐，**严禁删除或合并 release/win7 分支**。
 
 ### 分支定位
 
 | 分支 | 用途 | 技术栈 | EOL |
 |------|------|--------|-----|
 | `main` | 主开发分支 | Electron 21.4.4 + Python 3.10 (开发) + Chromium 106 | 持续维护 |
-| `release/win7` | Win7 LTS 维护分支 | Electron 21.4.4 + Python 3.8 (开发) + Chromium 106 | **2027-12-13** |
+| `release/win7` | Win7 LTS 开发分支 | Electron 21.4.4 + Python 3.8 (开发) + Chromium 106 | **2027-12-13** |
 
 > **Python 3.11 仅用于 Windows 安装包内嵌运行时**（脚本：`scripts/bundle-python-main.ps1`），不是开发环境版本。`backend/requirements-bundled.txt` 注释里提到的 "cp311 / Python 3.11.9 embeddable" 也是打包目标，不是 dev env 约束。
 
 ### 核心规则
 
 1. **release/win7 分支不可删除**:此分支服务 Windows 7 SP1 用户,直到 2027-12-13 EOL 后方可归档
-2. **不主动合并**:两个分支独立演进,main 的新功能不强制同步到 release/win7;release/win7 的 Win7 特定修复不合并回 main
-3. **按需 cherry-pick**:安全补丁或关键 bug 修复可以 cherry-pick 到另一分支,但需手动解决冲突并测试
+2. **功能对齐原则**:两个分支都处于开发模式，**新功能应尽可能同步到 release/win7**。差异仅在于：
+   - Python 版本差异（3.10 vs 3.8）需要的代码适配
+   - 依赖版本差异（pydantic 2.x vs 1.x）需要的 API 适配
+   - Win7 特定的兼容性修复（不合并回 main）
+3. **cherry-pick 同步**:新功能开发完成后，应主动 cherry-pick 到 release/win7 并做必要的兼容性适配
 4. **依赖版本独立**:
    - main 使用 `backend/requirements.txt`(Python 3.10,pydantic 2.x)
    - release/win7 使用 `backend/requirements-py38.txt`(Python 3.8,pydantic 1.x)
-   - **不要**将 main 的依赖升级自动同步到 release/win7
+   - **不要**将 main 的依赖升级自动同步到 release/win7（版本钉死）
 5. **CI 隔离**:
    - main 触发 `.github/workflows/ci.yml` 和 `.github/workflows/release.yml`
    - release/win7 触发 `.github/workflows/ci.yml`(py38 测试)和 `.github/workflows/release-win7.yml`
