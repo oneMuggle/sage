@@ -704,6 +704,10 @@ jobs:
   architecture-check:
     name: Architecture check
     runs-on: ubuntu-latest
+    # 补账提示 step 会向 PR 发评论：默认 GITHUB_TOKEN 无 issues 写权限会 403
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
