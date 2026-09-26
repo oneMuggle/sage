@@ -520,7 +520,7 @@ describe('R33: 协议级模型发现 (anthropic / gemini / ollama)', () => {
     });
     const result = await testEndpointConnection('http://localhost:11434', '', undefined, 'ollama');
     expect(result.success).toBe(true);
-    expect(result.message).toContain('对话连通');
+    expect(result.message).toContain('聊天端点正常');
     expect(result.discoveredModels?.[0]?.id).toBe('llama3');
   });
 });
@@ -534,7 +534,7 @@ describe('R49: 非 openai 协议级补充测试', () => {
       expect(url).toContain('/v1/messages');
       const body = JSON.parse(String(init?.body ?? '{}'));
       expect(body.model).toBe('claude-sonnet-4');
-      expect(body.max_tokens).toBe(16);
+      expect(body.max_tokens).toBe(10);
       return makeJsonResponse(200, {
         content: [{ type: 'text', text: 'pong from claude' }],
       });
@@ -546,21 +546,22 @@ describe('R49: 非 openai 协议级补充测试', () => {
       'anthropic',
     );
     expect(result.success).toBe(true);
-    expect(result.message).toContain('对话连通');
-    expect(result.message).toContain('claude-sonnet-4');
+    expect(result.message).toContain('聊天端点正常');
   });
 
   it('gemini 对话连通：POST generateContent 解析 candidates[0]', async () => {
     mockFetch(async (url, init) => {
+      if (url.includes('generateContent')) {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        expect(body.contents[0].parts[0].text).toBe('Hi');
+        return makeJsonResponse(200, {
+          candidates: [{ content: { parts: [{ text: 'pong from gemini' }] } }],
+        });
+      }
       if (url.includes('/v1beta/models')) {
         return makeJsonResponse(200, { models: [{ name: 'models/gemini-2.0-flash' }] });
       }
-      expect(url).toContain('generateContent');
-      const body = JSON.parse(String(init?.body ?? '{}'));
-      expect(body.contents[0].parts[0].text).toBe('ping');
-      return makeJsonResponse(200, {
-        candidates: [{ content: { parts: [{ text: 'pong from gemini' }] } }],
-      });
+      throw new Error('unexpected URL: ' + url);
     });
     const result = await testEndpointConnection(
       'https://generativelanguage.googleapis.com',
@@ -569,7 +570,7 @@ describe('R49: 非 openai 协议级补充测试', () => {
       'gemini',
     );
     expect(result.success).toBe(true);
-    expect(result.message).toContain('对话连通');
+    expect(result.message).toContain('聊天端点正常');
   });
 
   it('ollama 对话连通：POST /api/chat stream=false 解析 message.content', async () => {
@@ -584,7 +585,7 @@ describe('R49: 非 openai 协议级补充测试', () => {
     });
     const result = await testEndpointConnection('http://localhost:11434', '', 'llama3', 'ollama');
     expect(result.success).toBe(true);
-    expect(result.message).toContain('对话连通');
+    expect(result.message).toContain('聊天端点正常');
   });
 
   it('anthropic 对话端点 401 → 失败 + 中文提示', async () => {

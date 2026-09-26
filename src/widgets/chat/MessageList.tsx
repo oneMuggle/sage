@@ -112,7 +112,7 @@ export function MessageList({
     <>
       {/* 第二轮 B4: 会话内查找栏（Ctrl/Cmd+F），在列表根节点之外，自身文字不参与匹配 */}
       <ChatFindBar messages={messages} />
-      <div ref={rootRef} className="p-4 space-y-4">
+      <div ref={rootRef} className="p-4 space-y-[var(--density-msg-gap)]">
         {hiddenCount > 0 && (
           <button
             data-testid="load-earlier"

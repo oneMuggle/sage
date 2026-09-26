@@ -12,6 +12,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DensityProvider } from '../../../entities/density/useDensity';
 import { FontProvider } from '../../../entities/font/useFontSettings';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
@@ -66,7 +67,9 @@ function renderTab(resetSettings = vi.fn()): void {
   render(
     <I18nProvider>
       <FontProvider>
-        <GeneralTab resetSettings={resetSettings} />
+        <DensityProvider>
+          <GeneralTab resetSettings={resetSettings} />
+        </DensityProvider>
       </FontProvider>
     </I18nProvider>,
   );
