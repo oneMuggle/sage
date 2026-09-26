@@ -48,7 +48,7 @@ class TestConsolidationAccept:
         known = [{"name": "old-a"}, {"name": "old-b"}]
         adapter = SimpleNamespace(list_skills_extended=lambda: known)
         monkeypatch.setattr(
-            "backend.api.legacy_skills_routes._get_skill_adapter", lambda: adapter
+            "backend.api.legacy_skill_draft_routes._get_skill_adapter", lambda: adapter
         )
 
         resp = client.post(
@@ -69,7 +69,7 @@ class TestConsolidationAccept:
         monkeypatch.setattr(lifecycle_mod, "get_lifecycle_store", lambda: store)
         adapter = SimpleNamespace(list_skills_extended=lambda: [{"name": "pinned-a"}])
         monkeypatch.setattr(
-            "backend.api.legacy_skills_routes._get_skill_adapter", lambda: adapter
+            "backend.api.legacy_skill_draft_routes._get_skill_adapter", lambda: adapter
         )
 
         resp = client.post(
