@@ -442,10 +442,26 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       const body: Record<string, unknown> = {};
       // R18-B: is_pinned 置顶开关（后端 SessionUpdateIn.is_pinned 已支持）
       if (a.isPinned != null) body.is_pinned = a.isPinned;
+      // R51: is_archived 归档开关
+      if (a.isArchived != null) body.is_archived = a.isArchived;
       // title 缺省不下发 —— PATCH 只更新显式传入的字段
       if (a.title != null) body.title = a.title;
       return body;
     },
+  },
+
+  // 自动归档 sweep（对标 ZCode taskAutoArchive，#1571 批次）：归档 N 天
+  // 未活跃的未置顶会话；幂等，可安全重试。
+  session_archive_stale: {
+    method: 'POST',
+    path: () => '/api/v1/sessions/archive-stale',
+    body: (a) => ({ days: a.days }),
+  },
+
+  // 清空全部归档会话（含消息）——破坏性操作，前端需二次确认。
+  session_purge_archived: {
+    method: 'POST',
+    path: () => '/api/v1/sessions/purge-archived',
   },
 
   // F12 (对标增强第五轮批次 B): 跨会话消息全文搜索（侧栏搜索框数据源）

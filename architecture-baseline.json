@@ -11,7 +11,7 @@
     "backend/core/legacy/agent.py": 2523,
     "backend/core/legacy/llm_client.py": 1089,
     "backend/data/database.py": 1982,
-    "backend/data/session_repo.py": 1025,
+    "backend/data/session_repo.py": 1057,
     "backend/main.py": 1471,
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,

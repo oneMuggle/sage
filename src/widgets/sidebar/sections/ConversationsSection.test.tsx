@@ -8,9 +8,13 @@ import type { Session } from '../../../shared/lib/store';
 import { ConversationsSection } from './ConversationsSection';
 
 const searchMessagesMock = vi.fn();
+const archiveStaleMock = vi.fn(async (..._args: unknown[]) => ({ archived: 0 }));
+const purgeArchivedMock = vi.fn(async (..._args: unknown[]) => ({ purged: 0 }));
 vi.mock('../../../shared/api/sessionApi', () => ({
   sessionApi: {
     searchMessages: (...args: unknown[]) => searchMessagesMock(...args),
+    archiveStale: (...args: unknown[]) => archiveStaleMock(...args),
+    purgeArchived: (...args: unknown[]) => purgeArchivedMock(...args),
   },
 }));
 
@@ -45,6 +49,7 @@ const baseProps = {
   onSelect: () => {},
   onDelete: () => {},
   onNewSession: () => {},
+  onRefreshSessions: () => {},
 };
 
 describe('ConversationsSection', () => {
@@ -77,6 +82,58 @@ describe('ConversationsSection', () => {
     renderWithI18n(<ConversationsSection {...baseProps} onToggleCollapsed={onToggle} />);
     fireEvent.click(screen.getByRole('button', { name: '折叠' }));
     expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  describe('自动归档 + 清空归档（对标 ZCode taskAutoArchive）', () => {
+    beforeEach(() => {
+      archiveStaleMock.mockClear();
+      purgeArchivedMock.mockClear();
+      localStorage.clear();
+    });
+
+    it('归档视图提供自动归档天数选择与清空按钮', () => {
+      renderWithI18n(<ConversationsSection {...baseProps} />);
+      fireEvent.click(screen.getByTestId('toggle-archived'));
+      expect(screen.getByTestId('auto-archive-select')).toBeInTheDocument();
+      expect(screen.getByTestId('purge-archived')).toBeInTheDocument();
+    });
+
+    it('选择天数后写入 localStorage 并触发 archiveStale', async () => {
+      renderWithI18n(<ConversationsSection {...baseProps} />);
+      fireEvent.click(screen.getByTestId('toggle-archived'));
+      fireEvent.change(screen.getByTestId('auto-archive-select'), {
+        target: { value: '14' },
+      });
+      await waitFor(() => expect(archiveStaleMock).toHaveBeenCalledWith(14));
+      expect(localStorage.getItem('sage:session-auto-archive-days')).toBe('14');
+    });
+
+    it('清空全部归档：确认后调用 purge 并刷新列表', async () => {
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const refresh = vi.fn();
+      const archived: Session[] = sessions.map((s) => ({ ...s, is_archived: true }));
+      renderWithI18n(
+        <ConversationsSection {...baseProps} sessions={archived} onRefreshSessions={refresh} />,
+      );
+      fireEvent.click(screen.getByTestId('toggle-archived'));
+      fireEvent.click(screen.getByTestId('purge-archived'));
+      await waitFor(() => expect(purgeArchivedMock).toHaveBeenCalledTimes(1));
+      expect(refresh).toHaveBeenCalled();
+      confirmSpy.mockRestore();
+    });
+
+    it('清空全部归档：取消确认则不调用 purge', async () => {
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const refresh = vi.fn();
+      const archived: Session[] = sessions.map((s) => ({ ...s, is_archived: true }));
+      renderWithI18n(
+        <ConversationsSection {...baseProps} sessions={archived} onRefreshSessions={refresh} />,
+      );
+      fireEvent.click(screen.getByTestId('toggle-archived'));
+      fireEvent.click(screen.getByTestId('purge-archived'));
+      expect(purgeArchivedMock).not.toHaveBeenCalled();
+      confirmSpy.mockRestore();
+    });
   });
 
   it("U4': filters sessions by title (case-insensitive) and shows no-match", () => {

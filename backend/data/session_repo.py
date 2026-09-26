@@ -230,6 +230,38 @@ class SessionRepository:
         """归档会话"""
         return self.update(session_id, is_archived=1)
 
+    def archive_stale(self, cutoff_ms: int) -> int:
+        """归档最后活跃时间早于 cutoff_ms 的未置顶会话，返回归档数量。
+
+        - 最后活跃时间取 COALESCE(last_message_at, updated_at, created_at)
+        - 运行中/挂起的会话不归档（避免打断活跃流）
+        - 置顶会话不归档
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        now_ms = int(time.time() * 1000)
+        cursor.execute(
+            "UPDATE sessions SET is_archived = 1, updated_at = ? "
+            "WHERE is_archived = 0 AND is_pinned = 0 "
+            "AND COALESCE(run_status, 'idle') NOT IN ('running', 'suspended') "
+            "AND COALESCE(last_message_at, updated_at, created_at) < ?",
+            (now_ms, cutoff_ms),
+        )
+        conn.commit()
+        return cursor.rowcount
+
+    def purge_archived(self) -> int:
+        """永久删除全部归档会话（含消息），返回删除的会话数"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM messages WHERE session_id IN "
+            "(SELECT id FROM sessions WHERE is_archived = 1)"
+        )
+        cursor.execute("DELETE FROM sessions WHERE is_archived = 1")
+        conn.commit()
+        return cursor.rowcount
+
     def pin(self, session_id: str, pinned: bool = True) -> bool:
         """置顶/取消置顶会话"""
         return self.update(session_id, is_pinned=1 if pinned else 0)

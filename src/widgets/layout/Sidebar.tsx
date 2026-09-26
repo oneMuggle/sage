@@ -242,14 +242,12 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
             onDelete={(id) => void deleteSessionCascade(id)}
             onNewSession={handleNewSession}
             onRename={handleRenameSession}
+            onRefreshSessions={loadSessions}
           />
         );
       case 'todos':
         return (
-          <TodoSection
-            collapsed={isCollapsed}
-            onToggleCollapsed={() => toggleCollapsed(key)}
-          />
+          <TodoSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
         );
       case 'cron':
         return (
@@ -257,7 +255,10 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
         );
       case 'git':
         return (
-          <GitStatusSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
+          <GitStatusSection
+            collapsed={isCollapsed}
+            onToggleCollapsed={() => toggleCollapsed(key)}
+          />
         );
       case 'project':
         return (

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, HTTPException, Query
@@ -210,6 +211,34 @@ def delete_session(session_id: str, repo: SessionRepository = Depends(get_sessio
     # Phase 2: session_stop 生命周期钩子 (observe-only, fail-open)
     _fire_session_hook("session_stop", session_id)
     return {"status": "ok"}
+
+
+# ==================== 归档管理（对标 ZCode taskAutoArchive + 清空归档） ====================
+
+
+class SessionArchiveStaleRequest(BaseModel):
+    days: int  # 归档 N 天未活跃的会话，1-365
+
+
+@router.post("/sessions/archive-stale", response_model=dict)
+@with_db_lock
+def archive_stale_sessions(
+    data: SessionArchiveStaleRequest, repo: SessionRepository = Depends(get_session_repo)
+):
+    """归档最后活跃时间早于 N 天前的未置顶会话（自动归档 sweep 端点）"""
+    if not 1 <= data.days <= 365:
+        raise HTTPException(status_code=422, detail="days 需在 1-365")
+    cutoff_ms = int(time.time() - data.days * 86400) * 1000
+    archived = repo.archive_stale(cutoff_ms)
+    return {"archived": archived}
+
+
+@router.post("/sessions/purge-archived", response_model=dict)
+@with_db_lock
+def purge_archived_sessions(repo: SessionRepository = Depends(get_session_repo)):
+    """永久删除全部归档会话（含消息）"""
+    purged = repo.purge_archived()
+    return {"purged": purged}
 
 
 
