@@ -29,12 +29,31 @@ function countLines(filePath) {
   return readFileSync(filePath, 'utf-8').split('\n').length;
 }
 
+// Directories never scanned: third-party installs, nested checkouts, caches.
+// Dot-prefixed dirs (.worktrees, .venv*, .git, .qoder ...) are dev-machine
+// artifacts that CI clean checkouts never contain — walking them makes LOCAL
+// runs diverge from CI semantics (hundreds of phantom "violations") while the
+// committed gate stays identical.
+const SKIP_DIR_NAMES = new Set([
+  'node_modules',
+  'venv',
+  'dist',
+  'dist-electron',
+  'coverage',
+  '__pycache__',
+  'export_assets',
+]);
+
+function shouldSkipDir(name) {
+  return SKIP_DIR_NAMES.has(name) || name.startsWith('.');
+}
+
 function walkDir(dir, fileList = []) {
   const files = readdirSync(dir);
   for (const file of files) {
     const filePath = join(dir, file);
     if (statSync(filePath).isDirectory()) {
-      if (!filePath.includes('node_modules') && !filePath.includes('.git')) {
+      if (!shouldSkipDir(file)) {
         walkDir(filePath, fileList);
       }
     } else if (extname(filePath) === '.ts' || extname(filePath) === '.tsx' || extname(filePath) === '.py') {
