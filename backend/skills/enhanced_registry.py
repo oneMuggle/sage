@@ -47,7 +47,7 @@ class EnhancedSkillRegistry(SkillRegistry):
         """
         super().__init__()
         self._discovery_service = discovery_service
-        self._metadata_cache: dict[str, SkillMetadata] = {}
+        self._metadata_cache: Dict[str, SkillMetadata] = {}
 
     @property
     def discovery_service(self) -> SkillDiscoveryService:
@@ -109,7 +109,7 @@ class EnhancedSkillRegistry(SkillRegistry):
         """
         return self._metadata_cache.get(skill_name)
 
-    def list_with_metadata(self) -> list[tuple[BaseSkill, Optional[SkillMetadata]]]:
+    def list_with_metadata(self) -> List[tuple[BaseSkill, Optional[SkillMetadata]]]:
         """
         List all skills with their metadata.
 

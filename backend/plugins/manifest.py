@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Tuple, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -306,7 +306,7 @@ class PluginManifest(BaseModel):
             json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
 
 
-def validate_plugin_manifest(manifest_path: Union[Path, str]) -> tuple[bool, List[str]]:
+def validate_plugin_manifest(manifest_path: Union[Path, str]) -> Tuple[bool, List[str]]:
     """
     Validate a plugin manifest file.
 

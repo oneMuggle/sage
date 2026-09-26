@@ -40,7 +40,7 @@ class WorkspaceMcpConfig(BaseModel):
     auto_discover: bool = Field(default=True, description="是否自动发现服务器")
 
     @property
-    def all_server_names(self) -> list[str]:
+    def all_server_names(self) -> List[str]:
         """Get all server names (enabled + disabled)."""
         return self.enabled_servers + self.disabled_servers
 
@@ -68,7 +68,7 @@ class WorkspaceScopeManager:
         manager.set_server_enabled("/path/to/workspace", "server-name", True)
     """
 
-    def __init__(self, db_path: Optional[Union[Path, str]] = None) -> None:
+    def __init__(self, db_path: Optional[[Path, str]] = None) -> None:
         """
         Initialize workspace scope manager.
 
@@ -80,7 +80,7 @@ class WorkspaceScopeManager:
 
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._cache: dict[str, WorkspaceMcpConfig] = {}
+        self._cache: Dict[str, WorkspaceMcpConfig] = {}
 
         self._init_database()
 
@@ -334,7 +334,7 @@ class WorkspaceScopeManager:
         self,
         workspace_path: Union[Path, str],
         discovery_service: Optional[McpServerDiscoveryService] = None,
-    ) -> list[DiscoveredMcpServer]:
+    ) -> List[DiscoveredMcpServer]:
         """
         Get all enabled servers for a workspace.
 
@@ -363,7 +363,7 @@ class WorkspaceScopeManager:
 
         return enabled
 
-    def list_workspaces(self) -> list[str]:
+    def list_workspaces(self) -> List[str]:
         """
         List all configured workspaces.
 

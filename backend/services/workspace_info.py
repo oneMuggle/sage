@@ -41,7 +41,7 @@ class WorkspaceInfo(BaseModel):
     git_status: Optional[str] = Field(default=None, description="Git 状态")
     git_ahead: int = Field(default=0, description="领先远程的提交数")
     git_behind: int = Field(default=0, description="落后远程的提交数")
-    recent_files: list[RecentFile] = Field(
+    recent_files: List[RecentFile] = Field(
         default_factory=list, description="最近修改的文件"
     )
     total_files: int = Field(default=0, description="总文件数")
@@ -71,7 +71,7 @@ class WorkspaceInfoService:
     """
 
     def get_workspace_info(
-        self, workspace_path: Path | str, max_recent_files: int = 10
+        self, workspace_path: Union[Path, str], max_recent_files: int = 10
     ) -> WorkspaceInfo:
         """
         Get workspace information.
@@ -184,7 +184,7 @@ class WorkspaceInfoService:
 
     def _get_recent_files(
         self, workspace: Path, max_files: int
-    ) -> list[RecentFile]:
+    ) -> List[RecentFile]:
         """Get recently modified files."""
         recent = []
 

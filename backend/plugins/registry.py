@@ -65,10 +65,10 @@ class CapabilityRegistry:
     def __init__(self) -> None:
         """Initialize capability registry."""
         # Key: (capability_type, capability_name) -> RegisteredCapability
-        self._capabilities: dict[tuple[str, str], RegisteredCapability] = {}
+        self._capabilities: Dict[tuple[str, str], RegisteredCapability] = {}
 
         # Plugin index: plugin_name -> set of (type, name)
-        self._plugin_index: dict[str, set[tuple[str, str]]] = {}
+        self._plugin_index: Dict[str, set[tuple[str, str]]] = {}
 
     def register(
         self,
@@ -183,7 +183,7 @@ class CapabilityRegistry:
         return count
 
     def get(
-        self, capability_type: CapabilityType | str, capability_name: str
+        self, capability_type: Union[CapabilityType, str], capability_name: str
     ) -> Optional[RegisteredCapability]:
         """
         Get a registered capability.
@@ -209,7 +209,7 @@ class CapabilityRegistry:
         return registered
 
     def get_handler(
-        self, capability_type: CapabilityType | str, capability_name: str
+        self, capability_type: Union[CapabilityType, str], capability_name: str
     ) -> Optional[Any]:
         """
         Get the handler for a capability.
@@ -258,7 +258,7 @@ class CapabilityRegistry:
         self,
         plugin_name: Optional[str] = None,
         capability_type: Optional[CapabilityType | str] = None,
-    ) -> list[RegisteredCapability]:
+    ) -> List[RegisteredCapability]:
         """
         List registered capabilities.
 
@@ -290,7 +290,7 @@ class CapabilityRegistry:
 
         return results
 
-    def list_plugins(self) -> list[str]:
+    def list_plugins(self) -> List[str]:
         """
         List all plugins with registered capabilities.
 
@@ -300,7 +300,7 @@ class CapabilityRegistry:
         return list(self._plugin_index.keys())
 
     def has_capability(
-        self, capability_type: CapabilityType | str, capability_name: str
+        self, capability_type: Union[CapabilityType, str], capability_name: str
     ) -> bool:
         """
         Check if a capability is registered.

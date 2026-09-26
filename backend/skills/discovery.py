@@ -66,7 +66,7 @@ class SkillDiscoveryService:
         metadata = service.discover_one("my-skill")
     """
 
-    def __init__(self, skills_dir: Optional[Union[Path, str]] = None) -> None:
+    def __init__(self, skills_dir: Optional[[Path, str]] = None) -> None:
         """
         Initialize discovery service.
 
@@ -80,7 +80,7 @@ class SkillDiscoveryService:
             self._skills_dir = self._get_default_skills_dir()
 
         # Cache for discovered skills
-        self._cache: dict[str, SkillMetadata] = {}
+        self._cache: Dict[str, SkillMetadata] = {}
         self._cache_valid = False
 
     def _get_default_skills_dir(self) -> Path:
@@ -98,7 +98,7 @@ class SkillDiscoveryService:
         """Get the skills directory."""
         return self._skills_dir
 
-    def discover_all(self, use_cache: bool = True) -> list[SkillMetadata]:
+    def discover_all(self, use_cache: bool = True) -> List[SkillMetadata]:
         """
         Discover all skills in the skills directory.
 
@@ -223,7 +223,7 @@ class SkillDiscoveryService:
             priority=int(frontmatter.get("priority", 0)),
         )
 
-    def _extract_frontmatter(self, content: str) -> dict[str, Any]:
+    def _extract_frontmatter(self, content: str) -> Dict[str, Any]:
         """
         Extract YAML frontmatter from SKILL.md content.
 
@@ -312,7 +312,7 @@ class SkillDiscoveryService:
         self._cache_valid = False
         logger.debug("技能发现缓存已失效")
 
-    def list_skill_names(self) -> list[str]:
+    def list_skill_names(self) -> List[str]:
         """
         List all discovered skill names.
 
