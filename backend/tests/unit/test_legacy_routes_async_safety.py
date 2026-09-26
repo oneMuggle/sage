@@ -23,12 +23,15 @@ LEGACY_ROUTES_PATH = Path(__file__).resolve().parent.parent.parent / "api" / "le
 LEGACY_SESSION_ROUTES_PATH = (
     Path(__file__).resolve().parent.parent.parent / "api" / "legacy_session_routes.py"
 )
-# C1a (DSH 对标 R14): 记忆 API 迁出至双模块（核心 + list/summaries）
+# C1a/C1b (DSH 对标 R14/R15): 记忆 + 技能 API 路由组已拆出
 LEGACY_MEMORY_ROUTES_PATH = (
     Path(__file__).resolve().parent.parent.parent / "api" / "legacy_memory_routes.py"
 )
 LEGACY_MEMORY_LIST_ROUTES_PATH = (
     Path(__file__).resolve().parent.parent.parent / "api" / "legacy_memory_list_routes.py"
+)
+LEGACY_SKILLS_ROUTES_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "api" / "legacy_skills_routes.py"
 )
 # C1b (DSH 对标 R15): 技能 API 迁出至本模块
 LEGACY_SKILLS_ROUTES_PATH = (
@@ -36,9 +39,7 @@ LEGACY_SKILLS_ROUTES_PATH = (
 )
 
 # `async def` 但无 await 的 handler 是事件循环阻塞风险点。
-# 本测试维护一份"必须 keep_async"的精确白名单(10 个: main 7 + win7 memory 3)。
-# NOTE (win7 sync): win7 另有 3 个 memory 相关 async handler
-# (get_memories_by_turn / get_session_summary / memory_events),一并纳入。
+# 本测试维护一份"必须 keep_async"的精确白名单(7 个,L580/L974/1015/1105/1284/1400/1763)。
 # 所有其他 async def 必须有 await,否则应降级为 def。
 KEEP_ASYNC_HANDLERS = frozenset(
     {
@@ -49,20 +50,17 @@ KEEP_ASYNC_HANDLERS = frozenset(
         "chat",  # L1284 — 主 chat 端点,内调 LLM 流
         "chat_stream_create",  # L1400 — SSE 流,内调 LLM 流
         "chat_stream_attach",  # L1763 — SSE 续接,内调事件流
-        "get_memories_by_turn",  # memory 按 turn 查询 (win7 特有)
-        "get_session_summary",  # 会话摘要 (win7 特有)
-        "memory_events",  # memory SSE 事件流 (win7 特有)
     }
 )
 
 
-def _load_top_level_functions(src: str) -> list:
+def _load_top_level_functions(src: str) -> list[ast.FunctionDef | ast.AsyncFunctionDef]:
     """加载模块顶层函数定义。"""
     tree = ast.parse(src)
     return [
         node
         for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))  # noqa: UP038 — py38 运行时 isinstance 不支持 X | Y
     ]
 
 
@@ -71,7 +69,7 @@ def _has_await(func: ast.AsyncFunctionDef) -> bool:
     return any(isinstance(node, ast.Await) for node in ast.walk(func))
 
 
-def _is_router_endpoint(func: object) -> bool:
+def _is_router_endpoint(func: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
     """判断是否为 FastAPI 路由端点（顶层函数）。
 
     排除条件：函数名以 `_` 开头（私有 helper,不是 FastAPI 路由）。
@@ -121,13 +119,6 @@ def test_keep_async_handlers_actually_async():
     # L1 (P8): compact_session 已拆至 legacy_session_routes —— 合并两个模块的顶层函数
     session_src = LEGACY_SESSION_ROUTES_PATH.read_text(encoding="utf-8")
     funcs += _load_top_level_functions(session_src)
-    # C1a (R14): 记忆 API 已拆至 legacy_memory_routes / legacy_memory_list_routes
-    memory_src = LEGACY_MEMORY_ROUTES_PATH.read_text(encoding="utf-8")
-    funcs += _load_top_level_functions(memory_src)
-    memory_list_src = LEGACY_MEMORY_LIST_ROUTES_PATH.read_text(encoding="utf-8")
-    funcs += _load_top_level_functions(memory_list_src)
-    skills_src = LEGACY_SKILLS_ROUTES_PATH.read_text(encoding="utf-8")
-    funcs += _load_top_level_functions(skills_src)
     # C1b (R15): 技能 API 已拆至 legacy_skills_routes
     skills_src = LEGACY_SKILLS_ROUTES_PATH.read_text(encoding="utf-8")
     funcs += _load_top_level_functions(skills_src)
@@ -142,7 +133,7 @@ def test_keep_async_handlers_actually_async():
 
 
 def test_async_handler_count_matches_design():
-    """legacy 路由族应有 9 个 async def handler（合并 memory 双模块与 skills 模块后）。
+    """legacy 路由族应有 9 个 async def handler（含 win7 memory SSE/by-turn/summary 3 个额外 async handler）（C1b：3 个技能端点迁至 legacy_skills_routes）。
 
     Round 5 (+1): scan_skill_consolidation —— LLM 巡检端点,
     async 因为需要 await LLM provider.complete()。
@@ -150,24 +141,19 @@ def test_async_handler_count_matches_design():
     src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
     funcs = _load_top_level_functions(src)
-    async_endpoints = [
-        f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
-    ]
-    # C1a (R14): 合并 memory 双模块（3 个 win7 memory async handler 已迁出）
-    memory_src = LEGACY_MEMORY_ROUTES_PATH.read_text(encoding="utf-8")
-    funcs += _load_top_level_functions(memory_src)
-    memory_list_src = LEGACY_MEMORY_LIST_ROUTES_PATH.read_text(encoding="utf-8")
-    funcs += _load_top_level_functions(memory_list_src)
-    skills_src = LEGACY_SKILLS_ROUTES_PATH.read_text(encoding="utf-8")
-    funcs += _load_top_level_functions(skills_src)
+    for _extra in (LEGACY_MEMORY_ROUTES_PATH, LEGACY_MEMORY_LIST_ROUTES_PATH, LEGACY_SKILLS_ROUTES_PATH):
+        funcs += _load_top_level_functions(_extra.read_text(encoding="utf-8"))
     async_endpoints = [
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
 
-    # C1c 后 = 9：合并 legacy_routes(3) + memory_list(3) + skills(3) 模块
-    # （3 个技能 async handler 迁至 legacy_skills_routes，合并计数不变）。
+    # 6 个 keep_async (execute_skill, execute_slash_command,
+    # import_skills, chat, chat_stream_create, chat_stream_attach)
+    # C1b 后 = 4：execute_skill/execute_slash_command/import_skills 迁至 legacy_skills_routes。
+    # compact_session 已拆至 legacy_session_routes (L1, P8), 在那里由
+    # test_keep_async_handlers_actually_async 的合并扫描覆盖。
     assert len(async_endpoints) == 9, (
-        f"legacy 路由族应有 9 个 async def handler,实际 {len(async_endpoints)}:\n"
+        f"legacy 路由族应有 9 个 async def handler（含 win7 memory SSE/by-turn/summary 3 个额外 async handler）,实际 {len(async_endpoints)}:\n"
         + "\n".join(f"  {f.name} (line {f.lineno})" for f in async_endpoints)
     )
 
@@ -181,21 +167,11 @@ def test_async_handlers_count_invariant_against_internal_helpers():
     src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
     funcs = _load_top_level_functions(src)
+    for _extra in (LEGACY_MEMORY_ROUTES_PATH, LEGACY_MEMORY_LIST_ROUTES_PATH, LEGACY_SKILLS_ROUTES_PATH):
+        funcs += _load_top_level_functions(_extra.read_text(encoding="utf-8"))
     async_endpoints = [
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
-    # C1a (R14): 合并 memory 双模块（跟 test_async_handler_count_matches_design 一致）
-    memory_src = LEGACY_MEMORY_ROUTES_PATH.read_text(encoding="utf-8")
-    funcs += _load_top_level_functions(memory_src)
-    memory_list_src = LEGACY_MEMORY_LIST_ROUTES_PATH.read_text(encoding="utf-8")
-    funcs += _load_top_level_functions(memory_list_src)
-    skills_src = LEGACY_SKILLS_ROUTES_PATH.read_text(encoding="utf-8")
-    funcs += _load_top_level_functions(skills_src)
-    async_endpoints = [
-        f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
-    ]
-    # 同样 10 个
-    assert len(async_endpoints) == 9
     # 同样 7 个,跟 test_async_handler_count_matches_design 一致
     assert len(async_endpoints) == 9
 
