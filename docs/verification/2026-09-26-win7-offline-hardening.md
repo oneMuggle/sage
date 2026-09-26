@@ -41,3 +41,11 @@ PR/最终 SHA/合并/清理终态由主 checkout 的 `docs/mcp-win7-offline-impl
 
 没有 Win7 SP1 x64 实机、企业补丁/CA/签名基础设施、真实隔离网维护镜像；本轮不宣称已通过实际 Win7 安装、CPU/VC/native DLL、全离线升级恢复矩阵，也没有发布安装包。
 代码边界不是 OS 防火墙；未声称阻止所有第三方库出网。SQLite 恢复点不包括附件、模型、凭据和系统密钥；程序回滚不等于数据模式回滚。可信制品导入及精确产品线资产资格验证仍属发布前条件。
+
+## 首轮 CI 反馈与修正
+
+PR #1615 的首轮 CI `36205960831`：前端 397 文件、2940 passed / 3 skipped，Linux/Windows 构建、Electron smoke、架构检查均成功。后端覆盖率 **82.23%** 达到原有 80% 门槛，但 52 failed / 9807 passed / 126 skipped，因此没有合并。
+
+52 项失败来自存量网络传输测试隐含的“缺配置仍在线”假设及旧 doctor pip 建议断言：新增**非自动启用**的 `_online_network_settings` fixture，仅由相应 mock 网络传输测试显式选择；内存 SettingsRepository 测试替身同样显式配置 online。没有在全测试会话或生产代码中恢复 fail-open。默认工具注册测试改为同时验证本地工具可用、网络工具缺席，并新增显式 online 注册网络工具的对照用例。重依赖测试要求离线维护包指导且不得建议 `pip install`。
+
+修正后相关 10 个文件在锁定 Python 3.8 环境中 **375 passed / 1 skipped**（本地没有浏览器，真实浏览器 smoke 跳过）；其中包含原有 offline/intranet/SSRF/凭据剥离负向断言。未删除或跳过失败测试，未降低覆盖率或安全检查。最终提交仍须完整 CI 重新通过。

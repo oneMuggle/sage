@@ -77,7 +77,9 @@ class TestHeavyDepsCheck:
             result = check.run()
         assert result.severity == Severity.CRITICAL
         assert "3/3" in result.message
-        assert "pip install" in result.fix_hint
+        assert "离线维护包" in result.fix_hint
+        assert "不要运行主线 requirements.txt" in result.fix_hint
+        assert "pip install" not in result.fix_hint
 
     def test_critical_when_one_fails(self, check):
         """1 个失败 → CRITICAL(hnswlib 缺包会直接挂掉所有 embedding 调用)。"""

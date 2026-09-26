@@ -430,3 +430,11 @@ def reset_skill_adapter():  # noqa: PT004 - 空 yield 是合法的 teardown-only
     inproc_mod._skill_adapter_singleton = None
     yield
     inproc_mod._skill_adapter_singleton = None
+
+
+@pytest.fixture()
+def _online_network_settings(setup_test_db):
+    """Explicit opt-in for mocked transport tests; production/missing settings stay offline."""
+    from backend.data.settings_repo import SettingsRepository
+
+    SettingsRepository().set("network_policy", '{"mode":"online"}')

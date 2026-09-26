@@ -227,6 +227,7 @@ class TestRegistryRiskCollection:
 class TestBuiltinToolDeclarations:
     """内置工具风险声明验收测试"""
 
+    @pytest.mark.usefixtures("_online_network_settings")
     def test_builtin_tools_declare_expected_risk(self):
         """所有内置工具经 register_all_tools 注册后风险符合预期"""
         registry = ToolRegistry()

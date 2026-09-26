@@ -36,7 +36,7 @@ from backend.tools.credential_vault import (
 from backend.tools.download_tool import HttpDownloadTool
 from backend.tools.web_tool import WebFetchTool
 
-pytestmark = [pytest.mark.unit]
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("_online_network_settings")]
 
 
 @pytest.fixture(autouse=True)
@@ -64,7 +64,7 @@ class _MemRepo:
     """内存版 SettingsRepository（只实现 vault 相关语义）。"""
 
     def __init__(self):
-        self.data = {}
+        self.data = {"network_policy": '{"mode":"online"}'}
 
     def get(self, key):
         return self.data.get(key)
