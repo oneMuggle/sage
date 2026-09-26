@@ -7,21 +7,12 @@
     "backend/api/office_routes.py": 1436,
     "backend/api/orchestration_router.py": 807,
     "backend/api/wiki_routes.py": 1692,
-<<<<<<< HEAD
     "backend/application/services/chat_service.py": 1203,
     "backend/core/legacy/agent.py": 2523,
     "backend/core/legacy/llm_client.py": 1089,
     "backend/data/database.py": 1982,
-    "backend/data/session_repo.py": 1025,
+    "backend/data/session_repo.py": 1057,
     "backend/main.py": 1471,
-=======
-    "backend/application/services/chat_service.py": 1071,
-    "backend/core/legacy/agent.py": 2430,
-    "backend/core/legacy/llm_client.py": 1093,
-    "backend/data/database.py": 1949,
-    "backend/data/session_repo.py": 1056,
-    "backend/main.py": 1136,
->>>>>>> 23cbbdd5e (feat(sessions): 会话自动归档 + 清空全部归档 + ZCode 对标差距分析 (#1655))
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,
     "backend/office/excel.py": 1003,
@@ -55,19 +46,11 @@
     "backend/wiki/files.py": 927,
     "backend/zotero/client.py": 818,
     "electron/__tests__/commands.test.ts": 981,
-<<<<<<< HEAD
     "electron/commands.ts": 1300,
     "electron/main.ts": 2815,
     "electron/tests/updateIntegration.test.ts": 869,
     "electron/tests/updateManager.test.ts": 1813,
     "electron/updateManager.ts": 1498,
-=======
-    "electron/commands.ts": 1319,
-    "electron/main.ts": 2651,
-    "electron/tests/updateIntegration.test.ts": 865,
-    "electron/tests/updateManager.test.ts": 1776,
-    "electron/updateManager.ts": 1493,
->>>>>>> 23cbbdd5e (feat(sessions): 会话自动归档 + 清空全部归档 + ZCode 对标差距分析 (#1655))
     "packages/drawio-mcp-server/src/xml-validation.ts": 950,
     "src/features/office/OfficeEditPreviewDialog.tsx": 1591,
     "src/features/office/OfficeGenerateForm.tsx": 852,

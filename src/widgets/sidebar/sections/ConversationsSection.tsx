@@ -159,10 +159,7 @@ export function ConversationsSection({
       .finally(() => setPurging(false));
   }, [onRefreshSessions]);
 
-  const archivedCount = useMemo(
-    () => sessions.filter((s) => s.is_archived).length,
-    [sessions],
-  );
+  const archivedCount = useMemo(() => sessions.filter((s) => s.is_archived).length, [sessions]);
 
   return (
     <SiderSection
@@ -217,7 +214,6 @@ export function ConversationsSection({
                   data-testid="auto-archive-select"
                   value={autoArchiveDays}
                   onChange={(e) => setAutoArchiveDays(Number(e.target.value))}
-
                   className="h-5 rounded bg-bg-hover border border-transparent focus:border-primary focus:outline-none text-[11px]"
                 >
                   <option value={0}>关闭</option>
@@ -241,7 +237,10 @@ export function ConversationsSection({
             </div>
           )}
           {sessions.length === 0 ? (
-            <div className="px-3 py-6 text-xs text-text-muted text-center space-y-2" data-testid="sessions-empty">
+            <div
+              className="px-3 py-6 text-xs text-text-muted text-center space-y-2"
+              data-testid="sessions-empty"
+            >
               <p>尚无会话</p>
               <button
                 type="button"
