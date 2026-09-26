@@ -2,7 +2,7 @@
 import type { UpdateProvider, NormalisedRelease, ProviderChannel } from './base';
 import type { GiteeConfig } from '../providerConfig';
 import { ProviderError } from './genericHttp';
-import { fetchCompat } from '../../fetchCompat';
+import { fetchUpdate as fetchCompat } from '../request';
 
 const CHANNELS: ProviderChannel[] = [
   { id: 'stable', label: 'Stable', description: '正式版（pre=false）' },

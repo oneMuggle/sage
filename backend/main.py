@@ -339,6 +339,11 @@ async def lifespan(app: FastAPI):
     # 直接 ``Database()`` 会忽略该 hook，导致测试污染生产 ``data/sage.db``。
     # ``init_db()`` 全部走 ``CREATE TABLE IF NOT EXISTS``，重复调用幂等。
     db = get_database()
+    # This must precede init_db: the routine startup backup below is post-migration.
+    # Do not swallow errors: migrating without a valid recovery point is unsafe.
+    from backend.services.upgrade_backup import ensure_upgrade_backup, installed_build_identity
+
+    ensure_upgrade_backup(db.db_path, installed_build_identity())
     db.init_db()
     app.state.db = db
     app.state.catalog_repo = CatalogRepository(db)

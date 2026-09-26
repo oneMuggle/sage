@@ -4,18 +4,18 @@
 ``permission_mode`` 同一套 KV 机制 —— 不走 ``app_settings`` blob，避免碰
 ``LEGAL_TOP_KEYS`` 白名单与前后端三处同步。
 
-**fail-safe 方向**：任何读取/解析/校验失败都回退 ``ONLINE``（现状行为）。
-配置读不出来时不应该把用户的既有能力锁死。这与
-``load_tool_policy_from_config`` 的降级口径一致。
+**fail-safe 方向**：任何读取/解析/校验失败都回退 ``OFFLINE``。
+不可信配置不得扩大网络权限；本地工具仍可使用。企业部署环境提供更严格的上限。
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any, Optional
 
-from backend.domain.network_policy import NetworkPolicy
+from backend.domain.network_policy import NetworkMode, NetworkPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -24,37 +24,32 @@ SETTINGS_KEY_NETWORK_POLICY = "network_policy"
 
 
 def load_network_policy(repo: Optional[Any] = None) -> NetworkPolicy:
-    """读取网络策略；任何失败回退 ``NetworkPolicy()``（ONLINE）。
+    """读取网络策略；任何失败回退 OFFLINE，管理员部署模式优先。
 
     Args:
         repo: 可注入的 ``SettingsRepository``（测试用）；``None`` 时新建。
     """
+    deployment = os.environ.get("SAGE_DEPLOYMENT_MODE", "").strip().lower()
+    if deployment and deployment != "online":
+        if deployment == "intranet":
+            try:
+                hosts = tuple(h.strip() for h in os.environ.get("SAGE_NETWORK_ALLOWED_HOSTS", "").split(",") if h.strip())
+                return NetworkPolicy(mode=NetworkMode.INTRANET, allowed_hosts=hosts)
+            except (ValueError, TypeError):
+                logger.warning("管理员内网白名单非法，已禁止外联（offline）")
+        return NetworkPolicy(mode=NetworkMode.OFFLINE)
     try:
         if repo is None:
-            # 惰性 import 避免 tools ↔ data 循环依赖（与 permissions.py 同手法）
             from backend.data.settings_repo import SettingsRepository
 
             repo = SettingsRepository()
         raw = repo.get(SETTINGS_KEY_NETWORK_POLICY)
-    except Exception:  # noqa: BLE001 — 配置读取失败绝不阻断工具注册
-        logger.warning("网络策略读取失败，回退 online 模式", exc_info=True)
-        return NetworkPolicy()
-
-    if not raw:
-        return NetworkPolicy()
-
-    try:
+        if not raw:
+            return NetworkPolicy(mode=NetworkMode.OFFLINE)
         parsed = json.loads(raw)
-    except (ValueError, TypeError):
-        logger.warning("网络策略 JSON 解析失败，回退 online 模式")
-        return NetworkPolicy()
-
-    if not isinstance(parsed, dict):
-        logger.warning("网络策略不是 JSON 对象，回退 online 模式")
-        return NetworkPolicy()
-
-    try:
+        if not isinstance(parsed, dict) or "mode" not in parsed:
+            raise ValueError("network_policy must be an object with an explicit mode")
         return NetworkPolicy.from_config(parsed)
-    except (ValueError, TypeError):
-        logger.warning("网络策略字段非法，回退 online 模式")
-        return NetworkPolicy()
+    except Exception:  # noqa: BLE001 — invalid/unreadable policy must never expand network access
+        logger.warning("网络策略读取或校验失败，已禁止外联（offline）", exc_info=True)
+        return NetworkPolicy(mode=NetworkMode.OFFLINE)

@@ -1,14 +1,14 @@
 """network check 测试 —— 验证 network_policy 配置合法性与 httpx 依赖。
 
 场景覆盖:
-- 未配置（默认 ONLINE）→ INFO
+- 未配置（默认 OFFLINE）→ INFO
 - ONLINE + httpx 可用 → INFO
 - OFFLINE → INFO（气隙模式）
 - INTRANET + 合法 allowed_hosts → INFO
 - INTRANET + allowed_hosts 为空 → WARN
 - INTRANET + allowed_hosts 格式非法 → WARN
-- mode 非法 → WARN（fail-safe 到 ONLINE）
-- JSON 非法 → WARN（fail-safe 到 ONLINE）
+- mode 非法 → WARN（fail-safe 到 OFFLINE）
+- JSON 非法 → WARN（fail-safe 到 OFFLINE）
 - 非 dict JSON → WARN
 - httpx 不可用 → CRITICAL
 """
@@ -40,10 +40,15 @@ def _run_with_repo(raw: Optional[str]):
 
 
 class TestNetworkCheck:
-    def test_no_config_defaults_to_online_info(self) -> None:
+    def test_no_config_defaults_to_offline_info(self) -> None:
         result = _run_with_repo(None)
         assert result.severity == Severity.INFO
-        assert "online" in result.message.lower()
+        assert "offline" in result.message.lower()
+
+    def test_malformed_online_fields_reports_actual_offline_policy(self) -> None:
+        result = _run_with_repo(json.dumps({"mode": "online", "allowed_hosts": ["*"]}))
+        assert result.severity == Severity.WARN
+        assert "offline" in result.message
 
     def test_online_mode_info(self) -> None:
         raw = json.dumps({"mode": "online", "allowed_hosts": [], "insecure_tls_hosts": []})

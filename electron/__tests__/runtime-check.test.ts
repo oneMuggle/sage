@@ -152,7 +152,7 @@ describe('runRuntimeChecks', () => {
       expect(ti!.message).toContain('Windows Modules Installer');
     });
 
-    it('STATE=1 (STOPPED) → severity=critical, 带 doc_path + fix_script_path', async () => {
+    it('STATE=1 (STOPPED) → severity=warn, 带 doc_path + fix_script_path', async () => {
       execFileMock.mockResolvedValue({
         stdout: '\nSTATE              : 1 STOPPED\n',
       });
@@ -160,7 +160,7 @@ describe('runRuntimeChecks', () => {
       const results = await runRuntimeChecks();
       const ti = results.find((r) => r.name === 'TrustedInstaller');
       expect(ti).toBeDefined();
-      expect(ti!.severity).toBe('critical');
+      expect(ti!.severity).toBe('warn');
       expect(ti!.message).toContain('STATE=1');
       expect(ti!.fix_hint).toContain('win7-fix/fix.bat');
       // 关键字段: 服务禁用路径必须指向打包资源
@@ -170,7 +170,7 @@ describe('runRuntimeChecks', () => {
       expect(ti!.download_url).toBeUndefined();
     });
 
-    it('STATE=2 (START_PENDING) → severity=critical, 启动期卡住也视为异常', async () => {
+    it('STATE=2 (START_PENDING) → severity=warn, 不误判运行库缺失', async () => {
       execFileMock.mockResolvedValue({
         stdout: '\nSTATE              : 2 START_PENDING\n',
       });
@@ -178,7 +178,7 @@ describe('runRuntimeChecks', () => {
       const results = await runRuntimeChecks();
       const wu = results.find((r) => r.name === 'wuauserv');
       expect(wu).toBeDefined();
-      expect(wu!.severity).toBe('critical');
+      expect(wu!.severity).toBe('warn');
       expect(wu!.message).toContain('STATE=2');
     });
   });

@@ -56,7 +56,7 @@ class HeavyDepsCheck:
                 self.name,
                 Severity.CRITICAL,
                 f"{len(failed)}/{len(HEAVY_DEPS)} 重依赖不可用: {joined}",
-                "pip install -r backend/requirements.txt",
+                "联系管理员使用匹配当前 Win7 版本的离线维护包修复依赖；不要运行主线 requirements.txt 或在线 pip",
             )
 
         return CheckResult(

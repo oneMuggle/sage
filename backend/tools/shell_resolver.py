@@ -8,6 +8,7 @@ import ntpath
 import os
 import shutil
 import subprocess
+import sys
 from ctypes import wintypes
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -66,6 +67,18 @@ def _get_sage_install_root() -> Optional[str]:
     env = os.getenv("SAGE_INSTALL_DIR")
     if env and _is_local_windows_absolute(env) and _is_directory(env):
         return env
+    # Per-user/custom installs cannot be inferred from Program Files. Only trust
+    # the actual embedded interpreter layout, never CWD or an arbitrary PATH entry.
+    python_dir = ntpath.dirname(sys.executable)
+    resources = ntpath.dirname(python_dir)
+    install_root = ntpath.dirname(resources)
+    if (
+        ntpath.basename(python_dir).lower() == "python"
+        and ntpath.basename(resources).lower() == "resources"
+        and _is_local_windows_absolute(install_root)
+        and _is_regular_file(ntpath.join(resources, "tools", "git-bash", "usr", "bin", "bash.exe"))
+    ):
+        return install_root
     roots = _get_windows_program_files_roots()
     if roots:
         candidate = ntpath.join(roots[0], "Sage")

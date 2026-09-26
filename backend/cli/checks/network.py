@@ -2,11 +2,11 @@
 
 场景:
 
-- 未配置（默认 ONLINE）→ INFO
+- 未配置（默认 OFFLINE）→ INFO
 - 任意合法模式 + httpx 可用 → INFO
 - INTRANET 模式但 allowed_hosts 为空 → WARN（白名单形同虚设）
-- INTRANET 模式但 allowed_hosts 格式非法 → WARN（fail-safe 到 ONLINE）
-- mode 非法 / JSON 解析失败 → WARN（fail-safe 到 ONLINE）
+- INTRANET 模式但 allowed_hosts 格式非法 → WARN（fail-safe 到 OFFLINE）
+- mode 非法 / JSON 解析失败 → WARN（fail-safe 到 OFFLINE）
 - httpx 未安装 → CRITICAL（web_fetch/http_download 不可用）
 
 fail-safe 方向与 ``load_network_policy()`` 一致：配置读取/解析失败时不阻断
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any
 
 from backend.cli.doctor import CheckResult, Severity, register
@@ -46,19 +47,24 @@ class NetworkCheck:
 
     def run_with_repo(self, repo: Any) -> CheckResult:  # noqa: PLR0911 — 每个拒绝路径独立 return, 扁平比提取辅助函数更直读
         """可注入 repo 的入口（便于测试）。"""
+        if os.environ.get("SAGE_DEPLOYMENT_MODE", "").strip():
+            from backend.tools.network_config import load_network_policy
+
+            effective = load_network_policy(repo)
+            return self._check_httpx(effective.mode, mode_desc=effective.mode.value + "（管理员部署策略）")
         try:
             raw = repo.get("network_policy")
         except Exception as exc:  # noqa: BLE001
             return CheckResult(
                 self.name,
                 Severity.WARN,
-                f"network_policy 读取失败: {exc}（已 fail-safe 到 online）",
+                f"network_policy 读取失败: {exc}（已 fail-safe 到 offline）",
                 "检查 ~/.sage/preferences 表是否损坏；可清空后重启应用",
             )
 
-        # 未配置（默认 ONLINE）—— 与 load_network_policy() 口径一致
+        # 未配置（默认 OFFLINE）—— 与 load_network_policy() 口径一致
         if not raw:
-            return self._check_httpx(NetworkMode.ONLINE, mode_desc="online（默认，未配置）")
+            return self._check_httpx(NetworkMode.OFFLINE, mode_desc="offline（默认，未配置）")
 
         # JSON 解析
         try:
@@ -67,7 +73,7 @@ class NetworkCheck:
             return CheckResult(
                 self.name,
                 Severity.WARN,
-                "network_policy JSON 解析失败（已 fail-safe 到 online）",
+                "network_policy JSON 解析失败（已 fail-safe 到 offline）",
                 "在 Settings → Network 中重新选择网络模式",
             )
 
@@ -75,7 +81,7 @@ class NetworkCheck:
             return CheckResult(
                 self.name,
                 Severity.WARN,
-                "network_policy 不是 JSON 对象（已 fail-safe 到 online）",
+                "network_policy 不是 JSON 对象（已 fail-safe 到 offline）",
                 "在 Settings → Network 中重新选择网络模式",
             )
 
@@ -88,11 +94,11 @@ class NetworkCheck:
                 return CheckResult(
                     self.name,
                     Severity.WARN,
-                    f"network_policy.mode 非法: {mode_raw!r}（已 fail-safe 到 online）",
+                    f"network_policy.mode 非法: {mode_raw!r}（已 fail-safe 到 offline）",
                     "在 Settings → Network 中选择 online / intranet / offline",
                 )
         else:
-            mode = NetworkMode.ONLINE
+            mode = NetworkMode.OFFLINE
 
         # INTRANET 模式下校验 allowed_hosts
         if mode is NetworkMode.INTRANET:
@@ -112,11 +118,16 @@ class NetworkCheck:
                 return CheckResult(
                     self.name,
                     Severity.WARN,
-                    f"intranet 白名单格式非法: {exc}（已 fail-safe 到 online）",
+                    f"intranet 白名单格式非法: {exc}（已 fail-safe 到 offline）",
                     "在 Settings → Network 中修正 host 条目（通配只支持 *.example.com 形式）",
                 )
 
-        return self._check_httpx(mode, mode_desc=mode.value)
+        from backend.tools.network_config import load_network_policy
+
+        effective = load_network_policy(repo)
+        if effective.mode is not mode:
+            return CheckResult(self.name, Severity.WARN, "网络策略字段非法（已禁止外联 offline）", "联系管理员修复部署配置")
+        return self._check_httpx(effective.mode, mode_desc=effective.mode.value)
 
     def _check_httpx(self, mode: NetworkMode, mode_desc: str) -> CheckResult:
         """最后一步：校验 httpx 是否可导入。"""
@@ -127,7 +138,7 @@ class NetworkCheck:
                 self.name,
                 Severity.CRITICAL,
                 f"mode={mode_desc}，但 httpx 未安装（web_fetch / http_download 不可用）",
-                "conda activate sage-backend && pip install httpx",
+                "联系管理员使用匹配当前 Win7 版本的离线维护包修复 httpx；不要在生产环境运行 pip/conda",
             )
 
         if mode is NetworkMode.OFFLINE:
