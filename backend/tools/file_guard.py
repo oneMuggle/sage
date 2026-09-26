@@ -334,6 +334,10 @@ def atomic_write(
     临时文件在任何路径上都会被清理。只防协作客户端，不防恶意本机进程。
     """
     target = str(Path(path).expanduser())
+    if Path(target).is_symlink():
+        # 写穿符号链接（与旧的 open("w") 语义一致）：替换真实文件而非把链接换成普通文件。
+        # 越界判定已由调用方基于 realpath 完成。
+        target = os.path.realpath(target)
     directory = os.path.dirname(os.path.abspath(target))
     temp = os.path.join(directory, f".sage-{uuid.uuid4().hex}.tmp")
     try:
