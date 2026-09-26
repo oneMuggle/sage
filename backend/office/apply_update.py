@@ -47,13 +47,24 @@ import logging
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .edit import update_document
-from .errors import OfficeContentShapeError, OfficeEditError, OfficeFileNotFoundError
+from .errors import (
+    OfficeContentShapeError,
+    OfficeEditError,
+    OfficeFileNotFoundError,
+    OfficeRevisionConflictError,
+)
 from .models import OfficeDocStatus, OfficeDocumentSummary
+from .revision import (
+    compute_file_revision,
+    document_write_lock,
+    lookup_apply,
+    remember_apply,
+)
 from .selfcheck_history import record
 from .storage import document_path, save_document, snapshot_pre_edit
 
@@ -93,6 +104,21 @@ class OfficeDocUpdateRequest(BaseModel):
         default_factory=list,
         description="Same op dicts the office_update tool accepts (word/excel/ppt)",
     )
+    # F1 (P0-A): version + idempotency guards. Both optional — omitting them
+    # keeps the pre-existing "overwrite whatever is on disk" behaviour for
+    # existing callers; the edit-preview dialog always sends them.
+    expected_revision: Optional[str] = Field(
+        default=None,
+        description=(
+            "sha256:… the caller previewed against (DiffPreviewResult."
+            "source_revision). Mismatch → 409, file untouched"
+        ),
+    )
+    idempotency_key: Optional[str] = Field(
+        default=None,
+        max_length=128,
+        description="Retry token: a repeated apply with the same key replays the first outcome",
+    )
 
 
 class OfficeDocUpdateResult(BaseModel):
@@ -113,6 +139,16 @@ class OfficeDocUpdateResult(BaseModel):
     results: List[Dict[str, Any]] = Field(
         default_factory=list,
         description="Per-op outcomes from backend.office.edit ({op, ok, ...})",
+    )
+    revision: Optional[str] = Field(
+        default=None, description="Content revision of the saved file (sha256:…)"
+    )
+    previous_revision: Optional[str] = Field(
+        default=None, description="Content revision the ops were applied to"
+    )
+    idempotent_replay: bool = Field(
+        default=False,
+        description="True when this response replays an earlier apply with the same idempotency_key",
     )
 
 
@@ -146,15 +182,65 @@ def _self_check(doc_type: str, path: Path, ops: List[Dict[str, Any]]) -> Dict[st
         return {"ok": False, "error": f"readback_failed: {type(exc).__name__}"}
 
 
+def _replay(
+    doc_id: str, idempotency_key: Optional[str], current_revision: str
+) -> Optional[OfficeDocUpdateResult]:
+    """Return the recorded outcome when this apply is a retry, else None.
+
+    A replay is only safe while the file still carries the revision the
+    remembered apply produced: if anything (us, another op batch, an
+    external editor) has written since, the retry is a genuinely new write
+    and must go through the normal path — including its revision check.
+    """
+    entry = lookup_apply(doc_id, idempotency_key)
+    if entry is None or entry.get("revision_after") != current_revision:
+        return None
+    payload = entry.get("payload")
+    if not isinstance(payload, OfficeDocUpdateResult):
+        return None
+    return payload.model_copy(update={"idempotent_replay": True})
+
+
+def _post_write_revision(path: Path) -> Optional[str]:
+    """Content revision of the just-saved file; None if it cannot be read.
+
+    Best-effort by design: the edit already succeeded, so a hashing failure
+    degrades the response (no revision → caller cannot chain an
+    ``expected_revision``) instead of failing the request.
+    """
+    try:
+        return compute_file_revision(path)
+    except Exception:  # noqa: BLE001 — 已写盘成功，取版本失败只降级
+        logger.warning("post-write revision hash failed for %s", path.name)
+        return None
+
+
 def apply_doc_update(
     conn: sqlite3.Connection,
     doc: OfficeDocumentSummary,
     ops: List[Dict[str, Any]],
+    *,
+    expected_revision: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
 ) -> OfficeDocUpdateResult:
     """Apply ``ops`` to ``doc``'s managed file and persist the edited state.
 
+    Version semantics (F1):
+
+    * The whole "hash → snapshot → edit → persist" sequence runs inside
+      :func:`document_write_lock`, so two in-process writers cannot
+      interleave. It is NOT a cross-process lock — an external Word is
+      caught by the revision check, not prevented.
+    * ``expected_revision`` mismatch raises before any write: the file is
+      byte-for-byte untouched and the caller must re-preview.
+    * ``idempotency_key`` replays the first outcome when the file still
+      carries the revision that apply produced, so a double-click or a
+      network retry cannot append the same paragraph twice.
+
     Raises:
         OfficeFileNotFoundError: the managed file is missing on disk.
+        OfficeRevisionConflictError: the file changed since the preview
+            (409-mapped; nothing was written).
         OfficeEditError: file-level save failure (file left untouched).
         OfficeOpRejectedError: at least one op was rejected (422-mapped,
             per-op failure info in the message; file left untouched).
@@ -163,35 +249,59 @@ def apply_doc_update(
     if not file_path.is_file():
         raise OfficeFileNotFoundError(file_path)
 
-    # Pre-edit snapshot FIRST — same call the office_update tool path makes,
-    # best-effort: a failed snapshot must never block the user's edit.
-    snapshot_pre_edit(doc)
+    with document_write_lock(doc.id):
+        current_revision = compute_file_revision(file_path)
 
-    saved, per_op_results = update_document(doc.doc_type.value, file_path, ops)
-    if not saved:
-        raise OfficeOpRejectedError(
-            _rejection_message(per_op_results), file_path=file_path
+        replay = _replay(doc.id, idempotency_key, current_revision)
+        if replay is not None:
+            return replay
+
+        if expected_revision and expected_revision != current_revision:
+            raise OfficeRevisionConflictError(
+                expected=expected_revision,
+                actual=current_revision,
+                file_path=file_path,
+            )
+
+        # Pre-edit snapshot FIRST — same call the office_update tool path makes,
+        # best-effort: a failed snapshot must never block the user's edit.
+        snapshot_pre_edit(doc)
+
+        saved, per_op_results = update_document(doc.doc_type.value, file_path, ops)
+        if not saved:
+            raise OfficeOpRejectedError(
+                _rejection_message(per_op_results), file_path=file_path
+            )
+
+        # Mirror OfficeToolService._mark_edited: mutate the fetched summary in
+        # place (archived_at / derived_from / original_filename ride along) and
+        # INSERT OR REPLACE it. DB refresh failure is logged, not raised — the
+        # edit itself already succeeded.
+        try:
+            doc.status = OfficeDocStatus.EDITED
+            doc.updated_at = int(time.time() * 1000)
+            doc.metadata.file_size_bytes = file_path.stat().st_size
+            save_document(conn, doc)
+        except Exception:  # noqa: BLE001 — 文件已改成功，登记失败只记日志
+            logger.warning("office edit applied but DB refresh failed: doc=%s", doc.id)
+
+        self_check = _self_check(doc.doc_type.value, file_path, ops)
+        # N4 (round-3) 自检历史：apply 落一行（best-effort，失败由 helper
+        # 自吞——编辑本身已成功，历史绝不令请求失败）。
+        record(
+            doc.id, "apply", bool(self_check.get("ok")), self_check.get("summary"), conn=conn
         )
-
-    # Mirror OfficeToolService._mark_edited: mutate the fetched summary in
-    # place (archived_at / derived_from / original_filename ride along) and
-    # INSERT OR REPLACE it. DB refresh failure is logged, not raised — the
-    # edit itself already succeeded.
-    try:
-        doc.status = OfficeDocStatus.EDITED
-        doc.updated_at = int(time.time() * 1000)
-        doc.metadata.file_size_bytes = file_path.stat().st_size
-        save_document(conn, doc)
-    except Exception:  # noqa: BLE001 — 文件已改成功，登记失败只记日志
-        logger.warning("office edit applied but DB refresh failed: doc=%s", doc.id)
-
-    self_check = _self_check(doc.doc_type.value, file_path, ops)
-    # N4 (round-3) 自检历史：apply 落一行（best-effort，失败由 helper
-    # 自吞——编辑本身已成功，历史绝不令请求失败）。
-    record(doc.id, "apply", bool(self_check.get("ok")), self_check.get("summary"), conn=conn)
-    return OfficeDocUpdateResult(
-        ok=True,
-        summary=doc,
-        self_check=self_check,
-        results=per_op_results,
-    )
+        new_revision = _post_write_revision(file_path)
+        result = OfficeDocUpdateResult(
+            ok=True,
+            summary=doc,
+            self_check=self_check,
+            results=per_op_results,
+            revision=new_revision,
+            previous_revision=current_revision,
+        )
+        if new_revision is not None:
+            remember_apply(
+                doc.id, idempotency_key, current_revision, new_revision, result
+            )
+        return result

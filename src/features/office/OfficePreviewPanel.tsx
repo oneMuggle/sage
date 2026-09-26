@@ -35,7 +35,7 @@ import {
   Pencil,
   Presentation,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useTaskCenterStore } from '../../features/task-center/taskCenterStore';
@@ -55,6 +55,7 @@ import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
 import { DocxNativePreview } from './DocxNativePreview';
 import { PdfFormFillDialog } from './PdfFormFillDialog';
 import { pollOfficeProgress } from './officeProgress';
+import { buildPreviewCacheKey, isCurrentKey } from './previewRevision';
 
 export type OfficePreviewData =
   | { docType: 'ppt'; data: OfficePptReadResult }
@@ -147,6 +148,36 @@ export function OfficePreviewPanel({
     setLoadingOriginal(false);
   }, [summaryId]);
 
+  // F2 (office-p0-a): content revision of the shown document. Every render
+  // cache below keys on it, so a same-size edit can no longer reuse a stale
+  // rendering. Re-fetched whenever the row changes (switch, edit, restore);
+  // a failed probe degrades the key instead of blocking the preview.
+  const summaryUpdatedAt = preview?.data.summary.updated_at;
+  const summarySize = preview?.data.summary.metadata.file_size_bytes;
+  const [docRevision, setDocRevision] = useState<string | null>(null);
+  // Mirrors the cache key of the LATEST render so async results can check
+  // whether they are still relevant when they land.
+  const currentFidelityKeyRef = useRef<string>('');
+  useEffect(() => {
+    let cancelled = false;
+    setDocRevision(null);
+    if (!summaryId) return;
+    // Promise.resolve() wrapper: the probe is additive, so a build/test
+    // double that lacks docRevision must degrade the cache key, not throw
+    // out of the effect.
+    void Promise.resolve()
+      .then(() => officeApi.docRevision(summaryId))
+      .then((res) => {
+        if (!cancelled) setDocRevision(res.revision ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setDocRevision(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [summaryId, summaryUpdatedAt, summarySize]);
+
   // P2-D (office-p2d): PDF AcroForm 表单填写对话框
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   // P2-C (office-p2c): excel 公式缓存重算（soffice 重算回写，重算前服务端自动快照）
@@ -196,7 +227,15 @@ export function OfficePreviewPanel({
   }
 
   const summary = preview.data.summary;
-  const currentFidelityKey = `${summary.id}:${summary.metadata.file_size_bytes}`;
+  // F2: content-revision cache identity (falls back to the legacy
+  // updated_at/size triple when the revision probe failed).
+  const currentFidelityKey = buildPreviewCacheKey({
+    docId: summary.id,
+    revision: docRevision,
+    updatedAt: summary.updated_at,
+    sizeBytes: summary.metadata.file_size_bytes,
+  }).key;
+  currentFidelityKeyRef.current = currentFidelityKey;
 
   const buildManagedPath = (ws: string) =>
     [ws, 'office', summary.doc_type, summary.id, summary.generated_filename].join('/');
@@ -228,6 +267,12 @@ export function OfficePreviewPanel({
         workspace_path: ws,
         file_path: buildManagedPath(ws),
       });
+      // Late response: the user may have switched documents or the file may
+      // have changed while the converter ran — such a result must not be
+      // shown or cached under the current key.
+      if (!isCurrentKey(currentFidelityKey, currentFidelityKeyRef.current)) {
+        return;
+      }
       if (res.ok && res.data_url) {
         setFidelityUrl(res.data_url);
         setFidelityKey(currentFidelityKey);
@@ -545,6 +590,7 @@ export function OfficePreviewPanel({
         <DocxNativePreview
           workspacePath={workspacePath ?? summary.workspace_path ?? ''}
           managedPath={buildManagedPath(workspacePath ?? summary.workspace_path ?? '')}
+          revision={docRevision}
         />
       ) : (
         <div className="p-4 max-h-96 overflow-y-auto">

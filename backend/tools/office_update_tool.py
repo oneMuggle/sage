@@ -173,6 +173,14 @@ class OfficeUpdateTool(BaseTool):
                             "dry_run 预览下无效果；仅 word 文档可传。"
                         ),
                     },
+                    "expected_revision": {
+                        "type": "string",
+                        "description": (
+                            "可选乐观锁：上一次 office_read / office_update 返回的 "
+                            "revision（sha256:…）。文档在此之后被改动则本次编辑不落盘，"
+                            "返回 revision_conflict，请重新读取再改。doc_id 模式有效。"
+                        ),
+                    },
                 },
                 "required": ["ops"],
             },
@@ -185,6 +193,7 @@ class OfficeUpdateTool(BaseTool):
         ops: Optional[List[Dict[str, Any]]] = None,
         dry_run: bool = False,
         refresh_toc: bool = False,
+        expected_revision: Optional[str] = None,
         **kwargs: Any,
     ) -> ToolResult:
         normalized = _normalize_ops(ops)
@@ -198,7 +207,12 @@ class OfficeUpdateTool(BaseTool):
                 return self._dry_run_by_path(file_path.strip(), normalized)
             return ToolResult(success=False, error="doc_id_or_file_path_required")
         if isinstance(doc_id, str) and doc_id.strip():
-            return self._execute_bound(doc_id.strip(), normalized, do_refresh=refresh_toc)
+            return self._execute_bound(
+                doc_id.strip(),
+                normalized,
+                do_refresh=refresh_toc,
+                expected_revision=expected_revision,
+            )
         if isinstance(file_path, str) and file_path.strip():
             return self._execute_by_path(file_path.strip(), normalized, do_refresh=refresh_toc)
         return ToolResult(success=False, error="doc_id_or_file_path_required")
@@ -206,7 +220,12 @@ class OfficeUpdateTool(BaseTool):
     # ── doc_id 模式：走 service（授权 + DB 登记） ────────────────────
 
     def _execute_bound(
-        self, doc_id: str, ops: List[Dict[str, Any]], *, do_refresh: bool = False
+        self,
+        doc_id: str,
+        ops: List[Dict[str, Any]],
+        *,
+        do_refresh: bool = False,
+        expected_revision: Optional[str] = None,
     ) -> ToolResult:
         ctx = current_tool_context()
         if ctx is None or not ctx.session_id:
@@ -228,7 +247,14 @@ class OfficeUpdateTool(BaseTool):
                     )
         service = OfficeToolService(policy=self._policy)
         try:
-            result = service.update(conn, ctx.session_id, ctx.binding_generation, doc_id, ops)
+            result = service.update(
+                conn,
+                ctx.session_id,
+                ctx.binding_generation,
+                doc_id,
+                ops,
+                expected_revision=expected_revision,
+            )
         except Exception:
             return ToolResult(success=False, error="update_failed")
         if not result.get("success"):

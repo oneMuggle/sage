@@ -1894,6 +1894,11 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
       changes,
       truncated: ops.length > 200,
       error: null,
+      // F1: the demo stub carries the version stamp too, so the dialog's
+      // preview → apply revision handshake is exercisable without a backend.
+      source_revision: `sha256:demo-${asStr(args.docId) || 'doc'}`,
+      ops_hash: `ops:demo-${ops.length}`,
+      preview_id: `pv_demo_${ops.length}`,
     };
     return result;
   },
@@ -1930,8 +1935,25 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
         summary: { ops_applied: ops.length, re_read: true },
         error: null,
       },
+      previous_revision: asStr(args.expectedRevision) || null,
+      revision: `sha256:demo-${docId || 'doc'}-${ops.length}`,
+      idempotent_replay: false,
     };
     return result;
+  },
+
+  // F1/F2: content revision probe (GET /office/doc/{id}/revision). The demo
+  // derives a stable pseudo-hash from the row so the preview cache key
+  // changes exactly when the demo document does.
+  office_doc_revision: (args) => {
+    const docId = asStr(args.docId);
+    const doc = demoOfficeDocs.find((d) => d.id === docId);
+    return {
+      doc_id: docId,
+      revision: `sha256:demo-${docId}-${doc?.updated_at ?? 0}`,
+      size_bytes: doc?.metadata?.file_size_bytes ?? 0,
+      mtime_ms: doc?.updated_at ?? 0,
+    };
   },
 
   // Office parity batch 3 (item 3.2): 模板库 — 列表返回内置模板 (round-3

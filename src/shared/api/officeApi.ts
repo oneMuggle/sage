@@ -18,6 +18,7 @@ import type {
   OfficeArchiveResponse,
   OfficeCapabilities,
   OfficeDeleteResponse,
+  OfficeDocRevisionResponse,
   OfficeDocUpdateRequest,
   OfficeDocUpdateResponse,
   OfficeDocumentListResponse,
@@ -344,6 +345,23 @@ export const officeApi = {
   },
 
   /**
+   * F1/F2: current content revision of a managed document.
+   *
+   * The preview panel keys its render caches on this instead of
+   * `id:file_size_bytes`, which collides whenever an edit keeps the file
+   * the same size. Read-only and idempotent → bounded retry.
+   */
+  async docRevision(docId: string): Promise<OfficeDocRevisionResponse> {
+    return withRetry(async () => {
+      try {
+        return await invoke<OfficeDocRevisionResponse>('office_doc_revision', { docId });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
    * Restore a document's managed file from a snapshot (item 1.7).
    *
    * Overwrites the current managed file with the snapshot's bytes. No
@@ -513,6 +531,10 @@ export const officeApi = {
       return await invoke<OfficeDocUpdateResponse>('office_doc_update', {
         docId: req.doc_id,
         ops: req.ops,
+        // F1: optimistic concurrency — the dialog sends the revision its
+        // preview ran against plus a per-attempt retry token.
+        expectedRevision: req.expected_revision ?? undefined,
+        idempotencyKey: req.idempotency_key ?? undefined,
       });
     } catch (error) {
       throw handleApiError(error);

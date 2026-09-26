@@ -37,9 +37,19 @@ export function sanitizeRenderedDocx(container: HTMLElement): void {
 export interface DocxNativePreviewProps {
   workspacePath: string;
   managedPath: string;
+  /**
+   * F2: content revision of the document. Part of the effect deps so an
+   * edit that keeps the same path (and even the same byte size) re-renders,
+   * and part of the late-response guard below.
+   */
+  revision?: string | null;
 }
 
-export function DocxNativePreview({ workspacePath, managedPath }: DocxNativePreviewProps) {
+export function DocxNativePreview({
+  workspacePath,
+  managedPath,
+  revision,
+}: DocxNativePreviewProps) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
@@ -88,7 +98,7 @@ export function DocxNativePreview({ workspacePath, managedPath }: DocxNativePrev
     return () => {
       cancelled = true;
     };
-  }, [workspacePath, managedPath]);
+  }, [workspacePath, managedPath, revision]);
 
   if (state === 'error') {
     return (

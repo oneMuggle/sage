@@ -980,6 +980,7 @@ export const zh = {
   'office.edit.applyHint': '预览无误？应用后上述变更将写入文档。',
   'office.edit.applied': '已应用编辑',
   'office.edit.applyFailed': '应用失败',
+  'office.edit.revisionConflict': '文档在预览之后被改动，本次未写入；已重新生成差异',
   'office.edit.selfCheckOk': '自检通过',
   'office.edit.selfCheckFailed': '自检未通过',
   'office.edit.selfCheckParagraphs': '段落 {n}',

@@ -1005,6 +1005,8 @@ export const en: Record<TranslationKey, string> = {
   'office.edit.applyHint': 'Look good? Applying writes the changes above to the document.',
   'office.edit.applied': 'Edits applied',
   'office.edit.applyFailed': 'Apply failed',
+  'office.edit.revisionConflict':
+    'The document changed since this preview — nothing was written. Showing a fresh diff.',
   'office.edit.selfCheckOk': 'Self-check passed',
   'office.edit.selfCheckFailed': 'Self-check failed',
   'office.edit.selfCheckParagraphs': '{n} paragraphs',

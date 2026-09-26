@@ -20,7 +20,7 @@ from __future__ import annotations
 import base64
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -119,6 +119,7 @@ from backend.office.ppt_template import (
     analyze_ppt_template,
     fill_ppt_template,
 )
+from backend.office.revision import stat_revision
 from backend.office.storage import (
     archive_document,
     delete_document,
@@ -1042,14 +1043,50 @@ def update_document_endpoint(
     ``updated_at`` / ``file_size_bytes``) and a best-effort self-check
     readback of the saved file.
 
+    F1 (P0-A): ``expected_revision`` binds this write to the exact bytes the
+    caller previewed — a mismatch is a 409 with the file untouched, not a
+    silent overwrite of someone else's change. ``idempotency_key`` makes a
+    retried apply replay the first outcome instead of appending twice.
+
     Errors: unknown doc id → 404 (``OfficeFileNotFoundError``); missing
-    managed file → 404; rejected ops → 422 (``OfficeOpRejectedError``,
-    per-op failure info in ``message``); file-level save failure → 500
-    (``OfficeEditError``). All mapped by the registered OfficeError handler.
+    managed file → 404; stale revision → 409
+    (``OfficeRevisionConflictError``); rejected ops → 422
+    (``OfficeOpRejectedError``, per-op failure info in ``message``);
+    file-level save failure → 500 (``OfficeEditError``). All mapped by the
+    registered OfficeError handler.
     """
     conn = _db().get_connection()
     doc = _require_document(conn, doc_id)
-    return apply_doc_update(conn, doc, req.ops)
+    return apply_doc_update(
+        conn,
+        doc,
+        req.ops,
+        expected_revision=req.expected_revision,
+        idempotency_key=req.idempotency_key,
+    )
+
+
+@router.get("/doc/{doc_id}/revision")
+def get_document_revision_endpoint(doc_id: str) -> Dict[str, Any]:
+    """Current content revision of a managed document (F1/F2 read side).
+
+    The preview UI keys its caches on this value instead of
+    ``id:file_size_bytes``, which collides whenever an edit keeps the file
+    the same size. Hashing is memoized on ``(path, size, mtime_ns)``, so
+    polling it on every document switch stays cheap.
+    """
+    conn = _db().get_connection()
+    doc = _require_document(conn, doc_id)
+    managed = document_path(doc)
+    if not managed.is_file():
+        raise OfficeFileNotFoundError(managed)
+    stat = managed.stat()
+    return {
+        "doc_id": doc.id,
+        "revision": stat_revision(managed),
+        "size_bytes": stat.st_size,
+        "mtime_ms": int(stat.st_mtime * 1000),
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ Error → HTTP status mapping:
 - OfficeParseError       → 422 (file exists but unreadable / wrong format)
 - OfficeGenerateError    → 500 (we tried to write but failed)
 - OfficeSizeLimitError   → 413 (file too large)
+- OfficeRevisionConflict → 409 (the file changed since the preview)
 - OfficeError (base)     → 500 (catch-all)
 """
 
@@ -100,6 +101,31 @@ class OfficeContentShapeError(OfficeError):
     """LLM 传来的 content 结构不符合该 doc_type 的要求（缺 sheets / slides 等）。"""
 
 
+class OfficeRevisionConflictError(OfficeError):
+    """The document changed between the preview and the apply (F1 → 409).
+
+    Deliberately a direct ``OfficeError`` subclass: inheriting from
+    ``OfficeEditError`` would make ``_WRITE_FAILURE_ERRORS`` map it to 500,
+    but nothing was written — the file is byte-for-byte untouched and the
+    caller should re-preview against ``actual`` and resubmit.
+    """
+
+    def __init__(
+        self,
+        *,
+        expected: str,
+        actual: str,
+        file_path: Optional[Path] = None,
+    ) -> None:
+        super().__init__(
+            "document revision mismatch: the file changed since the preview "
+            f"(expected {expected}, on disk {actual}); re-preview and retry",
+            file_path=file_path,
+        )
+        self.expected = expected
+        self.actual = actual
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Template errors (Phase 2 — Word template operations)
 # ──────────────────────────────────────────────────────────────────────
@@ -183,6 +209,10 @@ def office_error_to_http_status(error: OfficeError) -> int:  # noqa: PLR0911 —
         return 422
     if isinstance(error, OfficeSizeLimitError):
         return 413
+    # Stale write: nothing was modified, so this must NOT fall through to the
+    # 500 write-failure branch below.
+    if isinstance(error, OfficeRevisionConflictError):
+        return 409
     # Template errors (Phase 2)
     if isinstance(error, OfficeTemplateParseError):
         return 400
