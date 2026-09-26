@@ -24,8 +24,10 @@ try:
     PYDANTIC_V2 = True
 except ImportError:
     # Pydantic v1 fallback
-    from pydantic import validator as field_validator  # type: ignore
-    from pydantic import root_validator as model_validator  # type: ignore
+    from pydantic import (  # type: ignore
+        root_validator as model_validator,
+        validator as field_validator,
+    )
     PYDANTIC_V2 = False
 
 
@@ -76,6 +78,7 @@ class PluginCapability(BaseModel):
             return v
     else:
         @field_validator("name")
+        @classmethod
         def validate_name(cls, v: str) -> str:
             """Validate capability name format (Pydantic v1)."""
             if not v.replace("-", "").replace("_", "").isalnum():
@@ -100,6 +103,7 @@ class PluginDependency(BaseModel):
             return self
     else:
         @model_validator
+        @classmethod
         def validate_version_format(cls, values: Dict[str, Any]) -> Dict[str, Any]:
             """Validate version constraint format (Pydantic v1)."""
             version = values.get("version", "")
@@ -210,6 +214,7 @@ class PluginManifest(BaseModel):
             return v.lower()
     else:
         @field_validator("name")
+        @classmethod
         def validate_plugin_name(cls, v: str) -> str:
             """Validate plugin name format (Pydantic v1)."""
             if not v.replace("-", "").replace("_", "").isalnum():
@@ -236,6 +241,7 @@ class PluginManifest(BaseModel):
             return self
     else:
         @model_validator
+        @classmethod
         def validate_capabilities_unique(cls, values: Dict[str, Any]) -> Dict[str, Any]:
             """Validate that capability names are unique (Pydantic v1)."""
             capabilities = values.get("capabilities", [])
@@ -245,6 +251,7 @@ class PluginManifest(BaseModel):
             return values
 
         @model_validator
+        @classmethod
         def validate_dependencies_no_self(cls, values: Dict[str, Any]) -> Dict[str, Any]:
             """Validate that plugin doesn't depend on itself (Pydantic v1)."""
             name = values.get("name", "")
