@@ -143,7 +143,7 @@ class TestPluginManifest:
         invalid_names = ["-my-plugin", "my-plugin-", "my plugin", "my.plugin"]
         for name in invalid_names:
             manifest_data = {**EXAMPLE_MANIFEST, "name": name}
-            with pytest.raises(ValueError, match="无效的名称"):
+            with pytest.raises(ValueError, match="插件名称"):
                 PluginManifest.model_validate(manifest_data)
 
     def test_manifest_capabilities_unique(self):
