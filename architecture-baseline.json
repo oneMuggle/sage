@@ -47,7 +47,7 @@
     "backend/wiki/files.py": 927,
     "backend/zotero/client.py": 818,
     "electron/__tests__/commands.test.ts": 981,
-    "electron/commands.ts": 1300,
+    "electron/commands.ts": 1305,
     "electron/main.ts": 2651,
     "electron/tests/updateIntegration.test.ts": 865,
     "electron/tests/updateManager.test.ts": 1776,
@@ -71,7 +71,8 @@
     "tests/electron/test_stub_backend.py": 896,
     "backend/api/arena_routes.py": 873,
     "backend/services/arena_draw_engine.py": 1054,
-    "backend/api/project_routes.py": 838
+    "backend/api/project_routes.py": 838,
+    "backend/tools/web_render.py": 816
   },
   "backend/orchestration/chat_dispatcher.py": 2226,
   "backend/tests/unit/test_chat_dispatcher_budget.py": 856
