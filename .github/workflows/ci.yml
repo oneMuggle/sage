@@ -278,8 +278,9 @@ jobs:
         # 显形为红 job，需给足真实运行时长（≥10.2 min，上限留一倍余量）。
         timeout-minutes: 20
         run: |
-          # durations 全量采集（≥1s），与 hex 步骤对齐（legacy 实测 ~14-16 min，
-          # 并行 job 里的最长者，同样需要分片权重数据）
+          # durations 全量采集（≥1s），与 hex 步骤对齐（同样需要分片权重数据）。
+          # 本步实测：逐用例 gc.collect() 时 ~14-19 min，1.05 万用例时撞上 20 min
+          # 超时；2026-09-26 起 tests/conftest.py 的 tmp_db_path 按需 gc，~4.5 min。
           conda run -n sage-backend bash -c "cd backend && API_MODE=legacy pytest --no-cov -q -n auto --dist loadfile --ignore=tests/integration/test_event_loop_blocking.py --durations=500 --durations-min=1.0"
 
   # ========== Backend: Windows 本地 unit 基线（非阻塞信号） ==========
