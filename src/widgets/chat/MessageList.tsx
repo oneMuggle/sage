@@ -29,6 +29,8 @@ interface MessageListProps {
   streamingMessageId?: string | null;
   /** M4: 消息级分叉回调（提供时 user/assistant 消息显示分叉按钮） */
   onFork?: (messageId: string) => void;
+  /** W1: 消息级回滚回调（对话 fork + 可选快照恢复） */
+  onRewind?: (messageId: string) => void;
   /** U5': 编辑重发回调（提供时 user 消息显示编辑按钮） */
   onEditResend?: (messageId: string) => void;
   /** R18-A: 重新生成回调（提供时 assistant 消息显示重新生成按钮） */
@@ -58,6 +60,7 @@ export function MessageList({
   attachments,
   streamingMessageId,
   onFork,
+  onRewind,
   onEditResend,
   onRegenerate,
   onDelete,
@@ -166,6 +169,7 @@ export function MessageList({
                 attachments={attachments?.[message.id]}
                 isStreaming={message.id === streamingMessageId}
                 onFork={onFork}
+                onRewind={onRewind}
                 onEditResend={onEditResend}
                 onRegenerate={onRegenerate}
                 onDelete={onDelete}
