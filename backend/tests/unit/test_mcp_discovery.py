@@ -12,8 +12,6 @@ Date: 2026-09-26
 """
 
 import json
-import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -43,12 +41,12 @@ class TestDiscoveredMcpServer:
 class TestMcpServerDiscoveryService:
     """Tests for McpServerDiscoveryService."""
 
-    @pytest.fixture
+    @pytest.fixture()
     def workspace_dir(self, tmp_path):
         """Create a temporary workspace directory."""
         return tmp_path / "workspace"
 
-    @pytest.fixture
+    @pytest.fixture()
     def service(self, workspace_dir):
         """Create a test discovery service."""
         workspace_dir.mkdir(parents=True, exist_ok=True)

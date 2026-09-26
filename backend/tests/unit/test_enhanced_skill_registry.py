@@ -11,8 +11,6 @@ Author: Claude
 Date: 2026-09-26
 """
 
-import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -26,18 +24,18 @@ from backend.skills.enhanced_registry import (
 class TestEnhancedSkillRegistry:
     """Tests for EnhancedSkillRegistry."""
 
-    @pytest.fixture
+    @pytest.fixture()
     def skills_dir(self, tmp_path):
         """Create a temporary skills directory."""
         return tmp_path / "skills"
 
-    @pytest.fixture
+    @pytest.fixture()
     def discovery_service(self, skills_dir):
         """Create a test discovery service."""
         skills_dir.mkdir(parents=True, exist_ok=True)
         return SkillDiscoveryService(skills_dir=skills_dir)
 
-    @pytest.fixture
+    @pytest.fixture()
     def registry(self, discovery_service):
         """Create a test enhanced registry."""
         return EnhancedSkillRegistry(discovery_service=discovery_service)
@@ -159,7 +157,7 @@ author: Test Author
 class TestDiscoveredSkill:
     """Tests for DiscoveredSkill wrapper."""
 
-    @pytest.fixture
+    @pytest.fixture()
     def skill_metadata(self):
         """Create test skill metadata."""
         from backend.skills.discovery import SkillMetadata
@@ -175,7 +173,7 @@ class TestDiscoveredSkill:
             triggers=["test", "example"],
         )
 
-    @pytest.fixture
+    @pytest.fixture()
     def discovered_skill(self, skill_metadata):
         """Create a test discovered skill."""
         return DiscoveredSkill(skill_metadata)

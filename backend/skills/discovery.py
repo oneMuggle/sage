@@ -242,8 +242,8 @@ class SkillDiscoveryService:
         result = {}
 
         # Simple YAML parsing (key: value pairs)
-        for line in frontmatter_text.split("\n"):
-            line = line.strip()
+        for raw_line in frontmatter_text.split("\n"):
+            line = raw_line.strip()
             if not line or line.startswith("#"):
                 continue
 
@@ -286,8 +286,8 @@ class SkillDiscoveryService:
         lines = content.split("\n")
         paragraph_lines = []
 
-        for line in lines:
-            line = line.strip()
+        for raw_line in lines:
+            line = raw_line.strip()
 
             # Skip empty lines at start
             if not paragraph_lines and not line:
@@ -368,91 +368,3 @@ def get_skill_discovery_service() -> SkillDiscoveryService:
     if _discovery_service is None:
         _discovery_service = SkillDiscoveryService()
     return _discovery_service
-
-
-if __name__ == "__main__":
-    # Test skill discovery
-    import tempfile
-
-    print("Testing SkillDiscoveryService...")
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        skills_dir = Path(tmpdir)
-
-        # Create test skill
-        skill_dir = skills_dir / "test-skill"
-        skill_dir.mkdir()
-
-        skill_content = """---
-name: test-skill
-description: A test skill for demonstration
-version: 1.0.0
-author: Test Author
-tags: test, demo
-triggers: test, example
-priority: 5
----
-
-# Test Skill
-
-This is a test skill for demonstration purposes.
-
-## Usage
-
-Use this skill to test the discovery system.
-"""
-
-        (skill_dir / "SKILL.md").write_text(skill_content, encoding="utf-8")
-
-        # Test discovery
-        service = SkillDiscoveryService(skills_dir=skills_dir)
-
-        print("\n1. Testing discover_all...")
-        skills = service.discover_all()
-        assert len(skills) == 1
-        print(f"✅ Discovered: {len(skills)} skill(s)")
-
-        print("\n2. Testing discover_one...")
-        metadata = service.discover_one("test-skill")
-        assert metadata.name == "test-skill"
-        assert metadata.description == "A test skill for demonstration"
-        assert metadata.version == "1.0.0"
-        assert metadata.author == "Test Author"
-        assert "test" in metadata.tags
-        assert metadata.priority == 5
-        print(f"✅ Parsed metadata: {metadata.name} v{metadata.version}")
-
-        print("\n3. Testing list_skill_names...")
-        names = service.list_skill_names()
-        assert "test-skill" in names
-        print(f"✅ Listed: {names}")
-
-        print("\n4. Testing has_skill...")
-        assert service.has_skill("test-skill")
-        assert not service.has_skill("nonexistent")
-        print("✅ has_skill works")
-
-        print("\n5. Testing get_skill_content...")
-        content = service.get_skill_content("test-skill")
-        assert "Test Skill" in content
-        print(f"✅ Got content: {len(content)} chars")
-
-        print("\n6. Testing cache...")
-        service.discover_all()  # Populate cache
-        service.discover_all(use_cache=True)  # Should use cache
-        service.invalidate_cache()
-        print("✅ Cache operations work")
-
-        # Create another skill
-        skill2_dir = skills_dir / "another-skill"
-        skill2_dir.mkdir()
-        (skill2_dir / "SKILL.md").write_text(
-            "---\nname: another-skill\n---\n# Another Skill\n", encoding="utf-8"
-        )
-
-        service.invalidate_cache()
-        skills = service.discover_all()
-        assert len(skills) == 2
-        print(f"\n7. Testing multiple skills: {len(skills)} discovered ✅")
-
-    print("\n✅ All discovery tests passed!")

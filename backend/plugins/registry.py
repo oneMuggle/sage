@@ -13,8 +13,7 @@ Date: 2026-09-26
 from __future__ import annotations
 
 import logging
-from enum import Enum
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -348,83 +347,3 @@ def get_capability_registry() -> CapabilityRegistry:
     if _registry is None:
         _registry = CapabilityRegistry()
     return _registry
-
-
-if __name__ == "__main__":
-    # Test capability registry
-    print("Testing CapabilityRegistry...")
-
-    registry = CapabilityRegistry()
-
-    # Create test capabilities
-    tool_cap = PluginCapability(
-        type=CapabilityType.TOOL,
-        name="test-tool",
-        description="A test tool",
-    )
-
-    skill_cap = PluginCapability(
-        type=CapabilityType.SKILL,
-        name="test-skill",
-        description="A test skill",
-    )
-
-    # Test register
-    print("\n1. Testing register...")
-    registered = registry.register("test-plugin", tool_cap, handler=lambda: "tool")
-    assert registered.plugin_name == "test-plugin"
-    print(f"✅ Registered: {registered.capability.name}")
-
-    # Test get
-    print("\n2. Testing get...")
-    found = registry.get(CapabilityType.TOOL, "test-tool")
-    assert found is not None
-    assert found.plugin_name == "test-plugin"
-    print(f"✅ Found: {found.capability.name}")
-
-    # Test get_handler
-    print("\n3. Testing get_handler...")
-    handler = registry.get_handler(CapabilityType.TOOL, "test-tool")
-    assert handler is not None
-    assert handler() == "tool"
-    print(f"✅ Handler works: {handler()}")
-
-    # Test list
-    print("\n4. Testing list_capabilities...")
-    registry.register("test-plugin", skill_cap, handler=lambda: "skill")
-    caps = registry.list_capabilities(plugin_name="test-plugin")
-    assert len(caps) == 2
-    print(f"✅ Listed: {len(caps)} capabilities")
-
-    # Test disable/enable
-    print("\n5. Testing disable/enable...")
-    registry.disable("test-plugin", "test-tool")
-    assert not registry.has_capability(CapabilityType.TOOL, "test-tool")
-    registry.enable("test-plugin", "test-tool")
-    assert registry.has_capability(CapabilityType.TOOL, "test-tool")
-    print("✅ Disable/enable works")
-
-    # Test unregister
-    print("\n6. Testing unregister...")
-    registry.unregister("test-plugin", "test-tool")
-    assert not registry.has_capability(CapabilityType.TOOL, "test-tool")
-    print("✅ Unregistered: test-tool")
-
-    # Test unregister_all
-    print("\n7. Testing unregister_all...")
-    count = registry.unregister_all("test-plugin")
-    assert count == 1  # skill_cap still registered
-    print(f"✅ Unregistered all: {count} capabilities")
-
-    # Test conflict
-    print("\n8. Testing conflict detection...")
-    registry.register("plugin-a", tool_cap)
-    try:
-        registry.register("plugin-b", tool_cap)
-        assert False, "Should have raised conflict error"
-    except CapabilityConflictError as e:
-        print(f"✅ Conflict detected: {e}")
-
-    registry.clear()
-
-    print("\n✅ All registry tests passed!")

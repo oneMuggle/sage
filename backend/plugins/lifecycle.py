@@ -436,7 +436,8 @@ class PluginLifecycleManager:
         """
         import json
 
-        record = self.get_plugin(plugin_name)
+        # 验证插件存在（不存在则抛异常）
+        self.get_plugin(plugin_name)
 
         conn = self._get_connection()
 
@@ -507,72 +508,3 @@ def get_lifecycle_manager() -> PluginLifecycleManager:
     if _lifecycle_manager is None:
         _lifecycle_manager = PluginLifecycleManager()
     return _lifecycle_manager
-
-
-if __name__ == "__main__":
-    # Test lifecycle management
-    import tempfile
-
-    print("Testing PluginLifecycleManager...")
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = Path(tmpdir) / "test_plugins.db"
-        manager = PluginLifecycleManager(db_path=db_path)
-
-        # Create test manifest
-        from backend.plugins.manifest import EXAMPLE_MANIFEST
-
-        manifest = PluginManifest.model_validate(EXAMPLE_MANIFEST)
-
-        # Test install
-        print("\n1. Testing install...")
-        record = manager.install(manifest, "/path/to/plugin")
-        assert record.status == PluginStatus.INSTALLED
-        print(f"✅ Installed: {record.name} v{record.version}")
-
-        # Test enable
-        print("\n2. Testing enable...")
-        record = manager.enable(manifest.name)
-        assert record.status == PluginStatus.ENABLED
-        print(f"✅ Enabled: {record.name}")
-
-        # Test disable
-        print("\n3. Testing disable...")
-        record = manager.disable(manifest.name)
-        assert record.status == PluginStatus.DISABLED
-        print(f"✅ Disabled: {record.name}")
-
-        # Test enable again
-        print("\n4. Testing enable again...")
-        record = manager.enable(manifest.name)
-        assert record.status == PluginStatus.ENABLED
-        print(f"✅ Enabled: {record.name}")
-
-        # Test uninstall
-        print("\n5. Testing uninstall...")
-        manager.uninstall(manifest.name)
-        record = manager.get_plugin(manifest.name)
-        assert record.status == PluginStatus.UNINSTALLED
-        print(f"✅ Uninstalled: {record.name}")
-
-        # Test restore
-        print("\n6. Testing restore...")
-        record = manager.restore(manifest.name)
-        assert record.status == PluginStatus.INSTALLED
-        print(f"✅ Restored: {record.name}")
-
-        # Test list
-        print("\n7. Testing list...")
-        plugins = manager.list_plugins()
-        assert len(plugins) == 1
-        print(f"✅ Listed: {len(plugins)} plugin(s)")
-
-        # Test update config
-        print("\n8. Testing update_config...")
-        record = manager.update_config(manifest.name, {"api_key": "test123"})
-        assert record.config["api_key"] == "test123"
-        print(f"✅ Config updated: {record.config}")
-
-        manager.close()
-
-    print("\n✅ All lifecycle tests passed!")

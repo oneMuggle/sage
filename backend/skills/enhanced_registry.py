@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from backend.skills.base import BaseSkill, SkillResult
+from backend.skills.base import BaseSkill, SkillResult, SkillSchema
 from backend.skills.discovery import SkillDiscoveryService, SkillMetadata
 from backend.skills.registry import SkillRegistry
 
@@ -151,15 +151,13 @@ class DiscoveredSkill(BaseSkill):
         super().__init__()
         self._metadata = metadata
 
-    def _build_schema(self) -> "SkillSchema":
+    def _build_schema(self) -> SkillSchema:
         """
         Build skill schema from metadata.
 
         Returns:
             SkillSchema
         """
-        from backend.skills.base import SkillSchema
-
         return SkillSchema(
             name=self._metadata.name,
             description=self._metadata.description,
@@ -238,73 +236,3 @@ def get_enhanced_skill_registry() -> EnhancedSkillRegistry:
     if _enhanced_registry is None:
         _enhanced_registry = EnhancedSkillRegistry()
     return _enhanced_registry
-
-
-if __name__ == "__main__":
-    # Test enhanced registry
-    import tempfile
-    from pathlib import Path
-
-    print("Testing EnhancedSkillRegistry...")
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        skills_dir = Path(tmpdir)
-
-        # Create test skill
-        skill_dir = skills_dir / "test-skill"
-        skill_dir.mkdir()
-
-        skill_content = """---
-name: test-skill
-description: A test skill
-version: 1.0.0
-author: Test Author
-tags: test, demo
-triggers: test, example
----
-
-# Test Skill
-
-This is the content of the test skill.
-"""
-
-        (skill_dir / "SKILL.md").write_text(skill_content, encoding="utf-8")
-
-        # Create discovery service
-        discovery = SkillDiscoveryService(skills_dir=skills_dir)
-
-        # Create enhanced registry
-        registry = EnhancedSkillRegistry(discovery_service=discovery)
-
-        print("\n1. Testing discover_and_register...")
-        count = registry.discover_and_register()
-        assert count == 1
-        print(f"✅ Discovered and registered: {count} skill(s)")
-
-        print("\n2. Testing get_metadata...")
-        metadata = registry.get_metadata("test-skill")
-        assert metadata is not None
-        assert metadata.name == "test-skill"
-        print(f"✅ Got metadata: {metadata.name} v{metadata.version}")
-
-        print("\n3. Testing list_with_metadata...")
-        skills_with_meta = registry.list_with_metadata()
-        assert len(skills_with_meta) == 1
-        skill, meta = skills_with_meta[0]
-        assert skill.name == "test-skill"
-        assert meta is not None
-        print(f"✅ Listed with metadata: {len(skills_with_meta)} skill(s)")
-
-        print("\n4. Testing skill matching...")
-        skill = registry.get("test-skill")
-        assert skill is not None
-        assert skill.match("this is a test")
-        print("✅ Skill matching works")
-
-        print("\n5. Testing skill execution...")
-        result = skill.execute({}, {})
-        assert result.success
-        assert "Test Skill" in result.content
-        print(f"✅ Skill executed, output: {len(result.content)} chars")
-
-    print("\n✅ All enhanced registry tests passed!")

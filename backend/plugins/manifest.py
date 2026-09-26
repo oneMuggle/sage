@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -72,7 +72,7 @@ class PluginDependency(BaseModel):
     optional: bool = Field(default=False, description="是否可选依赖")
 
     @model_validator(mode="after")
-    def validate_version_format(self) -> "PluginDependency":
+    def validate_version_format(self) -> PluginDependency:
         """Validate version constraint format."""
         # 支持：1.0.0, ^1.0.0, ~1.0.0, *, >=1.0.0
         valid = self.version.replace("^", "").replace("~", "").replace("*", "").replace(">=", "")
@@ -181,7 +181,7 @@ class PluginManifest(BaseModel):
         return v.lower()
 
     @model_validator(mode="after")
-    def validate_capabilities_unique(self) -> "PluginManifest":
+    def validate_capabilities_unique(self) -> PluginManifest:
         """Validate that capability names are unique."""
         names = [c.name for c in self.capabilities]
         if len(names) != len(set(names)):
@@ -189,7 +189,7 @@ class PluginManifest(BaseModel):
         return self
 
     @model_validator(mode="after")
-    def validate_dependencies_no_self(self) -> "PluginManifest":
+    def validate_dependencies_no_self(self) -> PluginManifest:
         """Validate that plugin doesn't depend on itself."""
         for dep in self.dependencies:
             if dep.name == self.name:
@@ -205,13 +205,13 @@ class PluginManifest(BaseModel):
         return self.model_dump()
 
     @classmethod
-    def from_json(cls, json_str: str) -> "PluginManifest":
+    def from_json(cls, json_str: str) -> PluginManifest:
         """Deserialize manifest from JSON string."""
         data = json.loads(json_str)
         return cls.model_validate(data)
 
     @classmethod
-    def from_file(cls, path: Path | str) -> "PluginManifest":
+    def from_file(cls, path: Path | str) -> PluginManifest:
         """Load manifest from plugin.json file."""
         path = Path(path)
         if not path.exists():
@@ -219,7 +219,7 @@ class PluginManifest(BaseModel):
         if not path.is_file():
             raise ValueError(f"路径不是文件: {path}")
 
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
 
         return cls.model_validate(data)
@@ -299,27 +299,3 @@ EXAMPLE_MANIFEST = {
         },
     },
 }
-
-
-if __name__ == "__main__":
-    # Test manifest creation and validation
-    print("Testing PluginManifest...")
-
-    # Create from example
-    manifest = PluginManifest.model_validate(EXAMPLE_MANIFEST)
-    print(f"✅ Created manifest: {manifest.name} v{manifest.version}")
-
-    # Serialize to JSON
-    json_str = manifest.to_json()
-    print(f"✅ Serialized to JSON ({len(json_str)} chars)")
-
-    # Deserialize from JSON
-    manifest2 = PluginManifest.from_json(json_str)
-    assert manifest == manifest2
-    print("✅ Round-trip serialization works")
-
-    # Validate
-    is_valid, errors = validate_plugin_manifest("plugin.json")
-    print(f"Validation result: {is_valid}, errors: {errors}")
-
-    print("\n✅ All tests passed!")
