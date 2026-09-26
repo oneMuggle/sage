@@ -925,6 +925,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/cancel`,
   },
+  // R55 (round55): 单 run 详情 —— 含 RT24/RT26 的 used_tokens/duration_ms/retry_of。
+  orchestration_get_run: {
+    method: 'GET',
+    path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}`,
+  },
   // C1 (2026-09-09): 会话编排 run 列表 —— 历史任务板恢复数据源。
   orchestration_list_session_runs: {
     method: 'GET',
