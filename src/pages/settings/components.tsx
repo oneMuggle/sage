@@ -32,7 +32,7 @@ export interface ToggleProps {
 
 export function SettingRow({ label, desc, children }: SettingRowProps) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-border">
+    <div className="flex items-center justify-between py-[var(--density-setting-row-py)] border-b border-border">
       <div>
         <div className="text-sm text-text">{label}</div>
         {desc ? <div className="text-xs text-muted mt-0.5">{desc}</div> : null}

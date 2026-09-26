@@ -1,3 +1,5 @@
+import { useDensity } from '../../entities/density/useDensity';
+import { DENSITY_LABELS, DENSITY_MODES } from '../../entities/density/densityMode';
 import {
   CODE_FONT_OPTIONS,
   FONT_SIZE_MAX,
@@ -12,6 +14,7 @@ import { SettingRow } from './components';
 
 export function FontSettingsSection() {
   const { settings, updateSettings, resetSettings, error, loading } = useFontSettings();
+  const { density, setDensity } = useDensity();
   const { t } = useI18n();
   return (
     <div>
@@ -76,6 +79,24 @@ export function FontSettingsSection() {
           </div>
         );
       })}
+      <SettingRow label={t('settings.density.label')}>
+        <div className="flex items-center gap-2">
+          {DENSITY_MODES.map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setDensity(mode)}
+              className={`px-3 py-1 text-sm rounded-radius-sm border transition-colors ${
+                density === mode
+                  ? 'bg-primary text-text-inverse border-primary'
+                  : 'bg-bg border-border text-text hover:bg-bg-hover'
+              }`}
+            >
+              {DENSITY_LABELS[mode]}
+            </button>
+          ))}
+        </div>
+      </SettingRow>
       <div className="my-3 rounded-radius-sm border border-border p-3 space-y-2">
         <p className="font-sans" style={{ fontSize: 'var(--font-size-ui)' }}>
           {t('settings.font.preview')}
