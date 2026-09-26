@@ -7,6 +7,7 @@ import { BtwOverlay } from '../../features/chat';
 import { useMessageJump } from '../../features/chat/useMessageJump';
 import type { Message as MessageType } from '../../shared/lib/store';
 
+import { ChatFindBar } from './ChatFindBar';
 import { Message } from './Message';
 import { SelectionQuoteButton } from './SelectionQuoteButton';
 import { TopicSeparator } from './TopicSeparator';
@@ -40,6 +41,8 @@ interface MessageListProps {
   onQuoteSelection?: (text: string) => void;
   /** P0-1: 保存此条消息到长期记忆（提供时 user/assistant 消息显示"保存到记忆"） */
   onSaveToMemory?: (message: MessageType) => void;
+  /** 第二轮 B2: 继续生成（只传给最后一条消息，且仅在没有流式输出时） */
+  onContinue?: () => void;
 }
 
 export function MessageList({
@@ -55,6 +58,7 @@ export function MessageList({
   onQuote,
   onQuoteSelection,
   onSaveToMemory,
+  onContinue,
 }: MessageListProps) {
   // U11: 只渲染最近 WINDOW_STEP 条, 更早的按需加载 —— 避免长会话全量
   // 重渲染(每条 Message 都可能含 ReactMarkdown/Shiki)。
@@ -99,9 +103,12 @@ export function MessageList({
 
   const hiddenCount = Math.max(0, messages.length - effectiveWindow);
   const visible = messages.slice(messages.length - effectiveWindow);
+  const lastId = messages[messages.length - 1].id;
 
   return (
     <>
+      {/* 第二轮 B4: 会话内查找栏（Ctrl/Cmd+F），在列表根节点之外，自身文字不参与匹配 */}
+      <ChatFindBar messages={messages} />
       <div ref={rootRef} className="p-4 space-y-4">
         {hiddenCount > 0 && (
           <button
@@ -135,6 +142,7 @@ export function MessageList({
                 onQuote={onQuote}
                 onSaveToMemory={onSaveToMemory}
                 artifactsByToolCall={artifactsByToolCall}
+                onContinue={message.id === lastId && !streamingMessageId ? onContinue : undefined}
               />
             )}
           </div>

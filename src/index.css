@@ -444,6 +444,18 @@ body {
   animation: shimmer-sweep 1.6s linear infinite;
 }
 
+/* 对话阅读体验 B3 / B4：检索词高亮（CSS Custom Highlight API，见
+   src/features/chat/textHighlight.ts）。命中用浅色底，查找的当前命中用醒目色。 */
+::highlight(sage-search-hit),
+::highlight(sage-find) {
+  background-color: rgb(var(--color-warning-rgb) / 0.35);
+}
+
+::highlight(sage-find-current) {
+  background-color: rgb(var(--color-warning-rgb) / 0.85);
+  color: #111827;
+}
+
 /* 尊重减少动画偏好 */
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -94,6 +94,16 @@ class AgentEvent:
     # M2 part B: state=ASK_USER_QUESTION 时携带提问快照(QuestionRequest.to_dict),
     # 含 request_id / question / header / options / multi_select / created_at 字段
     user_question: Optional[Dict[str, Any]] = None
+    # B2 (对话阅读体验第二轮): 终稿 DONE 事件携带 LLM 的 finish_reason
+    # (stop / length / tool_calls ...)。length = 触达输出上限被截断, 前端据此
+    # 提示并提供"继续生成"; 同一值随终稿 assistant 行落库 (messages.finish_reason)。
+    finish_reason: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        # finish_reason 只接受字符串: 测试替身 (MagicMock 响应) 等非 str 值归一为
+        # None, 保证事件可 JSON 序列化、落库时 sqlite 可绑定。
+        if not isinstance(self.finish_reason, str):
+            self.finish_reason = None
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为 JSON 友好的字典。"""
@@ -117,4 +127,6 @@ class AgentEvent:
             d["permission_request"] = self.permission_request
         if self.user_question is not None:
             d["user_question"] = self.user_question
+        if self.finish_reason is not None:
+            d["finish_reason"] = self.finish_reason
         return d

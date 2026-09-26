@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
 import { ErrorBoundary } from '../../app/providers/ErrorBoundary';
+import { dispatchFindShortcut } from '../../features/chat/chatFind';
 import { useResizableSidebar } from '../../shared/lib/useResizableSidebar';
 import { PageSkeleton } from '../../shared/ui';
 import { DeliveryDrawerHost } from '../task-center/DeliveryDrawerHost';
@@ -34,14 +35,14 @@ export function Layout() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // R40: Ctrl+N 新建会话 / Ctrl+F 聚焦搜索
+  // R40: Ctrl+F 聚焦搜索。第二轮 B4（docs/mcp-chat-reading-nav-optimization.md §10.3）：
+  // 聊天页的会话内查找栏挂载时，Ctrl+F 交给它（可取消事件被其 preventDefault）；
+  // 没有被接管则回落为聚焦会话搜索。Ctrl+Shift+F 始终聚焦会话搜索。
   useEffect(() => {
     const onQuickKeys = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      if (e.key === 'f') {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent('sage:focus-search'));
-      }
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'f') return;
+      e.preventDefault();
+      dispatchFindShortcut(e.shiftKey);
     };
     window.addEventListener('keydown', onQuickKeys);
     return () => window.removeEventListener('keydown', onQuickKeys);
