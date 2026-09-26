@@ -78,7 +78,7 @@ class TestListSkillDrafts:
         mock_store.list.return_value = [draft_a, draft_b]
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ):
             response = client.get("/skill-drafts")
@@ -99,7 +99,7 @@ class TestListSkillDrafts:
         mock_store.list.return_value = [draft]
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ):
             response = client.get("/skill-drafts?status=approved")
@@ -115,7 +115,7 @@ class TestListSkillDrafts:
         mock_store.list.return_value = []
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ):
             response = client.get("/skill-drafts")
@@ -131,7 +131,7 @@ class TestListSkillDrafts:
         mock_store.list.return_value = [draft]
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ):
             response = client.get("/skill-drafts")
@@ -169,13 +169,13 @@ class TestApproveSkillDraft:
         }
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ), patch(
-            "backend.api.legacy_routes.get_skill_loader",
+            "backend.api.legacy_skill_draft_routes.get_skill_loader",
             return_value=mock_loader,
         ), patch(
-            "backend.api.legacy_routes._get_skill_adapter",
+            "backend.api.legacy_skill_draft_routes._get_skill_adapter",
             return_value=mock_port,
         ):
             response = client.post("/skill-drafts/draft-42/approve")
@@ -206,13 +206,13 @@ class TestApproveSkillDraft:
         mock_port = MagicMock()
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ), patch(
-            "backend.api.legacy_routes.get_skill_loader",
+            "backend.api.legacy_skill_draft_routes.get_skill_loader",
             return_value=mock_loader,
         ), patch(
-            "backend.api.legacy_routes._get_skill_adapter",
+            "backend.api.legacy_skill_draft_routes._get_skill_adapter",
             return_value=mock_port,
         ):
             response = client.post("/skill-drafts/draft-existing/approve")
@@ -237,10 +237,10 @@ class TestApproveSkillDraft:
         mock_loader = MagicMock()
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ), patch(
-            "backend.api.legacy_routes.get_skill_loader",
+            "backend.api.legacy_skill_draft_routes.get_skill_loader",
             return_value=mock_loader,
         ):
             response = client.post("/skill-drafts/draft-invalid-content/approve")
@@ -259,10 +259,10 @@ class TestApproveSkillDraft:
         mock_loader = MagicMock()
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ), patch(
-            "backend.api.legacy_routes.get_skill_loader",
+            "backend.api.legacy_skill_draft_routes.get_skill_loader",
             return_value=mock_loader,
         ):
             response = client.post("/skill-drafts/draft-mismatched-name/approve")
@@ -277,7 +277,7 @@ class TestApproveSkillDraft:
         mock_store.get.return_value = None
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ):
             response = client.post("/skill-drafts/missing-id/approve")
@@ -297,10 +297,10 @@ class TestApproveSkillDraft:
         mock_loader.write.side_effect = OSError(raw_error)
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ), patch(
-            "backend.api.legacy_routes.get_skill_loader",
+            "backend.api.legacy_skill_draft_routes.get_skill_loader",
             return_value=mock_loader,
         ):
             response = client.post("/skill-drafts/draft-os-error/approve")
@@ -355,10 +355,10 @@ class TestApproveSkillDraftNameValidation:
         mock_loader = MagicMock()
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ), patch(
-            "backend.api.legacy_routes.get_skill_loader",
+            "backend.api.legacy_skill_draft_routes.get_skill_loader",
             return_value=mock_loader,
         ):
             response = client.post("/skill-drafts/draft-evil/approve")
@@ -378,10 +378,10 @@ class TestApproveSkillDraftNameValidation:
         mock_loader = MagicMock()
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ), patch(
-            "backend.api.legacy_routes.get_skill_loader",
+            "backend.api.legacy_skill_draft_routes.get_skill_loader",
             return_value=mock_loader,
         ):
             response = client.post("/skill-drafts/draft-slash/approve")
@@ -400,10 +400,10 @@ class TestApproveSkillDraftNameValidation:
         mock_loader = MagicMock()
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ), patch(
-            "backend.api.legacy_routes.get_skill_loader",
+            "backend.api.legacy_skill_draft_routes.get_skill_loader",
             return_value=mock_loader,
         ):
             response = client.post("/skill-drafts/draft-empty/approve")
@@ -420,10 +420,10 @@ class TestApproveSkillDraftNameValidation:
         mock_store.get.return_value = draft
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ), patch(
-            "backend.api.legacy_routes.get_skill_loader",
+            "backend.api.legacy_skill_draft_routes.get_skill_loader",
             return_value=MagicMock(),
         ):
             response = client.post("/skill-drafts/draft-x/approve")
@@ -449,7 +449,7 @@ class TestRejectSkillDraft:
         mock_store = MagicMock()
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ):
             response = client.post("/skill-drafts/draft-7/reject")
@@ -465,7 +465,7 @@ class TestRejectSkillDraft:
         mock_store = MagicMock()
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ):
             response = client.post("/skill-drafts/draft-abc/reject")
@@ -481,7 +481,7 @@ class TestRejectSkillDraft:
         mock_store.get.return_value = None
 
         with patch(
-            "backend.api.legacy_routes.get_skill_draft_store",
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
             return_value=mock_store,
         ):
             response = client.post("/skill-drafts/missing-id/reject")

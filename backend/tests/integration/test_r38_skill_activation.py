@@ -85,13 +85,15 @@ async def test_skill_activated_event_carries_matched_triggers(client):
 
     captured: dict = {}
     with patch(
-        "backend.api.legacy_routes._get_skill_adapter",
+        "backend.api.legacy_skills_routes._get_skill_adapter",
         return_value=_FakeSkillAdapter(),
     ), patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         MockAgent.return_value.run_loop = _mock_run_loop_done("已完成部署", captured)
         events = await _drive_stream(client, session_id, "帮我部署一下")
 
-    skill_events = [e for e in events if e.get("state") == "skill_activated"]
+    # TM2 (DSH 对标 R11): 过滤 context_pressure 事件（非 ReAct 流程事件）
+    non_cp = [e for e in events if e.get("state") != "context_pressure"]
+    skill_events = [e for e in non_cp if e.get("state") == "skill_activated"]
     assert len(skill_events) == 1, f"期望 1 个 skill_activated, 实得 {events}"
     skills = skill_events[0]["skills"]
     assert skills == [
@@ -120,7 +122,7 @@ async def test_no_skill_event_when_port_lacks_auto_activate(client):
     session_id = create.json()["id"]
 
     with patch(
-        "backend.api.legacy_routes._get_skill_adapter",
+        "backend.api.legacy_skills_routes._get_skill_adapter",
         return_value=_NoAutoActivateAdapter(),
     ), patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         MockAgent.return_value.run_loop = _mock_run_loop_done("好的")
@@ -144,7 +146,7 @@ async def test_skill_port_failure_never_blocks_chat(client):
             raise RuntimeError("skill discovery blew up")
 
     with patch(
-        "backend.api.legacy_routes._get_skill_adapter",
+        "backend.api.legacy_skills_routes._get_skill_adapter",
         return_value=_ExplodingAdapter(),
     ), patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         MockAgent.return_value.run_loop = _mock_run_loop_done("照常回复")
