@@ -5,6 +5,7 @@ Sage 后端测试 - 共享 fixtures
 import asyncio
 import contextlib
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -115,6 +116,28 @@ def tmp_db_path():
                 os.unlink(f.name)
 
 
+@pytest.fixture(scope="session")
+def template_db_path():
+    """表结构模板库：每个进程（xdist worker 各自一个 session）只真正建一次表。
+
+    从空文件跑 init_db() 建 115 条表/索引约 30 ms（Linux，fast sqlite），复制
+    模板后再跑一遍幂等的 init_db() 约 3 ms。全量后端用例单进程实测 652 s → 424 s。
+    init_db() 只有确定性的建表/迁移语句（不读时间、随机数、环境变量），复制
+    出的库与从空文件建出的库内容一致（iterdump 逐行相同）。
+    """
+    import backend.data.database as db_mod
+
+    with tempfile.NamedTemporaryFile(suffix=".template.db", delete=False) as f:
+        path = f.name
+    template = db_mod.Database(db_path=path)
+    template.init_db()
+    # 最后一个连接关闭时 checkpoint，WAL 内容全部落回主文件，之后整文件复制即可
+    template.close()
+    yield path
+    with contextlib.suppress(OSError):
+        os.unlink(path)
+
+
 @pytest.fixture(autouse=True)
 def setup_test_db(request):
     """每个测试自动使用独立临时数据库。
@@ -179,6 +202,9 @@ def setup_test_db(request):
     local_auth._local_auth_token = None
     initialize_local_auth_token()
 
+    # 先复制模板库（见 template_db_path），init_db() 照常调用：库已建好时
+    # 只剩幂等检查，结果与从空文件建表相同。
+    shutil.copyfile(request.getfixturevalue("template_db_path"), tmp_db_path)
     db_mod._db = db_mod.Database(db_path=tmp_db_path)
     db_mod._db.init_db()
     reset_wake_store()
