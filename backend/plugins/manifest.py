@@ -342,7 +342,7 @@ EXAMPLE_MANIFEST = {
         "author": "Sage Team",
         "homepage": "https://github.com/example/sage-plugin",
         "license": "MIT",
-        "categories": ["productivity", "tools"],
+        "categories": ["product", "tools"],
         "tags": ["example", "demo"],
     },
     "capabilities": [
