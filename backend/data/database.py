@@ -548,6 +548,8 @@ class Database:
                 -- sources:       [{kind: web|wiki|tool, ...}]          附着于终稿 assistant 行
                 rag_citations TEXT,
                 sources TEXT,
+                -- 第二轮 C1: 终稿生成统计 JSON（输入 / 输出 tokens、首字延迟、总耗时）
+                generation_stats TEXT,
                 FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
         """)
@@ -598,6 +600,13 @@ class Database:
                     conn.commit()
                 except sqlite3.OperationalError:
                     pass
+        # 第二轮 C1 (对话阅读体验): 老库补生成统计列，同款双进程防御。
+        if "generation_stats" not in columns:
+            try:
+                cursor.execute("ALTER TABLE messages ADD COLUMN generation_stats TEXT")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
 
         # DSH 对标 R1 (SE1, 2026-09-23): 会话事件日志 —— append-only 的
         # 会话事实源（对标 deepseek-harness "Model-visible ⟺ logged"）。
@@ -624,6 +633,26 @@ class Database:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_session_events_session "
             "ON session_events(session_id, seq)"
+        )
+        conn.commit()
+
+        # 第二轮 C2 (对话阅读体验): 回答版本 —— 最后一轮「重新生成」时旧回答整轮
+        # 归档于此（rows_json 为 messages 行原样快照），可在同一位置切换回来。
+        # anchor_id = 该轮 user 消息 id；会话删除时级联删除。见 answer_version_repo。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS message_versions (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                anchor_id TEXT NOT NULL,
+                rows_json TEXT NOT NULL,
+                generated_at INTEGER NOT NULL,
+                archived_at INTEGER NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_message_versions_anchor "
+            "ON message_versions(session_id, anchor_id)"
         )
         conn.commit()
 

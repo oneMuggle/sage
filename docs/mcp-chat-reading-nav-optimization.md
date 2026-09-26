@@ -283,7 +283,7 @@ MessageList（每次 messages / pending 变化）
 | P1 | B4 | 会话内查找 | ✓ | — |
 | P2 | C1 | 生成速度统计 | ✓ | ✓ 用量与耗时透传并落库 |
 | P2 | C2 | 回答版本切换 | ✓ | ✓ 同一位置保存多个回答版本 |
-| P2 | C3 | 端点离线提示 | ✓ | 视现有探测接口而定 |
+| P2 | C3 | 端点离线提示 | ✓ | —（按失败事件的错误类型判定，不新增接口） |
 
 P2 的详细设计在 P1 合并后补入 §10.6：先对照当时的代码核实，再定稿。
 
@@ -348,7 +348,51 @@ P2 的详细设计在 P1 合并后补入 §10.6：先对照当时的代码核实
 
 ### 10.6 P2 设计
 
-P1 合并后补入。
+> 基线：合并 #1619 后的 `origin/main` @ `a3c16668e`。实施顺序 C1 → C3 → C2（C2 改动最大，放最后）。
+
+**代码核实（P2 新增证据）**
+
+| 事实 | 位置 | 影响 |
+| --- | --- | --- |
+| `usage_events` 表预留了 `first_token_ms` / `latency_ms` 列，`usage_tracker.record` 也接受这两个参数，但 LLM 客户端从未传入 | `backend/services/usage_tracker.py`、`backend/core/legacy/llm_client.py` | C1 在流式请求里计时，顺带补齐用量统计的这两列 |
+| 流式请求带 `stream_options.include_usage`，终值 `LLMResponse` 有输入 / 输出 tokens | `llm_client.py` | 速度用上游返回的 completion_tokens 计算；上游不返回时不显示速度 |
+| 失败事件的 `error` 是 `LLMError.to_dict()`（`type` 为 `network_error` / `timeout` / `server_error` 等），但 `chatApi` 只取 message 往上抛 | `backend/core/errors.py`、`src/shared/api/chatApi.ts` | C3 在 `chatApi` 按错误类型判定「端点不可达」 |
+| `BackendStatusBanner` 只管本机后端进程；云端端点不可达时只有单条消息下的报错 | `src/widgets/system/BackendStatusBanner.tsx` | C3 新增独立的全局提示条 |
+| 重新生成 = 分叉到原问题之前再重发，侧栏每次多出一个会话 | `src/pages/Chat.tsx` `handleRegenerate` | C2 把最后一轮改为原位重新生成 |
+| 模型可见历史从 `session_events` 事件日志投影；`message.deleted` 宣告的 id 永久排除（日志里 id 不复用） | `backend/chat/event_projection.py`、`backend/data/session_event_repo.py` | C2 归档旧回答要写删除事件；恢复版本必须以新 id 重新插入 |
+| 本轮 user 消息在加载历史之后才落库；`client_message_id` 幂等复用只覆盖同 id 重试 | `backend/api/legacy_routes.py` producer | C2 的重新生成请求要跳过 user 落库，并从历史里剔除该 user 消息，否则上下文里会出现两遍 |
+
+**C1 生成速度统计**
+
+- 后端：流式请求记录开始时间和第一个内容 / 推理增量到达的时间，得到 `first_token_ms`（首字延迟）和 `latency_ms`（总耗时），写入 `usage_events` 的预留列，并挂到 `LLMResponse` 上；非流式请求只有 `latency_ms`。
+- agent 的终稿 DONE 事件新增 `generation_stats`（`input_tokens` / `output_tokens` / `first_token_ms` / `latency_ms`，缺失项省略）；producer 把它写入 assistant 行的新列 `messages.generation_stats`（JSON，老库启动时自动加列）；仓储负责读写和分叉复制。
+- 前端：收到 DONE 时写进本地消息，对账后以服务端为准。assistant 操作栏右侧显示「42.3 tok/s · 首字 0.82s · 1,234 tokens」，悬停显示输入 / 输出 tokens、首字延迟和总耗时。速度 = 输出 tokens ÷（总耗时 − 首字延迟）；上游没有返回用量时只显示耗时。
+- 只统计终稿那一次 LLM 调用；多步工具调用的中间步骤不计入。
+
+**C3 端点离线提示**
+
+- 判定：流式失败且错误类型是 `network_error`、`timeout`，或 `server_error` 且状态码为 502 / 503 / 504 时，记为「端点不可达」；之后任意一次成功完成即清除。系统断网（`navigator.onLine === false`）单独提示。
+- 展示：标题栏下方的全局提示条，所有页面都能看到，写明端点主机名和模型。按钮：「重新检测」（请求端点的模型列表接口，不消耗 token，成功即清除）、「端点设置」、关闭。用户换成别的对话端点后，旧端点的提示自动隐藏。
+- 不做后台定时探测，避免空耗请求；系统恢复联网时自动重新检测一次。
+
+**C2 回答版本切换**
+
+- 范围：只对会话的最后一轮生效。在最后一轮任一 assistant 气泡上点「重新生成」时原位重跑；更早的轮次仍沿用分叉会话（原位切换要连带替换后面的全部消息，不在本轮范围内）。
+- 存储：新表 `message_versions(id, session_id, anchor_id, rows_json, generated_at, archived_at)`。`anchor_id` 是本轮的 user 消息；`rows_json` 是该版本全部消息行的原样快照（`SELECT *`，恢复时按当前表的列回填）。会话删除时级联删除。
+- 流程：
+  1. 前端在本地移除旧回答，以 `regenerate_of=<锚点 id>` 发起流式请求。后端先校验锚点是最后一条 user 消息（否则 409，不占用 stream slot），然后不再落 user 消息，历史投影里剔除锚点和旧回答，跳过自动话题检测。
+  2. 旧回答在本轮**第一次落库之前**才归档（`ArchiveOnFirstSave` 包装仓储：删除旧行并写 `message.deleted` 事件，同步 `message_count`）。所以只有重新生成真的产出了内容（或被用户中断、留下 partial）时才替换旧回答；失败且没有任何落库时旧回答原样保留，前端流结束对账后重新显示。
+  3. 最后一条 assistant 消息的操作栏显示 `‹ 2/3 ›`。`GET /sessions/{id}/answer-versions` 列出版本（按版本首行时间排序，当前显示的版本也算一个）；切换时调 `POST /sessions/{id}/answer-versions/{version_id}/activate`：当前回答先归档为版本，目标版本的消息行以新 id 重新插入（同样写 `message.appended` 事件，保持「模型可见 ⟺ 已记录」），然后前端重拉消息。
+- 继续对话之后，之前那一轮的其他版本不再提供切换入口（数据保留）。演示模式没有后端，仍走分叉会话的旧行为。
+- 已知限制：重新生成只重发文字，原消息的图片 / 附件不会再次附带（与现有分叉式重新生成一致）。
+
+**验证矩阵（P2）**
+
+| 层 | 内容 |
+| --- | --- |
+| 前端单测 | 速度计算与格式化、统计展示；端点状态的判定 / 清除 / 端点切换后隐藏、提示条交互（重新检测成功与失败、断网、关闭）、`chatApi` 失败事件上报；版本 API 封装、版本切换器（翻页 / 边界禁用 / 单版本隐藏 / 切换失败提示）、原位重新生成（最后一轮走原位，更早轮次和演示模式走分叉）、`MessageList` 只把切换回调交给最后一条消息、`useChat` 的 `regenerateOf` 不追加 user 消息 |
+| 后端单测 | 流式计时与 `usage_tracker` 参数；`AgentEvent.generation_stats`；仓储 `generation_stats` 读写与分叉复制；版本归档 / 列出 / 激活（事件日志、`message_count`、新 id、非最后一轮拒绝）；`/chat/stream` 集成：生成统计落库、`regenerate_of`（不落 user、发给模型的历史里 user 消息只出现一次且不含旧回答、失败保留旧回答、更早轮次 409）、版本切换接口 |
+| 回归 / 静态 / CI | 同 §10.5 |
 
 ### 10.7 进度日志（第二轮，每完成一步即回填）
 
@@ -357,10 +401,10 @@ P1 合并后补入。
 | 1 | 2026-09-26 08:24 | 新建 P1 工作树 | ✅ 完成 | `scripts/worktree.sh new feat/chat-reading-p1-main --base origin/main` → `.worktrees/feat-chat-reading-p1-main`（端口 8783/1438）；`npm ci` 在工作树内独立安装依赖 |
 | 2 | 2026-09-26 08:50 | 代码核实 + P1 方案定稿（§10.1–§10.5） | ✅ 完成 | 本文件；登记 `docs/plans/2026-09-26_chat-reading-nav-r2.md` |
 | 3 | 2026-09-26 09:26 | P1 实施 + 本地验证 | ✅ 完成 | 见 §10.7.1：新增 9 个前端模块、9 个前端测试文件、1 个后端测试文件；受影响文件 eslint 0 错误，全量 `tsc --noEmit` 0 错误，`ruff check backend/` 通过，`architecture-check` 通过（6 个基线文件按棘轮协议上调） |
-| 4 | — | P1 main PR → CI 全绿 → 合并 | 🔄 进行中 | 分支 `feat/chat-reading-p1-main` |
-| 5 | — | P1 cherry-pick 到 win7 → PR → CI 全绿 → 合并 | ⏳ 待办 | — |
-| 6 | — | P2 设计定稿 + 实施 | ⏳ 待办 | — |
-| 7 | — | P2 main / win7 两条 PR 合并 | ⏳ 待办 | — |
+| 4 | 2026-09-26 09:53 | P1 main PR → CI 全绿 → 合并 | ✅ 完成 | [#1619](https://github.com/oneMuggle/sage/pull/1619) 14 项检查通过（2 项按条件跳过）→ squash 合并为 `a3c16668e`；见 §10.7.2 |
+| 5 | 2026-09-26 10:30 | P1 cherry-pick 到 win7 → PR → CI 全绿 → 合并 | ✅ 完成 | [#1622](https://github.com/oneMuggle/sage/pull/1622) 必需的 5 项检查及 All Checks / Architecture check / count-lines 通过（3 项按条件跳过）→ squash 合并为 `315fdebca`；见 §10.7.3 |
+| 6 | 2026-09-26 11:20 | P2 设计定稿 + 实施 + 本地验证 | ✅ 完成 | 设计见 §10.6，实施记录见 §10.7.4：新增 7 个前端模块、1 个后端模块、10 个前端测试文件、3 个后端测试文件；受影响文件 eslint 0 错误，`tsc --noEmit` 0 错误，`ruff check backend/` 通过，`architecture-check` 通过（8 个基线文件按棘轮协议上调） |
+| 7 | — | P2 main / win7 两条 PR 合并 | 🔄 进行中 | 分支 `feat/chat-reading-p2-main` |
 | 8 | — | 清理分支与工作树 + 回填 | ⏳ 待办 | — |
 
 ### 10.7.1 P1 实施记录（步骤 3）
@@ -396,3 +440,57 @@ P1 合并后补入。
 | `tsc --noEmit` | 0 错误 |
 | `ruff check backend/` | 通过 |
 | `architecture-check` | 通过。基线上调：`legacy_routes.py` 4395→4396、`agent.py` 2428→2429、`session_repo.py` 1009→1016、`Chat.tsx` 1182→1189、`types.ts` 2385→2387、`Message.tsx` 1068→1083 |
+
+### 10.7.2 P1 main 合并记录（步骤 4）
+
+- 提交前 `git fetch` + rebase 到最新 `origin/main`（期间合入 #1612–#1614，无冲突），推送后开 [#1619](https://github.com/oneMuggle/sage/pull/1619)。
+- CI：stub-smoke、stub-deep、live-boot、Frontend (TypeScript)、Backend (Python)、Backend collect (Python 3.8, win7 mine-sweeper)、Electron smoke、两个平台的 Electron build、Architecture check、Dependency audit、Backend legacy smoke、count-lines、All Checks 全部通过；Backend (Python 3.8, Win7 LTS) 与 Backend unit (Windows) 按条件跳过。
+- 合并前 `origin/main` 又前进了 #1617 / #1618，改动文件与本 PR 无交集，GitHub 判定 `MERGEABLE / CLEAN`，直接 squash 合并为 `a3c16668e`。
+
+### 10.7.3 P1 win7 对齐记录（步骤 5）
+
+- 新建 `.worktrees/feat-chat-reading-p1-win7`（基于 `origin/release/win7`），`git cherry-pick -x` main 的 squash 提交，提交信息标注 `(cherry picked from commit a3c16668e…)`。
+- 冲突与处理：
+
+| 文件 | 原因 | 处理 |
+| --- | --- | --- |
+| `src/shared/lib/shortcuts.ts` | win7「全局」分组没有 main 的 `Ctrl+N` / `Ctrl+F` / `Ctrl+Shift+D` 条目 | 保留 win7 现状，只加入本次的 `Ctrl+F` 与 `Ctrl+Shift+F` 两条 |
+| `src/widgets/chat/MessageList.tsx` | win7 没有 `onSuggestionClick` / `onBlockedAction` | 保留 win7 现状，只加入 `onContinue` |
+| `architecture-baseline.json` | 两条分支基线数值不同；rebase 到最新 `release/win7` 时 `backend/main.py` 已被 #1615 上调 | 保留 win7 数值，按本分支实际行数上调 `legacy_routes.py` 4400→4401、`agent.py` 2521→2522、`session_repo.py` 1010→1017；前端文件在 win7 上有余量 |
+
+- 本地验证（win7 工作树）：`npm run typecheck` 0 错误；受影响的 6 个前端目录 115 个测试文件全部通过；Python 3.8 下后端相关用例 35 passed；`ruff check backend/` 与 `architecture-check` 通过。
+- [#1622](https://github.com/oneMuggle/sage/pull/1622)：Frontend (TypeScript)、Backend (Python 3.8, Win7 LTS)、Electron smoke、两个平台的 Electron build 等必需检查全部通过 → squash 合并为 `315fdebca`。
+
+### 10.7.4 P2 实施记录（步骤 6）
+
+**新增模块**
+
+| 文件 | 作用 |
+| --- | --- |
+| `src/features/chat/generationStats.ts` | C1 速度计算（输出 tokens ÷（总耗时 − 首字延迟））与时长 / 数量格式化 |
+| `src/widgets/chat/GenerationStatsBadge.tsx` | C1 操作栏右侧的「tok/s · 首字 · tokens」摘要，悬停看明细 |
+| `src/shared/lib/endpointStatus.ts` | C3 端点可达性状态：失败事件按错误类型判定，成功完成即清除；端点比对 |
+| `src/widgets/system/EndpointStatusBanner.tsx` | C3 标题栏下方的全局提示条：重新检测（模型列表接口，不耗 token）/ 端点设置 / 关闭；系统断网单独提示，恢复联网自动重新检测 |
+| `src/features/chat/answerVersions.ts` | C2 最后一轮判定、原位重新生成、版本接口封装（走 `backendRequest` 通用通道，不改 Electron 命令表） |
+| `src/widgets/chat/AnswerVersionSwitcher.tsx` | C2 `‹ 2/3 ›` 切换器；只有一个版本时不渲染 |
+| `src/shared/lib/fillTemplate.ts` | `{name}` 占位符填充（C1 / C2 / C3 文案共用） |
+| `backend/data/answer_version_repo.py` | C2 版本仓储：归档 / 列出 / 切换（与 messages、事件日志同事务），以及 producer 接线辅助（`regenerate_excluded_ids`、`drop_excluded`、`ArchiveOnFirstSave`） |
+
+**改动的现有文件**
+
+- 后端：`llm_client.py`（流式计时、非流式耗时、写入 `usage_events` 预留列）、`agent_state.py`（`generation_stats` 字段、提取与 JSON）、`agent.py`（DONE 携带）、`database.py`（`messages.generation_stats` 列与老库补列、`message_versions` 表）、`session_repo.py`（字段读写、分叉复制）、`legacy_routes.py`（统计落库；`regenerate_of`：最后一轮校验、历史剔除、跳过 user 落库与自动话题检测、首次落库前归档、`message_count`）、`legacy_session_routes.py`（`GET /sessions/{id}/answer-versions`、`POST /sessions/{id}/answer-versions/{version_id}/activate`）。
+- 前端：`types.ts`（`GenerationStats`、`AgentEvent.generation_stats`、`ChatConfig.regenerateOf`）、`store.ts`（`Message.generation_stats`）、`useChat.ts`（DONE 统计写入本地消息；`regenerateOf` 不追加 user 消息并透传）、`chatApi.ts`（失败 / 完成上报端点状态；只在原位重新生成时带 `regenerateOf`）、`Layout.tsx`（挂载提示条）、`Message.tsx` / `MessageList.tsx`（统计、版本切换器；切换回调只交给最后一条消息）、`Chat.tsx`（最后一轮原位重新生成、切换后重拉消息）、`i18n/chatReading.ts`（C1–C3 文案）。
+
+**验证**
+
+| 项 | 结果 |
+| --- | --- |
+| 新增前端测试（10 个文件） | 39 passed |
+| 受影响前端目录（chat / send-message / shared / system / layout / pages / manage-endpoints，253 个文件） | 除 `ArenaAccounts.test.tsx`（已知的负载下偶发超时，单独重跑 7/7 通过）外全部通过；首轮发现 `stream.test.ts` 对 invoke 参数做整体比对，已改为只在原位重新生成时带 `regenerateOf`，普通发送的参数保持不变 |
+| 新增后端测试（2 个单测文件 + 1 个集成测试文件） | Python 3.11 与 3.8 均通过（连同 B2 的 7 个用例共 32 passed） |
+| 后端相关回归（session / agent / llm / legacy / chat 单测 + chat_stream 集成） | 714 passed，19 skipped |
+| eslint（改动与新增文件） | 0 错误（`Message.tsx` 1 条原有 warning） |
+| `tsc --noEmit` | 0 错误 |
+| `ruff check backend/` | 通过 |
+| prettier | 新增文件已格式化；改动文件没有引入新的格式问题 |
+| `architecture-check` | 通过。基线上调：`legacy_routes.py` 4396→4426、`agent.py` 2429→2430、`llm_client.py` 1074→1093、`database.py` 1920→1949、`session_repo.py` 1016→1024、`Chat.tsx` 1189→1198、`types.ts` 2387→2399、`Message.tsx` 1083→1101 |

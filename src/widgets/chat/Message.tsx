@@ -32,7 +32,9 @@ import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownCh
 import type { Message as MessageType, ToolCall } from '../../shared/lib/store';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { AnswerVersionSwitcher } from './AnswerVersionSwitcher';
 import { CompactBanner } from './CompactBanner';
+import { GenerationStatsBadge } from './GenerationStatsBadge';
 import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
@@ -62,6 +64,8 @@ interface MessageProps {
   onSaveToMemory?: (message: MessageType) => void;
   /** 第二轮 B2: 截断回答的「继续生成」（MessageList 只传给会话最后一条消息） */
   onContinue?: () => void;
+  /** 第二轮 C2: 回答版本切换后的回调（MessageList 只传给会话最后一条消息） */
+  onAnswerVersionChange?: () => void;
   /** right-panel R1 批次 B: tool_call_id → 产物[] 映射 —— 命中的工具卡片
    * 下渲染内联产物 chip，点击直达右侧面板产物预览（对齐 Claude） */
   artifactsByToolCall?: Record<string, Artifact[]>;
@@ -428,6 +432,7 @@ function MessageComponent({
   onQuote,
   onSaveToMemory,
   onContinue,
+  onAnswerVersionChange,
   artifactsByToolCall,
 }: MessageProps) {
   const { t } = useI18n();
@@ -931,6 +936,14 @@ function MessageComponent({
           canQuote ||
           canSaveToMemory) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
+            {/* 第二轮 C2: 最后一轮的回答版本切换 ‹ 2/3 › */}
+            {isAssistant && onAnswerVersionChange && !isStreaming && (
+              <AnswerVersionSwitcher
+                sessionId={message.session_id}
+                messageId={message.id}
+                onChanged={onAnswerVersionChange}
+              />
+            )}
             {canCopy && (
               <button
                 onClick={copyToClipboard}
@@ -1027,6 +1040,10 @@ function MessageComponent({
                 <Brain className="w-4 h-4" />
               </button>
             )}
+            {/* 第二轮 C1: 生成速度统计（右对齐，悬停看明细） */}
+            {isAssistant && !isStreaming && (
+              <GenerationStatsBadge stats={message.generation_stats} />
+            )}
           </div>
         )}
       </div>
@@ -1041,6 +1058,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.message === next.message &&
     prev.isStreaming === next.isStreaming &&
     prev.onContinue === next.onContinue &&
+    prev.onAnswerVersionChange === next.onAnswerVersionChange &&
     prev.onFeedback === next.onFeedback &&
     prev.knowledgeRefs === next.knowledgeRefs &&
     prev.attachments === next.attachments &&

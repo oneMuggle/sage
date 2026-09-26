@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { PlanCard } from '../components/PlanCard';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
+import { regenerateInPlace } from '../features/chat/answerVersions';
 import { useQuoteDraft } from '../features/chat/useQuoteDraft';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
@@ -668,6 +669,8 @@ export function Chat() {
       const msgs = messagesRef.current;
       const idx = msgs.findIndex((m) => m.id === assistantMessageId);
       if (idx < 0) return;
+      // 第二轮 C2: 最后一轮原位重新生成（旧回答归档为版本，可在回答下方切换）
+      if (regenerateInPlace(msgs, idx, currentSessionId, { removeMessage, sendMessage })) return;
       let userIdx = -1;
       for (let i = idx - 1; i >= 0; i--) {
         if (msgs[i].role === 'user') {
@@ -691,8 +694,13 @@ export function Chat() {
         );
       }
     },
-    [currentSessionId, isLoading, loadSessions, sendMessage, setCurrentSessionId, t],
+    [currentSessionId, isLoading, loadSessions, removeMessage, sendMessage, setCurrentSessionId, t],
   );
+
+  // 第二轮 C2: 回答版本切换后按服务端重拉消息
+  const handleAnswerVersionChange = useCallback(() => {
+    if (currentSessionId) void loadMessages(currentSessionId);
+  }, [currentSessionId, loadMessages]);
 
   // 第二轮 B2: 截断回答「继续生成」—— 发一条续写消息，原回答保留、历史可追溯
   const handleContinue = useCallback(() => {
@@ -884,6 +892,7 @@ export function Chat() {
                 onEditResend={handleStartEditResend}
                 onRegenerate={handleRegenerate}
                 onContinue={handleContinue}
+                onAnswerVersionChange={handleAnswerVersionChange}
                 onDelete={handleDeleteMessage}
                 onQuote={handleQuote}
                 onQuoteSelection={quoteText}

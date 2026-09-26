@@ -34,6 +34,7 @@ from backend.chat.compaction import (
     compact_messages,
     should_compact,
 )
+from backend.data.answer_version_repo import AnswerVersionError, AnswerVersionRepository
 from backend.data.database import get_database, make_with_db_lock
 from backend.data.session_repo import (
     ForkSourceNotFoundError,
@@ -478,3 +479,37 @@ def retreat_session_segment(session_id: str):
     """
     ok = MessageRepository().retreat_segment(session_id)
     return {"ok": ok}
+
+
+# ---------------------------------------------------------------------------
+# 对话阅读体验第二轮 C2：回答版本切换（最后一轮原位重新生成后的 ‹ 2/3 ›）
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sessions/{session_id}/answer-versions", response_model=dict)
+@with_db_lock
+def list_answer_versions(session_id: str, anchor_id: Optional[str] = None):
+    """列出会话最后一轮的回答版本（含当前显示的版本），按生成时间排序。
+
+    - 200 + ``{"anchor_id", "total", "current_index", "versions": [...]}``；
+      省略 ``anchor_id`` 时取最后一条 user 消息；不是最后一轮时 ``total`` 为 0。
+    """
+    return AnswerVersionRepository().list_versions(session_id, anchor_id)
+
+
+@router.post("/sessions/{session_id}/answer-versions/{version_id}/activate", response_model=dict)
+@with_db_lock
+def activate_answer_version(session_id: str, version_id: str):
+    """切换到指定回答版本：当前回答先归档为版本，目标版本以新 id 恢复。
+
+    - 200 + ``{"ok": true, "restored": n}``
+    - 404 —— 版本不存在或不属于该会话；409 —— 版本所在轮次已不是最后一轮
+    """
+    try:
+        restored = AnswerVersionRepository().activate(session_id, version_id)
+    except AnswerVersionError as exc:
+        raise HTTPException(
+            status_code=409 if exc.kind == "anchor_not_last" else 404,
+            detail={"type": exc.kind, "message": str(exc)},
+        ) from exc
+    return {"ok": True, "restored": restored}

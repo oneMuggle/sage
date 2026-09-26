@@ -11,6 +11,7 @@ import {
   type ChatOfficeRef,
   type TaskPlanItem,
 } from '../../shared/api';
+import type { GenerationStats } from '../../shared/api/types';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import {
   mapAgentErrorToText,
@@ -246,6 +247,8 @@ export function useChat() {
          * topic_separator 并清空 LLM 历史窗口。
          */
         contextReset?: boolean;
+        /** 第二轮 C2: 原位重新生成 —— 锚点 user 消息 id；不再追加 user 消息 */
+        regenerateOf?: string;
       },
     ) => {
       const sid = sessionId ?? currentSessionId;
@@ -316,7 +319,8 @@ export function useChat() {
         content,
         created_at: Date.now(),
       };
-      addMessage(userMessage);
+      // 第二轮 C2: 原位重新生成时锚点 user 消息已在列表里，不再追加
+      if (!opts?.regenerateOf) addMessage(userMessage);
 
       if (!chatEndpoint?.baseUrl) {
         // 仍记录错误供上层展示,但消息已经进 store
@@ -376,6 +380,8 @@ export function useChat() {
         memoryDisabled: opts?.memoryDisabled,
         // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
         contextReset: opts?.contextReset,
+        // 第二轮 C2: 原位重新生成的锚点（后端跳过 user 落库、历史剔除锚点）
+        regenerateOf: opts?.regenerateOf,
       };
 
       const appendContent = (next: string): void => {
@@ -445,6 +451,8 @@ export function useChat() {
       let lastDoneTitlePending = false;
       // 第二轮 B2: DONE 携带的 finish_reason（length = 截断），对账前先写入本地消息
       let lastDoneFinishReason: string | null = null;
+      // 第二轮 C1: DONE 携带的终稿生成统计（速度 / 首字延迟 / tokens）
+      let lastDoneGenerationStats: GenerationStats | null = null;
       // flushQueue=true 仅限流自然结束(onDone) —— 错误/中断不自动发队列消息
       const finishStream = (flushQueue = false): void => {
         if (finished) return;
@@ -480,6 +488,7 @@ export function useChat() {
             reasoning_content: finalReasoning || undefined,
             tool_calls: finalToolCalls.length > 0 ? finalToolCalls : undefined,
             ...(lastDoneFinishReason ? { finish_reason: lastDoneFinishReason } : {}),
+            ...(lastDoneGenerationStats ? { generation_stats: lastDoneGenerationStats } : {}),
           });
         }
         // client_message_id 协议 (同步 #1155): DONE 带回服务端 id 时, 把
@@ -793,6 +802,7 @@ export function useChat() {
                   if (evt.message_id) lastDoneMessageId = evt.message_id;
                   lastDoneTitlePending = evt.title_pending === true;
                   lastDoneFinishReason = evt.finish_reason ?? null;
+                  lastDoneGenerationStats = evt.generation_stats ?? null;
                 }
                 useChatStreamStore
                   .getState()

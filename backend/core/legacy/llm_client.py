@@ -176,6 +176,10 @@ class LLMResponse:
     # 既有调用方不受影响。
     usage: Optional[Dict[str, int]] = None
     raw: Optional[Dict[str, Any]] = None
+    # 第二轮 C1 (对话阅读体验): 本次调用的首字延迟 / 总耗时（毫秒）。流式请求
+    # 两者都有；非流式只有 latency_ms；拿不到时为 None。
+    first_token_ms: Optional[int] = None
+    latency_ms: Optional[int] = None
 
 
 @dataclass
@@ -677,6 +681,7 @@ class LLMClient:
                     context_breakdown=self._context_breakdown_snapshot(
                         body, usage_dict["prompt_tokens"]
                     ),
+                    latency_ms=int(elapsed * 1000),
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking skipped: %s", usage_err)
@@ -693,6 +698,7 @@ class LLMClient:
             total_tokens=usage.get("total_tokens", 0),
             usage=usage_dict,
             raw=data,
+            latency_ms=int(elapsed * 1000),
         )
 
     async def chat_stream(self, messages: List[Dict[str, Any]]) -> AsyncGenerator[str, None]:
@@ -888,6 +894,9 @@ class LLMClient:
         max_attempts, base_delay = _retry_settings()
         attempt = 0
         fallback_used = False
+        # 第二轮 C1: 首字延迟 / 总耗时计时（含重试等待，即用户实际等待的时间）
+        stream_started = time.monotonic()
+        first_token_at: Optional[float] = None
         while True:
             attempt += 1
             try:
@@ -924,11 +933,13 @@ class LLMClient:
                             "reasoning"
                         )
                         if isinstance(reasoning_piece, str) and reasoning_piece:
+                            first_token_at = first_token_at or time.monotonic()
                             reasoning_parts.append(reasoning_piece)
                             yield ("reasoning_delta", reasoning_piece)
 
                         content_piece = delta.get("content")
                         if isinstance(content_piece, str) and content_piece:
+                            first_token_at = first_token_at or time.monotonic()
                             content_parts.append(content_piece)
                             yield ("content_delta", content_piece)
 
@@ -1002,6 +1013,10 @@ class LLMClient:
                 reasoning_content = parsed_reasoning
             raw_content = parsed_content
 
+        latency_ms = int((time.monotonic() - stream_started) * 1000)
+        first_token_ms = (
+            None if first_token_at is None else int((first_token_at - stream_started) * 1000)
+        )
         usage_dict: Optional[Dict[str, int]] = None
         if isinstance(stream_usage, dict) and stream_usage:
             usage_dict = {
@@ -1025,6 +1040,8 @@ class LLMClient:
                     context_breakdown=self._context_breakdown_snapshot(
                         body, usage_dict["prompt_tokens"]
                     ),
+                    first_token_ms=first_token_ms,
+                    latency_ms=latency_ms,
                 )
             except Exception as usage_err:
                 logger.debug("usage tracking (stream) skipped: %s", usage_err)
@@ -1041,6 +1058,8 @@ class LLMClient:
                 output_tokens=usage_dict["completion_tokens"] if usage_dict else 0,
                 total_tokens=usage_dict["total_tokens"] if usage_dict else 0,
                 usage=usage_dict,
+                first_token_ms=first_token_ms,
+                latency_ms=latency_ms,
             ),
         )
 
