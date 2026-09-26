@@ -36,6 +36,7 @@
 | R13 | D1b 性能预算扩展（回填/迁移空转/双写吞吐） | #1556（`8a08428b`） | #1565（`4498ec0c`） | ✅ 双分支已合 |
 | R14 | C1a 记忆 API 路由组拆分（legacy_routes -770 行） | #1573（`ae591e68`） | #1589（`8e620dee`） | ✅ 双分支已合 |
 | R15 | C1b 技能 API 路由组拆分（legacy_routes 累计 -1160 行） | #1595（`1e54ad68`） | #1600（`a0c9d587`） | ✅ 双分支已合 |
-| R16 | C1c Skill Draft/Audit/Rollback/Consolidation 路由组拆分 | 本 PR | （待对齐） | 交付中 |
+| R16 | C1c Skill Draft/Audit/Rollback/Consolidation 路由组拆分 | #1611（`af319496`） | #1660（`e2af8068`） | ✅ 双分支已合 |
+| R17 | 测试稳定化：async_safety 守卫合并扫描 + r38 context_pressure 过滤同步 main | 本 PR | （待对齐） | 交付中 |
 
 —— 本账本由对标循环维护，随轮次追加。
