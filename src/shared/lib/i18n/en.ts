@@ -698,6 +698,7 @@ export const en: Record<TranslationKey, string> = {
   'settings.font.saveError':
     'Font preferences could not be saved. Changes are visible now; retry or reopen the app later to sync.',
   'settings.font.loadError': 'Font preferences could not be loaded. Using defaults for now.',
+  'settings.density.label': 'Information Density',
   'font.option.inter': 'Inter',
   'font.option.system': 'System Default',
   'font.option.noto-sans-sc': 'Noto Sans SC',

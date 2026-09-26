@@ -98,6 +98,38 @@ Sage 是一个 **calm, dense, operational** 的个人知识管理工具。
 
 ## 9. Motion
 
-- 快速：动画时长 150-200ms
-- 低戏剧：使用 `ease-out` 缓动，不使用弹跳或夸张效果
-- 目的性：动画用于引导注意力，不是装饰
+| 用途 | Duration | Easing | Tailwind class |
+|---|---|---|---|
+| 即时反馈（按钮 hover、icon 切换） | 120ms | `ease-out` | `transition-fast` |
+| 常规过渡（面板展开、路由切换） | 200ms | `ease-out` | `transition-base` |
+| 大范围重排（sidebar 折叠、模态框） | 300ms | `ease-out` | `transition-slow` |
+
+原则：
+- **低戏剧**：不使用弹跳、回弹或夸张缩放
+- **目的性**：动画用于引导注意力，不是装饰
+- **可中断**：所有过渡在用户交互时立即响应，不等待完成
+
+## 10. Density（信息密度）
+
+两档密度，通过 `[data-density]` 属性切换，默认 `comfortable`。
+
+| Token | Comfortable | Compact | 影响范围 |
+|---|---|---|---|
+| `--density-msg-gap` | 16px | 8px | 消息列表 vertical gap |
+| `--density-msg-py` | 10px | 6px | 消息气泡 vertical padding |
+| `--density-msg-px` | 14px | 10px | 消息气泡 horizontal padding |
+| `--density-setting-row-py` | 12px | 8px | 设置行 vertical padding |
+| `--density-sidebar-item-py` | 8px | 4px | 侧栏条目 vertical padding |
+
+切换方式：在 `<html>` 上设置 `data-density="compact"` 或 `data-density="comfortable"`。
+
+组件中引用密度变量时使用任意值语法：`py-[var(--density-msg-py)]`。
+
+## 11. 状态与反馈
+
+| 状态 | 颜色 | 用途 |
+|---|---|---|
+| Success | `--color-success` | 操作完成、保存成功 |
+| Error | `--color-error` | 表单校验失败、请求异常 |
+| Warning | `--color-warning` | 需要注意、即将过期 |
+| Info | `--color-info` | 提示信息、帮助说明 |

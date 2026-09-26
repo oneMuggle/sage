@@ -111,7 +111,7 @@ export function MessageList({
 
   return (
     <>
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-[var(--density-msg-gap)]">
         {hiddenCount > 0 && (
           <button
             data-testid="load-earlier"

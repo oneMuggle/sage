@@ -1,3 +1,4 @@
+import { getProviderDefinition } from '../../entities/endpoint/providerRegistry';
 import {
   DEMO_ENDPOINT_MODELS,
   type DiscoveredModel,
@@ -180,59 +181,19 @@ export async function fetchModels(baseUrl: string, apiKey: string): Promise<Disc
 }
 
 /**
- * R33: 按协议发现模型 —— anthropic/gemini/ollama 走各自的 /models 语义。
+ * R33 + A2: 按协议发现模型 —— 委托给 providerRegistry 中对应协议的定义。
  * 全部经本机后端 LLM 代理透传（X-LLM-Provider-Url 指定上游），自定义
- * 鉴权头（x-api-key / anthropic-version / x-goog-api-key）会被代理原样
- * 转发（_filter_request_headers 只剔除 hop-by-hop 与本地能力令牌）。
+ * 鉴权头由各 provider 定义自行构造。
  */
 export async function fetchModelsByProtocol(
   protocol: EndpointProtocol,
   baseUrl: string,
   apiKey: string,
 ): Promise<DiscoveredModel[]> {
-  if (protocol === 'openai-compatible') return fetchModels(baseUrl, apiKey);
-  const base = baseUrl.replace(/\/+$/, '');
   if (isDemoMode()) return DEMO_ENDPOINT_MODELS.map((model) => ({ ...model }));
-
-  const toModels = (ids: string[]): DiscoveredModel[] =>
-    ids.map((id) => ({ id, capabilities: inferCapabilities(id), endpointId: '' }));
-
-  if (protocol === 'anthropic') {
-    const response = await backendRequest<{ data?: Array<{ id?: string }> }>({
-      path: `${LLM_PROXY_BASE}/v1/models`,
-      method: 'GET',
-      headers: {
-        'X-LLM-Provider-Url': base,
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-    });
-    return toModels((response.data ?? []).map((m) => String(m.id ?? '')).filter(Boolean));
-  }
-
-  if (protocol === 'gemini') {
-    const response = await backendRequest<{ models?: Array<{ name?: string }> }>({
-      path: `${LLM_PROXY_BASE}/v1beta/models`,
-      method: 'GET',
-      headers: {
-        'X-LLM-Provider-Url': base,
-        'x-goog-api-key': apiKey,
-      },
-    });
-    return toModels(
-      (response.models ?? [])
-        .map((m) => String(m.name ?? '').replace(/^models\//, ''))
-        .filter(Boolean),
-    );
-  }
-
-  // ollama
-  const response = await backendRequest<{ models?: Array<{ name?: string }> }>({
-    path: `${LLM_PROXY_BASE}/api/tags`,
-    method: 'GET',
-    headers: { 'X-LLM-Provider-Url': base },
-  });
-  return toModels((response.models ?? []).map((m) => String(m.name ?? '')).filter(Boolean));
+  const provider = getProviderDefinition(protocol);
+  if (!provider) return [];
+  return provider.fetchModels(baseUrl, apiKey, backendRequest);
 }
 
 /**
@@ -378,12 +339,8 @@ export async function testEndpointConnection(
 }
 
 /**
- * R36: 非 openai 协议的对话级连通测试 —— 各家生成端点语义不同，
- * 按协议构造最小 completion。全部经本机 LLM 代理透传
- * （X-LLM-Provider-Url 指定上游 + 协议鉴权头原样转发）。
- *
- * 成功消息带模型与"对话连通"标记；上游非 2xx 时抛错（含代理的
- * 结构化 envelope），由调用方 _parseUpstreamError 统一翻译。
+ * R36 + A2: 非 openai 协议的对话级连通测试 —— 委托给 providerRegistry。
+ * 各家生成端点语义不同，由注册表中对应 provider 的 ``testChat`` 构造。
  */
 async function testChatCompletionByProtocol(
   protocol: Exclude<EndpointProtocol, 'openai-compatible'>,
@@ -391,59 +348,9 @@ async function testChatCompletionByProtocol(
   apiKey: string,
   model: string,
 ): Promise<{ success: boolean; message: string }> {
-  const base = baseUrl.replace(/\/+$/, '');
-
-  if (protocol === 'anthropic') {
-    const response = await backendRequest<{ content?: Array<{ text?: string }> }>({
-      path: `${LLM_PROXY_BASE}/v1/messages`,
-      method: 'POST',
-      headers: {
-        'X-LLM-Provider-Url': base,
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: {
-        model,
-        max_tokens: 16,
-        messages: [{ role: 'user', content: 'ping' }],
-      },
-    });
-    const text = response.content?.[0]?.text ?? '';
-    return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
-  }
-
-  if (protocol === 'gemini') {
-    const response = await backendRequest<{
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    }>({
-      path: `${LLM_PROXY_BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      method: 'POST',
-      headers: {
-        'X-LLM-Provider-Url': base,
-        'x-goog-api-key': apiKey,
-      },
-      body: {
-        contents: [{ parts: [{ text: 'ping' }] }],
-        generationConfig: { maxOutputTokens: 16 },
-      },
-    });
-    const text = response.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
-  }
-
-  // ollama
-  const response = await backendRequest<{ message?: { content?: string } }>({
-    path: `${LLM_PROXY_BASE}/api/chat`,
-    method: 'POST',
-    headers: { 'X-LLM-Provider-Url': base },
-    body: {
-      model,
-      messages: [{ role: 'user', content: 'ping' }],
-      stream: false,
-    },
-  });
-  const text = response.message?.content ?? '';
-  return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
+  const provider = getProviderDefinition(protocol);
+  if (!provider) return { success: false, message: `未知协议: ${protocol}` };
+  return provider.testChat(baseUrl, apiKey, model, backendRequest);
 }
 
 /**

@@ -539,7 +539,7 @@ function MessageComponent({
   return (
     <div
       data-testid={isAssistant ? 'chat-message-assistant' : undefined}
-      className={`flex gap-3 mb-5 w-full animate-message-enter ${isUser ? 'flex-row-reverse' : ''}`}
+      className={`flex gap-3 mb-[var(--density-msg-gap)] w-full animate-message-enter ${isUser ? 'flex-row-reverse' : ''}`}
     >
       {/* 头像 */}
       <div
@@ -689,7 +689,7 @@ function MessageComponent({
         {showBubble && (
           <div
             data-error={isError ? 'true' : undefined}
-            className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
+            className={`max-w-2xl px-[var(--density-msg-px)] py-[var(--density-msg-py)] rounded-radius-sm text-[13px] leading-relaxed ${
               isUser
                 ? 'bg-primary text-text-inverse'
                 : isError
@@ -812,7 +812,9 @@ function MessageComponent({
                 {ragCitations.map((c, i) => (
                   <div key={`rag-${c.media_id}-${i}`} className="space-y-0.5">
                     <div className="flex items-start gap-1.5">
-                      <span className="text-muted flex-shrink-0 font-mono">[{ragOffset + i + 1}]</span>
+                      <span className="text-muted flex-shrink-0 font-mono">
+                        [{ragOffset + i + 1}]
+                      </span>
                       <span className="text-text-secondary font-mono break-all">
                         {c.filename || c.media_id}
                       </span>
@@ -837,15 +839,17 @@ function MessageComponent({
                 {wikiSources.map((s, i) => (
                   <div key={`wiki-${s.path}-${i}`} className="space-y-0.5">
                     <div className="flex items-start gap-1.5">
-                      <span className="text-muted flex-shrink-0 font-mono">[{wikiOffset + i + 1}]</span>
-                      <span className="text-text-secondary font-mono break-all">{s.title || s.path}</span>
+                      <span className="text-muted flex-shrink-0 font-mono">
+                        [{wikiOffset + i + 1}]
+                      </span>
+                      <span className="text-text-secondary font-mono break-all">
+                        {s.title || s.path}
+                      </span>
                       {s.score != null && (
                         <span className="text-muted flex-shrink-0">({s.score.toFixed(2)})</span>
                       )}
                     </div>
-                    {s.snippet && (
-                      <div className="pl-5 text-muted break-all">{s.snippet}</div>
-                    )}
+                    {s.snippet && <div className="pl-5 text-muted break-all">{s.snippet}</div>}
                   </div>
                 ))}
               </div>
@@ -859,7 +863,9 @@ function MessageComponent({
                 {webSources.map((s, i) => (
                   <div key={`web-${s.url}-${i}`} className="space-y-0.5">
                     <div className="flex items-start gap-1.5">
-                      <span className="text-muted flex-shrink-0 font-mono">[{webOffset + i + 1}]</span>
+                      <span className="text-muted flex-shrink-0 font-mono">
+                        [{webOffset + i + 1}]
+                      </span>
                       {s.url ? (
                         <a
                           href={s.url}
@@ -873,9 +879,7 @@ function MessageComponent({
                         <span className="text-text-secondary break-all">{s.title}</span>
                       )}
                     </div>
-                    {s.snippet && (
-                      <div className="pl-5 text-muted break-all">{s.snippet}</div>
-                    )}
+                    {s.snippet && <div className="pl-5 text-muted break-all">{s.snippet}</div>}
                   </div>
                 ))}
               </div>
@@ -889,14 +893,14 @@ function MessageComponent({
                 {mcpSources.map((s, i) => (
                   <div key={`tool-${s.server}-${s.tool}-${i}`} className="space-y-0.5">
                     <div className="flex items-start gap-1.5">
-                      <span className="text-muted flex-shrink-0 font-mono">[{toolOffset + i + 1}]</span>
+                      <span className="text-muted flex-shrink-0 font-mono">
+                        [{toolOffset + i + 1}]
+                      </span>
                       <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
                         {s.server}/{s.tool}
                       </span>
                     </div>
-                    {s.preview && (
-                      <div className="pl-5 text-muted break-all">{s.preview}</div>
-                    )}
+                    {s.preview && <div className="pl-5 text-muted break-all">{s.preview}</div>}
                   </div>
                 ))}
               </div>
