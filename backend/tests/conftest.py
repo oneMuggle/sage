@@ -96,15 +96,23 @@ def tmp_db_path():
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         yield f.name
     if os.path.exists(f.name):
+        # 先直接删：POSIX 上即使还有未关闭的 sqlite 连接也能 unlink。全量
+        # gc.collect() 在 CI 上每次约 0.3 s，而本 fixture 经 setup_test_db 对
+        # 每个用例生效，1 万余个用例下占了后端 pytest 约 3/4 的时长（改成按需
+        # 后 20 min → 5 min，backend-legacy 也不再撞 20 min 超时），所以只在
+        # 删不掉时才做。
         # Windows fix (2026-09-06): 测试中 Repo 层未显式 close 的 sqlite 连接
         # 可能仍被循环引用持有，直接 unlink 报 WinError 32（文件被占用）。
-        # gc.collect() 触发连接对象终结器释放文件句柄后再删除。
-        import contextlib
-        import gc
-
-        gc.collect()
-        with contextlib.suppress(PermissionError):
+        # 此时 gc.collect() 触发连接对象终结器释放文件句柄后再删一次。
+        try:
             os.unlink(f.name)
+        except PermissionError:
+            import contextlib
+            import gc
+
+            gc.collect()
+            with contextlib.suppress(PermissionError):
+                os.unlink(f.name)
 
 
 @pytest.fixture(autouse=True)
