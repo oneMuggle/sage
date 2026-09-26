@@ -115,6 +115,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **渲染池自动扩槽（R42）**：用户未显式配置 render_pool_size 时，槽位上限自动为
   RENDER_POOL_SIZE_MAX=4（持续使用下懒增）；显式配置则钉死为配置值——化解 R38
   记录的"自动调优与显式配置语义冲突"。配置读取失败按非自动处理
+> 🧹 **R41：wiki 模板测试 Windows 路径归一化**（总账 §6 健康检查暴露项）
+
+### Fixed(test)
+- **wiki 模板测试 Windows 路径归一化（R41）**：`test_wiki_templates` /
+  `test_wiki_integration` 四例以 `"raw/sources"` 等正斜杠子串断言
+  `str(Path)`——Windows 下为反斜杠导致仅本地失败（CI ubuntu 不受影响，
+  #1394 同族）。归一化后再断言；生产代码无改动
 
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
