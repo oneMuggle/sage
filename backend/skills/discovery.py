@@ -17,7 +17,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -66,7 +66,7 @@ class SkillDiscoveryService:
         metadata = service.discover_one("my-skill")
     """
 
-    def __init__(self, skills_dir: Optional[Path | str] = None) -> None:
+    def __init__(self, skills_dir: Optional[Union[Path, str]] = None) -> None:
         """
         Initialize discovery service.
 

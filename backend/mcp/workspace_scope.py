@@ -15,7 +15,7 @@ import json
 import logging
 import sqlite3
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -68,7 +68,7 @@ class WorkspaceScopeManager:
         manager.set_server_enabled("/path/to/workspace", "server-name", True)
     """
 
-    def __init__(self, db_path: Optional[Path | str] = None) -> None:
+    def __init__(self, db_path: Optional[Union[Path, str]] = None) -> None:
         """
         Initialize workspace scope manager.
 
@@ -116,7 +116,7 @@ class WorkspaceScopeManager:
             conn.close()
 
     def get_workspace_config(
-        self, workspace_path: Path | str
+        self, workspace_path: Union[Path, str]
     ) -> WorkspaceMcpConfig:
         """
         Get workspace MCP configuration.
@@ -223,7 +223,7 @@ class WorkspaceScopeManager:
             conn.close()
 
     def set_server_enabled(
-        self, workspace_path: Path | str, server_name: str, enabled: bool
+        self, workspace_path: Union[Path, str], server_name: str, enabled: bool
     ) -> None:
         """
         Enable or disable a server for a workspace.
@@ -253,7 +253,7 @@ class WorkspaceScopeManager:
         )
 
     def add_custom_server(
-        self, workspace_path: Path | str, server: DiscoveredMcpServer
+        self, workspace_path: Union[Path, str], server: DiscoveredMcpServer
     ) -> None:
         """
         Add a custom server to a workspace.
@@ -287,7 +287,7 @@ class WorkspaceScopeManager:
         logger.info(f"Added custom server {server.name} to workspace {workspace_path}")
 
     def remove_custom_server(
-        self, workspace_path: Path | str, server_name: str
+        self, workspace_path: Union[Path, str], server_name: str
     ) -> None:
         """
         Remove a custom server from a workspace.
@@ -314,7 +314,7 @@ class WorkspaceScopeManager:
         )
 
     def set_auto_discover(
-        self, workspace_path: Path | str, auto_discover: bool
+        self, workspace_path: Union[Path, str], auto_discover: bool
     ) -> None:
         """
         Set auto-discovery setting for a workspace.
@@ -332,7 +332,7 @@ class WorkspaceScopeManager:
 
     def get_enabled_servers(
         self,
-        workspace_path: Path | str,
+        workspace_path: Union[Path, str],
         discovery_service: Optional[McpServerDiscoveryService] = None,
     ) -> list[DiscoveredMcpServer]:
         """
@@ -383,7 +383,7 @@ class WorkspaceScopeManager:
         finally:
             conn.close()
 
-    def delete_workspace(self, workspace_path: Path | str) -> None:
+    def delete_workspace(self, workspace_path: Union[Path, str]) -> None:
         """
         Delete workspace configuration.
 

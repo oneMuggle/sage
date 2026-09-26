@@ -17,7 +17,7 @@ import sqlite3
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -144,7 +144,7 @@ class PluginLifecycleManager:
         conn.commit()
 
     def install(
-        self, manifest: PluginManifest, install_path: str | Path
+        self, manifest: PluginManifest, install_path: Union[str, Path]
     ) -> PluginRecord:
         """
         Install a plugin.

@@ -13,9 +13,17 @@ from __future__ import annotations
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field
+
+# Pydantic v1/v2 compatibility
+try:
+    from pydantic import field_validator, model_validator
+except ImportError:
+    # Pydantic v1 fallback
+    from pydantic import validator as field_validator  # type: ignore
+    from pydantic import root_validator as model_validator  # type: ignore
 
 
 class PluginType(str, Enum):
@@ -45,7 +53,7 @@ class PluginCapability(BaseModel):
     version: str = Field(default="1.0.0", description="能力版本", pattern=r"^\d+\.\d+\.\d+$")
 
     # 可选配置
-    entry_point: str | None = Field(
+    entry_point: Optional[str] = Field(
         default=None, description="入口点（工具函数名/技能文件路径/MCP 服务器路径）"
     )
     permissions: List[str] = Field(
@@ -56,7 +64,6 @@ class PluginCapability(BaseModel):
     )
 
     @field_validator("name")
-    @classmethod
     def validate_name(cls, v: str) -> str:
         """Validate capability name format."""
         if not v.replace("-", "").replace("_", "").isalnum():
@@ -71,14 +78,15 @@ class PluginDependency(BaseModel):
     version: str = Field(..., description="版本要求", pattern=r"^[\d.^~*>=]+$")
     optional: bool = Field(default=False, description="是否可选依赖")
 
-    @model_validator(mode="after")
-    def validate_version_format(self) -> PluginDependency:
+    @model_validator
+    def validate_version_format(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         """Validate version constraint format."""
+        version = values.get("version", "")
         # 支持：1.0.0, ^1.0.0, ~1.0.0, *, >=1.0.0
-        valid = self.version.replace("^", "").replace("~", "").replace("*", "").replace(">=", "")
+        valid = version.replace("^", "").replace("~", "").replace("*", "").replace(">=", "")
         if not all(c.isdigit() or c == "." for c in valid):
-            raise ValueError(f"不支持的版本格式: {self.version}")
-        return self
+            raise ValueError(f"不支持的版本格式: {version}")
+        return values
 
 
 class PluginMetadata(BaseModel):
@@ -86,10 +94,10 @@ class PluginMetadata(BaseModel):
 
     display_name: str = Field(..., description="显示名称", min_length=1, max_length=100)
     description: str = Field(default="", description="插件描述", max_length=500)
-    icon: str | None = Field(default=None, description="图标路径或 URL")
+    icon: Optional[str] = Field(default=None, description="图标路径或 URL")
     author: str = Field(default="", description="作者名称", max_length=100)
-    homepage: str | None = Field(default=None, description="主页 URL")
-    repository: str | None = Field(default=None, description="代码仓库 URL")
+    homepage: Optional[str] = Field(default=None, description="主页 URL")
+    repository: Optional[str] = Field(default=None, description="代码仓库 URL")
     license: str = Field(default="MIT", description="许可证")
     categories: List[str] = Field(
         default_factory=list, description="分类标签", max_length=10
@@ -97,7 +105,7 @@ class PluginMetadata(BaseModel):
     tags: List[str] = Field(default_factory=list, description="标签", max_length=20)
 
     # 商店信息
-    hero_image: str | None = Field(default=None, description="商店页 Hero 图")
+    hero_image: Optional[str] = Field(default=None, description="商店页 Hero 图")
     example_prompts: List[str] = Field(
         default_factory=list, description="示例提示词", max_length=5
     )
@@ -171,7 +179,6 @@ class PluginManifest(BaseModel):
     )
 
     @field_validator("name")
-    @classmethod
     def validate_plugin_name(cls, v: str) -> str:
         """Validate plugin name format."""
         if not v.replace("-", "").replace("_", "").isalnum():
@@ -180,38 +187,51 @@ class PluginManifest(BaseModel):
             raise ValueError("插件名称不能以连字符开头或结尾")
         return v.lower()
 
-    @model_validator(mode="after")
-    def validate_capabilities_unique(self) -> PluginManifest:
+    @model_validator
+    def validate_capabilities_unique(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         """Validate that capability names are unique."""
-        names = [c.name for c in self.capabilities]
+        capabilities = values.get("capabilities", [])
+        names = [c.name if hasattr(c, "name") else c.get("name") for c in capabilities]
         if len(names) != len(set(names)):
             raise ValueError("能力名称必须唯一")
-        return self
+        return values
 
-    @model_validator(mode="after")
-    def validate_dependencies_no_self(self) -> PluginManifest:
+    @model_validator
+    def validate_dependencies_no_self(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         """Validate that plugin doesn't depend on itself."""
-        for dep in self.dependencies:
-            if dep.name == self.name:
+        name = values.get("name", "")
+        dependencies = values.get("dependencies", [])
+        for dep in dependencies:
+            dep_name = dep.name if hasattr(dep, "name") else dep.get("name")
+            if dep_name == name:
                 raise ValueError("插件不能依赖自身")
-        return self
+        return values
 
     def to_json(self, indent: int = 2) -> str:
         """Serialize manifest to JSON string."""
-        return self.model_dump_json(indent=indent)
+        # Pydantic v1/v2 compatibility
+        if hasattr(self, "model_dump_json"):
+            return self.model_dump_json(indent=indent)
+        return self.json(indent=indent)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize manifest to dictionary."""
-        return self.model_dump()
+        # Pydantic v1/v2 compatibility
+        if hasattr(self, "model_dump"):
+            return self.model_dump()
+        return self.dict()
 
     @classmethod
     def from_json(cls, json_str: str) -> PluginManifest:
         """Deserialize manifest from JSON string."""
         data = json.loads(json_str)
-        return cls.model_validate(data)
+        # Pydantic v1/v2 compatibility
+        if hasattr(cls, "model_validate"):
+            return cls.model_validate(data)
+        return cls.parse_obj(data)
 
     @classmethod
-    def from_file(cls, path: Path | str) -> PluginManifest:
+    def from_file(cls, path: Union[Path, str]) -> PluginManifest:
         """Load manifest from plugin.json file."""
         path = Path(path)
         if not path.exists():
@@ -222,9 +242,12 @@ class PluginManifest(BaseModel):
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
 
-        return cls.model_validate(data)
+        # Pydantic v1/v2 compatibility
+        if hasattr(cls, "model_validate"):
+            return cls.model_validate(data)
+        return cls.parse_obj(data)
 
-    def save(self, path: Path | str) -> None:
+    def save(self, path: Union[Path, str]) -> None:
         """Save manifest to plugin.json file."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -233,7 +256,7 @@ class PluginManifest(BaseModel):
             json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
 
 
-def validate_plugin_manifest(manifest_path: Path | str) -> tuple[bool, List[str]]:
+def validate_plugin_manifest(manifest_path: Union[Path, str]) -> tuple[bool, List[str]]:
     """
     Validate a plugin manifest file.
 
