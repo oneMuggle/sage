@@ -1222,6 +1222,14 @@ export const zh = {
   'todos.title': '待办事项',
   'todos.create': '新建待办',
   'todos.empty': '暂无待办',
+
+  // ─── Git 侧边栏面板 (ZCode 对标) ─────
+  'git.title': 'Git',
+  'git.not_a_repo': '非 Git 仓库',
+  'git.no_project': '无项目',
+  'git.refresh': '刷新',
+  'git.loading': '加载中…',
+  'git.clean': '工作区干净',
 } as const;
 
 export type TranslationKey = keyof typeof zh;

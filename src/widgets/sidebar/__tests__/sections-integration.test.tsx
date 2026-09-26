@@ -173,7 +173,7 @@ describe('Sidebar Sections Integration', () => {
 
     await waitFor(() => {
       const sections = container.querySelectorAll('[data-section-key]');
-      expect(sections.length).toBe(5);
+      expect(sections.length).toBe(6);
     });
   });
 

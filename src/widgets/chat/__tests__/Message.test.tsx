@@ -56,16 +56,15 @@ describe('Message', () => {
     // Act
     const { container } = renderWithI18n(<Message message={msg} />);
 
-    // Assert — 人性化标题 + 保留原始工具名(调试用)
+    // Assert — 人性化标题 + 文件名（专用渲染器不显示原始工具名）
     expect(container.textContent).toContain('Write');
     expect(container.textContent).toContain('src/App.tsx');
-    expect(container.textContent).toContain('write_file');
     // 原始 args JSON dump 不再渲染（write_file 的 content 会撑爆卡片）
     expect(container.textContent).not.toContain('export {}');
     expect(container.textContent).not.toContain('{"path"');
   });
 
-  it('shows external scope chip for web tools (U8)', () => {
+  it('shows search tool card for web tools (ZCode-inspired)', () => {
     const msg: MessageType = {
       id: '1',
       session_id: 's',
@@ -77,7 +76,6 @@ describe('Message', () => {
     const { container } = renderWithI18n(<Message message={msg} />);
     expect(container.textContent).toContain('Search');
     expect(container.textContent).toContain('tauri v2');
-    expect(container.textContent).toContain('external');
   });
 
   it('applies error style when content starts with [错误', () => {
