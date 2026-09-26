@@ -2,7 +2,7 @@ import { create } from 'zustand';
 
 import { saveCurrentSessionId } from '../../entities/session/storage';
 import { invoke } from '../api/desktopInvoke';
-import type { MessageSource, RagCitation } from '../api/types';
+import type { GenerationStats, MessageSource, RagCitation } from '../api/types';
 import { clientLogger } from '../log/client';
 
 // Re-export API modules for convenience
@@ -106,6 +106,10 @@ export interface Message {
   step_index?: number | null;
   /** Task 5 (2026-09-17): 消息子类型 —— 'topic_separator' 渲染为分隔线。 */
   subtype?: string | null;
+  /** 第二轮 B2: LLM 终止原因（DONE 事件 / get_messages 回读）；length = 被输出上限截断 */
+  finish_reason?: string | null;
+  /** 第二轮 C1: 终稿生成统计（DONE 事件 / get_messages 回读） */
+  generation_stats?: GenerationStats | null;
 }
 
 // 状态接口

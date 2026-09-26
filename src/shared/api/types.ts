@@ -507,6 +507,14 @@ export interface TodoSnapshotEvent {
   todos: TodoItem[];
 }
 
+/** 第二轮 C1: 终稿生成统计（毫秒 / tokens；拿不到的项省略） */
+export interface GenerationStats {
+  input_tokens?: number;
+  output_tokens?: number;
+  first_token_ms?: number;
+  latency_ms?: number;
+}
+
 /** 流式聊天事件 (NDJSON 协议的一行) */
 export interface AgentEvent {
   state: AgentState;
@@ -523,6 +531,10 @@ export interface AgentEvent {
   message_id?: string;
   /** 首轮对话标记: 标题将在后台生成, 前端稍后补刷侧栏 (2026-09) */
   title_pending?: boolean;
+  /** 第二轮 B2: DONE 携带的 LLM 终止原因（length = 触达输出上限被截断） */
+  finish_reason?: string;
+  /** 第二轮 C1: DONE 携带的终稿生成统计（tokens / 首字延迟 / 总耗时） */
+  generation_stats?: GenerationStats;
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
   /** M1: state === 'permission_request' 时携带的审批请求详情 */
@@ -649,6 +661,8 @@ export interface ChatConfig {
    * topic_separator 并清空 LLM 历史窗口，实现"新话题"显式分界。
    */
   contextReset?: boolean;
+  /** 第二轮 C2: 原位重新生成 —— 锚点 user 消息 id（后端不再落 user 消息） */
+  regenerateOf?: string;
 }
 
 // ==================== Memory 类型定义 ====================

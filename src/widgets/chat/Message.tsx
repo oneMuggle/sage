@@ -33,13 +33,18 @@ import type { BlockedAction, Message as MessageType, ToolCall } from '../../shar
 import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { AnswerVersionSwitcher } from './AnswerVersionSwitcher';
 import { BlockedCard } from './BlockedCard';
 import { CompactBanner } from './CompactBanner';
+import { GenerationStatsBadge } from './GenerationStatsBadge';
 import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
+import { ReadAloudButton } from './ReadAloudButton';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
+import { TruncationNotice } from './TruncationNotice';
 import { FileChangeCards } from './changes/FileChangeCard';
+import { resolveToolRenderer } from './toolRenderers';
 
 interface MessageProps {
   message: MessageType;
@@ -60,6 +65,10 @@ interface MessageProps {
   onQuote?: (message: MessageType) => void;
   /** P0-1: 将此条消息内容保存到长期记忆 */
   onSaveToMemory?: (message: MessageType) => void;
+  /** 第二轮 B2: 截断回答的「继续生成」（MessageList 只传给会话最后一条消息） */
+  onContinue?: () => void;
+  /** 第二轮 C2: 回答版本切换后的回调（MessageList 只传给会话最后一条消息） */
+  onAnswerVersionChange?: () => void;
   /** right-panel R1 批次 B: tool_call_id → 产物[] 映射 —— 命中的工具卡片
    * 下渲染内联产物 chip，点击直达右侧面板产物预览（对齐 Claude） */
   artifactsByToolCall?: Record<string, Artifact[]>;
@@ -428,6 +437,8 @@ function MessageComponent({
   onDelete,
   onQuote,
   onSaveToMemory,
+  onContinue,
+  onAnswerVersionChange,
   artifactsByToolCall,
   onBlockedAction,
 }: MessageProps) {
@@ -605,6 +616,66 @@ function MessageComponent({
               // 点击面板按钮直达右侧变更 Tab）
               const changePaths = message.session_id ? fileChangePaths(tc) : [];
               const isBlocked = Boolean(tc.metadata?.blockReason);
+              const SpecializedRenderer = resolveToolRenderer(tc.name);
+
+              // Artifact chips / image / media refs — 无论是否使用专用渲染器都渲染
+              const extras = (
+                <>
+                  {tc.id && artifactsByToolCall?.[tc.id]?.length ? (
+                    <div className="flex flex-wrap gap-1 px-2 pb-1.5">
+                      {artifactsByToolCall[tc.id].map((art) => (
+                        <button
+                          key={art.id}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-[11px] text-primary transition-colors"
+                          onClick={() => useRightPanelStore.getState().selectArtifact(art.id)}
+                          title="在右侧面板中查看"
+                          data-testid="message-artifact-chip"
+                        >
+                          <FileText className="w-3 h-3 shrink-0" />
+                          <span className="truncate max-w-48">{art.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {hasImage && (
+                    <div className="px-2 pb-2">
+                      <img
+                        src={tc.metadata!.imageData}
+                        alt={`Diagram from ${tc.name}`}
+                        className="max-w-full rounded border border-border"
+                        style={{ maxHeight: '400px', backgroundColor: '#ffffff' }}
+                      />
+                    </div>
+                  )}
+                  {tc.metadata?.mediaRefs && tc.metadata.mediaRefs.length > 0 && (
+                    <div className="px-2 pb-2">
+                      {tc.metadata.mediaRefs.map((ref, refIdx) => (
+                        <MediaAttachment
+                          key={ref.id || refIdx}
+                          url={ref.api_url ?? `/api/v1/media/${ref.id}`}
+                          mimeType={ref.mime_type}
+                          caption={`${ref.kind} — ${ref.source || tc.name}`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+
+              // 专用渲染器（ZCode-inspired） — 替代通用卡片头部+结果区
+              if (SpecializedRenderer && !isBlocked) {
+                return (
+                  <div key={`${tc.name}-${idx}`} className="flex flex-col gap-1.5">
+                    <SpecializedRenderer tc={tc} />
+                    {changePaths.length > 0 && (
+                      <FileChangeCards sessionId={message.session_id} paths={changePaths} />
+                    )}
+                    {extras}
+                  </div>
+                );
+              }
+
+              // 通用卡片（未注册专用渲染器 or 被拦截时走旧路径）
               return (
                 <div
                   key={`${tc.name}-${idx}`}
@@ -637,48 +708,7 @@ function MessageComponent({
                       <ToolCallResult result={tc.result} />
                     </div>
                   )}
-                  {/* right-panel R1 批次 B: 该工具调用落库的产物 chip ——
-                      点击直达右侧面板产物预览（selectArtifact：开面板+切产物Tab+选中） */}
-                  {tc.id && artifactsByToolCall?.[tc.id]?.length ? (
-                    <div className="flex flex-wrap gap-1 px-2 pb-1.5">
-                      {artifactsByToolCall[tc.id].map((art) => (
-                        <button
-                          key={art.id}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-[11px] text-primary transition-colors"
-                          onClick={() => useRightPanelStore.getState().selectArtifact(art.id)}
-                          title="在右侧面板中查看"
-                          data-testid="message-artifact-chip"
-                        >
-                          <FileText className="w-3 h-3 shrink-0" />
-                          <span className="truncate max-w-48">{art.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                  {/* Inline image preview for diagram tools */}
-                  {hasImage && (
-                    <div className="px-2 pb-2">
-                      <img
-                        src={tc.metadata!.imageData}
-                        alt={`Diagram from ${tc.name}`}
-                        className="max-w-full rounded border border-border"
-                        style={{ maxHeight: '400px', backgroundColor: '#ffffff' }}
-                      />
-                    </div>
-                  )}
-                  {/* Phase 4 (2026-09-12): multimodal tool output (TTS/image generation) */}
-                  {tc.metadata?.mediaRefs && tc.metadata.mediaRefs.length > 0 && (
-                    <div className="px-2 pb-2">
-                      {tc.metadata.mediaRefs.map((ref, refIdx) => (
-                        <MediaAttachment
-                          key={ref.id || refIdx}
-                          url={ref.api_url ?? `/api/v1/media/${ref.id}`}
-                          mimeType={ref.mime_type}
-                          caption={`${ref.kind} — ${ref.source || tc.name}`}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  {extras}
                 </div>
               );
             })}
@@ -813,7 +843,9 @@ function MessageComponent({
                 {ragCitations.map((c, i) => (
                   <div key={`rag-${c.media_id}-${i}`} className="space-y-0.5">
                     <div className="flex items-start gap-1.5">
-                      <span className="text-muted flex-shrink-0 font-mono">[{ragOffset + i + 1}]</span>
+                      <span className="text-muted flex-shrink-0 font-mono">
+                        [{ragOffset + i + 1}]
+                      </span>
                       <span className="text-text-secondary font-mono break-all">
                         {c.filename || c.media_id}
                       </span>
@@ -838,15 +870,17 @@ function MessageComponent({
                 {wikiSources.map((s, i) => (
                   <div key={`wiki-${s.path}-${i}`} className="space-y-0.5">
                     <div className="flex items-start gap-1.5">
-                      <span className="text-muted flex-shrink-0 font-mono">[{wikiOffset + i + 1}]</span>
-                      <span className="text-text-secondary font-mono break-all">{s.title || s.path}</span>
+                      <span className="text-muted flex-shrink-0 font-mono">
+                        [{wikiOffset + i + 1}]
+                      </span>
+                      <span className="text-text-secondary font-mono break-all">
+                        {s.title || s.path}
+                      </span>
                       {s.score != null && (
                         <span className="text-muted flex-shrink-0">({s.score.toFixed(2)})</span>
                       )}
                     </div>
-                    {s.snippet && (
-                      <div className="pl-5 text-muted break-all">{s.snippet}</div>
-                    )}
+                    {s.snippet && <div className="pl-5 text-muted break-all">{s.snippet}</div>}
                   </div>
                 ))}
               </div>
@@ -860,7 +894,9 @@ function MessageComponent({
                 {webSources.map((s, i) => (
                   <div key={`web-${s.url}-${i}`} className="space-y-0.5">
                     <div className="flex items-start gap-1.5">
-                      <span className="text-muted flex-shrink-0 font-mono">[{webOffset + i + 1}]</span>
+                      <span className="text-muted flex-shrink-0 font-mono">
+                        [{webOffset + i + 1}]
+                      </span>
                       {s.url ? (
                         <a
                           href={s.url}
@@ -874,9 +910,7 @@ function MessageComponent({
                         <span className="text-text-secondary break-all">{s.title}</span>
                       )}
                     </div>
-                    {s.snippet && (
-                      <div className="pl-5 text-muted break-all">{s.snippet}</div>
-                    )}
+                    {s.snippet && <div className="pl-5 text-muted break-all">{s.snippet}</div>}
                   </div>
                 ))}
               </div>
@@ -890,14 +924,14 @@ function MessageComponent({
                 {mcpSources.map((s, i) => (
                   <div key={`tool-${s.server}-${s.tool}-${i}`} className="space-y-0.5">
                     <div className="flex items-start gap-1.5">
-                      <span className="text-muted flex-shrink-0 font-mono">[{toolOffset + i + 1}]</span>
+                      <span className="text-muted flex-shrink-0 font-mono">
+                        [{toolOffset + i + 1}]
+                      </span>
                       <span className="px-1 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 flex-shrink-0">
                         {s.server}/{s.tool}
                       </span>
                     </div>
-                    {s.preview && (
-                      <div className="pl-5 text-muted break-all">{s.preview}</div>
-                    )}
+                    {s.preview && <div className="pl-5 text-muted break-all">{s.preview}</div>}
                   </div>
                 ))}
               </div>
@@ -937,6 +971,11 @@ function MessageComponent({
           </div>
         )}
 
+        {/* 第二轮 B2: 触达输出上限被截断时提示；最后一条消息附带「继续生成」 */}
+        {isAssistant && !isStreaming && (
+          <TruncationNotice finishReason={message.finish_reason} onContinue={onContinue} />
+        )}
+
         {/* Action buttons */}
         {(canCopy ||
           onFeedback ||
@@ -947,6 +986,14 @@ function MessageComponent({
           canQuote ||
           canSaveToMemory) && (
           <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
+            {/* 第二轮 C2: 最后一轮的回答版本切换 ‹ 2/3 › */}
+            {isAssistant && onAnswerVersionChange && !isStreaming && (
+              <AnswerVersionSwitcher
+                sessionId={message.session_id}
+                messageId={message.id}
+                onChanged={onAnswerVersionChange}
+              />
+            )}
             {canCopy && (
               <button
                 onClick={copyToClipboard}
@@ -957,6 +1004,10 @@ function MessageComponent({
               >
                 {copied ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
               </button>
+            )}
+            {/* 第二轮 B1: 朗读（不支持 speechSynthesis 时按钮自行隐藏） */}
+            {canCopy && isAssistant && (
+              <ReadAloudButton messageId={message.id} content={message.content} />
             )}
             {onFeedback && (
               <>
@@ -1039,6 +1090,10 @@ function MessageComponent({
                 <Brain className="w-4 h-4" />
               </button>
             )}
+            {/* 第二轮 C1: 生成速度统计（右对齐，悬停看明细） */}
+            {isAssistant && !isStreaming && (
+              <GenerationStatsBadge stats={message.generation_stats} />
+            )}
           </div>
         )}
       </div>
@@ -1052,6 +1107,8 @@ export const Message = memo(MessageComponent, (prev, next) => {
   return (
     prev.message === next.message &&
     prev.isStreaming === next.isStreaming &&
+    prev.onContinue === next.onContinue &&
+    prev.onAnswerVersionChange === next.onAnswerVersionChange &&
     prev.onFeedback === next.onFeedback &&
     prev.knowledgeRefs === next.knowledgeRefs &&
     prev.attachments === next.attachments &&

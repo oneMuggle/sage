@@ -85,6 +85,7 @@ from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.diagnostic_routes import router as diagnostic_router
 from backend.api.embedder_routes import router as embedder_router
 from backend.api.export_routes import router as export_router
+from backend.api.git_status_routes import router as git_status_router
 from backend.api.hex_routes import router as hex_router
 from backend.api.hooks_routes import router as hooks_router
 from backend.api.legacy_routes import router as legacy_router
@@ -965,6 +966,8 @@ from backend.api.gateway_routes import router as gateway_router
 app.include_router(gateway_router, prefix="/api/v1")
 register_office_exception_handlers(app)
 app.include_router(workspace_router, prefix="/api/v1")
+# ZCode-inspired: /api/v1/git/status?path=<workspace> 侧边栏 Git 状态面板
+app.include_router(git_status_router, prefix="/api/v1")
 # 会话级 worktree 模式 (2026-09-18): /api/v1/sessions/{id}/worktree[...]
 app.include_router(worktree_router, prefix="/api/v1")
 # 项目模块 P1 (2026-09-13): /api/v1/projects 最近项目注册表 + 项目内会话

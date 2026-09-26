@@ -18,7 +18,7 @@
 | 一个数据丢失型 bug | 「引用到对话」**覆盖**输入框里已输入的草稿（`setValue(injectedDraft.text)`），先打字再引用会丢字 |
 | 对标差距 | ChatGPT Web/iOS 的"选中文本 → Ask ChatGPT"、主流 IM/AI 应用的"搜索命中直达 + 短暂高亮"，Sage 均缺失 |
 | 本轮交付（P0） | A1 消息定位基础设施 · A2 大纲点击直达标题 · A3 搜索命中直达并高亮 · A4 划词引用追问 · A5 引用改为追加、不再覆盖草稿 |
-| 后续建议（P1/P2） | 消息朗读、截断提示 + 继续生成、命中词高亮、会话内查找、生成速度统计、回答版本切换（§3.2） |
+| 第二轮（P1/P2，§10） | 按优先级实施：P1 消息朗读、截断提示 + 继续生成、命中词高亮、会话内查找；P2 生成速度统计、回答版本切换、端点离线提示；两批均已合并到 `main` 与 `release/win7`（§10.8） |
 
 ---
 
@@ -79,7 +79,7 @@
 - **尾窗渲染**：扩窗只在定位时发生；定位完成后窗口保持扩大后的大小（否则目标消息会被立刻卸载），切会话时照常重置。
 - **性能**：选区检测只挂 `mouseup` / `keyup` / `selectionchange`，用 `requestAnimationFrame` 合批；不引入新依赖。
 
-### 3.2 P1 / P2（建议后续轮次）
+### 3.2 P1 / P2（第二轮实施，见 §10）
 
 | 级别 | 编号 | 名称 | 说明 |
 | --- | --- | --- | --- |
@@ -292,3 +292,287 @@ MessageList（每次 messages / pending 变化）
    https://github.com/openai/codex/issues/32159
 4. ChatGPT Chat Navigator（第三方）— 点击直达消息并短暂标记
    https://gptspeedbooster.com/chatgpt-chat-navigator/
+5. MDN — Web Speech API（`speechSynthesis` / `SpeechSynthesisUtterance`）
+   https://developer.mozilla.org/docs/Web/API/Web_Speech_API
+6. MDN — CSS Custom Highlight API（`CSS.highlights` / `::highlight()`）
+   https://developer.mozilla.org/docs/Web/API/CSS_Custom_Highlight_API
+
+---
+
+## 10. 第二轮：P1 / P2 实施
+
+> 日期: 2026-09-26 · 基线: `origin/main` @ `6a77dc3b5`（#1609）
+> 批次: P1（B1–B4）→ P2（C1–C3）。每批 main 合并后 cherry-pick 到 `release/win7`，流程同 §5。
+> P1 工作分支: `feat/chat-reading-p1-main`（worktree `.worktrees/feat-chat-reading-p1-main`）。
+> P2 工作分支: `feat/chat-reading-p2-main`（worktree `.worktrees/feat-chat-reading-p2-main`）；win7 对齐分支
+> `feat/chat-reading-p1-win7` / `feat/chat-reading-p2-win7`。四个工作树已在步骤 8 清理（§10.7.7）。
+
+### 10.1 范围与批次
+
+| 批次 | 编号 | 名称 | 前端 | 后端 |
+| --- | --- | --- | --- | --- |
+| P1 | B1 | 消息朗读 | ✓ | — |
+| P1 | B2 | 截断提示 + 继续生成 | ✓ | ✓ `finish_reason` 透传并落库 |
+| P1 | B3 | 搜索命中词高亮 | ✓ | — |
+| P1 | B4 | 会话内查找 | ✓ | — |
+| P2 | C1 | 生成速度统计 | ✓ | ✓ 用量与耗时透传并落库 |
+| P2 | C2 | 回答版本切换 | ✓ | ✓ 同一位置保存多个回答版本 |
+| P2 | C3 | 端点离线提示 | ✓ | —（按失败事件的错误类型判定，不新增接口） |
+
+P2 的详细设计在 P1 合并后补入 §10.6：先对照当时的代码核实，再定稿。
+
+### 10.2 代码核实（第二轮新增证据）
+
+| 事实 | 位置 | 影响 |
+| --- | --- | --- |
+| `messages` 表从建表起就有 `finish_reason` / `input_tokens` / `output_tokens` / `total_tokens` / `latency_ms` 列，但仓储的 `Message` 数据类没有这些字段，读写都不经过它们 | `backend/data/database.py`、`backend/data/session_repo.py` | B2 / C1 不需要数据库迁移，补齐仓储映射即可 |
+| 流式和非流式 LLM 响应都带 `finish_reason` | `backend/core/legacy/llm_client.py` | agent 在终稿 DONE 事件里带上即可 |
+| DONE 事件由 `AgentEvent.to_dict()` 序列化，经 producer 转发给前端 | `backend/core/legacy/agent_state.py`、`backend/api/legacy_routes.py` | 新增可选字段对旧前端透明 |
+| 流结束后前端会 `loadMessages` 对账，以服务端数据为准 | `src/features/send-message/useChat.ts` | 截断标记必须落库，否则对账后丢失 |
+| `Ctrl+F` 由 `Layout.tsx` 全局派发 `sage:focus-search`；`Ctrl+K` 是命令面板；`Ctrl+Shift+F` 没有占用 | `src/widgets/layout/Layout.tsx`、`src/App.tsx`、`src/shared/lib/shortcuts.ts` | B4 键位见 §10.3 |
+| 两条分支都是 Electron 21（Chromium 106）：`speechSynthesis`（Windows 走本地 SAPI 语音）和 CSS Custom Highlight API（Chromium 105+）都可用 | — | B1 / B3 / B4 不需要 polyfill；做特性检测，不支持时隐藏入口或不高亮 |
+| `Chat.tsx`、`Message.tsx`、`zh.ts` / `en.ts`、`types.ts` 等已在架构基线上，而且没有余量 | `architecture-baseline.json` | 新逻辑放进新模块，尽量不让基线文件增长；确需增长时按棘轮协议更新基线并在 PR 说明 |
+
+### 10.3 B4 键位决策
+
+- 聊天页有消息时，`Ctrl/Cmd+F` 打开「会话内查找」栏，与浏览器、VS Code、Telegram 的「在当前视图中查找」一致。
+- `Ctrl/Cmd+Shift+F` 始终聚焦侧栏的会话搜索（跨会话检索）。
+- 查找栏没有挂载时（其他页面、空会话），`Ctrl/Cmd+F` 保持原来的行为（聚焦会话搜索），非聊天页的使用习惯不变。
+- 实现上不做路由判断：`Layout` 先派发可取消的 `sage:open-chat-find` 事件，查找栏处理后调用 `preventDefault()`；没有被处理就回落为 `sage:focus-search`。
+- 快捷键帮助（`src/shared/lib/shortcuts.ts`）同步更新。
+
+### 10.4 P1 设计
+
+**B1 消息朗读**
+
+- 纯函数模块 `speech.ts`：把 Markdown 转成朗读文本（代码块换成「代码已略过」提示，链接只保留文字，去掉标记符号）；按句切成不超过 180 字的片段依次排队朗读，避开 Chromium 朗读长句中途停止的问题；按汉字占比选择 `zh-CN` 或 `en-US`，并优先使用同语种的本地语音。
+- 全局单例 `readAloudStore`：同一时刻只朗读一条消息；再次点击即停止；正在朗读的消息被卸载（切换会话、删除）时自动停止。
+- assistant 消息操作栏新增「朗读 / 停止朗读」按钮；环境不支持 `speechSynthesis` 时不渲染。
+
+**B2 截断提示 + 继续生成**
+
+- 后端：`AgentEvent` 新增可选字段 `finish_reason`，agent 的终稿 DONE 事件从 LLM 响应带出；producer 把它写入 `messages.finish_reason`；仓储 `Message` 补齐该字段（读、写、分叉复制）。
+- 前端：`Message` 类型新增 `finish_reason`；收到 DONE 时先写进本地消息，对账后以服务端为准。值为 `length`（兼容 `max_tokens`）时，在气泡下方提示「回答达到长度上限，已被截断」。
+- 如果被截断的是会话最后一条消息，同时给出「继续生成」按钮：发送一条「从中断处继续」的续写消息（对标 ChatGPT 的 Continue generating）。原消息不改写，历史可以追溯。
+
+**B3 搜索命中词高亮**
+
+- `messageJumpStore` 的定位请求新增 `highlightQuery`；从侧栏搜索命中直达时带上搜索词。
+- 定位完成后，用 CSS Custom Highlight API 在目标消息正文（`[data-quote-scope]`）里高亮全部命中，约 8 秒后自动清除。不改 DOM，不影响 React 渲染和复制。
+- 匹配方式：把正文的文本节点拼起来，做不区分大小写的字面匹配，所以能跨过加粗等行内标记。
+- 后端全文检索按词命中，多个词可以不相邻：整句没有字面命中时，退回逐词高亮。
+
+**B4 会话内查找**
+
+- 查找栏包含输入框、`n/m` 计数、上一个 / 下一个和关闭按钮，固定在消息区右上角；搜索范围是当前会话的全部消息，包括尾窗外还没渲染的。
+- 计数基于去掉 Markdown 标记后的消息文本。定位复用 A1 通道（`highlightQuery` + `highlightIndex`）：自动扩窗并滚动到当前命中；当前命中用醒目色，其他已渲染的命中用浅色。
+- 顺序符合聊天习惯：打开时停在最新（最靠下）的命中；`Enter` 或 ↑ 按钮跳到更早的命中，`Shift+Enter` 或 ↓ 按钮跳到更新的命中；`Esc` 关闭并清除高亮。查找栏已打开时再按 `Ctrl/Cmd+F` 会重新聚焦并全选输入框；关闭后再打开从空白开始。
+- 输入有 150ms 防抖，防抖生效前按 `Enter` 会立即提交查找词；输入法组词中的 `Enter` / `Esc` 不触发查找操作。
+- 已知限制：计数基于去掉标记后的源文本，高亮基于渲染后的 DOM。公式、Mermaid 图这类渲染后文字与源码不同的内容，两者可能对不上；对不上时滚动到消息本身，不高亮。
+
+### 10.5 验证矩阵（P1）
+
+| 层 | 内容 |
+| --- | --- |
+| 前端单测 | `speech` 纯函数、`readAloudStore`（排队 / 停止 / 互斥）、朗读按钮；截断提示与继续生成；`textHighlight`（跨节点匹配、特性检测降级）；会话内查找的计数与排序；查找栏交互（打开 / 计数 / 跳转 / 关闭）；`Layout` 键位回落；侧栏命中带上搜索词 |
+| 后端单测 | `AgentEvent.to_dict` 带 `finish_reason`；agent DONE 透传；仓储读写与分叉复制 `finish_reason` |
+| 回归 | chat / sidebar / layout / i18n 相关测试目录；后端 `session_repo`、agent、legacy chat 相关用例 |
+| 静态 | 改动文件 eslint、全量 `tsc --noEmit`、`ruff check backend/`、`architecture-check` |
+| CI | main 与 win7 的必需检查全部通过（同 §6） |
+
+### 10.6 P2 设计
+
+> 基线：合并 #1619 后的 `origin/main` @ `a3c16668e`。实施顺序 C1 → C3 → C2（C2 改动最大，放最后）。
+
+**代码核实（P2 新增证据）**
+
+| 事实 | 位置 | 影响 |
+| --- | --- | --- |
+| `usage_events` 表预留了 `first_token_ms` / `latency_ms` 列，`usage_tracker.record` 也接受这两个参数，但 LLM 客户端从未传入 | `backend/services/usage_tracker.py`、`backend/core/legacy/llm_client.py` | C1 在流式请求里计时，顺带补齐用量统计的这两列 |
+| 流式请求带 `stream_options.include_usage`，终值 `LLMResponse` 有输入 / 输出 tokens | `llm_client.py` | 速度用上游返回的 completion_tokens 计算；上游不返回时不显示速度 |
+| 失败事件的 `error` 是 `LLMError.to_dict()`（`type` 为 `network_error` / `timeout` / `server_error` 等），但 `chatApi` 只取 message 往上抛 | `backend/core/errors.py`、`src/shared/api/chatApi.ts` | C3 在 `chatApi` 按错误类型判定「端点不可达」 |
+| `BackendStatusBanner` 只管本机后端进程；云端端点不可达时只有单条消息下的报错 | `src/widgets/system/BackendStatusBanner.tsx` | C3 新增独立的全局提示条 |
+| 重新生成 = 分叉到原问题之前再重发，侧栏每次多出一个会话 | `src/pages/Chat.tsx` `handleRegenerate` | C2 把最后一轮改为原位重新生成 |
+| 模型可见历史从 `session_events` 事件日志投影；`message.deleted` 宣告的 id 永久排除（日志里 id 不复用） | `backend/chat/event_projection.py`、`backend/data/session_event_repo.py` | C2 归档旧回答要写删除事件；恢复版本必须以新 id 重新插入 |
+| 本轮 user 消息在加载历史之后才落库；`client_message_id` 幂等复用只覆盖同 id 重试 | `backend/api/legacy_routes.py` producer | C2 的重新生成请求要跳过 user 落库，并从历史里剔除该 user 消息，否则上下文里会出现两遍 |
+
+**C1 生成速度统计**
+
+- 后端：流式请求记录开始时间和第一个内容 / 推理增量到达的时间，得到 `first_token_ms`（首字延迟）和 `latency_ms`（总耗时），写入 `usage_events` 的预留列，并挂到 `LLMResponse` 上；非流式请求只有 `latency_ms`。
+- agent 的终稿 DONE 事件新增 `generation_stats`（`input_tokens` / `output_tokens` / `first_token_ms` / `latency_ms`，缺失项省略）；producer 把它写入 assistant 行的新列 `messages.generation_stats`（JSON，老库启动时自动加列）；仓储负责读写和分叉复制。
+- 前端：收到 DONE 时写进本地消息，对账后以服务端为准。assistant 操作栏右侧显示「42.3 tok/s · 首字 0.82s · 1,234 tokens」，悬停显示输入 / 输出 tokens、首字延迟和总耗时。速度 = 输出 tokens ÷（总耗时 − 首字延迟）；上游没有返回用量时只显示耗时。
+- 只统计终稿那一次 LLM 调用；多步工具调用的中间步骤不计入。
+
+**C3 端点离线提示**
+
+- 判定：流式失败且错误类型是 `network_error`、`timeout`，或 `server_error` 且状态码为 502 / 503 / 504 时，记为「端点不可达」；之后任意一次成功完成即清除。系统断网（`navigator.onLine === false`）单独提示。
+- 展示：标题栏下方的全局提示条，所有页面都能看到，写明端点主机名和模型。按钮：「重新检测」（请求端点的模型列表接口，不消耗 token，成功即清除）、「端点设置」、关闭。用户换成别的对话端点后，旧端点的提示自动隐藏。
+- 不做后台定时探测，避免空耗请求；系统恢复联网时自动重新检测一次。
+
+**C2 回答版本切换**
+
+- 范围：只对会话的最后一轮生效。在最后一轮任一 assistant 气泡上点「重新生成」时原位重跑；更早的轮次仍沿用分叉会话（原位切换要连带替换后面的全部消息，不在本轮范围内）。
+- 存储：新表 `message_versions(id, session_id, anchor_id, rows_json, generated_at, archived_at)`。`anchor_id` 是本轮的 user 消息；`rows_json` 是该版本全部消息行的原样快照（`SELECT *`，恢复时按当前表的列回填）。会话删除时级联删除。
+- 流程：
+  1. 前端在本地移除旧回答，以 `regenerate_of=<锚点 id>` 发起流式请求。后端先校验锚点是最后一条 user 消息（否则 409，不占用 stream slot），然后不再落 user 消息，历史投影里剔除锚点和旧回答，跳过自动话题检测。
+  2. 旧回答在本轮**第一次落库之前**才归档（`ArchiveOnFirstSave` 包装仓储：删除旧行并写 `message.deleted` 事件，同步 `message_count`）。所以只有重新生成真的产出了内容（或被用户中断、留下 partial）时才替换旧回答；失败且没有任何落库时旧回答原样保留，前端流结束对账后重新显示。
+  3. 最后一条 assistant 消息的操作栏显示 `‹ 2/3 ›`。`GET /sessions/{id}/answer-versions` 列出版本（按版本首行时间排序，当前显示的版本也算一个）；切换时调 `POST /sessions/{id}/answer-versions/{version_id}/activate`：当前回答先归档为版本，目标版本的消息行以新 id 重新插入（同样写 `message.appended` 事件，保持「模型可见 ⟺ 已记录」），然后前端重拉消息。
+- 继续对话之后，之前那一轮的其他版本不再提供切换入口（数据保留）。演示模式没有后端，仍走分叉会话的旧行为。
+- 已知限制：重新生成只重发文字，原消息的图片 / 附件不会再次附带（与现有分叉式重新生成一致）。
+
+**验证矩阵（P2）**
+
+| 层 | 内容 |
+| --- | --- |
+| 前端单测 | 速度计算与格式化、统计展示；端点状态的判定 / 清除 / 端点切换后隐藏、提示条交互（重新检测成功与失败、断网、关闭）、`chatApi` 失败事件上报；版本 API 封装、版本切换器（翻页 / 边界禁用 / 单版本隐藏 / 切换失败提示）、原位重新生成（最后一轮走原位，更早轮次和演示模式走分叉）、`MessageList` 只把切换回调交给最后一条消息、`useChat` 的 `regenerateOf` 不追加 user 消息 |
+| 后端单测 | 流式计时与 `usage_tracker` 参数；`AgentEvent.generation_stats`；仓储 `generation_stats` 读写与分叉复制；版本归档 / 列出 / 激活（事件日志、`message_count`、新 id、非最后一轮拒绝）；`/chat/stream` 集成：生成统计落库、`regenerate_of`（不落 user、发给模型的历史里 user 消息只出现一次且不含旧回答、失败保留旧回答、更早轮次 409）、版本切换接口 |
+| 回归 / 静态 / CI | 同 §10.5 |
+
+### 10.7 进度日志（第二轮，每完成一步即回填）
+
+| # | 时间（UTC+8） | 步骤 | 状态 | 证据 / 产物 |
+| --- | --- | --- | --- | --- |
+| 1 | 2026-09-26 08:24 | 新建 P1 工作树 | ✅ 完成 | `scripts/worktree.sh new feat/chat-reading-p1-main --base origin/main` → `.worktrees/feat-chat-reading-p1-main`（端口 8783/1438）；`npm ci` 在工作树内独立安装依赖 |
+| 2 | 2026-09-26 08:50 | 代码核实 + P1 方案定稿（§10.1–§10.5） | ✅ 完成 | 本文件；登记 `docs/plans/2026-09-26_chat-reading-nav-r2.md` |
+| 3 | 2026-09-26 09:26 | P1 实施 + 本地验证 | ✅ 完成 | 见 §10.7.1：新增 9 个前端模块、9 个前端测试文件、1 个后端测试文件；受影响文件 eslint 0 错误，全量 `tsc --noEmit` 0 错误，`ruff check backend/` 通过，`architecture-check` 通过（6 个基线文件按棘轮协议上调） |
+| 4 | 2026-09-26 09:53 | P1 main PR → CI 全绿 → 合并 | ✅ 完成 | [#1619](https://github.com/oneMuggle/sage/pull/1619) 14 项检查通过（2 项按条件跳过）→ squash 合并为 `a3c16668e`；见 §10.7.2 |
+| 5 | 2026-09-26 10:30 | P1 cherry-pick 到 win7 → PR → CI 全绿 → 合并 | ✅ 完成 | [#1622](https://github.com/oneMuggle/sage/pull/1622) 必需的 5 项检查及 All Checks / Architecture check / count-lines 通过（3 项按条件跳过）→ squash 合并为 `315fdebca`；见 §10.7.3 |
+| 6 | 2026-09-26 11:20 | P2 设计定稿 + 实施 + 本地验证 | ✅ 完成 | 设计见 §10.6，实施记录见 §10.7.4：新增 7 个前端模块、1 个后端模块、10 个前端测试文件、3 个后端测试文件；受影响文件 eslint 0 错误，`tsc --noEmit` 0 错误，`ruff check backend/` 通过，`architecture-check` 通过（8 个基线文件按棘轮协议上调） |
+| 7 | 2026-09-26 14:03 | P2 main / win7 两条 PR 合并 | ✅ 完成 | main [#1625](https://github.com/oneMuggle/sage/pull/1625) 14 项检查通过（2 项按条件跳过）→ squash 合并为 `91dbb9420`；win7 [#1627](https://github.com/oneMuggle/sage/pull/1627) 必需的 5 项检查及 All Checks / Architecture check / count-lines 通过（3 项按条件跳过）→ squash 合并为 `8a8e5af9d`；见 §10.7.5、§10.7.6 |
+| 8 | 2026-09-26 14:05 | 清理分支与工作树 | ✅ 完成 | 见 §10.7.7：4 个工作树与本地 / 远端分支全部删除，临时文件已清理 |
+| 9 | 2026-09-26 14:07 | 回填（本 PR）→ CI → 合并 → 删除回填分支与工作树 | 🔄 本步骤 | 回填分支 `docs/chat-reading-r2-backfill`（工作树 `.worktrees/docs-chat-reading-r2-backfill`）；同时在 `docs/plans/2026-09-26_chat-reading-nav-r2.md` 补交付号；合并后删除远端分支，随后移除本地工作树与分支；首轮 CI 被 main 上 #1621 遗留的问题拖红，另开 [#1630](https://github.com/oneMuggle/sage/pull/1630) 修复 main 后 rebase（见 §10.7.7） |
+
+### 10.7.1 P1 实施记录（步骤 3）
+
+**新增模块**
+
+| 文件 | 作用 |
+| --- | --- |
+| `src/features/chat/markdownText.ts` | Markdown → 可读纯文本（B1 朗读、B4 计数共用）；先把代码换成占位符保护起来，`snake_case` 不当作强调 |
+| `src/features/chat/speech.ts` | B1 纯逻辑：特性检测、朗读文本、语言判断、按句切片（≤180 字）、选本地语音 |
+| `src/features/chat/readAloudStore.ts` | B1 全局朗读状态；用播放代次过滤 `cancel()` 触发的旧回调 |
+| `src/features/chat/textHighlight.ts` | B3 / B4 高亮：`sage-search-hit`（8 秒后清除）、`sage-find`、`sage-find-current`（priority 1）；Range 居中滚动，jsdom 下回退为元素滚动 |
+| `src/features/chat/chatFind.ts` | B4 命中列表（按消息对象缓存纯文本）；`dispatchFindShortcut` 负责 `Ctrl+F` 分发与回落 |
+| `src/widgets/chat/ReadAloudButton.tsx` | B1 朗读 / 停止按钮；不支持时不渲染，卸载时停止 |
+| `src/widgets/chat/TruncationNotice.tsx` | B2 截断提示（`length` / `max_tokens`）与「继续生成」 |
+| `src/widgets/chat/ChatFindBar.tsx` | B4 查找栏：常驻外壳只监听打开事件，打开后才挂载面板（面板才用到 i18n） |
+| `src/shared/lib/i18n/chatReading.ts` | 第二轮文案，由 `i18n/index.tsx` 合并进 zh / en 词典（`zh.ts` / `en.ts` 在基线上且没有余量，不改动） |
+
+**改动的现有文件**
+
+- 后端：`agent_state.py`（`AgentEvent.finish_reason`，非字符串归一为 `None`）、`agent.py`（DONE 携带）、`legacy_routes.py`（写入 assistant 消息）、`session_repo.py`（`Message` 字段、读、写、分叉复制）。
+- 前端接线：`messageJumpStore.ts` / `useMessageJump.ts`（`highlightQuery` / `highlightIndex`；查找模式不闪烁整条消息）、`MessageList.tsx`（挂载查找栏；`onContinue` 只传给最后一条且无流式输出时）、`Message.tsx`（截断提示、朗读按钮）、`Chat.tsx`（`handleContinue`）、`useChat.ts`（DONE 的 `finish_reason` 写入本地消息）、`store.ts` / `types.ts`（字段）、`Layout.tsx`（`Ctrl+F` / `Ctrl+Shift+F`）、`shortcuts.ts`（帮助条目）、`ConversationsSection.tsx`（命中直达带上搜索词）、`index.css`（`::highlight()` 样式）。
+
+**验证**
+
+| 项 | 结果 |
+| --- | --- |
+| 新增前端测试（9 个文件） | 46 passed |
+| 前端全量 vitest（本机） | 3199 passed / 13 failed：失败全部在 `electron/` 下的 4 个主进程测试文件（logger、logIpc、自动重启、`sage-file` 协议），本次没有改动 `electron/`，这些测试也不依赖改动的模块，以 CI（Linux）结果为准；`src/` 下没有失败 |
+| 新增后端测试 `test_finish_reason_passthrough.py` + 相关用例 | Python 3.11：35 passed；Python 3.8：35 passed |
+| 后端单测（本机 `-n 6`，约 5 分钟时被执行环境中断，未跑完，全量以 CI 为准） | 3205 passed / 1 failed：`wiki/test_ingest_queue.py::test_queue_persists_to_file` 在中文 Windows 上用 GBK 解码 UTF-8 文件，与本改动无关（CI 为 Linux） |
+| eslint（改动与新增文件） | 0 错误（`Message.tsx` 有 1 条原有 warning） |
+| `tsc --noEmit` | 0 错误 |
+| `ruff check backend/` | 通过 |
+| `architecture-check` | 通过。基线上调：`legacy_routes.py` 4395→4396、`agent.py` 2428→2429、`session_repo.py` 1009→1016、`Chat.tsx` 1182→1189、`types.ts` 2385→2387、`Message.tsx` 1068→1083 |
+
+### 10.7.2 P1 main 合并记录（步骤 4）
+
+- 提交前 `git fetch` + rebase 到最新 `origin/main`（期间合入 #1612–#1614，无冲突），推送后开 [#1619](https://github.com/oneMuggle/sage/pull/1619)。
+- CI：stub-smoke、stub-deep、live-boot、Frontend (TypeScript)、Backend (Python)、Backend collect (Python 3.8, win7 mine-sweeper)、Electron smoke、两个平台的 Electron build、Architecture check、Dependency audit、Backend legacy smoke、count-lines、All Checks 全部通过；Backend (Python 3.8, Win7 LTS) 与 Backend unit (Windows) 按条件跳过。
+- 合并前 `origin/main` 又前进了 #1617 / #1618，改动文件与本 PR 无交集，GitHub 判定 `MERGEABLE / CLEAN`，直接 squash 合并为 `a3c16668e`。
+
+### 10.7.3 P1 win7 对齐记录（步骤 5）
+
+- 新建 `.worktrees/feat-chat-reading-p1-win7`（基于 `origin/release/win7`），`git cherry-pick -x` main 的 squash 提交，提交信息标注 `(cherry picked from commit a3c16668e…)`。
+- 冲突与处理：
+
+| 文件 | 原因 | 处理 |
+| --- | --- | --- |
+| `src/shared/lib/shortcuts.ts` | win7「全局」分组没有 main 的 `Ctrl+N` / `Ctrl+F` / `Ctrl+Shift+D` 条目 | 保留 win7 现状，只加入本次的 `Ctrl+F` 与 `Ctrl+Shift+F` 两条 |
+| `src/widgets/chat/MessageList.tsx` | win7 没有 `onSuggestionClick` / `onBlockedAction` | 保留 win7 现状，只加入 `onContinue` |
+| `architecture-baseline.json` | 两条分支基线数值不同；rebase 到最新 `release/win7` 时 `backend/main.py` 已被 #1615 上调 | 保留 win7 数值，按本分支实际行数上调 `legacy_routes.py` 4400→4401、`agent.py` 2521→2522、`session_repo.py` 1010→1017；前端文件在 win7 上有余量 |
+
+- 本地验证（win7 工作树）：`npm run typecheck` 0 错误；受影响的 6 个前端目录 115 个测试文件全部通过；Python 3.8 下后端相关用例 35 passed；`ruff check backend/` 与 `architecture-check` 通过。
+- [#1622](https://github.com/oneMuggle/sage/pull/1622)：Frontend (TypeScript)、Backend (Python 3.8, Win7 LTS)、Electron smoke、两个平台的 Electron build 等必需检查全部通过 → squash 合并为 `315fdebca`。
+
+### 10.7.4 P2 实施记录（步骤 6）
+
+**新增模块**
+
+| 文件 | 作用 |
+| --- | --- |
+| `src/features/chat/generationStats.ts` | C1 速度计算（输出 tokens ÷（总耗时 − 首字延迟））与时长 / 数量格式化 |
+| `src/widgets/chat/GenerationStatsBadge.tsx` | C1 操作栏右侧的「tok/s · 首字 · tokens」摘要，悬停看明细 |
+| `src/shared/lib/endpointStatus.ts` | C3 端点可达性状态：失败事件按错误类型判定，成功完成即清除；端点比对 |
+| `src/widgets/system/EndpointStatusBanner.tsx` | C3 标题栏下方的全局提示条：重新检测（模型列表接口，不耗 token）/ 端点设置 / 关闭；系统断网单独提示，恢复联网自动重新检测 |
+| `src/features/chat/answerVersions.ts` | C2 最后一轮判定、原位重新生成、版本接口封装（走 `backendRequest` 通用通道，不改 Electron 命令表） |
+| `src/widgets/chat/AnswerVersionSwitcher.tsx` | C2 `‹ 2/3 ›` 切换器；只有一个版本时不渲染 |
+| `src/shared/lib/fillTemplate.ts` | `{name}` 占位符填充（C1 / C2 / C3 文案共用） |
+| `backend/data/answer_version_repo.py` | C2 版本仓储：归档 / 列出 / 切换（与 messages、事件日志同事务），以及 producer 接线辅助（`regenerate_excluded_ids`、`drop_excluded`、`ArchiveOnFirstSave`） |
+
+**改动的现有文件**
+
+- 后端：`llm_client.py`（流式计时、非流式耗时、写入 `usage_events` 预留列）、`agent_state.py`（`generation_stats` 字段、提取与 JSON）、`agent.py`（DONE 携带）、`database.py`（`messages.generation_stats` 列与老库补列、`message_versions` 表）、`session_repo.py`（字段读写、分叉复制）、`legacy_routes.py`（统计落库；`regenerate_of`：最后一轮校验、历史剔除、跳过 user 落库与自动话题检测、首次落库前归档、`message_count`）、`legacy_session_routes.py`（`GET /sessions/{id}/answer-versions`、`POST /sessions/{id}/answer-versions/{version_id}/activate`）。
+- 前端：`types.ts`（`GenerationStats`、`AgentEvent.generation_stats`、`ChatConfig.regenerateOf`）、`store.ts`（`Message.generation_stats`）、`useChat.ts`（DONE 统计写入本地消息；`regenerateOf` 不追加 user 消息并透传）、`chatApi.ts`（失败 / 完成上报端点状态；只在原位重新生成时带 `regenerateOf`）、`Layout.tsx`（挂载提示条）、`Message.tsx` / `MessageList.tsx`（统计、版本切换器；切换回调只交给最后一条消息）、`Chat.tsx`（最后一轮原位重新生成、切换后重拉消息）、`i18n/chatReading.ts`（C1–C3 文案）。
+
+**验证**
+
+| 项 | 结果 |
+| --- | --- |
+| 新增前端测试（10 个文件） | 39 passed |
+| 受影响前端目录（chat / send-message / shared / system / layout / pages / manage-endpoints，253 个文件） | 除 `ArenaAccounts.test.tsx`（已知的负载下偶发超时，单独重跑 7/7 通过）外全部通过；首轮发现 `stream.test.ts` 对 invoke 参数做整体比对，已改为只在原位重新生成时带 `regenerateOf`，普通发送的参数保持不变 |
+| 新增后端测试（2 个单测文件 + 1 个集成测试文件） | Python 3.11 与 3.8 均通过（连同 B2 的 7 个用例共 32 passed） |
+| 后端相关回归（session / agent / llm / legacy / chat 单测 + chat_stream 集成） | 714 passed，19 skipped |
+| eslint（改动与新增文件） | 0 错误（`Message.tsx` 1 条原有 warning） |
+| `tsc --noEmit` | 0 错误 |
+| `ruff check backend/` | 通过 |
+| prettier | 新增文件已格式化；改动文件没有引入新的格式问题 |
+| `architecture-check` | 通过。基线上调：`legacy_routes.py` 4396→4426、`agent.py` 2429→2430、`llm_client.py` 1074→1093、`database.py` 1920→1949、`session_repo.py` 1016→1024、`Chat.tsx` 1189→1198、`types.ts` 2387→2399、`Message.tsx` 1083→1101 |
+
+### 10.7.5 P2 main 合并记录（步骤 7）
+
+- 提交前 `git fetch` + rebase 到最新 `origin/main`（`82fbb9938`，#1620），无冲突；推送后开 [#1625](https://github.com/oneMuggle/sage/pull/1625)（11:23）。
+- 开 PR 后自查发现：`/chat/stream` 的异步处理函数里直接调用了 `regenerate_excluded_ids`（SQLite 查询），会阻塞事件循环。追加 `ccbd0c720`，改成与同函数里其他数据库调用一致的 `await to_thread(...)`。新提交推送后，首轮 CI 被同一 PR 的并发组取消，`All Checks` 因此显示失败；没有用例失败。
+- CI（最终头 `ccbd0c720`）：stub-smoke、stub-deep、live-boot、Frontend (TypeScript)、Backend (Python)、Backend collect (Python 3.8, win7 mine-sweeper)、Electron smoke、两个平台的 Electron build、Architecture check、Dependency audit、Backend legacy smoke、count-lines、All Checks 共 14 项全部通过；Backend (Python 3.8, Win7 LTS) 与 Backend unit (Windows) 按条件跳过。
+- 合并前 `origin/main` 没有移动，squash 合并为 `91dbb942045884ceef9b58368e838ba5775aecce`（11:53）。
+
+### 10.7.6 P2 win7 对齐记录（步骤 7）
+
+- 在 #1625 跑 CI 期间新建 `.worktrees/feat-chat-reading-p2-win7`（基于 `origin/release/win7` @ `315fdebca`，端口 8786/1441，独立 `npm ci`），`git cherry-pick -x` 它的首个提交 `916c72467` 并解决冲突（11:35）。#1625 追加的 `ccbd0c720` 在 win7 上已被冲突解决时的 `_run_db_sync` 包装覆盖（win7 没有 `to_thread`）。#1625 合并后，把提交信息改为引用 squash 提交（`cherry picked from commit 91dbb9420…`）；改动文件集合与 `91dbb9420` 一致（40 个文件）。
+- 冲突与处理：
+
+| 文件 | 原因 | 处理 |
+| --- | --- | --- |
+| `backend/api/legacy_routes.py` | win7 的 producer 落库经 `_run_db_sync` 包装，user 消息落库块结构不同；会话更新写的是 `message_count + 2`；win7 没有导入 `to_thread` | 保留 win7 结构，只在 user 落库前插入 `regenerate_of` 分支；最后一轮校验与历史剔除查询改走 `_run_db_sync`；`message_count` 在 win7 原处改为重新生成 +1 |
+| `src/features/send-message/useChat.ts` | win7 没有附件检索（`attachmentRagConfig`） | 只加入 `GenerationStats` 类型导入 |
+| `src/widgets/chat/Message.tsx` | win7 没有 `BlockedCard` | 只加入 `AnswerVersionSwitcher` 导入 |
+| `src/shared/api/chatApi.ts` | win7 没有 `attachment_rag` 参数 | 只加入 `regenerateOf`（仅原位重新生成时携带） |
+| `architecture-baseline.json` | 两条分支基线数值不同 | 保留 win7 数值，按本分支实际行数上调 `legacy_routes.py` 4401→4431、`agent.py` 2522→2523、`llm_client.py` 1070→1089、`database.py` 1953→1982、`session_repo.py` 1017→1025、`Message.tsx` 1067→1074 |
+
+- 其余文件（`agent.py`、`agent_state.py`、`llm_client.py`、`database.py`、`session_repo.py`、`legacy_session_routes.py`、`Chat.tsx`、`MessageList.tsx`、`Layout.tsx`、`types.ts`、`store.ts` 等）自动合并。
+- 本地验证（win7 工作树）：`npm run typecheck` 0 错误；冲突与接线文件 eslint 0 错误（`Message.tsx` 1 条原有 warning）；`ruff check backend/` 与 `architecture-check` 通过；受影响的 8 个前端目录共 221 个测试文件全部通过；Python 3.8 下后端相关用例 32 passed（首轮集成测试暴露 win7 没有 `to_thread`，已改为 `_run_db_sync`）。
+- 11:55 左右本机桥接隧道掉线，推送暂停。13:38 重连后复核：提交树与掉线前的 `6ffe02f0f` 一致，提交信息已改好，`release/win7` 仍在 `315fdebca`，无需 rebase；推送后开 [#1627](https://github.com/oneMuggle/sage/pull/1627)（13:40）。
+- CI：`Frontend (TypeScript)`、`Electron smoke (playwright-electron)`、`Backend (Python 3.8, Win7 LTS)`（22 分钟全量）、`Electron build (windows-latest)`、`Electron build (ubuntu-latest)` 这 5 项必需检查，以及 All Checks、Architecture check、count-lines 全部通过；`Backend (Python)`、legacy smoke、Dependency audit 在 win7 目标上按条件跳过。
+- 合并前复查 base 没有移动 → squash 合并为 `8a8e5af9d7e7d021867874c1ef40d815cc92c5e1`（14:03）。
+
+### 10.7.7 清理记录（步骤 8）
+
+- 移除工作树：`.worktrees/feat-chat-reading-p1-main`、`.worktrees/feat-chat-reading-p1-win7`、`.worktrees/feat-chat-reading-p2-main`、`.worktrees/feat-chat-reading-p2-win7`（在主仓库目录执行 `git worktree remove --force` + `git worktree prune`；各工作树独立安装的 `node_modules` 随工作树一起删除）。
+- 删除本地分支 `feat/chat-reading-p1-main`、`feat/chat-reading-p1-win7`、`feat/chat-reading-p2-main`、`feat/chat-reading-p2-win7`（squash 合并，所以用 `-D`）。四个 PR 合并时没有带 `--delete-branch`，远端同名分支在这一步用 `git push origin --delete` 删除，`gh api .../branches/<name>` 复核均为 404。
+- 删除主机临时文件（PR 正文、提交信息、推送与测试日志）。
+- 主检出 `E:/ProgrammingData/electron/sage` 全程没有动过；清理前后它的 `node_modules` 都是 804 项。
+- 回填 PR [#1629](https://github.com/oneMuggle/sage/pull/1629) 首轮 CI 失败，原因不在本 PR：P2 两条 PR 合并后，main 又合入了 #1621（插件系统），main 自身在 `4a5891e83` 上就是红的。一是 Architecture check：`src/shared/lib/i18n/en.ts` / `zh.ts` 各涨 6 行（1253 / 1228），没有更新基线（1247 / 1222）；二是 Backend (Python)：CI 钉的 ruff 0.4.4 在 `backend/plugins/manifest.py` 报 6 个错误（1 个 I001、5 个 N805），后面的 pytest 根本没跑到；三是非阻断的 Backend unit (Windows)：`test_skill_discovery.py::test_default_skills_dir` 用 `/` 拼接的路径做断言。本 PR 先按 §7.4 的做法补了基线，但 Backend (Python) 仍然是红的；经用户确认，另开 [#1630](https://github.com/oneMuggle/sage/pull/1630) 修复 main（导入排序、v1 分支补 `@classmethod`、基线补账、测试改为比较路径分段）。#1630 CI 全绿后于 17:00 squash 合并为 `0dcc6e2d6`；本 PR rebase 到它之后，基线改动随之消失，重新变回纯文档。
+
+### 10.8 交付记录（第二轮）
+
+| 批次 | 分支 | PR | 合并提交 | 备注 |
+| --- | --- | --- | --- | --- |
+| P1 | `main` | [#1619](https://github.com/oneMuggle/sage/pull/1619) | `a3c16668eea61ab308a4274bc4561a2933584af8` | 2026-09-26 09:53 squash 合并 |
+| P1 | `release/win7` | [#1622](https://github.com/oneMuggle/sage/pull/1622) | `315fdebca977dac23d9dd1d1ff451e3ed5aeef5c` | 2026-09-26 10:30 squash 合并（← main #1619） |
+| P2 | `main` | [#1625](https://github.com/oneMuggle/sage/pull/1625) | `91dbb942045884ceef9b58368e838ba5775aecce` | 2026-09-26 11:53 squash 合并 |
+| P2 | `release/win7` | [#1627](https://github.com/oneMuggle/sage/pull/1627) | `8a8e5af9d7e7d021867874c1ef40d815cc92c5e1` | 2026-09-26 14:03 squash 合并（← main #1625） |
+| — | `main`（CI 修复） | [#1630](https://github.com/oneMuggle/sage/pull/1630) | `0dcc6e2d6600e4b623a230aa8c4ba105e2a1a6f8` | 2026-09-26 17:00 squash 合并；修复 #1621 遗留的 main CI 红灯，解除本回填的阻塞 |
+| — | `main`（回填） | 本 PR（`docs/chat-reading-r2-backfill`） | 合并后见 PR 页 | 只改文档 |
+
+说明：`release/win7` 上的本文件停留在"步骤 6 完成、步骤 7 进行中"的版本（随 #1627 带入）；完整进度以 main 为准，与 SOP 的"§回填只走 main"一致。

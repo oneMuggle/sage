@@ -48,6 +48,28 @@ def model_dump_compat(model: BaseModel, **kwargs: Any) -> Dict[str, Any]:
     return model.dict(**kwargs)
 
 
+def model_dump_json_compat(model: BaseModel, **kwargs: Any) -> str:
+    """Serialize a Pydantic model to JSON string on both v1 and v2.
+
+    Pydantic 2 exposes ``model_dump_json`` while Pydantic 1 only provides ``json``.
+    """
+    dump_json = getattr(model, "model_dump_json", None)
+    if callable(dump_json):
+        return dump_json(**kwargs)
+    return model.json(**kwargs)
+
+
+def model_validate_compat(model_cls: type, data: Any) -> BaseModel:
+    """Validate and construct a Pydantic model on both v1 and v2.
+
+    Pydantic 2 exposes ``model_validate`` while Pydantic 1 only provides ``parse_obj``.
+    """
+    validate = getattr(model_cls, "model_validate", None)
+    if callable(validate):
+        return validate(data)
+    return model_cls.parse_obj(data)
+
+
 # --------------------------------------------------------------------------
 # EndpointPayload — Task 1 (2026-08-23): 含 4 协议 + modelId + localModelPath.
 # --------------------------------------------------------------------------

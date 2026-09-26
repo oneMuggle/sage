@@ -38,6 +38,12 @@ export const orchRunClient = {
   updatePlan(runId: string, plan: TaskPlanItem[]): Promise<{ ok: boolean }> {
     return invoke<{ ok: boolean }>('orchestration_update_plan', { run_id: runId, plan });
   },
+  // R55 (round55): 单 run 详情（含 RT24/RT26 字段）。
+  getRun(
+    runId: string,
+  ): Promise<{ session_id: string | null; status: string; tasks: Array<Record<string, unknown>> }> {
+    return invoke('orchestration_get_run', { run_id: runId });
+  },
   // C1 (2026-09-09): 会话编排 run 列表（新→旧）—— 历史任务板恢复数据源。
   listSessionRuns(sessionId: string, limit = 20): Promise<SessionRunsResponse> {
     return invoke<SessionRunsResponse>('orchestration_list_session_runs', {

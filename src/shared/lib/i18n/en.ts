@@ -34,6 +34,12 @@ export const en: Record<TranslationKey, string> = {
   'sidebar.status.latency': 'Latency',
   'sidebar.empty': 'No chat history',
 
+  // ─── Sidebar Workspace Info ─────────
+  'workspace.info.title': 'Workspace Info',
+
+  // ─── Sidebar Usage Stats ────────────
+  'usage.title': 'Usage Stats',
+
   // ─── Chat ─────────────────────────
   'chat.title': 'Chat',
   'chat.new_session': '+ New Chat',
@@ -1243,4 +1249,12 @@ export const en: Record<TranslationKey, string> = {
   'todos.title': 'Todos',
   'todos.create': 'Add todo',
   'todos.empty': 'No pending todos',
+
+  // ─── Git sidebar panel (ZCode parity) ─────
+  'git.title': 'Git',
+  'git.not_a_repo': 'Not a Git repository',
+  'git.no_project': 'No project',
+  'git.refresh': 'Refresh',
+  'git.loading': 'Loading…',
+  'git.clean': 'Working tree clean',
 };
