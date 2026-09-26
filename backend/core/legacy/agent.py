@@ -1229,6 +1229,7 @@ class SageAgent:
                         iteration=i,
                         content=response.content,
                         agent_id=self.agent_id,
+                        finish_reason=getattr(response, "finish_reason", None),
                     )
                     return
 

@@ -314,6 +314,9 @@ class Message:
     # sources:       工具命中 [{kind: web|wiki|tool, ...}]（sources_extractor 提取）。
     rag_citations: Optional[str] = None
     sources: Optional[str] = None
+    # B2 (对话阅读体验第二轮): LLM 终止原因 (stop / length / tool_calls ...)。
+    # 列自建表起就存在, 此前仓储从未读写; length = 回答被输出上限截断。
+    finish_reason: Optional[str] = None
 
     @classmethod
     def from_row(cls, row) -> Message:
@@ -341,6 +344,7 @@ class Message:
                 row["rag_citations"] if "rag_citations" in row_keys else None
             ),
             sources=row["sources"] if "sources" in row_keys else None,
+            finish_reason=row["finish_reason"] if "finish_reason" in row_keys else None,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -365,6 +369,7 @@ class Message:
             # R81: 引用溯源同款解析口径（list / 畸形降级 None）。
             "rag_citations": _parse_json_column(self.rag_citations, list),
             "sources": _parse_json_column(self.sources, list),
+            "finish_reason": self.finish_reason,
         }
 
 
@@ -404,8 +409,8 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
     new_message_id = f"msg-{uuid.uuid4().hex[:12]}"  # 新 id，避免与源消息主键冲突
     cursor.execute(
         """
-        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, finish_reason, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """,
         (
             new_message_id,
@@ -424,6 +429,7 @@ def _insert_forked_message_row(cursor: Any, session_id: str, src_msg: Message) -
             # R81: 引用溯源列随 fork 复制，子会话保留完整引用区块
             src_msg.rag_citations,
             src_msg.sources,
+            src_msg.finish_reason,  # B2: 截断标记随 fork 复制
             src_msg.created_at,  # 保留原时间戳 → ORDER BY created_at ASC 保序
         ),
     )
@@ -610,8 +616,8 @@ class MessageRepository:
 
         cursor.execute(
             """
-            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at, segment_id, subtype)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO messages (id, session_id, role, content, model, provider, tool_calls, tool_call_id, reasoning_content, step_index, activated_skills, compact_info, memory_refs, rag_citations, sources, created_at, segment_id, subtype, finish_reason)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 message.id,
@@ -632,6 +638,7 @@ class MessageRepository:
                 message.created_at,
                 seg,
                 message.subtype,
+                message.finish_reason,
             ),
         )
 

@@ -24,7 +24,8 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'Ctrl(Cmd) + 1..9', description: '命令面板内跳转到第 N 个会话' },
       { keys: 'Ctrl(Cmd) + B', description: '折叠/展开侧边栏' },
       { keys: 'Ctrl(Cmd) + N', description: '新建会话' },
-      { keys: 'Ctrl(Cmd) + F', description: '聚焦会话搜索框' },
+      { keys: 'Ctrl(Cmd) + F', description: '聊天页：在当前会话中查找；其他页面：聚焦会话搜索框' },
+      { keys: 'Ctrl(Cmd) + Shift + F', description: '聚焦会话搜索框' },
       { keys: 'Ctrl(Cmd) + Shift + D', description: '切换暗色/亮色主题' },
       { keys: 'Shift + /', description: '打开本快捷键帮助' },
     ],
@@ -36,6 +37,14 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
       { keys: 'Shift + Enter', description: '插入换行' },
       { keys: '↑（空输入时）', description: '编辑上一条发送过的消息' },
       { keys: 'Esc', description: '关闭斜杠/@ 菜单' },
+    ],
+  },
+  {
+    group: '会话内查找',
+    items: [
+      { keys: 'Enter', description: '跳到更早的命中' },
+      { keys: 'Shift + Enter', description: '跳到更新的命中' },
+      { keys: 'Esc', description: '关闭查找栏' },
     ],
   },
   {

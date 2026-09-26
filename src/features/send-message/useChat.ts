@@ -486,6 +486,8 @@ export function useChat() {
       let lastDoneMessageId: string | null = null;
       // 标题后台生成提示 (2026-09): 首轮 DONE 后侧栏需延迟补刷
       let lastDoneTitlePending = false;
+      // 第二轮 B2: DONE 携带的 finish_reason（length = 截断），对账前先写入本地消息
+      let lastDoneFinishReason: string | null = null;
       // flushQueue=true 仅限流自然结束(onDone) —— 错误/中断不自动发队列消息
       const finishStream = (flushQueue = false): void => {
         if (finished) return;
@@ -520,6 +522,7 @@ export function useChat() {
             content: finalContent,
             reasoning_content: finalReasoning || undefined,
             tool_calls: finalToolCalls.length > 0 ? finalToolCalls : undefined,
+            ...(lastDoneFinishReason ? { finish_reason: lastDoneFinishReason } : {}),
           });
         }
         // client_message_id 协议: DONE 带回服务端 id 时, 把乐观占位 id
@@ -867,6 +870,7 @@ export function useChat() {
                   lastDoneContent = evt.content;
                   if (evt.message_id) lastDoneMessageId = evt.message_id;
                   lastDoneTitlePending = evt.title_pending === true;
+                  lastDoneFinishReason = evt.finish_reason ?? null;
                 }
                 useChatStreamStore
                   .getState()

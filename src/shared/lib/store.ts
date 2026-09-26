@@ -106,6 +106,8 @@ export interface Message {
   step_index?: number | null;
   /** Task 5 (2026-09-17): 消息子类型 —— 'topic_separator' 渲染为分隔线。 */
   subtype?: string | null;
+  /** 第二轮 B2: LLM 终止原因（DONE 事件 / get_messages 回读）；length = 被输出上限截断 */
+  finish_reason?: string | null;
 }
 
 // 状态接口

@@ -3438,6 +3438,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 else None
                             ),
                             sources=r81_sources_json,
+                            finish_reason=getattr(done_event, "finish_reason", None),  # B2 截断标记
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
                         )

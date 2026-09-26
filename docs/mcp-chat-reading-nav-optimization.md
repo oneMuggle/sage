@@ -18,7 +18,7 @@
 | 一个数据丢失型 bug | 「引用到对话」**覆盖**输入框里已输入的草稿（`setValue(injectedDraft.text)`），先打字再引用会丢字 |
 | 对标差距 | ChatGPT Web/iOS 的"选中文本 → Ask ChatGPT"、主流 IM/AI 应用的"搜索命中直达 + 短暂高亮"，Sage 均缺失 |
 | 本轮交付（P0） | A1 消息定位基础设施 · A2 大纲点击直达标题 · A3 搜索命中直达并高亮 · A4 划词引用追问 · A5 引用改为追加、不再覆盖草稿 |
-| 后续建议（P1/P2） | 消息朗读、截断提示 + 继续生成、命中词高亮、会话内查找、生成速度统计、回答版本切换（§3.2） |
+| 第二轮（P1/P2，§10） | 按优先级实施：P1 消息朗读、截断提示 + 继续生成、命中词高亮、会话内查找；P2 生成速度统计、回答版本切换、端点离线提示 |
 
 ---
 
@@ -79,7 +79,7 @@
 - **尾窗渲染**：扩窗只在定位时发生；定位完成后窗口保持扩大后的大小（否则目标消息会被立刻卸载），切会话时照常重置。
 - **性能**：选区检测只挂 `mouseup` / `keyup` / `selectionchange`，用 `requestAnimationFrame` 合批；不引入新依赖。
 
-### 3.2 P1 / P2（建议后续轮次）
+### 3.2 P1 / P2（第二轮实施，见 §10）
 
 | 级别 | 编号 | 名称 | 说明 |
 | --- | --- | --- | --- |
@@ -292,3 +292,139 @@ MessageList（每次 messages / pending 变化）
    https://github.com/openai/codex/issues/32159
 4. ChatGPT Chat Navigator（第三方）— 点击直达消息并短暂标记
    https://gptspeedbooster.com/chatgpt-chat-navigator/
+5. MDN — Web Speech API（`speechSynthesis` / `SpeechSynthesisUtterance`）
+   https://developer.mozilla.org/docs/Web/API/Web_Speech_API
+6. MDN — CSS Custom Highlight API（`CSS.highlights` / `::highlight()`）
+   https://developer.mozilla.org/docs/Web/API/CSS_Custom_Highlight_API
+
+---
+
+## 10. 第二轮：P1 / P2 实施
+
+> 日期: 2026-09-26 · 基线: `origin/main` @ `6a77dc3b5`（#1609）
+> 批次: P1（B1–B4）→ P2（C1–C3）。每批 main 合并后 cherry-pick 到 `release/win7`，流程同 §5。
+> P1 工作分支: `feat/chat-reading-p1-main`（worktree `.worktrees/feat-chat-reading-p1-main`）。
+
+### 10.1 范围与批次
+
+| 批次 | 编号 | 名称 | 前端 | 后端 |
+| --- | --- | --- | --- | --- |
+| P1 | B1 | 消息朗读 | ✓ | — |
+| P1 | B2 | 截断提示 + 继续生成 | ✓ | ✓ `finish_reason` 透传并落库 |
+| P1 | B3 | 搜索命中词高亮 | ✓ | — |
+| P1 | B4 | 会话内查找 | ✓ | — |
+| P2 | C1 | 生成速度统计 | ✓ | ✓ 用量与耗时透传并落库 |
+| P2 | C2 | 回答版本切换 | ✓ | ✓ 同一位置保存多个回答版本 |
+| P2 | C3 | 端点离线提示 | ✓ | 视现有探测接口而定 |
+
+P2 的详细设计在 P1 合并后补入 §10.6：先对照当时的代码核实，再定稿。
+
+### 10.2 代码核实（第二轮新增证据）
+
+| 事实 | 位置 | 影响 |
+| --- | --- | --- |
+| `messages` 表从建表起就有 `finish_reason` / `input_tokens` / `output_tokens` / `total_tokens` / `latency_ms` 列，但仓储的 `Message` 数据类没有这些字段，读写都不经过它们 | `backend/data/database.py`、`backend/data/session_repo.py` | B2 / C1 不需要数据库迁移，补齐仓储映射即可 |
+| 流式和非流式 LLM 响应都带 `finish_reason` | `backend/core/legacy/llm_client.py` | agent 在终稿 DONE 事件里带上即可 |
+| DONE 事件由 `AgentEvent.to_dict()` 序列化，经 producer 转发给前端 | `backend/core/legacy/agent_state.py`、`backend/api/legacy_routes.py` | 新增可选字段对旧前端透明 |
+| 流结束后前端会 `loadMessages` 对账，以服务端数据为准 | `src/features/send-message/useChat.ts` | 截断标记必须落库，否则对账后丢失 |
+| `Ctrl+F` 由 `Layout.tsx` 全局派发 `sage:focus-search`；`Ctrl+K` 是命令面板；`Ctrl+Shift+F` 没有占用 | `src/widgets/layout/Layout.tsx`、`src/App.tsx`、`src/shared/lib/shortcuts.ts` | B4 键位见 §10.3 |
+| 两条分支都是 Electron 21（Chromium 106）：`speechSynthesis`（Windows 走本地 SAPI 语音）和 CSS Custom Highlight API（Chromium 105+）都可用 | — | B1 / B3 / B4 不需要 polyfill；做特性检测，不支持时隐藏入口或不高亮 |
+| `Chat.tsx`、`Message.tsx`、`zh.ts` / `en.ts`、`types.ts` 等已在架构基线上，而且没有余量 | `architecture-baseline.json` | 新逻辑放进新模块，尽量不让基线文件增长；确需增长时按棘轮协议更新基线并在 PR 说明 |
+
+### 10.3 B4 键位决策
+
+- 聊天页有消息时，`Ctrl/Cmd+F` 打开「会话内查找」栏，与浏览器、VS Code、Telegram 的「在当前视图中查找」一致。
+- `Ctrl/Cmd+Shift+F` 始终聚焦侧栏的会话搜索（跨会话检索）。
+- 查找栏没有挂载时（其他页面、空会话），`Ctrl/Cmd+F` 保持原来的行为（聚焦会话搜索），非聊天页的使用习惯不变。
+- 实现上不做路由判断：`Layout` 先派发可取消的 `sage:open-chat-find` 事件，查找栏处理后调用 `preventDefault()`；没有被处理就回落为 `sage:focus-search`。
+- 快捷键帮助（`src/shared/lib/shortcuts.ts`）同步更新。
+
+### 10.4 P1 设计
+
+**B1 消息朗读**
+
+- 纯函数模块 `speech.ts`：把 Markdown 转成朗读文本（代码块换成「代码已略过」提示，链接只保留文字，去掉标记符号）；按句切成不超过 180 字的片段依次排队朗读，避开 Chromium 朗读长句中途停止的问题；按汉字占比选择 `zh-CN` 或 `en-US`，并优先使用同语种的本地语音。
+- 全局单例 `readAloudStore`：同一时刻只朗读一条消息；再次点击即停止；正在朗读的消息被卸载（切换会话、删除）时自动停止。
+- assistant 消息操作栏新增「朗读 / 停止朗读」按钮；环境不支持 `speechSynthesis` 时不渲染。
+
+**B2 截断提示 + 继续生成**
+
+- 后端：`AgentEvent` 新增可选字段 `finish_reason`，agent 的终稿 DONE 事件从 LLM 响应带出；producer 把它写入 `messages.finish_reason`；仓储 `Message` 补齐该字段（读、写、分叉复制）。
+- 前端：`Message` 类型新增 `finish_reason`；收到 DONE 时先写进本地消息，对账后以服务端为准。值为 `length`（兼容 `max_tokens`）时，在气泡下方提示「回答达到长度上限，已被截断」。
+- 如果被截断的是会话最后一条消息，同时给出「继续生成」按钮：发送一条「从中断处继续」的续写消息（对标 ChatGPT 的 Continue generating）。原消息不改写，历史可以追溯。
+
+**B3 搜索命中词高亮**
+
+- `messageJumpStore` 的定位请求新增 `highlightQuery`；从侧栏搜索命中直达时带上搜索词。
+- 定位完成后，用 CSS Custom Highlight API 在目标消息正文（`[data-quote-scope]`）里高亮全部命中，约 8 秒后自动清除。不改 DOM，不影响 React 渲染和复制。
+- 匹配方式：把正文的文本节点拼起来，做不区分大小写的字面匹配，所以能跨过加粗等行内标记。
+- 后端全文检索按词命中，多个词可以不相邻：整句没有字面命中时，退回逐词高亮。
+
+**B4 会话内查找**
+
+- 查找栏包含输入框、`n/m` 计数、上一个 / 下一个和关闭按钮，固定在消息区右上角；搜索范围是当前会话的全部消息，包括尾窗外还没渲染的。
+- 计数基于去掉 Markdown 标记后的消息文本。定位复用 A1 通道（`highlightQuery` + `highlightIndex`）：自动扩窗并滚动到当前命中；当前命中用醒目色，其他已渲染的命中用浅色。
+- 顺序符合聊天习惯：打开时停在最新（最靠下）的命中；`Enter` 或 ↑ 按钮跳到更早的命中，`Shift+Enter` 或 ↓ 按钮跳到更新的命中；`Esc` 关闭并清除高亮。查找栏已打开时再按 `Ctrl/Cmd+F` 会重新聚焦并全选输入框；关闭后再打开从空白开始。
+- 输入有 150ms 防抖，防抖生效前按 `Enter` 会立即提交查找词；输入法组词中的 `Enter` / `Esc` 不触发查找操作。
+- 已知限制：计数基于去掉标记后的源文本，高亮基于渲染后的 DOM。公式、Mermaid 图这类渲染后文字与源码不同的内容，两者可能对不上；对不上时滚动到消息本身，不高亮。
+
+### 10.5 验证矩阵（P1）
+
+| 层 | 内容 |
+| --- | --- |
+| 前端单测 | `speech` 纯函数、`readAloudStore`（排队 / 停止 / 互斥）、朗读按钮；截断提示与继续生成；`textHighlight`（跨节点匹配、特性检测降级）；会话内查找的计数与排序；查找栏交互（打开 / 计数 / 跳转 / 关闭）；`Layout` 键位回落；侧栏命中带上搜索词 |
+| 后端单测 | `AgentEvent.to_dict` 带 `finish_reason`；agent DONE 透传；仓储读写与分叉复制 `finish_reason` |
+| 回归 | chat / sidebar / layout / i18n 相关测试目录；后端 `session_repo`、agent、legacy chat 相关用例 |
+| 静态 | 改动文件 eslint、全量 `tsc --noEmit`、`ruff check backend/`、`architecture-check` |
+| CI | main 与 win7 的必需检查全部通过（同 §6） |
+
+### 10.6 P2 设计
+
+P1 合并后补入。
+
+### 10.7 进度日志（第二轮，每完成一步即回填）
+
+| # | 时间（UTC+8） | 步骤 | 状态 | 证据 / 产物 |
+| --- | --- | --- | --- | --- |
+| 1 | 2026-09-26 08:24 | 新建 P1 工作树 | ✅ 完成 | `scripts/worktree.sh new feat/chat-reading-p1-main --base origin/main` → `.worktrees/feat-chat-reading-p1-main`（端口 8783/1438）；`npm ci` 在工作树内独立安装依赖 |
+| 2 | 2026-09-26 08:50 | 代码核实 + P1 方案定稿（§10.1–§10.5） | ✅ 完成 | 本文件；登记 `docs/plans/2026-09-26_chat-reading-nav-r2.md` |
+| 3 | 2026-09-26 09:26 | P1 实施 + 本地验证 | ✅ 完成 | 见 §10.7.1：新增 9 个前端模块、9 个前端测试文件、1 个后端测试文件；受影响文件 eslint 0 错误，全量 `tsc --noEmit` 0 错误，`ruff check backend/` 通过，`architecture-check` 通过（6 个基线文件按棘轮协议上调） |
+| 4 | — | P1 main PR → CI 全绿 → 合并 | 🔄 进行中 | 分支 `feat/chat-reading-p1-main` |
+| 5 | — | P1 cherry-pick 到 win7 → PR → CI 全绿 → 合并 | ⏳ 待办 | — |
+| 6 | — | P2 设计定稿 + 实施 | ⏳ 待办 | — |
+| 7 | — | P2 main / win7 两条 PR 合并 | ⏳ 待办 | — |
+| 8 | — | 清理分支与工作树 + 回填 | ⏳ 待办 | — |
+
+### 10.7.1 P1 实施记录（步骤 3）
+
+**新增模块**
+
+| 文件 | 作用 |
+| --- | --- |
+| `src/features/chat/markdownText.ts` | Markdown → 可读纯文本（B1 朗读、B4 计数共用）；先把代码换成占位符保护起来，`snake_case` 不当作强调 |
+| `src/features/chat/speech.ts` | B1 纯逻辑：特性检测、朗读文本、语言判断、按句切片（≤180 字）、选本地语音 |
+| `src/features/chat/readAloudStore.ts` | B1 全局朗读状态；用播放代次过滤 `cancel()` 触发的旧回调 |
+| `src/features/chat/textHighlight.ts` | B3 / B4 高亮：`sage-search-hit`（8 秒后清除）、`sage-find`、`sage-find-current`（priority 1）；Range 居中滚动，jsdom 下回退为元素滚动 |
+| `src/features/chat/chatFind.ts` | B4 命中列表（按消息对象缓存纯文本）；`dispatchFindShortcut` 负责 `Ctrl+F` 分发与回落 |
+| `src/widgets/chat/ReadAloudButton.tsx` | B1 朗读 / 停止按钮；不支持时不渲染，卸载时停止 |
+| `src/widgets/chat/TruncationNotice.tsx` | B2 截断提示（`length` / `max_tokens`）与「继续生成」 |
+| `src/widgets/chat/ChatFindBar.tsx` | B4 查找栏：常驻外壳只监听打开事件，打开后才挂载面板（面板才用到 i18n） |
+| `src/shared/lib/i18n/chatReading.ts` | 第二轮文案，由 `i18n/index.tsx` 合并进 zh / en 词典（`zh.ts` / `en.ts` 在基线上且没有余量，不改动） |
+
+**改动的现有文件**
+
+- 后端：`agent_state.py`（`AgentEvent.finish_reason`，非字符串归一为 `None`）、`agent.py`（DONE 携带）、`legacy_routes.py`（写入 assistant 消息）、`session_repo.py`（`Message` 字段、读、写、分叉复制）。
+- 前端接线：`messageJumpStore.ts` / `useMessageJump.ts`（`highlightQuery` / `highlightIndex`；查找模式不闪烁整条消息）、`MessageList.tsx`（挂载查找栏；`onContinue` 只传给最后一条且无流式输出时）、`Message.tsx`（截断提示、朗读按钮）、`Chat.tsx`（`handleContinue`）、`useChat.ts`（DONE 的 `finish_reason` 写入本地消息）、`store.ts` / `types.ts`（字段）、`Layout.tsx`（`Ctrl+F` / `Ctrl+Shift+F`）、`shortcuts.ts`（帮助条目）、`ConversationsSection.tsx`（命中直达带上搜索词）、`index.css`（`::highlight()` 样式）。
+
+**验证**
+
+| 项 | 结果 |
+| --- | --- |
+| 新增前端测试（9 个文件） | 46 passed |
+| 前端全量 vitest（本机） | 3199 passed / 13 failed：失败全部在 `electron/` 下的 4 个主进程测试文件（logger、logIpc、自动重启、`sage-file` 协议），本次没有改动 `electron/`，这些测试也不依赖改动的模块，以 CI（Linux）结果为准；`src/` 下没有失败 |
+| 新增后端测试 `test_finish_reason_passthrough.py` + 相关用例 | Python 3.11：35 passed；Python 3.8：35 passed |
+| 后端单测（本机 `-n 6`，约 5 分钟时被执行环境中断，未跑完，全量以 CI 为准） | 3205 passed / 1 failed：`wiki/test_ingest_queue.py::test_queue_persists_to_file` 在中文 Windows 上用 GBK 解码 UTF-8 文件，与本改动无关（CI 为 Linux） |
+| eslint（改动与新增文件） | 0 错误（`Message.tsx` 有 1 条原有 warning） |
+| `tsc --noEmit` | 0 错误 |
+| `ruff check backend/` | 通过 |
+| `architecture-check` | 通过。基线上调：`legacy_routes.py` 4395→4396、`agent.py` 2428→2429、`session_repo.py` 1009→1016、`Chat.tsx` 1182→1189、`types.ts` 2385→2387、`Message.tsx` 1068→1083 |
