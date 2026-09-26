@@ -11,6 +11,7 @@
 import type { ComponentType } from 'react';
 
 import type { ToolCall } from '../../../shared/lib/store';
+
 import { BashToolRenderer } from './BashToolRenderer';
 import { FileWriteToolRenderer } from './FileWriteToolRenderer';
 import { WebSearchToolRenderer } from './WebSearchToolRenderer';

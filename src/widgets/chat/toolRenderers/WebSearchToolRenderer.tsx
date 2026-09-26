@@ -7,6 +7,7 @@
 import { Globe } from 'lucide-react';
 
 import type { ToolCall } from '../../../shared/lib/store';
+
 import { ToolCallCard } from './ToolCallCard';
 
 export function WebSearchToolRenderer({ tc }: { tc: ToolCall }) {

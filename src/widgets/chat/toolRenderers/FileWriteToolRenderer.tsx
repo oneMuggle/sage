@@ -8,6 +8,7 @@
 import { FileEdit, FilePlus } from 'lucide-react';
 
 import type { ToolCall } from '../../../shared/lib/store';
+
 import { ToolCallCard } from './ToolCallCard';
 
 const FILE_TOOLS = new Set(['write_file', 'edit_file']);

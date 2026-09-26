@@ -67,6 +67,7 @@ def _run_git(cwd: str, args: list[str], timeout: float = 5.0) -> tuple[int, str]
             capture_output=True,
             text=True,
             timeout=timeout,
+            check=False,
         )
         return result.returncode, result.stdout
     except subprocess.TimeoutExpired:
@@ -93,9 +94,9 @@ def _parse_porcelain_line(line: str) -> GitFileChange | None:
     # 优先级: conflicted > staged (index) > working tree
     if x == "U" or y == "U" or (x == "A" and y == "A") or (x == "D" and y == "D"):
         status = "conflicted"
-    elif x != " " and x != "?":
+    elif x not in {" ", "?"}:
         status = "staged"
-    elif y != " " and y != "?":
+    elif y not in {" ", "?"}:
         status = _STATUS_MAP.get(y, "modified")
     elif x == "?":
         status = "untracked"
@@ -159,7 +160,7 @@ def get_git_status(
         if change:
             files.append(change)
 
-    # 按状态排序: conflicted > staged > modified > untracked > deleted > renamed
+    # 排序优先级——conflicted 最前, renamed 最后
     status_order = {"conflicted": 0, "staged": 1, "modified": 2, "untracked": 3, "deleted": 4, "renamed": 5}
     files.sort(key=lambda f: (status_order.get(f.status, 99), f.path))
 

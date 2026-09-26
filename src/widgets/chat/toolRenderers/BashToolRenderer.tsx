@@ -7,6 +7,7 @@
 import { Terminal } from 'lucide-react';
 
 import type { ToolCall } from '../../../shared/lib/store';
+
 import { ToolCallCard } from './ToolCallCard';
 
 const MAX_OUTPUT_LINES = 8;
