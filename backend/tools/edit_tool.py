@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BaseTool, ToolResult, ToolSchema
+from .file_guard import check_expected_version, check_sensitive_path, compute_bytes_version
 from .file_tool import MAX_WRITE_SIZE_BYTES, _contains_binary_marker, detect_bom_encoding
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,7 @@ def _validate_edit_call_shape(  # noqa: PLR0911 — 守卫式参数校验：一�
             success=False,
             error=(
                 f"未知参数: {names}（合法参数: file_path, old_string, "
-                "new_string, replace_all）"
+                "new_string, replace_all, expected_version）"
             ),
         )
     if not isinstance(file_path, str) or not file_path.strip():
@@ -219,17 +220,25 @@ class EditTool(BaseTool):
                         "type": "boolean",
                         "description": "替换全部匹配处 (默认 false，仅允许唯一匹配)",
                     },
+                    "expected_version": {
+                        "type": "string",
+                        "description": (
+                            "可选乐观锁：read_file 返回的 version；文件已被他人修改"
+                            "则拒绝（version_conflict）。省略则不校验"
+                        ),
+                    },
                 },
                 "required": ["file_path", "old_string", "new_string"],
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911 — 守卫式早返回：一项检查一分支
         self,
         file_path: Optional[str] = None,
         old_string: Optional[str] = None,
         new_string: Optional[str] = None,
         replace_all: bool = False,
+        expected_version: Optional[str] = None,
         **kwargs,
     ) -> ToolResult:
         """
@@ -262,6 +271,14 @@ class EditTool(BaseTool):
         invalid = _validate_edit_params(old_string, new_string)
         if invalid is not None:
             return invalid
+
+        # LocalBridge P0: 凭据路径拒写 + expected_version 乐观锁
+        blocked = check_sensitive_path(file_path, "编辑")
+        if blocked is not None:
+            return blocked
+        blocked = check_expected_version(str(Path(file_path).expanduser()), expected_version)
+        if blocked is not None:
+            return blocked
 
         try:
             return self._apply_edit(file_path, old_string, new_string, bool(replace_all))
@@ -359,6 +376,8 @@ class EditTool(BaseTool):
                     "lines_removed": _count_logical_lines(old_string) * replacements,
                     "lines_added": _count_logical_lines(new_string) * replacements,
                     "bytes_written": len(updated_bytes),
+                    # LocalBridge P0: 写后新版本，可直接用于下一次 expected_version
+                    "version": compute_bytes_version(updated_bytes),
                 },
                 str(target),
             ),
