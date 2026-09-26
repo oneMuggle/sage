@@ -62,7 +62,7 @@ export function WorkspaceInfoSection({
   return (
     <SiderSection
       sectionKey="workspace-info"
-      label={t('workspace.info.title', '工作区信息')}
+      label={t('workspace.info.title')}
       icon={Folder}
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}

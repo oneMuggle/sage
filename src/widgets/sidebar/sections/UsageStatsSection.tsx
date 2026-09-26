@@ -58,7 +58,7 @@ export function UsageStatsSection({ collapsed, onToggleCollapsed }: UsageStatsSe
   return (
     <SiderSection
       sectionKey="usage-stats"
-      label={t('usage.title', '使用量统计')}
+      label={t('usage.title')}
       icon={BarChart3}
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
