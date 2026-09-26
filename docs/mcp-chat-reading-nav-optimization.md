@@ -18,7 +18,7 @@
 | 一个数据丢失型 bug | 「引用到对话」**覆盖**输入框里已输入的草稿（`setValue(injectedDraft.text)`），先打字再引用会丢字 |
 | 对标差距 | ChatGPT Web/iOS 的"选中文本 → Ask ChatGPT"、主流 IM/AI 应用的"搜索命中直达 + 短暂高亮"，Sage 均缺失 |
 | 本轮交付（P0） | A1 消息定位基础设施 · A2 大纲点击直达标题 · A3 搜索命中直达并高亮 · A4 划词引用追问 · A5 引用改为追加、不再覆盖草稿 |
-| 第二轮（P1/P2，§10） | 按优先级实施：P1 消息朗读、截断提示 + 继续生成、命中词高亮、会话内查找；P2 生成速度统计、回答版本切换、端点离线提示 |
+| 第二轮（P1/P2，§10） | 按优先级实施：P1 消息朗读、截断提示 + 继续生成、命中词高亮、会话内查找；P2 生成速度统计、回答版本切换、端点离线提示；两批均已合并到 `main` 与 `release/win7`（§10.8） |
 
 ---
 
@@ -304,6 +304,8 @@ MessageList（每次 messages / pending 变化）
 > 日期: 2026-09-26 · 基线: `origin/main` @ `6a77dc3b5`（#1609）
 > 批次: P1（B1–B4）→ P2（C1–C3）。每批 main 合并后 cherry-pick 到 `release/win7`，流程同 §5。
 > P1 工作分支: `feat/chat-reading-p1-main`（worktree `.worktrees/feat-chat-reading-p1-main`）。
+> P2 工作分支: `feat/chat-reading-p2-main`（worktree `.worktrees/feat-chat-reading-p2-main`）；win7 对齐分支
+> `feat/chat-reading-p1-win7` / `feat/chat-reading-p2-win7`。四个工作树已在步骤 8 清理（§10.7.7）。
 
 ### 10.1 范围与批次
 
@@ -436,8 +438,9 @@ P2 的详细设计在 P1 合并后补入 §10.6：先对照当时的代码核实
 | 4 | 2026-09-26 09:53 | P1 main PR → CI 全绿 → 合并 | ✅ 完成 | [#1619](https://github.com/oneMuggle/sage/pull/1619) 14 项检查通过（2 项按条件跳过）→ squash 合并为 `a3c16668e`；见 §10.7.2 |
 | 5 | 2026-09-26 10:30 | P1 cherry-pick 到 win7 → PR → CI 全绿 → 合并 | ✅ 完成 | [#1622](https://github.com/oneMuggle/sage/pull/1622) 必需的 5 项检查及 All Checks / Architecture check / count-lines 通过（3 项按条件跳过）→ squash 合并为 `315fdebca`；见 §10.7.3 |
 | 6 | 2026-09-26 11:20 | P2 设计定稿 + 实施 + 本地验证 | ✅ 完成 | 设计见 §10.6，实施记录见 §10.7.4：新增 7 个前端模块、1 个后端模块、10 个前端测试文件、3 个后端测试文件；受影响文件 eslint 0 错误，`tsc --noEmit` 0 错误，`ruff check backend/` 通过，`architecture-check` 通过（8 个基线文件按棘轮协议上调） |
-| 7 | — | P2 main / win7 两条 PR 合并 | 🔄 进行中 | 分支 `feat/chat-reading-p2-main` |
-| 8 | — | 清理分支与工作树 + 回填 | ⏳ 待办 | — |
+| 7 | 2026-09-26 14:03 | P2 main / win7 两条 PR 合并 | ✅ 完成 | main [#1625](https://github.com/oneMuggle/sage/pull/1625) 14 项检查通过（2 项按条件跳过）→ squash 合并为 `91dbb9420`；win7 [#1627](https://github.com/oneMuggle/sage/pull/1627) 必需的 5 项检查及 All Checks / Architecture check / count-lines 通过（3 项按条件跳过）→ squash 合并为 `8a8e5af9d`；见 §10.7.5、§10.7.6 |
+| 8 | 2026-09-26 14:05 | 清理分支与工作树 | ✅ 完成 | 见 §10.7.7：4 个工作树与本地 / 远端分支全部删除，临时文件已清理 |
+| 9 | 2026-09-26 14:07 | 回填（本 PR）→ CI → 合并 → 删除回填分支与工作树 | 🔄 本步骤 | 回填分支 `docs/chat-reading-r2-backfill`（工作树 `.worktrees/docs-chat-reading-r2-backfill`）；同时在 `docs/plans/2026-09-26_chat-reading-nav-r2.md` 补交付号；合并后删除远端分支，随后移除本地工作树与分支；首轮 CI 被 main 上 #1621 遗留的问题拖红，另开 [#1630](https://github.com/oneMuggle/sage/pull/1630) 修复 main 后 rebase（见 §10.7.7） |
 
 ### 10.7.1 P1 实施记录（步骤 3）
 
@@ -526,3 +529,50 @@ P2 的详细设计在 P1 合并后补入 §10.6：先对照当时的代码核实
 | `ruff check backend/` | 通过 |
 | prettier | 新增文件已格式化；改动文件没有引入新的格式问题 |
 | `architecture-check` | 通过。基线上调：`legacy_routes.py` 4396→4426、`agent.py` 2429→2430、`llm_client.py` 1074→1093、`database.py` 1920→1949、`session_repo.py` 1016→1024、`Chat.tsx` 1189→1198、`types.ts` 2387→2399、`Message.tsx` 1083→1101 |
+
+### 10.7.5 P2 main 合并记录（步骤 7）
+
+- 提交前 `git fetch` + rebase 到最新 `origin/main`（`82fbb9938`，#1620），无冲突；推送后开 [#1625](https://github.com/oneMuggle/sage/pull/1625)（11:23）。
+- 开 PR 后自查发现：`/chat/stream` 的异步处理函数里直接调用了 `regenerate_excluded_ids`（SQLite 查询），会阻塞事件循环。追加 `ccbd0c720`，改成与同函数里其他数据库调用一致的 `await to_thread(...)`。新提交推送后，首轮 CI 被同一 PR 的并发组取消，`All Checks` 因此显示失败；没有用例失败。
+- CI（最终头 `ccbd0c720`）：stub-smoke、stub-deep、live-boot、Frontend (TypeScript)、Backend (Python)、Backend collect (Python 3.8, win7 mine-sweeper)、Electron smoke、两个平台的 Electron build、Architecture check、Dependency audit、Backend legacy smoke、count-lines、All Checks 共 14 项全部通过；Backend (Python 3.8, Win7 LTS) 与 Backend unit (Windows) 按条件跳过。
+- 合并前 `origin/main` 没有移动，squash 合并为 `91dbb942045884ceef9b58368e838ba5775aecce`（11:53）。
+
+### 10.7.6 P2 win7 对齐记录（步骤 7）
+
+- 在 #1625 跑 CI 期间新建 `.worktrees/feat-chat-reading-p2-win7`（基于 `origin/release/win7` @ `315fdebca`，端口 8786/1441，独立 `npm ci`），`git cherry-pick -x` 它的首个提交 `916c72467` 并解决冲突（11:35）。#1625 追加的 `ccbd0c720` 在 win7 上已被冲突解决时的 `_run_db_sync` 包装覆盖（win7 没有 `to_thread`）。#1625 合并后，把提交信息改为引用 squash 提交（`cherry picked from commit 91dbb9420…`）；改动文件集合与 `91dbb9420` 一致（40 个文件）。
+- 冲突与处理：
+
+| 文件 | 原因 | 处理 |
+| --- | --- | --- |
+| `backend/api/legacy_routes.py` | win7 的 producer 落库经 `_run_db_sync` 包装，user 消息落库块结构不同；会话更新写的是 `message_count + 2`；win7 没有导入 `to_thread` | 保留 win7 结构，只在 user 落库前插入 `regenerate_of` 分支；最后一轮校验与历史剔除查询改走 `_run_db_sync`；`message_count` 在 win7 原处改为重新生成 +1 |
+| `src/features/send-message/useChat.ts` | win7 没有附件检索（`attachmentRagConfig`） | 只加入 `GenerationStats` 类型导入 |
+| `src/widgets/chat/Message.tsx` | win7 没有 `BlockedCard` | 只加入 `AnswerVersionSwitcher` 导入 |
+| `src/shared/api/chatApi.ts` | win7 没有 `attachment_rag` 参数 | 只加入 `regenerateOf`（仅原位重新生成时携带） |
+| `architecture-baseline.json` | 两条分支基线数值不同 | 保留 win7 数值，按本分支实际行数上调 `legacy_routes.py` 4401→4431、`agent.py` 2522→2523、`llm_client.py` 1070→1089、`database.py` 1953→1982、`session_repo.py` 1017→1025、`Message.tsx` 1067→1074 |
+
+- 其余文件（`agent.py`、`agent_state.py`、`llm_client.py`、`database.py`、`session_repo.py`、`legacy_session_routes.py`、`Chat.tsx`、`MessageList.tsx`、`Layout.tsx`、`types.ts`、`store.ts` 等）自动合并。
+- 本地验证（win7 工作树）：`npm run typecheck` 0 错误；冲突与接线文件 eslint 0 错误（`Message.tsx` 1 条原有 warning）；`ruff check backend/` 与 `architecture-check` 通过；受影响的 8 个前端目录共 221 个测试文件全部通过；Python 3.8 下后端相关用例 32 passed（首轮集成测试暴露 win7 没有 `to_thread`，已改为 `_run_db_sync`）。
+- 11:55 左右本机桥接隧道掉线，推送暂停。13:38 重连后复核：提交树与掉线前的 `6ffe02f0f` 一致，提交信息已改好，`release/win7` 仍在 `315fdebca`，无需 rebase；推送后开 [#1627](https://github.com/oneMuggle/sage/pull/1627)（13:40）。
+- CI：`Frontend (TypeScript)`、`Electron smoke (playwright-electron)`、`Backend (Python 3.8, Win7 LTS)`（22 分钟全量）、`Electron build (windows-latest)`、`Electron build (ubuntu-latest)` 这 5 项必需检查，以及 All Checks、Architecture check、count-lines 全部通过；`Backend (Python)`、legacy smoke、Dependency audit 在 win7 目标上按条件跳过。
+- 合并前复查 base 没有移动 → squash 合并为 `8a8e5af9d7e7d021867874c1ef40d815cc92c5e1`（14:03）。
+
+### 10.7.7 清理记录（步骤 8）
+
+- 移除工作树：`.worktrees/feat-chat-reading-p1-main`、`.worktrees/feat-chat-reading-p1-win7`、`.worktrees/feat-chat-reading-p2-main`、`.worktrees/feat-chat-reading-p2-win7`（在主仓库目录执行 `git worktree remove --force` + `git worktree prune`；各工作树独立安装的 `node_modules` 随工作树一起删除）。
+- 删除本地分支 `feat/chat-reading-p1-main`、`feat/chat-reading-p1-win7`、`feat/chat-reading-p2-main`、`feat/chat-reading-p2-win7`（squash 合并，所以用 `-D`）。四个 PR 合并时没有带 `--delete-branch`，远端同名分支在这一步用 `git push origin --delete` 删除，`gh api .../branches/<name>` 复核均为 404。
+- 删除主机临时文件（PR 正文、提交信息、推送与测试日志）。
+- 主检出 `E:/ProgrammingData/electron/sage` 全程没有动过；清理前后它的 `node_modules` 都是 804 项。
+- 回填 PR [#1629](https://github.com/oneMuggle/sage/pull/1629) 首轮 CI 失败，原因不在本 PR：P2 两条 PR 合并后，main 又合入了 #1621（插件系统），main 自身在 `4a5891e83` 上就是红的。一是 Architecture check：`src/shared/lib/i18n/en.ts` / `zh.ts` 各涨 6 行（1253 / 1228），没有更新基线（1247 / 1222）；二是 Backend (Python)：CI 钉的 ruff 0.4.4 在 `backend/plugins/manifest.py` 报 6 个错误（1 个 I001、5 个 N805），后面的 pytest 根本没跑到；三是非阻断的 Backend unit (Windows)：`test_skill_discovery.py::test_default_skills_dir` 用 `/` 拼接的路径做断言。本 PR 先按 §7.4 的做法补了基线，但 Backend (Python) 仍然是红的；经用户确认，另开 [#1630](https://github.com/oneMuggle/sage/pull/1630) 修复 main（导入排序、v1 分支补 `@classmethod`、基线补账、测试改为比较路径分段）。#1630 CI 全绿后于 17:00 squash 合并为 `0dcc6e2d6`；本 PR rebase 到它之后，基线改动随之消失，重新变回纯文档。
+
+### 10.8 交付记录（第二轮）
+
+| 批次 | 分支 | PR | 合并提交 | 备注 |
+| --- | --- | --- | --- | --- |
+| P1 | `main` | [#1619](https://github.com/oneMuggle/sage/pull/1619) | `a3c16668eea61ab308a4274bc4561a2933584af8` | 2026-09-26 09:53 squash 合并 |
+| P1 | `release/win7` | [#1622](https://github.com/oneMuggle/sage/pull/1622) | `315fdebca977dac23d9dd1d1ff451e3ed5aeef5c` | 2026-09-26 10:30 squash 合并（← main #1619） |
+| P2 | `main` | [#1625](https://github.com/oneMuggle/sage/pull/1625) | `91dbb942045884ceef9b58368e838ba5775aecce` | 2026-09-26 11:53 squash 合并 |
+| P2 | `release/win7` | [#1627](https://github.com/oneMuggle/sage/pull/1627) | `8a8e5af9d7e7d021867874c1ef40d815cc92c5e1` | 2026-09-26 14:03 squash 合并（← main #1625） |
+| — | `main`（CI 修复） | [#1630](https://github.com/oneMuggle/sage/pull/1630) | `0dcc6e2d6600e4b623a230aa8c4ba105e2a1a6f8` | 2026-09-26 17:00 squash 合并；修复 #1621 遗留的 main CI 红灯，解除本回填的阻塞 |
+| — | `main`（回填） | 本 PR（`docs/chat-reading-r2-backfill`） | 合并后见 PR 页 | 只改文档 |
+
+说明：`release/win7` 上的本文件停留在"步骤 6 完成、步骤 7 进行中"的版本（随 #1627 带入）；完整进度以 main 为准，与 SOP 的"§回填只走 main"一致。
