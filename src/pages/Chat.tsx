@@ -39,6 +39,7 @@ import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
 import { TerminalPanel } from '../widgets/chat/TerminalPanel';
 import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
 import { WorkspaceBranchPicker } from '../widgets/chat/WorkspaceBranchPicker';
+import { RewindDialog } from '../widgets/chat/rewind/RewindDialog';
 import { ArchivesModal } from '../widgets/session';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
@@ -557,6 +558,30 @@ export function Chat() {
     [currentSessionId, isLoading, loadSessions, setCurrentSessionId, t],
   );
 
+  // W1 (主流对标): 消息级「回滚到此处」——对话框内可选「对话+文件」或「仅对话」；
+  // 文件恢复用工作区检查点（不晚于消息时刻的最近快照），对话回滚复用 session_fork。
+  const [rewindTarget, setRewindTarget] = useState<{ messageId: string; createdAt: number } | null>(
+    null,
+  );
+  const handleRewind = useCallback(
+    (messageId: string) => {
+      if (!currentSessionId || isLoading) return;
+      const target = messagesRef.current.find((m) => m.id === messageId);
+      if (!target) return;
+      setRewindTarget({ messageId, createdAt: target.created_at });
+    },
+    [currentSessionId, isLoading],
+  );
+  const handleRewindForked = useCallback(
+    async (forkedId: string) => {
+      toast.success(t('chat.rewind_success'));
+      setRewindTarget(null);
+      void loadSessions();
+      setCurrentSessionId(forkedId);
+    },
+    [loadSessions, setCurrentSessionId, t],
+  );
+
   // U5' (对标增强第五轮批次 A): 编辑重发。
   // ① 点击 user 消息的编辑按钮 → 原文回填输入框 + 进入编辑态（editResendTarget）；
   // ② 用户改写后发送 → fork 当前会话（before_message 开区间截到该消息之前，
@@ -959,6 +984,7 @@ export function Chat() {
                 sessionId={currentSessionId}
                 streamingMessageId={streamingMessageId}
                 onFork={handleFork}
+                onRewind={handleRewind}
                 onEditResend={handleStartEditResend}
                 onRegenerate={handleRegenerate}
                 onContinue={handleContinue}
@@ -1192,6 +1218,16 @@ export function Chat() {
         onClose={() => setArchivesOpen(false)}
         sessionId={currentSessionId}
       />
+      {rewindTarget && currentSessionId && (
+        <RewindDialog
+          isOpen
+          sessionId={currentSessionId}
+          messageId={rewindTarget.messageId}
+          messageCreatedAt={rewindTarget.createdAt}
+          onClose={() => setRewindTarget(null)}
+          onForked={handleRewindForked}
+        />
+      )}
     </div>
   );
 }
