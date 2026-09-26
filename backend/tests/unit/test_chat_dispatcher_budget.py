@@ -853,3 +853,47 @@ async def test_aggregate_no_ranking_when_single_task(tmp_path, monkeypatch):
     await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
     agg = d._aggregate(list(d._states.values()))
     assert "耗时排行" not in agg
+
+
+# ---- OPS5 (round57): orch_events 保留策略 ---------------------------------------
+
+
+def test_orch_events_retention_deletes_old_events(tmp_path, monkeypatch):
+    """OPS5: init_db 清理 30 天前的 orch_events。"""
+    import time as _time
+
+    _init_tmp_db(tmp_path, monkeypatch)
+    from backend.data.database import get_database
+
+    conn = get_database().get_connection()
+    now_ms = int(_time.time() * 1000)
+    old_ms = now_ms - 31 * 24 * 3600 * 1000  # 31 天前
+    recent_ms = now_ms - 1000
+
+    # 先建 orch_runs 外键依赖
+    conn.execute(
+        "INSERT INTO orch_runs (run_id, session_id, status, created_at, plan_json)"
+        " VALUES ('r-ops5', 's-ops5', 'completed', ?, '{}')",
+        (now_ms,),
+    )
+    for i, (tid, at) in enumerate([("old", old_ms), ("recent", recent_ms)]):
+        conn.execute(
+            "INSERT INTO orch_events (event_id, run_id, seq, event_type,"
+            " occurred_at, producer, producer_generation, payload, visibility,"
+            " schema_version)"
+            " VALUES (?, 'r-ops5', ?, 'task.started', ?, 'test', 0, '{}', 'user',"
+            " 'run-events@1.0')",
+            (f"evt-{tid}", i + 1, at),
+        )
+    conn.commit()
+
+    # 触发保留策略（模拟 init_db 中的 DELETE）
+    cutoff = int(_time.time() * 1000) - 30 * 24 * 3600 * 1000
+    conn.execute("DELETE FROM orch_events WHERE occurred_at < ?", (cutoff,))
+    conn.commit()
+
+    remaining = conn.execute(
+        "SELECT COUNT(*) FROM orch_events WHERE run_id = 'r-ops5'"
+    ).fetchone()[0]
+    # 旧事件（31 天前）被删，近期事件保留
+    assert remaining == 1

@@ -116,5 +116,18 @@ class OrchEventRepository:
             command_id=row["command_id"],
         )
 
+    # OPS5 (round57): 事件保留策略 —— 删除早于 cutoff 的历史事件，
+    # 防止 orch_events 表无限增长。
+    def delete_before(self, cutoff_ms: int) -> int:
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM orch_events WHERE occurred_at < ?",
+            (cutoff_ms,),
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        return deleted
+
 
 __all__ = ["OrchEventRepository"]

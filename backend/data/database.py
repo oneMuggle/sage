@@ -11,6 +11,7 @@ import logging
 import os
 import sqlite3
 import threading
+import time
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
@@ -1821,6 +1822,15 @@ class Database:
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_orch_events_run_seq ON orch_events(run_id, seq)"
         )
+        # OPS5 (round57): 事件保留策略 —— 删除 30 天前的历史事件，防止表
+        # 无限增长。每次启动时执行一次（fail-open，失败不阻塞启动）。
+        try:
+            cutoff_ms = int(time.time() * 1000) - 30 * 24 * 3600 * 1000
+            cursor.execute(
+                "DELETE FROM orch_events WHERE occurred_at < ?", (cutoff_ms,)
+            )
+        except Exception:  # noqa: BLE001 — 清理失败不阻塞启动
+            pass
         # C3 (2026-09-09): orch_steps 死表退役 —— 表/repo 曾建好但生产路径
         # 零写入，step 事实已由 orch_events 的 task.step.* payload 承载（可
         # after_seq 回放）。存量库中的残留表不主动 DROP（无害，随库保留）。
