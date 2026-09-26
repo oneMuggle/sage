@@ -85,7 +85,7 @@ async def test_skill_activated_event_carries_matched_triggers(client):
 
     captured: dict = {}
     with patch(
-        "backend.api.legacy_routes._get_skill_adapter",
+        "backend.api.legacy_skills_routes._get_skill_adapter",
         return_value=_FakeSkillAdapter(),
     ), patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         MockAgent.return_value.run_loop = _mock_run_loop_done("已完成部署", captured)
@@ -120,7 +120,7 @@ async def test_no_skill_event_when_port_lacks_auto_activate(client):
     session_id = create.json()["id"]
 
     with patch(
-        "backend.api.legacy_routes._get_skill_adapter",
+        "backend.api.legacy_skills_routes._get_skill_adapter",
         return_value=_NoAutoActivateAdapter(),
     ), patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         MockAgent.return_value.run_loop = _mock_run_loop_done("好的")
@@ -144,7 +144,7 @@ async def test_skill_port_failure_never_blocks_chat(client):
             raise RuntimeError("skill discovery blew up")
 
     with patch(
-        "backend.api.legacy_routes._get_skill_adapter",
+        "backend.api.legacy_skills_routes._get_skill_adapter",
         return_value=_ExplodingAdapter(),
     ), patch("backend.api.legacy_routes.SageAgent") as MockAgent:
         MockAgent.return_value.run_loop = _mock_run_loop_done("照常回复")
