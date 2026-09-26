@@ -27,7 +27,7 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
   it('tab 值均在已知 tab 集合内', () => {
     const knownTabs = new Set([
       'general', 'basic', 'memory-knowledge', 'tools-connections', 'endpoints',
-      'models', 'orchestration', 'memory', 'network', 'mcp', 'zotero',
+      'models', 'orchestration', 'memory', 'network', 'mcp', 'remote-workspaces', 'zotero',
       'runtime', 'evolution', 'updates', 'providers',
     ]);
     for (const e of SETTINGS_SEARCH_INDEX) {

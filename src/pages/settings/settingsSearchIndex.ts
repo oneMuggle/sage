@@ -17,6 +17,7 @@ export type SettingsTabKey =
   | 'memory'
   | 'network'
   | 'mcp'
+  | 'remote-workspaces'
   | 'zotero'
   | 'runtime'
   | 'evolution'
@@ -384,6 +385,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   },
 
   // ── 网络 ──
+  {
+    key: 'remote_workspaces',
+    tab: 'remote-workspaces',
+    label: '远程工作区（MCP）',
+    labelEn: 'Remote workspaces (MCP)',
+    keywords: 'remote workspace mcp 远程 工作区 隧道 tunnel cloudflare 急停 emergency 共享 share',
+  },
   {
     key: 'network_policy',
     tab: 'network',

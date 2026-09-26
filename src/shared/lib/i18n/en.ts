@@ -230,6 +230,7 @@ export const en: Record<TranslationKey, string> = {
   'settings.tab.orchestration': 'Orchestration',
   'settings.tab.memory': 'Memory',
   'settings.tab.network': 'Network',
+  'settings.tab.remote-workspaces': 'Remote workspaces',
   'settings.tab.mcp': 'MCP',
   'settings.tab.zotero': 'Library',
   'settings.tab.runtime': 'Dev Environment',
