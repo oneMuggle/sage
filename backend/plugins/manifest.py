@@ -24,8 +24,10 @@ try:
     PYDANTIC_V2 = True
 except ImportError:
     # Pydantic v1 fallback
-    from pydantic import validator as field_validator  # type: ignore
-    from pydantic import root_validator as model_validator  # type: ignore
+    from pydantic import (
+        root_validator as model_validator,  # type: ignore
+        validator as field_validator,  # type: ignore
+    )
     PYDANTIC_V2 = False
 
 
@@ -76,7 +78,7 @@ class PluginCapability(BaseModel):
             return v
     else:
         @field_validator("name")
-        def validate_name(cls, v: str) -> str:
+        def validate_name(cls, v: str) -> str:  # noqa: N805
             """Validate capability name format (Pydantic v1)."""
             if not v.replace("-", "").replace("_", "").isalnum():
                 raise ValueError("能力名称只能包含字母、数字、连字符和下划线")
@@ -100,7 +102,7 @@ class PluginDependency(BaseModel):
             return self
     else:
         @model_validator
-        def validate_version_format(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        def validate_version_format(cls, values: Dict[str, Any]) -> Dict[str, Any]:  # noqa: N805
             """Validate version constraint format (Pydantic v1)."""
             version = values.get("version", "")
             valid = version.replace("^", "").replace("~", "").replace("*", "").replace(">=", "")
@@ -210,7 +212,7 @@ class PluginManifest(BaseModel):
             return v.lower()
     else:
         @field_validator("name")
-        def validate_plugin_name(cls, v: str) -> str:
+        def validate_plugin_name(cls, v: str) -> str:  # noqa: N805
             """Validate plugin name format (Pydantic v1)."""
             if not v.replace("-", "").replace("_", "").isalnum():
                 raise ValueError("插件名称只能包含字母、数字、连字符和下划线")
@@ -236,7 +238,7 @@ class PluginManifest(BaseModel):
             return self
     else:
         @model_validator
-        def validate_capabilities_unique(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        def validate_capabilities_unique(cls, values: Dict[str, Any]) -> Dict[str, Any]:  # noqa: N805
             """Validate that capability names are unique (Pydantic v1)."""
             capabilities = values.get("capabilities", [])
             names = [c.name if hasattr(c, "name") else c.get("name") for c in capabilities]
@@ -245,7 +247,7 @@ class PluginManifest(BaseModel):
             return values
 
         @model_validator
-        def validate_dependencies_no_self(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        def validate_dependencies_no_self(cls, values: Dict[str, Any]) -> Dict[str, Any]:  # noqa: N805
             """Validate that plugin doesn't depend on itself (Pydantic v1)."""
             name = values.get("name", "")
             dependencies = values.get("dependencies", [])
