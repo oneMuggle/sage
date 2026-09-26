@@ -1,7 +1,7 @@
 /**
  * TM3 (DSH 对标 ZCode): KeyboardShortcutsHelp 组件测试。
  */
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import { useStore } from '../../../shared/lib/store';
