@@ -515,6 +515,8 @@ export interface AgentEvent {
   message_id?: string;
   /** 首轮对话标记: 标题将在后台生成, 前端稍后补刷侧栏 (同步 #1196) */
   title_pending?: boolean;
+  /** 第二轮 B2: DONE 携带的 LLM 终止原因（length = 触达输出上限被截断） */
+  finish_reason?: string;
   /** 阶段 4: 当前执行 agent 的 ID (供前端显示"当前处理 agent") */
   agent_id?: string;
   /** M1: state === 'permission_request' 时携带的审批请求详情 */

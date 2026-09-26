@@ -694,6 +694,12 @@ export function Chat() {
     [currentSessionId, isLoading, loadSessions, sendMessage, setCurrentSessionId, t],
   );
 
+  // 第二轮 B2: 截断回答「继续生成」—— 发一条续写消息，原回答保留、历史可追溯
+  const handleContinue = useCallback(() => {
+    if (!currentSessionId || isLoading) return;
+    void sendMessage(t('chat.continue_prompt'), currentSessionId);
+  }, [currentSessionId, isLoading, sendMessage, t]);
+
   // R17-B: 删除单条消息 —— messageApi.delete 落库后本地同步移除；
   // 失败提示但不移动视图（历史保持可见）。
   const handleDeleteMessage = useCallback(
@@ -877,6 +883,7 @@ export function Chat() {
                 onFork={handleFork}
                 onEditResend={handleStartEditResend}
                 onRegenerate={handleRegenerate}
+                onContinue={handleContinue}
                 onDelete={handleDeleteMessage}
                 onQuote={handleQuote}
                 onQuoteSelection={quoteText}

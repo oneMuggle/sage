@@ -36,7 +36,9 @@ import { CompactBanner } from './CompactBanner';
 import { HtmlCodeBlock } from './HtmlCodeBlock';
 import { MarkdownImage } from './MarkdownImage';
 import { MermaidBlock } from './MermaidBlock';
+import { ReadAloudButton } from './ReadAloudButton';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
+import { TruncationNotice } from './TruncationNotice';
 import { FileChangeCards } from './changes/FileChangeCard';
 
 interface MessageProps {
@@ -58,6 +60,8 @@ interface MessageProps {
   onQuote?: (message: MessageType) => void;
   /** P0-1: 将此条消息内容保存到长期记忆 */
   onSaveToMemory?: (message: MessageType) => void;
+  /** 第二轮 B2: 截断回答的「继续生成」（MessageList 只传给会话最后一条消息） */
+  onContinue?: () => void;
   /** right-panel R1 批次 B: tool_call_id → 产物[] 映射 —— 命中的工具卡片
    * 下渲染内联产物 chip，点击直达右侧面板产物预览（对齐 Claude） */
   artifactsByToolCall?: Record<string, Artifact[]>;
@@ -423,6 +427,7 @@ function MessageComponent({
   onDelete,
   onQuote,
   onSaveToMemory,
+  onContinue,
   artifactsByToolCall,
 }: MessageProps) {
   const { t } = useI18n();
@@ -911,6 +916,11 @@ function MessageComponent({
           </div>
         )}
 
+        {/* 第二轮 B2: 触达输出上限被截断时提示；最后一条消息附带「继续生成」 */}
+        {isAssistant && !isStreaming && (
+          <TruncationNotice finishReason={message.finish_reason} onContinue={onContinue} />
+        )}
+
         {/* Action buttons */}
         {(canCopy ||
           onFeedback ||
@@ -931,6 +941,10 @@ function MessageComponent({
               >
                 {copied ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
               </button>
+            )}
+            {/* 第二轮 B1: 朗读（不支持 speechSynthesis 时按钮自行隐藏） */}
+            {canCopy && isAssistant && (
+              <ReadAloudButton messageId={message.id} content={message.content} />
             )}
             {onFeedback && (
               <>
@@ -1026,6 +1040,7 @@ export const Message = memo(MessageComponent, (prev, next) => {
   return (
     prev.message === next.message &&
     prev.isStreaming === next.isStreaming &&
+    prev.onContinue === next.onContinue &&
     prev.onFeedback === next.onFeedback &&
     prev.knowledgeRefs === next.knowledgeRefs &&
     prev.attachments === next.attachments &&

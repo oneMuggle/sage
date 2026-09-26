@@ -103,10 +103,11 @@ export function ConversationsSection({
 
   // 对话阅读导航 A3: 搜索态下点开有消息命中的会话 → 先登记定位请求再切会话，
   // 消息加载完成后 MessageList 自动滚到命中消息并高亮（对标"搜索命中直达"）。
+  // 第二轮 B3：请求带上搜索词，定位后在消息正文里高亮命中。
   const handleSelect = useCallback(
     (sessionId: string) => {
       const target = trimmedQuery.length >= 2 ? hitTargets.get(sessionId) : undefined;
-      if (target) requestMessageJump({ messageId: target });
+      if (target) requestMessageJump({ messageId: target, highlightQuery: trimmedQuery });
       onSelect(sessionId);
     },
     [hitTargets, onSelect, trimmedQuery],

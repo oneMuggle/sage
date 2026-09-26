@@ -21,6 +21,13 @@ export interface MessageJumpRequest {
   headingText?: string;
   /** 大纲定位兜底：该消息内第几个 h2/h3（0 起） */
   headingIndex?: number;
+  /** B3 / B4：定位后高亮的检索词（不区分大小写的字面匹配） */
+  highlightQuery?: string;
+  /**
+   * B4 会话内查找：突出目标消息内第几处命中（0 起）并滚动到该处，不闪烁整条消息。
+   * 缺省为 B3 搜索命中模式：高亮全部命中，数秒后自动清除。
+   */
+  highlightIndex?: number;
   /** 每次请求唯一；重复点击同一目标也会重新定位 */
   nonce: number;
 }
