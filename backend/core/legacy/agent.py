@@ -1230,6 +1230,7 @@ class SageAgent:
                         content=response.content,
                         agent_id=self.agent_id,
                         finish_reason=getattr(response, "finish_reason", None),
+                        generation_stats=AgentEvent.generation_stats_from(response),
                     )
                     return
 
