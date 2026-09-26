@@ -16,7 +16,7 @@ import logging
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Union
 
 from pydantic import BaseModel, Field
 

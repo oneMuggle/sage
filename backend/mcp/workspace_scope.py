@@ -15,7 +15,7 @@ import json
 import logging
 import sqlite3
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 

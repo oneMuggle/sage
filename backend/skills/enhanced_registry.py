@@ -11,7 +11,7 @@ Date: 2026-09-26
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Dict, List, Optional
 
 from backend.skills.base import BaseSkill, SkillResult, SkillSchema
 from backend.skills.discovery import SkillDiscoveryService, SkillMetadata
