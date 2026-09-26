@@ -2813,8 +2813,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
                 history_rows = []
             # C2: 原位重新生成 —— 历史剔除锚点 user 消息与旧回答 (事件投影同样剔除)
-            regen_excluded = answer_versions.regenerate_excluded_ids(
-                data.session_id, data.regenerate_of
+            regen_excluded = await to_thread(
+                answer_versions.regenerate_excluded_ids, data.session_id, data.regenerate_of
             )
             history_rows = answer_versions.drop_excluded(history_rows, regen_excluded)
             # Task 10 (2026-09-17): 自动话题检测 — 用户未显式 context_reset
