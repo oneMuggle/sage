@@ -19,11 +19,14 @@ from pydantic import BaseModel, Field
 
 # Pydantic v1/v2 compatibility
 try:
+    # Pydantic v2
     from pydantic import field_validator, model_validator
+    PYDANTIC_V2 = True
 except ImportError:
     # Pydantic v1 fallback
     from pydantic import validator as field_validator  # type: ignore
     from pydantic import root_validator as model_validator  # type: ignore
+    PYDANTIC_V2 = False
 
 
 class PluginType(str, Enum):
@@ -63,12 +66,21 @@ class PluginCapability(BaseModel):
         default=None, description="配置项 JSON Schema"
     )
 
-    @field_validator("name")
-    def validate_name(cls, v: str) -> str:
-        """Validate capability name format."""
-        if not v.replace("-", "").replace("_", "").isalnum():
-            raise ValueError("能力名称只能包含字母、数字、连字符和下划线")
-        return v
+    if PYDANTIC_V2:
+        @field_validator("name")
+        @classmethod
+        def validate_name(cls, v: str) -> str:
+            """Validate capability name format."""
+            if not v.replace("-", "").replace("_", "").isalnum():
+                raise ValueError("能力名称只能包含字母、数字、连字符和下划线")
+            return v
+    else:
+        @field_validator("name")
+        def validate_name(cls, v: str) -> str:
+            """Validate capability name format (Pydantic v1)."""
+            if not v.replace("-", "").replace("_", "").isalnum():
+                raise ValueError("能力名称只能包含字母、数字、连字符和下划线")
+            return v
 
 
 class PluginDependency(BaseModel):
@@ -78,15 +90,23 @@ class PluginDependency(BaseModel):
     version: str = Field(..., description="版本要求", pattern=r"^[\d.^~*>=]+$")
     optional: bool = Field(default=False, description="是否可选依赖")
 
-    @model_validator
-    def validate_version_format(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate version constraint format."""
-        version = values.get("version", "")
-        # 支持：1.0.0, ^1.0.0, ~1.0.0, *, >=1.0.0
-        valid = version.replace("^", "").replace("~", "").replace("*", "").replace(">=", "")
-        if not all(c.isdigit() or c == "." for c in valid):
-            raise ValueError(f"不支持的版本格式: {version}")
-        return values
+    if PYDANTIC_V2:
+        @model_validator(mode="after")
+        def validate_version_format(self) -> PluginDependency:
+            """Validate version constraint format."""
+            valid = self.version.replace("^", "").replace("~", "").replace("*", "").replace(">=", "")
+            if not all(c.isdigit() or c == "." for c in valid):
+                raise ValueError(f"不支持的版本格式: {self.version}")
+            return self
+    else:
+        @model_validator
+        def validate_version_format(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+            """Validate version constraint format (Pydantic v1)."""
+            version = values.get("version", "")
+            valid = version.replace("^", "").replace("~", "").replace("*", "").replace(">=", "")
+            if not all(c.isdigit() or c == "." for c in valid):
+                raise ValueError(f"不支持的版本格式: {version}")
+            return values
 
 
 class PluginMetadata(BaseModel):
@@ -178,34 +198,62 @@ class PluginManifest(BaseModel):
         default=None, description="用户配置 JSON Schema"
     )
 
-    @field_validator("name")
-    def validate_plugin_name(cls, v: str) -> str:
-        """Validate plugin name format."""
-        if not v.replace("-", "").replace("_", "").isalnum():
-            raise ValueError("插件名称只能包含字母、数字、连字符和下划线")
-        if v.startswith("-") or v.endswith("-"):
-            raise ValueError("插件名称不能以连字符开头或结尾")
-        return v.lower()
+    if PYDANTIC_V2:
+        @field_validator("name")
+        @classmethod
+        def validate_plugin_name(cls, v: str) -> str:
+            """Validate plugin name format."""
+            if not v.replace("-", "").replace("_", "").isalnum():
+                raise ValueError("插件名称只能包含字母、数字、连字符和下划线")
+            if v.startswith("-") or v.endswith("-"):
+                raise ValueError("插件名称不能以连字符开头或结尾")
+            return v.lower()
+    else:
+        @field_validator("name")
+        def validate_plugin_name(cls, v: str) -> str:
+            """Validate plugin name format (Pydantic v1)."""
+            if not v.replace("-", "").replace("_", "").isalnum():
+                raise ValueError("插件名称只能包含字母、数字、连字符和下划线")
+            if v.startswith("-") or v.endswith("-"):
+                raise ValueError("插件名称不能以连字符开头或结尾")
+            return v.lower()
 
-    @model_validator
-    def validate_capabilities_unique(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate that capability names are unique."""
-        capabilities = values.get("capabilities", [])
-        names = [c.name if hasattr(c, "name") else c.get("name") for c in capabilities]
-        if len(names) != len(set(names)):
-            raise ValueError("能力名称必须唯一")
-        return values
+    if PYDANTIC_V2:
+        @model_validator(mode="after")
+        def validate_capabilities_unique(self) -> PluginManifest:
+            """Validate that capability names are unique."""
+            names = [c.name for c in self.capabilities]
+            if len(names) != len(set(names)):
+                raise ValueError("能力名称必须唯一")
+            return self
 
-    @model_validator
-    def validate_dependencies_no_self(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate that plugin doesn't depend on itself."""
-        name = values.get("name", "")
-        dependencies = values.get("dependencies", [])
-        for dep in dependencies:
-            dep_name = dep.name if hasattr(dep, "name") else dep.get("name")
-            if dep_name == name:
-                raise ValueError("插件不能依赖自身")
-        return values
+        @model_validator(mode="after")
+        def validate_dependencies_no_self(self) -> PluginManifest:
+            """Validate that plugin doesn't depend on itself."""
+            for dep in self.dependencies:
+                if dep.name == self.name:
+                    raise ValueError("插件不能依赖自身")
+            return self
+    else:
+        @model_validator
+        def validate_capabilities_unique(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+            """Validate that capability names are unique (Pydantic v1)."""
+            capabilities = values.get("capabilities", [])
+            names = [c.name if hasattr(c, "name") else c.get("name") for c in capabilities]
+            if len(names) != len(set(names)):
+                raise ValueError("能力名称必须唯一")
+            return values
+
+        @model_validator
+        def validate_dependencies_no_self(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+            """Validate that plugin doesn't depend on itself (Pydantic v1)."""
+            name = values.get("name", "")
+            dependencies = values.get("dependencies", [])
+            for dep in dependencies:
+                dep_name = dep.name if hasattr(dep, "name") else dep.get("name")
+                if dep_name == name:
+                    raise ValueError("插件不能依赖自身")
+            return values
 
     def to_json(self, indent: int = 2) -> str:
         """Serialize manifest to JSON string."""
