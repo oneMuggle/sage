@@ -13,9 +13,6 @@ Author: Claude
 Date: 2026-09-26
 """
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from backend.mcp.discovery import DiscoveredMcpServer
@@ -58,24 +55,24 @@ class TestWorkspaceMcpConfig:
 class TestWorkspaceScopeManager:
     """Tests for WorkspaceScopeManager."""
 
-    @pytest.fixture
+    @pytest.fixture()
     def db_path(self, tmp_path):
         """Create a temporary database path."""
         return tmp_path / "test_workspace.db"
 
-    @pytest.fixture
+    @pytest.fixture()
     def manager(self, db_path):
         """Create a test manager."""
         return WorkspaceScopeManager(db_path=db_path)
 
-    @pytest.fixture
+    @pytest.fixture()
     def workspace1(self, tmp_path):
         """Create first test workspace."""
         ws = tmp_path / "workspace1"
         ws.mkdir()
         return ws
 
-    @pytest.fixture
+    @pytest.fixture()
     def workspace2(self, tmp_path):
         """Create second test workspace."""
         ws = tmp_path / "workspace2"

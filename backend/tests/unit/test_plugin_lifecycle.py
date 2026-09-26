@@ -11,9 +11,6 @@ Author: Claude
 Date: 2026-09-26
 """
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
 from backend.plugins.lifecycle import (
@@ -58,13 +55,13 @@ class TestPluginRecord:
 class TestPluginLifecycleManager:
     """Tests for PluginLifecycleManager."""
 
-    @pytest.fixture
+    @pytest.fixture()
     def manager(self, tmp_path):
         """Create a test lifecycle manager."""
         db_path = tmp_path / "test_plugins.db"
         return PluginLifecycleManager(db_path=db_path)
 
-    @pytest.fixture
+    @pytest.fixture()
     def manifest(self):
         """Create a test manifest."""
         return PluginManifest.model_validate(EXAMPLE_MANIFEST)

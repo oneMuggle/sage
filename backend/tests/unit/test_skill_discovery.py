@@ -11,17 +11,9 @@ Author: Claude
 Date: 2026-09-26
 """
 
-import tempfile
-from pathlib import Path
-
 import pytest
 
-from backend.skills.discovery import (
-    SkillDiscoveryError,
-    SkillDiscoveryService,
-    SkillMetadata,
-    SkillNotFoundError,
-)
+from backend.skills.discovery import SkillDiscoveryService, SkillMetadata, SkillNotFoundError
 
 
 class TestSkillMetadata:
@@ -46,12 +38,12 @@ class TestSkillMetadata:
 class TestSkillDiscoveryService:
     """Tests for SkillDiscoveryService."""
 
-    @pytest.fixture
+    @pytest.fixture()
     def skills_dir(self, tmp_path):
         """Create a temporary skills directory."""
         return tmp_path / "skills"
 
-    @pytest.fixture
+    @pytest.fixture()
     def service(self, skills_dir):
         """Create a test discovery service."""
         return SkillDiscoveryService(skills_dir=skills_dir)

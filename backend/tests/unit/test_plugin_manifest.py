@@ -143,7 +143,7 @@ class TestPluginManifest:
         invalid_names = ["-my-plugin", "my-plugin-", "my plugin", "my.plugin"]
         for name in invalid_names:
             manifest_data = {**EXAMPLE_MANIFEST, "name": name}
-            with pytest.raises(ValueError):
+            with pytest.raises(ValueError, match="无效的名称"):
                 PluginManifest.model_validate(manifest_data)
 
     def test_manifest_capabilities_unique(self):
@@ -208,7 +208,7 @@ class TestPluginManifest:
             assert manifest == manifest2
 
             # Verify JSON format
-            with open(manifest_path, "r", encoding="utf-8") as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 data = json.load(f)
             assert data["name"] == "example-plugin"
 
@@ -219,9 +219,10 @@ class TestPluginManifest:
 
     def test_manifest_from_file_not_file(self):
         """Test loading from directory path."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with pytest.raises(ValueError, match="路径不是文件"):
-                PluginManifest.from_file(tmpdir)
+        with tempfile.TemporaryDirectory() as tmpdir, pytest.raises(
+            ValueError, match="路径不是文件"
+        ):
+            PluginManifest.from_file(tmpdir)
 
 
 class TestValidatePluginManifest:
