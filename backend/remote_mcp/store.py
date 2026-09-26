@@ -3,6 +3,9 @@
 - 原子写（temp + ``os.replace``）；文件损坏时**不覆盖**，抛错交给调用方；
 - token = 256 bit 随机 hex，只经 :meth:`WorkspaceStore.connection_token` 取出，
   :meth:`public_view` 永不包含 token；
+- 落盘为 ``token_enc``（SecretBox：DPAPI / keychain / secret-tool；无后端时诚实降级），
+  内存保持明文用于常量时间比对；旧明文 ``token`` 加载后立即迁移；解密失败则重置
+  token、停用工作区并标记 ``token_reset``（M5a）；
 - 创建时对 root 做 realpath，拒绝磁盘根与用户主目录（LocalBridge main.cjs 同款）。
 """
 
@@ -11,6 +14,7 @@ from __future__ import annotations
 import contextlib
 import copy
 import json
+import logging
 import os
 import secrets
 import threading
@@ -20,7 +24,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 PERMISSION_KEYS = ("read", "write", "shell")
-APPROVAL_MODES = ("auto",)  # "ask" 在 M5 接入审批队列后开放
+APPROVAL_MODES = ("auto", "ask")
+
+logger = logging.getLogger(__name__)
 
 _FILE_NAME = "remote_workspaces.json"
 
@@ -57,13 +63,52 @@ class WorkspaceStore:
         workspaces = data.get("workspaces") if isinstance(data, dict) else None
         if not isinstance(workspaces, list):
             raise StoreError(f"远程工作区配置损坏（未覆盖原文件）: {self._path}")
+        migrate = False
+        for w in workspaces:
+            if not isinstance(w, dict) or not isinstance(w.get("id"), str):
+                raise StoreError(f"远程工作区配置损坏（未覆盖原文件）: {self._path}")
+            enc = w.pop("token_enc", None)
+            if isinstance(enc, str):
+                try:
+                    from backend.services.secret_box import decrypt_secret
+
+                    token = decrypt_secret(enc)
+                except Exception:  # noqa: BLE001 — 换机器/换用户后 DPAPI 无法解密
+                    token = ""
+                if len(token) != 64:
+                    logger.warning("remote_mcp: token for workspace %s could not be decrypted; reset", w["id"])
+                    token = secrets.token_hex(32)
+                    w["enabled"] = False
+                    w["token_reset"] = True
+                    migrate = True
+                w["token"] = token
+            elif isinstance(w.get("token"), str):
+                migrate = True  # 旧版明文 → 加密重写
+            else:
+                w["token"] = secrets.token_hex(32)
+                w["enabled"] = False
+                w["token_reset"] = True
+                migrate = True
+            if w.get("approval") not in APPROVAL_MODES:
+                w["approval"] = "auto"
         self._workspaces = workspaces
+        if migrate:
+            self._save()
+
+    @staticmethod
+    def _encrypt(workspace: Dict[str, Any]) -> Dict[str, Any]:
+        from backend.services.secret_box import encrypt_secret
+
+        row = {k: v for k, v in workspace.items() if k != "token"}
+        row["token_enc"] = encrypt_secret(workspace["token"], account=f"remote-mcp:{workspace['id']}")
+        return row
 
     def _save(self) -> None:
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
         temp = f"{self._path}.{uuid.uuid4().hex}.tmp"
         with open(temp, "w", encoding="utf-8") as handle:
-            json.dump({"version": 1, "workspaces": self._workspaces}, handle, ensure_ascii=False, indent=2)
+            json.dump({"version": 2, "workspaces": [self._encrypt(w) for w in self._workspaces]},
+                      handle, ensure_ascii=False, indent=2)
         with contextlib.suppress(OSError):
             Path(temp).chmod(0o600)
         Path(temp).replace(self._path)
@@ -135,9 +180,14 @@ class WorkspaceStore:
         return self.public_view(workspace)
 
     def update(self, workspace_id: str, *, enabled: Optional[bool] = None,
-               permissions: Optional[Dict[str, bool]] = None) -> Dict[str, Any]:
+               permissions: Optional[Dict[str, bool]] = None,
+               approval: Optional[str] = None) -> Dict[str, Any]:
         with self._lock:
             workspace = self._require(workspace_id)
+            if approval is not None:
+                if approval not in APPROVAL_MODES:
+                    raise StoreError(f"无效审批模式: {approval}")
+                workspace["approval"] = approval
             if enabled is not None:
                 if not isinstance(enabled, bool):
                     raise StoreError("enabled 必须是布尔值")
@@ -156,6 +206,7 @@ class WorkspaceStore:
             workspace = self._require(workspace_id)
             workspace["token"] = secrets.token_hex(32)
             workspace["rotated_at"] = _now()
+            workspace.pop("token_reset", None)
             self._save()
             return self.public_view(workspace)
 
@@ -172,4 +223,4 @@ class WorkspaceStore:
         raise StoreError("工作区不存在")
 
 
-__all__ = ["PERMISSION_KEYS", "StoreError", "WorkspaceStore", "default_store_path"]
+__all__ = ["APPROVAL_MODES", "PERMISSION_KEYS", "StoreError", "WorkspaceStore", "default_store_path"]
