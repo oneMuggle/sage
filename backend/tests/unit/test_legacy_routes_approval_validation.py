@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from backend.api.legacy_routes import (
+from backend.api.legacy_skill_draft_routes import (
     _validate_skill_draft_content,
     approve_skill_draft,
 )
@@ -50,8 +50,8 @@ def test_approve_write_oserror_returns_stable_detail_without_raw_error() -> None
     loader = MagicMock()
     loader.write.side_effect = OSError(raw_error)
 
-    with patch("backend.api.legacy_routes.get_skill_draft_store", return_value=store), patch(
-        "backend.api.legacy_routes.get_skill_loader", return_value=loader
+    with patch("backend.api.legacy_skill_draft_routes.get_skill_draft_store", return_value=store), patch(
+        "backend.api.legacy_skill_draft_routes.get_skill_loader", return_value=loader
     ), pytest.raises(HTTPException) as raised:
         approve_skill_draft("draft-os-error")
 
