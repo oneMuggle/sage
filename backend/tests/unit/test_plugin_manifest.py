@@ -112,7 +112,7 @@ class TestPluginMetadata:
         """Test metadata with categories and tags."""
         meta = PluginMetadata(
             display_name="Plugin",
-            categories=["productivity", "tools"],
+            categories=["product", "tools"],
             tags=["test", "demo"],
         )
         assert len(meta.categories) == 2
