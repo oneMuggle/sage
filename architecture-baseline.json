@@ -75,5 +75,8 @@
     "backend/tools/web_render.py": 816
   },
   "backend/orchestration/chat_dispatcher.py": 2226,
-  "backend/tests/unit/test_chat_dispatcher_budget.py": 856
+  "backend/tests/unit/test_chat_dispatcher_budget.py": 856,
+  "backend/data/database.py": 1958,
+  "backend/data/orch_events_repo.py": 133,
+  "backend/cli/doctor.py": 550
 }
