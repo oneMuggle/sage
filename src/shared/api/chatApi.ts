@@ -3,6 +3,7 @@
  * 包含同步聊天和流式聊天
  */
 
+import { reportStreamFailure, reportStreamSuccess } from '../lib/endpointStatus';
 import { clientLogger } from '../log/client';
 
 import type { AttachmentEmbedConfig } from './attachmentRagConfig';
@@ -193,6 +194,8 @@ export const chatApi = {
       attachment_media_ids: attachmentMediaIds ?? [],
       // r67: 附件检索注入（键已 snake，桥接原样透传）
       attachment_rag: attachmentRag ?? null,
+      // 第二轮 C2: 原位重新生成的锚点 user 消息 id（桥接转为 regenerate_of；普通发送不带）
+      ...(config?.regenerateOf ? { regenerateOf: config.regenerateOf } : {}),
     });
     const eventName = `chat-stream-${streamId}`;
 
@@ -280,6 +283,9 @@ export const chatApi = {
           return;
         }
         if (payload.state === 'done' || payload.state === 'failed') {
+          // 第二轮 C3: 端点可达性 —— 失败按错误类型上报，正常完成即清除
+          if (payload.state === 'failed') reportStreamFailure(payload.error, config);
+          else reportStreamSuccess();
           if (payload.state === 'failed' && payload.error && handlers.onError) {
             // DIAG(2026-07-30): stream 以 FAILED 收尾时,把整轮 trace 推到主进程日志
             // 让主进程侧能看到 LLM 在哪几步反复调工具,从而定位 max_iterations 根因。

@@ -47,6 +47,8 @@ interface MessageListProps {
   onBlockedAction?: (action: BlockedAction) => void;
   /** 第二轮 B2: 继续生成（只传给最后一条消息，且仅在没有流式输出时） */
   onContinue?: () => void;
+  /** 第二轮 C2: 回答版本切换后的回调（同上，只传给最后一条消息） */
+  onAnswerVersionChange?: () => void;
 }
 
 export function MessageList({
@@ -65,6 +67,7 @@ export function MessageList({
   onSuggestionClick,
   onBlockedAction,
   onContinue,
+  onAnswerVersionChange,
 }: MessageListProps) {
   // U11: 只渲染最近 WINDOW_STEP 条, 更早的按需加载 —— 避免长会话全量
   // 重渲染(每条 Message 都可能含 ReactMarkdown/Shiki)。
@@ -171,6 +174,9 @@ export function MessageList({
                 artifactsByToolCall={artifactsByToolCall}
                 onBlockedAction={onBlockedAction}
                 onContinue={message.id === lastId && !streamingMessageId ? onContinue : undefined}
+                onAnswerVersionChange={
+                  message.id === lastId && !streamingMessageId ? onAnswerVersionChange : undefined
+                }
               />
             )}
           </div>

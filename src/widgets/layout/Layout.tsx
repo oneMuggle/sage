@@ -6,6 +6,7 @@ import { ErrorBoundary } from '../../app/providers/ErrorBoundary';
 import { dispatchFindShortcut } from '../../features/chat/chatFind';
 import { useResizableSidebar } from '../../shared/lib/useResizableSidebar';
 import { PageSkeleton } from '../../shared/ui';
+import { EndpointStatusBanner } from '../system/EndpointStatusBanner';
 import { DeliveryDrawerHost } from '../task-center/DeliveryDrawerHost';
 import { TaskCenterWidget } from '../task-center/TaskCenterWidget';
 
@@ -131,6 +132,8 @@ export function Layout() {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <Titlebar />
+        {/* 第二轮 C3: 云端模型端点不可达 / 系统断网时的全局提示 */}
+        <EndpointStatusBanner />
         <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden">
           <ErrorBoundary
             fallback={(error, reset) => (

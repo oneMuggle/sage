@@ -50,6 +50,7 @@ from backend.chat.history_context import (
 from backend.chat.sources_extractor import extract_sources_from_tool, merge_sources
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
+from backend.data import answer_version_repo as answer_versions
 from backend.data.artifact_repo import (  # S7: 产物事件 → 活跃流推送
     add_artifact_listener,
     remove_artifact_listener,
@@ -408,6 +409,10 @@ class ChatRequest(BaseModel):
     # 当前消息前调用 MessageRepository.advance_segment(session_id)，开启新 segment；
     # 历史加载改用 get_active_segment 只取当前段。
     context_reset: bool = False
+
+    # C2 (对话阅读体验第二轮): 原位重新生成 —— 锚点 user 消息 id。设置时不再落
+    # user 消息, 历史剔除锚点与旧回答; 旧回答在本轮首次落库前归档为版本。
+    regenerate_of: Optional[str] = None
 
     # PM1 (round8): 单 agent 计划模式 —— 本次 run 只读（权限执行器 override
     # READ_ONLY）+ 计划指令 system 块；DONE 后前端出批准条，批准后普通执行。
@@ -1712,6 +1717,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
     registry: StreamRegistry = request.app.state.streams
 
+    # C2: 原位重新生成只允许会话最后一轮 (在占用 stream slot 之前拒绝)
+    if data.regenerate_of and not await to_thread(
+        answer_versions.AnswerVersionRepository().is_last_turn, data.session_id, data.regenerate_of
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail={"type": "anchor_not_last", "message": "只能原位重新生成会话的最后一轮"},
+        )
+
     async def producer(entry: StreamEntry) -> None:
         """后台跑 agent.run_loop,事件入 entry.queue。
 
@@ -2798,6 +2812,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     f"[REQ {request_id}] 历史消息加载失败(降级为无历史): {hist_err}"
                 )
                 history_rows = []
+            # C2: 原位重新生成 —— 历史剔除锚点 user 消息与旧回答 (事件投影同样剔除)
+            regen_excluded = await to_thread(
+                answer_versions.regenerate_excluded_ids, data.session_id, data.regenerate_of
+            )
+            history_rows = answer_versions.drop_excluded(history_rows, regen_excluded)
             # Task 10 (2026-09-17): 自动话题检测 — 用户未显式 context_reset
             # 且 auto_topic_detection 启用时，扫描最近 N 条 assistant 文本；
             # 正则层命中或向量层平均相似度 < 阈值即视作话题切换，自动
@@ -2813,7 +2832,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 _auto_detect_raw is not None
                 and _auto_detect_raw.strip().lower() == "true"
             )
-            if not data.context_reset and _auto_detect_on:
+            if not data.context_reset and _auto_detect_on and not data.regenerate_of:
                 recent_assistant = [
                     r.content for r in (history_rows or [])[-6:]
                     if getattr(r, "role", None) == "assistant"
@@ -2991,6 +3010,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     "[REQ %s] 事件日志读取失败(回退表投影): %s", request_id, ev_err
                 )
                 _session_events = []
+            _session_events = answer_versions.drop_excluded(_session_events, regen_excluded)
             if _session_events or not history_rows:
                 messages, omitted_history = build_request_messages_from_events(
                     system_content=system_content,
@@ -3096,6 +3116,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 不破坏流。
             message_repo = MessageRepository()
             session_repo = SessionRepository()
+            if data.regenerate_of:  # C2: 旧回答在本轮首次落库前归档为版本
+                message_repo = answer_versions.ArchiveOnFirstSave(
+                    message_repo, data.session_id, data.regenerate_of
+                )
             # R38 (2026-09-18): 通知载荷序列化 —— sqlite3 不能直接绑定
             # dict/list，必须 json.dumps（ensure_ascii=False 保留中文）。
             # memory_refs 落**本轮第一条** assistant 行（与前端把 chip 挂在
@@ -3145,6 +3169,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             request_id,
                             user_message_id,
                         )
+                # C2: 原位重新生成沿用锚点 user 消息, 不再落库
+                if data.regenerate_of:
+                    user_message_id, reuse_existing = data.regenerate_of, True
                 if not reuse_existing:
                     message_repo.save(
                         DbMessage(
@@ -3439,6 +3466,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             ),
                             sources=r81_sources_json,
                             finish_reason=getattr(done_event, "finish_reason", None),  # B2 截断标记
+                            generation_stats=getattr(done_event, "generation_stats_json", None),
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
                         )
@@ -3496,8 +3524,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             last_message_at=assistant_now,
                             # 2026-09 step-by-step: 多步 run 产生 (steps_completed+1)
                             # 条 assistant 行 (中间 step + 最终 done) 加 1 条 user 行,
-                            # 共 steps_completed+2 条新增消息。
-                            message_count=sess.message_count + steps_completed + 2,
+                            # 共 steps_completed+2 条新增消息 (C2 重新生成不落 user 行: +1)。
+                            message_count=sess.message_count
+                            + steps_completed
+                            + (1 if data.regenerate_of else 2),
                         )
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")

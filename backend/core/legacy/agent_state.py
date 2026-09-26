@@ -104,12 +104,41 @@ class AgentEvent:
     # (stop / length / tool_calls ...)。length = 触达输出上限被截断, 前端据此
     # 提示并提供"继续生成"; 同一值随终稿 assistant 行落库 (messages.finish_reason)。
     finish_reason: Optional[str] = None
+    # C1 (对话阅读体验第二轮): 终稿 DONE 事件携带本次 LLM 调用的生成统计
+    # 字段为输入输出 tokens、首字延迟、总耗时, 缺失项省略; 前端据此显示生成速度,
+    # 同一值随终稿 assistant 行落库 (messages.generation_stats 列)。
+    generation_stats: Optional[Dict[str, int]] = None
 
     def __post_init__(self) -> None:
         # finish_reason 只接受字符串: 测试替身 (MagicMock 响应) 等非 str 值归一为
         # None, 保证事件可 JSON 序列化、落库时 sqlite 可绑定。
         if not isinstance(self.finish_reason, str):
             self.finish_reason = None
+        # generation_stats 只接受 {str: int}: 非法值同样归一为 None。
+        stats = self.generation_stats
+        if stats is not None and not (
+            isinstance(stats, dict)
+            and all(isinstance(v, int) and not isinstance(v, bool) for v in stats.values())
+        ):
+            self.generation_stats = None
+
+    @staticmethod
+    def generation_stats_from(response: Any) -> Optional[Dict[str, int]]:
+        """从 LLMResponse 提取终稿生成统计; tokens 为 0 视为上游没有返回用量。"""
+        stats: Dict[str, int] = {}
+        for key in ("input_tokens", "output_tokens", "first_token_ms", "latency_ms"):
+            value = getattr(response, key, None)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                continue
+            if value == 0 and key.endswith("_tokens"):
+                continue
+            stats[key] = value
+        return stats or None
+
+    @property
+    def generation_stats_json(self) -> Optional[str]:
+        """generation_stats 的 JSON 文本 (落库用); 没有统计时为 None。"""
+        return json.dumps(self.generation_stats) if self.generation_stats else None
 
     def to_dict(self) -> Dict[str, Any]:
         """序列化为 JSON 友好的字典。"""
@@ -136,4 +165,6 @@ class AgentEvent:
             d["user_question"] = self.user_question
         if self.finish_reason is not None:
             d["finish_reason"] = self.finish_reason
+        if self.generation_stats:
+            d["generation_stats"] = self.generation_stats
         return d
