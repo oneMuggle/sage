@@ -54,6 +54,8 @@ export interface ToolCall {
       source?: string;
     }>;
     apiUrls?: string[];
+    /** 工具调用被拦截时的原因（拦截式 hook 触发时填充） */
+    blockReason?: string;
   };
 }
 

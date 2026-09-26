@@ -1,5 +1,6 @@
 export { ConversationsSection } from './sections/ConversationsSection';
 export { CronJobSection } from './sections/CronJobSection';
+export { GitStatusSection } from './sections/GitStatusSection';
 export { ProjectSection } from './sections/ProjectSection';
 export { TeamSection } from './sections/TeamSection';
 export { TodoSection } from './sections/TodoSection';
