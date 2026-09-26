@@ -8,12 +8,19 @@
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
 
+import { chatReadingEn, chatReadingZh } from './chatReading';
 import { en } from './en';
-import { zh, type TranslationKey } from './zh';
+import { zh, type TranslationKey as CoreTranslationKey } from './zh';
 
 export type Locale = 'zh' | 'en';
 
-const translations: Record<Locale, Record<TranslationKey, string>> = { zh, en };
+/** 核心词典（zh.ts）+ 按功能拆出的词典模块（见 chatReading.ts 的说明） */
+export type TranslationKey = CoreTranslationKey | keyof typeof chatReadingZh;
+
+const translations: Record<Locale, Record<TranslationKey, string>> = {
+  zh: { ...zh, ...chatReadingZh },
+  en: { ...en, ...chatReadingEn },
+};
 
 interface I18nContextValue {
   locale: Locale;
@@ -71,5 +78,3 @@ export function useI18n(): I18nContextValue {
   }
   return ctx;
 }
-
-export type { TranslationKey } from './zh';
