@@ -34,6 +34,12 @@ export const en: Record<TranslationKey, string> = {
   'sidebar.status.latency': 'Latency',
   'sidebar.empty': 'No chat history',
 
+  // ─── Sidebar Workspace Info ─────────
+  'workspace.info.title': 'Workspace Info',
+
+  // ─── Sidebar Usage Stats ────────────
+  'usage.title': 'Usage Stats',
+
   // ─── Chat ─────────────────────────
   'chat.title': 'Chat',
   'chat.new_session': '+ New Chat',
