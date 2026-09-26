@@ -34,6 +34,12 @@ export const zh = {
   'sidebar.status.latency': '延迟',
   'sidebar.empty': '暂无对话记录',
 
+  // ─── 侧边栏工作区信息 ─────────────
+  'workspace.info.title': '工作区信息',
+
+  // ─── 侧边栏使用量统计 ─────────────
+  'usage.title': '使用量统计',
+
   // ─── 聊天页 ───────────────────────
   'chat.title': '对话',
   'chat.new_session': '+ 新对话',
