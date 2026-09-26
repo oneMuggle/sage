@@ -225,6 +225,7 @@ export const zh = {
   'settings.tab.orchestration': '编排',
   'settings.tab.memory': '记忆',
   'settings.tab.network': '网络',
+  'settings.tab.remote-workspaces': '远程工作区',
   'settings.tab.mcp': 'MCP',
   'settings.tab.zotero': '文献库',
   'settings.tab.runtime': '开发环境',

@@ -1134,6 +1134,40 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}`,
   },
 
+  // Workspace MCP Server admin (M4). Backend: backend/remote_mcp/admin_routes.py.
+  // Tunnel / emergency stop / copy-url are Electron IPC (electron/remoteMcpIpc.ts).
+  remote_mcp_state: { method: 'GET', path: () => '/api/v1/remote-mcp/state' },
+  remote_mcp_listener_start: {
+    method: 'POST',
+    path: () => '/api/v1/remote-mcp/listener/start',
+    body: (a) => ({ port: a.port }),
+  },
+  remote_mcp_listener_stop: { method: 'POST', path: () => '/api/v1/remote-mcp/listener/stop' },
+  remote_mcp_workspace_create: {
+    method: 'POST',
+    path: () => '/api/v1/remote-mcp/workspaces',
+    body: (a) => ({ name: a.name, root: a.root }),
+  },
+  remote_mcp_workspace_update: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/remote-mcp/workspaces/${encodeURIComponent(String(a.id))}`,
+    body: (a) => {
+      const out: Record<string, unknown> = {};
+      if (a.enabled !== undefined) out.enabled = a.enabled;
+      if (a.permissions !== undefined) out.permissions = a.permissions;
+      return out;
+    },
+  },
+  remote_mcp_workspace_rotate: {
+    method: 'POST',
+    path: (a) => `/api/v1/remote-mcp/workspaces/${encodeURIComponent(String(a.id))}/rotate`,
+  },
+  remote_mcp_workspace_delete: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/remote-mcp/workspaces/${encodeURIComponent(String(a.id))}`,
+  },
+  remote_mcp_resume: { method: 'POST', path: () => '/api/v1/remote-mcp/resume' },
+
   // Zotero: read-only library access (backend/api/zotero_routes.py).
   // Settings UI uses these to show connection status, library stats, browse
   // collections, and search items — all via the Zotero SQLite client.
