@@ -31,4 +31,7 @@ R50 引入的 `formatOffset` 未防护负偏移——生产者与消费者的时
 
 ## 5. 交付记录
 
-（交付后回填）
+- **main**：PR #1647（squash `862084eb`，CI 14 项全绿）。
+- **win7 对齐**：PR #1653（squash `f85f75d1`，win7 必过项全绿）。
+  cherry-pick 干净落位，前端 only。
+- **回填分支**：`docs/r56-backfill`（本提交）。
