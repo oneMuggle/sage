@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from . import SERVER_NAME, SERVER_VERSION
+from .approval import Approver, needs_approval
 from .audit import AuditLog
 from .jobs import JobManager
 from .store import WorkspaceStore
@@ -66,8 +67,9 @@ def _result(req_id: Any, result: Dict[str, Any]) -> Dict[str, Any]:
 
 class RemoteMcpService:
     def __init__(self, store: WorkspaceStore, audit: Optional[AuditLog] = None,
-                 jobs: Optional[JobManager] = None) -> None:
+                 jobs: Optional[JobManager] = None, approver: Optional[Approver] = None) -> None:
         self.store = store
+        self.approver = approver
         self.audit = audit or AuditLog()
         self.jobs = jobs or JobManager()
         self.paused = False
@@ -234,6 +236,16 @@ class RemoteMcpService:
             return self._tool_error(
                 req_id, f"PERMISSION_DENIED: '{tool.permission}' is disabled for this workspace "
                 "(enable it locally in Sage)")
+        risk = needs_approval(active, tool.name, args)
+        if risk is not None:
+            denied = self._approve(active, session, tool.name, args, risk)
+            if denied is not None:
+                return self._tool_error(req_id, denied)
+            # 审批可能持续很久：执行前重新校验急停 / 撤权 / token 轮换
+            active = self.store.find_by_token(session.token)
+            if self.paused or active is None or active["id"] != workspace["id"] or (
+                    tool.permission and not active.get("permissions", {}).get(tool.permission)):
+                return self._tool_error(req_id, "ACCESS_REVOKED")
         started = time.time()
         try:
             data = tool.handler(ToolContext(active, session.owner, self.jobs), args)
@@ -247,6 +259,24 @@ class RemoteMcpService:
         self.audit.record("tool.ok", active["id"], tool=tool.name, ms=int((time.time() - started) * 1000))
         text = json.dumps(data, ensure_ascii=False, indent=2)
         return _result(req_id, {"content": [{"type": "text", "text": text}], "isError": False})
+
+    def _approve(self, workspace: Dict[str, Any], session: Session, tool_name: str,
+                 args: Dict[str, Any], risk: str) -> Optional[str]:
+        """返回 None 表示批准；否则返回给远端的错误文本。"""
+        if self.approver is None:
+            self.audit.record("approval.unavailable", workspace["id"], tool=tool_name)
+            return "APPROVAL_UNAVAILABLE: local approval channel is not ready; ask the user"
+        self.audit.record("approval.requested", workspace["id"], tool=tool_name, code=risk)
+        approved, reason = self.approver(workspace, tool_name, args, risk)
+        session.last_active = time.time()
+        if approved:
+            self.audit.record("approval.granted", workspace["id"], tool=tool_name)
+            return None
+        self.audit.record("approval.denied", workspace["id"], tool=tool_name, code=reason[:40])
+        if reason == "APPROVAL_UNAVAILABLE":
+            return "APPROVAL_UNAVAILABLE: local approval channel is not ready; ask the user"
+        return (f"APPROVAL_DENIED: {reason}. The local user did not approve this call; "
+                "do not retry automatically — ask the user.")
 
     @staticmethod
     def _tool_error(req_id: Any, message: str) -> Dict[str, Any]:
