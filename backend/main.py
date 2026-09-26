@@ -85,6 +85,7 @@ from backend.api.chat_stream_registry import StreamRegistry
 from backend.api.diagnostic_routes import router as diagnostic_router
 from backend.api.embedder_routes import router as embedder_router
 from backend.api.export_routes import router as export_router
+from backend.api.git_status_routes import router as git_status_router
 from backend.api.hex_routes import router as hex_router
 from backend.api.hooks_routes import router as hooks_router
 from backend.api.legacy_routes import router as legacy_router
@@ -116,7 +117,6 @@ from backend.api.todo_router import build_router as build_todo_router
 from backend.api.usage_routes import router as usage_router
 from backend.api.v1 import updates as updates_router_module
 from backend.api.web_access_routes import router as web_access_router
-from backend.api.git_status_routes import router as git_status_router
 from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.api.worktree_routes import router as worktree_router

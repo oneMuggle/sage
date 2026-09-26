@@ -32,7 +32,6 @@ import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownCh
 import type { BlockedAction, Message as MessageType, ToolCall } from '../../shared/lib/store';
 import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
-import { resolveToolRenderer } from './toolRenderers';
 
 import { AnswerVersionSwitcher } from './AnswerVersionSwitcher';
 import { BlockedCard } from './BlockedCard';
@@ -45,6 +44,7 @@ import { ReadAloudButton } from './ReadAloudButton';
 import { ShikiCodeBlock } from './ShikiCodeBlock';
 import { TruncationNotice } from './TruncationNotice';
 import { FileChangeCards } from './changes/FileChangeCard';
+import { resolveToolRenderer } from './toolRenderers';
 
 interface MessageProps {
   message: MessageType;
