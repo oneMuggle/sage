@@ -1060,7 +1060,25 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/update`,
     rawBody: true,
-    body: (a) => ({ ops: Array.isArray(a.ops) ? (a.ops as Record<string, unknown>[]) : [] }),
+    // F1 (P0-A): the optimistic-concurrency fields ride in the same body.
+    // Both are optional — omitted keys keep the pre-guard behaviour.
+    body: (a) => ({
+      ops: Array.isArray(a.ops) ? (a.ops as Record<string, unknown>[]) : [],
+      ...(typeof a.expectedRevision === 'string' && a.expectedRevision
+        ? { expected_revision: a.expectedRevision }
+        : {}),
+      ...(typeof a.idempotencyKey === 'string' && a.idempotencyKey
+        ? { idempotency_key: a.idempotencyKey }
+        : {}),
+    }),
+  },
+
+  // F1/F2 (P0-A): content revision probe for the preview caches. GET
+  // /api/v1/office/doc/{doc_id}/revision → {doc_id, revision, size_bytes,
+  // mtime_ms}. Read-only; unknown doc → 404 like the other doc routes.
+  office_doc_revision: {
+    method: 'GET',
+    path: (a) => `/api/v1/office/doc/${encodeURIComponent(String(a.docId))}/revision`,
   },
 
   // Office parity batch 3 (item 3.2): Word template library (从模板创建).

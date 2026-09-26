@@ -2008,6 +2008,17 @@ export interface OfficeUpdatePreviewResult {
   truncated: boolean;
   /** Why the real update would fail (set when ok=false). */
   error?: string | null;
+  /**
+   * F1: content revision (`sha256:…`) of the file this preview was computed
+   * from. Pass it back as `expected_revision` on apply so a file that
+   * changed in between is rejected (409) instead of silently overwritten.
+   * Optional — older backends omit it.
+   */
+  source_revision?: string | null;
+  /** Stable digest of the previewed op batch. */
+  ops_hash?: string | null;
+  /** Opaque id correlating this preview with its apply. */
+  preview_id?: string | null;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -2022,6 +2033,10 @@ export interface OfficeUpdatePreviewResult {
 export interface OfficeDocUpdateRequest {
   doc_id: string;
   ops: OfficeUpdateOp[];
+  /** F1: the revision the user previewed; mismatch → 409, file untouched. */
+  expected_revision?: string | null;
+  /** F1: retry token — a repeated apply replays instead of applying twice. */
+  idempotency_key?: string | null;
 }
 
 /**
@@ -2041,12 +2056,30 @@ export interface OfficeDocUpdateResponse {
   /** Post-update document summary (status='edited', refreshed updated_at). */
   summary: OfficeDocumentSummary;
   self_check: OfficeUpdateSelfCheck;
+  /** Content revision of the saved file — chain it into the next edit. */
+  revision?: string | null;
+  /** Revision the ops were applied to. */
+  previous_revision?: string | null;
+  /** True when this response replays an earlier apply with the same key. */
+  idempotent_replay?: boolean;
   /**
    * Per-op outcomes from the backend editor (backend.office.edit) —
    * `[{op, ok, ...}]`. Not rendered today; typed so the contract is
    * visible at the call site.
    */
   results?: Record<string, unknown>[];
+}
+
+/**
+ * Response of GET /office/doc/{doc_id}/revision (F1/F2 read side) — the
+ * content identity the preview caches key on.
+ */
+export interface OfficeDocRevisionResponse {
+  doc_id: string;
+  /** `sha256:…` of the managed file's current bytes. */
+  revision: string;
+  size_bytes: number;
+  mtime_ms: number;
 }
 
 /** Request of POST /office/export-pdf. */

@@ -59,6 +59,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .edit import update_document
 from .excel import read_xlsx
 from .ppt import read_ppt
+from .revision import compute_file_revision, compute_ops_hash, new_preview_id
 from .word import read_docx
 
 __all__ = [
@@ -119,6 +120,19 @@ class DiffPreviewResult(BaseModel):
     )
     error: Optional[str] = Field(
         default=None, description="Why the real update would fail (set when ok=False)"
+    )
+    # F1 (P0-A): version identity so the apply step can prove it overwrites
+    # the very bytes this preview was computed from. Optional — a caller that
+    # ignores them keeps today's (unchecked) behaviour.
+    source_revision: Optional[str] = Field(
+        default=None,
+        description="sha256:… of the source file at preview time; pass back as expected_revision",
+    )
+    ops_hash: Optional[str] = Field(
+        default=None, description="Stable digest of the previewed op batch"
+    )
+    preview_id: Optional[str] = Field(
+        default=None, description="Opaque id correlating this preview with its apply"
     )
 
 
@@ -591,6 +605,12 @@ def preview_update(source: Path, ops: List[Dict[str, Any]]) -> DiffPreviewResult
     the same directory (removed in ``finally``), and the change list is
     derived from structured reads of source vs. modified copy. Invalid ops
     surface as ``DiffPreviewResult(ok=False, error=…)`` instead of raising.
+
+    Every result — including the failures — carries the version stamp
+    (``source_revision`` / ``ops_hash`` / ``preview_id``) so the apply step
+    can refuse to overwrite a file that moved on since (F1). The revision is
+    read BEFORE the structured read, so it describes the bytes this preview
+    actually saw.
     """
     source = Path(source)
     doc_type = _DOC_TYPES.get(source.suffix.lower())
@@ -599,10 +619,21 @@ def preview_update(source: Path, ops: List[Dict[str, Any]]) -> DiffPreviewResult
             ok=False, error=f"unsupported extension for preview: {source.suffix!r}"
         )
 
+    stamp: Dict[str, Any] = {
+        "ops_hash": compute_ops_hash(ops),
+        "preview_id": new_preview_id(),
+    }
+    try:
+        stamp["source_revision"] = compute_file_revision(source)
+    except Exception:  # noqa: BLE001 — 版本戳失败不该让预览整体失败
+        stamp["source_revision"] = None
+
     try:
         before = _read_structured(doc_type, source)
     except Exception as exc:  # noqa: BLE001 — preview 把一切失败折算成 ok=False
-        return DiffPreviewResult(ok=False, error=f"failed to read source document: {exc}")
+        return DiffPreviewResult(
+            ok=False, error=f"failed to read source document: {exc}", **stamp
+        )
 
     fd, tmp_name = tempfile.mkstemp(
         prefix=f".{source.stem}.preview.", suffix=source.suffix, dir=str(source.parent)
@@ -613,10 +644,14 @@ def preview_update(source: Path, ops: List[Dict[str, Any]]) -> DiffPreviewResult
         shutil.copyfile(source, tmp_path)
         saved, per_op_results = update_document(doc_type, tmp_path, ops)
         if not saved:
-            return DiffPreviewResult(ok=False, error=_first_op_error(ops, per_op_results))
+            return DiffPreviewResult(
+                ok=False, error=_first_op_error(ops, per_op_results), **stamp
+            )
         after = _read_structured(doc_type, tmp_path)
     except Exception as exc:  # noqa: BLE001 — 同上
-        return DiffPreviewResult(ok=False, error=f"failed to apply ops to preview copy: {exc}")
+        return DiffPreviewResult(
+            ok=False, error=f"failed to apply ops to preview copy: {exc}", **stamp
+        )
     finally:
         with contextlib.suppress(OSError):
             tmp_path.unlink()
@@ -649,4 +684,4 @@ def preview_update(source: Path, ops: List[Dict[str, Any]]) -> DiffPreviewResult
     truncated = len(changes) > MAX_CHANGES
     if truncated:
         changes = changes[:MAX_CHANGES]
-    return DiffPreviewResult(ok=True, changes=changes, truncated=truncated)
+    return DiffPreviewResult(ok=True, changes=changes, truncated=truncated, **stamp)

@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added(office)
+- **文档版本一致性（F1/F2，方案 `docs/plans/2026-09-26_office-doc-revision.md`）**：新增
+  `backend/office/revision.py`（内容哈希 revision、单文档进程内写锁、有界幂等台账）；
+  `/office/update/preview` 返回 `source_revision` / `ops_hash` / `preview_id`；
+  `/office/doc/{id}/update` 支持 `expected_revision`（陈旧写入 → 409，原文件零改动）与
+  `idempotency_key`（重试重放，不重复追加）；新增 `GET /office/doc/{id}/revision`；
+  `office_update` 工具同享该语义（冲突返回 `revision_conflict`，成功回带 `revision`）。
+  前端预览缓存键由 `id:file_size_bytes` 改为内容 revision（同大小改动不再命中旧渲染），
+  DOCX 原生预览随 revision 重渲染，迟到的转换响应按 key 丢弃；编辑对话框在 409 时提示
+  并自动重新预览。**边界**：进程内锁不约束外部 Word/WPS（靠版本校验兜底），幂等台账
+  不持久化，重启后退化为普通（仍做版本校验的）写入。
+
 > 🎯 **Arena 能力移植收口：ArenCard 协议快路径 P0-P6 全链路**（方案 `archive/mcp-aren-card-port-plan-2026-09-19.md`，验收 `docs/verification/2026-09-19-aren-card-port.md`）
 
 ### Added(arena)
