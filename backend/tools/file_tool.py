@@ -31,6 +31,13 @@ from backend.office.allowed_paths import get_session_allowed_paths, is_allowed
 from backend.tools.context import current_tool_context
 
 from .base import BaseTool, ToolResult, ToolSchema
+from .file_guard import (
+    atomic_write,
+    check_expected_version,
+    check_sensitive_path,
+    compute_file_version,
+    file_write_lock,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -250,7 +257,11 @@ class ReadFileTool(BaseTool):
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
             name="read_file",
-            description="读取文件内容。支持文本文件和代码文件。",
+            description=(
+                "读取文件内容。支持文本文件和代码文件。返回 version（sha256），"
+                "修改该文件时可将其作为 expected_version 传给 write_file / "
+                "edit_file / apply_patch，防止覆盖他人的并发改动。"
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -292,6 +303,11 @@ class ReadFileTool(BaseTool):
         blocked = _check_read_access(
             path, self._policy.workspace_root, self._enforce_read_workspace
         )
+        if blocked is not None:
+            return blocked
+
+        # LocalBridge P0: 凭据路径守卫（.env / 私钥 / 证书等）
+        blocked = check_sensitive_path(path, "读取")
         if blocked is not None:
             return blocked
 
@@ -352,6 +368,8 @@ class ReadFileTool(BaseTool):
                     "truncated": truncated,
                     "original_bytes": original_bytes,
                     "max_read_bytes": max_bytes if truncated else None,
+                    # LocalBridge P0: 整文件原始字节版本（与分页/截断无关）
+                    "version": compute_file_version(str(file_path)),
                 },
             )
 
@@ -375,12 +393,26 @@ class WriteFileTool(BaseTool):
                     "path": {"type": "string", "description": "文件路径"},
                     "content": {"type": "string", "description": "文件内容"},
                     "append": {"type": "boolean", "description": "是否追加模式 (默认 false)"},
+                    "expected_version": {
+                        "type": "string",
+                        "description": (
+                            "可选乐观锁：覆盖已有文件时传 read_file 返回的 version；"
+                            "仅创建新文件传 'new'；省略则不校验"
+                        ),
+                    },
                 },
                 "required": ["path", "content"],
             },
         )
 
-    def execute(self, path: str, content: str, append: bool = False, **kwargs) -> ToolResult:
+    def execute(  # noqa: PLR0911 — 守卫式早返回
+        self,
+        path: str,
+        content: str,
+        append: bool = False,
+        expected_version: Optional[str] = None,
+        **kwargs,
+    ) -> ToolResult:
         """
         写入文件
 
@@ -393,6 +425,7 @@ class WriteFileTool(BaseTool):
             逃逸）；未绑定 workspace 时不检查（保留当前行为）+ debug 日志。
             内容超过 ``MAX_WRITE_SIZE_BYTES`` (10 MiB) 直接报错。
         A15: 写入 .py 文件后自动检查语法（verify after modify）。
+        LocalBridge P0: 凭据路径拒写；``expected_version`` 乐观锁校验。
         """
         root = self._policy.workspace_root
         if root:
@@ -422,6 +455,22 @@ class WriteFileTool(BaseTool):
                 ),
             )
 
+        blocked = check_sensitive_path(path, "写入", write=True)
+        if blocked is not None:
+            return blocked
+
+        with file_write_lock([path]) as busy:
+            if busy is not None:
+                return busy
+            blocked = check_expected_version(str(Path(path).expanduser()), expected_version)
+            if blocked is not None:
+                return blocked
+            return self._write_locked(path, content, append, expected_version)
+
+    def _write_locked(  # noqa: PLR0911 — 守卫式早返回
+        self, path: str, content: str, append: bool, expected_version: Optional[str]
+    ) -> ToolResult:
+        """持有写锁、版本已校验后的写入主流程。"""
         try:
             # M1: 写入硬限额（按 UTF-8 编码后字节数计）
             content_bytes = len(content.encode("utf-8"))
@@ -439,8 +488,19 @@ class WriteFileTool(BaseTool):
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
             mode = "a" if append else "w"
-            with open(file_path, mode, encoding="utf-8") as f:
-                f.write(content)
+            if append:
+                with open(file_path, mode, encoding="utf-8") as f:
+                    f.write(content)
+            else:
+                # LocalBridge P0: 临时文件 + 替换前复核 + 原子 rename（文本模式
+                # 写临时文件，换行翻译行为与旧的直接 open("w") 一致）
+                def _write_temp(temp: str) -> None:
+                    with open(temp, "w", encoding="utf-8") as f:
+                        f.write(content)
+
+                failed = atomic_write(str(file_path), _write_temp, expected_version)
+                if failed is not None:
+                    return failed
 
             # A15: Auto syntax check for Python files
             syntax_error = None
@@ -456,6 +516,11 @@ class WriteFileTool(BaseTool):
                 "bytes_written": content_bytes,
                 "mode": mode,
             }
+            try:
+                # 按落盘字节计算（Windows 文本模式会做换行翻译，不能用 content 推算）
+                result["version"] = compute_file_version(str(file_path))
+            except OSError:
+                logger.debug("write_file: 计算写后版本失败", exc_info=True)
             if syntax_error:
                 result["syntax_error"] = syntax_error
 

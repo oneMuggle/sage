@@ -24,6 +24,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import BaseTool, ToolResult, ToolSchema
+from .file_guard import (
+    atomic_write,
+    check_expected_version,
+    check_sensitive_path,
+    compute_bytes_version,
+    file_write_lock,
+)
 from .file_tool import MAX_WRITE_SIZE_BYTES, _contains_binary_marker, detect_bom_encoding
 
 logger = logging.getLogger(__name__)
@@ -117,7 +124,7 @@ def _validate_edit_call_shape(  # noqa: PLR0911 — 守卫式参数校验：一�
             success=False,
             error=(
                 f"未知参数: {names}（合法参数: file_path, old_string, "
-                "new_string, replace_all）"
+                "new_string, replace_all, expected_version）"
             ),
         )
     if not isinstance(file_path, str) or not file_path.strip():
@@ -219,17 +226,25 @@ class EditTool(BaseTool):
                         "type": "boolean",
                         "description": "替换全部匹配处 (默认 false，仅允许唯一匹配)",
                     },
+                    "expected_version": {
+                        "type": "string",
+                        "description": (
+                            "可选乐观锁：read_file 返回的 version；文件已被他人修改"
+                            "则拒绝（version_conflict）。省略则不校验"
+                        ),
+                    },
                 },
                 "required": ["file_path", "old_string", "new_string"],
             },
         )
 
-    def execute(
+    def execute(  # noqa: PLR0911 — 守卫式早返回：一项检查一分支
         self,
         file_path: Optional[str] = None,
         old_string: Optional[str] = None,
         new_string: Optional[str] = None,
         replace_all: bool = False,
+        expected_version: Optional[str] = None,
         **kwargs,
     ) -> ToolResult:
         """
@@ -263,14 +278,34 @@ class EditTool(BaseTool):
         if invalid is not None:
             return invalid
 
+        # LocalBridge P0: 凭据路径拒写 + expected_version 乐观锁
+        blocked = check_sensitive_path(file_path, "编辑", write=True)
+        if blocked is not None:
+            return blocked
+
         try:
-            return self._apply_edit(file_path, old_string, new_string, bool(replace_all))
+            with file_write_lock([file_path]) as busy:
+                if busy is not None:
+                    return busy
+                blocked = check_expected_version(
+                    str(Path(file_path).expanduser()), expected_version
+                )
+                if blocked is not None:
+                    return blocked
+                return self._apply_edit(
+                    file_path, old_string, new_string, bool(replace_all), expected_version
+                )
         except Exception as e:  # noqa: BLE001 — 工具约定：错误走 ToolResult 不抛
             logger.error("edit_file 执行失败: %s", e)
             return ToolResult(success=False, error=f"编辑失败: {e}")
 
-    def _apply_edit(
-        self, file_path: str, old_string: str, new_string: str, replace_all: bool
+    def _apply_edit(  # noqa: PLR0911 — 读-匹配-写流程的守卫式早返回
+        self,
+        file_path: str,
+        old_string: str,
+        new_string: str,
+        replace_all: bool,
+        expected_version: Optional[str] = None,
     ) -> ToolResult:
         """参数校验通过后的读-匹配-替换-写主流程（保持 execute 扁平）。"""
         target = Path(file_path).expanduser()
@@ -337,7 +372,11 @@ class EditTool(BaseTool):
                 ),
             )
 
-        target.write_bytes(updated_bytes)
+        failed = atomic_write(
+            str(target), lambda temp: Path(temp).write_bytes(updated_bytes), expected_version
+        )
+        if failed is not None:
+            return failed
 
         # right-panel R5: 广播 workspace_changed（变更面板事件驱动刷新，失败静默）
         from .file_tool import _notify_workspace_changed_safely
@@ -359,6 +398,8 @@ class EditTool(BaseTool):
                     "lines_removed": _count_logical_lines(old_string) * replacements,
                     "lines_added": _count_logical_lines(new_string) * replacements,
                     "bytes_written": len(updated_bytes),
+                    # LocalBridge P0: 写后新版本，可直接用于下一次 expected_version
+                    "version": compute_bytes_version(updated_bytes),
                 },
                 str(target),
             ),
