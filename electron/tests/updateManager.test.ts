@@ -98,6 +98,7 @@ vi.doMock('fs/promises', () => ({
 
 const { UpdateManager } = await import('../updateManager');
 const { StateManager } = await import('../updateState');
+const { ConfigManager } = await import('../updateConfig');
 const { LauncherHealthChecker: MockedLauncherHealthChecker } =
   await import('../updateHealthChecker');
 
@@ -307,6 +308,17 @@ describe('UpdateManager', () => {
         parseVersion('1.0.0-9007199254740992', 'test'),
       ),
     ).toBeGreaterThan(0);
+  });
+
+  it.each(['offline', 'intranet', 'invalid'])('blocks cached legacy downloads in %s mode', async (mode) => {
+    vi.mocked(fetch).mockResolvedValue(createResponse(200, createManifest('1.3.0')));
+    await updateManager.checkForUpdates();
+    vi.stubEnv('SAGE_DEPLOYMENT_MODE', mode);
+    try {
+      await expect(updateManager.downloadUpdate()).rejects.toThrow(/deployment policy/);
+      expect(updater.setFeedURL).not.toHaveBeenCalled();
+      expect(updater.downloadUpdate).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
   });
 
   it('throws a diagnostic error for an invalid manifest', async () => {
@@ -979,7 +991,30 @@ describe('UpdateManager', () => {
       expect(mockApp.exit).toHaveBeenCalledWith(0);
     });
 
+    it.each(['offline', 'intranet', 'typo'])('does not report rollback in %s deployment', async (mode) => {
+      vi.stubEnv('SAGE_DEPLOYMENT_MODE', mode);
+      try {
+        const configManager = new ConfigManager();
+        await configManager.setConfig({ ...(await configManager.getConfig()), enableTelemetry: true });
+        await fs.mkdir(tempPrevDir, { recursive: true });
+        await updateManager.rollback('private reason');
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('respects telemetry=false while still completing local rollback', async () => {
+      await fs.mkdir(tempPrevDir, { recursive: true });
+      await updateManager.rollback('private reason');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
     it('reports rollback event to backend', async () => {
+      const configManager = new ConfigManager();
+      await configManager.setConfig({ ...(await configManager.getConfig()), enableTelemetry: true });
       await fs.mkdir(tempPrevDir, { recursive: true });
       const fetchMock = vi.mocked(fetch).mockResolvedValue({ ok: true } as Response);
 
@@ -1017,6 +1052,8 @@ describe('UpdateManager', () => {
     });
 
     it('ignores rollback event reporting failures', async () => {
+      const configManager = new ConfigManager();
+      await configManager.setConfig({ ...(await configManager.getConfig()), enableTelemetry: true });
       await fs.mkdir(tempPrevDir, { recursive: true });
       vi.mocked(fetch).mockRejectedValue(new Error('network error'));
 

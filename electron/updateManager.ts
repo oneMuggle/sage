@@ -9,7 +9,7 @@ import type { UpdateState } from './updateState';
 import { ConfigManager } from './updateConfig';
 import type { UpdateChannel, UpdateConfig, UpdateStrategy } from './updateConfig';
 import { LauncherHealthChecker } from './updateHealthChecker';
-import { fetchCompat } from './fetchCompat';
+import { fetchUpdate as fetchCompat, updateDeploymentMode } from './update/request';
 // Task 1.7: pluggable update provider wiring.
 import type { UpdateProvider, NormalisedRelease } from './update/providers/base';
 import type { ProviderRegistry } from './update/providers/registry';
@@ -584,6 +584,10 @@ export class UpdateManager {
     updateOverride?: CheckedUpdate,
     releaseNotesOverride?: string,
   ): Promise<void> {
+    const mode = updateDeploymentMode();
+    if (mode === 'offline' || (mode === 'intranet' && !this.activeProvider)) {
+      throw new Error('Download denied by deployment policy; use an approved provider or offline maintenance package');
+    }
     // Task 1.7: provider-delegating download path. When activeProvider is
     // set, route through provider.downloadAsset(). The publicKey source
     // comes from the provider's store config (GenericHttpConfig.publicKey)
@@ -1088,6 +1092,7 @@ export class UpdateManager {
     const timeout = setTimeout(() => controller.abort(), 2000);
     try {
       const config = await this.configManager.getConfig();
+      if (!config.enableTelemetry || updateDeploymentMode() !== 'online') return;
       await fetchCompat(`${config.updateServerUrl}/api/v1/updates/rollbacks`, {
         method: 'POST',
         signal: controller.signal,

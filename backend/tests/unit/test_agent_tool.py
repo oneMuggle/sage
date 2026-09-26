@@ -103,7 +103,9 @@ class TestReadonlyWhitelist:
 
     def test_whitelist_is_read_only(self):
         """Registry exposes exactly the read-only tools + browser channel — nothing else."""
-        registry = build_readonly_tool_registry()
+        from backend.domain.network_policy import NetworkMode, NetworkPolicy
+
+        registry = build_readonly_tool_registry(network_policy=NetworkPolicy(mode=NetworkMode.ONLINE))
 
         names = set(registry.list_names())
         assert names == {

@@ -3,7 +3,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import type { UpdateProvider, NormalisedRelease, ProviderChannel } from './base';
 import type { GenericHttpConfig } from '../providerConfig';
-import { fetchCompat } from '../../fetchCompat';
+import { fetchUpdate as fetchCompat } from '../request';
 
 const CHANNELS: ProviderChannel[] = [
   { id: 'stable', label: 'Stable', description: 'Production-ready releases' },

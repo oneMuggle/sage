@@ -39,7 +39,7 @@ from backend.tools.browser_tool import (
     validate_url,
 )
 
-pytestmark = [pytest.mark.unit]
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("_online_network_settings")]
 
 
 # ---------------------------------------------------------------------------

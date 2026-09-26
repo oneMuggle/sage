@@ -318,13 +318,13 @@ async function checkWindowsService(
       return ok(serviceName, `${displayName} 服务正在运行 (STATE=4)`);
     }
     if (state === 1 || state === 2 || state === 3) {
-      // STATE=1 STOPPED / STATE=2 START_PENDING / STATE=3 STOP_PENDING 都视为"未运行"
-      // 启动期如果处于 START_PENDING 也算异常 (正常应迅速转 STATE=4)
+      // Demand-start/stopped or transitional services do not prove missing DLLs.
+      // Respect enterprise policy; actual runtime/patch checks decide criticality.
       return {
         name: serviceName,
-        severity: 'critical',
-        message: `${displayName} 服务未运行 (STATE=${state})`,
-        fix_hint: '以管理员身份运行安装包内 win7-fix/fix.bat, 然后重启电脑',
+        severity: 'warn',
+        message: `${displayName} 服务未运行或正在转换 (STATE=${state})；不代表应用运行库缺失`,
+        fix_hint: '由管理员查看 win7-fix/sage-win7-fix.md；win7-fix/fix.bat 仅作只读诊断，不更改服务或重启',
         detected: false,
         ...extra,
       };

@@ -483,3 +483,21 @@ def test_build_shell_fallback_note_with_explicit_version():
     note = shell_resolver.build_shell_fallback_note(ps_version="7.2.0")
     assert "PowerShell 7.2.0" in note
     assert "-Directory" not in note or "不支持" not in note
+
+
+@pytest.mark.parametrize("root", [r"C:\Users\中文 用户\AppData\Local\Programs\Sage", r"D:\Custom Apps\Sage"])
+def test_install_root_from_embedded_interpreter(monkeypatch, root):
+    _fake_os(monkeypatch, "nt", environ={})
+    monkeypatch.setattr(shell_resolver.sys, "executable", root + r"\resources\python\python.exe")
+    bash = root + r"\resources\tools\git-bash\usr\bin\bash.exe"
+    monkeypatch.setattr(shell_resolver, "_is_regular_file", lambda path: path == bash)
+    monkeypatch.setattr(shell_resolver, "_get_windows_program_files_roots", lambda: ())
+    assert shell_resolver._get_sage_install_root() == root
+
+
+def test_unrelated_python_layout_cannot_supply_install_root(monkeypatch):
+    _fake_os(monkeypatch, "nt", environ={})
+    monkeypatch.setattr(shell_resolver.sys, "executable", r"C:\Python38\python.exe")
+    monkeypatch.setattr(shell_resolver, "_is_regular_file", lambda path: True)
+    monkeypatch.setattr(shell_resolver, "_get_windows_program_files_roots", lambda: ())
+    assert shell_resolver._get_sage_install_root() is None

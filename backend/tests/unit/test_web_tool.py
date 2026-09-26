@@ -13,7 +13,7 @@ from backend.domain.tool_policy import ToolPolicy
 from backend.tools import http_factory, web_cache, web_render
 from backend.tools.web_tool import WebFetchTool, WebSearchTool, looks_like_antibot_page
 
-pytestmark = [pytest.mark.unit]
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("_online_network_settings")]
 
 from types import SimpleNamespace as fake_ns  # noqa: E402, N813
 

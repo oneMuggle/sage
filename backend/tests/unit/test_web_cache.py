@@ -11,7 +11,7 @@ from backend.tools import http_factory, web_cache, web_tool
 from backend.tools.search_config import SearchConfig
 from backend.tools.web_tool import WebFetchTool, WebSearchTool
 
-pytestmark = [pytest.mark.unit]
+pytestmark = [pytest.mark.unit, pytest.mark.usefixtures("_online_network_settings")]
 
 
 @pytest.fixture(autouse=True)
@@ -190,7 +190,7 @@ class TestWebFetchCache:
 
         class _Repo:
             def __init__(self):
-                self.data = {}
+                self.data = {"network_policy": '{"mode":"online"}'}
 
             def get(self, key):
                 return self.data.get(key)
