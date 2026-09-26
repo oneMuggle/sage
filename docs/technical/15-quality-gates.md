@@ -22,7 +22,7 @@ Sage 项目使用四层质量门禁：
 | `dependency-audit` | npm audit + pip-audit（只读报告，Critical/High 由聚合门禁执行）+ **environment.yml ↔ requirements.txt 漂移校验**（`scripts/check_env_yml_drift.py`，2026-09 新增） | main/develop 及其 PR |
 | `backend` (Python) | ruff → import-linter（六边形 KEPT）→ mypy（domain/ports）→ pytest `-n auto` + **coverage ≥ 80% 强门禁** → hex 主路径回归 | 每次 push/PR |
 | `backend-py38` (Win7 LTS) | 同上但用 `requirements-py38.txt` 钉版（Python 3.8） | 仅 `release/win7` 分支与指向它的 PR |
-| `frontend` (TypeScript) | eslint --cache → tsc → vitest --coverage（**thresholds 棘轮**）→ build | 每次 push/PR |
+| `frontend` (TypeScript) | eslint --cache → tsc → vitest --coverage（**thresholds 棘轮**）→ build → **bundle 体积门禁**（总 ≤12MB / 最大 chunk ≤1.6MB，`scripts/check-bundle-size.mjs`） | 每次 push/PR |
 | `electron-build` (ubuntu/windows 矩阵) | electron-builder 打包 | 每次 push/PR |
 | `electron-smoke` | playwright-electron 启动冒烟 | 每次 push/PR |
 | `backend-legacy` | API_MODE=legacy 兜底冒烟 | **非阻塞**（continue-on-error 安全网） |
