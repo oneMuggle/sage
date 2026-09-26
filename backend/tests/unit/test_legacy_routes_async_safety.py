@@ -160,10 +160,20 @@ def test_async_handler_count_matches_design():
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
 
+<<<<<<< HEAD
     # C1b 后 = 4：execute_skill/execute_slash_command/import_skills 迁至
     # legacy_skills_routes。
     assert len(async_endpoints) == 7, (
         f"legacy 路由族应有 7 个 async def handler,实际 {len(async_endpoints)}:\n"
+=======
+    # 6 个 keep_async (execute_skill, execute_slash_command,
+    # import_skills, chat, chat_stream_create, chat_stream_attach)
+    # C1b 后 = 4：execute_skill/execute_slash_command/import_skills 迁至 legacy_skills_routes。
+    # compact_session 已拆至 legacy_session_routes (L1, P8), 在那里由
+    # test_keep_async_handlers_actually_async 的合并扫描覆盖。
+    assert len(async_endpoints) == 3, (
+        f"legacy 路由族应有 4 个 async def handler,实际 {len(async_endpoints)}:\n"
+>>>>>>> af319496b (refactor(api): DSH-R16 C1c——Skill Draft/Audit/Rollback/Consolidation 路由组拆分（legacy_routes 累计 -1610 行） (#1611))
         + "\n".join(f"  {f.name} (line {f.lineno})" for f in async_endpoints)
     )
 
@@ -191,7 +201,11 @@ def test_async_handlers_count_invariant_against_internal_helpers():
     # 同样 10 个
     assert len(async_endpoints) == 7
     # 同样 7 个,跟 test_async_handler_count_matches_design 一致
+<<<<<<< HEAD
     assert len(async_endpoints) == 7
+=======
+    assert len(async_endpoints) == 3
+>>>>>>> af319496b (refactor(api): DSH-R16 C1c——Skill Draft/Audit/Rollback/Consolidation 路由组拆分（legacy_routes 累计 -1610 行） (#1611))
 
 
 if __name__ == "__main__":
