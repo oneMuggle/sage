@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import dataclasses
-from datetime import UTC, datetime
+from datetime import datetime, timezone  # noqa: UP017 — py38 兼容（UTC 是 3.11+）
 
 import pytest
 
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.unit
 def _record(trace_id="t1", url="https://upstream/v1", headers=None):
     return TraceRecord(
         trace_id=trace_id,
-        ts=datetime(2026, 9, 26, tzinfo=UTC),
+        ts=datetime(2026, 9, 26, tzinfo=timezone.utc),  # noqa: UP017 — py38 兼容
         endpoint="/v1/chat",
         upstream_url=url,
         upstream_method="POST",
