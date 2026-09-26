@@ -1,5 +1,5 @@
-import { useDensity } from '../../entities/density/useDensity';
 import { DENSITY_LABELS, DENSITY_MODES } from '../../entities/density/densityMode';
+import { useDensity } from '../../entities/density/useDensity';
 import {
   CODE_FONT_OPTIONS,
   FONT_SIZE_MAX,
