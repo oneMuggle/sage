@@ -18,6 +18,12 @@ from backend.mcp.config import (
     get_mcp_server_configs,
     load_server_configs,
 )
+from backend.mcp.discovery import (
+    DiscoveredMcpServer,
+    McpDiscoveryError,
+    McpServerDiscoveryService,
+    get_mcp_discovery_service,
+)
 from backend.mcp.pool import (
     McpServerPool,
     McpStatusReport,
@@ -29,6 +35,12 @@ from backend.mcp.pool import (
     reset_pool,
 )
 from backend.mcp.tool import McpTool, register_mcp_tools, shutdown_mcp_clients
+from backend.mcp.workspace_scope import (
+    WorkspaceMcpConfig,
+    WorkspaceScopeError,
+    WorkspaceScopeManager,
+    get_workspace_scope_manager,
+)
 
 __all__ = [
     "McpClient",
@@ -49,4 +61,14 @@ __all__ = [
     "McpTool",
     "register_mcp_tools",
     "shutdown_mcp_clients",
+    # Discovery
+    "DiscoveredMcpServer",
+    "McpDiscoveryError",
+    "McpServerDiscoveryService",
+    "get_mcp_discovery_service",
+    # Workspace Scope
+    "WorkspaceMcpConfig",
+    "WorkspaceScopeError",
+    "WorkspaceScopeManager",
+    "get_workspace_scope_manager",
 ]
