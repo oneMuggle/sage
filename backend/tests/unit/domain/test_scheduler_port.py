@@ -30,9 +30,10 @@ def test_validation_error_is_value_error():
 
 
 def test_port_protocol_defines_contract():
-    # 协议三方法在 Protocol 体内声明（结构化契约存在性护栏）
+    # 协议三方法在 Protocol 体内声明（结构化契约存在性护栏；
+    # 不用 __protocol_attrs__——私有运行时助手跨版本不稳定）
     for method in ("add_task", "list_tasks", "delete_task"):
-        assert method in SchedulerServicePort.__protocol_attrs__
+        assert callable(getattr(SchedulerServicePort, method, None))
 
 
 def test_duck_typed_implementation_satisfies_port():
