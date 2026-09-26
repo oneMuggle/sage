@@ -131,6 +131,8 @@ def _workspace_info(ctx: ToolContext, _args: Dict[str, Any]) -> Dict[str, Any]:
         "shellSandboxed": False,
         "shellInterpreter": "powershell" if os.name == "nt" else "sh",
         "writesRequireVersion": True,
+        "office": bool(perms.get("office")),
+        "memory": bool(perms.get("memory")),
     }
 
 
@@ -330,6 +332,8 @@ _PATCH_ITEM = _schema(
     ["path", "old_string", "new_string", "expected_version"],
 )
 
+from .knowledge import build_tools  # noqa: E402
+
 TOOLS: List[RemoteTool] = [
     RemoteTool("connection_info", "Connection diagnostics and recovery rules. Never replay "
                "file writes or commands automatically after a transport failure.",
@@ -375,6 +379,7 @@ TOOLS: List[RemoteTool] = [
                _schema({"jobId": {"type": "string"}}, ["jobId"]), "shell", _job_call("output")),
     RemoteTool("cancel_command", "Stop this session's command and its process tree.",
                _schema({"jobId": {"type": "string"}}, ["jobId"]), "shell", _job_call("cancel"), True),
+    *build_tools(RemoteTool, _schema, _PATH),
 ]
 
 TOOLS_BY_NAME: Dict[str, RemoteTool] = {t.name: t for t in TOOLS}
