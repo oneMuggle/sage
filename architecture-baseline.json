@@ -71,7 +71,8 @@
     "tests/electron/test_stub_backend.py": 896,
     "backend/api/arena_routes.py": 873,
     "backend/services/arena_draw_engine.py": 1054,
-    "backend/api/project_routes.py": 838
+    "backend/api/project_routes.py": 838,
+    "backend/tools/web_render.py": 816
   },
   "backend/orchestration/chat_dispatcher.py": 2226,
   "backend/tests/unit/test_chat_dispatcher_budget.py": 856
