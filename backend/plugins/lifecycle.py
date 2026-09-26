@@ -17,7 +17,7 @@ import sqlite3
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -47,7 +47,7 @@ class PluginRecord(BaseModel):
     enabled_at: Optional[float] = Field(default=None, description="启用时间戳")
     disabled_at: Optional[float] = Field(default=None, description="禁用时间戳")
     uninstalled_at: Optional[float] = Field(default=None, description="卸载时间戳")
-    config: dict[str, Any] = Field(default_factory=dict, description="用户配置")
+    config: Dict[str, Any] = Field(default_factory=dict, description="用户配置")
 
     class Config:
         """Pydantic v1 compatibility."""
@@ -420,7 +420,7 @@ class PluginLifecycleManager:
             logger.error(f"列出插件失败: {e}")
             raise PluginLifecycleError(f"列出失败: {e}") from e
 
-    def update_config(self, plugin_name: str, config: dict[str, Any]) -> PluginRecord:
+    def update_config(self, plugin_name: str, config: Dict[str, Any]) -> PluginRecord:
         """
         Update plugin configuration.
 

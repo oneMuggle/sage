@@ -17,7 +17,7 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -30,9 +30,9 @@ class DiscoveredMcpServer(BaseModel):
     name: str = Field(..., description="服务器名称")
     source: str = Field(..., description="发现来源 (workspace/env/plugin/builtin)")
     command: str = Field(default="", description="启动命令")
-    args: list[str] = Field(default_factory=list, description="命令参数")
+    args: List[str] = Field(default_factory=list, description="命令参数")
     url: Optional[str] = Field(default=None, description="HTTP URL (streamable-http)")
-    env: dict[str, str] = Field(default_factory=dict, description="环境变量")
+    env: Dict[str, str] = Field(default_factory=dict, description="环境变量")
     enabled: bool = Field(default=True, description="是否启用")
     description: str = Field(default="", description="服务器描述")
     workspace_path: Optional[str] = Field(default=None, description="工作区路径")

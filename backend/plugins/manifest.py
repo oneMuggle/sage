@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -48,10 +48,10 @@ class PluginCapability(BaseModel):
     entry_point: str | None = Field(
         default=None, description="入口点（工具函数名/技能文件路径/MCP 服务器路径）"
     )
-    permissions: list[str] = Field(
+    permissions: List[str] = Field(
         default_factory=list, description="所需权限列表（如 file:read, network:write）"
     )
-    config_schema: dict[str, Any] | None = Field(
+    config_schema: Optional[Dict[str, Any]] = Field(
         default=None, description="配置项 JSON Schema"
     )
 
@@ -91,14 +91,14 @@ class PluginMetadata(BaseModel):
     homepage: str | None = Field(default=None, description="主页 URL")
     repository: str | None = Field(default=None, description="代码仓库 URL")
     license: str = Field(default="MIT", description="许可证")
-    categories: list[str] = Field(
+    categories: List[str] = Field(
         default_factory=list, description="分类标签", max_length=10
     )
-    tags: list[str] = Field(default_factory=list, description="标签", max_length=20)
+    tags: List[str] = Field(default_factory=list, description="标签", max_length=20)
 
     # 商店信息
     hero_image: str | None = Field(default=None, description="商店页 Hero 图")
-    example_prompts: list[str] = Field(
+    example_prompts: List[str] = Field(
         default_factory=list, description="示例提示词", max_length=5
     )
 
@@ -145,10 +145,10 @@ class PluginManifest(BaseModel):
 
     metadata: PluginMetadata = Field(..., description="插件元数据")
 
-    capabilities: list[PluginCapability] = Field(
+    capabilities: List[PluginCapability] = Field(
         default_factory=list, description="插件能力列表"
     )
-    dependencies: list[PluginDependency] = Field(
+    dependencies: List[PluginDependency] = Field(
         default_factory=list, description="插件依赖列表"
     )
 
@@ -161,12 +161,12 @@ class PluginManifest(BaseModel):
     )
 
     # 生命周期钩子
-    hooks: list[str] = Field(
+    hooks: List[str] = Field(
         default_factory=list, description="生命周期钩子函数名"
     )
 
     # 配置
-    user_config: dict[str, Any] | None = Field(
+    user_config: Optional[Dict[str, Any]] = Field(
         default=None, description="用户配置 JSON Schema"
     )
 
@@ -200,7 +200,7 @@ class PluginManifest(BaseModel):
         """Serialize manifest to JSON string."""
         return self.model_dump_json(indent=indent)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """Serialize manifest to dictionary."""
         return self.model_dump()
 
@@ -233,7 +233,7 @@ class PluginManifest(BaseModel):
             json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
 
 
-def validate_plugin_manifest(manifest_path: Path | str) -> tuple[bool, list[str]]:
+def validate_plugin_manifest(manifest_path: Path | str) -> tuple[bool, List[str]]:
     """
     Validate a plugin manifest file.
 

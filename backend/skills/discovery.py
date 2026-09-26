@@ -17,7 +17,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -31,13 +31,13 @@ class SkillMetadata(BaseModel):
     description: str = Field(default="", description="技能描述")
     version: str = Field(default="1.0.0", description="技能版本")
     author: str = Field(default="", description="作者")
-    tags: list[str] = Field(default_factory=list, description="标签")
+    tags: List[str] = Field(default_factory=list, description="标签")
     path: str = Field(..., description="SKILL.md 文件路径")
     skill_dir: str = Field(..., description="技能目录路径")
 
     # Frontmatter 字段
-    triggers: list[str] = Field(default_factory=list, description="触发条件")
-    allowed_tools: list[str] = Field(default_factory=list, description="允许的工具")
+    triggers: List[str] = Field(default_factory=list, description="触发条件")
+    allowed_tools: List[str] = Field(default_factory=list, description="允许的工具")
     priority: int = Field(default=0, description="优先级")
 
 

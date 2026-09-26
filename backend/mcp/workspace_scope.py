@@ -15,7 +15,7 @@ import json
 import logging
 import sqlite3
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -28,13 +28,13 @@ class WorkspaceMcpConfig(BaseModel):
     """Workspace-level MCP configuration."""
 
     workspace_path: str = Field(..., description="工作区路径")
-    enabled_servers: list[str] = Field(
+    enabled_servers: List[str] = Field(
         default_factory=list, description="启用的服务器名称列表"
     )
-    disabled_servers: list[str] = Field(
+    disabled_servers: List[str] = Field(
         default_factory=list, description="禁用的服务器名称列表"
     )
-    custom_servers: list[DiscoveredMcpServer] = Field(
+    custom_servers: List[DiscoveredMcpServer] = Field(
         default_factory=list, description="工作区自定义服务器"
     )
     auto_discover: bool = Field(default=True, description="是否自动发现服务器")
