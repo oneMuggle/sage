@@ -174,6 +174,11 @@ export const en: Record<TranslationKey, string> = {
   'chat.fork_success': 'Forked into a new session',
   'chat.fork_failed': 'Fork failed: {message}',
   'session.fork_badge': 'Forked session',
+  'session.fork_tree_open': 'View fork family tree',
+  'session.fork_tree_title': 'Fork family tree',
+  'session.fork_tree_loading': 'Loading sessions…',
+  'session.fork_tree_current': 'current',
+  'session.fork_tree_single': 'This session has no fork family (not forked, no descendants).',
 
   // ─── File upload ──────────────────
   'chat.drop_files': 'Drop files here',
