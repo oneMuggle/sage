@@ -51,14 +51,13 @@ export default {
           subtle: 'rgb(var(--color-mem-subtle-rgb) / <alpha-value>)',
         },
         overlay: 'var(--color-overlay)',
-        // ZCode-inspired semantic UI color tokens (plain CSS vars for theme switching)
-        'ui-bg': 'var(--color-background)',
-        'ui-card': 'var(--color-card)',
-        'ui-surface': 'var(--color-surface)',
-        'ui-popover': 'var(--color-popover)',
-        'ui-border': 'var(--color-border)',
-        'ui-foreground': 'var(--color-foreground)',
-        'ui-subtle': 'var(--color-foreground-subtle)',
+        // ZCode-inspired surface hierarchy tokens (DESIGN.md §2)
+        'ui-page': 'rgb(var(--color-ui-page-rgb) / <alpha-value>)',
+        'ui-panel': 'rgb(var(--color-ui-panel-rgb) / <alpha-value>)',
+        'ui-card': 'rgb(var(--color-ui-card-rgb) / <alpha-value>)',
+        'ui-overlay': 'rgb(var(--color-ui-overlay-rgb) / <alpha-value>)',
+        'ui-fg': 'rgb(var(--color-ui-fg-rgb) / <alpha-value>)',
+        'ui-subtle': 'rgb(var(--color-ui-subtle-rgb) / <alpha-value>)',
         role: {
           blue: 'rgb(var(--color-role-blue-rgb) / <alpha-value>)',
           'blue-text': 'rgb(var(--color-role-blue-text-rgb) / <alpha-value>)',

@@ -316,6 +316,25 @@ async def lifespan(app: FastAPI):
     db.init_db()
     app.state.db = db
     app.state.catalog_repo = CatalogRepository(db)
+    # SE0: 孤儿 messages 清理 —— 2026-08-10 PR #290 启用 PRAGMA foreign_keys=ON
+    # 之前可能遗留的历史悬挂行(session 不存在但 messages 带其 session_id)。
+    # 必须在 backfill_session_events 之前执行 —— 否则 backfill 的 INSERT INTO
+    # session_events 触发 FK violation,连锁引发 database is locked(见 PR #1722)。
+    # fail-safe,失败仅告警,不阻断启动。
+    try:
+        from backend.data.session_event_backfill import cleanup_orphan_messages
+
+        _orphan_deleted = cleanup_orphan_messages(db)
+        if _orphan_deleted:
+            logger.info(
+                "清理了 %d 条孤儿消息(session 已不存在)", _orphan_deleted
+            )
+    except Exception:
+        logger.exception("orphan messages cleanup failed (ignored)")
+        try:
+            db.get_connection().rollback()
+        except Exception:
+            logger.error("rollback failed after orphan cleanup error", exc_info=True)
     # SE2 (DSH 对标 R2): 存量会话事件回填 —— SE1 之前的会话没有
     # session_events 记录，读取切换（历史从事件投影）前必须补齐。
     # 幂等（有事件即跳过）、fail-safe（失败仅告警，不阻断启动）。
@@ -331,6 +350,12 @@ async def lifespan(app: FastAPI):
             )
     except Exception:
         logger.exception("session event backfill failed (ignored)")
+        # A3: 显式 rollback 避免未回滚事务在 SQLite WAL 模式下持有 RESERVED 锁，
+        # 阻塞后续所有数据库操作（database is locked 连锁故障）。
+        try:
+            db.get_connection().rollback()
+        except Exception:
+            logger.error("rollback failed after backfill error", exc_info=True)
     # Task 4: load builtin seed data if catalog is empty (no network access)
     # fail-safe — must not crash startup if seed parsing or DB write fails
     try:
@@ -341,6 +366,11 @@ async def lifespan(app: FastAPI):
             logger.info("Loaded %d builtin seed records", seed_count)
     except Exception:
         logger.exception("builtin seed failed (ignored)")
+        # A3: 同上,显式 rollback 防止事务锁污染
+        try:
+            db.get_connection().rollback()
+        except Exception:
+            logger.error("rollback failed after seed error", exc_info=True)
     if __name__ == "__main__":
         _elapsed_db = time.monotonic() - _startup_t0
         print(  # noqa: T201

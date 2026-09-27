@@ -7,6 +7,7 @@ import {
   Brain,
   ChevronDown,
   GitBranch,
+  History,
   Eye,
   EyeOff,
   Pencil,
@@ -55,6 +56,8 @@ interface MessageProps {
   isStreaming?: boolean;
   /** M4: 从此消息分叉新会话（非破坏性，无需确认） */
   onFork?: (messageId: string) => void;
+  /** W1: 回滚到此处（对话 fork + 可选工作区快照恢复，Claude Code /rewind 对标） */
+  onRewind?: (messageId: string) => void;
   /** U5': 编辑此条 user 消息并重发（分叉其前缀，原会话保留） */
   onEditResend?: (messageId: string) => void;
   /** R18-A: 重新生成此条 assistant 回答（fork 前缀 + 重发前驱 user 消息） */
@@ -164,7 +167,7 @@ const markdownComponents = {
       // P2: 长表格纵向限高滚动 + 表头粘性（此前只能横向滚动，数十行的表
       // 把整条消息拉得极长）
       <div className="overflow-x-auto my-3 max-h-80 overflow-y-auto">
-        <table className="min-w-full text-xs border-collapse border border-border">
+        <table className="min-w-full text-ui-sm border-collapse border border-border">
           {children}
         </table>
       </div>
@@ -227,13 +230,13 @@ const markdownComponents = {
     );
   },
   h1({ children }: { children?: ReactNode }) {
-    return <h1 className="text-lg font-bold mt-4 mb-2">{children}</h1>;
+    return <h1 className="text-ui-xl font-bold mt-4 mb-2">{children}</h1>;
   },
   h2({ children }: { children?: ReactNode }) {
-    return <h2 className="text-base font-bold mt-3 mb-2">{children}</h2>;
+    return <h2 className="text-ui-lg font-bold mt-3 mb-2">{children}</h2>;
   },
   h3({ children }: { children?: ReactNode }) {
-    return <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>;
+    return <h3 className="text-ui-base font-bold mt-2 mb-1">{children}</h3>;
   },
 };
 
@@ -309,7 +312,7 @@ function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStream
         aria-expanded={isExpanded}
       >
         <Brain className="w-4 h-4 text-primary" />
-        <span className="text-xs font-medium text-text-secondary">
+        <span className="text-ui-sm font-medium text-text-secondary">
           思考过程 ({reasoning.length} 字)
         </span>
         <ChevronDown
@@ -319,7 +322,7 @@ function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStream
       {isExpanded && (
         <div
           ref={contentRef}
-          className="px-3 py-2 bg-bg-subtle/50 border-t border-border/50 text-xs text-text-secondary leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap"
+          className="px-3 py-2 bg-bg-subtle/50 border-t border-border/50 text-ui-sm text-text-secondary leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap"
         >
           {reasoning}
         </div>
@@ -432,6 +435,7 @@ function MessageComponent({
   attachments,
   isStreaming,
   onFork,
+  onRewind,
   onEditResend,
   onRegenerate,
   onDelete,
@@ -496,6 +500,8 @@ function MessageComponent({
   }, [message.tool_calls]);
   // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
   const canFork = Boolean(onFork) && (isUser || isAssistant);
+  // W1: 回滚到此处（user/assistant 均可——语义为回到该消息刚完成的时点）
+  const canRewind = Boolean(onRewind) && (isUser || isAssistant) && !isStreaming;
   // U5': 编辑重发只对 user 消息有意义（重写用户输入，而非模型回答）
   const canEditResend = Boolean(onEditResend) && isUser;
   // R18-A: 重新生成仅对 assistant 消息有意义（重跑回答，原会话保留）
@@ -554,7 +560,7 @@ function MessageComponent({
     >
       {/* 头像 */}
       <div
-        className={`w-7 h-7 rounded-radius-sm flex-shrink-0 flex items-center justify-center text-xs font-semibold ${
+        className={`w-7 h-7 rounded-radius-sm flex-shrink-0 flex items-center justify-center text-ui-sm font-semibold ${
           isAssistant ? 'bg-primary/10 text-primary' : 'bg-bg text-muted border border-border'
         }`}
       >
@@ -592,7 +598,7 @@ function MessageComponent({
             {attachments.map((file, idx) => (
               <span
                 key={idx}
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs border ${
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded text-ui-sm border ${
                   isUser
                     ? 'bg-text-inverse/15 border-text-inverse/20 text-text-inverse'
                     : 'bg-bg-subtle border-border text-text-secondary'
@@ -803,7 +809,7 @@ function MessageComponent({
             每条带统一序号 [n]（类文章引用），供用户核对来源可靠性。 */}
         {sourcesExpanded && sourcesTotal > 0 && (
           <div
-            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-2"
+            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-ui-sm space-y-2"
             data-testid="message-sources-list"
           >
             {(memoryRefs.length > 0 || memorySources.length > 0) && (
@@ -942,7 +948,7 @@ function MessageComponent({
         {/* R38: 技能激活明细（skill_activated 流事件携带，可展开） */}
         {skillsExpanded && activatedSkills.length > 0 && (
           <div
-            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-xs space-y-1"
+            className="mt-1 p-2 rounded-radius-sm bg-bg-subtle border border-border text-ui-sm space-y-1"
             data-testid="skill-activated-list"
           >
             {activatedSkills.map((skill) => (
@@ -980,6 +986,7 @@ function MessageComponent({
         {(canCopy ||
           onFeedback ||
           canFork ||
+          canRewind ||
           canEditResend ||
           canDelete ||
           canRegenerate ||
@@ -1057,6 +1064,17 @@ function MessageComponent({
                 data-testid="fork-message"
               >
                 <GitBranch className="w-4 h-4" />
+              </button>
+            )}
+            {canRewind && (
+              <button
+                onClick={() => onRewind?.(message.id)}
+                className="p-1 rounded hover:bg-bg-hover"
+                title={t('chat.rewind')}
+                aria-label={t('chat.rewind')}
+                data-testid="rewind-message"
+              >
+                <History className="w-4 h-4" />
               </button>
             )}
             {canDelete && (

@@ -33,6 +33,7 @@ import { RemoteWorkspacesTab } from './RemoteWorkspacesTab';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
 import { ToolsConnectionsTab } from './ToolsConnectionsTab';
 import { UpdatesTab } from './UpdatesTab';
+import { UsageStatsTab } from './UsageStatsTab';
 import { ZoteroTab } from './ZoteroTab';
 import {
   searchSettings,
@@ -80,6 +81,7 @@ export function Settings() {
     { key: 'runtime', label: t('settings.tab.runtime') },
     { key: 'evolution', label: t('settings.tab.evolution') },
     { key: 'updates', label: t('settings.tab.updates') },
+    { key: 'usage-stats', label: t('settings.tab.usage-stats' as TranslationKey) },
   ];
   if (ENABLE_UPDATE_PROVIDERS_UI()) {
     tabs.push({ key: 'providers', label: t('settings.tab.providers' as TranslationKey) });
@@ -190,6 +192,7 @@ export function Settings() {
               </div>
             )}
             {activeTab === 'updates' && <UpdatesTab />}
+            {activeTab === 'usage-stats' && <UsageStatsTab />}
             {activeTab === 'providers' && ENABLE_UPDATE_PROVIDERS_UI() && <ProvidersManager />}
           </div>
         </div>

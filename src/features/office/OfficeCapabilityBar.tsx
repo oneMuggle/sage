@@ -19,9 +19,11 @@ import { officeApi } from '../../shared/api/officeApi';
 import type { OfficeCapabilities } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { pdfFormats } from './officeCapabilities';
+
 export interface OfficeCapabilityBarProps {
   /** 探测结果回传给页面（预览面板据此隐藏高保真开关）。 */
-  onCapabilities?: (caps: OfficeCapabilities) => void;
+  onCapabilities?: (caps: OfficeCapabilities | null) => void;
 }
 
 interface BadgeSpec {
@@ -55,6 +57,7 @@ export function OfficeCapabilityBar({ onCapabilities }: OfficeCapabilityBarProps
       } catch {
         // 探测失败 → 整条隐藏（caps 维持 null）。辅助信息不阻塞页面。
         setCaps(null);
+        onCapabilities?.(null);
       } finally {
         setProbing(false);
       }
@@ -68,16 +71,18 @@ export function OfficeCapabilityBar({ onCapabilities }: OfficeCapabilityBarProps
 
   if (!caps) return null;
 
+  const formats = pdfFormats(caps);
+  const pdfHint = formats.length
+    ? `${t('office.caps.detected')} · ${formats.join(' / ').toUpperCase()} · ${
+        caps.soffice_available ? `LibreOffice: ${caps.soffice_path ?? ''}` : 'MS Word COM'
+      }`
+    : t(installHintKey(caps.platform));
   const badges: BadgeSpec[] = [
     {
       key: 'pdf',
-      ok: caps.pdf_export_available,
-      label: t('office.caps.pdf'),
-      hint: caps.pdf_export_available
-        ? caps.soffice_available
-          ? `LibreOffice: ${caps.soffice_path ?? ''}`
-          : 'MS Word COM'
-        : t(installHintKey(caps.platform)),
+      ok: formats.length > 0,
+      label: `${t('office.caps.pdf')}${formats.length ? ` · ${formats.join('/').toUpperCase()}` : ''}`,
+      hint: pdfHint,
     },
     {
       key: 'image',

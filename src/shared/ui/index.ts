@@ -1,7 +1,7 @@
 // 通用组件导出
 export { Button } from './Button';
 
-// U-Card: DESIGN.md §7 标准卡片容器 (bg-ui-card + border-ui-border + rounded-xl)
+// U-Card: DESIGN.md §7 标准卡片容器 (bg-ui-card + border-border + rounded-xl)
 export { Card } from './Card';
 
 export { Input } from './Input';

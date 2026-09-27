@@ -157,15 +157,20 @@
   --sidebar-width: 240px;
   --header-height: 48px;
 
-  /* ZCode-inspired semantic UI tokens */
+  /* ZCode-inspired surface hierarchy (DESIGN.md §2) */
   --ui-font-size: 14px;
-  --color-background: #ffffff;
-  --color-card: #f8f9fa;
-  --color-surface: #f3f4f6;
-  --color-popover: #ffffff;
-  --color-border: #e5e7eb;
-  --color-foreground: #111827;
-  --color-foreground-subtle: #6b7280;
+  --color-ui-page: #ffffff;
+  --color-ui-page-rgb: 255 255 255;
+  --color-ui-panel: #f9fafb;
+  --color-ui-panel-rgb: 249 250 251;
+  --color-ui-card: #f8f9fa;
+  --color-ui-card-rgb: 248 249 250;
+  --color-ui-overlay: #ffffff;
+  --color-ui-overlay-rgb: 255 255 255;
+  --color-ui-fg: #111827;
+  --color-ui-fg-rgb: 17 24 39;
+  --color-ui-subtle: #6b7280;
+  --color-ui-subtle-rgb: 107 114 128;
 }
 
 [data-theme='dark'] {
@@ -301,15 +306,20 @@
   --sidebar-width: 240px;
   --header-height: 48px;
 
-  /* ZCode-inspired semantic UI tokens (dark) */
+  /* ZCode-inspired surface hierarchy (dark) */
   --ui-font-size: 14px;
-  --color-background: #0f172a;
-  --color-card: #1e293b;
-  --color-surface: #334155;
-  --color-popover: #1e293b;
-  --color-border: #334155;
-  --color-foreground: #f1f5f9;
-  --color-foreground-subtle: #94a3b8;
+  --color-ui-page: #0f172a;
+  --color-ui-page-rgb: 15 23 42;
+  --color-ui-panel: #162032;
+  --color-ui-panel-rgb: 22 32 50;
+  --color-ui-card: #1e293b;
+  --color-ui-card-rgb: 30 41 59;
+  --color-ui-overlay: #1e293b;
+  --color-ui-overlay-rgb: 30 41 59;
+  --color-ui-fg: #f1f5f9;
+  --color-ui-fg-rgb: 241 245 249;
+  --color-ui-subtle: #94a3b8;
+  --color-ui-subtle-rgb: 148 163 184;
 }
 
 body {
