@@ -342,6 +342,7 @@ export const zh = {
   'settings.network.search.engine.zhipu': '智谱（需 API Key）',
   'settings.tab.evolution': '进化',
   'settings.tab.updates': '更新',
+  'settings.tab.usage-stats': '使用统计',
   'settings.section.theme': '主题',
   'settings.section.appearance': '外观',
   'settings.section.chat': '对话',

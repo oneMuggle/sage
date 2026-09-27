@@ -187,7 +187,8 @@ export const en: Record<TranslationKey, string> = {
   'chat.rewind_loading': 'Loading snapshots…',
   'chat.rewind_no_snapshots': 'No workspace snapshot exists before this message',
   'chat.rewind_files_count': '{count} files',
-  'chat.rewind_hint': 'The original session is kept intact; files are restored first, then the conversation is forked.',
+  'chat.rewind_hint':
+    'The original session is kept intact; files are restored first, then the conversation is forked.',
   'chat.rewind_confirm': 'Rewind',
   'chat.rewind_success': 'Rewound and forked into a new session',
   'chat.rewind_restore_failed': 'File restore failed: {message}',
@@ -354,6 +355,7 @@ export const en: Record<TranslationKey, string> = {
   'settings.network.search.engine.zhipu': 'Zhipu (API key required)',
   'settings.tab.evolution': 'Evolution',
   'settings.tab.updates': 'Updates',
+  'settings.tab.usage-stats': 'Usage Stats',
   'settings.section.theme': 'Theme',
   'settings.section.appearance': 'Appearance',
   'settings.section.chat': 'Chat',

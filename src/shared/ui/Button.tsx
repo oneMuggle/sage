@@ -3,17 +3,17 @@ import { clsx } from 'clsx';
 import { ButtonHTMLAttributes, forwardRef } from 'react';
 
 // Button 变体样式 — 对齐 DESIGN.md §7 设计 token 规范
-// 主按钮：bg-ui-bg text-ui-foreground border-ui-border
-// 次要按钮：bg-ui-surface text-ui-foreground
+// 主按钮：bg-ui-card text-ui-fg border-border
+// 次要按钮：bg-ui-panel text-ui-fg
 // 危险按钮：bg-error text-text-inverse (与 DESIGN.md §7 危险按钮的 bg-red-500 等价)
 const buttonVariants = cva(
   'inline-flex items-center justify-center rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50 disabled:pointer-events-none',
   {
     variants: {
       variant: {
-        primary: 'bg-ui-bg text-ui-foreground border border-ui-border hover:bg-ui-surface',
-        secondary: 'bg-ui-surface text-ui-foreground hover:bg-ui-bg',
-        ghost: 'hover:bg-ui-surface',
+        primary: 'bg-ui-card text-ui-fg border border-border hover:bg-ui-panel',
+        secondary: 'bg-ui-panel text-ui-fg hover:bg-ui-card',
+        ghost: 'hover:bg-ui-panel',
         danger: 'bg-error text-text-inverse hover:bg-error/90',
       },
       size: {
