@@ -45,10 +45,27 @@
 | R51 | OPS4 cancel 时清理待决审批 | #1569 `5c7c45b7` | #1572 `ae782696` |
 | R50 | RD22 事件时间线相对偏移 | #1540 `f377e1cf` | #1545 `8339a897` |
 | R52 | RD23 会话多 run 历史浏览器 MVP | #1582 `54271cfe` | #1588 `e476c5e6` |
+| R55 | RD25 单 run 详情 API 客户端（getRun 桥接） | #1617 `c97edbc6d` | ✓（orchestration_get_run 桥接已在 win7） |
+| R57 | BU23 聚合头部 per-agent 工作量分布 | #1691 `35c883236` | R63 对齐（ALG-1） |
+| R58 | RD26 orchRunClient 全方法测试覆盖 | #1668 `d6da988a1` | —（前端测试，无 win7 侧） |
+| R61 | BU24 per-agent token 分布 + RD25 负偏移防护 | #1727 `ac5c02a8` | R63 对齐（ALG-2） |
+| R62 | RT27 run 级聚合统计（total_used_tokens/total_duration_ms） | #1731 `500921e35` | R63 对齐（ALG-3） |
+| R63 | win7 对齐收口（ALG1-5）+ R2b 单测 + 总账回填 | #1738 `a3ef4dcaf` | #1739 `ce8213b9`（ALG-4 由并行 #1735 先行覆盖） |
+| R64 | win7 对齐小批次（r166 hooks 测试 + round63 文档同步 + 基线补账） | —（纯 win7 对齐，上游 #1743/#1745） | #1748 `870d4ebf` |
+| R65 | win7 对齐小批次（r167/r168/r169 测试三连） | —（纯 win7 对齐，上游 #1746/#1749/#1751） | #1756 `f87a1fdf` |
+| R66 | usage_routes 5 端点单测补齐（18 例） | #1760 `d5df5590` | #1761 `8abaf25f` |
+| R67 | win7 对齐小批次（r170 legacy settings + r172 窗口策略测试） | —（纯 win7 对齐，上游 #1754/#1762） | #1769 `0c6cd867` |
+| R68 | win7 对齐小批次（r174 legacy models 13 DTO 测试） | —（纯 win7 对齐，上游 #1768） | #1775 `db28c7c4` |
 
 §回填记录：R23 `#1084`、R24 `#1096`、R25 `#1108`、R26 `#1141`、R27 `#1157`、
 R28-31 `#1193`、R32 `#1203`、R33 `#1250`、R34 `#1261`、R35 `#1272`、
 R36 `#1281`、R42 `#1316`、R43 `#1384`。R53 回填即本提交。
+R55/R57/R58/R61/R62 回填即本提交（R63）；R63 回填即本提交。
+R64 回填即本提交（round64 文档随本提交首次入 main）。
+R65 回填即本提交（round65 文档随本提交首次入 main）。
+R66 回填即本提交。
+R67 回填即本提交（round67 文档随本提交首次入 main）。
+R68 回填即本提交（round68 文档随本提交首次入 main）。
 
 
 ## 2. 过程经验（diff-patch / 双分支交付）
@@ -65,8 +82,11 @@ R36 `#1281`、R42 `#1316`、R43 `#1384`。R53 回填即本提交。
    事件量；workflow_dispatch 可作分支级验证（注意 job 的 if 语义）；
    push 恢复后补真 pull_request CI。
 4. **shell cwd 失效**：worktree 删除会让常驻 shell 的 cwd 失效，spawn
-   ENOENT 易误诊为 bash.exe 损坏（R18/R36 各一次）。先用 Write 工具重建
+   ENOENT 易误诊为 bash.exe 损坏（R18/R36/R63 各一次）。先用 Write 工具重建
    失效目录即可恢复，无需重装 Git。
+5. **API squash 标题勿用 printf \u 转义**（R63 实证，#1738 标题
+   全角括号损坏）：msys printf 对 `\uff08` 类转义产出坏字节。构造
+   JSON payload 一律用 Write 工具落盘 UTF-8 文件再 `curl -d @file`。
 
 ## 3. 后续优化建议（状态更新 2026-09-24）
 

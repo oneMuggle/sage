@@ -13,6 +13,7 @@ import 时毫发无损，跑到那一行才 TypeError。
 规则（py38 不可用的运行期写法）：
 - isinstance 第二参数出现 ``A | B`` 联合（3.10+）
 - ``asyncio.to_thread``（3.9+；backend/utils/py_compat.py 垫片自身除外）
+- ``ast.unparse``（3.9+；utils.py_compat.ast_unparse 有降级实现）
 - zip 的 strict 关键字（3.10+）
 - ``Path.write_text/read_text/write_bytes/readlink(..., newline=)``（3.10+）
 - ``Path.hardlink_to``（3.10+）
@@ -70,6 +71,15 @@ def _is_asyncio_to_thread(node):
     )
 
 
+def _is_ast_unparse(node):
+    return (
+        isinstance(node, ast.Attribute)
+        and node.attr == "unparse"
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "ast"
+    )
+
+
 def visit_node(node, rel, hits):
     # R1: isinstance(x, A | B)
     if (
@@ -87,6 +97,10 @@ def visit_node(node, rel, hits):
     # R2: asyncio.to_thread
     if _is_asyncio_to_thread(node):
         hits.append((rel, getattr(node, "lineno", 0), "asyncio.to_thread（3.9+），改用 utils.py_compat.to_thread"))
+
+    # R2b: ast.unparse（3.9+；utils.py_compat.ast_unparse 有降级实现）
+    if _is_ast_unparse(node):
+        hits.append((rel, getattr(node, "lineno", 0), "ast.unparse（3.9+），改用 utils.py_compat.ast_unparse"))
 
     # R3: zip(strict=...)
     if (

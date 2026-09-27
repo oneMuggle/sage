@@ -22,12 +22,15 @@ import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Sequence, Set, Union
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, StrictBool
 
+from backend.api.chat_request_policy import (  # C2b: 唯一实现，原五份逐字重复收编
+    _check_request_within_window,
+    _resolve_effective_window,
+)
 from backend.api.chat_stream_registry import (
     SENTINEL,
     SessionBusyError,
@@ -38,7 +41,6 @@ from backend.api.orch_routes import router as orch_routes_router
 from backend.api.settings_models import model_dump_compat
 from backend.chat.compaction import (
     compact_messages,
-    estimate_messages_tokens,
     should_compact,
 )
 from backend.chat.executors import resolve_attachments
@@ -51,22 +53,14 @@ from backend.chat.sources_extractor import extract_sources_from_tool, merge_sour
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data import answer_version_repo as answer_versions
-from backend.data.artifact_repo import (  # S7: 产物事件 → 活跃流推送
-    add_artifact_listener,
-    remove_artifact_listener,
-)
 from backend.data.database import get_database
 from backend.data.session_repo import (
     Message as DbMessage,
     MessageRepository,
     SessionRepository,
 )
-from backend.data.workspace_events import (  # right-panel R5: 工作区变更事件 → 活跃流推送
-    add_workspace_listener,
-    remove_workspace_listener,
-)
 from backend.memory import get_memory_manager
-from backend.office.chat_refs import ChatOfficeRef, authorize_chat_office_request
+from backend.office.chat_refs import authorize_chat_office_request
 from backend.office.workspace_errors import (
     WorkspaceDocumentNotFoundError,
     WorkspaceNotBoundError,
@@ -78,142 +72,9 @@ from backend.orchestration.chat_dispatcher import (
     _classify_orchestration_mode,
 )
 from backend.orchestration.llm_factory import load_llm_config_for_chat
-from backend.services.scheduler import get_scheduler_service
-
-
-def _resolve_effective_window(  # noqa: PLR0911 — Task 5 priority cascade, each branch is a distinct user-facing mode
-    model_id: Optional[str] = None,
-    max_context: Optional[int] = None,
-    request_endpoint_id: Optional[str] = None,
-    auto_context: Optional[bool] = None,
-) -> Optional[int]:
-    """Task 5: Resolve effective context window from model catalog.
-
-    Priority for ``endpoint_id``: request > persisted settings > None.
-    Behaviour by ``auto_context`` flag (after catalog resolve):
-
-    - ``auto_context=True``  → resolve from catalog; ``max_context``, if
-      set, is applied as a safety upper bound (``min(catalog, max)``).
-      This is the path that lets the UI's ``autoContext`` switch actually
-      turn on catalog-driven window sizing.
-    - ``auto_context=False`` → fixed cap at ``max_context`` (user pinned
-      a value). Catalog caps still apply via effective_window.
-    - ``auto_context=None``  → resolve from catalog (the default for
-      callers that do not yet pass the field), 4096 default cap.
-
-    Returns ``max_context`` if the catalog cannot be resolved, else
-    ``None`` so callers can decide how to fall back.
-    """
-    try:
-        from backend.data.database import get_database
-        from backend.data.settings_canonicalizer import to_camel
-        from backend.data.settings_repo import SettingsRepository
-        from backend.model_catalog.context import effective_window
-        from backend.model_catalog.repository import CatalogRepository
-        from backend.model_catalog.schemas import EndpointKey
-
-        raw = SettingsRepository().get_json("app_settings")
-        if not isinstance(raw, dict):
-            return max_context if max_context else None
-        settings = to_camel(raw)
-        endpoints = settings.get("endpoints") or []
-        if not isinstance(endpoints, list):
-            return max_context if max_context else None
-
-        # Priority: request endpoint_id > persisted settings
-        endpoint_id = None
-        if request_endpoint_id:
-            # Verify the request endpoint_id exists in the endpoints list
-            ep = next(
-                (e for e in endpoints if isinstance(e, dict) and e.get("id") == request_endpoint_id),
-                None,
-            )
-            if ep is not None:
-                endpoint_id = request_endpoint_id
-
-        if not endpoint_id:
-            # Fallback to persisted settings
-            selections = settings.get("modelSelections") or {}
-            chat_sel = selections.get("chatModel") if isinstance(selections, dict) else None
-            if isinstance(chat_sel, dict) and chat_sel.get("endpointId"):
-                ep_id = chat_sel["endpointId"]
-                ep = next(
-                    (e for e in endpoints if isinstance(e, dict) and e.get("id") == ep_id),
-                    None,
-                )
-                if ep is not None:
-                    endpoint_id = ep_id
-
-        if not endpoint_id or not model_id:
-            return max_context if max_context else None
-
-        repo = CatalogRepository(get_database())
-        resolved = repo.resolve(EndpointKey(endpoint_id=endpoint_id, model_id=model_id))
-        # auto_context=True (UI toggle on): catalog-driven window with
-        # max_context as a safety upper bound. This is the only branch
-        # where the UI's autoContext switch actually reaches catalog
-        # resolution — without it, the previous logic made max_context
-        # always win and the toggle was inert.
-        if auto_context is True:
-            # effective_window(automatic=True) ignores ``fixed`` per the
-            # schema contract, so the natural catalog window is returned
-            # first and only then clamped to max_context. 4096 is a
-            # stand-in positive int — its value is discarded.
-            window = effective_window(
-                resolved.limits, automatic=True, fixed=4096,
-            )
-            if max_context:
-                window = min(window, max_context)
-            return window
-        # auto_context=False: user explicitly pinned a value, treat as cap.
-        if auto_context is False and max_context:
-            return effective_window(
-                resolved.limits, automatic=False, fixed=max_context,
-            )
-        # auto_context=None (or False without max_context): resolve from
-        # catalog, 4096 default ceiling.
-        return effective_window(
-            resolved.limits, automatic=True, fixed=4096,
-        )
-    except Exception:
-        return max_context if max_context else None
-
-
-def _check_request_within_window(
-    messages: Sequence[Dict[str, Any]],
-    effective_window: Optional[int],
-) -> None:
-    """Brief line 16: explicit reject when required content overshoots window.
-
-    The history was already truncated to ``max(0, effective_window - reserve)``,
-    so this guard only fires when system / attachments / trailing_system /
-    current user input alone exceed the resolved window (e.g., a 1 MB
-    attachment + a long system prompt against a 4K-window model). Without
-    this check the producer would silently send an over-budget request that
-    the upstream LLM truncates or errors on — this gives the caller a
-    deterministic 400 instead.
-
-    No-op when the catalog has not resolved a window (``effective_window``
-    is None or non-positive) so callers without catalog data keep the legacy
-    behaviour.
-    """
-    if effective_window is None or effective_window <= 0:
-        return
-    total = estimate_messages_tokens(messages)
-    if total > effective_window:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"required content (system + history + attachments + current "
-                f"input) ~{total} tokens exceeds resolved context window "
-                f"({effective_window} tokens); reduce input length, drop "
-                f"attachments, or pick a larger-context model"
-            ),
-        )
-
-
 from backend.orchestration.orch_settings import load_orch_settings
 from backend.scheduler import get_evolution_logs
+from backend.services.scheduler import get_scheduler_service
 from backend.skills.review_queue import get_review_queue
 
 logger = logging.getLogger(__name__)
@@ -287,18 +148,8 @@ def _safe_log_field(value: object, max_length: int = 64) -> str:
 
 # ==================== Pydantic 模型 ====================
 
-
-class SessionCreate(BaseModel):
-    title: str = "新对话"
-    parent_id: Optional[str] = None
-
-
-class SessionUpdate(BaseModel):
-    title: Optional[str] = None
-
-    is_pinned: Optional[bool] = None
-
-
+# C1e (DSH 对标 R27): 13 个 legacy 请求/响应模型迁出至 legacy_models.py
+# （纯物理拆分；本模块再导出保持既有 import 路径——含测试——不变）。
 #: PM1 (round8): 计划模式 system 指令 —— 只读调研 + 结构化计划产出；
 #: 执行被权限门（per-run READ_ONLY）与指令双重约束，批准后由前端衔接。
 #: 计划前置 Round (2026-09-19): 追加"歧义先澄清"——对照 Claude Code plan
@@ -317,161 +168,6 @@ _PLAN_MODE_DIRECTIVE = (
 )
 
 
-class ChatRequest(BaseModel):
-    session_id: str
-    message: str
-    # client_message_id (2026-09, docs/plans/2026-09-18_client-message-id-r1-plan):
-    # 前端乐观 user 消息 id 与服务端落库 id 对齐的根方案。传入时 user 消息
-    # 落库 id = f"u-{client_message_id}" (确定性); 未传 = 服务端 UUID (兼容)。
-    client_message_id: Optional[str] = Field(
-        default=None,
-        pattern=r"^[0-9a-f-]{8,64}$",
-        description="前端生成的消息身份 id (UUID), 用于乐观 id 对齐与幂等",
-    )
-    workspace_path: Optional[str] = None
-    # 2026-07-30: 选 agent 的入口。None / 空字符串 → 端点 fallback 到 "primary"。
-    # 真正的路由由 SageAgent(agent_id=...) 内部完成:从 SQLite 读 profile,
-    # 透传到 get_available_tools → ToolRegistry.get_schemas_for_llm(allowed_tools=...)
-    # 这样 memory_manager 之类的窄权限 agent 不会拿到 list_dir/read_file。
-    agent_id: Optional[str] = None
-    api_key: Optional[str] = None
-
-    api_url: Optional[str] = None
-
-    model: Optional[str] = None
-
-    max_context: Optional[int] = None
-
-    # Task 5 (2026-09-15): auto-context resolution flag.
-    # true = backend resolves effective window from catalog; false = use max_context as fixed cap.
-    auto_context: Optional[bool] = None
-
-    # Task 5 (2026-09-15): endpoint identifier from the request.
-    # Takes priority over persisted settings when resolving context window / usage attribution.
-    endpoint_id: Optional[str] = None
-
-    temperature: Optional[float] = None
-
-    # 透传字段:provider 让后端不再硬写,reasoning_effort/thinking_budget
-    # 让上游 LLM 启用 thinking 输出(provider 决定哪种 key 会被接受)
-    # - provider: openai / claude / gemini / deepseek / ollama / custom
-    # - reasoning_effort: OpenAI o1/o3/5 + DeepSeek OpenAI 兼容代理
-    # - thinking_budget: Gemini 2.5 OpenAI 兼容模式
-    provider: Optional[str] = None
-
-    reasoning_effort: Optional[str] = None
-
-    thinking_budget: Optional[int] = None
-
-    # Task 6 (M1-M2 chat-read): frontend 把 @mention 解析成
-    # ``backend.office.chat_refs.ChatOfficeRef`` 列表,``chat_stream_create``
-    # 在调 LLM 前同步授权. 空列表 = legacy 路径(attachment_resolver).
-    # 用 forward ref 避免 route→domain 循环导入; ``model_rebuild`` 在
-    # legacy_routes 模块加载完毕时自动被 Pydantic v2 调用.
-    office_refs: List[ChatOfficeRef] = Field(default_factory=list)
-
-    # R37: 聊天文本文档附件 —— 已上传媒体 id 列表（POST /chat/attachments
-    # 返回的 media_ref.id）。producer 按 id 读全文，注入上下文附件块。
-    attachment_media_ids: List[str] = Field(default_factory=list)
-
-    # r66（RAG 切片 4a）：附件检索注入配置（opt-in）。超长文档（>100k
-    # 字符）改走「嵌入 query → 附件 chunk 检索 → top_k 注入」；缺省 =
-    # 现状全文截断注入。embed 配置与 wiki ingest / r58 同口径。
-    attachment_rag: Optional[Dict[str, Any]] = None
-
-    # G6 (2026-09-06): 聊天图片输入 —— base64 data URL 列表（data:image/png;base64,...）。
-    # 非空时 user 消息转 OpenAI 多模态 content（text + image_url 分段），
-    # 依赖 llm_client._convert_messages 对 list 型 content 的原样透传。
-    # 上限 4 张 / 单张 5MiB（解码后字节计）—— 防上下文爆炸。
-    images: List[str] = Field(default_factory=list)
-
-    # Multi-Agent Orchestration (spec 2026-08-11): 编排模式开关。
-    # auto（默认）—— 轻量 LLM 二分类决定；force_multi / force_single ——
-    # 用户斜杠命令 /orchestrate / /single 覆盖，跳过语义判定。
-    # Optional: 兼容渲染进程 IPC payload 里显式 null(undefined ?? null 序列化的产物)。
-    # Pydantic 默认值只在字段缺失时生效，显式 null 仍按类型校验 →
-    # 不加 Optional 会被 422 拒绝。业务层 `data.orchestration_mode or "auto"` 已兜底。
-    orchestration_mode: Optional[str] = "auto"
-
-    # Wave 3 A10 (2026-08-14): resume 恢复流 —— plan_override 非空时跳过 LLM
-    # 拆解，直接用存储计划建 dispatcher；run_id 复用 resume 返回的 new_run_id。
-    plan_override: Optional[List[Dict[str, Any]]] = None
-    run_id: Optional[str] = None
-
-    # Task 4 (2026-09-17): 上下文重置标记。True 时 chat_stream_create 在持久化
-    # 当前消息前调用 MessageRepository.advance_segment(session_id)，开启新 segment；
-    # 历史加载改用 get_active_segment 只取当前段。
-    context_reset: bool = False
-
-    # C2 (对话阅读体验第二轮): 原位重新生成 —— 锚点 user 消息 id。设置时不再落
-    # user 消息, 历史剔除锚点与旧回答; 旧回答在本轮首次落库前归档为版本。
-    regenerate_of: Optional[str] = None
-
-    # PM1 (round8): 单 agent 计划模式 —— 本次 run 只读（权限执行器 override
-    # READ_ONLY）+ 计划指令 system 块；DONE 后前端出批准条，批准后普通执行。
-    plan_mode: Optional[bool] = False
-
-    # 对标 S2（2026-09-13）：临时聊天（无记忆）模式。``"off"`` 时本轮
-    # 既不注入 L13 记忆上下文，也不做对话后记忆提取；与 ChatGPT
-    # "Temporary chat" / Claude 无记忆会话对齐。缺省 ``"on"``。
-    memory_mode: Optional[str] = "on"
-
-
-class MessageResponse(BaseModel):
-    id: str
-    session_id: str
-    role: str
-    content: str
-    created_at: int
-    model: Optional[str] = None
-
-    tool_calls: Optional[str] = None
-
-
-class ChatErrorInfo(BaseModel):
-    """结构化的 /chat 错误信息。
-
-    字段与 LLMError.to_dict() 对齐，便于前端统一处理。
-    """
-
-    type: str
-    message: str
-    status_code: Optional[int] = None
-
-    retry_after: Optional[int] = None
-
-
-class ChatResponse(BaseModel):
-    """聊天响应：成功时含 message+session，失败时含 error+null message。"""
-
-    message: Optional[MessageResponse] = None
-
-    session: Optional[Dict] = None
-
-    error: Optional[ChatErrorInfo] = None
-
-
-class EvolutionLogResponse(BaseModel):
-    """进化日志响应"""
-
-    id: str
-    evolution_type: str
-    description: str
-    before_state: Optional[str] = None
-
-    after_state: Optional[str] = None
-
-    trigger_type: str
-    trigger_condition: Optional[str] = None
-
-    status: str
-    error_message: Optional[str] = None
-
-    tokens_used: Optional[int] = None
-
-    created_at: int
-    completed_at: Optional[int] = None
-
 
 #: agent role 白名单（PATCH/POST 共用）。
 _VALID_AGENT_ROLES = {
@@ -485,73 +181,21 @@ _VALID_AGENT_ROLES = {
 }
 
 
-class AgentToggle(BaseModel):
-    """PATCH /agents/{id}/toggle 请求体 (PR-5)。
-
-    单字段 ``enabled`` 必填 — 缺失走 Pydantic 自动 422。专门用来对
-    enable/disable 这一高频操作做语义化端点 (审计 + 未来权限),不
-    与 PATCH /agents/{id} 重叠。
-
-    注: 用 ``StrictBool`` 而非 ``bool`` — Pydantic v2 默认 lax 模式会把
-    "yes"/"1"/1 等强转 True, 在 API 边界宁可 422 也不要静默转换。前端
-    Type[Script 永远传真 bool, 严格模式不会误伤。
-    """
-
-    enabled: StrictBool
-
-
-class AgentUpdate(BaseModel):
-    """PATCH /agents/{id} 请求体 (PR-4)。
-
-    所有字段可选 — 不传视为"该字段不更新"。role / max_iterations
-    走 Pydantic 校验, 非法值 422 (由 FastAPI 自动处理)。
-    """
-
-    # 注: Pydantic v2 默认对 "model_" 前缀的字段名有保留命名空间保护.
-    # 我们在类内用 model_config 字段, 通过 ConfigDict 关掉该保护.
-    model_config = {"protected_namespaces": ()}
-
-    name: Optional[str] = None
-
-    role: Union[str, None] = None  # 校验放在路由层 (依赖 Pydantic Literal 不直观)
-
-    system_prompt: Optional[str] = None
-
-    tools: Optional[List[str]] = None
-
-    memory_access: Optional[List[str]] = None
-
-    model_config_data: Union[dict, None] = (
-        None  # 字段名避开 Pydantic 保留名, 路由层映射到 model_config
-    )
-
-    max_iterations: Optional[int] = None  # 路由层校验 1..50
-
-    enabled: Optional[bool] = None
-
-    description: Optional[str] = None
-
-
-class AgentCreate(BaseModel):
-    """POST /agents 请求体（US-4 角色可扩展）。
-
-    id / name 必填；其余字段带默认值。
-    ``model_config_data`` 字段名避开 Pydantic 保留名（同 AgentUpdate）。
-    """
-
-    model_config = {"protected_namespaces": ()}
-
-    id: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
-    name: str = Field(min_length=1, max_length=64)
-    role: str = "general"
-    system_prompt: str = ""
-    tools: Optional[List[str]] = None
-    memory_access: Optional[List[str]] = None
-    model_config_data: Optional[Dict] = None
-    max_iterations: Optional[int] = None
-    enabled: Optional[bool] = None
-    description: Optional[str] = None
-
+from backend.api.legacy_models import (  # noqa: F401 — 再导出面
+    AgentCreate,
+    AgentToggle,
+    AgentUpdate,
+    ChatErrorInfo,
+    ChatRequest,
+    ChatResponse,
+    EvolutionLogResponse,
+    InterruptRequest,
+    LearnRequest,
+    MessageResponse,
+    SessionCreate,
+    SessionUpdate,
+    SteerRequest,
+)
 
 # ==================== 依赖注入 ====================
 
@@ -569,12 +213,6 @@ _PENDING_RUN_CANCELLATIONS: Set[str] = set()
 # 点击"开始执行"。orch_routes.confirm_run 设置事件唤醒 producer。
 # cancel_run 也会设置事件（以取消状态退出等待）。
 _RUN_CONFIRM_EVENTS: Dict[str, asyncio.Event] = {}
-
-
-class InterruptRequest(BaseModel):
-    """/interrupt 请求体 —— stream_id 可选，兼容不带 body 的旧调用方。"""
-
-    stream_id: Optional[str] = None
 
 
 def interrupt_stream(stream_id: Optional[str]) -> str:
@@ -1276,215 +914,20 @@ def export_agent_file(agent_id: str):
 
 # C1 第二刀 (DSH 对标 R15): 技能 API 迁出至 legacy_skills_routes.py
 # （纯物理拆分，路径/行为零变更；与 orch_routes 同款 include 模式）。
-from backend.api.legacy_skills_routes import (  # noqa: F401 — /settings、/preferences handler 引用其模型与 _get_skill_adapter
-    LegacyPreferenceItem,
-    LegacySettingsRequest,
-    LegacySettingsResponse,
+from backend.api.legacy_skills_routes import (  # noqa: F401 — skills handler 引用 _get_skill_adapter
     _get_skill_adapter,
     router as legacy_skills_routes_router,
 )
 
 router.include_router(legacy_skills_routes_router)
-@router.get("/settings")
-@with_db_lock
-def legacy_get_settings() -> Optional[Dict]:
-    """读取持久化的 settings；不存在返回 null。
 
-    翻译历史 snake_case 残留到 camelCase 返回，与 AppSettings 类型对齐。
-    JSON 损坏 / 顶层非 dict (list / scalar) → null fallback，不抛 500，与 hex GET 对齐。
-    """
-    from backend.data.settings_canonicalizer import (
-        detect_legacy_snake_pollution,
-        redact_secrets,
-        strip_unknown_fields,
-        to_camel,
-    )
-    from backend.data.settings_repo import SettingsRepository
+# C1d (DSH 对标 R25): settings / preferences API 迁出至 legacy_settings_routes.py
+# （纯物理拆分，路径/行为零变更；与 C1a/b/c 同款 include 模式）。
+from backend.api.legacy_settings_routes import (  # noqa: F401 — 经 include 挂载
+    router as legacy_settings_routes_router,
+)
 
-    repo = SettingsRepository()
-    try:
-        raw = repo.get_json("app_settings")
-    except (ValueError, TypeError):
-        logger.warning("[LEGACY] /settings: corrupted app_settings JSON, returning null")
-        return None
-    if raw is None:
-        return None
-    if not isinstance(raw, dict):
-        # get_json 可返回任意合法 JSON; app_settings 必须是 dict; 与 hex GET 对齐。
-        logger.warning("[LEGACY] /settings: top-level non-dict JSON, returning null")
-        return None
-    detect_legacy_snake_pollution(raw)
-    translated = to_camel(raw)
-    # Task 1 (2026-08-23): 历史 endpoints[*] 无 protocol 字段 (旧 schema 没这层)
-    # → 迁移默认值 ``openai-compatible`` (OpenAI 兼容端点是最常见的 LM Studio /
-    # Ollama / OpenAI 替代品). 这样旧客户端无需再写一次 PUT 就能看到正确 protocol.
-    _migrate_default_protocol(translated)
-    # 2026-08-26: 边界净化白名单外字段 + 脱敏 apiKey, 防止历史残留
-    # (memory_server_sync / local_model_path 等) 重新污染 GET 响应,
-    # 同时保证明文凭据不通过 HTTP 回前端 (OWASP A02:2021).
-    cleaned = strip_unknown_fields(translated)
-    return redact_secrets(cleaned)
-
-
-def _migrate_default_protocol(settings: dict) -> None:
-    """把 DB 中无 ``protocol`` 字段的 endpoint 默认填 ``openai-compatible``.
-
-    仅在 GET 路径走 — 不写回 DB (避免无谓 IO); 用户下次 PUT 时如果设置里仍无
-    protocol 字段, 由 handler 在写库前再补一遍默认值.
-    """
-    endpoints = settings.get("endpoints")
-    if not isinstance(endpoints, list):
-        return
-    for ep in endpoints:
-        if isinstance(ep, dict) and "protocol" not in ep:
-            ep["protocol"] = "openai-compatible"
-
-
-@router.put("/settings", response_model=LegacySettingsResponse)
-@with_db_lock
-def legacy_update_settings(req: LegacySettingsRequest) -> LegacySettingsResponse:
-    """持久化 settings 到 preferences 表。
-
-    v3.1 修复：合并而非覆盖。
-    LegacySettingsRequest 只有 api_base_url/api_key/model 三个字段，
-    如果直接替换，会丢失 endpoints、model_selections 等其他数据。
-    修复策略：先读现有 settings，再把请求字段 merge 进去。
-
-    Task 2 (settings-schema-canonicalization):
-    - 整树翻译到 camelCase (to_camel)
-    - 白名单校验 (validate_settings_shape) 拒绝白名单外字段 → 400
-    """
-    from backend.data.settings_canonicalizer import (
-        classify_settings_shape_field,
-        classify_settings_validation_error,
-        strip_unknown_fields,
-        to_camel,
-        validate_settings_payload,
-        validate_settings_shape,
-    )
-    from backend.data.settings_repo import SettingsRepository
-
-    repo = SettingsRepository()
-    try:
-        existing = repo.get_json("app_settings") or {}
-    except (ValueError, TypeError):
-        # DB 行 JSON 损坏 → 当空树处理, 避免 500 阻断合法的 PUT
-        existing = {}
-    if not isinstance(existing, dict):
-        # existing 是 list/scalar (脏数据) → 用空树, 不阻断合法 PUT; 与 hex PUT 对齐.
-        existing = {}
-
-    # LegacySettingsRequest 是 extra="allow", model_dump(exclude_none=True) 会包含所有 set 字段
-    # (含 extras, 如 streaming/foo/endpoints) — 这是设计: 旧客户端 PUT schema 之外字段不丢。
-    payload = model_dump_compat(req, exclude_none=True)
-
-    # 剥离 legacy compatibility 3 字段: api_base_url / api_key / model.
-    # 这 3 字段不进 DB (与 hex PUT 对齐, 见 eebbedd), 仅用于审计和 changed_fields.
-    # 原因: 这 3 个 snake 字段通过 to_camel 翻译后 (apiKey) 或原样保留 (api_base_url/model)
-    # 都不在 LEGAL_TOP_KEYS, 会触发 validate_settings_shape 400, 但它们是合法 legacy schema 字段.
-    legacy_compat_fields = {"api_base_url", "api_key", "model"}
-    legacy_compat_payload = {k: payload.pop(k) for k in list(payload) if k in legacy_compat_fields}
-
-    # existing 里的历史残留字段（compactMode / proxyMode 等前端已删）会让
-    # validate_settings_shape 对整棵合并树报 400。只剥离 existing 侧的残留，
-    # payload 侧的未知字段仍原样保留并触发 400（与 hex PUT 对齐）。
-    camel_existing = strip_unknown_fields(to_camel(existing))
-    camel_merged = {**camel_existing, **to_camel(payload)}
-    # Task 1 (2026-08-23): 写入前给旧 endpoints (无 protocol) 补默认值, 与 GET 路径对齐.
-    _migrate_default_protocol(camel_merged)
-    # Task 1 round 1 (2026-08-24): 显式跑 timezone / protocol / localModelPath
-    # value 校验 (Pydantic 装饰器不可用, 这里下沉到 canonicalizer 层).
-    try:
-        validate_settings_payload(camel_merged)
-    except ValueError as exc:
-        field = classify_settings_validation_error(exc)
-        logger.warning(
-            "[LEGACY] /settings rejected: error_type=invalid_settings_payload field=%s",
-            field,
-        )
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "type": "invalid_settings_payload",
-                "message": "设置内容无效，请检查字段格式",
-                "field": field,
-            },
-        ) from exc
-    try:
-        validate_settings_shape(camel_merged)
-    except ValueError as exc:
-        field = classify_settings_shape_field(exc)
-        logger.warning(
-            "[LEGACY] /settings rejected: error_type=invalid_settings_shape field=%s",
-            field,
-        )
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "type": "invalid_settings_shape",
-                "message": "设置结构无效，请检查字段",
-                "field": field,
-            },
-        ) from exc
-    repo.set_json("app_settings", camel_merged, category="general")
-    changed_fields = [k for k in payload if k != "api_key"]
-    if "api_key" in payload:
-        changed_fields.append("api_key")
-    # 同时把 legacy 兼容字段记进 changed_fields (审计可见), 即使不进 DB
-    changed_fields.extend(k for k in legacy_compat_payload if k not in changed_fields)
-    logger.info(f"[LEGACY] /settings updated: changed={changed_fields}")
-    return LegacySettingsResponse(status="ok", changed_fields=changed_fields)
-
-
-@router.get("/preferences/{key}", response_model=LegacyPreferenceItem)
-@with_db_lock
-def legacy_get_preference(key: str) -> LegacyPreferenceItem:
-    """通用 KV 读取（白名单限定 key）。
-
-    2026-08-26: 当 key=='app_settings' 时, 对 value (JSON 字符串) 做
-    ``redact_secrets_json`` —— 把 endpoint.apiKey 替换为 hasApiKey 标记,
-    防止明文凭据通过 preference GET 返回前端 (OWASP A02:2021).
-    """
-    from backend.data.settings_canonicalizer import redact_secrets_json
-    from backend.data.settings_repo import SettingsRepository
-
-    if key not in SettingsRepository.KEYS:
-        raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
-    val = SettingsRepository().get(key)
-    if key == "app_settings":
-        val = redact_secrets_json(val)
-    return LegacyPreferenceItem(value=val)
-
-
-@router.put("/preferences/{key}", response_model=LegacyPreferenceItem)
-@with_db_lock
-def legacy_put_preference(key: str, item: LegacyPreferenceItem) -> LegacyPreferenceItem:
-    """通用 KV 写入（白名单限定 key）。"""
-    from backend.data.settings_canonicalizer import (
-        parse_app_settings_object,
-        redact_secrets_json,
-    )
-    from backend.data.settings_repo import SettingsRepository
-
-    if key not in SettingsRepository.KEYS:
-        raise HTTPException(status_code=400, detail=f"key {key!r} not in whitelist")
-    if key == "app_settings" and item.value is not None:
-        try:
-            parse_app_settings_object(item.value)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail="app_settings must be a JSON object") from exc
-    if item.value is not None:
-        SettingsRepository().set(
-            key, item.value, value_type=item.value_type, category=item.category
-        )
-    if key == "app_settings":
-        return LegacyPreferenceItem(
-            value=redact_secrets_json(item.value),
-            value_type=item.value_type,
-            category=item.category,
-        )
-    return item
-
+router.include_router(legacy_settings_routes_router)
 
 # ==================== 聊天 API ====================
 
@@ -1756,85 +1199,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 office_doc_scope=frozenset(),
             )
         _tool_ctx_token = set_tool_context(_tool_ctx)
-        # live-events P2 (2026-09-07): ``agent`` 工具事件桥 —— 单 agent 模式
-        # 派遣的只读子代理,其中间事件经本桥投影进聊天流（subagent_event）。
-        # producer 与 AgentTool.execute_async 同一事件循环,put_nowait 安全;
-        # finally 注销（闭包持有 queue 引用,不注销会向已关闭的流推送）。
-        from backend.tools.agent_event_bridge import register_stream_emitter
+        # live-events P2 (2026-09-07) / P1 todo 接线 / S7 产物 / right-panel R5:
+        # 四路事件推送原为四个内联闭包（会话过滤 + put_nowait + 静默降级），
+        # C2a 收敛为 StreamEventSink（见 chat_stream_sinks.py，行为逐字节等价）。
+        # producer 与各事件源同一事件循环,put_nowait 安全;finally 注销
+        # （sink 持有 queue 引用,不注销会向已关闭的流推送 / 随全局表泄漏）。
+        from backend.api.chat_stream_sinks import StreamEventSink
 
-        def _emit_agent_bridge_event(event: Dict[str, Any]) -> None:
-            try:
-                entry.queue.put_nowait(event)
-            except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞执行
-                logger.debug("agent 事件桥推送失败（队列满/关闭），忽略")
-
-        register_stream_emitter(data.session_id, _emit_agent_bridge_event)
-        # P1 todo 接线 (spec 2026-08-21): todo_write 变更 → todo_snapshot
-        # SSE 全量快照。会话过滤防跨流串扰；队列满静默降级（尽力而为）。
-        from backend.tools.todo_state import (
-            add_todo_listener,
-            remove_todo_listener,
-        )
-
-        def _push_todo_snapshot(session_id: str, todos: Any) -> None:
-            if session_id != data.session_id:
-                return
-            try:
-                entry.queue.put_nowait(
-                    {
-                        "state": "todo_snapshot",
-                        "session_id": session_id,
-                        "todos": todos,
-                    }
-                )
-            except Exception:  # noqa: BLE001 — 降级铁律
-                logger.debug("todo_snapshot 推送失败（队列满/关闭），忽略")
-
-        add_todo_listener(_push_todo_snapshot)
-
+        sink = StreamEventSink(entry.queue, data.session_id)
+        sink.register()
         # B4 (2026-09-09): 流启动时推送持久化的 todo 快照 —— 此前 todo 只在
         # todo_write 写入时推送，重启/重开会话后任务板为空。get() 命中
         # session_todos 持久层（缓存 miss 回填），恢复上次任务清单。
-        try:
-            from backend.tools.todo_state import get_todo_store
-
-            persisted_todos = get_todo_store().get(data.session_id)
-            if persisted_todos:
-                await entry.queue.put(
-                    {
-                        "state": "todo_snapshot",
-                        "session_id": data.session_id,
-                        "todos": persisted_todos,
-                    }
-                )
-        except Exception:  # noqa: BLE001 — 降级铁律
-            logger.debug("todo_snapshot 初始推送失败（忽略）")
-
-        # S7 (2026-09-06): 产物事件 → 活跃流推送。工具线程在 record_artifact
-        # 落库后广播，这里按会话过滤后入队；前端据此事件驱动刷新产物面板 +
-        # 侧栏徽章（不再依赖手动刷新）。队列满静默降级（尽力而为）。
-        def _push_artifact_event(event: Dict[str, Any]) -> None:
-            if event.get("session_id") != data.session_id:
-                return
-            try:
-                entry.queue.put_nowait(event)
-            except Exception:  # noqa: BLE001 — 降级铁律
-                logger.debug("artifact_created 推送失败（队列满/关闭），忽略")
-
-        add_artifact_listener(_push_artifact_event)
-
-        # right-panel R5: 写文件工具落盘 → workspace_changed 事件 → 活跃流
-        # 推送。前端变更列表据此防抖刷新（徽标实时化，不再依赖手动刷新）。
-        # 队列满静默降级（尽力而为），与 artifact 推送同口径。
-        def _push_workspace_event(event: Dict[str, Any]) -> None:
-            if event.get("session_id") != data.session_id:
-                return
-            try:
-                entry.queue.put_nowait(event)
-            except Exception:  # noqa: BLE001 — 降级铁律
-                logger.debug("workspace_changed 推送失败（队列满/关闭），忽略")
-
-        add_workspace_listener(_push_workspace_event)
+        await sink.push_persisted_todo()
         try:
             # P0-4 (2026-08-20): 终态变量前置到 try 顶部 —— finally 无条件读取
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
@@ -3707,10 +3084,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(%s)写入失败: %s", _terminal_status, status_err)
-            # S7: 注销产物事件监听器（闭包持有 entry/queue 引用，不注销会泄漏）
-            remove_artifact_listener(_push_artifact_event)
-            # right-panel R5: 注销工作区变更事件监听器（理由同上）
-            remove_workspace_listener(_push_workspace_event)
+            # C2a: 注销四路事件监听（sink 持有 entry/queue 引用，不注销
+            # 会向已关闭的流推送 / 随全局 listener 表泄漏）。
+            sink.unregister()
             # P2-9 (2026-08-14): 长连接结束注销注册表条目（run 级 cancel 不再命中）。
             # run_id 为 None（single 路径）时跳过 —— 从未注册过。
             if run_id:
@@ -3723,13 +3099,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # ContextVar never leaks into the next producer invocation.
             if _tool_ctx_token is not None:
                 reset_tool_context(_tool_ctx_token)
-            # P1 todo 接线: 注销监听器（闭包持有 entry/queue 引用，
-            # 不注销会随全局 _listeners 泄漏并推已关闭的流）。
-            remove_todo_listener(_push_todo_snapshot)
-            # live-events P2: 注销 agent 事件桥（理由同 todo listener）。
-            from backend.tools.agent_event_bridge import unregister_stream_emitter
-
-            unregister_stream_emitter(data.session_id)
 
     # RT6 (round7): 同会话已有活跃流时服务端仲裁 409（此前纯靠前端守卫）。
     try:
@@ -3835,13 +3204,6 @@ def interrupt(data: Optional[InterruptRequest] = Body(default=None)):
     return {"status": "ok", "target": target}
 
 
-class SteerRequest(BaseModel):
-    """/chat/steer 请求体 —— 向运行中的主 agent 注入用户补充消息（RT5）。"""
-
-    stream_id: str
-    content: str
-
-
 #: steering 消息长度上限（与编排链 O1 steering 端点同额度）
 _STEER_MAX_CHARS = 8192
 
@@ -3894,17 +3256,6 @@ def list_evolution_logs(limit: int = 50, offset: int = 0):
 # /learn: 用户显式触发当前会话的 review,产生技能草案候选。
 # 与 Task 8 的自动 signal detection (complex_turn / low_success_rate)
 # 互补 — 本端点是 manual trigger,trigger_type="explicit_learn"。
-
-
-class LearnRequest(BaseModel):
-    """POST /learn 请求体。
-
-    - session_id: 要 review 的会话 (必填)
-    - prompt: 用户附加的提示,传给 LLM 作为 review 上下文 (可选)
-    """
-
-    session_id: str
-    prompt: str = ""
 
 
 @router.post("/learn")
