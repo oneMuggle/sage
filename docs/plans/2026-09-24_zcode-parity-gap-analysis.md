@@ -12,7 +12,7 @@
 | F1 | **会话自动归档**（3/7/14/30 天不活跃自动归档 + 一键清空全部归档） | `settings.taskAutoArchive*`（en-US.ts:1938-1947）、`DeleteAllArchivedTasksButton.tsx` | `is_archived` 原语齐全（repo/路由/前端切换视图），缺 sweep 与清空 | 小：后端 2 端点 + 前端设置/按钮 |
 | F2 | **检查点 / 文件回滚**（对话内 Checkpoint 节点 + rewind 对话框，区分不可回滚原因） | `components/ai-elements/checkpoint.tsx`、`ConversationFileRewindDialog.tsx` | 无 rewind 概念；依赖 agent 循环落检查点 | 大：需 agent 循环 + 存储协议配合 |
 | F3 | **模型轨迹查看器**（完整 trajectory：时间线/搜索/工具 payload/角色样式） | `ModelTrajectoryPane.tsx` 等 | 有 run trace（arena 域）与事件日志，无聊天轨迹 UI | 中：数据已有（事件日志），缺 UI |
-| F4 | **跨会话任务查找器**（TaskFindDialog：按标题/内容全局跳转） | `quickpick/TaskFindDialog.tsx` | 有跨会话消息搜索（F12），无会话级跳转面板 | 小-中 |
+| ~~F4~~ ✅ | **跨会话任务查找器**（TaskFindDialog：按标题/内容全局跳转） | `quickpick/TaskFindDialog.tsx` | **勘误（2026-09-26）**：CommandPalette 全局搜索已渲染「会话」分组并跳转（CommandPalette.tsx:444），实质对齐 | — |
 | F5 | **未读任务计数 + 应用徽标**（按任务/窗口汇总到 Dock/托盘） | `lib/unreadTaskCount.ts`、`desktop/unreadBadge.ts` | 右面板有局部未读概念；无会话未读 + 托盘徽标链路 | 中 |
 | F6 | **任务自动归档策略可配**（关闭/3/7/14/30 天） | 同 F1 | 同 F1 | 见 F1 |
 | F7 | **外部会话导入**（Claude History 迁移向导） | `settings/MigrationSection.tsx`、`ExternalAgentImportDialog.tsx` | 无（格式不同，需评估） | 大 |
@@ -34,7 +34,7 @@
 
 | # | ZCode 逻辑 | ZCode 证据 | sage 现状 | 备注 |
 |---|---|---|---|---|
-| L1 | **权限作用域分级**（允许一次 / 本项目始终允许 / 会话级；Deny 附文字反馈） | `PermissionDialog.tsx`、`ZCodePermissionOption.display/freeText` | 有 M1 审批对话框；作用域分级与文字反馈待核对补齐 | 中 |
+| ~~L1~~ ✅ | **权限作用域分级**（允许一次 / 本项目始终允许 / 会话级；Deny 附文字反馈） | `PermissionDialog.tsx`、`ZCodePermissionOption.display/freeText` | **已对齐（2026-09-26）**：允许/项目级允许/拒绝+remember 此前已有；Deny 附反馈（freeText）经 #1655 后续 PR 补齐（ApprovalAnswer.reason 全链路） | — |
 | L2 | **排队输入语义分级**（startNow / queue / guide 三种投递） | `session.port.ts:295` | #1334 已有排队/插话/打断三通道 | ✅ 基本对齐 |
 | L3 | **运行状态恢复**（启动时 recover 僵死运行态） | — | sage 已有 `recover_stale_run_states`（session_repo） | ✅ |
 | L4 | **Worktree 感知状态卡**（会话卡展示 git worktree 行级变化） | `conversationStatusPanelModel.ts:148` | 无（git 状态在独立面板） | 中 |

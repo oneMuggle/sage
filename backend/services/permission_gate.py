@@ -263,11 +263,15 @@ class ApprovalAnswer:
         approved:    用户是否批准。
         remember:    是否把该决定持久化为规则（精确工具名 allow/deny）。
         answered_by: 应答来源——``"gui"`` / ``"timeout"`` / ``"default-deny"``。
+        reason:      拒绝时用户附带的文字反馈（对标 ZCode freeText；批准/
+                     超时/默认拒绝路径为空串）。agent 拒绝分支把它拼进
+                     reason，模型可据此调整方案而非盲目重放。
     """
 
     approved: bool
     remember: bool
     answered_by: str
+    reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -424,8 +428,13 @@ class ApprovalGate:
                 "审批决策落库失败（忽略）request=%s: %s", req.request_id, exc
             )
 
-    def answer(self, request_id: str, approved: bool, remember: bool = False) -> bool:
+    def answer(
+        self, request_id: str, approved: bool, remember: bool = False, reason: str = ""
+    ) -> bool:
         """解析一个挂起的请求。
+
+        Args:
+            reason: 拒绝时用户附带的文字反馈（可为空；对标 ZCode freeText）。
 
         Returns:
             True 表示成功解析；False 表示 id 未知 / 已过期 / 已解析。
@@ -437,7 +446,9 @@ class ApprovalGate:
         if future.done():
             return False
         future.set_result(
-            ApprovalAnswer(approved=approved, remember=remember, answered_by="gui")
+            ApprovalAnswer(
+                approved=approved, remember=remember, answered_by="gui", reason=reason
+            )
         )
         return True
 
