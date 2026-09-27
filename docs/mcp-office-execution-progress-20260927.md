@@ -14,16 +14,17 @@
 
 能力发现返回 DOCX/XLSX/PPTX 支持范围；Word 注册/文件与 pywin32 同时存在才报告 DOCX。UI 按格式控制 PDF 入口，保留 Word 原生预览；显示“已发现、未验证运行”。取消尚未接 UI，转换健康/COM 超时仍在后续批次。
 
-## 阶段 3：验证 — 进行中
+## 阶段 3：相关验证 — 完成
 
 - 现代 Windows / Python 3.11（本任务独立 venv，含 formulas）：重点测试 51 passed。
 - 同一 Windows 主机 / Python 3.8：重点测试 48 passed、3 skipped（未安装 formulas，符合 Win7 依赖策略）。
 - 两线相关前端：各 128 passed / 13 files；前端与 Electron 类型检查已通过。
-- Linux main Office 单测上一轮 865 passed、3 skipped；新增生命周期用例及集成回归将再完整运行。
+- Linux main Office 单测与集成共 1184 passed、3 skipped；Python 3.8 / Win7 共 1065 passed、13 skipped；另两线各 3 项公式闭环通过。
 - Windows 广域 Win7 单测遇到既有 symlink 权限限制（WinError 1314），且运行收到 KeyboardInterrupt；不作为全量通过证据。改用 Linux Python 3.8 做完整回归，同时保留 Windows 重点生命周期实测。
 - 架构棘轮仅登记本批真实增量：main 四项合计 +7 行；Win7 三项合计 +4 行（types 仍低于既有基线，不降低）。
+- 两线完整 Ruff、相关 ESLint、架构/diff 检查通过。细节、失败修正和环境限制见 [验证记录](verification/2026-09-27-office-execution-boundary.md)。
 - 尚无本批 CI 或原生 Win7 SP1/Office 人工验收结论。
 
-## 阶段 4：交付 — 待开始
+## 阶段 4：交付 — 进行中
 
-尚未发布本批 PR，尚未合并。完整 P0-B 的 COM 监督/健康检查、F6 出口策略与全部 P1/P2 未在本批完成。
+实现已在两线独立提交，正核对最新基线并准备 PR，尚未合并。完整 P0-B 的 COM 监督/健康检查、F6 出口策略与全部 P1/P2 未在本批完成。
