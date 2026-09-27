@@ -164,8 +164,10 @@ def test_preview_returns_the_source_revision_it_read(workspace: Path):
 
     assert preview.ok is True
     assert preview.source_revision == _sha(managed)
-    assert preview.ops_hash and preview.ops_hash.startswith("ops:")
-    assert preview.preview_id and preview.preview_id.startswith("pv_")
+    assert preview.ops_hash
+    assert preview.ops_hash.startswith("ops:")
+    assert preview.preview_id
+    assert preview.preview_id.startswith("pv_")
     # A dry run must not touch the source.
     assert _sha(managed) == preview.source_revision
 
