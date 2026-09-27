@@ -89,6 +89,49 @@ async def test_gate_answer_false_propagates_denial():
     assert answer.answered_by == "gui"
 
 
+@pytest.mark.asyncio()
+async def test_gate_answer_propagates_deny_reason():
+    """对标 ZCode freeText：answer 携带的拒绝反馈透传到 ApprovalAnswer.reason。
+
+    批准路径 reason 恒为空串（timeout/default-deny 构造点依赖默认值，
+    无需显式传参——由 ApprovalAnswer.reason: str = "" 保证）。
+    """
+    gate = ApprovalGate()
+    req = _make_request()
+    feedback = "路径不对，应该写到 docs/ 目录"
+
+    async def deny_with_reason():
+        await asyncio.sleep(0.01)
+        assert (
+            gate.answer(req.request_id, approved=False, reason=feedback) is True
+        )
+
+    task = asyncio.create_task(deny_with_reason())
+    answer = await gate.request(req, timeout=5.0)
+    await task
+
+    assert answer.approved is False
+    assert answer.reason == feedback
+
+    # 批准路径 reason 默认为空
+    gate2 = ApprovalGate()
+    req2 = _make_request()
+
+    async def approve_later():
+        await asyncio.sleep(0.01)
+        gate2.answer(req2.request_id, approved=True)
+
+    task2 = asyncio.create_task(approve_later())
+    answer2 = await gate2.request(req2, timeout=5.0)
+    await task2
+    assert answer2.reason == ""
+    await task
+
+    # Assert
+    assert answer.approved is False
+    assert answer.answered_by == "gui"
+
+
 def test_gate_answer_unknown_id_returns_false():
     """未知 request_id → False (路由层转成 unknown_or_expired)。"""
     # Arrange

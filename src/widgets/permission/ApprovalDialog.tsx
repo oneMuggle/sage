@@ -52,6 +52,9 @@ export function ApprovalDialog() {
   const workspacePath = useCurrentWorkspace();
   const [remember, setRemember] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // 对标 ZCode freeText：拒绝反馈——点「拒绝」先展开输入框（可留空直接确认）
+  const [denyReason, setDenyReason] = useState('');
+  const [denyExpanded, setDenyExpanded] = useState(false);
 
   // 新请求到达时重置上一个请求遗留的勾选/提交状态（store 直接替换
   // currentRequest，组件不卸载，必须显式重置局部 state）
@@ -59,6 +62,9 @@ export function ApprovalDialog() {
   useEffect(() => {
     setRemember(false);
     setSubmitting(false);
+    // 对标 ZCode freeText：拒绝反馈输入态随新请求重置
+    setDenyReason('');
+    setDenyExpanded(false);
   }, [requestId]);
 
   // live-events P1 附带 (2026-09-07): 审批等待 OS 通知 —— 用户不在窗口前
@@ -82,7 +88,7 @@ export function ApprovalDialog() {
 
   const risk = RISK_BADGE_CLASSES[currentRequest.risk] ? currentRequest.risk : ('safe' as const);
 
-  const answer = async (approved: boolean): Promise<void> => {
+  const answer = async (approved: boolean, reason = ''): Promise<void> => {
     if (submitting) return;
     setSubmitting(true);
     try {
@@ -90,6 +96,7 @@ export function ApprovalDialog() {
         requestId: currentRequest.request_id,
         approved,
         remember,
+        reason,
       });
       if (!resp || resp.ok !== true) {
         toast.error(`${t('permission.toast.failed')}: ${resp?.error ?? 'unknown'}`);
@@ -244,6 +251,22 @@ export function ApprovalDialog() {
             {t('permission.remember')}
           </label>
 
+          {/* 对标 ZCode freeText：拒绝反馈输入框——点拒绝展开，模型据此调整方案 */}
+          {denyExpanded && (
+            <div data-testid="permission-deny-feedback">
+              <textarea
+                data-testid="permission-deny-reason"
+                value={denyReason}
+                onChange={(e) => setDenyReason(e.target.value)}
+                maxLength={500}
+                rows={2}
+                placeholder={t('permission.deny_reason.placeholder')}
+                className="w-full text-xs rounded border border-border bg-bg-input p-2 focus:border-primary focus:outline-none placeholder:text-muted resize-none"
+              />
+              <p className="text-[10px] text-muted">{t('permission.deny_reason.hint')}</p>
+            </div>
+          )}
+
           <div className="flex justify-between gap-2 pt-1">
             {/* Phase 3.3: "项目级允许"按钮 —— 仅当有 target_path 且有活跃工作区时显示 */}
             {currentRequest.target_path && workspacePath ? (
@@ -265,10 +288,18 @@ export function ApprovalDialog() {
                 type="button"
                 data-testid="permission-deny"
                 disabled={submitting}
-                onClick={() => void answer(false)}
+                onClick={() => {
+                  // 对标 ZCode freeText：拒绝先展开反馈输入框；已展开时
+                  // 再次点击 = 带反馈（可空）提交拒绝。
+                  if (!denyExpanded) {
+                    setDenyExpanded(true);
+                    return;
+                  }
+                  void answer(false, denyReason.trim().slice(0, 500));
+                }}
                 className="px-3 py-1.5 text-xs border border-border rounded text-text-secondary hover:text-text hover:bg-bg-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {t('permission.deny')}
+                {denyExpanded ? t('permission.deny_confirm') : t('permission.deny')}
               </button>
               <button
                 type="button"

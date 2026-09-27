@@ -104,6 +104,46 @@ async def test_post_answer_approves_and_resolves_gate_future(gate, client):
     assert answer.answered_by == "gui"
 
 
+async def test_post_answer_carries_deny_reason_to_gate(gate, client):
+    """对标 ZCode freeText：body.reason 经路由透传到 ApprovalAnswer.reason。"""
+    # Arrange
+    req = _pending_request()
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+    feedback = "路径不对，应该写到 docs/ 目录"
+
+    # Act
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={"approved": False, "remember": False, "reason": feedback},
+    )
+    answer = await holder
+
+    # Assert
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+    assert answer.approved is False
+    assert answer.reason == feedback
+
+
+async def test_post_answer_rejects_oversized_reason(gate, client):
+    """reason 超 500 字符 → 422（pydantic max_length）。"""
+    # Arrange
+    req = _pending_request()
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    # Act
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={"approved": False, "reason": "x" * 501},
+    )
+
+    # Assert
+    assert resp.status_code == 422
+    holder.cancel()
+
+
 async def test_post_answer_unknown_id_returns_ok_false(gate, client):
     """未知 request_id → {"ok": false, "error": "unknown_or_expired"}。"""
     # Arrange / Act

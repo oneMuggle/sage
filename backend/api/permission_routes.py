@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.data.settings_repo import SettingsRepository
 from backend.services.permission_gate import get_permission_gate
@@ -67,6 +67,9 @@ class ApprovalAnswerBody(BaseModel):
 
     approved: bool
     remember: bool = False
+    # 对标 ZCode freeText：拒绝时用户附带的文字反馈（≤500 字符），
+    # 经 gate → agent 拼进拒绝 reason，模型据此调整方案。批准时可留空。
+    reason: str = Field(default="", max_length=500)
 
     class Config:
         # pydantic v1/v2 双兼容写法（Win7 LTS 分支用 v1）；
@@ -240,7 +243,7 @@ async def answer_approval(
     if req is None:
         return {"ok": False, "error": "unknown_or_expired"}
 
-    resolved = gate.answer(request_id, body.approved, body.remember)
+    resolved = gate.answer(request_id, body.approved, body.remember, reason=body.reason)
     if not resolved:
         return {"ok": False, "error": "unknown_or_expired"}
 

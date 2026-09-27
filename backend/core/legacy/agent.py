@@ -2147,10 +2147,13 @@ class SageAgent:
                 reason=f"{decision.reason}（用户已批准）",
             )
         else:
+            # 对标 ZCode freeText：用户拒绝时附带的文字反馈拼进 reason，
+            # 模型据此调整方案重试，而不是不知道原因地盲目重放。
+            user_feedback = f"，用户反馈: {answer.reason}" if answer.reason else ""
             result_box["decision"] = PermissionDecision(
                 allowed=False,
                 needs_approval=False,
-                reason=f"{decision.reason}（未获批准: {answer.answered_by}）",
+                reason=f"{decision.reason}（未获批准: {answer.answered_by}{user_feedback}）",
             )
 
     async def _post_tool_observe(
