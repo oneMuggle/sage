@@ -16,7 +16,7 @@ import logging
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -41,7 +41,7 @@ class WorkspaceInfo(BaseModel):
     git_status: Optional[str] = Field(default=None, description="Git 状态")
     git_ahead: int = Field(default=0, description="领先远程的提交数")
     git_behind: int = Field(default=0, description="落后远程的提交数")
-    recent_files: list[RecentFile] = Field(
+    recent_files: List[RecentFile] = Field(
         default_factory=list, description="最近修改的文件"
     )
     total_files: int = Field(default=0, description="总文件数")
@@ -184,7 +184,7 @@ class WorkspaceInfoService:
 
     def _get_recent_files(
         self, workspace: Path, max_files: int
-    ) -> list[RecentFile]:
+    ) -> List[RecentFile]:
         """Get recently modified files."""
         recent = []
 
