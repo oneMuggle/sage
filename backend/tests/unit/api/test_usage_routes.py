@@ -229,7 +229,8 @@ async def test_requests_paging(monkeypatch):
     out = await ur.list_usage_requests(limit=2, offset=1, session_id=None)
     assert out["total"] == 5
     assert [i["id"] for i in out["items"]] == ["2", "3"]
-    assert out["limit"] == 2 and out["offset"] == 1
+    assert out["limit"] == 2
+    assert out["offset"] == 1
 
 
 @pytest.mark.asyncio()
@@ -241,7 +242,8 @@ async def test_requests_db_error_degrades(monkeypatch):
     out = await ur.list_usage_requests(limit=7, offset=3, session_id=None)
     assert out["items"] == []
     assert out["total"] == 0
-    assert out["limit"] == 7 and out["offset"] == 3
+    assert out["limit"] == 7
+    assert out["offset"] == 3
     assert "db gone" in out["error"]
 
 
