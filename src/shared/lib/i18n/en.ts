@@ -1048,7 +1048,7 @@ export const en: Record<TranslationKey, string> = {
   'office.export.exporting': 'Exporting…',
   'office.export.success': 'PDF exported',
   'office.export.failed': 'Export failed',
-  'office.export.noConverter': 'No local converter found (LibreOffice or MS Word required)',
+  'office.export.noConverter': 'No converter detected for this format (LibreOffice: DOCX/XLSX/PPTX; MS Word: DOCX only)',
   'office.export.openFolder': 'Show in Folder',
   'office.export.openPdf': 'Open PDF',
 
@@ -1056,12 +1056,13 @@ export const en: Record<TranslationKey, string> = {
   'office.fidelity.toggle': 'High fidelity',
   'office.fidelity.loading': 'Converting…',
   'office.fidelity.failed': 'High-fidelity preview failed',
+  'office.caps.detected': 'Converter detected; runtime health not verified',
   'office.caps.pdf': 'PDF export',
   'office.caps.image': 'Image compression',
   'office.caps.formula': 'Formula evaluation',
   'office.caps.refresh': 'Re-detect',
   'office.caps.install.pdf.win':
-    'No converter detected: install LibreOffice (libreoffice.org/download) or MS Word to enable PDF export / high-fidelity preview',
+    'Install LibreOffice for DOCX/XLSX/PPTX; MS Word + pywin32 supports DOCX only',
   'office.caps.install.pdf.mac':
     'No converter detected: brew install --cask libreoffice to enable PDF export / high-fidelity preview',
   'office.caps.install.pdf.linux':

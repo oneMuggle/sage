@@ -68,6 +68,7 @@ import {
   type OfficeReadResult,
 } from '../features/office';
 import { OfficeStagingInspector } from '../features/office/OfficeStagingInspector';
+import { pdfAvailableForDocument } from '../features/office/officeCapabilities';
 import { WorkspaceBindModal } from '../features/workspace';
 import type { OfficeCapabilities, OfficeDocType } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
@@ -420,7 +421,7 @@ export function Office() {
               <OfficePreviewPanel
                 preview={preview}
                 workspacePath={workspacePath}
-                fidelityAvailable={capabilities?.pdf_export_available ?? true}
+                fidelityAvailable={pdfAvailableForDocument(capabilities, preview?.docType)}
                 onRefresh={() => void refresh()}
                 onEditPreview={
                   preview && preview.docType !== 'pdf' ? () => setEditDialogOpen(true) : undefined

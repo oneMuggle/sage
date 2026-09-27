@@ -6,8 +6,8 @@
 - evaluate_workbook：真实 xlsx（openpyxl 生成、无缓存值）→
   ``{sheet: {"B4": 30}}``；无公式工作簿 → 空 dict。
 - 失败路径全部 fail-safe → None：formulas 库缺失（monkeypatch import）、
-  超时（monkeypatch _calculate 慢 + 极小超时预算）、求值异常
-  （monkeypatch _calculate 抛错）、公式数超上限（monkeypatch 常量）。
+  超时（真实子进程 + 极小超时预算）、求值异常
+  （子进程非零退出）、公式数超上限（monkeypatch 常量）。
 - read_xlsx 集成：求值成功 → 条目升级为 ``B4=SUM(B2:B3) → 30 (本地求值)``
   且提示行省略；库缺失 → 原始条目 + 提示行原样（优雅降级）；部分解析
   → 仍有未解析公式时提示行保留。
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import builtins
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytest
 from openpyxl import Workbook
@@ -101,7 +101,21 @@ def test_evaluate_workbook_missing_library_returns_none(
     fixture_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """formulas 缺失 → None（优雅降级），绝不抛 ImportError。"""
-    monkeypatch.setattr(builtins, "__import__", _no_formulas_import)
+    # Install the missing-engine import guard IN the child, not the parent.
+    script = fixture_dir / "missing_engine.py"
+    root = str(Path(__file__).resolve().parents[4])
+    script.write_text(
+        "import sys\n"
+        f"sys.path.insert(0, {root!r})\n"
+        "class MissingEngine:\n"
+        "    def find_spec(self, fullname, path=None, target=None):\n"
+        "        if fullname == 'formulas': raise ImportError('engine absent')\n"
+        "        return None\n"
+        "sys.meta_path.insert(0, MissingEngine())\n"
+        "from backend.office.formula_worker import main\n"
+        "sys.exit(main())\n"
+    )
+    monkeypatch.setattr("backend.office.excel_eval._WORKER_SCRIPT", script)
     path = _build_sum_xlsx(fixture_dir / "sum.xlsx")
     assert evaluate_workbook(path) is None
 
@@ -109,14 +123,7 @@ def test_evaluate_workbook_missing_library_returns_none(
 def test_evaluate_workbook_timeout_returns_none(
     fixture_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """求值超过墙钟预算 → None（monkeypatch 慢求值 + 极小超时）。"""
-    import time
-
-    def _slow_calculate(file_path: object) -> Dict[str, Any]:
-        time.sleep(1.0)
-        return {}
-
-    monkeypatch.setattr("backend.office.excel_eval._calculate", _slow_calculate)
+    """真实求值子进程超过墙钟预算 → None；终止/回收另有监督器用例。"""
     monkeypatch.setattr("backend.office.excel_eval._EVAL_TIMEOUT_SECONDS", 0.05)
     path = _build_sum_xlsx(fixture_dir / "sum.xlsx")
     assert evaluate_workbook(path) is None
@@ -125,11 +132,10 @@ def test_evaluate_workbook_timeout_returns_none(
 def test_evaluate_workbook_eval_failure_returns_none(
     fixture_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """求值线程抛异常 → None，绝不向上传播。"""
-    def _boom(file_path: object) -> Dict[str, Any]:
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr("backend.office.excel_eval._calculate", _boom)
+    """子进程异常退出 → None，绝不向上传播。"""
+    script = fixture_dir / "failed_worker.py"
+    script.write_text("import sys; sys.stdin.readline(); raise RuntimeError('boom')")
+    monkeypatch.setattr("backend.office.excel_eval._WORKER_SCRIPT", script)
     path = _build_sum_xlsx(fixture_dir / "sum.xlsx")
     assert evaluate_workbook(path) is None
 
@@ -169,7 +175,7 @@ def test_read_xlsx_graceful_when_formulas_missing(
     fixture_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """formulas 缺失：读取照常成功，原始条目 + 提示行原样保留。"""
-    monkeypatch.setattr(builtins, "__import__", _no_formulas_import)
+    monkeypatch.setattr("backend.office.excel_eval.evaluate_workbook", lambda _path: None)
     path = _build_sum_xlsx(fixture_dir / "sum.xlsx")
     result = read_xlsx(path, include_formulas=True)
     sheet = result.sheets[0]
@@ -187,7 +193,7 @@ def test_read_xlsx_keeps_note_when_eval_partial(
     """部分解析：仍有未解析公式 → 提示行保留，已解析条目照常升级。"""
     path = _build_multi_formula_xlsx(fixture_dir / "multi.xlsx")
 
-    def _partial(file_path: object) -> Optional[Dict[str, Dict[str, Any]]]:
+    def _partial(file_path: object) -> Dict[str, Dict[str, Any]] | None:
         return {"Calc": {"B4": 30}}  # C1 缺席 → 未解析
 
     monkeypatch.setattr("backend.office.excel_eval.evaluate_workbook", _partial)

@@ -2086,6 +2086,9 @@ export interface OfficeCapabilities {
   formulas_available: boolean;
   /** P4-A (office-p4a): OCR 兜底可用（pytesseract 已装且 tesseract 在 PATH）。 */
   ocr_available: boolean;
+  /** Static discovery only; missing fields indicate a legacy backend. */
+  pdf_export_formats?: Array<'docx' | 'xlsx' | 'pptx'>;
+  conversion_probe_status?: 'detected' | 'unavailable';
 }
 
 /**
