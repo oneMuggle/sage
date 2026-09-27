@@ -60,7 +60,7 @@ def _req(**fields):
 
 
 def test_get_settings_empty_returns_none(monkeypatch):
-    store = _install(monkeypatch, {})
+    _install(monkeypatch, {})
     assert legacy_get_settings() is None
 
 
