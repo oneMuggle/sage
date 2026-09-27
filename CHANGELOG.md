@@ -133,6 +133,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   系统重派生后 taskkill /T 遍历不到，实测每轮全量单测泄漏一棵树并锁临时
   目录）——E2E 实证 terminate 后临时目录即可删除；POSIX 不启用
 
+> 🧹 **R48：perf 预算测试 CI 环境容忍系数**（R44/R47 期 CI 实证收口）
+
+### Fixed(test)
+- **perf 预算 CI 容忍系数（R48）**：GitHub 共享 runner 性能方差大，绝对预算断言
+  在 CI 上系统性超限（事件投影 0.535s/0.735s vs 0.5s 预算，R44/R47 期反复实证）。
+  新增 tests/perf/conftest 的 \`budget()\`：CI 环境（GITHUB_ACTIONS）预算放宽 3 倍，
+  本地照常收紧——保留数值门禁语义，消除环境假阳性；三个 perf 文件全部接入
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21
