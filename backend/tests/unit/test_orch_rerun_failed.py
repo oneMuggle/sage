@@ -394,3 +394,55 @@ async def test_rerun_failed_single_task_closure_includes_pending_downstream(
     assert resp.status_code == 200
     ids = [item["task_id"] for item in resp.json()["plan_override"]]
     assert ids == ["t1", "t2"]  # pending 下游随闭包重建
+
+
+# ---- RT27 (round62): run 级聚合统计 ---------------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_run_detail_includes_total_aggregates(tmp_path, monkeypatch):
+    """RT27: _run_detail 返回 total_used_tokens/total_duration_ms 聚合。"""
+    import json as _json
+    import time as _time
+
+    from backend.data.orch_run_repo import OrchRun, OrchRunRepository
+    from backend.data.orch_task_repo import OrchTaskRepository
+
+    _init_tmp_db_r62(tmp_path, monkeypatch)
+    now = int(_time.time() * 1000)
+    OrchRunRepository().upsert(
+        OrchRun(
+            run_id="r-rt27", session_id="s-rt27", status="completed",
+            created_at=now, plan_json=_json.dumps({"tasks": []}), original_request="",
+        )
+    )
+    repo = OrchTaskRepository()
+    for tid, tokens, dur in [("t1", 100, 500), ("t2", 200, 300)]:
+        repo.upsert_state(
+            run_id="r-rt27", task_id=tid, agent_id="primary", goal="g",
+            status="done", started_at=now - dur, finished_at=now,
+            used_tokens=tokens, duration_ms=dur,
+        )
+
+    import httpx
+    from httpx import ASGITransport
+
+    from backend.main import app
+
+    async with httpx.AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/api/v1/orch/runs/r-rt27")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_used_tokens"] == 300
+    assert data["total_duration_ms"] == 800
+
+
+def _init_tmp_db_r62(tmp_path, monkeypatch):
+    """RT27 专用 DB 初始化（避免与 budget 测试冲突）。"""
+    from backend.data import database as db_mod
+
+    monkeypatch.setenv("SAGE_DB_PATH", str(tmp_path / "rt27.db"))
+    monkeypatch.setattr(db_mod, "_db", None)
+    db_mod.get_database().init_db()
