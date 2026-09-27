@@ -2101,6 +2101,25 @@ class ChatDispatcher:
             )
             header += f"- Agent 分布：{dist}。\n"
 
+        # BU24 (round61): per-agent token 分布 —— 多 agent 时头部显示各
+        # agent 消耗汇总（conductor 判断哪个 agent 烧得多）。
+        _agent_tokens: Dict[str, int] = {}
+        for s in states:
+            if s.status in ("done", "failed"):
+                _used = self._task_tokens_used(s.task_id)
+                if _used:
+                    _agent_tokens[s.agent_id] = (
+                        _agent_tokens.get(s.agent_id, 0) + _used
+                    )
+        if len(_agent_tokens) > 1:
+            dist = "、".join(
+                f"{aid}×{tokens}"
+                for aid, tokens in sorted(
+                    _agent_tokens.items(), key=lambda x: x[1], reverse=True
+                )
+            )
+            header += f"- Agent token 分布：{dist}。\n"
+
         blocks: List[str] = []
         for state in states:
             header_item = f"## 子任务 {state.task_id}（{state.agent_id}）"
