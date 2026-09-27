@@ -25,6 +25,13 @@
 - 两线完整 Ruff、相关 ESLint、架构/diff 检查通过。细节、失败修正和环境限制见 [验证记录](verification/2026-09-27-office-execution-boundary.md)。
 - 尚无本批 CI 或原生 Win7 SP1/Office 人工验收结论。
 
-## 阶段 4：交付 — 进行中
+## 阶段 4：PR 已发布，未合并
 
-实现已在两线独立提交，正核对最新基线并准备 PR，尚未合并。完整 P0-B 的 COM 监督/健康检查、F6 出口策略与全部 P1/P2 未在本批完成。
+- main：[PR #1714](https://github.com/oneMuggle/sage/pull/1714)，目标 main，基线 1b8aced5。
+- Win7：[PR #1715](https://github.com/oneMuggle/sage/pull/1715)，目标 release/win7，基线 6359bdae。
+- 代码/验证发布版本：main d80494e0；Win7 dc561531。16 个共用源文件/测试逐字节相同，OfficeCapabilities 接口一致；本页随后仅补记发布信息。
+- 基线移动后的棘轮冲突保留全部上游条目，只增加本批实际行数；最新基线上再次通过两线 TypeScript、相关前端 128 项、Ruff、架构/diff 检查。
+- Git HTTPS fetch/push 持续被连接重置。经公共克隆和已验证 bundle 同步基线，再用主机已有 gh 认证调用 Git Data API 发布。三阶段提交的 **commit SHA 与 tree SHA 均与 Windows 工作树完全相同**；没有导出凭据，没有改写共享/目标分支。
+- PR 刚创建时尚无 checks；CI 的动态状态以两条 PR 为准，未通过前不合并。工作树保留用于 CI 修复，未提前清理。
+
+完整 P0-B 的 COM 监督/健康检查、F6 出口策略与全部 P1/P2 未在本批完成。
