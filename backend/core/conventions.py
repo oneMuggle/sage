@@ -145,8 +145,9 @@ class ConventionManager:
         row = cursor.fetchone()
         if not row:
             return None
-        row["is_active"] = bool(row["is_active"])
-        return Convention(**dict(row))
+        data = dict(row)  # sqlite3.Row 不可变，转 dict 后才能改 is_active
+        data["is_active"] = bool(data["is_active"])
+        return Convention(**data)
 
     def get_active(self, category: Optional[str] = None) -> List[Convention]:
         """获取活跃惯例"""
@@ -163,8 +164,9 @@ class ConventionManager:
         cursor.execute(sql, params)
         results = []
         for row in cursor.fetchall():
-            row["is_active"] = bool(row["is_active"])
-            results.append(Convention(**dict(row)))
+            data = dict(row)  # sqlite3.Row 不可变，转 dict 后才能改 is_active
+            data["is_active"] = bool(data["is_active"])
+            results.append(Convention(**data))
         return results
 
     def delete(self, convention_id: str) -> bool:
@@ -249,8 +251,9 @@ class ConventionManager:
         row = cursor.fetchone()
         if not row:
             return None
-        row["is_active"] = bool(row["is_active"])
-        return Convention(**dict(row))
+        data = dict(row)  # sqlite3.Row 不可变，转 dict 后才能改 is_active
+        data["is_active"] = bool(data["is_active"])
+        return Convention(**data)
 
     # ========== 置信度管理 ==========
 
