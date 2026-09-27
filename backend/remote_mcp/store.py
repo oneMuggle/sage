@@ -23,7 +23,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-PERMISSION_KEYS = ("read", "write", "shell")
+PERMISSION_KEYS = ("read", "write", "shell", "office", "memory")
 APPROVAL_MODES = ("auto", "ask")
 
 logger = logging.getLogger(__name__)
@@ -117,7 +117,11 @@ class WorkspaceStore:
 
     @staticmethod
     def public_view(workspace: Dict[str, Any]) -> Dict[str, Any]:
-        return {k: copy.deepcopy(v) for k, v in workspace.items() if k != "token"}
+        view = {k: copy.deepcopy(v) for k, v in workspace.items() if k != "token"}
+        perms = view.get("permissions") if isinstance(view.get("permissions"), dict) else {}
+        # M5b 新增 office/memory：旧配置缺键时按关闭展示（默认拒绝）
+        view["permissions"] = {k: bool(perms.get(k, k == "read")) for k in PERMISSION_KEYS}
+        return view
 
     def list_public(self) -> List[Dict[str, Any]]:
         with self._lock:
@@ -169,7 +173,7 @@ class WorkspaceStore:
             "root": canonical,
             "token": secrets.token_hex(32),
             "enabled": True,
-            "permissions": {"read": True, "write": False, "shell": False},
+            "permissions": {"read": True, "write": False, "shell": False, "office": False, "memory": False},
             "approval": "auto",
             "created_at": _now(),
             "rotated_at": None,

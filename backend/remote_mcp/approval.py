@@ -25,6 +25,8 @@ APPROVAL_TIMEOUT_S = 120.0
 TOOL_PREFIX = "remote_mcp."
 WRITE_TOOLS = frozenset({"write_file", "edit_file", "apply_patch"})
 SHELL_TOOLS = frozenset({"run_command"})
+# 记忆可能含隐私：ask 模式下每次检索都需本地确认
+PRIVATE_TOOLS = frozenset({"memory_search"})
 
 #: (approved, reason_code) —— reason 仅在拒绝时有意义
 Decision = Tuple[bool, str]
@@ -79,6 +81,8 @@ def needs_approval(workspace: Dict[str, Any], tool_name: str, args: Dict[str, An
         return risk if mode == "ask" else None
     if tool_name in WRITE_TOOLS and mode == "ask":
         return "write"
+    if tool_name in PRIVATE_TOOLS and mode == "ask":
+        return "private"
     return None
 
 

@@ -267,7 +267,8 @@ def test_store_rejects_home_and_hides_token(tmp_path):
     with pytest.raises(StoreError):
         store.update(ws["id"], permissions={"read": False})
     reloaded = WorkspaceStore(str(tmp_path / "w.json"))
-    assert reloaded.get(ws["id"])["permissions"] == {"read": True, "write": False, "shell": False}
+    assert reloaded.get(ws["id"])["permissions"] == {"read": True, "write": False, "shell": False,
+                                                    "office": False, "memory": False}
 
 
 def test_store_corrupt_file_not_overwritten(tmp_path):

@@ -25,7 +25,7 @@ import { useI18n } from '../../shared/lib/i18n';
 import { SettingRow, Toggle } from './components';
 
 const POLL_MS = 3000;
-const PERMISSIONS: RemotePermission[] = ['read', 'write', 'shell'];
+const PERMISSIONS: RemotePermission[] = ['read', 'write', 'shell', 'office', 'memory'];
 
 const BTN = 'px-3 py-1 text-xs rounded-radius-sm border border-border text-text hover:bg-surface transition-colors disabled:opacity-50';
 const BTN_PRIMARY = 'px-3 py-1 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary-hover transition-colors disabled:opacity-50';
