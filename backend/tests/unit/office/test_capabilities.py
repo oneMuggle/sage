@@ -20,8 +20,9 @@ def _clear_cache():
     capabilities._cache = None
 
 
-def _pin(monkeypatch, *, soffice=None, platform="linux", specs=()):
+def _pin(monkeypatch, *, soffice=None, platform="linux", specs=(), word=True):
     """钉住探测的全部外部输入。``specs`` 是 find_spec 应命中的模块名集合。"""
+    monkeypatch.setattr(capabilities, "_word_registered", lambda: word)
     monkeypatch.setattr(capabilities, "_locate_soffice", lambda: soffice)
     monkeypatch.setattr(capabilities.sys, "platform", platform)
     monkeypatch.setattr(
@@ -68,10 +69,61 @@ def test_cache_hit_and_force_bypass(monkeypatch):
         calls.append(1)
 
     monkeypatch.setattr(capabilities, "_locate_soffice", counting_locate)
-    monkeypatch.setattr(capabilities, "find_spec", lambda name: None)
+    monkeypatch.setattr(capabilities, "find_spec", lambda _name: None)
 
     capabilities.probe_capabilities()          # 探测 1 次
     capabilities.probe_capabilities()          # 30s 内 → 命中缓存
     assert len(calls) == 1
     capabilities.probe_capabilities(force=True)  # force → 旁路缓存
     assert len(calls) == 2
+
+
+def test_pywin32_without_word_is_not_a_converter(monkeypatch):
+    _pin(monkeypatch, platform="win32", specs={"win32com"}, word=False)
+    caps = capabilities.probe_capabilities(force=True)
+    assert not caps.word_com_available
+    assert not caps.pdf_export_available
+    assert caps.pdf_export_formats == []
+    assert caps.conversion_probe_status == "unavailable"
+
+
+def test_word_is_docx_only_and_discovery_is_not_health(monkeypatch):
+    _pin(monkeypatch, platform="win32", specs={"win32com"})
+    caps = capabilities.probe_capabilities(force=True)
+    assert caps.pdf_export_formats == ["docx"]
+    assert caps.conversion_probe_status == "detected"
+
+
+def test_libreoffice_discovers_all_office_formats(monkeypatch):
+    _pin(monkeypatch, soffice="/bin/soffice")
+    caps = capabilities.probe_capabilities(force=True)
+    assert caps.pdf_export_formats == ["docx", "xlsx", "pptx"]
+    assert caps.conversion_probe_status == "detected"
+
+
+@pytest.mark.parametrize("quoted", [True, False])
+def test_word_registry_requires_existing_executable(tmp_path, monkeypatch, quoted):
+    import sys
+    from unittest.mock import MagicMock
+
+    exe = tmp_path / "Office with spaces" / "WINWORD.EXE"
+    exe.parent.mkdir()
+    exe.touch()
+    registry = MagicMock()
+    command = ('"' + str(exe) + '"' if quoted else str(exe)) + " /Automation"
+    registry.QueryValueEx.side_effect = [("{word-clsid}", 1), (command, 1)]
+    monkeypatch.setitem(sys.modules, "winreg", registry)
+    assert capabilities._word_registered()
+    registry.QueryValueEx.side_effect = [("{word-clsid}", 1), (command, 1)]
+    exe.unlink()
+    assert not capabilities._word_registered()
+
+
+def test_word_registry_failure_is_unavailable(monkeypatch):
+    import sys
+    from unittest.mock import MagicMock
+
+    registry = MagicMock()
+    registry.OpenKey.side_effect = OSError("not registered")
+    monkeypatch.setitem(sys.modules, "winreg", registry)
+    assert not capabilities._word_registered()

@@ -8,6 +8,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.56] - 2026-09-27
+
+### Added
+- feat(remote-mcp): 工作区 MCP Server M1-M3——只读/写入/命令三阶段（#1637）
+- feat(session): W2 会话分叉家族树面板——fork 徽标一键查看与跨分支切换（#1687）
+- feat(sessions): 会话自动归档 + 清空全部归档（#1655）
+- feat(chat): W1 消息级「回滚到此处」——对话 fork + 工作区快照恢复联动（#1652）
+- feat(frontend): ZCode 启发 Round 2 — Turn 折叠 + Surface 层级 + 使用统计 + 命令面板增强（#1705）
+- feat(frontend): ZCode 启发设计系统文档 + 字体 token 迁移（#1635）
+- feat(ui): ZCode 对标——设计系统 + Git 侧边栏 + Tool Call 渲染器（#1632）
+- feat: ZCode-inspired plugin system, skill discovery, MCP integration（#1621）
+- feat(chat): 对话阅读体验 P1——朗读/截断提示/搜索高亮/会话内查找（#1619）
+- feat(chat): 对话阅读体验 P2——生成速度统计/端点离线提示/回答版本切换（#1625）
+- feat(chat): 对话阅读导航与划词引用（#1580）
+- feat(chat): RD23 会话多 run 历史浏览器——SessionRunHistory（#1582）
+- feat(chat): RD24 历史编排行内消耗统计（#1604）
+- feat(orch): BU22/BU23 聚合头部子任务排行 + per-agent 工作量分布（#1596, #1691）
+- feat(orch): RT26 重派链历史持久化——orch_tasks 增 retry_of 列（#1488）
+- feat(permission): 审批拒绝附文字反馈——ZCode freeText 对标（#1704）
+- feat(data): DSH-R9/R20/R21 schema 版本化迁移框架 + ALTER 防御块收编（#1512, #1698, #1708）
+- feat(events): DSH-R1/R2 会话事件日志地基 + 读取切换（#1421, #1435）
+- feat(llm): DSH-R8 B3 LLM 流录制/回放（#1499）
+- feat(agent): DSH-R3 B2 声明式并行工具调度（#1451）
+- feat(tools): LocalBridge P0 安全修复 + 文件工具 parity（#1636）
+- feat: 简化浏览器登录流程（#1497）
+- feat(chat): R120 run 失败路径推送已收集参考来源（#1485）
+
+### Changed(perf)
+- **shiki 细粒度加载**：渲染产物 18MB/450 chunk → 10MB/178（-44%）（#1401）
+- **ArtifactViewer CodeMirror lazy**：index 主 chunk 1528KB → 1140KB（#1419）
+- **memory 注入与召回合一（R99）**：单次检索，芯片与注入严格同源（#1424）
+- **usage_events 复合索引（RT25）**：补 (session_id, task_id, created_at)（#1409）
+- **每个 worker 只建一次表**：后端 pytest 20min → 5min（#1640, #1631）
+
 > 🎯 **Arena 能力移植收口：ArenCard 协议快路径 P0-P6 全链路**（方案 `archive/mcp-aren-card-port-plan-2026-09-19.md`，验收 `docs/verification/2026-09-19-aren-card-port.md`）
 
 ### Added(arena)
@@ -132,6 +166,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   user_data_dir 路径精确清扫脱离进程树的残留进程（crashpad-handler 等被
   系统重派生后 taskkill /T 遍历不到，实测每轮全量单测泄漏一棵树并锁临时
   目录）——E2E 实证 terminate 后临时目录即可删除；POSIX 不启用
+
+> 🧹 **R48：perf 预算测试 CI 环境容忍系数**（R44/R47 期 CI 实证收口）
+
+### Fixed(test)
+- **perf 预算 CI 容忍系数（R48）**：GitHub 共享 runner 性能方差大，绝对预算断言
+  在 CI 上系统性超限（事件投影 0.535s/0.735s vs 0.5s 预算，R44/R47 期反复实证）。
+  新增 tests/perf/conftest 的 \`budget()\`：CI 环境（GITHUB_ACTIONS）预算放宽 3 倍，
+  本地照常收紧——保留数值门禁语义，消除环境假阳性；三个 perf 文件全部接入
 
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 

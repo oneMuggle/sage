@@ -187,7 +187,8 @@ export const en: Record<TranslationKey, string> = {
   'chat.rewind_loading': 'Loading snapshots…',
   'chat.rewind_no_snapshots': 'No workspace snapshot exists before this message',
   'chat.rewind_files_count': '{count} files',
-  'chat.rewind_hint': 'The original session is kept intact; files are restored first, then the conversation is forked.',
+  'chat.rewind_hint':
+    'The original session is kept intact; files are restored first, then the conversation is forked.',
   'chat.rewind_confirm': 'Rewind',
   'chat.rewind_success': 'Rewound and forked into a new session',
   'chat.rewind_restore_failed': 'File restore failed: {message}',
@@ -355,6 +356,7 @@ export const en: Record<TranslationKey, string> = {
   'settings.network.search.engine.zhipu': 'Zhipu (API key required)',
   'settings.tab.evolution': 'Evolution',
   'settings.tab.updates': 'Updates',
+  'settings.tab.usage-stats': 'Usage Stats',
   'settings.section.theme': 'Theme',
   'settings.section.appearance': 'Appearance',
   'settings.section.chat': 'Chat',
@@ -688,6 +690,9 @@ export const en: Record<TranslationKey, string> = {
   'permission.remember': 'Remember my choice',
   'permission.approve': 'Allow',
   'permission.deny': 'Deny',
+  'permission.deny_confirm': 'Confirm deny',
+  'permission.deny_reason.placeholder': 'Optional: tell the agent why (it will adjust its approach)',
+  'permission.deny_reason.hint': 'The feedback is passed to the model with the denial.',
   'permission.toast.failed': 'Failed to submit approval answer',
   'permission.subagent_context': 'Orchestration subagent requests approval',
   'permission.diff': 'Proposed changes',
@@ -1044,7 +1049,7 @@ export const en: Record<TranslationKey, string> = {
   'office.export.exporting': 'Exporting…',
   'office.export.success': 'PDF exported',
   'office.export.failed': 'Export failed',
-  'office.export.noConverter': 'No local converter found (LibreOffice or MS Word required)',
+  'office.export.noConverter': 'No converter detected for this format (LibreOffice: DOCX/XLSX/PPTX; MS Word: DOCX only)',
   'office.export.openFolder': 'Show in Folder',
   'office.export.openPdf': 'Open PDF',
 
@@ -1052,12 +1057,13 @@ export const en: Record<TranslationKey, string> = {
   'office.fidelity.toggle': 'High fidelity',
   'office.fidelity.loading': 'Converting…',
   'office.fidelity.failed': 'High-fidelity preview failed',
+  'office.caps.detected': 'Converter detected; runtime health not verified',
   'office.caps.pdf': 'PDF export',
   'office.caps.image': 'Image compression',
   'office.caps.formula': 'Formula evaluation',
   'office.caps.refresh': 'Re-detect',
   'office.caps.install.pdf.win':
-    'No converter detected: install LibreOffice (libreoffice.org/download) or MS Word to enable PDF export / high-fidelity preview',
+    'Install LibreOffice for DOCX/XLSX/PPTX; MS Word + pywin32 supports DOCX only',
   'office.caps.install.pdf.mac':
     'No converter detected: brew install --cask libreoffice to enable PDF export / high-fidelity preview',
   'office.caps.install.pdf.linux':

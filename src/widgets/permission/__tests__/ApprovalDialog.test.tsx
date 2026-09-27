@@ -111,6 +111,7 @@ describe('ApprovalDialog', () => {
         requestId: 'req-approve',
         approved: true,
         remember: false,
+        reason: '',
       });
     });
     await waitFor(() => {
@@ -132,25 +133,52 @@ describe('ApprovalDialog', () => {
         requestId: 'req-remember',
         approved: true,
         remember: true,
+        reason: '',
       });
     });
   });
 
-  it('deny click invokes with approved=false and clears the store', async () => {
+  it('deny click expands feedback input first, second click submits with empty reason', async () => {
     seedRequest({ request_id: 'req-deny' });
     renderDialog();
 
+    // 第一次点击：展开反馈输入框，不提交
     fireEvent.click(screen.getByTestId('permission-deny'));
+    expect(screen.getByTestId('permission-deny-reason')).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalled();
 
+    // 第二次点击（按钮变「确认拒绝」）：留空提交
+    fireEvent.click(screen.getByTestId('permission-deny'));
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('permissions_answer', {
         requestId: 'req-deny',
         approved: false,
         remember: false,
+        reason: '',
       });
     });
     await waitFor(() => {
       expect(usePermissionState.getState().currentRequest).toBeNull();
+    });
+  });
+
+  it('deny with user feedback forwards trimmed reason to permissions_answer (ZCode freeText)', async () => {
+    seedRequest({ request_id: 'req-feedback' });
+    renderDialog();
+
+    fireEvent.click(screen.getByTestId('permission-deny'));
+    fireEvent.change(screen.getByTestId('permission-deny-reason'), {
+      target: { value: '  路径不对，应该写到 docs/ 目录  ' },
+    });
+    fireEvent.click(screen.getByTestId('permission-deny'));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('permissions_answer', {
+        requestId: 'req-feedback',
+        approved: false,
+        remember: false,
+        reason: '路径不对，应该写到 docs/ 目录',
+      });
     });
   });
 
@@ -175,6 +203,8 @@ describe('ApprovalDialog', () => {
     seedRequest({ request_id: 'req-ipc-fail' });
     renderDialog();
 
+    // 拒绝两段式：先展开反馈输入框，再确认提交
+    fireEvent.click(screen.getByTestId('permission-deny'));
     fireEvent.click(screen.getByTestId('permission-deny'));
 
     await waitFor(() => {
