@@ -109,6 +109,7 @@ export function ProgressSection({
         <SessionRunHistory
           sessionId={sessionId}
           onSelectRun={onSelectRun}
+          excludeRunId={taskBoard?.runId}
         />
       )}
     </div>
