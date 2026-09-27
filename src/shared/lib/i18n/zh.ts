@@ -332,6 +332,7 @@ export const zh = {
   'settings.network.browser_env.fix': '修复建议',
   'settings.tab.evolution': '进化',
   'settings.tab.updates': '更新',
+  'settings.tab.usage-stats': '使用统计',
   'settings.section.theme': '主题',
   'settings.section.appearance': '外观',
   'settings.section.chat': '对话',

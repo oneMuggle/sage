@@ -11,6 +11,8 @@ import { ChatFindBar } from './ChatFindBar';
 import { Message } from './Message';
 import { SelectionQuoteButton } from './SelectionQuoteButton';
 import { TopicSeparator } from './TopicSeparator';
+import { TurnGroup } from './TurnGroup';
+import { groupMessagesIntoTurns } from './turnGrouping';
 
 /** U11 (批次 C-3): 尾窗渲染步长 —— "加载更早"每次多显示的条数 */
 const WINDOW_STEP = 60;
@@ -98,6 +100,13 @@ export function MessageList({
     setWindowSize,
   });
 
+  const hiddenCount = Math.max(0, messages.length - effectiveWindow);
+  const visible = messages.slice(messages.length - effectiveWindow);
+  const lastId = messages[messages.length - 1]?.id;
+
+  // ZCode 启发: 将连续 assistant/tool 消息分组为 Turn，支持折叠
+  const turnItems = useMemo(() => groupMessagesIntoTurns(visible), [visible]);
+
   if (messages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted">
@@ -106,10 +115,6 @@ export function MessageList({
       </div>
     );
   }
-
-  const hiddenCount = Math.max(0, messages.length - effectiveWindow);
-  const visible = messages.slice(messages.length - effectiveWindow);
-  const lastId = messages[messages.length - 1].id;
 
   return (
     <>
@@ -126,21 +131,57 @@ export function MessageList({
             加载更早消息（还有 {hiddenCount} 条）
           </button>
         )}
-        {visible.map((message) => (
-          <div
-            key={message.id}
-            data-message-id={message.id}
-            data-jump-flash={flashId === message.id ? 'true' : undefined}
-            className={flashId === message.id ? JUMP_FLASH_CLASS : undefined}
-          >
-            {message.subtype === 'topic_separator' ? (
-              <TopicSeparator content={message.content} />
-            ) : (
-              <Message
-                message={message}
-                knowledgeRefs={knowledgeRefs?.[message.id]}
-                attachments={attachments?.[message.id]}
-                isStreaming={message.id === streamingMessageId}
+        {turnItems.map((item) => {
+          if (item.kind === 'standalone') {
+            const message = item.message;
+            return (
+              <div
+                key={item.id}
+                data-message-id={message.id}
+                data-jump-flash={flashId === message.id ? 'true' : undefined}
+                className={flashId === message.id ? JUMP_FLASH_CLASS : undefined}
+              >
+                {message.subtype === 'topic_separator' ? (
+                  <TopicSeparator content={message.content} />
+                ) : (
+                  <Message
+                    message={message}
+                    knowledgeRefs={knowledgeRefs?.[message.id]}
+                    attachments={attachments?.[message.id]}
+                    isStreaming={message.id === streamingMessageId}
+                    onFork={onFork}
+                    onRewind={onRewind}
+                    onEditResend={onEditResend}
+                    onRegenerate={onRegenerate}
+                    onDelete={onDelete}
+                    onQuote={onQuote}
+                    onSaveToMemory={onSaveToMemory}
+                    artifactsByToolCall={artifactsByToolCall}
+                    onContinue={
+                      message.id === lastId && !streamingMessageId ? onContinue : undefined
+                    }
+                    onAnswerVersionChange={
+                      message.id === lastId && !streamingMessageId
+                        ? onAnswerVersionChange
+                        : undefined
+                    }
+                  />
+                )}
+              </div>
+            );
+          }
+
+          // kind === 'turn'
+          return (
+            <div key={item.id}>
+              <TurnGroup
+                messages={item.messages}
+                turnId={item.id}
+                streamingMessageId={streamingMessageId}
+                flashId={flashId}
+                knowledgeRefs={knowledgeRefs}
+                attachments={attachments}
+                artifactsByToolCall={artifactsByToolCall}
                 onFork={onFork}
                 onRewind={onRewind}
                 onEditResend={onEditResend}
@@ -148,15 +189,20 @@ export function MessageList({
                 onDelete={onDelete}
                 onQuote={onQuote}
                 onSaveToMemory={onSaveToMemory}
-                artifactsByToolCall={artifactsByToolCall}
-                onContinue={message.id === lastId && !streamingMessageId ? onContinue : undefined}
+                onContinue={
+                  item.messages[item.messages.length - 1]?.id === lastId && !streamingMessageId
+                    ? onContinue
+                    : undefined
+                }
                 onAnswerVersionChange={
-                  message.id === lastId && !streamingMessageId ? onAnswerVersionChange : undefined
+                  item.messages[item.messages.length - 1]?.id === lastId && !streamingMessageId
+                    ? onAnswerVersionChange
+                    : undefined
                 }
               />
-            )}
-          </div>
-        ))}
+            </div>
+          );
+        })}
       </div>
       <BtwOverlay />
       {onQuoteSelection && <SelectionQuoteButton rootRef={rootRef} onQuote={onQuoteSelection} />}

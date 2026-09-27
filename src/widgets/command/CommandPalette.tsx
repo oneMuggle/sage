@@ -1,13 +1,16 @@
 import { Command } from 'cmdk';
-import { Folder } from 'lucide-react';
+import { Folder, Settings, Zap } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { useTheme } from '../../app/providers/useTheme';
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
+import { searchSettings } from '../../pages/settings/settingsSearchIndex';
 import { backendRequest } from '../../shared/api/backendRequest';
 import { projectApi, type ProjectSummary } from '../../shared/api/projectApi';
+import { skillsApi } from '../../shared/api/skillsApi';
+import type { Skill } from '../../shared/api/types';
 import { getRecentWikiProjects } from '../../shared/api-client/wiki';
 import { useStore } from '../../shared/lib/store';
 
@@ -52,6 +55,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     () => localStorage.getItem(KNOWLEDGE_SCOPE_KEY) ?? '',
   );
   const [wikiRecents, setWikiRecents] = useState<Array<{ path: string; name: string }>>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   // 打开时重置搜索
@@ -68,6 +72,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       getRecentWikiProjects()
         .then((recents) => setWikiRecents(recents.map((r) => ({ path: r.path, name: r.name }))))
         .catch(() => setWikiRecents([]));
+      // Task 4: 加载技能列表供命令面板搜索（失败静默降级）
+      skillsApi
+        .list()
+        .then(setSkills)
+        .catch(() => setSkills([]));
     }
   }, [open]);
 
@@ -114,6 +123,20 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       controller.abort();
     };
   }, [search, knowledgeScope]);
+
+  // Task 4: 客户端搜索设置项和技能（search >= 2 时启用）
+  const settingsResults = search.length >= 2 ? searchSettings(search).slice(0, 8) : [];
+  const skillsResults =
+    search.length >= 2
+      ? skills
+          .filter((s) => {
+            const q = search.toLowerCase();
+            return (
+              s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q)
+            );
+          })
+          .slice(0, 6)
+      : [];
 
   const handleNav = useCallback(
     (path: string) => {
@@ -500,14 +523,57 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                 ))}
               </Command.Group>
             )}
-            {!globalResults.sessions?.length &&
-              !globalResults.memories?.length &&
-              !globalResults.knowledge?.length &&
-              !globalResults.projects?.length && (
-                <div className="py-6 text-center text-sm text-text-muted">无匹配结果</div>
-              )}
           </>
         )}
+        {/* Task 4: 设置项搜索（客户端，search >= 2） */}
+        {settingsResults.length > 0 && (
+          <Command.Group heading="设置">
+            {settingsResults.map((entry) => (
+              <Command.Item
+                key={entry.key}
+                value={`settings-${entry.key}-${entry.label}`}
+                onSelect={() => handleNav('/settings')}
+                className="flex items-center gap-2.5 px-3 py-2 rounded-radius-sm text-sm text-text cursor-default select-none aria-selected:bg-primary/10 aria-selected:text-primary data-[disabled]:opacity-50 transition-colors"
+              >
+                <Settings className="w-4 h-4 text-text-muted shrink-0" />
+                <span className="flex-1 truncate">{entry.label}</span>
+                <span className="text-xs text-text-muted shrink-0">{entry.tab}</span>
+              </Command.Item>
+            ))}
+          </Command.Group>
+        )}
+        {/* Task 4: 技能搜索（客户端，search >= 2） */}
+        {skillsResults.length > 0 && (
+          <Command.Group heading="技能">
+            {skillsResults.map((skill) => (
+              <Command.Item
+                key={skill.name}
+                value={`skill-${skill.name}-${skill.description ?? ''}`}
+                onSelect={() => handleNav('/skills')}
+                className="flex items-center gap-2.5 px-3 py-2 rounded-radius-sm text-sm text-text cursor-default select-none aria-selected:bg-primary/10 aria-selected:text-primary data-[disabled]:opacity-50 transition-colors"
+              >
+                <Zap className="w-4 h-4 text-text-muted shrink-0" />
+                <span className="flex-1 truncate">{skill.name}</span>
+                {skill.description && (
+                  <span className="text-xs text-text-muted truncate max-w-[40%]">
+                    {skill.description}
+                  </span>
+                )}
+              </Command.Item>
+            ))}
+          </Command.Group>
+        )}
+        {/* Task 4: 无匹配兜底（全局搜索 + 设置 + 技能全空） */}
+        {search.length >= 2 &&
+          !searching &&
+          !globalResults?.sessions?.length &&
+          !globalResults?.memories?.length &&
+          !globalResults?.knowledge?.length &&
+          !globalResults?.projects?.length &&
+          settingsResults.length === 0 &&
+          skillsResults.length === 0 && (
+            <div className="py-6 text-center text-sm text-text-muted">无匹配结果</div>
+          )}
       </Command.List>
 
       {/* 底部提示 */}

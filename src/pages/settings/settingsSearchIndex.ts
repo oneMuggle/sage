@@ -21,6 +21,7 @@ export type SettingsTabKey =
   | 'runtime'
   | 'evolution'
   | 'updates'
+  | 'usage-stats'
   | 'providers';
 
 export interface SettingsSearchEntry {
@@ -445,9 +446,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'zotero 文献 参考文献 library 文献库 引用 cite',
   },
 
-  // ── Zotero ──
-  { key: 'zotero', tab: 'zotero', label: 'Zotero 文献库', labelEn: 'Zotero Library', keywords: 'zotero 文献 参考文献 library 文献库 引用 cite' },
-
   // ── 开发环境 ──
   {
     key: 'runtime',
@@ -480,6 +478,36 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '更新源管理',
     labelEn: 'Update sources',
     keywords: 'provider 更新源 镜像 源管理',
+  },
+
+  // ── 使用统计 ──
+  {
+    key: 'usage-stats-summary',
+    tab: 'usage-stats',
+    label: '用量概览',
+    labelEn: 'Usage overview',
+    keywords: 'usage stats 用量 统计 token 请求 成本 overview',
+  },
+  {
+    key: 'usage-stats-trend',
+    tab: 'usage-stats',
+    label: '消耗趋势图',
+    labelEn: 'Usage trend chart',
+    keywords: 'trend 趋势 折线图 消耗 chart',
+  },
+  {
+    key: 'usage-stats-model',
+    tab: 'usage-stats',
+    label: '按模型分布',
+    labelEn: 'By model',
+    keywords: 'model 模型 分布 占比',
+  },
+  {
+    key: 'usage-stats-export',
+    tab: 'usage-stats',
+    label: '导出 CSV',
+    labelEn: 'Export CSV',
+    keywords: 'export csv 导出 下载',
   },
 ];
 
