@@ -21,10 +21,13 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture()
-def clean_registry():
-    """隔离全局注册表：测试结束恢复原内容。"""
+def clean_registry(setup_test_db):
+    """隔离全局注册表 + 清空 schema_version 表（测试结束恢复原内容）。"""
     saved = list(MIGRATIONS)
     MIGRATIONS.clear()
+    conn = setup_test_db.get_connection()
+    conn.execute("DELETE FROM schema_version")
+    conn.commit()
     yield MIGRATIONS
     MIGRATIONS[:] = saved
 
@@ -111,11 +114,10 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
 
     db = Database(db_path=str(tmp_path / "fresh.db"))
     try:
-        db.init_db()  # 空注册表：迁移步骤 no-op，不抛错
+        db.init_db()  # v1_baseline 自动注册（runner.py 模块级），但 still no-op
         versions = applied_versions(db.get_connection())
-        assert versions == set()
+        # v1 基线自动注册并应用（runner.py 模块级 register_migration）
+        assert versions == {1}
         # schema_version 表已建（账本就绪）
-        rows = db.get_connection().execute("SELECT * FROM schema_version").fetchall()
-        assert rows == []
     finally:
         db.close()
