@@ -1,4 +1,4 @@
-# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容，保留 typing 注解
+# ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容，保留 typing 注解
 """存量会话事件回填（DSH 对标 R2，SE2）。
 
 SE1 落地前的历史会话没有 ``session_events`` 记录 —— 读取切换
@@ -47,45 +47,62 @@ def backfill_session_events(db: Any = None) -> Dict[str, int]:
 
     written = 0
     backfilled = 0
+    failed_sessions = 0
     for sid in session_ids:
-        cursor.execute(
-            """
-            SELECT id, role, content, tool_calls, segment_id, subtype, created_at
-            FROM messages
-            WHERE session_id = ?
-            ORDER BY created_at ASC, rowid ASC
-            """,
-            (sid,),
-        )
-        rows = cursor.fetchall()
-        if not rows:
-            continue
-        backfilled += 1
-        for seq, row in enumerate(rows, start=1):
+        try:
             cursor.execute(
-                "INSERT INTO session_events (session_id, seq, type, payload, created_at) "
-                "VALUES (?, ?, 'message.appended', ?, ?)",
-                (
-                    sid,
-                    seq,
-                    json.dumps(
-                        {
-                            "id": row["id"],
-                            "role": row["role"],
-                            "content": row["content"],
-                            "subtype": row["subtype"],
-                            "segment_id": row["segment_id"],
-                            "tool_calls": row["tool_calls"],
-                            "created_at": row["created_at"],
-                        },
-                        ensure_ascii=False,
-                        default=str,
-                    ),
-                    row["created_at"],
-                ),
+                """
+                SELECT id, role, content, tool_calls, segment_id, subtype, created_at
+                FROM messages
+                WHERE session_id = ?
+                ORDER BY created_at ASC, rowid ASC
+                """,
+                (sid,),
             )
-            written += 1
-        conn.commit()
+            rows = cursor.fetchall()
+            if not rows:
+                continue
+            backfilled += 1
+            for seq, row in enumerate(rows, start=1):
+                cursor.execute(
+                    "INSERT INTO session_events (session_id, seq, type, payload, created_at) "
+                    "VALUES (?, ?, 'message.appended', ?, ?)",
+                    (
+                        sid,
+                        seq,
+                        json.dumps(
+                            {
+                                "id": row["id"],
+                                "role": row["role"],
+                                "content": row["content"],
+                                "subtype": row["subtype"],
+                                "segment_id": row["segment_id"],
+                                "tool_calls": row["tool_calls"],
+                                "created_at": row["created_at"],
+                            },
+                            ensure_ascii=False,
+                            default=str,
+                        ),
+                        row["created_at"],
+                    ),
+                )
+                written += 1
+            conn.commit()
+        except Exception:
+            # A3: 单会话失败不污染全局事务 —— rollback 当前 session 的未完成写入，
+            # 继续处理后续会话。避免 SQLite WAL 模式下未回滚事务持有 RESERVED 锁，
+            # 阻塞后续所有数据库操作（database is locked 连锁故障）。
+            failed_sessions += 1
+            logger.warning(
+                "会话事件回填跳过 session_id=%s（%d 条消息），事务已回滚",
+                sid,
+                len(rows) if "rows" in locals() else 0,
+                exc_info=True,
+            )
+            try:
+                conn.rollback()
+            except Exception:
+                logger.error("rollback failed for session_id=%s", sid, exc_info=True)
 
     result = {
         "sessions_scanned": len(session_ids),
