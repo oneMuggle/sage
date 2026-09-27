@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from backend.api import metrics_routes as mr
 from backend.adapters.out.metric.prometheus_adapter import PrometheusMetricAdapter
+from backend.api import metrics_routes as mr
 
 pytestmark = pytest.mark.unit
 
