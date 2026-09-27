@@ -48,7 +48,7 @@ def _seed_messages(db, sid, n):
     conn.commit()
 
 
-def test_compaction_walk_budget(setup_test_db):
+def test_compaction_walk_budget(setup_test_db, budget):
     """压缩切割遍历 5,000 条消息（不含 LLM 调用，只测切割+估算）。预算 1.0s。"""
     sid = "s-perf-compact"
     ensure_session(setup_test_db, sid)
@@ -73,11 +73,11 @@ def test_compaction_walk_budget(setup_test_db):
     start = time.perf_counter()
     result = should_compact(msgs)
     elapsed = time.perf_counter() - start
-    assert elapsed < 1.0, f"should_compact 遍历耗时 {elapsed:.3f}s"
+    assert elapsed < budget(1.0), f"should_compact 遍历耗时 {elapsed:.3f}s"
     assert isinstance(result, bool)
 
 
-def test_event_projection_10k_budget(setup_test_db):
+def test_event_projection_10k_budget(setup_test_db, budget):
     """10,000 事件投影 ≤ 0.5s（与 R10 的 5,000 对比验证线性扩展）。"""
     sid = "s-perf-10k"
     ensure_session(setup_test_db, sid)
@@ -127,11 +127,11 @@ def test_event_projection_10k_budget(setup_test_db):
     h2 = db_rows_to_history(rows)
     t2 = time.perf_counter() - start
     assert h1 == h2
-    assert t1 < 0.5, f"事件投影 {t1:.3f}s"
-    assert t2 < 0.5, f"表投影 {t2:.3f}s"
+    assert t1 < budget(0.5), f"事件投影 {t1:.3f}s"
+    assert t2 < budget(0.5), f"表投影 {t2:.3f}s"
 
 
-def test_backfill_idempotent_budget(setup_test_db):
+def test_backfill_idempotent_budget(setup_test_db, budget):
     """回填幂等路径：二次运行零写入 ≤ 0.2s。"""
     sid = "s-perf-backfill-idem"
     ensure_session(setup_test_db, sid)
@@ -142,4 +142,4 @@ def test_backfill_idempotent_budget(setup_test_db):
     result = backfill_session_events(setup_test_db)
     elapsed = time.perf_counter() - start
     assert result["events_written"] == 0
-    assert elapsed < 0.2, f"幂等回填耗时 {elapsed:.3f}s"
+    assert elapsed < budget(0.2), f"幂等回填耗时 {elapsed:.3f}s"
