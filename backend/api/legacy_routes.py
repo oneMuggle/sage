@@ -204,72 +204,16 @@ def get_session_repo() -> SessionRepository:
     return SessionRepository()
 
 
-# P0-2 (2026-08-20): stream_id → 本流真实运行实例。旧 /interrupt 用
-# Depends(get_agent) 每次新建空实例，中断信号永远到不了 producer 里
-# 正在跑的 agent。producer 在 run_loop 前登记、finally 注销。
-_ACTIVE_STREAMS: Dict[str, Dict[str, Any]] = {}
-_PENDING_RUN_CANCELLATIONS: Set[str] = set()
-# Fix #3 (2026-09-06): 用户确认事件 —— producer 发 task_plan 后等待用户在前端
-# 点击"开始执行"。orch_routes.confirm_run 设置事件唤醒 producer。
-# cancel_run 也会设置事件（以取消状态退出等待）。
-_RUN_CONFIRM_EVENTS: Dict[str, asyncio.Event] = {}
-
-
-def interrupt_stream(stream_id: Optional[str]) -> str:
-    """中断目标流：主 agent interrupt（+ multi 模式 cancel dispatcher）。
-
-    返回命中标识（"stream"/"none"）供端点回传与测试断言。
-    纯内存注册表操作，不依赖 DB。
-    """
-    if not stream_id:
-        return "none"
-    entry = _ACTIVE_STREAMS.get(stream_id)
-    if entry is None:
-        return "none"
-    entry["cancelled"] = True
-    agent_obj: SageAgent = entry["agent"]
-    agent_obj.interrupt()
-    run_id = entry.get("run_id")
-    if run_id:
-        from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
-
-        dispatcher = entry.get("dispatcher") or _ACTIVE_DISPATCHERS.get(run_id)
-        if dispatcher is not None:
-            dispatcher.cancel()
-    return "stream"
-
-
-def interrupt_run(run_id: str) -> str:
-    """Cancel every active stream belonging to an orchestration run.
-
-    If planning has not bound the run id to its stream yet, retain a pending
-    cancellation token.  The producer consumes it when the dispatcher binds.
-    """
-    matched = False
-    for entry in list(_ACTIVE_STREAMS.values()):
-        if entry.get("run_id") != run_id:
-            continue
-        matched = True
-        entry["cancelled"] = True
-        agent_obj: SageAgent = entry["agent"]
-        agent_obj.interrupt()
-        dispatcher = entry.get("dispatcher")
-        if dispatcher is None:
-            from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
-
-            dispatcher = _ACTIVE_DISPATCHERS.get(run_id)
-        if dispatcher is not None:
-            dispatcher.cancel()
-    if not matched:
-        # P2-9 兼容回退：run 级 cancel 在无 stream entry 时仍直接命中
-        # dispatcher 注册表（如 resume 流或仅注册 dispatcher 的场景）。
-        from backend.orchestration.chat_dispatcher import _ACTIVE_DISPATCHERS
-
-        if _ACTIVE_DISPATCHERS.get(run_id) is not None:
-            _ACTIVE_DISPATCHERS[run_id].cancel()
-            return "stream"
-        _PENDING_RUN_CANCELLATIONS.add(run_id)
-    return "stream" if matched else "pending"
+# C2c (DSH 对标 R28): 流状态注册表 + 中断函数迁出至 chat_stream_state.py
+# （本模块再导出——orch_routes 经 legacy_routes 导入 _RUN_CONFIRM_EVENTS
+#  的既有路径不变；对注册表只做原地变异，跨模块共享同一对象即正确）。
+from backend.api.chat_stream_state import (  # noqa: F401 — 再导出面
+    _ACTIVE_STREAMS,
+    _PENDING_RUN_CANCELLATIONS,
+    _RUN_CONFIRM_EVENTS,
+    interrupt_run,
+    interrupt_stream,
+)
 
 
 def _finalize_orch_run(
