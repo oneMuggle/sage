@@ -57,7 +57,7 @@ def _seed_legacy_messages(db, sid, n):
     conn.commit()
 
 
-def test_backfill_5000_budget(setup_test_db):
+def test_backfill_5000_budget(setup_test_db, budget):
     """路径：存量回填（5,000 行）≤ 4s（本地实测 ~0.4s × 10）。"""
     sid = "s-perf-backfill"
     ensure_session(setup_test_db, sid)
@@ -68,19 +68,19 @@ def test_backfill_5000_budget(setup_test_db):
     elapsed = time.perf_counter() - start
 
     assert result["events_written"] == N_MESSAGES
-    assert elapsed < BUDGET_BACKFILL, f"回填耗时 {elapsed:.3f}s"
+    assert elapsed < budget(BUDGET_BACKFILL), f"回填耗时 {elapsed:.3f}s"
 
 
-def test_migration_runner_overhead_budget(setup_test_db):
+def test_migration_runner_overhead_budget(setup_test_db, budget):
     """路径：迁移框架空转（init_db 每次启动的固定开销）≤ 0.2s。"""
     conn = setup_test_db.get_connection()
     start = time.perf_counter()
     run_pending_migrations(conn)
     elapsed = time.perf_counter() - start
-    assert elapsed < 0.2, f"空转耗时 {elapsed:.3f}s"
+    assert elapsed < budget(0.2), f"空转耗时 {elapsed:.3f}s"
 
 
-def test_dual_write_throughput_budget(setup_test_db):
+def test_dual_write_throughput_budget(setup_test_db, budget):
     """路径：消息双写吞吐（5,000 条 save，含事件+FTS 挂钩）≤ 25s。
 
     本地实测 ~2.5s（×10 余量）；显著劣化说明事件/索引挂钩出现
@@ -104,5 +104,5 @@ def test_dual_write_throughput_budget(setup_test_db):
             )
         )
     elapsed = time.perf_counter() - start
-    assert elapsed < BUDGET_DUAL_WRITE, f"双写耗时 {elapsed:.1f}s"
+    assert elapsed < budget(BUDGET_DUAL_WRITE), f"双写耗时 {elapsed:.1f}s"
     assert SessionEventRepository().count_by_session(sid) == N_MESSAGES

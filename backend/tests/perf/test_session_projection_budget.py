@@ -108,29 +108,29 @@ def _measure(fn):
 
 
 class TestSessionPathBudgets:
-    def test_session_open_budget(self, setup_test_db, big_session):
+    def test_session_open_budget(self, setup_test_db, big_session, budget):
         """路径 1：长会话打开（全量读取）。预算 0.5s（本地实测 ×10）。"""
         repo = MessageRepository()
         elapsed, _ = _measure(
             lambda: repo.get_by_session(big_session, limit=100000)
         )
-        assert elapsed < BUDGET_SESSION_OPEN, f"打开耗时 {elapsed:.3f}s"
+        assert elapsed < budget(BUDGET_SESSION_OPEN), f"打开耗时 {elapsed:.3f}s"
 
-    def test_events_projection_budget(self, setup_test_db, big_session):
+    def test_events_projection_budget(self, setup_test_db, big_session, budget):
         """路径 2：事件投影（5,000 事件）。预算 0.5s。"""
         events = SessionEventRepository().get_by_session(big_session)
         elapsed, history = _measure(lambda: events_to_history(events))
-        assert elapsed < BUDGET_EVENTS_PROJECTION, f"投影耗时 {elapsed:.3f}s"
+        assert elapsed < budget(BUDGET_EVENTS_PROJECTION), f"投影耗时 {elapsed:.3f}s"
         assert len(history) == N_MESSAGES
 
-    def test_rows_projection_budget(self, setup_test_db, big_session):
+    def test_rows_projection_budget(self, setup_test_db, big_session, budget):
         """路径 3：messages 表投影（parity 另一侧，同预算）。"""
         rows = MessageRepository().get_by_session(big_session, limit=100000)
         elapsed, history = _measure(lambda: db_rows_to_history(rows))
-        assert elapsed < BUDGET_ROWS_PROJECTION, f"表投影耗时 {elapsed:.3f}s"
+        assert elapsed < budget(BUDGET_ROWS_PROJECTION), f"表投影耗时 {elapsed:.3f}s"
         assert len(history) == N_MESSAGES
 
-    def test_request_assembly_with_truncation_budget(self, setup_test_db, big_session):
+    def test_request_assembly_with_truncation_budget(self, setup_test_db, big_session, budget):
         """路径 4：请求装配 + 强制截断（预算收紧触发 truncate 完整遍历）。"""
         events = SessionEventRepository().get_by_session(big_session)
         elapsed, (messages, omitted) = _measure(
@@ -142,7 +142,7 @@ class TestSessionPathBudgets:
                 turn_limit=None,
             )
         )
-        assert elapsed < BUDGET_REQUEST_ASSEMBLY, f"装配耗时 {elapsed:.3f}s"
+        assert elapsed < budget(BUDGET_REQUEST_ASSEMBLY), f"装配耗时 {elapsed:.3f}s"
         assert omitted > 0  # 确实触发了截断
         assert messages[0]["role"] == "system"
 
