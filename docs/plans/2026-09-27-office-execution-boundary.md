@@ -16,7 +16,7 @@
 - 单实例最多一个求值 worker，超额调用明确降级，不无限排队。
 - 保留 500 个公式上限；增加 50 MiB 输入、2 MiB JSON 输出、15 秒总等待预算。
 - 使用 JSON 标量通信，不使用 pickle，不把子进程输出无限读入内存。
-- worker 启动握手后才加载文档，Windows 先附加私有 Job Object：512 MiB 进程内存、一个活动进程、关闭 job 杀掉所属进程。无法配置 job 时安全降级，不绕过宿主限制。
+- worker 启动握手后才加载文档，Windows 以挂起状态创建进程，先附加私有 Job Object，再恢复主线程并发送握手：512 MiB Job 总内存、最多两个 OS 进程（兼容 venv 启动器 + 一个计算 worker）、关闭 job 杀掉所属进程。无法配置 job 时安全降级，不绕过宿主限制。
 - POSIX worker 设置资源限制；超时、取消和异常时只终止本次 worker 的进程组并回收。
 - 取消事件作为内部接口提供；没有接入现有 UI 取消按钮前，不宣称 UI 端已完整支持取消。
 - 读取成功但公式未能计算时沿用现有“需在 Excel 中打开”的提示，不伪造 0 或空的正常数值。
@@ -39,3 +39,7 @@
 - 真实 Win7/原生 Office 另做验收，现代 Windows 的 Python 3.8 测试不能替代。
 - main 和 Win7 分别 PR，记录交叉链接、功能差异与 CI 的准确状态。不改覆盖率阈值，不覆盖共享 checkout。
 - 只维护本任务 worktree/分支/临时文件；已有 PR #1626 保持不变。
+
+## 验证驱动的方案修订
+
+Windows venv 的 python.exe 含重定向启动器，实际需要“启动器 + 解释器”两个 OS 进程。真实测试复现单进程 Job 限额导致退出 101。将 Job 改为两个进程、512 MiB **总**内存，并使用 CREATE_SUSPENDED → 绑定 Job → 通过文档化 Toolhelp/OpenThread/ResumeThread 恢复主线程，消除启动器抢先生成未受 Job 管理子进程的竞态。仍只允许一个求值任务，不放宽到任意子进程树。

@@ -1003,7 +1003,7 @@ export const zh = {
   'office.export.exporting': '导出中…',
   'office.export.success': '已导出 PDF',
   'office.export.failed': '导出失败',
-  'office.export.noConverter': '未找到本机转换器（需要 LibreOffice 或 MS Word）',
+  'office.export.noConverter': '未发现此格式的本机转换器（LibreOffice 支持 DOCX/XLSX/PPTX；MS Word 仅支持 DOCX）',
   'office.export.openFolder': '打开所在文件夹',
   'office.export.openPdf': '打开 PDF',
 
@@ -1011,12 +1011,13 @@ export const zh = {
   'office.fidelity.toggle': '高保真',
   'office.fidelity.loading': '转换中…',
   'office.fidelity.failed': '高保真预览失败',
+  'office.caps.detected': '已发现转换组件，尚未验证运行',
   'office.caps.pdf': 'PDF 导出',
   'office.caps.image': '图片压缩',
   'office.caps.formula': '公式求值',
   'office.caps.refresh': '重新检测',
   'office.caps.install.pdf.win':
-    '未检测到转换器：安装 LibreOffice（libreoffice.org/download）或 MS Word 后可导出/高保真预览 PDF',
+    '安装 LibreOffice 可导出 DOCX/XLSX/PPTX；MS Word + pywin32 仅支持 DOCX',
   'office.caps.install.pdf.mac':
     '未检测到转换器：brew install --cask libreoffice 后可导出/高保真预览 PDF',
   'office.caps.install.pdf.linux':
