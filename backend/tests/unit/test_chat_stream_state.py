@@ -92,7 +92,9 @@ def test_interrupt_run_cancels_all_matching_streams(clean_registries):
     st._ACTIVE_STREAMS["s2"] = _entry(a2, run_id="r1", dispatcher=d1)
     st._ACTIVE_STREAMS["s3"] = _entry(_FakeAgent(), run_id="r2")
     assert st.interrupt_run("r1") == "stream"
-    assert a1.interrupted and a2.interrupted and d1.cancelled
+    assert a1.interrupted
+    assert a2.interrupted
+    assert d1.cancelled
     assert st._ACTIVE_STREAMS["s3"]["cancelled"] is False  # 其他 run 不受影响
 
 
