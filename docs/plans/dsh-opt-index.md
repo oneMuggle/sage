@@ -45,5 +45,7 @@
 | R21 | C3b v2 messages 表 ALTER 收编 | #1708（`4aeddfc8`） | #1709（`90041bc5`） | ✅ 双分支已合 |
 | R22 | C3b v3 sessions 表 ALTER 收编 | #1711（`ceac2052`） | #1719（`23634dce`） | ✅ 双分支已合 |
 | R23 | C3b v4 memories_episodic 表 ALTER 收编 | #1734（`663f8e6c`） | #1737（`28fe8b58`） | ✅ 双分支已合 |
+| R24 | C2a chat_stream 四路事件推送闭包收敛为 StreamEventSink | #1744（`8141f88c`） | #1747（`1abe24d6`） | ✅ 双分支已合 |
+| R25 | C1d settings/preferences 路由组迁出（legacy_routes 3977→3699） | #1750（`0b06eb12`） | #1752（`743579cc`） | ✅ 双分支已合 |
 
 —— 本账本由对标循环维护，随轮次追加。
