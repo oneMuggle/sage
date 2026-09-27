@@ -242,14 +242,12 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
             onDelete={(id) => void deleteSessionCascade(id)}
             onNewSession={handleNewSession}
             onRename={handleRenameSession}
+            onRefreshSessions={loadSessions}
           />
         );
       case 'todos':
         return (
-          <TodoSection
-            collapsed={isCollapsed}
-            onToggleCollapsed={() => toggleCollapsed(key)}
-          />
+          <TodoSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
         );
       case 'cron':
         return (
@@ -257,7 +255,10 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
         );
       case 'git':
         return (
-          <GitStatusSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
+          <GitStatusSection
+            collapsed={isCollapsed}
+            onToggleCollapsed={() => toggleCollapsed(key)}
+          />
         );
       case 'project':
         return (
@@ -283,7 +284,7 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
       <aside
         data-testid="sidebar-rail"
         style={{ width: `${width}px` }}
-        className="h-screen bg-surface border-r border-border flex flex-col items-center flex-shrink-0"
+        className="h-screen bg-ui-panel border-r border-border flex flex-col items-center flex-shrink-0"
       >
         {/* 品牌 logo（无 wordmark） */}
         <div className="h-12 flex items-center justify-center border-b border-border w-full relative">
@@ -351,7 +352,7 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
   return (
     <aside
       style={{ width: `${width}px` }}
-      className="h-screen bg-surface border-r border-border flex flex-col flex-shrink-0"
+      className="h-screen bg-ui-panel border-r border-border flex flex-col flex-shrink-0"
     >
       {/* U-Brand: 替换 197-202 的硬编码 S+Sage 块为共享 <BrandLogo withWordmark />，wordmark 用 sidebar.brand */}
       <div className="h-12 flex items-center px-4 border-b border-border">

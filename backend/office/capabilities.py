@@ -1,27 +1,20 @@
-"""Round A P6: Office 环境能力探测（本机转换器 / 可选依赖）。
+"""Lightweight converter discovery, not a conversion-health guarantee.
 
-探测四类能力供前端展示能力徽章与安装引导，替代"点了导出才发现没装
-LibreOffice"的事后失败 toast：
-
-- **pdf_converter**: LibreOffice（跨平台）或 Word COM（Windows + pywin32）
-  任一可用即可导出/高保真预览 PDF；
-- **image_optimize**: Pillow —— >8MB 图片插入时自动降采样压缩；
-- **formula_eval**: formulas 引擎 —— xlsx 公式本地求值。
-
-探测本身零副作用：只做 ``find_spec`` / 路径存在性检查，不 import 重模块、
-不启动子进程。结果带 30s TTL 模块级缓存 —— 前端每次进 Office 页都会拉一
-次，探测虽轻也没必要每次都扫全部候选路径。
-
-Python 3.8-compatible syntax（typing.Optional，无 PEP 604），与
-``backend/office`` 其余模块同口径，可回流 release/win7。
+Word COM requires pywin32 plus registered, existing Word executable, and
+supports DOCX only. LibreOffice supports DOCX/XLSX/PPTX. No converter is
+started by these checks; OCR retains its existing separate discovery path.
+Results are cached for 30 seconds. Python 3.8-compatible.
 """
 
 from __future__ import annotations
 
+import os
+import re
 import sys
 import time
 from importlib.util import find_spec
-from typing import Optional, Tuple
+from pathlib import Path
+from typing import List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -44,10 +37,16 @@ class OfficeCapabilities(BaseModel):
         default=None, description="定位到的 soffice 可执行文件路径；未找到为 None"
     )
     word_com_available: bool = Field(
-        description="Word COM 通道是否可用（仅 Windows 且已安装 pywin32）"
+        description="是否发现 pywin32、Word COM 注册及可执行文件（未验证运行）"
     )
     pdf_export_available: bool = Field(
         description="是否存在任一 PDF 转换器（soffice 或 Word COM）"
+    )
+    pdf_export_formats: List[Literal["docx", "xlsx", "pptx"]] = Field(
+        default_factory=list, description="发现转换器的源格式；不代表实际转换健康已通过"
+    )
+    conversion_probe_status: Literal["detected", "unavailable"] = Field(
+        default="unavailable", description="仅静态发现，不启动转换器，不声称已验证运行"
     )
     pillow_available: bool = Field(description="Pillow 是否可导入（图片自动压缩）")
     formulas_available: bool = Field(description="formulas 引擎是否可导入（公式本地求值）")
@@ -65,17 +64,37 @@ class OfficeCapabilities(BaseModel):
 _cache: Optional[Tuple[float, OfficeCapabilities]] = None
 
 
+def _word_registered() -> bool:
+    """Registry/file discovery only; never Dispatch Word during a capability GET."""
+    try:
+        import winreg
+
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r"Word.Application\CLSID") as key:
+            clsid = winreg.QueryValueEx(key, None)[0]
+        with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, "CLSID\\" + clsid + r"\LocalServer32") as key:
+            command = os.path.expandvars(winreg.QueryValueEx(key, None)[0]).strip()
+        match = re.match(r'^"([^"\n]+\.exe)"(?:\s|$)|^(.+?\.exe)(?:\s|$)', command, re.IGNORECASE)
+        return bool(match and Path(match.group(1) or match.group(2)).is_file())
+    except (ImportError, OSError, TypeError, ValueError):
+        return False
+
+
 def _probe() -> OfficeCapabilities:
     soffice_path = _locate_soffice()
-    # Word COM 只在 Windows 上有意义；pywin32 缺失时 export_pdf 的
-    # COM 分支同样会跳过，这里保持同一判定口径（find_spec 不加载 COM）。
-    word_com = sys.platform == "win32" and find_spec("win32com") is not None
+    word_com = (
+        sys.platform == "win32"
+        and find_spec("win32com") is not None
+        and _word_registered()
+    )
+    formats = ["docx", "xlsx", "pptx"] if soffice_path is not None else (["docx"] if word_com else [])
     return OfficeCapabilities(
         platform=sys.platform,
         soffice_available=soffice_path is not None,
         soffice_path=soffice_path,
         word_com_available=word_com,
-        pdf_export_available=soffice_path is not None or word_com,
+        pdf_export_available=bool(formats),
+        pdf_export_formats=formats,
+        conversion_probe_status="detected" if formats else "unavailable",
         pillow_available=find_spec("PIL") is not None,
         formulas_available=find_spec("formulas") is not None,
         ocr_available=_ocr_available(),

@@ -172,4 +172,34 @@ main 最新（R112 后，含并行会话 r118/r119/R34/RD22 合入）串行全�
 - **结论：零真实失败**。两套件在负载下暴露的 flake 均为时间敏感
   测试（限速窗口/自动重启/异步等待超时），已记录待域 owner 加固。
 
+
+## 8. 拍板大项可行性深化（R126，2026-09-26，为 owner 决策供依据）
+
+### 8.1 STEP_DONE 事件流同步 win7 —— 建议分两期，一期收益显著
+- **影响面实测**：生产代码 30 行（agent_state 枚举+字段 3 处 / agent.py
+  产出 2 处 / producer 计数与落库 4 处 / 前端 chatStreamStore+useChat
+  分桶机制 ~50 行）。win7 agent.py（2522 行）与 main（2429 行）已深度
+  分叉，直接 cherry 不可行，需手工移植。
+- **一期（低风险）**：仅同步 agent_state 枚举+字段+producer 计数，
+  run_loop 暂不产出 step_done 事件（R83 增量推送为沉睡代码的现状
+  不变，但 sources/落库计数与 main 对齐）。~60 行，1 个 PR。
+- **二期（需产品拍板）**：run_loop 产出端 + 前端分桶 UI（多步消息
+  分桶是用户可见行为变化）。
+### 8.2 内联 [S1] 引用 —— 基建完备度 90%，剩 prompt 设计
+- wiki/chat.py 已有 citation 编号/S1 回链/内容哈希校验全套（19 处）。
+  剩余工作仅是 system prompt 注入编号约定 + 降级策略（LLM 未标时不
+  内联）。建议与 wiki-chat 现有 [S1] 渲染组件（WikiChat.tsx:25-92）
+  复用合并，~80 行。
+### 8.3 loadMessages 分页 —— 需先定对账语义
+- mergeLoadedMessages 的 (role,content) 计数对账 + compact_info 深度
+  去重是分页的正确性根基。分页后"本地乐观副本"与"服务端页"的认领
+  关系需重定义（当前全量加载使对账退化为 id 集合差）。建议设计先行：
+  按 id 游标分页 + hasMore 标记 + 追加加载，对账逻辑仅作用于当前页。
+  规模 ~150 行 + 回归测试，但正确性风险集中在边界场景。
+### 8.4 mcp 入 CI env —— 已有安全路径，风险可控
+- requirements-optional.txt 已文档化 starlette 0.41 + httpx 0.27 兼容
+  升级路径（A 方案）；win7 侧 optional 文件已含 mcp 段。CI 可用
+  "安装 mcp 但不升锁版本"的 try-install + skip-if-fail 模式试探，
+  不动生产锁。规模 ~20 行 workflow 改动。
+
 —— 本账本由参考来源专项循环维护，随轮次追加。

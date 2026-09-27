@@ -485,6 +485,13 @@ def test_launch_command_disables_automation_controlled_flag():
     assert command[-1] == "about:blank"
 
 
+def test_launch_command_disables_crashpad():
+    """R46：crashpad-handler 会脱离进程树存活并锁临时目录，启动即禁用。"""
+    command = browser_cdp._build_launch_command("/usr/bin/chrome", True, "/tmp/p")
+    assert "--disable-crashpad" in command
+    assert "--disable-breakpad" in command
+
+
 def test_stealth_script_covers_three_cheapest_signals():
     script = browser_cdp.STEALTH_SCRIPT
     assert "webdriver" in script

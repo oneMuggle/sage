@@ -45,6 +45,72 @@ def register_migration(version: int, name: str, fn: Callable[[Any], None]) -> No
     MIGRATIONS.append((version, name, fn))
 
 
+def _v1_schema_baseline(conn: Any) -> None:
+    """v1 基线迁移：no-op（当前 DDL 状态由 init_db 幂等 DDL 保证）。"""
+
+
+register_migration(1, "schema_baseline", _v1_schema_baseline)
+
+
+def _v2_messages_columns(conn: Any) -> None:
+    """v2：messages 表补齐 reasoning_content/step_index/segment_id/subtype 列。
+
+    收编自 init_db 中散落的 ALTER 防御块（C3b v2）。幂等：PRAGMA 检查
+    列存在性，已存在则跳过。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(messages)")
+    columns = {row["name"] for row in cursor.fetchall()}
+    if "reasoning_content" not in columns:
+        cursor.execute("ALTER TABLE messages ADD COLUMN reasoning_content TEXT")
+        conn.commit()
+    if "step_index" not in columns:
+        cursor.execute("ALTER TABLE messages ADD COLUMN step_index INTEGER")
+        conn.commit()
+    if "segment_id" not in columns:
+        cursor.execute(
+            "ALTER TABLE messages ADD COLUMN segment_id INTEGER DEFAULT 0"
+        )
+        conn.commit()
+    if "subtype" not in columns:
+        cursor.execute("ALTER TABLE messages ADD COLUMN subtype TEXT")
+        conn.commit()
+
+
+register_migration(2, "messages_columns", _v2_messages_columns)
+
+
+def _v3_sessions_columns(conn: Any) -> None:
+    """v3：sessions 表补齐 fork_root/forked_at_message_id/run_status/last_error/last_run_at 列。
+
+    收编自 init_db 中散落的 ALTER 防御块（C3b v3）。幂等：PRAGMA 检查
+    列存在性，已存在则跳过。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(sessions)")
+    columns = {row["name"] for row in cursor.fetchall()}
+    if "fork_root" not in columns:
+        cursor.execute("ALTER TABLE sessions ADD COLUMN fork_root TEXT")
+        conn.commit()
+    if "forked_at_message_id" not in columns:
+        cursor.execute("ALTER TABLE sessions ADD COLUMN forked_at_message_id TEXT")
+        conn.commit()
+    if "run_status" not in columns:
+        cursor.execute(
+            "ALTER TABLE sessions ADD COLUMN run_status TEXT DEFAULT 'idle'"
+        )
+        conn.commit()
+    if "last_error" not in columns:
+        cursor.execute("ALTER TABLE sessions ADD COLUMN last_error TEXT")
+        conn.commit()
+    if "last_run_at" not in columns:
+        cursor.execute("ALTER TABLE sessions ADD COLUMN last_run_at INTEGER")
+        conn.commit()
+
+
+register_migration(3, "sessions_columns", _v3_sessions_columns)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(

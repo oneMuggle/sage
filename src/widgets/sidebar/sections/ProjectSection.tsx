@@ -542,7 +542,7 @@ export function ProjectSection({
         title={session.title}
       >
         <MessageDot />
-        <span className="flex-1 min-w-0 text-xs text-text-secondary truncate">
+        <span className="flex-1 min-w-0 text-ui-sm text-text-secondary truncate">
           {session.title || t('sidebar.new_chat')}
         </span>
         <span className="shrink-0 text-[10px] text-muted tabular-nums group-hover/sub:hidden">
@@ -775,7 +775,7 @@ export function ProjectSection({
         >
           {dropActive && (
             <div
-              className="px-3 py-2 text-xs text-primary text-center"
+              className="px-3 py-2 text-ui-sm text-primary text-center"
               data-testid="project-drop-hint"
             >
               {t('sider.project.drop_hint')}
@@ -783,7 +783,7 @@ export function ProjectSection({
           )}
           {projects.length === 0 ? (
             <div
-              className="px-3 py-3 text-xs text-text-muted text-center"
+              className="px-3 py-3 text-ui-sm text-text-muted text-center"
               data-testid="project-empty"
             >
               {t('sider.project.empty')}
@@ -826,7 +826,7 @@ export function ProjectSection({
                     <Folder className="w-3.5 h-3.5 shrink-0 text-muted" aria-hidden="true" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-text truncate">{project.name}</span>
+                        <span className="text-ui-sm text-text truncate">{project.name}</span>
                         {missing && (
                           <AlertTriangle
                             className="w-3 h-3 shrink-0 text-warning"
