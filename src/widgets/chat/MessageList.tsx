@@ -106,6 +106,13 @@ export function MessageList({
     setWindowSize,
   });
 
+  const hiddenCount = Math.max(0, messages.length - effectiveWindow);
+  const visible = messages.slice(messages.length - effectiveWindow);
+  const lastId = messages[messages.length - 1]?.id;
+
+  // ZCode 启发: 将连续 assistant/tool 消息分组为 Turn，支持折叠
+  const turnItems = useMemo(() => groupMessagesIntoTurns(visible), [visible]);
+
   if (messages.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted">
@@ -135,13 +142,6 @@ export function MessageList({
       </div>
     );
   }
-
-  const hiddenCount = Math.max(0, messages.length - effectiveWindow);
-  const visible = messages.slice(messages.length - effectiveWindow);
-  const lastId = messages[messages.length - 1].id;
-
-  // ZCode 启发: 将连续 assistant/tool 消息分组为 Turn，支持折叠
-  const turnItems = useMemo(() => groupMessagesIntoTurns(visible), [visible]);
 
   return (
     <>
@@ -201,16 +201,12 @@ export function MessageList({
 
           // kind === 'turn'
           return (
-            <div
-              key={item.id}
-              data-message-id={item.messages[0]?.id}
-              data-jump-flash={flashId === item.messages[0]?.id ? 'true' : undefined}
-              className={flashId === item.messages[0]?.id ? JUMP_FLASH_CLASS : undefined}
-            >
+            <div key={item.id}>
               <TurnGroup
                 messages={item.messages}
                 turnId={item.id}
                 streamingMessageId={streamingMessageId}
+                flashId={flashId}
                 knowledgeRefs={knowledgeRefs}
                 attachments={attachments}
                 artifactsByToolCall={artifactsByToolCall}

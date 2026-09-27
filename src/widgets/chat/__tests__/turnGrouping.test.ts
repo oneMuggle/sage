@@ -6,7 +6,6 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Message } from '../../../shared/lib/store';
-
 import {
   getTurnSummary,
   getTurnToolCallCount,

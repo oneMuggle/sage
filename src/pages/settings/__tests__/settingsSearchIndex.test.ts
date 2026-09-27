@@ -28,7 +28,7 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
     const knownTabs = new Set([
       'general', 'basic', 'memory-knowledge', 'tools-connections', 'endpoints',
       'models', 'orchestration', 'memory', 'network', 'mcp', 'zotero',
-      'runtime', 'evolution', 'updates', 'providers',
+      'runtime', 'evolution', 'updates', 'providers', 'usage-stats',
     ]);
     for (const e of SETTINGS_SEARCH_INDEX) {
       expect(knownTabs.has(e.tab), `tab of ${e.key}`).toBe(true);

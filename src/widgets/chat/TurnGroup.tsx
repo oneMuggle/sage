@@ -4,13 +4,15 @@ import { memo, useState } from 'react';
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import type { BlockedAction, Message } from '../../shared/lib/store';
 
-import { getTurnSummary, getTurnToolCallCount, isTurnCollapsible } from './turnGrouping';
 import { Message as MessageComponent } from './Message';
+import { getTurnSummary, getTurnToolCallCount, isTurnCollapsible } from './turnGrouping';
 
 interface TurnGroupProps {
   messages: Message[];
   turnId: string;
   streamingMessageId?: string | null;
+  /** 对话阅读导航 A1: 当前高亮定位的消息 ID（透传自 MessageList） */
+  flashId?: string | null;
   knowledgeRefs?: Record<string, { id: string; title: string }[]>;
   attachments?: Record<string, { name: string; size: number; type: string; dataUrl?: string }[]>;
   artifactsByToolCall?: Record<string, Artifact[]>;
@@ -30,6 +32,7 @@ function TurnGroupComponent({
   messages,
   turnId,
   streamingMessageId,
+  flashId,
   knowledgeRefs,
   attachments,
   artifactsByToolCall,
@@ -109,28 +112,37 @@ function TurnGroupComponent({
         </button>
       )}
       {messages.map((msg, idx) => (
-        <MessageComponent
+        <div
           key={msg.id}
-          message={msg}
-          knowledgeRefs={knowledgeRefs?.[msg.id]}
-          attachments={attachments?.[msg.id]}
-          isStreaming={msg.id === streamingMessageId}
-          onFork={onFork}
-          onRewind={onRewind}
-          onEditResend={onEditResend}
-          onRegenerate={onRegenerate}
-          onDelete={onDelete}
-          onQuote={onQuote}
-          onSaveToMemory={onSaveToMemory}
-          artifactsByToolCall={artifactsByToolCall}
-          onBlockedAction={onBlockedAction}
-          onContinue={idx === lastAssistantIdx ? onContinue : undefined}
-          onAnswerVersionChange={idx === lastAssistantIdx ? onAnswerVersionChange : undefined}
-        />
+          data-message-id={msg.id}
+          data-jump-flash={flashId === msg.id ? 'true' : undefined}
+          className={flashId === msg.id ? TURN_JUMP_FLASH_CLASS : undefined}
+        >
+          <MessageComponent
+            message={msg}
+            knowledgeRefs={knowledgeRefs?.[msg.id]}
+            attachments={attachments?.[msg.id]}
+            isStreaming={msg.id === streamingMessageId}
+            onFork={onFork}
+            onRewind={onRewind}
+            onEditResend={onEditResend}
+            onRegenerate={onRegenerate}
+            onDelete={onDelete}
+            onQuote={onQuote}
+            onSaveToMemory={onSaveToMemory}
+            artifactsByToolCall={artifactsByToolCall}
+            onBlockedAction={onBlockedAction}
+            onContinue={idx === lastAssistantIdx ? onContinue : undefined}
+            onAnswerVersionChange={idx === lastAssistantIdx ? onAnswerVersionChange : undefined}
+          />
+        </div>
       ))}
     </div>
   );
 }
+
+/** 对话阅读导航 A1: 定位命中后的短暂高亮（与 MessageList 中 JUMP_FLASH_CLASS 同步） */
+const TURN_JUMP_FLASH_CLASS = 'rounded-radius-sm ring-2 ring-primary/50 bg-primary/5 transition-shadow';
 
 function formatTurnTime(ts: number): string {
   if (!ts) return '';

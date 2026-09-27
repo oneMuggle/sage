@@ -53,12 +53,12 @@ export function groupMessagesIntoTurns(messages: Message[]): TurnItem[] {
   return items;
 }
 
-/** Turn 是否可折叠：包含 > 1 条 assistant/tool 消息时启用折叠 */
+/** Turn 是否可折叠：包含 >= 3 条 assistant/tool 消息时启用折叠（2 条及以下保持展开，避免隐藏有用信息） */
 export function isTurnCollapsible(messages: Message[]): boolean {
   const assistantOrToolCount = messages.filter(
     (m) => m.role === 'assistant' || m.role === 'tool',
   ).length;
-  return assistantOrToolCount > 1;
+  return assistantOrToolCount >= 3;
 }
 
 /** 提取 Turn 中最终的用户可见文本摘要（用于折叠态预览） */
