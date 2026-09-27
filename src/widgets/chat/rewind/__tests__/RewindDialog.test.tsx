@@ -80,7 +80,9 @@ describe('RewindDialog', () => {
     renderDialog();
     await waitFor(() => expect(screen.getByTestId('rewind-checkpoint-ck-new')).toBeInTheDocument());
     expect(screen.queryByTestId('rewind-checkpoint-ck-future')).toBeNull();
-    expect(screen.getByTestId('rewind-checkpoint-ck-new').querySelector('input')).toBeChecked();
+    await waitFor(() =>
+      expect(screen.getByTestId('rewind-checkpoint-ck-new').querySelector('input')).toBeChecked(),
+    );
     expect(screen.getByTestId('rewind-scope-both').querySelector('input')).toBeChecked();
   });
 
