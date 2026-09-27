@@ -47,5 +47,6 @@
 | R23 | C3b v4 memories_episodic 表 ALTER 收编 | #1734（`663f8e6c`） | #1737（`28fe8b58`） | ✅ 双分支已合 |
 | R24 | C2a chat_stream 四路事件推送闭包收敛为 StreamEventSink | #1744（`8141f88c`） | #1747（`1abe24d6`） | ✅ 双分支已合 |
 | R25 | C1d settings/preferences 路由组迁出（legacy_routes 3977→3699） | #1750（`0b06eb12`） | #1752（`743579cc`） | ✅ 双分支已合 |
+| R26 | C2b 请求窗口策略五份重复收敛为 chat_request_policy（净 -684 行） | #1757（`62d3d6eb`） | #1759（`2b162513`） | ✅ 双分支已合 |
 
 —— 本账本由对标循环维护，随轮次追加。
