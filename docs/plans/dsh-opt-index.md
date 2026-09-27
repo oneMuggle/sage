@@ -48,5 +48,6 @@
 | R24 | C2a chat_stream 四路事件推送闭包收敛为 StreamEventSink | #1744（`8141f88c`） | #1747（`1abe24d6`） | ✅ 双分支已合 |
 | R25 | C1d settings/preferences 路由组迁出（legacy_routes 3977→3699） | #1750（`0b06eb12`） | #1752（`743579cc`） | ✅ 双分支已合 |
 | R26 | C2b 请求窗口策略五份重复收敛为 chat_request_policy（净 -684 行） | #1757（`62d3d6eb`） | #1759（`2b162513`） | ✅ 双分支已合 |
+| R27 | C1e legacy 13 个请求/响应模型归位 legacy_models.py（legacy_routes 3977→3327） | #1763（`0f756f22`） | #1767（`e73cd600`） | ✅ 双分支已合 |
 
 —— 本账本由对标循环维护，随轮次追加。
