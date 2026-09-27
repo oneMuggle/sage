@@ -77,9 +77,10 @@ export interface OfficePreviewPanelProps {
   onEditPreview?: () => void;
   /**
    * Round A P1: whether the 高保真 toggle is offered at all — wired to
-   * capabilities.pdf_export_available (no local converter → no toggle,
+   * the current document format's converter discovery (no converter → no toggle,
    * the badge bar explains why). Defaults to true so existing callers
-   * and tests keep the button.
+   * and tests keep the button. Also gates PDF export; Word native preview
+   * remains available without a PDF converter.
    */
   fidelityAvailable?: boolean;
   /**
@@ -281,7 +282,7 @@ export function OfficePreviewPanel({
   };
 
   const handleExportPdf = async () => {
-    if (exporting) return;
+    if (exporting || !fidelityAvailable) return;
     const ws = workspacePath ?? summary.workspace_path;
     if (!ws) {
       toast.error(t('office.export.failed'));
@@ -480,7 +481,8 @@ export function OfficePreviewPanel({
             <button
               type="button"
               onClick={() => void handleExportPdf()}
-              disabled={exporting}
+              disabled={exporting || !fidelityAvailable}
+              title={!fidelityAvailable ? t('office.export.noConverter') : undefined}
               className="flex items-center gap-1 px-2 py-1 rounded border border-border text-xs text-text-secondary hover:bg-bg-hover transition-colors disabled:opacity-50"
               data-testid="office-export-pdf-button"
               aria-label={t('office.export.pdf')}

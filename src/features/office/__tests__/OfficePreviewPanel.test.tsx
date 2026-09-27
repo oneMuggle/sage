@@ -388,6 +388,29 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
     expect(screen.queryByTestId('office-edit-preview-button')).toBeNull();
   });
 
+  it.each([EXCEL_PREVIEW, PPT_PREVIEW])('blocks PDF actions when this format has no converter', (preview) => {
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficePreviewPanel preview={preview} fidelityAvailable={false} />
+      </I18nProvider>,
+    );
+    const button = screen.getByTestId('office-export-pdf-button');
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+    expect(mockExportPdf).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('office-fidelity-toggle')).toBeNull();
+  });
+
+  it('keeps native Word preview while disabling PDF export without a converter', () => {
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficePreviewPanel preview={WORD_PREVIEW} fidelityAvailable={false} />
+      </I18nProvider>,
+    );
+    expect(screen.getByTestId('office-export-pdf-button')).toBeDisabled();
+    expect(screen.getByTestId('office-fidelity-toggle')).toBeEnabled();
+  });
+
   it('exports via the managed path and toasts the output path on success', async () => {
     mockExportPdf.mockResolvedValueOnce({
       ok: true,
@@ -427,7 +450,7 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
     fireEvent.click(screen.getByTestId('office-export-pdf-button'));
     await waitFor(() => {
       expect(toastMock.error).toHaveBeenCalledWith(
-        '未找到本机转换器（需要 LibreOffice 或 MS Word）',
+        '未发现此格式的本机转换器（LibreOffice 支持 DOCX/XLSX/PPTX；MS Word 仅支持 DOCX）',
       );
     });
     expect(toastMock.success).not.toHaveBeenCalled();
