@@ -162,6 +162,8 @@ RUNTIME_SKIP_FRAGMENTS = (
     "scripts/py38_compat_rewrite.py",
     "scripts/check_py38_compat.py",
     "compat/win7/asyncio_compat.py",
+    # 扫描器的单元测试包含全部地雷字面量（测试样本，非真实代码）
+    "tools/test_py38_hazard_scan.py",
 )
 
 

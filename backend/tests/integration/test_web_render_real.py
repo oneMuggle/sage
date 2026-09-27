@@ -13,7 +13,7 @@ Chrome/Edge 时整体跳过（与 test_browser_tool.test_real_browser_smoke
 from __future__ import annotations
 
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
@@ -68,11 +68,17 @@ class _FixtureHandler(BaseHTTPRequestHandler):
 
 @pytest.fixture(scope="module")
 def fixture_server():
-    server = HTTPServer(("127.0.0.1", 0), _FixtureHandler)
+    # ThreadingHTTPServer：handler 线程化，keep-alive 半开连接不会阻塞 serve 循环
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _FixtureHandler)
+    server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     yield f"http://127.0.0.1:{server.server_address[1]}"
-    server.shutdown()
+    # shutdown() 在 serve 循环被卡住时会永久阻塞（__is_shut_down.wait()），
+    # CI 上已实锤 120s 超时。改为限时等待 + 强制关套接字兜底。
+    stopper = threading.Thread(target=server.shutdown, daemon=True)
+    stopper.start()
+    stopper.join(timeout=10)
     server.server_close()
 
 
