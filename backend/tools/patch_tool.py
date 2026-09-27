@@ -28,6 +28,13 @@ from .edit_tool import (
     _validate_edit_params,
     _validate_target_file,
 )
+from .file_guard import (
+    atomic_write,
+    check_expected_version,
+    check_sensitive_path,
+    compute_bytes_version,
+    file_write_lock,
+)
 from .file_tool import (
     MAX_WRITE_SIZE_BYTES,
     _notify_workspace_changed_safely,
@@ -36,7 +43,7 @@ from .file_tool import (
 
 logger = logging.getLogger(__name__)
 
-_PATCH_KEYS = {"file_path", "old_string", "new_string", "replace_all"}
+_PATCH_KEYS = {"file_path", "old_string", "new_string", "replace_all", "expected_version"}
 
 #: 单次 apply_patch 的补丁条数上限（防失控批量改写）
 MAX_PATCHES_PER_CALL = 32
@@ -78,6 +85,8 @@ class ApplyPatchTool(BaseTool):
                 "所有补丁先整体校验（存在性/匹配唯一性/边界），任一失败则"
                 "全部不写。每项 {file_path, old_string, new_string, replace_all?}，"
                 "语义与 edit_file 一致；同一文件多项按顺序链式生效。"
+                "可选 expected_version（read_file 返回的 version）按文件校验"
+                "原始版本，任一冲突整批不写。"
                 "批量改写前建议先 checkpoint_create 建检查点。"
             ),
             parameters={
@@ -92,6 +101,7 @@ class ApplyPatchTool(BaseTool):
                                 "old_string": {"type": "string"},
                                 "new_string": {"type": "string"},
                                 "replace_all": {"type": "boolean"},
+                                "expected_version": {"type": "string"},
                             },
                             "required": ["file_path", "old_string", "new_string"],
                         },
@@ -102,7 +112,9 @@ class ApplyPatchTool(BaseTool):
             },
         )
 
-    def execute(self, patches: Optional[List[Dict[str, Any]]] = None, **kwargs: Any) -> ToolResult:
+    def execute(  # noqa: PLR0911 — 入口守卫式早返回
+        self, patches: Optional[List[Dict[str, Any]]] = None, **kwargs: Any
+    ) -> ToolResult:
         if kwargs:
             return ToolResult(
                 success=False,
@@ -122,12 +134,25 @@ class ApplyPatchTool(BaseTool):
                 success=False, error="apply_patch 需要绑定工作区（workspace）"
             )
 
-        plan, rejection = self._validate_plan(root, patches)
-        if rejection is not None:
-            return rejection
-        return self._write_all(plan)
+        lock_paths = [
+            os.path.abspath(os.path.join(root, p["file_path"]))
+            for p in patches
+            if isinstance(p, dict) and isinstance(p.get("file_path"), str)
+        ]
+        with file_write_lock(lock_paths) as busy:
+            if busy is not None:
+                return busy
+            plan, rejection = self._validate_plan(root, patches)
+            if rejection is not None:
+                return rejection
+            versions = {
+                os.path.abspath(os.path.join(root, p["file_path"])): p["expected_version"]
+                for p in patches
+                if "expected_version" in p
+            }
+            return self._write_all(plan, versions)
 
-    def _validate_plan(
+    def _validate_plan(  # noqa: PLR0911 — 校验阶段逐项早返回，整批拒绝
         self, root: str, patches: List[Dict[str, Any]]
     ) -> Tuple[List[_PlannedEdit], Optional[ToolResult]]:
         """只读校验阶段：全部补丁在内存中推演终态，任何失败整批拒绝。
@@ -156,7 +181,18 @@ class ApplyPatchTool(BaseTool):
             if blocked is not None:
                 return [], self._with_index(index, blocked)
 
+            # LocalBridge P0: 凭据路径拒写
+            blocked = check_sensitive_path(absolute, "编辑", write=True)
+            if blocked is not None:
+                return [], self._with_index(index, blocked)
+
             planned_edit = planned.get(absolute)
+            if "expected_version" in patch:
+                # 校验阶段尚未落盘：磁盘内容即原始内容，同一文件的链式补丁
+                # 也都对照原始版本（read_file 时拿到的那个）
+                blocked = check_expected_version(absolute, patch["expected_version"])
+                if blocked is not None:
+                    return [], self._with_index(index, blocked)
             if planned_edit is None:
                 target = Path(absolute)
                 load_error, original, encoding = self._load_original(target, file_path)
@@ -230,7 +266,9 @@ class ApplyPatchTool(BaseTool):
             return ToolResult(success=False, error=f"读取失败: {exc}"), None, None
 
     @staticmethod
-    def _validate_patch_shape(index: int, patch: Any) -> Optional[ToolResult]:
+    def _validate_patch_shape(  # noqa: PLR0911 — 一字段一分支
+        index: int, patch: Any
+    ) -> Optional[ToolResult]:
         """单条补丁的形态检查：dict / 必需键 / 类型 / 未登记键。"""
         if not isinstance(patch, dict):
             return ApplyPatchTool._with_index(
@@ -243,7 +281,7 @@ class ApplyPatchTool(BaseTool):
                 ToolResult(
                     success=False,
                     error=f"未知字段: {', '.join(sorted(unknown))}（合法字段: "
-                    "file_path, old_string, new_string, replace_all）",
+                    "file_path, old_string, new_string, replace_all, expected_version）",
                 ),
             )
         for key in ("file_path", "old_string", "new_string"):
@@ -254,6 +292,10 @@ class ApplyPatchTool(BaseTool):
         if "file_path" in patch and not patch["file_path"].strip():
             return ApplyPatchTool._with_index(
                 index, ToolResult(success=False, error="file_path 不能为空")
+            )
+        if "expected_version" in patch and not isinstance(patch["expected_version"], str):
+            return ApplyPatchTool._with_index(
+                index, ToolResult(success=False, error="expected_version 必须是字符串")
             )
         if "replace_all" in patch and not isinstance(patch["replace_all"], bool):
             return ApplyPatchTool._with_index(
@@ -269,7 +311,9 @@ class ApplyPatchTool(BaseTool):
             error=f"patches[{index}] 校验失败，整批未写入: {rejection.error}",
         )
 
-    def _write_all(self, plan: List[_PlannedEdit]) -> ToolResult:
+    def _write_all(
+        self, plan: List[_PlannedEdit], versions: Optional[Dict[str, str]] = None
+    ) -> ToolResult:
         """校验通过后的落盘阶段；写失败的文件如实上报（校验阶段已排除绝大多数风险）。"""
         written: List[Dict[str, Any]] = []
         for planned_edit in plan:
@@ -283,8 +327,13 @@ class ApplyPatchTool(BaseTool):
                         f"{MAX_WRITE_SIZE_BYTES} 字节 (10 MiB)"
                     ),
                 )
+            expected = (versions or {}).get(os.path.abspath(str(planned_edit.path)))
             try:
-                planned_edit.path.write_bytes(updated_bytes)
+                failed = atomic_write(
+                    str(planned_edit.path),
+                    lambda temp, data=updated_bytes: Path(temp).write_bytes(data),
+                    expected,
+                )
             except OSError as exc:
                 return ToolResult(
                     success=False,
@@ -292,6 +341,14 @@ class ApplyPatchTool(BaseTool):
                         f"写入失败（{planned_edit.path}）: {exc}；"
                         f"已写入 {len(written)}/{len(plan)} 个文件，"
                         "可用 checkpoint_restore 恢复"
+                    ),
+                )
+            if failed is not None:
+                return ToolResult(
+                    success=False,
+                    error=(
+                        f"{failed.error}（{planned_edit.path}；已写入 "
+                        f"{len(written)}/{len(plan)} 个文件，可用 checkpoint_restore 恢复）"
                     ),
                 )
             written.append(
@@ -302,6 +359,8 @@ class ApplyPatchTool(BaseTool):
                     "lines_removed": planned_edit.lines_removed,
                     # G-2 (round5 批次 G): 该文件经行级 trim 容错命中
                     "fuzzy": planned_edit.fuzzy,
+                    # LocalBridge P0: 写后新版本
+                    "version": compute_bytes_version(updated_bytes),
                 }
             )
             # right-panel R5: 逐文件广播 workspace_changed（失败静默）
