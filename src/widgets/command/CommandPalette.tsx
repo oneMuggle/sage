@@ -131,7 +131,9 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
       ? skills
           .filter((s) => {
             const q = search.toLowerCase();
-            return s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q);
+            return (
+              s.name.toLowerCase().includes(q) || (s.description ?? '').toLowerCase().includes(q)
+            );
           })
           .slice(0, 6)
       : [];
