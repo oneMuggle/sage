@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import ast
 import asyncio
 import contextvars
 import functools
@@ -29,3 +30,28 @@ async def to_thread(func: Callable[..., Any], /, *args: Any, **kwargs: Any) -> A
 # TimeoutError 是两个类（3.11 起合流），except 必须同时覆盖。
 # 以常量形式提供，避免各 except 行被 UP041 autofix 改回单型。
 TIMEOUT_ERRORS = (TimeoutError, getattr(asyncio, "TimeoutError", TimeoutError))
+
+
+def ast_unparse(node: ast.AST) -> str:
+    """``ast.unparse`` 的 py38 兼容实现（3.9+ 才有）。
+
+    降级策略：Name/Attribute/Constant 精确还原，其余（Subscript 等
+    复合标注）返回空串——调用方（文档生成）对空串有容错。
+    """
+    if hasattr(ast, "unparse"):
+        return ast.unparse(node)
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parts: list[str] = []
+        cur: ast.expr = node
+        while isinstance(cur, ast.Attribute):
+            parts.append(cur.attr)
+            cur = cur.value
+        if isinstance(cur, ast.Name):
+            parts.append(cur.id)
+            return ".".join(reversed(parts))
+        return ""
+    if isinstance(node, ast.Constant):
+        return repr(node.value)
+    return ""
