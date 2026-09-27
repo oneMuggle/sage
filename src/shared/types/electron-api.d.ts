@@ -13,6 +13,7 @@
 import type { UpdateChannel, UpdateConfig, UpdateStrategy } from '../../../electron/updateConfig';
 import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
 import type { CheckResult } from '../../../electron/updateManager';
+import type { RemoteMcpElectronApiBridge } from '../api/remoteMcpApi';
 import type {
   JournalFillFromContentRequest,
   JournalFillFromContentResponse,
@@ -398,6 +399,8 @@ export interface ElectronAPI {
   ): Promise<UnlistenFn>;
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
+  /** Workspace MCP Server (M4) — optional: absent in web / older preloads. */
+  remoteMcp?: RemoteMcpElectronApiBridge;
   arenaToken: ArenaTokenElectronApiBridge;
   office: OfficeElectronApiBridge;
   media: MediaElectronApiBridge;

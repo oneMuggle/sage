@@ -16,6 +16,7 @@
  *                              unavailable on Win7 without UAC workaround)
  */
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import type { RemoteMcpElectronApiBridge, RemoteTunnelState } from '../src/shared/api/remoteMcpApi';
 import type { WindowControlsBridge } from '../src/shared/api/windowControlsClient';
 import type {
   ArenaTokenElectronApiBridge,
@@ -226,6 +227,16 @@ const electronAPI = {
     rescanSkills: () => ipcRenderer.invoke('skills:rescan') as Promise<RescanResult>,
     importSkills: () => ipcRenderer.invoke('skills:import') as Promise<ImportResult>,
   } satisfies SkillsElectronApiBridge,
+
+  /** Workspace MCP Server (M4): tunnel, emergency stop, copy URL to clipboard. */
+  remoteMcp: {
+    tunnelState: () => ipcRenderer.invoke('remote-mcp:tunnel-state') as Promise<RemoteTunnelState>,
+    startTunnel: () => ipcRenderer.invoke('remote-mcp:tunnel-start') as Promise<RemoteTunnelState>,
+    stopTunnel: () => ipcRenderer.invoke('remote-mcp:tunnel-stop') as Promise<RemoteTunnelState>,
+    emergencyStop: () => ipcRenderer.invoke('remote-mcp:emergency-stop') as Promise<RemoteTunnelState>,
+    copyUrl: (id: string, options?: { public?: boolean }) =>
+      ipcRenderer.invoke('remote-mcp:copy-url', id, options) as Promise<boolean>,
+  } satisfies RemoteMcpElectronApiBridge,
 
   /**
    * Arena token window control (P3, plan §5.9/§6.2) — backs the DrawTab

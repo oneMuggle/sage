@@ -34,7 +34,16 @@
 // TypeScript preserves source order of imports; if `./logger` is required
 // before `electron`, the `app.isPackaged` reference throws a TDZ error at
 // runtime even though tsc --noEmit is happy.
-import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Notification,
+  shell,
+} from 'electron';
 import './crashGuard';
 import { logger } from './logger';
 import { setupTrayAndGlobalShortcut } from './tray';
@@ -84,6 +93,8 @@ import {
 } from './relay';
 import { streamControllers } from './commands';
 import { registerSkillsIpc } from './skillsIpc';
+import { registerRemoteMcpIpc, type RemoteMcpController } from './remoteMcpIpc';
+import { RemoteTunnel } from './remoteTunnel';
 import { registerOfficeIpc } from './officeIpc';
 import { registerMediaIpc } from './mediaIpc';
 import { buildApplicationMenu } from './menu';
@@ -1079,6 +1090,11 @@ function createMainWindow(): void {
   });
 }
 
+// Workspace MCP Server (M4): tunnel + emergency-stop hotkey.
+// See docs/plans/2026-09-26-workspace-mcp-m4-ui.md
+const REMOTE_MCP_HOTKEY = 'Control+Alt+Escape';
+let remoteMcp: RemoteMcpController | null = null;
+
 async function registerIpcHandlers(): Promise<void> {
   ipcMain.handle(
     'sage:invoke',
@@ -1646,6 +1662,38 @@ async function registerIpcHandlers(): Promise<void> {
     },
     () => backendAuthToken ?? undefined,
   );
+
+  // Workspace MCP Server (M4): cloudflared tunnel, copy-url, emergency stop.
+  //   remote-mcp:tunnel-state / tunnel-start / tunnel-stop / emergency-stop / copy-url
+  // Ctrl+Alt+Esc shares emergencyStop() with the settings-page button.
+  remoteMcp = registerRemoteMcpIpc(
+    (channel, handler) => {
+      ipcMain.handle(channel, async (evt, ...args: unknown[]) => {
+        if (!isTrustedRenderer(evt.sender)) throw new Error('未授权的窗口请求');
+        if (isDemoProcess()) throw new Error('演示模式不支持该后端操作');
+        return handler(...args);
+      });
+    },
+    {
+      tunnel: new RemoteTunnel({
+        log: (event, details) => logger.info(`remote-mcp: ${event}`, details ?? {}),
+      }),
+      authToken: () => backendAuthToken ?? undefined,
+      writeClipboard: (text) => clipboard.writeText(text),
+      tunnelSupported: !isLegacyWindows(),
+      hotkeyRegistered: () => globalShortcut.isRegistered(REMOTE_MCP_HOTKEY),
+    },
+  );
+  try {
+    globalShortcut.register(REMOTE_MCP_HOTKEY, () => {
+      logger.warn('remote-mcp: emergency stop hotkey');
+      remoteMcp?.emergencyStop().catch((err: unknown) => {
+        logger.error('remote-mcp: emergency stop failed', { error: String(err) });
+      });
+    });
+  } catch (err) {
+    logger.warn('remote-mcp: hotkey registration failed', { error: String(err) });
+  }
 
   // Phase 1.3 (2026-07-16): Office document IPC handlers.
   //   office:pick-file   → native open dialog filtered by doc type
@@ -2635,6 +2683,9 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   appIsQuitting = true;
+  globalShortcut.unregister(REMOTE_MCP_HOTKEY);
+  remoteMcp?.dispose();
+  remoteMcp = null;
   cleanupUpdateIpc?.();
   cleanupUpdateIpc = null;
   cleanupProviderIpc?.();
