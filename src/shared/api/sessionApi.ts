@@ -222,6 +222,33 @@ export const sessionApi = {
   },
 
   /**
+   * 自动归档 sweep（对标 ZCode taskAutoArchive）：归档 N 天未活跃的
+   * 未置顶会话，返回归档数量。幂等（重复调用安全）→ 可走 withRetry。
+   */
+  async archiveStale(days: number): Promise<{ archived: number }> {
+    return withRetry(async () => {
+      try {
+        return await invoke<{ archived: number }>('session_archive_stale', { days });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * 永久删除全部归档会话（含消息），返回删除数量。
+   *
+   * 刻意**不走 withRetry**：purge 非幂等（破坏性操作，重试语义不明）。
+   */
+  async purgeArchived(): Promise<{ purged: number }> {
+    try {
+      return await invoke<{ purged: number }>('session_purge_archived');
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
    * M4: 从会话分叉。复制 atMessageId 及之前的消息（缺省全部）到新会话。
    *
    * U5': `options.beforeMessage` 切换为**开区间**——复制 atMessageId 之前

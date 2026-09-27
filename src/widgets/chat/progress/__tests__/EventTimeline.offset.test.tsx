@@ -51,3 +51,19 @@ describe('EventTimeline — 相对时间偏移 (RD22)', () => {
     expect(items[1].textContent).toContain('+1m31s');
   });
 });
+
+// ============================================================================
+// RD25 (round56): 负偏移防护
+// ============================================================================
+
+describe('EventTimeline — 负偏移防护 (RD25)', () => {
+  it('occurred_at 早于 base → 偏移 clamp 到 +0ms', () => {
+    const events = [
+      evt(1, 1_002_000),
+      evt(2, 1_000_500), // 早于 base（时钟偏移场景）
+    ];
+    render(<EventTimeline events={events} />);
+    const items = screen.getAllByTestId(/^event-timeline-item-/);
+    expect(items[1].textContent).toContain('+0ms');
+  });
+});

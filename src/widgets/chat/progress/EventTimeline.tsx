@@ -60,8 +60,10 @@ function formatTime(msTimestamp: number): string {
 
 /** RD22 (round50): 相对首事件的偏移量（+0.0s 起），便于一眼读出步骤间隔。 */
 function formatOffset(ms: number): string {
-  if (ms < 1000) return `+${ms}ms`;
-  const s = ms / 1000;
+  // RD25 (round56): 时钟偏移可能导致负偏移——clamp 到 0。
+  const clamped = Math.max(0, ms);
+  if (clamped < 1000) return `+${clamped}ms`;
+  const s = clamped / 1000;
   if (s < 60) return `+${s.toFixed(1)}s`;
   const m = Math.floor(s / 60);
   return `+${m}m${(s % 60).toFixed(0)}s`;
