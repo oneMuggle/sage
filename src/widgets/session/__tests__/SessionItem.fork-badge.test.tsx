@@ -37,7 +37,7 @@ describe('SessionItem — fork badge (M4)', () => {
     );
 
     const badge = screen.getByTestId('fork-badge');
-    expect(badge).toHaveAttribute('title', '分叉会话 · fork_root: origin-9');
+    expect(badge).toHaveAttribute('title', '查看分叉家族树');
     expect(badge).toHaveAttribute('aria-label', '分叉会话');
   });
 
