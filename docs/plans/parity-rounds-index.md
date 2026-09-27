@@ -50,12 +50,12 @@
 | R58 | RD26 orchRunClient 全方法测试覆盖 | #1668 `d6da988a1` | —（前端测试，无 win7 侧） |
 | R61 | BU24 per-agent token 分布 + RD25 负偏移防护 | #1727 `ac5c02a8` | R63 对齐（ALG-2） |
 | R62 | RT27 run 级聚合统计（total_used_tokens/total_duration_ms） | #1731 `500921e35` | R63 对齐（ALG-3） |
-| R63 | win7 对齐收口（ALG1-5）+ R2b 单测 + 总账回填 | 本 PR | 批次 B PR（交付后回填） |
+| R63 | win7 对齐收口（ALG1-5）+ R2b 单测 + 总账回填 | #1738 `a3ef4dcaf` | #1739 `ce8213b9`（ALG-4 由并行 #1735 先行覆盖） |
 
 §回填记录：R23 `#1084`、R24 `#1096`、R25 `#1108`、R26 `#1141`、R27 `#1157`、
 R28-31 `#1193`、R32 `#1203`、R33 `#1250`、R34 `#1261`、R35 `#1272`、
 R36 `#1281`、R42 `#1316`、R43 `#1384`。R53 回填即本提交。
-R55/R57/R58/R61/R62 回填即本提交（R63）；R63 win7 批次 B 交付号落地后补。
+R55/R57/R58/R61/R62 回填即本提交（R63）；R63 回填即本提交。
 
 
 ## 2. 过程经验（diff-patch / 双分支交付）
@@ -72,8 +72,11 @@ R55/R57/R58/R61/R62 回填即本提交（R63）；R63 win7 批次 B 交付号落
    事件量；workflow_dispatch 可作分支级验证（注意 job 的 if 语义）；
    push 恢复后补真 pull_request CI。
 4. **shell cwd 失效**：worktree 删除会让常驻 shell 的 cwd 失效，spawn
-   ENOENT 易误诊为 bash.exe 损坏（R18/R36 各一次）。先用 Write 工具重建
+   ENOENT 易误诊为 bash.exe 损坏（R18/R36/R63 各一次）。先用 Write 工具重建
    失效目录即可恢复，无需重装 Git。
+5. **API squash 标题勿用 printf \u 转义**（R63 实证，#1738 标题
+   全角括号损坏）：msys printf 对 `\uff08` 类转义产出坏字节。构造
+   JSON payload 一律用 Write 工具落盘 UTF-8 文件再 `curl -d @file`。
 
 ## 3. 后续优化建议（状态更新 2026-09-24）
 
