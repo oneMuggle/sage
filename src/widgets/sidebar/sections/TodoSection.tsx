@@ -53,7 +53,7 @@ export function TodoSection({ collapsed, onToggleCollapsed }: TodoSectionProps) 
               key={todo.id}
               className="group flex items-center justify-between gap-2 px-2 py-1 rounded-radius-sm hover:bg-bg-hover"
             >
-              <span className="text-xs text-text truncate">{todo.title}</span>
+              <span className="text-ui-sm text-text truncate">{todo.title}</span>
               <span
                 className={[
                   'text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0',

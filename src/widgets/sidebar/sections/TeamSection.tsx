@@ -18,7 +18,7 @@ export function TeamSection({ collapsed, onToggleCollapsed }: TeamSectionProps) 
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
       render={() => (
-        <div className="px-3 py-2 text-xs text-muted">占位 - 团队协作将在 Phase 6 接入</div>
+        <div className="px-3 py-2 text-ui-sm text-muted">占位 - 团队协作将在 Phase 6 接入</div>
       )}
     />
   );

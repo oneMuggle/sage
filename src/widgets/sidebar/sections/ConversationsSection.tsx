@@ -195,7 +195,7 @@ export function ConversationsSection({
               placeholder={t('sidebar.search_sessions')}
               aria-label={t('sidebar.search_sessions')}
               data-testid="session-search"
-              className="w-full h-6 pl-6 pr-2 text-xs rounded bg-bg-hover border border-transparent focus:border-primary focus:outline-none placeholder:text-muted"
+              className="w-full h-6 pl-6 pr-2 text-ui-sm rounded bg-bg-hover border border-transparent focus:border-primary focus:outline-none placeholder:text-muted"
             />
             <button
               type="button"
@@ -240,7 +240,7 @@ export function ConversationsSection({
             </div>
           )}
           {sessions.length === 0 ? (
-            <div className="px-3 py-6 text-xs text-text-muted text-center space-y-2" data-testid="sessions-empty">
+            <div className="px-3 py-6 text-ui-sm text-text-muted text-center space-y-2" data-testid="sessions-empty">
               <p>尚无会话</p>
               <button
                 type="button"
@@ -252,7 +252,7 @@ export function ConversationsSection({
               </button>
             </div>
           ) : displaySessions.length === 0 && searchQuery.trim() ? (
-            <div className="px-3 py-4 text-xs text-text-muted text-center">
+            <div className="px-3 py-4 text-ui-sm text-text-muted text-center">
               {t('sidebar.no_match')}
             </div>
           ) : displaySessions.length > VIRTUALIZE_THRESHOLD ? (

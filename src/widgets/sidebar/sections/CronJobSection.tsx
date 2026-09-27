@@ -49,7 +49,7 @@ export function CronJobSection({ collapsed, onToggleCollapsed }: CronJobSectionP
               className="group flex items-center justify-between gap-2 px-2 py-1 rounded-radius-sm hover:bg-bg-hover"
             >
               <div className="flex flex-col min-w-0">
-                <span className="text-xs text-text truncate">{task.name}</span>
+                <span className="text-ui-sm text-text truncate">{task.name}</span>
                 <span className="text-[10px] text-muted truncate">
                   {describeSchedule(task.schedule, locale as 'zh' | 'en')}
                 </span>
