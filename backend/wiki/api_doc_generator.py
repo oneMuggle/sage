@@ -78,7 +78,7 @@ def _ast_node_to_str(node: ast.AST) -> str:  # noqa: PLR0911
 def _safe_unparse(node: ast.AST) -> str:
     """ast.unparse 的 py3.8 兼容包装。"""
     if hasattr(ast, "unparse"):
-        return ast.unparse(node)
+        return ast.unparse(node)  # py38-ok hasattr 守卫的本地兼容包装
     return _ast_node_to_str(node)
 
 
