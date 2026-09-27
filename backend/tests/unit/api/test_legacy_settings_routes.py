@@ -11,7 +11,6 @@ import json
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 
 from backend.api import legacy_settings_routes as lsr
 from backend.api.legacy_settings_routes import (
@@ -169,7 +168,7 @@ def test_put_corrupted_existing_still_saves(monkeypatch):
 
 def test_preferences_get_and_put(monkeypatch):
     # 路由读 SettingsRepository.KEYS 类属性——fake 必须是带 KEYS 的类
-    store = {"search_config": json.dumps({"order": ["bing"]})}
+    saved = {"search_config": json.dumps({"order": ["bing"]})}
 
     import backend.data.settings_repo as repo_mod
 
@@ -177,7 +176,7 @@ def test_preferences_get_and_put(monkeypatch):
         KEYS = frozenset({"search_config", "app_settings"})
 
         def __init__(self):
-            self._s = store
+            self._s = saved
 
         def get(self, key):
             return self._s.get(key)
@@ -195,4 +194,4 @@ def test_preferences_get_and_put(monkeypatch):
         "search_config", LegacyPreferenceItem(value=json.dumps({"order": ["ddg"]}))
     )
     assert out.value == json.dumps({"order": ["ddg"]})
-    assert json.loads(store["search_config"])["order"] == ["ddg"]
+    assert json.loads(saved["search_config"])["order"] == ["ddg"]
