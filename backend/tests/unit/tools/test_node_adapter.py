@@ -64,6 +64,7 @@ def fake_env(tmp_path, monkeypatch):
     bin_dir.mkdir()
     node = bin_dir / "node.exe"
     node.write_bytes(b"")
+    node.chmod(0o755)  # Linux CI 需要 X_OK；Windows 下 X_OK 恒真不受影响
     monkeypatch.setenv("PATH", str(bin_dir))
 
     responses = {
