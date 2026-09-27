@@ -291,10 +291,10 @@ def _kill_profile_stragglers(user_data_dir: str) -> None:
     ps = (
         "Get-CimInstance Win32_Process | "
         "Where-Object { $_.CommandLine -ne $null -and "
-        "$_.CommandLine -match [regex]::Escape('{}') } | "
+        "$_.CommandLine -match [regex]::Escape('__UDD__') } | "
         "ForEach-Object { Stop-Process -Id $_.ProcessId -Force "
         "-ErrorAction SilentlyContinue }"
-    ).format(user_data_dir)
+    ).replace("__UDD__", user_data_dir)
     try:
         subprocess.run(  # noqa: S603 — powershell 为系统命令
             ["powershell", "-NoProfile", "-Command", ps],
