@@ -19,13 +19,13 @@ pytestmark = pytest.mark.unit
 
 
 def _convention(**overrides):
-    base = dict(
-        id="c1",
-        name="先读后写",
-        description="修改文件前先读取目标文件",
-        category="tool_usage",
-        confidence=0.8,
-    )
+    base = {
+        "id": "c1",
+        "name": "先读后写",
+        "description": "修改文件前先读取目标文件",
+        "category": "tool_usage",
+        "confidence": 0.8,
+    }
     base.update(overrides)
     return Convention(**base)
 
