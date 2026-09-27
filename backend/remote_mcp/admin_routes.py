@@ -10,15 +10,22 @@ import re
 import threading
 from typing import Any, Dict, Optional, Tuple
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from . import DEFAULT_PORT
+from .approval import GateApprover, capture_main_loop
 from .listener import LOOPBACK, Listener
 from .protocol import RemoteMcpService
 from .store import StoreError, WorkspaceStore
 
-router = APIRouter(prefix="/remote-mcp", tags=["remote-mcp"])
+
+async def _capture_loop() -> None:
+    """async 依赖在主事件循环里运行：记录主循环供远程审批跨线程提交（M5a）。"""
+    capture_main_loop()
+
+
+router = APIRouter(prefix="/remote-mcp", tags=["remote-mcp"], dependencies=[Depends(_capture_loop)])
 
 _PUBLIC_BASE = re.compile(r"^https://[a-z0-9-]+\.trycloudflare\.com$")
 
@@ -36,7 +43,10 @@ def get_runtime() -> Tuple[RemoteMcpService, Listener]:
                 store = WorkspaceStore()
             except (StoreError, ValueError) as exc:
                 raise HTTPException(status_code=500, detail=str(exc)) from exc
-            _service = RemoteMcpService(store)
+            _service = RemoteMcpService(store, approver=GateApprover())
+            for w in store.list_public():
+                if w.get("token_reset"):
+                    _service.audit.record("workspace.token_reset", w["id"])
             _listener = Listener(_service)
         assert _listener is not None
         return _service, _listener
@@ -60,6 +70,7 @@ class CreateBody(BaseModel):
 class UpdateBody(BaseModel):
     enabled: Optional[bool] = None
     permissions: Optional[Dict[str, bool]] = None
+    approval: Optional[str] = None
 
 
 class UrlBody(BaseModel):
@@ -127,7 +138,8 @@ def update_workspace(workspace_id: str, body: UpdateBody) -> Dict[str, Any]:
     service, _ = get_runtime()
     before = service.store.get(workspace_id)
     try:
-        after = service.store.update(workspace_id, enabled=body.enabled, permissions=body.permissions)
+        after = service.store.update(workspace_id, enabled=body.enabled, permissions=body.permissions,
+                                     approval=body.approval)
     except StoreError as exc:
         raise _bad(exc) from exc
     narrowed = (before or {}).get("enabled") and not after["enabled"]

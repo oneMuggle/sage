@@ -20,7 +20,7 @@ import { Welcome } from './pages/Welcome';
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
-import { ApprovalDialog } from './widgets/permission';
+import { ApprovalDialog, RemoteApprovalBridge } from './widgets/permission';
 import { QuestionDialog } from './widgets/question';
 import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
 import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
@@ -230,6 +230,7 @@ function App() {
         <ShortcutHelpOverlay open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
         {/* M1: 全局工具审批模态框 — 由 permission_request 流事件驱动 */}
         <ApprovalDialog />
+        <RemoteApprovalBridge />
         {/* M2 part B: 全局提问模态框 — 由 ask_user_question 流事件驱动 */}
         <QuestionDialog />
         {/* Task 11: 全局更新对话框 — 由 update:state-changed 事件驱动 */}

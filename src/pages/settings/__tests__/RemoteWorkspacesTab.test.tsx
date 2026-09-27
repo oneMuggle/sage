@@ -100,14 +100,16 @@ describe('RemoteWorkspacesTab', () => {
     );
   });
 
-  it('revoking read does not require confirmation', async () => {
-    const confirm = vi.spyOn(window, 'confirm');
+  it('read cannot be revoked from the UI (backend forbids it)', async () => {
     renderTab();
-    fireEvent.click(await screen.findByTestId('remote-ws-perm-read-ws1'));
-    await waitFor(() =>
-      expect(mocks.updateWorkspace).toHaveBeenCalledWith('ws1', { permissions: { read: false } }),
-    );
-    expect(confirm).not.toHaveBeenCalled();
+    const read = (await screen.findByTestId('remote-ws-perm-read-ws1')) as HTMLInputElement;
+    expect(read.disabled).toBe(true);
+  });
+
+  it('switches approval mode', async () => {
+    renderTab();
+    fireEvent.change(await screen.findByTestId('remote-ws-approval-ws1'), { target: { value: 'ask' } });
+    await waitFor(() => expect(mocks.updateWorkspace).toHaveBeenCalledWith('ws1', { approval: 'ask' }));
   });
 
   it('emergency stop goes through the main-process bridge', async () => {

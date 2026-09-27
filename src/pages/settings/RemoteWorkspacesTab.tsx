@@ -14,6 +14,7 @@ import {
   DEFAULT_REMOTE_MCP_PORT,
   remoteMcpApi,
   remoteMcpBridge,
+  type RemoteApprovalMode,
   type RemoteMcpState,
   type RemotePermission,
   type RemoteTunnelState,
@@ -269,13 +270,38 @@ export function RemoteWorkspacesTab() {
                       type="checkbox"
                       data-testid={`remote-ws-perm-${key}-${ws.id}`}
                       checked={Boolean(ws.permissions[key])}
-                      disabled={busy}
+                      disabled={busy || key === 'read'}
                       onChange={(e) => setPermission(ws, key, e.target.checked)}
                     />
                     {permLabel[key]}
                   </label>
                 ))}
+                <label className="flex items-center gap-1 text-text">
+                  {L('审批', 'Approval')}
+                  <select
+                    data-testid={`remote-ws-approval-${ws.id}`}
+                    className={INPUT}
+                    value={ws.approval ?? 'auto'}
+                    disabled={busy}
+                    onChange={(e) =>
+                      void run(() =>
+                        remoteMcpApi.updateWorkspace(ws.id, { approval: e.target.value as RemoteApprovalMode }),
+                      )
+                    }
+                  >
+                    <option value="auto">{L('自动（危险命令仍需审批）', 'Auto (destructive commands still ask)')}</option>
+                    <option value="ask">{L('写入和命令每次询问', 'Ask for every write / command')}</option>
+                  </select>
+                </label>
               </div>
+              {ws.token_reset ? (
+                <div className="px-2 py-1 text-xs text-warning bg-surface rounded-radius-sm">
+                  {L(
+                    '本机无法解密原有 token（可能换了电脑或用户），已重置并停用。启用后请重新复制地址。',
+                    'The stored token could not be decrypted (new machine or user); it was reset and the workspace disabled. Re-enable and copy the URL again.',
+                  )}
+                </div>
+              ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" className={BTN} disabled={busy || !bridge || !ws.enabled || paused} onClick={() => copy(ws, false)}>
                   {L('复制本机地址', 'Copy local URL')}

@@ -6,7 +6,7 @@
  *   remote_mcp_listener_start   → POST   /listener/start      { port }
  *   remote_mcp_listener_stop    → POST   /listener/stop
  *   remote_mcp_workspace_create → POST   /workspaces          { name, root }
- *   remote_mcp_workspace_update → PATCH  /workspaces/{id}     { enabled?, permissions? }
+ *   remote_mcp_workspace_update → PATCH  /workspaces/{id}     { enabled?, permissions?, approval? }
  *   remote_mcp_workspace_rotate → POST   /workspaces/{id}/rotate
  *   remote_mcp_workspace_delete → DELETE /workspaces/{id}
  *   remote_mcp_resume           → POST   /resume
@@ -16,6 +16,8 @@
  */
 import { invoke } from './desktopInvoke';
 
+export type RemoteApprovalMode = 'auto' | 'ask';
+
 export type RemotePermission = 'read' | 'write' | 'shell' | 'office' | 'memory';
 
 export interface RemoteWorkspace {
@@ -24,7 +26,9 @@ export interface RemoteWorkspace {
   root: string;
   enabled: boolean;
   permissions: Partial<Record<RemotePermission, boolean>>;
-  approval?: string;
+  approval?: RemoteApprovalMode;
+  /** token 无法解密（换机器 / 换用户）后已重置，需重新复制地址 */
+  token_reset?: boolean;
   sessions: number;
   created_at?: number;
 }
@@ -79,7 +83,11 @@ export const remoteMcpApi = {
     invoke<RemoteMcpState>('remote_mcp_workspace_create', { name, root }),
   updateWorkspace: (
     id: string,
-    patch: { enabled?: boolean; permissions?: Partial<Record<RemotePermission, boolean>> },
+    patch: {
+      enabled?: boolean;
+      permissions?: Partial<Record<RemotePermission, boolean>>;
+      approval?: RemoteApprovalMode;
+    },
   ) => invoke<RemoteMcpState>('remote_mcp_workspace_update', { id, ...patch }),
   rotateWorkspace: (id: string) => invoke<RemoteMcpState>('remote_mcp_workspace_rotate', { id }),
   deleteWorkspace: (id: string) => invoke<RemoteMcpState>('remote_mcp_workspace_delete', { id }),
