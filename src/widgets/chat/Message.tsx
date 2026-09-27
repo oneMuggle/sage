@@ -540,7 +540,7 @@ function MessageComponent({
   return (
     <div
       data-testid={isAssistant ? 'chat-message-assistant' : undefined}
-      className={`flex gap-3 mb-5 w-full animate-message-enter ${isUser ? 'flex-row-reverse' : ''}`}
+      className={`flex gap-3 mb-[var(--density-msg-gap)] w-full animate-message-enter ${isUser ? 'flex-row-reverse' : ''}`}
     >
       {/* 头像 */}
       <div
@@ -699,7 +699,7 @@ function MessageComponent({
         <div
           data-error={isError ? 'true' : undefined}
           data-quote-scope="message-body"
-          className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
+          className={`max-w-2xl px-[var(--density-msg-px)] py-[var(--density-msg-py)] rounded-radius-sm text-[13px] leading-relaxed ${
             isUser
               ? 'bg-primary text-text-inverse'
               : isError
@@ -721,7 +721,11 @@ function MessageComponent({
                 <MarkdownChunk md={chunks.live} plainFences={unclosedFence || undefined} />
                 {/* 流式生成光标 — 跟随内容尾部闪烁（reduced-motion 全局关闭） */}
                 {isStreaming && (
-                  <span className="stream-cursor" aria-hidden="true" data-testid="stream-cursor" />
+                  <span
+                    className="stream-cursor"
+                    aria-hidden="true"
+                    data-testid="stream-cursor"
+                  />
                 )}
               </div>
             )

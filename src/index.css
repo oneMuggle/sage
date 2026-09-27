@@ -157,6 +157,13 @@
   --sidebar-width: 240px;
   --header-height: 48px;
 
+  /* Density (comfortable defaults) */
+  --density-msg-gap: 16px;
+  --density-msg-py: 10px;
+  --density-msg-px: 14px;
+  --density-setting-row-py: 12px;
+  --density-sidebar-item-py: 8px;
+
   /* ZCode-inspired semantic UI tokens */
   --ui-font-size: 14px;
   --color-background: #ffffff;
@@ -310,6 +317,14 @@
   --color-border: #334155;
   --color-foreground: #f1f5f9;
   --color-foreground-subtle: #94a3b8;
+}
+
+[data-density='compact'] {
+  --density-msg-gap: 8px;
+  --density-msg-py: 6px;
+  --density-msg-px: 10px;
+  --density-setting-row-py: 8px;
+  --density-sidebar-item-py: 4px;
 }
 
 body {

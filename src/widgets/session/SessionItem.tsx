@@ -185,7 +185,7 @@ export function SessionItem({
       onClick={onSelect}
       onKeyDown={handleKeyDown}
       className={`
-        group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer
+        group flex items-center gap-2 px-3 py-[var(--density-sidebar-item-py)] rounded-lg cursor-pointer
         w-full min-w-0 overflow-hidden
         transition-colors focus:outline-none focus:ring-2 focus:ring-primary
         ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-bg-hover'}

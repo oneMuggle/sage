@@ -3,8 +3,9 @@
  */
 
 import { clsx } from 'clsx';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
+import { getProtocolOptions } from '../../entities/endpoint/providerRegistry';
 import {
   DEFAULT_ENDPOINT,
   type EndpointConfig,
@@ -20,16 +21,7 @@ import {
 import type { EndpointsTabProps } from './components';
 
 // Task 1 (2026-08-23): 协议下拉选项 — 与后端 canonicalizer / EndpointProtocol 类型对齐.
-// 显示名本地化为中文, value 与协议字面量一致 (用于 EndpointConfig.protocol 字段).
-// 2026-08-26: openai-compatible 文案明确 LM Studio / OpenAI / 其他兼容服务, 防止用户
-// 把它当作 "OpenAI 云 API 专用" 而去找并不存在的 LM Studio 独立 provider. LM Studio
-// 是 OpenAI-compatible (/v1/chat/completions) 服务, 空 key 时 Authorization 头跳过.
-const PROTOCOL_OPTIONS: ReadonlyArray<{ value: EndpointProtocol; label: string }> = [
-  { value: 'openai-compatible', label: 'OpenAI 兼容 (LM Studio / OpenAI / 其他 /v1/*)' },
-  { value: 'ollama', label: 'Ollama 原生 (/api/chat)' },
-  { value: 'anthropic', label: 'Anthropic Messages' },
-  { value: 'gemini', label: 'Google Gemini' },
-];
+// A2 (providerRegistry): 改为从注册表读取，不再硬编码。
 
 export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -38,6 +30,8 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [probingId, setProbingId] = useState<string | null>(null);
   const [probeResults, setProbeResults] = useState<Record<string, ProbeResult>>({});
+  // A2: 从 providerRegistry 读取协议选项（替代原硬编码常量）
+  const PROTOCOL_OPTIONS = useMemo(() => getProtocolOptions(), []);
 
   const handleAdd = () => {
     const newEndpoint: EndpointConfig = {

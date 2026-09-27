@@ -141,7 +141,10 @@ describe('Sidebar Sections Integration', () => {
     // Pre-populate localStorage with collapsed state
     localStorage.setItem(
       SECTIONS_CONFIG_KEY,
-      JSON.stringify({ order: ['conversations', 'todos', 'cron', 'project', 'team'], collapsed: ['cron'] }),
+      JSON.stringify({
+        order: ['conversations', 'todos', 'cron', 'project', 'team'],
+        collapsed: ['cron'],
+      }),
     );
 
     render(
@@ -160,7 +163,10 @@ describe('Sidebar Sections Integration', () => {
   });
 
   it('persists section order from localStorage', async () => {
-    const customOrder = { order: ['conversations', 'todos', 'cron', 'project', 'team'], collapsed: [] };
+    const customOrder = {
+      order: ['conversations', 'todos', 'cron', 'project', 'team'],
+      collapsed: [],
+    };
     localStorage.setItem(SECTIONS_CONFIG_KEY, JSON.stringify(customOrder));
 
     const { container } = render(

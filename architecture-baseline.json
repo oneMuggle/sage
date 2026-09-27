@@ -64,7 +64,7 @@
     "src/shared/api/types.ts": 2367,
     "src/shared/lib/i18n/en.ts": 1249,
     "src/shared/lib/i18n/zh.ts": 1225,
-    "src/widgets/chat/Message.tsx": 1099,
+    "src/widgets/chat/Message.tsx": 1103,
     "src/widgets/chat/progress/__tests__/TaskTreeSection.rerun.test.tsx": 904,
     "src/widgets/sidebar/sections/ProjectSection.tsx": 938,
     "tests/electron/test_stub_backend.py": 896,
