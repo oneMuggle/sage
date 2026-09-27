@@ -19,6 +19,25 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.56-win7] - 2026-09-27
+
+### Added
+- feat(frontend): ZCode 启发 Round 2 — Turn 折叠 + Surface 层级 + 使用统计 + 命令面板增强（#1716）
+- feat(frontend): ZCode 启发设计系统文档 + 字体 token 迁移（#1696）
+- feat: 信息密度系统 + Provider 抽象层 cherry-pick win7（#1638）
+- feat(permission): 审批拒绝附文字反馈——ZCode freeText 对标（#1710）
+- feat(data): DSH-R20 C3b + DSH-R21 C3b v2——ALTER 防御块收编进迁移框架（#1702, #1709）
+- feat(ui): DSH-R19 TM3 键盘快捷键帮助面板（#1692）
+- cherry(win7): W1 消息级回滚 + W2 分叉家族树面板（#1693）
+- cherry(win7): web_render fixture 修复 + r161 测试 + RD26（#1703）
+- cherry(win7): DSH-R16 Skill 路由组拆分 + DSH-R17 async safety 守卫（#1660, #1670）
+- feat(sessions): 会话自动归档 + 清空全部归档（#1655）
+- feat(web-access): R42 渲染池默认配置自动扩槽（#1645）
+- fix(browser): R46 crashpad 禁用 + profile 残留进程清扫（#1697）
+- fix(test): R48 perf 预算 CI 容忍系数 + R41 wiki 路径归一化（#1712, #1642）
+- fix(chat): RD25 formatOffset 负偏移防护（#1653）
+- perf(tests): 每个 worker 只建一次表 + tmp_db_path gc 优化（#1646, #1633）
+
 > 🌐 **网页访问能力优化 Round 21：DL2 后台下载任务化**（方案 `docs/plans/2026-09-19_web-access-round21-dljobs.md`）
 
 ### Added(web-access)
