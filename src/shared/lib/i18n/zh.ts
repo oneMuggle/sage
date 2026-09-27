@@ -190,6 +190,11 @@ export const zh = {
   'chat.fork_success': '已分叉为新会话',
   'chat.fork_failed': '分叉失败：{message}',
   'session.fork_badge': '分叉会话',
+  'session.fork_tree_open': '查看分叉家族树',
+  'session.fork_tree_title': '分叉家族树',
+  'session.fork_tree_loading': '正在加载会话…',
+  'session.fork_tree_current': '当前',
+  'session.fork_tree_single': '该会话没有分叉家族（非分叉会话且无后代）。',
 
   // ─── 文件上传 ─────────────────────
   'chat.drop_files': '拖放文件到此处',

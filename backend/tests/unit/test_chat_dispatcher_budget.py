@@ -853,3 +853,57 @@ async def test_aggregate_no_ranking_when_single_task(tmp_path, monkeypatch):
     await d.dispatch([{"task_id": "t1", "agent_id": "primary", "goal": "g1"}])
     agg = d._aggregate(list(d._states.values()))
     assert "耗时排行" not in agg
+
+
+# ---- BU23 (round57): per-agent 工作量分布 -----------------------------------------
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_shows_agent_distribution(tmp_path, monkeypatch):
+    """BU23: 多 agent 时显示工作量分布。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1", entry_queue=queue, run_id="orch-bu23-1", session_id="s-bu23"
+    )
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        state.status = "done"
+        state.output = "ok"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([
+        {"task_id": "t1", "agent_id": "primary", "goal": "g1"},
+        {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+        {"task_id": "t3", "agent_id": "researcher", "goal": "g3"},
+    ])
+    agg = d._aggregate(list(d._states.values()))
+    assert "Agent 分布" in agg
+    assert "primary×2" in agg
+    assert "researcher×1" in agg
+
+
+@pytest.mark.asyncio()
+async def test_aggregate_no_agent_distribution_for_single_agent(tmp_path, monkeypatch):
+    """BU23: 单一 agent 时不显示分布（无信息量）。"""
+    _init_tmp_db(tmp_path, monkeypatch)
+    queue = _make_queue()
+    d = ChatDispatcher(
+        stream_id="s1", entry_queue=queue, run_id="orch-bu23-2", session_id="s-bu23b"
+    )
+    d._semaphore = asyncio.Semaphore(4)
+
+    async def fake_run(state):
+        state.status = "done"
+        state.output = "ok"
+        return "ok"
+
+    d._run_subagent = fake_run
+    await d.dispatch([
+        {"task_id": "t1", "agent_id": "primary", "goal": "g1"},
+        {"task_id": "t2", "agent_id": "primary", "goal": "g2"},
+    ])
+    agg = d._aggregate(list(d._states.values()))
+    assert "Agent 分布" not in agg
