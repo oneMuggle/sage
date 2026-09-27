@@ -82,6 +82,26 @@ def _render_pool_size() -> int:
     except Exception:  # noqa: BLE001 — 配置失败按默认处理（保持现状行为）
         return RENDER_POOL_SIZE
 
+
+def _render_pool_auto() -> bool:
+    """R42：用户未显式配置 render_pool_size 时允许自动扩槽（上限 MAX）。
+
+    显式配置（含显式 2）视为钉死，不自动扩——化解"自动调优与显式配置
+    语义冲突"（R38 评估结论的落地形态）。任何失败按非自动处理。
+    """
+    try:
+        import json
+
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get(SETTINGS_KEY_WEB_ACCESS_CONFIG)
+        if not raw:
+            return False  # 无配置键 → 使用默认 2 槽，不自动扩
+        parsed = json.loads(raw)
+        return "render_pool_size" not in parsed
+    except Exception:  # noqa: BLE001 — 配置失败按非自动处理
+        return False
+
 #: 渲染正文上限（字符，对齐 browser_tool.SNAPSHOT_TEXT_CAP）
 RENDER_TEXT_CAP = 30 * 1024
 
@@ -364,9 +384,12 @@ class _RendererPool:
 
     def acquire(self) -> BrowserSession:
         with self._lock:
+            # R42：自动模式下（用户未显式配置 render_pool_size）槽位上限为
+            # RENDER_POOL_SIZE_MAX；显式配置时上限为配置值（钉死语义）。
+            cap = RENDER_POOL_SIZE_MAX if _render_pool_auto() else _render_pool_size()
             # R25：配置的槽位数超过既有槽时懒增（缩小不回收已活实例，LRU
             # 自然少用）；新增槽 last_used=0 会被优先选中。
-            for bid in _render_pool_ids(_render_pool_size()):
+            for bid in _render_pool_ids(max(cap, len(self._entries))):
                 if bid not in self._entries:
                     self._entries[bid] = {"session": None, "last_used": 0.0}
             # LRU 序试槽：最久未用的优先；某槽启动失败降级下一槽，全部
