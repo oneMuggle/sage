@@ -111,6 +111,37 @@ def _v3_sessions_columns(conn: Any) -> None:
 register_migration(3, "sessions_columns", _v3_sessions_columns)
 
 
+def _v4_memories_episodic_columns(conn: Any) -> None:
+    """v4：memories_episodic 表补齐 scope/project_key/invalid_at/supersedes_id 列。
+
+    收编自 init_db 中散落的 ALTER 防御块（C3b v4）。幂等：PRAGMA 检查
+    列存在性，已存在则跳过。scope 默认 'user'（P1 作用域轴，存量行跨
+    项目可见，与旧行为一致）；invalid_at/supersedes_id 为 P3 时间有效区。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(memories_episodic)")
+    columns = {row["name"] for row in cursor.fetchall()}
+    if "scope" not in columns:
+        cursor.execute(
+            "ALTER TABLE memories_episodic ADD COLUMN scope TEXT DEFAULT 'user'"
+        )
+        conn.commit()
+    if "project_key" not in columns:
+        cursor.execute("ALTER TABLE memories_episodic ADD COLUMN project_key TEXT")
+        conn.commit()
+    if "invalid_at" not in columns:
+        cursor.execute("ALTER TABLE memories_episodic ADD COLUMN invalid_at INTEGER")
+        conn.commit()
+    if "supersedes_id" not in columns:
+        cursor.execute(
+            "ALTER TABLE memories_episodic ADD COLUMN supersedes_id TEXT"
+        )
+        conn.commit()
+
+
+register_migration(4, "memories_episodic_columns", _v4_memories_episodic_columns)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(
