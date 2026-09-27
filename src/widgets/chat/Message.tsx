@@ -7,6 +7,7 @@ import {
   Brain,
   ChevronDown,
   GitBranch,
+  History,
   Eye,
   EyeOff,
   Pencil,
@@ -53,6 +54,8 @@ interface MessageProps {
   isStreaming?: boolean;
   /** M4: 从此消息分叉新会话（非破坏性，无需确认） */
   onFork?: (messageId: string) => void;
+  /** W1: 回滚到此处（对话 fork + 可选工作区快照恢复，Claude Code /rewind 对标） */
+  onRewind?: (messageId: string) => void;
   /** U5': 编辑此条 user 消息并重发（分叉其前缀，原会话保留） */
   onEditResend?: (messageId: string) => void;
   /** R18-A: 重新生成此条 assistant 回答（fork 前缀 + 重发前驱 user 消息） */
@@ -427,6 +430,7 @@ function MessageComponent({
   attachments,
   isStreaming,
   onFork,
+  onRewind,
   onEditResend,
   onRegenerate,
   onDelete,
@@ -486,6 +490,8 @@ function MessageComponent({
   }, [message.tool_calls]);
   // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
   const canFork = Boolean(onFork) && (isUser || isAssistant);
+  // W1: 回滚到此处（user/assistant 均可——语义为回到该消息刚完成的时点）
+  const canRewind = Boolean(onRewind) && (isUser || isAssistant) && !isStreaming;
   // U5': 编辑重发只对 user 消息有意义（重写用户输入，而非模型回答）
   const canEditResend = Boolean(onEditResend) && isUser;
   // R18-A: 重新生成仅对 assistant 消息有意义（重跑回答，原会话保留）
@@ -959,6 +965,7 @@ function MessageComponent({
         {(canCopy ||
           onFeedback ||
           canFork ||
+          canRewind ||
           canEditResend ||
           canDelete ||
           canRegenerate ||
@@ -1036,6 +1043,17 @@ function MessageComponent({
                 data-testid="fork-message"
               >
                 <GitBranch className="w-4 h-4" />
+              </button>
+            )}
+            {canRewind && (
+              <button
+                onClick={() => onRewind?.(message.id)}
+                className="p-1 rounded hover:bg-bg-hover"
+                title={t('chat.rewind')}
+                aria-label={t('chat.rewind')}
+                data-testid="rewind-message"
+              >
+                <History className="w-4 h-4" />
               </button>
             )}
             {canDelete && (

@@ -30,6 +30,8 @@ import type { Session } from '../../shared/lib/store';
 import { formatRelativeTime } from '../../shared/lib/utils';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { ForkTreeModal } from './ForkTreeModal';
+
 interface SessionItemProps {
   session: Session;
   isActive: boolean;
@@ -59,6 +61,8 @@ export function SessionItem({
 }: SessionItemProps) {
   const { t } = useI18n();
   const [exporting, setExporting] = useState(false);
+  // W2: fork 徽标点击 → 家族树对话框（状态自含，仅打开时挂载）
+  const [forkTreeOpen, setForkTreeOpen] = useState(false);
   // U4': inline 重命名态(标题位置换成输入框,Enter 提交 / Esc 取消)
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
@@ -132,6 +136,8 @@ export function SessionItem({
 
   // R18-B: 置顶/取消置顶 —— API 落库 + store 原地更新（避免整表 reload）
   const updateSession = useStore((st) => st.updateSession);
+  // W2: 家族树节点点击切会话（复用命令面板同款切换路径）
+  const setCurrentSessionId = useStore((st) => st.setCurrentSessionId);
   const [pinning, setPinning] = useState(false);
   const handleTogglePin = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -196,14 +202,18 @@ export function SessionItem({
         <p className="text-sm font-medium flex items-center gap-1 min-w-0">
           {/* M4: fork 徽标 — session.fork_root 存在时显示，tooltip 带源会话 id */}
           {session.fork_root && (
-            <span
+            <button
               data-testid="fork-badge"
               aria-label={t('session.fork_badge')}
-              title={`${t('session.fork_badge')} · fork_root: ${session.fork_root}`}
-              className="inline-flex flex-shrink-0"
+              title={t('session.fork_tree_open')}
+              className="inline-flex flex-shrink-0 rounded hover:bg-bg-hover p-0.5 -m-0.5"
+              onClick={(e) => {
+                e.stopPropagation();
+                setForkTreeOpen(true);
+              }}
             >
               <GitBranch className="w-3 h-3 text-muted" />
-            </span>
+            </button>
           )}
           {/* U4': inline 重命名态——输入框替换标题文本,Enter 提交 / Esc 取消 */}
           {renaming ? (
@@ -423,6 +433,18 @@ export function SessionItem({
           className="p-1"
         />
       </div>
+      {forkTreeOpen && (
+        <ForkTreeModal
+          isOpen
+          session={session}
+          activeSessionId={session.id}
+          onClose={() => setForkTreeOpen(false)}
+          onSwitch={(id) => {
+            setCurrentSessionId(id);
+            setForkTreeOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }
