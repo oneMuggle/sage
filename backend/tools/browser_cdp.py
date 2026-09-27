@@ -249,6 +249,9 @@ def _terminate_session(session: BrowserSession) -> None:
             session.process.kill()
     except OSError as exc:
         logger.warning("browser terminate 失败: %s", exc)
+    # R46：树杀仍可能漏掉重派生的 crashpad-handler 等孤儿——按 profile
+    # 路径精确清扫残留进程，避免临时目录被锁（实测单测跑一轮泄漏一棵树）。
+    _kill_profile_stragglers(session.user_data_dir)
     if getattr(session, "persistent", False):
         return
     _remove_dir_with_retry(session.user_data_dir)
@@ -273,6 +276,34 @@ def _kill_process_tree(process: subprocess.Popen) -> None:
         )
     except (OSError, subprocess.SubprocessError):
         logger.debug("taskkill 进程树失败（忽略）: pid=%s", pid, exc_info=True)
+
+
+def _kill_profile_stragglers(user_data_dir: str) -> None:
+    """Windows：按 profile 目录清扫脱离进程树的残留进程（R46）。
+
+    crashpad-handler 等子进程在浏览器关闭过程会被系统重派生（脱离父子
+    链），taskkill /T 按父 PID 遍历不到它们——实测每轮全量单测泄漏一棵
+    进程树并锁住临时目录。此清扫按命令行中的 profile 路径精确匹配兜底。
+    POSIX 上无此问题，不启用。
+    """
+    if os.name != "nt":
+        return
+    ps = (
+        "Get-CimInstance Win32_Process | "
+        "Where-Object { $_.CommandLine -ne $null -and "
+        "$_.CommandLine -match [regex]::Escape('__UDD__') } | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force "
+        "-ErrorAction SilentlyContinue }"
+    ).replace("__UDD__", user_data_dir)
+    try:
+        subprocess.run(  # noqa: S603 — powershell 为系统命令
+            ["powershell", "-NoProfile", "-Command", ps],
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        logger.debug("profile 残留清扫失败（忽略）: %s", user_data_dir, exc_info=True)
 
 
 def _remove_dir_with_retry(path: str, attempts: int = 5) -> None:
@@ -414,6 +445,12 @@ def _build_launch_command(
         "--disable-extensions",
         "--disable-background-networking",
         "--window-size=1440,900",
+        # R46：禁用 crashpad/breakpad —— crashpad-handler 子进程在 Windows
+        # 上会脱离进程树存活（taskkill /T 遍历不到），持锁 user_data_dir
+        # 导致临时目录删不掉（总账 §4 实证）。无头自动化浏览器不需要
+        # 崩溃上报。
+        "--disable-crashpad",
+        "--disable-breakpad",
         # AB4（Round 5）：不向页面暴露自动化痕迹 —— 默认 Chrome 会把
         # navigator.webdriver 置 true 并挂 "Chrome is being controlled" 提示，
         # 是最廉价的 bot 信号。只做"不主动暴露"，不做验证码破解。
