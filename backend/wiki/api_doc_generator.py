@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
+from backend.utils.py_compat import ast_unparse
+
 
 @dataclass
 class FunctionSignature:
@@ -67,12 +69,12 @@ def extract_python_module(file_path: Path) -> Optional[ModuleDoc]:
                 if arg.arg != "self":
                     annotation = ""
                     if arg.annotation:
-                        annotation = ast.unparse(arg.annotation)
+                        annotation = ast_unparse(arg.annotation)
                     params.append(f"{arg.arg}: {annotation}" if annotation else arg.arg)
 
             return_type = ""
             if node.returns:
-                return_type = ast.unparse(node.returns)
+                return_type = ast_unparse(node.returns)
 
             functions.append(
                 FunctionSignature(
@@ -94,14 +96,14 @@ def extract_python_module(file_path: Path) -> Optional[ModuleDoc]:
                         if arg.arg != "self":
                             annotation = ""
                             if arg.annotation:
-                                annotation = ast.unparse(arg.annotation)
+                                annotation = ast_unparse(arg.annotation)
                             params.append(
                                 f"{arg.arg}: {annotation}" if annotation else arg.arg
                             )
 
                     return_type = ""
                     if item.returns:
-                        return_type = ast.unparse(item.returns)
+                        return_type = ast_unparse(item.returns)
 
                     methods.append(
                         FunctionSignature(
