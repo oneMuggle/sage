@@ -14,6 +14,8 @@ import type { OrchRunDetail } from '../../../shared/api/orchRunClient';
 interface SessionRunHistoryProps {
   sessionId: string;
   onSelectRun: (run: OrchRunDetail) => void;
+  /** RD26 (round60): 排除当前正在显示的 run（避免与任务板重复）。 */
+  excludeRunId?: string | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -33,7 +35,7 @@ function formatRelative(ts: number): string {
   return `${Math.floor(diff / 86_400_000)} 天前`;
 }
 
-export function SessionRunHistory({ sessionId, onSelectRun }: SessionRunHistoryProps) {
+export function SessionRunHistory({ sessionId, onSelectRun, excludeRunId }: SessionRunHistoryProps) {
   const [open, setOpen] = useState(false);
   const [runs, setRuns] = useState<OrchRunDetail[]>([]);
   const [loading, setLoading] = useState(false);
@@ -74,7 +76,7 @@ export function SessionRunHistory({ sessionId, onSelectRun }: SessionRunHistoryP
       {!loading && runs.length === 0 && (
         <div className="text-xs text-text-tertiary py-1">暂无编排记录</div>
       )}
-      {runs.map((run) => {
+      {runs.filter((r) => r.run_id !== excludeRunId).map((run) => {
         const done = run.tasks.filter((t) => t.status === 'done').length;
         const total = run.tasks.length;
         // RD24 (round54): run 级消耗汇总 —— RT24 持久化的 used_tokens 聚合。
