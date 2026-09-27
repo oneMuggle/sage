@@ -123,6 +123,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `str(Path)`——Windows 下为反斜杠导致仅本地失败（CI ubuntu 不受影响，
   #1394 同族）。归一化后再断言；生产代码无改动
 
+> 🧹 **R46：浏览器进程树收尾加固——crashpad 禁用 + profile 残留清扫**（总账 §4 收口）
+
+### Fixed(browser)
+- **crashpad 禁用参数（R46）**：`_build_launch_command` 增 `--disable-crashpad` /
+  `--disable-breakpad`（无头自动化无需崩溃上报；旧 Chrome 忽略未知开关，无害）
+- **profile 残留进程清扫（R46）**：`_terminate_session` 在树杀后按
+  user_data_dir 路径精确清扫脱离进程树的残留进程（crashpad-handler 等被
+  系统重派生后 taskkill /T 遍历不到，实测每轮全量单测泄漏一棵树并锁临时
+  目录）——E2E 实证 terminate 后临时目录即可删除；POSIX 不启用
+
 > 🧹 **alpha.47 暂无未发布变更**（PR #1359 在 hook tests flake 重测中）
 
 ## [v0.4.9-alpha.47] - 2026-09-21
