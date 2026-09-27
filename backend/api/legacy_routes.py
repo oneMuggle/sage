@@ -51,19 +51,11 @@ from backend.chat.sources_extractor import extract_sources_from_tool, merge_sour
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data import answer_version_repo as answer_versions
-from backend.data.artifact_repo import (  # S7: 产物事件 → 活跃流推送
-    add_artifact_listener,
-    remove_artifact_listener,
-)
 from backend.data.database import get_database
 from backend.data.session_repo import (
     Message as DbMessage,
     MessageRepository,
     SessionRepository,
-)
-from backend.data.workspace_events import (  # right-panel R5: 工作区变更事件 → 活跃流推送
-    add_workspace_listener,
-    remove_workspace_listener,
 )
 from backend.memory import get_memory_manager
 from backend.office.chat_refs import ChatOfficeRef, authorize_chat_office_request
@@ -1798,85 +1790,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 office_doc_scope=frozenset(),
             )
         _tool_ctx_token = set_tool_context(_tool_ctx)
-        # live-events P2 (2026-09-07): ``agent`` 工具事件桥 —— 单 agent 模式
-        # 派遣的只读子代理,其中间事件经本桥投影进聊天流（subagent_event）。
-        # producer 与 AgentTool.execute_async 同一事件循环,put_nowait 安全;
-        # finally 注销（闭包持有 queue 引用,不注销会向已关闭的流推送）。
-        from backend.tools.agent_event_bridge import register_stream_emitter
+        # live-events P2 (2026-09-07) / P1 todo 接线 / S7 产物 / right-panel R5:
+        # 四路事件推送原为四个内联闭包（会话过滤 + put_nowait + 静默降级），
+        # C2a 收敛为 StreamEventSink（见 chat_stream_sinks.py，行为逐字节等价）。
+        # producer 与各事件源同一事件循环,put_nowait 安全;finally 注销
+        # （sink 持有 queue 引用,不注销会向已关闭的流推送 / 随全局表泄漏）。
+        from backend.api.chat_stream_sinks import StreamEventSink
 
-        def _emit_agent_bridge_event(event: Dict[str, Any]) -> None:
-            try:
-                entry.queue.put_nowait(event)
-            except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞执行
-                logger.debug("agent 事件桥推送失败（队列满/关闭），忽略")
-
-        register_stream_emitter(data.session_id, _emit_agent_bridge_event)
-        # P1 todo 接线 (spec 2026-08-21): todo_write 变更 → todo_snapshot
-        # SSE 全量快照。会话过滤防跨流串扰；队列满静默降级（尽力而为）。
-        from backend.tools.todo_state import (
-            add_todo_listener,
-            remove_todo_listener,
-        )
-
-        def _push_todo_snapshot(session_id: str, todos: Any) -> None:
-            if session_id != data.session_id:
-                return
-            try:
-                entry.queue.put_nowait(
-                    {
-                        "state": "todo_snapshot",
-                        "session_id": session_id,
-                        "todos": todos,
-                    }
-                )
-            except Exception:  # noqa: BLE001 — 降级铁律
-                logger.debug("todo_snapshot 推送失败（队列满/关闭），忽略")
-
-        add_todo_listener(_push_todo_snapshot)
-
+        sink = StreamEventSink(entry.queue, data.session_id)
+        sink.register()
         # B4 (2026-09-09): 流启动时推送持久化的 todo 快照 —— 此前 todo 只在
         # todo_write 写入时推送，重启/重开会话后任务板为空。get() 命中
         # session_todos 持久层（缓存 miss 回填），恢复上次任务清单。
-        try:
-            from backend.tools.todo_state import get_todo_store
-
-            persisted_todos = get_todo_store().get(data.session_id)
-            if persisted_todos:
-                await entry.queue.put(
-                    {
-                        "state": "todo_snapshot",
-                        "session_id": data.session_id,
-                        "todos": persisted_todos,
-                    }
-                )
-        except Exception:  # noqa: BLE001 — 降级铁律
-            logger.debug("todo_snapshot 初始推送失败（忽略）")
-
-        # S7 (2026-09-06): 产物事件 → 活跃流推送。工具线程在 record_artifact
-        # 落库后广播，这里按会话过滤后入队；前端据此事件驱动刷新产物面板 +
-        # 侧栏徽章（不再依赖手动刷新）。队列满静默降级（尽力而为）。
-        def _push_artifact_event(event: Dict[str, Any]) -> None:
-            if event.get("session_id") != data.session_id:
-                return
-            try:
-                entry.queue.put_nowait(event)
-            except Exception:  # noqa: BLE001 — 降级铁律
-                logger.debug("artifact_created 推送失败（队列满/关闭），忽略")
-
-        add_artifact_listener(_push_artifact_event)
-
-        # right-panel R5: 写文件工具落盘 → workspace_changed 事件 → 活跃流
-        # 推送。前端变更列表据此防抖刷新（徽标实时化，不再依赖手动刷新）。
-        # 队列满静默降级（尽力而为），与 artifact 推送同口径。
-        def _push_workspace_event(event: Dict[str, Any]) -> None:
-            if event.get("session_id") != data.session_id:
-                return
-            try:
-                entry.queue.put_nowait(event)
-            except Exception:  # noqa: BLE001 — 降级铁律
-                logger.debug("workspace_changed 推送失败（队列满/关闭），忽略")
-
-        add_workspace_listener(_push_workspace_event)
+        await sink.push_persisted_todo()
         try:
             # P0-4 (2026-08-20): 终态变量前置到 try 顶部 —— finally 无条件读取
             # 它们，若留在数百行之后声明，早期异常（如 resolve_attachments 抛错、
@@ -3712,10 +3638,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
             except Exception as status_err:  # noqa: BLE001 — fail-open
                 logger.debug("会话运行态(%s)写入失败: %s", _terminal_status, status_err)
-            # S7: 注销产物事件监听器（闭包持有 entry/queue 引用，不注销会泄漏）
-            remove_artifact_listener(_push_artifact_event)
-            # right-panel R5: 注销工作区变更事件监听器（理由同上）
-            remove_workspace_listener(_push_workspace_event)
+            # C2a: 注销四路事件监听（sink 持有 entry/queue 引用，不注销
+            # 会向已关闭的流推送 / 随全局 listener 表泄漏）。
+            sink.unregister()
             # P2-9 (2026-08-14): 长连接结束注销注册表条目（run 级 cancel 不再命中）。
             # run_id 为 None（single 路径）时跳过 —— 从未注册过。
             if run_id:
@@ -3728,13 +3653,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # ContextVar never leaks into the next producer invocation.
             if _tool_ctx_token is not None:
                 reset_tool_context(_tool_ctx_token)
-            # P1 todo 接线: 注销监听器（闭包持有 entry/queue 引用，
-            # 不注销会随全局 _listeners 泄漏并推已关闭的流）。
-            remove_todo_listener(_push_todo_snapshot)
-            # live-events P2: 注销 agent 事件桥（理由同 todo listener）。
-            from backend.tools.agent_event_bridge import unregister_stream_emitter
-
-            unregister_stream_emitter(data.session_id)
 
     # RT6 (round7): 同会话已有活跃流时服务端仲裁 409（此前纯靠前端守卫）。
     try:
