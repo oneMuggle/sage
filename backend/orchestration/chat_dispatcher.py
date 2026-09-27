@@ -2088,6 +2088,38 @@ class ChatDispatcher:
             )
             header += f"- 耗时排行：{desc}。\n"
 
+        # BU23 (round57): per-agent 工作量分布 —— conductor 了解负载分布。
+        _agent_counts: Dict[str, int] = {}
+        for s in states:
+            _agent_counts[s.agent_id] = _agent_counts.get(s.agent_id, 0) + 1
+        if len(_agent_counts) > 1:
+            dist = "、".join(
+                f"{aid}×{cnt}"
+                for aid, cnt in sorted(
+                    _agent_counts.items(), key=lambda x: x[1], reverse=True
+                )
+            )
+            header += f"- Agent 分布：{dist}。\n"
+
+        # BU24 (round61): per-agent token 分布 —— 多 agent 时头部显示各
+        # agent 消耗汇总（conductor 判断哪个 agent 烧得多）。
+        _agent_tokens: Dict[str, int] = {}
+        for s in states:
+            if s.status in ("done", "failed"):
+                _used = self._task_tokens_used(s.task_id)
+                if _used:
+                    _agent_tokens[s.agent_id] = (
+                        _agent_tokens.get(s.agent_id, 0) + _used
+                    )
+        if len(_agent_tokens) > 1:
+            dist = "、".join(
+                f"{aid}×{tokens}"
+                for aid, tokens in sorted(
+                    _agent_tokens.items(), key=lambda x: x[1], reverse=True
+                )
+            )
+            header += f"- Agent token 分布：{dist}。\n"
+
         blocks: List[str] = []
         for state in states:
             header_item = f"## 子任务 {state.task_id}（{state.agent_id}）"

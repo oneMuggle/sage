@@ -48,6 +48,9 @@ class OrchRunDetail(BaseModel):
     tasks: List[Dict[str, Any]]
     # Wave 3 A9: resume 恢复流原始请求
     original_request: Optional[str] = None
+    # RT27 (round62): run 级聚合统计 —— 历史回看一目了然。
+    total_used_tokens: Optional[int] = None
+    total_duration_ms: Optional[int] = None
 
 
 class SessionRunsResponse(BaseModel):
@@ -93,6 +96,12 @@ def _run_detail(run: OrchRun) -> OrchRunDetail:
         }
         for t in task_repo.list_by_run(run.run_id)
     ]
+    total_used = sum(
+        t["used_tokens"] for t in tasks if isinstance(t.get("used_tokens"), int)
+    )
+    total_dur = sum(
+        t["duration_ms"] for t in tasks if isinstance(t.get("duration_ms"), int)
+    )
     return OrchRunDetail(
         run_id=run.run_id,
         session_id=run.session_id,
@@ -101,6 +110,9 @@ def _run_detail(run: OrchRun) -> OrchRunDetail:
         plan=plan,
         tasks=tasks,
         original_request=run.original_request,
+        # RT27 (round62): run 级聚合统计。
+        total_used_tokens=total_used if total_used > 0 else None,
+        total_duration_ms=total_dur if total_dur > 0 else None,
     )
 
 
