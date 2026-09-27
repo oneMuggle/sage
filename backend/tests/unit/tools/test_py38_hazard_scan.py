@@ -44,6 +44,26 @@ def test_r2_asyncio_to_thread(tmp_path):
     assert "asyncio.to_thread" in hit[2]
 
 
+def test_r2b_ast_unparse(tmp_path):
+    hit = _one_hit(tmp_path, "ast.unparse(node)\n")
+    assert "ast.unparse" in hit[2]
+
+
+def test_r2b_py_compat_shim_not_flagged(tmp_path):
+    # py_compat.ast_unparse 是降级垫片自身，R2b 不得误报
+    source = (
+        "from backend.utils.py_compat import ast_unparse\n"
+        "ast_unparse(node)\n"
+        "utils.py_compat.ast_unparse(node)\n"
+    )
+    assert _scan(tmp_path, source) == []
+
+
+def test_r2b_ast_parse_not_flagged(tmp_path):
+    # 同模块其他成员（ast.parse 等）不属于 R2b 范围
+    assert _scan(tmp_path, "ast.parse(source)\n") == []
+
+
 def test_r3_zip_strict(tmp_path):
     hit = _one_hit(tmp_path, "zip(a, b, strict=True)\n")
     assert "strict" in hit[2]
