@@ -45,6 +45,13 @@ def register_migration(version: int, name: str, fn: Callable[[Any], None]) -> No
     MIGRATIONS.append((version, name, fn))
 
 
+def _v1_schema_baseline(conn: Any) -> None:
+    """v1 基线迁移：no-op（当前 DDL 状态由 init_db 幂等 DDL 保证）。"""
+
+
+register_migration(1, "schema_baseline", _v1_schema_baseline)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(
