@@ -12,7 +12,7 @@
     "backend/core/legacy/llm_client.py": 1093,
     "backend/data/database.py": 1949,
     "backend/data/session_repo.py": 1056,
-    "backend/main.py": 1154,
+    "backend/main.py": 1173,
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,
     "backend/office/excel.py": 1003,

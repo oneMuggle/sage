@@ -118,4 +118,44 @@ def backfill_session_events(db: Any = None) -> Dict[str, int]:
     return result
 
 
-__all__ = ["backfill_session_events"]
+def cleanup_orphan_messages(db: Any = None) -> int:
+    """删除 session_id 在 sessions 表不存在的孤儿 messages。
+
+    背景:2026-08-10 PR #290 启用 ``PRAGMA foreign_keys=ON`` 之前,历史数据
+    中可能遗留孤儿 messages(手动 SQL / curl / 早期代码漏洞)。启用 FK 后
+    这些孤儿不会自动清除( SQLite FK 不回溯校验),会在
+    ``backfill_session_events`` 中触发 FK violation,连锁引发
+    ``database is locked``(见 PR #1722)。启动时一次性清理,保证后续
+    backfill 和其他依赖 FK 的路径正常工作。
+
+    幂等:没有孤儿时返回 0,无副作用。
+
+    Returns:
+        删除的孤儿消息数。
+    """
+    database = db if db is not None else get_database()
+    conn = database.get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            DELETE FROM messages
+            WHERE NOT EXISTS (
+                SELECT 1 FROM sessions WHERE sessions.id = messages.session_id
+            )
+            """
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        return deleted
+    except Exception:
+        # 失败路径显式 rollback,避免 SQLite WAL 模式下未回滚事务持有
+        # RESERVED 锁,阻塞后续所有数据库操作。
+        try:
+            conn.rollback()
+        except Exception:
+            logger.error("rollback failed during orphan cleanup", exc_info=True)
+        raise
+
+
+__all__ = ["backfill_session_events", "cleanup_orphan_messages"]
