@@ -331,6 +331,12 @@ async def lifespan(app: FastAPI):
             )
     except Exception:
         logger.exception("session event backfill failed (ignored)")
+        # A3: 显式 rollback 避免未回滚事务在 SQLite WAL 模式下持有 RESERVED 锁，
+        # 阻塞后续所有数据库操作（database is locked 连锁故障）。
+        try:
+            db.get_connection().rollback()
+        except Exception:
+            logger.error("rollback failed after backfill error", exc_info=True)
     # Task 4: load builtin seed data if catalog is empty (no network access)
     # fail-safe — must not crash startup if seed parsing or DB write fails
     try:
@@ -341,6 +347,11 @@ async def lifespan(app: FastAPI):
             logger.info("Loaded %d builtin seed records", seed_count)
     except Exception:
         logger.exception("builtin seed failed (ignored)")
+        # A3: 同上,显式 rollback 防止事务锁污染
+        try:
+            db.get_connection().rollback()
+        except Exception:
+            logger.error("rollback failed after seed error", exc_info=True)
     if __name__ == "__main__":
         _elapsed_db = time.monotonic() - _startup_t0
         print(  # noqa: T201
