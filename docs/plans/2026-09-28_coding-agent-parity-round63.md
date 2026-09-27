@@ -50,8 +50,22 @@ ast_unparse 包装（与 #1733 的 py_compat 集中化冲突，取 py_compat 方
 
 ## 4. 批次 B
 
-（见 §2，独立 PR 交付，交付号回填至本节与总账）
+已随独立 PR 交付（见 §5）。实施与原设计的差异：ALG-4（#1733
+ast_unparse+R2b）在 rebase 时发现并行会话已通过 #1735（cherry(win7)）先行
+对齐 win7——其 api_doc_generator 保留本地 `_safe_unparse` 包装（py3.9+ 走
+ast.unparse，3.8 走本地降级），功能等价，本轮按「尊重先行交付」跳过重复
+pick；批次 A 的 R2b 单测不受影响照常落地。
 
 ## 5. 交付记录
 
-（交付后回填）
+- **批次 A（main）**：#1738 `a3ef4dcaf`
+  - CI：14 success + 2 skipped（条件 job），0 failure。
+  - 内容：R2b 单测 3 例 + 总账 R55/R57/R58/R61/R62 行 + 本文档。
+- **批次 B（win7）**：#1739 `ce8213b9`
+  - cherry-pick：#1691（ALG-1 BU23）/ #1727（ALG-2 BU24+RD25 clamp）/
+    #1731（ALG-3 RT27）/ #1729 + #1732（ALG-5 r163/r164 测试）/
+    批次 A 的 R2b 单测 + 本文档；总账为 main-only 文档，win7 侧不携带。
+  - 波折记录：pull_request 事件被静默丢弃（R28 惯例）→ ci-rerun SOP；
+    首跑红于 package-lock 版本契约（win7 分支既有漂移，非本轮引入，
+    随并行 #1735 修复）；rebase 至 8f806e340 后二跑全绿（全量套件）。
+- **总账回填**：即本提交。
