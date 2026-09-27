@@ -95,7 +95,7 @@ export function TwoStepDelete({
       className={`${BASE_CLASS} ${armed ? ARMED_CLASS : IDLE_CLASS}${className ? ` ${className}` : ''}`}
     >
       {icon ?? <Trash2 className="h-4 w-4" />}
-      {armed && <span className="whitespace-nowrap text-xs">{armedLabel}</span>}
+      {armed && <span className="whitespace-nowrap text-ui-sm">{armedLabel}</span>}
     </button>
   );
 }
