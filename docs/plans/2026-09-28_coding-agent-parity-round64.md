@@ -34,6 +34,10 @@ R63 收口后复扫：main 新增 4 个并行交付（#1741/#1742/#1743/#1744）
 - cherry-pick `7c40d0b29`：干净落地（新文件）。
 - cherry-pick `2ed9dc7e2`：round63 文档 hunk 干净；总账按预期 modify/delete
   冲突，win7 侧排除。
+- 首跑 CI 红：**Architecture check 行数基线棘轮**——BU23/BU24 pick 使
+  chat_dispatcher 2239→2258（+19）、test_chat_dispatcher_budget 910→969
+  （+59）。按棘轮协议（只升不降）补账 `architecture-baseline.json`，
+  数值与 main #1730 一致。
 - 本地：扫描 0 命中；hooks 测试 + 扫描器测试全绿（本地 3.12）。
 
 ## 4. 批次 B
