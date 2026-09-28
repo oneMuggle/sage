@@ -10,8 +10,9 @@ run 直接 FAILED。本模块提供**就地机械压缩**作为急救手段：
 - ``first_aid_compact``：就地截断早期消息内容，**绝不增删消息**——保持
   assistant(tool_calls) ↔ tool 配对完整，压缩后的列表仍能通过任何
   OpenAI 兼容 API 的消息结构校验。
-- ``run_ctx_budget_tokens``：迭代边界高水位预算（事前预防），env
-  ``SAGE_RUN_CTX_BUDGET_TOKENS`` 可覆盖（0 = 关闭预防性压缩）。
+- ``run_ctx_budget_tokens``：迭代边界高水位预算（事前预防）。优先级为
+  env ``SAGE_RUN_CTX_BUDGET_TOKENS``（0 = 关闭）> :func:`effective_budget_tokens`
+  按模型实际窗口派生 > 固定默认常量（仅在窗口未知时兜底）。
 
 与 LLM 摘要压缩（``backend.chat.compaction``，run 前对持久化历史执行）
 的分工：本模块只服务 run_loop 内存列表的确定性急救——不调 LLM、不落盘、
@@ -22,16 +23,27 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-#: 默认 run 级上下文高水位预算（估算 token）。取值高于工具结果 run 预算
-#: （256k 字符 ≈ 最坏 6.4 万 token）留出余量，只在真正逼近窗口时触发。
+#: 默认 run 级上下文高水位预算（估算 token）。仅在**拿不到模型窗口**时
+#: 作为回退口径；正常路径走 :func:`effective_budget_tokens` 按模型实际
+#: 窗口派生。取值高于工具结果 run 预算留出余量，只在真正逼近窗口时触发。
 DEFAULT_RUN_CTX_BUDGET_TOKENS = 100_000
 
 #: env 覆盖键（0 = 关闭预防性压缩；爆后修复不受此开关影响）
 ENV_RUN_CTX_BUDGET = "SAGE_RUN_CTX_BUDGET_TOKENS"
+
+#: 派生预算时额外扣除的缓冲：覆盖 system 提示、工具 schema，以及 token
+#: 估算本身的误差——本模块估算是启发式（中文按字符、其余按 4 字符），
+#: 宁可早压不可压过头。
+BUFFER_TOKENS = 13_000
+
+#: output 预留封顶。模型声明的 max_tokens 动辄 32k/128k，但一次回答实际
+#: 用不到那么多；按声明值全额预留会把预算压得过低。21k 对齐 ZCode
+#: ``compact/policy.ts`` 的 min(maxOutputTokens, 21_000)。
+MAX_OUTPUT_RESERVE = 21_000
 
 #: 急救压缩时保持原样的最近消息条数（当前迭代正在对话的"活跃区"）
 DEFAULT_KEEP_RECENT = 6
@@ -72,8 +84,38 @@ def estimate_messages_tokens(messages: List[Dict[str, Any]]) -> int:
     return total
 
 
-def run_ctx_budget_tokens() -> int:
-    """读取 run 级高水位预算（env 覆盖 > 默认）。0 表示关闭预防性压缩。"""
+def effective_budget_tokens(
+    context_window: Optional[int] = None,
+    max_output_tokens: Optional[int] = None,
+) -> int:
+    """按模型实际窗口派生 run 级高水位预算。
+
+    模型的 context window 由 **input 与 output 共享**，所以能装进历史的
+    上限要先扣掉本轮输出预留，再扣掉固定缓冲::
+
+        window - min(max_output, 21k) - 13k
+
+    对标 ZCode ``compact/policy.ts`` 的 ``getEffectiveContextWindowSize()``。
+
+    窗口未知（模型目录缺失、endpoint 未解析）时返回 ``0`` 表示"无法派生"，
+    由 :func:`run_ctx_budget_tokens` 回退到默认常量——**绝不因窗口未知就
+    关闭压缩**。
+    """
+    if not context_window or context_window <= 0:
+        return 0
+    reserve = min(max_output_tokens or 0, MAX_OUTPUT_RESERVE)
+    return max(0, int(context_window) - reserve - BUFFER_TOKENS)
+
+
+def run_ctx_budget_tokens(
+    context_window: Optional[int] = None,
+    max_output_tokens: Optional[int] = None,
+) -> int:
+    """读取 run 级高水位预算。优先级：env 覆盖 > 窗口派生 > 默认常量。
+
+    返回 0 表示关闭预防性压缩。窗口参数缺省时退化为旧行为（固定 100k 常量），
+    调用方无需改造即可继续工作。
+    """
     raw = os.environ.get(ENV_RUN_CTX_BUDGET, "").strip()
     if raw:
         try:
@@ -82,6 +124,9 @@ def run_ctx_budget_tokens() -> int:
                 return value
         except ValueError:
             logger.warning("env %s=%r 不是合法整数，回退默认预算", ENV_RUN_CTX_BUDGET, raw)
+    derived = effective_budget_tokens(context_window, max_output_tokens)
+    if derived > 0:
+        return derived
     return DEFAULT_RUN_CTX_BUDGET_TOKENS
 
 
