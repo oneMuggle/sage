@@ -84,7 +84,7 @@ async def test_auto_compaction_before_chat_run_loop(client, monkeypatch):
         return DIGEST
 
     monkeypatch.setattr(
-        "backend.api.legacy_routes._build_compaction_llm_callable",
+        "backend.api.chat_session_lifecycle._build_compaction_llm_callable",
         lambda: fake_summary_llm,
     )
 
@@ -134,7 +134,7 @@ async def test_auto_compaction_failure_never_blocks_chat(client, monkeypatch):
         raise RuntimeError("summary upstream down")
 
     monkeypatch.setattr(
-        "backend.api.legacy_routes._build_compaction_llm_callable",
+        "backend.api.chat_session_lifecycle._build_compaction_llm_callable",
         lambda: exploding_llm,
     )
 
@@ -178,7 +178,7 @@ async def test_auto_compaction_prefers_request_llm_config(client, monkeypatch):
 
     monkeypatch.setattr("backend.core.legacy.llm_client.LLMClient", FakeLLMClient)
     monkeypatch.setattr(
-        "backend.api.legacy_routes._build_compaction_llm_callable",
+        "backend.api.chat_session_lifecycle._build_compaction_llm_callable",
         lambda: pytest.fail("请求带 llm_config 时不应走 app_settings 回退"),
     )
 
