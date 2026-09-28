@@ -51,6 +51,6 @@
 | R27 | C1e legacy 13 个请求/响应模型归位 legacy_models.py（legacy_routes 3977→3327） | #1763（`0f756f22`） | #1767（`e73cd600`） | ✅ 双分支已合 |
 | R28 | C2c 流状态注册表与中断函数迁出 chat_stream_state（legacy_routes→3270） | #1774（`2e040f50`） | #1777（`51f9471f`） | ✅ 双分支已合 |
 | R29 | C2d 会话压缩/记忆提取装配迁出 chat_session_lifecycle（legacy_routes→2956） | #1782（`4985a218`） | #1790（`371166cb`） | ✅ 双分支已合 |
-| R30 | C2e Agent API 路由组迁出 legacy_agent_routes（legacy_routes→2748，C 系列 5463→2748） | #1792（`7b6c50cf`） | #1795（待合） | 交付中 |
+| R30 | C2e Agent API 路由组迁出 legacy_agent_routes（legacy_routes→2748，C 系列 5463→2748） | #1792（`7b6c50cf`） | #1795（`3ea442c7`） | ✅ 双分支已合 |
 
 —— 本账本由对标循环维护，随轮次追加。
