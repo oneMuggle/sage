@@ -44,4 +44,13 @@ monkeypatch 模块属性——路由以模块对象引用三个 repo/reader）�
 
 ## 5. 交付记录
 
-（交付后回填）
+- **批次 A（main）**：#1806 `17463d53`
+  - 内容：test_artifact_routes.py（21 例）+ 本文档。Backend/Frontend/
+    Electron/Architecture 全绿；**Dependency audit 红但非门禁**——
+    repo 级既有漂移（npm fast-uri GHSA-58mr/-qw65 未入 policy、undici
+    解析问题、pip 侧 4 包 10 漏洞、audit 环境创建失败），与本批次
+    零依赖改动无关。已登记总账 §3 待办（R74 候选：policy 覆盖或
+    依赖升级）。
+- **批次 B（win7 对齐）**：#1809 `f9af71be`
+  - 测试文件 + 文档同步至 win7；CI 一次全绿（Win7 LTS py38 job 过）。
+- **总账回填**：即本提交。
