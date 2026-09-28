@@ -40,7 +40,7 @@ _LEGACY_ONLY = pytest.mark.skipif(
 @_LEGACY_ONLY
 async def test_chat_returns_structured_error_on_auth_failed():
     """LLM 401 时 /chat 返回结构化错误响应（HTTP 200 + error 字段）。"""
-    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+    with patch("backend.api.legacy_chat_routes.SageAgent") as MockAgent:
         mock_agent_instance = MockAgent.return_value
         mock_agent_instance.chat = AsyncMock(
             side_effect=LLMError(LLMErrorType.AUTH_FAILED, "API Key 无效", status_code=401)
@@ -67,7 +67,7 @@ async def test_chat_returns_structured_error_on_auth_failed():
 @_LEGACY_ONLY
 async def test_chat_returns_structured_error_on_timeout():
     """LLM 超时时 /chat 返回 timeout 错误。"""
-    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+    with patch("backend.api.legacy_chat_routes.SageAgent") as MockAgent:
         mock_agent_instance = MockAgent.return_value
         mock_agent_instance.chat = AsyncMock(
             side_effect=LLMError(LLMErrorType.TIMEOUT, "请求 LLM 超时")
@@ -92,7 +92,7 @@ async def test_chat_handles_agent_returning_error_dict_without_crashing():
     """回归测试：agent.chat() 返回 error 字典时（Task 6 后的新契约），
     路由不能因 success 日志崩溃，要透传 error 字典给前端。
     这是用户报告的'发送消息无响应' bug 的根因。"""
-    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+    with patch("backend.api.legacy_chat_routes.SageAgent") as MockAgent:
         mock_agent_instance = MockAgent.return_value
         # chat() 返回 error 字典而不是 raise LLMError（Task 6 的新契约）
         mock_agent_instance.chat = AsyncMock(
@@ -129,7 +129,7 @@ async def test_chat_handles_agent_returning_error_dict_without_crashing():
 @_LEGACY_ONLY
 async def test_chat_request_id_in_response_header():
     """响应头应包含 x-request-id 用于诊断追踪。"""
-    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+    with patch("backend.api.legacy_chat_routes.SageAgent") as MockAgent:
         mock_agent_instance = MockAgent.return_value
         mock_agent_instance.chat = AsyncMock(
             return_value={
@@ -161,9 +161,9 @@ async def test_chat_response_header_request_id_matches_handler_logs(caplog):
     """响应头 x-request-id 应与 handler 日志中的 [REQ xxx] 一致。"""
     import logging
 
-    caplog.set_level(logging.INFO, logger="backend.api.legacy_routes")
+    caplog.set_level(logging.INFO, logger="backend.api.legacy_chat_routes")
 
-    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+    with patch("backend.api.legacy_chat_routes.SageAgent") as MockAgent:
         mock_agent_instance = MockAgent.return_value
         mock_agent_instance.chat = AsyncMock(
             return_value={

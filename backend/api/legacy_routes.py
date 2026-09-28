@@ -268,7 +268,8 @@ router.include_router(legacy_settings_routes_router)
 
 # C2g (DSH 对标 R32): 非流式聊天/attach/interrupt/steer/进化/learn 端点迁出至
 # legacy_chat_routes.py（纯物理拆分，路径/行为零变更；include 模式同前）。
-from backend.api.legacy_chat_routes import (  # noqa: F401 — 经 include 挂载
+from backend.api.legacy_chat_routes import (  # noqa: F401 — include 挂载 + 再导出面
+    get_active_chat_stream,  # noqa: F401 — 测试经 legacy_routes 导入
     router as legacy_chat_routes_router,
 )
 
