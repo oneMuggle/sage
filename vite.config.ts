@@ -210,6 +210,10 @@ export default defineConfig({
       '**/.worktrees/**',
       '**/dist/**',
       '**/dist-electron/**',
+      // 2026-09-28 (W5): gitignore 的 reference/ 借鉴代码（如 LocalBridge-Share）
+      // 其自带 *.test.cjs 依赖自身 deps（express 等），本仓库从未安装——
+      // 不排除会让本地全量运行常驻 8 个幻影失败（CI 干净检出不受影响）。
+      'reference/**',
       'tests/electron/**',
       'tests/e2e/**',
       'e2e/**',
