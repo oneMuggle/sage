@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -55,9 +55,10 @@ const EMPTY_TOOL_CALLS: readonly never[] = [];
  *
  * - 太大会让用户微调 scrollbar 也算"在底部"→ 流式 token 抢焦点
  * - 太小会让 1px 误差就让"跳到最新"按钮闪出/消失
- * 经验值 48px 对应 ~5 行文字,大多数用户用滚轮 1-2 击内仍能停在阈值内。
+ * 96px 约 10 行文字：流式时每帧可新增数行,48px 会把"距底 60px"判成非底部,
+ * 按钮在一次滚轮微调内反复闪现。滚轮 1-2 击仍能停在阈值内。
  */
-const BOTTOM_THRESHOLD_PX = 48;
+const BOTTOM_THRESHOLD_PX = 96;
 
 export function Chat() {
   const {
@@ -205,6 +206,12 @@ export function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const wasAtBottomRef = useRef(true);
   const lastMsgLengthRef = useRef(0);
+  // 2026-09-28 (P0-2): 同一帧内多个流式 delta 只写一次 scrollTop,
+  // 避免每个 token 都同步写布局属性、与用户手势争抢主线程。
+  const scrollRafRef = useRef<number | null>(null);
+  // 我们自己写入的 scrollTop —— 用来把"程序滚动"和"用户手势"区分开,
+  // 否则用户上滑会被紧随其后的程序滚动"洗白"回底部状态。
+  const programmaticTopRef = useRef<number | null>(null);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   // R17-A2: 压缩成功后 toast「查看归档」入口
   const [archivesOpen, setArchivesOpen] = useState(false);
@@ -223,10 +230,11 @@ export function Chat() {
     setShowJumpToLatest(false);
   }, [currentSessionId]);
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-
+  // 2026-09-28 (P0-2): useLayoutEffect + rAF 合帧。
+  // 旧实现每个 token 同步写一次 scrollTop;流式一帧内可来多个 delta,
+  // 每次写都强制重排,与用户滚动手势争抢。加 rAF 后一帧只写一次,
+  // 且在 paint 前完成,不会闪出中间帧。
+  useLayoutEffect(() => {
     const prevLength = lastMsgLengthRef.current;
     const currentLength = messages.length;
     const previousMessages = previousMessagesRef.current;
@@ -236,9 +244,17 @@ export function Chat() {
     lastMsgLengthRef.current = currentLength;
     previousMessagesRef.current = messages;
 
-    if (addedUserMessage || wasAtBottomRef.current) {
-      el.scrollTop = el.scrollHeight;
-    }
+    if (!addedUserMessage && !wasAtBottomRef.current) return;
+    if (scrollRafRef.current !== null) return; // 本帧已排队,等它统一写
+
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const el = scrollRef.current;
+      if (!el) return;
+      const top = el.scrollHeight;
+      programmaticTopRef.current = top;
+      el.scrollTop = top;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- messages 本身不加入 deps，避免每次 render 都触发；通过 messages.length + lastMsg 字段变化驱动
   }, [
     messages.length,
@@ -249,6 +265,17 @@ export function Chat() {
     streamingMessageId,
   ]);
 
+  // 卸载时撤掉排队中的帧,避免对已卸载的节点写 scrollTop。
+  useEffect(
+    () => () => {
+      if (scrollRafRef.current !== null) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = null;
+      }
+    },
+    [],
+  );
+
   // Scroll listener: 维护 wasAtBottomRef + showJumpToLatest UI state。
   // 用 ``wasAtBottomRef`` 同步标记 + ``useState`` 异步刷新,避免 setState 触发的
   // re-render 打断滚动节奏(scrollTop 频繁跳变会让 wasAtBottom 状态本身抖动)。
@@ -257,6 +284,15 @@ export function Chat() {
     if (!el) return;
 
     const onScroll = () => {
+      // 2026-09-28 (P0-2) 惯性保护: scrollTop 与我们写入值不符 = 用户手势。
+      // 撤掉排队中的程序滚动,别在用户上滑的同一帧把人拽回底部。
+      if (programmaticTopRef.current !== null && el.scrollTop !== programmaticTopRef.current) {
+        programmaticTopRef.current = null;
+        if (scrollRafRef.current !== null) {
+          cancelAnimationFrame(scrollRafRef.current);
+          scrollRafRef.current = null;
+        }
+      }
       const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
       const atBottom = distance <= BOTTOM_THRESHOLD_PX;
       wasAtBottomRef.current = atBottom;
@@ -1139,7 +1175,6 @@ export function Chat() {
               });
             }
           }}
-
         />
       </div>
       {/* /内容行 */}

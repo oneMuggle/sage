@@ -156,6 +156,45 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+    // 覆盖率棘轮门禁（2026-09-23）：基线为当日全量实测
+    // (stmts 61.81 / branch 80.6 / funcs 67.09 / lines 61.81)。
+    // 阈值留 ~2pt 余量，只防"大幅回退"，不为凑数写浅测试；
+    // 后续覆盖率提升时同步上调基线。
+    //
+    // 2026-09-28 (P0-3) 口径修正：此前**没有** coverage.exclude，vendored
+    // 第三方代码与独立 package 全部计入分母 —— 实测 5267 条语句（占 6.9%）
+    // 来自下列文件，任何渲染层单测都不可能覆盖：
+    //   - extension/wiki-clipper/lib/{readability,turndown}.js  第三方 vendored
+    //   - backend/.../export_assets/vendor/highlight.min.js     压缩过的 hljs
+    //   - packages/drawio-mcp-server/**                          独立 MCP 包
+    // 依据：package.json 的 lint 已经用 --ignore-pattern 排除了
+    // extension/** 与 backend/**/export_assets —— 覆盖率口径与 lint 口径对齐，
+    // 不是为了抬高数字而挑软柿子。artifacts/ 已有 3 个测试文件，故不排除。
+    coverage: {
+      provider: 'v8',
+      // v8 provider 一旦显式指定 exclude 就不再套用默认值，需重列。
+      exclude: [
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/dist-electron/**',
+        '**/.claude/**',
+        '**/.worktrees/**',
+        // vendored 第三方 + 独立 package（见上方依据）
+        'extension/**',
+        'backend/**/export_assets/**',
+        'packages/**',
+      ],
+      thresholds: {
+        // 2026-09-28 排除 vendored 后实测：
+        // stmts 69.79 / branch 81.07 / funcs 67.33 / lines 69.79。
+        // branch 几乎没涨（vendored 是语句多、分支少的纯 JS），故维持 79；
+        // stmts/lines 水位真实上移，棘轮 60 → 67，仍留 ~2.7pt 余量。
+        statements: 67,
+        branches: 79,
+        functions: 65,
+        lines: 67,
+      },
+    },
     // Phase 4: exclude Playwright Electron smoke tests (run separately via
     // `npx playwright test tests/electron/smoke.spec.ts`, not Vitest).
     // Phase 6 (2026-06-27): also exclude ./e2e/ (wiki-folder-picker Playwright spec).

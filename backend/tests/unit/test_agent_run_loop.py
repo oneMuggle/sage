@@ -1053,3 +1053,125 @@ async def test_non_overflow_llm_error_not_first_aided(monkeypatch):
     assert exc_info.value.type == LLMErrorType.RATE_LIMITED
     assert agent.llm_client.chat.await_count == 1
     assert messages == snapshot
+
+
+# ---- 迭代边界级联压缩（micro → first_aid）与熔断 ------------------------------
+
+
+def _paired_history(pairs: int, tool_name: str, tool_chars: int = 5000) -> list:
+    """构造 run_loop 真实形态的历史：tool 消息不带 name，靠 id 反查。"""
+    messages = [{"role": "system", "content": "system prompt"}]
+    for i in range(pairs):
+        messages.append(
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": f"call_{i}",
+                        "type": "function",
+                        "function": {"name": tool_name, "arguments": "{}"},
+                    }
+                ],
+            }
+        )
+        messages.append(
+            {"role": "tool", "tool_call_id": f"call_{i}", "content": "y" * tool_chars}
+        )
+    messages.append({"role": "user", "content": "继续"})
+    return messages
+
+
+@pytest.mark.asyncio()
+async def test_microcompact_runs_before_first_aid(monkeypatch):
+    """超预算时优先 micro：白名单工具旧结果被清成哨兵串，而非截断标记。"""
+    monkeypatch.setenv("SAGE_RUN_CTX_BUDGET_TOKENS", "1")
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(return_value=_make_response(content="ok"))
+
+    messages = _paired_history(6, "read_file")
+    async for _ in agent.run_loop(messages):
+        pass
+
+    early_tool = next(m for m in messages if m.get("tool_call_id") == "call_0")
+    assert early_tool["content"] == "[旧工具结果已清除]"
+
+
+@pytest.mark.asyncio()
+async def test_non_whitelisted_tool_falls_through_to_first_aid(monkeypatch):
+    """白名单外工具 micro 不动手，级联降级到 first_aid 的截断标记。"""
+    monkeypatch.setenv("SAGE_RUN_CTX_BUDGET_TOKENS", "1")
+    agent = SageAgent()
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(return_value=_make_response(content="ok"))
+
+    messages = _paired_history(6, "office_read")
+    async for _ in agent.run_loop(messages):
+        pass
+
+    early_tool = next(m for m in messages if m.get("tool_call_id") == "call_0")
+    assert early_tool["content"].endswith("[已压缩：早期工具结果]")
+
+
+@pytest.mark.asyncio()
+async def test_compaction_uses_model_context_window(monkeypatch):
+    """预算按 llm_config.context_window 派生，不是固定 100k 常量。"""
+    monkeypatch.delenv("SAGE_RUN_CTX_BUDGET_TOKENS", raising=False)
+    agent = SageAgent()
+    agent.llm_config = MagicMock()
+    # 窗口小到必然触发，窗口大到不该触发——同一个 agent 只靠窗口参数区分。
+    agent.llm_config.context_window = 20_000
+    agent.llm_config.max_tokens = 4_000
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(return_value=_make_response(content="ok"))
+
+    # 条数要够多，早期条目才落在 first_aid 的保留区之外。
+    small_window = _paired_history(8, "read_file", tool_chars=5_000)
+    before = [dict(m) for m in small_window]
+    async for _ in agent.run_loop(small_window):
+        pass
+    assert small_window != before, "小窗口应触发压缩"
+
+    agent.llm_config.context_window = 2_000_000
+    big_window = _paired_history(8, "read_file", tool_chars=5_000)
+    tool_before = [m["content"] for m in big_window if m.get("role") == "tool"]
+    async for _ in agent.run_loop(big_window):
+        pass
+    # run_loop 自己会追加本轮 assistant 回复，只比对工具结果本身。
+    assert [m["content"] for m in big_window if m.get("role") == "tool"] == tool_before, (
+        "大窗口不应触发压缩"
+    )
+
+
+def test_compact_if_over_budget_circuit_breaks(monkeypatch):
+    """压不下时累计失败，达阈值后停止继续尝试。"""
+    monkeypatch.setenv("SAGE_RUN_CTX_BUDGET_TOKENS", "1")
+    agent = SageAgent()
+    agent.llm_config = MagicMock()
+    agent.llm_config.context_window = None
+    agent.llm_config.max_tokens = 4096
+
+    # 全是 system 消息——两级压缩都不动它，必然压不下。
+    messages = [{"role": "system", "content": "s" * 50_000} for _ in range(4)]
+
+    failures = 0
+    for iteration in range(6):
+        snapshot = [dict(m) for m in messages]
+        failures = agent._compact_if_over_budget(messages, iteration, failures)
+        if iteration >= 3:
+            assert messages == snapshot, f"第 {iteration} 次已熔断，不应再改写"
+    assert failures >= 3
+
+
+def test_compact_if_over_budget_resets_on_success(monkeypatch):
+    """压到预算内即清零失败计数（预算必须可达——1 永远压不下）。"""
+    monkeypatch.setenv("SAGE_RUN_CTX_BUDGET_TOKENS", "10000")
+    agent = SageAgent()
+    agent.llm_config = MagicMock()
+    agent.llm_config.context_window = None
+    agent.llm_config.max_tokens = 4096
+
+    # 20 组结果压缩后只剩最近 5 条（约 6.3k token），低于 10k 预算。
+    messages = _paired_history(20, "read_file", tool_chars=5_000)
+    assert agent._compact_if_over_budget(messages, 0, 2) == 0

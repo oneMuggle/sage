@@ -2245,6 +2245,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 request_endpoint_id=data.endpoint_id,
                 auto_context=data.auto_context,
             )
+            # 把窗口透传给 run_loop：其预防性压缩阈值按实际窗口派生
+            # （window − output 预留 − 缓冲），而不是固定 100k 常量。
+            # 解析不到时保持缺省，run_ctx_budget_tokens 回退默认常量。
+            if llm_config is not None and effective_window:
+                llm_config["context_window"] = int(effective_window)
             # 上下文明细改造: reserve 不再硬编码 16384——本轮非历史开销
             # (system/附件/动态上下文/当前输入/工具 schema) 按实际大小实测,
             # 另加输出预算 (LLMConfig.max_tokens 默认 4096)。测量失败或

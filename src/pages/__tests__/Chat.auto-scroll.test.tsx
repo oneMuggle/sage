@@ -17,7 +17,7 @@
  *
  * 不发起任何真实 IPC/localStorage;useSettings 与 useChat 都被 mock。
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -119,6 +119,29 @@ function setupScrollEl(
   return scrollEl;
 }
 
+/** 等两帧：确保上一轮排队的 rAF 已落地,再开始计数。 */
+async function flushFrames(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+  });
+}
+
+/** 装一个可计数的 scrollTop 访问器,用来观测"写了几次"。 */
+function trackScrollTop(scrollEl: HTMLDivElement, initial: number) {
+  const state = { top: initial, writes: 0 };
+  Object.defineProperty(scrollEl, 'scrollTop', {
+    configurable: true,
+    get: () => state.top,
+    set: (value: number) => {
+      state.writes += 1;
+      state.top = value;
+    },
+  });
+  return state;
+}
+
 describe('Chat — auto-scroll to bottom on new message', () => {
   beforeEach(() => {
     useSettingsMock.mockReturnValue({
@@ -151,7 +174,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
     vi.useRealTimers();
   });
 
-  it('scrolls to bottom when a new message is added', () => {
+  it('scrolls to bottom when a new message is added', async () => {
     // jsdom 中 scrollHeight 默认 0 — 我们把它设成非零以便断言 scrollTop 被赋值
     const messagesV1 = [baseMsg('1', 'user', 'hello')];
 
@@ -162,7 +185,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -196,7 +219,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -209,10 +232,11 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       </MemoryRouter>,
     );
 
-    expect(scrollEl.scrollTop).toBe(1234);
+    // 2026-09-28 (P0-2): 写入已改为 rAF 合帧,需等下一帧而不是同步断言。
+    await waitFor(() => expect(scrollEl.scrollTop).toBe(1234));
   });
 
-  it('scrolls to bottom on streaming content_delta (same length, mutated content)', () => {
+  it('scrolls to bottom on streaming content_delta (same length, mutated content)', async () => {
     // 流式: messages.length 不变,但最后一条 assistant 的 content 增长。
     // 依赖里同时监听了 lastMsg?.content,保证这种情况也触发滚动。
     const baseAssistant = baseMsg('1', 'assistant', 'hel');
@@ -223,7 +247,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -254,7 +278,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -267,7 +291,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
       </MemoryRouter>,
     );
 
-    expect(scrollEl.scrollTop).toBe(777);
+    await waitFor(() => expect(scrollEl.scrollTop).toBe(777));
   });
 });
 
@@ -296,7 +320,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -329,7 +353,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -357,7 +381,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -380,7 +404,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -406,7 +430,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -437,7 +461,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -465,7 +489,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -495,7 +519,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -522,7 +546,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -554,7 +578,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -593,7 +617,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -624,7 +648,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       clearError: vi.fn(),
       sendMessage: vi.fn(),
       interrupt: vi.fn(),
-    reattachActiveStream: vi.fn(),
+      reattachActiveStream: vi.fn(),
       loadMessages: vi.fn(),
       streamingToolCalls: [],
     });
@@ -640,5 +664,111 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
     await waitFor(() => {
       expect(scrollEl.scrollTop).toBe(scrollEl.scrollHeight);
     });
+  });
+});
+
+/**
+ * 2026-09-28 (P0-2) 抖动回归
+ *
+ * 三个缺陷各对应一条用例：
+ *   1. 每个流式 delta 同步写一次 scrollTop → 同帧 N 次 delta 应合帧为 1 次写
+ *   2. 用户上滑被紧随其后的程序滚动"洗白" → 手势应撤掉排队中的那次写
+ *   3. 底部阈值过小(48px) → 距底 60px 被判成非底部,按钮在滚轮微调内反复闪现
+ */
+describe('Chat — 抖动回归 (P0-2)', () => {
+  const streamingChat = (content: string) => ({
+    messages: [{ ...baseMsg('1', 'assistant', content) }],
+    isLoading: true,
+    streamingMessageId: '1',
+    error: null,
+    errorSessionId: null,
+    clearError: vi.fn(),
+    sendMessage: vi.fn(),
+    interrupt: vi.fn(),
+    reattachActiveStream: vi.fn(),
+    loadMessages: vi.fn(),
+    currentAgentId: null,
+    iteration: 0,
+    streamingState: null,
+    streamingToolCalls: [],
+  });
+
+  const mountChat = (initialContent: string) => {
+    useChatMock.mockReturnValue(streamingChat(initialContent));
+    return render(
+      <MemoryRouter>
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+  };
+
+  const pushDelta = (content: string, rerender: ReturnType<typeof render>['rerender']) => {
+    useChatMock.mockReturnValue(streamingChat(content));
+    rerender(
+      <MemoryRouter>
+        <I18nProvider>
+          <Chat />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+  };
+
+  beforeEach(() => {
+    useStore.setState({ messages: [], currentSessionId: null, sessions: [] });
+  });
+
+  it('coalesces a burst of streaming deltas into a single scrollTop write', async () => {
+    const { container, rerender } = mountChat('h');
+    const scrollEl = setupScrollEl(container, 1000, 400, 504); // distance=96 → 底部
+    const tracker = trackScrollTop(scrollEl, 504);
+    fireEvent.scroll(scrollEl);
+
+    // 挂载那一帧已排过一次写,先落地再归零,只统计本轮 burst。
+    await flushFrames();
+    tracker.writes = 0;
+    tracker.top = 504;
+
+    // 一次 burst：5 个 delta 连续到达,中间不 paint。
+    for (const content of ['he', 'hel', 'hell', 'hello', 'hello world']) {
+      pushDelta(content, rerender);
+    }
+
+    await waitFor(() => expect(tracker.top).toBe(1000));
+    expect(tracker.writes).toBe(1);
+  });
+
+  it('cancels the queued programmatic scroll when the user scrolls up first', async () => {
+    const { container, rerender } = mountChat('h');
+    const scrollEl = setupScrollEl(container, 1000, 400, 504);
+    const tracker = trackScrollTop(scrollEl, 504);
+    fireEvent.scroll(scrollEl);
+    await flushFrames();
+    tracker.writes = 0;
+
+    // 新 delta 排了一帧；帧还没落地时用户上滑。
+    pushDelta('hello', rerender);
+    tracker.top = 200;
+    fireEvent.scroll(scrollEl);
+
+    // 帧落地后不得把人拽回底部。
+    await flushFrames();
+    expect(tracker.top).toBe(200);
+    expect(tracker.writes).toBe(0);
+  });
+
+  it('treats 60px from the bottom as still at the bottom (threshold 96)', async () => {
+    const { container, rerender } = mountChat('hel');
+    // distance = 1000 - 400 - 540 = 60,落在 48~96 之间：旧阈值会判成非底部。
+    const scrollEl = setupScrollEl(container, 1000, 400, 540);
+    fireEvent.scroll(scrollEl);
+
+    expect(screen.queryByRole('button', { name: '跳到最新' })).toBeNull();
+
+    pushDelta('hello world', rerender);
+
+    await waitFor(() => expect(scrollEl.scrollTop).toBe(1000));
+    expect(screen.queryByRole('button', { name: '跳到最新' })).toBeNull();
   });
 });
