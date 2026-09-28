@@ -12,6 +12,7 @@ import {
   resolveTemplate,
   saveRememberedValues,
   TemplateFillDialog,
+  tplStorageKey,
 } from '../TemplateFillDialog';
 
 
@@ -35,12 +36,9 @@ describe('R31 变量记忆 — 纯函数', () => {
   });
 
   it('损坏的存储返回空对象', () => {
-    const key = Object.keys(localStorage).find((k) => k.startsWith('sage:tplfill:'));
-    if (key) localStorage.setItem(key, '{broken json');
-    // 直接写坏值再读
-    saveRememberedValues(CONTENT, { 内容: 'x' });
-    const realKey = Object.keys(localStorage).find((k) => k.startsWith('sage:tplfill:'));
-    localStorage.setItem(realKey!, '{broken');
+    // 键必须用 tplStorageKey 定位：Object.keys(localStorage) 返回的是 Storage
+    // 原型成员（length/key/getItem…），不是存储条目，find(prefix) 恒为 undefined。
+    localStorage.setItem(tplStorageKey(CONTENT), '{broken json');
     expect(loadRememberedValues(CONTENT)).toEqual({});
   });
 });
