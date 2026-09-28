@@ -81,7 +81,7 @@ _CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 _ALLOWED_IMAGE_MIME_PREFIXES = ("data:image/png", "data:image/jpeg", "data:image/webp", "data:image/gif")
 
 
-def _validate_chat_images(images: List[str]) -> str | None:
+def _validate_chat_images(images: List[str]) -> Optional[str]:
     """校验 base64 data URL 图片列表；返回错误文案或 None（全部合法）。"""
     if len(images) > _CHAT_IMAGE_MAX_COUNT:
         return f"图片数量 {len(images)} 超过上限 {_CHAT_IMAGE_MAX_COUNT}"
