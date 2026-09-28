@@ -211,4 +211,48 @@ describe('Message — R17 信任感交互', () => {
     renderWithI18n(<Message message={makeMsg()} />);
     expect(screen.queryByTestId('compact-banner')).not.toBeInTheDocument();
   });
+
+  // 复制后的 1.5s 复位定时器若不随卸载清理，会在 vitest 拆除 jsdom 环境后
+  // 才触发 setState → ReferenceError: window is not defined。该报错发生在
+  // 环境 teardown 阶段，只在跑全量套件时炸，单独跑本文件复现不出来。
+  //
+  // 断言点是「卸载那一刻定时器已被清掉」而不是「推进时间不抛错」：后者是空的
+  // —— advanceTimersByTime 会把定时器跑掉，之后计数必然归零，而 React 18 对
+  // 已卸载组件的 setState 又是静默 no-op。
+  it('卸载时清理复制复位定时器', () => {
+    vi.useFakeTimers();
+    try {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
+      const { unmount } = renderWithI18n(<Message message={makeMsg()} />);
+
+      fireEvent.click(screen.getByTestId('copy-message'));
+      expect(vi.getTimerCount()).toBeGreaterThan(0); // 1.5s 复位定时器已挂起
+
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('连续点击复制只保留最后一个复位定时器', () => {
+    vi.useFakeTimers();
+    try {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
+      const { unmount } = renderWithI18n(<Message message={makeMsg()} />);
+      const btn = screen.getByTestId('copy-message');
+
+      fireEvent.click(btn);
+      expect(vi.getTimerCount()).toBe(1);
+      fireEvent.click(btn); // 第二次点击应接管而非叠加
+      expect(vi.getTimerCount()).toBe(1);
+
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

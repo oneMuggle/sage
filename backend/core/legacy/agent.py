@@ -31,6 +31,7 @@ from backend.core.legacy.context_first_aid import (
     first_aid_compact,
     run_ctx_budget_tokens,
 )
+from backend.core.legacy.context_microcompact import micro_compact
 from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
@@ -86,6 +87,16 @@ DEFAULT_MAX_ITERATIONS = 10
 #: （保留最近 6 条），第 2 次用激进压缩（保留最近 2 条）；仍溢出则按
 #: 原错误面终止——同一请求盲目重试必然复现，压缩是唯一出路。
 _MAX_FIRST_AID_ATTEMPTS = 2
+
+#: 预防性压缩的熔断阈值：连续这么多次迭代压不下来（压完仍超预算）就停止
+#: 继续尝试，把 token 花在真正的 LLM 调用上而不是反复改写历史。
+#: 对标 ZCode ``compact/policy.ts`` 的 MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES。
+_MAX_CONSECUTIVE_COMPACT_FAILURES = 3
+
+#: rapid-refill 判据：压缩后剩余量仍高于压缩前的这个比例，说明省下的空间
+#: 立刻被新内容填回去了（典型是超长单条工具结果，或估算口径失真）。
+#: 命中时记 warning 并计入熔断计数。
+_RAPID_REFILL_RATIO = 0.9
 
 #: DSH 对标 R3 (B2): 单个并发池组的工具数上限（有界滚动池）。超过即
 #: 开新池组——避免一次超大 READ 批把 executor 线程池占满（默认池仅
@@ -915,6 +926,74 @@ class SageAgent:
                 logger.warning("env SAGE_MAX_TOOL_CALLS_PER_RUN=%r 非法,回退 policy 默认", raw)
         return int(getattr(self.tool_policy, "max_tool_calls_per_run", 25) or 25)
 
+    def _compact_if_over_budget(
+        self,
+        messages: List[Dict[str, Any]],
+        iteration: int,
+        failures: int,
+    ) -> int:
+        """迭代边界预防性压缩：三级级联 + 熔断计数。就地改写 ``messages``。
+
+        级联顺序按「省得多少 / 代价多大」排列，每级都先验一次是否真能省下
+        东西，不做无用改写：
+
+        1. :func:`micro_compact` —— 清空白名单工具的**旧**结果为哨兵串。
+           无 LLM，省得最多，但信息不可恢复，所以只动白名单且保底 256 token。
+        2. :func:`first_aid_compact` —— 早期消息保头尾截断。信息损失小，
+           但单条省得有限，对超长单条内容无能为力。
+        3. 都不够则不再预防——交给已有的溢出急救环（``_MAX_FIRST_AID_ATTEMPTS``）
+           和更激进的手段处理，避免在迭代边界反复消耗。
+
+        返回更新后的连续失败计数（供调用方决定是否继续尝试）。
+        """
+        budget = run_ctx_budget_tokens(
+            context_window=getattr(self.llm_config, "context_window", None),
+            max_output_tokens=getattr(self.llm_config, "max_tokens", None),
+        )
+        if budget <= 0:
+            return 0
+
+        before = estimate_messages_tokens(messages)
+        if before <= budget:
+            return 0  # 本迭代没压过，历史是干净的
+
+        if failures >= _MAX_CONSECUTIVE_COMPACT_FAILURES:
+            logger.warning(
+                "run_loop 迭代 %s 预防性压缩已熔断（连续 %d 次压不下），跳过",
+                iteration,
+                failures,
+            )
+            return failures
+
+        _, after = micro_compact(messages)
+        if after > budget:
+            _, after = first_aid_compact(messages)
+
+        logger.info(
+            "run_loop 迭代 %s 高水位压缩：估算 token %d → %d (预算 %d)",
+            iteration,
+            before,
+            after,
+            budget,
+        )
+
+        # 只有"压完仍超预算"才算失败并计入熔断。压不下去通常意味着本轮
+        # 灌入了超大内容，重复压缩无益。
+        if after > budget:
+            return failures + 1
+        if before > 0 and after > before * _RAPID_REFILL_RATIO:
+            # 压到预算内了，但回收不足 10%——单次压缩几乎白做，后续迭代
+            # 大概率再次触发。只告警不熔断：预算内就是安全的。
+            logger.warning(
+                "run_loop 迭代 %s 压缩收益极低：%d → %d（保留率 %.0f%%），"
+                "单条超长内容或估算口径失真",
+                iteration,
+                before,
+                after,
+                100.0 * after / before,
+            )
+        return 0
+
     @staticmethod
     def _should_stream(llm_client: Optional[LLMClient]) -> bool:
         """是否尝试流式 LLM 调用（L2 真流式开关）。
@@ -975,6 +1054,8 @@ class SageAgent:
         # 切片 B: env 解析收敛到共享件 backend.chat.empty_response_guard
         empty_response_max = empty_response_max_retries()
         empty_response_retries = 0
+        # 预防性压缩的连续失败计数（每 run fresh，达阈值熔断）
+        _compact_failures = 0
         # B2 工具复读守卫配置与状态（对标 hermes repetition_guard）:
         # 相同 (工具名, 规范化参数) 签名重复出现 → 软限注入提醒, 硬限拦截执行。
         try:
@@ -1025,8 +1106,13 @@ class SageAgent:
         # 后续每轮迭代重复发送 —— read_file 上限 5MiB,一次大读取会把后续每轮
         # 请求拖成巨型 payload（bash 的 30KiB 输出 cap 是唯一既有例外）。
         # UI 事件 (AgentEvent.tool_result) 保留全文,只有进 LLM 的消息被截断。
-        tool_cap_chars = int(os.getenv("SAGE_TOOL_RESULT_CAP_CHARS", "32000"))
-        remaining_budget = int(os.getenv("SAGE_TOOL_RESULT_RUN_BUDGET_CHARS", "256000"))
+        # 单条 100 KB / run 级 512 KB。2026-09-28 从 32 KB/256 KB 上调：
+        # read_file / web_fetch 的常见输出正好落在这个量级，32 KB 会在
+        # 工具侧就截掉模型真正需要的部分。run 级预算上调后仍远小于
+        # 派生出来的上下文预算（100k token ≈ 400 KB 纯 ASCII 起步），
+        # 由 microcompact / first_aid 在迭代边界兜底。
+        tool_cap_chars = int(os.getenv("SAGE_TOOL_RESULT_CAP_CHARS", "102400"))
+        remaining_budget = int(os.getenv("SAGE_TOOL_RESULT_RUN_BUDGET_CHARS", "512000"))
 
         def cap_result_for_context(content: str) -> str:
             """按单结果上限 + run 级累计预算截断进 LLM 上下文的工具结果。"""
@@ -1073,19 +1159,12 @@ class SageAgent:
                         "run_loop 迭代 %s 注入 %d 条用户补充消息", i, len(_steer_messages)
                     )
 
-                # RT2 (round7): 迭代边界高水位预防 —— 估算 token 超预算时先
-                # 机械压缩（透明治理，仅日志），避免请求撑爆窗口后才被动急救。
-                # env SAGE_RUN_CTX_BUDGET_TOKENS=0 可关闭。
-                _ctx_budget = run_ctx_budget_tokens()
-                if _ctx_budget > 0 and estimate_messages_tokens(messages) > _ctx_budget:
-                    _before, _after = first_aid_compact(messages)
-                    logger.info(
-                        "run_loop 迭代 %s 高水位压缩：估算 token %d → %d (预算 %d)",
-                        i,
-                        _before,
-                        _after,
-                        _ctx_budget,
-                    )
+                # RT2 (round7) + 2026-09-28 双层压缩: 迭代边界高水位预防 ——
+                # micro → first_aid 两级级联（见 _compact_if_over_budget）。
+                # 阈值按模型实际窗口派生；env SAGE_RUN_CTX_BUDGET_TOKENS=0 关闭。
+                _compact_failures = self._compact_if_over_budget(
+                    messages, i, _compact_failures
+                )
 
                 yield AgentEvent(state=AgentState.THINKING, iteration=i, agent_id=self.agent_id)
 

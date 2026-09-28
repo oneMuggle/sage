@@ -506,6 +506,12 @@ function MessageComponent({
   const canQuote = Boolean(onQuote) && (isUser || isAssistant);
   const canSaveToMemory = Boolean(onSaveToMemory) && (isUser || isAssistant);
   const [copied, setCopied] = useState(false);
+  // 复制后的 1.5s 复位定时器：组件可能在回调触发前卸载（切会话、删除消息），
+  // 不清理就会在环境拆除后调用 setState → ReferenceError: window is not defined。
+  const copiedResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (copiedResetRef.current !== null) clearTimeout(copiedResetRef.current);
+  }, []);
   // R38: 技能激活明细展开态
   const [skillsExpanded, setSkillsExpanded] = useState(false);
   const activatedSkills = message.activated_skills ?? [];
@@ -540,7 +546,8 @@ function MessageComponent({
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
     setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    if (copiedResetRef.current !== null) clearTimeout(copiedResetRef.current);
+    copiedResetRef.current = setTimeout(() => setCopied(false), 1500);
   };
 
   return (

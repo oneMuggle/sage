@@ -156,6 +156,50 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
+    // 覆盖率棘轮门禁（win7 2026-09-28 随 main #1784 引入）：阈值只防"大幅
+    // 回退"，不为凑数写浅测试；后续覆盖率提升时同步上调基线。
+    // 本分支此前**完全没有** coverage 块，阈值直接按本分支实测定（见下）。
+    //
+    // 2026-09-28 (P0-3) 口径修正：此前**没有** coverage.exclude，vendored
+    // 第三方代码与独立 package 全部计入分母 —— 实测 5267 条语句（占 6.9%）
+    // 来自下列文件，任何渲染层单测都不可能覆盖：
+    //   - extension/wiki-clipper/lib/{readability,turndown}.js  第三方 vendored
+    //   - backend/.../export_assets/vendor/highlight.min.js     压缩过的 hljs
+    //   - packages/drawio-mcp-server/**                          独立 MCP 包
+    // 依据：package.json 的 lint 已经用 --ignore-pattern 排除了
+    // extension/** 与 backend/**/export_assets —— 覆盖率口径与 lint 口径对齐，
+    // 不是为了抬高数字而挑软柿子。artifacts/ 已有 3 个测试文件，故不排除。
+    coverage: {
+      provider: 'v8',
+      // v8 provider 一旦显式指定 exclude 就不再套用默认值，需重列。
+      exclude: [
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/dist-electron/**',
+        '**/.claude/**',
+        '**/.worktrees/**',
+        // vendored 第三方 + 独立 package（见上方依据）
+        'extension/**',
+        'backend/**/export_assets/**',
+        'packages/**',
+      ],
+      thresholds: {
+        // 2026-09-28 排除 vendored 后**本分支**实测（426 文件 / 3102 例）：
+        // stmts 68.32 / branch 80.72 / funcs 65.61 / lines 68.32。
+        //
+        // 数值与 main 的 69.79/81.07/67.33/69.79 不同：win7 前端套件比 main
+        // 少 256 例（3102 vs 3358），functions 尤其低。阈值必须按本分支实测
+        // 定 —— funcs 若照抄 main 的 65，本分支只剩 0.61pt 余量，一次与代码
+        // 无关的性能波动就会红 CI。
+        //
+        // 定 67/79/64/67，各自留 1.3 / 1.7 / 1.6 / 1.3pt 余量，与 main
+        // 「留 ~2pt、只防大幅回退」的棘轮意图一致。
+        statements: 67,
+        branches: 79,
+        functions: 64,
+        lines: 67,
+      },
+    },
     // Phase 4: exclude Playwright Electron smoke tests (run separately via
     // `npx playwright test tests/electron/smoke.spec.ts`, not Vitest).
     // Phase 6 (2026-06-27): also exclude ./e2e/ (wiki-folder-picker Playwright spec).

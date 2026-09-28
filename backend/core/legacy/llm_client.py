@@ -215,6 +215,10 @@ class LLMConfig:
     fallback_model: Optional[str] = None
     # Task 5 (2026-09-15): endpoint identity for usage attribution
     endpoint_id: Optional[str] = None
+    # 模型目录解析出的实际上下文窗口（token）。run_loop 用它派生上下文
+    # 高水位预算——见 context_first_aid.effective_budget_tokens。None =
+    # 未解析到，按默认常量兜底，不会关闭压缩。
+    context_window: Optional[int] = None
 
 
 def _capture_price_snapshot(
