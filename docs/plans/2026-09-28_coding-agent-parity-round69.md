@@ -46,4 +46,11 @@ zotero/gateway/todo 等路由，后续轮次分批。）
 
 ## 5. 交付记录
 
-（交付后回填）
+- **批次 A（main）**：#1778 `7f488f64`
+  - 内容：test_metrics_routes.py（2 例）+ test_media_routes.py（4 例）+
+    test_theme_router.py（12 例）+ 本文档。
+  - 一轮 CI 红：ruff I001（test_metrics_routes import 排序）——修复后
+    终跑全绿（16 checks 0 failure）。
+- **批次 B（win7 对齐）**：#1780 `9c619bb1`
+  - 三个测试文件 + 文档同步至 win7；CI 一次全绿（Win7 LTS py38 job 过）。
+- **总账回填**：即本提交。
