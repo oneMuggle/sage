@@ -12,8 +12,11 @@ from __future__ import annotations
 import pytest
 
 from backend.core.legacy.context_first_aid import (
+    BUFFER_TOKENS,
     DEFAULT_RUN_CTX_BUDGET_TOKENS,
+    MAX_OUTPUT_RESERVE,
     _estimate_text_tokens,
+    effective_budget_tokens,
     estimate_messages_tokens,
     first_aid_compact,
     run_ctx_budget_tokens,
@@ -169,3 +172,46 @@ def test_run_ctx_budget_invalid_env_falls_back(monkeypatch):
     assert run_ctx_budget_tokens() == DEFAULT_RUN_CTX_BUDGET_TOKENS
     monkeypatch.setenv("SAGE_RUN_CTX_BUDGET_TOKENS", "-3")
     assert run_ctx_budget_tokens() == DEFAULT_RUN_CTX_BUDGET_TOKENS
+
+
+# ---- 窗口派生预算 -------------------------------------------------------------
+
+
+def test_effective_budget_derives_from_window_and_output():
+    assert effective_budget_tokens(200_000, 8_000) == 200_000 - 8_000 - BUFFER_TOKENS
+
+
+def test_effective_budget_caps_output_reserve():
+    """模型声明 128k max_tokens 时按 21k 封顶预留，不把预算压到负数。"""
+    assert effective_budget_tokens(200_000, 128_000) == (
+        200_000 - MAX_OUTPUT_RESERVE - BUFFER_TOKENS
+    )
+
+
+def test_effective_budget_never_negative():
+    assert effective_budget_tokens(20_000, 128_000) == 0
+
+
+def test_effective_budget_unknown_window_yields_zero():
+    """窗口未知返回 0（=无法派生），由 run_ctx_budget_tokens 回退默认常量。"""
+    assert effective_budget_tokens(None, 8_000) == 0
+    assert effective_budget_tokens(0, 8_000) == 0
+    assert effective_budget_tokens(-1, 8_000) == 0
+
+
+def test_run_ctx_budget_prefers_window_over_default(monkeypatch):
+    monkeypatch.delenv("SAGE_RUN_CTX_BUDGET_TOKENS", raising=False)
+    derived = effective_budget_tokens(200_000, 8_000)
+    assert run_ctx_budget_tokens(context_window=200_000, max_output_tokens=8_000) == derived
+
+
+def test_run_ctx_budget_env_still_wins_over_window(monkeypatch):
+    monkeypatch.setenv("SAGE_RUN_CTX_BUDGET_TOKENS", "5000")
+    assert run_ctx_budget_tokens(context_window=200_000, max_output_tokens=8_000) == 5000
+
+
+def test_run_ctx_budget_falls_back_when_window_unknown(monkeypatch):
+    """窗口缺失时绝不返回 0（那等于关掉压缩），而是回退默认常量。"""
+    monkeypatch.delenv("SAGE_RUN_CTX_BUDGET_TOKENS", raising=False)
+    assert run_ctx_budget_tokens(context_window=None) == DEFAULT_RUN_CTX_BUDGET_TOKENS
+    assert run_ctx_budget_tokens(context_window=0) == DEFAULT_RUN_CTX_BUDGET_TOKENS

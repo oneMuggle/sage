@@ -29,6 +29,8 @@ vi.mock('../../../shared/api/desktopEvent', () => ({
   listen: (...args: unknown[]) => listenMock(...args),
 }));
 
+import { createFakeStream, done } from './fixtures/fakeStream';
+
 const VALID_SESSION_ID = '11111111-2222-3333-4444-555555555555';
 
 /**
@@ -172,18 +174,8 @@ describe('useChat', () => {
     seedActiveEndpoint();
     // PR-6: useChat 改走 chatStream
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-1' });
-    listenMock.mockImplementationOnce(
-      async (
-        _name: string,
-        cb: (e: { payload: { state: string; iteration: number; content?: string } }) => void,
-      ) => {
-        // 立即同步调 cb 触发 done 事件 (微观队列避免与 state setter 互卡)
-        Promise.resolve().then(() =>
-          cb({ payload: { state: 'done', iteration: 1, content: 'hi from assistant' } }),
-        );
-        return vi.fn();
-      },
-    );
+    // 2026-09-28 (P0-3): 改用共享夹具,消除各处手写的 listen mock。
+    listenMock.mockImplementationOnce(createFakeStream([done('hi from assistant', 1)]).listen);
 
     const { result } = renderHook(() => useChat());
 
@@ -1528,9 +1520,7 @@ describe('useChat taskBoard', () => {
       ]);
     });
     // assistant 消息不携带技能明细
-    const assistant = useStore
-      .getState()
-      .messages.find((m) => m.role === 'assistant');
+    const assistant = useStore.getState().messages.find((m) => m.role === 'assistant');
     expect(assistant?.activated_skills).toBeUndefined();
   });
   // r77 回归: 重接(reattach)重放时 memory_used 也要写入 memory_refs,
@@ -1562,9 +1552,7 @@ describe('useChat taskBoard', () => {
     });
 
     await waitFor(() => {
-      const assistant = useStore
-        .getState()
-        .messages.find((m) => m.role === 'assistant');
+      const assistant = useStore.getState().messages.find((m) => m.role === 'assistant');
       expect(assistant?.memory_refs).toEqual(memPayload);
       expect(assistant?.memory_applied).toBe(1);
     });
@@ -1671,10 +1659,7 @@ describe('useChat subagent_event synthesized board (agent tool)', () => {
     seedActiveEndpoint();
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-agent-live' });
     listenMock.mockImplementationOnce(
-      async (
-        _name: string,
-        cb: (e: { payload: Record<string, unknown> }) => void,
-      ) => {
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
         Promise.resolve().then(() => {
           cb({
             payload: {
@@ -1729,10 +1714,7 @@ describe('useChat subagent_event synthesized board (agent tool)', () => {
     seedActiveEndpoint();
     invokeMock.mockResolvedValueOnce({ streamId: 'stream-agent-guard' });
     listenMock.mockImplementationOnce(
-      async (
-        _name: string,
-        cb: (e: { payload: Record<string, unknown> }) => void,
-      ) => {
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
         Promise.resolve().then(() => {
           // 先建立编排板（正常多 agent 流程）
           cb({
@@ -1913,9 +1895,7 @@ describe('useChat subagent_event synthesized board (agent tool)', () => {
       });
 
       const userMsg = result.current.messages.find((m) => m.role === 'user');
-      expect(userMsg?.activated_skills).toEqual([
-        { name: 'deploy', triggers_matched: ['部署'] },
-      ]);
+      expect(userMsg?.activated_skills).toEqual([{ name: 'deploy', triggers_matched: ['部署'] }]);
     });
 
     it('memory_used 条目缺 id → 丢弃, 不写 memory_refs', async () => {
