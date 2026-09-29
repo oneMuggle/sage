@@ -209,3 +209,72 @@ describe('OrchestrationTab — 计划前置旋钮 (Round 3)', () => {
     });
   });
 });
+
+/**
+ * 回归护栏：四个 profile 的迭代上限此前完全没有 UI 入口。
+ *
+ * 真正控制主对话循环 ReAct 预算是这四项（backend/api/legacy_routes.py 按
+ * profile 名取 max_*_iterations 传给 agent.run_loop），而非 agents 页的
+ * agent.max_iterations（被 run_loop 显式实参覆盖，且 PATCH 硬校验 1..50）。
+ * 缺 UI 时它们恒为后端默认值（primary/coder 15、reviewer 8、writer 5），
+ * 用户无论怎么调都撞 max_iterations_exceeded。
+ */
+describe('OrchestrationTab profile 迭代上限（主对话循环实际预算）', () => {
+  const PROFILE_CASES = [
+    { testId: 'orch-max-primary-iterations', key: 'maxPrimaryIterations', def: '15', defValue: 15 },
+    { testId: 'orch-max-coder-iterations', key: 'maxCoderIterations', def: '15', defValue: 15 },
+    { testId: 'orch-max-reviewer-iterations', key: 'maxReviewerIterations', def: '8', defValue: 8 },
+    { testId: 'orch-max-writer-iterations', key: 'maxWriterIterations', def: '5', defValue: 5 },
+  ] as const;
+
+  it.each(PROFILE_CASES)('$key 渲染输入框且默认值与后端 OrchSettings 对齐', (c) => {
+    renderTab();
+    const input = screen.getByTestId(c.testId) as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).toBe(c.def);
+  });
+
+  it.each(PROFILE_CASES)('$key 修改后走部分更新契约', (c) => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId(c.testId), { target: { value: '200' } });
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        [c.key]: 200,
+        // 其余 profile 键必须保留（本次修改未波及的那些）
+        ...Object.fromEntries(
+          PROFILE_CASES.filter((other) => other.key !== c.key).map((other) => [
+            other.key,
+            other.defValue,
+          ]),
+        ),
+      }),
+    });
+  });
+
+  it('接受 10000 这类大值 —— 后端无上限，不在 UI 侧误挡', () => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-max-primary-iterations'), {
+      target: { value: '10000' },
+    });
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({ maxPrimaryIterations: 10000 }),
+    });
+  });
+
+  it('拒绝 0 与负数 —— 0 会让 ReAct 循环零次执行直接判定超限', () => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-max-primary-iterations'), { target: { value: '0' } });
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId('orch-max-primary-iterations'), {
+      target: { value: '-5' },
+    });
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId('orch-max-primary-iterations'), { target: { value: '' } });
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
+  });
+});

@@ -103,7 +103,10 @@ export function getProtocolOptions(): ReadonlyArray<{
 // LLM_PROXY_BASE 常量（避免循环依赖 api.ts）
 // ============================================================================
 
-const LLM_PROXY_BASE = '/api/v1/llm-proxy';
+// 必须与 backend/main.py 挂载的 llm_proxy_router 前缀一致（/api/v1 + /llm/{path}）。
+// 此前误写为 '/api/v1/llm-proxy' —— 后端无此路由，且该路径不落在 local_auth 的
+// LLM 豁免前缀内，端点「测试连接」恒 401「本地授权凭据无效或缺失」。
+const LLM_PROXY_BASE = '/api/v1/llm';
 
 // ============================================================================
 // 辅助函数
