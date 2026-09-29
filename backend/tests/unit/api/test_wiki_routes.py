@@ -36,16 +36,14 @@ pytestmark = pytest.mark.unit
 def _make_wiki_project(tmp_path: Path, name: str = "proj") -> Path:
     """标准 Wiki 项目：根目录 + wiki/ + schema.md + 一个内容页。
 
-    newline="\n"：Windows 上 write_text 默认会把 \n 翻译成 \r\n，
+    用 write_bytes 落 LF：Windows 上 write_text 默认把 \n 翻译成 \r\n，
     而 citations/locate 的 content_hash 按原始字节算，会错位。
     """
     root = tmp_path / name
     (root / "wiki" / "pages").mkdir(parents=True)
-    (root / "wiki" / "schema.md").write_text(
-        "---\ntitle: schema\n---\n", encoding="utf-8", newline="\n"
-    )
-    (root / "wiki" / "pages" / "note.md").write_text(
-        "---\ntitle: Note\n---\nline1\nline2\n", encoding="utf-8", newline="\n"
+    (root / "wiki" / "schema.md").write_bytes(b"---\ntitle: schema\n---\n")
+    (root / "wiki" / "pages" / "note.md").write_bytes(
+        b"---\ntitle: Note\n---\nline1\nline2\n"
     )
     return root.resolve()
 
