@@ -258,7 +258,9 @@ class MilestoneUpdateRequest(BaseModel):
     description: Optional[str] = Field(default=None, max_length=2000)
     stage: Optional[str] = Field(default=None, max_length=64)
     due_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
-    status: Optional[str] = Field(default=None, pattern=r"^(pending|in_progress|completed|blocked)$")
+    status: Optional[str] = Field(
+        default=None, pattern=r"^(pending|in_progress|completed|blocked)$"
+    )
     sort_order: Optional[int] = Field(default=None, ge=0)
 
 
@@ -283,6 +285,7 @@ class MilestonesResponse(BaseModel):
 
 class ProjectTypeConfigResponse(BaseModel):
     """项目类型配置（阶段枚举、约束模板列表）。"""
+
     model_config = ConfigDict(extra="forbid")
     stage_enum: Dict[str, Optional[List[str]]]
     milestone_status: List[str]
@@ -294,6 +297,7 @@ class ProjectTypeConfigResponse(BaseModel):
 
 class GitCommitModel(BaseModel):
     """Git 提交记录。"""
+
     model_config = ConfigDict(extra="forbid")
     sha: str
     author: str
@@ -303,6 +307,7 @@ class GitCommitModel(BaseModel):
 
 class GitStatusResponse(BaseModel):
     """Git 仓库状态响应。"""
+
     model_config = ConfigDict(extra="forbid")
     is_repo: bool
     current_branch: Optional[str] = None
@@ -350,9 +355,7 @@ def _milestone_model(milestone: ProjectMilestone) -> MilestoneModel:
 def list_projects() -> ProjectListResponse:
     repo = ProjectRepository()
     stats = repo.session_stats()
-    return ProjectListResponse(
-        projects=[_with_stats(p, stats) for p in repo.list()]
-    )
+    return ProjectListResponse(projects=[_with_stats(p, stats) for p in repo.list()])
 
 
 @router.post("", response_model=ProjectModel)
@@ -364,6 +367,7 @@ def register_project(request: ProjectRegisterRequest) -> ProjectModel:
         project_type = request.project_type
         if project_type is None:
             from pathlib import Path
+
             result = detect_project_type(Path(request.path))
             detected_type = result.project_type
             project_type = detected_type  # 使用检测结果作为默认值
@@ -382,9 +386,7 @@ def register_project(request: ProjectRegisterRequest) -> ProjectModel:
 
 @router.patch("/{project_id}", response_model=ProjectModel)
 @with_db_lock
-def update_project(
-    project_id: str, request: ProjectUpdateRequest
-) -> ProjectModel:
+def update_project(project_id: str, request: ProjectUpdateRequest) -> ProjectModel:
     """更新项目概览字段。未出现在请求中的字段保持不变。"""
     repo = ProjectRepository()
     project = repo.get(project_id)
@@ -432,9 +434,7 @@ def update_project_allowed_paths(
 def list_project_materials(project_id: str) -> ProjectMaterialsResponse:
     _get_project_or_404(project_id)
     materials = ProjectMaterialRepository().list_by_project(project_id)
-    return ProjectMaterialsResponse(
-        materials=[_material_model(material) for material in materials]
-    )
+    return ProjectMaterialsResponse(materials=[_material_model(material) for material in materials])
 
 
 @router.post(
@@ -463,9 +463,7 @@ def add_project_material(
     response_model=MaterialMutationResponse,
 )
 @with_db_lock
-def remove_project_material(
-    project_id: str, material_id: str
-) -> MaterialMutationResponse:
+def remove_project_material(project_id: str, material_id: str) -> MaterialMutationResponse:
     _get_project_or_404(project_id)
     materials = ProjectMaterialRepository()
     material = materials.get(material_id)
@@ -503,9 +501,7 @@ def save_answer_as_project_material(
             "仅可保存助手回答,用户消息不允许作为项目资料",
         )
 
-    binding = get_workspace_binding(
-        get_database().get_connection(), message.session_id
-    )
+    binding = get_workspace_binding(get_database().get_connection(), message.session_id)
     if binding is None or binding.workspace_path != project.path:
         raise _error(403, "message_project_mismatch", "消息不属于该项目")
 
@@ -580,16 +576,21 @@ def detect_project_type_route(request: ProjectTypeDetectRequest) -> ProjectTypeD
         return ProjectTypeDetectResponse(
             project_type=result.project_type,
             confidence=result.confidence,
-            signals=[
-                DetectionSignalModel(type=s.type, weight=s.weight)
-                for s in result.signals
-            ],
+            signals=[DetectionSignalModel(type=s.type, weight=s.weight) for s in result.signals],
         )
     except OSError as exc:
         raise _error(400, "path_error", f"路径错误: {exc}") from exc
 
 
 # ── Project constraints routes (2026-09-24) ──────────────────────────────────
+
+
+# 注意：字面量段路由必须先于 /{project_id}/constraints 注册——FastAPI 按定义
+# 顺序匹配，"templates" 会被先注册的 {project_id} 吃掉导致本端点永远 404。
+@router.get("/templates/constraints", response_model=ConstraintTemplatesResponse)
+def list_constraint_templates() -> ConstraintTemplatesResponse:
+    """列出可用的约束模板。"""
+    return ConstraintTemplatesResponse(templates=dict(CONSTRAINT_TEMPLATES.items()))
 
 
 @router.get("/{project_id}/constraints", response_model=ConstraintsResponse)
@@ -607,9 +608,7 @@ def list_constraints(project_id: str) -> ConstraintsResponse:
     status_code=201,
 )
 @with_db_lock
-def create_constraint(
-    project_id: str, request: ConstraintCreateRequest
-) -> ConstraintModel:
+def create_constraint(project_id: str, request: ConstraintCreateRequest) -> ConstraintModel:
     """创建一条项目约束。"""
     _get_project_or_404(project_id)
     constraint = ProjectConstraintRepository().create(
@@ -683,22 +682,12 @@ def import_constraint_template(
     return ConstraintsResponse(constraints=[_constraint_model(c) for c in created])
 
 
-@router.get("/templates/constraints", response_model=ConstraintTemplatesResponse)
-def list_constraint_templates() -> ConstraintTemplatesResponse:
-    """列出可用的约束模板。"""
-    return ConstraintTemplatesResponse(
-        templates=dict(CONSTRAINT_TEMPLATES.items())
-    )
-
-
 # ── Project milestones routes (2026-09-24) ───────────────────────────────────
 
 
 @router.get("/{project_id}/milestones", response_model=MilestonesResponse)
 @with_db_lock
-def list_milestones(
-    project_id: str, status: Optional[str] = None
-) -> MilestonesResponse:
+def list_milestones(project_id: str, status: Optional[str] = None) -> MilestonesResponse:
     """列出项目的所有里程碑。可按状态过滤。"""
     _get_project_or_404(project_id)
     milestones = ProjectMilestoneRepository().list_by_project(project_id, status=status)
@@ -711,9 +700,7 @@ def list_milestones(
     status_code=201,
 )
 @with_db_lock
-def create_milestone(
-    project_id: str, request: MilestoneCreateRequest
-) -> MilestoneModel:
+def create_milestone(project_id: str, request: MilestoneCreateRequest) -> MilestoneModel:
     """创建一个里程碑。"""
     _get_project_or_404(project_id)
     milestone = ProjectMilestoneRepository().create(
