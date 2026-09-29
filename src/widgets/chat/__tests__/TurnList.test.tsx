@@ -5,8 +5,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { TurnList } from '../TurnList';
 import type { TurnItem } from '../../../features/chat/useConversationTurns';
+import { TurnList } from '../TurnList';
 
 const items: TurnItem[] = [
   { index: 1, messageId: 'u1', preview: '第一问' },
