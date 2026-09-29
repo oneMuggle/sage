@@ -593,6 +593,16 @@ def detect_project_type_route(request: ProjectTypeDetectRequest) -> ProjectTypeD
 # ── Project constraints routes (2026-09-24) ──────────────────────────────────
 
 
+# 注意：字面量段路由必须先于 /{project_id}/constraints 注册——FastAPI 按定义
+# 顺序匹配，"templates" 会被先注册的 {project_id} 吃掉导致本端点永远 404。
+@router.get("/templates/constraints", response_model=ConstraintTemplatesResponse)
+def list_constraint_templates() -> ConstraintTemplatesResponse:
+    """列出可用的约束模板。"""
+    return ConstraintTemplatesResponse(
+        templates=dict(CONSTRAINT_TEMPLATES.items())
+    )
+
+
 @router.get("/{project_id}/constraints", response_model=ConstraintsResponse)
 @with_db_lock
 def list_constraints(project_id: str) -> ConstraintsResponse:
@@ -682,14 +692,6 @@ def import_constraint_template(
     except ValueError as exc:
         raise _error(400, "unknown_template", str(exc)) from exc
     return ConstraintsResponse(constraints=[_constraint_model(c) for c in created])
-
-
-@router.get("/templates/constraints", response_model=ConstraintTemplatesResponse)
-def list_constraint_templates() -> ConstraintTemplatesResponse:
-    """列出可用的约束模板。"""
-    return ConstraintTemplatesResponse(
-        templates=dict(CONSTRAINT_TEMPLATES.items())
-    )
 
 
 # ── Project milestones routes (2026-09-24) ───────────────────────────────────
