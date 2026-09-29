@@ -103,3 +103,49 @@ async def test_publish_restores_sequence_from_repository() -> None:
     await subscription.close()
     await hub.publish(make_event(run_id="run-1", seq=0, event_type="done", producer="test"))
     assert hub.subscriber_count("run-1") == 0
+
+
+@pytest.mark.asyncio()
+async def test_restore_runs_default_branch_replays_from_list_runs_returning_str_ids() -> None:
+    """Regression guard for PR #1786: list_runs() returns List[str] per protocol
+    contract; restore_runs() must not assume objects with a ``run_id`` attribute.
+    Without the fix this crashed with AttributeError: 'str' object has no
+    attribute 'run_id', which broke backend startup on any machine with
+    pre-existing orch_events rows.
+    """
+    class Repository:
+        def __init__(self) -> None:
+            self.events: dict[str, list] = {"run-a": [], "run-b": []}
+            self.replayed: list[str] = []
+
+        def list_runs(self) -> list[str]:
+            return ["run-a", "run-b"]
+
+        def list_after(self, run_id: str, after_seq: int = 0, limit: int = 1000):
+            return [e for e in self.events[run_id] if e.seq > after_seq]
+
+        def append(self, event) -> None:
+            self.events.setdefault(event.run_id, []).append(event)
+
+        def max_seq(self, run_id: str) -> int:
+            seqs = [e.seq for e in self.events.get(run_id, [])]
+            return max(seqs) if seqs else 0
+
+    repo = Repository()
+    repo.events["run-a"] = [
+        make_event(run_id="run-a", seq=1, event_type="run.started", producer="p"),
+        make_event(run_id="run-a", seq=2, event_type="progress", producer="p"),
+    ]
+    repo.events["run-b"] = [
+        make_event(run_id="run-b", seq=1, event_type="run.started", producer="p"),
+    ]
+
+    hub = EventHub(event_repository=repo)
+    restored = await hub.restore_runs()
+
+    assert restored == 3
+    assert hub.subscriber_count("run-a") == 0
+    assert hub.subscriber_count("run-b") == 0
+    # history was populated from persisted events
+    assert len(hub._history["run-a"]) == 2
+    assert len(hub._history["run-b"]) == 1
