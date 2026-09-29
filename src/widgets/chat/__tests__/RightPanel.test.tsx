@@ -32,6 +32,7 @@ vi.mock('../../../shared/api/orchRunClient', () => ({
 
 import type { Artifact } from '../../../features/artifacts/artifactApi';
 import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
+import { useStore } from '../../../shared/lib/store';
 import { RightPanel } from '../RightPanel';
 
 const props = {
@@ -256,5 +257,40 @@ describe('RightPanel', () => {
       rerender(<RightPanel {...props} sessionId="sB" />);
       expect(fetchChangesSpy).toHaveBeenCalledWith('sB');
     });
+  });
+});
+
+// 对标 U1（ZCode ConversationTurnNavigator）：目录 Tab 顶部渲染轮次导航分组。
+// useConversationTurns 从 store.messages 派生——灌入两条 user 消息后断言
+// 「轮次」分组出现且条目齐全（点击定位走 messageJumpStore，RightPanel 集成层
+// 只验证渲染与分组的出现）。
+describe('RightPanel — 轮次导航（U1 对标）', () => {
+  it('目录 Tab 顶部渲染轮次导航分组，条目数为全部 user 消息数', () => {
+    const now = Date.now();
+    useStore.setState({
+      messages: [
+        {
+          id: 'u-msg-1',
+          session_id: 'sess_001',
+          role: 'user',
+          content: '第一轮提问',
+          created_at: now,
+        },
+        {
+          id: 'u-msg-2',
+          session_id: 'sess_001',
+          role: 'user',
+          content: '第二轮提问',
+          created_at: now + 1,
+        },
+      ] as never,
+    });
+
+    render(<RightPanel {...props} sessionId="sess_001" />);
+    fireEvent.click(screen.getByText('目录'));
+
+    expect(screen.getByTestId('turn-list-heading')).toBeInTheDocument();
+    expect(screen.getByTestId('turn-item-1')).toBeInTheDocument();
+    expect(screen.getByTestId('turn-item-2')).toBeInTheDocument();
   });
 });
