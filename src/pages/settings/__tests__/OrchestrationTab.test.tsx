@@ -243,7 +243,10 @@ describe('OrchestrationTab profile 迭代上限（主对话循环实际预算）
         [c.key]: 200,
         // 其余 profile 键必须保留（本次修改未波及的那些）
         ...Object.fromEntries(
-          PROFILE_CASES.filter((other) => other.key !== c.key).map((other) => [other.key, other.defValue]),
+          PROFILE_CASES.filter((other) => other.key !== c.key).map((other) => [
+            other.key,
+            other.defValue,
+          ]),
         ),
       }),
     });
@@ -266,7 +269,9 @@ describe('OrchestrationTab profile 迭代上限（主对话循环实际预算）
     fireEvent.change(screen.getByTestId('orch-max-primary-iterations'), { target: { value: '0' } });
     expect(mocks.updateSettings).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByTestId('orch-max-primary-iterations'), { target: { value: '-5' } });
+    fireEvent.change(screen.getByTestId('orch-max-primary-iterations'), {
+      target: { value: '-5' },
+    });
     expect(mocks.updateSettings).not.toHaveBeenCalled();
 
     fireEvent.change(screen.getByTestId('orch-max-primary-iterations'), { target: { value: '' } });
