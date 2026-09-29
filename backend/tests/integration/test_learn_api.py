@@ -46,10 +46,10 @@ class TestLearnEndpoint:
         mock_queue = Mock()
 
         with patch(
-            "backend.api.legacy_routes.get_review_queue",
+            "backend.api.legacy_chat_routes.get_review_queue",
             return_value=mock_queue,
         ), patch(
-            "backend.api.legacy_routes.SessionRepository",
+            "backend.api.legacy_chat_routes.SessionRepository",
             return_value=_mock_session_exists("session_1"),
         ):
             response = client.post(
@@ -78,10 +78,10 @@ class TestLearnEndpoint:
         mock_queue = Mock()
 
         with patch(
-            "backend.api.legacy_routes.get_review_queue",
+            "backend.api.legacy_chat_routes.get_review_queue",
             return_value=mock_queue,
         ), patch(
-            "backend.api.legacy_routes.SessionRepository",
+            "backend.api.legacy_chat_routes.SessionRepository",
             return_value=_mock_session_exists("session_2"),
         ):
             response = client.post(
@@ -105,7 +105,7 @@ class TestLearnEndpoint:
         mock_queue = Mock()
 
         with patch(
-            "backend.api.legacy_routes.get_review_queue",
+            "backend.api.legacy_chat_routes.get_review_queue",
             return_value=mock_queue,
         ):
             response = client.post(
@@ -122,10 +122,10 @@ class TestLearnEndpoint:
         mock_queue = Mock()
 
         with patch(
-            "backend.api.legacy_routes.get_review_queue",
+            "backend.api.legacy_chat_routes.get_review_queue",
             return_value=mock_queue,
         ), patch(
-            "backend.api.legacy_routes.SessionRepository",
+            "backend.api.legacy_chat_routes.SessionRepository",
             return_value=_mock_session_exists("session_3"),
         ):
             response = client.post(
@@ -152,10 +152,10 @@ class TestLearnEndpointSessionValidation:
         mock_queue = Mock()
 
         with patch(
-            "backend.api.legacy_routes.get_review_queue",
+            "backend.api.legacy_chat_routes.get_review_queue",
             return_value=mock_queue,
         ), patch(
-            "backend.api.legacy_routes.SessionRepository",
+            "backend.api.legacy_chat_routes.SessionRepository",
             return_value=_mock_session_exists("nonexistent"),
         ):
             response = client.post(
@@ -170,7 +170,7 @@ class TestLearnEndpointSessionValidation:
     def test_learn_404_response_includes_session_id(self, client):
         """404 detail message mentions the missing session_id."""
         with patch(
-            "backend.api.legacy_routes.SessionRepository",
+            "backend.api.legacy_chat_routes.SessionRepository",
             return_value=_mock_session_exists("nonexistent"),
         ):
             response = client.post(
