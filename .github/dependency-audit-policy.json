@@ -250,6 +250,32 @@
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
       "exception": "temporary exception pending compatible dependency upgrade"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "fast-uri",
+      "package_version": "3.1.6",
+      "advisory": "GHSA-58mr-gqgx-xq4g",
+      "advisory_url": "https://github.com/advisories/GHSA-58mr-gqgx-xq4g",
+      "affected_path": "node_modules/fast-uri",
+      "actual_reachability": "conditionally reachable; transitive URI parser in the API framework tree, no route feeds untrusted input to fast-uri directly",
+      "controls": "transitive dependency; upgrade tracked via lockfile refresh review; no direct runtime API exposure; quarterly npm audit review",
+      "exception": "temporary exception pending compatible dependency upgrade"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "fast-uri",
+      "package_version": "3.1.6",
+      "advisory": "GHSA-qw65-cvwx-89v3",
+      "advisory_url": "https://github.com/advisories/GHSA-qw65-cvwx-89v3",
+      "affected_path": "node_modules/fast-uri",
+      "actual_reachability": "conditionally reachable; transitive URI parser in the API framework tree, no route feeds untrusted input to fast-uri directly",
+      "controls": "transitive dependency; upgrade tracked via lockfile refresh review; no direct runtime API exposure; quarterly npm audit review",
+      "exception": "temporary exception pending compatible dependency upgrade"
     }
   ]
 }

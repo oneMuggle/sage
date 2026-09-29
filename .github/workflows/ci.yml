@@ -398,6 +398,11 @@ jobs:
         if: always()
         run: |
           if [ ! -x .venv-dependency-audit/bin/pip-audit ]; then
+            # 自愈：venv 存在但 pip-audit 入口偶发缺失（R74 实证）时重装一次
+            echo "pip-audit binary missing — attempting self-heal reinstall"
+            .venv-dependency-audit/bin/python -m pip install --disable-pip-version-check pip-audit==2.9.0 || true
+          fi
+          if [ ! -x .venv-dependency-audit/bin/pip-audit ]; then
             printf '%s\n' '{"error":"pip-audit environment was not created"}' > pip-audit.json
             exit 1
           fi
