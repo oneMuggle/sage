@@ -349,8 +349,18 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     visibility: 'basic',
   },
   'orch.maxRetries': orchNumber('orch.maxRetries', '子任务重试次数', '子任务失败后的最大重试次数', 2, 0, 10),
-  'orch.maxLaneIterations': orchNumber('orch.maxLaneIterations', 'Lane 迭代上限', '每个 Lane 的最大迭代次数', 8, 1, 50),
-  'orch.maxSubagentIterations': orchNumber('orch.maxSubagentIterations', '子代理迭代上限', '每个子代理的 ReAct 迭代预算', 6, 1, 50),
+  // 默认值必须与 backend/orchestration/orch_settings.py 的 OrchSettings 一致 ——
+  // 此前此处声明 8 / 6，而后端实际是 12 / 10（alpha.36 上调），读注册表会推断错。
+  'orch.maxLaneIterations': orchNumber('orch.maxLaneIterations', 'Lane 迭代上限', 'Lane 的最大重试次数（非 ReAct 预算）', 12, 1, 50),
+  'orch.maxSubagentIterations': orchNumber('orch.maxSubagentIterations', '子代理迭代上限', '每个子代理的 ReAct 迭代预算', 10, 1, 50),
+  // 以下四项是主对话循环实际生效的 ReAct 预算 —— backend/api/legacy_routes.py
+  // 按 profile 名取它们作为显式实参传给 agent.run_loop，覆盖 agent profile 自带的
+  // max_iterations（后者另受 PATCH 1..50 硬校验，且对普通聊天不生效）。
+  // 后端无上限，故不设 max，仅拒 0（range(0) 会直接判定超限）。
+  'orch.maxPrimaryIterations': orchNumber('orch.maxPrimaryIterations', 'primary 迭代上限', '默认助手（普通对话）的 ReAct 迭代预算，撞顶返回 max_iterations_exceeded', 15, 1),
+  'orch.maxCoderIterations': orchNumber('orch.maxCoderIterations', 'coder 迭代上限', 'coder profile 的 ReAct 迭代预算', 15, 1),
+  'orch.maxReviewerIterations': orchNumber('orch.maxReviewerIterations', 'reviewer 迭代上限', 'reviewer profile 的 ReAct 迭代预算', 8, 1),
+  'orch.maxWriterIterations': orchNumber('orch.maxWriterIterations', 'writer 迭代上限', 'writer profile 的 ReAct 迭代预算', 5, 1),
   'orch.maxAggregateChars': orchNumber('orch.maxAggregateChars', '聚合结果上限', '编排聚合结果字符上限', 122880, 1024, 1048576),
   'orch.maxSubagentResultChars': orchNumber('orch.maxSubagentResultChars', '单结果截断上限', '每个子代理结果字符上限', 51200, 1024, 524288),
   'orch.runTokenBudget': orchNumber('orch.runTokenBudget', 'Run token 预算', '单个 Run token 上限，0 表示不限', 0, 0),

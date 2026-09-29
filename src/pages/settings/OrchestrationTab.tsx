@@ -155,6 +155,46 @@ export function OrchestrationTab() {
           onChange={(v) => setOrch({ maxSubagentIterations: v })}
         />
       </section>
+      {/*
+        主对话循环的 ReAct 预算。此前这四项后端字段齐备（OrchSettings +
+        设置白名单 + types.ts），但无任何 UI 入口，恒为默认值
+        (primary/coder 15、reviewer 8、writer 5)；用户在 agents 页调
+        max_iterations 也无效 —— legacy_routes.py 按 profile 名取这四项
+        作为显式实参传给 run_loop，覆盖 profile 自带的值。
+        min=1：0 会让 for i in range(0) 直接判定超限。不设 max：后端无上限。
+      */}
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">主对话循环迭代上限</h3>
+        <NumberField
+          label="primary（默认助手）迭代上限"
+          desc="普通对话实际生效的 ReAct 预算；撞顶返回 max_iterations_exceeded"
+          dataTestId="orch-max-primary-iterations"
+          min={1}
+          value={settings.orch.maxPrimaryIterations}
+          onChange={(v) => setOrch({ maxPrimaryIterations: v })}
+        />
+        <NumberField
+          label="coder 迭代上限"
+          dataTestId="orch-max-coder-iterations"
+          min={1}
+          value={settings.orch.maxCoderIterations}
+          onChange={(v) => setOrch({ maxCoderIterations: v })}
+        />
+        <NumberField
+          label="reviewer 迭代上限"
+          dataTestId="orch-max-reviewer-iterations"
+          min={1}
+          value={settings.orch.maxReviewerIterations}
+          onChange={(v) => setOrch({ maxReviewerIterations: v })}
+        />
+        <NumberField
+          label="writer 迭代上限"
+          dataTestId="orch-max-writer-iterations"
+          min={1}
+          value={settings.orch.maxWriterIterations}
+          onChange={(v) => setOrch({ maxWriterIterations: v })}
+        />
+      </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">结果上限</h3>
         <NumberField
