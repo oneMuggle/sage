@@ -348,6 +348,34 @@ def test_rejects_npm_item_severity_without_matching_advisory(tmp_path, severity,
     ], env={**os.environ, "NPM_AUDIT_ALL_OUTCOME": "failure", "NPM_AUDIT_PROD_OUTCOME": "failure"}, capture_output=True, text=True, check=False)
     assert result.returncode == 1
     assert "report parse failure" in result.stdout
+
+
+def test_skips_moderate_item_absent_from_lockfile(tmp_path):
+    # R74: npm audit 会为 prune 掉的 optional/dev 嵌套树报 moderate
+    # （实测 node-gyp 嵌套 undici 不在 lockfile）——moderate/low 缺节点
+    # 按「未安装」跳过，门放行并打印跳过说明。
+    report = npm_report(advisory="GHSA-1111-1111-1111", severity="moderate")
+    report["vulnerabilities"]["electron"]["nodes"] = ["node_modules/node-gyp/node_modules/undici"]
+    report["metadata"]["vulnerabilities"]["moderate"] = 1
+    report["metadata"]["vulnerabilities"]["high"] = 0
+    result = run_gate(
+        tmp_path, npm=report, npm_prod=empty_npm(),
+        NPM_AUDIT_ALL_OUTCOME="success", NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 0
+    assert "absent from package-lock" in result.stdout
+    assert "not covered by policy" not in result.stdout
+
+
+def test_high_item_absent_from_lockfile_still_fails(tmp_path):
+    # high/critical 缺节点无法核实 → 维持失败（宁可误报不可漏报）
+    report = npm_report()
+    report["vulnerabilities"]["electron"]["nodes"] = ["node_modules/ghost"]
+    result = run_gate(tmp_path, npm=report, npm_prod=empty_npm())
+    assert result.returncode == 1
+    assert "nodes must exist in package-lock" in result.stdout
+
+
 def test_rejects_package_lock_declared_name_mismatch(tmp_path):
     lock = package_lock_data()
     lock["packages"]["node_modules/electron"]["name"] = "not-electron"

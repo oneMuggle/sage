@@ -255,10 +255,27 @@ def npm_findings(
             continue
         nodes = item.get("nodes")
         if not isinstance(nodes, list) or not nodes or any(
-            not isinstance(node, str) or not node.strip() or node not in versions or node not in identities
-            for node in nodes
+            not isinstance(node, str) or not node.strip() for node in nodes
         ):
             report_error(f"{path}: {package}: nodes must exist in package-lock", failures)
+            continue
+        missing_nodes = [
+            node for node in nodes
+            if node not in versions or node not in identities
+        ]
+        if missing_nodes:
+            # npm audit 对 prune 掉的 optional/dev 嵌套树仍会报 advisory
+            # （实测 node-gyp 嵌套 undici 不在 lockfile packages 里）。
+            # lockfile 是安装事实的权威口径：moderate/low 缺节点按
+            # 「未安装」跳过；high/critical 无法核实 → 维持失败
+            # （宁可误报不可漏报）。
+            if item_severity in {"high", "critical"}:
+                report_error(f"{path}: {package}: nodes must exist in package-lock", failures)
+                continue
+            print(
+                f"{path}: {package}: advisory nodes absent from package-lock "
+                f"(severity {item_severity}) — treated as not installed, skipped"
+            )
             continue
         lock_identities = {identities[node] for node in nodes}
         lock_versions = {versions[node] for node in nodes}
