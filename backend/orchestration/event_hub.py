@@ -124,7 +124,7 @@ class EventHub:
         if self._event_repository is None:
             return 0
         if run_ids is None:
-            run_ids = [run.run_id for run in self._event_repository.list_runs()]
+            run_ids = list(self._event_repository.list_runs())
         restored = 0
         for run_id in run_ids:
             restored += await self.restore_run(run_id)
