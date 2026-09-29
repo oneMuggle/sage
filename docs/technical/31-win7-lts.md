@@ -244,3 +244,50 @@ git push origin v0.5.0-beta.1-win7
 
 > Cherry-pick 原则（见 §2）:**单 commit cherry-pick, commit message 加 `(cherry picked from main commit XXX)`**。
 > 避免把 main 的 release 元数据（CHANGELOG / version bump）带回 win7。
+
+## 11. 双版本打包 + 启动诊断（alpha.50 起）
+
+> 归档自 `docs/superpowers/specs/2026-09-24-win7-dual-build-and-diagnostics-design.md`（2026-09-24 设计，PR #1493 / #1495 实施）。
+
+### 11.1 为什么有双版本
+
+alpha.50 起 `release-win7.yml` 设 `SAGE_PROTECT_CODE: "true"` 触发 Cython 保护模式，但 `bundle-python.ps1` 从未把编译出的 `.pyd` 复制到 `resources/` 任何子目录 → 运行时 `PYTHONPATH=<resources>/sage-core` 指向不存在目录 → `import sage_core.entities.agent` 抛 `ModuleNotFoundError` → 内网 Win7 启动失败。
+
+Cython 保护有兼容风险，因此**并行产出两个安装包**，由用户按环境选择：
+
+| 产物 | 模式 | `SAGE_PROTECT_CODE` | 适用 |
+| --- | --- | --- | --- |
+| `Sage-Setup-${version}-win7.exe` | Source | `false` | ✅ **推荐**，兼容性最佳，内网首选 |
+| `Sage-Setup-${version}-win7-cython.exe` | Cython | `true` | ⚠️ 实验性，代码保护但有打包风险 |
+
+产物名由 `electron-builder.yml` 的 `artifactName` 占位符 + workflow `env.ARTIFACT_SUFFIX` 组合生成。**不确定选哪个就装 Source 模式**（无 `-cython` 后缀）。
+
+### 11.2 `bundle-python.ps1` 关键修复（相对 main 移植 7 项）
+
+win7 分支的 `bundle-python.ps1` 相对 main 的 `bundle-python-main.ps1` 长期缺 7 项，导致保护模式下 `sage_core` 完全缺失。核心 4 项：
+
+| # | 修复 | 作用 |
+| --- | --- | --- |
+| 1 | `_pth` 文件加入 `..` | embeddable Python 能找到 `Lib/site-packages` |
+| 2 | 复制 `Include/` + `libs/` 到 embeddable | Cython 编译期需要头文件与链接库 |
+| 3 | `sage_core` 复制到 `Lib/site-packages` | 非保护模式复制源码；保护模式复制 `.pyd` + `__init__.py` |
+| 4 | `$LASTEXITCODE` 守门 | Cython 编译失败时立即中止，不产出残缺安装包 |
+
+第 3 项还须保证 `resources/sage-core/` 目录存在 —— `electron-builder.yml` 的 `extraResources` 引用了它，目录缺失会导致打包阶段报错。
+
+### 11.3 后端启动运行时诊断
+
+启动失败时白屏/闪退无日志是 Win7 内网环境最常见的反馈黑洞。`electron/backendDiagnostics.ts` 在后端启动失败时写一份诊断报告：
+
+- **路径**：`%AppData%\Sage\diagnostic-*.log`
+- **容量**：64 KiB ring buffer（多轮启动只留最近内容）
+- **内容**：Python 可执行路径、site-packages 解析结果、`PYTHONPATH` 各段是否存在、spawn 退出码、stderr 尾部
+- **隐私**：日志含本机用户名与安装路径。**贴到 GitHub Issue 前请自行删敏**（日志头部有 `# NOTE:` 提示行）
+
+用户报障时的标准动作：取最近一份 `diagnostic-*.log` 附到 Issue。
+
+### 11.4 风险与边界
+
+- 双构建使 win7 发布耗时约翻倍（Source + Cython 各一次 Windows 交叉编译）
+- Cython 模式为实验性，不保证与 Source 模式行为完全一致
+- `upload-artifact@v4` 用 `**` 通配时需注意 globstar 语义，否则会漏传产物
