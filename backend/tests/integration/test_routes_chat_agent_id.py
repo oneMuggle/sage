@@ -59,7 +59,7 @@ async def test_chat_defaults_to_primary_agent_when_agent_id_omitted():
     """
     from backend.core.errors import LLMError, LLMErrorType
 
-    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+    with patch("backend.api.legacy_chat_routes.SageAgent") as MockAgent:
         mock_agent_instance = MockAgent.return_value
         mock_agent_instance.chat = AsyncMock(
             side_effect=LLMError(LLMErrorType.AUTH_FAILED, "auth fail")
@@ -87,7 +87,7 @@ async def test_chat_passes_explicit_agent_id():
     """显式传 agent_id="coder" 时,应直接透传,不要覆盖。"""
     from backend.core.errors import LLMError, LLMErrorType
 
-    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+    with patch("backend.api.legacy_chat_routes.SageAgent") as MockAgent:
         mock_agent_instance = MockAgent.return_value
         mock_agent_instance.chat = AsyncMock(
             side_effect=LLMError(LLMErrorType.AUTH_FAILED, "auth fail")
@@ -113,7 +113,7 @@ async def test_chat_treats_empty_string_agent_id_as_primary():
     """空字符串 agent_id 应 fallback 到 primary(等价 None)。"""
     from backend.core.errors import LLMError, LLMErrorType
 
-    with patch("backend.api.legacy_routes.SageAgent") as MockAgent:
+    with patch("backend.api.legacy_chat_routes.SageAgent") as MockAgent:
         mock_agent_instance = MockAgent.return_value
         mock_agent_instance.chat = AsyncMock(
             side_effect=LLMError(LLMErrorType.AUTH_FAILED, "auth fail")
