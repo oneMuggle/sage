@@ -14,8 +14,17 @@ interface SiderSectionsState {
   collapsed: string[];
 }
 
-function readSectionsState(defaultOrder: readonly string[]): SiderSectionsState {
-  const fallback: SiderSectionsState = { order: [...defaultOrder], collapsed: [] };
+function readSectionsState(
+  defaultOrder: readonly string[],
+  defaultCollapsed: readonly string[],
+): SiderSectionsState {
+  // UX-IA R1 A3: 首次使用（无存储）时按 defaultCollapsed 折叠低频分组；
+  // 已有存储的用户完全沿用其持久化选择，不受默认值变化影响。
+  const defaultSet = new Set(defaultOrder);
+  const fallback: SiderSectionsState = {
+    order: [...defaultOrder],
+    collapsed: defaultCollapsed.filter((key) => defaultSet.has(key)),
+  };
   let raw: string | null = null;
   try {
     raw = localStorage.getItem(SIDER_SECTIONS_STORAGE_KEY);
@@ -35,7 +44,6 @@ function readSectionsState(defaultOrder: readonly string[]): SiderSectionsState 
       : [];
     const reconciled = reconcileStoredSiderOrder(storedOrder, [...defaultOrder]);
     // 过滤掉不在 defaultOrder 中的 collapsed keys
-    const defaultSet = new Set(defaultOrder);
     const filteredCollapsed = storedCollapsed.filter((key) => defaultSet.has(key));
     return { order: reconciled, collapsed: filteredCollapsed };
   } catch {
@@ -58,8 +66,15 @@ export interface UseSiderSectionsResult {
   reorderSections: (from: number, to: number) => void;
 }
 
-export function useSiderSections(defaultOrder: readonly string[]): UseSiderSectionsResult {
-  const [state, setState] = useState<SiderSectionsState>(() => readSectionsState(defaultOrder));
+const NO_DEFAULT_COLLAPSED: readonly string[] = [];
+
+export function useSiderSections(
+  defaultOrder: readonly string[],
+  defaultCollapsed: readonly string[] = NO_DEFAULT_COLLAPSED,
+): UseSiderSectionsResult {
+  const [state, setState] = useState<SiderSectionsState>(() =>
+    readSectionsState(defaultOrder, defaultCollapsed),
+  );
   const stateRef = useRef(state);
   stateRef.current = state;
 
