@@ -22,6 +22,8 @@ import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
+import { ChatInlineError } from '../widgets/chat/ChatInlineError';
+import { CHAT_NOTICE_PRIORITY, ChatNoticeStack } from '../widgets/chat/ChatNoticeStack';
 import { ContextMeter } from '../widgets/chat/ContextMeter';
 import { ContextPressureBadge } from '../widgets/chat/ContextPressureBadge';
 import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../widgets/chat/InterruptedRunBanner';
@@ -901,44 +903,49 @@ export function Chat() {
           right-panel R1 批次 D: relative 供面板最大化时 absolute 覆盖。 */}
       <div className="flex-1 flex min-h-0 overflow-hidden relative">
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
-          {showTopicShiftBanner && (
-            <TopicShiftBanner
-              sessionId={currentSessionId!}
-              reason={shiftInfo.reason}
-              onRetreat={() => void handleRetreat()}
-            />
-          )}
-
-          {showInterruptBanner && (
-            <InterruptedRunBanner
-              onRetry={retryInterruptedRun}
-              onDismiss={() =>
-                setDismissedInterrupts((prev) => new Set(prev).add(currentSessionId ?? ''))
-              }
-            />
-          )}
-
-          {/* R17-D: 顶层错误内联条 —— 保留历史可见（替代旧整页 ErrorState）
-              2026-09 修复: 只渲染归属当前会话的错误, 后台会话失败不再串台;
-              且"重试"因此必然作用于出错会话本身 */}
-          {error && errorSessionId === currentSessionId && (
-            <div
-              className="mx-4 mt-2 flex items-start justify-between gap-3 px-3 py-2 rounded border border-error/40 bg-error/5"
-              data-testid="chat-inline-error"
-            >
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-error">对话出错</p>
-                <p className="text-xs text-text-secondary break-all">{error}</p>
-              </div>
-              <button
-                type="button"
-                onClick={clearError}
-                className="text-xs px-2 py-1 rounded border border-border hover:bg-bg-hover shrink-0"
-              >
-                关闭
-              </button>
-            </div>
-          )}
+          {/* UX-IA R1 批次 B: 会话级提示按优先级合并（错误 > 中断 > 话题切换），
+              同一时刻只展示最重要的一条，其余折叠为「另有 N 条提示」。
+              R17-D 语义不变：只渲染归属当前会话的错误。
+              win7 线：错误条无「重试」按钮（沿用 release/win7 既有行为），不传 onRetry。 */}
+          <ChatNoticeStack
+            notices={[
+              error != null &&
+                error !== '' &&
+                errorSessionId === currentSessionId && {
+                  key: 'error',
+                  priority: CHAT_NOTICE_PRIORITY.error,
+                  node: (
+                    <ChatInlineError
+                      error={error}
+                      onClose={clearError}
+                    />
+                  ),
+                },
+              showInterruptBanner && {
+                key: 'interrupted',
+                priority: CHAT_NOTICE_PRIORITY.interrupted,
+                node: (
+                  <InterruptedRunBanner
+                    onRetry={retryInterruptedRun}
+                    onDismiss={() =>
+                      setDismissedInterrupts((prev) => new Set(prev).add(currentSessionId ?? ''))
+                    }
+                  />
+                ),
+              },
+              showTopicShiftBanner && {
+                key: 'topic-shift',
+                priority: CHAT_NOTICE_PRIORITY.topicShift,
+                node: (
+                  <TopicShiftBanner
+                    sessionId={currentSessionId!}
+                    reason={shiftInfo.reason}
+                    onRetreat={() => void handleRetreat()}
+                  />
+                ),
+              },
+            ]}
+          />
 
           <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto relative">
             {isLoading && messages.length === 0 ? (
