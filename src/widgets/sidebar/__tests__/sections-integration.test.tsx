@@ -125,7 +125,8 @@ describe('Sidebar Sections Integration', () => {
       </I18nProvider>,
     );
 
-    // Click collapse button on first section (会话)
+    // UX-IA R1 A3: 默认顺序为 项目 → 会话 → …，低频分组默认折叠；
+    // 第一个「折叠」按钮属于首个展开分组（项目）
     const collapseButtons = screen.getAllByRole('button', { name: '折叠' });
     fireEvent.click(collapseButtons[0]);
 
@@ -133,7 +134,8 @@ describe('Sidebar Sections Integration', () => {
       const stored = localStorage.getItem(SECTIONS_CONFIG_KEY);
       expect(stored).toBeTruthy();
       const parsed = JSON.parse(stored!);
-      expect(parsed.collapsed).toContain('conversations');
+      expect(parsed.collapsed).toContain('project');
+      expect(parsed.order[0]).toBe('project');
     });
   });
 

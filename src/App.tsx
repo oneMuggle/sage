@@ -16,6 +16,7 @@ import { useSettingsStore } from './features/manage-settings/settingsStore';
 import { onSessionNotifyClick } from './features/send-message/sessionNotify';
 import { Chat } from './pages/Chat';
 import { Welcome } from './pages/Welcome';
+import { OPEN_COMMAND_PALETTE_EVENT } from './shared/lib/commandPaletteEvents';
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
@@ -260,7 +261,13 @@ function AppKeyboardBridge({
       }
     };
     window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    // UX-IA R1 A1：侧栏「搜索」按钮等非键盘入口请求打开命令面板
+    const openPalette = () => setCommandOpen(true);
+    window.addEventListener(OPEN_COMMAND_PALETTE_EVENT, openPalette);
+    return () => {
+      window.removeEventListener('keydown', handler);
+      window.removeEventListener(OPEN_COMMAND_PALETTE_EVENT, openPalette);
+    };
   }, [navigate, setCommandOpen, setShortcutHelpOpen]);
   return null;
 }

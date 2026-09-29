@@ -14,6 +14,8 @@ import {
   UserCog,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
+  PenSquare,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -27,6 +29,7 @@ import { testEndpointConnection } from '../../features/manage-endpoints/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { deleteSessionCascade } from '../../features/send-message/useChat';
 import { sessionApi } from '../../shared/api/sessionApi';
+import { requestOpenCommandPalette } from '../../shared/lib/commandPaletteEvents';
 import { unlockFeature, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
@@ -41,12 +44,18 @@ import {
   useSiderSections,
 } from '../sidebar';
 
-const SECTION_KEYS = ['conversations', 'todos', 'cron', 'git', 'project', 'team'] as const;
+// UX-IA R1 A3（对标 ChatGPT / Claude Projects）：项目作为一级容器排在会话之上；
+// 待办 / 定时 / Git / 团队属于低频信息，新用户默认折叠，避免左栏同时出现多个滚动列表。
+// 老用户的顺序与折叠状态由 useSiderSections 从 localStorage 恢复，不受影响。
+const SECTION_KEYS = ['project', 'conversations', 'todos', 'cron', 'git', 'team'] as const;
+const DEFAULT_COLLAPSED_SECTIONS = ['todos', 'cron', 'git', 'team'] as const;
 
 // 导航项配置。
 // 对标 S3 (2026-09-13, 竞品对标 §2.2 导航收敛): 一级只保留高频 4 项，
 // 其余归入可折叠「更多」分组（默认展开，折叠状态本地持久化；当前路由命中
 // 「更多」内条目时强制展开）。路由与渐进披露（U10）规则不变。
+// UX-IA R1 A2 (2026-09-29): 「设置」移出一级导航，改为页脚齿轮入口
+// （对标 ChatGPT / Claude 左下角账户菜单）；折叠 rail 仍保留设置图标。
 interface NavItem {
   path: string;
   label: string;
@@ -58,8 +67,8 @@ const primaryNavItems: NavItem[] = [
   { path: '/chat', label: '对话', icon: MessageSquare },
   { path: '/memory', label: '记忆', icon: Brain },
   { path: '/knowledge', label: '知识库', icon: BookOpen },
-  { path: '/settings', label: '设置', icon: Settings },
 ];
+const settingsNavItem: NavItem = { path: '/settings', label: '设置', icon: Settings };
 const moreNavItems: NavItem[] = [
   { path: '/office', label: 'Office', icon: FileSpreadsheet },
   { path: '/skills', label: '技能', icon: Sparkles },
@@ -68,7 +77,7 @@ const moreNavItems: NavItem[] = [
   { path: '/arena', label: 'Arena', icon: UserCog },
   { path: '/help', label: '帮助', icon: HelpCircle },
 ];
-const navItems = [...primaryNavItems, ...moreNavItems];
+const navItems = [...primaryNavItems, ...moreNavItems, settingsNavItem];
 const MORE_OPEN_KEY = 'sage:sider:more-open:v1';
 
 function readMoreOpen(): boolean {
@@ -138,7 +147,7 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
     order: sectionOrder,
     collapsed: collapsedSections,
     toggleCollapsed,
-  } = useSiderSections(SECTION_KEYS);
+  } = useSiderSections(SECTION_KEYS, DEFAULT_COLLAPSED_SECTIONS);
   // 会话排序完全交给后端 SQL (`SessionRepository.list()`):
   //   is_pinned DESC, run_status IN ('running','suspended') DESC, updated_at DESC
   // 前端不再持有 localStorage 拖拽顺序。
@@ -204,6 +213,11 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
   const handleNewSession = () => {
     // Phase 7: 新建会话跳转到欢迎屏，由用户在欢迎屏输入后再创建 session
     navigate('/welcome');
+  };
+
+  const handleOpenSearch = () => {
+    // 与 Ctrl/Cmd+K 同一入口：命令面板内含全局搜索（会话/记忆/知识库）
+    requestOpenCommandPalette();
   };
 
   // 会话切换统一入口（会话列表 onSelect 与项目模块 onOpenSession 共用）
@@ -371,6 +385,32 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
         )}
       </div>
 
+      {/* UX-IA R1 A1：顶部主操作条（对标 ChatGPT「新聊天 / 搜索聊天」） */}
+      <div className="px-2 pt-2 flex items-center gap-1" data-testid="sidebar-primary-actions">
+        <button
+          type="button"
+          onClick={handleNewSession}
+          aria-label="新建对话"
+          data-testid="sidebar-new-chat-primary"
+          title="新建对话 (Ctrl+N)"
+          className="flex-1 flex items-center gap-2.5 px-3 py-2 rounded-radius-sm border border-border text-sm font-medium text-text-primary hover:bg-bg-hover transition-colors"
+        >
+          <PenSquare className="w-4 h-4" />
+          <span>新建对话</span>
+        </button>
+        <Tooltip content="搜索 (Ctrl+K)" side="bottom">
+          <button
+            type="button"
+            onClick={handleOpenSearch}
+            aria-label="搜索"
+            data-testid="sidebar-search-button"
+            className="flex items-center justify-center w-9 h-9 rounded-radius-sm border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+        </Tooltip>
+      </div>
+
       {/* 导航列表 */}
       <nav className="flex-1 py-2 px-2 overflow-y-auto">
         {primaryNavItems.map((item) => {
@@ -476,6 +516,23 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
           </span>
           {connectionStatus === 'error' && <AttnBadge count={1} title="连接失败,请检查端点配置" />}
           <span className="ml-auto">v{__APP_VERSION__}</span>
+          {/* UX-IA R1 A2：设置入口移至页脚 */}
+          <Tooltip content="设置" side="top">
+            <Link
+              to={settingsNavItem.path}
+              aria-label="设置"
+              data-testid="sidebar-settings-link"
+              className={clsx(
+                'flex items-center justify-center w-7 h-7 rounded-radius-sm transition-colors',
+                location.pathname === settingsNavItem.path
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary',
+              )}
+            >
+              <Settings className="w-4 h-4" />
+              <span className="sr-only">设置</span>
+            </Link>
+          </Tooltip>
         </div>
       </div>
     </aside>
