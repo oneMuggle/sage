@@ -21,7 +21,7 @@
 
 | # | ZCode UI | ZCode 证据 | sage 现状 | 规模评估 |
 |---|---|---|---|---|
-| U1 | **轮次导航器**（多轮间快速跳转） | `ConversationTurnNavigator.tsx` | R120 已做消息定位/大纲（部分覆盖）；无独立轮次导航 | 小（R120 基础上） |
+| ~~U1~~ ✅ | **轮次导航器**（多轮间快速跳转） | `ConversationTurnNavigator.tsx` | **已对齐（2026-09-29）**：目录 Tab 顶部按用户输入切分的轮次列表（useConversationTurns + TurnList），点击跳转对应消息（#1817，win7 对齐 #1821） | — |
 | U2 | **分屏 Workbench**（会话 Pane 拆分/拖放/多会话并排） | `WorkbenchPane.tsx`、`paneLayoutTree.ts` | 无 | 大 |
 | U3 | **白板**（手绘 + 加入对话发给模型） | `WhiteboardPane.tsx` | 无 | 大 |
 | U4 | **内嵌浏览器 Tab**（favicon/缩放/截屏/人工接管） | `browser-use/` | 无（sage 有文件预览 Pane，无浏览器） | 大 |
