@@ -38,6 +38,10 @@ LEGACY_SKILLS_ROUTES_PATH = (
     Path(__file__).resolve().parent.parent.parent / "api" / "legacy_skills_routes.py"
 )
 
+LEGACY_CHAT_ROUTES_PATH = (
+    Path(__file__).resolve().parent.parent.parent / "api" / "legacy_chat_routes.py"
+)
+
 # `async def` 但无 await 的 handler 是事件循环阻塞风险点。
 # 本测试维护一份"必须 keep_async"的精确白名单(7 个,L580/L974/1015/1105/1284/1400/1763)。
 # 所有其他 async def 必须有 await,否则应降级为 def。
@@ -122,6 +126,9 @@ def test_keep_async_handlers_actually_async():
     # C1b (R15): 技能 API 已拆至 legacy_skills_routes
     skills_src = LEGACY_SKILLS_ROUTES_PATH.read_text(encoding="utf-8")
     funcs += _load_top_level_functions(skills_src)
+    # C2g (R32): 非流式 chat/attach 已拆至 legacy_chat_routes
+    chat_src = LEGACY_CHAT_ROUTES_PATH.read_text(encoding="utf-8")
+    funcs += _load_top_level_functions(chat_src)
     name_to_func = {f.name: f for f in funcs}
 
     for keep_name in KEEP_ASYNC_HANDLERS:
@@ -141,7 +148,7 @@ def test_async_handler_count_matches_design():
     src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
     funcs = _load_top_level_functions(src)
-    for _extra in (LEGACY_MEMORY_ROUTES_PATH, LEGACY_MEMORY_LIST_ROUTES_PATH, LEGACY_SKILLS_ROUTES_PATH):
+    for _extra in (LEGACY_MEMORY_ROUTES_PATH, LEGACY_MEMORY_LIST_ROUTES_PATH, LEGACY_SKILLS_ROUTES_PATH, LEGACY_CHAT_ROUTES_PATH):
         funcs += _load_top_level_functions(_extra.read_text(encoding="utf-8"))
     async_endpoints = [
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
@@ -167,7 +174,7 @@ def test_async_handlers_count_invariant_against_internal_helpers():
     src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
     funcs = _load_top_level_functions(src)
-    for _extra in (LEGACY_MEMORY_ROUTES_PATH, LEGACY_MEMORY_LIST_ROUTES_PATH, LEGACY_SKILLS_ROUTES_PATH):
+    for _extra in (LEGACY_MEMORY_ROUTES_PATH, LEGACY_MEMORY_LIST_ROUTES_PATH, LEGACY_SKILLS_ROUTES_PATH, LEGACY_CHAT_ROUTES_PATH):
         funcs += _load_top_level_functions(_extra.read_text(encoding="utf-8"))
     async_endpoints = [
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
