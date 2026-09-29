@@ -19,6 +19,15 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
 
 ## [Unreleased]
 
+## [v0.4.9-alpha.57-win7] - 2026-09-29
+
+### Fixed
+- fix(win7): 端点测试连接 401 —— 前端代理基址 `/api/v1/llm-proxy` 与后端实际路由 `/api/v1/llm` 不一致，请求被 LocalAuthMiddleware 拒为「本地授权凭据无效或缺失」（#1836）
+- fix(win7): 会话迭代上限无 UI 入口 —— `maxLaneIterations` / `maxSubagentIterations` 未注册进 settingsRegistry，用户设 10000+ 仍触顶（#1836）
+
+### Changed
+- feat(chat): 右侧面板密度调整 —— 档位与自动展开开关收进「选项」浮层、Tab 行在产物详情页常驻、宽度档位 320/440/560 → 360/520/720（#1837）
+
 ## [v0.4.9-alpha.56-win7] - 2026-09-27
 
 ### Added
