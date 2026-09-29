@@ -1,6 +1,6 @@
 // src/widgets/chat/RightPanel.tsx
-import { Bell, BellOff, Maximize2, Minimize2, X } from 'lucide-react';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { Bell, BellOff, Maximize2, Minimize2, SlidersHorizontal, X } from 'lucide-react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { revealArtifact } from '../../features/artifacts/artifactApi';
@@ -68,12 +68,25 @@ const TAB_LABELS: Record<RightPanelTab, string> = {
   preview: '预览',
 };
 
-/** 宽度档位（right-panel R1 批次 D，对齐 Claude 的小/中/大三档） */
+/**
+ * 宽度档位（right-panel R1 批次 D，对齐 Claude 的小/中/大三档）。
+ *
+ * 2026-09-29 面板密度调整：320/440/560 在 5 个 Tab + 操作区并排时每个 Tab
+ * 只剩 ~30px，「产物 (12)」放不下。档位整体上移到 360/520/720，
+ * L 档才有足够宽度铺开变更/预览这类宽内容。
+ */
 const WIDTH_PRESETS = [
-  { label: 'S', width: 320 },
-  { label: 'M', width: 440 },
-  { label: 'L', width: 560 },
+  { label: 'S', width: 360 },
+  { label: 'M', width: 520 },
+  { label: 'L', width: 720 },
 ] as const;
+
+/** 面板默认宽度（= S 档；拖拽手柄双击复位也回落至此） */
+const DEFAULT_PANEL_WIDTH = 360;
+
+/** 拖拽宽度上下限（下限留给三档操作区，上限放开以容纳宽内容） */
+const MIN_PANEL_WIDTH = 280;
+const MAX_PANEL_WIDTH = 900;
 
 interface PanelHeaderProps {
   tab?: RightPanelTab;
@@ -93,26 +106,128 @@ interface PanelHeaderProps {
   changesCount?: number;
 }
 
-/** 产物自动唤起开关（就地读写 localStorage；事件侧 isArtifactAutoOpenEnabled 同源） */
-function AutoOpenToggle() {
+/**
+ * 产物自动唤起开关（就地读写 localStorage；事件侧 isArtifactAutoOpenEnabled 同源）。
+ *
+ * 2026-09-29 由顶栏铃铛图标按钮改为「选项」浮层内的一行 —— 铃铛独占
+ * 32px 顶栏空间，而它只服务于产物 Tab，常态展示属于空间浪费。
+ */
+function AutoOpenToggleRow() {
   const [enabled, setEnabled] = useState(() => isArtifactAutoOpenEnabled());
   return (
     <button
-      className={
-        'p-2 text-text-secondary hover:text-text hover:bg-bg-hover rounded transition-colors ' +
-        (enabled ? 'text-primary' : '')
-      }
+      aria-pressed={enabled}
+      className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-hover hover:text-text"
       onClick={() => {
         const next = !enabled;
         setArtifactAutoOpenEnabled(next);
         setEnabled(next);
       }}
       title={enabled ? '产物创建时自动展开面板：开' : '产物创建时自动展开面板：关'}
-      aria-label="切换产物自动展开"
       data-testid="right-panel-auto-open-toggle"
     >
-      {enabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
+      {enabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
+      <span className="flex-1 text-left">产物自动展开</span>
     </button>
+  );
+}
+
+interface PanelOptionsMenuProps {
+  activePreset?: string | null;
+  onApplyPreset?: (width: number) => void;
+  showAutoOpenToggle?: boolean;
+}
+
+/**
+ * 顶栏「选项」浮层：收纳宽度档位 + 产物自动展开开关。
+ *
+ * 2026-09-29 之前这两组控件平铺在 Tab 行右侧，占掉 ~92px（3 个档位按钮
+ * 60px + 铃铛 32px），5 个 Tab 挤到每个 ~30px。收进浮层后 Tab 行只保留
+ * 最大化/关闭两个图标，每个 Tab 多拿 ~18px。
+ */
+function PanelOptionsMenu({
+  activePreset,
+  onApplyPreset,
+  showAutoOpenToggle,
+}: PanelOptionsMenuProps) {
+  const hasItems = Boolean(onApplyPreset) || Boolean(showAutoOpenToggle);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // 点击浮层外 / Esc 收起。hasItems 为假时不注册监听。
+  useEffect(() => {
+    if (!open || !hasItems) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open, hasItems]);
+
+  if (!hasItems) return null;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        className="p-2 text-text-secondary hover:text-text hover:bg-bg-hover rounded transition-colors"
+        onClick={() => setOpen((v) => !v)}
+        title="面板选项（宽度档位 / 产物自动展开）"
+        aria-label="面板选项"
+        aria-haspopup="true"
+        aria-expanded={open}
+        data-testid="right-panel-options-toggle"
+      >
+        <SlidersHorizontal className="w-4 h-4" />
+      </button>
+      {open && (
+        // 披露式浮层（disclosure popover），非 role=menu：本浮层内是普通
+        // 切换按钮，未实现方向键导航，挂 menu 角色属于半套 ARIA 实现。
+        <div
+          aria-label="面板选项"
+          className="absolute right-0 top-full z-30 mt-1 w-44 rounded-md border border-border bg-surface py-1 shadow-lg"
+        >
+          {onApplyPreset && (
+            <>
+              <div className="px-3 pt-1 pb-0.5 text-[10px] text-text-muted">面板宽度</div>
+              {WIDTH_PRESETS.map((p) => (
+                <button
+                  key={p.label}
+                  aria-pressed={activePreset === p.label}
+                  className={
+                    'flex w-full items-center gap-2 rounded px-3 py-1.5 text-xs transition-colors ' +
+                    'hover:bg-bg-hover ' +
+                    (activePreset === p.label ? 'text-primary' : 'text-text-secondary')
+                  }
+                  onClick={() => {
+                    onApplyPreset(p.width);
+                    setOpen(false);
+                  }}
+                  title={`面板宽度：${p.label}（${p.width}px）`}
+                  aria-label={`面板宽度档位 ${p.label}`}
+                  data-testid={`right-panel-preset-${p.label}`}
+                >
+                  <span className="w-3 text-center font-medium">{p.label}</span>
+                  <span className="flex-1 text-left">{p.width}px</span>
+                </button>
+              ))}
+            </>
+          )}
+          {showAutoOpenToggle && (
+            <>
+              {onApplyPreset && <div className="my-1 border-t border-border" aria-hidden />}
+              <AutoOpenToggleRow />
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -128,27 +243,6 @@ export function PanelHeader({
   artifactCount = 0,
   changesCount = 0,
 }: PanelHeaderProps) {
-  // 宽度档位（三档小按钮；未提供回调时隐藏）
-  const presets = onApplyPreset
-    ? WIDTH_PRESETS.map((p) => (
-        <button
-          key={p.label}
-          className={
-            'w-5 py-0.5 text-[10px] font-medium rounded transition-colors ' +
-            (activePreset === p.label
-              ? 'bg-primary/15 text-primary'
-              : 'text-text-secondary hover:text-text hover:bg-bg-hover')
-          }
-          onClick={() => onApplyPreset(p.width)}
-          title={`面板宽度：${p.label}（${p.width}px）`}
-          aria-label={`面板宽度档位 ${p.label}`}
-          data-testid={`right-panel-preset-${p.label}`}
-        >
-          {p.label}
-        </button>
-      ))
-    : null;
-
   const maximizeButton = onToggleMaximize ? (
     <button
       className="p-2 text-text-secondary hover:text-text hover:bg-bg-hover rounded transition-colors"
@@ -172,31 +266,42 @@ export function PanelHeader({
     </button>
   );
 
-  // list 视图:Progress / Artifacts tabs + 档位/最大化/× 按钮
+  // list 视图:Progress / Artifacts tabs + 选项/最大化/× 按钮
   if (tab !== undefined && onTabChange) {
+    const countOf = (t: RightPanelTab) =>
+      t === 'artifacts' ? artifactCount : t === 'changes' ? changesCount : 0;
     return (
       <div className="flex border-b border-border items-center pr-1">
-        {RIGHT_PANEL_TABS.map((t) => (
-          <button
-            key={t}
-            className={
-              'flex-1 min-w-0 py-2 text-sm font-medium transition-colors ' +
-              (tab === t
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-text-secondary hover:text-text')
-            }
-            onClick={() => onTabChange(t)}
-          >
-            {t === 'artifacts' && artifactCount > 0
-              ? `${TAB_LABELS[t]} (${artifactCount})`
-              : t === 'changes' && changesCount > 0
-                ? `${TAB_LABELS[t]} (${changesCount})`
-                : TAB_LABELS[t]}
-          </button>
-        ))}
+        {RIGHT_PANEL_TABS.map((t) => {
+          const count = countOf(t);
+          return (
+            <button
+              key={t}
+              // 计数压成小号数字而非「(N)」后缀：Tab 行在 S 档下每个 Tab
+              // 只有 ~50px，带括号的形式会截断。aria-label 保留「产物 (N)」
+              // 完整读法，屏幕阅读器与既有测试断言不受影响。
+              aria-label={count > 0 ? `${TAB_LABELS[t]} (${count})` : TAB_LABELS[t]}
+              className={
+                'flex-1 min-w-0 truncate py-2 text-sm font-medium transition-colors ' +
+                (tab === t
+                  ? 'text-primary border-b-2 border-primary'
+                  : 'text-text-secondary hover:text-text')
+              }
+              onClick={() => onTabChange(t)}
+            >
+              {TAB_LABELS[t]}
+              {count > 0 && (
+                <span className="ml-0.5 text-[10px] tabular-nums opacity-70">{count}</span>
+              )}
+            </button>
+          );
+        })}
         <div className="flex items-center gap-0.5 ml-1 shrink-0">
-          {showAutoOpenToggle && <AutoOpenToggle />}
-          {presets}
+          <PanelOptionsMenu
+            activePreset={activePreset}
+            onApplyPreset={onApplyPreset}
+            showAutoOpenToggle={showAutoOpenToggle}
+          />
           {maximizeButton}
           {closeButton}
         </div>
@@ -246,8 +351,9 @@ function RightPanelInner({
     return c && !c.clean ? c.changes.length : 0;
   });
   // P0-3 (UI 优化方案 2026-09-12): 面板宽度可调 —— 拖拽左边缘手柄，
-  // 持久化到 localStorage（范围 280~600，默认 320）。
-  // 批次 D: applyWidth 供档位按钮/双击重置/键盘调整（clamp + 立即持久化）。
+  // 持久化到 localStorage。
+  // 批次 D: applyWidth 供选项浮层档位/双击重置/键盘调整（clamp + 立即持久化）。
+  // 2026-09-29: 范围放宽到 280~900、默认 360（5 个 Tab 不再挤在 320px 里）。
   const {
     width,
     isDragging,
@@ -255,9 +361,9 @@ function RightPanelInner({
     applyWidth,
   } = useResizablePanel({
     storageKey: 'right-panel-width',
-    minWidth: 280,
-    maxWidth: 600,
-    defaultWidth: 320,
+    minWidth: MIN_PANEL_WIDTH,
+    maxWidth: MAX_PANEL_WIDTH,
+    defaultWidth: DEFAULT_PANEL_WIDTH,
     anchor: 'right',
   });
 
@@ -327,6 +433,19 @@ function RightPanelInner({
     useRightPanelStore.getState().setOpen(false);
   };
 
+  // 2026-09-29: 产物详情页也保留 Tab 行 —— 此前详情态只给「最大化/×」，
+  // 离开必须先点「返回」，想看进度得回列表再切，形成死胡同。
+  // 切 Tab 一律先清掉选中产物：否则点了「进度」仍停在详情页。
+  const handleTabChange = useCallback(
+    (next: RightPanelTab) => {
+      useRightPanelStore.getState().clearSelectedArtifact();
+      setTab(next);
+    },
+    [setTab],
+  );
+  // 详情态高亮「产物」，让 Tab 行的选中态与实际内容一致。
+  const activeTab: RightPanelTab = selected ? 'artifacts' : tab;
+
   const content = (
     <>
       {/* P0-3: 左边缘拖拽手柄 —— 悬停时高亮 + cursor-col-resize 反馈。
@@ -335,7 +454,7 @@ function RightPanelInner({
         <div
           className="absolute top-0 left-0 h-full w-1.5 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10"
           onMouseDown={onResizeMouseDown}
-          onDoubleClick={() => applyWidth(320)}
+          onDoubleClick={() => applyWidth(DEFAULT_PANEL_WIDTH)}
           onKeyDown={(e) => {
             if (e.key === 'ArrowLeft') {
               e.preventDefault();
@@ -352,26 +471,18 @@ function RightPanelInner({
           data-testid="right-panel-resize-handle"
         />
       )}
-      {selected ? (
-        <PanelHeader
-          onClose={handleClose}
-          maximized={maximized}
-          onToggleMaximize={showMaximize ? () => setMaximized(!maximized) : undefined}
-        />
-      ) : (
-        <PanelHeader
-          tab={tab}
-          onTabChange={setTab}
-          onClose={handleClose}
-          maximized={maximized}
-          onToggleMaximize={showMaximize ? () => setMaximized(!maximized) : undefined}
-          activePreset={activePreset}
-          onApplyPreset={applyWidth}
-          showAutoOpenToggle={tab === 'artifacts'}
-          artifactCount={sessionId ? artifacts.length : 0}
-          changesCount={changesCount}
-        />
-      )}
+      <PanelHeader
+        tab={activeTab}
+        onTabChange={handleTabChange}
+        onClose={handleClose}
+        maximized={maximized}
+        onToggleMaximize={showMaximize ? () => setMaximized(!maximized) : undefined}
+        activePreset={activePreset}
+        onApplyPreset={applyWidth}
+        showAutoOpenToggle={activeTab === 'artifacts'}
+        artifactCount={sessionId ? artifacts.length : 0}
+        changesCount={changesCount}
+      />
 
       <div className="h-[calc(100%-2.5rem)] overflow-y-auto min-h-0">
         {selected && sessionId ? (
