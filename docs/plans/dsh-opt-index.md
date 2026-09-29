@@ -53,5 +53,6 @@
 | R29 | C2d 会话压缩/记忆提取装配迁出 chat_session_lifecycle（legacy_routes→2956） | #1782（`4985a218`） | #1790（`371166cb`） | ✅ 双分支已合 |
 | R30 | C2e Agent API 路由组迁出 legacy_agent_routes（legacy_routes→2748，C 系列 5463→2748） | #1792（`7b6c50cf`） | #1795（`3ea442c7`） | ✅ 双分支已合 |
 | R31 | C2f 聊天流支撑函数迁出 chat_stream_support（legacy_routes→2619） | #1800（`2961a9b1`） | #1801（`855f51e5`） | ✅ 双分支已合 |
+| R32 | C2g 非流式聊天/attach/interrupt/steer/进化/learn 迁出 legacy_chat_routes（legacy_routes→2359） | #1808（`cec72b08`） | #1822（待合） | 交付中 |
 
 —— 本账本由对标循环维护，随轮次追加。
