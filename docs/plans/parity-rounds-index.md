@@ -61,6 +61,7 @@
 | R71 | prompt 模板库路由单测补齐（main 18 例 / win7 17 例适配） | #1794 `b5ac8c91` | #1796 `52040c1d`（reorder 适配 win7 行为基线） |
 | R72 | win7 对齐小批次（r178 MemoryManager 协调层测试，扁平路径适配） | —（纯 win7 对齐，上游 #1788） | #1802 `effd97ff` |
 | R73 | artifact 产物路由单测补齐（21 例） | #1806 `17463d53` | #1809 `f9af71be` |
+| R74 | 依赖审计门漂移治理（fast-uri policy + 门脚本分级 + pip-audit 自愈） | #1812 `e419f530` | 审计 job 属 main 定向，无 win7 侧 |
 
 §回填记录：R23 `#1084`、R24 `#1096`、R25 `#1108`、R26 `#1141`、R27 `#1157`、
 R28-31 `#1193`、R32 `#1203`、R33 `#1250`、R34 `#1261`、R35 `#1272`、
@@ -76,6 +77,7 @@ R70 回填即本提交。
 R71 回填即本提交（round71 文档随本提交首次入 main）。
 R72 回填即本提交（round72 文档随本提交首次入 main）。
 R73 回填即本提交（round73 文档随本提交首次入 main）。
+R74 回填即本提交（round74 文档随本提交首次入 main；§3.5 标记已落地）。
 
 
 ## 2. 过程经验（diff-patch / 双分支交付）
@@ -115,11 +117,12 @@ R73 回填即本提交（round73 文档随本提交首次入 main）。
    未覆盖自动开 issue。
 4. ~~CI 事件去重~~ **已落地**：R45 ci-rerun.yml（#1395）——
    workflow_dispatch 按 ref+target 手动全量重验，SOP §4.2 扩展触发命令。
-5. **依赖审计门 repo 级漂移**（R73 发现，待处理）：Dependency audit
-   对全任意 PR 红——npm fast-uri（GHSA-58mr-gqgx-xq4g / GHSA-qw65-cvwx-
-   89v3）未入 policy、undici 解析问题、pip 侧 4 包 10 漏洞、audit 环境
-   创建失败。该门非 required check（#1806 在 audit 红的情况下合入）。
-   R74 候选：policy 覆盖登记或依赖升级，另查 pip-audit 环境创建失败根因。
+5. ~~依赖审计门 repo 级漂移~~ **已落地**：R74（#1812）——fast-uri
+   GHSA-58mr/-qw65 policy 登记（transitive，review_by 2027-01-01）、
+   门脚本 nodes 缺失分级行为（moderate/low 按 lockfile 权威口径视为
+   未安装跳过；high/critical 维持失败）、ci.yml pip-audit 入口自愈
+   重装。真报告重放 exit 0 + 本 PR 的 Dependency audit job 转绿自证。
+   遗留观察项：pip-audit venv 入口偶发缺失的深层根因（自愈可兜底）。
 
 —— 本账本由对标循环维护，随轮次追加。
 

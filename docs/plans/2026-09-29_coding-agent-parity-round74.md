@@ -54,4 +54,9 @@ R73 发现 Dependency audit 对全任意 PR 红（含纯文档 PR）。经下载
 
 ## 5. 交付记录
 
-（交付后回填）
+- **批次（main，本轮唯一交付面）**：#1812 `e419f530`
+  - 内容：policy +2 fast-uri 例外、门脚本 nodes 分级行为（+2 例门测试）、
+    ci.yml pip-audit 入口自愈重装 + 本文档。
+  - CI 全绿（16 checks 0 failure），**Dependency audit job 随本改动
+    自验证转绿**。
+- **总账回填**：即本提交（§3.5 待办同步标记已落地）。
