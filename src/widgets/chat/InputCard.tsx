@@ -1,4 +1,15 @@
-import { BookOpen, Clock, Image, Paperclip, Plus, Send, Square, X } from 'lucide-react';
+import {
+  AtSign,
+  BookOpen,
+  Clock,
+  Image,
+  Paperclip,
+  Plus,
+  Send,
+  Slash,
+  Square,
+  X,
+} from 'lucide-react';
 import { memo, useEffect, useRef } from 'react';
 import type React from 'react';
 
@@ -6,6 +17,7 @@ import { AttachmentUpload } from '../../features/send-message/AttachmentUpload';
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { ComposerPlusMenu, type ComposerPlusMenuItem } from './ComposerPlusMenu';
 import { FileAttachment } from './FileAttachment';
 import { KnowledgeChip } from './KnowledgeChip';
 import { SlashCommandMenu } from './SlashCommandMenu';
@@ -181,6 +193,83 @@ function InputCardInner({
     onChange,
     enabled: !disabled,
   });
+
+  // UX-IA R1 批次 C：「+」工具菜单条目。行为与改前各图标按钮一致；
+  // 「@ 引用」「/ 命令」通过 onChange 写入触发字符，复用 ChatInput 既有的
+  // @ 菜单（useAtFileQuery）与 slash 菜单（value 以 "/" 开头）检测逻辑。
+  const focusInputEnd = () => {
+    requestAnimationFrame(() => {
+      const el = emacsRef.current;
+      if (!el) return;
+      el.focus();
+      const end = el.value.length;
+      el.setSelectionRange(end, end);
+    });
+  };
+  const plusItems: ComposerPlusMenuItem[] = [
+    ...(onImageSelect
+      ? [
+          {
+            key: 'image',
+            label: t('chat.attach_image'),
+            icon: <Image className="w-4 h-4" />,
+            onSelect: () => document.getElementById('chat-input-image')?.click(),
+          },
+        ]
+      : []),
+    ...(onFileSelect
+      ? [
+          {
+            key: 'file',
+            label: t('chat.attach_file'),
+            icon: <Paperclip className="w-4 h-4" />,
+            onSelect: () => document.getElementById('chat-input-file')?.click(),
+          },
+        ]
+      : []),
+    ...(onToggleKnowledgeSelector
+      ? [
+          {
+            key: 'knowledge',
+            label: t('chat.knowledge_ref'),
+            icon: <BookOpen className="w-4 h-4" />,
+            onSelect: () => onToggleKnowledgeSelector(!showKnowledgeSelector),
+          },
+        ]
+      : []),
+    {
+      key: 'mention',
+      label: '引用文件 / 实体',
+      icon: <AtSign className="w-4 h-4" />,
+      hint: '@',
+      onSelect: () => {
+        const sep = value === '' || /\s$/.test(value) ? '' : ' ';
+        onChange(`${value}${sep}@`);
+        focusInputEnd();
+      },
+    },
+    {
+      key: 'command',
+      label: value === '' ? '命令与技能' : '命令与技能（清空输入后可用）',
+      icon: <Slash className="w-4 h-4" />,
+      hint: '/',
+      disabled: value !== '',
+      onSelect: () => {
+        onChange('/');
+        focusInputEnd();
+      },
+    },
+    ...(onSchedule
+      ? [
+          {
+            key: 'schedule',
+            label: '定时发送',
+            icon: <Clock className="w-4 h-4" />,
+            onSelect: onSchedule,
+          },
+        ]
+      : []),
+  ];
 
   // Autosize: textarea grows with content up to the 200px cap.
   // Without this, content past one line scrolls inside the textarea and
@@ -403,6 +492,7 @@ function InputCardInner({
           )}
           {atFileMenu}
           <div className="border border-border rounded-radius-sm px-3 py-2 bg-bg flex items-end gap-2">
+            <ComposerPlusMenu items={plusItems} disabled={disabled} />
             <textarea
               ref={emacsRef}
               value={value}
@@ -420,51 +510,17 @@ function InputCardInner({
               aria-label="message input"
             />
 
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <button
-                type="button"
-                className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
-                title={t('chat.attach_image')}
-                onClick={() => document.getElementById('chat-input-image')?.click()}
-              >
-                <Image className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
-                title={t('chat.attach_file')}
-                onClick={() => document.getElementById('chat-input-file')?.click()}
-              >
-                <Paperclip className="w-4 h-4" />
-              </button>
-              {/* Phase 4 (2026-09-12): audio attachment upload */}
-              {onAudioAttachment && (
+            {/* Phase 4 (2026-09-12): audio attachment upload。
+                UX-IA R1 批次 C：音频上传是自带隐藏 input 与上传状态的独立组件，
+                放进会自动关闭的菜单里会在上传中途被卸载，故保留为常驻按钮。 */}
+            {onAudioAttachment && (
+              <div className="flex items-center flex-shrink-0">
                 <AttachmentUpload
                   onAttachmentUploaded={onAudioAttachment}
                   onError={(msg) => console.error('[InputCard] Audio upload failed:', msg)}
                 />
-              )}
-              {onToggleKnowledgeSelector && (
-                <button
-                  type="button"
-                  className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
-                  title={t('chat.knowledge_ref')}
-                  onClick={() => onToggleKnowledgeSelector(!showKnowledgeSelector)}
-                >
-                  <BookOpen className="w-4 h-4" />
-                </button>
-              )}
-              {onSchedule && (
-                <button
-                  type="button"
-                  className="w-7 h-7 flex items-center justify-center rounded-radius-sm hover:bg-bg-hover text-muted hover:text-text transition-colors"
-                  title="定时"
-                  onClick={onSchedule}
-                >
-                  <Clock className="w-4 h-4" />
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {showKnowledgeSelector && knowledgeDocs.length > 0 && onToggleKnowledge && (
