@@ -11,6 +11,7 @@ import {
   useConversationOutline,
   type OutlineItem,
 } from '../../features/chat/useConversationOutline';
+import { useConversationTurns, type TurnItem } from '../../features/chat/useConversationTurns';
 import {
   isArtifactAutoOpenEnabled,
   setArtifactAutoOpenEnabled,
@@ -22,6 +23,7 @@ import type { ToolCall } from '../../shared/lib/store';
 import { useResizablePanel } from '../../shared/lib/useResizablePanel';
 
 import { ConversationOutline } from './ConversationOutline';
+import { TurnList } from './TurnList';
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
 import { ArtifactsSection } from './artifacts/ArtifactsSection';
 import { ChangesSection } from './changes/ChangesSection';
@@ -234,6 +236,8 @@ function RightPanelInner({
   const setMaximized = useRightPanelStore((s) => s.setMaximized);
   const { artifacts, loading, refresh } = useArtifacts(sessionId);
   const { items: outlineItems, isLoading: outlineLoading } = useConversationOutline(sessionId);
+  // 对标 U1（ZCode ConversationTurnNavigator）：轮次导航数据源
+  const { items: turnItems } = useConversationTurns(sessionId);
   // R3 批次 C: 变更计数徽标（changesListStore 缓存，ChangesSection 拉取后
   // 这里同步可读；工作区干净/未拉取时不显示计数）
   const changesCount = useChangesListStore((s) => {
@@ -266,6 +270,16 @@ function RightPanelInner({
       if (maximized) setMaximized(false);
       if (!isPush) useRightPanelStore.getState().setOpen(false);
       requestMessageJump({ messageId: item.messageId, headingText: item.text, headingIndex });
+    },
+    [isPush, maximized, setMaximized],
+  );
+
+  // 对标 U1: 轮次条目 → 定位到该轮 user 消息。收起面板逻辑与大纲一致。
+  const handleTurnSelect = useCallback(
+    (item: TurnItem) => {
+      if (maximized) setMaximized(false);
+      if (!isPush) useRightPanelStore.getState().setOpen(false);
+      requestMessageJump({ messageId: item.messageId });
     },
     [isPush, maximized, setMaximized],
   );
@@ -383,11 +397,24 @@ function RightPanelInner({
         ) : tab === 'changes' ? (
           <ChangesSection sessionId={sessionId} />
         ) : tab === 'outline' ? (
-          <ConversationOutline
-            items={outlineItems}
-            isLoading={outlineLoading}
-            onSelect={handleOutlineSelect}
-          />
+          <>
+            {/* 对标 U1: 轮次导航——目录上方，按用户输入切分对话 */}
+            <div className="pt-2">
+              <div
+                className="px-3 pb-1 text-[11px] font-medium text-muted"
+                data-testid="turn-list-heading"
+              >
+                轮次
+              </div>
+              <TurnList items={turnItems} onSelect={handleTurnSelect} />
+            </div>
+            <div className="border-t border-border" />
+            <ConversationOutline
+              items={outlineItems}
+              isLoading={outlineLoading}
+              onSelect={handleOutlineSelect}
+            />
+          </>
         ) : tab === 'preview' ? (
           useRightPanelStore.getState().previewFilePath ? (
             <DocumentPreview filePath={useRightPanelStore.getState().previewFilePath!} />
