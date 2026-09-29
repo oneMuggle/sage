@@ -24,7 +24,7 @@ def test_chat_route_uses_single_agent():
 
     from backend.main import app
 
-    with TestClient(app) as client, patch("backend.api.legacy_routes.SageAgent") as MockSageAgent:
+    with TestClient(app) as client, patch("backend.api.legacy_chat_routes.SageAgent") as MockSageAgent:
         mock_agent = MagicMock()
         mock_agent.chat = AsyncMock(
             return_value={
