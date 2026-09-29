@@ -16,6 +16,20 @@ describe('useSiderSections — hydrate', () => {
     expect(result.current.collapsed.size).toBe(0);
   });
 
+  it('applies defaultCollapsed only when storage is empty (UX-IA R1 A3)', () => {
+    const { result } = renderHook(() => useSiderSections(DEFAULT, ['cron', 'team', 'unknown']));
+    expect([...result.current.collapsed].sort()).toEqual(['cron', 'team']);
+  });
+
+  it('ignores defaultCollapsed when a stored state exists (UX-IA R1 A3)', () => {
+    localStorage.setItem(
+      SIDER_SECTIONS_STORAGE_KEY,
+      JSON.stringify({ order: DEFAULT, collapsed: [] }),
+    );
+    const { result } = renderHook(() => useSiderSections(DEFAULT, ['cron', 'team']));
+    expect(result.current.collapsed.size).toBe(0);
+  });
+
   it('hydrates from a valid stored state', () => {
     localStorage.setItem(
       SIDER_SECTIONS_STORAGE_KEY,
