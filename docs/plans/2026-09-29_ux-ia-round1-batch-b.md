@@ -48,5 +48,11 @@
 
 | 分支 | PR | squash SHA |
 | --- | --- | --- |
-| main | 待回填 | 待回填 |
-| release/win7 | 待回填 | 待回填 |
+| main | #1842 | `408db33f` |
+| release/win7 | #1843 | `3fc4fea2` |
+
+### 4.1 win7 差异（有意保留）
+
+cherry-pick 时 `src/pages/Chat.tsx` 冲突：release/win7 的内联错误条没有「重试」按钮（main 有）。
+解决方式：`ChatInlineError` 的 `onRetry` 在 win7 线改为可选，win7 `Chat.tsx` 不传，
+渲染与改前 win7 行为一致；新增用例覆盖「未传 onRetry 不渲染重试」。main 线组件签名不变。
