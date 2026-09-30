@@ -234,6 +234,7 @@ const SOURCE_LABELS: Record<string, string> = {
   project_constraints: '项目约束',
   project_materials: '项目资料',
   skills: '技能清单',
+  skills_activated: '自动激活的技能',
   memory: '记忆召回',
   attachments: '附件 / 引用文档',
   environment: '环境信息',
