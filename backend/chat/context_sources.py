@@ -42,6 +42,10 @@ SOURCE_MARKERS: Tuple[Tuple[str, str, Optional[str]], ...] = (
     ("skills", "<available-skills>", "</available-skills>"),
     ("environment", "<environment>", "</environment>"),
     ("memory", "以下是相关的记忆上下文：", None),
+    # hex 路径（chat_service.py）用半角冒号
+    ("memory", "以下是相关的记忆上下文:", None),
+    # A16 技能自动激活块（auto_activation.py 的固定标题）
+    ("skills_activated", "以下是根据用户本次消息自动激活的技能指令", None),
     ("attachments", "<attachments>", "</attachments>"),
     ("attachments", "<attached_document", "</attached_document>"),
 )
@@ -54,6 +58,7 @@ SOURCE_ORDER: Tuple[str, ...] = (
     "project_constraints",
     "project_materials",
     "skills",
+    "skills_activated",
     "memory",
     "attachments",
     "environment",
