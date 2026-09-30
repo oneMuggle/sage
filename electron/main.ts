@@ -112,6 +112,7 @@ import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
 import { runRuntimeChecks, showRuntimeMissingDialog } from './runtime-check';
 import { resolveSageDbPath, resolveSageUserDataDir } from './userDataPaths';
+import { installDefaultWebContentsHardening } from './webContentsHardening';
 import { mainWindow, setMainWindow } from './mainWindow';
 import {
   initDiagnosticExport,
@@ -269,6 +270,7 @@ function isLegacyWindows(): boolean {
   }
 }
 const NEEDS_NO_SANDBOX = isLegacyWindows() || process.env.SAGE_NO_SANDBOX === '1';
+installDefaultWebContentsHardening((url) => openExternalSafely(url)); // Electron 21 公告缓解，见模块注释
 app.disableHardwareAcceleration();
 if (NEEDS_NO_SANDBOX) {
   app.commandLine.appendSwitch('no-sandbox');
