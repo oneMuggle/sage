@@ -148,6 +148,8 @@ export interface ContextSource {
   tokens: number;
   /** 该来源块出现的次数（base_system / other_dynamic 恒为 0） */
   count: number;
+  /** 本轮因注入预算被截掉的 token（仅截断时出现；UX-IA R2-C） */
+  trimmed?: number;
 }
 
 export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage> {

@@ -242,12 +242,21 @@ const SOURCE_LABELS: Record<string, string> = {
 
 export function ContextSourceList({ sources }: { sources?: ContextSource[] | null }) {
   if (!sources || sources.length === 0) return null;
+  const trimmedTotal = sources.reduce((a, s) => a + (s.trimmed ?? 0), 0);
   return (
     <span
       className="mt-2 block border-t border-border pt-2"
       data-testid="context-meter-sources"
     >
       <span className="mb-1 block text-[11px] font-medium text-text-primary">本轮注入的上下文</span>
+      {trimmedTotal > 0 && (
+        <span
+          className="mb-1 block text-[10px] text-warning"
+          data-testid="context-meter-trimmed-notice"
+        >
+          注入内容超出预算（窗口的 35%），已截掉约 {formatTokens(trimmedTotal)} tokens 低优先级内容
+        </span>
+      )}
       {sources.map((s) => (
         <span
           key={s.key}
@@ -255,7 +264,18 @@ export function ContextSourceList({ sources }: { sources?: ContextSource[] | nul
           className="flex items-center justify-between gap-2 py-0.5 text-[11px] text-text-secondary"
         >
           <span>{SOURCE_LABELS[s.key] ?? s.key}</span>
-          <span className="tabular-nums">{formatTokens(s.tokens)}</span>
+          <span className="flex items-center gap-1.5 tabular-nums">
+            {s.trimmed ? (
+              <span
+                className="rounded bg-warning/15 px-1 text-[10px] text-warning"
+                data-testid={`context-source-trimmed-${s.key}`}
+                title="因注入预算被截断的部分（保留了开头）"
+              >
+                已截断 {formatTokens(s.trimmed)}
+              </span>
+            ) : null}
+            {formatTokens(s.tokens)}
+          </span>
         </span>
       ))}
     </span>
