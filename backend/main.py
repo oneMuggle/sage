@@ -291,7 +291,18 @@ def _build_chat_service() -> ChatService:
         events=FileEventAdapter(),
         memory=memory_adapter,  # MemoryPort for memory integration
         wake_store=get_wake_store(),  # A4: 会话挂起 / 唤醒注册
+        context_window_resolver=_resolve_default_context_window,  # UX-IA R2-D 注入预算
     )
+
+
+def _resolve_default_context_window() -> Optional[int]:
+    """hex 路径的有效窗口：按已保存设置解析（与 legacy 同一实现）；失败返回 None。"""
+    try:
+        from backend.api.chat_request_policy import _resolve_effective_window
+
+        return _resolve_effective_window()
+    except Exception:  # noqa: BLE001 — 窗口未知时预算不生效
+        return None
 
 
 @asynccontextmanager

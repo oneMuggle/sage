@@ -20,6 +20,7 @@ UX-IA Round 2 · 批次 B（2026-09-30）。保持 Python 3.8 兼容（win7 LTS�
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.chat.context_sources import SOURCE_MARKERS, TRIM_NOTE_FMT, _find_blocks
@@ -40,10 +41,13 @@ TRIM_ORDER: Tuple[str, ...] = (
     "project_materials",
     "memory",
     "skills",
+    "skills_activated",
     "project_overview",
     "project_constraints",
     "sage_md",
 )
+#: 这些来源由多条独立条目组成，给出本轮输入时按相关度保留条目，而不是只保留开头
+RELEVANCE_KEYS: Tuple[str, ...] = ("project_materials", "memory")
 
 _CLOSE_BY_KEY: Dict[str, Optional[str]] = {key: close for key, _, close in SOURCE_MARKERS}
 
@@ -77,13 +81,65 @@ def _truncate_block(block: str, key: str, target_tokens: int) -> Tuple[str, int]
     return new_block, max(0, before - estimate_tokens(new_block))
 
 
+def _bigrams(text: str) -> set:
+    """字符二元组集合（中英文通用、无需分词 / embedding 的轻量相关度特征）。"""
+    s = re.sub(r"\s+", "", (text or "").lower())
+    return {s[i : i + 2] for i in range(len(s) - 1)}
+
+
+def _split_entries(body: str) -> Tuple[List[str], str]:
+    """按空行切条目；只有一段时退化为按行切。返回 (条目列表, 连接符)。"""
+    parts = [p for p in re.split(r"\n\s*\n", body) if p.strip()]
+    if len(parts) >= 2:
+        return parts, "\n\n"
+    return [p for p in body.split("\n") if p.strip()], "\n"
+
+
+def _truncate_by_relevance(block: str, target_tokens: int, query: str) -> Tuple[str, int]:
+    """按与本轮输入的相关度保留条目（保持原顺序），其余丢弃。
+
+    条目不足 2 条、或没有任何条目与输入相关时返回 (block, 0)，由调用方回退到尾部截断。
+    """
+    before = estimate_tokens(block)
+    q = _bigrams(query)
+    if before <= target_tokens or not q:
+        return block, 0
+    header, _, body = block.partition("\n")
+    entries, joiner = _split_entries(body)
+    if len(entries) < 2:
+        return block, 0
+    scores = [len(_bigrams(e) & q) for e in entries]
+    if max(scores) <= 0:
+        return block, 0
+    room = target_tokens - estimate_tokens(header) - _MARGIN_TOKENS
+    order = sorted(range(len(entries)), key=lambda i: (-scores[i], i))
+    keep: List[int] = []
+    used = 0
+    for i in order:
+        cost = estimate_tokens(entries[i]) + 1
+        if used + cost > room:
+            continue
+        keep.append(i)
+        used += cost
+    if not keep:
+        return block, 0
+    kept = joiner.join(entries[i] for i in sorted(keep))
+    dropped = before - estimate_tokens(header + "\n" + kept)
+    new_block = header + "\n" + kept + "\n" + TRIM_NOTE_FMT.format(n=max(0, dropped))
+    if block.endswith("\n") and not new_block.endswith("\n"):
+        new_block += "\n"
+    return new_block, max(0, before - estimate_tokens(new_block))
+
+
 def apply_context_budget(
     system_content: str,
     dynamic_parts: List[str],
     window: Optional[int],
+    query: Optional[str] = None,
 ) -> Tuple[str, List[str], Optional[Dict[str, Any]]]:
     """超预算时按优先级截断注入块。
 
+    ``query`` 为本轮用户输入：给出时，资料 / 记忆按相关度保留条目。
     返回 (新 system_content, 新 dynamic_parts, report)。未超预算或不处理时
     report 为 None；超预算时 report = {budget, before, after, trimmed: {key: tokens}}。
     """
@@ -113,7 +169,11 @@ def apply_context_budget(
             block = texts[ti][start:end]
             tokens = estimate_tokens(block)
             target = max(KEEP_TOKENS, tokens - over - _MARGIN_TOKENS)
-            new_block, saved = _truncate_block(block, key, target)
+            saved = 0
+            if query and key in RELEVANCE_KEYS:
+                new_block, saved = _truncate_by_relevance(block, target, query)
+            if saved <= 0:
+                new_block, saved = _truncate_block(block, key, target)
             if saved <= 0:
                 continue
             replacements.setdefault(ti, []).append((start, end, new_block))
@@ -140,6 +200,7 @@ __all__ = [
     "BUDGET_RATIO",
     "KEEP_TOKENS",
     "MIN_BUDGET_TOKENS",
+    "RELEVANCE_KEYS",
     "TRIM_ORDER",
     "apply_context_budget",
     "budget_for_window",
