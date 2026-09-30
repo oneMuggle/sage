@@ -35,5 +35,25 @@ describe('ContextSourceList', () => {
     expect(rows[1]).toHaveTextContent('记忆召回');
     // 未知 key 回退显示原始 key，前端不因后端新增来源而崩
     expect(rows[2]).toHaveTextContent('future_key');
+    expect(screen.queryByTestId('context-meter-trimmed-notice')).toBeNull();
+    expect(screen.queryByTestId(/^context-source-trimmed-/)).toBeNull();
+  });
+
+  it('flags sources truncated by the injection budget', () => {
+    render(
+      <ContextSourceList
+        sources={[
+          { key: 'sage_md', tokens: 900, count: 1 },
+          { key: 'project_materials', tokens: 400, count: 1, trimmed: 2500 },
+          { key: 'memory', tokens: 200, count: 1, trimmed: 300 },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('context-meter-trimmed-notice')).toHaveTextContent('2.8k');
+    expect(screen.getByTestId('context-source-trimmed-project_materials')).toHaveTextContent(
+      '已截断 2.5k',
+    );
+    expect(screen.getByTestId('context-source-trimmed-memory')).toHaveTextContent('已截断 300');
+    expect(screen.queryByTestId('context-source-trimmed-sage_md')).toBeNull();
   });
 });

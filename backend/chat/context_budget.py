@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from backend.chat.context_sources import SOURCE_MARKERS, _find_blocks
+from backend.chat.context_sources import SOURCE_MARKERS, TRIM_NOTE_FMT, _find_blocks
 from backend.memory.working import estimate_tokens
 
 logger = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ def _truncate_block(block: str, key: str, target_tokens: int) -> Tuple[str, int]
             hi = mid - 1
     cut = body[:lo].rstrip()
     dropped = before - estimate_tokens(cut)
-    note = f"\n…[已按上下文预算截断约 {max(0, dropped)} tokens]"
+    note = "\n" + TRIM_NOTE_FMT.format(n=max(0, dropped))
     new_block = cut + note + ("\n" + close if close and close in block else "")
     return new_block, max(0, before - estimate_tokens(new_block))
 

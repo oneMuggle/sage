@@ -18,9 +18,20 @@ UX-IA Round 2 · 上下文可视化（2026-09-30）。保持 Python 3.8 兼容�
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from backend.memory.working import estimate_tokens
+
+#: 预算截断说明（由 context_budget 写入被截断块的尾部）。R2-C 据此在来源明细中标注截断量。
+TRIM_NOTE_FMT = "…[已按上下文预算截断约 {n} tokens]"
+_TRIM_NOTE_RE = re.compile(r"…\[已按上下文预算截断约 (\d+) tokens\]")
+
+
+def trimmed_tokens_in(text: str) -> int:
+    """块内所有预算截断说明声明的截断量之和。"""
+    return sum(int(m.group(1)) for m in _TRIM_NOTE_RE.finditer(text or ""))
+
 
 #: (来源 key, 起始标记, 闭合标记或 None)。无闭合标记的块延续到下一个标记。
 SOURCE_MARKERS: Tuple[Tuple[str, str, Optional[str]], ...] = (
@@ -102,6 +113,7 @@ def compute_context_sources(
     """
     totals: Dict[str, int] = {}
     counts: Dict[str, int] = {}
+    trimmed: Dict[str, int] = {}
     for idx, msg in enumerate(messages or []):
         role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
         if role != "system":
@@ -118,6 +130,9 @@ def compute_context_sources(
                 totals[rest_key] = totals.get(rest_key, 0) + estimate_tokens(gap)
             totals[key] = totals.get(key, 0) + estimate_tokens(text[start:end])
             counts[key] = counts.get(key, 0) + 1
+            cut = trimmed_tokens_in(text[start:end])
+            if cut > 0:
+                trimmed[key] = trimmed.get(key, 0) + cut
             cursor = max(cursor, end)
         tail = text[cursor:]
         if tail.strip():
@@ -129,8 +144,17 @@ def compute_context_sources(
         tokens = int(round(totals.get(key, 0) * factor))
         if tokens <= 0:
             continue
-        result.append({"key": key, "tokens": tokens, "count": counts.get(key, 0)})
+        entry: Dict[str, Any] = {"key": key, "tokens": tokens, "count": counts.get(key, 0)}
+        if trimmed.get(key):
+            entry["trimmed"] = int(round(trimmed[key] * factor))
+        result.append(entry)
     return result
 
 
-__all__ = ["SOURCE_MARKERS", "SOURCE_ORDER", "compute_context_sources"]
+__all__ = [
+    "SOURCE_MARKERS",
+    "SOURCE_ORDER",
+    "TRIM_NOTE_FMT",
+    "compute_context_sources",
+    "trimmed_tokens_in",
+]
