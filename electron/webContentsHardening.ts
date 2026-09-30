@@ -19,6 +19,8 @@
  *   并且没有注册为 privileged scheme，这里不需要额外处理。
  */
 
+import { logger } from './logger';
+
 export interface WindowOpenDetailsLike {
   url: string;
 }
@@ -92,4 +94,28 @@ export function installWebContentsHardening(app: AppLike, deps: HardeningDeps): 
       deps.warn?.('security: hardenWebContents failed', { err: String(err) });
     }
   });
+}
+
+/** arena token 登录窗口使用的远程分区（与 arenaTokenWindow.ts 保持一致）。 */
+export const ARENA_TOKEN_PARTITION = 'persist:arena-token';
+
+/**
+ * main.ts 的接入点。动态引入 electron，原因同 sageFileProtocol.ts：
+ * 部分 electron 单测会用不完整的 mock 替换 'electron'。
+ * 这里在模块加载时调用，dynamic import 会在 app ready、窗口创建之前完成。
+ */
+export function installDefaultWebContentsHardening(openExternal: (url: string) => void): void {
+  void import('electron')
+    .then(({ app, session }) => {
+      if (!app?.on || !session?.fromPartition) return;
+      installWebContentsHardening(app as unknown as AppLike, {
+        openExternal,
+        allowsSandboxedPopups: (contents) =>
+          contents.session === session.fromPartition(ARENA_TOKEN_PARTITION),
+        warn: (message, detail) => logger.warn(message, detail),
+      });
+    })
+    .catch((err: unknown) => {
+      logger.warn('security: webContents hardening install failed', { err: String(err) });
+    });
 }

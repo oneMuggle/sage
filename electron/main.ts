@@ -42,7 +42,6 @@ import {
   globalShortcut,
   ipcMain,
   Notification,
-  session,
   shell,
 } from 'electron';
 import './crashGuard';
@@ -124,7 +123,7 @@ import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
 import { runRuntimeChecks, showRuntimeMissingDialog } from './runtime-check';
 import { resolveSageDbPath, resolveSageUserDataDir } from './userDataPaths';
-import { installWebContentsHardening } from './webContentsHardening';
+import { installDefaultWebContentsHardening } from './webContentsHardening';
 import { mainWindow, setMainWindow } from './mainWindow';
 import {
   initDiagnosticExport,
@@ -274,15 +273,7 @@ function isLegacyWindows(): boolean {
   }
 }
 const NEEDS_NO_SANDBOX = isLegacyWindows() || process.env.SAGE_NO_SANDBOX === '1';
-
-// 2026-09-30: electron@21.4.4（Win7 LTS）无法升级修复 2026-09-29 的 4 条高危公告，
-// 在应用层对所有 webContents 统一拦截 <webview> 与弹窗，详见 webContentsHardening.ts。
-installWebContentsHardening(app, {
-  openExternal: (url) => openExternalSafely(url),
-  allowsSandboxedPopups: (contents) =>
-    contents.session === session.fromPartition('persist:arena-token'),
-  warn: (message, detail) => logger.warn(message, detail),
-});
+installDefaultWebContentsHardening((url) => openExternalSafely(url)); // Electron 21 公告缓解，见模块注释
 app.disableHardwareAcceleration();
 if (NEEDS_NO_SANDBOX) {
   app.commandLine.appendSwitch('no-sandbox');
