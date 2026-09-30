@@ -272,3 +272,35 @@ Step 9 [回归]      重启 Sage → 设置应保留
 - Win7 KB3033929：[Microsoft Update Catalog](https://www.catalog.update.microsoft.com/Search.aspx?q=KB3033929)
 - electron-builder NSIS 文档：[electron-builder JSON schema](https://www.electron.build/configuration/nsis)
 - playwright-electron API：[Playwright docs](https://playwright.dev/docs/api/class-electron)
+
+## 12. Electron 性能与架构治理现状
+
+> 归档自 `docs/plans/2026-09-22_zcode-inspired-optimization.md`（2026-09-22，参考 ZCode v3.14.0 的优化方案）。
+>
+> ⚠️ **该计划文档的完成标记与代码不符**，此处只记录经核实已落地的部分。
+
+### 12.1 已落地
+
+| 项 | 落地形态 | 位置 |
+| --- | --- | --- |
+| 前端 Bundle 瘦身 | Vite `manualChunks` 拆分 + hidden sourcemap | `vite.config.ts` |
+| 打包体优化 | `asarUnpack` 清理非必要资源 | `electron-builder.yml` |
+| 文件规模治理 | 800 行/文件上限 + 基线棘轮（只许降不许升） | `scripts/architecture-check.mjs` |
+| 行数统计 | CI `count-lines` job | `scripts/count-lines.sh` |
+
+架构治理由 CI 强制：每个 PR 跑 `architecture-check`，超限即红。失败时 workflow 会向 PR 自动发一条「现成可粘贴」的基线补账 JSON 行，降低补账遗忘率。
+
+### 12.2 未落地（原计划 Phase 1/3/4/6）
+
+| 项 | 原计划目标 | 现状 |
+| --- | --- | --- |
+| 后端启动并行化 | 拆解 25+ 步串行初始化，`startup_profiler.py` 诊断 | ❌ 文件不存在，仍串行 |
+| 内存诊断系统 | `electron/memory-diagnostics.ts` + IPC 暴露 | ❌ 文件不存在 |
+| Electron 架构治理 | `main.ts` 拆到 <500 行/文件 | ⏸ **延期**，`main.ts` 现 2701 行 |
+| 状态管理优化 | CommandPalette/Chat 全面 Zustand selector | ❌ 无对应产物 |
+
+> 原计划 Phase 4 的拆分方案（`electron/lifecycle/{app-lifecycle,backend-spawn,backend-health,backend-restart}.ts`）尚未实施，需单独 PR。`main.ts` 是当前最大单体文件，拆分前需先与 `docs/technical/15-state-ownership.md` 的状态归属约定对齐。
+
+### 12.3 与 ZCode 的差距
+
+ZCode 采用四进程架构（主进程 / 渲染 / 工具执行 / 沙箱）彻底隔离崩溃域；Sage 仍是单主进程 + 多窗口模型，工具执行走 `bash` 工具子进程。短期内不追求对齐 —— Electron 21.4.4（Win7 EOL 栈）的进程模型调整成本高于收益。
