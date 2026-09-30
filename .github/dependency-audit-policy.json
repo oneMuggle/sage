@@ -276,6 +276,54 @@
       "actual_reachability": "conditionally reachable; transitive URI parser in the API framework tree, no route feeds untrusted input to fast-uri directly",
       "controls": "transitive dependency; upgrade tracked via lockfile refresh review; no direct runtime API exposure; quarterly npm audit review",
       "exception": "temporary exception pending compatible dependency upgrade"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "electron",
+      "package_version": "21.4.4",
+      "advisory": "GHSA-9qh4-3jw8-366w",
+      "advisory_url": "https://github.com/advisories/GHSA-9qh4-3jw8-366w",
+      "affected_path": "node_modules/electron",
+      "actual_reachability": "reachable; mitigated in app layer; accepted residual risk",
+      "controls": "<webview> Node integration in workers: Sage never uses <webview>; electron/webContentsHardening.ts blocks will-attach-webview on every webContents; contextIsolation, nodeIntegration:false, IPC sender validation; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); upstream fixes only in >=41.10.4/41.10.6 (no Win7 support); quarterly npm audit review"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "electron",
+      "package_version": "21.4.4",
+      "advisory": "GHSA-gr2m-v5gq-v685",
+      "advisory_url": "https://github.com/advisories/GHSA-gr2m-v5gq-v685",
+      "affected_path": "node_modules/electron",
+      "actual_reachability": "reachable; mitigated in app layer; accepted residual risk",
+      "controls": "sandbox not inherited by window.open popups: webContentsHardening.ts denies all popups by default (http(s) -> OS browser); arena login partition gets only sandboxed, preload-less, node-less popups; contextIsolation, nodeIntegration:false, IPC sender validation; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); upstream fixes only in >=41.10.4/41.10.6 (no Win7 support); quarterly npm audit review"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "electron",
+      "package_version": "21.4.4",
+      "advisory": "GHSA-hq2x-r82h-9wj4",
+      "advisory_url": "https://github.com/advisories/GHSA-hq2x-r82h-9wj4",
+      "affected_path": "node_modules/electron",
+      "actual_reachability": "reachable; mitigated in app layer; accepted residual risk",
+      "controls": "sandbox not inherited by link/target=_blank popups (OpenURLFromTab): same global setWindowOpenHandler deny as GHSA-gr2m; contextIsolation, nodeIntegration:false, IPC sender validation; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); upstream fixes only in >=41.10.4/41.10.6 (no Win7 support); quarterly npm audit review"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "electron",
+      "package_version": "21.4.4",
+      "advisory": "GHSA-j84w-jfhq-vhvj",
+      "advisory_url": "https://github.com/advisories/GHSA-j84w-jfhq-vhvj",
+      "affected_path": "node_modules/electron",
+      "actual_reachability": "reachable; mitigated in app layer; accepted residual risk",
+      "controls": "cross-origin reads via file/HTTP protocol handlers: sage-file protocol is non-privileged and restricted to workspace roots + allowed_paths allowlist (electron/sageFileProtocol.ts); contextIsolation, nodeIntegration:false, IPC sender validation; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); upstream fixes only in >=41.10.4/41.10.6 (no Win7 support); quarterly npm audit review"
     }
   ]
 }
