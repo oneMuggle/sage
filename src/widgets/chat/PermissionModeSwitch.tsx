@@ -156,7 +156,7 @@ export function PermissionModeSwitch({ sessionId }: PermissionModeSwitchProps) {
         <div
           role="menu"
           data-testid="permission-mode-menu"
-          className="absolute right-0 top-full mt-1 z-30 w-64 rounded border border-border bg-surface shadow-lg p-1"
+          className="absolute right-0 bottom-full mb-1 z-30 w-64 rounded border border-border bg-surface shadow-lg p-1"
         >
           {PERMISSION_PRESETS.map((p) => {
             const PIcon = PRESET_ICON[p];
@@ -190,7 +190,7 @@ export function PermissionModeSwitch({ sessionId }: PermissionModeSwitchProps) {
       {auditOpen && (
         <div
           data-testid="auto-approval-audit"
-          className="absolute right-0 top-full mt-1 z-30 w-80 max-h-72 overflow-y-auto rounded border border-border bg-surface shadow-lg p-2"
+          className="absolute right-0 bottom-full mb-1 z-30 w-80 max-h-72 overflow-y-auto rounded border border-border bg-surface shadow-lg p-2"
         >
           <p className="text-xs font-semibold text-text mb-1">{t('chat.perm.audit_title')}</p>
           {items.length === 0 ? (

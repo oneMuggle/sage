@@ -852,14 +852,10 @@ export function Chat() {
           <ProjectBadge workspacePath={workspacePath} />
           {/* worktree 模式 (2026-09-18): 会话级分支/worktree 切换入口 */}
           <WorkspaceBranchPicker sessionId={currentSessionId} />
-          {/* U8: 会话级模型切换(G5 收尾) · U14: 会话用量徽章 · U17: 上下文占用 */}
-          <SessionModelPicker sessionId={currentSessionId} />
+          {/* U14: 会话用量徽章。模型 / 上下文 / 权限已移入输入框（UX-IA R1 批次 D） */}
           <SessionUsageBadge sessionId={currentSessionId} />
-          <ContextMeter sessionId={currentSessionId} />
         </div>
         <div className="flex items-center gap-2">
-          {/* 对标 S3: 权限三档一键切换 + 本会话自动放行计数 */}
-          <PermissionModeSwitch sessionId={currentSessionId} />
           {currentSessionId && (
             <button
               type="button"
@@ -1145,6 +1141,13 @@ export function Chat() {
             workspacePath={workspacePath}
             injectedDraft={editResendTarget ?? quotedDraft}
             editResendNotice={editResendNotice}
+            composerControls={
+              <>
+                <PermissionModeSwitch sessionId={currentSessionId} />
+                <ContextMeter sessionId={currentSessionId} />
+                <SessionModelPicker sessionId={currentSessionId} />
+              </>
+            }
           />
           {/* Phase 3 (2026-09-25): 底部终端面板（VS Code 风格），Ctrl+` 切换 */}
           <TerminalPanel />
