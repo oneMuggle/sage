@@ -72,7 +72,7 @@ def _truncate_block(block: str, key: str, target_tokens: int) -> Tuple[str, int]
             hi = mid - 1
     cut = body[:lo].rstrip()
     dropped = before - estimate_tokens(cut)
-    note = "\n…[已按上下文预算截断约 {} tokens]".format(max(0, dropped))
+    note = f"\n…[已按上下文预算截断约 {max(0, dropped)} tokens]"
     new_block = cut + note + ("\n" + close if close and close in block else "")
     return new_block, max(0, before - estimate_tokens(new_block))
 
@@ -97,7 +97,7 @@ def apply_context_budget(
         if over <= 0:
             return system_content, dynamic_parts, None
 
-        # 收集可截断块: (优先级, 文本序号, start, end, key)
+        # 收集可截断块，元素依次为优先级、文本序号、起止位置与来源 key
         candidates: List[Tuple[int, int, int, int, str]] = []
         for ti, text in enumerate(texts):
             for start, end, key in _find_blocks(text):
