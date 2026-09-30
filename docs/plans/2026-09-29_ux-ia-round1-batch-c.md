@@ -25,5 +25,8 @@
 - `ChatInput.scheduled.test.tsx` 改为先打开菜单再找定时项。
 
 ## 5. PR
-- main：待回填
-- win7：待回填
+- main：#1845（`8d5ecb176`）
+- win7（release/win7）：#1848
+
+## 6. 附带：审计门禁修复
+批次 C 合并时，2026-09-29 新发布的 Electron 21 / undici 公告导致全仓审计门禁失败。另开 PR 处理（main #1846，win7 #1847）：用 webContentsHardening.ts 在应用层缓解、登记策略例外、undici 升级到 6.28.1 / 7.29.1。Electron 保持 21.4.4，Win7 兼容不受影响。
