@@ -134,6 +134,20 @@ export interface ContextBreakdown {
   prompt_tokens: number | null;
   /** 是否已按实报值等比校准 */
   calibrated: boolean;
+  /**
+   * UX-IA Round 2：本轮注入上下文的来源明细（按 system 消息中的块标记切分，
+   * 与 categories 同口径校准）。旧记录无此字段。
+   */
+  sources?: ContextSource[];
+}
+
+export interface ContextSource {
+  /** base_system | sage_md | project_overview | project_constraints | project_materials |
+   *  skills | memory | attachments | environment | other_dynamic */
+  key: string;
+  tokens: number;
+  /** 该来源块出现的次数（base_system / other_dynamic 恒为 0） */
+  count: number;
 }
 
 export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage> {
