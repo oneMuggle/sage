@@ -18,7 +18,7 @@ import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
-import { InputCard, type KnowledgeDocType } from './InputCard';
+import { InputCard, type InputCardProps, type KnowledgeDocType } from './InputCard';
 import { extractTemplateVars, TemplateFillDialog } from './TemplateFillDialog';
 import {
   commandToPrompt,
@@ -46,7 +46,8 @@ function useOptionalNavigate(): (route: string) => void {
   );
 }
 
-interface ChatInputProps {
+// UX-IA R1 批次 D：composerControls 透传给 InputCard（模型 / 上下文 / 权限）。
+interface ChatInputProps extends Pick<InputCardProps, 'composerControls'> {
   onSend: (
     message: string,
     options?: {
@@ -97,10 +98,7 @@ interface ChatInputProps {
    * 并把焦点移回输入框；缺省 / `'replace'`（编辑重发）保持覆盖语义。
    */
   injectedDraft?: { text: string; nonce: number; mode?: 'replace' | 'append' } | null;
-  /**
-   * U5': 编辑重发提示条。非 null 时在输入卡片上方渲染"正在编辑重发"
-   * 横条，onCancel 由 Chat 页清除编辑态。
-   */
+  /** U5': 编辑重发提示条（非 null 时渲染横条，onCancel 由 Chat 页清除编辑态）。 */
   editResendNotice?: { onCancel: () => void } | null;
   /**
    * Optional workspace root — kept for backwards-compat with callers that
@@ -123,6 +121,7 @@ function ChatInputInner({
   workspacePath,
   injectedDraft,
   editResendNotice,
+  composerControls,
 }: ChatInputProps) {
   const { t } = useI18n();
 
@@ -773,6 +772,7 @@ function ChatInputInner({
           </div>
         }
         hint={t('chat.hint')}
+        composerControls={composerControls}
       />
       {fillTarget != null && (
         <TemplateFillDialog

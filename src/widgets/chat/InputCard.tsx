@@ -127,6 +127,11 @@ export interface InputCardProps {
 
   // Wave 3 C6: 编排模式条（ChatInput 提供 select，渲染在输入卡顶部）
   orchModeBar?: React.ReactNode;
+  /**
+   * UX-IA R1 批次 D：输入框右下角的会话控件（模型、上下文占用、权限档位），
+   * 渲染在发送/停止按钮左侧，对标 ChatGPT / Claude 的 composer 布局。
+   */
+  composerControls?: React.ReactNode;
 
   // Footer hint
   hint?: string;
@@ -180,6 +185,7 @@ function InputCardInner({
   onSlashClose,
   atFileMenu,
   orchModeBar,
+  composerControls,
   hint,
   inputHistory,
   focusRequest,
@@ -570,6 +576,11 @@ function InputCardInner({
           )}
         </div>
 
+        {composerControls && (
+          <div data-testid="composer-controls" className="flex items-center gap-1 mr-1.5 min-w-0">
+            {composerControls}
+          </div>
+        )}
         {isLoading ? (
           <button
             type="button"
