@@ -15,13 +15,15 @@ function renderInput(props: Partial<React.ComponentProps<typeof InputCard>> = {}
 describe('ChatInput scheduled button', () => {
   it('renders schedule button when onSchedule is provided', () => {
     renderInput({ onSchedule: vi.fn() });
-    expect(screen.getByTitle(/定时/i)).toBeTruthy();
+    fireEvent.click(screen.getByTestId('composer-plus'));
+    expect(screen.getByTestId('composer-plus-item-schedule')).toBeTruthy();
   });
 
   it('clicking schedule button invokes onSchedule', () => {
     const onSchedule = vi.fn();
     renderInput({ onSchedule });
-    fireEvent.click(screen.getByTitle(/定时/i));
+    fireEvent.click(screen.getByTestId('composer-plus'));
+    fireEvent.click(screen.getByTestId('composer-plus-item-schedule'));
     expect(onSchedule).toHaveBeenCalledTimes(1);
   });
 
