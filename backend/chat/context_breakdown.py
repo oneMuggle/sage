@@ -235,12 +235,22 @@ def build_breakdown_snapshot(
     if actual_prompt_tokens and actual_prompt_tokens > 0:
         categories = calibrate_breakdown(estimate, int(actual_prompt_tokens))
         calibrated = True
-    return {
+    snapshot: Dict[str, Any] = {
         "categories": categories,
         "estimated_total": est_total,
         "prompt_tokens": int(actual_prompt_tokens or 0) or None,
         "calibrated": calibrated,
     }
+    # UX-IA Round 2: 本轮注入上下文的来源明细（SAGE.md / 项目 / 记忆 / 附件…）。
+    # 增强信息，失败只省略该字段，不影响分类明细。
+    try:
+        from backend.chat.context_sources import compute_context_sources
+
+        scale = (float(actual_prompt_tokens) / est_total) if calibrated and est_total else 1.0
+        snapshot["sources"] = compute_context_sources(messages, scale)
+    except Exception:  # noqa: BLE001
+        pass
+    return snapshot
 
 
 __all__ = [
