@@ -1530,7 +1530,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             from backend.chat.context_budget import apply_context_budget
 
             system_content, dynamic_context_parts, _budget_report = apply_context_budget(
-                system_content, dynamic_context_parts, effective_window
+                system_content, dynamic_context_parts, effective_window, data.message
             )
             # 上下文明细改造: reserve 不再硬编码 16384——本轮非历史开销
             # (system/附件/动态上下文/当前输入/工具 schema) 按实际大小实测,
