@@ -1469,6 +1469,14 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 解析不到时保持缺省，run_ctx_budget_tokens 回退默认常量。
             if llm_config is not None and effective_window:
                 llm_config["context_window"] = int(effective_window)
+            # UX-IA R2-B: 注入上下文统一预算——超出时按优先级截断低优先级块
+            # （资料 → 记忆 → 技能 → 概览 → 约束 → SAGE.md），而非整块丢弃;
+            # 窗口未知 / 未超预算 / 异常时原样放行。详见 backend/chat/context_budget.py。
+            from backend.chat.context_budget import apply_context_budget
+
+            system_content, dynamic_context_parts, _budget_report = apply_context_budget(
+                system_content, dynamic_context_parts, effective_window
+            )
             # 上下文明细改造: reserve 不再硬编码 16384——本轮非历史开销
             # (system/附件/动态上下文/当前输入/工具 schema) 按实际大小实测,
             # 另加输出预算 (LLMConfig.max_tokens 默认 4096)。测量失败或
