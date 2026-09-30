@@ -13,7 +13,7 @@ import {
   useChatStreamStore,
   selectSessionSlots,
 } from '../../features/send-message/chatStreamStore';
-import type { ContextBreakdown } from '../../shared/api/usageApi';
+import type { ContextBreakdown, ContextSource } from '../../shared/api/usageApi';
 import { fetchSessionUsage, type SessionUsage } from '../../shared/api/usageApi';
 import { resolvedContextWindow } from '../../shared/lib/modelWindows';
 
@@ -219,8 +219,45 @@ export function ContextMeter({ sessionId, refreshKey = 0 }: ContextMeterProps) {
               暂无分类明细（该请求记录早于明细分桶上线，或明细采集失败）。
             </span>
           )}
+          <ContextSourceList sources={breakdown?.sources} />
         </span>
       )}
+    </span>
+  );
+}
+
+/** UX-IA Round 2：本轮注入上下文来源（对标 Claude 的 context 可视化）。 */
+const SOURCE_LABELS: Record<string, string> = {
+  base_system: '基础系统提示词',
+  sage_md: '项目指令 (SAGE.md)',
+  project_overview: '项目概览',
+  project_constraints: '项目约束',
+  project_materials: '项目资料',
+  skills: '技能清单',
+  memory: '记忆召回',
+  attachments: '附件 / 引用文档',
+  environment: '环境信息',
+  other_dynamic: '其他动态上下文',
+};
+
+export function ContextSourceList({ sources }: { sources?: ContextSource[] | null }) {
+  if (!sources || sources.length === 0) return null;
+  return (
+    <span
+      className="mt-2 block border-t border-border pt-2"
+      data-testid="context-meter-sources"
+    >
+      <span className="mb-1 block text-[11px] font-medium text-text-primary">本轮注入的上下文</span>
+      {sources.map((s) => (
+        <span
+          key={s.key}
+          data-testid={`context-source-${s.key}`}
+          className="flex items-center justify-between gap-2 py-0.5 text-[11px] text-text-secondary"
+        >
+          <span>{SOURCE_LABELS[s.key] ?? s.key}</span>
+          <span className="tabular-nums">{formatTokens(s.tokens)}</span>
+        </span>
+      ))}
     </span>
   );
 }
