@@ -314,6 +314,26 @@ check 集天然缺 2 个必需项，补多少次都补不齐。
 `422 Unprocessable Entity`（body 为空），同参数 `gh workflow run ci-rerun.yml
 -f ref=... -f target=...` 却成功。补跑通道优先用 `gh`；状态复查仍用 REST。
 
+**⚠️ `gh workflow run` 必须带 `--ref`，否则 check-run 记到错的 SHA 上。**
+`-f ref=<分支>` 只是 workflow 的一个**输入**（它决定 job 里 `actions/checkout`
+checkout 谁）；决定 **run 挂在哪个 ref / check-run 记到哪个 commit** 的是
+`--ref` 标志。漏掉它时 `gh` 回退到当前检出分支，在主检出（detached HEAD）里
+就落到默认分支 `main` 上——run 照跑、`All Checks` 照绿，但它的 check-run
+全部记在 `main` 的 SHA 上，对 PR 毫无作用。实测白烧了一轮 py38（约 10 min）
+才发现 PR head 上的 `Backend (Python 3.8, Win7 LTS)` 仍是 ci.yml 留下的
+`skipped`。
+
+正确写法（两个 ref 都要给，`--ref` 决定归属，`-f ref` 决定 checkout）：
+
+```powershell
+gh workflow run ci-rerun.yml --ref feat/ux-ia-r3-b-win7 `
+  -f ref=feat/ux-ia-r3-b-win7 -f target=release/win7
+```
+
+**自查**：dispatch 之后立刻确认
+`GET /actions/runs/<id>` 的 `head_sha` 等于 PR head SHA；不等就是漏了 `--ref`，
+取消重发，别等它跑完才发现。
+
 **给后续会话的判据**：补跑后若 `All Checks` 绿但 `/merge` 报
 "N of N required status checks are expected"，先
 `GET /branches/<base>/protection/required_status_checks` 取必需 check 名，
