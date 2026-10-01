@@ -244,11 +244,10 @@ export function ContextSourceList({ sources }: { sources?: ContextSource[] | nul
   if (!sources || sources.length === 0) return null;
   const trimmedTotal = sources.reduce((a, s) => a + (s.trimmed ?? 0), 0);
   return (
-    <span
-      className="mt-2 block border-t border-border pt-2"
-      data-testid="context-meter-sources"
-    >
-      <span className="mb-1 block text-[11px] font-medium text-text-primary">本轮注入的上下文</span>
+    <span className="mt-2 block border-t border-border pt-2" data-testid="context-meter-sources">
+      <span className="mb-1 block text-[11px] font-medium text-text-primary">
+        上一轮请求的来源分类（非内容验真）
+      </span>
       {trimmedTotal > 0 && (
         <span
           className="mb-1 block text-[10px] text-warning"
@@ -257,6 +256,9 @@ export function ContextSourceList({ sources }: { sources?: ContextSource[] | nul
           注入内容超出预算（窗口的 35%），已截掉约 {formatTokens(trimmedTotal)} tokens 低优先级内容
         </span>
       )}
+      <span className="block text-ui-sm text-text-secondary mb-2">
+        此清单是已记录的来源类别与预算统计，不是发送前预览，也不证明每条事实或引用已核验。单条文件/记忆标识未采集时不虚构跳转。
+      </span>
       {sources.map((s) => (
         <span
           key={s.key}

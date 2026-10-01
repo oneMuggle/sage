@@ -33,6 +33,7 @@ import {
 } from '../../features/task-center/taskCenterStore';
 import type { Lane, LaneStatus } from '../../shared/api/types';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { productMessages } from '../../shared/lib/productMessages';
 import { useStore } from '../../shared/lib/store';
 
 type EntrySource = 'registry' | 'chat' | 'lane';
@@ -155,7 +156,7 @@ function StatusIcon({ status }: { status: TaskCenterStatus }) {
 }
 
 export function TaskCenterWidget() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
@@ -247,6 +248,9 @@ export function TaskCenterWidget() {
   }, [registryTasks, activeStreamIds, lanes, sessions, t]);
 
   const busy = entries.length > 0;
+  const runningCount = entries.filter((e) => e.status === 'running').length;
+  const awaitingCount = entries.filter((e) => e.status === 'awaiting_approval').length;
+  const otherCount = entries.filter((e) => e.status === 'queued' || e.status === 'paused').length;
   const finishedCount = entries.filter((e) => TERMINAL_TASK_STATUSES.has(e.status)).length;
 
   // Ticking clock while tasks are active (decouples elapsed display); no timer
@@ -321,7 +325,11 @@ export function TaskCenterWidget() {
                 <button
                   type="button"
                   onClick={() => handleNavigate(entry)}
-                  title={t(STATUS_LABEL_KEYS[entry.status])}
+                  title={
+                    entry.opensDelivery
+                      ? productMessages(locale).awaitingReview
+                      : t(STATUS_LABEL_KEYS[entry.status])
+                  }
                   className="flex flex-1 items-center gap-2 px-2 py-1.5 text-xs text-text min-w-0"
                 >
                   <StatusIcon status={entry.status} />
@@ -379,8 +387,16 @@ export function TaskCenterWidget() {
         onClick={() => setExpanded((v) => !v)}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-surface border border-border shadow-md text-xs text-text hover:bg-bg-hover transition-colors"
       >
-        <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" aria-hidden />
-        {t('taskCenter.activeCount').replace('{n}', String(entries.length))}
+        {runningCount > 0 ? (
+          <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" aria-hidden />
+        ) : (
+          <CheckCircle2 className="w-3.5 h-3.5 text-primary" aria-hidden />
+        )}
+        {productMessages(locale)
+          .taskSummary.replace('{running}', String(runningCount))
+          .replace('{awaiting}', String(awaitingCount))
+          .replace('{other}', String(otherCount))
+          .replace('{finished}', String(finishedCount))}
       </button>
     </div>
   );

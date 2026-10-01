@@ -345,6 +345,18 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<void>
   }
 }
 
+/** Backend first for safety-sensitive settings; failed writes never poison the cache. */
+export async function saveSettingsStrict(partial: Partial<AppSettings>): Promise<void> {
+  await settingsClient.setSettingsStrict(sanitizeForBackend(partial));
+  const current = readLocalCacheSync() ?? DEFAULT_SETTINGS;
+  const merged = { ...current, ...partial, version: SETTINGS_VERSION } as AppSettings;
+  try {
+    writeLocalCacheSync(merged);
+  } catch {
+    console.warn('[settings] Backend saved, local cache is unavailable');
+  }
+}
+
 /**
  * 恢复默认 - preferences KV 层（补齐 resetSettings 只覆盖 app_settings blob 的缺口）。
  *

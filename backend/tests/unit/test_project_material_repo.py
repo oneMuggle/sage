@@ -1,7 +1,7 @@
 """project_material_repo 单元测试 (M3 项目上下文沉淀, 2026-09-15)。
 
 TDD: 先写失败测试, 再实现。覆盖:
-- add: 新增资料, 计算 content_hash, 状态 pending_index
+- add: 新增资料, 计算 content_hash, 状态 ready（可用于对话）
 - add (duplicate): 同 project+hash 幂等, 返回已有行
 - list_by_project: 按项目列出资料
 - remove: 删除资料
@@ -49,10 +49,10 @@ def material_repo(setup_test_db):
 class TestProjectMaterialAdd:
     """add: 新增资料。"""
 
-    def test_add_creates_material_with_pending_status(
+    def test_add_creates_material_with_ready_status(
         self, material_repo, project
     ):
-        """新增资料, 状态 pending_index, content_hash 自动计算。"""
+        """新增资料, 状态 ready（可用于对话）, content_hash 自动计算。"""
         material = material_repo.add(
             project_id=project.id,
             content="# Test content\nSome text",
@@ -60,7 +60,7 @@ class TestProjectMaterialAdd:
         )
         assert material.project_id == project.id
         assert material.source_message_id == "msg_123"
-        assert material.status == "pending_index"
+        assert material.status == "ready"
         assert material.content_hash  # SHA-256 hex
         assert material.wiki_page_path is None
         assert material.created_at > 0
@@ -168,7 +168,10 @@ class TestProjectMaterialGetActive:
     ):
         """只返回 status=ready 的资料, 忽略 pending/failed。"""
         m1 = material_repo.add(project.id, "# Ready", "msg_1")
-        material_repo.add(project.id, "# Pending", "msg_2")
+        pending = material_repo.add(project.id, "# Pending", "msg_2")
+        conn = material_repo.db.get_connection()
+        conn.execute("UPDATE project_materials SET status='pending_index', wiki_page_path='/wiki/pending.md' WHERE id=?", (pending.id,))
+        conn.commit()
         m3 = material_repo.add(project.id, "# Failed", "msg_3")
         material_repo.mark_ready(m1.id, "/wiki/ready.md")
         material_repo.mark_failed(m3.id, "error")
@@ -181,7 +184,10 @@ class TestProjectMaterialGetActive:
         self, material_repo, project
     ):
         """无 ready 资料时返回空列表。"""
-        material_repo.add(project.id, "# Pending", "msg_1")
+        pending = material_repo.add(project.id, "# Pending", "msg_1")
+        conn = material_repo.db.get_connection()
+        conn.execute("UPDATE project_materials SET status='pending_index', wiki_page_path='/wiki/pending.md' WHERE id=?", (pending.id,))
+        conn.commit()
         active = material_repo.get_active_materials_for_project(project.id)
         assert active == []
 
