@@ -13,9 +13,18 @@ interface SkillListProps {
   onArchive?: (name: string, archived: boolean) => void;
   // R17-A1 管理面：钉住 / 取消钉住回调 — 透传给 SkillCard
   onPin?: (name: string, pinned: boolean) => void;
+  // P2-2: 技能回滚成功后刷新列表（SKILL.md 可能已换回上一版）
+  onRolledBack?: () => void;
 }
 
-const SkillList: React.FC<SkillListProps> = ({ skills, onToggle, onDelete, onArchive, onPin }) => {
+const SkillList: React.FC<SkillListProps> = ({
+  skills,
+  onToggle,
+  onDelete,
+  onArchive,
+  onPin,
+  onRolledBack,
+}) => {
   if (skills.length === 0) {
     return (
       <div className="text-center py-8">
@@ -44,6 +53,7 @@ const SkillList: React.FC<SkillListProps> = ({ skills, onToggle, onDelete, onArc
           onArchive={onArchive}
           pinned={skill.pinned}
           onPin={onPin}
+          onRolledBack={onRolledBack}
         />
       ))}
     </div>

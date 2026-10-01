@@ -3,6 +3,8 @@ import React from 'react';
 import type { SkillDispatch } from '../../shared/api';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
+import { SkillAuditDrawer } from './SkillAuditDrawer';
+
 interface SkillCardProps {
   name: string;
   description: string;
@@ -25,6 +27,11 @@ interface SkillCardProps {
   // R17-A1 管理面：钉住态（pin 后不可归档、巡检不给出 archive 建议）
   pinned?: boolean;
   onPin?: (name: string, pinned: boolean) => void;
+  /**
+   * P2-2: 变更历史入口。传了就渲染「历史」按钮 + 审计抽屉。
+   * 回滚成功后回调，用于让外层刷新技能列表（SKILL.md 可能已换回上一版）。
+   */
+  onRolledBack?: () => void;
 }
 
 const SkillCard: React.FC<SkillCardProps> = ({
@@ -44,7 +51,10 @@ const SkillCard: React.FC<SkillCardProps> = ({
   onArchive,
   pinned,
   onPin,
+  onRolledBack,
 }) => {
+  // P2-2: 审计抽屉只在用户点开时才加载，不随卡片列表批量拉取。
+  const [auditOpen, setAuditOpen] = React.useState(false);
   // M9: 用户可调用的 slash command — 仅在显式声明 user_invocable_name 时渲染,
   // name 回退策略在 chat 层处理 (避免前端做映射)
   const slashCommand =
@@ -182,6 +192,17 @@ const SkillCard: React.FC<SkillCardProps> = ({
               {lifecycle === 'archived' ? '取消归档' : '归档'}
             </button>
           )}
+          {/* P2-2: 变更历史 + 回滚。技能会被后台自动改动，此前用户既看不到
+              改了什么、也无法退回 —— 只能被动接受。 */}
+          <button
+            type="button"
+            onClick={() => setAuditOpen(true)}
+            data-testid={`skill-audit-open-${name}`}
+            className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:text-text transition-colors"
+            aria-label={`查看 ${name} 的变更历史`}
+          >
+            历史
+          </button>
           {/* U12: 两步式确认卸载 — 不弹 modal，armed 后二次点击生效 */}
           {onDelete && source !== 'builtin' && (
             <TwoStepDelete
@@ -211,6 +232,12 @@ const SkillCard: React.FC<SkillCardProps> = ({
           </label>
         </div>
       </div>
+      <SkillAuditDrawer
+        skillName={name}
+        open={auditOpen}
+        onOpenChange={setAuditOpen}
+        onRolledBack={onRolledBack}
+      />
     </div>
   );
 };

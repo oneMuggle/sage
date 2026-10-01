@@ -343,7 +343,10 @@ export function MemoryTab() {
         )}
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>
+        {/* P1-5: 合并两个记忆 tab 后此处原本与 MemoryKnowledgeTab 的「记忆管理」
+            同名，会在同一页出现两个同名小节。改为「存储位置」——它讲的就是
+            数据存在哪，与「记忆管理」不是一回事。 */}
+        <h3 className="text-sm font-semibold text-text mb-3">存储位置</h3>
         <SettingRow
           label="本地存储"
           desc="记忆数据存储在本地 SQLite 数据库中，具体路径由 SAGE_DB_PATH 环境变量与运行模式决定"

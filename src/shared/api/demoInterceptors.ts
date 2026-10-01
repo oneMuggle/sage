@@ -532,8 +532,12 @@ export const DEMO_LANE_EVENTS: LaneEvent[] = [
 
 /** 演示工作区路径 (Office 页前置: workspace_get 必须返回非空 binding) */
 export const DEMO_WORKSPACE_PATH = '/home/fz/sage-workspace';
-
 const NOW_S = Math.floor(NOW / 1000);
+
+/** P2-2 demo 技能审计台账的三个相对时间点（毫秒），让 demo 记录看起来是先后发生的 */
+const DEMO_AUDIT_T0 = NOW - 86_400_000 * 30;
+const DEMO_AUDIT_T1 = NOW - 86_400_000 * 7;
+const DEMO_AUDIT_T2 = NOW - 3_600_000 * 5;
 
 function demoUUID(): string {
   try {
@@ -1512,6 +1516,25 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
     demoSkills = demoSkills.filter((s) => s.name !== name);
     const result: DeleteSkillResult = { deleted: true, name, base_dir: `/skills/${name}` };
     return result;
+  },
+
+  // P2-2 技能审计 / 回滚（demo 模式）。不注册的话 demo 模式下点「历史」会抛
+  // 「演示模式不支持该后端操作」—— 演示模式也要能走通全流程，不能只让真后端可用。
+  skill_audit: (args) => {
+    const name = asStr(args.name);
+    return {
+      skill_name: name,
+      entries: [
+        { id: 1, skill_name: name, action: 'create', actor: 'system', source: 'builtin', created_at: DEMO_AUDIT_T0 },
+        { id: 2, skill_name: name, action: 'consolidation_note', actor: 'system', source: 'consolidation_scan', created_at: DEMO_AUDIT_T1 },
+        { id: 3, skill_name: name, action: 'update', actor: 'user', source: 'editor', created_at: DEMO_AUDIT_T2 },
+      ],
+    };
+  },
+
+  skill_rollback: (args) => {
+    const name = asStr(args.name);
+    return { status: 'rolled_back', skill_name: name };
   },
 
   execute_skill: () => {
