@@ -20,14 +20,14 @@ vi.mock('../GeneralTab', () => ({
   ),
 }));
 vi.mock('../McpTab', () => ({ McpTab: () => <div data-testid="tab-mcp" /> }));
-vi.mock('../MemoryKnowledgeTab', () => ({
-  MemoryKnowledgeTab: () => (
-    <div data-testid="tab-memory-knowledge">
+vi.mock('../MemorySettingsTab', () => ({
+  MemorySettingsTab: () => (
+    <div data-testid="tab-memory">
       <div data-settings-anchor="autoMemory">自动记忆提取</div>
+      <a href="/memory" data-testid="memory-workspace-link">打开记忆页面</a>
     </div>
   ),
 }));
-vi.mock('../MemoryTab', () => ({ MemoryTab: () => <div data-testid="tab-memory" /> }));
 vi.mock('../ModelsTab', () => ({
   ModelsTab: () => (
     <div data-testid="tab-models">
@@ -131,5 +131,35 @@ describe('设置搜索锚点定位 (P1-4)', () => {
     renderSettings();
     await clickSearchResult('reset_settings');
     expect(screen.getByTestId('settings-search')).toHaveValue('');
+  });
+});
+
+describe('记忆 tab 合并 (P1-5)', () => {
+  it('只存在一个记忆 tab —— 不再有「记忆与知识」', () => {
+    renderSettings();
+    // IA1/IA2 的可执行判据：左侧导航里「记忆」只出现一次。
+    const navButtons = screen.getAllByRole('button');
+    const memoryLabels = navButtons
+      .map((b) => b.textContent?.trim())
+      .filter((label) => label === '记忆');
+    expect(memoryLabels).toHaveLength(1);
+    expect(navButtons.some((b) => b.textContent?.includes('记忆与知识'))).toBe(false);
+  });
+
+  it('旧用户持久化的 memory-knowledge 自动迁到 memory，不落空白页', () => {
+    // 老用户 localStorage 里还留着 'memory-knowledge'。不迁移的话 activeTab
+    // 会指向一个已下线的 tab —— 左侧无高亮项、右侧一片空白，且用户不知道
+    // 该点哪里才能回去。这是最典型的静默失败。
+    localStorage.setItem('sage:settings-tab', 'memory-knowledge');
+    renderSettings();
+    expect(screen.getByTestId('tab-memory')).toBeInTheDocument();
+  });
+
+  it('记忆 tab 指向唯一的记忆工作台 /memory', () => {
+    // 收敛的第二半：设置页负责「怎么配」，内容归 /memory 页管。
+    localStorage.setItem('sage:settings-tab', 'memory');
+    renderSettings();
+    const link = screen.getByTestId('memory-workspace-link');
+    expect(link.getAttribute('href')).toBe('/memory');
   });
 });

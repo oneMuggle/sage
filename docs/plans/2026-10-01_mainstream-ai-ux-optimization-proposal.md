@@ -216,10 +216,12 @@ Sage 的记忆存本地 SQLite + ChromaDB，**架构上比 Claude 更可审计�
 
 | # | 建议 | 后端缺口 | 对标 |
 |---|---|---|---|
-| **P2-1** | **审批撤销** —— 让高危操作审批可反悔（与记忆 undo-write 对称） | `PermissionRequest` 无 revoke 语义 | reversibility |
-| **P2-2** | **技能演化审计 + 回滚 UI** | 端点已存在（`legacy_skill_draft_routes.py:270,282`），`skillsApi.ts` 无方法 | 哲学「可审计可回滚」 |
-| **P2-3** | **编排历史复盘** —— 恢复 `listRuns` UI + `rerun-failed` | Wave 4 已删调用；`GET /orch/runs`（`orch_routes.py:118`）无 UI | observability |
-| **P2-4** | **计划预览（plan-and-execute）** —— 执行前展示可编辑步骤 | `POST /orch/plan-items`（`:564`）UI 已删 | 2026 主流原语 |
+| **P2-1** | **审批撤销** —— 让高危操作审批可反悔（与记忆 undo-write 对称） | ⚠️ **原判断需修正** | 核实发现「撤销**待审批请求**」价值为零（UI 已有「拒绝」按钮），且后端 `answer(false)` 本就能解析 Future。真正可反悔的是**已落盘的副作用**，而 `FileChangeCard` 的逐文件回滚（`file-change-revert` → `workspace_revert_changes`）**早已实现** —— 第六次「以为缺≠缺」。**本批落地的真实缺口**：① 逐文件回滚**零二次确认**（P1-8 全量替换时的漏网之鱼，不在设置页也不在行内删除按钮里）；② `apply_patch` 一次动 N 个文件要点 N 次。→ 补 `confirmDialog({danger})` + 新增「全部回滚 (N)」，部分失败如实上报「已回滚 M 个 + 失败清单」 |
+| **P2-2** | **技能演化审计 + 回滚 UI** | ✅ 已落地 | 端点确实存在但从未被接出来（`skillsApi.ts` 无方法 → 会抛 `UnknownIpcCommandError`）。补 `electron/commands.ts` 两条路由 + `skillsApi.getAudit/rollback` + `SkillCard` 的「历史」按钮 + `SkillAuditDrawer`。**两处后端限制如实写进 UI**：审计 list 的 SQL 不返回 before/after 内容（只能做元数据时间线，做不了 diff）；回滚无条目粒度（只能「回到上一版」，不能点某条历史回那版）。回滚走 `confirmDialog({danger})` |
+| **P2-5** | **渐进式授权** —— 连续批准 N 次后对常规操作自动放行（带通知） | ✅ 已落地 | ⚠️ 方案漏掉既有资产：`subagent_approval.py` 的 `AutoApproveEnforcer` 已是 autopilot 雏形（run 级**二值开关**、只覆盖子代理、与用户历史无关）。本批做的是**会话级、由用户自己批准历史驱动**的版本：① `ApprovalDecisionRepository.consecutive_gui_approvals()`（只认 `answered_by='gui'` 且 approved，遇拒绝即重置，不跨会话）；② `TrustEscalationEnforcer` 包在 `agent._build_permission_enforcer()`（**注入路径不包** —— 子代理已有 autopilot，两套叠加会绕过「连续人工批准」前提）；③ `GET/POST /permissions/trust-policy` + 设置页开关与阈值 + 已积累信任可视化。**默认关闭**，9 条安全不变式逐条有测试（deny 胜出、破坏性/可疑命令不自动放行、边界升级不放行、无法静态评估的工具转人工、计数失败降级为继续问人、每次放行落审计 `answered_by='trust'`） |
+| **P2-6** | **运行后摘要** —— 完成时给「改了什么/碰了什么/哪些失败」 | ✅ 已落地（零后端改动） | 新增 `RunSummaryPanel`（挂在 `SubagentLivePanel` 相邻位，二者互斥：运行中 / 结束后）。「哪些失败」用现成的 `taskBoard.statuses`（含 `error` + `retry_count`）+ `progress` 计数；「碰了什么」复用 workspace changes 缓存。**三处如实标注**：文件是 **workspace 级快照、无 run 归属**（文案写「本次会话工作区变更」而非「本次 run 改动」）；未绑定 git 仓库如实显示不可用原因；「执行了哪些工具及成败」后端**零实现**（无 run 级工具台账），因此不展示 —— 宁可少说不可编造。附带「重跑失败任务」入口（复用既有 `rerun-failed` 通路） |
+| **P2-3** | **编排历史复盘** | ⚠️ **已实现，方案判断过期** | 逐项核实后：`GET /orch/runs` 的**带 session 过滤版本**仍在（`orch_routes.py:118`），`orchRunClient.listSessionRuns` / `getRun` / `rerunFailed` 均已存在，UI 是 `SessionRunHistory.tsx`（挂在 `ProgressSection.tsx:108`），`rerun-failed` 端点 + `Chat.handleRerunFailed` 链路完整。本条的判断停留在 Wave 4 删无过滤 `listRuns` 的那个时点，C1（2026-09-09）已回归。**真实剩余缺口**仅「全局跨会话编排历史」——后端已无该端点，需新增 |
+| **P2-4** | **计划预览（plan-and-execute）** | ⚠️ **已实现，方案判断过期** | `POST /orch/plan-items`（`orch_routes.py:564`）链路完整：`Chat.tsx:1087` 的 `plan-approve-orch` 直接调 `planItemsFromText` 后带 `planOverride` 发送；`PlanCard.tsx` 支持逐行编辑 + 删除（≥1 行守卫）+ `开始执行`；挂载在 `Chat.tsx:1156`。方案称「UI 已删」为误判 |
 | **P2-5** | **渐进式授权** —— 连续批准 N 次后对常规操作自动放行（带通知） | 需信任度状态机 | progressive delegation |
 | **P2-6** | **运行后摘要** —— 完成时给「改了什么/碰了什么/为什么/哪些失败」 | 需聚合 | post-action summary |
 | **P2-7** | **EvolutionPanel 文案修正** | ✅ 已落地 | 核实后确认原文案确属误导：技能演化**只产出草稿**，需在「技能」页逐条 approve/reject（`legacy_skill_draft_routes.py:102,244`），并非「无需手动操作」。改为如实分两层陈述：5 个维护任务自动调度 vs 技能草稿需人审批，并指明审批入口在哪 |

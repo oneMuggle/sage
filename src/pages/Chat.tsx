@@ -30,6 +30,7 @@ import {
   ChatInput,
   MessageList,
   PendingQueueStrip,
+  RunSummaryPanel,
   SubagentLivePanel,
 } from '../widgets/chat';
 import { ChatInlineError } from '../widgets/chat/ChatInlineError';
@@ -1190,6 +1191,18 @@ export function Chat() {
           conductor 阻塞在 dispatch_subagents 内,这里逐行展示每个子任务的
           实时步骤,消除"只能被动等待"的黑盒感。 */}
           <SubagentLivePanel sessionId={currentSessionId} />
+
+          {/* P2-6 运行后摘要：编排 run 终态时补一段「结果 / 碰了什么 / 哪些失败」。
+              与 SubagentLivePanel 互斥（一个渲染运行中、一个渲染结束后），
+              位置相邻，用户视线不用跳。普通对话无 taskBoard → 组件自行返回 null。 */}
+          <RunSummaryPanel
+            sessionId={currentSessionId}
+            onRerunFailed={
+              taskBoard
+                ? () => void handleRerunFailed(taskBoard.runId)
+                : undefined
+            }
+          />
 
           {showConfigWarning && (
             <div

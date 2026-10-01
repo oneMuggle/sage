@@ -11,8 +11,10 @@ import type {
   ConsolidationSuggestion,
   DeleteSkillResult,
   Skill,
+  SkillAuditResponse,
   SkillExecuteRequest,
   SkillExecuteResult,
+  SkillRollbackResult,
 } from './types';
 import { handleApiError, withRetry } from './utils';
 
@@ -207,6 +209,42 @@ export const skillsApi = {
         return await invoke<ConsolidationAcceptResult>('skills_consolidation_accept', {
           skillNames,
         });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * P2-2 读取技能的审计台账（谁在什么时候改了什么）。
+   *
+   * 只返回元数据，不含 before/after 内容 —— 后端 list 接口的 SELECT 就没有这两列。
+   * 这里如实按时间线呈现，不假装能展示 diff。
+   *
+   * Backend: GET /api/v1/skills/{name}/audit?limit=N。
+   */
+  async getAudit(name: string, limit = 50): Promise<SkillAuditResponse> {
+    return withRetry(async () => {
+      try {
+        return await invoke<SkillAuditResponse>('skill_audit', { name, limit });
+      } catch (error) {
+        throw handleApiError(error);
+      }
+    });
+  },
+
+  /**
+   * P2-2 把技能回滚到上一个有快照的版本。
+   *
+   * 不可逆写操作 —— 调用方必须先经 confirmDialog 显式确认。
+   * 后端无条目粒度：只能「回滚到上一版」，不能指定回滚到哪一条历史。
+   *
+   * Backend: POST /api/v1/skills/{name}/rollback。
+   */
+  async rollback(name: string): Promise<SkillRollbackResult> {
+    return withRetry(async () => {
+      try {
+        return await invoke<SkillRollbackResult>('skill_rollback', { name });
       } catch (error) {
         throw handleApiError(error);
       }
