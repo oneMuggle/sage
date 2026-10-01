@@ -21,7 +21,13 @@ import type { Message as MessageType } from '../shared/lib/store';
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { LoadingState } from '../shared/ui/LoadingState';
-import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
+import {
+  ActiveAgentIndicator,
+  ChatInput,
+  MessageList,
+  RunSummaryPanel,
+  SubagentLivePanel,
+} from '../widgets/chat';
 import { ChatInlineError } from '../widgets/chat/ChatInlineError';
 import { CHAT_NOTICE_PRIORITY, ChatNoticeStack } from '../widgets/chat/ChatNoticeStack';
 import { ContextMeter } from '../widgets/chat/ContextMeter';
@@ -910,12 +916,7 @@ export function Chat() {
                 errorSessionId === currentSessionId && {
                   key: 'error',
                   priority: CHAT_NOTICE_PRIORITY.error,
-                  node: (
-                    <ChatInlineError
-                      error={error}
-                      onClose={clearError}
-                    />
-                  ),
+                  node: <ChatInlineError error={error} onClose={clearError} />,
                 },
               showInterruptBanner && {
                 key: 'interrupted',
@@ -1006,9 +1007,8 @@ export function Chat() {
                         const sid = planApprovalFor;
                         if (!sid || planOrchBusyRef.current) return;
                         const planText =
-                          [...messages]
-                            .reverse()
-                            .find((m) => m.role === 'assistant')?.content ?? '';
+                          [...messages].reverse().find((m) => m.role === 'assistant')?.content ??
+                          '';
                         if (!planText.trim()) {
                           toast.error('找不到可结构化的计划内容');
                           return;
@@ -1107,6 +1107,14 @@ export function Chat() {
           conductor 阻塞在 dispatch_subagents 内,这里逐行展示每个子任务的
           实时步骤,消除"只能被动等待"的黑盒感。 */}
           <SubagentLivePanel sessionId={currentSessionId} />
+
+          {/* P2-6 运行后摘要：编排 run 终态时补一段「结果 / 碰了什么 / 哪些失败」。
+              与 SubagentLivePanel 互斥（一个渲染运行中、一个渲染结束后），
+              位置相邻，用户视线不用跳。普通对话无 taskBoard → 组件自行返回 null。 */}
+          <RunSummaryPanel
+            sessionId={currentSessionId}
+            onRerunFailed={taskBoard ? () => void handleRerunFailed(taskBoard.runId) : undefined}
+          />
 
           {showConfigWarning && (
             <div

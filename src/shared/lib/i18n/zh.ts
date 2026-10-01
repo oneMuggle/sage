@@ -216,7 +216,6 @@ export const zh = {
   'settings.title': '设置',
   'settings.tab.general': '通用',
   'settings.tab.basic': '基础',
-  'settings.tab.memory-knowledge': '记忆与知识',
   'settings.tab.tools-connections': '工具与连接',
   'settings.tab.endpoints': '端点',
   'settings.tab.models': '模型',
@@ -524,7 +523,8 @@ export const zh = {
   'sider.project.overview_description': '项目说明',
   'sider.project.overview_description_placeholder': '简要描述这个项目（目标、技术栈等）',
   'sider.project.overview_instructions': '项目指令',
-  'sider.project.overview_instructions_placeholder': '对所有会话生效的项目级系统提示（优先级高于全局偏好）',
+  'sider.project.overview_instructions_placeholder':
+    '对所有会话生效的项目级系统提示（优先级高于全局偏好）',
   'sider.project.overview_save': '保存',
   'sider.project.overview_saving': '保存中…',
   'sider.project.overview_saved': '项目概览已保存',
@@ -1004,7 +1004,8 @@ export const zh = {
   'office.export.exporting': '导出中…',
   'office.export.success': '已导出 PDF',
   'office.export.failed': '导出失败',
-  'office.export.noConverter': '未发现此格式的本机转换器（LibreOffice 支持 DOCX/XLSX/PPTX；MS Word 仅支持 DOCX）',
+  'office.export.noConverter':
+    '未发现此格式的本机转换器（LibreOffice 支持 DOCX/XLSX/PPTX；MS Word 仅支持 DOCX）',
   'office.export.openFolder': '打开所在文件夹',
   'office.export.openPdf': '打开 PDF',
 

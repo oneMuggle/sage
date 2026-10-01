@@ -222,7 +222,6 @@ export const en: Record<TranslationKey, string> = {
   'settings.title': 'Settings',
   'settings.tab.general': 'General',
   'settings.tab.basic': 'Basic',
-  'settings.tab.memory-knowledge': 'Memory & Knowledge',
   'settings.tab.tools-connections': 'Tools & Connections',
   'settings.tab.endpoints': 'Endpoints',
   'settings.tab.models': 'Models',
@@ -246,7 +245,8 @@ export const en: Record<TranslationKey, string> = {
   'settings.network.creds.delete': 'Delete',
   'settings.network.creds.expired': 'expired',
   'settings.network.creds.browser': 'Browser',
-  'settings.network.creds.browser.missing': 'No usable browser found (JS render & browser channels unavailable)',
+  'settings.network.creds.browser.missing':
+    'No usable browser found (JS render & browser channels unavailable)',
   'settings.network.creds.add_header': 'Add header credential (Bearer / API key)',
   'settings.network.creds.add_header.domain': 'Domain (e.g. .api.example.com)',
   'settings.network.creds.add_header.name': 'Header name (e.g. Authorization)',
@@ -676,7 +676,8 @@ export const en: Record<TranslationKey, string> = {
   'permission.approve': 'Allow',
   'permission.deny': 'Deny',
   'permission.deny_confirm': 'Confirm deny',
-  'permission.deny_reason.placeholder': 'Optional: tell the agent why (it will adjust its approach)',
+  'permission.deny_reason.placeholder':
+    'Optional: tell the agent why (it will adjust its approach)',
   'permission.deny_reason.hint': 'The feedback is passed to the model with the denial.',
   'permission.toast.failed': 'Failed to submit approval answer',
   'permission.subagent_context': 'Orchestration subagent requests approval',
@@ -1031,7 +1032,8 @@ export const en: Record<TranslationKey, string> = {
   'office.export.exporting': 'Exporting…',
   'office.export.success': 'PDF exported',
   'office.export.failed': 'Export failed',
-  'office.export.noConverter': 'No converter detected for this format (LibreOffice: DOCX/XLSX/PPTX; MS Word: DOCX only)',
+  'office.export.noConverter':
+    'No converter detected for this format (LibreOffice: DOCX/XLSX/PPTX; MS Word: DOCX only)',
   'office.export.openFolder': 'Show in Folder',
   'office.export.openPdf': 'Open PDF',
 

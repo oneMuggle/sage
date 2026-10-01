@@ -26,12 +26,50 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
 
   it('tab 值均在已知 tab 集合内', () => {
     const knownTabs = new Set([
-      'general', 'basic', 'memory-knowledge', 'tools-connections', 'endpoints',
-      'models', 'orchestration', 'memory', 'network', 'mcp', 'zotero',
-      'runtime', 'evolution', 'updates', 'providers', 'usage-stats',
+      'general',
+      'basic',
+      'tools-connections',
+      'endpoints',
+      'models',
+      'orchestration',
+      'memory',
+      'network',
+      'mcp',
+      'zotero',
+      'runtime',
+      'evolution',
+      'updates',
+      'providers',
+      'usage-stats',
     ]);
     for (const e of SETTINGS_SEARCH_INDEX) {
       expect(knownTabs.has(e.tab), `tab of ${e.key}`).toBe(true);
+    }
+  });
+
+  it('P1-5：不存在已下线的 memory-knowledge tab', () => {
+    // 两个「记忆」tab 已合并。索引里若还留着 memory-knowledge，搜索命中会跳到
+    // 一个没有内容面板的 tab —— 静默失败，用户只看到空白设置页。
+    for (const e of SETTINGS_SEARCH_INDEX) {
+      expect(e.tab, `tab of ${e.key}`).not.toBe('memory-knowledge');
+    }
+  });
+
+  it('P1-5：记忆相关条目全部收敛到同一个 memory tab', () => {
+    // IA1 的可执行判据：记忆能力的设置入口只有一个。
+    const memoryKeys = [
+      'autoMemory',
+      'confirmDelete',
+      'context_turn_limit',
+      'auto_checkpoint',
+      'memory_embedding',
+      'memory_consolidation',
+      'memory_backup',
+    ];
+    for (const key of memoryKeys) {
+      const entry = SETTINGS_SEARCH_INDEX.find((e) => e.key === key);
+      expect(entry, `missing index entry ${key}`).toBeTruthy();
+      expect(entry?.tab, `tab of ${key}`).toBe('memory');
     }
   });
 
