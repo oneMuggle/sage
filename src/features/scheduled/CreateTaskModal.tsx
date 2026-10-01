@@ -6,6 +6,8 @@ import { skillsApi } from '../../shared/api/skillsApi';
 import type { CreateTaskInput, ScheduledTask, Skill } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { CronExpressionPicker } from './CronExpressionPicker';
+import { validateCronExpression, validateOneShotTimestamp } from './cronValidator';
 import {
   insertSkillRef,
   invalidRefLabels,
@@ -13,9 +15,6 @@ import {
   removeSkillRef,
   validateSkillRefs,
 } from './skillLink';
-
-import { CronExpressionPicker } from './CronExpressionPicker';
-import { validateCronExpression, validateOneShotTimestamp } from './cronValidator';
 
 interface CreateTaskModalProps {
   open: boolean;
