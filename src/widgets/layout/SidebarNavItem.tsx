@@ -59,6 +59,9 @@ export function SidebarNavItem({ item, active, variant, trailing, ariaLabel }: S
               {trailing}
             </span>
           )}
+          {/* sr-only 文本标签：rail 只有图标，但入口名仍需可被文本查询与朗读命中
+              （aria-label 仍作为可访问名优先，两者在正常渲染下同为 item.label）。 */}
+          <span className="sr-only">{item.label}</span>
         </Link>
       </Tooltip>
     );
