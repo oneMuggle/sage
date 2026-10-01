@@ -271,6 +271,36 @@ CI 状态复查因此改走 REST + `Invoke-RestMethod`，不再依赖 `gh`。
 另：当天晚间本地代理（127.0.0.1:7890）曾中途掉线，导致 `git push` 与 `gh` 同时失败；
 直连可用时可用 `git -c http.proxy= -c https.proxy= push` 命令级绕过（不改配置）。
 
+### 7.3 补跑通道的能力边界：ci-rerun 满足不了 win7 的 5 个必需 check（2026-10-02）
+
+#1875（win7 轨交付号回填）的 `pull_request` 事件被静默丢弃（head SHA 上零
+workflow run），按 SOP §命令表用 `ci-rerun.yml` 补跑。跑出来 `All Checks` 是绿的，
+但 `PUT /pulls/1875/merge` 返回 405：
+
+```
+{"message":"5 of 5 required status checks are expected."}
+```
+
+根因：`release/win7` 的分支保护要求 5 个 check —— `Frontend (TypeScript)`、
+`Electron smoke (playwright-electron)`、`Backend (Python 3.8, Win7 LTS)`、
+`Electron build (windows-latest)`、`Electron build (ubuntu-latest)`。
+而 `ci-rerun.yml` 只定义了 backend / backend-py38 / dependency-audit / frontend /
+electron-smoke / all-green 六个 job，**没有 Electron build 矩阵**，补跑出来的
+check 集天然缺 2 个必需项，补多少次都补不齐。
+
+`ci.yml` 虽有 `workflow_dispatch`，但手动触发时 `github.ref` 是特性分支而非
+`refs/heads/release/win7`，`backend-py38` 的 `if` 会落空、反而跑 py3.11 的
+`backend`——check 集同样不对。
+
+**正确解法：往 PR 分支推一个新提交触发 `synchronize`**，让 PR 走真正的
+`pull_request` 路径（`github.base_ref == 'release/win7'` 成立，job 集才正确）。
+
+**给后续会话的判据**：补跑后若 `All Checks` 绿但 `/merge` 报
+"N of N required status checks are expected"，先
+`GET /branches/<base>/protection/required_status_checks` 取必需 check 名，
+再与 head SHA 上的 check-runs 求差集——差集非空即说明补跑 workflow 少定义了
+job，此时补跑无解，必须推提交触发真 CI。
+
 ## 8. 本轮交付的最终形态与遗留
 
 **已交付（双轨合并）**：批次 0、A、D 数据层、B-1/B-3/B-4、D UI 接线。左栏从
