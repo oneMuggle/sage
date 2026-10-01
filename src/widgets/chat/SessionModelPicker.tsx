@@ -8,11 +8,29 @@ import { Bot } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { getEffective } from '../../entities/model-catalog/api';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { sessionApi } from '../../shared/api/sessionApi';
+import { fetchSessionUsage } from '../../shared/api/usageApi';
 
 interface SessionModelPickerProps {
   sessionId: string | null;
+}
+
+/** 当前占用超过目标窗口该比例时，切换前先提示（历史会被截断）。 */
+const SWITCH_RISK_RATIO = 0.8;
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+/** 尚未确认的切换：已预检出「历史会被截断」风险，等用户显式点头。 */
+interface PendingSwitch {
+  modelId: string;
+  windowTokens: number;
+  usedTokens: number;
 }
 
 export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
@@ -20,6 +38,7 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
   const [override, setOverride] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null);
 
   // 会话切换时拉取当前覆盖
   useEffect(() => {
@@ -50,12 +69,13 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
     (ep.discoveredModels ?? []).map((m) => ({
       modelId: m.id,
       endpointName: ep.name,
+      endpointId: ep.id,
     })),
   );
 
   const globalModelId = settings.modelSelections.chatModel.modelId;
 
-  const handleChange = (value: string): void => {
+  const doSwitch = (value: string): void => {
     if (!sessionId || saving) return;
     setSaving(true);
     sessionApi
@@ -68,6 +88,45 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
         toast.error(e instanceof Error ? e.message : '模型切换失败');
       })
       .finally(() => setSaving(false));
+  };
+
+  /**
+   * P1-3: 消除「盲切换」。
+   *
+   * 此前切换只弹一句「已切换为 X」，不告知窗口变化 —— 用户换到小窗口模型后
+   * 可能突然发现历史被截断。对标 Cursor 的 model switch 提示。
+   *
+   * 预检拿两路数据：目标模型的 effective 窗口（model catalog 解析）与本会话
+   * 当前占用。任一不可得就**不拦截**（未知 ≠ 有风险），照常切换 ——
+   * 宁可少拦，不可误拦把正常切换也变成阻碍。
+   */
+  const handleChange = (value: string): void => {
+    if (!sessionId || saving) return;
+    const target = options.find((o) => o.modelId === value);
+    if (!target) {
+      doSwitch(value);
+      return;
+    }
+    void (async () => {
+      const [effective, usage] = await Promise.allSettled([
+        getEffective(target.endpointId, value),
+        fetchSessionUsage(sessionId),
+      ]);
+      const limits = effective.status === 'fulfilled' ? effective.value?.limits : null;
+      const windowTokens = limits?.native ?? limits?.service ?? null;
+      const usedTokens =
+        usage.status === 'fulfilled' ? (usage.value.last_prompt_tokens ?? null) : null;
+      if (
+        windowTokens != null &&
+        windowTokens > 0 &&
+        usedTokens != null &&
+        usedTokens > windowTokens * SWITCH_RISK_RATIO
+      ) {
+        setPendingSwitch({ modelId: value, windowTokens, usedTokens });
+        return;
+      }
+      doSwitch(value);
+    })();
   };
 
   return (
@@ -90,6 +149,38 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
       </select>
       {override && (
         <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">覆盖</span>
+      )}
+      {pendingSwitch && (
+        <span
+          className="flex items-center gap-1.5 text-[11px] text-yellow-700 dark:text-yellow-400"
+          data-testid="model-switch-warning"
+          role="alert"
+        >
+          <span>
+            {pendingSwitch.modelId} 窗口 {formatTokens(pendingSwitch.windowTokens)}，本对话已用{' '}
+            {formatTokens(pendingSwitch.usedTokens)}，超出部分会被截断
+          </span>
+          <button
+            type="button"
+            data-testid="model-switch-confirm"
+            onClick={() => {
+              const next = pendingSwitch.modelId;
+              setPendingSwitch(null);
+              doSwitch(next);
+            }}
+            className="px-1.5 py-0.5 rounded border border-yellow-600 hover:bg-yellow-600/10"
+          >
+            仍然切换
+          </button>
+          <button
+            type="button"
+            data-testid="model-switch-cancel"
+            onClick={() => setPendingSwitch(null)}
+            className="px-1.5 py-0.5 rounded border border-border hover:bg-bg-hover"
+          >
+            取消
+          </button>
+        </span>
       )}
     </div>
   );

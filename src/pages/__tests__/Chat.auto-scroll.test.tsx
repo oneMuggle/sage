@@ -35,9 +35,21 @@ vi.mock('../../features/manage-settings/useSettings', () => ({
   useSettings: () => useSettingsMock(),
 }));
 
-const useChatMock = vi.fn();
+// P1-6: 各用例用 mockReturnValue 逐个描述自己关心的字段，没写到的字段靠这里兜底。
+// 合并默认值而不是要求每个用例补齐 —— 否则 useChat 每加一个返回值，
+// 十几个既有用例就会集体红，而它们与新字段毫无关系。
+// 必须整体放进 vi.hoisted：vi.mock 工厂被提升到文件顶部，直接引用外层
+// const 会在工厂执行时撞 TDZ。
+const { useChatMock, useChatDefaults } = vi.hoisted(() => ({
+  useChatMock: vi.fn(),
+  useChatDefaults: {
+    pendingMessages: [] as Array<{ id: string; content: string; sid?: string }>,
+    cancelPending: vi.fn(),
+    clearPendingForSession: vi.fn(),
+  },
+}));
 vi.mock('../../features/send-message/useChat', () => ({
-  useChat: () => useChatMock(),
+  useChat: () => ({ ...useChatDefaults, ...useChatMock() }),
 }));
 
 // C3 (2026-08-15): Chat → TaskTreeSection(已派发)/PlanCard(未派发,主对话区域) 渲染链挂载即调

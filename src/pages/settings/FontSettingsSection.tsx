@@ -22,10 +22,13 @@ export function FontSettingsSection() {
         const options = isUi ? UI_FONT_OPTIONS : CODE_FONT_OPTIONS;
         const familyLabel = t(isUi ? 'settings.font.ui' : 'settings.font.code');
         const sizeLabel = t(isUi ? 'settings.font.sizeUi' : 'settings.font.sizeCode');
+        // P1-4 搜索锚点：与 settingsSearchIndex 中登记的 key 对应
+        const familyAnchor = isUi ? 'font_ui' : 'font_code';
+        const sizeAnchor = isUi ? 'font_size_ui' : 'font_size_code';
         const selected = options.find((option) => option.id === settings[familyKey]);
         return (
           <div key={kind}>
-            <SettingRow label={familyLabel}>
+            <SettingRow label={familyLabel} anchor={familyAnchor}>
               <select
                 aria-label={familyLabel}
                 value={settings[familyKey]}
@@ -43,7 +46,7 @@ export function FontSettingsSection() {
                 ))}
               </select>
             </SettingRow>
-            <SettingRow label={sizeLabel}>
+            <SettingRow label={sizeLabel} anchor={sizeAnchor}>
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="range"

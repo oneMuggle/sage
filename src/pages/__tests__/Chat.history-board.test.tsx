@@ -29,8 +29,14 @@ vi.mock('../../features/manage-settings/useSettings', () => ({
 }));
 
 const useChatMock = vi.fn();
+// P1-6: 合并 P1-6 新增字段的默认值，用例只描述自己关心的字段。
+const useChatDefaults = {
+  pendingMessages: [] as Array<{ id: string; content: string; sid?: string }>,
+  cancelPending: vi.fn(),
+  clearPendingForSession: vi.fn(),
+};
 vi.mock('../../features/send-message/useChat', () => ({
-  useChat: () => useChatMock(),
+  useChat: () => ({ ...useChatDefaults, ...useChatMock() }),
 }));
 
 const listSessionRunsMock = vi.fn();

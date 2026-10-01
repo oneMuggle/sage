@@ -25,7 +25,14 @@ import type { BlockedAction, Message as MessageType } from '../shared/lib/store'
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { LoadingState } from '../shared/ui/LoadingState';
-import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
+import {
+  ActiveAgentIndicator,
+  ChatInput,
+  MessageList,
+  PendingQueueStrip,
+  RunSummaryPanel,
+  SubagentLivePanel,
+} from '../widgets/chat';
 import { ChatInlineError } from '../widgets/chat/ChatInlineError';
 import { CHAT_NOTICE_PRIORITY, ChatNoticeStack } from '../widgets/chat/ChatNoticeStack';
 import { ContextMeter } from '../widgets/chat/ContextMeter';
@@ -87,6 +94,9 @@ export function Chat() {
     planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
     preflightPhase, // Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示）
     clearPlanApproval, // PM2: 清除批准状态
+    pendingMessages, // P1-6: 排队待发消息（会自动连发，需可见可撤）
+    cancelPending, // P1-6: 撤回单条排队消息
+    clearPendingForSession, // P1-6: 清空本会话排队消息
   } = useChat();
   // P1 (UI 优化方案 2026-09-13): 开关状态持久化 —— 重启恢复上次的面板开合
   // right-panel R1 批次 A: 开合上抬 rightPanelStore（自动唤起/内联卡片需要
@@ -828,6 +838,19 @@ export function Chat() {
     [t],
   );
 
+  /**
+   * P0-6: 气泡内记忆引用可回溯 —— 跳记忆库并带 focus 参数定位。
+   *
+   * 此前参考来源只展示 memory_type + 截断 preview，用户看到答案受某条
+   * 记忆影响却无法核对来源（对标 Claude「明确声明用了哪条记忆」）。
+   */
+  const handleOpenMemory = useCallback(
+    (memoryId: string) => {
+      navigate(`/memory?focus=${encodeURIComponent(memoryId)}`);
+    },
+    [navigate],
+  );
+
   // R19-W1: 网页访问拦截卡片动作 —— 把后端的建议动作翻译成前端语义。
   // login_to_site: 发一条消息请 agent 用 browser_login 工具登录（用户只需在弹出浏览器中完成登录）；
   // open_browser: 发一条消息请 agent 用 browser_navigate 打开（走完整工具链）；
@@ -1023,6 +1046,7 @@ export function Chat() {
                 onQuote={handleQuote}
                 onQuoteSelection={quoteText}
                 onSaveToMemory={handleSaveToMemory}
+                onOpenMemory={handleOpenMemory}
                 onBlockedAction={handleBlockedAction}
               />
             )}
@@ -1168,6 +1192,18 @@ export function Chat() {
           实时步骤,消除"只能被动等待"的黑盒感。 */}
           <SubagentLivePanel sessionId={currentSessionId} />
 
+          {/* P2-6 运行后摘要：编排 run 终态时补一段「结果 / 碰了什么 / 哪些失败」。
+              与 SubagentLivePanel 互斥（一个渲染运行中、一个渲染结束后），
+              位置相邻，用户视线不用跳。普通对话无 taskBoard → 组件自行返回 null。 */}
+          <RunSummaryPanel
+            sessionId={currentSessionId}
+            onRerunFailed={
+              taskBoard
+                ? () => void handleRerunFailed(taskBoard.runId)
+                : undefined
+            }
+          />
+
           {showConfigWarning && (
             <div
               data-testid="config-warning"
@@ -1190,6 +1226,18 @@ export function Chat() {
           {/* TM2 (DSH 对标 R11): 上下文水位徽章（≥0.6 才渲染） */}
           <ContextPressureBadge sessionId={currentSessionId} />
           <KeyboardShortcutsHelp />
+          {/* P1-6: 排队队列常驻可见。放在输入框正上方 —— 队列会在当前回复
+              结束后自动连发，用户必须能在真正发出去之前看见并撤回。
+              只展示当前会话的条目（队列按会话隔离，见 useChat S3）。 */}
+          <PendingQueueStrip
+            items={pendingMessages
+              .filter((p) => p.sid === currentSessionId)
+              .map((p) => ({ id: p.id, content: p.content }))}
+            onCancel={cancelPending}
+            onClearAll={() => {
+              if (currentSessionId) clearPendingForSession(currentSessionId);
+            }}
+          />
           <ChatInput
             onSend={handleSendMessageWithEditResend}
             onInterrupt={interrupt}

@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AdvancedSection, ApplyModeBadge, Toggle } from '../components';
+import { AdvancedSection, ApplyModeBadge, SettingRow, Toggle } from '../components';
 
 describe('settings shared components', () => {
   it('renders the Chinese apply-mode label', () => {
@@ -53,5 +53,26 @@ describe('Toggle a11y', () => {
     expect(toggle).toBeDisabled();
     fireEvent.click(toggle);
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('SettingRow 搜索锚点 (P1-4)', () => {
+  it('exposes data-settings-anchor matching the search index key', () => {
+    const { container } = render(
+      <SettingRow label="流式输出" anchor="streaming">
+        <Toggle value onChange={() => {}} />
+      </SettingRow>,
+    );
+    expect(container.querySelector('[data-settings-anchor="streaming"]')).not.toBeNull();
+  });
+
+  it('omits the attribute when no anchor is registered', () => {
+    // 未登记锚点的行必须完全不受影响 —— 定位逻辑找不到时静默降级为「只切 tab」。
+    const { container } = render(
+      <SettingRow label="未登记项">
+        <Toggle value onChange={() => {}} />
+      </SettingRow>,
+    );
+    expect(container.querySelector('[data-settings-anchor]')).toBeNull();
   });
 });

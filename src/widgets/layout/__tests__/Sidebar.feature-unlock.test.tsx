@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
@@ -6,6 +6,15 @@ import { FEATURE_UNLOCK_STORAGE_KEY } from '../../../shared/lib/hooks/useFeature
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { Sidebar } from '../Sidebar';
+
+// vi.mock 工厂会被提升，直接引用外层 const 会 TDZ —— 必须走 vi.hoisted。
+const { confirmDialogMock } = vi.hoisted(() => ({
+  confirmDialogMock: vi.fn<(opts: { title: string; message?: string }) => Promise<boolean>>(),
+}));
+
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
+  confirmDialog: (opts: { title: string; message?: string }) => confirmDialogMock(opts),
+}));
 
 vi.mock('../../../features/manage-settings/useSettings', () => ({
   useSettings: () => ({
@@ -28,6 +37,7 @@ vi.mock('../../../features/manage-endpoints/api', () => ({
 
 beforeEach(() => {
   localStorage.clear();
+  confirmDialogMock.mockReset();
   const setState = useStore.setState as unknown as (partial: Record<string, unknown>) => void;
   setState({ currentSessionId: null, sessions: [] });
 });
@@ -42,39 +52,54 @@ function renderSidebarAt(path: string) {
   );
 }
 
-describe('Sidebar — progressive disclosure (U10)', () => {
-  it('hides advanced entries before first use', () => {
+/**
+ * P1-7 契约变更：渐进式披露不再等于「隐藏」。
+ *
+ * 原本未解锁入口直接 `return null`，造成"功能不存在"的错觉 —— `/office`
+ * 是本项目核心差异化能力，却只能靠输 URL 或命令面板发现。现改为
+ * **灰态可见**（`data-locked="true"`）：入口常驻 → 点击给出用途说明 →
+ * 确认后解锁进入。一级导航区的隐藏逻辑不变，灰态只出现在「更多」分组内。
+ */
+const lockedEntry = (name: string) => screen.queryByTestId(`sidebar-locked-${name}`);
+const isLocked = (name: string) => lockedEntry(name) !== null;
+
+describe('Sidebar — progressive disclosure (U10, P1-7 灰态可见)', () => {
+  it('未首次使用时高级入口灰态可见（而非隐藏）', () => {
     renderSidebarAt('/chat');
     // 常规入口仍然可见
     expect(screen.getByText('对话')).toBeInTheDocument();
     expect(screen.getByText('设置')).toBeInTheDocument();
-    // 高级入口隐藏
-    expect(screen.queryByText('编排')).not.toBeInTheDocument();
-    expect(screen.queryByText('Office')).not.toBeInTheDocument();
-    expect(screen.queryByText('Arena')).not.toBeInTheDocument();
+    // 高级入口：可见但标记为未启用 —— 用户能知道功能存在
+    expect(screen.getByText('编排')).toBeInTheDocument();
+    expect(screen.getByText('Office')).toBeInTheDocument();
+    expect(screen.getByText('Arena')).toBeInTheDocument();
+    expect(isLocked('orchestration')).toBe(true);
+    expect(isLocked('office')).toBe(true);
+    expect(isLocked('arena')).toBe(true);
   });
 
-  it('unlocks the entry for the currently visited advanced route', () => {
+  it('访问高级路由即解锁该入口，其余保持灰态', () => {
     renderSidebarAt('/orchestration');
-    // 访问 /orchestration 即解锁并显示编排入口
     expect(screen.getByText('编排')).toBeInTheDocument();
-    // 未访问的高级入口仍然隐藏
-    expect(screen.queryByText('Office')).not.toBeInTheDocument();
-    expect(screen.queryByText('Arena')).not.toBeInTheDocument();
-    // 解锁状态已持久化
+    // 已解锁 → 不再是灰态条目
+    expect(isLocked('orchestration')).toBe(false);
+    // 未访问的仍是灰态（但可见）
+    expect(isLocked('office')).toBe(true);
+    expect(isLocked('arena')).toBe(true);
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toContain('orchestration');
   });
 
-  it('keeps the entry visible on later loads once unlocked (sticky)', () => {
+  it('解锁状态跨会话保持（sticky）', () => {
     localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['orchestration']));
     renderSidebarAt('/chat');
     expect(screen.getByText('编排')).toBeInTheDocument();
-    expect(screen.queryByText('Office')).not.toBeInTheDocument();
-    expect(screen.queryByText('Arena')).not.toBeInTheDocument();
+    expect(isLocked('orchestration')).toBe(false);
+    expect(isLocked('office')).toBe(true);
+    expect(isLocked('arena')).toBe(true);
   });
 
-  it('shows all advanced entries when all are unlocked', () => {
+  it('全部解锁后不再有任何灰态条目', () => {
     localStorage.setItem(
       FEATURE_UNLOCK_STORAGE_KEY,
       JSON.stringify(['orchestration', 'office', 'arena-accounts']),
@@ -84,12 +109,60 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     expect(screen.getByText('Office')).toBeInTheDocument();
     // P5：入口并入 /arena 三页签控制台，label 从「Arena 账号」改为「Arena」
     expect(screen.getByText('Arena')).toBeInTheDocument();
+    expect(screen.queryByTestId(/^sidebar-locked-/)).toBeNull();
+  });
+
+  it('P1-7: 点击灰态入口给出用途说明，确认后解锁并进入', async () => {
+    let settle: (ok: boolean) => void = () => {};
+    confirmDialogMock.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          settle = resolve;
+        }),
+    );
+    renderSidebarAt('/chat');
+
+    fireEvent.click(lockedEntry('office')!);
+    await waitFor(() => expect(confirmDialogMock).toHaveBeenCalled());
+    // 说明里要讲清这个高级能力能干什么，否则引导无意义
+    expect(confirmDialogMock.mock.calls[0][0].message).toContain('Word');
+    // 用户还没点确认 —— 此时绝不能已经解锁
+    expect(isLocked('office')).toBe(true);
+    expect(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) ?? '[]').not.toContain('office');
+
+    await act(async () => {
+      settle(true);
+    });
+    await waitFor(() => expect(isLocked('office')).toBe(false));
+    expect(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) ?? '[]').toContain('office');
+  });
+
+  it('P1-7: 取消说明不产生解锁副作用', async () => {
+    let settle: (ok: boolean) => void = () => {};
+    confirmDialogMock.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          settle = resolve;
+        }),
+    );
+    renderSidebarAt('/chat');
+
+    fireEvent.click(lockedEntry('arena')!);
+    await waitFor(() => expect(confirmDialogMock).toHaveBeenCalled());
+    await act(async () => {
+      settle(false);
+    });
+
+    // 拒绝对「说明」而言是正常路径 —— 不该留下任何解锁痕迹
+    expect(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) ?? '[]').not.toContain('arena');
+    expect(isLocked('arena')).toBe(true);
   });
 
   it('unlocks arena entry when visiting /arena directly (legacy /arena-accounts too)', () => {
     // P5：规范路径 /arena 直接解锁
     renderSidebarAt('/arena');
     expect(screen.getByText('Arena')).toBeInTheDocument();
+    expect(isLocked('arena')).toBe(false);
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toContain('arena-accounts');
 

@@ -14,12 +14,13 @@
  *   重新拉列表。
  * - "暂无待办" 空状态、"加载中" 占位符与 ``Memory.tsx`` 同形态。
  */
-import { Check, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { Check, Loader2, Plus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useTodoStore } from '../entities/todo/todoStore';
 import type { Todo } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
+import { TwoStepDelete } from '../widgets/sidebar/TwoStepDelete';
 
 export function TodoPage() {
   const { t } = useI18n();
@@ -116,9 +117,9 @@ export function TodoPage() {
                 void cancel(todo.id);
               }}
               onDelete={() => {
-                if (window.confirm(`确认删除「${todo.title}」？`)) {
-                  void remove(todo.id);
-                }
+                // P1-8: 两步确认下沉到 TodoRow，不再使用 window.confirm
+                // （与项目内 SessionItem / MemoryItem 的两步确认惯例一致）。
+                void remove(todo.id);
               }}
             />
           ))}
@@ -178,15 +179,13 @@ function TodoRow({ todo, onComplete, onCancel, onDelete }: TodoRowProps) {
             </button>
           </>
         )}
-        <button
-          type="button"
-          onClick={onDelete}
-          title="删除"
-          aria-label={`删除 ${todo.title}`}
-          className="w-6 h-6 flex items-center justify-center text-text-muted hover:text-red-600 hover:bg-bg-hover rounded"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        <TwoStepDelete
+          onConfirm={onDelete}
+          label={`删除 ${todo.title}`}
+          armedLabel="确认删除?"
+          data-testid={`todo-delete-${todo.id}`}
+          className="w-6 h-6 justify-center"
+        />
       </div>
     </li>
   );

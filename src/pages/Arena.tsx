@@ -148,9 +148,8 @@ export default function Arena() {
                     void runAction(account.id, () => enableAccount(account.id), `已启用 ${account.email}`)
                   }
                   onDelete={(account) => {
-                    if (window.confirm(`确认删除账号 ${account.email}？（软删除，密码不可恢复）`)) {
-                      void runAction(account.id, () => deleteAccount(account.id), `已删除 ${account.email}`);
-                    }
+                    // P1-8: 两步确认已下沉到 AccountTable，页面层不再弹 window.confirm。
+                    void runAction(account.id, () => deleteAccount(account.id), `已删除 ${account.email}`);
                   }}
                 />
               </div>

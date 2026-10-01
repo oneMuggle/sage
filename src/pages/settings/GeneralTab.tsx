@@ -67,6 +67,7 @@ function PermissionModeSelector() {
   return (
     <>
       <SettingRow
+        anchor="permission_mode"
         label={t('settings.permission.mode')}
         desc={t(`settings.permission.mode.${mode}.desc` as TranslationKey)}
       >
@@ -193,6 +194,7 @@ function FallbackModelInput(): JSX.Element {
 
   return (
     <SettingRow
+      anchor="fallback_model"
       label="降级模型 (fallback)"
       desc="主模型重试耗尽（限流/服务端错误/超时）后自动切换到此模型；留空 = 不降级"
     >
@@ -248,6 +250,7 @@ function SpendLimitInput(): JSX.Element {
 
   return (
     <SettingRow
+      anchor="spend_limit"
       label="每日花费限额 (USD)"
       desc="按估算成本拦截当日请求；0 或留空 = 不限。保存即生效"
     >
@@ -296,6 +299,7 @@ function AutoCheckpointCard() {
     <section data-testid="auto-checkpoint-section">
       <h3 className="text-sm font-semibold text-text mb-3">安全网</h3>
       <SettingRow
+        anchor="auto_checkpoint"
         label="发送前自动快照"
         desc="每轮对话开始前为绑定的工作区创建检查点，可在变更面板一键回滚（默认开）"
       >
@@ -382,6 +386,7 @@ function ResetDefaultsSection({ resetSettings }: { resetSettings: () => Promise<
     return (
       <>
         <SettingRow
+          anchor="reset_settings"
           label="恢复默认设置"
           desc="将外观 / 模型上下文 / 编排 / 权限模式 / 网络 / 钩子 / 花费限额等全部设置项恢复默认"
         >
@@ -513,10 +518,18 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => Promise<voi
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">对话</h3>
-        <SettingRow label="自动记忆提取" desc="对话中自动识别并保存关键信息到记忆库">
+        <SettingRow
+          anchor="autoMemory"
+          label="自动记忆提取"
+          desc="对话中自动识别并保存关键信息到记忆库"
+        >
           <Toggle value={settings.autoMemory} onChange={(v) => updateSettings({ autoMemory: v })} />
         </SettingRow>
-        <SettingRow label="确认后再删除记忆" desc="删除记忆前弹出确认对话框">
+        <SettingRow
+          anchor="confirmDelete"
+          label="确认后再删除记忆"
+          desc="删除记忆前弹出确认对话框"
+        >
           <Toggle
             value={settings.confirmDelete}
             onChange={(v) => updateSettings({ confirmDelete: v })}
@@ -594,6 +607,7 @@ export function AttachmentRagCard() {
     <section data-testid="attachment-rag-section">
       <h3 className="text-sm font-semibold text-text mb-3">超长文档检索注入（实验）</h3>
       <SettingRow
+        anchor="attachment_rag"
         label="启用附件检索"
         desc="文档超过 10 万字符时不再整段截断，改为嵌入问题并注入最相关的片段（需在下方填写嵌入端点）"
       >

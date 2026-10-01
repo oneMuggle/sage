@@ -23,6 +23,10 @@ vi.mock('../../features/send-message/useChat', () => ({
     interrupt: vi.fn(),
     reattachActiveStream: vi.fn(),
     streamingToolCalls: [],
+    // P1-6: 排队队列字段（useChat 新增），缺了 Chat 渲染时会崩。
+    pendingMessages: [],
+    cancelPending: vi.fn(),
+    clearPendingForSession: vi.fn(),
   }),
 }));
 

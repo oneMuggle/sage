@@ -6,15 +6,23 @@
  * - 每条记忆按 ``source`` 字段渲染"working / 核心 / 摘要"徽章
  * - 携带 ``session_id`` 的记忆会显示来源会话,可点击跳转
  * - 提供"按会话查看摘要"模式,通过 ``memoryApi.getSessionSummaries`` 拉取
+ *
+ * P0-1 (2026-10-01):
+ * - 接上此前零调用的 ``memoryApi.searchMemories`` / ``memoryApi.deleteMemory``。
+ *   PHILOSOPHY.md 把"不可删除:用户无法清除记忆"列为反模式,而删除端点与
+ *   两步确认组件早已存在却无渲染方 → 用户有一条错误记忆时无路可走。
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 import { memoryApi, Memory } from '../../shared/api';
 
 // Constants
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const MEMORY_PAGE_SIZE = 100;
+/** 搜索防抖 —— 与会话列表搜索(ConversationsSection)保持同一手速。 */
+const SEARCH_DEBOUNCE_MS = 300;
 
 type MemoryFilter = 'all' | 'episodic' | 'semantic' | 'working' | 'session_summary';
 type ViewMode = 'all' | 'summaries';
@@ -30,6 +38,11 @@ interface MemoryBrowserProps {
    * triggering a full page reload (fix/security-perf-quickwins §1.3b g).
    */
   refreshKey?: number;
+  /**
+   * P0-6: 来自聊天气泡记忆引用的深链定位 id。命中的那条会被高亮并滚动到
+   * 可视区 —— 用户点「这条记忆凭什么影响我的答案」后需要立刻看到它。
+   */
+  focusMemoryId?: string;
 }
 
 const FILTER_LABELS: Record<MemoryFilter, string> = {
@@ -80,7 +93,7 @@ const SCOPE_BADGE_LABEL: Record<string, string> = {
   global: '全局',
 };
 
-export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowserProps) {
+export function MemoryBrowser({ initialType = 'all', refreshKey, focusMemoryId }: MemoryBrowserProps) {
   const navigate = useNavigate();
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,6 +102,9 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [summarySessionId, setSummarySessionId] = useState<string>('');
+  // P0-1: 记忆检索。此前 ``memoryApi.searchMemories`` 已实现但全仓零调用。
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [stats, setStats] = useState({
     total: 0,
     thisWeek: 0,
@@ -104,6 +120,12 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
   // 同时 unmount 时 abort() 让 invoke 立刻结束,避免 setState on unmounted 警告。
   const requestGenRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+
+  // P0-1: 输入防抖后再触发检索,避免每敲一个字打一次后端。
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     return () => {
@@ -123,6 +145,19 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
     setError(null);
     try {
       const type = filterType === 'all' ? undefined : filterType;
+      // P0-1: 检索态走 searchMemories(语义检索),空查询走原分页列表。
+      // searchMemories 只接受 episodic/semantic —— working/session_summary
+      // 归为 undefined 交由后端全量匹配,避免静默收窄结果集。
+      if (searchQuery) {
+        const searchType = filterType === 'episodic' || filterType === 'semantic' ? filterType : undefined;
+        const hits = await memoryApi.searchMemories(searchQuery, searchType);
+        if (gen !== requestGenRef.current) return;
+        setMemories(hits);
+        // 检索结果没有 source_breakdown,只更新"当前显示"总数,
+        // 其余分类计数保持上一轮全量口径,避免展示成 0 误导。
+        setStats((prev) => ({ ...prev, total: hits.length }));
+        return;
+      }
       const response = await memoryApi.getMemories(type, 1, MEMORY_PAGE_SIZE, {
         signal: ac.signal,
       });
@@ -149,7 +184,7 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
         setLoading(false);
       }
     }
-  }, [filterType]);
+  }, [filterType, searchQuery]);
 
   // 加载摘要视图(批次三 step 6 新增) — 需要指定 session_id。
   const loadSummaries = useCallback(
@@ -226,6 +261,26 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
     [navigate],
   );
 
+  // P0-1: 删除记忆 —— 接上此前零调用的 ``memoryApi.deleteMemory``。
+  // 失败时保留该行并明确告知,不做"看起来删掉了"的静默移除
+  // (PHILOSOPHY「静默失败」反模式)。
+  //
+  // 注意:失败**不走** setError —— 那是列表级错误态,一设置就会把整个
+  // 记忆库替换成「加载失败 + 重试」,而列表本身并无问题。此处只报 toast。
+  const handleDeleteMemory = useCallback(async (memory: Memory) => {
+    try {
+      await memoryApi.deleteMemory(memory.id);
+      setMemories((prev) => prev.filter((m) => m.id !== memory.id));
+      setStats((prev) => ({ ...prev, total: Math.max(0, prev.total - 1) }));
+      toast.success('记忆已删除', {
+        description: (memory.content || memory.summary || '').split('\n')[0].slice(0, 40),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '删除失败';
+      toast.error('删除失败', { description: `${message}（该条记忆仍保留）` });
+    }
+  }, []);
+
   // 作用域为纯前端过滤(后端 list 契约不变)。缺 scope 的旧行按 DB 默认
   // 'user' 处理,与后端 visibility 规则一致。
   const visibleMemories = useMemo(() => {
@@ -247,6 +302,19 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
 
       {/* 视图模式切换 */}
       <div className="flex items-center gap-2 mb-4">
+        {viewMode === 'all' && (
+          <div className="relative flex-1 max-w-xs">
+            <input
+              type="search"
+              data-testid="memory-search-input"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="搜索记忆内容…"
+              aria-label="搜索记忆"
+              className="w-full px-2 py-1 border border-border rounded-radius-sm text-xs bg-surface text-text placeholder:text-muted"
+            />
+          </div>
+        )}
         <button
           className={`px-3 py-1 border border-border rounded-radius-sm text-xs cursor-pointer font-mono ${
             viewMode === 'all'
@@ -345,7 +413,13 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
       ) : (
         <div className="flex flex-col gap-2">
           {visibleMemories.map((memory) => (
-            <MemoryItemCard key={memory.id} memory={memory} onJumpToSession={handleJumpToSession} />
+            <MemoryItemCard
+              key={memory.id}
+              memory={memory}
+              onJumpToSession={handleJumpToSession}
+              onDelete={handleDeleteMemory}
+              focused={memory.id === focusMemoryId}
+            />
           ))}
         </div>
       )}
@@ -365,10 +439,29 @@ function StatCard({ value, label }: { value: number; label: string }) {
 function MemoryItemCard({
   memory,
   onJumpToSession,
+  onDelete,
+  focused = false,
 }: {
   memory: Memory;
   onJumpToSession: (sessionId: string | undefined) => void;
+  onDelete: (memory: Memory) => void | Promise<void>;
+  /** P0-6: 深链定位命中态 —— 高亮 + 滚入视区。 */
+  focused?: boolean;
 }) {
+  // P0-1: 删除走内联两步确认 —— 破坏性操作先摆出内容首行让用户核对,
+  // 再要求显式确认;不用 window.confirm(与项目内两步确认惯例一致)。
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  // P0-6: 命中深链时滚入视区（列表可能很长，用户看不到自己点的那条）。
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    // jsdom 与部分旧环境不实现 scrollIntoView —— 必须守卫，
+    // 否则深链定位会把整棵子树渲染炸掉。
+    const el = cardRef.current;
+    if (focused && el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'center' });
+    }
+  }, [focused]);
   const source = memory.source || memory.layer || memory.memory_type || 'episodic';
   const sourceLabel = SOURCE_LABEL[source] || source;
   const sourceClass = SOURCE_BADGE_CLASSES[source] || SOURCE_BADGE_CLASSES.episodic;
@@ -413,8 +506,14 @@ function MemoryItemCard({
 
   return (
     <div
+      ref={focused ? cardRef : undefined}
       data-testid={memory.source === 'episodic' ? 'memory-episodic-item' : 'memory-item'}
-      className="p-3 border border-border rounded-radius-sm bg-surface cursor-pointer hover:border-primary transition-colors"
+      data-focused={focused || undefined}
+      className={
+        focused
+          ? 'p-3 border-2 border-primary rounded-radius-sm bg-surface ring-1 ring-primary/30'
+          : 'p-3 border border-border rounded-radius-sm bg-surface cursor-pointer hover:border-primary transition-colors'
+      }
     >
       <div className="flex items-center justify-between mb-1 gap-2">
         <span className="font-semibold text-sm text-text truncate flex-1">{title}</span>
@@ -468,6 +567,53 @@ function MemoryItemCard({
             ↳ 会话 {truncate(sessionId, 12)}
           </button>
         )}
+        <span className="ml-auto flex items-center gap-2">
+          {confirming ? (
+            <>
+              <span className="text-error">确认删除？</span>
+              <button
+                type="button"
+                data-testid={`memory-delete-confirm-${memory.id}`}
+                disabled={deleting}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleting(true);
+                  void Promise.resolve(onDelete(memory)).finally(() => {
+                    setDeleting(false);
+                    setConfirming(false);
+                  });
+                }}
+                className="px-2 py-0.5 border border-error rounded text-[11px] text-error hover:bg-error/10 disabled:opacity-50"
+              >
+                {deleting ? '删除中…' : '确认删除'}
+              </button>
+              <button
+                type="button"
+                data-testid={`memory-delete-cancel-${memory.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConfirming(false);
+                }}
+                className="px-2 py-0.5 border border-border rounded text-[11px] text-muted hover:text-text"
+              >
+                取消
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              data-testid={`memory-delete-${memory.id}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirming(true);
+              }}
+              className="px-2 py-0.5 border border-border rounded text-[11px] text-muted hover:text-error hover:border-error"
+              title="删除这条记忆"
+            >
+              删除
+            </button>
+          )}
+        </span>
       </div>
     </div>
   );
