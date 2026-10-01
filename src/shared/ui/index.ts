@@ -18,6 +18,11 @@ export type { LiveDotProps, LiveState } from './LiveDot';
 export { AttnBadge, ATTN_BADGE_MAX_DISPLAY } from './AttnBadge';
 export type { AttnBadgeProps } from './AttnBadge';
 
+// UX-IA R3 批次 A-1：侧边面板统一外壳（chat / wiki / ModelCatalog 三套右栏的收敛目标）
+// 组件属性类型暂不导出：批次 B/C 的迁移方还没接，导出即 knip 新增违规
+// （基线棘轮只增不减）。届时随首个消费方一起放开。
+export { PanelShell, PanelShellAction } from './PanelShell';
+
 // U-Brand: 共享品牌标识，favicon 之外所有 UI 位点都通过本组件复用
 export { BrandLogo } from './BrandLogo';
 export type { BrandLogoProps, BrandLogoSize } from './BrandLogo';
