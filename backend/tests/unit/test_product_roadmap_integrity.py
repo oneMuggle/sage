@@ -53,7 +53,7 @@ def test_material_status_is_explicit_and_scoped_per_project(tmp_path, setup_test
     assert repo.get(failed.id).error_message == "retain this error"
     assert repo.get(elsewhere.id).status == "pending_index"
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid material status"):
         repo.add(first.id, "invalid status", status="ready?")
 
     revived = repo.add(first.id, "index blew up")
