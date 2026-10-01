@@ -65,7 +65,11 @@ function asPreset(v: unknown): PermissionPreset {
 
 export const permissionApi = {
   async getPreset(): Promise<PermissionPresetState> {
-    const fallback: PermissionPresetState = { preset: 'standard', mode: 'workspace_write', custom: false };
+    const fallback: PermissionPresetState = {
+      preset: 'standard',
+      mode: 'workspace_write',
+      custom: false,
+    };
     if (isDemoMode()) return fallback;
     try {
       const raw = await invoke<unknown>('permissions_get_preset', {});

@@ -916,12 +916,7 @@ export function Chat() {
                 errorSessionId === currentSessionId && {
                   key: 'error',
                   priority: CHAT_NOTICE_PRIORITY.error,
-                  node: (
-                    <ChatInlineError
-                      error={error}
-                      onClose={clearError}
-                    />
-                  ),
+                  node: <ChatInlineError error={error} onClose={clearError} />,
                 },
               showInterruptBanner && {
                 key: 'interrupted',
@@ -1012,9 +1007,8 @@ export function Chat() {
                         const sid = planApprovalFor;
                         if (!sid || planOrchBusyRef.current) return;
                         const planText =
-                          [...messages]
-                            .reverse()
-                            .find((m) => m.role === 'assistant')?.content ?? '';
+                          [...messages].reverse().find((m) => m.role === 'assistant')?.content ??
+                          '';
                         if (!planText.trim()) {
                           toast.error('找不到可结构化的计划内容');
                           return;
@@ -1119,11 +1113,7 @@ export function Chat() {
               位置相邻，用户视线不用跳。普通对话无 taskBoard → 组件自行返回 null。 */}
           <RunSummaryPanel
             sessionId={currentSessionId}
-            onRerunFailed={
-              taskBoard
-                ? () => void handleRerunFailed(taskBoard.runId)
-                : undefined
-            }
+            onRerunFailed={taskBoard ? () => void handleRerunFailed(taskBoard.runId) : undefined}
           />
 
           {showConfigWarning && (

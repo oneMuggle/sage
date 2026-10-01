@@ -16,9 +16,30 @@ vi.mock('../../../shared/api/skillsApi', () => ({
 }));
 
 const ENTRIES = [
-  { id: 3, skill_name: 'office_create', action: 'update', actor: 'user', source: 'editor', created_at: 1_757_000_000_000 },
-  { id: 2, skill_name: 'office_create', action: 'consolidation_note', actor: 'system', source: 'consolidation_scan', created_at: 1_756_000_000_000 },
-  { id: 1, skill_name: 'office_create', action: 'create', actor: 'system', source: 'builtin', created_at: 1_755_000_000_000 },
+  {
+    id: 3,
+    skill_name: 'office_create',
+    action: 'update',
+    actor: 'user',
+    source: 'editor',
+    created_at: 1_757_000_000_000,
+  },
+  {
+    id: 2,
+    skill_name: 'office_create',
+    action: 'consolidation_note',
+    actor: 'system',
+    source: 'consolidation_scan',
+    created_at: 1_756_000_000_000,
+  },
+  {
+    id: 1,
+    skill_name: 'office_create',
+    action: 'create',
+    actor: 'system',
+    source: 'builtin',
+    created_at: 1_755_000_000_000,
+  },
 ];
 
 beforeEach(() => {

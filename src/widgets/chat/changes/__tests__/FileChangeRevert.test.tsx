@@ -18,7 +18,11 @@ import { FileChangeCard, FileChangeCards } from '../FileChangeCard';
 const mockGetChangeDiff = vi.fn<(s: string, p: string) => Promise<WorkspaceDiff>>();
 const mockGetChanges = vi.fn<(s: string) => Promise<WorkspaceChanges>>();
 const mockRevertChanges = vi.fn<
-  (s: string, paths: string[], deleteUntracked?: boolean) => Promise<{
+  (
+    s: string,
+    paths: string[],
+    deleteUntracked?: boolean,
+  ) => Promise<{
     reverted: string[];
     errors: Array<{ path: string; error: string }>;
   }>
@@ -48,7 +52,9 @@ const SAMPLE: WorkspaceChanges = {
   ahead: 0,
   behind: 0,
   clean: false,
-  changes: [{ indexStatus: '', worktreeStatus: 'M', path: 'src/app.ts', insertions: 1, deletions: 0 }],
+  changes: [
+    { indexStatus: '', worktreeStatus: 'M', path: 'src/app.ts', insertions: 1, deletions: 0 },
+  ],
 };
 
 beforeEach(() => {
@@ -104,9 +110,7 @@ describe('批量回滚 (P2-1)', () => {
   it('一次调用回滚全部文件，而不是逐个', async () => {
     render(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts', 'c.ts']} />);
     await clickAndConfirm(screen.getByTestId('file-change-revert-all'), true);
-    await waitFor(() =>
-      expect(mockRevertChanges).toHaveBeenCalledTimes(1),
-    );
+    await waitFor(() => expect(mockRevertChanges).toHaveBeenCalledTimes(1));
     expect(mockRevertChanges).toHaveBeenCalledWith('s1', ['a.ts', 'b.ts', 'c.ts'], false);
   });
 
@@ -141,11 +145,17 @@ describe('批量回滚 (P2-1)', () => {
 describe('未跟踪文件（本次新建）的回滚语义', () => {
   const NEW_FILE: WorkspaceChanges = {
     ...SAMPLE,
-    changes: [{ indexStatus: '?', worktreeStatus: '?', path: 'new.ts', insertions: 3, deletions: 0 }],
+    changes: [
+      { indexStatus: '?', worktreeStatus: '?', path: 'new.ts', insertions: 3, deletions: 0 },
+    ],
   };
 
   it('逐文件回滚：显式授权删除，且确认框说清「回滚即删除」', async () => {
-    useChangesListStore.setState({ bySession: { s1: NEW_FILE }, errors: {}, loadingBy: {} } as never);
+    useChangesListStore.setState({
+      bySession: { s1: NEW_FILE },
+      errors: {},
+      loadingBy: {},
+    } as never);
     render(<FileChangeCard sessionId="s1" path="new.ts" />);
     await clickAndConfirm(screen.getByTestId('file-change-revert'), true);
     await waitFor(() => expect(mockRevertChanges).toHaveBeenCalledWith('s1', ['new.ts'], true));
@@ -168,6 +178,8 @@ describe('未跟踪文件（本次新建）的回滚语义', () => {
     render(<FileChangeCards sessionId="s1" paths={['a.ts', 'b.ts']} />);
     await clickAndConfirm(screen.getByTestId('file-change-revert-all'), true);
     // 标志整批生效：后端只对确实是未跟踪的路径删文件，a.ts 仍走 git checkout
-    await waitFor(() => expect(mockRevertChanges).toHaveBeenCalledWith('s1', ['a.ts', 'b.ts'], true));
+    await waitFor(() =>
+      expect(mockRevertChanges).toHaveBeenCalledWith('s1', ['a.ts', 'b.ts'], true),
+    );
   });
 });

@@ -44,7 +44,10 @@ beforeEach(() => {
 
 describe('RunSummaryPanel (P2-6)', () => {
   it('运行中不渲染 —— 与 SubagentLivePanel 互斥', () => {
-    seedBoard({ progress: { total: 2, done: 1, running: 1, queued: 0, failed: 0, cancelled: 0 } }, true);
+    seedBoard(
+      { progress: { total: 2, done: 1, running: 1, queued: 0, failed: 0, cancelled: 0 } },
+      true,
+    );
     const { container } = render(<RunSummaryPanel sessionId={SESSION} />);
     expect(container).toBeEmptyDOMElement();
   });
@@ -65,12 +68,24 @@ describe('RunSummaryPanel (P2-6)', () => {
     seedBoard({
       statuses: {
         t1: {
-          state: 'task_status', run_id: 'run-1', task_id: 't1', status: 'done',
-          agent_id: 'coder', goal: '实现登录', error: null, output_preview: null,
+          state: 'task_status',
+          run_id: 'run-1',
+          task_id: 't1',
+          status: 'done',
+          agent_id: 'coder',
+          goal: '实现登录',
+          error: null,
+          output_preview: null,
         },
         t2: {
-          state: 'task_status', run_id: 'run-1', task_id: 't2', status: 'failed',
-          agent_id: 'tester', goal: '补充测试', error: '超时未返回', output_preview: null,
+          state: 'task_status',
+          run_id: 'run-1',
+          task_id: 't2',
+          status: 'failed',
+          agent_id: 'tester',
+          goal: '补充测试',
+          error: '超时未返回',
+          output_preview: null,
           retry_count: 2,
         },
       },
@@ -88,8 +103,14 @@ describe('RunSummaryPanel (P2-6)', () => {
     seedBoard({
       statuses: {
         t3: {
-          state: 'task_status', run_id: 'run-1', task_id: 't3', status: 'cancelled',
-          agent_id: 'coder', goal: '重构模块', error: null, output_preview: null,
+          state: 'task_status',
+          run_id: 'run-1',
+          task_id: 't3',
+          status: 'cancelled',
+          agent_id: 'coder',
+          goal: '重构模块',
+          error: null,
+          output_preview: null,
         },
       },
     });
@@ -102,8 +123,14 @@ describe('RunSummaryPanel (P2-6)', () => {
     seedBoard({
       statuses: {
         t4: {
-          state: 'task_status', run_id: 'run-1', task_id: 't4', status: 'failed',
-          agent_id: 'coder', goal: 'x', error: 'boom', output_preview: null,
+          state: 'task_status',
+          run_id: 'run-1',
+          task_id: 't4',
+          status: 'failed',
+          agent_id: 'coder',
+          goal: 'x',
+          error: 'boom',
+          output_preview: null,
         },
       },
     });
@@ -118,8 +145,20 @@ describe('RunSummaryPanel (P2-6)', () => {
     useChangesListStore.setState({
       bySession: {
         [SESSION]: {
-          branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0, clean: false,
-          changes: [{ indexStatus: 'M', worktreeStatus: 'M', path: 'src/a.ts', insertions: 12, deletions: 3 }],
+          branch: 'main',
+          upstream: 'origin/main',
+          ahead: 0,
+          behind: 0,
+          clean: false,
+          changes: [
+            {
+              indexStatus: 'M',
+              worktreeStatus: 'M',
+              path: 'src/a.ts',
+              insertions: 12,
+              deletions: 3,
+            },
+          ],
         },
       },
     } as never);
@@ -152,7 +191,10 @@ describe('RunSummaryPanel (P2-6)', () => {
   it('终态时才拉取工作区变更，运行中不拉', async () => {
     const fetch = vi.fn().mockResolvedValue(undefined);
     useChangesListStore.setState({ fetch } as never);
-    seedBoard({ progress: { total: 1, done: 0, running: 1, queued: 0, failed: 0, cancelled: 0 } }, true);
+    seedBoard(
+      { progress: { total: 1, done: 0, running: 1, queued: 0, failed: 0, cancelled: 0 } },
+      true,
+    );
     render(<RunSummaryPanel sessionId={SESSION} />);
     expect(fetch).not.toHaveBeenCalled();
 

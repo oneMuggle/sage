@@ -26,9 +26,21 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
 
   it('tab 值均在已知 tab 集合内', () => {
     const knownTabs = new Set([
-      'general', 'basic', 'tools-connections', 'endpoints',
-      'models', 'orchestration', 'memory', 'network', 'mcp', 'zotero',
-      'runtime', 'evolution', 'updates', 'providers', 'usage-stats',
+      'general',
+      'basic',
+      'tools-connections',
+      'endpoints',
+      'models',
+      'orchestration',
+      'memory',
+      'network',
+      'mcp',
+      'zotero',
+      'runtime',
+      'evolution',
+      'updates',
+      'providers',
+      'usage-stats',
     ]);
     for (const e of SETTINGS_SEARCH_INDEX) {
       expect(knownTabs.has(e.tab), `tab of ${e.key}`).toBe(true);
@@ -45,8 +57,15 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
 
   it('P1-5：记忆相关条目全部收敛到同一个 memory tab', () => {
     // IA1 的可执行判据：记忆能力的设置入口只有一个。
-    const memoryKeys = ['autoMemory', 'confirmDelete', 'context_turn_limit', 'auto_checkpoint',
-      'memory_embedding', 'memory_consolidation', 'memory_backup'];
+    const memoryKeys = [
+      'autoMemory',
+      'confirmDelete',
+      'context_turn_limit',
+      'auto_checkpoint',
+      'memory_embedding',
+      'memory_consolidation',
+      'memory_backup',
+    ];
     for (const key of memoryKeys) {
       const entry = SETTINGS_SEARCH_INDEX.find((e) => e.key === key);
       expect(entry, `missing index entry ${key}`).toBeTruthy();

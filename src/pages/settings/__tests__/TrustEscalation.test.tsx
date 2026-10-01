@@ -8,8 +8,7 @@ const setTrustPolicy = vi.fn();
 vi.mock('../../../shared/api/permissionApi', () => ({
   permissionApi: {
     getTrustPolicy: () => getTrustPolicy(),
-    setTrustPolicy: (enabled: boolean, threshold?: number) =>
-      setTrustPolicy(enabled, threshold),
+    setTrustPolicy: (enabled: boolean, threshold?: number) => setTrustPolicy(enabled, threshold),
   },
 }));
 

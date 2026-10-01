@@ -22,7 +22,10 @@ import { AlertTriangle, CheckCircle2, FileCode2 } from 'lucide-react';
 import { useEffect } from 'react';
 
 import { useChangesListStore } from '../../features/changes/changesListStore';
-import { selectSessionSlots, useChatStreamStore } from '../../features/send-message/chatStreamStore';
+import {
+  selectSessionSlots,
+  useChatStreamStore,
+} from '../../features/send-message/chatStreamStore';
 
 interface RunSummaryPanelProps {
   sessionId: string | null | undefined;
@@ -126,7 +129,10 @@ export function RunSummaryPanel({ sessionId, onRerunFailed }: RunSummaryPanelPro
           </div>
           <ul className="space-y-0.5">
             {changes?.changes.slice(0, 8).map((change) => (
-              <li key={change.path} className="flex items-baseline gap-1.5 font-mono text-text-secondary">
+              <li
+                key={change.path}
+                className="flex items-baseline gap-1.5 font-mono text-text-secondary"
+              >
                 <span className="truncate">{change.path}</span>
                 {typeof change.insertions === 'number' && change.insertions > 0 ? (
                   <span className="text-success">+{change.insertions}</span>

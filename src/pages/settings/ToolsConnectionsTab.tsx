@@ -141,7 +141,9 @@ function TrustEscalationSection(): JSX.Element {
             setEnabled(state.enabled);
             setThreshold(state.threshold);
           })
-          .catch(() => { /* 读取也失败时保持当前显示，由错误提示说明 */ });
+          .catch(() => {
+            /* 读取也失败时保持当前显示，由错误提示说明 */
+          });
       })
       .finally(() => setSaving(false));
   };

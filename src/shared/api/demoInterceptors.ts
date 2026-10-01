@@ -1525,9 +1525,30 @@ const demoHandlers: Record<string, (args: Record<string, unknown>) => unknown> =
     return {
       skill_name: name,
       entries: [
-        { id: 1, skill_name: name, action: 'create', actor: 'system', source: 'builtin', created_at: DEMO_AUDIT_T0 },
-        { id: 2, skill_name: name, action: 'consolidation_note', actor: 'system', source: 'consolidation_scan', created_at: DEMO_AUDIT_T1 },
-        { id: 3, skill_name: name, action: 'update', actor: 'user', source: 'editor', created_at: DEMO_AUDIT_T2 },
+        {
+          id: 1,
+          skill_name: name,
+          action: 'create',
+          actor: 'system',
+          source: 'builtin',
+          created_at: DEMO_AUDIT_T0,
+        },
+        {
+          id: 2,
+          skill_name: name,
+          action: 'consolidation_note',
+          actor: 'system',
+          source: 'consolidation_scan',
+          created_at: DEMO_AUDIT_T1,
+        },
+        {
+          id: 3,
+          skill_name: name,
+          action: 'update',
+          actor: 'user',
+          source: 'editor',
+          created_at: DEMO_AUDIT_T2,
+        },
       ],
     };
   },

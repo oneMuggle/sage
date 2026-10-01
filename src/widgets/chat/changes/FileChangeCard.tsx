@@ -432,11 +432,7 @@ export function FileChangeCards({ sessionId, paths }: { sessionId: string; paths
           )}
           <span className="text-[11px] text-muted">点击展开</span>
         </button>
-        <RevertAllButton
-          count={paths.length}
-          onClick={handleRevertAll}
-          disabled={revertingAll}
-        />
+        <RevertAllButton count={paths.length} onClick={handleRevertAll} disabled={revertingAll} />
       </div>
     );
   }
@@ -444,11 +440,7 @@ export function FileChangeCards({ sessionId, paths }: { sessionId: string; paths
   return (
     <div className="flex flex-col">
       <div className="mb-1 flex items-center justify-end">
-        <RevertAllButton
-          count={paths.length}
-          onClick={handleRevertAll}
-          disabled={revertingAll}
-        />
+        <RevertAllButton count={paths.length} onClick={handleRevertAll} disabled={revertingAll} />
       </div>
       {paths.map((path) => (
         <FileChangeCard key={path} sessionId={sessionId} path={path} />
