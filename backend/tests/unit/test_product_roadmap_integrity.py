@@ -31,7 +31,8 @@ def test_legacy_memory_modes_remain_compatible(mode):
     assert request.memory_mode == mode
 
 
-def test_legacy_repair_is_scoped_and_preserves_index_jobs_and_errors(tmp_path, setup_test_db):
+def test_material_status_is_explicit_and_scoped_per_project(tmp_path, setup_test_db):
+    """状态只由显式调用改变：默认 ready，pending/failed 不会被静默改写。"""
     a = tmp_path / "a"
     b = tmp_path / "b"
     a.mkdir()
@@ -39,18 +40,23 @@ def test_legacy_repair_is_scoped_and_preserves_index_jobs_and_errors(tmp_path, s
     first = ProjectRepository().register(str(a))
     second = ProjectRepository().register(str(b))
     repo = ProjectMaterialRepository()
-    legacy = repo.add(first.id, "legacy")
-    indexed = repo.add(first.id, "index job")
-    failed = repo.add(first.id, "failed")
-    other = repo.add(second.id, "other project")
-    conn = repo.db.get_connection()
-    for item in (legacy, indexed, other):
-        conn.execute("UPDATE project_materials SET status='pending_index' WHERE id=?", (item.id,))
-    conn.execute("UPDATE project_materials SET wiki_page_path='/wiki/pending.md' WHERE id=?", (indexed.id,))
+
+    ready = repo.add(first.id, "usable immediately")
+    pending = repo.add(first.id, "awaiting async index", status="pending_index")
+    failed = repo.add(first.id, "index blew up")
     repo.mark_failed(failed.id, "retain this error")
-    conn.commit()
-    assert [row.id for row in repo.get_active_materials_for_project(first.id)] == [legacy.id]
-    assert repo.get(indexed.id).status == "pending_index"
+    elsewhere = repo.add(second.id, "other project", status="pending_index")
+
+    assert ready.status == "ready"
+    assert [row.id for row in repo.get_active_materials_for_project(first.id)] == [ready.id]
+    assert repo.get(pending.id).status == "pending_index"
     assert repo.get(failed.id).error_message == "retain this error"
-    assert repo.get(other.id).status == "pending_index"
-    assert repo.add(first.id, "legacy").id == legacy.id
+    assert repo.get(elsewhere.id).status == "pending_index"
+
+    with pytest.raises(ValueError):
+        repo.add(first.id, "invalid status", status="ready?")
+
+    revived = repo.add(first.id, "index blew up")
+    assert revived.id == failed.id
+    assert revived.status == "ready"
+    assert revived.error_message is None
