@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useMessageJumpStore } from '../../../features/chat/messageJumpStore';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Session } from '../../../shared/lib/store';
+import * as confirmService from '../../../shared/ui/ConfirmDialog/confirmService';
 
 import { ConversationsSection } from './ConversationsSection';
 
@@ -109,7 +110,7 @@ describe('ConversationsSection', () => {
     });
 
     it('清空全部归档：确认后调用 purge 并刷新列表', async () => {
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const confirmSpy = vi.spyOn(confirmService, 'confirmDialog').mockResolvedValue(true);
       const refresh = vi.fn();
       const archived: Session[] = sessions.map((s) => ({ ...s, is_archived: true }));
       renderWithI18n(
@@ -123,7 +124,7 @@ describe('ConversationsSection', () => {
     });
 
     it('清空全部归档：取消确认则不调用 purge', async () => {
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const confirmSpy = vi.spyOn(confirmService, 'confirmDialog').mockResolvedValue(false);
       const refresh = vi.fn();
       const archived: Session[] = sessions.map((s) => ({ ...s, is_archived: true }));
       renderWithI18n(

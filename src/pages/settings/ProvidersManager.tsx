@@ -19,6 +19,7 @@
 import { useEffect, useState } from 'react';
 
 import type { ProviderConfigSummary } from '../../shared/types/electron-api';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 export function ProvidersManager(): JSX.Element {
   const [list, setList] = useState<ProviderConfigSummary[]>([]);
@@ -62,7 +63,9 @@ export function ProvidersManager(): JSX.Element {
   };
 
   const onRemove = async (id: string): Promise<void> => {
-    if (!window.confirm('确定删除？')) return;
+    // P1-8: 用项目内 confirmDialog 服务取代 window.confirm。
+    const ok = await confirmDialog({ title: '确定删除？', danger: true });
+    if (!ok) return;
     setBusyId(id);
     try {
       await window.electronAPI?.providers.remove(id);

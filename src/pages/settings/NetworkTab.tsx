@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 
 import { settingsClient } from '../../shared/api/settingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 import { SettingRow } from './components';
 import { parseCookieHeader, type CookieImportItem } from './credentialCookieParser';
@@ -642,8 +643,13 @@ function CredentialsSection() {
       .catch(() => undefined);
   };
 
-  const removeCred = (domain: string): void => {
-    if (!window.confirm(t('settings.network.creds.confirm'))) return;
+  // P1-8: 用项目内 confirmDialog 服务取代 window.confirm。
+  const removeCred = async (domain: string): Promise<void> => {
+    const ok = await confirmDialog({
+      title: t('settings.network.creds.confirm'),
+      danger: true,
+    });
+    if (!ok) return;
     void fetch(webAccessApiUrl(`/api/v1/web-access/credentials/${encodeURIComponent(domain)}`), {
       method: 'DELETE',
     })

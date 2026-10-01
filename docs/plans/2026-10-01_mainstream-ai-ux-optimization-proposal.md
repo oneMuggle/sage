@@ -111,7 +111,7 @@ OS 通知也只带 tool_name + 子任务 id（`ApprovalDialog.tsx:77-80`），�
 | IA4 | 隐藏功能无发现路径：`/orchestration` `/office` `/arena` 默认不渲染 | `Sidebar.tsx:94-99,178-183` |
 | IA5 | 设置搜索只跳 tab、不锚点定位，65 条索引价值折半 | `Settings.tsx:98-101` |
 | IA6 | 模型切换是「盲操作」：不校验上下文长度、不提示窗口变化 | `SessionModelPicker.tsx:65-88` |
-| IA7 | 「清空全部归档」用 `window.confirm`，与项目内两步确认惯例不一致 | `ConversationsSection.tsx:151` vs `GeneralTab.tsx:359` |
+| IA7 | 「清空全部归档」用 `window.confirm`，与项目内两步确认惯例不一致 | `ConversationsSection.tsx:151` vs `GeneralTab.tsx:359` —— ✅ P1-8 已修 |
 
 **已确认不是问题**（曾疑为缺口，实为已实现，勿重复排期）：
 - 流式中可继续输入 —— `ChatInput.tsx:357-358` 走 steering 注入当前 run，失败回退队列。
@@ -193,16 +193,22 @@ Sage 的记忆存本地 SQLite + ChromaDB，**架构上比 Claude 更可审计�
 
 ## 5. 优化建议 · P1（对标主流的体验升级）
 
-| # | 建议 | 对标 | 理由 |
+### 5.1 实施状态（2026-10-01 首轮）
+
+> **重要修正**：P1-2 盘点后发现**已完整实现** —— `Chat.tsx:101-115` 用 sessionStorage
+> 持久化 `tempChatSessions`，`isTempChat` 门控记忆写入提示与落库。本项无需再做。
+> 这是本轮第二个教训：**「以为缺」不等于「缺」**，实施前必须逐项核实。
+
+| # | 建议 | 状态 | 落地位置 / 备注 |
 |---|---|---|---|
-| **P1-1** | **记忆 Pause / Reset 二分** —— 停止新增 vs 彻底清除，二选一不混为一谈 | Claude Settings→Memory | 主流已验证的预期管理；当前「关掉记忆」语义不清 |
-| **P1-2** | **临时对话（无痕）** —— 不写记忆、不进历史的会话模式 | Claude Incognito / ChatGPT Temporary Chat | 本地产品做这个成本极低，且是隐私卖点 |
-| **P1-3** | **模型切换后果预警** —— 切换时提示新模型上下文窗口、当前历史长度、超限风险 | Cursor model switch | 消除「盲操作」，避免切换后静默丢历史 |
-| **P1-4** | **设置搜索锚点定位** —— 65 条索引从「跳 tab 顶部」升级为「跳 tab + 滚动到该项 + 高亮」 | —— | 已有索引，改造成本低收益高 |
-| **P1-5** | **记忆/知识库入口收敛** —— IA1/IA2 归一为「记忆」单一心智模型下的一组子视图 | —— | 消除「该去哪改」的判断成本 |
-| **P1-6** | **steer/排队意图可见化** —— 流式中发送时明确提示「将插入当前运行」vs「将排队」，并显示队列长度 | ChatGPT/Claude 队列态 | 能力已有，缺反馈 |
-| **P1-7** | **隐藏功能发现路径** —— 侧栏「更多」组给未解锁能力一个可见但灰态的入口（点击引导一次） | —— | `/office` 是核心差异化，不能只靠输 URL |
-| **P1-8** | **统一危险操作确认** —— 消除 `window.confirm` | 项目内既有惯例 | 视觉一致性 |
+| **P1-1** | 记忆 Pause / Reset 二分 | ✅ 已落地 | ① `autoMemory` 开关 desc 澄清「关闭只停止新增，已记住的仍保留」；② 新增 `ClearAllMemoriesSection` —— 统计条数 → 需输入「清除全部记忆」才放行 → 分页逐条删 → **失败数如实上报**。单条失败不中断整体，不谎称全部清除 |
+| **P1-2** | 临时对话（无痕） | ✅ 早已实现 | `Chat.tsx` sessionStorage + `isTempChat` 门控 |
+| **P1-3** | 模型切换后果预警 | ✅ 已落地 | `SessionModelPicker` 切换**前**预检：`getEffective`(目标窗口) + `fetchSessionUsage`(当前占用)，超 80% 才拦。**任一数据不可得就不拦** —— 宁可少拦，不可把正常切换变成阻碍 |
+| **P1-4** | 设置搜索锚点定位 | ⏸️ 未做 | 需给每个设置项加 DOM id，工作量大于预期 |
+| **P1-5** | 记忆/知识库入口收敛 | ⏸️ 未做 | 涉及 IA 重排，需先定信息架构再动代码 |
+| **P1-6** | steer/排队意图可见化 | ⏸️ 未做 | 需先确认 steering 与队列的真实分流行为 |
+| **P1-7** | 隐藏功能发现路径 | ⏸️ 未做 | `/office` 是核心差异化能力却默认不可见，价值高于 P1-4/5/6，建议下批优先 |
+| **P1-8** | 统一危险操作确认 | ✅ 已落地（范围比初判大） | 项目 R3 已引入 `confirmDialog` 服务（`src/shared/ui/ConfirmDialog/`，挂在 `AppProviders`），但仍有 **7 个文件 11 处 `window.confirm` 漏网**。全部替换：行内删除按钮走 `TwoStepDelete`（`AccountTable` 覆盖 Arena 两页 + `TodoPage`），设置页危险操作走 `confirmDialog`（`RemoteWorkspacesTab` 5 处 / `NetworkTab` / `ProvidersManager` / `ConversationsSection`）。**生产代码 `window.confirm(` 已归零** |
 
 ---
 

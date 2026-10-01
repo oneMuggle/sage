@@ -21,6 +21,7 @@ import {
   type RemoteWorkspace,
 } from '../../shared/api/remoteMcpApi';
 import { useI18n } from '../../shared/lib/i18n';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 import { SettingRow, Toggle } from './components';
 
@@ -104,12 +105,19 @@ export function RemoteWorkspacesTab() {
     void run(() => (on ? remoteMcpApi.startListener(value) : remoteMcpApi.stopListener()));
   };
 
-  const toggleTunnel = (on: boolean) => {
+  // P1-8: 用项目内 confirmDialog 服务取代 window.confirm —— 原生弹窗阻塞
+  // 主线程、不适配主题、按钮不可本地化（R3 引入该服务，本页是漏网之鱼）。
+  const toggleTunnel = async (on: boolean) => {
     if (!bridge) return;
-    if (on && !window.confirm(L(
-      '开启公网通道后，任何拿到地址的人都能以已授权的权限访问工作区。地址等同于密码。继续？',
-      'Anyone with the public URL can use the granted permissions. The URL is a password. Continue?',
-    ))) return;
+    if (on && !(await confirmDialog({
+      title: L('开启公网通道？', 'Open a public tunnel?'),
+      message: L(
+        '开启公网通道后，任何拿到地址的人都能以已授权的权限访问工作区。地址等同于密码。',
+        'Anyone with the public URL can use the granted permissions. The URL is a password.',
+      ),
+      confirmLabel: L('继续', 'Continue'),
+      danger: true,
+    }))) return;
     void run(() => (on ? bridge.startTunnel() : bridge.stopTunnel()));
   };
 
@@ -120,15 +128,23 @@ export function RemoteWorkspacesTab() {
     }, L('已急停：通道已关闭，所有调用被拒绝', 'Emergency stop: tunnel closed, all calls refused'));
   };
 
-  const setPermission = (ws: RemoteWorkspace, key: RemotePermission, value: boolean) => {
-    if (value && key === 'shell' && !window.confirm(L(
-      '命令执行不是沙箱，拥有当前 Windows 用户的全部权限。确定为该工作区开启？',
-      'Command execution is NOT sandboxed and runs with your full user rights. Enable for this workspace?',
-    ))) return;
-    if (value && key === 'write' && !window.confirm(L(
-      '开启后远端可以修改该目录下的文件（受保护路径除外）。确定？',
-      'Remote clients will be able to modify files in this folder (protected paths excluded). Continue?',
-    ))) return;
+  const setPermission = async (ws: RemoteWorkspace, key: RemotePermission, value: boolean) => {
+    if (value && key === 'shell' && !(await confirmDialog({
+      title: L('开启命令执行权限？', 'Enable command execution?'),
+      message: L(
+        '命令执行不是沙箱，拥有当前 Windows 用户的全部权限。确定为该工作区开启？',
+        'Command execution is NOT sandboxed and runs with your full user rights. Enable for this workspace?',
+      ),
+      danger: true,
+    }))) return;
+    if (value && key === 'write' && !(await confirmDialog({
+      title: L('开启写入权限？', 'Enable write access?'),
+      message: L(
+        '开启后远端可以修改该目录下的文件（受保护路径除外）。确定？',
+        'Remote clients will be able to modify files in this folder (protected paths excluded). Continue?',
+      ),
+      danger: true,
+    }))) return;
     void run(() => remoteMcpApi.updateWorkspace(ws.id, { permissions: { [key]: value } }));
   };
 
@@ -189,7 +205,7 @@ export function RemoteWorkspacesTab() {
         >
           <Toggle
             value={tunnelActive}
-            onChange={toggleTunnel}
+            onChange={(v) => void toggleTunnel(v)}
             disabled={busy || !bridge || !tunnel?.supported || (!tunnelActive && (!listenerRunning || paused))}
             testId="remote-mcp-tunnel-toggle"
           />
@@ -271,7 +287,7 @@ export function RemoteWorkspacesTab() {
                       data-testid={`remote-ws-perm-${key}-${ws.id}`}
                       checked={Boolean(ws.permissions[key])}
                       disabled={busy || key === 'read'}
-                      onChange={(e) => setPermission(ws, key, e.target.checked)}
+                      onChange={(e) => void setPermission(ws, key, e.target.checked)}
                     />
                     {permLabel[key]}
                   </label>
@@ -319,9 +335,18 @@ export function RemoteWorkspacesTab() {
                   className={BTN}
                   disabled={busy}
                   onClick={() => {
-                    if (window.confirm(L('重置后旧地址立即失效，已连接的会话会断开。继续？', 'The old URL stops working and sessions disconnect. Continue?'))) {
-                      void run(() => remoteMcpApi.rotateWorkspace(ws.id), L('已重置 token', 'Token rotated'));
-                    }
+                    void (async () => {
+                      if (await confirmDialog({
+                        title: L('重置访问 token？', 'Rotate access token?'),
+                        message: L(
+                          '重置后旧地址立即失效，已连接的会话会断开。',
+                          'The old URL stops working and sessions disconnect.',
+                        ),
+                        danger: true,
+                      })) {
+                        void run(() => remoteMcpApi.rotateWorkspace(ws.id), L('已重置 token', 'Token rotated'));
+                      }
+                    })();
                   }}
                 >
                   {L('重置 token', 'Rotate token')}
@@ -331,9 +356,18 @@ export function RemoteWorkspacesTab() {
                   className={`${BTN} text-error`}
                   disabled={busy}
                   onClick={() => {
-                    if (window.confirm(L(`移除工作区“${ws.name}”？`, `Remove workspace "${ws.name}"?`))) {
-                      void run(() => remoteMcpApi.deleteWorkspace(ws.id));
-                    }
+                    void (async () => {
+                      if (await confirmDialog({
+                        title: L('移除工作区？', 'Remove workspace?'),
+                        message: L(
+                          `移除工作区“${ws.name}”？`,
+                          `Remove workspace "${ws.name}"?`,
+                        ),
+                        danger: true,
+                      })) {
+                        void run(() => remoteMcpApi.deleteWorkspace(ws.id));
+                      }
+                    })();
                   }}
                 >
                   {L('移除', 'Remove')}
