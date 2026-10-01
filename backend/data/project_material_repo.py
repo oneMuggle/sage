@@ -4,7 +4,11 @@
 上下文使用。设计约束：
 
 - 按 (project_id, content_hash) 去重：同内容重复添加返回已有行；
-- 三态 status: pending_index (遗留索引状态) / ready (可用于上下文) / failed (失败)；
+- 三态 status: pending_index (待索引) / ready (已生效) / failed (失败)；
+  当前没有异步索引管线，add() 默认直接写 ready（P0 修复，2026-09-20：
+  此前硬编码 pending_index 且生产路径从不调用 mark_ready，资料永远不会
+  进入 system prompt）；pending_index / failed 与 mark_ready / mark_failed
+  保留给未来的异步索引（wiki ingest）接入；
 - source_message_id 可选，记录来源消息（save-answer 场景）；
 - content 直接存 SQLite（单资料上限 64 KB，避免大文档拖慢查询）；
 - get_active_materials_for_project 返回 ready 状态资料，按 created_at ASC
@@ -26,6 +30,16 @@ logger = logging.getLogger(__name__)
 
 #: 单资料内容上限 (字符数)。超出拒绝添加，避免大文档拖慢 SQLite 查询。
 MAX_MATERIAL_CONTENT_CHARS = 64_000
+
+#: 资料状态三态。ready 才会被 get_active_materials_for_project 注入。
+MATERIAL_STATUS_PENDING = "pending_index"
+MATERIAL_STATUS_READY = "ready"
+MATERIAL_STATUS_FAILED = "failed"
+VALID_MATERIAL_STATUSES = frozenset(
+    {MATERIAL_STATUS_PENDING, MATERIAL_STATUS_READY, MATERIAL_STATUS_FAILED}
+)
+#: add() 默认状态：资料内容直接落 SQLite、无索引步骤，添加即生效。
+DEFAULT_MATERIAL_STATUS = MATERIAL_STATUS_READY
 
 
 class ProjectMaterialContentTooLargeError(ValueError):
@@ -91,29 +105,63 @@ class ProjectMaterialRepository:
         content: str,
         source_message_id: Optional[str] = None,
         now_ms: Optional[int] = None,
+        *,
+        status: str = DEFAULT_MATERIAL_STATUS,
     ) -> ProjectMaterial:
         """添加资料，返回新建或已有行（按 project+hash 去重）。
 
+        默认以 ``ready`` 写入：资料内容直接存 SQLite 并由
+        ``get_active_materials_for_project`` 读取注入，中间没有任何异步
+        索引步骤，因此添加后必须立即生效。未来接入异步索引管线时，调用方
+        可显式传 ``status="pending_index"``，再由 ``mark_ready`` /
+        ``mark_failed`` 收尾。
+
+        去重命中的已有行若处于 ``failed`` 状态，会按本次请求的 status 复活
+        （清空 error_message），用户无需先删除再重新添加。
+
         Raises:
             ProjectMaterialContentTooLargeError: 内容超出上限。
+            ValueError: status 不在 VALID_MATERIAL_STATUSES 内。
         """
+        if status not in VALID_MATERIAL_STATUSES:
+            raise ValueError(
+                f"Invalid material status {status!r}; expected one of "
+                f"{sorted(VALID_MATERIAL_STATUSES)}"
+            )
         if len(content) > MAX_MATERIAL_CONTENT_CHARS:
             raise ProjectMaterialContentTooLargeError(
                 f"Material content exceeds {MAX_MATERIAL_CONTENT_CHARS} chars"
             )
 
-        self._repair_legacy_inline_materials(project_id)
         content_hash = _compute_content_hash(content)
         ts = int(time.time() * 1000) if now_ms is None else now_ms
         conn = self.db.get_connection()
 
-        # 幂等: 同 (project_id, content_hash) 返回已有行
+        # 幂等: 同 (project_id, content_hash) 返回已有行；failed 行按本次
+        # 请求的状态复活（重试语义），其余状态原样返回。
         existing = conn.execute(
             "SELECT * FROM project_materials WHERE project_id = ? AND content_hash = ?",
             (project_id, content_hash),
         ).fetchone()
         if existing is not None:
-            return _row_to_material(existing)
+            material = _row_to_material(existing)
+            if (
+                material.status == MATERIAL_STATUS_FAILED
+                and status != MATERIAL_STATUS_FAILED
+            ):
+                conn.execute(
+                    "UPDATE project_materials SET status = ?, error_message = NULL "
+                    "WHERE id = ?",
+                    (status, material.id),
+                )
+                conn.commit()
+                logger.info(
+                    "project material %s revived from failed to %s",
+                    material.id,
+                    status,
+                )
+                return self._get_or_raise(conn, material.id)
+            return material
 
         material_id = str(uuid.uuid4())
         conn.execute(
@@ -121,39 +169,34 @@ class ProjectMaterialRepository:
             INSERT INTO project_materials
                 (id, project_id, source_message_id, content_hash, content,
                  status, wiki_page_path, error_message, created_at)
-            VALUES (?, ?, ?, ?, ?, 'ready', NULL, NULL, ?)
+            VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)
             """,
-            (material_id, project_id, source_message_id, content_hash, content, ts),
+            (
+                material_id,
+                project_id,
+                source_message_id,
+                content_hash,
+                content,
+                status,
+                ts,
+            ),
         )
         conn.commit()
+        return self._get_or_raise(conn, material_id)
 
+    @staticmethod
+    def _get_or_raise(conn, material_id: str) -> ProjectMaterial:  # noqa: ANN001
+        """按 id 回读刚写入的行；写入后立即回读，不存在视为内部错误。"""
         row = conn.execute(
             "SELECT * FROM project_materials WHERE id = ?", (material_id,)
         ).fetchone()
         assert row is not None
         return _row_to_material(row)
 
-    def _repair_legacy_inline_materials(self, project_id: str) -> None:
-        """Only plain legacy text with no index target/error becomes usable.
-
-        No content is changed or removed; real index jobs and failed rows remain
-        untouched. This idempotent repair is scoped to the requested project.
-        """
-        conn = self.db.get_connection()
-        cursor = conn.execute(
-            """UPDATE project_materials SET status = 'ready'
-               WHERE project_id = ? AND status = 'pending_index'
-                 AND wiki_page_path IS NULL AND error_message IS NULL""",
-            (project_id,),
-        )
-        if cursor.rowcount:
-            conn.commit()
-
     def list_by_project(
         self, project_id: str, limit: int = 100
     ) -> List[ProjectMaterial]:
         """按项目列出资料，按 created_at DESC（新的在前）。"""
-        self._repair_legacy_inline_materials(project_id)
         conn = self.db.get_connection()
         rows = conn.execute(
             """
@@ -218,7 +261,6 @@ class ProjectMaterialRepository:
         self, project_id: str
     ) -> List[ProjectMaterial]:
         """返回 ready 状态资料，按 created_at ASC（旧的先注入），供上下文拼接。"""
-        self._repair_legacy_inline_materials(project_id)
         conn = self.db.get_connection()
         rows = conn.execute(
             """
@@ -232,8 +274,13 @@ class ProjectMaterialRepository:
 
 
 __all__ = [
+    "DEFAULT_MATERIAL_STATUS",
     "MAX_MATERIAL_CONTENT_CHARS",
+    "MATERIAL_STATUS_FAILED",
+    "MATERIAL_STATUS_PENDING",
+    "MATERIAL_STATUS_READY",
     "ProjectMaterial",
     "ProjectMaterialContentTooLargeError",
     "ProjectMaterialRepository",
+    "VALID_MATERIAL_STATUSES",
 ]
