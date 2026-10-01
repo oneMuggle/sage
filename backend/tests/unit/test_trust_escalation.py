@@ -47,14 +47,14 @@ class _StubRepo:
         self.values[key] = value
 
 
-@pytest.fixture
+@pytest.fixture()
 def stub_repo(monkeypatch):
     repo = _StubRepo()
     monkeypatch.setattr("backend.data.settings_repo.SettingsRepository", lambda: repo)
     return repo
 
 
-@pytest.fixture
+@pytest.fixture()
 def base_enforcer():
     return PermissionEnforcer(
         mode=PermissionMode.WORKSPACE_WRITE,
@@ -63,7 +63,7 @@ def base_enforcer():
     )
 
 
-@pytest.fixture
+@pytest.fixture()
 def trust_env(monkeypatch):
     """把信任数据源替换成可控桩：连续次数 / 会话 id / 落库记录。"""
 
