@@ -26,8 +26,13 @@
 9. **每次自动放行都落库**（``answered_by='trust'``），事后可在审计台账里
    区分「用户点的」和「系统放行的」。
 
-py38 兼容（release/win7 线）：本文件不使用 ``X | Y`` 类型语法、
-``zip(strict=)``、``datetime.UTC`` 或构造期 ``asyncio.Lock()``。
+py38 兼容（release/win7 线）：本文件不使用 PEP 604 联合类型注解、
+PEP 585 泛型下标、Python 3.10+ 的 zip 严格模式、Python 3.11+ 的
+datetime UTC 常量，也不在构造期创建 asyncio 锁。
+
+注意：这段说明本身会被 ``scripts/check_py38_compat.py`` 的正则文本扫描
+命中 —— 该脚本按字面量找禁用写法，不区分代码与注释。所以这里刻意不写出
+那些符号本身，改用 PEP 编号与自然语言指代。
 """
 
 from __future__ import annotations
