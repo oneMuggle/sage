@@ -271,6 +271,69 @@ CI 状态复查因此改走 REST + `Invoke-RestMethod`，不再依赖 `gh`。
 另：当天晚间本地代理（127.0.0.1:7890）曾中途掉线，导致 `git push` 与 `gh` 同时失败；
 直连可用时可用 `git -c http.proxy= -c https.proxy= push` 命令级绕过（不改配置）。
 
+### 7.3 补跑通道的能力边界：ci-rerun 满足不了 win7 的 5 个必需 check（2026-10-02）
+
+#1875（win7 轨交付号回填）的 `pull_request` 事件被静默丢弃（head SHA 上零
+workflow run），按 SOP §命令表用 `ci-rerun.yml` 补跑。跑出来 `All Checks` 是绿的，
+但 `PUT /pulls/1875/merge` 返回 405：
+
+```
+{"message":"5 of 5 required status checks are expected."}
+```
+
+根因：`release/win7` 的分支保护要求 5 个 check —— `Frontend (TypeScript)`、
+`Electron smoke (playwright-electron)`、`Backend (Python 3.8, Win7 LTS)`、
+`Electron build (windows-latest)`、`Electron build (ubuntu-latest)`。
+而 `ci-rerun.yml` 只定义了 backend / backend-py38 / dependency-audit / frontend /
+electron-smoke / all-green 六个 job，**没有 Electron build 矩阵**，补跑出来的
+check 集天然缺 2 个必需项，补多少次都补不齐。
+
+`ci.yml` 虽有 `workflow_dispatch`，但它不能单独顶替：手动触发时 `github.ref` 是
+特性分支而非 `refs/heads/release/win7`，`backend-py38` 的 `if`（`ci.yml:22`）
+两个条件都不成立，会被 skip 掉——于是缺的那一个必需 check 仍然缺。它只能作为
+「补 Electron build 矩阵」的那一半来用，见下。
+
+**「推新提交触发真 CI」这条路也走不通**：不只 `opened` 被丢，`synchronize`
+同样被丢。17:26 UTC 往分支推了一个提交，4 分钟内新 head SHA 上零 workflow run。
+所以推提交不能作为兜底。
+
+**实测可行的解法：两条补跑 workflow 叠加，check 集取并集。**
+
+1. `ci.yml`（`workflow_dispatch`，`ref` = PR 分支）—— `desktop-build` 是
+   job 级无条件运行（`ci.yml:491`，`if:` 只出现在 step 级），dispatch 下照样
+   产出 `Electron build (windows-latest)` / `Electron build (ubuntu-latest)`，
+   外加 `Frontend (TypeScript)`、`Electron smoke (playwright-electron)`、
+   `Architecture check`、`count-lines`。
+2. `ci-rerun.yml`（`ref` = PR 分支，`target` = `release/win7`）—— 补上唯一
+   还缺的 `Backend (Python 3.8, Win7 LTS)`（它的 job 体与 `ci.yml` 的
+   `backend-py38` 同源）。
+
+并集恰好覆盖 win7 的 5 个必需 check。
+
+另：打 `ci-rerun.yml` 的 dispatch 时，PowerShell `Invoke-RestMethod` 直连返回
+`422 Unprocessable Entity`（body 为空），同参数 `gh workflow run ci-rerun.yml
+-f ref=... -f target=...` 却成功。补跑通道优先用 `gh`；状态复查仍用 REST。
+
+**给后续会话的判据**：补跑后若 `All Checks` 绿但 `/merge` 报
+"N of N required status checks are expected"，先
+`GET /branches/<base>/protection/required_status_checks` 取必需 check 名，
+再与 head SHA 上的 check-runs 求差集——差集里缺的是哪几个 job，就去哪个
+workflow 里找它们是否根本没定义（本次即 `ci-rerun.yml` 缺 Electron build 矩阵），
+再按上面的叠加配方补齐。
+
+**顺带修正一处认知**：`main` 的必需 check 只有 3 个（`stub-smoke` /
+`stub-deep` / `live-boot`，全部由 `e2e-pr-gate.yml` 产出），`release/win7`
+是 5 个且含两个 Electron build。同一套补跑配方对 main 只需要
+`ci-rerun.yml`（`target=main`）一条，因为 `ci.yml` 正常触发的 PR run 自带
+全部三个。不要按 main 的经验推断 win7。
+
+**但 main 轨没有同样的兜底**：`e2e-pr-gate.yml` 只声明了 `pull_request`
+触发，**没有 `workflow_dispatch`**，所以三个必需 check 一旦被丢事件就没有
+任何补跑通道可用（本轮 #1876 侥幸触发成功）。若将来要在 main 上加
+`workflow_dispatch`，注意它的 `concurrency.group` 用了
+`github.event.pull_request.number || github.ref`，dispatch 时会落到 `github.ref`
+分支上，语义仍然安全。
+
 ## 8. 本轮交付的最终形态与遗留
 
 **已交付（双轨合并）**：批次 0、A、D 数据层、B-1/B-3/B-4、D UI 接线。左栏从
