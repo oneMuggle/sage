@@ -30,7 +30,7 @@ import time
 import uuid
 import weakref
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from sage_core import LLMError, Message, Role, ToolCall
 from sage_core.repositories import EventPort, LLMPort, MetricPort, SkillPort, StoragePort, ToolPort
@@ -128,8 +128,10 @@ class ChatService:
         permission_denied_tools: Optional[List[str]] = None,  # M3 黑名单
         wake_store: Optional[WakeStore] = None,  # A4 Suspend-Resume 唤醒仓储
         lifecycle: Optional[Any] = None,  # Task 4 / Gap A — optional MemoryLifecycleManager
+        context_window_resolver: Optional[Callable[[], Optional[int]]] = None,  # UX-IA R2-D
     ) -> None:
         self.llm = llm
+        self._context_window_resolver = context_window_resolver
         self.tools = tools
         self.skills = skills
         self.storage = storage
@@ -338,6 +340,9 @@ class ChatService:
         if activation_block:
             system_content += activation_block
             span.set_attribute("skills.auto_activated", True)
+
+        # 2.65) UX-IA R2-D: 注入上下文统一预算（与 legacy 同规则，fail-safe）
+        system_content = self._apply_context_budget(system_content, user_message.content or "")
 
         # Prepend system message to history
         system_msg = Message(role=Role.SYSTEM, content=system_content)
@@ -645,6 +650,20 @@ class ChatService:
         except Exception:
             pass
         return system_content
+
+    def _apply_context_budget(self, system_content: str, query: str) -> str:
+        """超出注入预算时按优先级截断（backend/chat/context_budget.py）；窗口未知 / 异常时原样返回。"""
+        resolver = self._context_window_resolver
+        if resolver is None:
+            return system_content
+        try:
+            from backend.chat.context_budget import apply_context_budget
+
+            new_content, _parts, _report = apply_context_budget(system_content, [], resolver(), query)
+            return new_content
+        except Exception as exc:  # noqa: BLE001 — 预算是增强逻辑
+            logger.debug(f"context budget skipped: {exc}")
+            return system_content
 
     def invalidate_session_snapshot(self, session_id: str) -> None:
         """丢弃指定 session 的 system prompt 静态段快照（下一轮重建）。
