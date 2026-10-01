@@ -3,7 +3,10 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { FEATURE_UNLOCK_STORAGE_KEY } from '../../../shared/lib/hooks/useFeatureUnlock';
+import {
+  FEATURE_DISABLE_STORAGE_KEY,
+  FEATURE_UNLOCK_STORAGE_KEY,
+} from '../../../shared/lib/hooks/useFeatureUnlock';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { Sidebar } from '../../../widgets/layout/Sidebar';
@@ -104,18 +107,26 @@ describe('ArenaAccountsToggle — Sidebar integration', () => {
       fireEvent.click(screen.getByTestId('toggle-arena-accounts'));
     });
     expect(screen.queryByText('Arena')).not.toBeInTheDocument();
+    // P1-7：显式关闭是完全隐藏，不是退回灰态——侧栏不应再劝导用户开启
+    expect(screen.queryByTestId('sidebar-locked-arena')).not.toBeInTheDocument();
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).not.toContain('arena-accounts');
+    const disabled = JSON.parse(
+      localStorage.getItem(FEATURE_DISABLE_STORAGE_KEY) as string,
+    ) as string[];
+    expect(disabled).toContain('arena-accounts');
   });
 
   it('turning the toggle on in settings makes the sidebar entry appear immediately', () => {
     renderBoth('/chat');
-    expect(screen.queryByText('Arena')).not.toBeInTheDocument();
+    // P1-7 契约：初始属「从未使用」→ 侧栏灰态入口常驻可见（可发现），但尚未解锁
+    expect(screen.getByTestId('sidebar-locked-arena')).toBeInTheDocument();
 
-    // 设置页 toggle on → 侧边栏入口出现
+    // 设置页 toggle on → 侧边栏入口由灰态锁定态转为可点击链接
     act(() => {
       fireEvent.click(screen.getByTestId('toggle-arena-accounts'));
     });
+    expect(screen.queryByTestId('sidebar-locked-arena')).not.toBeInTheDocument();
     expect(screen.getByText('Arena')).toBeInTheDocument();
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toContain('arena-accounts');

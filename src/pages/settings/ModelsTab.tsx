@@ -130,6 +130,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-text">模型参数</h3>
         <SettingRow
+          anchor="max_context"
           label="最大上下文长度"
           desc="单次对话发送给模型的最大 token 数；自动模式下此值不生效"
         >
@@ -146,6 +147,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         </SettingRow>
         {/* Task 6 (2026-09-15): 自动上下文开关 — 保留固定值 / 未知显示未知 */}
         <SettingRow
+          anchor="auto_context"
           label="自动推断上下文窗口"
           desc="开启时根据模型目录自动选择; 关闭时使用上方的固定值 (catalog 已知时取最小值)"
         >
@@ -162,6 +164,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
           </label>
         </SettingRow>
         <SettingRow
+          anchor="temperature"
           label="Temperature"
           desc="控制输出的随机性：数值越高越随机；0 最稳定，2 最随机。实际效果取决于模型实现"
         >
@@ -181,6 +184,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-text">模型目录管理</h3>
         <SettingRow
+          anchor="model_catalog"
           label="模型目录 (catalog)"
           desc="管理跨端点的模型价格/上下文窗口/能力标签 — 用户覆盖、快照审核、OpenRouter 同步"
         >

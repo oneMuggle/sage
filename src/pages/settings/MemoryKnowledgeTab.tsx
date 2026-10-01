@@ -218,6 +218,7 @@ function AutoCheckpointCard() {
     <section data-testid="auto-checkpoint-section">
       <h3 className="text-sm font-semibold text-text mb-3">安全网</h3>
       <SettingRow
+        anchor="auto_checkpoint"
         label="发送前自动快照"
         desc="每轮对话开始前为绑定的工作区创建检查点，可在变更面板一键回滚（默认开）"
       >
@@ -266,6 +267,7 @@ function SpendLimitInput(): JSX.Element {
 
   return (
     <SettingRow
+      anchor="spend_limit"
       label="每日花费限额 (USD)"
       desc="按估算成本拦截当日请求；0 或留空 = 不限。保存即生效"
     >
@@ -292,12 +294,13 @@ export function MemoryKnowledgeTab() {
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>
         <SettingRow
+          anchor="autoMemory"
           label="自动记忆提取"
           desc="对话中自动识别并保存关键信息到记忆库。关闭只停止新增，已记住的内容仍保留——彻底清除请用下方「清除全部记忆」。"
         >
           <Toggle value={settings.autoMemory} onChange={(v) => updateSettings({ autoMemory: v })} />
         </SettingRow>
-        <SettingRow label="确认后再删除记忆" desc="删除记忆前弹出确认对话框">
+        <SettingRow anchor="confirmDelete" label="确认后再删除记忆" desc="删除记忆前弹出确认对话框">
           <Toggle
             value={settings.confirmDelete}
             onChange={(v) => updateSettings({ confirmDelete: v })}

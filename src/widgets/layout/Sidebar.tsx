@@ -30,7 +30,7 @@ import { useSettings } from '../../features/manage-settings/useSettings';
 import { deleteSessionCascade } from '../../features/send-message/useChat';
 import { sessionApi } from '../../shared/api/sessionApi';
 import { requestOpenCommandPalette } from '../../shared/lib/commandPaletteEvents';
-import { unlockFeature, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
+import { unlockFeature, useFeatureExplicitlyDisabled, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import { AttnBadge, BrandLogo, LiveDot, Tooltip, type LiveState } from '../../shared/ui';
@@ -79,6 +79,23 @@ const moreNavItems: NavItem[] = [
 ];
 const navItems = [...primaryNavItems, ...moreNavItems, settingsNavItem];
 const MORE_OPEN_KEY = 'sage:sider:more-open:v1';
+
+/**
+ * P1-7: 未解锁高级入口的一句话说明。
+ *
+ * 渐进式披露原本把 office / orchestration / arena 直接 `return null` 藏掉 ——
+ * 结果是"功能不存在"的错觉：`/office` 是本项目核心差异化能力（能按格式规范
+ * 直接交稿），却只能靠输 URL 或命令面板发现。
+ *
+ * 改为**可见但灰态**：入口常驻可见 → 点击给出用途说明 → 确认后解锁进入。
+ * 仍保持「默认不抢占一级导航」的设计意图（只在「更多」分组内灰态展示），
+ * 但把"不可发现"换成"可发现 + 有引导"。
+ */
+const LOCKED_FEATURE_HINTS: Record<string, string> = {
+  office: '按格式规范直接生成 / 校验 / 修复 Word、Excel、PPT、PDF 交付稿',
+  orchestration: '多代理任务编排：并行子代理、进度时间线、人工干预',
+  'arena-accounts': '多账号自动化调度与观察',
+};
 
 function readMoreOpen(): boolean {
   try {
@@ -177,6 +194,27 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
     orchestration: orchestrationUnlocked,
     office: officeUnlocked,
     'arena-accounts': arenaAccountsUnlocked,
+  };
+
+  // P1-7: 「用户显式关闭」与「从未使用」是两种不同的不可见 —— 前者尊重用户
+  // 意图完全隐藏（设置里点了 OFF），后者灰态可见 + 用途引导（解决"功能不存在"
+  // 的错觉）。混为一谈会让用户关掉 Arena 后仍被灰态入口反复提示。
+  const orchestrationDisabled = useFeatureExplicitlyDisabled('orchestration');
+  const officeDisabled = useFeatureExplicitlyDisabled('office');
+  const arenaDisabled = useFeatureExplicitlyDisabled('arena-accounts');
+  const disabledByFeature: Record<string, boolean> = {
+    orchestration: orchestrationDisabled,
+    office: officeDisabled,
+    'arena-accounts': arenaDisabled,
+  };
+
+  // P1-7: 等待确认解锁的高级入口（灰态可见 → 点开说明 → 确认进入）。
+  const [pendingFeature, setPendingFeature] = useState<{ key: string; path: string } | null>(null);
+  const confirmPendingFeature = (): void => {
+    if (!pendingFeature) return;
+    unlockFeature(pendingFeature.key);
+    setPendingFeature(null);
+    navigate(pendingFeature.path);
   };
 
   useEffect(() => {
@@ -466,9 +504,37 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
             {moreExpanded &&
               moreNavItems.map((item) => {
                 const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
-                if (featureKey && !unlockedByFeature[featureKey]) return null;
+                // 用户显式关闭 → 完全隐藏（尊重用户意图，不做灰态劝导）
+                if (featureKey && disabledByFeature[featureKey]) return null;
+                const locked = Boolean(featureKey) && !unlockedByFeature[featureKey];
                 const isActive = location.pathname === item.path;
                 const Icon = item.icon;
+                const label =
+                  item.labelKey === 'sidebar.nav.agents' ? t('sidebar.nav.agents') : item.label;
+
+                // P1-7: 锁定项不再直接隐藏 —— 灰态常驻可见，点击给出用途说明。
+                // （一级导航区仍按原逻辑 return null，灰态只出现在「更多」分组内，
+                //   以免高级能力与高频入口抢注意力。）
+                if (locked) {
+                  return (
+                    <button
+                      key={item.path}
+                      type="button"
+                      data-testid={`sidebar-locked-${item.path.slice(1)}`}
+                      data-locked="true"
+                      aria-label={`${label}（未启用）`}
+                      onClick={() => setPendingFeature({ key: featureKey, path: item.path })}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-radius-sm text-sm font-medium text-text-tertiary hover:text-text-secondary hover:bg-bg-hover transition-colors text-left"
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span className="truncate">{label}</span>
+                      <span className="ml-auto text-[10px] uppercase tracking-wide shrink-0">
+                        {t('sidebar.lockedBadge')}
+                      </span>
+                    </button>
+                  );
+                }
+
                 return (
                   <Link
                     key={item.path}
@@ -481,14 +547,45 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
                     )}
                   >
                     <Icon className="w-4 h-4" />
-                    <span>
-                      {item.labelKey === 'sidebar.nav.agents'
-                        ? t('sidebar.nav.agents')
-                        : item.label}
-                    </span>
+                    <span>{label}</span>
                   </Link>
                 );
               })}
+
+            {/* P1-7: 高级功能用途说明 —— 确认后解锁并进入，避免"功能不存在"的错觉。 */}
+            {pendingFeature && (
+              <div
+                className="mx-2 my-1 p-2 rounded-radius-sm border border-border bg-surface text-[11px] text-text-secondary"
+                data-testid="sidebar-feature-hint"
+                role="dialog"
+                aria-label={t('sidebar.lockedHintTitle')}
+              >
+                <div className="font-medium text-text mb-0.5">
+                  {t('sidebar.lockedHintTitle')}
+                </div>
+                <p className="mb-1.5 leading-relaxed">
+                  {LOCKED_FEATURE_HINTS[pendingFeature.key] ?? t('sidebar.lockedHintGeneric')}
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    data-testid="sidebar-feature-hint-open"
+                    onClick={confirmPendingFeature}
+                    className="px-2 py-0.5 rounded border border-primary text-primary hover:bg-primary/10"
+                  >
+                    {t('sidebar.lockedHintOpen')}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="sidebar-feature-hint-dismiss"
+                    onClick={() => setPendingFeature(null)}
+                    className="px-2 py-0.5 rounded border border-border text-text-tertiary hover:text-text"
+                  >
+                    {t('sidebar.lockedHintDismiss')}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

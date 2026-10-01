@@ -55,6 +55,7 @@ function PermissionModeSelector() {
   return (
     <>
       <SettingRow
+        anchor="permission_mode"
         label={t('settings.permission.mode')}
         desc={t(`settings.permission.mode.${mode}.desc` as TranslationKey)}
       >
@@ -105,6 +106,7 @@ function FallbackModelInput(): JSX.Element {
 
   return (
     <SettingRow
+      anchor="fallback_model"
       label="降级模型 (fallback)"
       desc="主模型重试耗尽（限流/服务端错误/超时）后自动切换到此模型；留空 = 不降级"
     >

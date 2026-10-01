@@ -78,6 +78,19 @@ interface ActiveStreamHandle {
   finish: (() => void) | null;
 }
 
+/**
+ * P1-6: 排队待发的一条消息。
+ *
+ * `id` 是 P1-6 新增的 —— 撤回操作需要稳定标识，不能用数组下标：
+ * 队列在自动 flush 与用户撤回之间并发变化，下标会指向错误的条目。
+ */
+interface PendingChatMessage {
+  id: string;
+  content: string;
+  sid?: string;
+  orchestrationMode?: ChatConfig['orchestrationMode'];
+}
+
 // A1 (parity-s4): module-level registry of live stream handles.
 // Handles used to live only in the hook ref, so a background session stream
 // could be watched but never cancelled after leaving the Chat page.
@@ -162,13 +175,33 @@ export function useChat() {
   // 结束(onDone)后自动发送。错误/中断路径不自动 flush——连续失败场景
   // 自动重发只会重复报错。S3: 队列按会话隔离,A 队列的消息不会在 B 的
   // 流结束后被误发。
-  const pendingMessagesRef = useRef<
-    Array<{
-      content: string;
-      sid?: string;
-      orchestrationMode?: ChatConfig['orchestrationMode'];
-    }>
-  >([]);
+  //
+  // P1-6: 补 `id` + state 镜像 —— 队列原本只活在 ref 里,唯一的用户可见
+  // 信号是一条 4 秒即逝的 toast。连续发 3 条时用户既看不到队列、也撤不掉,
+  // 更严重的是错误/中断路径不 flush → 这些消息变成"僵尸队列"静默滞留,
+  // 可能在很久之后被下一条正常流意外带发。透明可控原则要求队列常驻可见。
+  const pendingMessagesRef = useRef<PendingChatMessage[]>([]);
+  // ref 仍是 sendMessage / onDone 读写的真相来源（异步回调里读 state 会拿到
+  // 陈旧快照）；state 只服务渲染。两侧必须经 setPending 同步，禁止直改 ref。
+  const [pendingMessages, setPendingMessages] = useState<PendingChatMessage[]>([]);
+  const setPending = useCallback((next: PendingChatMessage[]): void => {
+    pendingMessagesRef.current = next;
+    setPendingMessages(next);
+  }, []);
+  /** 撤回单条已排队消息（不发送、不留痕）。 */
+  const cancelPending = useCallback(
+    (id: string): void => {
+      setPending(pendingMessagesRef.current.filter((p) => p.id !== id));
+    },
+    [setPending],
+  );
+  /** 清空某会话的排队消息（不发送、不留痕）。 */
+  const clearPendingForSession = useCallback(
+    (sid: string): void => {
+      setPending(pendingMessagesRef.current.filter((p) => p.sid !== sid));
+    },
+    [setPending],
+  );
   const sendMessageRef = useRef<typeof sendMessage | null>(null);
 
   // 流式当前 assistant 消息的内容覆盖 (派生 messages 的最后一条) —— 2026-08-19
@@ -307,7 +340,10 @@ export function useChat() {
           }
         }
         // U5: 忙时不再丢弃消息——入队,当前回复自然结束后自动发送
-        pendingMessagesRef.current.push({ content, sid, orchestrationMode });
+        setPending([
+          ...pendingMessagesRef.current,
+          { id: crypto.randomUUID(), content, sid, orchestrationMode },
+        ]);
         toast.info('已加入队列,当前回复完成后自动发送');
         return;
       }
@@ -575,7 +611,8 @@ export function useChat() {
           const pending = pendingMessagesRef.current;
           const idx = pending.findIndex((p) => p.sid === sid);
           if (idx >= 0) {
-            const [next] = pending.splice(idx, 1);
+            const next = pending[idx];
+            setPending([...pending.slice(0, idx), ...pending.slice(idx + 1)]);
             window.setTimeout(() => {
               void sendMessageRef.current?.(
                 next.content,
@@ -1252,6 +1289,15 @@ export function useChat() {
     preflightPhase,
     /** PM2: 清除计划批准状态（批准执行或忽略时调用） */
     clearPlanApproval: useCallback(() => setPlanApprovalFor(null), []),
+    /**
+     * P1-6: 已排队待发的消息（跨会话混合）—— 供 UI 常驻展示与撤回。
+     * 队列会在当前回复结束后自动连发，用户必须能在真正发出去之前反悔。
+     */
+    pendingMessages,
+    /** P1-6: 撤回单条排队消息（不发送、不留痕） */
+    cancelPending,
+    /** P1-6: 清空某会话的排队消息（不发送、不留痕） */
+    clearPendingForSession,
     reattachActiveStream,
   };
 }

@@ -18,6 +18,14 @@ export interface SettingRowProps {
   label: string;
   desc?: string;
   children: React.ReactNode;
+  /**
+   * P1-4: 设置搜索锚点。填 `settingsSearchIndex.ts` 里该条目登记的 `key`，
+   * 点击搜索结果时可滚动定位 + 高亮到这一行。
+   *
+   * 不填不渲染该属性 —— 未登记锚点的行不受影响，定位逻辑找不到时静默降级
+   * 为「只切 tab」，保持既有行为。
+   */
+  anchor?: string;
 }
 
 export interface ToggleProps {
@@ -30,9 +38,12 @@ export interface ToggleProps {
 
 // ==================== 共用组件 ====================
 
-export function SettingRow({ label, desc, children }: SettingRowProps) {
+export function SettingRow({ label, desc, children, anchor }: SettingRowProps) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-border">
+    <div
+      data-settings-anchor={anchor}
+      className="flex items-center justify-between py-3 border-b border-border"
+    >
       <div>
         <div className="text-sm text-text">{label}</div>
         {desc ? <div className="text-xs text-muted mt-0.5">{desc}</div> : null}

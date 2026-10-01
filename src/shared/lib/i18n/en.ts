@@ -130,6 +130,13 @@ export const en: Record<TranslationKey, string> = {
   'chat.atEntity.agent': 'Agent',
   'chat.atEntity.agent.desc': '@agent:name — reference this agent’s persona',
   'sidebar.more': 'More',
+  // P1-7: advanced entries stay visible but dimmed — progressive disclosure
+  // should not read as "this feature does not exist".
+  'sidebar.lockedBadge': 'Off',
+  'sidebar.lockedHintTitle': 'Advanced feature',
+  'sidebar.lockedHintOpen': 'Open',
+  'sidebar.lockedHintDismiss': 'Not now',
+  'sidebar.lockedHintGeneric': 'Once enabled, the entry stays in the sidebar.',
   'prompt.saved': 'Saved as a prompt template (reusable via /tpl-)',
   'prompt.save_empty': 'Type the prompt content after /prompt-save',
   'prompt.save_failed': 'Failed to save template',

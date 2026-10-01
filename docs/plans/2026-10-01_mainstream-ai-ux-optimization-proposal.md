@@ -204,10 +204,10 @@ Sage 的记忆存本地 SQLite + ChromaDB，**架构上比 Claude 更可审计�
 | **P1-1** | 记忆 Pause / Reset 二分 | ✅ 已落地 | ① `autoMemory` 开关 desc 澄清「关闭只停止新增，已记住的仍保留」；② 新增 `ClearAllMemoriesSection` —— 统计条数 → 需输入「清除全部记忆」才放行 → 分页逐条删 → **失败数如实上报**。单条失败不中断整体，不谎称全部清除 |
 | **P1-2** | 临时对话（无痕） | ✅ 早已实现 | `Chat.tsx` sessionStorage + `isTempChat` 门控 |
 | **P1-3** | 模型切换后果预警 | ✅ 已落地 | `SessionModelPicker` 切换**前**预检：`getEffective`(目标窗口) + `fetchSessionUsage`(当前占用)，超 80% 才拦。**任一数据不可得就不拦** —— 宁可少拦，不可把正常切换变成阻碍 |
-| **P1-4** | 设置搜索锚点定位 | ⏸️ 未做 | 需给每个设置项加 DOM id，工作量大于预期 |
+| **P1-4** | 设置搜索锚点定位 | ✅ 已落地 | ① 共享 `SettingRow` 新增可选 `anchor` prop → 渲染 `data-settings-anchor`；② `Settings.tsx` 点击搜索结果后记下 anchor，**等目标 tab 渲染完**再 `scrollIntoView` + 一次性高亮（`.settings-anchor-flash`，尊重 `prefers-reduced-motion`）；③ 已在 Basic/General/MemoryKnowledge/Memory/Models/Network/Orchestration/ToolsConnections 共登记 **30+ 锚点**（编排 tab 一屏 15 项，问题最集中）。**未登记锚点的条目静默降级为「只切 tab」** —— 整 tab 级条目（端点/MCP/Zotero…）本就无需定位。`scrollIntoView` 已守卫（jsdom 未实现） |
 | **P1-5** | 记忆/知识库入口收敛 | ⏸️ 未做 | 涉及 IA 重排，需先定信息架构再动代码 |
-| **P1-6** | steer/排队意图可见化 | ⏸️ 未做 | 需先确认 steering 与队列的真实分流行为 |
-| **P1-7** | 隐藏功能发现路径 | ⏸️ 未做 | `/office` 是核心差异化能力却默认不可见，价值高于 P1-4/5/6，建议下批优先 |
+| **P1-6** | steer/排队意图可见化 | ✅ 已落地 | 核实结论：steer 已有 toast 反馈且立即生效，**不需要 UI**；真正的洞是**队列** —— 原本只活在 `useChat` 的 ref 里，唯一信号是 4 秒即逝的 toast，用户既看不到也撤不掉。更严重的是错误/中断路径刻意不 flush → 消息变成「僵尸队列」静默滞留，可能被下一条无关流意外带发。改为：队列加稳定 `id` + state 镜像（ref 仍是异步回调的真相来源），新增 `PendingQueueStrip` 常驻在输入框上方，显示条数/内容、**逐条撤回 + 全部清空**，并写明「当前回复结束后自动发送」 |
+| **P1-7** | 隐藏功能发现路径 | ✅ 已落地 | `/office` 是核心差异化能力却默认 `return null` 藏起来，只能靠输 URL 发现。改为「更多」分组内**灰态常驻可见** + 点击给出用途说明卡（`LOCKED_FEATURE_HINTS`）→ 确认后解锁进入。**关键语义修正**（被既有 `ArenaAccountsToggle` 集成测试逼出）：必须区分「用户显式关闭」与「从未使用」—— 前者完全隐藏（尊重用户意图），后者灰态劝导。为此新增 `FEATURE_DISABLE_STORAGE_KEY` 独立追踪 + `useFeatureExplicitlyDisabled` hook |
 | **P1-8** | 统一危险操作确认 | ✅ 已落地（范围比初判大） | 项目 R3 已引入 `confirmDialog` 服务（`src/shared/ui/ConfirmDialog/`，挂在 `AppProviders`），但仍有 **7 个文件 11 处 `window.confirm` 漏网**。全部替换：行内删除按钮走 `TwoStepDelete`（`AccountTable` 覆盖 Arena 两页 + `TodoPage`），设置页危险操作走 `confirmDialog`（`RemoteWorkspacesTab` 5 处 / `NetworkTab` / `ProvidersManager` / `ConversationsSection`）。**生产代码 `window.confirm(` 已归零** |
 
 ---
@@ -222,7 +222,7 @@ Sage 的记忆存本地 SQLite + ChromaDB，**架构上比 Claude 更可审计�
 | **P2-4** | **计划预览（plan-and-execute）** —— 执行前展示可编辑步骤 | `POST /orch/plan-items`（`:564`）UI 已删 | 2026 主流原语 |
 | **P2-5** | **渐进式授权** —— 连续批准 N 次后对常规操作自动放行（带通知） | 需信任度状态机 | progressive delegation |
 | **P2-6** | **运行后摘要** —— 完成时给「改了什么/碰了什么/为什么/哪些失败」 | 需聚合 | post-action summary |
-| **P2-7** | **EvolutionPanel 文案修正** —— 现文案「已由后台自动调度，无需手动操作」直接否定「需人审批」主张 | 纯文案 | 哲学一致性 |
+| **P2-7** | **EvolutionPanel 文案修正** | ✅ 已落地 | 核实后确认原文案确属误导：技能演化**只产出草稿**，需在「技能」页逐条 approve/reject（`legacy_skill_draft_routes.py:102,244`），并非「无需手动操作」。改为如实分两层陈述：5 个维护任务自动调度 vs 技能草稿需人审批，并指明审批入口在哪 |
 
 ---
 

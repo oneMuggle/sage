@@ -25,7 +25,13 @@ import type { BlockedAction, Message as MessageType } from '../shared/lib/store'
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { LoadingState } from '../shared/ui/LoadingState';
-import { ActiveAgentIndicator, ChatInput, MessageList, SubagentLivePanel } from '../widgets/chat';
+import {
+  ActiveAgentIndicator,
+  ChatInput,
+  MessageList,
+  PendingQueueStrip,
+  SubagentLivePanel,
+} from '../widgets/chat';
 import { ChatInlineError } from '../widgets/chat/ChatInlineError';
 import { CHAT_NOTICE_PRIORITY, ChatNoticeStack } from '../widgets/chat/ChatNoticeStack';
 import { ContextMeter } from '../widgets/chat/ContextMeter';
@@ -87,6 +93,9 @@ export function Chat() {
     planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
     preflightPhase, // Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示）
     clearPlanApproval, // PM2: 清除批准状态
+    pendingMessages, // P1-6: 排队待发消息（会自动连发，需可见可撤）
+    cancelPending, // P1-6: 撤回单条排队消息
+    clearPendingForSession, // P1-6: 清空本会话排队消息
   } = useChat();
   // P1 (UI 优化方案 2026-09-13): 开关状态持久化 —— 重启恢复上次的面板开合
   // right-panel R1 批次 A: 开合上抬 rightPanelStore（自动唤起/内联卡片需要
@@ -1204,6 +1213,18 @@ export function Chat() {
           {/* TM2 (DSH 对标 R11): 上下文水位徽章（≥0.6 才渲染） */}
           <ContextPressureBadge sessionId={currentSessionId} />
           <KeyboardShortcutsHelp />
+          {/* P1-6: 排队队列常驻可见。放在输入框正上方 —— 队列会在当前回复
+              结束后自动连发，用户必须能在真正发出去之前看见并撤回。
+              只展示当前会话的条目（队列按会话隔离，见 useChat S3）。 */}
+          <PendingQueueStrip
+            items={pendingMessages
+              .filter((p) => p.sid === currentSessionId)
+              .map((p) => ({ id: p.id, content: p.content }))}
+            onCancel={cancelPending}
+            onClearAll={() => {
+              if (currentSessionId) clearPendingForSession(currentSessionId);
+            }}
+          />
           <ChatInput
             onSend={handleSendMessageWithEditResend}
             onInterrupt={interrupt}

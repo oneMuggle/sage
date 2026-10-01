@@ -10,7 +10,7 @@
 
 import { clsx } from 'clsx';
 import { Search } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
@@ -63,6 +63,11 @@ export function Settings() {
     }
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
+  // P1-4: 待定位的设置项锚点。点击搜索结果时写入，在目标 tab 渲染完成后
+  // 消费一次。用 ref 而非 state —— 它不是渲染输入，只是一条「下一帧要做的事」。
+  const pendingAnchorRef = useRef<string | null>(null);
+  // 每次点击搜索结果自增，驱动锚点定位 effect（不能用 activeTab：见 jumpToItem）。
+  const [jumpToken, setJumpToken] = useState(0);
   const { settings, updateSettings, resetSettings } = useSettings();
   const { t, locale } = useI18n();
 
@@ -102,7 +107,35 @@ export function Settings() {
   const jumpToItem = (item: SettingsSearchEntry): void => {
     setActiveTab(item.tab);
     setSearchQuery('');
+    // P1-4: 切 tab 之后才定位 —— 目标行此刻才刚挂载。定位失败（该条目是
+    // 整 tab 级、或调用方忘了登记 anchor）时静默降级为「只切 tab」，
+    // 与 P1-4 之前的行为完全一致，不报错也不空手。
+    pendingAnchorRef.current = item.key;
+    // 用自增 token 触发定位，而不是依赖 [activeTab] —— 命中项就在当前 tab 时
+    // activeTab 不变，effect 不会重跑，定位会被静默吞掉。
+    setJumpToken((n) => n + 1);
   };
+
+  // P1-4: 目标 tab 渲染完成后消费锚点 —— 滚动到该行并短暂高亮。
+  // 走 setTimeout(0) 而非直接在 effect 里查：目标行属于刚刚挂载的子树，
+  // effect 执行时 DOM 尚未可用，下一帧才稳定。
+  useEffect(() => {
+    const anchorKey = pendingAnchorRef.current;
+    if (!anchorKey) return;
+    pendingAnchorRef.current = null;
+    const handle = window.setTimeout(() => {
+      const selector = `[data-settings-anchor="${CSS.escape(anchorKey)}"]`;
+      const target = document.querySelector(selector);
+      if (!target) return; // 未登记锚点 → 静默降级为「只切 tab」
+      // scrollIntoView 在 jsdom 中未实现 —— 必须守卫，否则测试环境直接抛错。
+      if (typeof target.scrollIntoView === 'function') {
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+      target.classList.add('settings-anchor-flash');
+      window.setTimeout(() => target.classList.remove('settings-anchor-flash'), 2000);
+    }, 0);
+    return () => window.clearTimeout(handle);
+  }, [jumpToken]);
 
   return (
     <div className="flex-1 flex overflow-hidden">

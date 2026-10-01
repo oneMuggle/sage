@@ -80,9 +80,12 @@ describe('Sidebar — "更多" group (S3 nav convergence)', () => {
     expect(screen.getByTestId('sidebar-more-toggle')).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('still respects progressive disclosure inside the group', () => {
+  it('P1-7: 组内未解锁入口灰态可见（渐进式披露不再等于隐藏）', () => {
     renderSidebarAt('/chat');
-    expect(screen.queryByText('编排')).not.toBeInTheDocument();
+    // 灰态但可见 —— 用户能知道「编排」这个能力存在
+    expect(screen.getByTestId('sidebar-locked-orchestration')).toBeInTheDocument();
+    // 灰态条目不是链接：未解锁时不应直接可导航
+    expect(screen.queryByRole('link', { name: /编排/ })).toBeNull();
     localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['orchestration']));
   });
 });

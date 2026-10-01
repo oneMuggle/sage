@@ -392,6 +392,7 @@ export function NetworkTab() {
           {t('settings.section.network.access')}
         </h3>
         <SettingRow
+          anchor="network_policy"
           label={t('settings.network.mode')}
           desc={t(`settings.network.mode.${policy.mode}.desc` as TranslationKey)}
         >
@@ -446,7 +447,11 @@ export function NetworkTab() {
           {t('settings.section.network.fetch')}
         </h3>
         {/* F1 抓取代理（Round 2 批次2 后端：web_proxy KV，逐调用现读即时生效） */}
-        <SettingRow label={t('settings.network.proxy')} desc={t('settings.network.proxy.hint')}>
+        <SettingRow
+          anchor="web_proxy"
+          label={t('settings.network.proxy')}
+          desc={t('settings.network.proxy.hint')}
+        >
           <div className="flex flex-col gap-1 w-64" data-testid="proxy-fields">
             <input
               data-testid="proxy-http-input"
@@ -475,7 +480,11 @@ export function NetworkTab() {
         </SettingRow>
 
         {/* F2 搜索引擎（Round 1 批次1 后端：search_config KV，key 落库自动加密） */}
-        <SettingRow label={t('settings.network.search')} desc={t('settings.network.search.hint')}>
+        <SettingRow
+          anchor="search_config"
+          label={t('settings.network.search')}
+          desc={t('settings.network.search.hint')}
+        >
           <div className="flex flex-col gap-1 w-64" data-testid="search-fields">
             <select
               data-testid="search-first-engine"

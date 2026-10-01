@@ -127,6 +127,12 @@ export const zh = {
   'chat.atEntity.agent': '智能体',
   'chat.atEntity.agent.desc': '@agent:名称 —— 引用该智能体的角色设定',
   'sidebar.more': '更多',
+  // P1-7: 高级入口灰态可见（渐进式披露不再等于「功能不存在」）
+  'sidebar.lockedBadge': '未启用',
+  'sidebar.lockedHintTitle': '这是一个高级功能',
+  'sidebar.lockedHintOpen': '打开',
+  'sidebar.lockedHintDismiss': '暂不',
+  'sidebar.lockedHintGeneric': '启用后入口会常驻侧栏。',
   'prompt.saved': '已存为提示词模板（/tpl- 开头可复用）',
   'prompt.save_empty': '请在 /prompt-save 后输入要保存的提示词内容',
   'prompt.save_failed': '模板保存失败',
