@@ -2,8 +2,17 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { useScheduledTaskStore } from '../../entities/scheduled/taskStore';
-import type { CreateTaskInput, ScheduledTask } from '../../shared/api/types';
+import { skillsApi } from '../../shared/api/skillsApi';
+import type { CreateTaskInput, ScheduledTask, Skill } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
+
+import {
+  insertSkillRef,
+  invalidRefLabels,
+  parseSkillRefs,
+  removeSkillRef,
+  validateSkillRefs,
+} from './skillLink';
 
 import { CronExpressionPicker } from './CronExpressionPicker';
 import { validateCronExpression, validateOneShotTimestamp } from './cronValidator';
@@ -52,6 +61,10 @@ export function CreateTaskModal({
   const [targetSession, setTargetSession] = useState(task?.session_id ?? sessionId);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [skills, setSkills] = useState<Skill[] | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
+  // 技能列表不可用时（IPC 失败/无权限）不假装校验通过：直接标为不可用。
+  const skillsUnavailable = skills === null;
 
   useEffect(() => {
     if (!open) return;
@@ -86,7 +99,39 @@ export function CreateTaskModal({
       ? { ok: true as const }
       : validateOneShotTimestamp(atMs);
 
+  // 技能列表加载失败时不阻塞保存，只提示无法校验。
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    try {
+      skillsApi
+        .list()
+        .then((list) => {
+          if (!cancelled) setSkills(list);
+        })
+        .catch(() => {
+          if (!cancelled) setSkills(null);
+        });
+    } catch {
+      if (!cancelled) setSkills(null);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const refs = useMemo(() => parseSkillRefs(content), [content]);
+  const skillRefs = useMemo(() => validateSkillRefs(content, skills ?? []), [content, skills]);
+  const invalidRefs = skillsUnavailable
+    ? []
+    : invalidRefLabels(skillRefs, t('scheduled.skill.unknown'), t('scheduled.skill.disabled'));
+  const invalidKey = invalidRefs.join('|');
+  useEffect(() => {
+    setAcknowledged(false);
+  }, [invalidKey]);
+
   const canSubmit =
+    (invalidRefs.length === 0 || acknowledged) &&
     name.trim().length > 0 &&
     content.trim().length > 0 &&
     targetSession.length > 0 &&
@@ -237,6 +282,75 @@ export function CreateTaskModal({
             className="border border-border rounded-radius-sm px-2 py-1.5 text-sm bg-bg resize-none"
           />
         </label>
+
+        <div
+          className="flex flex-col gap-1.5 text-xs text-text-secondary"
+          data-testid="scheduled-skill-link"
+        >
+          <span>{t('scheduled.skill.title')}</span>
+          <span className="text-[11px] text-text-muted">{t('scheduled.skill.hint')}</span>
+          {skillsUnavailable ? (
+            <span className="text-[11px] text-warning" data-testid="scheduled-skill-unavailable">
+              {t('scheduled.skill.list_unavailable')}
+            </span>
+          ) : null}
+          {refs.length > 0 ? (
+            <span className="flex flex-wrap gap-1.5">
+              {refs.map((name) => (
+                <span
+                  key={name}
+                  className="flex items-center gap-1 rounded bg-bg-muted px-1.5 py-0.5"
+                  data-testid="scheduled-skill-chip"
+                >
+                  <span className="font-mono">/{name}</span>
+                  <button
+                    type="button"
+                    className="text-[10px] text-text-muted hover:text-text-primary"
+                    onClick={() => setContent((current) => removeSkillRef(current, name))}
+                  >
+                    {t('scheduled.skill.remove')}
+                  </button>
+                </span>
+              ))}
+            </span>
+          ) : null}
+          <select
+            value=""
+            data-testid="scheduled-skill-select"
+            className="border border-border rounded-radius-sm px-2 py-1.5 text-sm bg-bg"
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value) setContent((current) => insertSkillRef(current, value));
+            }}
+          >
+            <option value="">{t('scheduled.skill.select')}</option>
+            {(skills ?? []).map((skill) => (
+              <option key={skill.name} value={skill.name}>
+                /{skill.name}
+                {skill.enabled === false ? `（${t('scheduled.skill.disabled')}）` : ''}
+              </option>
+            ))}
+          </select>
+          {invalidRefs.length > 0 ? (
+            <span
+              className="flex flex-col gap-1 rounded border border-warning/40 bg-warning/10 p-2"
+              data-testid="scheduled-skill-warning"
+            >
+              <span className="text-warning">
+                {t('scheduled.skill.warning')} {invalidRefs.join('、')}
+              </span>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={acknowledged}
+                  data-testid="scheduled-skill-ack"
+                  onChange={(e) => setAcknowledged(e.target.checked)}
+                />
+                <span>{t('scheduled.skill.acknowledge')}</span>
+              </label>
+            </span>
+          ) : null}
+        </div>
 
         <label className="flex items-center gap-2 text-xs text-text-secondary">
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />

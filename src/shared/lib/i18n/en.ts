@@ -675,6 +675,19 @@ export const en: Record<TranslationKey, string> = {
     'Check the target conversation first: the previous delivery may have succeeded before the error. Retry now?',
   'scheduled.confirm.delete': 'Delete this scheduled task?',
 
+  // ─── Batch C: skill references (/skill-name inside the content) ─────
+  'scheduled.skill.title': 'Linked skills',
+  'scheduled.skill.hint':
+    'Reference a registered skill as /skill-name in the message body. A reference is plain text — it never auto-runs a skill or widens file access.',
+  'scheduled.skill.select': 'Insert skill reference',
+  'scheduled.skill.remove': 'Remove',
+  'scheduled.skill.unknown': 'not registered',
+  'scheduled.skill.disabled': 'disabled',
+  'scheduled.skill.warning':
+    'These references are invalid right now and will not take effect (they are never auto-removed):',
+  'scheduled.skill.acknowledge': 'I understand these references are invalid — save anyway',
+  'scheduled.skill.list_unavailable': 'Skill list unavailable — references cannot be validated',
+
   // ─── M1 tool approval ─────────────
   'permission.title': 'Tool approval required',
   'permission.tool': 'Tool',
