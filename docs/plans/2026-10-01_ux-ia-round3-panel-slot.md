@@ -206,13 +206,34 @@
 
 | 批次 | main PR | win7 PR | 状态 |
 | --- | --- | --- | --- |
-| 方案文档 | **#1870** | 待回填 | 已合并前评审中，CI 全绿 |
+| 方案文档 | **#1870** | 待回填 | CI 全绿（14 pass / 2 skip） |
 | 批次 0 | **#1870** | 待回填 | 已实现，CI 全绿 |
 | 批次 A | **#1870** | 待回填 | 已实现，CI 全绿（未接任何现有面板） |
-| 批次 D 数据层 | **#1871** | 待回填 | 已实现，CI 进行中 |
+| 批次 D 数据层 | **#1871** | 待回填 | 已实现，CI 全绿（14 pass / 2 skip） |
 | 批次 B | — | — | **阻塞**：入口文件被 #1867/#1868/#1133/#1869 占用 |
 | 批次 C | — | — | 阻塞于 #1828（占 `RightPanel.tsx` + `rightPanelStore.ts`） |
 | 批次 D UI 接线 | — | — | 依赖批次 B 的 rail 位置 |
+
+### 7.1 #1871 的 CI 红灯与处置（2026-10-01）
+
+首次运行的 `Electron smoke (playwright-electron)` 失败，但**失败点不在冒烟测试**：
+
+```
+#4 Install npm dependencies  -> failure
+#5 Build frontend + Electron -> skipped
+#6 Smoke test                 -> skipped
+```
+
+日志根因：`npm error RequestError: connect ETIMEDOUT 172.182.252.133:443`，
+来自 electron 的 postinstall（`node install.js`）从 GitHub CDN 拉二进制超时 ——
+runner 出网问题，与代码无关（本分支零 `package.json` 改动，只新增 5 个文件）。
+用 `POST /actions/runs/<id>/rerun-failed-jobs` 只重跑该 job 后全绿。
+
+**排查时的坑**：同一时段 `gh` CLI 的 GraphQL 与 REST 请求在我这边全部返回
+`EOF`，但 `Invoke-RestMethod` 直连 `api.github.com` 正常（HTTP 200）。
+CI 状态复查因此改走 REST + `Invoke-RestMethod`，不再依赖 `gh`。
+若后续再遇到 `Electron smoke` 红灯，**先看失败的是第几步**：
+第 4 步 = 依赖安装（网络/registry），第 6 步 = 真正的冒烟失败（才需要查代码）。
 
 ## 8. 批次 B 的解阻路径
 
