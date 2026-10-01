@@ -12,9 +12,9 @@
 |---|---|---|
 | A 可信底座 | 已完成并验证 | 资料可用性（改为方案 A，见 A1）、关键设置回执、协议感知状态、长期记忆契约、设置与任务状态 |
 | B 成果流程 | 主要入口已完成并验证 | 任务简报、项目工作台、设置分组与定位；Office 主流程仅接入入口，未改管线 |
-| C 持续复用 | 部分完成 | 任务配方、能力感知入口、来源说明校准已完成；本次新增来源可追溯（C1）与技能×定时任务联动（C2）；能力感知自动路由、单任务硬预算未实施 |
-| 全量门禁 | 本地已通过 | 定向与全量 vitest、ruff、架构基线、ESLint、Prettier、类型检查均通过；CI 为最终门禁 |
-| 发布 | 已开 PR | 主线 PR #1867、Win7 PR #1868，均已推送；CI 结果待观察，未合并 |
+| C 持续复用 | 部分完成 | 任务配方、能力感知入口、来源说明校准已完成；本次新增来源可追溯（C1）与技能×定时任务联动（C2）；能力感知自动路由、单任务硬预算未实施（见“延后”） |
+| 全量门禁 | 本地 + CI 均通过 | 全量 vitest、后端定向 pytest、ruff、架构基线、ESLint、Prettier、类型检查均通过；两条线 CI（`ci-rerun` 补跑）全绿 |
+| 发布 | 已开 PR，未合并 | 主线 PR #1867（分支头 `8eb5b9a76`）、Win7 PR #1868（分支头 `d992ac189`），CI 全绿，等 reviewer 授权合并 |
 
 ## 批次 A：可信底座（已完成）
 
@@ -64,7 +64,10 @@
 - **C1 来源可追溯**：`backend/chat/context_sources.py` 只从最终 payload 中**真实存在的格式**提取单条标识（资料 `--- <id> [status] ---`、技能清单 `- /name`、自动激活 `Skill '<name>' auto-activated`、附件 `=== ref ===`），来源条目新增 `items / excluded / identifiable / omitted_items`；记忆召回、项目指令/概览/约束等取不到稳定标识的来源标为不可追溯。**未改动装配链路、预算阈值与估算口径**。
 - **C1 前端四态**：来源面板可展开单条明细，明确区分已注入 / 已截断 / 被排除 / 未核验；标识为注入内容中的真实记录，没有可用跳转入口时不提供跳转。
 - **C2 技能 × 定时任务联动**：新增 `src/features/scheduled/skillLink.ts`，技能引用就是正文里的 `/技能名`，按 `skillsApi.list()` 返回的真实技能校验（已启用 / 已停用 / 未注册）；定时任务弹窗可插入/移除引用，存在失效引用时保存前必须显式确认，**不静默丢弃、不自动改写正文**；技能列表不可用时提示无法校验且不阻塞保存。**未新增后端字段、未改执行链路、不自动运行技能**。
-- **延后**：定时任务列表的技能徽标（需列表侧加载技能再做，避免为展示而新增后端字段）、C3 能力感知路由、C4 单任务硬预算。
+- **延后**：定时任务列表的技能徽标（需列表侧加载技能再做，避免为展示而新增后端字段）、配方 → 定时任务预填入口、C3 能力感知路由、C4 单任务硬预算。
+- **CI 暴露并已修正的两处（随补修提交推送，既有断言未放宽）**：
+  - `CreateTaskModal.tsx` 中 `./skillLink` 的导入位置与组内空行触发 eslint `import/order` 两条 error → 导入移入同级导入组（`./cronValidator` 之后）。
+  - 新增控件造成既有测试的选择器歧义：① `ContextSourceList` 用 `/^context-source-/` 统计“顶层来源行”，嵌套的展开/明细/单条元素复用同一前缀会多匹配 3 个节点 → 嵌套元素改用 `context-meter-source-*` 前缀（`context-source-trimmed-*` 保持原样）；② `ScheduledTasks` 页面用 `getByRole('combobox')` 断言目标会话下拉，弹窗新增「插入技能引用」下拉后同页出现两个 combobox → 改为 `getAllByRole('combobox')[0]`。两处都只改定位方式，断言内容不变。
 
 ## 验证结果
 
@@ -72,18 +75,20 @@
 - 后端：`test_project_material_repo.py` 与 `test_product_roadmap_integrity.py` 共 22 个测试通过；Win7 使用真实 `sage-backend-py38` 环境执行。
 - 后端资料链路定向回归（PR 后补充）：两条线各 **49 个测试**通过——主线 Python 3.11.16（`sage-backend`）、Win7 Python 3.8.20（`sage-backend-py38`），覆盖 `test_project_material_repo.py`、`test_product_roadmap_integrity.py`、`test_project_routes_m3.py`、`test_project_overview_injection.py`。
 - 批次 C 定向回归：前端 **31 个测试**通过（`ContextMeter` 来源明细、`skillLink`、`CreateTaskModal`、i18n 套件），后端 **61 个测试**通过（含 `test_context_sources.py` 12 例）。
+- 批次 C 补修后的**全量前端套件**：主线 **476 文件 / 3435 测试**通过（2 跳过），Win7 **447 文件 / 3209 测试**通过（2 跳过），退出码 0。
+- CI（批次 C）：两条线的 `pull_request` 事件被 GitHub 静默丢弃（分支上查不到新 run），按仓库 SOP 用 `gh workflow run ci-rerun.yml -f ref=<分支> -f target=<基线>` 手动补跑，**全绿**——主线 run 36914410515（Backend / Frontend / Electron smoke / Dependency audit / All Checks），Win7 run 36914430035（Backend Python 3.8 / Frontend / Electron smoke / All Checks）。
 - `ruff check backend/`：两条线均通过（修正了 `pytest.raises(ValueError)` 过宽的 PT011）。
 - 架构基线：`backend/data/database.py` 因回填增长 13 行，按 ratchet 协议登记为有意增长（主线 1949→1962、Win7 1982→1995），未下调任何既有条目。
 - 类型检查（renderer + electron）、架构基线检查、ESLint、Prettier：两条线均通过（未放宽基线，i18n 增长通过提取共用模块保持预算）。
-- 全量前端套件（最终）：主线 473 文件 / 3424 测试通过、2 跳过，退出码 0；Win7 444 文件 / 3198 测试通过、2 跳过，退出码 0。
+- 全量前端套件（批次 A/B 收尾时）：主线 473 文件 / 3424 测试通过、2 跳过，退出码 0；Win7 444 文件 / 3198 测试通过、2 跳过，退出码 0。
 - 首轮全量发现 11 个失败，全部由本轮界面改动导致旧断言过期（推荐项数量与名称、渐变类名、Office 门控）；已按新行为更新 4 个测试文件，未放宽断言、未跳过用例。
 
 ## 已知限制与未完成项
 
 - **远端新鲜度未验证**：两次 `git fetch` 分别遇到连接重置与低速超时，基线使用已存在的 origin 跟踪引用。集成前必须重新 fetch 并核对漂移、执行分支新鲜度检查。
-- **推送链路受阻**：`https://github.com` 的 IPv6 通路当前不可达（`curl -4` 返回 200、`curl -6` 失败），`git push` 反复被连接重置；改用 GitHub Git Data API 按对象精确提交（blob → tree → commit → ref），远端提交 sha 与本地完全一致（主线 `8a9c33620`、Win7 `3e4b615be`）。网络恢复后建议重新 `git fetch` 核对远端引用。
+- **推送链路受阻**：`https://github.com` 的 IPv6 通路当前不可达（`curl -4` 返回 200、`curl -6` 失败），`git push` 反复被连接重置；改用 GitHub Git Data API 按对象精确提交（blob → tree → commit → ref），远端提交 sha 与本地完全一致（主线 `8a9c33620` → 批次 C 后 `8eb5b9a76`；Win7 `3e4b615be` → 批次 C 后 `d992ac189`）。网络恢复后建议重新 `git fetch` 核对远端引用。
 - 本机 lefthook 因缺少 `if` 内置命令无法执行（环境假警报），提交/推送使用 `--no-verify`；已手动跑通 ruff、架构基线检查、定向 pytest、ESLint、Prettier、类型检查。
-- CI 是最终门禁：主线 PR #1867、Win7 PR #1868，结果待观察。
+- CI 是最终门禁：当前两条线 CI 全绿（见“验证结果”），但 `pull_request` 事件被 GitHub 静默丢弃，只能靠 `ci-rerun` 手动触发；合并前建议再确认一次事件通路是否恢复。
 - 未做真实界面点验、性能测量、用户研究；窄窗口/大字号/高 DPI 等仍为待验证项。
 - 未实施自动数据迁移与历史清理；未改动生产数据库。
 - 批次 C 的自动路由与硬预算需要后端配套能力，当前仅打通入口与说明。
