@@ -78,7 +78,9 @@ class TrustEscalationEnforcer:
     def rules(self):  # noqa: ANN201 — 与 base 同型
         return self._base.rules
 
-    def check(self, tool_name: str, args: Optional[Dict[str, Any]] = None) -> PermissionDecision:
+    def check(  # noqa: PLR0911 — 每个提前 return 都是一条独立的安全否决，合并会掩盖哪条网拦住了
+        self, tool_name: str, args: Optional[Dict[str, Any]] = None
+    ) -> PermissionDecision:
         decision = self._base.check(tool_name, args or {})
         if not decision.needs_approval:
             # allow / deny 原样保留 —— deny 永远胜出。
@@ -111,11 +113,7 @@ class TrustEscalationEnforcer:
             allowed=True,
             needs_approval=False,
             reason=(
-                "{reason}{suffix}（你已连续批准该操作 {n} 次）".format(
-                    reason=reason,
-                    suffix=_TRUST_REASON_SUFFIX,
-                    n=approved_times,
-                )
+                f"{reason}{_TRUST_REASON_SUFFIX}（你已连续批准该操作 {approved_times} 次）"
             ),
         )
 

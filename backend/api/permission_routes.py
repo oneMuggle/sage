@@ -172,7 +172,7 @@ def get_trust_policy() -> Dict[str, Any]:
                 continue
             if not decision.session_id or not decision.tool_name:
                 continue
-            key = "{0}|{1}".format(decision.session_id, decision.tool_name)
+            key = f"{decision.session_id}|{decision.tool_name}"
             if key not in tools:
                 tools[key] = repo.consecutive_gui_approvals(
                     decision.session_id, decision.tool_name
