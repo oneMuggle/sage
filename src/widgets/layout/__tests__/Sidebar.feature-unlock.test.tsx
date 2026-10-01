@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
@@ -6,6 +6,15 @@ import { FEATURE_UNLOCK_STORAGE_KEY } from '../../../shared/lib/hooks/useFeature
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { Sidebar } from '../Sidebar';
+
+// vi.mock 工厂会被提升，直接引用外层 const 会 TDZ —— 必须走 vi.hoisted。
+const { confirmDialogMock } = vi.hoisted(() => ({
+  confirmDialogMock: vi.fn<(opts: { title: string; message?: string }) => Promise<boolean>>(),
+}));
+
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
+  confirmDialog: (opts: { title: string; message?: string }) => confirmDialogMock(opts),
+}));
 
 vi.mock('../../../features/manage-settings/useSettings', () => ({
   useSettings: () => ({
@@ -28,6 +37,7 @@ vi.mock('../../../features/manage-endpoints/api', () => ({
 
 beforeEach(() => {
   localStorage.clear();
+  confirmDialogMock.mockReset();
   const setState = useStore.setState as unknown as (partial: Record<string, unknown>) => void;
   setState({ currentSessionId: null, sessions: [] });
 });
@@ -103,31 +113,47 @@ describe('Sidebar — progressive disclosure (U10, P1-7 灰态可见)', () => {
   });
 
   it('P1-7: 点击灰态入口给出用途说明，确认后解锁并进入', async () => {
+    let settle: (ok: boolean) => void = () => {};
+    confirmDialogMock.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          settle = resolve;
+        }),
+    );
     renderSidebarAt('/chat');
 
     fireEvent.click(lockedEntry('office')!);
-    const hint = await screen.findByTestId('sidebar-feature-hint');
+    await waitFor(() => expect(confirmDialogMock).toHaveBeenCalled());
     // 说明里要讲清这个高级能力能干什么，否则引导无意义
-    expect(hint.textContent).toContain('Word');
-    // 仅展示说明时尚未解锁
+    expect(confirmDialogMock.mock.calls[0][0].message).toContain('Word');
+    // 用户还没点确认 —— 此时绝不能已经解锁
     expect(isLocked('office')).toBe(true);
-    expect(JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) ?? '[]')).not.toContain(
-      'office',
-    );
+    expect(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) ?? '[]').not.toContain('office');
 
-    fireEvent.click(screen.getByTestId('sidebar-feature-hint-open'));
+    await act(async () => {
+      settle(true);
+    });
     await waitFor(() => expect(isLocked('office')).toBe(false));
-    expect(JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) ?? '[]')).toContain('office');
+    expect(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) ?? '[]').toContain('office');
   });
 
-  it('P1-7: 说明可被关闭且不产生解锁副作用', async () => {
+  it('P1-7: 取消说明不产生解锁副作用', async () => {
+    let settle: (ok: boolean) => void = () => {};
+    confirmDialogMock.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          settle = resolve;
+        }),
+    );
     renderSidebarAt('/chat');
 
     fireEvent.click(lockedEntry('arena')!);
-    await screen.findByTestId('sidebar-feature-hint');
-    fireEvent.click(screen.getByTestId('sidebar-feature-hint-dismiss'));
+    await waitFor(() => expect(confirmDialogMock).toHaveBeenCalled());
+    await act(async () => {
+      settle(false);
+    });
 
-    await waitFor(() => expect(screen.queryByTestId('sidebar-feature-hint')).toBeNull());
+    // 拒绝对「说明」而言是正常路径 —— 不该留下任何解锁痕迹
     expect(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) ?? '[]').not.toContain('arena');
     expect(isLocked('arena')).toBe(true);
   });

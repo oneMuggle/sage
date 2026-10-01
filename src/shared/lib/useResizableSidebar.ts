@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-const SIDEBAR_MIN = 220;
-const SIDEBAR_MAX = 360;
-const SIDEBAR_DEFAULT = 240;
+// UX-IA R3 批次 B：侧栏改为「56px rail + 内容列」两段式，width 语义仍是**总宽**
+// （Layout 的 wrapper 与拖拽手柄按它算，未改动），内容列宽度 = width - 56。
+// 因此边界整体上移：旧的 220~360 在扣掉 rail 后只剩 164~304px 内容列，
+// 装不下会话标题。存量落在新界外的宽度会被视为越界并回落到默认值。
+const SIDEBAR_MIN = 260;
+const SIDEBAR_MAX = 480;
+const SIDEBAR_DEFAULT = 300;
 const STORAGE_KEY = 'sidebar-width';
 
 export function useResizableSidebar() {
