@@ -50,8 +50,10 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     expect(screen.getByText('设置')).toBeInTheDocument();
     // 高级入口隐藏
     expect(screen.queryByText('编排')).not.toBeInTheDocument();
-    expect(screen.queryByText('Office')).not.toBeInTheDocument();
     expect(screen.queryByText('Arena')).not.toBeInTheDocument();
+    // 文档与验收是核心交付入口, 不再受渐进式披露门控
+    expect(screen.getByText('文档与验收')).toBeInTheDocument();
+    expect(screen.getByText('项目工作台')).toBeInTheDocument();
   });
 
   it('unlocks the entry for the currently visited advanced route', () => {
@@ -59,7 +61,7 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     // 访问 /orchestration 即解锁并显示编排入口
     expect(screen.getByText('编排')).toBeInTheDocument();
     // 未访问的高级入口仍然隐藏
-    expect(screen.queryByText('Office')).not.toBeInTheDocument();
+    expect(screen.queryByText('Arena')).not.toBeInTheDocument();
     expect(screen.queryByText('Arena')).not.toBeInTheDocument();
     // 解锁状态已持久化
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
@@ -70,7 +72,6 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     localStorage.setItem(FEATURE_UNLOCK_STORAGE_KEY, JSON.stringify(['orchestration']));
     renderSidebarAt('/chat');
     expect(screen.getByText('编排')).toBeInTheDocument();
-    expect(screen.queryByText('Office')).not.toBeInTheDocument();
     expect(screen.queryByText('Arena')).not.toBeInTheDocument();
   });
 
@@ -81,7 +82,8 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     );
     renderSidebarAt('/chat');
     expect(screen.getByText('编排')).toBeInTheDocument();
-    expect(screen.getByText('Office')).toBeInTheDocument();
+    // 文档与验收已提升为一级入口, 解锁与否都可见
+    expect(screen.getByText('文档与验收')).toBeInTheDocument();
     // P5：入口并入 /arena 三页签控制台，label 从「Arena 账号」改为「Arena」
     expect(screen.getByText('Arena')).toBeInTheDocument();
   });
@@ -96,9 +98,7 @@ describe('Sidebar — progressive disclosure (U10)', () => {
     // 旧路径 /arena-accounts（重定向到 /arena）同样保留解锁语义
     localStorage.clear();
     renderSidebarAt('/arena-accounts');
-    const storedLegacy = JSON.parse(
-      localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string,
-    );
+    const storedLegacy = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(storedLegacy).toContain('arena-accounts');
   });
 });

@@ -1,6 +1,7 @@
 /**
  * English translations
  */
+import { pausedMemoryEn } from './pausedMemory';
 import type { TranslationKey } from './zh';
 
 export const en: Record<TranslationKey, string> = {
@@ -94,13 +95,7 @@ export const en: Record<TranslationKey, string> = {
   'chat.skills_toggle': 'View activated skills',
   'chat.skill_loaded': 'Skill {name} loaded',
   // S2 parity: inline memory-write hints / temporary chat
-  'chat.memory_saved': '🧠 Memory updated',
-  'chat.memory_saved_profile': '🧠 Profile updated',
-  'chat.memory_undo': 'Undo',
-  'chat.memory_dismiss': 'Dismiss',
-  'chat.temp_chat': 'Temporary chat',
-  'chat.temp_chat_on': 'Temporary chat: memory is neither read nor written in this session',
-  'chat.temp_chat_off': 'Turn on temporary chat (no memory)',
+  ...pausedMemoryEn,
   // S3 parity: permission presets + auto-approval audit + page commands
   'chat.perm.careful': 'Careful',
   'chat.perm.careful.desc': 'Ask before writing files, running commands, or using the network',
@@ -691,7 +686,8 @@ export const en: Record<TranslationKey, string> = {
   'permission.approve': 'Allow',
   'permission.deny': 'Deny',
   'permission.deny_confirm': 'Confirm deny',
-  'permission.deny_reason.placeholder': 'Optional: tell the agent why (it will adjust its approach)',
+  'permission.deny_reason.placeholder':
+    'Optional: tell the agent why (it will adjust its approach)',
   'permission.deny_reason.hint': 'The feedback is passed to the model with the denial.',
   'permission.toast.failed': 'Failed to submit approval answer',
   'permission.subagent_context': 'Orchestration subagent requests approval',
@@ -1049,7 +1045,8 @@ export const en: Record<TranslationKey, string> = {
   'office.export.exporting': 'Exporting…',
   'office.export.success': 'PDF exported',
   'office.export.failed': 'Export failed',
-  'office.export.noConverter': 'No converter detected for this format (LibreOffice: DOCX/XLSX/PPTX; MS Word: DOCX only)',
+  'office.export.noConverter':
+    'No converter detected for this format (LibreOffice: DOCX/XLSX/PPTX; MS Word: DOCX only)',
   'office.export.openFolder': 'Show in Folder',
   'office.export.openPdf': 'Open PDF',
 

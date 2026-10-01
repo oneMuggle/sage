@@ -3,6 +3,8 @@
  *
  * 键使用点分隔的命名空间: sidebar.new_chat, chat.title, settings.general ...
  */
+import { pausedMemoryZh } from './pausedMemory';
+
 export const zh = {
   // --- Task center: A1 states & actions (parity-s4) ---
   'taskCenter.cancel': '取消',
@@ -94,13 +96,7 @@ export const zh = {
   'chat.skills_toggle': '查看激活的技能',
   'chat.skill_loaded': '技能 {name} 已加载',
   // 对标 S2: 内联记忆写入提示 / 临时聊天
-  'chat.memory_saved': '🧠 记住了',
-  'chat.memory_saved_profile': '🧠 更新了关于你的画像',
-  'chat.memory_undo': '撤销',
-  'chat.memory_dismiss': '关闭提示',
-  'chat.temp_chat': '临时聊天',
-  'chat.temp_chat_on': '临时聊天：本会话不读取也不写入长期记忆',
-  'chat.temp_chat_off': '开启临时聊天（不读写记忆）',
+  ...pausedMemoryZh,
   // 对标 S3: 权限三档 + 自动放行审计 + 页面直达命令
   'chat.perm.careful': '谨慎',
   'chat.perm.careful.desc': '写文件、执行命令、联网都先问我',
@@ -1023,7 +1019,8 @@ export const zh = {
   'office.export.exporting': '导出中…',
   'office.export.success': '已导出 PDF',
   'office.export.failed': '导出失败',
-  'office.export.noConverter': '未发现此格式的本机转换器（LibreOffice 支持 DOCX/XLSX/PPTX；MS Word 仅支持 DOCX）',
+  'office.export.noConverter':
+    '未发现此格式的本机转换器（LibreOffice 支持 DOCX/XLSX/PPTX；MS Word 仅支持 DOCX）',
   'office.export.openFolder': '打开所在文件夹',
   'office.export.openPdf': '打开 PDF',
 

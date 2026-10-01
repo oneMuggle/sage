@@ -4,7 +4,7 @@
 上下文使用。设计约束：
 
 - 按 (project_id, content_hash) 去重：同内容重复添加返回已有行；
-- 三态 status: pending_index (待索引) / ready (已索引) / failed (失败)；
+- 三态 status: pending_index (遗留索引状态) / ready (可用于上下文) / failed (失败)；
 - source_message_id 可选，记录来源消息（save-answer 场景）；
 - content 直接存 SQLite（单资料上限 64 KB，避免大文档拖慢查询）；
 - get_active_materials_for_project 返回 ready 状态资料，按 created_at ASC
@@ -102,6 +102,7 @@ class ProjectMaterialRepository:
                 f"Material content exceeds {MAX_MATERIAL_CONTENT_CHARS} chars"
             )
 
+        self._repair_legacy_inline_materials(project_id)
         content_hash = _compute_content_hash(content)
         ts = int(time.time() * 1000) if now_ms is None else now_ms
         conn = self.db.get_connection()
@@ -120,7 +121,7 @@ class ProjectMaterialRepository:
             INSERT INTO project_materials
                 (id, project_id, source_message_id, content_hash, content,
                  status, wiki_page_path, error_message, created_at)
-            VALUES (?, ?, ?, ?, ?, 'pending_index', NULL, NULL, ?)
+            VALUES (?, ?, ?, ?, ?, 'ready', NULL, NULL, ?)
             """,
             (material_id, project_id, source_message_id, content_hash, content, ts),
         )
@@ -132,10 +133,27 @@ class ProjectMaterialRepository:
         assert row is not None
         return _row_to_material(row)
 
+    def _repair_legacy_inline_materials(self, project_id: str) -> None:
+        """Only plain legacy text with no index target/error becomes usable.
+
+        No content is changed or removed; real index jobs and failed rows remain
+        untouched. This idempotent repair is scoped to the requested project.
+        """
+        conn = self.db.get_connection()
+        cursor = conn.execute(
+            """UPDATE project_materials SET status = 'ready'
+               WHERE project_id = ? AND status = 'pending_index'
+                 AND wiki_page_path IS NULL AND error_message IS NULL""",
+            (project_id,),
+        )
+        if cursor.rowcount:
+            conn.commit()
+
     def list_by_project(
         self, project_id: str, limit: int = 100
     ) -> List[ProjectMaterial]:
         """按项目列出资料，按 created_at DESC（新的在前）。"""
+        self._repair_legacy_inline_materials(project_id)
         conn = self.db.get_connection()
         rows = conn.execute(
             """
@@ -200,6 +218,7 @@ class ProjectMaterialRepository:
         self, project_id: str
     ) -> List[ProjectMaterial]:
         """返回 ready 状态资料，按 created_at ASC（旧的先注入），供上下文拼接。"""
+        self._repair_legacy_inline_materials(project_id)
         conn = self.db.get_connection()
         rows = conn.execute(
             """
