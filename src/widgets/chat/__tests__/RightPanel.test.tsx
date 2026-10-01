@@ -291,3 +291,37 @@ describe('RightPanel — 轮次导航（U1 对标）', () => {
     expect(screen.getByTestId('turn-item-2')).toBeInTheDocument();
   });
 });
+
+// 对标 F3（ZCode ModelTrajectoryPane）：轨迹 Tab 渲染会话级模型轨迹。
+// useConversationTrajectory 从 store.messages 派生——灌入 user+assistant 消息后
+// 断言「轨迹」Tab 点击后条目出现（搜索/展开细节由 TrajectoryPane 自身测试覆盖）。
+describe('RightPanel — 轨迹 Tab（F3 对标）', () => {
+  it('轨迹 Tab 渲染模型轨迹条目', () => {
+    const now = Date.now();
+    useStore.setState({
+      messages: [
+        {
+          id: 'u-msg-1',
+          session_id: 'sess_001',
+          role: 'user',
+          content: '轨迹测试提问',
+          created_at: now,
+        },
+        {
+          id: 'a-msg-1',
+          session_id: 'sess_001',
+          role: 'assistant',
+          content: '轨迹测试回答',
+          created_at: now + 1,
+        },
+      ] as never,
+    });
+
+    render(<RightPanel {...props} sessionId="sess_001" />);
+    fireEvent.click(screen.getByText('轨迹'));
+
+    expect(screen.getByTestId('trajectory-pane')).toBeInTheDocument();
+    expect(screen.getAllByTestId('trajectory-entry')).toHaveLength(2);
+    expect(screen.getByText('轨迹测试提问')).toBeInTheDocument();
+  });
+});
