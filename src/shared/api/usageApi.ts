@@ -150,6 +150,23 @@ export interface ContextSource {
   count: number;
   /** 本轮因注入预算被截掉的 token（仅截断时出现；UX-IA R2-C） */
   trimmed?: number;
+  /** 被预算整条排除的条数（目前只有项目资料会汇总；批次 C） */
+  excluded?: number;
+  /** 该来源是否在 payload 中携带可追溯的单条标识（批次 C） */
+  identifiable?: boolean;
+  /** 本轮实际注入的单条标识（资料 id / 技能名 / 附件 ref），上限 20 条 */
+  items?: ContextSourceItem[];
+  /** 超出上限未列出的条数 */
+  omitted_items?: number;
+}
+
+/** 单条可追溯来源（批次 C）：只展示后端真实记录的标识，不提供跳转时不虚构 */
+export interface ContextSourceItem {
+  id: string;
+  /** 展示用文案（可能含来源消息等附加信息） */
+  label: string;
+  /** 该条是否被单条预算截断 */
+  truncated?: boolean;
 }
 
 export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage> {

@@ -639,6 +639,17 @@ export const zh = {
   'scheduled.run_succeeded': '上次投递成功',
   'scheduled.confirm.retry': '请先检查目标会话：上次投递可能在报错前已成功。确认再次投递？',
   'scheduled.confirm.delete': '确定要删除这个定时任务吗？',
+  // ─── 批次 C：技能引用（正文里的 /技能名，不新增后端字段） ─────
+  'scheduled.skill.title': '关联技能',
+  'scheduled.skill.hint':
+    '在发送内容里用 /技能名 引用已注册技能；引用只是正文文本，不会自动执行技能，也不会扩大文件访问范围。',
+  'scheduled.skill.select': '插入技能引用',
+  'scheduled.skill.remove': '移除',
+  'scheduled.skill.unknown': '未注册',
+  'scheduled.skill.disabled': '已停用',
+  'scheduled.skill.warning': '以下引用当前无效，保存后不会生效（不会被自动删除）：',
+  'scheduled.skill.acknowledge': '我已知悉这些引用无效，仍然保存',
+  'scheduled.skill.list_unavailable': '技能列表不可用，无法校验引用',
 
   // ─── M1 工具审批 ──────────────────
   'permission.title': '工具执行审批',
