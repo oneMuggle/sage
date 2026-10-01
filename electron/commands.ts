@@ -992,6 +992,11 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   // NOTE: WordLintRequest is extra="forbid" — officeApi.lintWord must send
   // ONLY workspacePath + filePath + formatSpec (+ optional maxSizeBytes).
   office_word_lint: { method: 'POST', path: () => '/api/v1/office/word/lint' },
+  // P0-2 (2026-10-01): Word 格式自动修复 —— POST /office/word/repair。
+  // 后端 repair_docx 默认写 <stem>-repaired.docx，overwrite=true 时原子替换原
+  // 文件，并自动复检把 remaining 带回。接线前该端点全仓零调用，"一键修复"
+  // 在 UI 上不存在（只报问题不给修法）。
+  office_word_repair: { method: 'POST', path: () => '/api/v1/office/word/repair' },
   // Office parity batch 1 (item 1.2): PDF read/generate.
   // Backend: backend/api/office_routes.py:495-508 (POST /pdf/read, POST /pdf/generate).
   // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send

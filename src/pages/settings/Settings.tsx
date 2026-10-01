@@ -67,6 +67,10 @@ export function Settings() {
   const { t, locale } = useI18n();
 
   const tabs: { key: SettingsTab; label: string }[] = [
+    // P0-5: 'general' 此前不在此列表（却作为默认 activeTab + 承载破坏性
+    // 「重置全部设置」），导致默认落地页在左侧导航无高亮项、切走后无法
+    // 返回。SettingsTabKey 与 i18n 均已有该 key，属单纯的数组漏项。
+    { key: 'general', label: t('settings.tab.general') },
     { key: 'basic', label: t('settings.tab.basic') },
     { key: 'memory-knowledge', label: t('settings.tab.memory-knowledge') },
     { key: 'tools-connections', label: t('settings.tab.tools-connections') },

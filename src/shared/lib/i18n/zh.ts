@@ -85,6 +85,7 @@ export const zh = {
   'chat.sources_toggle': '查看本次回答的参考来源',
   'chat.sources_count': '{n} 条参考来源',
   'chat.sources_group_memory': '记忆',
+  'chat.sources_open_memory': '在记忆库中查看这条记忆',
   'chat.sources_group_attachment': '附件检索',
   'chat.sources_group_wiki': '知识库',
   'chat.sources_group_web': '网页',
@@ -673,6 +674,11 @@ export const zh = {
   'permission.deny_reason.placeholder': '可选：告诉模型为什么拒绝（它会据此调整方案）',
   'permission.deny_reason.hint': '反馈会随拒绝决议传给模型。',
   'permission.toast.failed': '审批应答失败',
+  // P0-4: 远程渠道（Telegram/Discord/Slack）处理后桌面端原本静默关窗，
+  // 高危操作失去唯一的本地审计锚点。这里如实回执「已离开待批队列」，
+  // 但不猜测结果（批准/拒绝/超时在前端不可区分）。
+  'permission.remote_resolved': '该审批已离开待批队列',
+  'permission.remote_resolved.desc': '{tool} · 风险 {risk} · 已等待 {wait} · 可能已在远程渠道处理或已超时',
   'permission.subagent_context': '编排子任务请求审批',
   'permission.diff': '将写入的变更',
   'permission.project_allow.button': '项目级允许',
@@ -1112,6 +1118,15 @@ export const zh = {
   'office.delivery.lintFail': '存在格式问题',
   'office.delivery.lintSkipped': '未指定格式规范，已跳过检查',
   'office.delivery.lintFailed': '检查失败',
+  // P0-2 (2026-10-01): 自动修复闭环。语义类问题（引用/覆盖）无法机械
+  // 修复，故如实区分"已修复"与"仍需人工处理"，不谎称全部通过。
+  'office.delivery.repair': '一键修复',
+  'office.delivery.repairing': '修复中…',
+  'office.delivery.repairDone': '已修复 {n} 条规则',
+  'office.delivery.repairOutput': '修复版已另存为 {path}',
+  'office.delivery.repairRemaining': '仍有 {n} 条需人工处理（引用 / 覆盖等语义类问题无法机械修复）',
+  'office.delivery.repairFailed': '自动修复失败',
+  'office.delivery.repairRetry': '重试修复',
   'office.delivery.retry': '重试',
   'office.delivery.errors': '错误 {n}',
   'office.delivery.warnings': '警告 {n}',

@@ -45,6 +45,8 @@ interface MessageListProps {
   onQuoteSelection?: (text: string) => void;
   /** P0-1: 保存此条消息到长期记忆（提供时 user/assistant 消息显示"保存到记忆"） */
   onSaveToMemory?: (message: MessageType) => void;
+  /** P0-6: 打开记忆浏览器并定位到该条记忆 */
+  onOpenMemory?: (memoryId: string) => void;
   /** R44: 空态建议提示词点击回调 */
   onSuggestionClick?: (prompt: string) => void;
   /** R19-W1: 网页访问拦截卡片动作回调（透传给 Message → BlockedCard） */
@@ -69,6 +71,7 @@ export function MessageList({
   onQuote,
   onQuoteSelection,
   onSaveToMemory,
+  onOpenMemory,
   onSuggestionClick,
   onBlockedAction,
   onContinue,
@@ -183,6 +186,7 @@ export function MessageList({
                     onDelete={onDelete}
                     onQuote={onQuote}
                     onSaveToMemory={onSaveToMemory}
+                    onOpenMemory={onOpenMemory}
                     artifactsByToolCall={artifactsByToolCall}
                     onBlockedAction={onBlockedAction}
                     onContinue={
@@ -217,6 +221,7 @@ export function MessageList({
                 onDelete={onDelete}
                 onQuote={onQuote}
                 onSaveToMemory={onSaveToMemory}
+                onOpenMemory={onOpenMemory}
                 onBlockedAction={onBlockedAction}
                 onContinue={
                   item.messages[item.messages.length - 1]?.id === lastId && !streamingMessageId

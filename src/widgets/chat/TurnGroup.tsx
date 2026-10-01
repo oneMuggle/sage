@@ -23,6 +23,8 @@ interface TurnGroupProps {
   onDelete?: (messageId: string) => void;
   onQuote?: (message: Message) => void;
   onSaveToMemory?: (message: Message) => void;
+  /** P0-6: 打开记忆浏览器并定位到该条记忆 */
+  onOpenMemory?: (memoryId: string) => void;
   onBlockedAction?: (action: BlockedAction) => void;
   onContinue?: () => void;
   onAnswerVersionChange?: () => void;
@@ -43,6 +45,7 @@ function TurnGroupComponent({
   onDelete,
   onQuote,
   onSaveToMemory,
+  onOpenMemory,
   onBlockedAction,
   onContinue,
   onAnswerVersionChange,
@@ -130,6 +133,7 @@ function TurnGroupComponent({
             onDelete={onDelete}
             onQuote={onQuote}
             onSaveToMemory={onSaveToMemory}
+  onOpenMemory={onOpenMemory}
             artifactsByToolCall={artifactsByToolCall}
             onBlockedAction={onBlockedAction}
             onContinue={idx === lastAssistantIdx ? onContinue : undefined}

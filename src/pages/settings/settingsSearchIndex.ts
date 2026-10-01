@@ -517,6 +517,16 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     labelEn: 'Export CSV',
     keywords: 'export csv 导出 下载',
   },
+  // P0-5: 「通用」tab 此前无任何索引条目 → 搜「重置」无结果，而
+  // 「重置全部设置」是破坏性操作，检索不到尤其危险。其余通用 tab 项
+  // （权限/降级/消费上限/自动快照/托盘）索引中已存在，无需重复登记。
+  {
+    key: 'reset_settings',
+    tab: 'general',
+    label: '重置全部设置',
+    labelEn: 'Reset all settings',
+    keywords: 'reset 重置 恢复默认 清除配置 clear defaults',
+  },
 ];
 
 export function searchSettings(query: string): SettingsSearchEntry[] {

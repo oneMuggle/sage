@@ -68,6 +68,8 @@ interface MessageProps {
   onQuote?: (message: MessageType) => void;
   /** P0-1: 将此条消息内容保存到长期记忆 */
   onSaveToMemory?: (message: MessageType) => void;
+  /** P0-6: 打开记忆浏览器并定位到该条记忆（来源可回溯） */
+  onOpenMemory?: (memoryId: string) => void;
   /** 第二轮 B2: 截断回答的「继续生成」（MessageList 只传给会话最后一条消息） */
   onContinue?: () => void;
   /** 第二轮 C2: 回答版本切换后的回调（MessageList 只传给会话最后一条消息） */
@@ -441,6 +443,7 @@ function MessageComponent({
   onDelete,
   onQuote,
   onSaveToMemory,
+  onOpenMemory,
   onContinue,
   onAnswerVersionChange,
   artifactsByToolCall,
@@ -830,7 +833,21 @@ function MessageComponent({
                     <span className="px-1 rounded bg-primary/10 text-primary flex-shrink-0">
                       {ref.memory_type}
                     </span>
-                    <span className="text-text-secondary break-all">{ref.preview}</span>
+                    {/* P0-6: 此前只展示 memory_type + 截断 preview，用户无法核对
+                        "它凭什么引用了这条记忆"。可点击回溯记忆库并高亮定位。 */}
+                    {onOpenMemory ? (
+                      <button
+                        type="button"
+                        data-testid={`message-memory-ref-${ref.id}`}
+                        onClick={() => onOpenMemory(ref.id)}
+                        className="text-left text-text-secondary break-all hover:text-primary hover:underline"
+                        title={t('chat.sources_open_memory')}
+                      >
+                        {ref.preview}
+                      </button>
+                    ) : (
+                      <span className="text-text-secondary break-all">{ref.preview}</span>
+                    )}
                   </div>
                 ))}
                 {/* R86: @memory: 实体引用命中，序号与记忆召回连续 */}

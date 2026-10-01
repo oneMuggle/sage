@@ -85,6 +85,7 @@ export const en: Record<TranslationKey, string> = {
   'chat.sources_toggle': 'View sources used for this reply',
   'chat.sources_count': '{n} sources',
   'chat.sources_group_memory': 'Memory',
+  'chat.sources_open_memory': 'View this memory in the memory browser',
   'chat.sources_group_attachment': 'Attachments',
   'chat.sources_group_wiki': 'Knowledge base',
   'chat.sources_group_web': 'Web',
@@ -694,6 +695,13 @@ export const en: Record<TranslationKey, string> = {
   'permission.deny_reason.placeholder': 'Optional: tell the agent why (it will adjust its approach)',
   'permission.deny_reason.hint': 'The feedback is passed to the model with the denial.',
   'permission.toast.failed': 'Failed to submit approval answer',
+  // P0-4: the desktop previously closed the dialog silently once a remote
+  // channel handled the request, leaving high-risk actions with no local audit
+  // anchor. Report the fact honestly; the outcome (approved / denied / timed
+  // out) is not distinguishable from the pending list alone.
+  'permission.remote_resolved': 'Approval left the pending queue',
+  'permission.remote_resolved.desc':
+    '{tool} · risk {risk} · waited {wait} · likely handled remotely or timed out',
   'permission.subagent_context': 'Orchestration subagent requests approval',
   'permission.diff': 'Proposed changes',
   'permission.project_allow.button': 'Allow for project',
@@ -1139,6 +1147,17 @@ export const en: Record<TranslationKey, string> = {
   'office.delivery.lintFail': 'Format issues found',
   'office.delivery.lintSkipped': 'No format spec given, check skipped',
   'office.delivery.lintFailed': 'Check failed',
+  // P0-2 (2026-10-01): repair closes the lint → fix → recheck loop. Semantic
+  // issues (citations / coverage) cannot be fixed mechanically, so report
+  // "fixed" and "still needs a human" separately instead of claiming a pass.
+  'office.delivery.repair': 'Auto-fix',
+  'office.delivery.repairing': 'Fixing…',
+  'office.delivery.repairDone': 'Fixed {n} rules',
+  'office.delivery.repairOutput': 'Fixed copy saved as {path}',
+  'office.delivery.repairRemaining':
+    '{n} still need manual work (citations / coverage cannot be fixed mechanically)',
+  'office.delivery.repairFailed': 'Auto-fix failed',
+  'office.delivery.repairRetry': 'Retry fix',
   'office.delivery.retry': 'Retry',
   'office.delivery.errors': '{n} errors',
   'office.delivery.warnings': '{n} warnings',

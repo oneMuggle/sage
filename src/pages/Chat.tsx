@@ -828,6 +828,19 @@ export function Chat() {
     [t],
   );
 
+  /**
+   * P0-6: 气泡内记忆引用可回溯 —— 跳记忆库并带 focus 参数定位。
+   *
+   * 此前参考来源只展示 memory_type + 截断 preview，用户看到答案受某条
+   * 记忆影响却无法核对来源（对标 Claude「明确声明用了哪条记忆」）。
+   */
+  const handleOpenMemory = useCallback(
+    (memoryId: string) => {
+      navigate(`/memory?focus=${encodeURIComponent(memoryId)}`);
+    },
+    [navigate],
+  );
+
   // R19-W1: 网页访问拦截卡片动作 —— 把后端的建议动作翻译成前端语义。
   // login_to_site: 发一条消息请 agent 用 browser_login 工具登录（用户只需在弹出浏览器中完成登录）；
   // open_browser: 发一条消息请 agent 用 browser_navigate 打开（走完整工具链）；
@@ -1023,6 +1036,7 @@ export function Chat() {
                 onQuote={handleQuote}
                 onQuoteSelection={quoteText}
                 onSaveToMemory={handleSaveToMemory}
+                onOpenMemory={handleOpenMemory}
                 onBlockedAction={handleBlockedAction}
               />
             )}
