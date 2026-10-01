@@ -1,6 +1,7 @@
 import { clsx } from 'clsx';
 import {
   Bot,
+  CalendarClock,
   ChevronDown,
   ChevronRight,
   MessageSquare,
@@ -11,6 +12,7 @@ import {
   Sparkles,
   FileSpreadsheet,
   HelpCircle,
+  ListTodo,
   UserCog,
   PanelLeftClose,
   PanelLeftOpen,
@@ -36,26 +38,32 @@ import { useStore } from '../../shared/lib/store';
 import { AttnBadge, BrandLogo, LiveDot, Tooltip, type LiveState } from '../../shared/ui';
 import {
   ConversationsSection,
-  CronJobSection,
   GitStatusSection,
   ProjectSection,
-  TeamSection,
-  TodoSection,
   useSiderSections,
 } from '../sidebar';
 
-// UX-IA R1 A3（对标 ChatGPT / Claude Projects）：项目作为一级容器排在会话之上；
-// 待办 / 定时 / Git / 团队属于低频信息，新用户默认折叠，避免左栏同时出现多个滚动列表。
-// 老用户的顺序与折叠状态由 useSiderSections 从 localStorage 恢复，不受影响。
-const SECTION_KEYS = ['project', 'conversations', 'todos', 'cron', 'git', 'team'] as const;
-const DEFAULT_COLLAPSED_SECTIONS = ['todos', 'cron', 'git', 'team'] as const;
+import { SidebarNavItem, type SidebarNavItemData } from './SidebarNavItem';
+
+// UX-IA R1 A3（对标 ChatGPT / Claude Projects）：项目作为一级容器排在会话之上。
+// UX-IA R3 批次 0（2026-10-01）：分组从 6 个收敛到 3 个 ——
+//   - todos / cron 删除：两者本来就有完整整页（/todos、/scheduled），左栏分组
+//     只是「预览前 5 条 + 跳转」，与整页构成同一列里的两个同名入口（"待办"出现两次）。
+//     现降级为一级导航项，能力零损失、重复入口消失。
+//   - team 删除：占位实现（"占位 - 团队协作将在 Phase 6 接入"），无功能不占位。
+// useSiderSections 会用 defaultOrder 过滤存量 localStorage 里的旧 key，
+// 老用户残留的 todos/cron/team 会被自动丢弃，无需迁移脚本。
+const SECTION_KEYS = ['project', 'conversations', 'git'] as const;
+const DEFAULT_COLLAPSED_SECTIONS = ['git'] as const;
 
 // 导航项配置。
-// 对标 S3 (2026-09-13, 竞品对标 §2.2 导航收敛): 一级只保留高频 4 项，
+// 对标 S3 (2026-09-13, 竞品对标 §2.2 导航收敛): 一级只保留高频项，
 // 其余归入可折叠「更多」分组（默认展开，折叠状态本地持久化；当前路由命中
 // 「更多」内条目时强制展开）。路由与渐进披露（U10）规则不变。
 // UX-IA R1 A2 (2026-09-29): 「设置」移出一级导航，改为页脚齿轮入口
 // （对标 ChatGPT / Claude 左下角账户菜单）；折叠 rail 仍保留设置图标。
+// UX-IA R3 批次 0-3: 「待办」升入一级导航（agent 产品的每日收件箱，检索频率最高）；
+// 「定时任务」留在「更多」（低频配置项）。两者原本都是左栏分组 + 整页双入口。
 interface NavItem {
   path: string;
   label: string;
@@ -65,11 +73,13 @@ interface NavItem {
 
 const primaryNavItems: NavItem[] = [
   { path: '/chat', label: '对话', icon: MessageSquare },
+  { path: '/todos', label: '待办', icon: ListTodo },
   { path: '/memory', label: '记忆', icon: Brain },
   { path: '/knowledge', label: '知识库', icon: BookOpen },
 ];
 const settingsNavItem: NavItem = { path: '/settings', label: '设置', icon: Settings };
 const moreNavItems: NavItem[] = [
+  { path: '/scheduled', label: '定时任务', icon: CalendarClock },
   { path: '/office', label: 'Office', icon: FileSpreadsheet },
   { path: '/skills', label: '技能', icon: Sparkles },
   { path: '/agents', label: '智能体', labelKey: 'sidebar.nav.agents', icon: Bot },
@@ -241,6 +251,22 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
     }
   };
 
+  /** 渐进披露门控：未解锁的高级入口不渲染。 */
+  const isRevealed = (item: NavItem): boolean => {
+    const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
+    return !featureKey || unlockedByFeature[featureKey];
+  };
+
+  /** NavItem → SidebarNavItemData（解析 i18n labelKey）。 */
+  const toNavData = (item: NavItem): SidebarNavItemData => ({
+    path: item.path,
+    label: item.labelKey === 'sidebar.nav.agents' ? t('sidebar.nav.agents') : item.label,
+    icon: item.icon,
+  });
+
+  const isActivePath = (path: string): boolean =>
+    location.pathname === path || (path === '/chat' && location.pathname === '/');
+
   const renderSection = (key: string) => {
     const isCollapsed = collapsedSections.has(key);
 
@@ -259,14 +285,6 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
             onRefreshSessions={loadSessions}
           />
         );
-      case 'todos':
-        return (
-          <TodoSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
-        );
-      case 'cron':
-        return (
-          <CronJobSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
-        );
       case 'git':
         return (
           <GitStatusSection
@@ -282,10 +300,6 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
             onOpenSession={handleOpenSession}
           />
         );
-      case 'team':
-        return (
-          <TeamSection collapsed={isCollapsed} onToggleCollapsed={() => toggleCollapsed(key)} />
-        );
       default:
         return null;
     }
@@ -293,6 +307,8 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
 
   // P1-3.6 (UI 优化方案 2026-09-13): 折叠态 icon rail —— 仅渲染品牌 logo + 导航图标，
   // 隐藏文字标签/会话列表/sections。宽度由 Layout 固定 56px。
+  // UX-IA R3 批次 0-5：折叠态同样渲染「对话」待处理角标 —— 此前角标只在展开态存在，
+  // 用户一旦折叠侧栏就完全看不到"还有 N 项等你处理"。
   if (collapsed) {
     return (
       <aside
@@ -321,32 +337,20 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
         {/* 导航图标（无文字标签） */}
         <nav className="flex-1 py-2 flex flex-col items-center gap-1 overflow-y-auto w-full">
           {navItems.map((item) => {
-            const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
-            if (featureKey && !unlockedByFeature[featureKey]) {
+            if (!isRevealed(item)) {
               return null;
             }
 
-            const isActive =
-              location.pathname === item.path ||
-              (item.path === '/chat' && location.pathname === '/');
-            const Icon = item.icon;
-
             return (
-              // P1: 折叠 rail 图标用统一 Tooltip（radix）替代原生 title
-              <Tooltip key={item.path} content={item.label} side="right">
-                <Link
-                  to={item.path}
-                  aria-label={item.label}
-                  className={clsx(
-                    'flex items-center justify-center w-10 h-10 rounded-radius-sm transition-colors',
-                    isActive
-                      ? 'bg-primary/10 text-primary'
-                      : 'text-text-secondary hover:bg-bg-hover',
-                  )}
-                >
-                  <Icon className="w-5 h-5" />
-                </Link>
-              </Tooltip>
+              <SidebarNavItem
+                key={item.path}
+                item={toNavData(item)}
+                active={isActivePath(item.path)}
+                variant="rail"
+                trailing={
+                  item.path === '/chat' ? <AttnBadge count={attentionCount} /> : undefined
+                }
+              />
             );
           })}
         </nav>
@@ -415,39 +419,23 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
       <nav className="flex-1 py-2 px-2 overflow-y-auto">
         {primaryNavItems.map((item) => {
           // 渐进式功能披露 (U10)：高级入口未解锁前不渲染。
-          const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
-          if (featureKey && !unlockedByFeature[featureKey]) {
+          if (!isRevealed(item)) {
             return null;
           }
 
-          const isActive =
-            location.pathname === item.path || (item.path === '/chat' && location.pathname === '/');
-          const Icon = item.icon;
-
           return (
-            <Link
+            <SidebarNavItem
               key={item.path}
-              to={item.path}
-              className={clsx(
-                'flex items-center gap-2.5 px-3 py-2 rounded-radius-sm transition-colors text-sm font-medium',
-                isActive ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-bg-hover',
-              )}
-            >
-              <Icon className="w-4 h-4" />
-              <span>
-                {item.labelKey === 'sidebar.nav.agents' ? t('sidebar.nav.agents') : item.label}
-              </span>
-              {/* U9: 对话入口的待处理数量（AttnBadge，带数字） */}
-              {item.path === '/chat' && <AttnBadge count={attentionCount} />}
-            </Link>
+              item={toNavData(item)}
+              active={isActivePath(item.path)}
+              variant="row"
+              trailing={item.path === '/chat' ? <AttnBadge count={attentionCount} /> : undefined}
+            />
           );
         })}
 
         {/* 对标 S3: 「更多」分组 —— 次高频入口收敛，减少一级导航噪音 */}
-        {moreNavItems.some((item) => {
-          const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
-          return !featureKey || unlockedByFeature[featureKey];
-        }) && (
+        {moreNavItems.some(isRevealed) && (
           <div className="mt-1" data-testid="sidebar-more-group">
             <button
               type="button"
@@ -465,28 +453,14 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
             </button>
             {moreExpanded &&
               moreNavItems.map((item) => {
-                const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
-                if (featureKey && !unlockedByFeature[featureKey]) return null;
-                const isActive = location.pathname === item.path;
-                const Icon = item.icon;
+                if (!isRevealed(item)) return null;
                 return (
-                  <Link
+                  <SidebarNavItem
                     key={item.path}
-                    to={item.path}
-                    className={clsx(
-                      'flex items-center gap-2.5 px-3 py-2 rounded-radius-sm transition-colors text-sm font-medium',
-                      isActive
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-text-secondary hover:bg-bg-hover',
-                    )}
-                  >
-                    <Icon className="w-4 h-4" />
-                    <span>
-                      {item.labelKey === 'sidebar.nav.agents'
-                        ? t('sidebar.nav.agents')
-                        : item.label}
-                    </span>
-                  </Link>
+                    item={toNavData(item)}
+                    active={location.pathname === item.path}
+                    variant="row"
+                  />
                 );
               })}
           </div>
@@ -520,7 +494,7 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
           <Tooltip content="设置" side="top">
             <Link
               to={settingsNavItem.path}
-              aria-label="设置"
+              aria-label={settingsNavItem.label}
               data-testid="sidebar-settings-link"
               className={clsx(
                 'flex items-center justify-center w-7 h-7 rounded-radius-sm transition-colors',
@@ -530,7 +504,7 @@ export function Sidebar({ width = 240, collapsed = false, onToggleCollapse }: Si
               )}
             >
               <Settings className="w-4 h-4" />
-              <span className="sr-only">设置</span>
+              <span className="sr-only">{settingsNavItem.label}</span>
             </Link>
           </Tooltip>
         </div>
