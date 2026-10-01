@@ -254,7 +254,7 @@ function ContextSourceRow({ source }: { source: ContextSource }) {
       <button
         type="button"
         aria-expanded={open}
-        data-testid={`context-source-toggle-${source.key}`}
+        data-testid={`context-meter-source-toggle-${source.key}`}
         className="flex w-full items-center justify-between gap-2 py-0.5 text-left text-[11px] text-text-secondary hover:text-text-primary"
         onClick={() => setOpen((v) => !v)}
       >
@@ -286,7 +286,7 @@ function ContextSourceRow({ source }: { source: ContextSource }) {
       {open ? (
         <span
           className="mt-0.5 block pl-4 text-[10px] text-text-muted"
-          data-testid={`context-source-detail-${source.key}`}
+          data-testid={`context-meter-source-detail-${source.key}`}
         >
           {source.identifiable && items.length > 0 ? (
             <span className="block">
@@ -294,7 +294,7 @@ function ContextSourceRow({ source }: { source: ContextSource }) {
                 <span
                   key={item.id}
                   className="flex items-center justify-between gap-2 py-0.5"
-                  data-testid={`context-source-item-${source.key}`}
+                  data-testid={`context-meter-source-item-${source.key}`}
                 >
                   <span className="truncate font-mono" title={item.label}>
                     {item.label}

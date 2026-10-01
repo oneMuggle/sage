@@ -67,11 +67,11 @@ describe('ContextMeter 来源明细', () => {
         omitted_items: 1,
       },
     ]);
-    fireEvent.click(screen.getByTestId('context-source-toggle-project_materials'));
-    const detail = screen.getByTestId('context-source-detail-project_materials');
+    fireEvent.click(screen.getByTestId('context-meter-source-toggle-project_materials'));
+    const detail = screen.getByTestId('context-meter-source-detail-project_materials');
     expect(detail.textContent).toContain('mat-1');
     expect(detail.textContent).toContain('来源消息 msg_7');
-    expect(screen.getAllByTestId('context-source-item-project_materials')).toHaveLength(2);
+    expect(screen.getAllByTestId('context-meter-source-item-project_materials')).toHaveLength(2);
     expect(detail.textContent).toContain('已截断');
     expect(detail.textContent).toContain('另有 1 条未列出');
     expect(screen.getByTestId('context-source-excluded-project_materials').textContent).toContain(
@@ -81,10 +81,10 @@ describe('ContextMeter 来源明细', () => {
 
   it('无单条标识的记忆来源明确说明不可逐条追溯，不虚构来源', async () => {
     await openPanel([{ key: 'memory', tokens: 800, count: 1, identifiable: false }]);
-    fireEvent.click(screen.getByTestId('context-source-toggle-memory'));
-    const detail = screen.getByTestId('context-source-detail-memory');
+    fireEvent.click(screen.getByTestId('context-meter-source-toggle-memory'));
+    const detail = screen.getByTestId('context-meter-source-detail-memory');
     expect(detail.textContent).toContain('无法逐条追溯');
-    expect(screen.queryByTestId('context-source-item-memory')).toBeNull();
+    expect(screen.queryByTestId('context-meter-source-item-memory')).toBeNull();
   });
 
   it('保留“非内容验真”的口径声明', async () => {
