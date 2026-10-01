@@ -165,3 +165,44 @@ describe('Sidebar — U9 Live-Dot vs Attention-Badge 分离', () => {
     expect(screen.getByRole('status', { name: '连接失败,请检查端点配置' })).toBeInTheDocument();
   });
 });
+
+/**
+ * UX-IA R3 批次 0-5：折叠态不得丢信息。
+ * 此前 AttnBadge 只在展开态渲染，用户一按 Ctrl+B 折叠侧栏，"还有 N 项等你处理"
+ * 就完全不可见 —— 而折叠往往正是为了给对话区让出空间（此时最需要看到提醒）。
+ */
+describe('Sidebar — 折叠态 rail 的待处理角标', () => {
+  function renderRail() {
+    return render(
+      <I18nProvider defaultLocale="zh">
+        <MemoryRouter initialEntries={['/chat']}>
+          <Sidebar collapsed width={56} onToggleCollapse={() => {}} />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+  }
+
+  it('折叠态下对话入口仍带待处理角标', () => {
+    hoisted.testEndpointConnection.mockResolvedValue({ success: true });
+    usePermissionState.setState({ currentRequest: PENDING_PERMISSION });
+    renderRail();
+    const chatLink = screen.getByRole('link', { name: '对话' });
+    expect(within(chatLink).getByRole('status')).toHaveTextContent('1');
+  });
+
+  it('折叠态下审批与提问同时挂起计数累加', () => {
+    hoisted.testEndpointConnection.mockResolvedValue({ success: true });
+    usePermissionState.setState({ currentRequest: PENDING_PERMISSION });
+    useQuestionState.setState({ currentQuestion: PENDING_QUESTION });
+    renderRail();
+    const chatLink = screen.getByRole('link', { name: '对话' });
+    expect(within(chatLink).getByRole('status')).toHaveTextContent('2');
+  });
+
+  it('折叠态下无挂起时不渲染角标（保持安静）', async () => {
+    hoisted.testEndpointConnection.mockResolvedValue({ success: true, latency: 10 });
+    renderRail();
+    await waitFor(() => expect(screen.getByLabelText(/^已连接/)).toBeInTheDocument());
+    expect(screen.queryByRole('status', { name: /项待处理/ })).not.toBeInTheDocument();
+  });
+});
