@@ -54,7 +54,9 @@ describe('ScheduledTasks page', () => {
     );
     fireEvent.click(screen.getAllByText(/scheduled\.create|新建任务|New Task/i)[0]);
     expect(screen.getByRole('dialog')).toBeTruthy();
-    expect((screen.getByRole('combobox') as HTMLSelectElement).value).toBe('real-session');
+    // 弹窗里有两个下拉：第一个是目标会话，第二个是「插入技能引用」（批次 C 新增）。
+    // 这里断言的仍是目标会话下拉，用 getAllByRole(...)[0] 精确定位。
+    expect((screen.getAllByRole('combobox')[0] as HTMLSelectElement).value).toBe('real-session');
     expect(screen.queryByRole('option', { name: 'default' })).toBeNull();
   });
 });
