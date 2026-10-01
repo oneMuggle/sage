@@ -87,12 +87,23 @@
 | PR | 占用文件 | 对本文影响 |
 | --- | --- | --- |
 | **#1828** 模型轨迹查看器 | `widgets/chat/RightPanel.tsx`、`features/right-panel/rightPanelStore.ts`、`widgets/chat/TrajectoryPane.tsx` | **批次 C 阻塞**——右栏两个核心文件正在被改，等合并后重做 |
-| **#1133** 桌宠 P1 | `widgets/layout/Layout.tsx` | 本轮不改 Layout |
-| **#1334** 投递三通道 | `widgets/task-center/__tests__/*` | 本轮不改 TaskCenter |
-| **#1869** 价值闭环 | `Chat.tsx` / `Message*.tsx` / `MemoryBrowser.tsx` / `Settings.tsx` | 本轮不碰 |
+| **#1133** 桌宠 P1 | `widgets/layout/Layout.tsx` | 批次 B 的容器改动需等其合并 |
+| **#1867 / #1868** 产品路线批次 A/B | `widgets/layout/Sidebar.tsx`、`widgets/layout/__tests__/Sidebar.feature-unlock.test.tsx`、`widgets/sidebar/sections/ProjectSection.tsx` | **批次 B 阻塞**（与本 PR 自身也冲突，见下）；本 PR 的 `navItems` 改动与它们的 `primaryNavItems` / `moreNavItems` 落在同一片字面量上 |
+| **#1869** 价值闭环 | `Chat.tsx` / `Message*.tsx` / `MemoryBrowser.tsx` / `Settings.tsx`、`widgets/sidebar/sections/ConversationsSection.tsx` | 批次 B-2（项目→会话合并树）涉 `ConversationsSection`，需等其合并 |
+| **#1334** 投递三通道 | `widgets/task-center/__tests__/*` | 批次 C 的 TaskCenter 改造需等其合并 |
 
-**安全文件集（本轮）**：`src/widgets/layout/Sidebar.tsx`、`src/widgets/sidebar/**`、
-新增 `src/shared/ui/PanelShell.tsx`、新增 `src/features/app-panels/**`。
+**批次 B 的入口当前被全部占用**（`Sidebar.tsx` ← #1867/#1868，`Layout.tsx` ← #1133，`ConversationsSection.tsx` ← #1869，`ProjectSection.tsx` ← #1867/#1868），故本轮未实施。解阻路径见 §8。
+
+### 2.1 本 PR 自身与 #1867 / #1868 的重叠
+
+| 位置 | 本 PR（批次 0） | #1867 / #1868 |
+| --- | --- | --- |
+| `primaryNavItems` | 插入 `待办`（`/todos`） | 插入 `项目工作台`（`/projects`）、`文档与验收`（`/office`） |
+| `moreNavItems` | 插入 `定时任务`（`/scheduled`） | 移除 `Office` |
+| `ADVANCED_FEATURE_BY_PATH` | 不动 | 移除 `'/office'` 门控 |
+| import 区 | 移除已删分组的引用 | 新增 `Folder` 图标、`isEndpointConfigured` |
+
+两侧都改同一批 `navItems` 字面量，合并必冲突。**建议产品路线先合并、本 PR rebase**：本分支只有 2 个提交且改动集中在导航项定义与分组渲染，且无三方语义冲突（待办/定时是一级导航项、项目工作台是另一条产品线入口，可共存）。已在 #1870 留言同步。
 
 ---
 
@@ -144,7 +155,18 @@
 
 ### 批次 D —— 统一注意力层
 
-一个 `AttentionCenter` store 汇总审批 / 提问 / 新产物 / git dirty / cron 到期 / todo 到期 / 连接失败，总数徽标固定在 rail 底部账户行；折叠态常驻（批次 0-5 是它的最小版本）。
+一个 `AttentionCenter` 汇总审批 / 提问 / 新产物 / git dirty / todo / 连接失败，总数徽标固定在 rail 底部账户行。
+
+**数据层已落地**（#1871，从 `origin/main` 独立切出，只新增 `src/features/attention/**`）：
+
+| 文件 | 内容 |
+| --- | --- |
+| `attentionCenter.ts` | 纯函数聚合，按风险顺序（审批 > 提问 > 产物 > 待办 > 改动）输出单一快照 |
+| `useAttentionSnapshot.ts` | 订阅层，接 permission / question / todo / changesList 四个 store |
+
+三个设计决定：① **只读不加载**（不调 `load()`，否则把侧栏重新绑回数据加载）；② **选择器返回原始值**（返回 number 而非新对象，避免 zustand 死循环）；③ **刻意不含定时任务**（现有 store 无到期判定，"已启用数" ≠ "需要你处理"，不发明语义）。
+
+**UI 接线**（rail 总数角标 + 汇总气泡）随批次 B 一起做，届时本模块是唯一取数来源。
 
 ---
 
@@ -184,8 +206,29 @@
 
 | 批次 | main PR | win7 PR | 状态 |
 | --- | --- | --- | --- |
-| 批次 0 | 待回填 | 待回填 | 已实现，门禁全绿 |
-| 批次 A | 待回填 | 待回填 | 已实现，门禁全绿（未接任何现有面板） |
-| 批次 B | — | — | 未开始，涉 17 个既有测试，走独立 PR |
+| 方案文档 | **#1870** | 待回填 | 已合并前评审中，CI 全绿 |
+| 批次 0 | **#1870** | 待回填 | 已实现，CI 全绿 |
+| 批次 A | **#1870** | 待回填 | 已实现，CI 全绿（未接任何现有面板） |
+| 批次 D 数据层 | **#1871** | 待回填 | 已实现，CI 进行中 |
+| 批次 B | — | — | **阻塞**：入口文件被 #1867/#1868/#1133/#1869 占用 |
 | 批次 C | — | — | 阻塞于 #1828（占 `RightPanel.tsx` + `rightPanelStore.ts`） |
-| 批次 D | — | — | 未开始，依赖批次 B 的 rail 位置 |
+| 批次 D UI 接线 | — | — | 依赖批次 B 的 rail 位置 |
+
+## 8. 批次 B 的解阻路径
+
+批次 B（左栏两段式 = rail 常驻 + 单列表内容列 + 单滚动容器）是**用户可感知的收益**，但四个入口文件当前全被占用。按依赖顺序：
+
+```
+1. #1867 / #1868 合并（产品路线）  ─┐
+2. 本 PR #1870 rebase 后合并        ─┴─→  #1869 合并  →  #1133 合并
+                                                          ↓
+                                            批次 B 可开工（Sidebar / Layout / ConversationsSection / ProjectSection 均空闲）
+                                                          ↓
+                                            批次 D UI 接线（rail 总数角标）
+```
+
+批次 B 的实施要点（供开工时直接用）：
+
+- **总量不变**：rail 固定 56px，内容列吃剩余宽度 → `Layout.tsx` 只需把 `width` 语义从"整栏宽"改为"内容列宽"，或让 `Sidebar` 内部拆分。`useResizableSidebar` 的 min 220 会让内容列只剩 164px，建议同步调到 260~480。
+- **`collapsed` 语义变为"隐藏内容列"**：折叠态的 rail 就是现有的 `Sidebar collapsed` 实现，可直接复用，不需要新组件。
+- **测试影响面**：`Sidebar.*.test.tsx` 7 个 + `widgets/sidebar` 10 个。其中 `sidebar-settings-link`（移入 rail 底部）、`sidebar-version`、`sidebar-new-chat-primary`、`sidebar-search-button` 的 testid 与语义必须保持；`Sidebar.more-group.test.tsx` 大概率要删（rail 消除了「更多」分组的存在理由）。
