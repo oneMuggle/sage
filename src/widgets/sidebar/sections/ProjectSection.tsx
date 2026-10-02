@@ -61,8 +61,11 @@ import { formatRelativeTime } from '../../../shared/lib/utils';
 import { SiderSection } from '../SiderSection';
 import { TwoStepDelete } from '../TwoStepDelete';
 
+import { MaterialStatusBadge } from './MaterialStatusBadge';
+
 interface ProjectSectionProps {
   collapsed: boolean;
+  presentation?: 'sidebar' | 'workbench';
   onToggleCollapsed: () => void;
   /** Sidebar 统一的会话切换回调：setCurrentSessionId + 按需 navigate('/chat') */
   onOpenSession: (sessionId: string) => void;
@@ -87,6 +90,7 @@ export function ProjectSection({
   collapsed,
   onToggleCollapsed,
   onOpenSession,
+  presentation = 'sidebar',
 }: ProjectSectionProps) {
   const { t } = useI18n();
   const loadSessions = useStore((s) => s.loadSessions);
@@ -744,7 +748,7 @@ export function ProjectSection({
       icon={Folder}
       collapsed={collapsed}
       onToggleCollapsed={onToggleCollapsed}
-      maxHeight="30vh"
+      maxHeight={presentation === 'workbench' ? 'none' : '30vh'}
       trailing={
         <button
           type="button"
@@ -800,11 +804,16 @@ export function ProjectSection({
                     data-testid="project-row"
                     role="button"
                     tabIndex={0}
-                    onClick={() => void openProject(project)}
+                    onClick={() =>
+                      presentation === 'workbench'
+                        ? toggleExpand(project)
+                        : void openProject(project)
+                    }
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        void openProject(project);
+                        if (presentation === 'workbench') toggleExpand(project);
+                        else void openProject(project);
                       }
                     }}
                     className="group flex items-center gap-1 mx-1.5 px-1.5 py-1.5 rounded cursor-pointer hover:bg-bg-hover"
@@ -891,29 +900,6 @@ export function ProjectSection({
 function MessageDot() {
   return (
     <span className="w-1 h-1 rounded-full bg-current opacity-40 shrink-0" aria-hidden="true" />
-  );
-}
-
-/** P3: 资料状态徽标——颜色映射 ready/pending/failed, 标签本地化 */
-function MaterialStatusBadge({ status }: { status: ProjectMaterial['status'] }) {
-  const { t } = useI18n();
-  const palette = {
-    ready: 'bg-success/15 text-success border-success/30',
-    pending_index: 'bg-muted/20 text-muted border-muted/30',
-    failed: 'bg-warning/15 text-warning border-warning/30',
-  } as const;
-  const labelKey = {
-    ready: 'sider.project.material_status_ready',
-    pending_index: 'sider.project.material_status_pending',
-    failed: 'sider.project.material_status_failed',
-  } as const;
-  return (
-    <span
-      data-testid={`project-material-status-${status}`}
-      className={`shrink-0 px-1 py-px rounded border text-[9px] ${palette[status]}`}
-    >
-      {t(labelKey[status])}
-    </span>
   );
 }
 

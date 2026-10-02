@@ -3,6 +3,8 @@
 已绑定 workspace + 已登记项目 → system prompt 含 "项目概览" 与 "项目资料"
 两块; 资料标"不得覆盖上方指令", 验证优先级正确性。
 未登记项目 (workspace 未在 projects 表) → 项目元数据块不注入, 资料亦无。
+P0 回归 (2026-09-20): 经 REST 添加的资料不需要任何手动 mark_ready 即注入
+(此前 add() 写 pending_index 且无人调用 mark_ready, 资料从不生效)。
 mock SageAgent.run_loop 捕获实际 messages, 与 test_project_context_injection.py 同套模板。
 """
 
@@ -26,6 +28,7 @@ from backend.office.session_workspace import bind_session_workspace
 pytestmark = pytest.mark.integration
 
 CHAT_STREAM_PATH = "/api/v1/chat/stream"
+PROJECTS_PATH = "/api/v1/projects"
 SESSION_BOUND = "m3-ctx-bound"
 SESSION_UNREGISTERED = "m3-ctx-unregistered"
 
@@ -99,7 +102,7 @@ async def test_bound_workspace_with_registered_project_injects_metadata(
 async def test_bound_workspace_with_ready_materials_injects_block(
     client, captured_run_loop_messages, tmp_path
 ):
-    """绑定 workspace + 项目 + ready 资料 → 注入资料块 + 防覆盖声明。"""
+    """绑定 workspace + 项目 + 资料 (add 默认 ready) → 注入资料块 + 防覆盖声明。"""
     workspace = tmp_path / "registered-with-materials"
     workspace.mkdir()
 
@@ -108,7 +111,7 @@ async def test_bound_workspace_with_ready_materials_injects_block(
         project_id=project.id,
         content="# Reference\nAlways quote M3MAT marker",
     )
-    ProjectMaterialRepository().mark_ready(material.id, "/wiki/m3-ref.md")
+    assert material.status == "ready"
 
     _ensure_session(SESSION_BOUND)
     conn = get_database().get_connection()
@@ -123,10 +126,37 @@ async def test_bound_workspace_with_ready_materials_injects_block(
 
 
 @pytest.mark.asyncio()
+async def test_material_added_via_api_is_injected_without_manual_ready(
+    client, captured_run_loop_messages, tmp_path
+):
+    """P0 回归: POST /projects/{id}/materials 后直接聊天, 资料必须已注入。"""
+    workspace = tmp_path / "registered-api-mat"
+    workspace.mkdir()
+
+    project = ProjectRepository().register(str(workspace))
+    add_response = await client.post(
+        f"{PROJECTS_PATH}/{project.id}/materials",
+        json={"content": "# API added\nAlways quote APIMAT marker"},
+    )
+    assert add_response.status_code == 201, add_response.text
+    assert add_response.json()["status"] == "ready"
+
+    _ensure_session(SESSION_BOUND)
+    conn = get_database().get_connection()
+    bind_session_workspace(conn, SESSION_BOUND, str(workspace))
+
+    messages = await _chat_once(client, captured_run_loop_messages, SESSION_BOUND)
+    system_text = _system_content(messages)
+
+    assert MATERIALS_HEADER in system_text
+    assert "APIMAT marker" in system_text
+
+
+@pytest.mark.asyncio()
 async def test_pending_materials_are_excluded_from_injection(
     client, captured_run_loop_messages, tmp_path
 ):
-    """pending_index / failed 状态的资料不进入注入。"""
+    """pending_index (显式, 预留异步索引) / failed 状态的资料不进入注入。"""
     workspace = tmp_path / "registered-pending-mat"
     workspace.mkdir()
 
@@ -134,6 +164,7 @@ async def test_pending_materials_are_excluded_from_injection(
     pending = ProjectMaterialRepository().add(
         project_id=project.id,
         content="# Pending\nPENDINGMAT marker should NOT appear",
+        status="pending_index",
     )
     failed = ProjectMaterialRepository().add(
         project_id=project.id,
@@ -151,8 +182,8 @@ async def test_pending_materials_are_excluded_from_injection(
     assert MATERIALS_HEADER not in system_text
     assert "PENDINGMAT" not in system_text
     assert "FAILEDMAT" not in system_text
-    assert pending.id
-    assert failed.id
+    assert pending.status == "pending_index"
+    assert ProjectMaterialRepository().get(failed.id).status == "failed"
 
 
 @pytest.mark.asyncio()

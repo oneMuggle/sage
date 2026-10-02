@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getTrustPolicy = vi.fn();
@@ -8,8 +8,17 @@ const setTrustPolicy = vi.fn();
 vi.mock('../../../shared/api/permissionApi', () => ({
   permissionApi: {
     getTrustPolicy: () => getTrustPolicy(),
-    setTrustPolicy: (enabled: boolean, threshold?: number) =>
-      setTrustPolicy(enabled, threshold),
+    setTrustPolicy: (enabled: boolean, threshold?: number) => setTrustPolicy(enabled, threshold),
+  },
+}));
+
+// 本分支（批次 A2）新增的显式回执写入与本用例无关：隔离掉，避免它的错误提示参与断言。
+vi.mock('../../../shared/api/settingsClient', () => ({
+  settingsClient: {
+    getPreference: vi.fn(async () => null),
+    setPreference: vi.fn(async () => undefined),
+    getPreferenceStrict: vi.fn(async () => null),
+    setPreferenceStrict: vi.fn(async () => undefined),
   },
 }));
 
@@ -97,7 +106,8 @@ describe('渐进式授权设置 (P2-5)', () => {
     renderTab();
     const toggle = await screen.findByTestId('trust-escalation-toggle');
     fireEvent.click(toggle);
-    const alert = await screen.findByRole('alert');
+    const section = await screen.findByTestId('trust-escalation-section');
+    const alert = await within(section).findByRole('alert');
     expect(alert).toHaveTextContent('数据库只读');
     await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'));
   });
@@ -105,7 +115,8 @@ describe('渐进式授权设置 (P2-5)', () => {
   it('读取失败时显示错误而不是假装策略已加载', async () => {
     getTrustPolicy.mockRejectedValue(new Error('后端不可达'));
     renderTab();
-    expect(await screen.findByRole('alert')).toHaveTextContent('后端不可达');
+    const section = await screen.findByTestId('trust-escalation-section');
+    expect(await within(section).findByRole('alert')).toHaveTextContent('后端不可达');
   });
 
   it('文案说明危险操作仍然逐次询问，不夸大承诺', async () => {

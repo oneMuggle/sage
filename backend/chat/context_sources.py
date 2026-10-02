@@ -27,6 +27,30 @@ from backend.memory.working import estimate_tokens
 TRIM_NOTE_FMT = "…[已按上下文预算截断约 {n} tokens]"
 _TRIM_NOTE_RE = re.compile(r"…\[已按上下文预算截断约 (\d+) tokens\]")
 
+#: 单条可追溯标识的提取规则。只解析装配器**实际输出**的格式（见 project_context.py /
+#: attachment_resolver.py / auto_activation.py），取不到标识的来源不伪造。
+_MATERIAL_ITEM_RE = re.compile(
+    r"^--- (?P<id>[0-9A-Za-z_-]{8,}) \[(?P<status>[a-z_]+)\]"
+    r"(?: \(来源消息 (?P<msg>[^)]+)\))? ---$",
+    re.M,
+)
+#: 资料块尾部对被预算排除资料条数的汇总（build_project_materials_block）。
+_MATERIAL_EXCLUDED_RE = re.compile(r"另有 (\d+) 条资料超出预算被排除。")
+#: `<available-skills>` 清单条目：- /name：description
+_SKILL_ITEM_RE = re.compile(r"^- /(?P<name>[^\s:：]+)[:：]", re.M)
+#: 自动激活块：Skill 'name' auto-activated: description
+_SKILL_ACTIVATED_RE = re.compile(r"Skill '(?P<name>[^']+)' auto-activated")
+#: 附件块：=== source_ref ===
+_ATTACHMENT_ITEM_RE = re.compile(r"^=== (?P<ref>.+?) ===$", re.M)
+
+#: 携带单条可追溯标识的来源；其余来源（记忆召回、项目指令/概览/约束、环境等）
+#: 在最终 payload 里没有稳定标识，前端据此显示"未提供可追溯标识"。
+IDENTIFIABLE_SOURCES = frozenset(
+    {"project_materials", "skills", "skills_activated", "attachments"}
+)
+#: 每个来源最多列出的单条标识；超出只报数量，不伪造明细。
+MAX_ITEMS_PER_SOURCE = 20
+
 
 def trimmed_tokens_in(text: str) -> int:
     """块内所有预算截断说明声明的截断量之和。"""
@@ -108,17 +132,74 @@ def _find_blocks(text: str) -> List[Tuple[int, int, str]]:
     return blocks
 
 
+def _material_items(text: str) -> List[Dict[str, Any]]:
+    """项目资料块: `--- <id> [status] (来源消息 x) ---` + 正文 + 可选 `[截断]`。"""
+    items: List[Dict[str, Any]] = []
+    matches = list(_MATERIAL_ITEM_RE.finditer(text))
+    for idx, match in enumerate(matches):
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
+        body = text[match.end():end]
+        label = match.group("id")
+        if match.group("msg"):
+            label = "{} · 来源消息 {}".format(label, match.group("msg"))
+        items.append(
+            {
+                "id": match.group("id"),
+                "label": label,
+                "truncated": "[截断]" in body,
+            }
+        )
+    return items
+
+
+def source_items(key: str, block_text: str) -> List[Dict[str, Any]]:
+    """提取块内真实存在的单条标识；无标识来源返回空列表。"""
+    if key == "project_materials":
+        return _material_items(block_text or "")
+    if key == "skills":
+        return [
+            {"id": m.group("name"), "label": "/" + m.group("name"), "truncated": False}
+            for m in _SKILL_ITEM_RE.finditer(block_text or "")
+        ]
+    if key == "skills_activated":
+        return [
+            {"id": m.group("name"), "label": m.group("name"), "truncated": False}
+            for m in _SKILL_ACTIVATED_RE.finditer(block_text or "")
+        ]
+    if key == "attachments":
+        return [
+            {"id": m.group("ref"), "label": m.group("ref"), "truncated": False}
+            for m in _ATTACHMENT_ITEM_RE.finditer(block_text or "")
+        ]
+    return []
+
+
+def excluded_items(key: str, block_text: str) -> int:
+    """被预算整条排除的数量（目前只有资料块会汇总）。"""
+    if key != "project_materials":
+        return 0
+    total = 0
+    for match in _MATERIAL_EXCLUDED_RE.finditer(block_text or ""):
+        total += int(match.group(1))
+    return total
+
+
 def compute_context_sources(
     messages: List[Dict[str, Any]], scale: float = 1.0
 ) -> List[Dict[str, Any]]:
     """按来源统计 system 消息中的注入上下文 token。
 
     ``scale`` 用于与 breakdown 相同的实报校准（prompt_tokens / 估算总和）。
-    返回按 ``SOURCE_ORDER`` 排序、tokens>0 的 ``[{key, tokens, count}]``。
+    返回按 ``SOURCE_ORDER`` 排序、tokens>0 的条目: ``{key, tokens, count,
+    trimmed?, excluded?, identifiable, items?/omitted_items?}``。``items`` 只列出
+    payload 中真实存在的单条标识（资料 id、技能名、附件 ref）；没有稳定标识的来源
+    ``identifiable=False`` 且不带 ``items``，由前端明确显示"未提供可追溯标识"。
     """
     totals: Dict[str, int] = {}
     counts: Dict[str, int] = {}
     trimmed: Dict[str, int] = {}
+    items: Dict[str, List[Dict[str, Any]]] = {}
+    excluded: Dict[str, int] = {}
     for idx, msg in enumerate(messages or []):
         role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
         if role != "system":
@@ -138,6 +219,11 @@ def compute_context_sources(
             cut = trimmed_tokens_in(text[start:end])
             if cut > 0:
                 trimmed[key] = trimmed.get(key, 0) + cut
+            if key in IDENTIFIABLE_SOURCES:
+                found = source_items(key, text[start:end])
+                if found:
+                    items.setdefault(key, []).extend(found)
+                    excluded[key] = excluded.get(key, 0) + excluded_items(key, text[start:end])
             cursor = max(cursor, end)
         tail = text[cursor:]
         if tail.strip():
@@ -152,14 +238,27 @@ def compute_context_sources(
         entry: Dict[str, Any] = {"key": key, "tokens": tokens, "count": counts.get(key, 0)}
         if trimmed.get(key):
             entry["trimmed"] = int(round(trimmed[key] * factor))
+        if excluded.get(key):
+            entry["excluded"] = int(excluded[key])
+        # 只有装配器确实写入了标识的来源才给明细; 其余来源明确标记不可追溯。
+        entry["identifiable"] = key in IDENTIFIABLE_SOURCES
+        if key in IDENTIFIABLE_SOURCES:
+            found = items.get(key) or []
+            entry["items"] = found[:MAX_ITEMS_PER_SOURCE]
+            if len(found) > MAX_ITEMS_PER_SOURCE:
+                entry["omitted_items"] = len(found) - MAX_ITEMS_PER_SOURCE
         result.append(entry)
     return result
 
 
 __all__ = [
+    "IDENTIFIABLE_SOURCES",
+    "MAX_ITEMS_PER_SOURCE",
     "SOURCE_MARKERS",
     "SOURCE_ORDER",
     "TRIM_NOTE_FMT",
     "compute_context_sources",
+    "excluded_items",
+    "source_items",
     "trimmed_tokens_in",
 ]

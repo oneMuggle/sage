@@ -128,7 +128,7 @@ class TestAddMaterial:
     """POST /api/v1/projects/{id}/materials: 直接添加资料。"""
 
     async def test_add_material(self, client, project):
-        """添加资料, 状态 pending_index。"""
+        """添加资料, 状态 ready (添加即生效, 无异步索引)。"""
         resp = await client.post(
             f"/api/v1/projects/{project.id}/materials",
             json={
@@ -139,7 +139,7 @@ class TestAddMaterial:
         assert resp.status_code == 201
         data = resp.json()
         assert data["project_id"] == project.id
-        assert data["status"] == "pending_index"
+        assert data["status"] == "ready"
         assert data["content_hash"]  # SHA-256 hex
 
     async def test_add_material_dedup(self, client, project):
@@ -212,7 +212,7 @@ class TestSaveAnswer:
         data = resp.json()
         assert data["project_id"] == project.id
         assert data["source_message_id"] == msg.id
-        assert data["status"] == "pending_index"
+        assert data["status"] == "ready"
 
     async def test_save_answer_rejects_cross_project_message(
         self, client, project, other_project, setup_test_db

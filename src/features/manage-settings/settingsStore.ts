@@ -19,6 +19,7 @@ import {
   loadSettings as loadSettingsFromStorage,
   resetSettings as resetSettingsLib,
   saveSettings,
+  saveSettingsStrict,
 } from '../../entities/setting/storage';
 import type { AppSettings } from '../../entities/setting/types';
 import { DEFAULT_SETTINGS, withDemoSettingsDefaults } from '../../entities/setting/types';
@@ -30,8 +31,11 @@ interface SettingsStoreState {
 
   loadSettings: () => Promise<void>;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
+  updateSettingsStrict: (partial: Partial<AppSettings>) => Promise<void>;
   resetSettings: () => Promise<void>;
 }
+
+let strictWrites: Promise<void> = Promise.resolve();
 
 export const useSettingsStore = create<SettingsStoreState>((set) => ({
   settings: { ...DEFAULT_SETTINGS },
@@ -59,6 +63,17 @@ export const useSettingsStore = create<SettingsStoreState>((set) => ({
   updateSettings: async (partial) => {
     set((state) => ({ settings: { ...state.settings, ...partial } }));
     await saveSettings(partial);
+  },
+
+  updateSettingsStrict: (partial) => {
+    const write = strictWrites
+      .catch(() => undefined)
+      .then(async () => {
+        await saveSettingsStrict(partial);
+        set((state) => ({ settings: { ...state.settings, ...partial } }));
+      });
+    strictWrites = write;
+    return write;
   },
 
   resetSettings: async () => {

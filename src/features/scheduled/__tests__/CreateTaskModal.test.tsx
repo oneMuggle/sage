@@ -179,7 +179,8 @@ describe('scheduled audit form contracts', () => {
     fireEvent.change(document.querySelector('textarea')!, {
       target: { value: 'New instructions' },
     });
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 's-2' } });
+    // 批次 C 新增技能选择器后，页面上第一个 combobox 仍是目标会话下拉框。
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 's-2' } });
     fireEvent.click(screen.getByTestId('cron-preset-hourly'));
     fireEvent.click(submitButton());
     await waitFor(() =>

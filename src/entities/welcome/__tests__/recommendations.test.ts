@@ -10,17 +10,19 @@ import {
 } from '../recommendations';
 
 describe('recommendations data', () => {
-  it('exports exactly 3 default recommendations', () => {
-    expect(defaultRecommendations).toHaveLength(3);
+  it('exports the deliverable-oriented default recommendations', () => {
+    expect(defaultRecommendations).toHaveLength(5);
   });
 
-  it('every recommendation has all required fields', () => {
+  it('every recommendation has all required fields and bilingual labels', () => {
     defaultRecommendations.forEach((rec: AssistantRecommendation) => {
       expect(rec.id).toBeTruthy();
       expect(rec.title).toBeTruthy();
       expect(rec.prompt).toBeTruthy();
       expect(rec.icon).toBeTruthy();
       expect(rec.gradient).toBeTruthy();
+      expect(rec.labels?.zh.title).toBeTruthy();
+      expect(rec.labels?.en.title).toBeTruthy();
     });
   });
 
@@ -30,16 +32,18 @@ describe('recommendations data', () => {
     });
   });
 
-  it('default recommendations include code, search, and idea themes', () => {
+  it('default recommendations cover deliverables and keep a coding entry', () => {
     const ids = defaultRecommendations.map((r) => r.id);
-    expect(ids).toContain('code');
-    expect(ids).toContain('search');
-    expect(ids).toContain('idea');
+    expect(ids).toContain('report');
+    expect(ids).toContain('organize');
+    expect(ids).toContain('data');
+    expect(ids).toContain('slides');
+    expect(ids).toContain('coding');
   });
 
-  it('gradient is a valid tailwind class string', () => {
+  it('gradient is a background class string', () => {
     defaultRecommendations.forEach((rec) => {
-      expect(rec.gradient).toMatch(/^bg-gradient-to-/);
+      expect(rec.gradient).toMatch(/^bg-[a-z0-9-]+$/);
     });
   });
 });

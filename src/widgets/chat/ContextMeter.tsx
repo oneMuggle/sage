@@ -241,15 +241,97 @@ const SOURCE_LABELS: Record<string, string> = {
   other_dynamic: '其他动态上下文',
 };
 
+/**
+ * 批次 C · 单来源明细：已注入（items）/ 已截断（trimmed）/ 被排除（excluded）/
+ * 未核验（统一声明）。没有单条标识的来源明确说明不可逐条追溯，不虚构跳转。
+ */
+function ContextSourceRow({ source }: { source: ContextSource }) {
+  const [open, setOpen] = useState(false);
+  const label = SOURCE_LABELS[source.key] ?? source.key;
+  const items = source.items ?? [];
+  return (
+    <span className="block" data-testid={`context-source-${source.key}`}>
+      <button
+        type="button"
+        aria-expanded={open}
+        data-testid={`context-meter-source-toggle-${source.key}`}
+        className="flex w-full items-center justify-between gap-2 py-0.5 text-left text-[11px] text-text-secondary hover:text-text-primary"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="text-text-muted">{open ? '▾' : '▸'}</span>
+          <span className="truncate">{label}</span>
+          {source.excluded ? (
+            <span
+              className="shrink-0 rounded bg-warning/15 px-1 text-[10px] text-warning"
+              data-testid={`context-source-excluded-${source.key}`}
+              title="整条未进入本轮注入（超出该来源预算）"
+            >
+              排除 {source.excluded} 条
+            </span>
+          ) : null}
+          {source.trimmed ? (
+            <span
+              className="shrink-0 rounded bg-warning/15 px-1 text-[10px] text-warning"
+              data-testid={`context-source-trimmed-${source.key}`}
+              title="因注入预算被截断的部分（保留了开头）"
+            >
+              已截断 {formatTokens(source.trimmed)}
+            </span>
+          ) : null}
+        </span>
+        <span className="shrink-0 tabular-nums">{formatTokens(source.tokens)}</span>
+      </button>
+
+      {open ? (
+        <span
+          className="mt-0.5 block pl-4 text-[10px] text-text-muted"
+          data-testid={`context-meter-source-detail-${source.key}`}
+        >
+          {source.identifiable && items.length > 0 ? (
+            <span className="block">
+              {items.map((item) => (
+                <span
+                  key={item.id}
+                  className="flex items-center justify-between gap-2 py-0.5"
+                  data-testid={`context-meter-source-item-${source.key}`}
+                >
+                  <span className="truncate font-mono" title={item.label}>
+                    {item.label}
+                  </span>
+                  {item.truncated ? (
+                    <span className="shrink-0 rounded bg-warning/15 px-1 text-warning">已截断</span>
+                  ) : null}
+                </span>
+              ))}
+              {source.omitted_items ? (
+                <span className="block py-0.5">
+                  另有 {source.omitted_items} 条未列出（超过展示上限）
+                </span>
+              ) : null}
+              <span className="block py-0.5">
+                以上为注入内容中真实记录的标识；没有可用跳转入口时不提供跳转。
+              </span>
+            </span>
+          ) : (
+            <span className="block py-0.5">
+              该来源未在注入内容中携带单条标识，无法逐条追溯（不虚构来源）。
+            </span>
+          )}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export function ContextSourceList({ sources }: { sources?: ContextSource[] | null }) {
   if (!sources || sources.length === 0) return null;
   const trimmedTotal = sources.reduce((a, s) => a + (s.trimmed ?? 0), 0);
   return (
-    <span
-      className="mt-2 block border-t border-border pt-2"
-      data-testid="context-meter-sources"
-    >
-      <span className="mb-1 block text-[11px] font-medium text-text-primary">本轮注入的上下文</span>
+    <span className="mt-2 block border-t border-border pt-2" data-testid="context-meter-sources">
+      <span className="mb-1 block text-[11px] font-medium text-text-primary">
+        上一轮请求的来源分类（非内容验真）
+      </span>
       {trimmedTotal > 0 && (
         <span
           className="mb-1 block text-[10px] text-warning"
@@ -258,26 +340,11 @@ export function ContextSourceList({ sources }: { sources?: ContextSource[] | nul
           注入内容超出预算（窗口的 35%），已截掉约 {formatTokens(trimmedTotal)} tokens 低优先级内容
         </span>
       )}
+      <span className="block text-ui-sm text-text-secondary mb-2">
+        此清单是已记录的来源类别与预算统计，不是发送前预览，也不证明每条事实或引用已核验。单条文件/记忆标识未采集时不虚构跳转。
+      </span>
       {sources.map((s) => (
-        <span
-          key={s.key}
-          data-testid={`context-source-${s.key}`}
-          className="flex items-center justify-between gap-2 py-0.5 text-[11px] text-text-secondary"
-        >
-          <span>{SOURCE_LABELS[s.key] ?? s.key}</span>
-          <span className="flex items-center gap-1.5 tabular-nums">
-            {s.trimmed ? (
-              <span
-                className="rounded bg-warning/15 px-1 text-[10px] text-warning"
-                data-testid={`context-source-trimmed-${s.key}`}
-                title="因注入预算被截断的部分（保留了开头）"
-              >
-                已截断 {formatTokens(s.trimmed)}
-              </span>
-            ) : null}
-            {formatTokens(s.tokens)}
-          </span>
-        </span>
+        <ContextSourceRow key={s.key} source={s} />
       ))}
     </span>
   );

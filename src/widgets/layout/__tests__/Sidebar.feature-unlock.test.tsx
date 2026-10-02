@@ -69,13 +69,17 @@ describe('Sidebar — progressive disclosure (U10, P1-7 灰态可见)', () => {
     // 常规入口仍然可见
     expect(screen.getByText('对话')).toBeInTheDocument();
     expect(screen.getByText('设置')).toBeInTheDocument();
-    // 高级入口：可见但标记为未启用 —— 用户能知道功能存在
+    // 高级入口：可见但标记为未启用 —— 用户能知道功能存在（上游 P1-7）
     expect(screen.getByText('编排')).toBeInTheDocument();
-    expect(screen.getByText('Office')).toBeInTheDocument();
     expect(screen.getByText('Arena')).toBeInTheDocument();
     expect(isLocked('orchestration')).toBe(true);
-    expect(isLocked('office')).toBe(true);
     expect(isLocked('arena')).toBe(true);
+    // 文档与验收（/office）保留上游的一次性解锁门控，但已提升进一级导航：
+    // 未解锁时同样灰态可见（不是隐藏），点击给出用途说明后进入。
+    expect(screen.getByText('文档与验收')).toBeInTheDocument();
+    expect(isLocked('office')).toBe(true);
+    // 项目工作台是常规入口，不受门控
+    expect(screen.getByText('项目工作台')).toBeInTheDocument();
   });
 
   it('访问高级路由即解锁该入口，其余保持灰态', () => {
@@ -86,6 +90,7 @@ describe('Sidebar — progressive disclosure (U10, P1-7 灰态可见)', () => {
     // 未访问的仍是灰态（但可见）
     expect(isLocked('office')).toBe(true);
     expect(isLocked('arena')).toBe(true);
+    // 解锁状态已持久化
     const stored = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(stored).toContain('orchestration');
   });
@@ -106,7 +111,8 @@ describe('Sidebar — progressive disclosure (U10, P1-7 灰态可见)', () => {
     );
     renderSidebarAt('/chat');
     expect(screen.getByText('编排')).toBeInTheDocument();
-    expect(screen.getByText('Office')).toBeInTheDocument();
+    // 文档与验收已提升为一级入口, 解锁与否都可见
+    expect(screen.getByText('文档与验收')).toBeInTheDocument();
     // P5：入口并入 /arena 三页签控制台，label 从「Arena 账号」改为「Arena」
     expect(screen.getByText('Arena')).toBeInTheDocument();
     expect(screen.queryByTestId(/^sidebar-locked-/)).toBeNull();
@@ -169,9 +175,7 @@ describe('Sidebar — progressive disclosure (U10, P1-7 灰态可见)', () => {
     // 旧路径 /arena-accounts（重定向到 /arena）同样保留解锁语义
     localStorage.clear();
     renderSidebarAt('/arena-accounts');
-    const storedLegacy = JSON.parse(
-      localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string,
-    );
+    const storedLegacy = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(storedLegacy).toContain('arena-accounts');
   });
 });
