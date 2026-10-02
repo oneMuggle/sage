@@ -18,9 +18,11 @@ describe('AssistantRecommendations', () => {
       <AssistantRecommendations recommendations={defaultRecommendations} onSelect={vi.fn()} />,
     );
     // Use heading role to disambiguate title from description
+    expect(screen.getByRole('button', { name: /写报告/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /整理资料/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /分析表格/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /制作演示/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /写代码/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /搜索/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /创意/ })).toBeInTheDocument();
   });
 
   it('renders a card for each recommendation (count matches)', () => {
@@ -28,7 +30,7 @@ describe('AssistantRecommendations', () => {
       <AssistantRecommendations recommendations={defaultRecommendations} onSelect={vi.fn()} />,
     );
     const cards = screen.getAllByTestId('recommendation-card');
-    expect(cards).toHaveLength(3);
+    expect(cards).toHaveLength(5);
   });
 
   it('calls onSelect with the clicked recommendation', () => {
@@ -36,10 +38,10 @@ describe('AssistantRecommendations', () => {
     renderWithI18n(
       <AssistantRecommendations recommendations={defaultRecommendations} onSelect={onSelect} />,
     );
-    const codeCard = screen.getAllByTestId('recommendation-card')[0]!;
-    fireEvent.click(codeCard);
+    const reportCard = screen.getAllByTestId('recommendation-card')[0]!;
+    fireEvent.click(reportCard);
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'code' }));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'report' }));
   });
 
   it('renders nothing when recommendations is empty', () => {

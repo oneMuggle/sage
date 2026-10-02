@@ -37,6 +37,7 @@ vi.mock('../../manage-settings/useSettings', () => ({
     },
     isLoading: false,
     updateSettings: updateSettingsMock,
+    updateSettingsStrict: updateSettingsMock,
     loadSettings: vi.fn(),
     resetSettings: vi.fn(),
   }),
@@ -143,6 +144,7 @@ describe('OnboardingWizard — R26', () => {
       ),
     );
     await waitFor(() => expect(screen.getByTestId('wizard-test-result')).toBeInTheDocument());
+    fireEvent.change(screen.getByTestId('wizard-model'), { target: { value: 'llama3' } });
     fireEvent.click(screen.getByTestId('wizard-save'));
 
     await waitFor(() => expect(updateSettingsMock).toHaveBeenCalled());
@@ -167,8 +169,51 @@ describe('OnboardingWizard — R26', () => {
     await waitFor(() =>
       expect(screen.getByTestId('wizard-test-result')).toHaveTextContent('连接被拒绝'),
     );
+    fireEvent.change(screen.getByTestId('wizard-model-manual'), {
+      target: { value: 'manual-model' },
+    });
     fireEvent.click(screen.getByTestId('wizard-save'));
     await waitFor(() => expect(updateSettingsMock).toHaveBeenCalled());
+  });
+
+  it('does not claim completion before the backend acknowledges the save', async () => {
+    let resolve!: () => void;
+    updateSettingsMock.mockImplementation(
+      () =>
+        new Promise<void>((done) => {
+          resolve = done;
+        }),
+    );
+    renderWizard();
+    fireEvent.click(screen.getByTestId('wizard-next-0'));
+    fireEvent.change(screen.getByTestId('wizard-baseurl'), {
+      target: { value: 'https://api.example.com/v1' },
+    });
+    fireEvent.change(screen.getByTestId('wizard-apikey'), { target: { value: 'test-key' } });
+    fireEvent.click(screen.getByTestId('wizard-next-1'));
+    fireEvent.change(screen.getByTestId('wizard-model-manual'), { target: { value: 'model' } });
+    fireEvent.click(screen.getByTestId('wizard-save'));
+    await waitFor(() => expect(updateSettingsMock).toHaveBeenCalled());
+    expect(screen.queryByTestId('wizard-finish')).not.toBeInTheDocument();
+    expect(screen.getByTestId('wizard-save')).toBeDisabled();
+    resolve();
+    await waitFor(() => expect(screen.getByTestId('wizard-finish')).toBeInTheDocument());
+  });
+
+  it('shows an unconfirmed save and permits retry instead of reporting success', async () => {
+    updateSettingsMock.mockRejectedValue(new Error('offline'));
+    renderWizard();
+    fireEvent.click(screen.getByTestId('wizard-next-0'));
+    fireEvent.change(screen.getByTestId('wizard-baseurl'), {
+      target: { value: 'https://api.example.com/v1' },
+    });
+    fireEvent.change(screen.getByTestId('wizard-apikey'), { target: { value: 'test-key' } });
+    fireEvent.click(screen.getByTestId('wizard-next-1'));
+    fireEvent.change(screen.getByTestId('wizard-model-manual'), { target: { value: 'model' } });
+    fireEvent.click(screen.getByTestId('wizard-save'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('保存未确认'));
+    expect(screen.queryByTestId('wizard-finish')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('wizard-save')).not.toBeDisabled());
   });
 
   it('跳过按钮不写入任何设置', () => {

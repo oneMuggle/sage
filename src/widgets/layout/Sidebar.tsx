@@ -9,6 +9,7 @@ import {
   Network,
   Sparkles,
   FileSpreadsheet,
+  Folder,
   HelpCircle,
   ListTodo,
   UserCog,
@@ -24,6 +25,7 @@ import { toast } from 'sonner';
 
 import { usePermissionState } from '../../entities/permission/permissionState';
 import { useQuestionState } from '../../entities/question/questionState';
+import { isEndpointConfigured } from '../../entities/setting/endpointReadiness';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { useArtifactEventsStore } from '../../features/artifacts/artifactEventsStore';
 import { useAttentionSnapshot, attentionSummary, attentionTitle } from '../../features/attention';
@@ -83,6 +85,8 @@ interface NavItem {
 
 const primaryNavItems: NavItem[] = [
   { path: '/chat', label: '对话', icon: MessageSquare },
+  { path: '/projects', label: '项目工作台', icon: Folder },
+  { path: '/office', label: '文档与验收', icon: FileSpreadsheet },
   { path: '/todos', label: '待办', icon: ListTodo },
   { path: '/memory', label: '记忆', icon: Brain },
   { path: '/knowledge', label: '知识库', icon: BookOpen },
@@ -90,7 +94,6 @@ const primaryNavItems: NavItem[] = [
 const settingsNavItem: NavItem = { path: '/settings', label: '设置', icon: Settings };
 const moreNavItems: NavItem[] = [
   { path: '/scheduled', label: '定时任务', icon: CalendarClock },
-  { path: '/office', label: 'Office', icon: FileSpreadsheet },
   { path: '/skills', label: '技能', icon: Sparkles },
   { path: '/agents', label: '智能体', labelKey: 'sidebar.nav.agents', icon: Bot },
   { path: '/orchestration', label: '编排', icon: Network },
@@ -114,9 +117,11 @@ const railNavItems = [...primaryNavItems, ...moreNavItems, settingsNavItem];
  */
 const ADVANCED_FEATURE_BY_PATH: Record<string, string> = {
   '/orchestration': 'orchestration',
-  '/office': 'office',
   '/arena': 'arena-accounts',
   '/arena-accounts': 'arena-accounts',
+  // 注意：/office 刻意不在此登记。Win7 轨没有主线 P1-7 的「灰态可见」门控 ——
+  // 这里的门控是“未解锁就不渲染”，把 /office 放进来会重新把核心交付入口藏起来
+  // （正是批次 B 要解决的“功能不存在”错觉）。/office 作为一级导航常驻。
 };
 
 interface SidebarProps {
@@ -207,7 +212,8 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
   }, [location.pathname]);
 
   useEffect(() => {
-    if (!chatEndpoint?.baseUrl || !chatEndpoint.apiKey) {
+    let cancelled = false;
+    if (!chatEndpoint || !isEndpointConfigured(chatEndpoint)) {
       setConnectionStatus('not-configured');
       return;
     }
@@ -215,15 +221,20 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
       chatEndpoint.baseUrl,
       chatEndpoint.apiKey,
       settings.modelSelections.chatModel.modelId ?? undefined,
+      chatEndpoint.protocol,
     )
       .then((result) => {
+        if (cancelled) return;
         setConnectionStatus(result.success ? 'connected' : 'error');
         setLatency(result.latency ?? null);
       })
       .catch(() => {
-        setConnectionStatus('error');
+        if (!cancelled) setConnectionStatus('error');
       });
-  }, [chatEndpoint?.baseUrl, chatEndpoint?.apiKey, settings.modelSelections.chatModel.modelId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [chatEndpoint, settings.modelSelections.chatModel.modelId]);
 
   const handleNewSession = () => {
     // Phase 7: 新建会话跳转到欢迎屏，由用户在欢迎屏输入后再创建 session

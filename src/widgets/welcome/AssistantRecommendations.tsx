@@ -13,7 +13,7 @@ export function AssistantRecommendations({
   recommendations,
   onSelect,
 }: AssistantRecommendationsProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   if (recommendations.length === 0) return null;
 
@@ -22,13 +22,14 @@ export function AssistantRecommendations({
       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted mb-3 px-1">
         {t('welcome.rec.title')}
       </h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {recommendations.map((rec) => {
           const Icon = lucideIconMap[rec.icon];
           // Cast: rec.id is a constrained string union from defaultRecommendations;
           // runtime fallback to the key string itself keeps UI safe when a new id is added.
           const titleKey = `welcome.rec.${rec.id}.title` as TranslationKey;
           const descKey = `welcome.rec.${rec.id}.desc` as TranslationKey;
+          const labels = rec.labels?.[locale === 'en' ? 'en' : 'zh'];
           return (
             <button
               key={rec.id}
@@ -36,15 +37,17 @@ export function AssistantRecommendations({
               data-testid="recommendation-card"
               onClick={() => onSelect(rec)}
               className="group text-left p-4 rounded-radius-md border border-border bg-surface hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30"
-              aria-label={t(titleKey)}
+              aria-label={labels?.title ?? t(titleKey)}
             >
               <div
-                className={`w-10 h-10 rounded-radius-sm flex items-center justify-center text-text-inverse mb-2 ${rec.gradient}`}
+                className={`w-10 h-10 rounded-radius-sm flex items-center justify-center text-primary mb-2 ${rec.gradient}`}
               >
                 {Icon ? <Icon className="w-5 h-5" /> : null}
               </div>
-              <div className="text-sm font-medium text-text">{t(titleKey)}</div>
-              <div className="text-xs text-text-tertiary mt-0.5 line-clamp-2">{t(descKey)}</div>
+              <div className="text-sm font-medium text-text">{labels?.title ?? t(titleKey)}</div>
+              <div className="text-xs text-text-tertiary mt-0.5 line-clamp-2">
+                {labels?.desc ?? t(descKey)}
+              </div>
             </button>
           );
         })}

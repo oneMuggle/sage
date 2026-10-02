@@ -1,6 +1,7 @@
 /**
  * English translations
  */
+import { pausedMemoryEn } from './pausedMemory';
 import type { TranslationKey } from './zh';
 
 export const en: Record<TranslationKey, string> = {
@@ -73,13 +74,7 @@ export const en: Record<TranslationKey, string> = {
   'chat.skills_toggle': 'View activated skills',
   'chat.skill_loaded': 'Skill {name} loaded',
   // S2 parity: inline memory-write hints / temporary chat
-  'chat.memory_saved': '🧠 Memory updated',
-  'chat.memory_saved_profile': '🧠 Profile updated',
-  'chat.memory_undo': 'Undo',
-  'chat.memory_dismiss': 'Dismiss',
-  'chat.temp_chat': 'Temporary chat',
-  'chat.temp_chat_on': 'Temporary chat: memory is neither read nor written in this session',
-  'chat.temp_chat_off': 'Turn on temporary chat (no memory)',
+  ...pausedMemoryEn,
   // S3 parity: permission presets + auto-approval audit + page commands
   'chat.perm.careful': 'Careful',
   'chat.perm.careful.desc': 'Ask before writing files, running commands, or using the network',
@@ -664,6 +659,19 @@ export const en: Record<TranslationKey, string> = {
   'scheduled.confirm.retry':
     'Check the target conversation first: the previous delivery may have succeeded before the error. Retry now?',
   'scheduled.confirm.delete': 'Delete this scheduled task?',
+
+  // ─── Batch C: skill references (/skill-name inside the content) ─────
+  'scheduled.skill.title': 'Linked skills',
+  'scheduled.skill.hint':
+    'Reference a registered skill as /skill-name in the message body. A reference is plain text — it never auto-runs a skill or widens file access.',
+  'scheduled.skill.select': 'Insert skill reference',
+  'scheduled.skill.remove': 'Remove',
+  'scheduled.skill.unknown': 'not registered',
+  'scheduled.skill.disabled': 'disabled',
+  'scheduled.skill.warning':
+    'These references are invalid right now and will not take effect (they are never auto-removed):',
+  'scheduled.skill.acknowledge': 'I understand these references are invalid — save anyway',
+  'scheduled.skill.list_unavailable': 'Skill list unavailable — references cannot be validated',
 
   // ─── M1 tool approval ─────────────
   'permission.title': 'Tool approval required',

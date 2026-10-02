@@ -3,6 +3,8 @@
  *
  * 键使用点分隔的命名空间: sidebar.new_chat, chat.title, settings.general ...
  */
+import { pausedMemoryZh } from './pausedMemory';
+
 export const zh = {
   // --- Task center: A1 states & actions (parity-s4) ---
   'taskCenter.cancel': '取消',
@@ -73,13 +75,7 @@ export const zh = {
   'chat.skills_toggle': '查看激活的技能',
   'chat.skill_loaded': '技能 {name} 已加载',
   // 对标 S2: 内联记忆写入提示 / 临时聊天
-  'chat.memory_saved': '🧠 记住了',
-  'chat.memory_saved_profile': '🧠 更新了关于你的画像',
-  'chat.memory_undo': '撤销',
-  'chat.memory_dismiss': '关闭提示',
-  'chat.temp_chat': '临时聊天',
-  'chat.temp_chat_on': '临时聊天：本会话不读取也不写入长期记忆',
-  'chat.temp_chat_off': '开启临时聊天（不读写记忆）',
+  ...pausedMemoryZh,
   // 对标 S3: 权限三档 + 自动放行审计 + 页面直达命令
   'chat.perm.careful': '谨慎',
   'chat.perm.careful.desc': '写文件、执行命令、联网都先问我',
@@ -642,6 +638,17 @@ export const zh = {
   'scheduled.run_succeeded': '上次投递成功',
   'scheduled.confirm.retry': '请先检查目标会话：上次投递可能在报错前已成功。确认再次投递？',
   'scheduled.confirm.delete': '确定要删除这个定时任务吗？',
+  // ─── 批次 C：技能引用（正文里的 /技能名，不新增后端字段） ─────
+  'scheduled.skill.title': '关联技能',
+  'scheduled.skill.hint':
+    '在发送内容里用 /技能名 引用已注册技能；引用只是正文文本，不会自动执行技能，也不会扩大文件访问范围。',
+  'scheduled.skill.select': '插入技能引用',
+  'scheduled.skill.remove': '移除',
+  'scheduled.skill.unknown': '未注册',
+  'scheduled.skill.disabled': '已停用',
+  'scheduled.skill.warning': '以下引用当前无效，保存后不会生效（不会被自动删除）：',
+  'scheduled.skill.acknowledge': '我已知悉这些引用无效，仍然保存',
+  'scheduled.skill.list_unavailable': '技能列表不可用，无法校验引用',
 
   // ─── M1 工具审批 ──────────────────
   'permission.title': '工具执行审批',

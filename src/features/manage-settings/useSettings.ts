@@ -7,6 +7,7 @@ export interface UseSettingsReturn {
   isLoading: boolean;
   loadSettings: () => Promise<void>;
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
+  updateSettingsStrict: (partial: Partial<AppSettings>) => Promise<void>;
   resetSettings: () => Promise<void>;
 }
 
@@ -24,7 +25,8 @@ export function useSettings(): UseSettingsReturn {
   const isLoading = useSettingsStore((s) => s.isLoading);
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   const updateSettings = useSettingsStore((s) => s.updateSettings);
+  const updateSettingsStrict = useSettingsStore((s) => s.updateSettingsStrict);
   const resetSettings = useSettingsStore((s) => s.resetSettings);
 
-  return { settings, isLoading, loadSettings, updateSettings, resetSettings };
+  return { settings, isLoading, loadSettings, updateSettings, updateSettingsStrict, resetSettings };
 }

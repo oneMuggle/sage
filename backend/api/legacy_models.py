@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, StrictBool
 
@@ -117,7 +117,7 @@ class ChatRequest(BaseModel):
     # 对标 S2（2026-09-13）：临时聊天（无记忆）模式。``"off"`` 时本轮
     # 既不注入 L13 记忆上下文，也不做对话后记忆提取；与 ChatGPT
     # "Temporary chat" / Claude 无记忆会话对齐。缺省 ``"on"``。
-    memory_mode: Optional[str] = "on"
+    memory_mode: Optional[Literal["on", "off"]] = "on"
 
 
 

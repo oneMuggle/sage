@@ -17,14 +17,16 @@ import {
   type EndpointProtocol,
 } from '../../entities/setting/types';
 import { useI18n } from '../../shared/lib/i18n';
-import {
-  testEndpointConnection,
-  type ConnectionTestResult,
-} from '../manage-endpoints/api';
+import { productMessages } from '../../shared/lib/productMessages';
+import { testEndpointConnection, type ConnectionTestResult } from '../manage-endpoints/api';
 import { useSettings } from '../manage-settings/useSettings';
 
 const PROTOCOLS: { value: EndpointProtocol; labelKey: string; hint: string }[] = [
-  { value: 'openai-compatible', labelKey: 'wizard.proto.openai', hint: 'OpenAI / DeepSeek / 月之暗面 / 硅基流动 …' },
+  {
+    value: 'openai-compatible',
+    labelKey: 'wizard.proto.openai',
+    hint: 'OpenAI / DeepSeek / 月之暗面 / 硅基流动 …',
+  },
   { value: 'anthropic', labelKey: 'wizard.proto.anthropic', hint: 'Claude 系列模型' },
   { value: 'gemini', labelKey: 'wizard.proto.gemini', hint: 'Google AI Studio' },
   { value: 'ollama', labelKey: 'wizard.proto.ollama', hint: '本地 Ollama（无需密钥）' },
@@ -33,8 +35,8 @@ const PROTOCOLS: { value: EndpointProtocol; labelKey: string; hint: string }[] =
 const MAX_BASEURL_LEN = 300;
 
 export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
-  const { t } = useI18n();
-  const { settings, updateSettings } = useSettings();
+  const { t, locale } = useI18n();
+  const { settings, updateSettingsStrict } = useSettings();
   const [step, setStep] = useState(0);
   const [protocol, setProtocol] = useState<EndpointProtocol>('openai-compatible');
   const [baseUrl, setBaseUrl] = useState('');
@@ -43,6 +45,8 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
   const [selectedModel, setSelectedModel] = useState('');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const needsKey = protocol !== 'ollama';
 
@@ -55,7 +59,12 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     setTesting(true);
     setTestResult(null);
     try {
-      const result = await testEndpointConnection(baseUrl.trim(), apiKey.trim(), undefined, protocol);
+      const result = await testEndpointConnection(
+        baseUrl.trim(),
+        apiKey.trim(),
+        undefined,
+        protocol,
+      );
       setTestResult(result);
     } catch (error) {
       setTestResult({
@@ -68,27 +77,43 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
+    if (!selectedModel.trim()) {
+      setSaveError(productMessages(locale).modelRequired);
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
     const endpoint: EndpointConfig = {
       ...DEFAULT_ENDPOINT,
       id: crypto.randomUUID(),
-      name: `${PROTOCOLS.find((p) => p.value === protocol)?.labelKey ?? protocol}`,
+      name: t(
+        (PROTOCOLS.find((p) => p.value === protocol)?.labelKey ??
+          'wizard.proto.openai') as Parameters<typeof t>[0],
+      ),
       baseUrl: baseUrl.trim(),
       apiKey: apiKey.trim(),
       protocol,
-      modelId: selectedModel,
+      modelId: selectedModel.trim(),
       discoveredModels: testResult?.success ? (testResult.discoveredModels ?? []) : [],
       lastDiscoveredAt: testResult?.success ? Date.now() : null,
     };
-    void updateSettings({
-      endpoints: [...settings.endpoints, endpoint],
-      modelSelections: {
-        ...settings.modelSelections,
-        chatModel: { endpointId: endpoint.id, modelId: selectedModel || null },
-      },
-    });
-    setSaved(true);
-    setStep(3);
+    try {
+      await updateSettingsStrict({
+        endpoints: [...settings.endpoints, endpoint],
+        modelSelections: {
+          ...settings.modelSelections,
+          chatModel: { endpointId: endpoint.id, modelId: selectedModel.trim() || null },
+        },
+      });
+      setSaved(true);
+      setStep(3);
+    } catch {
+      setSaveError(productMessages(locale).saveFailed);
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (saved) {
@@ -132,152 +157,180 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
       <h2 className="text-sm font-semibold text-text">{t('wizard.title')}</h2>
       <p className="text-xs text-text-secondary mt-0.5">{t('wizard.subtitle')}</p>
 
-      {/* 步骤指示 */}
-      <div className="flex items-center gap-1 mt-3 text-[11px] text-text-secondary">
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            className={`px-1.5 py-0.5 rounded ${step === i ? 'bg-primary/10 text-primary font-medium' : step > i ? 'text-primary' : ''}`}
-          >
-            {i + 1}. {t(`wizard.step${i + 1}` as Parameters<typeof t>[0])}
-          </span>
-        ))}
-      </div>
-
-      {step === 0 && (
-        <div className="mt-3 space-y-2" data-testid="wizard-step-protocol">
-          {PROTOCOLS.map((p) => (
-            <button
-              key={p.value}
-              type="button"
-              onClick={() => setProtocol(p.value)}
-              className={`w-full text-left px-3 py-2 rounded-radius-sm border transition-colors ${
-                protocol === p.value
-                  ? 'border-primary bg-primary/5'
-                  : 'border-border hover:bg-bg-hover'
-              }`}
-            >
-              <div className="text-xs font-medium text-text">{t(p.labelKey as Parameters<typeof t>[0])}</div>
-              <div className="text-[11px] text-text-secondary">{p.hint}</div>
-            </button>
-          ))}
-          <button
-            type="button"
-            data-testid="wizard-next-0"
-            onClick={() => setStep(1)}
-            className="mt-1 inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover"
-          >
-            {t('wizard.next')}
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
+      {saveError && (
+        <p role="alert" className="mt-2 text-ui-sm text-error">
+          {saveError}
+        </p>
       )}
-
-      {step === 1 && (
-        <div className="mt-3 space-y-2" data-testid="wizard-step-credentials">
-          <label className="block text-xs text-text-secondary">
-            {t('wizard.baseurl')}
-            <input
-              data-testid="wizard-baseurl"
-              value={baseUrl}
-              onChange={(e) => setBaseUrl(e.target.value)}
-              placeholder={
-                protocol === 'ollama' ? 'http://localhost:11434' : 'https://api.example.com/v1'
-              }
-              className="mt-1 w-full px-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
-            />
-          </label>
-          {needsKey && (
-            <label className="block text-xs text-text-secondary">
-              {t('wizard.apikey')}
-              <input
-                data-testid="wizard-apikey"
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="mt-1 w-full px-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
-              />
-            </label>
-          )}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setStep(0)}
-              className="px-3 py-1.5 text-xs rounded-radius-sm border border-border hover:bg-bg-hover"
+      {saving && (
+        <p role="status" className="mt-2 text-ui-sm text-muted">
+          {productMessages(locale).saving}
+        </p>
+      )}
+      <fieldset disabled={saving} className="m-0 min-w-0 border-0 p-0">
+        {/* 步骤指示 */}
+        <div className="flex items-center gap-1 mt-3 text-[11px] text-text-secondary">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className={`px-1.5 py-0.5 rounded ${step === i ? 'bg-primary/10 text-primary font-medium' : step > i ? 'text-primary' : ''}`}
             >
-              {t('wizard.back')}
-            </button>
+              {i + 1}. {t(`wizard.step${i + 1}` as Parameters<typeof t>[0])}
+            </span>
+          ))}
+        </div>
+
+        {step === 0 && (
+          <div className="mt-3 space-y-2" data-testid="wizard-step-protocol">
+            {PROTOCOLS.map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => setProtocol(p.value)}
+                className={`w-full text-left px-3 py-2 rounded-radius-sm border transition-colors ${
+                  protocol === p.value
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:bg-bg-hover'
+                }`}
+              >
+                <div className="text-xs font-medium text-text">
+                  {t(p.labelKey as Parameters<typeof t>[0])}
+                </div>
+                <div className="text-[11px] text-text-secondary">{p.hint}</div>
+              </button>
+            ))}
             <button
               type="button"
-              data-testid="wizard-next-1"
-              disabled={!canNextFromCreds}
-              onClick={() => setStep(2)}
-              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover disabled:opacity-50"
+              data-testid="wizard-next-0"
+              onClick={() => setStep(1)}
+              className="mt-1 inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover"
             >
               {t('wizard.next')}
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {step === 2 && (
-        <div className="mt-3 space-y-2" data-testid="wizard-step-test">
-          <button
-            type="button"
-            data-testid="wizard-test"
-            disabled={testing}
-            onClick={() => void handleTest()}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-radius-sm border border-border hover:bg-bg-hover disabled:opacity-50"
-          >
-            {testing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-            {t('wizard.test')}
-          </button>
-          {testResult && (
-            <p
-              className={`text-xs ${testResult.success ? 'text-primary' : 'text-error'}`}
-              data-testid="wizard-test-result"
-            >
-              {testResult.message}
-            </p>
-          )}
-          {testResult?.success && (testResult.discoveredModels?.length ?? 0) > 0 && (
+        {step === 1 && (
+          <div className="mt-3 space-y-2" data-testid="wizard-step-credentials">
             <label className="block text-xs text-text-secondary">
-              {t('wizard.pick_model')}
-              <select
-                data-testid="wizard-model"
-                value={selectedModel}
-                onChange={(e) => setSelectedModel(e.target.value)}
+              {t('wizard.baseurl')}
+              <input
+                data-testid="wizard-baseurl"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder={
+                  protocol === 'ollama' ? 'http://localhost:11434' : 'https://api.example.com/v1'
+                }
                 className="mt-1 w-full px-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
-              >
-                <option value="">{t('wizard.pick_model_hint')}</option>
-                {testResult.discoveredModels!.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.id}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
-          )}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setStep(1)}
-              className="px-3 py-1.5 text-xs rounded-radius-sm border border-border hover:bg-bg-hover"
-            >
-              {t('wizard.back')}
-            </button>
-            <button
-              type="button"
-              data-testid="wizard-save"
-              onClick={handleSave}
-              className="px-3 py-1.5 text-xs rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover"
-            >
-              {t('wizard.save')}
-            </button>
+            {needsKey && (
+              <label className="block text-xs text-text-secondary">
+                {t('wizard.apikey')}
+                <input
+                  data-testid="wizard-apikey"
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  className="mt-1 w-full px-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
+                />
+              </label>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setStep(0)}
+                className="px-3 py-1.5 text-xs rounded-radius-sm border border-border hover:bg-bg-hover"
+              >
+                {t('wizard.back')}
+              </button>
+              <button
+                type="button"
+                data-testid="wizard-next-1"
+                disabled={!canNextFromCreds}
+                onClick={() => setStep(2)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover disabled:opacity-50"
+              >
+                {t('wizard.next')}
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {step === 2 && (
+          <div className="mt-3 space-y-2" data-testid="wizard-step-test">
+            <button
+              type="button"
+              data-testid="wizard-test"
+              disabled={testing}
+              onClick={() => void handleTest()}
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-radius-sm border border-border hover:bg-bg-hover disabled:opacity-50"
+            >
+              {testing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {t('wizard.test')}
+            </button>
+            {testResult && (
+              <p
+                className={`text-xs ${testResult.success ? 'text-primary' : 'text-error'}`}
+                data-testid="wizard-test-result"
+              >
+                {testResult.message}
+              </p>
+            )}
+            {testResult?.success && (testResult.discoveredModels?.length ?? 0) > 0 && (
+              <label className="block text-xs text-text-secondary">
+                {t('wizard.pick_model')}
+                <select
+                  data-testid="wizard-model"
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="mt-1 w-full px-2 py-1.5 text-xs rounded-radius-sm border border-border bg-bg text-text"
+                >
+                  <option value="">{t('wizard.pick_model_hint')}</option>
+                  {testResult.discoveredModels!.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {!(testResult?.success && (testResult.discoveredModels?.length ?? 0) > 0) && (
+              <label className="block text-ui-sm text-text-secondary">
+                {t('wizard.pick_model')}
+                <input
+                  data-testid="wizard-model-manual"
+                  value={selectedModel}
+                  disabled={saving}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className="mt-1 w-full px-2 py-1.5 rounded border border-border bg-bg text-text"
+                />
+              </label>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className="px-3 py-1.5 text-xs rounded-radius-sm border border-border hover:bg-bg-hover"
+              >
+                {t('wizard.back')}
+              </button>
+              <button
+                type="button"
+                data-testid="wizard-save"
+                disabled={saving}
+                aria-busy={saving}
+                onClick={handleSave}
+                className="px-3 py-1.5 text-xs rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover"
+              >
+                {t('wizard.save')}
+              </button>
+            </div>
+          </div>
+        )}
+      </fieldset>
     </div>
   );
 }

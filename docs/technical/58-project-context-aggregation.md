@@ -94,7 +94,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_project_materials_hash
 ```
 
 - `content_hash` 复合 UNIQUE INDEX → 重复添加同内容返回已有行（idempotent）
-- `status` 三态机：`pending_index`（初始）→ `ready`（索引成功）/ `failed`（索引失败）
+- `status` 三态：`ready`（`add()` 默认，添加即可注入）/ `pending_index`、`failed`
+  （预留给未来的异步索引管线，由 `mark_ready` / `mark_failed` 收尾；当前生产路径
+  不会产生）。`add(status=...)` 仅接受 `VALID_MATERIAL_STATUSES`，否则 `ValueError`；
+  去重命中 `failed` 行时按本次请求的 status 复活并清空 `error_message`。
+  历史背景与回填见 §11
 - 单条 64 KB 限制（`MAX_MATERIAL_CONTENT_CHARS`），超出抛 `ProjectMaterialContentTooLargeError` → 413
 
 ## 4. API 端点
@@ -105,7 +109,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_project_materials_hash
 |---|---|---|
 | `PATCH /api/v1/projects/{id}` | 更新 description/instructions | `model_fields_set` 仅改传入字段 |
 | `GET /api/v1/projects/{id}/materials` | 列出资料（含 pending_index/ready/failed） | 404 项目不存在 |
-| `POST /api/v1/projects/{id}/materials` | 直接添加（content + optional source_message_id） | content ≤ 64 KB；content_hash 幂等 |
+| `POST /api/v1/projects/{id}/materials` | 直接添加（content + optional source_message_id），返回 `status=ready` | content ≤ 64 KB；content_hash 幂等 |
 | `DELETE /api/v1/projects/{id}/materials/{material_id}` | 删除单条 | 校验 material 属于该项目 |
 | `POST /api/v1/projects/{id}/materials/save-answer` | 从消息保存回答 | (1) message 存在 (2) role == "assistant" (3) message.session_id 当前绑定到该项目 (review HIGH/Security MEDIUM) |
 
@@ -281,9 +285,51 @@ caller 必须持锁。
 - **跨项目引用**：资料当前严格按 project_id 隔离，未支持"将其他项目的资料
   引用到本项目"——有意保持隔离，避免越权
 
+## 11. P0 修复记录（2026-09-20）：资料添加后直接 `ready`
+
+**症状**：用户在侧栏添加资料 / 保存回答后，徽章一直停留在「处理中」，
+system prompt 里从未出现「项目资料」块。
+
+**根因**：`ProjectMaterialRepository.add()` 硬编码写入 `status='pending_index'`，
+而仓库里 `mark_ready()` 只有测试调用、没有任何生产索引管线；
+`get_active_materials_for_project()` 又只取 `status='ready'`。三者合起来，
+资料永远不会被注入。既有测试之所以通过，是因为它们在断言前手动调用了
+`mark_ready()`。
+
+**修复**（`backend/data/project_material_repo.py` + `backend/data/database.py`）：
+
+1. `add()` 新增关键字参数 `status`，默认 `DEFAULT_MATERIAL_STATUS = "ready"`；
+   INSERT 使用请求的 status。`pending_index` / `failed` 与 `mark_ready` /
+   `mark_failed` 保留，供未来异步索引（wiki ingest）显式传
+   `status="pending_index"` 使用
+2. 去重命中 `failed` 行时按本次请求的 status 复活（清空 `error_message`），
+   "再添加一次"即重试；`pending_index` 行保持不动
+3. `database.py` schema 初始化追加幂等回填：
+   `UPDATE project_materials SET status='ready' WHERE status='pending_index'`，
+   修正升级前已停留在 `pending_index` 的存量资料（将来接入异步索引时必须
+   移除或按版本门控）
+4. 路由层（`backend/api/project_routes.py`）与注入层
+   （`backend/chat/project_context.py`、`backend/api/legacy_routes.py`）无需改动
+
+**测试**：
+
+- `backend/tests/unit/test_project_material_repo.py`：默认 ready、显式
+  pending、非法 status、failed 复活、pending 不被覆盖；GetActive 用例改为
+  显式 `status="pending_index"` 构造排除项
+- `backend/tests/api/test_project_routes_m3.py`：add / save-answer 断言
+  `status == "ready"`
+- `backend/tests/integration/test_project_overview_injection.py`：删除手动
+  `mark_ready`；新增端到端回归
+  `test_material_added_via_api_is_injected_without_manual_ready`
+  （REST 添加 → `/chat/stream` → system prompt 含 `MATERIALS_HEADER`）
+
+**双分支交付**：`main` 与 `release/win7` 各自独立分支 + PR，win7 侧为
+同一提交的 cherry-pick（改动文件在两分支上逐字节一致，且不含 py3.9+ 语法）。
+完整评审与后续路线图见 `docs/mcp-project-feature-review.md`。
+
 ---
 
-_本节配套测试: backend/tests/api/test_project_routes_m3.py (18 个) +
-backend/tests/unit/test_project_material_repo.py (12 个) +
-backend/tests/integration/test_project_overview_injection.py (10 个) +
+_本节配套测试: backend/tests/api/test_project_routes_m3.py (17 个) +
+backend/tests/unit/test_project_material_repo.py (19 个) +
+backend/tests/integration/test_project_overview_injection.py (5 个) +
 src/widgets/sidebar/sections/ProjectSection.test.tsx (29 个)。_

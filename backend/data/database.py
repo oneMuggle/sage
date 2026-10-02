@@ -1072,8 +1072,9 @@ class Database:
         conn.commit()
 
         # M3 (2026-09-15): 项目资料表——用户显式添加的参考资料，注入 system
-        # prompt 供上下文使用。status 三态: pending_index (待索引) / ready
-        # (已索引可注入) / failed (索引失败)。content_hash 用于 project+hash
+        # prompt 供上下文使用。status 三态: pending_index (待索引，保留给
+        # 未来异步索引) / ready (已生效可注入，add() 默认) / failed (索引
+        # 失败)。content_hash 用于 project+hash
         # 去重（同内容重复添加返回已有行）。source_message_id 可选，记录来源
         # 消息（save-answer 场景）。wiki_page_path 指向索引后的 wiki 页面路径。
         cursor.execute("""
@@ -1097,6 +1098,18 @@ class Database:
         cursor.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_project_materials_dedup "
             "ON project_materials(project_id, content_hash)"
+        )
+        conn.commit()
+
+        # P0 修复 (2026-09-20): 资料添加后直接 ready。此前 add() 写入
+        # pending_index，而生产路径没有任何索引管线调用 mark_ready，导致
+        # 存量资料永远停留在 pending_index、从不注入 system prompt。这里把
+        # 遗留的 pending_index 行一次性回填为 ready（幂等：无匹配行即 no-op；
+        # failed 行不动）。注意：将来真正接入异步索引、add() 重新写
+        # pending_index 时，必须删除或按版本号门控此回填。
+        cursor.execute(
+            "UPDATE project_materials SET status = 'ready' "
+            "WHERE status = 'pending_index'"
         )
         conn.commit()
 
