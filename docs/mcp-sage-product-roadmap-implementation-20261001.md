@@ -1,8 +1,8 @@
 # Sage 产品路线实施报告（截至 2026-10-01）
 
 - 范围：完整优化路线，分批实施；主线与 Win7 LTS 双轨。
-- 主线 worktree：`.worktrees/sage-product-roadmap-main-20261001`（分支 `feat/sage-product-roadmap-main-20261001`，基线 `419ff871f`）
-- Win7 worktree：`.worktrees/sage-product-roadmap-win7-20261001`（分支 `feat/sage-product-roadmap-win7-20261001`，基线 `0238bb43d`）
+- 主线 worktree：`.worktrees/sage-product-roadmap-main-20261001`（分支 `feat/sage-product-roadmap-main-20261001`，基线 `419ff871f`，已合入 `origin/main` `4ac57c8cd`，见“基线合并与冲突解决”）
+- Win7 worktree：`.worktrees/sage-product-roadmap-win7-20261001`（分支 `feat/sage-product-roadmap-win7-20261001`，基线 `0238bb43d`，已合入 `origin/release/win7` `f4461a655`）
 - 方案文档：两条线各自的 `docs/plans/2026-10-01_sage-product-roadmap.md`
 - 前置评审：`docs/mcp-sage-product-optimization-20261001.md`（分支 `docs/mcp-sage-product-review-20261001`）
 
@@ -13,8 +13,8 @@
 | A 可信底座 | 已完成并验证 | 资料可用性（改为方案 A，见 A1）、关键设置回执、协议感知状态、长期记忆契约、设置与任务状态 |
 | B 成果流程 | 主要入口已完成并验证 | 任务简报、项目工作台、设置分组与定位；Office 主流程仅接入入口，未改管线 |
 | C 持续复用 | 部分完成 | 任务配方、能力感知入口、来源说明校准已完成；本次新增来源可追溯（C1）与技能×定时任务联动（C2）；能力感知自动路由、单任务硬预算未实施（见“延后”） |
-| 全量门禁 | 本地 + CI 均通过 | 全量 vitest、后端定向 pytest、ruff、架构基线、ESLint、Prettier、类型检查均通过；两条线 CI（`ci-rerun` 补跑）全绿 |
-| 发布 | 已开 PR，未合并 | 主线 PR #1867（分支头 `8eb5b9a76`）、Win7 PR #1868（分支头 `d992ac189`），CI 全绿，等 reviewer 授权合并 |
+| 全量门禁 | 本地 + CI 均通过 | 本地：全量 vitest、后端定向 pytest、ruff、架构基线、ESLint、类型检查均通过；CI：两条线的真实 `pull_request` 检查（含必需项）均通过 |
+| 发布 | 已开 PR，未合并 | 主线 PR #1867（合并提交 `fd44020ca`）、Win7 PR #1868（合并提交 `a021bc284`）均为 `MERGEABLE / CLEAN`，必需检查全部通过；等 reviewer 授权合并（含上面的 `/office` 门控取舍确认） |
 
 ## 批次 A：可信底座（已完成）
 
@@ -69,6 +69,16 @@
   - `CreateTaskModal.tsx` 中 `./skillLink` 的导入位置与组内空行触发 eslint `import/order` 两条 error → 导入移入同级导入组（`./cronValidator` 之后）。
   - 新增控件造成既有测试的选择器歧义：① `ContextSourceList` 用 `/^context-source-/` 统计“顶层来源行”，嵌套的展开/明细/单条元素复用同一前缀会多匹配 3 个节点 → 嵌套元素改用 `context-meter-source-*` 前缀（`context-source-trimmed-*` 保持原样）；② `ScheduledTasks` 页面用 `getByRole('combobox')` 断言目标会话下拉，弹窗新增「插入技能引用」下拉后同页出现两个 combobox → 改为 `getAllByRole('combobox')[0]`。两处都只改定位方式，断言内容不变。
 
+## 基线合并与冲突解决（批次 C 之后）
+
+两个 PR 的基线在批次 C 推送之后继续前进（`origin/main` `419ff871f` → `4ac57c8cd`，合入了 PR #1869；`origin/release/win7` `0238bb43d` → `f4461a655`），两个 PR 一度变为 `CONFLICTING`。已把新基线合入各自分支（合并提交：主线 `fd44020ca`、Win7 `a021bc284`），冲突与取舍如下：
+
+- **主线 7 个冲突文件**：`architecture-baseline.json`（逐文件取较大值，i18n en/zh 按实测 1322/1289 重新登记，未下调任何条目）、`settings/components.tsx`、`Settings.tsx`、`ToolsConnectionsTab.tsx`、`MemoryKnowledgeTab.tsx`、`Sidebar.tsx` 及其测试。原则：上游行为一律保留，本分支新增能力（显式回执、搜索定位兜底、项目工作台 / 文档与验收入口）叠加其上。
+- **Win7 3 个冲突文件**：`Settings.tsx`、`ToolsConnectionsTab.tsx`、`Sidebar.tsx`；同一原则，但 Win7 基线没有主线的 `data-settings-anchor` 跳转机制与 P1-7 灰态门控，所以不照搬主线的写法。
+- **待 reviewer 确认的产品取舍**：`/office`（文档与验收）两轨处理不同。主线保留上游 P1-7 的“灰态可见 → 用途说明 → 确认后解锁”，位置提升到一级但不取消门控；Win7 的门控是“未解锁就不渲染”，把 `/office` 放进去会重新藏起来（正是批次 B 要解决的“功能不存在”错觉），因此 Win7 不门控、常驻一级。主线如要取消门控，删掉 `ADVANCED_FEATURE_BY_PATH` 里的 `'/office'` 即可。
+- **为适配上游测试**：主线 3 个测试（`MemoryKnowledgeTab.clearAll`、`TrustEscalation`、`Settings.anchor`）与 Win7 的 `TrustEscalation` 做了选择器 / mock 适配（mock 签名与真实 `settingsClient` 一致），断言内容未放宽；`Sidebar.feature-unlock` 按合并后的行为重写。
+- **合并后本地验证**：主线全量 vitest 487 files / 3580 tests，Win7 455 files / 3310 tests，均通过；两轨 typecheck、lint（0 error）、architecture-check、ruff 通过；后端定向各 195 通过（主线 Python 3.11.16、Win7 Python 3.8.20）。
+
 ## 验证结果
 
 - 两条线定向回归：各 14 个文件 / 41 个测试通过（含新增的资料、回执、协议、记忆、简报、设置分组测试）。
@@ -76,7 +86,7 @@
 - 后端资料链路定向回归（PR 后补充）：两条线各 **49 个测试**通过——主线 Python 3.11.16（`sage-backend`）、Win7 Python 3.8.20（`sage-backend-py38`），覆盖 `test_project_material_repo.py`、`test_product_roadmap_integrity.py`、`test_project_routes_m3.py`、`test_project_overview_injection.py`。
 - 批次 C 定向回归：前端 **31 个测试**通过（`ContextMeter` 来源明细、`skillLink`、`CreateTaskModal`、i18n 套件），后端 **61 个测试**通过（含 `test_context_sources.py` 12 例）。
 - 批次 C 补修后的**全量前端套件**：主线 **476 文件 / 3435 测试**通过（2 跳过），Win7 **447 文件 / 3209 测试**通过（2 跳过），退出码 0。
-- CI（批次 C）：两条线的 `pull_request` 事件被 GitHub 静默丢弃（分支上查不到新 run），按仓库 SOP 用 `gh workflow run ci-rerun.yml -f ref=<分支> -f target=<基线>` 手动补跑，**全绿**——主线 run 36914410515（Backend / Frontend / Electron smoke / Dependency audit / All Checks），Win7 run 36914430035（Backend Python 3.8 / Frontend / Electron smoke / All Checks）。
+- CI（批次 C）：**更正**——此前文档与 PR 评论里写的“`pull_request` 事件被 GitHub 静默丢弃”是误判。两个 PR 在基线前进后处于 `CONFLICTING`，GitHub 不会为有合并冲突的 PR 派发 `pull_request` 工作流（GitHub 文档如此规定），所以批次 C 的推送没有产生 PR 检查；当时用 `ci-rerun.yml`（`workflow_dispatch`）补跑的结果只能证明代码本身能通过，**不参与分支保护判定**（见 `docs/plans/2026-10-01_ux-ia-round3-panel-slot.md` §7.3）。解冲突合入新基线后，真实 `pull_request` 检查随即触发并通过：主线 CI run 36957094454 + E2E PR Gate run 36957094446（含必需项 `stub-smoke` / `stub-deep` / `live-boot`，全部 pass）；Win7 CI run 36960804610（Backend Python 3.8 / Frontend / Electron build ×2 / Electron smoke / Architecture check / All Checks 全部 success）。两个 PR 当前为 `MERGEABLE / CLEAN`。
 - `ruff check backend/`：两条线均通过（修正了 `pytest.raises(ValueError)` 过宽的 PT011）。
 - 架构基线：`backend/data/database.py` 因回填增长 13 行，按 ratchet 协议登记为有意增长（主线 1949→1962、Win7 1982→1995），未下调任何既有条目。
 - 类型检查（renderer + electron）、架构基线检查、ESLint、Prettier：两条线均通过（未放宽基线，i18n 增长通过提取共用模块保持预算）。
@@ -85,10 +95,10 @@
 
 ## 已知限制与未完成项
 
-- **远端新鲜度未验证**：两次 `git fetch` 分别遇到连接重置与低速超时，基线使用已存在的 origin 跟踪引用。集成前必须重新 fetch 并核对漂移、执行分支新鲜度检查。
-- **推送链路受阻**：`https://github.com` 的 IPv6 通路当前不可达（`curl -4` 返回 200、`curl -6` 失败），`git push` 反复被连接重置；改用 GitHub Git Data API 按对象精确提交（blob → tree → commit → ref），远端提交 sha 与本地完全一致（主线 `8a9c33620` → 批次 C 后 `8eb5b9a76`；Win7 `3e4b615be` → 批次 C 后 `d992ac189`）。网络恢复后建议重新 `git fetch` 核对远端引用。
+- **远端新鲜度**：本机 `git fetch` 曾因网络问题失败，基线新鲜度改用 `gh api` 核对：合并时 `origin/main`=`4ac57c8cd`、`origin/release/win7`=`f4461a655`；此后 `main` 又前进到 `456b9a9e8`（4 个提交，仅 CI 工作流 / 依赖审计 / 文档，与本 PR 无源码重叠，PR 仍为 CLEAN）。合并前若基线再前进，需要重新合并并等待真实 PR 检查。
+- **推送链路受阻**：`https://github.com` 的 IPv6 通路不可达（`curl -4` 返回 200、`curl -6` 失败），`git push` 反复被连接重置；改用 GitHub Git Data API 按对象精确提交（blob → tree → commit → ref），远端提交 sha 与本地完全一致（主线 `8a9c33620` → 批次 C 后 `8eb5b9a76` → 合并提交 `fd44020ca`；Win7 `3e4b615be` → `d992ac189` → `a021bc284`）。合并提交使用保留两个 parent 的脚本推送，并复用两侧 parent 已有的 blob，只上传冲突解决产生的新内容。网络恢复后建议重新 `git fetch` 核对远端引用。
 - 本机 lefthook 因缺少 `if` 内置命令无法执行（环境假警报），提交/推送使用 `--no-verify`；已手动跑通 ruff、架构基线检查、定向 pytest、ESLint、Prettier、类型检查。
-- CI 是最终门禁：当前两条线 CI 全绿（见“验证结果”），但 `pull_request` 事件被 GitHub 静默丢弃，只能靠 `ci-rerun` 手动触发；合并前建议再确认一次事件通路是否恢复。
+- CI 是最终门禁：两个 PR 当前均为 `MERGEABLE / CLEAN`，必需检查全部通过。`ci-rerun` 只是人工验证手段，不再作为门禁证据；PR 一旦再次出现合并冲突，`pull_request` 检查就不会触发——这是需要留意的信号，而不是 GitHub 丢事件。
 - 未做真实界面点验、性能测量、用户研究；窄窗口/大字号/高 DPI 等仍为待验证项。
 - 未实施自动数据迁移与历史清理；未改动生产数据库。
 - 批次 C 的自动路由与硬预算需要后端配套能力，当前仅打通入口与说明。
