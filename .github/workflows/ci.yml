@@ -10,13 +10,14 @@ on:
       - '**.md'
       - '.github/CODEOWNERS'
       - '.github/ISSUE_TEMPLATE/**'
+  # NOTE: no paths-ignore here on purpose.
+  # A workflow skipped by a path filter produces NO check-run at all. Since
+  # release/win7 requires these 5 contexts in branch protection, a docs-only PR
+  # targeting win7 would stay mergeable_state=blocked forever (no close/reopen,
+  # no new branch, no rerun can help -- nothing ever emits the required checks).
+  # main/develop never hit this because their ci.yml has no pull_request filter.
   pull_request:
     branches: [main, develop, release/**]
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
-      - '.github/CODEOWNERS'
-      - '.github/ISSUE_TEMPLATE/**'
   workflow_dispatch:
 
 concurrency:
