@@ -23,8 +23,7 @@ import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
 import { EndpointsTab } from './EndpointsTab';
 import { GeneralTab } from './GeneralTab';
 import { McpTab } from './McpTab';
-import { MemoryKnowledgeTab } from './MemoryKnowledgeTab';
-import { MemoryTab } from './MemoryTab';
+import { MemorySettingsTab } from './MemorySettingsTab';
 import { ModelsTab } from './ModelsTab';
 import { NetworkTab } from './NetworkTab';
 import { OrchestrationTab } from './OrchestrationTab';
@@ -44,12 +43,31 @@ import {
 
 export type SettingsTab = SettingsTabKey;
 
+/**
+ * 历史持久化 tab 值 → 当前 tab 的迁移表。
+ *
+ * - `general`：P0-5 之前 'general' 不在 tabs 列表里却承载默认落地页，迁到 basic。
+ * - `memory-knowledge`：P1-5 把两个「记忆」tab 合并成一个，该 key 已下线，
+ *   迁到 memory。老用户 localStorage 里还留着旧值，不迁移就会落进
+ *   “无 tab 内容”的空白页。
+ */
+const LEGACY_TAB_ALIASES: Record<string, SettingsTab> = {
+  general: 'basic',
+  'memory-knowledge': 'memory',
+};
+
+function migrateTab(saved: string): SettingsTab {
+  return (LEGACY_TAB_ALIASES[saved] ?? saved) as SettingsTab;
+}
+
 export function Settings() {
   // R45: 记住上次访问的 tab —— localStorage 持久化，重开设置页恢复
   const [activeTab, setActiveTabState] = useState<SettingsTab>(() => {
     try {
       const saved = localStorage.getItem('sage:settings-tab');
-      return initialSettingsTab(saved, ENABLE_UPDATE_PROVIDERS_UI());
+      // 上游把「记忆与知识」tab 重命名为 memory：旧书签先按上游别名迁移，
+      // 再走 initialSettingsTab 的合法性与可见性校验（providers 开关、未知值回退 basic）。
+      return initialSettingsTab(saved ? migrateTab(saved) : null, ENABLE_UPDATE_PROVIDERS_UI());
     } catch {
       /* ignore */
     }
@@ -72,11 +90,12 @@ export function Settings() {
 
   const tabs: { key: SettingsTab; label: string }[] = [
     { key: 'basic', label: t('settings.tab.basic') },
-    { key: 'memory-knowledge', label: t('settings.tab.memory-knowledge') },
     { key: 'tools-connections', label: t('settings.tab.tools-connections') },
     { key: 'endpoints', label: t('settings.tab.endpoints') },
     { key: 'models', label: t('settings.tab.models') },
     { key: 'orchestration', label: t('settings.tab.orchestration') },
+    // P1-5: 「记忆与知识」tab 已下线并入这里 —— 它里面没有任何知识库设置，
+    // 却让用户以为记忆与知识是绑定的，徒增记忆能力的入口数量。
     { key: 'memory', label: t('settings.tab.memory') },
     { key: 'network', label: t('settings.tab.network') },
     { key: 'mcp', label: t('settings.tab.mcp') },
@@ -227,7 +246,6 @@ export function Settings() {
             )}
             {activeTab === 'general' && <GeneralTab resetSettings={resetSettings} />}
             {activeTab === 'basic' && <BasicTab />}
-            {activeTab === 'memory-knowledge' && <MemoryKnowledgeTab />}
             {activeTab === 'tools-connections' && <ToolsConnectionsTab />}
             {activeTab === 'endpoints' && (
               <EndpointsTab settings={settings} updateSettings={updateSettings} />
@@ -236,7 +254,9 @@ export function Settings() {
               <ModelsTab settings={settings} updateSettings={updateSettings} />
             )}
             {activeTab === 'orchestration' && <OrchestrationTab />}
-            {activeTab === 'memory' && <MemoryTab />}
+            {/* P1-5: 记忆设置合并为单 tab（日常开关 + 记忆引擎），顶部指向
+                唯一的记忆工作台 /memory —— 设置页不再自成第三个记忆入口。 */}
+            {activeTab === 'memory' && <MemorySettingsTab />}
             {activeTab === 'network' && <NetworkTab />}
             {activeTab === 'mcp' && <McpTab />}
             {activeTab === 'zotero' && <ZoteroTab />}

@@ -7,6 +7,11 @@ import { Sidebar } from '../../layout/Sidebar';
 
 const SECTIONS_CONFIG_KEY = 'sage:sider:sections:v1';
 
+// UX-IA R3 批次 0：左栏分组从 6 个收敛到 3 个（todos/cron 降级为一级导航项，
+// team 占位删除）。这些断言按「分组 key 集合」而非标题文案编写——
+// 待办/定时任务仍是左栏可见入口，只是形态从分组变成导航项（用文案断言会歧义）。
+const EXPECTED_SECTION_KEYS = ['project', 'conversations', 'git'];
+
 const mockSessions = [
   {
     id: 's1',
@@ -36,6 +41,12 @@ const mockSessions = [
     message_count: 7,
   },
 ];
+
+function sectionKeys(container: HTMLElement): string[] {
+  return Array.from(container.querySelectorAll('[data-section-key]')).map(
+    (el) => el.getAttribute('data-section-key') ?? '',
+  );
+}
 
 describe('Sidebar Sections Integration', () => {
   beforeEach(() => {
@@ -81,26 +92,40 @@ describe('Sidebar Sections Integration', () => {
         latency: 42,
       }),
     }));
-
-    vi.mock('../../../entities/todo/todoStore', () => ({
-      useTodoStore: (selector: (s: Record<string, unknown>) => unknown) =>
-        selector({
-          todos: [],
-          loading: false,
-          error: null,
-          summary: null,
-          load: vi.fn(),
-          create: vi.fn(),
-          update: vi.fn(),
-          delete: vi.fn(),
-          complete: vi.fn(),
-          cancel: vi.fn(),
-          loadSummary: vi.fn(),
-        }),
-    }));
   });
 
-  it('renders all sections in default order', () => {
+  it('renders the three remaining sections in default order', () => {
+    const { container } = render(
+      <I18nProvider>
+        <MemoryRouter>
+          <Sidebar />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    expect(sectionKeys(container)).toEqual(EXPECTED_SECTION_KEYS);
+    expect(screen.getByText('会话')).toBeInTheDocument();
+    expect(screen.getByText('项目')).toBeInTheDocument();
+  });
+
+  it('no longer renders the removed todos/cron/team sections', () => {
+    const { container } = render(
+      <I18nProvider>
+        <MemoryRouter>
+          <Sidebar />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    const keys = sectionKeys(container);
+    expect(keys).not.toContain('todos');
+    expect(keys).not.toContain('cron');
+    // team 是占位实现（"Phase 6 才接入"），未接入前不占左栏位置
+    expect(keys).not.toContain('team');
+    expect(screen.queryByText('团队')).toBeNull();
+  });
+
+  it('promotes todos/scheduled to nav entries so no feature is lost', () => {
     render(
       <I18nProvider>
         <MemoryRouter>
@@ -109,11 +134,10 @@ describe('Sidebar Sections Integration', () => {
       </I18nProvider>,
     );
 
-    expect(screen.getByText('会话')).toBeInTheDocument();
-    expect(screen.getByText('待办')).toBeInTheDocument();
-    expect(screen.getByText('定时任务')).toBeInTheDocument();
-    expect(screen.getByText('项目')).toBeInTheDocument();
-    expect(screen.getByText('团队')).toBeInTheDocument();
+    // 原 TodoSection / CronJobSection 的作用只是"预览 + 跳转整页"，
+    // 整页仍在，因此入口从分组迁移到导航项即可（消除同一列里的重复标签）。
+    expect(screen.getByRole('link', { name: '待办' })).toHaveAttribute('href', '/todos');
+    expect(screen.getByRole('link', { name: '定时任务' })).toHaveAttribute('href', '/scheduled');
   });
 
   it('updates localStorage when collapsing a section', async () => {
@@ -139,37 +163,16 @@ describe('Sidebar Sections Integration', () => {
     });
   });
 
-  it('persists collapsed state after re-render', async () => {
-    // Pre-populate localStorage with collapsed state
+  it('drops removed section keys from stored state', async () => {
+    // 老用户 localStorage 里仍留有 todos/cron/team —— reconcile 后应只剩 3 个，
+    // 否则 renderSection 会命中 default 分支返回 null 留下空 div。
     localStorage.setItem(
       SECTIONS_CONFIG_KEY,
       JSON.stringify({
         order: ['conversations', 'todos', 'cron', 'project', 'team'],
-        collapsed: ['cron'],
+        collapsed: ['cron', 'todos', 'team'],
       }),
     );
-
-    render(
-      <I18nProvider>
-        <MemoryRouter>
-          <Sidebar />
-        </MemoryRouter>
-      </I18nProvider>,
-    );
-
-    await waitFor(() => {
-      // "定时任务" section should show expand button (collapsed)
-      const expandButtons = screen.getAllByRole('button', { name: '展开' });
-      expect(expandButtons.length).toBeGreaterThan(0);
-    });
-  });
-
-  it('persists section order from localStorage', async () => {
-    const customOrder = {
-      order: ['conversations', 'todos', 'cron', 'project', 'team'],
-      collapsed: [],
-    };
-    localStorage.setItem(SECTIONS_CONFIG_KEY, JSON.stringify(customOrder));
 
     const { container } = render(
       <I18nProvider>
@@ -180,15 +183,56 @@ describe('Sidebar Sections Integration', () => {
     );
 
     await waitFor(() => {
-      const sections = container.querySelectorAll('[data-section-key]');
-      expect(sections.length).toBe(6);
+      // 存量顺序里 conversations 排第一，reconcile 保留该顺序并把缺失项追加到末尾；
+      // 断言重点是「已删除的 todos/cron/team 不再出现在 order 里」。
+      expect(sectionKeys(container)).toEqual(['conversations', 'project', 'git']);
+    });
+  });
+
+  it('persists collapsed state after re-render', async () => {
+    // git 是唯一默认折叠的分组：预置 collapsed:['git']
+    localStorage.setItem(
+      SECTIONS_CONFIG_KEY,
+      JSON.stringify({ order: EXPECTED_SECTION_KEYS, collapsed: ['git'] }),
+    );
+
+    render(
+      <I18nProvider>
+        <MemoryRouter>
+          <Sidebar />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      const expandButtons = screen.getAllByRole('button', { name: '展开' });
+      expect(expandButtons.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('persists section order from localStorage', async () => {
+    localStorage.setItem(
+      SECTIONS_CONFIG_KEY,
+      JSON.stringify({ order: ['conversations', 'project', 'git'], collapsed: [] }),
+    );
+
+    const { container } = render(
+      <I18nProvider>
+        <MemoryRouter>
+          <Sidebar />
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(sectionKeys(container)).toEqual(['conversations', 'project', 'git']);
     });
   });
 
   it('handles corrupt localStorage gracefully', async () => {
     localStorage.setItem(SECTIONS_CONFIG_KEY, '{invalid json');
 
-    render(
+    const { container } = render(
       <I18nProvider>
         <MemoryRouter>
           <Sidebar />
@@ -197,20 +241,15 @@ describe('Sidebar Sections Integration', () => {
     );
 
     await waitFor(() => {
-      // Should still render all sections with default order
-      expect(screen.getByText('会话')).toBeInTheDocument();
-      expect(screen.getByText('待办')).toBeInTheDocument();
-      expect(screen.getByText('定时任务')).toBeInTheDocument();
-      expect(screen.getByText('项目')).toBeInTheDocument();
-      expect(screen.getByText('团队')).toBeInTheDocument();
+      expect(sectionKeys(container)).toEqual(EXPECTED_SECTION_KEYS);
     });
   });
 
   it('recovers from incomplete section order in localStorage', async () => {
-    const incompleteOrder = { order: ['conversations', 'cron'], collapsed: [] };
+    const incompleteOrder = { order: ['conversations'], collapsed: [] };
     localStorage.setItem(SECTIONS_CONFIG_KEY, JSON.stringify(incompleteOrder));
 
-    render(
+    const { container } = render(
       <I18nProvider>
         <MemoryRouter>
           <Sidebar />
@@ -219,12 +258,8 @@ describe('Sidebar Sections Integration', () => {
     );
 
     await waitFor(() => {
-      // Should render all sections, appending missing ones
-      expect(screen.getByText('会话')).toBeInTheDocument();
-      expect(screen.getByText('待办')).toBeInTheDocument();
-      expect(screen.getByText('定时任务')).toBeInTheDocument();
-      expect(screen.getByText('项目')).toBeInTheDocument();
-      expect(screen.getByText('团队')).toBeInTheDocument();
+      // 存量只有 conversations：reconcile 保留它并补齐缺失的 project/git
+      expect(sectionKeys(container)).toEqual(['conversations', 'project', 'git']);
     });
   });
 });

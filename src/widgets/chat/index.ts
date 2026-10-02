@@ -13,3 +13,4 @@ export { Message } from './Message';
 export { TopicSeparator } from './TopicSeparator';
 export { ActiveAgentIndicator } from './ActiveAgentIndicator';
 export { SubagentLivePanel } from './SubagentLivePanel';
+export { RunSummaryPanel } from './RunSummaryPanel';

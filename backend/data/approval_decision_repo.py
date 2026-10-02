@@ -11,12 +11,15 @@ the table exists and only performs CRUD.
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 from dataclasses import dataclass
 from typing import List, Optional
 
 from backend.data.database import _SQLITE_LOCK, get_database
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -132,6 +135,54 @@ class ApprovalDecisionRepository:
             )
             for row in rows
         ]
+
+
+    def consecutive_gui_approvals(
+        self,
+        session_id: str,
+        tool_name: str,
+        lookback: int = 20,
+    ) -> int:
+        """某会话内某工具**最近连续**被用户手动批准的次数（P2-5 渐进式授权）。
+
+        口径严格 —— 只计 ``answered_by='gui'`` 且 ``approved=1`` 的**人工**决策：
+
+        - ``answered_by='auto'`` / ``'trust'`` / ``'timeout'`` 等**不计入**。
+          那不是「用户表达过同意」，拿自动放行去喂自动放行会自我强化，
+          一次误配就能滚成全自动。
+        - 从最近一条往回数，**遇到任何一条拒绝立即中断**。用户拒绝过一次
+          就说明当时的判断变了，之后再多的批准也不该抹掉那个信号。
+        - ``session_id`` 维度：信任不跨会话累积。新会话从头开始问。
+
+        失败（DB 不可用 / 越界参数）**返回 0** —— fail-safe 方向是「继续
+        问人」，绝不能是「自动放行」。渐进式授权是安全降级特性，
+        它的降级必须朝更保守的一侧。
+        """
+        if not session_id or not tool_name:
+            return 0
+        n = max(1, min(int(lookback), 200))
+        try:
+            # rowid DESC 做确定性 tiebreak：decided_at 是毫秒精度，同一毫秒内
+            # 连续插入的「先批准后拒绝」会因排序不确定而数错连续次数。
+            # 顺序错了 = 该问的没问，属于安全方向的错误，必须消掉。
+            rows = self.db.get_connection().execute(
+                "SELECT approved, answered_by FROM approval_decisions "
+                "WHERE session_id = ? AND tool_name = ? "
+                "ORDER BY decided_at DESC, rowid DESC LIMIT ?",
+                (session_id, tool_name, n),
+            ).fetchall()
+        except Exception as exc:  # noqa: BLE001 — 降级为「继续人工审批」
+            logger.warning("连续批准计数查询失败，降级为逐次审批: %s", exc)
+            return 0
+        count = 0
+        for row in rows:
+            if not bool(row["approved"]):
+                break  # 遇拒绝即中断
+            if (row["answered_by"] or "") != "gui":
+                # 非人工决策插在中间：不算作「用户刚同意过」，保守中断
+                break
+            count += 1
+        return count
 
 
 __all__ = ["ApprovalDecision", "ApprovalDecisionRepository"]

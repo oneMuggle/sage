@@ -3,11 +3,7 @@ import React, { useCallback, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import {
-  skillsApi,
-  type ConsolidationSuggestion,
-  type Skill,
-} from '../shared/api';
+import { skillsApi, type ConsolidationSuggestion, type Skill } from '../shared/api';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { RetryButton } from '../shared/ui/RetryButton';
@@ -173,7 +169,9 @@ const Skills: React.FC = () => {
           `${label}完成：扫描 ${result.scanned} 个技能，${result.drafts_created} 条建议已生成草稿（待审批）`,
         );
       } else {
-        toast.success(`${label}完成：扫描 ${result.scanned} 个技能，${result.suggestions.length} 条建议`);
+        toast.success(
+          `${label}完成：扫描 ${result.scanned} 个技能，${result.suggestions.length} 条建议`,
+        );
       }
     } catch (error) {
       toast.error(`固化巡检失败: ${(error as Error).message}`);
@@ -417,7 +415,10 @@ const Skills: React.FC = () => {
                     key={`${s.created_at}-${i}`}
                     className="flex items-center justify-between gap-3 p-2 rounded bg-bg-subtle"
                   >
-                    <p className="text-xs text-text-secondary flex-1 truncate" title={JSON.stringify(s.suggestion)}>
+                    <p
+                      className="text-xs text-text-secondary flex-1 truncate"
+                      title={JSON.stringify(s.suggestion)}
+                    >
                       {s.skill_names.join(', ')}
                       {typeof s.suggestion?.reason === 'string' ? ` — ${s.suggestion.reason}` : ''}
                     </p>
@@ -453,6 +454,7 @@ const Skills: React.FC = () => {
             onDelete={handleDelete}
             onArchive={handleArchive}
             onPin={handlePin}
+            onRolledBack={loadSkills}
           />
         </TabsContent>
 

@@ -2102,12 +2102,21 @@ class SageAgent:
         优先用注入的 ``self.permission_enforcer``；否则从 settings 现读。
         office_create 的 path boundary 校验器注入：边界来自当前会话绑定
         （``_office_boundary_resolver``），写工作区外升级为 ask。
+
+        P2-5 渐进式授权：settings 现读的 enforcer 外面再包一层
+        ``TrustEscalationEnforcer``（连续 N 次人工批准后自动放行常规工具）。
+        未显式开启时 ``build_trust_enforcer`` 返回 ``None``，行为与此前完全
+        一致 —— 未经用户同意的自动放行不允许存在。
+
+        注入路径（``self.permission_enforcer``，子代理走这条）**不包**：
+        子代理有自己的 autopilot 语义（``subagent_approval``），两套信任机制
+        叠加会绕过「连续人工批准」这一前提。
         """
         if self.permission_enforcer is not None:
             return self.permission_enforcer
         validator = make_office_path_boundary(self._office_boundary_resolver)
         try:
-            return load_enforcer_from_settings(path_boundary_validator=validator)
+            base = load_enforcer_from_settings(path_boundary_validator=validator)
         except Exception as exc:  # noqa: BLE001 — DB 故障不应阻塞 agent 启动
             logger.warning("权限执行器从 settings 构造失败，回退默认: %s", exc)
             return PermissionEnforcer(
@@ -2116,6 +2125,13 @@ class SageAgent:
                 bash_validator=validate_bash,
                 path_boundary_validator=validator,
             )
+        try:
+            from backend.services.trust_escalation import build_trust_enforcer
+
+            return build_trust_enforcer(base) or base
+        except Exception as exc:  # noqa: BLE001 — 包装失败保守回落逐次审批
+            logger.warning("渐进式授权包装失败，回退逐次审批: %s", exc)
+            return base
 
     def _pre_dispatch_gate(
         self,
