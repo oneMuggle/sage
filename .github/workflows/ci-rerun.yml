@@ -3,9 +3,24 @@
 # 无 CI）时，对分支手动触发一次与 ci.yml 同语义的全量验证；All Checks
 # 会挂在分支头 SHA 上，令 PR 恢复可合并状态。
 # 用法：
-#   gh workflow run ci-rerun.yml -f ref=<分支名> -f target=<main|release/win7>
+#   gh workflow run ci-rerun.yml --ref <分支名> \
+#     -f ref=<分支名> -f target=<main|release/win7>
+# ⚠️ --ref 与 -f ref= 都要给，缺一不可：
+#   -f ref=  只是本 workflow 的输入，决定各 job 里 actions/checkout checkout
+#             哪个分支；
+#   --ref    决定 run 挂在哪个 ref、check-run 记到哪个 commit。
+#   漏掉 --ref 时 gh 回退到当前检出分支（在主检出这种 detached HEAD 上会
+#   落到默认分支 main），run 照跑、All Checks 照绿，但 check-run 全部记在
+#   main 的 SHA 上，对目标 PR 完全无效。dispatch 后请立刻核对
+#   GET /actions/runs/<id> 的 head_sha 是否等于 PR head SHA。
+# ⚠️ 必须由**单个 run** 覆盖全部分支保护必需 check。曾尝试用
+#   ci.yml(workflow_dispatch) + 本文件两条 run 叠加、check 集取并集来凑齐
+#   release/win7 的 5 项，5 项全绿但 /merge 仍返回 405 —— GitHub 是按最新
+#   check suite 判定的，只被更早的 suite 报告过的 context 不算数。因此本
+#   文件必须自己带上 desktop-build 矩阵，详见 §7.3 与 desktop-build 的注释。
 # 语义差异（相对 ci.yml）：所有 job 的 if 以 inputs.target 判定，不再
-# 依赖 pull_request 事件上下文；frontend 与 electron-smoke 永远运行。
+# 依赖 pull_request 事件上下文；frontend、desktop-build 与 electron-smoke
+# 永远运行；architecture-check 仍未纳入（静态检查，与运行时无关）。
 name: CI Retry
 
 on:
@@ -329,9 +344,152 @@ jobs:
           fail_ci_if_error: false
 
   # ========== Desktop Build: Electron 21 + electron-builder 矩阵 ==========
-  # - 3 OS 矩阵：ubuntu (AppImage) / macos (DMG) / windows (NSIS)
-  # - Linux/macOS runner 不能跑 Windows NSIS 产物但能 cross-build；
-  #   windows-latest 直接产 NSIS 离线安装包
+  # - 与 ci.yml 的 desktop-build 同源（本文件原先只留了这段注释、没有对应
+  #   job，导致 ci-rerun 永远产不出 `Electron build (*)` 这两个 check）。
+  # - release/win7 的分支保护把 `Electron build (windows-latest)` 与
+  #   `Electron build (ubuntu-latest)` 列为必需 check，缺了就永远合不进去。
+  #   详见 docs/plans/2026-10-01_ux-ia-round3-panel-slot.md §7.3。
+  # - 唯一与 ci.yml 的差异：checkout 用 inputs.ref（补跑的目标分支），
+  #   而 ci.yml 走 pull_request/push 事件、直接 checkout 事件 ref。
+  # - 矩阵只有 ubuntu / windows：macOS DMG 在 electron-builder.yml 里
+  #   mac.target 仍为 null，与 ci.yml 保持一致。
+  desktop-build:
+    name: Electron build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12'
+          cache: 'npm'
+
+      - name: Cache electron-builder downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Install Linux build deps (webkit2gtk for Electron cross-build)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxrandr2 \
+            libgbm1 \
+            libasound2t64
+
+      - name: Install npm dependencies
+        run: npm ci --force
+
+      - name: Verify command contract tests
+        run: npm exec -- vitest run electron/__tests__/backendLauncher.test.ts electron/__tests__/backendSupervisor.test.ts electron/__tests__/commands.test.ts
+
+      - name: Build frontend + Electron
+        run: npm run electron:build
+
+      - name: Generate build-manifest.json (cross-platform)
+        shell: pwsh
+        run: node scripts/ci-write-manifest.mjs
+
+      - name: Package (Linux AppImage + deb)
+        if: matrix.os == 'ubuntu-latest'
+        run: npx electron-builder --linux AppImage deb --publish never
+
+      - name: Verify packaged build-manifest.json (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        shell: pwsh
+        run: |
+          $found = Get-ChildItem -Path release -Directory -Recurse -Filter linux-unpacked -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]' } |
+            Select-Object -First 1
+          if (-not $found) {
+            Write-Error "::error::Could not find release/**/linux-unpacked directory. electron-builder output structure may have changed."
+            exit 1
+          }
+          $manifest = Join-Path $found.FullName 'resources/build-manifest.json'
+          if (-not (Test-Path $manifest)) {
+            Write-Error "::error::Missing $manifest in packaged Linux artifact (check electron-builder.yml extraResources)"
+            exit 1
+          }
+          Write-Host "Linux packaged build-manifest.json OK at $manifest"
+
+      - name: Verify Linux artifacts (vitest)
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run test:packaging
+
+      - name: Fetch VC++ Redistributable (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: pwsh scripts/fetch-vcredist.ps1
+
+      - name: Install canary dependency (pydantic, Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: python -m pip install --quiet pydantic
+
+      - name: Verify Office path safety (stdlib canary, Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: python scripts/verify-office-paths.py
+
+      - name: Package (Windows NSIS)
+        if: matrix.os == 'windows-latest'
+        env:
+          ARTIFACT_SUFFIX: ci
+        run: npx electron-builder --win --publish never
+
+      - name: Verify packaged build-manifest.json (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $found = Get-ChildItem -Path release -Directory -Recurse -Filter win-unpacked -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]' } |
+            Select-Object -First 1
+          if (-not $found) {
+            Write-Error "::error::Could not find release/**/win-unpacked directory. electron-builder output structure may have changed."
+            exit 1
+          }
+          $manifest = Join-Path $found.FullName 'resources/build-manifest.json'
+          if (-not (Test-Path $manifest)) {
+            Write-Error "::error::Missing $manifest in packaged Windows artifact (check electron-builder.yml extraResources)"
+            exit 1
+          }
+          Write-Host "Windows packaged build-manifest.json OK at $manifest"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: electron-${{ matrix.os }}
+          path: |
+            release/**/*.exe
+            release/**/*.AppImage
+            release/**/*.deb
+            release/**/*.dmg
+          if-no-files-found: error
 
   electron-smoke:
     name: Electron smoke (playwright-electron)
@@ -385,15 +543,18 @@ jobs:
     # 2026-09-24 修复：needs 引用了本文件未定义的 architecture-check
     # （该 job 只存在于 ci.yml，ci-rerun 从未定义它）→ workflow_dispatch
     # 解析直接 422，SOP 补跑通道整体不可用。改为仅依赖本文件实有的 job。
-    needs: [backend, backend-py38, frontend, electron-smoke, dependency-audit]
+    # 2026-10-02 补 desktop-build：Electron build (windows/ubuntu-latest) 是
+    # release/win7 的必需 check，本文件此前完全没有这个 job。
+    needs: [backend, backend-py38, frontend, desktop-build, electron-smoke, dependency-audit]
     runs-on: ubuntu-latest
     if: ${{ always() }}
     steps:
       - name: Check all required jobs passed
         run: |
           set -e
-          # 必过项：frontend + electron-smoke 永远要过
+          # 必过项：frontend + desktop-build + electron-smoke 永远要过
           [ "${{ needs.frontend.result }}" = "success" ]
+          [ "${{ needs.desktop-build.result }}" = "success" ]
           [ "${{ needs.electron-smoke.result }}" = "success" ]
           # Architecture check runs on every trigger; must pass.
           # （ci-rerun 未定义该 job——单文件行数属静态检查，与运行时无关，
