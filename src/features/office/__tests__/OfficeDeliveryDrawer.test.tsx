@@ -263,3 +263,136 @@ describe('OfficeDeliveryDrawer (A4b)', () => {
     expect(screen.queryByTestId('office-delivery-drawer')).toBeNull();
   });
 });
+
+/**
+ * P0-2（2026-10-01）：接上此前零调用的 POST /office/word/repair。
+ * 接线前抽屉只报问题不给修法 —— 用户看到 lint 失败后无路可走。
+ */
+describe('OfficeDeliveryDrawer 自动修复（P0-2）', () => {
+  const FAILING_LINT = makeLint({
+    ok: false,
+    issue_count: 1,
+    error_count: 1,
+    warning_count: 0,
+    issues: [
+      { rule_id: 'page/margins', severity: 'error', message: 'margin 1cm vs 2.54cm', fix_hint: '调页边距' },
+    ],
+  });
+
+  function makeRepair(remainingOk: boolean) {
+    return {
+      ok: true,
+      repaired_rules: ['page/margins'],
+      output_path: '/ws/report-repaired.docx',
+      overwrite: false,
+      remaining: makeLint({
+        ok: remainingOk,
+        issue_count: remainingOk ? 0 : 1,
+        error_count: remainingOk ? 0 : 1,
+        warning_count: 0,
+        issues: remainingOk
+          ? []
+          : [
+              {
+                rule_id: 'citation/coverage',
+                severity: 'error',
+                message: 'citation missing',
+                fix_hint: '补引用',
+              },
+            ],
+      }),
+    };
+  }
+
+  beforeEach(() => {
+    invokeMock.mockReset();
+    seedEntry();
+  });
+
+  it('lint 通过时不显示修复入口（没有可修的东西）', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'office_word_read') return makeReadResult();
+      if (cmd === 'office_word_lint') return makeLint();
+      return null;
+    });
+    renderDrawer();
+    await waitFor(() => expect(screen.getByTestId('lint-result')).toBeTruthy());
+    expect(screen.queryByTestId('lint-repair-button')).toBeNull();
+  });
+
+  it('点击修复走 repair 通道，且默认不覆盖原稿', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'office_word_read') return makeReadResult();
+      if (cmd === 'office_word_lint') return FAILING_LINT;
+      if (cmd === 'office_word_repair') return makeRepair(true);
+      return null;
+    });
+    renderDrawer();
+    await waitFor(() => expect(screen.getByTestId('lint-repair-button')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('lint-repair-button'));
+
+    await waitFor(() =>
+      expect(invokeMock).toHaveBeenCalledWith('office_word_repair', {
+        workspacePath: '/ws',
+        filePath: '/ws/report.docx',
+        formatSpec: SPEC,
+        overwrite: false,
+      }),
+    );
+    // 修复版另存，原稿不动（不可逆操作须显式确认）
+    const report = await screen.findByTestId('lint-repair-report');
+    expect(report.textContent).toContain('已修复 1 条规则');
+    expect(report.textContent).toContain('report-repaired.docx');
+  }, 20000);
+
+  it('复检后仍有语义类问题则如实提示剩余数量', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'office_word_read') return makeReadResult();
+      if (cmd === 'office_word_lint') return FAILING_LINT;
+      if (cmd === 'office_word_repair') return makeRepair(false);
+      return null;
+    });
+    renderDrawer();
+    await waitFor(() => expect(screen.getByTestId('lint-repair-button')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('lint-repair-button'));
+
+    const remaining = await screen.findByTestId('lint-repair-remaining');
+    expect(remaining.textContent).toContain('1 条');
+  }, 20000);
+
+  it('修复后以复检结果刷新问题列表', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'office_word_read') return makeReadResult();
+      if (cmd === 'office_word_lint') return FAILING_LINT;
+      if (cmd === 'office_word_repair') return makeRepair(false);
+      return null;
+    });
+    renderDrawer();
+    await waitFor(() => expect(screen.getByTestId('lint-repair-button')).toBeTruthy());
+    expect(screen.getByText('margin 1cm vs 2.54cm')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('lint-repair-button'));
+
+    // 复检结果替换原问题列表：旧问题消失，新问题出现
+    await waitFor(() => expect(screen.queryByText('margin 1cm vs 2.54cm')).toBeNull());
+    expect(screen.getByText('citation missing')).toBeTruthy();
+  }, 20000);
+
+  it('修复失败时保留问题列表并给出失败提示', async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'office_word_read') return makeReadResult();
+      if (cmd === 'office_word_lint') return FAILING_LINT;
+      if (cmd === 'office_word_repair') throw new Error('repair boom');
+      return null;
+    });
+    renderDrawer();
+    await waitFor(() => expect(screen.getByTestId('lint-repair-button')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('lint-repair-button'));
+
+    expect(await screen.findByTestId('lint-repair-failed')).toBeTruthy();
+    // 关键：失败不得抹掉已有问题列表
+    expect(screen.getByText('margin 1cm vs 2.54cm')).toBeTruthy();
+    expect(screen.getByTestId('lint-repair-button')).toBeTruthy();
+  }, 20000);
+});

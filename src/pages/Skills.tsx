@@ -453,6 +453,7 @@ const Skills: React.FC = () => {
             onDelete={handleDelete}
             onArchive={handleArchive}
             onPin={handlePin}
+            onRolledBack={loadSkills}
           />
         </TabsContent>
 

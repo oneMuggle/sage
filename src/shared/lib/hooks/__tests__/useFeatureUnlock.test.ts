@@ -6,6 +6,7 @@ import {
   unlockFeature,
   lockFeature,
   isFeatureUnlocked,
+  isFeatureExplicitlyDisabled,
   FEATURE_UNLOCK_STORAGE_KEY,
   FEATURE_UNLOCK_EVENT,
   FEATURE_UNLOCK_LOCK_EVENT,
@@ -265,9 +266,16 @@ describe('useFeatureUnlock — lock', () => {
   });
 
   it('lockFeature does not dispatch when the key was not unlocked', () => {
-    let dispatched = false;
+    // P1-7 修正：lock 一个「未解锁」的 key 不再是纯 no-op —— 它会写入
+    // 「用户显式关闭」标记，订阅该状态的组件（Sidebar 的
+    // useFeatureExplicitlyDisabled）必须被通知，否则入口会停留在灰态。
+    // 真正幂等的是「重复 lock 同一个已显式关闭且未解锁的 key」。
+    lockFeature('arena-accounts');
+    expect(isFeatureExplicitlyDisabled('arena-accounts')).toBe(true);
+
+    let dispatchedAfterSecond = false;
     const listener = () => {
-      dispatched = true;
+      dispatchedAfterSecond = true;
     };
     window.addEventListener(FEATURE_UNLOCK_LOCK_EVENT, listener);
     try {
@@ -275,7 +283,7 @@ describe('useFeatureUnlock — lock', () => {
     } finally {
       window.removeEventListener(FEATURE_UNLOCK_LOCK_EVENT, listener);
     }
-    expect(dispatched).toBe(false);
+    expect(dispatchedAfterSecond).toBe(false);
   });
 
   it('updates a second instance when the first locks (custom event)', () => {

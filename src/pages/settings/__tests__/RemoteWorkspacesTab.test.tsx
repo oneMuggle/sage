@@ -9,6 +9,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
+import * as confirmService from '../../../shared/ui/ConfirmDialog/confirmService';
 import { RemoteWorkspacesTab } from '../RemoteWorkspacesTab';
 
 const mocks = vi.hoisted(() => ({
@@ -87,13 +88,14 @@ describe('RemoteWorkspacesTab', () => {
   });
 
   it('asks for confirmation before enabling shell; cancel sends nothing', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    // P1-8: 确认走项目内 confirmDialog 服务（原 window.confirm 已全量替换）
+    const confirm = vi.spyOn(confirmService, 'confirmDialog').mockResolvedValue(false);
     renderTab();
     fireEvent.click(await screen.findByTestId('remote-ws-perm-shell-ws1'));
     expect(confirm).toHaveBeenCalled();
     expect(mocks.updateWorkspace).not.toHaveBeenCalled();
 
-    confirm.mockReturnValue(true);
+    confirm.mockResolvedValue(true);
     fireEvent.click(screen.getByTestId('remote-ws-perm-shell-ws1'));
     await waitFor(() =>
       expect(mocks.updateWorkspace).toHaveBeenCalledWith('ws1', { permissions: { shell: true } }),

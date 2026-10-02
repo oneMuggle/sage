@@ -307,7 +307,11 @@ export function MemoryTab() {
         <p className="text-xs text-text-secondary mb-2">
           每周日 04:30 自动执行：把访问频繁的短期记忆晋升为语义记忆，并衰减长期未访问的记忆。也可手动立即执行。
         </p>
-        <SettingRow label="手动固化" desc="立即运行一次记忆固化任务（通常无需手动触发）">
+        <SettingRow
+          anchor="memory_consolidation"
+          label="手动固化"
+          desc="立即运行一次记忆固化任务（通常无需手动触发）"
+        >
           <button
             type="button"
             data-testid="memory-consolidation-run"
@@ -343,8 +347,12 @@ export function MemoryTab() {
         )}
       </section>
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">记忆管理</h3>
+        {/* P1-5: 合并两个记忆 tab 后此处原本与 MemoryKnowledgeTab 的「记忆管理」
+            同名，会在同一页出现两个同名小节。改为「存储位置」——它讲的就是
+            数据存在哪，与「记忆管理」不是一回事。 */}
+        <h3 className="text-sm font-semibold text-text mb-3">存储位置</h3>
         <SettingRow
+          anchor="memory_backup"
           label="本地存储"
           desc="记忆数据存储在本地 SQLite 数据库中，具体路径由 SAGE_DB_PATH 环境变量与运行模式决定"
         >

@@ -889,6 +889,41 @@ export interface ConsolidationAcceptResult {
   missing: string[];
 }
 
+/**
+ * P2-2 技能审计台账条目 — GET /skills/{name}/audit。
+ *
+ * 注意一个真实的后端限制：list 接口的 SQL **不返回** before_content /
+ * after_content（backend/skills/audit.py 的 SELECT 只取这 6 列），所以前端
+ * 拿不到 diff，只能做元数据时间线。不要在 UI 里承诺展示「改了什么内容」——
+ * 那是后端还没给的数据。
+ */
+export interface SkillAuditEntry {
+  id: number;
+  skill_name: string;
+  action: 'create' | 'update' | 'archive' | 'restore' | 'rollback' | 'consolidation_note';
+  actor: 'user' | 'system';
+  source: string | null;
+  /** 毫秒时间戳 */
+  created_at: number;
+}
+
+/** GET /skills/{name}/audit 的响应。 */
+export interface SkillAuditResponse {
+  skill_name: string;
+  entries: SkillAuditEntry[];
+}
+
+/**
+ * P2-2 技能回滚结果 — POST /skills/{name}/rollback。
+ *
+ * 语义是**回到上一个有快照的版本**（后端取 latest_before_snapshot），没有条目
+ * 粒度参数：UI 只能提供「回滚到上一版」，不能做「点某条历史回到那一版」。
+ */
+export interface SkillRollbackResult {
+  status: 'rolled_back';
+  skill_name: string;
+}
+
 export interface SkillExecuteRequest {
   action?: string;
   args?: Record<string, unknown>;

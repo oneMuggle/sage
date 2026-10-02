@@ -1,5 +1,6 @@
 import { Plus, Download } from 'lucide-react';
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { memoryApi } from '../shared/api';
 import type { Memory } from '../shared/api/types';
@@ -16,6 +17,9 @@ export function Memory() {
   // Bump after a successful save to refresh the MemoryBrowser without a
   // full page reload (fix/security-perf-quickwins §1.3b g).
   const [refreshKey, setRefreshKey] = useState(0);
+  // P0-6: 来自聊天气泡内记忆引用的深链定位（Chat 跳 /memory?focus=<id>）。
+  const [searchParams] = useSearchParams();
+  const focusMemoryId = searchParams.get('focus') ?? undefined;
 
   const handleExport = async () => {
     setExporting(true);
@@ -123,7 +127,7 @@ export function Memory() {
       {/* P2 scope 轴: 项目级 MEMORY.md */}
       <ProjectProfileCard />
 
-      <MemoryBrowser initialType="all" refreshKey={refreshKey} />
+      <MemoryBrowser initialType="all" refreshKey={refreshKey} focusMemoryId={focusMemoryId} />
     </div>
   );
 }

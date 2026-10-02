@@ -9,7 +9,6 @@
 export type SettingsTabKey =
   | 'general'
   | 'basic'
-  | 'memory-knowledge'
   | 'tools-connections'
   | 'endpoints'
   | 'models'
@@ -105,21 +104,21 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   },
   {
     key: 'autoMemory',
-    tab: 'memory-knowledge',
+    tab: 'memory',
     label: '自动记忆提取',
     labelEn: 'Auto memory extraction',
     keywords: 'automemory 记忆 自动提取',
   },
   {
     key: 'confirmDelete',
-    tab: 'memory-knowledge',
+    tab: 'memory',
     label: '确认后再删除记忆',
     labelEn: 'Confirm before deleting memory',
     keywords: 'confirmdelete 删除记忆 确认',
   },
   {
     key: 'context_turn_limit',
-    tab: 'memory-knowledge',
+    tab: 'memory',
     label: '上下文轮数限制',
     labelEn: 'Context turn limit',
     keywords: 'context turn limit 上下文 轮数 隔离 不限',
@@ -133,7 +132,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   },
   {
     key: 'auto_checkpoint',
-    tab: 'memory-knowledge',
+    tab: 'memory',
     label: '发送前自动快照',
     labelEn: 'Auto checkpoint',
     keywords: 'checkpoint 快照 安全网 回滚 撤销',
@@ -172,6 +171,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '钩子 (Hooks)',
     labelEn: 'Hooks',
     keywords: 'hooks 钩子 pre_tool_use 命令',
+  },
+  {
+    key: 'trust_escalation',
+    tab: 'tools-connections',
+    label: '渐进式授权',
+    labelEn: 'Progressive delegation',
+    keywords: 'trust 信任 渐进式授权 连续批准 自动放行 progressive delegation threshold',
   },
   {
     key: 'spend_limit',
@@ -516,6 +522,16 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '导出 CSV',
     labelEn: 'Export CSV',
     keywords: 'export csv 导出 下载',
+  },
+  // P0-5: 「通用」tab 此前无任何索引条目 → 搜「重置」无结果，而
+  // 「重置全部设置」是破坏性操作，检索不到尤其危险。其余通用 tab 项
+  // （权限/降级/消费上限/自动快照/托盘）索引中已存在，无需重复登记。
+  {
+    key: 'reset_settings',
+    tab: 'general',
+    label: '重置全部设置',
+    labelEn: 'Reset all settings',
+    keywords: 'reset 重置 恢复默认 清除配置 clear defaults',
   },
 ];
 

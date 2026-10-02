@@ -12,7 +12,13 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { officeApi } from '../../shared/api/officeApi';
-import type { OfficeWordLintResult, WordFormatSpec } from '../../shared/api/types';
+import type {
+  OfficeWordLintIssue,
+  OfficeWordLintResult,
+  WordFormatSpec,
+  WordLintResult,
+  WordRepairResult,
+} from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
 
@@ -22,6 +28,25 @@ import { OfficePreviewPanel, type OfficePreviewData } from './OfficePreviewPanel
 const ISSUES_DISPLAY_CAP = 10;
 
 type LintState = 'loading' | 'ready' | 'skipped' | 'error';
+
+/**
+ * P0-2: 把 repair 返回的复检结果收敛成本组件使用的 lint 形态。
+ *
+ * 两份契约同源但 `fix_hint` 可选性不同（WordLintIssue 可缺省，
+ * OfficeWordLintIssue 必填）。此处只做展示层归一，不改共享类型 ——
+ * 那会影响所有既有 lint 消费方。缺省按空串处理，与既有的
+ * `issue.fix_hint !== ''` 渲染判断自洽。
+ */
+function toLintResult(result: WordLintResult): OfficeWordLintResult {
+  return {
+    ok: result.ok,
+    issue_count: result.issue_count,
+    error_count: result.error_count,
+    warning_count: result.warning_count,
+    checked_rules: result.checked_rules,
+    issues: result.issues.map((issue): OfficeWordLintIssue => ({ ...issue, fix_hint: issue.fix_hint ?? '' })),
+  };
+}
 
 export interface OfficeDeliveryDrawerProps {
   /** 任务中心条目 id（决议写回 completeTask 用）。 */
@@ -53,6 +78,10 @@ export function OfficeDeliveryDrawer({
   const [lintSeq, setLintSeq] = useState(0);
   const [preview, setPreview] = useState<OfficePreviewData | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
+  // P0-2: 自动修复状态。repairState 独立于 lintState —— 修复是副作用操作，
+  // 失败不能让已渲染的 lint 结果消失。
+  const [repairState, setRepairState] = useState<'idle' | 'running' | 'failed'>('idle');
+  const [repairReport, setRepairReport] = useState<WordRepairResult | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -114,6 +143,32 @@ export function OfficeDeliveryDrawer({
     completeTask(entryId, 'cancelled');
     onClose();
     navigate('/office');
+  };
+
+  /**
+   * P0-2: 对照 FormatSpec 自动修复。
+   *
+   * overwrite 保持 false —— 后端另存 `<stem>-repaired.docx`，原稿不动。
+   * 这符合"不可逆操作必须显式确认"：用户先看到修复版产物与剩余问题，
+   * 是否替换原稿由他自己决定。修复后端会自动复检，remaining 即复检结果，
+   * 直接用它替换 lint 展示（而不是再打一次 lint，多一次往返）。
+   */
+  const handleRepair = async () => {
+    if (!formatSpec) return;
+    setRepairState('running');
+    try {
+      const result = await officeApi.repairWord({
+        workspace_path: workspacePath,
+        file_path: filePath,
+        format_spec: formatSpec,
+        overwrite: false,
+      });
+      setRepairReport(result);
+      if (result.remaining) setLint(toLintResult(result.remaining));
+      setRepairState('idle');
+    } catch {
+      setRepairState('failed');
+    }
   };
 
   return (
@@ -218,6 +273,55 @@ export function OfficeDeliveryDrawer({
                   {t('office.delivery.moreIssues').replace(
                     '{n}',
                     String(lint.issues.length - ISSUES_DISPLAY_CAP),
+                  )}
+                </div>
+              )}
+
+              {/* P0-2: 一键修复。此前只报问题不给修法，闭环断在最后一步。 */}
+              {repairReport && (
+                <div className="mt-2 pt-2 border-t border-border-primary" data-testid="lint-repair-report">
+                  <div className="text-xs text-text-secondary">
+                    {t('office.delivery.repairDone').replace(
+                      '{n}',
+                      String(repairReport.repaired_rules.length),
+                    )}
+                  </div>
+                  <div className="text-xs text-text-tertiary">
+                    {t('office.delivery.repairOutput').replace(
+                      '{path}',
+                      repairReport.output_path.split(/[\\/]/).pop() || repairReport.output_path,
+                    )}
+                  </div>
+                  {repairReport.remaining && !repairReport.remaining.ok && (
+                    <div className="text-xs text-yellow-700" data-testid="lint-repair-remaining">
+                      {t('office.delivery.repairRemaining').replace(
+                        '{n}',
+                        String(repairReport.remaining.issue_count),
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 修复报告刻意独立于按钮条件：全部修完时 lint.ok 翻真，
+                  若把按钮与报告绑在一起，用户点完修复会看到反馈凭空消失，
+                  误以为没生效。 */}
+              {!lint.ok && (
+                <div className={repairReport ? 'mt-2' : 'mt-2 pt-2 border-t border-border-primary'}>
+                  <button
+                    type="button"
+                    onClick={() => void handleRepair()}
+                    disabled={repairState === 'running'}
+                    data-testid="lint-repair-button"
+                    className="text-xs px-2 py-1 rounded border border-primary text-primary hover:bg-primary/10 disabled:opacity-50"
+                  >
+                    {repairState === 'running' ? t('office.delivery.repairing') : t('office.delivery.repair')}
+                  </button>
+
+                  {repairState === 'failed' && (
+                    <span className="ml-2 text-xs text-red-600" data-testid="lint-repair-failed">
+                      {t('office.delivery.repairFailed')}
+                    </span>
                   )}
                 </div>
               )}

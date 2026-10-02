@@ -60,7 +60,13 @@ export function SiderSection({
           >
             <div
               className="px-1"
-              style={maxHeight ? { maxHeight, overflowY: 'auto' } : undefined}
+              // UX-IA R3 批次 B-3：此前这里挂 `overflowY: auto` + maxHeight，
+              // 与外层 nav 的滚动构成**嵌套滚动区**（nav 滚 → 分组标题到边界
+              // 才轮到外层）。两段式布局下内容列已是唯一滚动容器，分组内再滚
+              // 只会让「滚到哪儿了」变得难以预期，故只保留高度上限、不再自带滚动。
+              // 调用方（ConversationsSection / ProjectSection）仍可传 maxHeight
+              // 作为"该分组最多占多高"的软约束，由外层容器统一消化溢出。
+              style={maxHeight ? { maxHeight } : undefined}
             >
               {render()}
             </div>

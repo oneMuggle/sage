@@ -50,6 +50,8 @@ import type {
   OfficeWordGenerateRequest,
   OfficeWordLintRequest,
   OfficeWordLintResult,
+  WordRepairRequest,
+  WordRepairResult,
   OfficeWordReadResult,
 } from './types';
 import { handleApiError, withRetry } from './utils';
@@ -437,6 +439,31 @@ export const officeApi = {
         workspacePath: req.workspace_path,
         filePath: req.file_path,
         formatSpec: req.format_spec,
+        ...(req.max_size_bytes !== undefined ? { maxSizeBytes: req.max_size_bytes } : {}),
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * P0-2 (2026-10-01): 对照 FormatSpec 自动修复 .docx 违规（后端 Round 12）。
+   *
+   * 接线动机：此前只 lint 不 repair，用户看到问题列表后无路可走。修复后端
+   * 会自动复检并把未消除的违规放在 `remaining` 里，UI 据此提示"修了 N 条、
+   * 还剩 M 条"而不是谎称全好。
+   *
+   * 写文件是有副作用的调用 —— 沿用本文件惯例不加 withRetry。
+   * `overwrite` 默认 false（后端写 <stem>-repaired.docx 新文件），
+   * 由调用方显式决定是否原地覆盖。
+   */
+  async repairWord(req: WordRepairRequest): Promise<WordRepairResult> {
+    try {
+      return await invoke<WordRepairResult>('office_word_repair', {
+        workspacePath: req.workspace_path,
+        filePath: req.file_path,
+        formatSpec: req.format_spec,
+        overwrite: req.overwrite ?? false,
         ...(req.max_size_bytes !== undefined ? { maxSizeBytes: req.max_size_bytes } : {}),
       });
     } catch (error) {

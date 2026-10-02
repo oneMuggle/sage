@@ -7,3 +7,5 @@ export { Message } from './Message';
 export { TopicSeparator } from './TopicSeparator';
 export { ActiveAgentIndicator } from './ActiveAgentIndicator';
 export { SubagentLivePanel } from './SubagentLivePanel';
+export { PendingQueueStrip } from './PendingQueueStrip';
+export { RunSummaryPanel } from './RunSummaryPanel';
