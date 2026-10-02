@@ -271,11 +271,66 @@ CI 状态复查因此改走 REST + `Invoke-RestMethod`，不再依赖 `gh`。
 另：当天晚间本地代理（127.0.0.1:7890）曾中途掉线，导致 `git push` 与 `gh` 同时失败；
 直连可用时可用 `git -c http.proxy= -c https.proxy= push` 命令级绕过（不改配置）。
 
-### 7.3 CI 门禁的三个事实：补跑通道不参与判定、--ref 的两个含义、policy 例外会过期（2026-10-02）
+### 7.3 CI 门禁的四个事实：paths-ignore 让纯文档 PR 永不建 run、补跑通道不参与判定、--ref 的两个含义、policy 例外会过期（2026-10-02）
 
-本轮为了把 win7 轨最后一条 PR 合并，在 CI 上绕了很大一圈，最终挖出三条与
-`AGENTS.md`/SOP 现有描述**不一致**的事实。三条都写在这里，因为它们都曾导致
-我做出错误判断。
+本轮为了把 win7 轨最后一条 PR 合并，在 CI 上绕了很大一圈，最终挖出四条与
+`AGENTS.md`/SOP 现有描述**不一致**的事实。四条都写在这里，因为它们都曾导致
+我做出错误判断。其中**第一条是本轮最大的误判**，它推翻了我先前「GitHub 静默
+丢弃 `pull_request` 事件」的结论。
+
+#### 事实零（根因）：`release/win7` 的 `ci.yml` 在 `pull_request` 上挂了 `paths-ignore`
+
+本轮前四条 win7 轨文档 PR（#1875 / #1885 / #1886 等）表现为「开了 PR 之后零
+workflow run、head SHA 上零 check-run、`mergeable_state` 永远是 `blocked`」。
+我当时的判断是「GitHub 把 `pull_request` 事件静默丢弃了」，并据此尝试了
+close+reopen、换新分支重开、推新提交触发 `synchronize`、`ci-rerun.yml` 补跑
+——**全部无效**。真实原因要朴素得多：
+
+```yaml
+# release/win7 上的 ci.yml（本轮修复前）
+on:
+  push:
+    branches: [main, develop, release/win7]
+    paths-ignore:            # ← 省几分钟的优化
+      - 'docs/**'
+      - '**.md'
+  pull_request:
+    branches: [main, develop, release/**]
+    paths-ignore:            # ← 致命：纯文档 PR 被整条 workflow 跳过
+      - 'docs/**'
+      - '**.md'
+```
+
+`paths-ignore` 命中时，GitHub **不创建任何 check-run**（不是创建一个
+`skipped` 或 `neutral` 的 check，是**零个**）。而 `release/win7` 的分支保护
+要求 5 个必需 context：
+
+```text
+Frontend (TypeScript) · Electron smoke (playwright-electron)
+Backend (Python 3.8, Win7 LTS) · Electron build (windows-latest)
+Electron build (ubuntu-latest)
+```
+
+必需 check 永远不出现 → 永远 `blocked`。**这个状态和「事件被丢弃」在 API
+表象上完全一样**（零 run、零 check-run），这正是我误判的原因。
+
+三条可复用的判据：
+
+1. **`docs/**` 纯文档 PR + 有必需 check 的分支保护 = 结构性死锁。** 换分支、
+   重开、推新提交都改变不了 PR 的 changed files 集合，所以永远救不回来。
+   遇到「零 run」先看 `GET /contents/<workflow>?ref=<base>` 里的 `on:` 块有没有
+   `paths-ignore`，而不是先怀疑平台。
+2. **`mergeable=True`（无冲突）但零 check-run，就是路径过滤，不是事件丢失。**
+   真丢事件和路径过滤的区分点：`closed`/`reopened`/`synchronize` 之后仍然零
+   run，基本就是 `paths-ignore`。
+3. **同一仓库不同基表现不同，是最强的线索。** `main` 的 `ci.yml` 一直没有
+   `pull_request` 的 `paths-ignore`，所以 main 轨的文档 PR 从来没出过这个问题；
+   只有 win7 基的文档 PR 全军覆没。这个反差一开始就该指向分支配置而不是平台。
+
+修复（见 #1886）：**只从 `pull_request` 移除 `paths-ignore`，`push` 上的保留**
+（push 侧省几分钟是真实收益，且不影响合并）。移除后纯文档 PR 会跑全量 CI，
+这是「可合并」必须付的代价；若要省这几分钟，正确做法是另建一个廉价的 docs-only
+check 去满足分支保护，而不是让整条 workflow 消失。
 
 #### 事实一：`workflow_dispatch` 的 check-run 不参与 PR 的分支保护判定
 
@@ -306,9 +361,10 @@ workflow 跑出来的结果。
   `ci-rerun.yml` 无论补多少 job 都没用。
 - `ci-rerun.yml` 的真实用途只剩一个：**对某个分支做一次等价于 `ci.yml` 的人
   工验证**（例如确认一个 hotfix 分支没打破 py38）。它不是门禁，不能替代 CI。
-- 因此「`release/win7` 基的 PR 丢了事件」这件事**没有补跑兜底**，只有三条路：
-  让真事件触发（close+reopen / 新分支重开）、让 owner 走 admin 合并、或接受
-  这条 PR 卡住。这一点应当在 SOP 里改写，而不是靠补跑硬扛。
+- 因此「`release/win7` 基的 PR 零 run」这件事**没有补跑兜底**。而事实零 已经
+  给出了它的真正成因与修法：先查 base 分支 `ci.yml` 的 `on:` 块。**不要再用
+  close+reopen / 换新分支重开来「触发真事件」**——本轮实测这两招对纯文档 PR
+  零效果（它们不改变 changed files 集合），反而白白消耗两轮等待。
 
 #### 事实二：`gh workflow run` 的 `--ref` 有两个含义，缺一不可
 
