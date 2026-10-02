@@ -271,104 +271,97 @@ CI 状态复查因此改走 REST + `Invoke-RestMethod`，不再依赖 `gh`。
 另：当天晚间本地代理（127.0.0.1:7890）曾中途掉线，导致 `git push` 与 `gh` 同时失败；
 直连可用时可用 `git -c http.proxy= -c https.proxy= push` 命令级绕过（不改配置）。
 
-### 7.3 补跑通道的两个坑：ci-rerun 缺 Electron build 矩阵 + 单 suite 约束（2026-10-02）
+### 7.3 CI 门禁的三个事实：补跑通道不参与判定、--ref 的两个含义、policy 例外会过期（2026-10-02）
 
-win7 轨的交付号回填 PR（#1875，后被 #1879 取代）遇到 `pull_request` 事件被
-GitHub 静默丢弃（head SHA 上零 workflow run），按 SOP §命令表走 `ci-rerun.yml`
-补跑。跑出来 `All Checks` 绿，但 `PUT /pulls/<n>/merge` 返回 405：
+本轮为了把 win7 轨最后一条 PR 合并，在 CI 上绕了很大一圈，最终挖出三条与
+`AGENTS.md`/SOP 现有描述**不一致**的事实。三条都写在这里，因为它们都曾导致
+我做出错误判断。
 
+#### 事实一：`workflow_dispatch` 的 check-run 不参与 PR 的分支保护判定
+
+这是本轮最贵的一条。SOP §命令表写着「PR 事件被丢弃时用 `ci-rerun.yml` 补跑，
+令 PR 恢复可合并状态」——**这句话不成立**。
+
+GraphQL 实证（#1879，head `f23b7dd6b`，该 SHA 上同时存在一条 `pull_request`
+run 与一条 `workflow_dispatch` run）：
+
+```graphql
+pullRequest(number: 1879) {
+  mergeStateStatus          # BLOCKED
+  statusCheckRollup { state # FAILURE
+    contexts { nodes { ... on CheckRun {
+      name conclusion
+      checkSuite { workflowRun { workflow { name } event } } } } } }
+}
 ```
-{"message":"5 of 5 required status checks are expected."}
-```
 
-**坑一：`ci-rerun.yml` 缺 Electron build 矩阵。** `release/win7` 的分支保护
-要求 5 个 check —— `Frontend (TypeScript)`、`Electron smoke (playwright-electron)`、
-`Backend (Python 3.8, Win7 LTS)`、`Electron build (windows-latest)`、
-`Electron build (ubuntu-latest)`。而 `ci-rerun.yml` 原本只定义 backend /
-backend-py38 / dependency-audit / frontend / electron-smoke / all-green 六个
-job，**没有任何 desktop-build**（文件里甚至只留了一段"Desktop Build"注释
-却没有对应 job），补多少次都产不出那 2 个必需 check。已修：main 轨的 #1881
-把 `ci.yml` 的 `desktop-build` 矩阵原样搬进 `ci-rerun.yml`（唯一差异是
-checkout 用 `inputs.ref`）并加进 `all-green` 的 `needs`，本 PR 把同一份
-修复合回 win7 轨——因为下面「坑三」会说明，`--ref` dispatch 用的是被指分支上
-的 workflow 文件版本，win7 分支不带上这份修复就白跑。
+返回的 rollup **只列 `event: pull_request` 的那 10 个 check-run**，
+`workflow_dispatch`（CI Retry）那 7 个 check-run 一个都不在里面。也就是说
+GitHub 判定「这个 PR 的必需 check 满足了吗」时，只看 `pull_request` 触发的
+workflow 跑出来的结果。
 
-**坑二：必需 check 必须由同一个 run（check suite）报齐，叠加取并集无效。**
-曾试图用 `ci.yml`(workflow_dispatch) + `ci-rerun.yml` 两条 run 叠加：前者补
-`Electron build (windows/ubuntu-latest)`，后者补 `Backend (Python 3.8, Win7 LTS)`。
-结果 head SHA 上 5 个必需 context **全部 `success`**、`All Checks` 也绿，
-`/merge` 仍返回 405、PR 一直 `mergeableState=blocked`。GitHub 是按**最新
-check suite** 判定必需项的：只被更早那个 suite 报告过的 context 不算数。
-所以修完坑一之后，`ci-rerun.yml` 单条 dispatch（`target=release/win7`）
-自己就能覆盖全部 5 项，不必也不应再叠加第二条 workflow。
+推论（三条都别再踩）：
 
-**「推新提交触发真 CI」这条路也不通**：不只 `opened` 被丢，`synchronize`
-同样被丢（17:26 UTC 推了一个提交，4 分钟内新 head SHA 上零 workflow run），
-`reopened` 也丢（关掉再重开 #1875，5 分钟内零 run）。换新分支重开一个新 PR
-（#1879）同样丢。同期以 `main` 为基的 PR 全部正常触发，所以这是
-**基分支相关**的丢事件，不是随机抖动——win7 轨的 PR 一旦丢事件只能靠补跑。
+- **任何补跑通道都不可能让一个丢了 `pull_request` 事件的 PR 变得可合并。**
+  `ci-rerun.yml` 无论补多少 job 都没用。
+- `ci-rerun.yml` 的真实用途只剩一个：**对某个分支做一次等价于 `ci.yml` 的人
+  工验证**（例如确认一个 hotfix 分支没打破 py38）。它不是门禁，不能替代 CI。
+- 因此「`release/win7` 基的 PR 丢了事件」这件事**没有补跑兜底**，只有三条路：
+  让真事件触发（close+reopen / 新分支重开）、让 owner 走 admin 合并、或接受
+  这条 PR 卡住。这一点应当在 SOP 里改写，而不是靠补跑硬扛。
 
-**⚠️ `gh workflow run` 必须带 `--ref`。** `-f ref=<分支>` 只是 workflow 的一个
-**输入**（决定 job 里 `actions/checkout` checkout 谁）；决定 **run 挂在哪个
-ref / check-run 记到哪个 commit** 的是 `--ref` 标志。漏掉它时 `gh` 回退到
-当前检出分支，在主检出（detached HEAD）里就落到默认分支 `main` 上——run 照跑、
-`All Checks` 照绿，但 check-run 全部记在 `main` 的 SHA 上，对 PR 毫无作用。
-实测白烧了一轮 py38（约 10 min）才发现 PR head 上的
-`Backend (Python 3.8, Win7 LTS)` 仍是 ci.yml 留下的 `skipped`。
+#### 事实二：`gh workflow run` 的 `--ref` 有两个含义，缺一不可
 
-正确写法（两个 ref 都要给，`--ref` 决定归属，`-f ref` 决定 checkout）：
+- `-f ref=<分支>` 是 workflow 的**输入**，决定各 job 里 `actions/checkout`
+  checkout 哪个分支。
+- `--ref <分支>` 决定 **run 挂在哪个 ref、check-run 记到哪个 commit**。
+
+漏掉 `--ref` 时 `gh` 回退到当前检出分支。在主检出（detached HEAD）里就落到
+默认分支 `main` 上：run 照跑、`All Checks` 照绿，但 check-run 全部记在 `main`
+的 SHA 上，对目标 PR 毫无作用。实测白烧了一轮 py38（约 10 min）才发现 PR head
+上的 `Backend (Python 3.8, Win7 LTS)` 仍是 `ci.yml` 留下的 `skipped`。
 
 ```powershell
 gh workflow run ci-rerun.yml --ref <分支名> `
   -f ref=<分支名> -f target=release/win7
 ```
 
-**自查**：dispatch 之后立刻确认 `GET /actions/runs/<id>` 的 `head_sha` 等于
-PR head SHA；不等就是漏了 `--ref`，取消重发，别等它跑完才发现。
+自查两步（`gh api repos/<o>/<r>/actions/runs/<id>/jobs --jq '.jobs[].name'`）：
 
-另：同一 dispatch 用 PowerShell `Invoke-RestMethod` 直连 REST 打会返回
-`422 Unprocessable Entity`（body 为空），`gh workflow run` 同参数却成功。
-补跑通道优先用 `gh`；状态复查仍用 REST。
+1. `GET /actions/runs/<id>` 的 `head_sha` 是否等于目标 SHA；
+2. job 集是否符合预期。
 
-**给后续会话的判据**：`All Checks` 绿但 `/merge` 报
-"N of N required status checks are expected" 时，按顺序查三件事——
-1. `GET /branches/<base>/protection/required_status_checks` 拿必需 check 名；
-2. 必需 check 是否**由同一个 run 报齐**（对比 head SHA 上各 check-run 的
-   `check_suite.workflow_run`，别只看 union 后是否全绿）；
-3. 缺的那些 job 在补跑 workflow 里**是否根本没定义**（本次即 `ci-rerun.yml`
-   缺 desktop-build）。第 2、3 条任一不满足，补跑就无解，必须让真
-   `pull_request` 事件触发，或请 owner 走 admin 合并。
+#### 事实三：`--ref` 还决定用哪个分支的 workflow 文件版本
 
-**顺带修正一处认知**：`main` 的必需 check 只有 3 个（`stub-smoke` /
-`stub-deep` / `live-boot`，全部由 `e2e-pr-gate.yml` 产出），`release/win7`
-是 5 个且含两个 Electron build。`ci.yml` 正常触发的 PR run 自带 main 那三个，
-但对 win7 而言 `e2e-pr-gate.yml` 根本不参与（它只监听 `branches: [main]`）。
-不要按 main 的经验推断 win7。
+`workflow_dispatch` 的 workflow 定义取自 `--ref` 指定的 ref，**不是默认分支**。
+所以即使 `main` 上的 `ci-rerun.yml` 已修好，只要目标分支上那份还是旧的，跑出来
+的 job 集就是旧的。本轮实测：修复已合入 main、`head_sha` 也核对正确，但
+`GET /actions/runs/<id>/jobs` 只列出 5 个旧 job、没有 `Electron build (*)`——
+因为 win7 分支的 `ci-rerun.yml` 还没带上修复。
 
-**但 main 轨没有同样的兜底**：`e2e-pr-gate.yml` 只声明了 `pull_request`
-触发，**没有 `workflow_dispatch`**，所以三个必需 check 一旦被丢事件就没有
-任何补跑通道可用（本轮 #1876 侥幸触发成功）。若将来要在 main 上加
-`workflow_dispatch`，注意它的 `concurrency.group` 用了
-`github.event.pull_request.number || github.ref`，dispatch 时会落到 `github.ref`
-分支上，语义仍然安全。
+这条促成了一处实际改进：`ci-rerun.yml` 原先只有 6 个 job、连一段
+"Desktop Build" 注释都没有对应的 job definition，而它自己的文件头声明
+「对分支手动触发一次与 ci.yml 同语义的全量验证」——并没有做到。已把 `ci.yml`
+的 `desktop-build` 矩阵原样移入（唯一差异是 checkout 用 `inputs.ref`），
+使其名副其实。**但请注意：这只是让补跑通道能正确做事，并不改变事实一。**
 
-**⚠️ `--ref` 同时决定「用哪个分支的 workflow 文件版本」。** 这一点最容易踩：
-`workflow_dispatch` 的 workflow 定义取自 `--ref` 指定的 ref，而不是默认分支。
-所以在 win7 分支上 dispatch 时，即使 `main` 上的 `ci-rerun.yml` 已经修好，
-只要该分支上的同名文件还是旧的，跑出来的 job 集就是旧的——本轮实测就是这样：
-修复已合入 main、`head_sha` 也核对正确，但 `GET /actions/runs/<id>/jobs`
-只列出 5 个 job、没有 `Electron build (*)`，因为 win7 分支的
-`ci-rerun.yml` 还是坑一修复前的样子。
+#### 事实四（附带）：本轮真正卡住 PR 的不是 CI 通道，是 policy 例外过期
 
-因此 dispatch 前除核对 `head_sha` 外，还要核对 job 集：
+`#1879` 最终失败的直接原因是 `Backend (Python 3.8, Win7 LTS)` 红灯，而它红在
+`Enforce Win7 dependency audit gate` 一步——`.github/dependency-audit-policy.json`
+里 52 条例外的 `review_by` 是 `2026-10-01`，昨天过期。
 
-```powershell
-gh api repos/<owner>/<repo>/actions/runs/<id>/jobs --jq '.jobs[].name'
-```
+`scripts/check_dependency_audit.py` 的判定逻辑值得记住：**只要 policy 文件里
+存在任何 `review_by < 今天` 的条目就判失败**，与该条目是否还匹配当前 finding
+无关。所以「例外出期」是一个独立于漏洞是否修复的硬门禁——到期日就是强制复审
+的截止线。
 
-期望看到 `Electron build (ubuntu-latest)` 与 `Electron build (windows-latest)`。
-看不到就说明 `--ref` 指的分支上 workflow 文件还没带上修复——先把修复同步过去
-（win7 轨的对应 PR 也要带 `.github/workflows/ci-rerun.yml`），再 dispatch。
+处置方式与结论见 `docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md`。
+本轮实测的关键补充：**在 Python 3.8 约束下，该计划里被列为「可升级」的那一批
+绝大多数并不存在可用修复版本**（py38 上 pillow / protobuf / click /
+python-multipart / starlette / pytest 的修复版全部要求 3.9+/3.10+），
+`extract-zip` 则连任何 Python 上都没有修复版。原计划「2026-09-30 前完成所有
+可升级项」的前提在 py38 上不成立。
 
 ## 8. 本轮交付的最终形态与遗留
 
