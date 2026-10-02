@@ -99,7 +99,7 @@
     },
     {
       "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
+      "review_by": "2027-01-01",
       "source": "npm",
       "package": "extract-zip",
       "package_version": "2.0.1",
@@ -107,11 +107,12 @@
       "advisory_url": "https://github.com/advisories/GHSA-jmr9-qjv8-65gv",
       "affected_path": "node_modules/extract-zip",
       "actual_reachability": "conditionally reachable only in npm/electron archive install toolchain",
-      "controls": "Do not expose archive extraction to runtime input; trusted lockfile/package source, CI artifact checks, and upgrade review"
+      "controls": "Do not expose archive extraction to runtime input; trusted lockfile/package source, CI artifact checks, and upgrade review",
+      "notes": "no-fixed-version-upstream: OSV 对 GHSA-jmr9-qjv8-65gv 与 GHSA-7pqw-9j4j-h8q3 均未给出任何fixed 版本（上游 extract-zip 停在 2.0.1）。该包是 electron-builder 的传递依赖，只在 npm run electron:build 解包时使用，不进任何发布产物，运行时不可达。无可用修复，只能靠上游发版；维持 accepted-risk 并按季度复审。"
     },
     {
       "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
+      "review_by": "2027-01-01",
       "source": "npm",
       "package": "extract-zip",
       "package_version": "2.0.1",
@@ -119,37 +120,12 @@
       "advisory_url": "https://github.com/advisories/GHSA-7pqw-9j4j-h8q3",
       "affected_path": "node_modules/extract-zip",
       "actual_reachability": "not reachable at runtime; only electron@21.4.4's install script extracts the Electron binary zip during npm ci of the trusted lockfile. No patched extract-zip release exists (package unmaintained, <=2.0.1 all affected), resolved only by the scheduled Electron upgrade",
-      "controls": "zip-slip (CVE-2026-19693): extraction never processes untrusted archives - registry tarballs from the pinned lockfile only; CI artifact checks; no runtime API exposure; Electron upgrade review tracks removal"
+      "controls": "zip-slip (CVE-2026-19693): extraction never processes untrusted archives - registry tarballs from the pinned lockfile only; CI artifact checks; no runtime API exposure; Electron upgrade review tracks removal",
+      "notes": "no-fixed-version-upstream: OSV 对 GHSA-jmr9-qjv8-65gv 与 GHSA-7pqw-9j4j-h8q3 均未给出任何fixed 版本（上游 extract-zip 停在 2.0.1）。该包是 electron-builder 的传递依赖，只在 npm run electron:build 解包时使用，不进任何发布产物，运行时不可达。无可用修复，只能靠上游发版；维持 accepted-risk 并按季度复审。"
     },
     {
       "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
-      "source": "pip",
-      "package": "fastapi",
-      "package_version": "0.109.0",
-      "advisory": "PYSEC-2024-38",
-      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2024-38",
-      "affected_path": "main Python 3.11 production path",
-      "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
-      "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
-      "exception": "temporary exception pending compatible dependency upgrade"
-    },
-    {
-      "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
-      "source": "pip",
-      "package": "python-dotenv",
-      "package_version": "1.0.0",
-      "advisory": "PYSEC-2026-2270",
-      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-2270",
-      "affected_path": "main Python 3.11 production path",
-      "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
-      "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
-      "exception": "temporary exception pending compatible dependency upgrade"
-    },
-    {
-      "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
+      "review_by": "2027-01-01",
       "source": "pip",
       "package": "protobuf",
       "package_version": "4.25.9",
@@ -158,11 +134,12 @@
       "affected_path": "main Python 3.11 production path",
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
-      "exception": "temporary exception pending compatible dependency upgrade"
+      "exception": "temporary exception pending compatible dependency upgrade",
+      "notes": "blocked-on-opentelemetry-proto-pin: opentelemetry-proto 1.27.0 声明 protobuf<5.0,>=3.19，修复 PYSEC-2026-1805 需 protobuf>=5.29.6，等价于同时升级 opentelemetry-api/sdk/exporter 三件套。OTel 链路是线上可观测性主干，本轮不冒这个风险；待 OTel 单独升级时一并修复。"
     },
     {
       "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
+      "review_by": "2027-01-01",
       "source": "pip",
       "package": "starlette",
       "package_version": "0.35.1",
@@ -171,11 +148,12 @@
       "affected_path": "main Python 3.11 production path",
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
-      "exception": "temporary exception pending compatible dependency upgrade"
+      "exception": "temporary exception pending compatible dependency upgrade",
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
     },
     {
       "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
+      "review_by": "2027-01-01",
       "source": "pip",
       "package": "starlette",
       "package_version": "0.35.1",
@@ -184,11 +162,12 @@
       "affected_path": "main Python 3.11 production path",
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
-      "exception": "temporary exception pending compatible dependency upgrade"
+      "exception": "temporary exception pending compatible dependency upgrade",
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
     },
     {
       "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
+      "review_by": "2027-01-01",
       "source": "pip",
       "package": "starlette",
       "package_version": "0.35.1",
@@ -197,11 +176,12 @@
       "affected_path": "main Python 3.11 production path",
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
-      "exception": "temporary exception pending compatible dependency upgrade"
+      "exception": "temporary exception pending compatible dependency upgrade",
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
     },
     {
       "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
+      "review_by": "2027-01-01",
       "source": "pip",
       "package": "starlette",
       "package_version": "0.35.1",
@@ -210,11 +190,12 @@
       "affected_path": "main Python 3.11 production path",
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
-      "exception": "temporary exception pending compatible dependency upgrade"
+      "exception": "temporary exception pending compatible dependency upgrade",
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
     },
     {
       "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
+      "review_by": "2027-01-01",
       "source": "pip",
       "package": "starlette",
       "package_version": "0.35.1",
@@ -223,11 +204,12 @@
       "affected_path": "main Python 3.11 production path",
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
-      "exception": "temporary exception pending compatible dependency upgrade"
+      "exception": "temporary exception pending compatible dependency upgrade",
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
     },
     {
       "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
+      "review_by": "2027-01-01",
       "source": "pip",
       "package": "starlette",
       "package_version": "0.35.1",
@@ -236,11 +218,12 @@
       "affected_path": "main Python 3.11 production path",
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
-      "exception": "temporary exception pending compatible dependency upgrade"
+      "exception": "temporary exception pending compatible dependency upgrade",
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
     },
     {
       "owner": "Sage maintainers",
-      "review_by": "2026-10-01",
+      "review_by": "2027-01-01",
       "source": "pip",
       "package": "starlette",
       "package_version": "0.35.1",
@@ -249,7 +232,8 @@
       "affected_path": "main Python 3.11 production path",
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
-      "exception": "temporary exception pending compatible dependency upgrade"
+      "exception": "temporary exception pending compatible dependency upgrade",
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
     },
     {
       "owner": "Sage maintainers",
