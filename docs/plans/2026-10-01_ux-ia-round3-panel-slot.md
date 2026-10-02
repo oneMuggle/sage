@@ -271,81 +271,77 @@ CI 状态复查因此改走 REST + `Invoke-RestMethod`，不再依赖 `gh`。
 另：当天晚间本地代理（127.0.0.1:7890）曾中途掉线，导致 `git push` 与 `gh` 同时失败；
 直连可用时可用 `git -c http.proxy= -c https.proxy= push` 命令级绕过（不改配置）。
 
-### 7.3 补跑通道的能力边界：ci-rerun 满足不了 win7 的 5 个必需 check（2026-10-02）
+### 7.3 补跑通道的两个坑：ci-rerun 缺 Electron build 矩阵 + 单 suite 约束（2026-10-02）
 
-#1875（win7 轨交付号回填）的 `pull_request` 事件被静默丢弃（head SHA 上零
-workflow run），按 SOP §命令表用 `ci-rerun.yml` 补跑。跑出来 `All Checks` 是绿的，
-但 `PUT /pulls/1875/merge` 返回 405：
+win7 轨的交付号回填 PR（#1875，后被 #1879 取代）遇到 `pull_request` 事件被
+GitHub 静默丢弃（head SHA 上零 workflow run），按 SOP §命令表走 `ci-rerun.yml`
+补跑。跑出来 `All Checks` 绿，但 `PUT /pulls/<n>/merge` 返回 405：
 
 ```
 {"message":"5 of 5 required status checks are expected."}
 ```
 
-根因：`release/win7` 的分支保护要求 5 个 check —— `Frontend (TypeScript)`、
-`Electron smoke (playwright-electron)`、`Backend (Python 3.8, Win7 LTS)`、
-`Electron build (windows-latest)`、`Electron build (ubuntu-latest)`。
-而 `ci-rerun.yml` 只定义了 backend / backend-py38 / dependency-audit / frontend /
-electron-smoke / all-green 六个 job，**没有 Electron build 矩阵**，补跑出来的
-check 集天然缺 2 个必需项，补多少次都补不齐。
+**坑一：`ci-rerun.yml` 缺 Electron build 矩阵。** `release/win7` 的分支保护
+要求 5 个 check —— `Frontend (TypeScript)`、`Electron smoke (playwright-electron)`、
+`Backend (Python 3.8, Win7 LTS)`、`Electron build (windows-latest)`、
+`Electron build (ubuntu-latest)`。而 `ci-rerun.yml` 原本只定义 backend /
+backend-py38 / dependency-audit / frontend / electron-smoke / all-green 六个
+job，**没有任何 desktop-build**（文件里甚至只留了一段"Desktop Build"注释
+却没有对应 job），补多少次都产不出那 2 个必需 check。已在本 PR 修掉：把
+`ci.yml` 的 `desktop-build` 矩阵原样搬进 `ci-rerun.yml`（唯一差异是
+checkout 用 `inputs.ref`），并加进 `all-green` 的 `needs`。
 
-`ci.yml` 虽有 `workflow_dispatch`，但它不能单独顶替：手动触发时 `github.ref` 是
-特性分支而非 `refs/heads/release/win7`，`backend-py38` 的 `if`（`ci.yml:22`）
-两个条件都不成立，会被 skip 掉——于是缺的那一个必需 check 仍然缺。它只能作为
-「补 Electron build 矩阵」的那一半来用，见下。
+**坑二：必需 check 必须由同一个 run（check suite）报齐，叠加取并集无效。**
+曾试图用 `ci.yml`(workflow_dispatch) + `ci-rerun.yml` 两条 run 叠加：前者补
+`Electron build (windows/ubuntu-latest)`，后者补 `Backend (Python 3.8, Win7 LTS)`。
+结果 head SHA 上 5 个必需 context **全部 `success`**、`All Checks` 也绿，
+`/merge` 仍返回 405、PR 一直 `mergeableState=blocked`。GitHub 是按**最新
+check suite** 判定必需项的：只被更早那个 suite 报告过的 context 不算数。
+所以修完坑一之后，`ci-rerun.yml` 单条 dispatch（`target=release/win7`）
+自己就能覆盖全部 5 项，不必也不应再叠加第二条 workflow。
 
-**「推新提交触发真 CI」这条路也走不通**：不只 `opened` 被丢，`synchronize`
-同样被丢。17:26 UTC 往分支推了一个提交，4 分钟内新 head SHA 上零 workflow run。
-所以推提交不能作为兜底。
+**「推新提交触发真 CI」这条路也不通**：不只 `opened` 被丢，`synchronize`
+同样被丢（17:26 UTC 推了一个提交，4 分钟内新 head SHA 上零 workflow run），
+`reopened` 也丢（关掉再重开 #1875，5 分钟内零 run）。换新分支重开一个新 PR
+（#1879）同样丢。同期以 `main` 为基的 PR 全部正常触发，所以这是
+**基分支相关**的丢事件，不是随机抖动——win7 轨的 PR 一旦丢事件只能靠补跑。
 
-**实测可行的解法：两条补跑 workflow 叠加，check 集取并集。**
-
-1. `ci.yml`（`workflow_dispatch`，`ref` = PR 分支）—— `desktop-build` 是
-   job 级无条件运行（`ci.yml:491`，`if:` 只出现在 step 级），dispatch 下照样
-   产出 `Electron build (windows-latest)` / `Electron build (ubuntu-latest)`，
-   外加 `Frontend (TypeScript)`、`Electron smoke (playwright-electron)`、
-   `Architecture check`、`count-lines`。
-2. `ci-rerun.yml`（`ref` = PR 分支，`target` = `release/win7`）—— 补上唯一
-   还缺的 `Backend (Python 3.8, Win7 LTS)`（它的 job 体与 `ci.yml` 的
-   `backend-py38` 同源）。
-
-并集恰好覆盖 win7 的 5 个必需 check。
-
-另：打 `ci-rerun.yml` 的 dispatch 时，PowerShell `Invoke-RestMethod` 直连返回
-`422 Unprocessable Entity`（body 为空），同参数 `gh workflow run ci-rerun.yml
--f ref=... -f target=...` 却成功。补跑通道优先用 `gh`；状态复查仍用 REST。
-
-**⚠️ `gh workflow run` 必须带 `--ref`，否则 check-run 记到错的 SHA 上。**
-`-f ref=<分支>` 只是 workflow 的一个**输入**（它决定 job 里 `actions/checkout`
-checkout 谁）；决定 **run 挂在哪个 ref / check-run 记到哪个 commit** 的是
-`--ref` 标志。漏掉它时 `gh` 回退到当前检出分支，在主检出（detached HEAD）里
-就落到默认分支 `main` 上——run 照跑、`All Checks` 照绿，但它的 check-run
-全部记在 `main` 的 SHA 上，对 PR 毫无作用。实测白烧了一轮 py38（约 10 min）
-才发现 PR head 上的 `Backend (Python 3.8, Win7 LTS)` 仍是 ci.yml 留下的
-`skipped`。
+**⚠️ `gh workflow run` 必须带 `--ref`。** `-f ref=<分支>` 只是 workflow 的一个
+**输入**（决定 job 里 `actions/checkout` checkout 谁）；决定 **run 挂在哪个
+ref / check-run 记到哪个 commit** 的是 `--ref` 标志。漏掉它时 `gh` 回退到
+当前检出分支，在主检出（detached HEAD）里就落到默认分支 `main` 上——run 照跑、
+`All Checks` 照绿，但 check-run 全部记在 `main` 的 SHA 上，对 PR 毫无作用。
+实测白烧了一轮 py38（约 10 min）才发现 PR head 上的
+`Backend (Python 3.8, Win7 LTS)` 仍是 ci.yml 留下的 `skipped`。
 
 正确写法（两个 ref 都要给，`--ref` 决定归属，`-f ref` 决定 checkout）：
 
 ```powershell
-gh workflow run ci-rerun.yml --ref feat/ux-ia-r3-b-win7 `
-  -f ref=feat/ux-ia-r3-b-win7 -f target=release/win7
+gh workflow run ci-rerun.yml --ref <分支名> `
+  -f ref=<分支名> -f target=release/win7
 ```
 
-**自查**：dispatch 之后立刻确认
-`GET /actions/runs/<id>` 的 `head_sha` 等于 PR head SHA；不等就是漏了 `--ref`，
-取消重发，别等它跑完才发现。
+**自查**：dispatch 之后立刻确认 `GET /actions/runs/<id>` 的 `head_sha` 等于
+PR head SHA；不等就是漏了 `--ref`，取消重发，别等它跑完才发现。
 
-**给后续会话的判据**：补跑后若 `All Checks` 绿但 `/merge` 报
-"N of N required status checks are expected"，先
-`GET /branches/<base>/protection/required_status_checks` 取必需 check 名，
-再与 head SHA 上的 check-runs 求差集——差集里缺的是哪几个 job，就去哪个
-workflow 里找它们是否根本没定义（本次即 `ci-rerun.yml` 缺 Electron build 矩阵），
-再按上面的叠加配方补齐。
+另：同一 dispatch 用 PowerShell `Invoke-RestMethod` 直连 REST 打会返回
+`422 Unprocessable Entity`（body 为空），`gh workflow run` 同参数却成功。
+补跑通道优先用 `gh`；状态复查仍用 REST。
+
+**给后续会话的判据**：`All Checks` 绿但 `/merge` 报
+"N of N required status checks are expected" 时，按顺序查三件事——
+1. `GET /branches/<base>/protection/required_status_checks` 拿必需 check 名；
+2. 必需 check 是否**由同一个 run 报齐**（对比 head SHA 上各 check-run 的
+   `check_suite.workflow_run`，别只看 union 后是否全绿）；
+3. 缺的那些 job 在补跑 workflow 里**是否根本没定义**（本次即 `ci-rerun.yml`
+   缺 desktop-build）。第 2、3 条任一不满足，补跑就无解，必须让真
+   `pull_request` 事件触发，或请 owner 走 admin 合并。
 
 **顺带修正一处认知**：`main` 的必需 check 只有 3 个（`stub-smoke` /
 `stub-deep` / `live-boot`，全部由 `e2e-pr-gate.yml` 产出），`release/win7`
-是 5 个且含两个 Electron build。同一套补跑配方对 main 只需要
-`ci-rerun.yml`（`target=main`）一条，因为 `ci.yml` 正常触发的 PR run 自带
-全部三个。不要按 main 的经验推断 win7。
+是 5 个且含两个 Electron build。`ci.yml` 正常触发的 PR run 自带 main 那三个，
+但对 win7 而言 `e2e-pr-gate.yml` 根本不参与（它只监听 `branches: [main]`）。
+不要按 main 的经验推断 win7。
 
 **但 main 轨没有同样的兜底**：`e2e-pr-gate.yml` 只声明了 `pull_request`
 触发，**没有 `workflow_dispatch`**，所以三个必需 check 一旦被丢事件就没有
