@@ -147,6 +147,78 @@ def list_session_auto_approvals(
     }
 
 
+@router.get("/trust-policy")
+def get_trust_policy() -> Dict[str, Any]:
+    """P2-5 渐进式授权：读取当前策略 + 各工具的连续人工批准次数。
+
+    暴露计数是为了让用户**看得见**「哪些工具已经攒够信任」，而不是被静默
+    自动放行 —— 渐进式授权最容易被质疑的就是「它凭什么替我点同意」。
+    """
+    from backend.services.trust_escalation import (
+        DEFAULT_TRUST_THRESHOLD,
+        SETTINGS_KEY_ENABLED,
+        SETTINGS_KEY_THRESHOLD,
+        load_trust_policy,
+    )
+
+    enabled, threshold = load_trust_policy()
+    tools: Dict[str, int] = {}
+    try:
+        from backend.data.approval_decision_repo import ApprovalDecisionRepository
+
+        repo = ApprovalDecisionRepository()
+        for decision in repo.list(limit=200):
+            if (decision.answered_by or "") != "gui":
+                continue
+            if not decision.session_id or not decision.tool_name:
+                continue
+            key = f"{decision.session_id}|{decision.tool_name}"
+            if key not in tools:
+                tools[key] = repo.consecutive_gui_approvals(
+                    decision.session_id, decision.tool_name
+                )
+    except Exception as exc:  # noqa: BLE001 — 计数失败不影响策略读取
+        logger.warning("trust 计数读取失败（忽略）: %s", exc)
+
+    return {
+        "ok": True,
+        "enabled": enabled,
+        "threshold": threshold,
+        "default_threshold": DEFAULT_TRUST_THRESHOLD,
+        "settings_keys": {
+            "enabled": SETTINGS_KEY_ENABLED,
+            "threshold": SETTINGS_KEY_THRESHOLD,
+        },
+        # 键为 "session_id|tool_name"，值 = 连续人工批准次数
+        "consecutive": tools,
+    }
+
+
+class TrustPolicyBody(BaseModel):
+    """P2-5 渐进式授权策略写入体。"""
+
+    enabled: bool
+    threshold: Optional[int] = None
+
+
+@router.post("/trust-policy")
+def set_trust_policy(body: TrustPolicyBody) -> Dict[str, Any]:
+    """P2-5：开关渐进式授权。默认关闭，必须由用户显式开启。"""
+    from backend.data.settings_repo import SettingsRepository
+    from backend.services.trust_escalation import (
+        DEFAULT_TRUST_THRESHOLD,
+        SETTINGS_KEY_ENABLED,
+        SETTINGS_KEY_THRESHOLD,
+    )
+
+    threshold = body.threshold if body.threshold is not None else DEFAULT_TRUST_THRESHOLD
+    threshold = max(1, min(int(threshold), 20))
+    repo = SettingsRepository()
+    repo.set(SETTINGS_KEY_ENABLED, "1" if body.enabled else "0", category="permissions")
+    repo.set(SETTINGS_KEY_THRESHOLD, str(threshold), category="permissions")
+    return {"ok": True, "enabled": body.enabled, "threshold": threshold}
+
+
 def forbidden_origin_response(request: Request) -> Optional[JSONResponse]:
     """Origin 守卫：带 Origin 头且不在白名单 → 403 响应；否则 None（放行）。
 

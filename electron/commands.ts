@@ -669,6 +669,13 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
       return `/api/v1/permissions/session/${sid}/auto-approvals?${params.toString()}`;
     },
   },
+  // P2-5 渐进式授权：策略读写。默认关闭，必须由用户在设置页显式开启。
+  permissions_get_trust_policy: { method: 'GET', path: () => '/api/v1/permissions/trust-policy' },
+  permissions_set_trust_policy: {
+    method: 'POST',
+    path: () => '/api/v1/permissions/trust-policy',
+    body: (a) => ({ enabled: a.enabled, threshold: a.threshold }),
+  },
   permissions_answer: {
     method: 'POST',
     path: (a) => `/api/v1/permissions/${encodeURIComponent(String(a.requestId))}/answer`,
@@ -852,6 +859,23 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   skills_consolidation_accept: {
     method: 'POST',
     path: () => '/api/v1/skills/consolidation/accept',
+  },
+
+  // P2-2 (可审计可回滚): 技能演化的审计台账与回滚。后端端点早已存在
+  // (backend/api/legacy_skill_draft_routes.py 的 /skills/{name}/audit 与
+  // /skills/{name}/rollback)，但此前没有任何前端入口 —— 技能被自动演化改动后，
+  // 用户既看不到「谁在什么时候改了什么」，也无法退回上一版。缺这两条 IPC 路由
+  // 的话 skillsApi.getAudit / .rollback 会抛 UnknownIpcCommandError。
+  skill_audit: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/skills/${encodeURIComponent(String(a.name))}/audit?limit=${encodeURIComponent(
+        String(a.limit ?? 50),
+      )}`,
+  },
+  skill_rollback: {
+    method: 'POST',
+    path: (a) => `/api/v1/skills/${encodeURIComponent(String(a.name))}/rollback`,
   },
 
   // Path B: list user-invocable SKILL.md slash command names.

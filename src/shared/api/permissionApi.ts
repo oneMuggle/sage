@@ -41,6 +41,20 @@ export interface SessionAutoApprovals {
   items: AutoApprovalRecord[];
 }
 
+/**
+ * P2-5 渐进式授权策略。
+ *
+ * `consecutive` 的键是 `session_id|tool_name`，值是该会话内该工具**最近连续**
+ * 被用户手动批准的次数。把它暴露给 UI，是为了让用户看得见「哪些工具已经
+ * 攒够信任」—— 渐进式授权最容易被质疑的就是「它凭什么替我点同意」。
+ */
+export interface TrustPolicyState {
+  enabled: boolean;
+  threshold: number;
+  default_threshold: number;
+  consecutive: Record<string, number>;
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
@@ -51,7 +65,11 @@ function asPreset(v: unknown): PermissionPreset {
 
 export const permissionApi = {
   async getPreset(): Promise<PermissionPresetState> {
-    const fallback: PermissionPresetState = { preset: 'standard', mode: 'workspace_write', custom: false };
+    const fallback: PermissionPresetState = {
+      preset: 'standard',
+      mode: 'workspace_write',
+      custom: false,
+    };
     if (isDemoMode()) return fallback;
     try {
       const raw = await invoke<unknown>('permissions_get_preset', {});
@@ -110,6 +128,61 @@ export const permissionApi = {
     } catch {
       // 纯增强信息：失败静默
       return empty;
+    }
+  },
+
+  /**
+   * P2-5 读取渐进式授权策略。demo 模式返回「关闭」—— 演示数据里没有真实的
+   * 审批历史，报一个假的信任度只会误导。
+   */
+  async getTrustPolicy(): Promise<TrustPolicyState> {
+    const fallback: TrustPolicyState = {
+      enabled: false,
+      threshold: 3,
+      default_threshold: 3,
+      consecutive: {},
+    };
+    if (isDemoMode()) return fallback;
+    try {
+      const raw = await invoke<unknown>('permissions_get_trust_policy', {});
+      if (!isRecord(raw)) return fallback;
+      const consecutive: Record<string, number> = {};
+      if (isRecord(raw.consecutive)) {
+        for (const [key, value] of Object.entries(raw.consecutive)) {
+          const n = Number(value);
+          if (Number.isFinite(n) && n > 0) consecutive[key] = n;
+        }
+      }
+      return {
+        enabled: raw.enabled === true,
+        threshold: Number(raw.threshold) || fallback.threshold,
+        default_threshold: Number(raw.default_threshold) || fallback.default_threshold,
+        consecutive,
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  async setTrustPolicy(enabled: boolean, threshold?: number): Promise<TrustPolicyState> {
+    const fallback: TrustPolicyState = {
+      enabled,
+      threshold: threshold ?? 3,
+      default_threshold: 3,
+      consecutive: {},
+    };
+    if (isDemoMode()) return fallback;
+    try {
+      const raw = await invoke<unknown>('permissions_set_trust_policy', { enabled, threshold });
+      if (!isRecord(raw)) return fallback;
+      return {
+        enabled: raw.enabled === true,
+        threshold: Number(raw.threshold) || fallback.threshold,
+        default_threshold: fallback.default_threshold,
+        consecutive: {},
+      };
+    } catch (error) {
+      throw handleApiError(error);
     }
   },
 };
