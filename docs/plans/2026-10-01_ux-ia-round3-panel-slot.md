@@ -212,16 +212,41 @@
 
 ## 7. 交付号回填
 
-| 批次 | main PR | win7 PR | 状态 |
+| 批次 | main PR | main SHA | win7 PR | win7 SHA | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| 方案文档 | **#1870** | `08ce1ef9` | **#1872** | `7931eee4f` | 已合并，CI 全绿 |
+| 批次 0（侧栏收敛） | **#1870** | `08ce1ef9` | **#1872** | `7931eee4f` | 已合并，CI 全绿 |
+| 批次 A（槽位地基） | **#1870** | `08ce1ef9` | **#1872** | `7931eee4f` | 已合并，CI 全绿（未接任何现有面板） |
+| 批次 D 数据层 | **#1871** | `69e3d6b1f` | **#1872** | `7931eee4f` | 已合并，CI 全绿 |
+| 批次 B-1/B-3/B-4（两段式） | **#1873** | `69f67693c` | **#1874** | `a9dc5422` | 已合并，CI 全绿 |
+| 批次 D UI 接线 | **#1873** | `69f67693c` | **#1874** | `a9dc5422` | 已合并（随批次 B 同 PR） |
+| 批次 B-2（项目→会话树） | — | — | — | — | **保持阻塞**（见 §7.2） |
+| 批次 C（右栏收单槽位） | — | — | — | — | **保持阻塞**（见 §7.2） |
+
+四条 PR 的 CI 均为 `All Checks: pass`；本地产出全量 vitest 466 文件通过 / 2 跳过，
+`tsc` / `tsc:electron` / `eslint` / `architecture-check` / `knip` 棘轮全部通过或持平。
+
+### 7.2 保持阻塞的批次（2026-10-02 决策）
+
+用户已确认：B-2 与 C **不抢在别的会话前面动手**，本轮交付到批次 B / D UI 为止。
+理由是持有者仍在活跃工作 —— #1869 静默 3h、#1867 静默 7h，动手会打断他们本轮工作。
+
+| 批次 | 需要动的文件 | 持有者 | 持有者状态 |
 | --- | --- | --- | --- |
-| 方案文档 | **#1870** | **#1872** | 已合并 main `08ce1ef9` / win7 `7931eee4f` |
-| 批次 0（侧栏收敛） | **#1870** | **#1872** | 已合并，CI 全绿 |
-| 批次 A（槽位地基） | **#1870** | **#1872** | 已合并，CI 全绿（未接任何现有面板） |
-| 批次 D 数据层 | **#1871** | **#1872** | 已合并 main `69e3d6b1f` / win7 `7931eee4f`，CI 全绿 |
-| 批次 B-1/B-3/B-4（两段式） | 见 §7.2 | 见 §7.2 | 已实施，CI 进行中 |
-| 批次 B-2（项目→会话树） | — | — | 未做：需重写被 #1869 / #1867 占用的两个 section |
-| 批次 C（右栏收单槽位） | — | — | 阻塞于 #1828（占 `RightPanel.tsx` + `rightPanelStore.ts`） |
-| 批次 D UI 接线 | — | — | 依赖批次 B 的 rail 位置（已就绪） |
+| B-2 项目→会话合并树 | `widgets/sidebar/sections/ConversationsSection.tsx` | #1869 | 活跃（静默 3h） |
+| B-2 | `widgets/sidebar/sections/ProjectSection.tsx` | #1867 / #1868 | 活跃（静默 7h） |
+| C 右栏收单槽位 | `widgets/chat/RightPanel.tsx`、`features/right-panel/rightPanelStore.ts` | #1828 | 停滞（静默 62h，`clean`，理论上可直接合） |
+
+**开工时的解阻顺序**（前两项落地后即可做 B-2 与 C）：
+
+```
+#1869 合并 ─┐
+#1867 合并 ─┴─→ 批次 B-2 开工（两个 section 解绑）
+#1828 合并 ────→ 批次 C 开工（右栏两个文件解绑）
+```
+
+其中 C 只差 #1828 一个条件：该 PR 静默 62h 且 `mergeable_state=clean`，若其持有者不再推进，
+可由仓库 owner 决定关闭该 PR 后由本会话接手。
 
 ### 7.1 #1871 的 CI 红灯与处置（2026-10-01）
 
@@ -246,21 +271,117 @@ CI 状态复查因此改走 REST + `Invoke-RestMethod`，不再依赖 `gh`。
 另：当天晚间本地代理（127.0.0.1:7890）曾中途掉线，导致 `git push` 与 `gh` 同时失败；
 直连可用时可用 `git -c http.proxy= -c https.proxy= push` 命令级绕过（不改配置）。
 
-## 8. 批次 B 的解阻路径
+### 7.3 补跑通道的两个坑：ci-rerun 缺 Electron build 矩阵 + 单 suite 约束（2026-10-02）
 
-批次 B（左栏两段式 = rail 常驻 + 单列表内容列 + 单滚动容器）是**用户可感知的收益**，但四个入口文件当前全被占用。按依赖顺序：
+win7 轨的交付号回填 PR（#1875，后被 #1879 取代）遇到 `pull_request` 事件被
+GitHub 静默丢弃（head SHA 上零 workflow run），按 SOP §命令表走 `ci-rerun.yml`
+补跑。跑出来 `All Checks` 绿，但 `PUT /pulls/<n>/merge` 返回 405：
 
 ```
-1. #1867 / #1868 合并（产品路线）  ─┐
-2. 本 PR #1870 rebase 后合并        ─┴─→  #1869 合并  →  #1133 合并
-                                                          ↓
-                                            批次 B 可开工（Sidebar / Layout / ConversationsSection / ProjectSection 均空闲）
-                                                          ↓
-                                            批次 D UI 接线（rail 总数角标）
+{"message":"5 of 5 required status checks are expected."}
 ```
 
-批次 B 的实施要点（供开工时直接用）：
+**坑一：`ci-rerun.yml` 缺 Electron build 矩阵。** `release/win7` 的分支保护
+要求 5 个 check —— `Frontend (TypeScript)`、`Electron smoke (playwright-electron)`、
+`Backend (Python 3.8, Win7 LTS)`、`Electron build (windows-latest)`、
+`Electron build (ubuntu-latest)`。而 `ci-rerun.yml` 原本只定义 backend /
+backend-py38 / dependency-audit / frontend / electron-smoke / all-green 六个
+job，**没有任何 desktop-build**（文件里甚至只留了一段"Desktop Build"注释
+却没有对应 job），补多少次都产不出那 2 个必需 check。已修：main 轨的 #1881
+把 `ci.yml` 的 `desktop-build` 矩阵原样搬进 `ci-rerun.yml`（唯一差异是
+checkout 用 `inputs.ref`）并加进 `all-green` 的 `needs`，本 PR 把同一份
+修复合回 win7 轨——因为下面「坑三」会说明，`--ref` dispatch 用的是被指分支上
+的 workflow 文件版本，win7 分支不带上这份修复就白跑。
 
-- **总量不变**：rail 固定 56px，内容列吃剩余宽度 → `Layout.tsx` 只需把 `width` 语义从"整栏宽"改为"内容列宽"，或让 `Sidebar` 内部拆分。`useResizableSidebar` 的 min 220 会让内容列只剩 164px，建议同步调到 260~480。
-- **`collapsed` 语义变为"隐藏内容列"**：折叠态的 rail 就是现有的 `Sidebar collapsed` 实现，可直接复用，不需要新组件。
-- **测试影响面**：`Sidebar.*.test.tsx` 7 个 + `widgets/sidebar` 10 个。其中 `sidebar-settings-link`（移入 rail 底部）、`sidebar-version`、`sidebar-new-chat-primary`、`sidebar-search-button` 的 testid 与语义必须保持；`Sidebar.more-group.test.tsx` 大概率要删（rail 消除了「更多」分组的存在理由）。
+**坑二：必需 check 必须由同一个 run（check suite）报齐，叠加取并集无效。**
+曾试图用 `ci.yml`(workflow_dispatch) + `ci-rerun.yml` 两条 run 叠加：前者补
+`Electron build (windows/ubuntu-latest)`，后者补 `Backend (Python 3.8, Win7 LTS)`。
+结果 head SHA 上 5 个必需 context **全部 `success`**、`All Checks` 也绿，
+`/merge` 仍返回 405、PR 一直 `mergeableState=blocked`。GitHub 是按**最新
+check suite** 判定必需项的：只被更早那个 suite 报告过的 context 不算数。
+所以修完坑一之后，`ci-rerun.yml` 单条 dispatch（`target=release/win7`）
+自己就能覆盖全部 5 项，不必也不应再叠加第二条 workflow。
+
+**「推新提交触发真 CI」这条路也不通**：不只 `opened` 被丢，`synchronize`
+同样被丢（17:26 UTC 推了一个提交，4 分钟内新 head SHA 上零 workflow run），
+`reopened` 也丢（关掉再重开 #1875，5 分钟内零 run）。换新分支重开一个新 PR
+（#1879）同样丢。同期以 `main` 为基的 PR 全部正常触发，所以这是
+**基分支相关**的丢事件，不是随机抖动——win7 轨的 PR 一旦丢事件只能靠补跑。
+
+**⚠️ `gh workflow run` 必须带 `--ref`。** `-f ref=<分支>` 只是 workflow 的一个
+**输入**（决定 job 里 `actions/checkout` checkout 谁）；决定 **run 挂在哪个
+ref / check-run 记到哪个 commit** 的是 `--ref` 标志。漏掉它时 `gh` 回退到
+当前检出分支，在主检出（detached HEAD）里就落到默认分支 `main` 上——run 照跑、
+`All Checks` 照绿，但 check-run 全部记在 `main` 的 SHA 上，对 PR 毫无作用。
+实测白烧了一轮 py38（约 10 min）才发现 PR head 上的
+`Backend (Python 3.8, Win7 LTS)` 仍是 ci.yml 留下的 `skipped`。
+
+正确写法（两个 ref 都要给，`--ref` 决定归属，`-f ref` 决定 checkout）：
+
+```powershell
+gh workflow run ci-rerun.yml --ref <分支名> `
+  -f ref=<分支名> -f target=release/win7
+```
+
+**自查**：dispatch 之后立刻确认 `GET /actions/runs/<id>` 的 `head_sha` 等于
+PR head SHA；不等就是漏了 `--ref`，取消重发，别等它跑完才发现。
+
+另：同一 dispatch 用 PowerShell `Invoke-RestMethod` 直连 REST 打会返回
+`422 Unprocessable Entity`（body 为空），`gh workflow run` 同参数却成功。
+补跑通道优先用 `gh`；状态复查仍用 REST。
+
+**给后续会话的判据**：`All Checks` 绿但 `/merge` 报
+"N of N required status checks are expected" 时，按顺序查三件事——
+1. `GET /branches/<base>/protection/required_status_checks` 拿必需 check 名；
+2. 必需 check 是否**由同一个 run 报齐**（对比 head SHA 上各 check-run 的
+   `check_suite.workflow_run`，别只看 union 后是否全绿）；
+3. 缺的那些 job 在补跑 workflow 里**是否根本没定义**（本次即 `ci-rerun.yml`
+   缺 desktop-build）。第 2、3 条任一不满足，补跑就无解，必须让真
+   `pull_request` 事件触发，或请 owner 走 admin 合并。
+
+**顺带修正一处认知**：`main` 的必需 check 只有 3 个（`stub-smoke` /
+`stub-deep` / `live-boot`，全部由 `e2e-pr-gate.yml` 产出），`release/win7`
+是 5 个且含两个 Electron build。`ci.yml` 正常触发的 PR run 自带 main 那三个，
+但对 win7 而言 `e2e-pr-gate.yml` 根本不参与（它只监听 `branches: [main]`）。
+不要按 main 的经验推断 win7。
+
+**但 main 轨没有同样的兜底**：`e2e-pr-gate.yml` 只声明了 `pull_request`
+触发，**没有 `workflow_dispatch`**，所以三个必需 check 一旦被丢事件就没有
+任何补跑通道可用（本轮 #1876 侥幸触发成功）。若将来要在 main 上加
+`workflow_dispatch`，注意它的 `concurrency.group` 用了
+`github.event.pull_request.number || github.ref`，dispatch 时会落到 `github.ref`
+分支上，语义仍然安全。
+
+**⚠️ `--ref` 同时决定「用哪个分支的 workflow 文件版本」。** 这一点最容易踩：
+`workflow_dispatch` 的 workflow 定义取自 `--ref` 指定的 ref，而不是默认分支。
+所以在 win7 分支上 dispatch 时，即使 `main` 上的 `ci-rerun.yml` 已经修好，
+只要该分支上的同名文件还是旧的，跑出来的 job 集就是旧的——本轮实测就是这样：
+修复已合入 main、`head_sha` 也核对正确，但 `GET /actions/runs/<id>/jobs`
+只列出 5 个 job、没有 `Electron build (*)`，因为 win7 分支的
+`ci-rerun.yml` 还是坑一修复前的样子。
+
+因此 dispatch 前除核对 `head_sha` 外，还要核对 job 集：
+
+```powershell
+gh api repos/<owner>/<repo>/actions/runs/<id>/jobs --jq '.jobs[].name'
+```
+
+期望看到 `Electron build (ubuntu-latest)` 与 `Electron build (windows-latest)`。
+看不到就说明 `--ref` 指的分支上 workflow 文件还没带上修复——先把修复同步过去
+（win7 轨的对应 PR 也要带 `.github/workflows/ci-rerun.yml`），再 dispatch。
+
+## 8. 本轮交付的最终形态与遗留
+
+**已交付（双轨合并）**：批次 0、A、D 数据层、B-1/B-3/B-4、D UI 接线。左栏从
+「一列 15 项平铺列表 + 3 层嵌套滚动」变为「56px 常驻 rail + 内容列 + 单滚动容器」，
+「更多」分组下线，待处理信号统一走 `features/attention` 单一来源且折叠态常驻。
+
+**刻意留下的**（§7.2）：批次 B-2 与 C。它们不是技术上做不了，而是动手会打断
+两个仍在活跃工作的并行会话（#1869 / #1867）。批次 A 建立的 `panelRegistry` 与
+`PanelShell` 已在库中就位，C 开工时不需要再设计，只需要接线。
+
+**与 #1867 的冲突已发生**：合并批次 0 时两侧都改了 `Sidebar.tsx` 的
+`primaryNavItems` / `moreNavItems` 字面量，#1867 现为 `dirty`。已在 #1870 留言，
+建议产品路线 rebase 后再合；批次 B 进一步把导航整体搬进 rail，若 #1867 rebase
+时以本分支为准，则其「项目工作台 / 文档与验收」两个入口直接落进 rail 即可，
+无需二次改造。
