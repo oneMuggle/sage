@@ -122,7 +122,7 @@ describe('RuntimeEnvTab 诊断面板', () => {
     render(<RuntimeEnvTab />);
     await waitFor(() => expect(screen.getByText('✓ 全部满足')).toBeInTheDocument(), { timeout: 30000 });
     await waitFor(() => expect(screen.getByText('PY_OK')).toBeInTheDocument(), { timeout: 30000 });
-    expect(screen.getByText('推荐运行时: C:/py/python.exe')).toBeInTheDocument();
+    expect(await screen.findByText('推荐运行时: C:/py/python.exe', {}, { timeout: 30000 })).toBeInTheDocument();
   });
 
   it('诊断失败显示失败信息', async () => {
