@@ -57,7 +57,7 @@ export function ConstraintManager({ projectId, projectType }: ConstraintManagerP
   const handleDelete = async (constraintId: string) => {
     if (!confirm('确定要删除此约束吗？')) return;
     try {
-      await projectApi.deleteConstraint(constraintId);
+      await projectApi.deleteConstraint(projectId, constraintId);
       await fetchConstraints();
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除约束失败');
