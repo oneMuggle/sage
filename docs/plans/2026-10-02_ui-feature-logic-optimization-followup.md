@@ -4,6 +4,7 @@
 > 与既有文档的关系：续 `docs/plans/2026-10-01_mainstream-ai-ux-optimization-proposal.md`（#1869，下称「10-01 方案」）。10-01 方案的诊断是「功能不缺，缺价值闭环」，聚焦**后端已建成、前端没入口**。本文补它没覆盖的另一半——**前端已有入口、却走不通**——并把它做成可自动化的门禁；同时给出 UI、逻辑上的存量治理方案。
 > 范围：Sage 主体（聊天、代理、Office、记忆、项目、设置、IPC 桥与后端）。**不含** Arena 账号 / 验证码 / 抽卡 / 临时邮箱相关模块，本文不对它们做任何优化建议。
 > AGENTS.md 对照：原则 1（spec 先行）——本文即方案文档，未改任何业务代码；原则 2（单一所有者）——§7 给出在飞 PR 冲突登记；原则 5——在独立 worktree 完成。
+> 修订（2026-10-03）：复核时发现原稿把 10px 直接映射到 `text-ui-xs`，与 `DESIGN.md` §4「xs 仅用于快捷键徽标」冲突。已改写 U1 方案第 2、3 步与 §10 第 5 项；U1「现状」里的字号计数补注了此前未列出的 2 处。其余内容未改。
 
 ## 0. 结论速览
 
@@ -175,13 +176,15 @@ README 把「Office 全链路」放在第一位，项目类型 / 约束 / 里程
 ### U1 · 字号标尺落地（P1）
 
 - 规范：`DESIGN.md` §4 写明「所有操作界面文本**只能**采用」`text-ui-*` 标尺（xl 18 / lg 16 / base 14 / caption 13 / sm 12 / xs 10，其中 xs 仅用于快捷键徽标），且该标尺由用户可调的 `--ui-font-size` 驱动（`tailwind.config.js:93-98` 为 `calc(var(--ui-font-size, 14px) ± n)`）。
-- 现状：任意字号 `text-[Npx]` 231 处（`10px` 115、`11px` 98、`18px` 7、`12px` 5、`15px` 2、`13px` 2，分布 81 个文件），标尺 `text-ui-*` 仅 35 处，采用率约 13%。
+- 现状：任意字号 `text-[Npx]` 231 处（`10px` 115、`11px` 98、`18px` 7、`12px` 5、`15px` 2、`13px` 2，以上合计 229，余 2 处为其他取值；分布 81 个文件），标尺 `text-ui-*` 仅 35 处，采用率约 13%。
 - 影响：这 213 处 10 / 11px 文本是固定像素，用户在设置里调大字号时它们不会跟着变——对低视力用户是实打实的问题；11px 还不在标尺内。
 - 现有 lint 没有规则在守（`eslint.config.js` 只有 `import/no-restricted-paths`），规范只存在于文档。
 - 方案：
   1. 先上 lint：用 `no-restricted-syntax` 禁止 className 字符串字面量中的 `text-[…px]`，**以 231 为基线棘轮**，新增即红；
-  2. 再 codemod，**按目录分 PR**（一次改 81 个文件会与所有在飞 PR 冲突）：10px → `text-ui-xs`，12px → `text-ui-sm`，13px → `text-ui-caption`，18px → `text-ui-xl`；11px 需设计决策——并入 `text-ui-sm`（+1px）或新增 `text-ui-2xs`（`--ui-font-size - 3px`）；
-  3. 每个 PR 附关键页面前后截图。10-01 方案 §8 与 `DESIGN.md` §10 都说 calm / dense 是主动选择，不放宽密度，因此 11px 的取舍必须由设计负责人拍板。
+  2. 再 codemod，**按目录分 PR**（一次改 81 个文件会与所有在飞 PR 冲突）。12px → `text-ui-sm`、13px → `text-ui-caption`、18px → `text-ui-xl` 可机械替换；**10px 与 11px 不能直接套，需设计决策**：`DESIGN.md` §4 规定 `text-ui-xs`（10px）仅用于快捷键徽标，而 10px 有 115 处，未必都是徽标（未逐处核实）；11px 则不在标尺内。做法：先把 10px 的 115 处按「快捷键徽标 / 其他」分类（徽标 → `text-ui-xs`），其余 10px 与全部 11px 二选一——
+     - (a) 保持视觉不变：新增 `text-ui-2xs`（`--ui-font-size - 3px`）承接 11px，并把 `DESIGN.md` §4 里 `xs` / `2xs` 的适用范围改写为「次级元信息」；
+     - (b) 并入 `text-ui-sm`（10px +2px、11px +1px）：与规范字面一致，但这些文本会整体变大；
+  3. 每个 PR 附关键页面前后截图。10-01 方案 §8 与 `DESIGN.md` §10 都说 calm / dense 是主动选择，不放宽密度，(b) 与此冲突（最多影响 213 处文本），所以取舍必须由设计负责人拍板；建议倾向 (a)——密度不变，同时让这些文本跟随用户字号设置，正是 U1 要解决的问题。
 - 验收：新增 `text-[Npx]` 为 0；基线逐批下降；把 `--ui-font-size` 调到 16px 时对应区域明显放大（手测）。
 
 ### U2 · 失败可见性规范（P1，与 L3 联动）
@@ -264,7 +267,7 @@ G2 failover 的解锁条件（沿用 10-01 方案的暂缓结论）：`backend/a
 2. **U3**：英文界面是否为正式支持语言。
 3. **L1**：`projects_create_session` 的语义——复用 `POST /projects/{id}/open`，还是补后端 `POST /projects/{id}/sessions`。
 4. **L1**：`agent_chat`、`wiki_chat_cancel` 是否仍需要。
-5. **U1**：11px 文本并入 `text-ui-sm`（+1px），还是新增 `text-ui-2xs`。
+5. **U1**：≤ 11px 文本的处理口径——(a) 新增 `text-ui-2xs`、视觉不变，并改写 `DESIGN.md` §4 中 `xs` 的适用范围；还是 (b) 并入 `text-ui-sm`（10px +2px、11px +1px）。10px 的 115 处是否都是快捷键徽标，需先分类（见 U1）。
 6. **批次 1** 是否直接开修复 PR。
 
 ## 附录：取证方法（可复现）
