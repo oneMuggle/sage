@@ -77,7 +77,7 @@ export function MilestoneEditor({
 
       if (milestone) {
         // 更新
-        await projectApi.updateMilestone(milestone.id, {
+        await projectApi.updateMilestone(projectId, milestone.id, {
           title: title.trim(),
           description: description.trim() || undefined,
           stage: stage.trim() || undefined,
