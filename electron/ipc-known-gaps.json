@@ -13,21 +13,7 @@
       "office_template_thumbnail",
       "office_word_data"
     ],
-    "projects": [
-      "projects_create_constraint",
-      "projects_create_milestone",
-      "projects_delete_constraint",
-      "projects_delete_milestone",
-      "projects_detect_type",
-      "projects_git_status",
-      "projects_import_constraints",
-      "projects_list_constraints",
-      "projects_list_milestones",
-      "projects_update_allowed_paths",
-      "projects_update_constraint",
-      "projects_update_milestone",
-      "projects_update_type"
-    ],
+    "projects": ["projects_update_allowed_paths"],
     "prompts": ["prompts_reorder"],
     "chat": ["agent_chat"],
     "wiki": ["wiki_chat_cancel"]

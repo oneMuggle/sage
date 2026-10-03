@@ -13,5 +13,8 @@
  *    them without a bundler.
  */
 import type { CommandRoute } from '../commands';
+import { projectRoutes } from './projects';
 
-export const DOMAIN_ROUTES: Record<string, CommandRoute> = {};
+export const DOMAIN_ROUTES: Record<string, CommandRoute> = {
+  ...projectRoutes,
+};
