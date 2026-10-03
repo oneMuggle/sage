@@ -1,18 +1,6 @@
 {
   "_comment": "Known IPC contract gaps — see docs/plans/2026-10-02_ui-feature-logic-optimization-followup.md §L1. The ipc-contract tests tolerate exactly these and nothing else: a NEW gap fails, and so does an entry that is no longer a gap (delete it in the PR that fixes it). The list only ever shrinks. projects_update_allowed_paths is supplied by in-flight PR #1010 — remove it when that merges.",
   "frontendUnregistered": {
-    "office": [
-      "office_capabilities",
-      "office_excel_recalc",
-      "office_import_convert_legacy",
-      "office_pdf_data",
-      "office_pdf_fill_form",
-      "office_pdf_preview",
-      "office_pdf_read_form",
-      "office_snapshot_diff",
-      "office_template_thumbnail",
-      "office_word_data"
-    ],
     "projects": [
       "projects_create_constraint",
       "projects_create_milestone",
