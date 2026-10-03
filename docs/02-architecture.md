@@ -110,8 +110,8 @@
 
 **双轨策略**：
 
-- `API_MODE=hex`（默认）：新六边形路径，`hex_routes.py` → `ChatService` → ports
-- `API_MODE=legacy`：旧路径完全回滚，`legacy_routes.py` → `core/legacy/SageAgent`
+- `API_MODE=hex`（需显式设置）：新六边形路径，`hex_routes.py` → `ChatService` → ports
+- `API_MODE=legacy`（默认）：旧路径完全回滚，`legacy_routes.py` → `core/legacy/SageAgent`
 
 **依赖约束**：由 `import-linter` 在 `backend/pyproject.toml` 中配置，5 层单向依赖，**0 violations**。
 
