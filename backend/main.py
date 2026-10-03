@@ -1264,11 +1264,11 @@ async def add_request_id_header(request: Request, call_next):
 # hex /chat 是否挂载; 缺省 "legacy" 保持现行 wire 行为不变。
 API_MODE = os.environ.get("API_MODE", "legacy").lower()
 
-# 路由装配（P2 双轨）：
-# - API_MODE=hex（默认）：先注册 hex（/chat 走 ChatService），
+# 路由装配（P2 双轨）。缺省 API_MODE=legacy（见上方常量）：
+# - API_MODE=legacy（默认）：仅注册 legacy。
+# - API_MODE=hex（需显式设置）：先注册 hex（/chat 走 ChatService），
 #   再注册 legacy（/sessions、/memory、/evolution、/interrupt）。
 #   FastAPI 按注册顺序匹配——hex 的 /chat 优先命中，其余走 legacy。
-# - API_MODE=legacy：仅注册 legacy。
 # 通用 LLM 代理（/api/v1/llm/*）在两种模式下都注册 — 浏览器到 LLM 的
 # 测试连接 / 拉取模型调用都走它，与 API_MODE 无关（见 llm_proxy_routes.py）。
 # PG-A1 GREEN-2 的"临时切 legacy"已于 S7-1 (P7) 收口为单一读取点;
