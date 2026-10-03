@@ -158,10 +158,20 @@ export function ConstraintManager({ projectId, projectType }: ConstraintManagerP
                     )}
                   </div>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(constraint)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`编辑约束：${constraint.category}`}
+                      onClick={() => handleEdit(constraint)}
+                    >
                       <Edit2 className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(constraint.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`删除约束：${constraint.category}`}
+                      onClick={() => handleDelete(constraint.id)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
