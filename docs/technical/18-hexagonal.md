@@ -32,14 +32,14 @@ Sage 后端从单体 `core/` 迁移到六边形架构（Ports & Adapters），�
 ## 18.4 双轨策略
 
 ```
-api/routes.py  (dispatcher, 26 行)
-   ├── API_MODE=hex（默认）→ api/hex_routes.py → ChatService → ports
-   └── API_MODE=legacy      → api/legacy_routes.py → core/legacy/SageAgent
+backend/main.py  (按 API_MODE 挂载路由；原 api/routes.py dispatcher 已不存在)
+   ├── API_MODE=hex（需显式设置）→ api/hex_routes.py → ChatService → ports
+   └── API_MODE=legacy（默认）   → api/legacy_routes.py → core/legacy/SageAgent
 ```
 
 - **hex 模式**：新六边形路径。`/chat` 由 `hex_routes` 接管，其他端点转发给 legacy（避免破坏现有 509 测试）
 - **legacy 模式**：旧路径完全回滚。`core/legacy/{agent,llm_client,orchestrator,agent_state}.py` 仍可独立工作
-- 切换：通过 `API_MODE` 环境变量（默认 `hex`）
+- 切换：通过 `API_MODE` 环境变量（缺省 `legacy`）
 
 ## 18.5 依赖约束（import-linter）
 
