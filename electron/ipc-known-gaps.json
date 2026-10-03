@@ -28,7 +28,6 @@
       "projects_update_milestone",
       "projects_update_type"
     ],
-    "prompts": ["prompts_reorder"],
     "chat": ["agent_chat"],
     "wiki": ["wiki_chat_cancel"]
   },
