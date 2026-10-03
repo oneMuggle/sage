@@ -6,8 +6,9 @@
 
 ## 0. 结论速览
 
-- 批次 0（L4、L5、P1-5）与批次 1 的 L1（门禁 + 全部可修的断链）已在 main 与 win7 两条线实现并开 PR（未合并）。F1（4 个 e2e）**没做**，原因见 §5。
+- 批次 0（L4、L5、P1-5）与批次 1 的 L1（门禁 + 全部可修的断链）已在 main 与 win7 两条线实现并开 PR（未合并）。F1 以「UI → 桥 → HTTP 线路测试」的形式完成（草稿 PR #1899，堆叠在 #1890 / #1893–#1896 之上）；Playwright e2e 本身仍没做，原因见 §5。
 - **方案有四处需要更正**（§1）。其中两处会直接影响结论：L4 的松弛数字是错的；「12 条从未接入」不是纯映射——接通后会在运行时暴露前后端从未联调过的契约错误。
+- 对 CI 的实测（§3）：main 线 PR 唯一的红是**依赖审计**（`Dependency audit` 及依赖它的 `All Checks`），与本批无关——纯文档的 #1898 同样红；win7 的 #1897 全绿。
 - 实施中修掉了方案没预料到的 3 个真问题：PDF 表单填写会静默丢字段（Office）、项目类型检测在 UI 上显示 `[object Object]` 或直接抛错、侧栏「+」永远 404。
 
 ## 1. 对方案的更正
@@ -67,6 +68,7 @@ main 线（前三条基于 `origin/main`，后四条基于门禁分支 #1890；�
 | `fix/ipc-bridge-projects-20261003` | #1894 | `027950139` `d84d5888d` | 项目域 12 条映射；前端 API 层契约对齐（§1.3） |
 | `feat/project-create-session-20261003` | #1895 | `045857a96` | 后端 `POST /projects/{id}/sessions`（§1.5）；`project_routes.py` 基线 838 → 849 |
 | `fix/ipc-bridge-misc-20261003` | #1896 | `cceff58b0` `ea7c3318e` | 恢复 `prompts_reorder`；删除无调用方的 `chatApi.chat()` |
+| `test/ui-wire-contract-20261003` | #1899（草稿） | 8（6 个堆叠 + 2 个自有） | F1：18 个 UI / API → 桥 → HTTP 线路测试；U4：4 个纯图标按钮补 `aria-label`。**堆叠 PR**：只需审最后 2 个提交 |
 
 win7 线：`chore/ipc-contract-win7-20261003`（**#1897**，base `release/win7`，10 个提交，`cherry-pick -x` 保留来源）：arch-check、win7 基线收紧（24 项）、L5、P1-5、汇总层、门禁（manifest 与名单按 win7 重新生成）、Office、项目桥映射、项目前端契约、会话路由。
 
@@ -82,6 +84,8 @@ win7 线：`chore/ipc-contract-win7-20261003`（**#1897**，base `release/win7`�
 - **T2**：每条 manifest 的 (method, path) 在真实 FastAPI `app.routes` 里都存在。
 - **集成演练**（scratch worktree，已丢弃）：把 4 个领域分支合到门禁分支上——93 个前端测试文件、126 个后端测试全过，两套 `tsc` 退出码 0，manifest 235 条。**这次演练发现了会话分支缺基线上调**（单独开 PR 会让 `architecture-check` 变红），已修。
 - **win7（Python 3.8.20）**：契约 + 会话路由 + 项目集成共 14 个测试通过；前端 65 个测试文件通过，两套 `tsc`、eslint 通过，manifest 220 条。
+- **F1 线路测试**（#1899）：React 组件 / API 客户端经 `window.electronAPI.invoke` 走真实的 `electron/invoke.ts`，只把 HTTP 层换成假后端（对 `extra="forbid"` 回 422）。18 个测试：Prompt 拖拽排序（2）、约束 / 里程碑 / 类型检测 / 会话 / Git 状态（6）、Office 10 条（10）。5 种变异均被抓到：删 prompts 路由红 1、删 Office 路由红 10、里程碑创建泄漏字段红 1、约束删除丢项目 id 红 1、`fill-form` 去掉 `rawBody` 红 1。vitest 120 个文件通过。
+- **CI 实测（2026-10-03）**：main 线 8 个 PR（#1890–#1896、#1898）均为「12 通过 / 2 跳过 / 2 失败」，失败的永远是同一对：`Dependency audit (Node 22.12 + Python 3.11)` 与依赖它的聚合项 `All Checks`；Frontend、Backend、架构检查、py38 收集、e2e 门禁、Electron 构建与冒烟全部通过。**win7 的 #1897：8 通过 / 3 跳过 / 0 失败。**
 - **冲突预演**：用 `git merge-tree` 对在飞 PR 做试合并并扣除对照组（`origin/main × 该 PR`）：#1626、#1131、#1209 **无新增冲突**；#1867 仅 `architecture-baseline.json` 一个文件；#1010、#1334 无本地分支，**未验证**。
 
 局限：T1 只跟进同文件内的 wrapper（跨文件 wrapper 不跟进）；没有 UI 手测；下面 §6 是手测清单。
@@ -96,7 +100,8 @@ win7 线：`chore/ipc-contract-win7-20261003`（**#1897**，base `release/win7`�
 
 ## 5. 没做的 / 待决策
 
-- **F1（4 个 e2e）没做。** 这仓库的 e2e 用 Playwright + Vite dev server，且 `playwright.config.ts` 的 `reuseExistingServer: !process.env.CI` 会在 1420 端口上静默复用别人已经起着的 dev server——在 worktree 里跑出来的结果可能测的是另一份代码。要做需要单独一轮：从 worktree 起 Vite 到空闲端口并覆盖 `baseURL`，沿用 `tests/e2e/journal.spec.ts` 的 IPC mock 写法。我没法在这里看到浏览器界面调选择器，不交付未验证的 e2e。
+- **Playwright e2e 仍没做。** 这仓库的 e2e 用 Playwright + Vite dev server，且 `playwright.config.ts` 的 `reuseExistingServer: !process.env.CI` 会在 1420 端口上静默复用别人已经起着的 dev server——在 worktree 里跑出来的结果可能测的是另一份代码；我也没法在这里看到浏览器界面调选择器，不交付未验证的 e2e。F1 的意图（前端入口与后端对得上）改由 #1899 的线路测试覆盖；审批框「项目级允许」依赖 #1010，未覆盖。要做真 e2e 需要单独一轮：从 worktree 起 Vite 到空闲端口并覆盖 `baseURL`，沿用 `tests/e2e/journal.spec.ts` 的 IPC mock 写法。
+- **依赖审计 job 红（与本批无关，但会挡住所有 PR 的合并）。** `audit-watch`（每日定时巡检）在 main 上从 09-29 起每天失败；PR 时的 `Dependency audit` 昨天（`38c5f7992` 的 push）还是绿的，今天对所有 PR 都红，包括纯文档的 #1892 / #1898。日志里是 13 条：2 条 npm 公告未被策略覆盖（`braces` GHSA-vfj7-8cjw-p6xm、`http-cache-semantics` GHSA-ch52-4w7c-c8xp），8 条「item severity high lacks a matching valid advisory」，3 条「nodes must exist in package-lock」；pip 另有 8 条 findings。策略文件是 `.github/dependency-audit-policy.json`，脚本是 `scripts/check_dependency_audit.py`。这是安全取舍，**我没有动策略**，需要你或安全负责人 triage 后更新。
 - **待你决策**：① `wiki_chat_cancel`——删掉这次调用，或在主进程实现带 owner token 的取消；② 创建里程碑时的「状态」字段（§1.3.1）；③ 方案 §10 的 L6（Win7 约束）、U3（英文界面）、U1（≤ 11px 口径）三项，本次未涉及。
 - 批次 2 / 3 / 4（F2、U1、L3、U2、L2、L5 完整收敛、L6、U3）未动。
 - `--max-slack` 已实现但**没有接进 CI**（避免让在飞 PR 意外变红）；L1 门禁转阻塞的条件不变：#1010 / #1626 / #1131 合并、名单清零之后。
@@ -105,7 +110,7 @@ win7 线：`chore/ipc-contract-win7-20261003`（**#1897**，base `release/win7`�
 
 - 设置 → Prompt 模板：拖拽排序后刷新，顺序保持（此前会弹回且无提示）。
 - Office：PDF 预览、Word 原生预览、Excel 重算、快照对比、能力条、PDF 表单（用一份字段名带大写 / 驼峰的表单，填写后字段应有值）。
-- 项目：创建向导选目录，「检测依据」应显示文案而非 `[object Object]`；约束新增 / 编辑 / 删除 / 导入模板；里程碑新增 / 改状态 / 删除；Git 状态 widget；侧栏项目行「+」每次都新建一个会话。
+- 项目：约束 / 里程碑每行的编辑、删除按钮现在有 `aria-label`（可用读屏或开发者工具核对）；创建向导选目录，「检测依据」应显示文案而非 `[object Object]`；约束新增 / 编辑 / 删除 / 导入模板；里程碑新增 / 改状态 / 删除；Git 状态 widget；侧栏项目行「+」每次都新建一个会话。
 - 审批框「项目级允许」依赖 #1010，本次未修，仍会失败。
 
 ## 7. 复现
