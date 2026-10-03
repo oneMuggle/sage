@@ -56,7 +56,7 @@ export function MilestoneManager({ projectId }: MilestoneManagerProps) {
   const handleDelete = async (milestoneId: string) => {
     if (!confirm('确定要删除此里程碑吗？')) return;
     try {
-      await projectApi.deleteMilestone(milestoneId);
+      await projectApi.deleteMilestone(projectId, milestoneId);
       await fetchMilestones();
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除里程碑失败');
@@ -65,7 +65,7 @@ export function MilestoneManager({ projectId }: MilestoneManagerProps) {
 
   const handleStatusChange = async (milestoneId: string, status: string) => {
     try {
-      await projectApi.updateMilestone(milestoneId, { status });
+      await projectApi.updateMilestone(projectId, milestoneId, { status });
       await fetchMilestones();
     } catch (err) {
       setError(err instanceof Error ? err.message : '更新状态失败');

@@ -476,15 +476,14 @@ export const projectApi = {
   /** 检测项目类型（基于文件特征） */
   async detectType(path: string): Promise<ProjectTypeDetectionResult> {
     try {
-      const response = await invoke<{
-        detected_type: string;
-        confidence: number;
-        signals: string[];
-      }>('projects_detect_type', { path });
+      const response = await invoke<ProjectTypeDetectWire>('projects_detect_type', { path });
       return {
-        detectedType: response.detected_type as ProjectType,
+        // 无明显特征时后端返回 project_type=null + confidence=0；向导只在置信度 >= 0.7 时才
+        // 自动采用，这里回退到中性类型以满足 ProjectType。
+        detectedType: (response.project_type ?? 'personal') as ProjectType,
         confidence: response.confidence,
-        signals: response.signals,
+        // 后端是 {type, weight}[]；UI 把它们当作「检测依据」文案直接拼接 / 渲染。
+        signals: response.signals.map((signal) => signal.type),
       };
     } catch (error) {
       throw handleApiError(error);
@@ -535,13 +534,15 @@ export const projectApi = {
     }
   },
 
-  /** 更新约束 */
+  /** 更新约束（后端按项目校验归属，所以要同时给 projectId） */
   async updateConstraint(
+    projectId: string,
     constraintId: string,
     payload: UpdateConstraintPayload,
   ): Promise<ProjectConstraint> {
     try {
       const constraint = await invoke<ConstraintWire>('projects_update_constraint', {
+        projectId,
         constraintId,
         ...payload,
       });
@@ -552,9 +553,10 @@ export const projectApi = {
   },
 
   /** 删除约束 */
-  async deleteConstraint(constraintId: string): Promise<boolean> {
+  async deleteConstraint(projectId: string, constraintId: string): Promise<boolean> {
     try {
       const response = await invoke<{ removed: boolean }>('projects_delete_constraint', {
+        projectId,
         constraintId,
       });
       return response.removed;
@@ -606,13 +608,15 @@ export const projectApi = {
     }
   },
 
-  /** 更新里程碑 */
+  /** 更新里程碑（后端按项目校验归属，所以要同时给 projectId） */
   async updateMilestone(
+    projectId: string,
     milestoneId: string,
     payload: UpdateMilestonePayload,
   ): Promise<ProjectMilestone> {
     try {
       const milestone = await invoke<MilestoneWire>('projects_update_milestone', {
+        projectId,
         milestoneId,
         ...payload,
       });
@@ -623,9 +627,10 @@ export const projectApi = {
   },
 
   /** 删除里程碑 */
-  async deleteMilestone(milestoneId: string): Promise<boolean> {
+  async deleteMilestone(projectId: string, milestoneId: string): Promise<boolean> {
     try {
       const response = await invoke<{ removed: boolean }>('projects_delete_milestone', {
+        projectId,
         milestoneId,
       });
       return response.removed;
@@ -660,6 +665,13 @@ interface MilestoneWire {
   status: string;
   sort_order: number;
   created_at: number;
+}
+
+/** POST /projects/detect-type 响应（后端 ProjectTypeDetectResponse）。 */
+interface ProjectTypeDetectWire {
+  project_type: string | null;
+  confidence: number;
+  signals: Array<{ type: string; weight: number }>;
 }
 
 function mapConstraint(c: ConstraintWire): ProjectConstraint {
