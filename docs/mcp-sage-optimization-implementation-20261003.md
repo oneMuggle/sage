@@ -1,12 +1,12 @@
 # Sage 优化方案实施记录 · 批次 0 + 批次 1（2026-10-03）
 
 > 对应方案：`docs/plans/2026-10-02_ui-feature-logic-optimization-followup.md`。基线：`origin/main` @ `38c5f7992`、`release/win7` @ `6069b48e5`。
-> **全部是本地分支与本地提交：未 push、未开 PR、未合并。** 提交用了 `LEFTHOOK=0`：未引导的 worktree 里 lefthook 的 pre-commit 在 Node 层直接崩溃（与改动无关）；该钩子只对 `backend/**/*.py`、`src/**/*.{ts,tsx}` 生效，已手动跑了等价的 ruff / eslint / prettier。按 AGENTS.md 原则 4，推送时须在 PR 描述里说明。
+> **状态（2026-10-03）：已 push 并按域开 PR（#1890–#1897，见 §2），均未合并。** 写下初稿时它们还都是本地提交。提交与推送用了 `LEFTHOOK=0` / `--no-verify`：未引导的 worktree 里 lefthook 的 pre-commit 在 Node 层直接崩溃（与改动无关）；该钩子只对 `backend/**/*.py`、`src/**/*.{ts,tsx}` 生效，已手动跑了等价的 ruff / eslint / prettier。按 AGENTS.md 原则 4，推送时须在 PR 描述里说明。
 > 没有运行 Electron，没有手测任何界面；验证是静态检查 + 单元 / 契约测试 + 对真实 FastAPI app 的路由核对（见 §3）。
 
 ## 0. 结论速览
 
-- 批次 0（L4、L5、P1-5）与批次 1 的 L1（门禁 + 全部可修的断链）已在 main 与 win7 两条线落地。F1（4 个 e2e）**没做**，原因见 §5。
+- 批次 0（L4、L5、P1-5）与批次 1 的 L1（门禁 + 全部可修的断链）已在 main 与 win7 两条线实现并开 PR（未合并）。F1（4 个 e2e）**没做**，原因见 §5。
 - **方案有四处需要更正**（§1）。其中两处会直接影响结论：L4 的松弛数字是错的；「12 条从未接入」不是纯映射——接通后会在运行时暴露前后端从未联调过的契约错误。
 - 实施中修掉了方案没预料到的 3 个真问题：PDF 表单填写会静默丢字段（Office）、项目类型检测在 UI 上显示 `[object Object]` 或直接抛错、侧栏「+」永远 404。
 
@@ -56,19 +56,19 @@ win7 渲染端没有 Prompt 拖拽排序（`prompts_reorder` 只在 main），�
 
 ## 2. 分支与提交
 
-main 线（全部基于 `origin/main`，后四条基于门禁分支；各自独立，可按任意顺序合并）：
+main 线（前三条基于 `origin/main`，后四条基于门禁分支 #1890；领域 PR 的 diff 会带上门禁的 2 个提交，先合哪个都能干净合并）：
 
-| 分支 | 提交 | 内容 |
-| --- | --- | --- |
-| `chore/arch-baseline-tighten-20261003` | `4b4d57b15` `5b2d2ff4e` | `architecture-check` 增加 `--tighten` / `--max-slack`（保格式的文本级改写，只降不升）+ 9 个测试；基线一次性收紧 9 项（松弛 1,737 → 0） |
-| `chore/batch0-comment-backfill-20261003` | `fb27e69c4` `2707a856f` | L5：更正 4 处「API_MODE 缺省 hex」的过时表述（`main.py`、`hex_routes.py`、`02-architecture.md`、`18-hexagonal.md`）；10-01 方案 P1-5 状态回填 |
-| `feat/ipc-contract-gate-20261003` | `df1083375` `5d57063fa` | `commandRoutes/` 域路由表汇总（`commands.ts` 只加 3 行）；L1 门禁：`scripts/export-ipc-manifest.mjs`、`electron/ipc-manifest.json`、T1 / T3（vitest）、T2（pytest）、`electron/ipc-known-gaps.json` |
-| `fix/ipc-bridge-office-20261003` | `4e8d50578` | 恢复 Office 10 条（含 §1.4） |
-| `fix/ipc-bridge-projects-20261003` | `027950139` `d84d5888d` | 项目域 12 条映射；前端 API 层契约对齐（§1.3） |
-| `feat/project-create-session-20261003` | `045857a96` | 后端 `POST /projects/{id}/sessions`（§1.5）；`project_routes.py` 基线 838 → 849 |
-| `fix/ipc-bridge-misc-20261003` | `cceff58b0` `ea7c3318e` | 恢复 `prompts_reorder`；删除无调用方的 `chatApi.chat()` |
+| 分支 | PR | 提交 | 内容 |
+| --- | --- | --- | --- |
+| `chore/arch-baseline-tighten-20261003` | #1891 | `4b4d57b15` `5b2d2ff4e` | `architecture-check` 增加 `--tighten` / `--max-slack`（保格式的文本级改写，只降不升）+ 9 个测试；基线一次性收紧 9 项（松弛 1,737 → 0） |
+| `chore/batch0-comment-backfill-20261003` | #1892 | `fb27e69c4` `2707a856f` | L5：更正 4 处「API_MODE 缺省 hex」的过时表述（`main.py`、`hex_routes.py`、`02-architecture.md`、`18-hexagonal.md`）；10-01 方案 P1-5 状态回填 |
+| `feat/ipc-contract-gate-20261003` | #1890 | `df1083375` `5d57063fa` | `commandRoutes/` 域路由表汇总（`commands.ts` 只加 3 行）；L1 门禁：`scripts/export-ipc-manifest.mjs`、`electron/ipc-manifest.json`、T1 / T3（vitest）、T2（pytest）、`electron/ipc-known-gaps.json` |
+| `fix/ipc-bridge-office-20261003` | #1893 | `4e8d50578` | 恢复 Office 10 条（含 §1.4） |
+| `fix/ipc-bridge-projects-20261003` | #1894 | `027950139` `d84d5888d` | 项目域 12 条映射；前端 API 层契约对齐（§1.3） |
+| `feat/project-create-session-20261003` | #1895 | `045857a96` | 后端 `POST /projects/{id}/sessions`（§1.5）；`project_routes.py` 基线 838 → 849 |
+| `fix/ipc-bridge-misc-20261003` | #1896 | `cceff58b0` `ea7c3318e` | 恢复 `prompts_reorder`；删除无调用方的 `chatApi.chat()` |
 
-win7 线：`chore/ipc-contract-win7-20261003`（基于 `origin/release/win7`，10 个提交，`cherry-pick -x` 保留来源）：arch-check、win7 基线收紧（24 项）、L5、P1-5、汇总层、门禁（manifest 与名单按 win7 重新生成）、Office、项目桥映射、项目前端契约、会话路由。
+win7 线：`chore/ipc-contract-win7-20261003`（**#1897**，base `release/win7`，10 个提交，`cherry-pick -x` 保留来源）：arch-check、win7 基线收紧（24 项）、L5、P1-5、汇总层、门禁（manifest 与名单按 win7 重新生成）、Office、项目桥映射、项目前端契约、会话路由。
 
 实现要点：
 - 门禁的 manifest 用 TypeScript 自带的 `transpileModule` + 极小的 CommonJS 加载器求值，不引入 esbuild 这个隐式依赖；加载器拒绝包导入，以此强制路由模块保持纯净。
@@ -92,7 +92,7 @@ win7 线：`chore/ipc-contract-win7-20261003`（基于 `origin/release/win7`，1
 2. 再合 `feat/ipc-contract-gate-20261003`（后四条依赖它）。
 3. 其余四条任意顺序。已实测：合并时 `index.ts` 与 `ipc-known-gaps.json` 会有「各加一行 import/spread、各删一组名单」的并集型冲突（机械可解）；`ipc-manifest.json` 一次都没冲突，真冲突时直接 `npm run ipc:manifest` 重新生成。
 4. 合并后名单里仅剩 `projects_update_allowed_paths`（#1010 合并后删除该条）与 `wiki_chat_cancel`。
-5. 推送前按 AGENTS.md 先 `git fetch` 确认 base 未移动；PR 描述里写明 `LEFTHOOK=0` / `--no-verify`。
+5. 已按 AGENTS.md 先 `git fetch` 确认 base 未移动（`origin/main` 仍是 `38c5f7992`、`release/win7` 仍是 `6069b48e5`）后推送；各 PR 描述里已写明 `--no-verify`。win7 PR 对 4 个在飞 win7 PR（#1868、#894、#862、#852）试合并无新增冲突。
 
 ## 5. 没做的 / 待决策
 
