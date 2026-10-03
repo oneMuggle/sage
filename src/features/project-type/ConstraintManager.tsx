@@ -57,7 +57,7 @@ export function ConstraintManager({ projectId, projectType }: ConstraintManagerP
   const handleDelete = async (constraintId: string) => {
     if (!confirm('确定要删除此约束吗？')) return;
     try {
-      await projectApi.deleteConstraint(constraintId);
+      await projectApi.deleteConstraint(projectId, constraintId);
       await fetchConstraints();
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除约束失败');
@@ -158,10 +158,20 @@ export function ConstraintManager({ projectId, projectType }: ConstraintManagerP
                     )}
                   </div>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(constraint)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`编辑约束：${constraint.category}`}
+                      onClick={() => handleEdit(constraint)}
+                    >
                       <Edit2 className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(constraint.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`删除约束：${constraint.category}`}
+                      onClick={() => handleDelete(constraint.id)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
