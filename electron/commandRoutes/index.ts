@@ -15,8 +15,10 @@
 import type { CommandRoute } from '../commands';
 import { officeRoutes } from './office';
 import { projectRoutes } from './projects';
+import { promptRoutes } from './prompts';
 
 export const DOMAIN_ROUTES: Record<string, CommandRoute> = {
   ...officeRoutes,
   ...projectRoutes,
+  ...promptRoutes,
 };
