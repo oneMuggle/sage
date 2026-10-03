@@ -32,5 +32,5 @@
     "chat": ["agent_chat"],
     "wiki": ["wiki_chat_cancel"]
   },
-  "manifestWithoutRoute": ["projects_create_session"]
+  "manifestWithoutRoute": []
 }
