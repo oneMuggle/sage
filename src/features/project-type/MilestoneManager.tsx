@@ -182,10 +182,20 @@ export function MilestoneManager({ projectId }: MilestoneManagerProps) {
                     </div>
                   </div>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(milestone)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`编辑里程碑：${milestone.title}`}
+                      onClick={() => handleEdit(milestone)}
+                    >
                       <Edit2 className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(milestone.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`删除里程碑：${milestone.title}`}
+                      onClick={() => handleDelete(milestone.id)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
