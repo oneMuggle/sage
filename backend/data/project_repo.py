@@ -368,16 +368,8 @@ class ProjectRepository:
         return None if row is None else _row_to_project(row)
 
 
-def open_project(
-    project_id: str, now_ms: Optional[int] = None
-) -> Tuple[Project, Session, bool]:
-    """打开项目：返回 ``(项目, 会话, 是否新建了会话)``。
-
-    语义对标主流工具"点击最近项目"：目录仍在磁盘上 → 刷新 last_opened_at，
-    优先复用该项目最近活跃会话；一个都没有 → 新建会话并绑定到项目目录
-    （标题取项目名，会话列表里即可辨识归属）。目录已消失 → 抛
-    ``ProjectPathMissingError``，由路由层映射 410，让前端提示移除或重选。
-    """
+def _openable_project(project_id: str, now_ms: Optional[int]) -> Project:
+    """取项目、校验目录仍在磁盘上并刷新 last_opened_at（open / create_session 共用）。"""
     repo = ProjectRepository()
     project = repo.get(project_id)
     if project is None:
@@ -391,17 +383,52 @@ def open_project(
         ) from exc
 
     repo.touch(project_id, now_ms)
+    return project
 
-    existing = repo.sessions_for_project(project.path, limit=1)
-    if existing:
-        return project, existing[0], False
 
+def _new_bound_session(project: Project, now_ms: Optional[int]) -> Session:
+    """新建会话（标题取项目名，会话列表里即可辨识归属）并绑定到项目目录。"""
     session = SessionRepository().create(title=project.name)
     bind_session_workspace(
         get_database().get_connection(), session.id, project.path, now_ms=now_ms
     )
+    return session
+
+
+def open_project(
+    project_id: str, now_ms: Optional[int] = None
+) -> Tuple[Project, Session, bool]:
+    """打开项目：返回 ``(项目, 会话, 是否新建了会话)``。
+
+    语义对标主流工具"点击最近项目"：目录仍在磁盘上 → 刷新 last_opened_at，
+    优先复用该项目最近活跃会话；一个都没有 → 新建会话并绑定到项目目录
+    （标题取项目名，会话列表里即可辨识归属）。目录已消失 → 抛
+    ``ProjectPathMissingError``，由路由层映射 410，让前端提示移除或重选。
+    """
+    project = _openable_project(project_id, now_ms)
+
+    existing = ProjectRepository().sessions_for_project(project.path, limit=1)
+    if existing:
+        return project, existing[0], False
+
+    session = _new_bound_session(project, now_ms)
     logger.info("project open: 新建会话 %s 绑定项目 %s", session.id, project.path)
     return project, session, True
+
+
+def create_project_session(
+    project_id: str, now_ms: Optional[int] = None
+) -> Tuple[Project, Session]:
+    """在项目下显式新建一个会话并绑定项目目录：返回 ``(项目, 新会话)``。
+
+    与 ``open_project`` 的区别：open 优先**复用**最近活跃会话（点击最近项目），
+    这里**总是新建**（侧栏项目行的「+」按钮）。同样先校验目录仍在磁盘上：目录已消失 →
+    ``ProjectPathMissingError``，不静默重建绑定。
+    """
+    project = _openable_project(project_id, now_ms)
+    session = _new_bound_session(project, now_ms)
+    logger.info("project create_session: 新建会话 %s 绑定项目 %s", session.id, project.path)
+    return project, session
 
 
 def register_quietly(path: str, now_ms: Optional[int] = None) -> Optional[Project]:
@@ -424,6 +451,7 @@ __all__ = [
     "ProjectNotFoundError",
     "ProjectPathMissingError",
     "ProjectRepository",
+    "create_project_session",
     "open_project",
     "register_quietly",
 ]
