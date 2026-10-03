@@ -7,6 +7,7 @@ Claude Code 项目 → 会话归属）。路由面刻意保持最小：
 - ``POST /projects``                     登记目录（validate_workspace 校验，幂等）
 - ``DELETE /projects/{project_id}``      从清单移除（不动磁盘与会话）
 - ``POST /projects/{project_id}/open``   打开项目：复用最近会话或新建并绑定
+- ``POST /projects/{project_id}/sessions`` 在项目下显式新建会话并绑定目录（总是新建）
 - ``GET  /projects/{project_id}/sessions`` 项目下未归档会话（新→旧）
 
 会话与目录的归属复用 ``session_workspace_bindings`` 活跃绑定（见
@@ -45,6 +46,7 @@ from backend.data.project_repo import (
     ProjectNotFoundError,
     ProjectPathMissingError,
     ProjectRepository,
+    create_project_session,
     open_project,
 )
 from backend.data.session_repo import MessageRepository
@@ -549,6 +551,28 @@ def open_project_route(project_id: str) -> ProjectOpenResponse:
         project=_with_stats(project, stats),
         session=session.to_dict(),
         created=created,
+    )
+
+
+@router.post("/{project_id}/sessions", response_model=ProjectOpenResponse, status_code=201)
+@with_db_lock
+def create_project_session_route(project_id: str) -> ProjectOpenResponse:
+    """在项目下显式新建一个会话并绑定项目目录（总是新建，不复用）。
+
+    与 ``/open`` 的区别：open 复用最近活跃会话，本端点服务侧栏项目行的「+」按钮，
+    每次都开一个新会话。目录在磁盘上已消失 → 410 ``project_path_missing``。
+    """
+    try:
+        project, session = create_project_session(project_id)
+    except ProjectNotFoundError as exc:
+        raise _error(404, "project_not_found", "项目不存在") from exc
+    except ProjectPathMissingError as exc:
+        raise _error(410, "project_path_missing", "项目目录不存在或已被移动") from exc
+    stats = ProjectRepository().session_stats()
+    return ProjectOpenResponse(
+        project=_with_stats(project, stats),
+        session=session.to_dict(),
+        created=True,
     )
 
 

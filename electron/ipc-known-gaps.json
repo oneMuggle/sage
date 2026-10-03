@@ -4,5 +4,5 @@
     "projects": ["projects_update_allowed_paths"],
     "wiki": ["wiki_chat_cancel"]
   },
-  "manifestWithoutRoute": ["projects_create_session"]
+  "manifestWithoutRoute": []
 }
