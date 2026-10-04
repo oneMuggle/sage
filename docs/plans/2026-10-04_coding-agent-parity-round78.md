@@ -62,15 +62,24 @@ ZoteroClient / settings_repo / 模块级单例全 monkeypatch）：
 pytest 9.0.3）；`ruff check` + `ruff format --check` 干净；
 `py38_hazard_scan` 0 命中。纯测试新增，无生产代码改动。
 
-## 4. 批次 B
+## 4. 批次 B（win7 对齐）
 
 win7 线 `backend/api/zotero_routes.py` 与 `backend/zotero/*` 同源存在
-（win7 此前只有 `test_zotero_client.py`，无路由测试），批次 B 为同文件
-移植 + 文档同步，无适配差异。
+（win7 此前只有 `test_zotero_client.py`，无路由测试），但有两处真实差异，
+批次 B 一并处理：
+
+1. 类型注解为 py38 风格（`Optional[...]` / `List[...]`），无行为差异。
+2. **win7 仍带着 r94（#1377）修掉的设置路径持久化断链**：`zotero_routes.py`
+   仍 import 不存在的 `backend.services.settings_repo.SettingsRepo`，且
+   `backend/data/settings_repo.py` 白名单缺 `zotero_db_path`——设置页配置的
+   路径在 win7 上永远读不到、也存不进。批次 B 按 r94 修复原样移植（2 处
+   import/类名 + 白名单 1 键）；移植后本测试 18 例在 win7 全绿。
 
 ## 5. 交付记录
 
-- **批次 A（main）**：待填（本提交推送后开 PR）。
+- **批次 A（main）**：#1900 `86004d2d3`。
   - 内容：`backend/tests/unit/api/test_zotero_routes.py`（18 例）+ 本文档。
-- **批次 B（win7 对齐）**：批次 A 之后同轮交付（遵循 R76/R77 惯例）。
+- **批次 B（win7 对齐）**：`feat-parity-r78-win7`：r94 修复移植
+  （`backend/api/zotero_routes.py`、`backend/data/settings_repo.py`）+ 18 例
+  测试 + 文档同步；本地 18 例全绿、ruff 无新增、py38 危险扫描 0 命中。
 - **总账回填**：`docs/plans/parity-rounds-index.md` R78 行待批次 A/B 合并后回填。
