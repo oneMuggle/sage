@@ -231,6 +231,7 @@ def npm_findings(
     findings: set[Key] = set()
     has_valid_advisory = False
     parseable_severities: set[str] = set()
+    parsed_items: dict[str, tuple[str, set[str], set[str]]] = {}
     for package, item in report["vulnerabilities"].items():
         if not isinstance(package, str) or not package.strip() or not isinstance(item, dict):
             report_error(f"{path}: vulnerability item must be an object with a non-empty package name", failures)
@@ -291,11 +292,14 @@ def npm_findings(
             report_error(f"{path}: {package}: via must be a list", failures)
             continue
         valid_advisories_by_severity = {level: False for level in LEVELS}
+        dependency_references: set[str] = set()
         for node in nodes:
             for advisory in via:
                 if isinstance(advisory, str):
                     if not advisory.strip():
                         report_error(f"{path}: {package}: via dependency reference must be non-empty", failures)
+                    else:
+                        dependency_references.add(advisory.strip())
                     continue
                 if not isinstance(advisory, dict):
                     report_error(f"{path}: {package}: every via entry must be an object or non-empty dependency reference", failures)
@@ -317,8 +321,55 @@ def npm_findings(
                 parseable_severities.add(severity)
                 if severity in {"high", "critical"}:
                     findings.add(("npm", item_name, version, identifier, node))
-        if item_severity in {"high", "critical"} and not valid_advisories_by_severity[item_severity]:
-            report_error(f"{path}: {package}: item severity {item_severity} lacks a matching valid advisory", failures)
+        parsed_items[item_name] = (
+            item_severity,
+            {
+                severity
+                for severity, is_valid in valid_advisories_by_severity.items()
+                if is_valid
+            },
+            dependency_references,
+        )
+
+    severity_rank = {level: index for index, level in enumerate(LEVELS)}
+
+    def has_advisory_chain(
+        package_name: str, minimum_severity: str, visited: set[str]
+    ) -> bool:
+        """Resolve npm meta-vulnerability refs to a direct advisory in this report."""
+        if package_name in visited:
+            return False
+        parsed = parsed_items.get(package_name)
+        if parsed is None:
+            return False
+        item_severity, direct_severities, references = parsed
+        required_rank = severity_rank[minimum_severity]
+        if severity_rank[item_severity] < required_rank:
+            return False
+        if any(severity_rank[level] >= required_rank for level in direct_severities):
+            return True
+        next_visited = visited | {package_name}
+        return any(
+            has_advisory_chain(reference, minimum_severity, next_visited)
+            for reference in references
+        )
+
+    for package_name, (item_severity, direct_severities, references) in parsed_items.items():
+        if item_severity not in {"high", "critical"}:
+            continue
+        required_rank = severity_rank[item_severity]
+        has_direct_advisory = any(
+            severity_rank[level] >= required_rank for level in direct_severities
+        )
+        has_transitive_advisory = any(
+            has_advisory_chain(reference, item_severity, {package_name})
+            for reference in references
+        )
+        if not has_direct_advisory and not has_transitive_advisory:
+            report_error(
+                f"{path}: {package_name}: item severity {item_severity} lacks a matching valid advisory or dependency chain",
+                failures,
+            )
     expected = {level for level in ("high", "critical") if normalized[level]}
     missing_severities = expected - parseable_severities
     if missing_severities:
@@ -366,7 +417,6 @@ def pip_findings(report: Any, failures: list[str]) -> set[Key]:
             aliases = vulnerability.get("aliases")
             if aliases is not None and (
                 not isinstance(aliases, list)
-                or not aliases
                 or any(
                     not isinstance(alias, str)
                     or not alias.strip()
@@ -374,7 +424,7 @@ def pip_findings(report: Any, failures: list[str]) -> set[Key]:
                     for alias in aliases
                 )
             ):
-                report_error("pip-audit.json: vulnerability aliases must be a non-empty valid string list", failures)
+                report_error("pip-audit.json: vulnerability aliases must be a list of valid advisory IDs", failures)
                 continue
             findings.add(("pip", package.strip(), version.strip(), vulnerability["id"].strip(), "main Python 3.11 production path"))
     return findings

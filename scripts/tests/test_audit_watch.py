@@ -40,13 +40,12 @@ POLICY = {
 
 
 def pip_report(name, version, advisory):
-    # pip-audit 真实形态：vuln 至少含合法 id；aliases 可省略（空列表会被
-    # 校验器判为无效）。
+    # pip-audit 真实形态：vuln 至少含合法 id；aliases 可省略或显式为空。
     return [
         {
             "name": name,
             "version": version,
-            "vulns": [{"id": advisory}],
+            "vulns": [{"id": advisory, "aliases": []}],
         }
     ]
 
@@ -88,6 +87,24 @@ def test_uncovered_multi_report_relabels_py38_path():
     # main 路径的发现被策略覆盖 → 未覆盖的只有 py38 标签那份
     assert len(uncovered) == 1
     assert uncovered[0][4] == PY38_LABEL
+
+
+def test_multi_report_policy_can_cover_main_and_py38_paths():
+    reports = [
+        (MAIN_LABEL, pip_report("anyio", "3.7.1", "GHSA-82r6-8w77-94w6")),
+        (PY38_LABEL, pip_report("anyio", "3.7.1", "GHSA-82r6-8w77-94w6")),
+    ]
+    policy = {
+        **POLICY,
+        "exceptions": [
+            *POLICY["exceptions"],
+            {**POLICY["exceptions"][0], "affected_path": PY38_LABEL},
+        ],
+    }
+    uncovered, all_findings, failures = uncovered_findings(reports, policy)
+    assert failures == []
+    assert uncovered == []
+    assert len(all_findings) == 2
 
 
 def test_cli_exit_2_and_writes_outputs(tmp_path):
