@@ -108,5 +108,9 @@
     "typescript-eslint": "^8.60.1",
     "vite": "^7.3.6",
     "vitest": "^3.2.7"
+  },
+  "overrides": {
+    "source-map-js": "1.2.2",
+    "tinypool": "2.2.0"
   }
 }
