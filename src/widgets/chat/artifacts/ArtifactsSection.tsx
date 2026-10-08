@@ -72,6 +72,21 @@ export function ArtifactsSection({
     return <div className="p-3 text-sm text-muted">请先选择会话</div>;
   }
 
+  const openDelivery = useTaskCenterStore((s) => s.openDelivery);
+
+  // F1: Office 产物一键打开 OfficeDeliveryDrawer（质检 + 排版修复 + 对比）
+  const handleOpenDelivery = (artifact: Artifact) => {
+    openDelivery({
+      kind: office,
+      entryId: `artifact:${artifact.id}`,
+      ref: {
+        workspacePath: deriveWorkspacePath(artifact.path, artifact.workspace_path),
+        filePath: artifact.path,
+        formatSpec: parseFormatSpec(artifact.format_spec),
+      },
+    });
+  };
+
   // P2-3.11: 双击 Artifact → 弹出独立窗口 (仅 HTML 类型)
   const handleDoubleClick = (artifact: Artifact) => {
     if (!window.electronAPI?.openArtifactWindow) return;
@@ -153,6 +168,7 @@ export function ArtifactsSection({
                 artifact={a}
                 onSelect={onSelect}
                 onDoubleClick={handleDoubleClick}
+                onOpenDelivery={handleOpenDelivery}
               />
             ))}
           </div>

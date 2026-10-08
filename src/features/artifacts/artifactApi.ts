@@ -24,6 +24,10 @@ export interface Artifact {
   kind: ArtifactKind;
   size: number;
   created_at: number;
+  /** F1: 关联工作区根目录（Office 产物直通交付抽屉质检/修复用） */
+  workspace_path?: string | null;
+  /** F1: 生成时持久化的 WordFormatSpec JSON 字符串（可选） */
+  format_spec?: string | null;
 }
 
 export interface ArtifactContent {
