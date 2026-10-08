@@ -142,6 +142,22 @@ def _v4_memories_episodic_columns(conn: Any) -> None:
 register_migration(4, "memories_episodic_columns", _v4_memories_episodic_columns)
 
 
+def _v5_artifacts_office_columns(conn: Any) -> None:
+    """v5：artifacts 表补齐 workspace_path 与 format_spec 列（F1 产物直通交付抽屉）。"""
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(artifacts)")
+    columns = {row["name"] for row in cursor.fetchall()}
+    if "workspace_path" not in columns:
+        cursor.execute("ALTER TABLE artifacts ADD COLUMN workspace_path TEXT")
+        conn.commit()
+    if "format_spec" not in columns:
+        cursor.execute("ALTER TABLE artifacts ADD COLUMN format_spec TEXT")
+        conn.commit()
+
+
+register_migration(5, "artifacts_office_columns", _v5_artifacts_office_columns)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(
