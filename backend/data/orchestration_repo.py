@@ -168,32 +168,26 @@ class TaskRepository:
         A task is ready when:
         - Status is CREATED
         - All blocked_by tasks are COMPLETED
+
+        依赖状态必须对**全量**任务求值：此前只把 CREATED 任务载入
+        ``all_tasks`` 再判 ``dep_id in all_tasks``，已完成依赖永远不在
+        集合里 → 带依赖的任务永远 ready 不了（2026-09-29 修复）。
         """
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
-        query = """
-            SELECT t.* FROM orch_plan_tasks t
-            WHERE t.status = 'created'
-        """
-        params: List[Any] = []
-
-        if team_id is not None:
-            query += " AND t.team_id = ?"
-            params.append(team_id)
-
-        cursor.execute(query, params)
-        all_tasks = {row["task_id"]: row for row in cursor.fetchall()}
+        cursor.execute("SELECT * FROM orch_plan_tasks")
+        rows = cursor.fetchall()
+        statuses = {row["task_id"]: row["status"] for row in rows}
 
         ready = []
-        for row in all_tasks.values():
+        for row in rows:
+            if row["status"] != TaskStatus.CREATED.value:
+                continue
+            if team_id is not None and row["team_id"] != team_id:
+                continue
             blocked_by = json.loads(row["blocked_by"])
-            # Check if all dependencies are completed
-            all_deps_completed = all(
-                dep_id in all_tasks and all_tasks[dep_id]["status"] == TaskStatus.COMPLETED.value
-                for dep_id in blocked_by
-            )
-            if all_deps_completed:
+            if all(statuses.get(dep_id) == TaskStatus.COMPLETED.value for dep_id in blocked_by):
                 ready.append(self._row_to_task(row))
 
         return ready
