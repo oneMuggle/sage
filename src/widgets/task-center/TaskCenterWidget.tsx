@@ -23,6 +23,8 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
+import { usePanelStore } from '../../features/app-panels/usePanelStore';
+import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { useChatStreamStore } from '../../features/send-message/chatStreamStore';
 import { cancelSessionStream } from '../../features/send-message/useChat';
 import {
@@ -159,6 +161,15 @@ export function TaskCenterWidget() {
   const { t, locale } = useI18n();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
+  const rightPanelMaximized = useRightPanelStore((s) => s.maximized && s.open);
+  const appPanelMaximized = usePanelStore(
+    (s) => Boolean(s.slots.right?.maximized || s.slots.bottom?.maximized),
+  );
+  const panelMaximized = rightPanelMaximized || appPanelMaximized;
+
+  useEffect(() => {
+    if (panelMaximized && expanded) setExpanded(false);
+  }, [panelMaximized, expanded]);
   const [now, setNow] = useState(() => Date.now());
   const [cancellingIds, setCancellingIds] = useState<ReadonlySet<string>>(new Set());
 
@@ -306,7 +317,12 @@ export function TaskCenterWidget() {
 
   return (
     <div
-      className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2"
+      className={
+        panelMaximized
+          ? 'fixed bottom-2 right-2 z-30 flex flex-col items-end gap-1.5 opacity-80 hover:opacity-100 transition-opacity'
+          : 'fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2'
+      }
+      data-panel-maximized={panelMaximized ? 'true' : 'false'}
       data-testid="task-center"
     >
       {expanded && (
@@ -336,15 +352,15 @@ export function TaskCenterWidget() {
                   <span className="truncate flex-1">
                     {entry.title}
                     {entry.status === 'failed' && entry.error ? (
-                      <span className="block truncate text-[10px] text-error">{entry.error}</span>
+                      <span className="block truncate text-ui-2xs text-error">{entry.error}</span>
                     ) : null}
                   </span>
                   {entry.percent != null ? (
-                    <span className="text-[10px] text-primary tabular-nums shrink-0">
+                    <span className="text-ui-2xs text-primary tabular-nums shrink-0">
                       {Math.round(entry.percent)}%
                     </span>
                   ) : entry.startedAt != null ? (
-                    <span className="text-[10px] text-muted tabular-nums shrink-0">
+                    <span className="text-ui-2xs text-muted tabular-nums shrink-0">
                       {Math.max(0, Math.floor((now - entry.startedAt) / 1000))}s
                     </span>
                   ) : null}
@@ -373,7 +389,7 @@ export function TaskCenterWidget() {
               type="button"
               data-testid="task-center-clear"
               onClick={() => clearFinished()}
-              className="mt-1 px-2 py-1 rounded text-[11px] text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
+              className="mt-1 px-2 py-1 rounded text-ui-2xs text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
             >
               {t('taskCenter.clearFinished')}
             </button>

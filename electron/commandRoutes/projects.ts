@@ -118,4 +118,70 @@ export const projectRoutes: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/projects/${projectId(a)}/milestones/${milestoneId(a)}`,
   },
+
+  // 项目模块 P1 (2026-09-13): 最近项目注册表 + 项目内会话。
+  // open = "复用最近活跃会话或新建并绑定项目目录"（后端原子完成，返回
+  // { project, session, created }），前端拿到 session.id 后 setCurrent + 导航。
+  projects_list: {
+    method: 'GET',
+    path: () => '/api/v1/projects',
+  },
+  projects_register: {
+    method: 'POST',
+    path: () => '/api/v1/projects',
+    body: (a) => ({ path: a.path }),
+  },
+  projects_remove: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}`,
+  },
+  projects_open: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/open`,
+    body: () => ({}),
+  },
+  projects_create_session: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
+    body: () => ({}),
+  },
+  projects_list_sessions: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
+  },
+  // M3 项目上下文沉淀 (2026-09-15): 概览字段编辑 + 资料 CRUD + 保存回答。
+  // PATCH 用 model_fields_set 语义——只把前端实际改了/传了的字段写进 body,
+  // 没传的字段后端按"未出现"处理, 不清空现有值。
+  projects_update: {
+    method: 'PATCH',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}`,
+    body: (a) => {
+      const body: Record<string, unknown> = {};
+      if (a.description !== undefined) body.description = a.description;
+      if (a.instructions !== undefined) body.instructions = a.instructions;
+      return body;
+    },
+  },
+  projects_list_materials: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials`,
+  },
+  projects_add_material: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials`,
+    body: (a) => ({
+      content: a.content,
+      source_message_id: a.source_message_id ?? null,
+    }),
+  },
+  projects_remove_material: {
+    method: 'DELETE',
+    path: (a) =>
+      `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials/${encodeURIComponent(String(a.materialId))}`,
+  },
+  projects_save_answer: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials/save-answer`,
+    body: (a) => ({ message_id: a.message_id }),
+  },
 };

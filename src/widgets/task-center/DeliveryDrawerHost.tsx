@@ -26,7 +26,7 @@ export function DeliveryDrawerHost() {
     return <LaneDetailDrawer lane={lane} open onClose={closeDelivery} />;
   }
 
-  const ref = tasks[delivery.entryId]?.deliveryRef;
+  const ref = delivery.ref ?? tasks[delivery.entryId]?.deliveryRef;
   if (!ref) return null;
   return (
     <OfficeDeliveryDrawer

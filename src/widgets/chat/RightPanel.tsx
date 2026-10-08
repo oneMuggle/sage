@@ -137,7 +137,7 @@ export function PanelHeader({
         <button
           key={p.label}
           className={
-            'w-5 py-0.5 text-[10px] font-medium rounded transition-colors ' +
+            'min-w-[28px] min-h-[28px] px-1 inline-flex items-center justify-center text-ui-2xs font-medium rounded transition-colors ' +
             (activePreset === p.label
               ? 'bg-primary/15 text-primary'
               : 'text-text-secondary hover:text-text hover:bg-bg-hover')
