@@ -15,7 +15,13 @@ import { create } from 'zustand';
 import { useStore } from '../../shared/lib/store';
 import { useArtifactEventsStore } from '../artifacts/artifactEventsStore';
 
-export type RightPanelTab = 'progress' | 'artifacts' | 'changes' | 'outline' | 'preview';
+export type RightPanelTab =
+  | 'progress'
+  | 'artifacts'
+  | 'changes'
+  | 'outline'
+  | 'trajectory'
+  | 'preview';
 
 const TAB_KEY = 'right-panel-tab';
 const OPEN_KEY = 'right-panel-open';
@@ -25,6 +31,7 @@ const VALID_TABS: readonly RightPanelTab[] = [
   'artifacts',
   'changes',
   'outline',
+  'trajectory',
   'preview',
 ];
 
