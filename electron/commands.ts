@@ -4,6 +4,8 @@
  * Pure module (no electron imports) so it can be unit-tested with vitest
  * without spinning up the Electron runtime.
  */
+import { DOMAIN_ROUTES } from './commandRoutes';
+
 export interface CommandRoute {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: (args: Record<string, unknown>) => string;
@@ -31,6 +33,7 @@ function normalizeWorkspaceSearchLimit(value: unknown): number {
 }
 
 export const COMMAND_ROUTES: Record<string, CommandRoute> = {
+  ...DOMAIN_ROUTES, // electron/commandRoutes/*: add new commands there, not in this file
   // B1 (P11): 记忆嵌入器状态 / 切换
   embedder_get_status: {
     method: 'GET',

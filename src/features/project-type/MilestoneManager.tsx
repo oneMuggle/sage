@@ -56,7 +56,7 @@ export function MilestoneManager({ projectId }: MilestoneManagerProps) {
   const handleDelete = async (milestoneId: string) => {
     if (!confirm('确定要删除此里程碑吗？')) return;
     try {
-      await projectApi.deleteMilestone(milestoneId);
+      await projectApi.deleteMilestone(projectId, milestoneId);
       await fetchMilestones();
     } catch (err) {
       setError(err instanceof Error ? err.message : '删除里程碑失败');
@@ -65,7 +65,7 @@ export function MilestoneManager({ projectId }: MilestoneManagerProps) {
 
   const handleStatusChange = async (milestoneId: string, status: string) => {
     try {
-      await projectApi.updateMilestone(milestoneId, { status });
+      await projectApi.updateMilestone(projectId, milestoneId, { status });
       await fetchMilestones();
     } catch (err) {
       setError(err instanceof Error ? err.message : '更新状态失败');
@@ -182,10 +182,20 @@ export function MilestoneManager({ projectId }: MilestoneManagerProps) {
                     </div>
                   </div>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(milestone)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`编辑里程碑：${milestone.title}`}
+                      onClick={() => handleEdit(milestone)}
+                    >
                       <Edit2 className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(milestone.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`删除里程碑：${milestone.title}`}
+                      onClick={() => handleDelete(milestone.id)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

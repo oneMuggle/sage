@@ -1,6 +1,6 @@
 /**
  * Sage API - Chat API
- * 包含同步聊天和流式聊天
+ * 流式聊天（同步 chat() 已删：无任何调用方，其 agent_chat 命令也从未在桥里注册）
  */
 
 import { reportStreamFailure, reportStreamSuccess } from '../lib/endpointStatus';
@@ -10,8 +10,8 @@ import type { AttachmentEmbedConfig } from './attachmentRagConfig';
 import { isDemoMode } from './demoFlag';
 import { listen, type UnlistenFn } from './desktopEvent';
 import { invoke } from './desktopInvoke';
-import type { AgentEvent, ChatConfig, ChatOfficeRef, ChatResponse } from './types';
-import { ApiException, handleApiError, isValidSessionId, withRetry } from './utils';
+import type { AgentEvent, ChatConfig, ChatOfficeRef } from './types';
+import { ApiException, isValidSessionId } from './utils';
 
 /** demo 聊天脚本按需加载 (R2): 仅演示模式才拉取 demo 数据模块。 */
 let demoChatScriptPromise: Promise<typeof import('./demoChatScript')> | null = null;
@@ -25,52 +25,6 @@ function loadDemoChatScript(): Promise<typeof import('./demoChatScript')> {
 const STREAM_TRACE_MAX = 50;
 
 export const chatApi = {
-  async chat(sessionId: string, message: string, config?: ChatConfig): Promise<ChatResponse> {
-    // 消息原文直传: 用户内容会进入 LLM 上下文并落库,任何转义都是数据污染
-    // (XSS 由渲染层 React 转义负责, 不在此处处理)。
-    if (isDemoMode()) {
-      throw new ApiException({
-        error: 'DEMO_MODE_UNSUPPORTED',
-        message: '演示模式不支持同步聊天，请使用流式聊天',
-        details: {},
-      });
-    }
-
-    // 验证会话ID
-    if (!isValidSessionId(sessionId)) {
-      throw new ApiException({
-        error: 'VALIDATION_ERROR',
-        message: '无效的会话ID格式',
-        details: { sessionId },
-      });
-    }
-
-    return withRetry(
-      async () => {
-        try {
-          const response = await invoke<ChatResponse>('agent_chat', {
-            sessionId,
-            message,
-            apiKey: config?.apiKey ?? null,
-            apiUrl: config?.apiUrl ?? null,
-            model: config?.model ?? null,
-            maxContext: config?.maxContext ?? null,
-            // Task 5 (2026-09-15): auto-context resolution flag.
-            autoContext: config?.autoContext ?? null,
-            temperature: config?.temperature ?? null,
-            provider: config?.provider ?? null,
-            reasoningEffort: config?.reasoningEffort ?? null,
-            thinkingBudget: config?.thinkingBudget ?? null,
-          });
-          return response;
-        } catch (error) {
-          throw handleApiError(error);
-        }
-      },
-      { maxRetries: 2 },
-    ); // chat 操作重试次数少一些
-  },
-
   async interrupt(streamId?: string, sessionId?: string): Promise<void> {
     try {
       // A renderer reload may have lost the handle; resolve ONLY this session.
