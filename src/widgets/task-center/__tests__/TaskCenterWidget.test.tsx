@@ -1,4 +1,3 @@
-import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
 /**
  * P4 第一块片: TaskCenterWidget 渲染行为。
  */
@@ -6,6 +5,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, beforeEach } from 'vitest';
 
+import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
 import { useTaskCenterStore } from '../../../features/task-center/taskCenterStore';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { TaskCenterWidget } from '../TaskCenterWidget';

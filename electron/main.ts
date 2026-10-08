@@ -1130,6 +1130,9 @@ async function registerIpcHandlers(): Promise<void> {
       if (payload.cmd === 'wiki_chat_stream') {
         return startWikiChatStream(evt.sender, payload.args ?? {}, BACKEND_URL);
       }
+      if (payload.cmd === 'wiki_chat_cancel') {
+        return cancelWikiChatStream(payload.args ?? {});
+      }
       if (payload.cmd === 'wiki_ingest_stream') {
         return startWikiIngestStream(evt.sender, payload.args ?? {}, BACKEND_URL);
       }
@@ -1943,46 +1946,44 @@ async function registerIpcHandlers(): Promise<void> {
   );
 }
 
-/**
- * Start a wiki chat streaming session.
- *
- * Returns a unique `streamId` immediately (the renderer needs it to
- * subscribe to `wiki-chat-stream-{streamId}-chunk/done/error` channels
- * and to call `sage:unlisten` for abort). The actual HTTP POST +
- * NDJSON relay runs in the background:
- *
- *   1. POST args to /api/v1/wiki/chat/stream (camelCase→snake_case
- *      conversion is the renderer's responsibility — see
- *      api-client/wiki.ts wikiChatStream).
- *   2. Stream the NDJSON response via relayNdjsonToEvent; each event is
- *      dispatched to `sage:event:wiki-chat-stream-{streamId}-{chunk|
- *      done|error}`.
- *   3. On HTTP failure → forward `HTTP {status}` as a -error event.
- *   4. On AbortError (renderer unsubscribed via sage:unlisten) → swallow
- *      silently. Any other exception → forward `String(e)` as a -error.
- *   5. The AbortController is removed from `streamControllers` in the
- *      `finally` block regardless of outcome.
- *
- * Why a separate function (not inlined in `sage:invoke`):
- *   - Keeps the IPC handler readable.
- *   - The closure captures `webContents` and `backendUrl` cleanly, so
- *     the body of the async block doesn't have to thread them through.
- */
+const wikiChatOwners = new Map<string, string>();
+
+function cancelWikiChatStream(args: Record<string, unknown>): { ok: boolean } {
+  const rawId = args.stream_id ?? args.streamId;
+  const streamId = typeof rawId === 'string' ? rawId.trim() : '';
+  if (!streamId) return { ok: false };
+  const expectedOwner = wikiChatOwners.get(streamId);
+  const ownerToken = typeof args.owner_token === 'string' ? args.owner_token : undefined;
+  if (expectedOwner && ownerToken && expectedOwner !== ownerToken) return { ok: false };
+  const controller = streamControllers.get(streamId);
+  if (controller) {
+    controller.abort();
+    streamControllers.delete(streamId);
+  }
+  wikiChatOwners.delete(streamId);
+  return { ok: true };
+}
+
 function startWikiChatStream(
   sender: Electron.WebContents,
   args: Record<string, unknown>,
   backendUrl: string,
 ): { streamId: string } {
-  const streamId = `wiki-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const requestedId =
+    typeof args.stream_id === 'string' && args.stream_id.trim() ? args.stream_id.trim() : undefined;
+  const streamId =
+    requestedId ?? `wiki-chat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const controller = new AbortController();
   streamControllers.set(streamId, controller);
+  if (typeof args.owner_token === 'string' && args.owner_token) {
+    wikiChatOwners.set(streamId, args.owner_token);
+  }
   const wc = BrowserWindow.fromWebContents(sender);
   if (!wc) {
     streamControllers.delete(streamId);
+    wikiChatOwners.delete(streamId);
     throw new Error('No WebContents for invoke');
   }
-  // Fire-and-forget: relay runs in background. Return streamId NOW so
-  // the renderer can start subscribing to the per-id event channels.
   (async () => {
     try {
       const res = await fetch(`${backendUrl}/api/v1/wiki/chat/stream`, {
@@ -2010,15 +2011,14 @@ function startWikiChatStream(
       }
     } finally {
       streamControllers.delete(streamId);
+      wikiChatOwners.delete(streamId);
     }
   })();
   return { streamId };
 }
 
 /**
- * PR-3 Task 3: start a wiki-ingest NDJSON stream.
- *
- * Same fire-and-forget shape as `startWikiChatStream`, but the backend
+ * PR-3 Task 3: start a wiki-ingest NDJSON stream. Same fire-and-forget shape as `startWikiChatStream`, but the backend
  * `/ingest/stream` endpoint speaks a 3-event vocabulary
  * (progress / done / error) and the renderer `useWikiIngest` hook only
  * listens for a single `-progress` channel. The transform argument to

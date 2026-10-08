@@ -224,3 +224,25 @@ ightarrow$ 会话」合并树（批次 B-2）+ `TrajectoryPane` 二期后端事�
    - **U1**：`RightPanel.tsx` 顶栏宽度预设按钮升级至 `min-w-[28px] min-h-[28px]`（符合 WCAG 2.5.8 靶区标准）；`TaskCenterWidget.tsx` 在右侧面板或底部工作台最大化时自动收起展开浮层并退让至紧凑边角态（`data-panel-maximized="true"`）。
    - **U3**：`tailwind.config.js` 新增响应式 `text-ui-2xs`（`calc(var(--ui-font-size, 14px) - 3px)`），并在 `RightPanel`、`ArtifactsSection`、`TaskCenterWidget`、`OfficeCapabilityBar` 完成首批字号迁移。
    - **U4**：新增 `src/shared/lib/reportActionFailure.ts`（单测覆盖），接入 `PromptTemplatesTab` 拖拽排序失败回滚提示与 `OfficeCapabilityBar` 引擎探测失败可重试提示条。
+---
+
+## 七、P1 第一批落地实施记录（2026-10-08）
+
+### 7.1 P0 双轨合入闭环
+
+- **PR #1910 (`main`)**：已通过全部 CI 门禁并 Squash Merge 合入 `main`（Commit `212f454ca6f130b5cbd17397379884960efb5fe6`）。
+- **PR #1911 (`release/win7`)**：已通过全部 Python 3.8 / Electron / 前端门禁并 Squash Merge 合入 `release/win7`（Commit `fcc7377e721ecb4716b5885f1c5db0c094d0b0c9`）。
+
+### 7.2 P1 第一批（F3 + F2 + L4）实施明细
+
+1. **F3（清零最后 2 条 IPC 已知缺口，收口 PR #1010）**：
+   - 在 `electron/commandRoutes/projects.ts` 注册 `projects_update_allowed_paths`（`PUT /api/v1/projects/${id}/allowed-paths`），并在 `projects_register` 透传 `allowed_paths` 与 `project_type`。
+   - 在 `electron/main.ts` 注册 `wiki_chat_cancel` 命令路由与 `cancelWikiChatStream`（支持 `stream_id` 与 `owner_token` 归属校验，复用流式 `AbortController` 立即中止后端 SSE 请求）。
+   - 将 `electron/ipc-known-gaps.json` 的 `frontendUnregistered` 与 `manifestWithoutRoute` 清零（`2 -> 0`），重新导出 `electron/ipc-manifest.json`，并在 `electron/__tests__/ipc-contract.test.ts` 新增两条路由契约单测。
+2. **F2（Office 文档版本一致性与 409 冲突/幂等保护，收口 PR #1626）**：
+   - 新增 `backend/office/revision.py`（基于 `(size, mtime_ns)` 记忆化的 SHA-256 内容版本戳、单文档进程内写锁、有界幂等重放台账）。
+   - `/api/v1/office/update/preview` 返回 `source_revision` / `ops_hash` / `preview_id`；`/api/v1/office/doc/{id}/update` 与 `office_update` 工具支持 `expected_revision`（陈旧版本写入返回 HTTP 409 / `revision_conflict`，原文件零改动）与 `idempotency_key`（重试幂等重放），并在写后显式失效 `read_cache`；新增 `GET /api/v1/office/doc/{id}/revision` 及对应 IPC 命令 `office_doc_revision`。
+   - 前端 `OfficePreviewPanel`、`DocxNativePreview`、`OfficeEditPreviewDialog` 切换为按内容 `revision` 键控缓存，409 冲突时提示并自动刷新预览。
+3. **L4（Python 3.8 双轨防漂移门禁与架构基线收紧）**：
+   - 新增零依赖 AST 门禁脚本 `scripts/check_py38_compat.py` 及单测/全仓契约测试 `backend/tests/unit/test_py38_compat_gate.py`，静态拦截四类破坏 `release/win7` Python 3.8 运行时的语法：缺失 `from __future__ import annotations` 时的 PEP 604/585 注解、运行时 `isinstance/issubclass(..., A | B)`、Pydantic `BaseModel` 字段与 FastAPI 路由参数/返回值中的 PEP 604/585 注解；同时为 `scripts/py38_compat_rewrite.py` 增加 `--fail-on-drift` 退出码支持。
+   - 运行 `node scripts/architecture-check.mjs --tighten` 收紧双轨 `architecture-baseline.json` 基线。
