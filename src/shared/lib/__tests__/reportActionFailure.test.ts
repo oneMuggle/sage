@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { formatActionError, reportActionFailure } from '../reportActionFailure';
 
