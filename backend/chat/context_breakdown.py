@@ -29,6 +29,7 @@ payload（messages + tools）按类别估算,响应回来后按实报 ``prompt_t
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, List, Optional
 
 from backend.memory.working import estimate_tokens
@@ -249,7 +250,7 @@ def build_breakdown_snapshot(
         scale = (float(actual_prompt_tokens) / est_total) if calibrated and est_total else 1.0
         snapshot["sources"] = compute_context_sources(messages, scale)
     except Exception:  # noqa: BLE001
-        pass
+        logging.getLogger(__name__).debug("context_sources breakdown skipped", exc_info=True)
     return snapshot
 
 
