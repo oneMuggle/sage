@@ -74,7 +74,7 @@ export function ConstraintEditor({
 
       if (constraint) {
         // 更新
-        await projectApi.updateConstraint(constraint.id, {
+        await projectApi.updateConstraint(projectId, constraint.id, {
           category: category.trim(),
           content: content.trim(),
           triggerPattern: triggerPattern.trim() || undefined,
