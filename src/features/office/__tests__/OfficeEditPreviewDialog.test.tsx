@@ -13,6 +13,10 @@
  *    officeApi.updateDocument, toasts success, renders the self-check
  *    summary line and fires onApplied; a thrown apply error toasts the
  *    backend message and returns to result for retry.
+ *  - F1 version handshake (office-p0-a): the apply carries the preview's
+ *    source_revision + a per-preview idempotency key, and a 409 conflict
+ *    toasts the dedicated message and re-previews instead of leaving a
+ *    stale diff on screen.
  *  - buildUpdateOps unit table.
  */
 
@@ -267,6 +271,9 @@ describe('OfficeEditPreviewDialog — apply loop (round 2, R1)', () => {
       changes: [{ op: 'replace_text', target: 'a', before: 'a', after: 'b' }],
       truncated: false,
       error: null,
+      source_revision: 'sha256:preview-rev',
+      ops_hash: 'ops:abc',
+      preview_id: 'pv_test',
     });
     renderDialog({
       docType: 'word',
@@ -324,6 +331,9 @@ describe('OfficeEditPreviewDialog — apply loop (round 2, R1)', () => {
       expect(mockUpdateDocument).toHaveBeenCalledWith({
         doc_id: 'doc-1',
         ops: [{ op: 'replace_text', find: 'a', replace: 'b' }],
+        // F1: bound to the exact bytes the diff above was computed from.
+        expected_revision: 'sha256:preview-rev',
+        idempotency_key: 'doc-1:pv_test',
       });
     });
     expect(mockUpdateDocument).toHaveBeenCalledTimes(1);
@@ -389,6 +399,103 @@ describe('OfficeEditPreviewDialog — apply loop (round 2, R1)', () => {
     expect(screen.getByTestId('office-edit-apply')).toBeInTheDocument();
     expect(onAppliedMock).not.toHaveBeenCalled();
     expect(toastMock.success).not.toHaveBeenCalled();
+  });
+
+  it('re-previews instead of writing when the backend answers 409', async () => {
+    await previewOk();
+    mockUpdateDocument.mockRejectedValueOnce(
+      new Error('Backend POST → 409: document revision mismatch'),
+    );
+    // The re-preview after the conflict must see the CURRENT file.
+    mockPreviewUpdate.mockResolvedValueOnce({
+      ok: true,
+      changes: [{ op: 'replace_text', target: 'a', before: 'a2', after: 'b' }],
+      truncated: false,
+      error: null,
+      source_revision: 'sha256:fresh-rev',
+      preview_id: 'pv_fresh',
+    });
+
+    fireEvent.click(screen.getByTestId('office-edit-apply'));
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledWith(
+        '文档在预览之后被改动，本次未写入；已重新生成差异',
+      );
+    });
+    // A fresh preview was requested; no second write attempt was made.
+    await waitFor(() => expect(mockPreviewUpdate).toHaveBeenCalledTimes(2));
+    expect(mockUpdateDocument).toHaveBeenCalledTimes(1);
+    expect(onAppliedMock).not.toHaveBeenCalled();
+    expect(toastMock.success).not.toHaveBeenCalled();
+  });
+
+  it('applies the second attempt against the revision of the fresh preview', async () => {
+    await previewOk();
+    mockUpdateDocument.mockRejectedValueOnce(
+      new Error('Backend POST → 409: document revision mismatch'),
+    );
+    mockPreviewUpdate.mockResolvedValueOnce({
+      ok: true,
+      changes: [{ op: 'replace_text', target: 'a', before: 'a2', after: 'b' }],
+      truncated: false,
+      error: null,
+      source_revision: 'sha256:fresh-rev',
+      preview_id: 'pv_fresh',
+    });
+    fireEvent.click(screen.getByTestId('office-edit-apply'));
+    await waitFor(() => expect(mockPreviewUpdate).toHaveBeenCalledTimes(2));
+
+    mockUpdateDocument.mockResolvedValueOnce({
+      ok: true,
+      summary: {
+        id: 'doc-1',
+        doc_type: 'word',
+        status: 'edited',
+        metadata: { file_size_bytes: 4096 },
+      },
+      self_check: { ok: true, summary: { ops_applied: 1 }, error: null },
+      revision: 'sha256:after',
+      previous_revision: 'sha256:fresh-rev',
+      idempotent_replay: false,
+    });
+    fireEvent.click(screen.getByTestId('office-edit-apply'));
+
+    await waitFor(() => {
+      expect(mockUpdateDocument).toHaveBeenLastCalledWith({
+        doc_id: 'doc-1',
+        ops: [{ op: 'replace_text', find: 'a', replace: 'b' }],
+        expected_revision: 'sha256:fresh-rev',
+        idempotency_key: 'doc-1:pv_fresh',
+      });
+    });
+  });
+
+  it('omits the guard fields when the backend preview carries no revision', async () => {
+    mockPreviewUpdate.mockResolvedValueOnce({
+      ok: true,
+      changes: [{ op: 'replace_text', target: 'a', before: 'a', after: 'b' }],
+      truncated: false,
+      error: null,
+    });
+    renderDialog({ docType: 'word', onApplied: onAppliedMock });
+    fireEvent.change(screen.getByTestId('office-edit-find'), { target: { value: 'a' } });
+    fireEvent.change(screen.getByTestId('office-edit-replace'), { target: { value: 'b' } });
+    fireEvent.click(screen.getByTestId('office-edit-preview-submit'));
+    expect(await screen.findByTestId('office-edit-result')).toBeInTheDocument();
+
+    mockUpdateDocument.mockResolvedValueOnce({
+      ok: true,
+      summary: { id: 'doc-1', doc_type: 'word', status: 'edited', metadata: {} },
+      self_check: { ok: true, summary: {}, error: null },
+    });
+    fireEvent.click(screen.getByTestId('office-edit-apply'));
+
+    await waitFor(() => {
+      expect(mockUpdateDocument).toHaveBeenCalledWith(
+        expect.objectContaining({ doc_id: 'doc-1', expected_revision: undefined }),
+      );
+    });
   });
 });
 
