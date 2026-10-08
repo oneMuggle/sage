@@ -55,6 +55,7 @@
     "office_archive_document": { "method": "POST", "path": "/api/v1/office/doc/{docId}/archive" },
     "office_capabilities": { "method": "GET", "path": "/api/v1/office/capabilities" },
     "office_delete_document": { "method": "DELETE", "path": "/api/v1/office/documents/{docId}" },
+    "office_doc_revision": { "method": "GET", "path": "/api/v1/office/doc/{docId}/revision" },
     "office_doc_update": { "method": "POST", "path": "/api/v1/office/doc/{docId}/update" },
     "office_excel_generate": { "method": "POST", "path": "/api/v1/office/excel/generate" },
     "office_excel_read": { "method": "POST", "path": "/api/v1/office/excel/read" },

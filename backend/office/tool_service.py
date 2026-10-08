@@ -46,6 +46,7 @@ from backend.office.models import (
     OfficePptGenerateRequest,
     OfficeWordGenerateRequest,
 )
+from backend.office.revision import compute_file_revision, document_write_lock
 from backend.office.session_workspace import (
     get_active_workspace,
     get_document_in_workspace,
@@ -627,13 +628,14 @@ class OfficeToolService:
     # update (改 — 原地编辑)
     # ──────────────────────────────────────────────────────────────
 
-    def update(
+    def update(  # noqa: PLR0911 — 版本冲突/过大/拒绝各自早退，逐条 return 是这套契约的可读形式
         self,
         conn: sqlite3.Connection,
         session_id: str,
         binding_generation: int,
         doc_id: str,
         ops: List[Dict[str, Any]],
+        expected_revision: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Apply in-place edits to a workspace-managed document.
 
@@ -647,6 +649,12 @@ class OfficeToolService:
             4. On success, refresh the DB row: status → EDITED,
                ``updated_at`` → now, ``file_size_bytes`` → new size.
 
+        F1 (P0-A): the chat write path shares the API path's version
+        semantics — the edit runs inside the same per-document write lock,
+        an ``expected_revision`` mismatch returns ``revision_conflict``
+        (nothing written), and every success reports the resulting
+        ``revision`` so the model can chain a checked follow-up edit.
+
         The absolute workspace path never appears in the returned dict.
         """
         doc = self._resolve_doc(conn, session_id, binding_generation, doc_id)
@@ -654,48 +662,64 @@ class OfficeToolService:
             return _not_found()
 
         path = document_path(doc)
-        try:
-            if path.is_file() and path.stat().st_size > self._policy.max_read_bytes:
+        with document_write_lock(doc.id):
+            try:
+                if path.is_file() and path.stat().st_size > self._policy.max_read_bytes:
+                    return {
+                        "success": False,
+                        "error": {
+                            "code": "file_too_large",
+                            "message": "file exceeds edit cap",
+                            "max_read_bytes": self._policy.max_read_bytes,
+                        },
+                    }
+                if expected_revision:
+                    actual = compute_file_revision(path)
+                    if actual != expected_revision:
+                        return {
+                            "success": False,
+                            "error": {
+                                "code": "revision_conflict",
+                                "message": (
+                                    "document changed since it was read; "
+                                    "re-read the document and retry"
+                                ),
+                                "expected": expected_revision,
+                                "actual": actual,
+                            },
+                        }
+                # PR-2: pre-edit snapshot — capture the bytes that the editor
+                # is about to overwrite. Best-effort: a snapshot failure must
+                # never block the user's edit (edit is the primary intent).
+                snapshot_pre_edit(doc)
+                saved, results = _update_document(doc.doc_type.value, path, ops)
+            except OfficeError as exc:
                 return {
                     "success": False,
-                    "error": {
-                        "code": "file_too_large",
-                        "message": "file exceeds edit cap",
-                        "max_read_bytes": self._policy.max_read_bytes,
-                    },
+                    "error": {"code": "update_failed", "message": str(exc)},
                 }
-            # PR-2: pre-edit snapshot — capture the bytes that the editor
-            # is about to overwrite. Best-effort: a snapshot failure must
-            # never block the user's edit (edit is the primary intent).
-            snapshot_pre_edit(doc)
-            saved, results = _update_document(doc.doc_type.value, path, ops)
-        except OfficeError as exc:
-            return {
-                "success": False,
-                "error": {"code": "update_failed", "message": str(exc)},
-            }
-        except Exception as exc:  # noqa: BLE001 — 编辑器未归类异常按失败处理
-            return {
-                "success": False,
-                "error": {"code": "update_failed", "message": str(exc)},
-            }
+            except Exception as exc:  # noqa: BLE001 — 编辑器未归类异常按失败处理
+                return {
+                    "success": False,
+                    "error": {"code": "update_failed", "message": str(exc)},
+                }
 
-        if not saved:
-            return {
-                "success": False,
-                "error": {"code": "operation_failed", "message": "one or more ops failed"},
-                "results": results,
-            }
+            if not saved:
+                return {
+                    "success": False,
+                    "error": {"code": "operation_failed", "message": "one or more ops failed"},
+                    "results": results,
+                }
 
-        self._mark_edited(conn, doc, path)
-        return {
-            "success": True,
-            "content": {
+            self._mark_edited(conn, doc, path)
+            content: Dict[str, Any] = {
                 "document_id": doc.id,
                 "doc_type": doc.doc_type.value,
                 "results": results,
-            },
-        }
+            }
+            with contextlib.suppress(Exception):
+                content["revision"] = compute_file_revision(path)
+            return {"success": True, "content": content}
 
     def _mark_edited(
         self,
