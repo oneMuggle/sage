@@ -27,11 +27,7 @@
  * 不存在"，仍可点击重试或移除。数据经 projectApi（invoke → IPC → 后端
  * /api/v1/projects），刷新走 store.loadSessions() 保证会话区即时同步。
  *
- * P5 拖拽登记：把文件夹拖到本分组内容区即登记（批量、不自动打开——
- * 与 + 按钮的"登记即打开"区分，避免顺手拖拽打断当前工作流）。路径取
- * Electron `File.path`（浏览器无此属性 → 静默忽略，与 OfficeFilePicker
- * 同判据）；目录有效性由后端 validate_workspace 校验，零新增 IPC。
- * 迁移注记：Electron ≥32 需改用 webUtils.getPathForFile。
+ * P5 拖拽登记：文件夹拖入批量登记，目录有效性由后端 validate_workspace 校验。
  */
 
 import {
@@ -325,17 +321,19 @@ export function ProjectSection({
       setBusyId(project.id);
       try {
         const { session } = await projectApi.createSession(project.id);
+        clearMissing(project.id);
         await loadSessions();
         onOpenSession(session.id);
         void refresh();
         if (expandedIds.has(project.id)) void refreshSubSessions(project.id);
       } catch (err) {
-        toast.error(t('sider.project.open_failed').replace('{message}', errorMessage(err)));
+        if (isPathMissingError(err)) setMissingIds((prev) => new Set(prev).add(project.id));
+        toast.error(isPathMissingError(err) ? t('sider.project.missing') : t('sider.project.open_failed').replace('{message}', errorMessage(err)));
       } finally {
         setBusyId(null);
       }
     },
-    [busyId, expandedIds, loadSessions, onOpenSession, refresh, refreshSubSessions, t],
+    [busyId, clearMissing, expandedIds, loadSessions, onOpenSession, refresh, refreshSubSessions, t],
   );
 
   const handleRemoveProject = useCallback(
@@ -533,6 +531,7 @@ export function ProjectSection({
       <div
         key={session.id}
         data-testid="project-session-row"
+        aria-current={session.id === currentSessionId ? 'page' : undefined}
         role="button"
         tabIndex={0}
         onClick={() => onOpenSession(session.id)}

@@ -1,9 +1,8 @@
 // src/features/chat/useConversationTrajectory.ts
 //
-// 对标 F3（ZCode ModelTrajectoryPane）：会话级模型轨迹数据源。
+// 对标 F3/F4（ZCode ModelTrajectoryPane 一期 + 二期遥测增强）：会话级模型轨迹数据源。
 // 从 messages store 派生整段会话的轨迹条目：角色、预览、模型、步序、
-// 工具调用数、token 用量、耗时、reasoning 摘要——全部来自前端已有数据，
-// 不依赖新增后端端点（session_events 查询 API 留待 DSH 拆分收口后另批）。
+// 工具调用数、input/output token 用量、耗时、reasoning 摘要，并计算会话级汇总遥测。
 
 import { useMemo } from 'react';
 
@@ -23,6 +22,8 @@ export interface TrajectoryEntry {
   model?: string;
   provider?: string;
   finishReason?: string | null;
+  /** generation_stats.input_tokens（仅 assistant 终稿） */
+  inputTokens?: number;
   /** generation_stats.output_tokens（仅 assistant 终稿） */
   totalTokens?: number;
   /** generation_stats.latency_ms（仅 assistant 终稿） */
@@ -38,6 +39,15 @@ export interface TrajectoryEntry {
   hasMemoryRefs: boolean;
   hasSkills: boolean;
   hasCompactInfo: boolean;
+}
+
+export interface TrajectorySummary {
+  totalEntries: number;
+  totalToolCalls: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalLatencyMs: number;
+  maxLatencyMs: number;
 }
 
 function toPreview(text: string): string {
@@ -59,29 +69,52 @@ function parseToolCalls(toolCalls: ToolCall[] | string | null | undefined): Tool
 }
 
 /**
- * 获取当前会话的模型轨迹条目（按消息顺序，含 user/assistant/tool/system）。
+ * 获取当前会话的模型轨迹条目与汇总遥测（按消息顺序，含 user/assistant/tool/system）。
  */
 export function useConversationTrajectory(sessionId: string | null): {
   items: TrajectoryEntry[];
+  summary: TrajectorySummary;
 } {
   const messages = useStore((s) => s.messages);
 
-  const items = useMemo(() => {
-    if (!sessionId) return [];
+  return useMemo(() => {
+    const emptySummary: TrajectorySummary = {
+      totalEntries: 0,
+      totalToolCalls: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
+      totalLatencyMs: 0,
+      maxLatencyMs: 0,
+    };
+    if (!sessionId) return { items: [], summary: emptySummary };
 
     const entries: TrajectoryEntry[] = [];
+    let totalToolCalls = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let totalLatencyMs = 0;
+    let maxLatencyMs = 0;
 
     for (const msg of messages) {
       if (msg.session_id !== sessionId) continue;
-      // 话题段切换 marker 不属于模型轨迹
       if (msg.subtype === 'topic_separator') continue;
 
       const toolCalls = parseToolCalls(msg.tool_calls);
       const stats = msg.generation_stats ?? null;
+      const inputTokens =
+        stats && typeof stats.input_tokens === 'number' ? stats.input_tokens : undefined;
       const totalTokens =
         stats && typeof stats.output_tokens === 'number' ? stats.output_tokens : undefined;
       const latencyMs =
         stats && typeof stats.latency_ms === 'number' ? stats.latency_ms : undefined;
+
+      totalToolCalls += toolCalls.length;
+      if (typeof inputTokens === 'number') totalInputTokens += inputTokens;
+      if (typeof totalTokens === 'number') totalOutputTokens += totalTokens;
+      if (typeof latencyMs === 'number') {
+        totalLatencyMs += latencyMs;
+        if (latencyMs > maxLatencyMs) maxLatencyMs = latencyMs;
+      }
 
       entries.push({
         messageId: msg.id,
@@ -92,6 +125,7 @@ export function useConversationTrajectory(sessionId: string | null): {
         model: msg.model,
         provider: msg.provider,
         finishReason: msg.finish_reason,
+        inputTokens,
         totalTokens,
         latencyMs,
         toolCallCount: toolCalls.length,
@@ -104,8 +138,16 @@ export function useConversationTrajectory(sessionId: string | null): {
       });
     }
 
-    return entries;
+    return {
+      items: entries,
+      summary: {
+        totalEntries: entries.length,
+        totalToolCalls,
+        totalInputTokens,
+        totalOutputTokens,
+        totalLatencyMs,
+        maxLatencyMs,
+      },
+    };
   }, [messages, sessionId]);
-
-  return { items };
 }
