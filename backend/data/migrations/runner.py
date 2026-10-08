@@ -1,4 +1,4 @@
-# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容，保留 typing 注解
+# ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容，保留 typing 注解
 """schema 版本化迁移框架（DSH 对标 R9，C3）。
 
 对标 deepseek-harness 的会话格式"代"纪律：**迁移只新增版本命名的后继，
