@@ -5,7 +5,7 @@
 """新六边形 API 路由 — 调用 ChatService。
 
 本模块是 P2 末的双轨：与 legacy_routes.py 并存。
-默认 API_MODE=hex 时由 routes.py 加载本路由。
+API_MODE=hex（需显式设置，缺省为 legacy）时由 main.py 挂载本路由。
 
 设计要点
 --------
