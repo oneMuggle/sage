@@ -164,6 +164,7 @@ RUNTIME_SKIP_FRAGMENTS = (
     "compat/win7/asyncio_compat.py",
     # 扫描器的单元测试包含全部地雷字面量（测试样本，非真实代码）
     "tools/test_py38_hazard_scan.py",
+    "test_py38_compat_gate.py",
 )
 
 
@@ -215,6 +216,123 @@ def check_runtime_apis(path: Path, root: Path) -> list[tuple[int, str]]:
                 out.append((lineno, "py38 runtime: parenthesized `with (a as x, b as y):` is Py3.9+ grammar (SyntaxError on 3.8; run scripts/py38_compat_rewrite.py)"))
         i += 1
     return out
+
+
+
+MODEL_SUFFIXES = ("Model", "Schema", "Request", "Response")
+ROUTE_METHODS = frozenset({"get", "post", "put", "delete", "patch", "websocket", "api_route"})
+
+
+def _find_annotation_violations(node: ast.AST) -> list[str]:
+    issues: list[str] = []
+    for sub in ast.walk(node):
+        lineno = getattr(sub, "lineno", "?")
+        if isinstance(sub, ast.BinOp) and isinstance(sub.op, ast.BitOr):
+            issues.append(f"line {lineno}: PEP 604 `|` union in annotation")
+        elif (
+            isinstance(sub, ast.Subscript)
+            and isinstance(sub.value, ast.Name)
+            and sub.value.id in PEP585_BUILTINS
+        ):
+            issues.append(
+                f"line {lineno}: PEP 585 `{sub.value.id}[...]` generic in annotation"
+            )
+    return issues
+
+
+def check_source(source: str, filename: str = "<string>") -> list[str]:
+    try:
+        tree = ast.parse(source, filename=filename)
+    except SyntaxError as exc:
+        return [f"{filename}:{exc.lineno or '?'}: syntax error: {exc.msg}"]
+    has_future = any(
+        isinstance(n, ast.ImportFrom)
+        and n.module == "__future__"
+        and any(a.name == "annotations" for a in n.names)
+        for n in tree.body
+    )
+    problems: list[str] = []
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in ("isinstance", "issubclass")
+            and len(node.args) >= 2
+            and isinstance(node.args[1], ast.BinOp)
+            and isinstance(node.args[1].op, ast.BitOr)
+        ):
+            problems.append(
+                f"{filename}:{node.lineno}: {node.func.id}() uses PEP 604 `|` union at runtime"
+            )
+        if isinstance(node, ast.ClassDef) and any(
+            (isinstance(b, ast.Name) and any(s in b.id for s in MODEL_SUFFIXES))
+            or (isinstance(b, ast.Attribute) and any(s in b.attr for s in MODEL_SUFFIXES))
+            for b in node.bases
+        ):
+            for stmt in node.body:
+                if isinstance(stmt, ast.AnnAssign) and stmt.annotation is not None:
+                    for issue in _find_annotation_violations(stmt.annotation):
+                        problems.append(f"{filename}:{issue} in Pydantic model `{node.name}`")
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and any(
+            isinstance(d, ast.Call)
+            and isinstance(d.func, ast.Attribute)
+            and d.func.attr in ROUTE_METHODS
+            for d in node.decorator_list
+        ):
+            args = list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs)
+            for arg in args:
+                if arg.annotation is not None:
+                    for issue in _find_annotation_violations(arg.annotation):
+                        problems.append(
+                            f"{filename}:{issue} in FastAPI route `{node.name}` param `{arg.arg}`"
+                        )
+            if node.returns is not None:
+                for issue in _find_annotation_violations(node.returns):
+                    problems.append(
+                        f"{filename}:{issue} in FastAPI route `{node.name}` return annotation"
+                    )
+        if not has_future:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                args = list(node.args.posonlyargs) + list(node.args.args) + list(node.args.kwonlyargs)
+                for arg in args:
+                    if arg.annotation is not None:
+                        for issue in _find_annotation_violations(arg.annotation):
+                            problems.append(
+                                f"{filename}:{issue} (missing `from __future__ import annotations`)"
+                            )
+                if node.returns is not None:
+                    for issue in _find_annotation_violations(node.returns):
+                        problems.append(
+                            f"{filename}:{issue} (missing `from __future__ import annotations`)"
+                        )
+            elif isinstance(node, ast.AnnAssign) and node.annotation is not None:
+                for issue in _find_annotation_violations(node.annotation):
+                    problems.append(
+                        f"{filename}:{issue} (missing `from __future__ import annotations`)"
+                    )
+    return problems
+
+
+def check_paths(paths: list[Path]) -> list[str]:
+    targets: list[Path] = []
+    for p in paths:
+        if p.is_file() and p.suffix == ".py":
+            targets.append(p)
+        elif p.is_dir():
+            targets.extend(sorted(p.rglob("*.py")))
+    violations: list[str] = []
+    for py_file in targets:
+        if "__pycache__" in py_file.parts:
+            continue
+        rel = py_file.as_posix()
+        if any(frag in rel for frag in SKIP_PATH_FRAGMENTS):
+            continue
+        try:
+            src = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        violations.extend(check_source(src, filename=rel))
+    return violations
 
 
 def main() -> int:

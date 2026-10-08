@@ -282,7 +282,7 @@ def _persist_read_summary(
     *,
     file_path: Path,
     canonical_workspace: str,
-    original_filename: str | None,
+    original_filename: Optional[str],
 ) -> None:
     """Persist a read result's summary into the office_documents table.
 

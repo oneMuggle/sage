@@ -525,6 +525,11 @@ def main() -> int:
         action="store_true",
         help="only report which files would change, don't write",
     )
+    parser.add_argument(
+        "--fail-on-drift",
+        action="store_true",
+        help="exit with code 1 when --check finds files that would be rewritten",
+    )
     args = parser.parse_args()
 
     targets: list[Path] = []
