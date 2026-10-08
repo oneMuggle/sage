@@ -1,9 +1,7 @@
-/**
- * Chat, agents, messages & attachment RAG IPC commands.
- */
 import type { CommandRoute } from '../commands';
 
 export const chatRoutes: Record<string, CommandRoute> = {
+
   // chat
   // I2: create + attach split — POST 立即返回 {streamId} 启动后台 LLM 调用,
   // GET attach 到同一 stream 拉取 NDJSON 事件。LLM 只跑一次。
@@ -12,6 +10,8 @@ export const chatRoutes: Record<string, CommandRoute> = {
   // /api/v1 下 —— 去掉前缀会全部 404。commands.test.ts 有 guard 测试
   // 防止漏前缀。
   agent_chat_stream: { method: 'POST', path: () => '/api/v1/chat/stream' },
+  // 2026-09 修复 (同步 #957): chatApi.chat() 调用 agent_chat 但映射表缺项。
+  agent_chat: { method: 'POST', path: () => '/api/v1/chat' },
   list_agents: { method: 'GET', path: () => '/api/v1/agents' },
   get_agent: {
     method: 'GET',
@@ -40,12 +40,11 @@ export const chatRoutes: Record<string, CommandRoute> = {
   // RT5 (round7): 单 agent steering —— 运行中注入用户补充消息（body 经
   // relay camelToSnakeKeys 转成 { stream_id, content }）。
   chat_steer: { method: 'POST', path: () => '/api/v1/chat/steer' },
-
-  // R25-D4: 查询会话活跃 chat 流（renderer 重载后 reattach）。null = 无活跃流。
   chat_stream_active: {
     method: 'GET',
     path: (a) => `/api/v1/chat/stream/active?session_id=${encodeURIComponent(String(a.sessionId))}`,
   },
+
   // F12 (对标增强第五轮批次 B): 跨会话消息全文搜索（侧栏搜索框数据源）
   search_messages: {
     method: 'GET',
@@ -71,26 +70,5 @@ export const chatRoutes: Record<string, CommandRoute> = {
   delete_message: {
     method: 'POST',
     path: (a) => `/api/v1/messages/${encodeURIComponent(String(a.id))}/delete`,
-  },
-
-  // r59: 附件向量索引三端点透传（backend/api/chat_attachment_routes.py r58）。
-  // embed 配置 / query_vector 由调用方构造，body 原样透传（键已 snake）。
-  attachment_rag_index: {
-    method: 'POST',
-    path: (a) => `/api/v1/chat/attachments/${encodeURIComponent(String(a.mediaId))}/index`,
-    body: (a) => {
-      const body: Record<string, unknown> = { embed: a.embed };
-      if (a.target_chunk_size !== undefined) body.target_chunk_size = a.target_chunk_size;
-      return body;
-    },
-  },
-  attachment_rag_search: {
-    method: 'POST',
-    path: () => '/api/v1/chat/attachments/search',
-    rawBody: true,
-  },
-  attachment_rag_delete_index: {
-    method: 'DELETE',
-    path: (a) => `/api/v1/chat/attachments/${encodeURIComponent(String(a.mediaId))}/index`,
   },
 };

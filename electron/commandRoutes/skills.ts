@@ -1,9 +1,7 @@
-/**
- * Skills, skill consolidation, skill audit/rollback, skill drafts & learn IPC commands.
- */
 import type { CommandRoute } from '../commands';
 
 export const skillRoutes: Record<string, CommandRoute> = {
+
   // skills (PR-7)
   // src/pages/Skills.tsx calls skillsApi.list() / .toggle() / .execute()
   // which route through these IPC names. Backend exposes matching endpoints

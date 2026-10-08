@@ -1,6 +1,3 @@
-/**
- * Memory, embedder, user/project profiles & import/export IPC commands.
- */
 import type { CommandRoute } from '../commands';
 
 export const memoryRoutes: Record<string, CommandRoute> = {
@@ -24,6 +21,7 @@ export const memoryRoutes: Record<string, CommandRoute> = {
     // 信封即 body（后端 import_memory(payload) 直接收 dict）
     body: (a) => a.payload as Record<string, unknown>,
   },
+
   // memory
   get_memories: {
     method: 'GET',

@@ -1,11 +1,6 @@
-/**
- * Settings, permissions, questions, scheduled tasks, todo, theme, backups, usage & runtime IPC commands.
- */
 import type { CommandRoute } from '../commands';
 
 export const settingsRoutes: Record<string, CommandRoute> = {
-  // R19: 数据安全 —— 备份清单/手动备份/记忆导出（system_routes，GET/POST
-  // 均无业务 body，本机 token 由 fetch 桥统一注入）。
   system_backups_list: {
     method: 'GET',
     path: () => '/api/v1/system/backups',
@@ -21,6 +16,7 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/system/backups/${encodeURIComponent(String(a.name))}/restore`,
     body: () => ({}),
   },
+
   // settings & preferences
   get_settings: { method: 'GET', path: () => '/api/v1/settings' },
   get_evolution_logs: {
@@ -51,17 +47,6 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: () => '/api/v1/permissions/preset',
     body: (a) => ({ preset: a.preset }),
-  },
-  permissions_session_auto_approvals: {
-    method: 'GET',
-    path: (a) => {
-      const sid = encodeURIComponent(String(a?.sessionId ?? ''));
-      const params = new URLSearchParams({
-        limit: String((a?.limit as number) ?? 50),
-        side_effect_only: String(a?.sideEffectOnly === false ? 'false' : 'true'),
-      });
-      return `/api/v1/permissions/session/${sid}/auto-approvals?${params.toString()}`;
-    },
   },
   // P2-5 渐进式授权：策略读写。默认关闭，必须由用户在设置页显式开启。
   permissions_get_trust_policy: { method: 'GET', path: () => '/api/v1/permissions/trust-policy' },
@@ -207,7 +192,6 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/theme/get/${encodeURIComponent(String(a.id))}`,
   },
   theme_delete: { method: 'POST', path: () => '/api/v1/theme/delete' },
-
   // M6 生态扩展: 用量/成本面板 (backend/services/usage_tracker.py 内存态)
   // L8 PR-A (2026-09-09): 支持 range=today|total 查询参数, 默认 today。
   // L8 PR-B (2026-09-09): range 扩到 today|7d|30d|total。
@@ -219,11 +203,6 @@ export const settingsRoutes: Record<string, CommandRoute> = {
       if (!range) return '/api/v1/usage';
       return `/api/v1/usage?range=${encodeURIComponent(range)}`;
     },
-  },
-  // U14 (批次 C): 会话级持久化用量
-  usage_get_session: {
-    method: 'GET',
-    path: (a) => `/api/v1/usage/session/${encodeURIComponent(String(a.sessionId))}`,
   },
   // L8 PR-B (2026-09-09): 单次请求详情 (usage_events 分页)
   usage_list_requests: {
@@ -259,6 +238,7 @@ export const settingsRoutes: Record<string, CommandRoute> = {
       return url;
     },
   },
+
   // 2026-09-04: 本地开发环境助手 — 复用 ChatService.tools 路径,
   // runtime_exec 在后端经 PermissionEnforcer 审批 (与 bash 同等闸口)。
   // 见 docs/plans/2026-09-04_local-development-assistant.md Stage 4。

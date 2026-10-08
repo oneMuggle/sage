@@ -1,6 +1,3 @@
-/**
- * Session lifecycle, workspace binding, git changes, worktrees & checkpoints IPC commands.
- */
 import type { CommandRoute } from '../commands';
 
 const DEFAULT_WORKSPACE_SEARCH_LIMIT = 20;
@@ -16,6 +13,7 @@ function normalizeWorkspaceSearchLimit(value: unknown): number {
 }
 
 export const sessionRoutes: Record<string, CommandRoute> = {
+
   // sessions
   list_sessions: {
     method: 'GET',
@@ -92,7 +90,6 @@ export const sessionRoutes: Record<string, CommandRoute> = {
     method: 'DELETE',
     path: (a) => `/api/v1/sessions/${encodeURIComponent(String(a.sessionId))}/workspace`,
   },
-
   workspace_search_files: {
     method: 'GET',
     path: (a) => {
@@ -213,6 +210,8 @@ export const sessionRoutes: Record<string, CommandRoute> = {
       const body: Record<string, unknown> = {};
       // R18-B: is_pinned 置顶开关（后端 SessionUpdateIn.is_pinned 已支持）
       if (a.isPinned != null) body.is_pinned = a.isPinned;
+      // R51: is_archived 归档开关
+      if (a.isArchived != null) body.is_archived = a.isArchived;
       // title 缺省不下发 —— PATCH 只更新显式传入的字段
       if (a.title != null) body.title = a.title;
       return body;
@@ -231,5 +230,21 @@ export const sessionRoutes: Record<string, CommandRoute> = {
   session_purge_archived: {
     method: 'POST',
     path: () => '/api/v1/sessions/purge-archived',
+  },
+  permissions_session_auto_approvals: {
+    method: 'GET',
+    path: (a) => {
+      const sid = encodeURIComponent(String(a?.sessionId ?? ''));
+      const params = new URLSearchParams({
+        limit: String((a?.limit as number) ?? 50),
+        side_effect_only: String(a?.sideEffectOnly === false ? 'false' : 'true'),
+      });
+      return `/api/v1/permissions/session/${sid}/auto-approvals?${params.toString()}`;
+    },
+  },
+  // U14 (批次 C): 会话级持久化用量
+  usage_get_session: {
+    method: 'GET',
+    path: (a) => `/api/v1/usage/session/${encodeURIComponent(String(a.sessionId))}`,
   },
 };

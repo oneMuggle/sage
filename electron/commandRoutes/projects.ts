@@ -119,6 +119,7 @@ export const projectRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/projects/${projectId(a)}/milestones/${milestoneId(a)}`,
   },
 
+
   // 项目模块 P1 (2026-09-13): 最近项目注册表 + 项目内会话。
   // open = "复用最近活跃会话或新建并绑定项目目录"（后端原子完成，返回
   // { project, session, created }），前端拿到 session.id 后 setCurrent + 导航。

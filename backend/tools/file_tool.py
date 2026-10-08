@@ -134,19 +134,31 @@ def detect_artifact_kind(path: str) -> str:
     return "text"
 
 
-def _record_artifact_safely(resolved_path: str, size: int) -> None:
+def _record_artifact_safely(
+    resolved_path: str,
+    size: int,
+    workspace_path: Optional[str] = None,
+    format_spec: Optional[str] = None,
+) -> None:
     """写入成功后记录产物;任何失败都静默,不影响写入结果。"""
     try:
         ctx = current_tool_context()
         if ctx is None or not ctx.session_id:
             return
         p = Path(resolved_path)
+        ws_path = (
+            workspace_path
+            if workspace_path is not None
+            else getattr(ctx, "workspace_root", None)
+        )
         artifact_repo.record_artifact(
             session_id=ctx.session_id,
             path=str(p),
             name=p.name,
             kind=detect_artifact_kind(resolved_path),
             size=size,
+            workspace_path=ws_path,
+            format_spec=format_spec,
         )
     except Exception:  # noqa: BLE001 — 记录产物失败绝不阻断写入
         logger.debug("write_file: 记录产物失败", exc_info=True)
