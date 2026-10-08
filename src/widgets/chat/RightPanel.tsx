@@ -246,6 +246,27 @@ export function PanelHeader({
   artifactCount = 0,
   changesCount = 0,
 }: PanelHeaderProps) {
+  // 宽度档位（三档小按钮；未提供回调时隐藏）
+  const presets = onApplyPreset
+    ? WIDTH_PRESETS.map((p) => (
+        <button
+          key={p.label}
+          className={
+            'min-w-[28px] min-h-[28px] px-1 inline-flex items-center justify-center text-ui-2xs font-medium rounded transition-colors ' +
+            (activePreset === p.label
+              ? 'bg-primary/15 text-primary'
+              : 'text-text-secondary hover:text-text hover:bg-bg-hover')
+          }
+          onClick={() => onApplyPreset(p.width)}
+          title={`面板宽度：${p.label}（${p.width}px）`}
+          aria-label={`面板宽度档位 ${p.label}`}
+          data-testid={`right-panel-preset-${p.label}`}
+        >
+          {p.label}
+        </button>
+      ))
+    : null;
+
   const maximizeButton = onToggleMaximize ? (
     <button
       className="p-2 text-text-secondary hover:text-text hover:bg-bg-hover rounded transition-colors"

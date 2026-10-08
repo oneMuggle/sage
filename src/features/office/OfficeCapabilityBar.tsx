@@ -12,12 +12,13 @@
  * 页面主流程。
  */
 
-import { CheckCircle2, RefreshCw, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, RefreshCw, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { officeApi } from '../../shared/api/officeApi';
 import type { OfficeCapabilities } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
+import { reportActionFailure } from '../../shared/lib/reportActionFailure';
 
 import { pdfFormats } from './officeCapabilities';
 
@@ -46,16 +47,19 @@ export function OfficeCapabilityBar({ onCapabilities }: OfficeCapabilityBarProps
   const { t } = useI18n();
   const [caps, setCaps] = useState<OfficeCapabilities | null>(null);
   const [probing, setProbing] = useState(false);
+  const [probeError, setProbeError] = useState<string | null>(null);
 
   const probe = useCallback(
     async (force: boolean) => {
       setProbing(true);
+      setProbeError(null);
       try {
         const result = await officeApi.getCapabilities(force);
         setCaps(result);
         onCapabilities?.(result);
-      } catch {
-        // 探测失败 → 整条隐藏（caps 维持 null）。辅助信息不阻塞页面。
+      } catch (err) {
+        const msg = reportActionFailure('探测文档处理引擎状态失败', err, { notify: force });
+        setProbeError(msg);
         setCaps(null);
         onCapabilities?.(null);
       } finally {
@@ -69,7 +73,29 @@ export function OfficeCapabilityBar({ onCapabilities }: OfficeCapabilityBarProps
     void probe(false);
   }, [probe]);
 
-  if (!caps) return null;
+  if (!caps) {
+    if (!probeError) return null;
+    return (
+      <div
+        className="flex items-center gap-2 flex-wrap text-xs text-amber-600 dark:text-amber-400"
+        data-testid="office-capability-error"
+      >
+        <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden />
+        <span>{probeError}</span>
+        <button
+          type="button"
+          onClick={() => void probe(true)}
+          disabled={probing}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-amber-500/40 hover:bg-amber-500/10 text-ui-2xs transition-colors disabled:opacity-50"
+          data-testid="office-caps-refresh"
+          aria-label={t('office.caps.refresh')}
+        >
+          <RefreshCw className={`w-3 h-3 ${probing ? 'animate-spin' : ''}`} aria-hidden />
+          {t('office.caps.refresh')}
+        </button>
+      </div>
+    );
+  }
 
   const formats = pdfFormats(caps);
   const pdfHint = formats.length
