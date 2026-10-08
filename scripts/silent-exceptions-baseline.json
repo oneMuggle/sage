@@ -1,0 +1,20 @@
+{
+  "description": "Per-subsystem ratchet ceiling for broad silent except-pass blocks in backend/.",
+  "subsystems": {
+    "backend/api": 6,
+    "backend/application": 0,
+    "backend/chat": 0,
+    "backend/core": 1,
+    "backend/data": 0,
+    "backend/domain": 0,
+    "backend/memory": 1,
+    "backend/office": 2,
+    "backend/orchestration": 0,
+    "backend/scheduler": 1,
+    "backend/services": 7,
+    "backend/skills": 1,
+    "backend/tools": 10,
+    "backend/utils": 2,
+    "backend/wiki": 2
+  }
+}

@@ -612,8 +612,8 @@ class ChatService:
                 for tool in self.tools.list_tools()
             ):
                 system_content += DIAGRAM_TOOL_PROMPT
-        except Exception:
-            pass
+        except Exception:  # noqa: BLE001
+            logger.debug("diagram tool prompt injection skipped", exc_info=True)
         return system_content
 
     def _apply_context_budget(self, system_content: str, query: str) -> str:

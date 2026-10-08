@@ -159,7 +159,7 @@ def default_compact_threshold() -> int:
         if raw is not None and raw.strip():
             return get_compact_threshold()
     except Exception:  # noqa: BLE001 — DB 不可用时按无覆盖处理
-        pass
+        logger.debug("compaction threshold settings lookup skipped", exc_info=True)
     try:
         # 延迟导入：history_context 模块级 import 了本模块，反向依赖必须惰性
         from backend.chat.history_context import history_token_budget
