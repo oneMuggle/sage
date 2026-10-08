@@ -23,6 +23,7 @@ import type { ToolCall } from '../../shared/lib/store';
 import { useResizablePanel } from '../../shared/lib/useResizablePanel';
 
 import { ConversationOutline } from './ConversationOutline';
+import { TrajectoryPane } from './TrajectoryPane';
 import { TurnList } from './TurnList';
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
 import { ArtifactsSection } from './artifacts/ArtifactsSection';
@@ -55,6 +56,7 @@ interface RightPanelProps {
 const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   'progress',
   'outline',
+  'trajectory',
   'changes',
   'preview',
   'artifacts',
@@ -65,6 +67,7 @@ const TAB_LABELS: Record<RightPanelTab, string> = {
   artifacts: '产物',
   changes: '变更',
   outline: '目录',
+  trajectory: '轨迹',
   preview: '预览',
 };
 
@@ -415,6 +418,9 @@ function RightPanelInner({
               onSelect={handleOutlineSelect}
             />
           </>
+        ) : tab === 'trajectory' ? (
+          /* 对标 F3: 模型轨迹——会话级时间线 + 搜索 + 工具 payload */
+          <TrajectoryPane sessionId={sessionId} />
         ) : tab === 'preview' ? (
           useRightPanelStore.getState().previewFilePath ? (
             <DocumentPreview filePath={useRightPanelStore.getState().previewFilePath!} />
