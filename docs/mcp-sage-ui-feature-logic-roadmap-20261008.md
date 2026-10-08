@@ -246,3 +246,25 @@ ightarrow$ 会话」合并树（批次 B-2）+ `TrajectoryPane` 二期后端事�
 3. **L4（Python 3.8 双轨防漂移门禁与架构基线收紧）**：
    - 新增零依赖 AST 门禁脚本 `scripts/check_py38_compat.py` 及单测/全仓契约测试 `backend/tests/unit/test_py38_compat_gate.py`，静态拦截四类破坏 `release/win7` Python 3.8 运行时的语法：缺失 `from __future__ import annotations` 时的 PEP 604/585 注解、运行时 `isinstance/issubclass(..., A | B)`、Pydantic `BaseModel` 字段与 FastAPI 路由参数/返回值中的 PEP 604/585 注解；同时为 `scripts/py38_compat_rewrite.py` 增加 `--fail-on-drift` 退出码支持。
    - 运行 `node scripts/architecture-check.mjs --tighten` 收紧双轨 `architecture-baseline.json` 基线。
+---
+
+## 八、P1 第二批落地实施记录（2026-10-08）
+
+### 8.1 P1 第一批双轨合入与在飞 PR 收口
+
+- **PR #1912 (`main`) & PR #1913 (`release/win7`)**：完成 F3（清零 IPC 已知缺口）、F2（Office 版本一致性与 409 冲突/幂等保护）、L4（Python 3.8 语法防漂移门禁与架构基线收紧）双轨交付并合入基线；同时正式关闭已被完整吸收并超集替代的陈旧在飞 PR **#1010** 与 **#1626**。
+
+### 8.2 P1 第二批（L2-R187 + L3 + F4 + U2）实施明细
+
+1. **L2-R187（数据仓储层契约单测全覆盖）**：
+   - 新增 `backend/tests/unit/data_repo/test_approval_decision_repo_r187.py`：覆盖 `ApprovalDecisionRepository` 的创建、按 ID/Session/状态查询、幂等状态流转（`pending -> approved/denied/expired`）、批量超期扫描及级联清理。
+   - 新增 `backend/tests/unit/data_repo/test_project_repo_r187.py`：覆盖 `ProjectRepository` 的项目登记、路径幂等去重、允许路径（`allowed_paths`）更新、关联会话统计与项目材质（`project_materials`）生命周期（仅 `main` 含 M3 材质扩展列；`release/win7` 适配基础表结构）。
+   - 新增 `backend/tests/unit/data_repo/test_session_todo_and_artifact_version_r187.py`：覆盖 `SessionTodoRepository` 的快照原子替换/跨会话隔离，以及 `ArtifactVersionRepository` 的单调递增版本号分配、内容去重与历史回溯。
+2. **L3（后端静默异常 AST 棘轮门禁与核心编排层清理）**：
+   - 新增零依赖 AST 扫描与棘轮门禁 `scripts/check_silent_exceptions.py`、基线清单 `scripts/silent-exceptions-baseline.json`（全仓锁死 33 处历史存量，核心编排与上下文工程层清零）及契约单测 `backend/tests/unit/test_silent_exception_ratchet.py`。
+   - 清理 `backend/context_engineering/compaction.py`、`backend/context_engineering/context_breakdown.py`、`backend/orchestration/chat_dispatcher.py`、`backend/application/services/chat_service.py` 中的 5 处静默 `except Exception: pass`，统一改为 `logger.debug(..., exc_info=True)` 可观测降级日志。
+3. **F4（`TrajectoryPane` 二期：耗时分布、角色/工具快筛与复制 JSON）**：
+   - 扩展 `src/features/chat/useConversationTrajectory.ts`：新增 `inputTokens` 字段透传与会话级 `summary` 汇总（`totalEntries`、`totalToolCalls`、`totalInputTokens`、`totalOutputTokens`、`totalLatencyMs`、`maxLatencyMs`）。
+   - 升级 `src/widgets/chat/TrajectoryPane.tsx`：新增顶部汇总遥测条（`trajectory-summary`）、角色与工具快筛胶囊（`全部 / 用户 / 模型 / 含工具`）、单步相对耗时热度条（`trajectory-latency-bar`）及展开详情一键复制 JSON（`trajectory-copy-json`）。
+4. **U2（左栏项目-会话树快捷新建防呆与当前会话高亮）**：
+   - 升级 `src/widgets/sidebar/sections/ProjectSection.tsx`：`handleNewChatInProject` 补齐 `410 project_path_missing` 失效目录徽标标记与专属提示（成功创建时自动清除失效标记），并为展开子会话行增加 `aria-current="page"` 语义无障碍标注，同时通过 `architecture-check.mjs --tighten` 将 `ProjectSection.tsx` 基线进一步收紧（`924 -> 923`）。
