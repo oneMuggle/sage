@@ -130,7 +130,12 @@ export const projectRoutes: Record<string, CommandRoute> = {
   projects_register: {
     method: 'POST',
     path: () => '/api/v1/projects',
-    body: (a) => ({ path: a.path }),
+    body: (a) => {
+      const body: Record<string, unknown> = { path: a.path };
+      if (a.allowed_paths !== undefined) body.allowed_paths = a.allowed_paths;
+      if (a.project_type !== undefined) body.project_type = a.project_type;
+      return body;
+    },
   },
   projects_remove: {
     method: 'DELETE',
@@ -149,6 +154,11 @@ export const projectRoutes: Record<string, CommandRoute> = {
   projects_list_sessions: {
     method: 'GET',
     path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/sessions`,
+  },
+  projects_update_allowed_paths: {
+    method: 'PUT',
+    path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/allowed-paths`,
+    body: (a) => ({ allowed_paths: a.allowed_paths ?? a.allowedPaths ?? [] }),
   },
   // M3 项目上下文沉淀 (2026-09-15): 概览字段编辑 + 资料 CRUD + 保存回答。
   // PATCH 用 model_fields_set 语义——只把前端实际改了/传了的字段写进 body,

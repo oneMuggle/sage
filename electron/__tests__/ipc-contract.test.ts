@@ -228,7 +228,7 @@ describe('IPC contract gate', () => {
     // Guards the parser above: if it silently found nothing, every special command would be
     // reported as a new gap with a misleading message.
     expect(mainProcessSpecialCommands()).toEqual(
-      expect.arrayContaining(['wiki_chat_stream', 'wiki_ingest_stream']),
+      expect.arrayContaining(['wiki_chat_stream', 'wiki_chat_cancel', 'wiki_ingest_stream']),
     );
   });
 
