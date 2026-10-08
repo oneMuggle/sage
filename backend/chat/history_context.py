@@ -109,6 +109,9 @@ def db_rows_to_history(rows: Sequence[Any]) -> List[Dict[str, str]]:
     rows = rows[last_sep_idx + 1:]
 
     history: List[Dict[str, str]] = []
+    # 连续重复 user 消息去重：与 events_to_history 保持语义一致，
+    # 避免 LLM 看到的"最后一个 user 消息"不是用户实际发送的最新消息。
+    last_user_content: Optional[str] = None
     for row in rows:
         # 防御性:即使未先切片,也不允许 separator 进入请求
         if getattr(row, "subtype", None) == "topic_separator":
@@ -121,7 +124,16 @@ def db_rows_to_history(rows: Sequence[Any]) -> List[Dict[str, str]]:
         content = getattr(row, "content", None)
         if content is None or not str(content).strip():
             continue
-        history.append({"role": role, "content": str(content)})
+        content_str = str(content)
+        # user 消息去重：连续相同内容只保留最后一条
+        if role == "user":
+            if content_str == last_user_content:
+                continue  # 跳过重复
+            last_user_content = content_str
+        else:
+            # assistant 消息打断连续性
+            last_user_content = None
+        history.append({"role": role, "content": content_str})
     return history
 
 
