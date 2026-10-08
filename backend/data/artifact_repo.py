@@ -150,6 +150,8 @@ def record_artifact(
     kind: str,
     size: int,
     tool_call_id: Optional[str] = None,
+    workspace_path: Optional[str] = None,
+    format_spec: Optional[str] = None,
 ) -> str:
     """记录一个新产物,返回 artifact id。落库成功后广播 ``artifact_created`` 事件（S7）。"""
     artifact_id = f"art_{uuid.uuid4().hex[:12]}"
@@ -159,10 +161,12 @@ def record_artifact(
     conn.execute(
         """
         INSERT INTO artifacts
-            (id, session_id, tool_call_id, path, name, kind, size, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (id, session_id, tool_call_id, path, name, kind, size, created_at,
+             workspace_path, format_spec)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (artifact_id, session_id, tool_call_id, path, name, kind, size, created_at),
+        (artifact_id, session_id, tool_call_id, path, name, kind, size, created_at,
+         workspace_path, format_spec),
     )
     conn.commit()
     _emit_artifact_event(

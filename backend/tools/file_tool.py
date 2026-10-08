@@ -141,8 +141,17 @@ def detect_artifact_kind(path: str) -> str:
     return "text"
 
 
-def _record_artifact_safely(resolved_path: str, size: int) -> None:
-    """写入成功后记录产物;任何失败都静默,不影响写入结果。"""
+def _record_artifact_safely(
+    resolved_path: str,
+    size: int,
+    workspace_path: Optional[str] = None,
+    format_spec: Optional[str] = None,
+) -> None:
+    """写入成功后记录产物;任何失败都静默,不影响写入结果。
+
+    ``workspace_path`` / ``format_spec`` 由 office_create_tool 传入，
+    供交付抽屉复用。file_tool 自身调用不传，保持向后兼容。
+    """
     try:
         ctx = current_tool_context()
         if ctx is None or not ctx.session_id:
@@ -154,6 +163,9 @@ def _record_artifact_safely(resolved_path: str, size: int) -> None:
             name=p.name,
             kind=detect_artifact_kind(resolved_path),
             size=size,
+            tool_call_id=ctx.tool_call_id if hasattr(ctx, "tool_call_id") else None,
+            workspace_path=workspace_path,
+            format_spec=format_spec,
         )
     except Exception:  # noqa: BLE001 — 记录产物失败绝不阻断写入
         logger.debug("write_file: 记录产物失败", exc_info=True)
