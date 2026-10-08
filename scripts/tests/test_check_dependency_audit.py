@@ -121,12 +121,12 @@ def test_rejects_malformed_pip_advisory_id(tmp_path, vulnerability_id):
     assert "invalid vulnerability entry or advisory ID" in result.stdout
 
 
-@pytest.mark.parametrize("aliases", [[], [""], ["GHSA-pip"], [1], "CVE-2024-1234"])
+@pytest.mark.parametrize("aliases", [[""], ["GHSA-pip"], [1], "CVE-2024-1234"])
 def test_rejects_malformed_pip_aliases(tmp_path, aliases):
     pip = {"dependencies": [{"name": "demo", "version": "1.0", "vulns": [{"id": "CVE-2024-1234", "aliases": aliases}]}]}
     result = run_gate(tmp_path, pip=pip)
     assert result.returncode == 1
-    assert "aliases must be a non-empty valid string list" in result.stdout
+    assert "aliases must be a list of valid advisory IDs" in result.stdout
 
 
 def test_accepts_pip_audit_object_format_and_exact_exception(tmp_path):
@@ -135,7 +135,7 @@ def test_accepts_pip_audit_object_format_and_exact_exception(tmp_path):
             {
                 "name": "demo",
                 "version": "1.0",
-                "vulns": [{"id": "GHSA-pip0-pip0-pip0"}],
+                "vulns": [{"id": "GHSA-pip0-pip0-pip0", "aliases": []}],
             }
         ]
     }
@@ -260,6 +260,76 @@ def test_accepts_npm_dependency_reference_strings(tmp_path):
     report["vulnerabilities"]["electron"]["via"].insert(0, "@electron/get")
     result = run_gate(tmp_path, npm=report, npm_prod=empty_npm(), NPM_AUDIT_ALL_OUTCOME="success", NPM_AUDIT_PROD_OUTCOME="success")
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_accepts_high_npm_meta_vulnerability_via_reported_dependency(tmp_path):
+    advisory = "GHSA-test-test-test"
+    report = {
+        "metadata": {
+            "vulnerabilities": {"low": 0, "moderate": 0, "high": 2, "critical": 0}
+        },
+        "vulnerabilities": {
+            "wrapper": {
+                "name": "wrapper",
+                "severity": "high",
+                "nodes": ["node_modules/wrapper"],
+                "via": ["braces"],
+            },
+            "braces": {
+                "name": "braces",
+                "severity": "high",
+                "nodes": ["node_modules/braces"],
+                "via": [
+                    {
+                        "url": f"https://github.com/advisories/{advisory}",
+                        "severity": "high",
+                    }
+                ],
+            },
+        },
+    }
+    package_lock = package_lock_data()
+    package_lock["packages"]["node_modules/wrapper"] = {"version": "1.0.0"}
+    package_lock["packages"]["node_modules/braces"] = {"version": "3.0.3"}
+    policy = base_policy()
+    policy["exceptions"].append(
+        {
+            "source": "npm",
+            "package": "braces",
+            "package_version": "3.0.3",
+            "advisory": advisory,
+            "advisory_url": f"https://github.com/advisories/{advisory}",
+            "affected_path": "node_modules/braces",
+            "actual_reachability": "test",
+            "controls": "test",
+            "owner": "Sage maintainers",
+            "review_by": "2099-01-01",
+        }
+    )
+    result = run_gate(
+        tmp_path,
+        policy=policy,
+        npm=report,
+        npm_prod=empty_npm(),
+        package_lock=package_lock,
+        NPM_AUDIT_ALL_OUTCOME="success",
+        NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_rejects_high_npm_meta_vulnerability_with_unresolved_reference(tmp_path):
+    report = npm_report()
+    report["vulnerabilities"]["electron"]["via"] = ["not-in-this-report"]
+    result = run_gate(
+        tmp_path,
+        npm=report,
+        npm_prod=empty_npm(),
+        NPM_AUDIT_ALL_OUTCOME="success",
+        NPM_AUDIT_PROD_OUTCOME="success",
+    )
+    assert result.returncode == 1
+    assert "lacks a matching valid advisory or dependency chain" in result.stdout
 
 
 def test_accepts_editable_pip_skip_entry(tmp_path):

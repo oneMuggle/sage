@@ -71,6 +71,8 @@ jobs:
       - name: Upload coverage
         if: always()
         uses: codecov/codecov-action@v4
+        # The pytest steps enforce coverage thresholds; Codecov is reporting-only.
+        continue-on-error: true
         with:
           file: backend/coverage.xml
           flags: backend-py38
@@ -164,6 +166,8 @@ jobs:
       - name: Upload coverage
         if: always()
         uses: codecov/codecov-action@v4
+        # The pytest steps enforce coverage thresholds; Codecov is reporting-only.
+        continue-on-error: true
         with:
           file: backend/coverage.xml
           flags: backend
@@ -478,6 +482,8 @@ jobs:
       - name: Upload coverage
         if: always()
         uses: codecov/codecov-action@v4
+        # The pytest steps enforce coverage thresholds; Codecov is reporting-only.
+        continue-on-error: true
         with:
           file: coverage/coverage-final.json
           flags: frontend
