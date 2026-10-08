@@ -50,6 +50,8 @@ import type {
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { diffSpans } from '../../shared/lib/textDiff';
 
+import { isRevisionConflict } from './previewRevision';
+
 export type OfficeEditPreviewPhase = 'compose' | 'previewing' | 'result' | 'applying' | 'applied';
 
 export interface OfficeEditPreviewDialogProps {
@@ -442,6 +444,10 @@ export function OfficeEditPreviewDialog({
   const [previewedOps, setPreviewedOps] = useState<OfficeUpdateOp[] | null>(null);
   // Set once /office/doc/{id}/update confirmed the apply (round 2, R1).
   const [applied, setApplied] = useState<OfficeDocUpdateResponse | null>(null);
+  // F1 (office-p0-a): the revision the preview ran against travels with the
+  // apply, and one retry token per previewed batch makes a double-submit a
+  // replay instead of a second write.
+  const [idempotencyKey, setIdempotencyKey] = useState<string | null>(null);
 
   const setField = (key: keyof ComposeState) => (value: string) =>
     setCompose((prev) => ({ ...prev, [key]: value }));
@@ -461,6 +467,7 @@ export function OfficeEditPreviewDialog({
       });
       setResult(res);
       setPreviewedOps(ops);
+      setIdempotencyKey(`${doc.id}:${res.preview_id ?? Date.now()}`);
       setPhase('result');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -477,13 +484,29 @@ export function OfficeEditPreviewDialog({
     if (!previewedOps || phase !== 'result') return;
     setPhase('applying');
     try {
-      const res = await officeApi.updateDocument({ doc_id: doc.id, ops: previewedOps });
+      const res = await officeApi.updateDocument({
+        doc_id: doc.id,
+        ops: previewedOps,
+        // Optimistic concurrency: refuse to overwrite a file that changed
+        // after the diff the user just approved (backend answers 409).
+        expected_revision: result?.source_revision ?? undefined,
+        idempotency_key: idempotencyKey ?? undefined,
+      });
       setApplied(res);
       setPhase('applied');
       toast.success(t('office.edit.applied'));
       onApplied?.(doc.id);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      if (isRevisionConflict(msg)) {
+        // The document moved on between preview and apply: the approved
+        // diff is void, so re-run the preview against the current file
+        // instead of leaving a stale diff on screen.
+        toast.error(t('office.edit.revisionConflict'));
+        setPhase('result');
+        void handlePreview();
+        return;
+      }
       toast.error(`${t('office.edit.applyFailed')}: ${msg}`);
       setPhase('result');
     }
@@ -494,6 +517,7 @@ export function OfficeEditPreviewDialog({
     setResult(null);
     setPreviewedOps(null);
     setApplied(null);
+    setIdempotencyKey(null);
   };
 
   const inputClass = 'w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text';
