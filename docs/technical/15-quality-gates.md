@@ -17,7 +17,7 @@ Sage 项目使用四层质量门禁：
 
 | Job | 职责 | 触发条件 |
 | --- | --- | --- |
-| `architecture-check` | `scripts/architecture-check.mjs`——单文件行数棘轮（基线 `architecture-baseline.json`，新文件 >800 行即红；基线键 POSIX 规范化，Windows 亦可跑） | 每次 push/PR |
+| `architecture-check` | `scripts/architecture-check.mjs`——单文件行数棘轮（基线 `architecture-baseline.json`，新文件 >800 行即红；基线键 POSIX 规范化，Windows 亦可跑；`--tighten` 把基线逐项收紧到当前行数（只降不升），`--max-slack=N` 在松弛超过 N 行时报错，默认 100，opt-in，暂未接入 CI） | 每次 push/PR |
 | `count-lines` | 行数统计 | 每次 push/PR |
 | `dependency-audit` | npm audit + pip-audit（只读报告，Critical/High 由聚合门禁执行）+ **environment.yml ↔ requirements.txt 漂移校验**（`scripts/check_env_yml_drift.py`，2026-09 新增） | main/develop 及其 PR |
 | `backend` (Python) | ruff → import-linter（六边形 KEPT）→ mypy（domain/ports）→ pytest `-n auto` + **coverage ≥ 80% 强门禁** → hex 主路径回归 | 每次 push/PR |
