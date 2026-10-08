@@ -1,7 +1,7 @@
 // src/widgets/chat/artifacts/ArtifactRow.tsx
-import { FileText, FileCode, FileImage, FileSpreadsheet, File, ShieldCheck } from lucide-react;
+import { FileText, FileCode, FileImage, FileSpreadsheet, File, ShieldCheck } from 'lucide-react';
 
-import type { Artifact, ArtifactKind } from ../../../features/artifacts/artifactApi;
+import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
 
 interface ArtifactRowProps {
   artifact: Artifact;
@@ -24,10 +24,10 @@ const KIND_ICONS: Record<ArtifactKind, typeof File> = {
 };
 
 const OFFICE_DELIVERY_KINDS: ReadonlySet<ArtifactKind> = new Set([
-  docx,
-  xlsx,
-  pptx,
-  pdf,
+  'docx',
+  'xlsx',
+  'pptx',
+  'pdf',
 ]);
 
 function formatSize(bytes: number): string {

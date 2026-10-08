@@ -31,6 +31,16 @@ describe('taskCenterStore 交付抽屉 (A4)', () => {
     });
   });
 
+  it('openDelivery 支持直接附带 OfficeDeliveryRef（F1 产物直通交付抽屉）', () => {
+    const ref = { workspacePath: '/ws/out', filePath: '/ws/out/report.docx', formatSpec: null };
+    useTaskCenterStore.getState().openDelivery({ kind: 'office', entryId: 'artifact:art-1', ref });
+    expect(useTaskCenterStore.getState().delivery).toEqual({
+      kind: 'office',
+      entryId: 'artifact:art-1',
+      ref,
+    });
+  });
+
   it('openDelivery 切换 office 抽屉', () => {
     useTaskCenterStore.getState().openDelivery({ kind: 'office', entryId: 'office:generate' });
     expect(useTaskCenterStore.getState().delivery).toEqual({

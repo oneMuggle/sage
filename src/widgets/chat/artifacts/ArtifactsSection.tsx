@@ -3,8 +3,29 @@ import { RefreshCw, FolderOpen } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
+import { useTaskCenterStore } from '../../../features/task-center/taskCenterStore';
+import type { WordFormatSpec } from '../../../shared/api/types';
 
 import { ArtifactRow } from './ArtifactRow';
+
+function deriveWorkspacePath(filePath: string, explicitWorkspace?: string | null): string {
+  if (explicitWorkspace && explicitWorkspace.trim()) {
+    return explicitWorkspace.trim();
+  }
+  const normalized = filePath.replace(/\\/g, '/');
+  const idx = normalized.lastIndexOf('/');
+  return idx > 0 ? filePath.slice(0, idx) : filePath;
+}
+
+function parseFormatSpec(raw?: string | null): WordFormatSpec | null {
+  if (!raw || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as WordFormatSpec) : null;
+  } catch {
+    return null;
+  }
+}
 
 interface ArtifactsSectionProps {
   artifacts: Artifact[];
@@ -59,6 +80,7 @@ export function ArtifactsSection({
 }: ArtifactsSectionProps) {
   // right-panel R4 批次 C: 类型过滤（仅影响列表渲染，计数徽标口径不变）
   const [filter, setFilter] = useState<KindFilter>('all');
+  const openDelivery = useTaskCenterStore((s) => s.openDelivery);
 
   const filtered = useMemo(
     () =>
@@ -72,12 +94,10 @@ export function ArtifactsSection({
     return <div className="p-3 text-sm text-muted">请先选择会话</div>;
   }
 
-  const openDelivery = useTaskCenterStore((s) => s.openDelivery);
-
   // F1: Office 产物一键打开 OfficeDeliveryDrawer（质检 + 排版修复 + 对比）
   const handleOpenDelivery = (artifact: Artifact) => {
     openDelivery({
-      kind: office,
+      kind: 'office',
       entryId: `artifact:${artifact.id}`,
       ref: {
         workspacePath: deriveWorkspacePath(artifact.path, artifact.workspace_path),
@@ -133,7 +153,7 @@ export function ArtifactsSection({
             <button
               key={g.key}
               className={
-                'px-1.5 py-0.5 text-[11px] rounded transition-colors ' +
+                'px-1.5 py-0.5 text-ui-2xs rounded transition-colors ' +
                 (filter === g.key
                   ? 'bg-primary/15 text-primary'
                   : 'text-text-secondary hover:text-text hover:bg-bg-hover')
