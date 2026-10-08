@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from backend.data.session_event_repo import (
     EVENT_COMPACTION_PERFORMED,
@@ -89,6 +89,10 @@ def events_to_history(events: Sequence[Any]) -> List[Dict[str, str]]:
     events = events[last_sep_idx + 1:]
 
     history: List[Dict[str, str]] = []
+    # 连续重复 user 消息去重：用户可能因网络问题或误操作重复发送相同内容，
+    # 投影时只保留最后一次（避免 LLM 看到的"最后一个 user 消息"不是最新的）。
+    # assistant 消息打断连续性 —— 同一轮对话内的重复才算"连续"。
+    last_user_content: Optional[str] = None
     for event in events:
         if _event_type(event) != EVENT_MESSAGE_APPENDED:
             continue
@@ -107,7 +111,16 @@ def events_to_history(events: Sequence[Any]) -> List[Dict[str, str]]:
         content = payload.get("content")
         if content is None or not str(content).strip():
             continue
-        history.append({"role": role, "content": str(content)})
+        content_str = str(content)
+        # user 消息去重：连续相同内容只保留最后一条
+        if role == "user":
+            if content_str == last_user_content:
+                continue  # 跳过重复
+            last_user_content = content_str
+        else:
+            # assistant 消息打断连续性
+            last_user_content = None
+        history.append({"role": role, "content": content_str})
     return history
 
 
