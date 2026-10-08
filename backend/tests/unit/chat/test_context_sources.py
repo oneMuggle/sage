@@ -2,7 +2,12 @@
 
 from backend.chat import project_context as pc
 from backend.chat.context_breakdown import build_breakdown_snapshot
-from backend.chat.context_sources import compute_context_sources
+from backend.chat.context_sources import (
+    MAX_ITEMS_PER_SOURCE,
+    compute_context_sources,
+    excluded_items,
+    source_items,
+)
 from backend.chat.env_context import build_environment_block
 
 
@@ -99,3 +104,85 @@ def test_snapshot_includes_scaled_sources():
     assert scaled["calibrated"] is True
     ratio = scaled["sources"][0]["tokens"] / raw["sources"][0]["tokens"]
     assert 1.9 < ratio < 2.1
+
+
+# ── C1 细粒度来源追溯：只提取 payload 中真实存在的标识 ──────────────────
+
+
+def test_material_items_carry_real_ids_and_truncation_flag():
+    block = "\n".join(
+        [
+            pc.MATERIALS_HEADER,
+            "以下是用户显式添加的参考资料。",
+            "--- 4ddd271f-1764-4553-bd19-a12724cdf2b1 [ready] ---",
+            "完整资料内容" * 20,
+            "--- 9f0c2a11-2233-4455-6677-8899aabbccdd [ready] (来源消息 msg_7) ---",
+            "被截断的资料内容" * 20 + " [截断]",
+        ]
+    )
+    src = _by_key(compute_context_sources([{"role": "system", "content": block}]))
+    items = src["project_materials"]["items"]
+    assert [i["id"] for i in items] == [
+        "4ddd271f-1764-4553-bd19-a12724cdf2b1",
+        "9f0c2a11-2233-4455-6677-8899aabbccdd",
+    ]
+    assert items[0]["truncated"] is False
+    assert items[1]["truncated"] is True
+    assert "来源消息 msg_7" in items[1]["label"]
+    assert src["project_materials"]["identifiable"] is True
+
+
+def test_excluded_materials_are_reported_not_invented():
+    block = "\n".join(
+        [
+            pc.MATERIALS_HEADER,
+            "--- aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee [ready] ---",
+            "资料",
+            "另有 3 条资料超出预算被排除。",
+        ]
+    )
+    src = _by_key(compute_context_sources([{"role": "system", "content": block}]))
+    assert src["project_materials"]["excluded"] == 3
+    assert len(src["project_materials"]["items"]) == 1
+
+
+def test_skill_and_attachment_items_use_declared_names():
+    skills = "<available-skills>\n- /search：搜索\n- /writer：写作\n</available-skills>"
+    activated = (
+        "以下是根据用户本次消息自动激活的技能指令 (A16 Skill Auto-Activation):\n\n"
+        "Skill 'report-writing' auto-activated: 写报告"
+    )
+    attachments = "<attachments>\n=== docs/spec.md ===\n摘要\n</attachments>"
+    src = _by_key(
+        compute_context_sources(
+            [{"role": "system", "content": "s"}, {"role": "system", "content": "\n\n".join([skills, activated, attachments])}]
+        )
+    )
+    assert [i["id"] for i in src["skills"]["items"]] == ["search", "writer"]
+    assert [i["id"] for i in src["skills_activated"]["items"]] == ["report-writing"]
+    assert [i["id"] for i in src["attachments"]["items"]] == ["docs/spec.md"]
+
+
+def test_memory_source_is_marked_not_identifiable():
+    block = "以下是相关的记忆上下文：\n- 用户偏好简洁\n- 项目用 Python 3.8"
+    src = _by_key(compute_context_sources([{"role": "system", "content": "s"}, {"role": "system", "content": block}]))
+    assert src["memory"]["identifiable"] is False
+    assert "items" not in src["memory"]
+
+
+def test_items_are_capped_with_omitted_count():
+    lines = [pc.MATERIALS_HEADER]
+    for i in range(MAX_ITEMS_PER_SOURCE + 3):
+        lines.append(f"--- mat-{i:032x} [ready] ---")
+        lines.append("内容")
+    src = _by_key(compute_context_sources([{"role": "system", "content": "\n".join(lines)}]))
+    entry = src["project_materials"]
+    assert len(entry["items"]) == MAX_ITEMS_PER_SOURCE
+    assert entry["omitted_items"] == 3
+
+
+def test_source_items_helpers_return_empty_for_unknown_sources():
+    assert source_items("memory", "- 记忆条目") == []
+    assert source_items("project_overview", "项目说明") == []
+    assert excluded_items("project_materials", "另有 2 条资料超出预算被排除。") == 2
+    assert excluded_items("skills", "另有 2 条资料超出预算被排除。") == 0

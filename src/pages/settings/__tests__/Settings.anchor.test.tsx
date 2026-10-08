@@ -8,7 +8,9 @@ import { Settings } from '../Settings';
 // 各 tab 组件一律替换为带锚点的占位：P1-4 关心的是「切 tab → 定位 → 高亮」
 // 这条链路，与各 tab 内部真实控件无关。真实控件的锚点由 components.test.tsx
 // 与各 tab 自己的测试覆盖。
-vi.mock('../useSettings', () => ({ useSettings: () => ({ settings: {}, updateSettings: vi.fn(), resetSettings: vi.fn() }) }));
+vi.mock('../useSettings', () => ({
+  useSettings: () => ({ settings: {}, updateSettings: vi.fn(), resetSettings: vi.fn() }),
+}));
 vi.mock('../BasicTab', () => ({ BasicTab: () => <div data-testid="tab-basic" /> }));
 vi.mock('../EffectiveSettingsSummary', () => ({ EffectiveSettingsSummary: () => <div /> }));
 vi.mock('../EndpointsTab', () => ({ EndpointsTab: () => <div data-testid="tab-endpoints" /> }));
@@ -24,7 +26,9 @@ vi.mock('../MemorySettingsTab', () => ({
   MemorySettingsTab: () => (
     <div data-testid="tab-memory">
       <div data-settings-anchor="autoMemory">自动记忆提取</div>
-      <a href="/memory" data-testid="memory-workspace-link">打开记忆页面</a>
+      <a href="/memory" data-testid="memory-workspace-link">
+        打开记忆页面
+      </a>
     </div>
   ),
 }));
@@ -43,10 +47,16 @@ vi.mock('../OrchestrationTab', () => ({
     </div>
   ),
 }));
-vi.mock('../ProvidersManager', () => ({ ProvidersManager: () => <div data-testid="tab-providers" /> }));
-vi.mock('../RemoteWorkspacesTab', () => ({ RemoteWorkspacesTab: () => <div data-testid="tab-remote-workspaces" /> }));
+vi.mock('../ProvidersManager', () => ({
+  ProvidersManager: () => <div data-testid="tab-providers" />,
+}));
+vi.mock('../RemoteWorkspacesTab', () => ({
+  RemoteWorkspacesTab: () => <div data-testid="tab-remote-workspaces" />,
+}));
 vi.mock('../RuntimeEnvTab', () => ({ RuntimeEnvTab: () => <div data-testid="tab-runtime" /> }));
-vi.mock('../ToolsConnectionsTab', () => ({ ToolsConnectionsTab: () => <div data-testid="tab-tools-connections" /> }));
+vi.mock('../ToolsConnectionsTab', () => ({
+  ToolsConnectionsTab: () => <div data-testid="tab-tools-connections" />,
+}));
 vi.mock('../UpdatesTab', () => ({ UpdatesTab: () => <div data-testid="tab-updates" /> }));
 vi.mock('../UsageStatsTab', () => ({ UsageStatsTab: () => <div data-testid="tab-usage-stats" /> }));
 vi.mock('../ZoteroTab', () => ({ ZoteroTab: () => <div data-testid="tab-zotero" /> }));
@@ -136,6 +146,8 @@ describe('设置搜索锚点定位 (P1-4)', () => {
 
 describe('记忆 tab 合并 (P1-5)', () => {
   it('只存在一个记忆 tab —— 不再有「记忆与知识」', () => {
+    // 本分支的设置导航是分组折叠：先落到 memory，令其所在分组展开。
+    localStorage.setItem('sage:settings-tab', 'memory');
     renderSettings();
     // IA1/IA2 的可执行判据：左侧导航里「记忆」只出现一次。
     const navButtons = screen.getAllByRole('button');

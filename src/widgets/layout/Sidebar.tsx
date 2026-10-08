@@ -9,6 +9,7 @@ import {
   Network,
   Sparkles,
   FileSpreadsheet,
+  Folder,
   HelpCircle,
   ListTodo,
   UserCog,
@@ -24,6 +25,7 @@ import { toast } from 'sonner';
 
 import { usePermissionState } from '../../entities/permission/permissionState';
 import { useQuestionState } from '../../entities/question/questionState';
+import { isEndpointConfigured } from '../../entities/setting/endpointReadiness';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { useArtifactEventsStore } from '../../features/artifacts/artifactEventsStore';
 import { useAttentionSnapshot, attentionSummary, attentionTitle } from '../../features/attention';
@@ -33,7 +35,11 @@ import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { deleteSessionCascade } from '../../features/send-message/useChat';
 import { sessionApi } from '../../shared/api/sessionApi';
 import { requestOpenCommandPalette } from '../../shared/lib/commandPaletteEvents';
-import { unlockFeature, useFeatureExplicitlyDisabled, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
+import {
+  unlockFeature,
+  useFeatureExplicitlyDisabled,
+  useFeatureUnlock,
+} from '../../shared/lib/hooks/useFeatureUnlock';
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import { AttnBadge, BrandLogo, LiveDot, Tooltip, type LiveState } from '../../shared/ui';
@@ -84,6 +90,8 @@ interface NavItem {
 
 const primaryNavItems: NavItem[] = [
   { path: '/chat', label: '对话', icon: MessageSquare },
+  { path: '/projects', label: '项目工作台', icon: Folder },
+  { path: '/office', label: '文档与验收', icon: FileSpreadsheet },
   { path: '/todos', label: '待办', icon: ListTodo },
   { path: '/memory', label: '记忆', icon: Brain },
   { path: '/knowledge', label: '知识库', icon: BookOpen },
@@ -91,7 +99,6 @@ const primaryNavItems: NavItem[] = [
 const settingsNavItem: NavItem = { path: '/settings', label: '设置', icon: Settings };
 const moreNavItems: NavItem[] = [
   { path: '/scheduled', label: '定时任务', icon: CalendarClock },
-  { path: '/office', label: 'Office', icon: FileSpreadsheet },
   { path: '/skills', label: '技能', icon: Sparkles },
   { path: '/agents', label: '智能体', labelKey: 'sidebar.nav.agents', icon: Bot },
   { path: '/orchestration', label: '编排', icon: Network },
@@ -131,9 +138,12 @@ const LOCKED_FEATURE_HINTS: Record<string, string> = {
  */
 const ADVANCED_FEATURE_BY_PATH: Record<string, string> = {
   '/orchestration': 'orchestration',
-  '/office': 'office',
   '/arena': 'arena-accounts',
   '/arena-accounts': 'arena-accounts',
+  // 合并取舍（#1867 rebase）：/office 已按产品路线提升进一级导航（解决「功能
+  // 不存在」的错觉），但仍保留上游 P1-7 的一次性解锁门控 —— 灰态可见 → 点击
+  // 给出用途说明 → 确认后进入并常驻。位置提升了，黑盒自动放行仍然没有。
+  '/office': 'office',
 };
 
 interface SidebarProps {
@@ -183,8 +193,8 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
   const artifactCount = useArtifactEventsStore((s) =>
     currentSessionId ? (s.counts[currentSessionId] ?? 0) : 0,
   );
-  const seenArtifactCount = useRightPanelStore(
-    (s) => (currentSessionId ? (s.seenArtifactCount[currentSessionId] ?? 0) : 0),
+  const seenArtifactCount = useRightPanelStore((s) =>
+    currentSessionId ? (s.seenArtifactCount[currentSessionId] ?? 0) : 0,
   );
   const attention = useAttentionSnapshot({
     sessionId: currentSessionId,
@@ -254,7 +264,8 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
   }, [location.pathname]);
 
   useEffect(() => {
-    if (!chatEndpoint?.baseUrl || !chatEndpoint.apiKey) {
+    let cancelled = false;
+    if (!chatEndpoint || !isEndpointConfigured(chatEndpoint)) {
       setConnectionStatus('not-configured');
       return;
     }
@@ -262,15 +273,20 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
       chatEndpoint.baseUrl,
       chatEndpoint.apiKey,
       settings.modelSelections.chatModel.modelId ?? undefined,
+      chatEndpoint.protocol,
     )
       .then((result) => {
+        if (cancelled) return;
         setConnectionStatus(result.success ? 'connected' : 'error');
         setLatency(result.latency ?? null);
       })
       .catch(() => {
-        setConnectionStatus('error');
+        if (!cancelled) setConnectionStatus('error');
       });
-  }, [chatEndpoint?.baseUrl, chatEndpoint?.apiKey, settings.modelSelections.chatModel.modelId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [chatEndpoint, settings.modelSelections.chatModel.modelId]);
 
   const handleNewSession = () => {
     // Phase 7: 新建会话跳转到欢迎屏，由用户在欢迎屏输入后再创建 session
@@ -475,7 +491,11 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
               data-testid={collapsed ? 'sidebar-expand-button' : 'sidebar-collapse-button'}
               className="flex items-center justify-center w-10 h-10 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
             >
-              {collapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+              {collapsed ? (
+                <PanelLeftOpen className="w-5 h-5" />
+              ) : (
+                <PanelLeftClose className="w-5 h-5" />
+              )}
             </button>
           )}
         </div>
@@ -489,10 +509,7 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
           </div>
 
           {/* UX-IA R1 A1：顶部主操作条（对标 ChatGPT「新聊天 / 搜索聊天」） */}
-          <div
-            className="px-2 pt-2 flex items-center gap-1"
-            data-testid="sidebar-primary-actions"
-          >
+          <div className="px-2 pt-2 flex items-center gap-1" data-testid="sidebar-primary-actions">
             <button
               type="button"
               onClick={handleNewSession}

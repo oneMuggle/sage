@@ -1,8 +1,10 @@
 """project_material_repo 单元测试 (M3 项目上下文沉淀, 2026-09-15)。
 
 TDD: 先写失败测试, 再实现。覆盖:
-- add: 新增资料, 计算 content_hash, 状态 pending_index
+- add: 新增资料, 计算 content_hash, 状态默认 ready (添加即生效, P0 修复 2026-09-20)
+- add (status=): 显式 pending_index 保留给异步索引; 非法 status 抛 ValueError
 - add (duplicate): 同 project+hash 幂等, 返回已有行
+- add (duplicate, failed): 已有行为 failed 时按本次 status 复活并清空 error_message
 - list_by_project: 按项目列出资料
 - remove: 删除资料
 - mark_ready: 标记索引完成
@@ -49,10 +51,10 @@ def material_repo(setup_test_db):
 class TestProjectMaterialAdd:
     """add: 新增资料。"""
 
-    def test_add_creates_material_with_pending_status(
+    def test_add_creates_material_ready_by_default(
         self, material_repo, project
     ):
-        """新增资料, 状态 pending_index, content_hash 自动计算。"""
+        """新增资料默认 ready (无异步索引, 添加即注入), content_hash 自动计算。"""
         material = material_repo.add(
             project_id=project.id,
             content="# Test content\nSome text",
@@ -60,10 +62,25 @@ class TestProjectMaterialAdd:
         )
         assert material.project_id == project.id
         assert material.source_message_id == "msg_123"
-        assert material.status == "pending_index"
+        assert material.status == "ready"
+        assert material.error_message is None
         assert material.content_hash  # SHA-256 hex
         assert material.wiki_page_path is None
         assert material.created_at > 0
+
+    def test_add_with_explicit_pending_status(self, material_repo, project):
+        """显式 status=pending_index 保留给未来的异步索引管线。"""
+        material = material_repo.add(
+            project.id, "# Async indexed", "msg_1", status="pending_index"
+        )
+        assert material.status == "pending_index"
+        assert material_repo.get_active_materials_for_project(project.id) == []
+
+    def test_add_rejects_invalid_status(self, material_repo, project):
+        """非法 status 直接拒绝, 不写库。"""
+        with pytest.raises(ValueError, match="Invalid material status"):
+            material_repo.add(project.id, "# Bad", "msg_1", status="indexed")
+        assert material_repo.list_by_project(project.id) == []
 
     def test_add_dedup_by_project_and_hash(self, material_repo, project):
         """同 project+hash 幂等, 返回已有行而非新建。"""
@@ -72,6 +89,25 @@ class TestProjectMaterialAdd:
         m2 = material_repo.add(project.id, content, "msg_2")
         assert m1.id == m2.id
         assert m1.content_hash == m2.content_hash
+
+    def test_add_revives_failed_duplicate(self, material_repo, project):
+        """已有行 failed 时重复添加 = 重试: 同 id, 状态复活, error_message 清空。"""
+        content = "# Retry me"
+        m1 = material_repo.add(project.id, content, "msg_1")
+        assert material_repo.mark_failed(m1.id, "index error") is True
+        m2 = material_repo.add(project.id, content, "msg_2")
+        assert m2.id == m1.id
+        assert m2.status == "ready"
+        assert m2.error_message is None
+        assert len(material_repo.list_by_project(project.id)) == 1
+
+    def test_add_dedup_keeps_pending_row_untouched(self, material_repo, project):
+        """已有行 pending_index (索引中) 时重复添加不改状态。"""
+        content = "# Still indexing"
+        m1 = material_repo.add(project.id, content, "msg_1", status="pending_index")
+        m2 = material_repo.add(project.id, content, "msg_2")
+        assert m2.id == m1.id
+        assert m2.status == "pending_index"
 
     def test_add_different_content_creates_separate(
         self, material_repo, project
@@ -137,7 +173,10 @@ class TestProjectMaterialStatus:
 
     def test_mark_ready(self, material_repo, project):
         """标记索引完成, 状态变 ready, wiki_page_path 可选。"""
-        material = material_repo.add(project.id, "# Content", "msg_1")
+        material = material_repo.add(
+            project.id, "# Content", "msg_1", status="pending_index"
+        )
+        assert material.status == "pending_index"
         updated = material_repo.mark_ready(
             material.id, wiki_page_path="/wiki/page.md"
         )
@@ -167,10 +206,9 @@ class TestProjectMaterialGetActive:
         self, material_repo, project
     ):
         """只返回 status=ready 的资料, 忽略 pending/failed。"""
-        m1 = material_repo.add(project.id, "# Ready", "msg_1")
-        material_repo.add(project.id, "# Pending", "msg_2")
+        m1 = material_repo.add(project.id, "# Ready", "msg_1")  # 默认 ready
+        material_repo.add(project.id, "# Pending", "msg_2", status="pending_index")
         m3 = material_repo.add(project.id, "# Failed", "msg_3")
-        material_repo.mark_ready(m1.id, "/wiki/ready.md")
         material_repo.mark_failed(m3.id, "error")
         active = material_repo.get_active_materials_for_project(project.id)
         assert len(active) == 1
@@ -181,7 +219,7 @@ class TestProjectMaterialGetActive:
         self, material_repo, project
     ):
         """无 ready 资料时返回空列表。"""
-        material_repo.add(project.id, "# Pending", "msg_1")
+        material_repo.add(project.id, "# Pending", "msg_1", status="pending_index")
         active = material_repo.get_active_materials_for_project(project.id)
         assert active == []
 
@@ -191,8 +229,6 @@ class TestProjectMaterialGetActive:
         """返回的资料按 created_at ASC 排序 (旧的先注入)。"""
         m1 = material_repo.add(project.id, "# First", "msg_1", now_ms=1000)
         m2 = material_repo.add(project.id, "# Second", "msg_2", now_ms=2000)
-        material_repo.mark_ready(m1.id, "/wiki/1.md")
-        material_repo.mark_ready(m2.id, "/wiki/2.md")
         active = material_repo.get_active_materials_for_project(project.id)
         assert len(active) == 2
         # 旧的在前——按注入顺序

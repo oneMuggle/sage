@@ -25,18 +25,31 @@ vi.mock('../../../shared/api/settingsClient', () => ({
   settingsClient: {
     getPreference: vi.fn(async () => null),
     setPreference: vi.fn(async () => undefined),
+    // 本分支（批次 A2）的偏好卡片走严格回执读写；签名与真实 settingsClient 一致
+    getPreferenceStrict: vi.fn(async () => null),
+    setPreferenceStrict: vi.fn(async () => undefined),
   },
 }));
 vi.mock('../../../features/manage-settings/useSettings', () => ({
   useSettings: () => ({
     settings: { autoMemory: true, confirmDelete: true },
     updateSettings: vi.fn(),
+    // 本分支（批次 A2）的记忆开关走严格回执写入
+    updateSettingsStrict: vi.fn(async () => undefined),
   }),
 }));
 // 与本次改动无关的重组件，隔离出去
 vi.mock('../ContextTurnLimitSelect', () => ({ ContextTurnLimitSelect: () => null }));
 vi.mock('../components', () => ({
-  SettingRow: ({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) => (
+  SettingRow: ({
+    label,
+    desc,
+    children,
+  }: {
+    label: string;
+    desc?: string;
+    children: React.ReactNode;
+  }) => (
     <div>
       <span>{label}</span>
       {desc ? <span>{desc}</span> : null}
@@ -49,10 +62,18 @@ vi.mock('sonner', () => ({
   toast: { info: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }));
 
+import { I18nProvider } from '../../../shared/lib/i18n';
 import { MemoryKnowledgeTab } from '../MemoryKnowledgeTab';
 
 function page(items: Array<{ id: string }>, total = items.length) {
-  return { items, page: 1, total, page_size: items.length, layer: 'all' as const, source_breakdown: {} };
+  return {
+    items,
+    page: 1,
+    total,
+    page_size: items.length,
+    layer: 'all' as const,
+    source_breakdown: {},
+  };
 }
 
 async function clickClearAll() {
@@ -68,19 +89,29 @@ describe('P1-1 清除全部记忆', () => {
   });
 
   it('开关文案澄清：关闭只停止新增，不删除已有', () => {
-    render(<MemoryKnowledgeTab />);
+    render(
+      <I18nProvider defaultLocale="zh">
+        <MemoryKnowledgeTab />
+      </I18nProvider>,
+    );
     expect(screen.getByText(/关闭只停止新增，已记住的内容仍保留/)).toBeInTheDocument();
   });
 
   it('统计后展示条数，未输入确认短语时禁止执行', async () => {
     getMemoriesMock.mockResolvedValue(page([{ id: 'a' }, { id: 'b' }], 2));
-    render(<MemoryKnowledgeTab />);
+    render(
+      <I18nProvider defaultLocale="zh">
+        <MemoryKnowledgeTab />
+      </I18nProvider>,
+    );
     await clickClearAll();
 
     expect(screen.getByTestId('clear-all-confirm').textContent).toContain('2');
     expect(screen.getByTestId('clear-all-confirm-yes')).toBeDisabled();
 
-    fireEvent.change(screen.getByTestId('clear-all-confirm-input'), { target: { value: '随便写' } });
+    fireEvent.change(screen.getByTestId('clear-all-confirm-input'), {
+      target: { value: '随便写' },
+    });
     expect(screen.getByTestId('clear-all-confirm-yes')).toBeDisabled();
     expect(deleteMemoryMock).not.toHaveBeenCalled();
   });
@@ -90,7 +121,11 @@ describe('P1-1 清除全部记忆', () => {
       .mockResolvedValueOnce(page([{ id: 'a' }, { id: 'b' }], 2))
       .mockResolvedValueOnce(page([{ id: 'a' }, { id: 'b' }], 2))
       .mockResolvedValue(page([]));
-    render(<MemoryKnowledgeTab />);
+    render(
+      <I18nProvider defaultLocale="zh">
+        <MemoryKnowledgeTab />
+      </I18nProvider>,
+    );
     await clickClearAll();
 
     fireEvent.change(screen.getByTestId('clear-all-confirm-input'), {
@@ -101,13 +136,19 @@ describe('P1-1 清除全部记忆', () => {
     await waitFor(() => expect(deleteMemoryMock).toHaveBeenCalledTimes(2), { timeout: 5000 });
     expect(deleteMemoryMock).toHaveBeenCalledWith('a');
     expect(deleteMemoryMock).toHaveBeenCalledWith('b');
-    await waitFor(() => expect(screen.getByTestId('clear-all-done')).toBeTruthy(), { timeout: 5000 });
+    await waitFor(() => expect(screen.getByTestId('clear-all-done')).toBeTruthy(), {
+      timeout: 5000,
+    });
     expect(toast.success).toHaveBeenCalledWith('已清除 2 条记忆');
   }, 20000);
 
   it('取消则不删除任何内容', async () => {
     getMemoriesMock.mockResolvedValue(page([{ id: 'a' }], 1));
-    render(<MemoryKnowledgeTab />);
+    render(
+      <I18nProvider defaultLocale="zh">
+        <MemoryKnowledgeTab />
+      </I18nProvider>,
+    );
     await clickClearAll();
 
     fireEvent.click(screen.getByTestId('clear-all-confirm-no'));
@@ -125,7 +166,11 @@ describe('P1-1 清除全部记忆', () => {
     deleteMemoryMock.mockImplementation(async (id: string) => {
       if (id === 'b') throw new Error('locked');
     });
-    render(<MemoryKnowledgeTab />);
+    render(
+      <I18nProvider defaultLocale="zh">
+        <MemoryKnowledgeTab />
+      </I18nProvider>,
+    );
     await clickClearAll();
 
     fireEvent.change(screen.getByTestId('clear-all-confirm-input'), {
@@ -134,7 +179,9 @@ describe('P1-1 清除全部记忆', () => {
     fireEvent.click(screen.getByTestId('clear-all-confirm-yes'));
 
     await waitFor(() => expect(deleteMemoryMock).toHaveBeenCalledTimes(2), { timeout: 5000 });
-    await waitFor(() => expect(screen.getByTestId('clear-all-done')).toBeTruthy(), { timeout: 5000 });
+    await waitFor(() => expect(screen.getByTestId('clear-all-done')).toBeTruthy(), {
+      timeout: 5000,
+    });
     expect(screen.getByTestId('clear-all-done').textContent).toContain('1 条失败');
     expect(toast.warning).toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
@@ -142,7 +189,11 @@ describe('P1-1 清除全部记忆', () => {
 
   it('统计失败时回到初始态并报错，不进入确认步骤', async () => {
     getMemoriesMock.mockRejectedValueOnce(new Error('db down'));
-    render(<MemoryKnowledgeTab />);
+    render(
+      <I18nProvider defaultLocale="zh">
+        <MemoryKnowledgeTab />
+      </I18nProvider>,
+    );
 
     fireEvent.click(await screen.findByTestId('clear-all-memories-button'));
 

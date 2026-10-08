@@ -41,8 +41,10 @@ export interface ToggleProps {
 export function SettingRow({ label, desc, children, anchor }: SettingRowProps) {
   return (
     <div
+      data-setting-label={label}
       data-settings-anchor={anchor}
-      className="flex items-center justify-between py-3 border-b border-border"
+      tabIndex={-1}
+      className="flex items-center justify-between py-3 border-b border-border focus:outline-none focus:ring-2 focus:ring-primary/40 focus:rounded"
     >
       <div>
         <div className="text-sm text-text">{label}</div>

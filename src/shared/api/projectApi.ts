@@ -143,7 +143,11 @@ export interface ProjectOpenResult {
   created: boolean;
 }
 
-/** M3: 资料当前状态——ready 进入 system prompt, pending_index/failed 被排除 */
+/**
+ * M3: 资料当前状态——ready 进入 system prompt, pending_index/failed 被排除。
+ * 后端 add() 默认直接写 ready（添加即生效）; pending_index/failed 预留给
+ * 未来的异步索引管线, 当前生产路径不会产生。
+ */
 export type ProjectMaterialStatus = 'pending_index' | 'ready' | 'failed';
 
 /** M3: 项目资料实体。content 可能很大, UI 默认折叠/截断展示。 */
@@ -156,7 +160,7 @@ export interface ProjectMaterial {
   contentHash: string;
   content: string;
   status: ProjectMaterialStatus;
-  /** 索引落地的 wiki 相对路径；ready 状态通常非空 */
+  /** 预留: 异步索引落地的 wiki 相对路径; 当前恒为 null */
   wikiPagePath: string | null;
   errorMessage: string | null;
   createdAt: number;
@@ -403,7 +407,7 @@ export const projectApi = {
 
   /**
    * M3: 直接添加资料(用户粘贴文本/Markdown)。
-   * 返回的资料 status=pending_index（待索引）; ready 后会自动进 system prompt。
+   * 返回的资料 status=ready（添加即生效, 下一条新消息起注入 system prompt）。
    * 同 (project_id, content_hash) 幂等, 返回已有行。
    */
   async addMaterial(
