@@ -1,10 +1,11 @@
 /**
  * P4 第一块片: TaskCenterWidget 渲染行为。
  */
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, beforeEach } from 'vitest';
 
+import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
 import { useTaskCenterStore } from '../../../features/task-center/taskCenterStore';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { TaskCenterWidget } from '../TaskCenterWidget';
@@ -42,5 +43,22 @@ describe('TaskCenterWidget', () => {
 
     fireEvent.click(screen.getByTestId('task-center-toggle'));
     expect(screen.queryByTestId('task-center-list')).not.toBeInTheDocument();
+  });
+
+  it('U1: 右侧面板最大化时胶囊标记 data-panel-maximized 并自动收起展开列表', async () => {
+    useTaskCenterStore.getState().registerTask('t-u1', 'office', '生成论文.docx');
+    useRightPanelStore.setState({ open: true, maximized: false });
+    renderWidget();
+    const root = screen.getByTestId('task-center');
+    expect(root.getAttribute('data-panel-maximized')).toBe('false');
+    fireEvent.click(screen.getByTestId('task-center-toggle'));
+    expect(screen.getByTestId('task-center-list')).toBeInTheDocument();
+
+    act(() => {
+      useRightPanelStore.setState({ open: true, maximized: true });
+    });
+    expect(screen.getByTestId('task-center').getAttribute('data-panel-maximized')).toBe('true');
+    expect(screen.queryByTestId('task-center-list')).not.toBeInTheDocument();
+    useRightPanelStore.setState({ open: true, maximized: false });
   });
 });

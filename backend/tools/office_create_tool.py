@@ -1270,9 +1270,9 @@ class OfficeCreateTool(BaseTool):
 
         stat = output.stat()
 
-        # --- 记录 Artifacts（无 tool_context 时静默跳过，不阻断结果） ------
-        # ``_record_artifact_safely`` 内部已吞掉一切异常，无需再包一层。
-        _record_artifact_safely(str(output), stat.st_size)
+        # --- 记录 Artifacts（含 workspace_path 与 format_spec 供交付抽屉复用） ---
+        _spec = _json.dumps(content["format_spec"], ensure_ascii=False) if isinstance(content.get("format_spec"), dict) else None
+        _record_artifact_safely(str(output), stat.st_size, str(target_dir), _spec)
 
         # --- plan 3.4 自校验回读：紧凑摘要附到结果（best-effort） --------
         result_content: Dict[str, Any] = {

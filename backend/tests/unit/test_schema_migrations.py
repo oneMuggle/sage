@@ -1,4 +1,4 @@
-# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容，保留 typing 注解
+# ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容，保留 typing 注解
 """schema 版本化迁移框架测试（DSH 对标 R9，C3）。
 
 全局 MIGRATIONS 注册表用 fixture 隔离（save/restore），测试注册的迁移
@@ -117,7 +117,7 @@ def test_init_db_with_empty_registry_is_noop(tmp_path):
         db.init_db()  # v1-v4 自动注册（runner.py 模块级），但 still no-op
         versions = applied_versions(db.get_connection())
         # v1 基线 + v2/v3/v4 列收编自动注册并应用（runner.py 模块级）
-        assert versions == {1, 2, 3, 4}
+        assert versions == {1, 2, 3, 4, 5}
         # schema_version 表已建（账本就绪）
     finally:
         db.close()

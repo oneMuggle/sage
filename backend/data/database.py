@@ -1181,7 +1181,7 @@ class Database:
                 path TEXT NOT NULL,
                 name TEXT NOT NULL,
                 kind TEXT NOT NULL,
-                size INTEGER DEFAULT 0,
+                size INTEGER DEFAULT 0, workspace_path TEXT, format_spec TEXT,
                 created_at INTEGER NOT NULL
             )
         """)

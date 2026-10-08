@@ -40,7 +40,7 @@ export interface OfficeDeliveryRef {
  */
 export type DeliveryDrawerState =
   | { kind: 'lane'; laneId: string }
-  | { kind: 'office'; entryId: string }
+  | { kind: 'office'; entryId: string; ref?: OfficeDeliveryRef }
   | null;
 
 /** Terminal states stay visible until the user clears them. */
