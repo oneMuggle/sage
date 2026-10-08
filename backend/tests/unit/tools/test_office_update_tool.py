@@ -90,7 +90,7 @@ def test_schema_has_no_workspace_path_parameter():
     props = _tool().schema.parameters["properties"]
     assert "workspace_path" not in props
     # dry_run: round-2 R4 只读预览开关（默认 false，不传即走正式编辑路径）
-    assert set(props) == {"doc_id", "file_path", "ops", "dry_run", "refresh_toc"}
+    assert set(props) == {"doc_id", "file_path", "ops", "dry_run", "refresh_toc", "expected_revision"}
 
 
 # ── 参数校验 ──────────────────────────────────────────────────────────
