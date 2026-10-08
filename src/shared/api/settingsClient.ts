@@ -60,6 +60,27 @@ async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<
   }
 }
 
+/** Strict transport completion; do not confuse timeout/failure with an acknowledgement. */
+async function strictIpcCall<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      invoke<T>(cmd, args),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('IPC timeout')), LOAD_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function notifyPreference(key: PreferenceKey): void {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('sage:setting-changed', { detail: { key } }));
+  }
+}
+
 export const settingsClient = {
   async getSettings(): Promise<AppSettings | null> {
     // 2026-08-26: invokeBackend 直接 res.json() 出后端 JSON, 无 envelope.
@@ -74,6 +95,16 @@ export const settingsClient = {
     await ipcCall('set_settings', { ...partial });
   },
 
+  async setSettingsStrict(partial: Partial<AppSettings>): Promise<void> {
+    await strictIpcCall('set_settings', { ...partial });
+    notifyPreference('app_settings');
+  },
+
+  async getPreferenceStrict(key: PreferenceKey): Promise<string | null> {
+    const resp = await strictIpcCall<{ value: string | null } | null>('get_preference', { key });
+    return resp?.value ?? null;
+  },
+
   async getPreference<T extends string = string>(key: PreferenceKey): Promise<T | null> {
     // 2026-08-26: 与 get_settings 对齐, PreferenceItem 是 {value, value_type, category}
     // 不是 envelope. value 才是真实载荷.
@@ -81,26 +112,15 @@ export const settingsClient = {
     return resp?.value ?? null;
   },
 
-  /** 字体同步使用严格写入：IPC 错误和超时向调用方抛出，原有写入契约不变。 */
+  /** Strict writes for fonts and safety-sensitive preferences. */
   async setPreferenceStrict(key: PreferenceKey, value: string, category = 'ui'): Promise<void> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      await Promise.race([
-        invoke('set_preference', { key, value, value_type: 'string', category }),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('IPC timeout')), LOAD_TIMEOUT_MS);
-        }),
-      ]);
-    } finally {
-      clearTimeout(timer);
-    }
+    await strictIpcCall('set_preference', { key, value, value_type: 'string', category });
+    notifyPreference(key);
   },
 
   async setPreference(key: PreferenceKey, value: string, category = 'ui'): Promise<void> {
-    await ipcCall('set_preference', { key, value, value_type: 'string', category });
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('sage:setting-changed', { detail: { key } }));
-    }
+    const result = await ipcCall('set_preference', { key, value, value_type: 'string', category });
+    if (result !== null) notifyPreference(key);
   },
 
   // ── Context Isolation (Task 8): context_turn_limit ──────────────────────

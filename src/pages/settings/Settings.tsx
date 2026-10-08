@@ -10,7 +10,7 @@
 
 import { clsx } from 'clsx';
 import { Search } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
@@ -33,6 +33,8 @@ import { ToolsConnectionsTab } from './ToolsConnectionsTab';
 import { UpdatesTab } from './UpdatesTab';
 import { UsageStatsTab } from './UsageStatsTab';
 import { ZoteroTab } from './ZoteroTab';
+import { initialSettingsTab } from './settingsNavigation';
+import { focusSettingsEntry, settingsGroups } from './settingsPresentation';
 import {
   searchSettings,
   type SettingsSearchEntry,
@@ -63,11 +65,13 @@ export function Settings() {
   const [activeTab, setActiveTabState] = useState<SettingsTab>(() => {
     try {
       const saved = localStorage.getItem('sage:settings-tab');
-      if (saved) return migrateTab(saved);
+      // 上游把「记忆与知识」tab 重命名为 memory：旧书签先按上游别名迁移，
+      // 再走 initialSettingsTab 的合法性与可见性校验（providers 开关、未知值回退 basic）。
+      return initialSettingsTab(saved ? migrateTab(saved) : null, ENABLE_UPDATE_PROVIDERS_UI());
     } catch {
       /* ignore */
     }
-    return 'general';
+    return 'basic';
   });
   const setActiveTab = useCallback((tab: SettingsTab) => {
     setActiveTabState(tab);
@@ -78,6 +82,9 @@ export function Settings() {
     }
   }, []);
   const [searchQuery, setSearchQuery] = useState('');
+  const [focusEntry, setFocusEntry] = useState<SettingsSearchEntry | null>(null);
+  const [focusMissing, setFocusMissing] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   const { settings, updateSettings, resetSettings } = useSettings();
   const { t, locale } = useI18n();
 
@@ -113,7 +120,35 @@ export function Settings() {
   const jumpToItem = (item: SettingsSearchEntry): void => {
     setActiveTab(item.tab);
     setSearchQuery('');
+    setFocusMissing(false);
+    setFocusEntry(item);
   };
+
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container || !focusEntry) return;
+    const attempt = () => {
+      if (!focusSettingsEntry(container, focusEntry)) return false;
+      setFocusEntry(null);
+      return true;
+    };
+    if (attempt()) return;
+    const observer = new MutationObserver(attempt);
+    observer.observe(container, { childList: true, subtree: true });
+    const timer = window.setTimeout(() => {
+      observer.disconnect();
+      setFocusMissing(true);
+      setFocusEntry(null);
+    }, 2000);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [activeTab, focusEntry]);
+  const groups = settingsGroups(
+    filteredTabs.map((tab) => tab.key),
+    locale,
+  );
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -161,28 +196,54 @@ export function Settings() {
           </div>
         )}
         <nav className="p-2 space-y-1">
-          {filteredTabs.map((tab) => (
-            <button
-              key={tab.key}
-              className={clsx(
-                'w-full px-3 py-2 text-sm rounded-md transition-colors text-left',
-                activeTab === tab.key
-                  ? 'bg-primary text-text-inverse font-medium'
-                  : 'text-muted hover:bg-bg-hover hover:text-ink',
-              )}
-              onClick={() => setActiveTab(tab.key)}
-            >
-              {tab.label}
-            </button>
-          ))}
+          {groups.map((group) => {
+            const selected = group.keys.includes(activeTab);
+            return (
+              <section key={group.id}>
+                <button
+                  type="button"
+                  data-testid={`settings-group-${group.id}`}
+                  aria-expanded={selected}
+                  onClick={() => setActiveTab(group.keys[0])}
+                  className={`w-full px-3 py-2 text-ui-base rounded text-left ${selected ? 'bg-primary/10 text-primary font-medium' : 'text-muted hover:bg-bg-hover'}`}
+                >
+                  {group.label}
+                </button>
+                {(selected || query) &&
+                  group.keys.length > 1 &&
+                  group.keys.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setActiveTab(key)}
+                      className={clsx(
+                        'w-full pl-5 pr-2 py-2 text-ui-sm rounded text-left',
+                        activeTab === key
+                          ? 'text-primary font-medium'
+                          : 'text-muted hover:bg-bg-hover',
+                      )}
+                    >
+                      {tabs.find((tab) => tab.key === key)?.label}
+                    </button>
+                  ))}
+              </section>
+            );
+          })}
         </nav>
       </div>
 
       {/* Right content panel */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-3xl mx-auto" ref={contentRef}>
             <EffectiveSettingsSummary />
+            {focusMissing && (
+              <p role="status" className="text-ui-sm text-warning mb-2">
+                {locale === 'en'
+                  ? 'The section is open, but the exact setting is unavailable or hidden by an advanced option.'
+                  : '已打开所属分组；该设置可能尚未加载或需展开高级选项，未伪造定位结果。'}
+              </p>
+            )}
             {activeTab === 'general' && <GeneralTab resetSettings={resetSettings} />}
             {activeTab === 'basic' && <BasicTab />}
             {activeTab === 'tools-connections' && <ToolsConnectionsTab />}

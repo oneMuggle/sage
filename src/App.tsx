@@ -28,6 +28,7 @@ import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
 // R24-D6: 路由级代码分割 —— 首屏只加载 Chat/Welcome，低频页面
 // (设置/记忆/智能体/技能/Office/知识库/编排/定时任务) 按需加载。
 // Electron file:// 下同样减少首屏解析/执行量。
+const Projects = lazy(() => import('./pages/Projects').then((m) => ({ default: m.Projects })));
 const Settings = lazy(() => import('./pages').then((m) => ({ default: m.Settings })));
 const Agents = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })));
 const Knowledge = lazy(() => import('./pages/Knowledge').then((m) => ({ default: m.Knowledge })));
@@ -192,6 +193,7 @@ function App() {
             <Route path="agents" element={<Agents />} />
             <Route path="skills" element={<Skills />} />
             <Route path="office" element={<Office />} />
+            <Route path="projects" element={<Projects />} />
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="scheduled" element={<ScheduledTasks />} />
             <Route path="orchestration" element={<Orchestration />} />

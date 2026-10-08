@@ -7,6 +7,7 @@ import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
 import { regenerateInPlace } from '../features/chat/answerVersions';
 import { useQuoteDraft } from '../features/chat/useQuoteDraft';
+import { useSessionMemoryPause } from '../features/chat/useSessionMemoryPause';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
 import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
@@ -95,26 +96,6 @@ export function Chat() {
   // 跨组件写面板状态）；localStorage 迁移进 store，此处只读订阅。
   const isMobile = useIsMobile();
   const rightPanelOpen = useRightPanelStore((s) => s.open);
-  // 对标 S2 (2026-09-13): 临时聊天 —— 按会话记住开关；开启后本会话每轮
-  // 都以 memory_mode='off' 发送（不注入记忆、不提取记忆、不弹"记住了"）。
-  // 2026-09 修复: 临时聊天开关此前是组件 state, 切到设置页再回来即复位为关,
-  // 之后该会话恢复读写长期记忆 —— 与用户开启时的预期相反。sessionStorage
-  // 持久化: 跨路由保留, 应用重启自然清空 (符合"临时"语义)。
-  const [tempChatSessions, setTempChatSessions] = useState<ReadonlySet<string>>(() => {
-    try {
-      const raw = sessionStorage.getItem('sage:temp-chat-sessions');
-      return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
-  useEffect(() => {
-    try {
-      sessionStorage.setItem('sage:temp-chat-sessions', JSON.stringify([...tempChatSessions]));
-    } catch {
-      // 隐私模式等场景写入失败可容忍
-    }
-  }, [tempChatSessions]);
 
   const {
     currentSessionId,
@@ -125,6 +106,7 @@ export function Chat() {
     isLoading: storeLoading,
     removeMessage,
   } = useStore();
+  const [tempChatSessions, setTempChatSessions] = useSessionMemoryPause(currentSessionId);
 
   // R25-D4: 挂载/切会话时探测后端活跃流并重接 —— renderer 重载（升级、
   // 崩溃恢复）后长任务输出不再丢失。内部有会话级去重守卫。
