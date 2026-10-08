@@ -1766,7 +1766,7 @@ class ChatDispatcher:
                     int(self._first_dispatch_at * 1000),
                 )
             except Exception:  # noqa: BLE001 — 增强字段，失败不带键
-                pass
+                logger.debug("task_usage_since lookup skipped", exc_info=True)
             # BU13 (round24): 执行时长（秒级时间戳差 ×1000）；两脚齐备才带键。
             if state.started_at and state.finished_at:
                 event["duration_ms"] = int(
@@ -2056,7 +2056,7 @@ class ChatDispatcher:
                     f"（{pct}%），剩余 {remaining}{rate_note}。\n"
                 )
             except Exception:  # noqa: BLE001 — 消耗行是增强信息，失败跳过
-                pass
+                logger.debug("run_token_budget usage header skipped", exc_info=True)
 
         # BU18 (round34): 墙钟进度行 —— 启用未触顶时给出已用/上限分钟数，
         # 与触顶标注（BU11）互斥；未启用不出现。
