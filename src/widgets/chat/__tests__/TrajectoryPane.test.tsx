@@ -139,6 +139,30 @@ describe('TrajectoryPane', () => {
     expect(screen.queryByTestId('trajectory-detail')).not.toBeInTheDocument();
   });
 
+  it('supports F4 role/tool filter pills, telemetry summary, latency bar, and copy JSON', () => {
+    seedMessages([
+      { id: 'u1', role: 'user', content: '请调用搜索' },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '已完成搜索',
+        model: 'glm-5',
+        tool_calls: JSON.stringify([{ id: 'tc1', name: 'web_search', args: { q: 'sage' } }]),
+        generation_stats: { input_tokens: 120, output_tokens: 45, latency_ms: 800 },
+      },
+    ]);
+    render(<TrajectoryPane sessionId={sid} />);
+    expect(screen.getByTestId('trajectory-summary')).toHaveTextContent('2 条轨迹');
+    expect(screen.getByTestId('trajectory-summary')).toHaveTextContent('Token 120 in / 45 out');
+    expect(screen.getByTestId('trajectory-latency-bar')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('trajectory-filter-tool'));
+    expect(screen.getAllByTestId('trajectory-entry')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('trajectory-entry'));
+    fireEvent.click(screen.getByTestId('trajectory-copy-json'));
+    expect(screen.getByTestId('trajectory-copy-json')).toHaveTextContent('已复制');
+  });
+
   it('renders empty state for session without messages', () => {
     render(<TrajectoryPane sessionId={sid} />);
     expect(screen.getByText('暂无轨迹')).toBeInTheDocument();
