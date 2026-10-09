@@ -1007,14 +1007,14 @@ function MessageComponent({
                 <button
                   onClick={() => onFeedback(message.id, 'up')}
                   className="p-1 rounded hover:bg-bg-hover"
-                  title="有帮助"
+                  title="有帮助" aria-label="有帮助"
                 >
                   <ThumbsUp className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => onFeedback(message.id, 'down')}
                   className="p-1 rounded hover:bg-bg-hover"
-                  title="没帮助"
+                  title="没帮助" aria-label="没帮助"
                 >
                   <ThumbsDown className="w-4 h-4" />
                 </button>
@@ -1046,7 +1046,7 @@ function MessageComponent({
               <button
                 onClick={() => onFork?.(message.id)}
                 className="p-1 rounded hover:bg-bg-hover"
-                title={t('chat.fork_from_here')}
+                title={t('chat.fork_from_here')} aria-label={t('chat.fork_from_here')}
                 data-testid="fork-message"
               >
                 <GitBranch className="w-4 h-4" />

@@ -14,6 +14,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useEffect, useReducer, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { usePermissionState } from '../../entities/permission/permissionState';
 import { useQuestionState } from '../../entities/question/questionState';
@@ -112,7 +113,7 @@ export function SessionItem({
       downloadHtmlFile(result.html, result.filename);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      alert(t('session.export_failed').replace('{message}', message));
+      toast.error(t('session.export_failed').replace('{message}', message));
     } finally {
       setExporting(false);
     }
@@ -128,7 +129,7 @@ export function SessionItem({
       downloadMarkdownFile(result.html, result.filename);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      alert(t('session.export_failed').replace('{message}', message));
+      toast.error(t('session.export_failed').replace('{message}', message));
     } finally {
       setExportingMd(false);
     }
@@ -148,7 +149,7 @@ export function SessionItem({
       updateSession(session.id, { is_pinned: !session.is_pinned });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      alert(message);
+      toast.error(message);
     } finally {
       setPinning(false);
     }
@@ -191,7 +192,7 @@ export function SessionItem({
       onClick={onSelect}
       onKeyDown={handleKeyDown}
       className={`
-        group flex items-center gap-2 px-3 py-[var(--density-sidebar-item-py)] rounded-lg cursor-pointer
+        group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer
         w-full min-w-0 overflow-hidden
         transition-colors focus:outline-none focus:ring-2 focus:ring-primary
         ${isActive ? 'bg-primary/10 text-primary' : 'hover:bg-bg-hover'}

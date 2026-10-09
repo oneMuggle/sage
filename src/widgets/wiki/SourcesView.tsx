@@ -1,6 +1,7 @@
 // Sources View - 源文件管理视图
 import { FolderPlus, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import { resolveEndpoint } from '../../entities/setting/types';
 import { mockSourcesTree } from '../../entities/wiki/mock-data';
@@ -8,6 +9,7 @@ import { useWikiStore } from '../../entities/wiki/store';
 import { useSettings } from '../../features/manage-settings/useSettings';
 import { useWikiIngest } from '../../features/wiki/useWikiIngest';
 import { wikiIngestStream } from '../../shared/api-client/wiki';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 import { SourcesTree } from './SourcesTree';
 import { WikiIngestProgress } from './WikiIngestProgress';
@@ -80,10 +82,15 @@ export function SourcesView() {
   };
 
   const handleDelete = (path: string) => {
-    if (confirm(`确定删除 ${path}?`)) {
-      // 模拟删除操作
-      alert(`模拟删除: ${path}`);
-    }
+    void confirmDialog({
+      title: '删除源文件',
+      message: `确定删除 ${path}?`,
+      danger: true,
+    }).then((ok) => {
+      if (ok) {
+        toast.info(`模拟删除: ${path}`);
+      }
+    });
   };
 
   return (

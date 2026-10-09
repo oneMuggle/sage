@@ -58,6 +58,13 @@ export interface OfficeRefChipType {
   filename: string;
 }
 
+export interface AudioAttachmentChipType {
+  id: string;
+  mimeType: string;
+  fileSize: number;
+  apiUrl: string;
+}
+
 export interface InputCardProps {
   value: string;
   onChange: (value: string) => void;
@@ -84,10 +91,12 @@ export interface InputCardProps {
    * Each entry is a `ChatOfficeRef` (docId, docType, filename).
    */
   officeRefs?: readonly OfficeRefChipType[];
+  audioAttachments?: readonly AudioAttachmentChipType[];
   onRemoveFile?: (idx: number) => void;
   onRemoveImage?: (idx: number) => void;
   onRemoveKnowledge?: (idx: number) => void;
   onRemoveOfficeRef?: (docId: string) => void;
+  onRemoveAudioAttachment?: (id: string) => void;
 
   // Knowledge selector
   knowledgeDocs?: KnowledgeDocType[];
@@ -162,10 +171,12 @@ function InputCardInner({
   images = [],
   knowledgeRefs = [],
   officeRefs = [],
+  audioAttachments = [],
   onRemoveFile,
   onRemoveImage,
   onRemoveKnowledge,
   onRemoveOfficeRef,
+  onRemoveAudioAttachment,
   knowledgeDocs = [],
   showKnowledgeSelector = false,
   onToggleKnowledgeSelector,
@@ -191,7 +202,7 @@ function InputCardInner({
   focusRequest,
 }: InputCardProps) {
   const { t } = useI18n();
-  const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0;
+  const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0 || officeRefs.length > 0 || audioAttachments.length > 0;
 
   // U20: Emacs-style editing keys (Ctrl+A/E/K/U/W, Alt+B/F) in the textarea.
   const { ref: emacsRef, handleKeyDown: handleEmacsKeyDown } = useEmacsKeybindings({
@@ -388,7 +399,7 @@ function InputCardInner({
 
   return (
     <div
-      className="p-4 border border-border rounded-radius-md bg-surface relative shadow-sm"
+      className="px-4 py-2.5 border-t border-border bg-surface relative"
       onDrop={onDrop}
       onDragOver={onDragOver}
     >
@@ -487,6 +498,31 @@ function InputCardInner({
         </div>
       )}
 
+      {audioAttachments.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-2" data-testid="audio-attachment-chips">
+          {audioAttachments.map((aud) => (
+            <span
+              key={aud.id}
+              data-testid="audio-attachment-chip"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-radius-sm bg-primary/10 text-primary text-xs"
+            >
+              <span aria-hidden="true">🎵</span>
+              <span>音频 ({Math.max(1, Math.round(aud.fileSize / 1024))} KB)</span>
+              {onRemoveAudioAttachment && (
+                <button
+                  type="button"
+                  className="ml-1 hover:text-error transition-colors"
+                  aria-label={`移除音频附件 ${aud.id}`}
+                  onClick={() => onRemoveAudioAttachment(aud.id)}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-end gap-2">
         <div className="flex-1 relative">
           {showSlashMenu && slashCommands.length > 0 && onSlashSelect && (
@@ -497,10 +533,11 @@ function InputCardInner({
             />
           )}
           {atFileMenu}
-          <div className="border border-border rounded-radius-sm px-3 py-2 bg-bg flex items-end gap-2">
+          <div className="border border-border focus-within:border-primary/60 rounded-radius-md px-3 py-2 bg-bg flex items-end gap-2 transition-colors">
             <ComposerPlusMenu items={plusItems} disabled={disabled} />
             <textarea
               ref={emacsRef}
+              rows={1}
               value={value}
               onChange={(e) => {
                 exitHistoryNav();
@@ -632,6 +669,7 @@ function InputCardInner({
         <input
           type="file"
           id="chat-input-file"
+          accept=".txt,.md,.pdf,.docx"
           multiple
           className="hidden"
           onChange={onFileSelect}

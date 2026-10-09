@@ -13,6 +13,8 @@ import { sessionApi } from '../../shared/api/sessionApi';
 
 interface SessionModelPickerProps {
   sessionId: string | null;
+  /** UI-P0-1: 浮层展开方向；顶栏使用 'bottom'，底部栏使用 'top'（默认） */
+  placement?: 'top' | 'bottom';
 }
 
 export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
@@ -89,7 +91,7 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
         ))}
       </select>
       {override && (
-        <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">覆盖</span>
+        <span className="text-2xs text-warning shrink-0">覆盖</span>
       )}
     </div>
   );

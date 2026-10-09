@@ -50,8 +50,10 @@ vi.mock('../../../shared/lib/i18n', () => ({
   }),
 }));
 
-// Mock confirm
-window.confirm = vi.fn(() => true);
+// Mock confirmDialog
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
+  confirmDialog: vi.fn().mockResolvedValue(true),
+}));
 
 describe('ThemeSelector', () => {
   beforeEach(() => {
