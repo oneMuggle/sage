@@ -15,6 +15,7 @@ import { fetchSessionUsage } from '../../shared/api/usageApi';
 
 interface SessionModelPickerProps {
   sessionId: string | null;
+  placement?: 'top' | 'bottom';
 }
 
 /** 当前占用超过目标窗口该比例时，切换前先提示（历史会被截断）。 */
@@ -33,7 +34,8 @@ interface PendingSwitch {
   usedTokens: number;
 }
 
-export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
+export function SessionModelPicker({ sessionId, placement = 'top' }: SessionModelPickerProps) {
+  const warningPos = placement === 'bottom' ? 'top-full mt-1.5' : 'bottom-full mb-1.5';
   const { settings } = useSettings();
   const [override, setOverride] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -130,7 +132,7 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
   };
 
   return (
-    <div className="flex items-center gap-1.5" title="本会话使用的模型(会话级覆盖,仅影响当前对话)">
+    <div className="relative flex items-center gap-1.5" title="本会话使用的模型(会话级覆盖,仅影响当前对话)">
       <Bot className="w-3.5 h-3.5 text-text-secondary shrink-0" />
       <select
         aria-label="会话模型"
@@ -152,7 +154,7 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
       )}
       {pendingSwitch && (
         <span
-          className="flex items-center gap-1.5 text-[11px] text-yellow-700 dark:text-yellow-400"
+          className={`absolute right-0 ${warningPos} z-40 w-80 rounded-radius-md border border-warning/40 bg-surface p-2.5 shadow-lg flex flex-wrap items-center gap-1.5 text-ui-xs text-warning`}
           data-testid="model-switch-warning"
           role="alert"
         >

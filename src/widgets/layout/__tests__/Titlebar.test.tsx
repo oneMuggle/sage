@@ -144,4 +144,18 @@ describe('Titlebar', () => {
 
     expect(screen.queryByRole('img', { name: 'brand.alt' })).not.toBeInTheDocument();
   });
+
+  it('hides duplicate brand logo when hideBrandLogo is true and renders mobile sidebar toggle when provided (UI-P0-2)', () => {
+    mockDetectPlatform.mockReturnValue('windows');
+    mockIsElectronDesktop.mockReturnValue(true);
+    const onToggle = vi.fn();
+
+    render(<Titlebar hideBrandLogo onToggleMobileSidebar={onToggle} mobileSidebarOpen={false} />);
+
+    expect(screen.queryByRole('img', { name: 'brand.alt' })).not.toBeInTheDocument();
+    const toggleBtn = screen.getByTestId('mobile-sidebar-toggle');
+    expect(toggleBtn).toBeInTheDocument();
+    toggleBtn.click();
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
 });

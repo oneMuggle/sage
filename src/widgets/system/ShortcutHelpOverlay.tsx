@@ -36,6 +36,7 @@ export function ShortcutHelpOverlay({ open, onClose }: ShortcutHelpOverlayProps)
       <div
         className="bg-surface-elevated border border-border rounded-radius-md shadow-lg max-w-lg w-full mx-4 max-h-[80vh] flex flex-col"
         role="dialog"
+        aria-modal="true"
         aria-label="快捷键帮助"
         onClick={(e) => e.stopPropagation()}
       >

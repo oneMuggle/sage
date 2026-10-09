@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
@@ -86,5 +86,34 @@ describe('ProvidersManager', () => {
     btn.click();
 
     await waitFor(() => expect(mocks.setDefault).toHaveBeenCalledWith('b'));
+  });
+
+  it('opens controlled add provider dialog instead of window.prompt and submits new provider', async () => {
+    renderManager();
+    await screen.findByTestId('provider-row-a');
+
+    fireEvent.click(screen.getByTestId('providers-add-button'));
+    expect(await screen.findByTestId('providers-add-dialog')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('provider-display-name-input'), {
+      target: { value: 'Mirror Source' },
+    });
+    fireEvent.change(screen.getByTestId('provider-owner-input'), {
+      target: { value: 'oneMuggle' },
+    });
+    fireEvent.change(screen.getByTestId('provider-repo-input'), {
+      target: { value: 'sage' },
+    });
+    fireEvent.click(screen.getByTestId('providers-submit-add'));
+
+    await waitFor(() =>
+      expect(mocks.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'github',
+          displayName: 'Mirror Source',
+          config: expect.objectContaining({ owner: 'oneMuggle', repo: 'sage' }),
+        }),
+      ),
+    );
   });
 });

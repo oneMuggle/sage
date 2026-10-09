@@ -178,9 +178,9 @@ export function MemoryTab() {
       setRestoringName(name);
       try {
         await invoke('system_backup_restore', { name });
-        window.alert('恢复已安排：将在下次启动应用（已自动做恢复前安全备份）');
+        toast.success('恢复已安排：将在下次启动应用（已自动做恢复前安全备份）');
       } catch {
-        window.alert('恢复失败，详见服务端日志');
+        toast.error('恢复失败，详见服务端日志');
       } finally {
         setRestoringName(null);
       }
@@ -203,9 +203,9 @@ export function MemoryTab() {
         'memory_import',
         { payload },
       );
-      window.alert(`导入完成：新增 ${res.imported} 条，跳过重复 ${res.skipped} 条，失败 ${res.failed} 条`);
+      toast.success(`导入完成：新增 ${res.imported} 条，跳过重复 ${res.skipped} 条，失败 ${res.failed} 条`);
     } catch {
-      window.alert('导入失败：文件格式需为 Sage 导出的记忆 JSON');
+      toast.error('导入失败：文件格式需为 Sage 导出的记忆 JSON');
     } finally {
       setImportingMemory(false);
     }

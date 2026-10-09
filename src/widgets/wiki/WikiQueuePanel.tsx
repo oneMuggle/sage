@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { useQueueStore } from '../../entities/wiki/queue-store';
 import type { IngestTask, QueueStatus } from '../../shared/api-client/wiki';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 interface WikiQueuePanelProps {
   projectPath: string;
@@ -153,9 +154,13 @@ export function WikiQueuePanel({ projectPath }: WikiQueuePanelProps) {
         </button>
         <button
           onClick={() => {
-            if (confirm('确定清除所有任务？此操作不可恢复。')) {
-              clearAll(projectPath);
-            }
+            void confirmDialog({
+              title: '清除全部任务',
+              message: '确定清除所有任务？此操作不可恢复。',
+              danger: true,
+            }).then((ok) => {
+              if (ok) clearAll(projectPath);
+            });
           }}
           disabled={totalCount === 0 || loading}
           className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 transition-colors hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-50"

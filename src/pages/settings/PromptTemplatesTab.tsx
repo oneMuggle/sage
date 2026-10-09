@@ -9,6 +9,7 @@
 
 import { Download, Pencil, Plus, RefreshCw, Search, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import {
   promptApi,
@@ -163,7 +164,7 @@ export function PromptTemplatesTab() {
         setConflictSelection(new Set(first.conflicts));
         return;
       }
-      window.alert(reportImport(first));
+      toast.success(reportImport(first));
       await load();
     } catch {
       setError('导入失败：文件需为 Sage 导出的模板 JSON');
@@ -187,7 +188,7 @@ export function PromptTemplatesTab() {
         ),
       } as PromptTemplateEnvelope;
       const second = await promptApi.importTemplates(subset, 'overwrite');
-      window.alert(reportImport(second));
+      toast.success(reportImport(second));
       setPendingImport(null);
       await load();
     } catch {

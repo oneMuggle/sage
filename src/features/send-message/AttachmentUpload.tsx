@@ -1,3 +1,4 @@
+import { Loader2, Mic } from 'lucide-react';
 // src/features/send-message/AttachmentUpload.tsx
 import React, { useCallback, useRef, useState } from 'react';
 
@@ -155,7 +156,7 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
         disabled={uploading}
         onClick={() => inputRef.current?.click()}
       >
-        {uploading ? <span className="animate-pulse">⏳</span> : <span>📎</span>}
+        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
       </button>
       <input
         ref={inputRef}

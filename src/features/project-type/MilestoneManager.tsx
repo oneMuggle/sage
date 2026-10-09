@@ -12,6 +12,7 @@ import { projectApi, type ProjectMilestone } from '../../shared/api';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 import { MilestoneEditor } from './MilestoneEditor';
 
@@ -54,7 +55,8 @@ export function MilestoneManager({ projectId }: MilestoneManagerProps) {
   };
 
   const handleDelete = async (milestoneId: string) => {
-    if (!confirm('确定要删除此里程碑吗？')) return;
+    const ok = await confirmDialog({ title: '删除里程碑', message: '确定要删除此里程碑吗？', danger: true });
+    if (!ok) return;
     try {
       await projectApi.deleteMilestone(projectId, milestoneId);
       await fetchMilestones();

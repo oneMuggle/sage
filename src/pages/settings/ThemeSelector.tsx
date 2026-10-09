@@ -12,6 +12,7 @@ import { ThemeGallery } from '../../features/theme/ThemeGallery';
 import type { ThemeCssPayload } from '../../features/theme/themeCssTypes';
 import { themeCssClient } from '../../shared/api/themeCssClient';
 import { useI18n } from '../../shared/lib/i18n';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 export function ThemeSelector() {
   const { t } = useI18n();
@@ -23,7 +24,8 @@ export function ThemeSelector() {
   }
 
   async function handleDeleteTheme(theme: ThemeCssPayload) {
-    if (!confirm(`确定要删除主题 "${theme.name}" 吗？`)) return;
+    const ok = await confirmDialog({ title: '删除自定义主题', message: `确定要删除主题 "${theme.name}" 吗？`, danger: true });
+    if (!ok) return;
 
     try {
       await themeCssClient.delete(theme.id);

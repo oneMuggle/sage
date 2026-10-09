@@ -28,6 +28,7 @@ const PRESET_ICON = {
 
 interface PermissionModeSwitchProps {
   sessionId: string | null;
+  placement?: 'top' | 'bottom';
 }
 
 function formatTime(ts: number): string {
@@ -36,7 +37,8 @@ function formatTime(ts: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 
-export function PermissionModeSwitch({ sessionId }: PermissionModeSwitchProps) {
+export function PermissionModeSwitch({ sessionId, placement = 'top' }: PermissionModeSwitchProps) {
+  const popupPos = placement === 'bottom' ? 'top-full mt-1' : 'bottom-full mb-1';
   const { t } = useI18n();
   const [preset, setPreset] = useState<PermissionPreset>('standard');
   const [custom, setCustom] = useState(false);
@@ -156,7 +158,7 @@ export function PermissionModeSwitch({ sessionId }: PermissionModeSwitchProps) {
         <div
           role="menu"
           data-testid="permission-mode-menu"
-          className="absolute right-0 bottom-full mb-1 z-30 w-64 rounded border border-border bg-surface shadow-lg p-1"
+          className={`absolute right-0 ${popupPos} z-30 w-64 rounded border border-border bg-surface shadow-lg p-1`}
         >
           {PERMISSION_PRESETS.map((p) => {
             const PIcon = PRESET_ICON[p];
@@ -190,7 +192,7 @@ export function PermissionModeSwitch({ sessionId }: PermissionModeSwitchProps) {
       {auditOpen && (
         <div
           data-testid="auto-approval-audit"
-          className="absolute right-0 bottom-full mb-1 z-30 w-80 max-h-72 overflow-y-auto rounded border border-border bg-surface shadow-lg p-2"
+          className={`absolute right-0 ${popupPos} z-30 w-80 max-h-72 overflow-y-auto rounded border border-border bg-surface shadow-lg p-2`}
         >
           <p className="text-xs font-semibold text-text mb-1">{t('chat.perm.audit_title')}</p>
           {items.length === 0 ? (

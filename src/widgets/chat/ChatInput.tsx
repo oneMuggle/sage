@@ -19,7 +19,7 @@ import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
-import { InputCard, type InputCardProps, type KnowledgeDocType } from './InputCard';
+import { InputCard, type AudioAttachmentChipType, type InputCardProps, type KnowledgeDocType } from './InputCard';
 import { extractTemplateVars, TemplateFillDialog } from './TemplateFillDialog';
 import {
   commandToPrompt,
@@ -29,11 +29,7 @@ import {
   type SlashCommand,
 } from './slashCommands';
 
-/**
- * 对标 S3: 页面直达命令需要 navigate；ChatInput 的既有单测大多不包 Router，
- * 因此在无 Router 上下文时退化为 window.location.hash 跳转（HashRouter 语义）。
- * Hook 调用顺序恒定（useInRouterContext 先于条件分支），不违反 hooks 规则。
- */
+/** 对标 S3: 页面直达命令需要 navigate；ChatInput 的既有单测大多不包 Router， 因此在无 Router 上下文时退化为 window.location.hash 跳转（HashRouter 语义）。 Hook 调用顺序恒定（useInRouterContext 先于条件分支），不违反 hooks 规则。 */
 function useOptionalNavigate(): (route: string) => void {
   const inRouter = useInRouterContext();
   // eslint-disable-next-line react-hooks/rules-of-hooks -- inRouter 在组件生命周期内恒定
@@ -57,57 +53,35 @@ interface ChatInputProps extends Pick<InputCardProps, 'composerControls'> {
       knowledgeRefs?: { id: string; title: string }[];
       attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
       images?: { name: string; size: number; type: string; dataUrl?: string }[];
-      /**
-       * Task 7 (2026-07-26): managed Office references from the @-menu.
-       * The Chat page forwards these into `chatApi.chatStream`'s 5th arg
-       * so the LLM can see the office doc summaries.
-       */
+      /** Task 7 (2026-07-26): managed Office references from the @-menu. The Chat page forwards these into `chatApi.chatStream`'s 5th arg so the LLM can see the office doc summaries. */
       officeRefs?: readonly ChatOfficeRef[];
-      /**
-       * Multi-Agent Orchestration: /orchestrate → force_multi、/single → force_single。
-       * Wave 3 C6: 编排模式条可传 'auto' | 'force_multi' | 'template:<id>'。
-       * 普通消息不传（undefined → 后端 auto）。
-       */
+      /** Multi-Agent Orchestration: /orchestrate → force_multi、/single → force_single。 Wave 3 C6: 编排模式条可传 'auto' | 'force_multi' | 'template:<id>'。 普通消息不传（undefined → 后端 auto）。 */
       orchestrationMode?: string;
-      /**
-       * Task 5 (2026-09-17): 上下文重置标记 —— "新话题" 按钮触发，
-       * 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。
-       */
+      /** Task 5 (2026-09-17): 上下文重置标记 —— "新话题" 按钮触发， 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。 */
       contextReset?: boolean;
     },
   ) => void;
   onInterrupt?: () => void;
   onClear?: () => void;
-  /**
-   * M4: /compact slash action 回调。由 Chat 页面实现（调用 session_compact
-   * IPC + toast + 重载消息）。未提供时 /compact 静默无操作。
-   */
+  /** M4: /compact slash action 回调。由 Chat 页面实现（调用 session_compact IPC + toast + 重载消息）。未提供时 /compact 静默无操作。 */
   onCompact?: () => void;
-  /**
-   * Task 12 (2026-08-03): /learn slash action 回调。由 Chat 页面实现
-   * （调用 learnApi + toast + 跳转到 Pending Drafts tab）。未提供时
-   * /learn 静默无操作。
-   */
+  /** Task 12 (2026-08-03): /learn slash action 回调。由 Chat 页面实现 （调用 learnApi + toast + 跳转到 Pending Drafts tab）。未提供时 /learn 静默无操作。 */
   onLearn?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   placeholder?: string;
-  /**
-   * U5' (对标增强第五轮批次 A): 编辑重发——外部注入输入框内容。
-   * `nonce` 变化时用 `text` 覆盖当前草稿（点击同一条消息两次也能重注入）。
-   * 对话阅读导航 A5: `mode: 'append'`（引用）时追加到草稿尾部而不覆盖，
-   * 并把焦点移回输入框；缺省 / `'replace'`（编辑重发）保持覆盖语义。
-   */
+  /** U5' (对标增强第五轮批次 A): 编辑重发——外部注入输入框内容。 `nonce` 变化时用 `text` 覆盖当前草稿（点击同一条消息两次也能重注入）。 对话阅读导航 A5: `mode: 'append'`（引用）时追加到草稿尾部而不覆盖， 并把焦点移回输入框；缺省 / `'replace'`（编辑重发）保持覆盖语义。 */
   injectedDraft?: { text: string; nonce: number; mode?: 'replace' | 'append' } | null;
   /** U5': 编辑重发提示条（非 null 时渲染横条，onCancel 由 Chat 页清除编辑态）。 */
   editResendNotice?: { onCancel: () => void } | null;
-  /**
-   * Optional workspace root — kept for backwards-compat with callers that
-   * haven't migrated to the SessionWorkspaceProvider yet. When the
-   * provider is mounted (Chat page via SessionWorkspaceProvider), the
-   * menu reads sessionId + workspacePath from there instead.
-   */
+  /** Optional workspace root — kept for backwards-compat with callers that haven't migrated to the SessionWorkspaceProvider yet. When the provider is mounted (Chat page via SessionWorkspaceProvider), the menu reads sessionId + workspacePath from there instead. */
   workspacePath?: string;
+  /** UI-P0-1: 顶栏受控编排模式（提供时与顶栏同步） */
+  orchestrationMode?: string;
+  onOrchestrationModeChange?: (mode: string) => void;
+  /** UI-P0-1: 顶栏已渲染编排模式与新话题时，底部输入框不再重复渲染 */
+  hideOrchModeBar?: boolean;
+  hideNewTopic?: boolean;
 }
 
 function ChatInputInner({
@@ -123,6 +97,10 @@ function ChatInputInner({
   injectedDraft,
   editResendNotice,
   composerControls,
+  orchestrationMode: controlledOrchMode,
+  onOrchestrationModeChange,
+  hideOrchModeBar = false,
+  hideNewTopic = false,
 }: ChatInputProps) {
   const { t } = useI18n();
 
@@ -198,7 +176,13 @@ function ChatInputInner({
 
   // Wave 3 C6 (2026-08-15): 编排模式偏好（组件 state —— YAGNI 不写 settings）。
   // auto = LLM 二分类；force_multi = 强制编排；template:<id> = 确定性模板。
-  const [orchMode, setOrchMode] = useState('auto');
+  const [internalOrchMode, setInternalOrchMode] = useState<string>('auto');
+  const orchMode = controlledOrchMode ?? internalOrchMode;
+  const setOrchMode = useCallback((next: string) => {
+    setInternalOrchMode(next);
+    onOrchestrationModeChange?.(next);
+  }, [onOrchestrationModeChange]);
+  const [audioAttachments, setAudioAttachments] = useState<AudioAttachmentChipType[]>([]);
 
   // Phase 6: @文件提及 + /btw 补充消息
   const btw = useBtwCommand();
@@ -268,9 +252,7 @@ function ChatInputInner({
     isDragOver,
   } = useFileUpload();
 
-  /**
-   * Insert a plain `@<path> ` into the textarea, replacing the @-query.
-   */
+  /** Insert a plain `@<path> ` into the textarea, replacing the @-query. */
   const insertAtFilePath = useCallback(
     (filePath: string) => {
       if (atQuery.query === null) return;
@@ -293,10 +275,7 @@ function ChatInputInner({
     [value, atQuery, setValue],
   );
 
-  /**
-   * Add a managed office ref. Dedupe by `docId` — adding the same docId
-   * twice is a no-op (immutable update).
-   */
+  /** Add a managed office ref. Dedupe by `docId` — adding the same docId twice is a no-op (immutable update). */
   const addOfficeRef = useCallback((ref: ChatOfficeRef) => {
     setOfficeRefs((prev) => {
       if (prev.some((r) => r.docId === ref.docId)) return prev;
@@ -304,19 +283,12 @@ function ChatInputInner({
     });
   }, []);
 
-  /**
-   * Remove an office ref by docId.
-   */
+  /** Remove an office ref by docId. */
   const removeOfficeRef = useCallback((docId: string) => {
     setOfficeRefs((prev) => prev.filter((r) => r.docId !== docId));
   }, []);
 
-  /**
-   * Handle the @-menu selection. Routes by discriminated-union kind:
-   *   - 'file' → insert `@<path>` into the textarea (existing behavior)
-   *   - 'office' → add the ChatOfficeRef to officeRefs
-   *   - 'office-import' → call importOfficeReference then add the ref
-   */
+  /** Handle the @-menu selection. Routes by discriminated-union kind: - 'file' → insert `@<path>` into the textarea (existing behavior) - 'office' → add the ChatOfficeRef to officeRefs - 'office-import' → call importOfficeReference then add the ref */
   const handleAtFileSelect = useCallback(
     async (selection: AtFileSelection) => {
       if (selection.kind === 'file') {
@@ -355,7 +327,7 @@ function ChatInputInner({
   const handleSend = () => {
     // RT5 (round7): 运行中允许发送 —— onSend（useChat.sendMessage）按会话
     // 活跃流先走 steering 注入当前 run，失败回退队列；不再 UI 硬拦截。
-    if (!value.trim()) return;
+    if (!value.trim() && files.length === 0 && images.length === 0 && knowledgeRefs.length === 0 && officeRefs.length === 0 && audioAttachments.length === 0) return;
     // R37/r75 后 files（txt/md/pdf/docx）会随消息上传注入——仅对其余
     // 不受支持的扩展名提示（诚实提示而不是静默丢失）。
     const unsupportedFiles = files.filter((f) => {
@@ -379,13 +351,11 @@ function ChatInputInner({
     setValue('');
     setKnowledgeRefs([]);
     setOfficeRefs([]);
+    setAudioAttachments([]);
     clearAll();
   };
 
-  /**
-   * Task 5 (2026-09-17): "新话题" 按钮 —— 空内容 + contextReset 走 onSend，
-   * 后端在消息前插入 topic_separator 并清空 LLM 上下文。
-   */
+  /** Task 5 (2026-09-17): "新话题" 按钮 —— 空内容 + contextReset 走 onSend， 后端在消息前插入 topic_separator 并清空 LLM 上下文。 */
   const handleNewTopic = useCallback(() => {
     if (isLoading || disabled) return;
     onSend('', { contextReset: true });
@@ -625,14 +595,24 @@ function ChatInputInner({
     e.target.value = '';
   };
 
-  // Phase 4 (2026-09-12): audio attachment upload handler
-  const handleAudioAttachment = (attachment: {
+  // Phase 4 (2026-09-12): audio attachment upload handler — 落入可移除音频附件 Chip 列表
+  const handleAudioAttachment = useCallback((attachment: {
     mediaRef: { id: string; mime_type: string; file_size: number };
     apiUrl: string;
   }) => {
-    // TODO: integrate with message sending (attach to next user message)
-    console.warn('[ChatInput] Audio attachment uploaded:', attachment);
-  };
+    setAudioAttachments((prev) => [
+      ...prev,
+      {
+        id: attachment.mediaRef.id,
+        mimeType: attachment.mediaRef.mime_type,
+        fileSize: attachment.mediaRef.file_size,
+        apiUrl: attachment.apiUrl,
+      },
+    ]);
+  }, []);
+  const removeAudioAttachment = useCallback((id: string) => {
+    setAudioAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
 
   const toggleKnowledgeRef = (doc: KnowledgeDocType) => {
     setKnowledgeRefs((prev) =>
@@ -708,7 +688,7 @@ function ChatInputInner({
         value={value}
         onChange={handleChange}
         onSubmit={handleSend}
-        onNewTopic={handleNewTopic}
+        onNewTopic={hideNewTopic ? undefined : handleNewTopic}
         placeholder={placeholder ?? t('chat.placeholder')}
         disabled={disabled}
         isLoading={isLoading}
@@ -717,10 +697,12 @@ function ChatInputInner({
         images={images}
         knowledgeRefs={knowledgeRefs}
         officeRefs={officeRefs}
+        audioAttachments={audioAttachments}
         onRemoveFile={removeFile}
         onRemoveImage={removeImage}
         onRemoveKnowledge={(idx) => setKnowledgeRefs((prev) => prev.filter((_, i) => i !== idx))}
         onRemoveOfficeRef={removeOfficeRef}
+        onRemoveAudioAttachment={removeAudioAttachment}
         knowledgeDocs={knowledgeDocs}
         showKnowledgeSelector={showKnowledgeSelector}
         onToggleKnowledgeSelector={setShowKnowledgeSelector}
@@ -758,7 +740,8 @@ function ChatInputInner({
           )
         }
         orchModeBar={
-          <div className="flex items-center gap-2 px-2 py-1 border-b border-border">
+          hideOrchModeBar ? undefined : (
+          <div className="flex items-center gap-2 px-2 py-1 mb-2 border-b border-border">
             <label className="text-xs text-text-tertiary">{t('chat.orchMode.label')}</label>
             <select
               data-testid="orch-mode-select"
@@ -776,6 +759,7 @@ function ChatInputInner({
               </option>
             </select>
           </div>
+          )
         }
         hint={t('chat.hint')}
         composerControls={composerControls}

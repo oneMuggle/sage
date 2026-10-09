@@ -42,7 +42,7 @@ interface AtFileMenuProps {
   onClose: () => void;
 }
 
-export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
+export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
   const { t } = useI18n();
   // Task 7 (2026-07-26): read both sessionId and workspacePath from the
   // session-workspace context. sessionId is required by fileSearchClient;
@@ -108,6 +108,47 @@ export function AtFileMenu({ query, onSelect }: AtFileMenuProps) {
   }, [query, sessionId]);
 
   // Don't render if query is null
+  useEffect(() => {
+    if (query === null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (results.length === 0) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelectedIdx((prev) => (prev + 1) % results.length);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopPropagation();
+        setSelectedIdx((prev) => (prev - 1 + results.length) % results.length);
+      } else if (e.key === 'Enter' && !e.shiftKey) {
+        const picked = results[selectedIdx];
+        if (picked) {
+          e.preventDefault();
+          e.stopPropagation();
+          const kind = classifyAtFileSelection(picked);
+          if (kind === 'file') {
+            onSelect({ kind: 'file', path: picked.path, name: picked.name });
+          } else if (kind === 'office' && picked.docId && picked.docType) {
+            onSelect({
+              kind: 'office',
+              ref: { docId: picked.docId, docType: picked.docType, filename: picked.name },
+            });
+          } else {
+            onSelect({ kind: 'office-import', result: picked });
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [query, results, selectedIdx, onSelect, onClose]);
+
   if (query === null) {
     return null;
   }
