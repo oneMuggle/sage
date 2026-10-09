@@ -1054,7 +1054,6 @@ export interface AgentCreate {
 export type ScheduleKind = 'once' | 'recurring';
 
 export type Schedule = { kind: 'once'; at: number } | { kind: 'recurring'; cron: string };
-
 export interface ScheduledTask {
   id: string;
   name: string;
@@ -1068,6 +1067,8 @@ export interface ScheduledTask {
   last_attempt?: number | null;
   last_status?: 'never' | 'succeeded' | 'failed';
   last_error?: string | null;
+  run_count?: number;
+  max_runs?: number | null;
   created_at: number;
 }
 
@@ -1078,6 +1079,7 @@ export interface CreateTaskInput {
   session_id: string;
   content: string;
   enabled?: boolean;
+  max_runs?: number | null;
 }
 
 export interface UpdateTaskInput {
@@ -1087,12 +1089,10 @@ export interface UpdateTaskInput {
   schedule?: Schedule;
   session_id?: string;
   content?: string;
+  max_runs?: number | null;
 }
 
-// ============================================================================
 // Multi-agent orchestration types (Phase 4)
-// ============================================================================
-
 export type LaneStatus =
   | 'created'
   | 'ready'

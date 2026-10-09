@@ -16,7 +16,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SRC_DIR = path.join(ROOT, 'src');
 const BASELINE_PATH = path.join(ROOT, 'scripts', 'font-scale-baseline.json');
 const REGEX = /\btext-\[\d+px\]/g;
 

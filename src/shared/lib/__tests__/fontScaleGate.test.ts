@@ -1,6 +1,7 @@
 // src/shared/lib/__tests__/fontScaleGate.test.ts
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 describe('U3 font-scale ratchet gate (check-font-scale.mjs)', () => {

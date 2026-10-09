@@ -18,7 +18,7 @@ from backend.data.session_repo import SessionRepository
 from backend.data.settings_repo import SettingsRepository
 
 
-@pytest.fixture
+@pytest.fixture()
 def temp_db(tmp_path: Path) -> Database:
     db = Database(db_path=tmp_path / "test_r188.db")
     db.init_db()
