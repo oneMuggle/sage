@@ -74,8 +74,8 @@ export function BlockedCard({
       {/* 标题栏 */}
       <div className="flex items-center gap-2 px-3 py-2 bg-warning/10 border-b border-warning/30">
         <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
-        <span className="text-[13px] font-medium text-warning">{t('chat.blocked.title')}</span>
-        <span className="ml-auto text-[11px] px-1.5 py-0.5 rounded bg-warning/15 text-warning/80 font-mono">
+        <span className="text-ui-caption font-medium text-warning">{t('chat.blocked.title')}</span>
+        <span className="ml-auto text-ui-2xs px-1.5 py-0.5 rounded bg-warning/15 text-warning/80 font-mono">
           {blockReason}
         </span>
       </div>
@@ -84,7 +84,7 @@ export function BlockedCard({
       <div className="px-3 py-2.5 flex flex-col gap-2">
         {/* 目标 URL */}
         {blockedUrl && (
-          <div className="flex items-start gap-2 text-[12px]">
+          <div className="flex items-start gap-2 text-ui-sm">
             <span className="text-muted shrink-0">{t('chat.blocked.target')}</span>
             <span className="font-mono text-text-secondary break-all" title={blockedUrl}>
               {blockedUrl}
@@ -93,11 +93,11 @@ export function BlockedCard({
         )}
 
         {/* 原因说明 */}
-        <div className="text-[12px] text-text-secondary leading-relaxed">{reasonLabel}</div>
+        <div className="text-ui-sm text-text-secondary leading-relaxed">{reasonLabel}</div>
 
         {/* 后端给出的错误详情（可选） */}
         {errorMessage && (
-          <div className="text-[11px] text-muted font-mono bg-bg-subtle/60 rounded px-2 py-1 break-all">
+          <div className="text-ui-2xs text-muted font-mono bg-bg-subtle/60 rounded px-2 py-1 break-all">
             {errorMessage}
           </div>
         )}
@@ -116,7 +116,7 @@ export function BlockedCard({
                   type="button"
                   data-testid={`blocked-action-${action.action}`}
                   onClick={() => onAction?.(action)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[12px] border transition-colors ${style}`}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-ui-sm border transition-colors ${style}`}
                 >
                   {icon}
                   <span>{action.label}</span>

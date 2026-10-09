@@ -1,48 +1,33 @@
 import {
-  Copy,
-  ThumbsUp,
-  ThumbsDown,
   BookOpen,
   Wrench,
-  Brain,
   ChevronDown,
-  GitBranch,
-  History,
-  Eye,
-  EyeOff,
-  Pencil,
-  RefreshCw,
-  Check,
-  Quote,
   FileText,
   Zap,
 } from 'lucide-react';
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import ReactMarkdown, { type Components } from 'react-markdown';
-import rehypeKatex from 'rehype-katex';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
+import { memo, useMemo, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { MediaAttachment } from '../../features/chat/MediaAttachment';
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { THINKING_PLACEHOLDER } from '../../features/send-message/thinkingPlaceholder';
-import { humanizeToolCall } from '../../shared/lib/humanize';
 import { useI18n } from '../../shared/lib/i18n';
 import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownChunks';
 import type { BlockedAction, Message as MessageType, ToolCall } from '../../shared/lib/store';
 import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
-import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
-import { AnswerVersionSwitcher } from './AnswerVersionSwitcher';
 import { BlockedCard } from './BlockedCard';
 import { CompactBanner } from './CompactBanner';
-import { GenerationStatsBadge } from './GenerationStatsBadge';
-import { HtmlCodeBlock } from './HtmlCodeBlock';
-import { MarkdownImage } from './MarkdownImage';
-import { MermaidBlock } from './MermaidBlock';
-import { ReadAloudButton } from './ReadAloudButton';
-import { ShikiCodeBlock } from './ShikiCodeBlock';
+import { MessageActionBar } from './MessageActionBar';
+import {
+  fileChangePaths,
+  MarkdownChunk,
+  renderTextWithLinks,
+  ThinkingPanel,
+  ThinkingShimmer,
+  ToolCallResult,
+  ToolCallTitle,
+} from './MessageMarkdownParts';
 import { TruncationNotice } from './TruncationNotice';
 import { FileChangeCards } from './changes/FileChangeCard';
 import { resolveToolRenderer } from './toolRenderers';
@@ -79,352 +64,6 @@ interface MessageProps {
   artifactsByToolCall?: Record<string, Artifact[]>;
   /** R19-W1: 网页访问拦截卡片动作回调 —— 由 Chat 层处理语义（发消息/跳设置/开浏览器） */
   onBlockedAction?: (action: BlockedAction) => void;
-}
-
-/** Code block renderer — delegates to ShikiCodeBlock for syntax highlighting */
-function CodeBlock({ language, children }: { language?: string; children: string }) {
-  // Inline code fallback
-  if (!language && !children.includes('\n')) {
-    return (
-      <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{children}</code>
-    );
-  }
-
-  return <ShikiCodeBlock language={language}>{children}</ShikiCodeBlock>;
-}
-
-/** markdown 插件集 — 模块级稳定引用，避免每次渲染重建数组 */
-const MD_REMARK_PLUGINS = [remarkGfm, remarkMath];
-const MD_REHYPE_PLUGINS = [rehypeKatex];
-
-const URL_SPLIT_RE = /(https?:\/\/[^\s<>()]+)/;
-
-/** P3: 用户消息纯文本中的 URL 自动链接化（assistant 走 markdown 已自带链接） */
-function renderTextWithLinks(text: string): ReactNode[] {
-  return text.split(URL_SPLIT_RE).map((part, i) =>
-    /^https?:\/\//.test(part) ? (
-      <a
-        key={i}
-        href={part}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="underline break-all"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {part}
-      </a>
-    ) : (
-      part
-    ),
-  );
-}
-
-/** 流式未闭合围栏的降级代码渲染 — 纯文本 pre，不随 delta 重复触发 Shiki/mermaid */
-function PlainCodeBlock({ className, children }: { className?: string; children: unknown }) {
-  const content = String(children).replace(/\n$/, '');
-  if (!className && !content.includes('\n')) {
-    return (
-      <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{content}</code>
-    );
-  }
-  return (
-    <pre className="bg-[#282c34] text-gray-300 p-3 text-code font-mono leading-relaxed overflow-x-auto rounded-md my-2">
-      <code>{content}</code>
-    </pre>
-  );
-}
-
-/** 自定义 component 映射 — 模块级单例（原先内联在 JSX 里，每次渲染重建整个映射对象） */
-const markdownComponents = {
-  code({ className, children }: { className?: string; children: unknown }) {
-    const match = /language-(\w+)/.exec(className || '');
-    const lang = match ? match[1] : undefined;
-    const content = String(children).replace(/\n$/, '');
-    // Inline code detection: no language class and short content
-    const isInlineCode = !className && !content.includes('\n');
-    if (isInlineCode || !lang) {
-      return (
-        <code className="px-1.5 py-0.5 bg-bg-subtle rounded text-code font-mono">{content}</code>
-      );
-    }
-    // U7': Mermaid 图表渲染（动态加载，失败回退源码展示）
-    if (lang === 'mermaid') {
-      return <MermaidBlock code={content} />;
-    }
-    // P1: HTML 代码块支持源码/预览切换（sandbox iframe）
-    if (lang === 'html') {
-      return <HtmlCodeBlock code={content} />;
-    }
-    return <CodeBlock language={lang}>{content}</CodeBlock>;
-  },
-  // P1: 图片加载骨架 + 渐入 + 点击放大（Lightbox）
-  img({ src, alt }: { src?: string; alt?: string }) {
-    return <MarkdownImage src={src} alt={alt} />;
-  },
-  pre({ children }: { children?: ReactNode }) {
-    return <>{children}</>;
-  },
-  table({ children }: { children?: ReactNode }) {
-    return (
-      // P2: 长表格纵向限高滚动 + 表头粘性（此前只能横向滚动，数十行的表
-      // 把整条消息拉得极长）
-      <div className="overflow-x-auto my-3 max-h-80 overflow-y-auto">
-        <table className="min-w-full text-ui-sm border-collapse border border-border">
-          {children}
-        </table>
-      </div>
-    );
-  },
-  th({ children }: { children?: ReactNode }) {
-    return (
-      <th className="border border-border px-3 py-1.5 bg-bg-subtle font-semibold text-left sticky top-0 z-[1]">
-        {children}
-      </th>
-    );
-  },
-  td({ children }: { children?: ReactNode }) {
-    return <td className="border border-border px-3 py-1.5">{children}</td>;
-  },
-  p({ children }: { children?: ReactNode }) {
-    return <p className="mb-2 last:mb-0">{children}</p>;
-  },
-  ul({ children }: { children?: ReactNode }) {
-    return <ul className="list-disc list-outside ml-5 mb-2">{children}</ul>;
-  },
-  ol({ children }: { children?: ReactNode }) {
-    return <ol className="list-decimal list-outside ml-5 mb-2">{children}</ol>;
-  },
-  li({ children }: { children?: ReactNode }) {
-    return <li className="mb-0.5">{children}</li>;
-  },
-  // P2: GFM 任务列表 checkbox 主题化（默认渲染无样式反馈）
-  input({ type, checked, disabled }: { type?: string; checked?: boolean; disabled?: boolean }) {
-    if (type === 'checkbox') {
-      return (
-        <input
-          type="checkbox"
-          checked={checked}
-          disabled={disabled}
-          className="mr-1.5 w-3.5 h-3.5 align-middle accent-primary"
-        />
-      );
-    }
-    return <input type={type} checked={checked} disabled={disabled} />;
-  },
-  a({ href, children }: { href?: string; children?: ReactNode }) {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        title={href}
-        className="text-primary hover:underline"
-      >
-        {children}
-      </a>
-    );
-  },
-  blockquote({ children }: { children?: ReactNode }) {
-    return (
-      <blockquote className="border-l-4 border-border pl-3 py-1 my-2 text-muted italic">
-        {children}
-      </blockquote>
-    );
-  },
-  h1({ children }: { children?: ReactNode }) {
-    return <h1 className="text-ui-xl font-bold mt-4 mb-2">{children}</h1>;
-  },
-  h2({ children }: { children?: ReactNode }) {
-    return <h2 className="text-ui-lg font-bold mt-3 mb-2">{children}</h2>;
-  },
-  h3({ children }: { children?: ReactNode }) {
-    return <h3 className="text-ui-base font-bold mt-2 mb-1">{children}</h3>;
-  },
-};
-
-/** 流式 live 尾块专用映射 — 未闭合围栏内的代码块降级纯文本 */
-const liveMarkdownComponents: typeof markdownComponents = {
-  ...markdownComponents,
-  code: PlainCodeBlock,
-};
-
-/**
- * memo 化的 markdown 块渲染器 — P1 流式分块的关键。
- * 比较器按字符串值相等跳过重解析（slice 出的新字符串实例也能命中），
- * 已确定的稳定前缀块在每个 delta 到达时零成本跳过。
- */
-const MarkdownChunk = memo(
-  function MarkdownChunk({ md, plainFences }: { md: string; plainFences?: boolean }) {
-    // Components 断言: 映射对象是模块级单例，handler 参数用窄化类型
-    // （react-markdown 的 ExtraProps 交叉类型过宽，直接标注反而失配）
-    const components = (plainFences ? liveMarkdownComponents : markdownComponents) as Components;
-    return (
-      <ReactMarkdown
-        remarkPlugins={MD_REMARK_PLUGINS}
-        rehypePlugins={MD_REHYPE_PLUGINS}
-        components={components}
-      >
-        {md}
-      </ReactMarkdown>
-    );
-  },
-  (prev, next) => prev.md === next.md && prev.plainFences === next.plainFences,
-);
-
-/** ThinkingShimmer — 等待首 token 的 shimmer 占位（替代 "🤔 思考中…" 静态文本）。
- *  两根相位错开的扫光条，animate-shimmer 见 index.css；reduced-motion 下
- *  全局 media query 会把动画压到 0.01ms，自然退化为静态骨架。 */
-function ThinkingShimmer() {
-  return (
-    <div className="flex items-center gap-2 py-1" data-testid="thinking-shimmer">
-      <span className="h-2.5 w-44 rounded-full animate-shimmer" />
-      <span
-        className="h-2.5 w-24 rounded-full animate-shimmer"
-        style={{ animationDelay: '-0.8s' }}
-      />
-    </div>
-  );
-}
-
-/** ThinkingPanel - 可折叠的 LLM 思考过程展示面板
- *  P1: 流式 reasoning 时自动展开 (isStreaming=true)
- */
-function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStreaming?: boolean }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  // P21: 流式期间自动滚动到底部，显示最新思考内容
-  const contentRef = useRef<HTMLDivElement | null>(null);
-
-  // P1 fix: 当 isStreaming 变为 true 时自动展开 (useState 只读初始值,需 useEffect 同步)
-  useEffect(() => {
-    if (isStreaming) setIsExpanded(true);
-  }, [isStreaming]);
-
-  // 流式期间 reasoning 增长时自动滚动到底部
-  useEffect(() => {
-    if (isStreaming && contentRef.current) {
-      contentRef.current.scrollTop = contentRef.current.scrollHeight;
-    }
-  }, [reasoning]);
-
-  return (
-    <div className="mb-2 border border-border/50 rounded-radius-sm overflow-hidden">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 bg-bg-subtle hover:bg-bg-hover transition-colors text-left"
-        aria-expanded={isExpanded}
-      >
-        <Brain className="w-4 h-4 text-primary" />
-        <span className="text-ui-sm font-medium text-text-secondary">
-          思考过程 ({reasoning.length} 字)
-        </span>
-        <ChevronDown
-          className={`w-4 h-4 ml-auto transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-        />
-      </button>
-      {isExpanded && (
-        <div
-          ref={contentRef}
-          className="px-3 py-2 bg-bg-subtle/50 border-t border-border/50 text-ui-sm text-text-secondary leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap"
-        >
-          {reasoning}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** U8: humanized tool call title — "Write **src/App.tsx**" / "Run `pytest`"
- *  代替原来的 write_file({"path":...}) 技术化展示。
- *  - 无 scope 的动作（文件操作）：对象加粗
- *  - 有 scope 的动作（shell / 网络）：对象用 code chip + scope 标签
- *    （local = 本机执行，external = 请求会离开本机）
- */
-function ToolCallTitle({ name, args }: { name: string; args: Record<string, unknown> }) {
-  const human = humanizeToolCall(name, args);
-  return (
-    <>
-      <span className="text-text-secondary">
-        {human.verb}
-        {human.object !== '' && (
-          <>
-            {' '}
-            {human.scope ? (
-              <code className="rounded bg-bg-hover px-1 py-0.5 font-mono text-[11px] text-text break-all">
-                {human.object}
-              </code>
-            ) : (
-              <strong className="font-semibold text-text break-all">{human.object}</strong>
-            )}
-          </>
-        )}
-      </span>
-      {human.scope && (
-        <span
-          className={`rounded px-1 py-0.5 text-[10px] leading-none ${
-            human.scope === 'external' ? 'bg-warning/10 text-warning' : 'bg-bg-hover text-muted'
-          }`}
-        >
-          {human.scope}
-        </span>
-      )}
-    </>
-  );
-}
-
-/** right-panel R5: 会改工作区文件的工具 —— 命中即渲染内联 diff 卡片 */
-const FILE_WRITE_TOOLS = new Set(['write_file', 'edit_file', 'apply_patch']);
-
-/**
- * 从工具调用参数提取目标文件路径（相对工作区根,与 git 接口口径一致）。
- * apply_patch 一次动多个文件 → 返回去重后的路径列表,逐文件各渲染一张卡。
- * 参数畸形（LLM 输出不可信）时返回空数组,不渲染卡片。
- */
-function fileChangePaths(tc: ToolCall): string[] {
-  if (!FILE_WRITE_TOOLS.has(tc.name)) return [];
-  const args = (tc.args && typeof tc.args === 'object' ? tc.args : {}) as Record<string, unknown>;
-  if (tc.name === 'apply_patch') {
-    if (!Array.isArray(args.patches)) return [];
-    const paths: string[] = [];
-    for (const patch of args.patches) {
-      const filePath = (patch as Record<string, unknown> | null)?.file_path;
-      if (typeof filePath === 'string' && filePath.trim() && !paths.includes(filePath.trim())) {
-        paths.push(filePath.trim());
-      }
-    }
-    return paths;
-  }
-  const raw = tc.name === 'edit_file' ? args.file_path : args.path;
-  return typeof raw === 'string' && raw.trim() ? [raw.trim()] : [];
-}
-
-/** 工具调用结果可折叠面板 — 大文件内容默认收起，避免刷屏
- *  阈值：超过 300 字符时自动折叠，用户可手动展开查看
- */
-function ToolCallResult({ result }: { result: unknown }) {
-  const safeResult = typeof result === 'string' ? result : JSON.stringify(result ?? '');
-  const [isExpanded, setIsExpanded] = useState(false);
-  const isLarge = safeResult.length > 300;
-
-  if (!isLarge) {
-    return <span className="text-text-primary break-all">{safeResult}</span>;
-  }
-
-  return (
-    <div className="w-full">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
-      >
-        {isExpanded ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-        <span>{isExpanded ? '收起' : `展开 (${safeResult.length} 字符)`}</span>
-      </button>
-      {isExpanded && (
-        <pre className="mt-1 p-2 bg-bg-subtle border border-border rounded-radius-sm text-[11px] text-text-secondary overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap break-all font-mono">
-          {safeResult}
-        </pre>
-      )}
-    </div>
-  );
 }
 
 // MEDIUM-5: React.memo 包装,自定义比较函数避免 ReactMarkdown 重解析
@@ -501,30 +140,6 @@ function MessageComponent({
     }
     return list.map(normalizeToolCallEnvelope);
   }, [message.tool_calls]);
-  // M4: 只有 user/assistant 消息可分叉（system/tool 行没有分叉语义）
-  const canFork = Boolean(onFork) && (isUser || isAssistant);
-  // W1: 回滚到此处（user/assistant 均可——语义为回到该消息刚完成的时点）
-  const canRewind = Boolean(onRewind) && (isUser || isAssistant) && !isStreaming;
-  // U5': 编辑重发只对 user 消息有意义（重写用户输入，而非模型回答）
-  const canEditResend = Boolean(onEditResend) && isUser;
-  // R18-A: 重新生成仅对 assistant 消息有意义（重跑回答，原会话保留）
-  const canRegenerate = Boolean(onRegenerate) && isAssistant && !isStreaming;
-  // R17-A: 复制按钮恒显 —— 此前被 onFeedback 门控劫持（调用方从不传
-  // onFeedback），主聊天没有任何复制入口。system/tool 行无复制语义。
-  const canCopy =
-    (isUser || isAssistant) && Boolean((message.content ?? '').trim()) && !isStreaming;
-  // R17-B: 删除仅对历史消息开放（流式中的占位消息不可删）
-  const canDelete = Boolean(onDelete) && (isUser || isAssistant) && !isStreaming;
-  // P0-1: 引用/保存记忆对 user+assistant 均可
-  const canQuote = Boolean(onQuote) && (isUser || isAssistant);
-  const canSaveToMemory = Boolean(onSaveToMemory) && (isUser || isAssistant);
-  const [copied, setCopied] = useState(false);
-  // 复制后的 1.5s 复位定时器：组件可能在回调触发前卸载（切会话、删除消息），
-  // 不清理就会在环境拆除后调用 setState → ReferenceError: window is not defined。
-  const copiedResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (copiedResetRef.current !== null) clearTimeout(copiedResetRef.current);
-  }, []);
   // R38: 技能激活明细展开态
   const [skillsExpanded, setSkillsExpanded] = useState(false);
   const activatedSkills = message.activated_skills ?? [];
@@ -556,13 +171,6 @@ function MessageComponent({
     );
   }
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(message.content);
-    setCopied(true);
-    if (copiedResetRef.current !== null) clearTimeout(copiedResetRef.current);
-    copiedResetRef.current = setTimeout(() => setCopied(false), 1500);
-  };
-
   return (
     <div
       data-testid={isAssistant ? 'chat-message-assistant' : undefined}
@@ -593,7 +201,7 @@ function MessageComponent({
             {knowledgeRefs.map((ref) => (
               <span
                 key={ref.id}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-primary/10 text-primary"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs bg-primary/10 text-primary"
               >
                 <BookOpen className="w-2.5 h-2.5" />
                 {ref.title}
@@ -642,7 +250,7 @@ function MessageComponent({
                       {artifactsByToolCall[tc.id].map((art) => (
                         <button
                           key={art.id}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-[11px] text-primary transition-colors"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-ui-2xs text-primary transition-colors"
                           onClick={() => useRightPanelStore.getState().selectArtifact(art.id)}
                           title="在右侧面板中查看"
                           data-testid="message-artifact-chip"
@@ -695,13 +303,13 @@ function MessageComponent({
               return (
                 <div
                   key={`${tc.name}-${idx}`}
-                  className="flex flex-col gap-1.5 rounded border border-border bg-bg-subtle text-[12px]"
+                  className="flex flex-col gap-1.5 rounded border border-border bg-bg-subtle text-ui-sm"
                 >
                   {/* Tool call header — U8: humanized title + 弱化的原始工具名(调试用) */}
                   <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
                     <Wrench className="w-3 h-3 text-primary shrink-0" />
                     <ToolCallTitle name={tc.name} args={tc.args} />
-                    <span className="font-mono text-[10px] text-muted">{tc.name}</span>
+                    <span className="font-mono text-ui-xs text-muted">{tc.name}</span>
                   </div>
                   {/* right-panel R5/R6: 文件修改卡组（<3 个平铺,≥3 个折叠为汇总条） */}
                   {changePaths.length > 0 && (
@@ -736,7 +344,7 @@ function MessageComponent({
           <div
             data-error={isError ? 'true' : undefined}
             data-quote-scope="message-body"
-            className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
+            className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-ui-caption leading-relaxed ${
               isUser
                 ? 'bg-primary text-text-inverse'
                 : isError
@@ -773,7 +381,7 @@ function MessageComponent({
         )}
 
         {/* 底部信息 */}
-        <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
+        <div className="flex items-center gap-2 mt-1 text-ui-2xs text-muted">
           {/* R81: 统一参考来源 chip（记忆 + 附件检索 + 工具命中收编，
               原 memory-used / rag-citations 两个分散 chip 合并为此处） */}
           {sourcesTotal > 0 && (
@@ -824,7 +432,7 @@ function MessageComponent({
           >
             {(memoryRefs.length > 0 || memorySources.length > 0) && (
               <div className="space-y-1">
-                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
                   {t('chat.sources_group_memory')}
                 </div>
                 {memoryRefs.map((ref, i) => (
@@ -867,7 +475,7 @@ function MessageComponent({
 
             {ragCitations.length > 0 && (
               <div className="space-y-1">
-                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
                   {t('chat.sources_group_attachment')}
                 </div>
                 {ragCitations.map((c, i) => (
@@ -894,7 +502,7 @@ function MessageComponent({
 
             {wikiSources.length > 0 && (
               <div className="space-y-1">
-                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
                   {t('chat.sources_group_wiki')}
                 </div>
                 {wikiSources.map((s, i) => (
@@ -918,7 +526,7 @@ function MessageComponent({
 
             {webSources.length > 0 && (
               <div className="space-y-1">
-                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
                   {t('chat.sources_group_web')}
                 </div>
                 {webSources.map((s, i) => (
@@ -948,7 +556,7 @@ function MessageComponent({
 
             {mcpSources.length > 0 && (
               <div className="space-y-1">
-                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
                   {t('chat.sources_group_tool')}
                 </div>
                 {mcpSources.map((s, i) => (
@@ -989,7 +597,7 @@ function MessageComponent({
                     {skill.triggers_matched.map((trigger, idx) => (
                       <span
                         key={idx}
-                        className="px-1 py-0.5 rounded bg-bg-hover text-text-tertiary text-[10px]"
+                        className="px-1 py-0.5 rounded bg-bg-hover text-text-tertiary text-ui-xs"
                       >
                         {trigger}
                       </span>
@@ -1007,137 +615,19 @@ function MessageComponent({
         )}
 
         {/* Action buttons */}
-        {(canCopy ||
-          onFeedback ||
-          canFork ||
-          canRewind ||
-          canEditResend ||
-          canDelete ||
-          canRegenerate ||
-          canQuote ||
-          canSaveToMemory) && (
-          <div className="flex items-center gap-1 mt-2 pt-2 border-t border-border">
-            {/* 第二轮 C2: 最后一轮的回答版本切换 ‹ 2/3 › */}
-            {isAssistant && onAnswerVersionChange && !isStreaming && (
-              <AnswerVersionSwitcher
-                sessionId={message.session_id}
-                messageId={message.id}
-                onChanged={onAnswerVersionChange}
-              />
-            )}
-            {canCopy && (
-              <button
-                onClick={copyToClipboard}
-                className="p-1 rounded hover:bg-bg-hover"
-                title={t('chat.copy')}
-                aria-label={t('chat.copy')}
-                data-testid="copy-message"
-              >
-                {copied ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4" />}
-              </button>
-            )}
-            {/* 第二轮 B1: 朗读（不支持 speechSynthesis 时按钮自行隐藏） */}
-            {canCopy && isAssistant && (
-              <ReadAloudButton messageId={message.id} content={message.content} />
-            )}
-            {onFeedback && (
-              <>
-                <button
-                  onClick={() => onFeedback(message.id, 'up')}
-                  className="p-1 rounded hover:bg-bg-hover"
-                  title="有帮助" aria-label="有帮助"
-                >
-                  <ThumbsUp className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => onFeedback(message.id, 'down')}
-                  className="p-1 rounded hover:bg-bg-hover"
-                  title="没帮助" aria-label="没帮助"
-                >
-                  <ThumbsDown className="w-4 h-4" />
-                </button>
-              </>
-            )}
-            {canRegenerate && (
-              <button
-                onClick={() => onRegenerate?.(message.id)}
-                className="p-1 rounded hover:bg-bg-hover"
-                title={t('chat.regenerate')}
-                aria-label={t('chat.regenerate')}
-                data-testid="regenerate-message"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-            )}
-            {canEditResend && (
-              <button
-                onClick={() => onEditResend?.(message.id)}
-                className="p-1 rounded hover:bg-bg-hover"
-                title={t('chat.edit_resend')}
-                aria-label={t('chat.edit_resend')}
-                data-testid="edit-resend"
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
-            )}
-            {canFork && (
-              <button
-                onClick={() => onFork?.(message.id)}
-                className="p-1 rounded hover:bg-bg-hover"
-                title={t('chat.fork_from_here')} aria-label={t('chat.fork_from_here')}
-                data-testid="fork-message"
-              >
-                <GitBranch className="w-4 h-4" />
-              </button>
-            )}
-            {canRewind && (
-              <button
-                onClick={() => onRewind?.(message.id)}
-                className="p-1 rounded hover:bg-bg-hover"
-                title={t('chat.rewind')}
-                aria-label={t('chat.rewind')}
-                data-testid="rewind-message"
-              >
-                <History className="w-4 h-4" />
-              </button>
-            )}
-            {canDelete && (
-              <TwoStepDelete
-                data-testid="delete-message"
-                onConfirm={() => onDelete?.(message.id)}
-                label={t('chat.delete_message')}
-                armedLabel={t('chat.delete_message_confirm')}
-                className="p-1"
-              />
-            )}
-            {canQuote && (
-              <button
-                onClick={() => onQuote?.(message)}
-                className="p-1 rounded hover:bg-bg-hover"
-                title={t('chat.quote_to_chat')}
-                aria-label={t('chat.quote_to_chat')}
-                data-testid="quote-message"
-              >
-                <Quote className="w-4 h-4" />
-              </button>
-            )}
-            {canSaveToMemory && (
-              <button
-                onClick={() => onSaveToMemory?.(message)}
-                className="p-1 rounded hover:bg-bg-hover"
-                title={t('chat.save_to_memory')}
-                aria-label={t('chat.save_to_memory')}
-                data-testid="save-to-memory"
-              >
-                <Brain className="w-4 h-4" />
-              </button>
-            )}
-            {/* 第二轮 C1: 生成速度统计（右对齐，悬停看明细） */}
-            {isAssistant && !isStreaming && (
-              <GenerationStatsBadge stats={message.generation_stats} />
-            )}
-          </div>
-        )}
+        <MessageActionBar
+          message={message}
+          isStreaming={isStreaming}
+          onFeedback={onFeedback}
+          onFork={onFork}
+          onRewind={onRewind}
+          onEditResend={onEditResend}
+          onRegenerate={onRegenerate}
+          onDelete={onDelete}
+          onQuote={onQuote}
+          onSaveToMemory={onSaveToMemory}
+          onAnswerVersionChange={onAnswerVersionChange}
+        />
       </div>
     </div>
   );

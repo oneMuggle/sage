@@ -403,9 +403,9 @@ export function PromptTemplatesTab() {
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium text-text">{tpl.name}</div>
                   {tpl.description && (
-                    <div className="text-[11px] text-text-secondary">{tpl.description}</div>
+                    <div className="text-ui-2xs text-text-secondary">{tpl.description}</div>
                   )}
-                  <div className="text-[11px] text-text-secondary font-mono mt-1 line-clamp-2">
+                  <div className="text-ui-2xs text-text-secondary font-mono mt-1 line-clamp-2">
                     {tpl.content.length > 120 ? `${tpl.content.slice(0, 120)}…` : tpl.content}
                   </div>
                 </div>
@@ -419,7 +419,7 @@ export function PromptTemplatesTab() {
                       if (entries.length === 0) return null;
                       return (
                         <span
-                          className="text-[11px] text-text-secondary mr-1"
+                          className="text-ui-2xs text-text-secondary mr-1"
                           data-testid={`prompts-memory-${tpl.id}`}
                         >
                           记忆 {entries.length} 项
@@ -463,7 +463,7 @@ export function PromptTemplatesTab() {
                     className="p-1 rounded hover:bg-error/10 text-muted hover:text-error"
                     title="删除"
                   >
-                    <span className="text-[11px]">删除</span>
+                    <span className="text-ui-2xs">删除</span>
                   </button>
                 </div>
               </div>
@@ -501,7 +501,7 @@ export function PromptTemplatesTab() {
                 onClick={() => {
                   orphans.forEach((e) => remove(e.key));
                 }}
-                className="px-2 py-0.5 text-[11px] rounded-radius-sm border border-border text-muted hover:text-error shrink-0"
+                className="px-2 py-0.5 text-ui-2xs rounded-radius-sm border border-border text-muted hover:text-error shrink-0"
               >
                 全部清除
               </button>
@@ -517,7 +517,7 @@ export function PromptTemplatesTab() {
                     : e.rawPreview || '(值损坏)';
                 return (
                   <li key={e.key} className="flex items-start justify-between gap-2">
-                    <span className="min-w-0 text-[11px]">
+                    <span className="min-w-0 text-ui-2xs">
                       <span className="font-mono text-muted">#{e.hash.slice(0, 8)}</span>
                       <span className="ml-2 text-text-secondary font-mono break-all">
                         {preview}
@@ -527,7 +527,7 @@ export function PromptTemplatesTab() {
                       type="button"
                       data-testid={`tplmem-orphan-remove-${e.hash}`}
                       onClick={() => remove(e.key)}
-                      className="text-[11px] text-error hover:underline shrink-0"
+                      className="text-ui-2xs text-error hover:underline shrink-0"
                     >
                       删除
                     </button>
