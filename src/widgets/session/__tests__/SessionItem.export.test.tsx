@@ -5,6 +5,7 @@
  * 失败时 alert 展示本地化错误。sessionApi 整体 mock,不打 IPC。
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { toast } from 'sonner';
 import { describe, expect, it, vi } from 'vitest';
 
 import { downloadHtmlFile, sessionApi } from '../../../shared/api/sessionApi';
@@ -107,7 +108,7 @@ describe('SessionItem — HTML export (U18)', () => {
 
   it('alerts localized error when export fails', async () => {
     vi.mocked(sessionApi.exportHtml).mockRejectedValue(new Error('backend 500'));
-    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
+    const toastErrorSpy = vi.spyOn(toast, 'error').mockImplementation(() => '');
 
     renderWithI18n(
       <SessionItem
@@ -121,8 +122,8 @@ describe('SessionItem — HTML export (U18)', () => {
     fireEvent.click(screen.getByTestId('export-session'));
 
     await waitFor(() => {
-      expect(alertSpy).toHaveBeenCalledWith('导出失败：backend 500');
+      expect(toastErrorSpy).toHaveBeenCalledWith('导出失败：backend 500');
     });
-    alertSpy.mockRestore();
+    toastErrorSpy.mockRestore();
   });
 });

@@ -274,7 +274,8 @@ export function PanelHeader({
     const countOf = (t: RightPanelTab) =>
       t === 'artifacts' ? artifactCount : t === 'changes' ? changesCount : 0;
     return (
-      <div className="flex border-b border-border items-center pr-1">
+      <div className="flex border-b border-border items-center pr-1 min-w-0">
+        <div className="flex-1 min-w-0 flex items-center overflow-x-auto no-scrollbar">
         {RIGHT_PANEL_TABS.map((t) => {
           const count = countOf(t);
           return (
@@ -285,7 +286,7 @@ export function PanelHeader({
               // 完整读法，屏幕阅读器与既有测试断言不受影响。
               aria-label={count > 0 ? `${TAB_LABELS[t]} (${count})` : TAB_LABELS[t]}
               className={
-                'flex-1 min-w-0 truncate py-2 text-sm font-medium transition-colors ' +
+                'shrink-0 whitespace-nowrap px-2 py-2 text-xs font-medium transition-colors ' +
                 (tab === t
                   ? 'text-primary border-b-2 border-primary'
                   : 'text-text-secondary hover:text-text')
@@ -299,6 +300,7 @@ export function PanelHeader({
             </button>
           );
         })}
+        </div>
         <div className="flex items-center gap-0.5 ml-1 shrink-0">
           <PanelOptionsMenu
             activePreset={activePreset}

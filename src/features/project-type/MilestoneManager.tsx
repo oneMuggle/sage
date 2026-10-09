@@ -12,6 +12,7 @@ import { projectApi, type ProjectMilestone } from '../../shared/api';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 import { MilestoneEditor } from './MilestoneEditor';
 
@@ -54,7 +55,8 @@ export function MilestoneManager({ projectId }: MilestoneManagerProps) {
   };
 
   const handleDelete = async (milestoneId: string) => {
-    if (!confirm('确定要删除此里程碑吗？')) return;
+    const ok = await confirmDialog({ title: '删除里程碑', message: '确定要删除此里程碑吗？', danger: true });
+    if (!ok) return;
     try {
       await projectApi.deleteMilestone(projectId, milestoneId);
       await fetchMilestones();
@@ -182,10 +184,20 @@ export function MilestoneManager({ projectId }: MilestoneManagerProps) {
                     </div>
                   </div>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => handleEdit(milestone)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`编辑里程碑：${milestone.title}`}
+                      onClick={() => handleEdit(milestone)}
+                    >
                       <Edit2 className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(milestone.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`删除里程碑：${milestone.title}`}
+                      onClick={() => handleDelete(milestone.id)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

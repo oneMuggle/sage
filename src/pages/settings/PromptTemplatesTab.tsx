@@ -8,8 +8,10 @@
 
 import { Download, Pencil, Plus, RefreshCw, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 import { promptApi, type PromptTemplate } from '../../shared/api/promptApi';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import { tplStorageKey } from '../../widgets/chat/TemplateFillDialog';
 
 const MAX_NAME_LEN = 60;
@@ -119,18 +121,19 @@ export function PromptTemplatesTab() {
       // R32 两阶段：先 skip 导入；有同名冲突时询问是否覆盖重导
       const first = await promptApi.importTemplates(envelope, 'skip');
       if (first.conflicts && first.conflicts.length > 0) {
-        const ok = window.confirm(
-          `发现 ${first.conflicts.length} 条同名模板（${first.conflicts.join('、')}）。是否用导入内容覆盖现有模板？`,
-        );
+        const ok = await confirmDialog({
+          title: '同名模板冲突',
+          message: `发现 ${first.conflicts.length} 条同名模板（${first.conflicts.join('、')}）。是否用导入内容覆盖现有模板？`,
+        });
         if (!ok) {
-          window.alert(report(first));
+          toast.info(report(first));
           await load();
           return;
         }
         const second = await promptApi.importTemplates(envelope, 'overwrite');
-        window.alert(report(second));
+        toast.success(report(second));
       } else {
-        window.alert(report(first));
+        toast.success(report(first));
       }
       await load();
     } catch {

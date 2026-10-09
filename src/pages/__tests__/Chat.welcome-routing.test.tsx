@@ -23,6 +23,10 @@ vi.mock('../../features/send-message/useChat', () => ({
     interrupt: vi.fn(),
     reattachActiveStream: vi.fn(),
     streamingToolCalls: [],
+    // P1-6: 排队队列字段（useChat 新增），缺了 Chat 渲染时会崩。
+    pendingMessages: [],
+    cancelPending: vi.fn(),
+    clearPendingForSession: vi.fn(),
   }),
 }));
 
@@ -155,5 +159,20 @@ describe('Chat — top-bar "新对话" must go to /welcome', () => {
     expect(screen.getByTestId('current-path').textContent).toBe('/welcome');
     // currentSessionId 被清空(避免 ChatRoute 在路由切换瞬间再次渲染 Chat)
     expect(useStore.getState().currentSessionId).toBeNull();
+  });
+
+  it('renders session model, permission mode, orchestration mode, and new topic in top header bar (UI-P0-1)', async () => {
+    useStore.getState().setCurrentSessionId('sess-header-1');
+    render(
+      <I18nProvider>
+        <ChatAppWithProbe />
+      </I18nProvider>,
+    );
+
+    const headerControls = await screen.findByTestId('chat-header-controls');
+    expect(headerControls).toBeInTheDocument();
+    expect(screen.getAllByTestId('orch-mode-select')).toHaveLength(1);
+    expect(screen.getAllByTestId('chat-new-topic')).toHaveLength(1);
+    expect(screen.queryByTestId('composer-controls')).not.toBeInTheDocument();
   });
 });

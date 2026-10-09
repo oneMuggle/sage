@@ -1,12 +1,6 @@
-/**
- * Settings 页面 - 网络 Tab（内网 Web 访问）
- *
- * 配置走 preferences KV 的 network_policy key（JSON 字符串），与 permission_mode
- * 同一路径。不进 app_settings blob —— 后者有 LEGAL_TOP_KEYS 白名单校验，加顶层
- * 字段要同步改前端 AppSettings、后端白名单、契约测试三处。
- */
-
+/** Settings 页面 - 网络 Tab（内网 Web 访问，配置走 preferences KV network_policy） */
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import { BrowserEnvironmentSection } from '../../features/diagnostic/BrowserEnvironmentSection';
 import { settingsClient } from '../../shared/api/settingsClient';
@@ -673,7 +667,7 @@ function CredentialsSection() {
           setHeaderValue('');
           reload();
         } else {
-          window.alert(t('settings.network.creds.add_header.invalid'));
+          toast.error(t('settings.network.creds.add_header.invalid'));
         }
       })
       .catch(() => undefined);

@@ -24,6 +24,11 @@ export function Layout() {
   const [collapsed, setCollapsed] = useState(false);
 
   // 监听窗口大小变化
+  // 路由切换时自动收起窄屏侧边栏抽屉
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname, location.search]);
+
   useEffect(() => {
     const onResize = () => {
       const mobile = window.innerWidth < 768;
@@ -131,7 +136,11 @@ export function Layout() {
       )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Titlebar />
+        <Titlebar
+          hideBrandLogo={!isMobile}
+          onToggleMobileSidebar={isMobile ? () => setMobileOpen((prev) => !prev) : undefined}
+          mobileSidebarOpen={mobileOpen}
+        />
         {/* 第二轮 C3: 云端模型端点不可达 / 系统断网时的全局提示 */}
         <EndpointStatusBanner />
         <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-hidden">
