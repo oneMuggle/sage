@@ -30,57 +30,57 @@ const TYPE_CONFIG: Record<string, TypeConfig> = {
   orphan: {
     icon: Unlink,
     label: '孤儿页',
-    color: 'text-orange-500',
-    bgColor: 'bg-orange-500/10',
+    color: 'text-warning',
+    bgColor: 'bg-warning/10',
   },
   'broken-link': {
     icon: Link2,
     label: '断链',
-    color: 'text-red-500',
-    bgColor: 'bg-red-500/10',
+    color: 'text-error',
+    bgColor: 'bg-error/10',
   },
   'no-outlinks': {
     icon: ListMinus,
     label: '无出链',
-    color: 'text-yellow-500',
-    bgColor: 'bg-yellow-500/10',
+    color: 'text-warning',
+    bgColor: 'bg-warning/10',
   },
   semantic: {
     icon: Info,
     label: '语义问题',
-    color: 'text-blue-500',
-    bgColor: 'bg-blue-500/10',
+    color: 'text-info',
+    bgColor: 'bg-info/10',
   },
   // --- Backend-backed lint types ---
   required_dir: {
     icon: FolderX,
     label: '必需目录缺失',
-    color: 'text-red-500',
-    bgColor: 'bg-red-500/10',
+    color: 'text-error',
+    bgColor: 'bg-error/10',
   },
   required_file: {
     icon: FileX2,
     label: '必需文件缺失',
-    color: 'text-red-500',
-    bgColor: 'bg-red-500/10',
+    color: 'text-error',
+    bgColor: 'bg-error/10',
   },
   frontmatter_missing: {
     icon: FileWarning,
     label: '缺少 frontmatter',
-    color: 'text-amber-500',
-    bgColor: 'bg-amber-500/10',
+    color: 'text-warning',
+    bgColor: 'bg-warning/10',
   },
   frontmatter_title: {
     icon: FileWarning,
     label: '缺少 title 字段',
-    color: 'text-amber-500',
-    bgColor: 'bg-amber-500/10',
+    color: 'text-warning',
+    bgColor: 'bg-warning/10',
   },
   wikilink_broken: {
     icon: Link2,
     label: '断链',
-    color: 'text-red-500',
-    bgColor: 'bg-red-500/10',
+    color: 'text-error',
+    bgColor: 'bg-error/10',
   },
 };
 
@@ -98,9 +98,9 @@ const SEVERITY_ICON: Record<string, React.ElementType> = {
 };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  error: 'text-red-500',
-  warning: 'text-amber-500',
-  info: 'text-blue-500',
+  error: 'text-error',
+  warning: 'text-warning',
+  info: 'text-info',
 };
 
 export function LintItemCard({ item, onFix, onDismiss }: LintItemCardProps) {

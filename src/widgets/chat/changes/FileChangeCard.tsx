@@ -164,7 +164,7 @@ export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
 
   return (
     <div
-      className={`mx-2 mb-1.5 rounded border bg-surface ${accepted ? 'border-green-300 dark:border-green-800 opacity-60' : 'border-border'}`}
+      className={`mx-2 mb-1.5 rounded border bg-surface ${accepted ? 'border-success/50 opacity-60' : 'border-border'}`}
       data-testid="file-change-card"
     >
       <div className="flex items-center gap-1 px-2 py-1">
@@ -180,22 +180,22 @@ export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
           ) : (
             <ChevronRight className="w-3.5 h-3.5 shrink-0 text-text-secondary" />
           )}
-          <span className="truncate font-mono text-[11px] text-text" title={path}>
+          <span className="truncate font-mono text-ui-2xs text-text" title={path}>
             {path}
           </span>
-          {accepted && <Check className="w-3 h-3 shrink-0 text-green-500" />}
+          {accepted && <Check className="w-3 h-3 shrink-0 text-success" />}
           {stats?.insertions != null && stats.insertions > 0 && (
-            <span className="shrink-0 font-mono text-[11px] text-green-600 dark:text-green-400">
+            <span className="shrink-0 font-mono text-ui-2xs text-success">
               +{stats.insertions}
             </span>
           )}
           {stats?.deletions != null && stats.deletions > 0 && (
-            <span className="shrink-0 font-mono text-[11px] text-red-500">−{stats.deletions}</span>
+            <span className="shrink-0 font-mono text-ui-2xs text-error">−{stats.deletions}</span>
           )}
         </button>
         {/* Phase 4: Accept 按钮 */}
         <button
-          className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover hover:text-green-500"
+          className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover hover:text-success"
           onClick={handleAccept}
           title="接受此变更"
           aria-label={`接受 ${path} 的变更`}
@@ -205,7 +205,7 @@ export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
         </button>
         {/* Phase 4: Revert 按钮 */}
         <button
-          className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover hover:text-red-500 disabled:opacity-50"
+          className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover hover:text-error disabled:opacity-50"
           onClick={handleRevert}
           disabled={reverting}
           title={reverting ? '回滚中…' : '回滚此变更'}
@@ -264,13 +264,13 @@ export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
           {loading ? (
             <div className="py-1 text-xs text-muted">加载 diff…</div>
           ) : error ? (
-            <div className="py-1 text-xs text-red-500">{error}</div>
+            <div className="py-1 text-xs text-error">{error}</div>
           ) : diff !== null && diff.trim() === '' ? (
             <div className="py-1 text-xs text-muted">暂无 diff 内容</div>
           ) : diff !== null ? (
             <>
               {truncated && (
-                <div className="pb-1 text-xs text-amber-600 dark:text-amber-400">
+                <div className="pb-1 text-xs text-warning">
                   diff 过长，已截断显示前 64KiB
                 </div>
               )}
@@ -312,7 +312,7 @@ function RevertAllButton({
       data-testid="file-change-revert-all"
       aria-label={`回滚这次改动的全部 ${count} 个文件`}
       title={`回滚这次改动的全部 ${count} 个文件`}
-      className="shrink-0 rounded border border-border px-1.5 py-1 text-[11px] text-text-secondary transition-colors hover:border-error hover:text-error hover:bg-bg-hover disabled:opacity-50"
+      className="shrink-0 rounded border border-border px-1.5 py-1 text-ui-2xs text-text-secondary transition-colors hover:border-error hover:text-error hover:bg-bg-hover disabled:opacity-50"
     >
       {disabled ? '回滚中…' : `全部回滚 (${count})`}
     </button>
@@ -419,18 +419,18 @@ export function FileChangeCards({ sessionId, paths }: { sessionId: string; paths
         >
           <ChevronRight className="w-3.5 h-3.5 shrink-0 text-text-secondary" />
           <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />
-          <span className="text-[11px] text-text">修改了 {paths.length} 个文件</span>
+          <span className="text-ui-2xs text-text">修改了 {paths.length} 个文件</span>
           {totals.known && (
             <>
-              <span className="font-mono text-[11px] text-green-600 dark:text-green-400">
+              <span className="font-mono text-ui-2xs text-success">
                 +{totals.insertions}
               </span>
               {totals.deletions > 0 && (
-                <span className="font-mono text-[11px] text-red-500">−{totals.deletions}</span>
+                <span className="font-mono text-ui-2xs text-error">−{totals.deletions}</span>
               )}
             </>
           )}
-          <span className="text-[11px] text-muted">点击展开</span>
+          <span className="text-ui-2xs text-muted">点击展开</span>
         </button>
         <RevertAllButton
           count={paths.length}

@@ -23,9 +23,9 @@ import type { TranslationKey } from '../../shared/lib/i18n/zh';
 import { Toggle } from './components';
 
 const STATE_BADGE_CLASSES: Record<McpServerState, string> = {
-  ready: 'bg-green-500/15 text-green-500',
-  discovering: 'bg-amber-500/15 text-amber-500',
-  failed: 'bg-red-500/15 text-red-500',
+  ready: 'bg-success/15 text-success',
+  discovering: 'bg-warning/15 text-warning',
+  failed: 'bg-error/15 text-error',
   disabled: 'bg-faint/15 text-faint',
 };
 
@@ -267,19 +267,19 @@ export function McpTab() {
         <p className="text-xs text-muted mb-3">{t('settings.mcp.desc')}</p>
 
         {loadError && (
-          <div role="alert" className="text-xs text-red-500 mb-3">
+          <div role="alert" className="text-xs text-error mb-3">
             {loadError}
           </div>
         )}
         {actionError && (
-          <div role="alert" className="text-xs text-red-500 mb-3">
+          <div role="alert" className="text-xs text-error mb-3">
             {actionError}
           </div>
         )}
         {authorizeMessage && (
           <div
             data-testid="mcp-authorize-message"
-            className="text-xs text-green-500 mb-3"
+            className="text-xs text-success mb-3"
           >
             {authorizeMessage}
           </div>
@@ -311,7 +311,7 @@ export function McpTab() {
                     <td className="py-2 text-text font-mono">
                       {srv.name}
                       {srv.required && (
-                        <span className="ml-1 text-amber-500" title={t('settings.mcp.required')}>
+                        <span className="ml-1 text-warning" title={t('settings.mcp.required')}>
                           *
                         </span>
                       )}
@@ -320,7 +320,7 @@ export function McpTab() {
                       <span
                         data-testid={`state-badge-${srv.name}`}
                         className={clsx(
-                          'px-2 py-0.5 rounded-full text-[11px] font-medium',
+                          'px-2 py-0.5 rounded-full text-ui-2xs font-medium',
                           STATE_BADGE_CLASSES[state],
                         )}
                       >
@@ -360,7 +360,7 @@ export function McpTab() {
                           'px-2 py-0.5 text-xs rounded-radius-sm border',
                           srv.builtin
                             ? 'border-border text-muted opacity-50 cursor-not-allowed'
-                            : 'border-red-500/40 text-red-500 hover:bg-red-500/10',
+                            : 'border-error/40 text-error hover:bg-error/10',
                         )}
                         disabled={srv.builtin}
                         title={srv.builtin ? t('settings.mcp.builtin_hint') : t('common.delete')}
@@ -374,7 +374,7 @@ export function McpTab() {
                             <span
                               data-testid={`mcp-oauth-badge-${srv.name}`}
                               title={t('settings.mcp.authorize.badge')}
-                              className="ml-1.5 text-amber-500"
+                              className="ml-1.5 text-warning"
                             >
                               🔑
                             </span>
@@ -401,7 +401,7 @@ export function McpTab() {
                     <tr className="border-b border-border">
                       <td colSpan={6} className="py-2 px-2 bg-faint/5">
                         <div data-testid={`mcp-tools-panel-${srv.name}`} className="space-y-1.5">
-                          <p className="text-[11px] text-muted">
+                          <p className="text-ui-2xs text-muted">
                             {t('settings.mcp.tools.hint')}
                           </p>
                           {toolsLoading && (
@@ -413,7 +413,7 @@ export function McpTab() {
                             <p
                               role="alert"
                               data-testid={`mcp-tools-error-${srv.name}`}
-                              className="text-xs text-red-500"
+                              className="text-xs text-error"
                             >
                               {toolsError || t('settings.mcp.tools.error')}
                             </p>
@@ -445,13 +445,13 @@ export function McpTab() {
                                     <span className="text-xs font-mono text-text">
                                       {tool.name}
                                       {!enabled && (
-                                        <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] bg-red-500/15 text-red-500 font-sans">
+                                        <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-ui-xs bg-error/15 text-error font-sans">
                                           {t('settings.mcp.tools.disabled_tag')}
                                         </span>
                                       )}
                                     </span>
                                     {tool.description && (
-                                      <span className="block text-[11px] text-muted truncate">
+                                      <span className="block text-ui-2xs text-muted truncate">
                                         {tool.description}
                                       </span>
                                     )}
@@ -553,7 +553,7 @@ export function McpTab() {
           </label>
         </div>
         {formError && (
-          <div role="alert" className="text-xs text-red-500 mt-2">
+          <div role="alert" className="text-xs text-error mt-2">
             {formError}
           </div>
         )}

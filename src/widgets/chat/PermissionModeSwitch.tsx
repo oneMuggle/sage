@@ -134,7 +134,7 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
       >
         <Icon className="w-3.5 h-3.5" aria-hidden />
         <span>{t(`chat.perm.${preset}`)}</span>
-        {custom && <span className="text-[10px] text-text-secondary">({t('chat.perm.custom')})</span>}
+        {custom && <span className="text-ui-xs text-text-secondary">({t('chat.perm.custom')})</span>}
         <ChevronDown className="w-3 h-3 opacity-60" aria-hidden />
       </button>
 
@@ -147,7 +147,7 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
           }}
           title={t('chat.perm.audit_title')}
           data-testid="auto-approval-badge"
-          className="flex items-center gap-1 px-1.5 py-1 text-[11px] rounded-radius-sm border border-border text-text-secondary hover:bg-bg-hover"
+          className="flex items-center gap-1 px-1.5 py-1 text-ui-2xs rounded-radius-sm border border-border text-text-secondary hover:bg-bg-hover"
         >
           <ShieldCheck className="w-3 h-3 text-accent" aria-hidden />
           {t('chat.perm.auto_count').replace('{n}', String(count))}
@@ -178,12 +178,12 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
                 <PIcon className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden />
                 <span className="min-w-0">
                   <span className="block font-medium">{t(`chat.perm.${p}`)}</span>
-                  <span className="block text-[11px] text-text-secondary">{t(`chat.perm.${p}.desc`)}</span>
+                  <span className="block text-ui-2xs text-text-secondary">{t(`chat.perm.${p}.desc`)}</span>
                 </span>
               </button>
             );
           })}
-          <p className="px-2 pt-1 text-[10px] text-text-secondary border-t border-border mt-1">
+          <p className="px-2 pt-1 text-ui-xs text-text-secondary border-t border-border mt-1">
             {t('chat.perm.destructive_note')}
           </p>
         </div>
@@ -203,8 +203,8 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
                 <li key={it.seq} className="py-1.5 text-xs" data-testid="auto-approval-item">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-text">{it.tool_name}</span>
-                    <span className="px-1 rounded bg-bg-hover text-[10px] text-text-secondary">{it.capability}</span>
-                    <span className="ml-auto text-[10px] text-text-secondary">{formatTime(it.created_at)}</span>
+                    <span className="px-1 rounded bg-bg-hover text-ui-xs text-text-secondary">{it.capability}</span>
+                    <span className="ml-auto text-ui-xs text-text-secondary">{formatTime(it.created_at)}</span>
                   </div>
                   {it.summary && (
                     <p className="text-text-secondary truncate" title={it.summary}>

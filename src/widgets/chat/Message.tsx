@@ -349,7 +349,7 @@ function ToolCallTitle({ name, args }: { name: string; args: Record<string, unkn
           <>
             {' '}
             {human.scope ? (
-              <code className="rounded bg-bg-hover px-1 py-0.5 font-mono text-[11px] text-text break-all">
+              <code className="rounded bg-bg-hover px-1 py-0.5 font-mono text-ui-2xs text-text break-all">
                 {human.object}
               </code>
             ) : (
@@ -360,7 +360,7 @@ function ToolCallTitle({ name, args }: { name: string; args: Record<string, unkn
       </span>
       {human.scope && (
         <span
-          className={`rounded px-1 py-0.5 text-[10px] leading-none ${
+          className={`rounded px-1 py-0.5 text-ui-xs leading-none ${
             human.scope === 'external' ? 'bg-warning/10 text-warning' : 'bg-bg-hover text-muted'
           }`}
         >
@@ -413,13 +413,13 @@ function ToolCallResult({ result }: { result: unknown }) {
     <div className="w-full">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
+        className="flex items-center gap-1 text-ui-2xs text-primary hover:text-primary/80 transition-colors"
       >
         {isExpanded ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
         <span>{isExpanded ? '收起' : `展开 (${safeResult.length} 字符)`}</span>
       </button>
       {isExpanded && (
-        <pre className="mt-1 p-2 bg-bg-subtle border border-border rounded-radius-sm text-[11px] text-text-secondary overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap break-all font-mono">
+        <pre className="mt-1 p-2 bg-bg-subtle border border-border rounded-radius-sm text-ui-2xs text-text-secondary overflow-x-auto max-h-80 overflow-y-auto whitespace-pre-wrap break-all font-mono">
           {safeResult}
         </pre>
       )}
@@ -593,7 +593,7 @@ function MessageComponent({
             {knowledgeRefs.map((ref) => (
               <span
                 key={ref.id}
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] bg-primary/10 text-primary"
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs bg-primary/10 text-primary"
               >
                 <BookOpen className="w-2.5 h-2.5" />
                 {ref.title}
@@ -642,7 +642,7 @@ function MessageComponent({
                       {artifactsByToolCall[tc.id].map((art) => (
                         <button
                           key={art.id}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-[11px] text-primary transition-colors"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-ui-2xs text-primary transition-colors"
                           onClick={() => useRightPanelStore.getState().selectArtifact(art.id)}
                           title="在右侧面板中查看"
                           data-testid="message-artifact-chip"
@@ -695,13 +695,13 @@ function MessageComponent({
               return (
                 <div
                   key={`${tc.name}-${idx}`}
-                  className="flex flex-col gap-1.5 rounded border border-border bg-bg-subtle text-[12px]"
+                  className="flex flex-col gap-1.5 rounded border border-border bg-bg-subtle text-ui-sm"
                 >
                   {/* Tool call header — U8: humanized title + 弱化的原始工具名(调试用) */}
                   <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
                     <Wrench className="w-3 h-3 text-primary shrink-0" />
                     <ToolCallTitle name={tc.name} args={tc.args} />
-                    <span className="font-mono text-[10px] text-muted">{tc.name}</span>
+                    <span className="font-mono text-ui-xs text-muted">{tc.name}</span>
                   </div>
                   {/* right-panel R5/R6: 文件修改卡组（<3 个平铺,≥3 个折叠为汇总条） */}
                   {changePaths.length > 0 && (
@@ -736,7 +736,7 @@ function MessageComponent({
           <div
             data-error={isError ? 'true' : undefined}
             data-quote-scope="message-body"
-            className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-[13px] leading-relaxed ${
+            className={`max-w-2xl px-3.5 py-2.5 rounded-radius-sm text-ui-caption leading-relaxed ${
               isUser
                 ? 'bg-primary text-text-inverse'
                 : isError
@@ -773,7 +773,7 @@ function MessageComponent({
         )}
 
         {/* 底部信息 */}
-        <div className="flex items-center gap-2 mt-1 text-[11px] text-muted">
+        <div className="flex items-center gap-2 mt-1 text-ui-2xs text-muted">
           {/* R81: 统一参考来源 chip（记忆 + 附件检索 + 工具命中收编，
               原 memory-used / rag-citations 两个分散 chip 合并为此处） */}
           {sourcesTotal > 0 && (
@@ -824,7 +824,7 @@ function MessageComponent({
           >
             {(memoryRefs.length > 0 || memorySources.length > 0) && (
               <div className="space-y-1">
-                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
                   {t('chat.sources_group_memory')}
                 </div>
                 {memoryRefs.map((ref, i) => (
@@ -867,7 +867,7 @@ function MessageComponent({
 
             {ragCitations.length > 0 && (
               <div className="space-y-1">
-                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
                   {t('chat.sources_group_attachment')}
                 </div>
                 {ragCitations.map((c, i) => (
@@ -894,7 +894,7 @@ function MessageComponent({
 
             {wikiSources.length > 0 && (
               <div className="space-y-1">
-                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
                   {t('chat.sources_group_wiki')}
                 </div>
                 {wikiSources.map((s, i) => (
@@ -918,7 +918,7 @@ function MessageComponent({
 
             {webSources.length > 0 && (
               <div className="space-y-1">
-                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
                   {t('chat.sources_group_web')}
                 </div>
                 {webSources.map((s, i) => (
@@ -948,7 +948,7 @@ function MessageComponent({
 
             {mcpSources.length > 0 && (
               <div className="space-y-1">
-                <div className="text-[10px] font-medium text-muted uppercase tracking-wide">
+                <div className="text-ui-xs font-medium text-muted uppercase tracking-wide">
                   {t('chat.sources_group_tool')}
                 </div>
                 {mcpSources.map((s, i) => (
@@ -989,7 +989,7 @@ function MessageComponent({
                     {skill.triggers_matched.map((trigger, idx) => (
                       <span
                         key={idx}
-                        className="px-1 py-0.5 rounded bg-bg-hover text-text-tertiary text-[10px]"
+                        className="px-1 py-0.5 rounded bg-bg-hover text-text-tertiary text-ui-xs"
                       >
                         {trigger}
                       </span>

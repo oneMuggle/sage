@@ -192,15 +192,15 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
           <div className="text-xs text-text-tertiary mb-2">{t('orchestration.drawer.delivery')}</div>
           <div className="flex items-center gap-2 mb-2" data-testid="acceptance-state">
             {acceptedAt !== null ? (
-              <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+              <span className="text-xs px-2 py-0.5 rounded bg-success/15 text-success">
                 {t('orchestration.drawer.accepted')}
               </span>
             ) : rejectedAt !== null ? (
-              <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-800">
+              <span className="text-xs px-2 py-0.5 rounded bg-error/15 text-error">
                 {t('orchestration.drawer.rejected')}
               </span>
             ) : (
-              <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">
+              <span className="text-xs px-2 py-0.5 rounded bg-warning/15 text-warning">
                 {t('orchestration.drawer.acceptancePending')}
               </span>
             )}
@@ -219,7 +219,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
           )}
           {warning && (
             <div
-              className="mt-2 text-xs text-yellow-700 bg-yellow-50 rounded px-2 py-1"
+              className="mt-2 text-xs text-warning bg-warning/10 rounded px-2 py-1"
               data-testid="decision-warning"
             >
               {warning}
@@ -274,10 +274,10 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
                   <span
                     className={
                       c.passed
-                        ? 'text-green-600 shrink-0'
+                        ? 'text-success shrink-0'
                         : c.skipped
                           ? 'text-text-tertiary shrink-0'
-                          : 'text-red-600 shrink-0'
+                          : 'text-error shrink-0'
                     }
                   >
                     {c.passed ? '✓' : c.skipped ? '○' : '✗'}
@@ -304,11 +304,11 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
             </div>
             <div className="flex items-center gap-2" data-testid="review-verdict">
               {reviewVerdict === 'pass' ? (
-                <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                <span className="text-xs px-2 py-0.5 rounded bg-success/15 text-success">
                   {t('orchestration.drawer.reviewPass')}
                 </span>
               ) : (
-                <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-800">
+                <span className="text-xs px-2 py-0.5 rounded bg-error/15 text-error">
                   {t('orchestration.drawer.reviewFail')}
                 </span>
               )}
@@ -349,7 +349,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
             {t('orchestration.lane.agent')} {lane.agent_id ?? '—'}
           </div>
           {lane.error && (
-            <div className="text-red-600 truncate" title={lane.error}>
+            <div className="text-error truncate" title={lane.error}>
               {lane.error}
             </div>
           )}
@@ -369,7 +369,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
             data-testid="decision-reason"
           />
           {error && (
-            <div className="text-xs text-red-600 mb-2" data-testid="decision-error">
+            <div className="text-xs text-error mb-2" data-testid="decision-error">
               {error}
             </div>
           )}
@@ -387,7 +387,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
               type="button"
               disabled={busy}
               onClick={() => void handleDecision('reject')}
-              className="flex-1 text-sm px-3 py-1.5 rounded border border-red-300 text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="flex-1 text-sm px-3 py-1.5 rounded border border-error/40 text-error hover:bg-error/10 disabled:opacity-50"
               data-testid="decision-reject"
             >
               {busy ? t('orchestration.drawer.deciding') : t('orchestration.drawer.reject')}
