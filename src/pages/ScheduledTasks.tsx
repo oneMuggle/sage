@@ -5,7 +5,9 @@ import { toast } from 'sonner';
 import { useScheduledTaskStore } from '../entities/scheduled/taskStore';
 import { CreateTaskModal } from '../features/scheduled/CreateTaskModal';
 import { describeSchedule } from '../features/scheduled/cronValidator';
-import type { ScheduledTask } from '../shared/api/types';
+import { summarizeTaskSkillHealth } from '../features/scheduled/skillLink';
+import { skillsApi } from '../shared/api/skillsApi';
+import type { ScheduledTask, Skill } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { confirmDialog } from '../shared/ui/ConfirmDialog/confirmService';
@@ -18,11 +20,31 @@ export function ScheduledTasks() {
   const loadSessions = useStore((s) => s.loadSessions);
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<ScheduledTask | undefined>(undefined);
+  const [skills, setSkills] = useState<Skill[] | null>(null);
 
   useEffect(() => {
     void load();
     void loadSessions();
   }, [load, loadSessions]);
+
+  useEffect(() => {
+    if (tasks.length === 0) return;
+    let cancelled = false;
+    try {
+      Promise.resolve(skillsApi.list())
+        .then((list) => {
+          if (!cancelled && Array.isArray(list)) setSkills(list);
+        })
+        .catch(() => {
+          if (!cancelled) setSkills(null);
+        });
+    } catch {
+      setSkills(null);
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [tasks.length]);
 
   const handleDelete = async (id: string) => {
     if (!(await confirmDialog({ title: t('scheduled.confirm.delete'), danger: true }))) return;
@@ -104,7 +126,34 @@ export function ScheduledTasks() {
                 <span className="text-xs text-text-secondary truncate">
                   {describeSchedule(task.schedule, locale as 'zh' | 'en')}
                 </span>
-                <span className="text-[10px] text-muted">session: {task.session_id}</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-ui-2xs text-muted">session: {task.session_id}</span>
+                  {typeof task.max_runs === 'number' && task.max_runs > 0 && (
+                    <span
+                      data-testid="task-budget-badge"
+                      className="text-ui-2xs px-1.5 py-0.5 rounded bg-muted/15 text-text-secondary"
+                    >
+                      runs: {task.run_count ?? 0}/{task.max_runs}
+                    </span>
+                  )}
+                </div>
+                {(() => {
+                  const health = summarizeTaskSkillHealth(
+                    task.content,
+                    skills,
+                    t('scheduled.skill.unknown'),
+                    t('scheduled.skill.disabled'),
+                  );
+                  return health.hasInvalid ? (
+                    <p
+                      role="status"
+                      data-testid="task-invalid-skill-badge"
+                      className="text-xs text-warning"
+                    >
+                      {health.invalidLabels.join('、')}
+                    </p>
+                  ) : null;
+                })()}
                 {task.last_status === 'failed' && (
                   <p role="status" className="text-xs text-error">
                     {t('scheduled.run_failed')} — {task.last_error}
@@ -119,7 +168,7 @@ export function ScheduledTasks() {
                   type="button"
                   onClick={() => handleToggleEnabled(task)}
                   className={[
-                    'px-2 py-1 text-[11px] rounded-full',
+                    'px-2 py-1 text-ui-2xs rounded-full',
                     task.enabled ? 'bg-success/10 text-success' : 'bg-muted/20 text-muted',
                   ].join(' ')}
                 >

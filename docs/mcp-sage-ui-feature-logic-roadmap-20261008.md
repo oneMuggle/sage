@@ -268,3 +268,48 @@ ightarrow$ 会话」合并树（批次 B-2）+ `TrajectoryPane` 二期后端事�
    - 升级 `src/widgets/chat/TrajectoryPane.tsx`：新增顶部汇总遥测条（`trajectory-summary`）、角色与工具快筛胶囊（`全部 / 用户 / 模型 / 含工具`）、单步相对耗时热度条（`trajectory-latency-bar`）及展开详情一键复制 JSON（`trajectory-copy-json`）。
 4. **U2（左栏项目-会话树快捷新建防呆与当前会话高亮）**：
    - 升级 `src/widgets/sidebar/sections/ProjectSection.tsx`：`handleNewChatInProject` 补齐 `410 project_path_missing` 失效目录徽标标记与专属提示（成功创建时自动清除失效标记），并为展开子会话行增加 `aria-current="page"` 语义无障碍标注，同时通过 `architecture-check.mjs --tighten` 将 `ProjectSection.tsx` 基线进一步收紧（`924 -> 923`）。
+---
+
+## 九、P2 第三批落地实施记录（2026-10-08）
+
+### 9.1 P1 第二批双轨合入闭环
+
+- **PR #1917 (`main`) & PR #1916 (`release/win7`)**：完成 L2-R187（`approval_decision_repo` / `project_repo` / `session_todo_repo` / `artifact_version_repo` 契约单测）、L3（`check_silent_exceptions.py` AST 棘轮门禁与核心编排层静默异常清理）、F4（`TrajectoryPane` 二期遥测汇总、角色/工具快筛、耗时热度条与复制 JSON）及 U2（左栏项目-会话树快捷新建 410 防呆与当前会话无障碍高亮），100% CI 门禁通过后 Squash Merge 合入 `main`（`d474a0751`）与 `release/win7`（`35f735ce8`）。
+
+### 9.2 P2 第三批（U5 + U3 + L2-R188 + L5）实施明细
+
+1. **U5（`i18n/{en,zh}.ts` 分域拆分并正式退出架构超限基线）**：
+   - 将 `src/shared/lib/i18n/zh.ts`（1,290 行）与 `src/shared/lib/i18n/en.ts`（1,324 行）按业务域拆分为 `src/shared/lib/i18n/locales/{zh,en}/{chatAndSider,settingsAndModels,workspaceAndTools}.ts`（每个子文件约 410–438 行，均远低于 800 行新文件上限）。
+   - `zh.ts` 与 `en.ts` 收敛为 20 行聚合入口，完整保留 `TranslationKey = keyof typeof zh` 字面量联合类型与 `Record<TranslationKey, string>` 编译期双向完备性校验。
+   - 执行 `node scripts/architecture-check.mjs --tighten`，将 `en.ts` 与 `zh.ts` 从 `architecture-baseline.json` **彻底移除**（单次消除 **2,581 行**架构基线配额）。
+2. **U3（`check-font-scale.mjs` 字号标尺棘轮门禁 + 50 处高频组件迁移）**：
+   - 新增 `scripts/check-font-scale.mjs`、`scripts/font-scale-baseline.json` 与契约单测 `src/shared/lib/__tests__/fontScaleGate.test.ts`，对 `src/` 非测试文件中的硬编码 `text-[Npx]` 实施逐文件只降不增棘轮保护（支持 `--tighten` 与 `--max-slack=0`）。
+   - 将 `TrajectoryPane.tsx`、`ContextMeter.tsx`、`TaskTreeSection.tsx`、`ProjectSection.tsx` 四大高频组件中的 **50 处** `text-[10px]` / `text-[11px]` 统一迁移至随 `--ui-font-size` 等比缩放的 `text-ui-2xs`，将全仓基线从 236 处直接压降至 **186 处**（`main`）/ **179 处**（`release/win7`）。
+3. **L2-R188 & R189（`backend/data/*_repo.py` 19/19 = 100% 契约单测全覆盖）**：
+   - 新增 `backend/tests/unit/data_repo/test_session_and_settings_repo_r188.py`，覆盖 `SessionRepository`、`SessionEventRepository` 与 `SettingsRepository`。
+   - 新增 `backend/tests/unit/data_repo/test_orch_and_project_subrepos_r189.py`，覆盖剩余 7 个仓储模块：`OrchRunRepo`、`OrchTaskRepo`（含 `claim_next_ready_task` 原子认领与心跳续租）、`OrchLaneRepo`、`OrchEventsRepo`、`OrchContextRepo`、`ProjectConstraintRepository` 与 `ProjectMilestoneRepository`。至此 `backend/data/*_repo.py` 全部 **19/19（100%）** 均具备独立契约单测（`main` 84 条 / `release/win7` 65 条全部通过）。
+4. **L5（`backend/api/office_routes.py` 双子路由拆分并彻底退出架构超限基线）**：
+   - 将期刊模板子系统拆出至 `backend/api/office_journal_routes.py`（275 行），并将文档生命周期、归档/快照、能力探测、版本号查询、模板库、Excel 重算、旧格式导入、PPT 模板分析/填充、PDF 表单读写、修订预览与写回、PDF 导出/转 Word 及自检历史拆出至 `backend/api/office_lifecycle_routes.py`（`main` 604 行 / `release/win7` 598 行），在 `office_routes.py` 中通过 `router.include_router` 与 `__all__` 保持全部符号向后兼容。
+   - `backend/api/office_routes.py` 从 1,452 行（`main`）/ 1,429 行（`release/win7`）压降至 **784 行（`main`）/ 767 行（`release/win7`）**（均低于 800 行架构红线），执行 `node scripts/architecture-check.mjs --tighten` 后**彻底退出 `scripts/architecture-baseline.json`**。
+5. **F5（定时任务运行次数预算守卫与技能引用失效告警徽标）**：
+   - 后端 `SchedulerService` 与 `scheduled_router.py` 新增单任务累计运行计数 `run_count` 与最大运行次数预算上限 `max_runs`（`ge=1`）：周期任务达到 `max_runs` 预算阈值后自动暂停（`enabled=False`、清理 APScheduler 作业并清空 `next_run`），防止无人值守周期任务无限消耗模型配额。
+   - 前端 `src/features/scheduled/skillLink.ts` 新增 `summarizeTaskSkillHealth`，并在 `src/pages/ScheduledTasks.tsx` 任务列表卡片上直接渲染失效/停用 `/skill` 引用告警徽标（`task-invalid-skill-badge`）与运行预算进度胶囊（`task-budget-badge`），同时将该页面硬编码字号全面迁移至 `text-ui-2xs` 并从 `font-scale-baseline.json` 中移除。
+
+### 9.3 路线图 15 项（U1–U5 / F1–F5 / L1–L5）全量收口总览
+
+| 编号 | 维度 | 核心交付成果 | 状态 |
+|---|---|---|---|
+| **U1 + U4** | UI / 体验 | 侧栏任务树与会话区密度收紧 + 无障碍语义与快捷键提示对齐 | 已合入（#1910 / #1911） |
+| **U2** | UI / 体验 | 左栏项目-会话树快捷新建 410 防呆与当前会话 `aria-current="page"` 高亮 | 已合入（#1917 / #1916） |
+| **U3** | UI / 体验 | `check-font-scale.mjs` 字号标尺棘轮门禁 + 52 处高频组件 `text-ui-2xs` 迁移 | 已完成（#1920 / #1921） |
+| **U5** | UI / 架构 | `i18n/{en,zh}.ts` 分域拆分为 6 个子文件并彻底退出 `architecture-baseline.json` | 已完成（#1920 / #1921） |
+| **F1** | 功能 | R186 `AnswerVersionRepository` / `ArtifactRepository` / `ProjectMaterialRepository` 闭环 | 已合入（#1910 / #1911） |
+| **F2** | 功能 | Office 文档版本一致性（SHA-256 revision）、HTTP 409 冲突拦截与幂等重放（收口 #1626） | 已合入（#1912 / #1913） |
+| **F3** | 功能 | 实现 `wiki_chat_cancel` 流式中止并清零 `electron/ipc-known-gaps.json`（收口 #1010） | 已合入（#1912 / #1913） |
+| **F4** | 功能 | `TrajectoryPane` 二期：耗时热度条、角色/工具快筛胶囊、Token 汇总与复制 JSON | 已合入（#1917 / #1916） |
+| **F5** | 功能 | 定时任务 `max_runs` 运行预算自动暂停守卫 + 任务列表卡片 `/skill` 失效引用告警徽标 | 已完成（#1920 / #1921） |
+| **L1** | 逻辑 / 稳定 | 聊天流式并发会话切换防串台保护与幂等清理 | 已合入（#1910 / #1911） |
+| **L2** | 逻辑 / 数据 | R186–R189 `backend/data/*_repo.py` **19/19（100%）** 仓储契约单测全覆盖 | 已完成（#1920 / #1921） |
+| **L3** | 逻辑 / 可观测 | `check_silent_exceptions.py` AST 棘轮门禁 + 核心编排与上下文工程层静默异常清零 | 已合入（#1917 / #1916） |
+| **L4** | 逻辑 / 双轨 | `check_py38_compat.py` AST 零依赖门禁拦截 4 类 Python 3.8 不兼容语法 | 已合入（#1912 / #1913） |
+| **L5** | 逻辑 / 架构 | `office_routes.py` 拆分为核心 + `office_journal_routes.py` + `office_lifecycle_routes.py` 并退出基线 | 已完成（#1920 / #1921） |

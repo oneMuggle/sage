@@ -335,7 +335,7 @@ export function TaskTreeSection({
           >
             {hasDeps && (
               <div
-                className="text-text-tertiary text-[10px]"
+                className="text-text-tertiary text-ui-2xs"
                 data-testid={`task-tree-deps-${item.task_id}`}
               >
                 ↳ 依赖 {dependsOn.join(', ')}
@@ -350,7 +350,7 @@ export function TaskTreeSection({
                   data-testid={`task-tree-toggle-${item.task_id}`}
                   aria-label={isCollapsed ? `展开 ${item.goal}` : `折叠 ${item.goal}`}
                   aria-expanded={!isCollapsed}
-                  className="w-3 text-[10px] text-text-tertiary hover:text-text-secondary shrink-0"
+                  className="w-3 text-ui-2xs text-text-tertiary hover:text-text-secondary shrink-0"
                   onClick={(event) => {
                     event.stopPropagation();
                     toggleCollapsed(item.task_id);
@@ -366,7 +366,7 @@ export function TaskTreeSection({
               {status === 'running' && st?.runningSince && (
                 <span
                   data-testid={`task-tree-elapsed-${item.task_id}`}
-                  className="text-text-tertiary text-[10px] shrink-0 tabular-nums"
+                  className="text-text-tertiary text-ui-2xs shrink-0 tabular-nums"
                 >
                   {formatElapsed(now - st.runningSince)}
                 </span>
@@ -381,7 +381,7 @@ export function TaskTreeSection({
                   data-testid={`task-tree-skip-${item.task_id}`}
                   disabled={skipping.has(item.task_id)}
                   title="跳过该子任务（依赖它的下游将级联失败）"
-                  className="px-1.5 py-0.5 text-[10px] border border-border rounded text-text-secondary hover:text-error hover:border-error/40 shrink-0 disabled:opacity-50"
+                  className="px-1.5 py-0.5 text-ui-2xs border border-border rounded text-text-secondary hover:text-error hover:border-error/40 shrink-0 disabled:opacity-50"
                   onClick={(event) => {
                     event.stopPropagation();
                     handleTaskSkip(item.task_id);
@@ -398,7 +398,7 @@ export function TaskTreeSection({
                   type="button"
                   data-testid={`task-tree-retry-${item.task_id}`}
                   title="只重试该任务（其下游未完成任务将一并重建，已完成任务结果保留）"
-                  className="px-1.5 py-0.5 text-[10px] border border-border rounded text-text-secondary hover:text-primary hover:border-primary/40 shrink-0"
+                  className="px-1.5 py-0.5 text-ui-2xs border border-border rounded text-text-secondary hover:text-primary hover:border-primary/40 shrink-0"
                   onClick={(event) => {
                     event.stopPropagation();
                     onRetryTask(board.runId!, item.task_id);
@@ -411,7 +411,7 @@ export function TaskTreeSection({
               {(st?.retry_count ?? 0) > 0 && (
                 <span
                   data-testid={`task-tree-retry-${item.task_id}`}
-                  className="text-text-tertiary text-[10px] shrink-0"
+                  className="text-text-tertiary text-ui-2xs shrink-0"
                 >
                   已重试 ×{st?.retry_count}
                 </span>
@@ -421,7 +421,7 @@ export function TaskTreeSection({
               {(st?.used_tokens ?? 0) > 0 || (st?.duration_ms ?? 0) > 0 ? (
                 <span
                   data-testid={`task-tree-usage-${item.task_id}`}
-                  className="text-text-tertiary text-[10px] shrink-0"
+                  className="text-text-tertiary text-ui-2xs shrink-0"
                 >
                   {(st?.used_tokens ?? 0) > 0 && formatTokens(st!.used_tokens!)}
                   {(st?.used_tokens ?? 0) > 0 && (st?.duration_ms ?? 0) > 0 && ' · '}
@@ -435,7 +435,7 @@ export function TaskTreeSection({
                 <span
                   data-testid={`task-tree-blocked-${item.task_id}`}
                   title={st.error}
-                  className="text-text-tertiary text-[10px] shrink-0"
+                  className="text-text-tertiary text-ui-2xs shrink-0"
                 >
                   因 {st.error.slice('blocked_by_failed:'.length).split(',').join('、')}{' '}
                   失败级联跳过
@@ -446,7 +446,7 @@ export function TaskTreeSection({
                 <span
                   data-testid={`task-tree-redeploy-${item.task_id}`}
                   title={`重派自失败任务 ${st.retry_of}`}
-                  className="text-primary text-[10px] shrink-0"
+                  className="text-primary text-ui-2xs shrink-0"
                 >
                   重派
                 </span>
@@ -459,7 +459,7 @@ export function TaskTreeSection({
                 <span
                   data-testid={`task-tree-adjusted-${item.task_id}`}
                   title="该任务的计划由 AI 在执行过程中调整"
-                  className="text-warning text-[10px] shrink-0"
+                  className="text-warning text-ui-2xs shrink-0"
                 >
                   已调整
                 </span>
@@ -469,7 +469,7 @@ export function TaskTreeSection({
             {live?.waitingApproval && status === 'running' && (
               <div
                 data-testid={`task-tree-approval-${item.task_id}`}
-                className="pl-6 text-[11px] text-warning"
+                className="pl-6 text-ui-2xs text-warning"
               >
                 ⏳ 等待审批: {live.waitingApproval}
               </div>
@@ -478,7 +478,7 @@ export function TaskTreeSection({
             {live?.liveStep && status === 'running' && (
               <div
                 data-testid={`task-tree-live-${item.task_id}`}
-                className="pl-6 text-[11px] text-primary animate-pulse truncate"
+                className="pl-6 text-ui-2xs text-primary animate-pulse truncate"
               >
                 {live.liveStep}
               </div>
@@ -486,7 +486,7 @@ export function TaskTreeSection({
             {/* live-events P0: 最近事件环形缓冲（最多展示最近 10 条,尾新头旧） */}
             {recentEvents.length > 0 && (
               <details className="pl-6">
-                <summary className="text-[11px] text-muted">
+                <summary className="text-ui-2xs text-muted">
                   实时动态（{live!.events.length} 条）
                 </summary>
                 <ul
