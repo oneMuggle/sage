@@ -515,14 +515,14 @@ export function ProjectSection({
     const sessions = subSessions[project.id];
     if (loadingSubIds.has(project.id) && !sessions) {
       return (
-        <div className="px-8 py-1.5 text-[10px] text-muted" data-testid="project-sessions-loading">
+        <div className="px-8 py-1.5 text-ui-2xs text-muted" data-testid="project-sessions-loading">
           {t('sider.project.sessions_loading')}
         </div>
       );
     }
     if (!sessions || sessions.length === 0) {
       return (
-        <div className="px-8 py-1.5 text-[10px] text-muted" data-testid="project-sessions-empty">
+        <div className="px-8 py-1.5 text-ui-2xs text-muted" data-testid="project-sessions-empty">
           {t('sider.project.sessions_empty')}
         </div>
       );
@@ -548,7 +548,7 @@ export function ProjectSection({
         <span className="flex-1 min-w-0 text-ui-sm text-text-secondary truncate">
           {session.title || t('sidebar.new_chat')}
         </span>
-        <span className="shrink-0 text-[10px] text-muted tabular-nums group-hover/sub:hidden">
+        <span className="shrink-0 text-ui-2xs text-muted tabular-nums group-hover/sub:hidden">
           {formatRelativeTime(session.updated_at)}
         </span>
         <div className="hidden group-hover/sub:flex items-center">
@@ -575,7 +575,7 @@ export function ProjectSection({
         data-testid="project-overview-panel"
       >
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] text-muted uppercase tracking-wide">
+          <span className="text-ui-2xs text-muted uppercase tracking-wide">
             {t('sider.project.overview_title')}
           </span>
           <button
@@ -583,13 +583,13 @@ export function ProjectSection({
             data-testid="project-overview-save"
             disabled={!draft?.dirty || saving}
             onClick={() => void handleOverviewSave(project)}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Save className="w-3 h-3" aria-hidden="true" />
             {saving ? t('sider.project.overview_saving') : t('sider.project.overview_save')}
           </button>
         </div>
-        <label className="block text-[10px] text-muted mb-0.5">
+        <label className="block text-ui-2xs text-muted mb-0.5">
           {t('sider.project.overview_description')}
         </label>
         <textarea
@@ -597,10 +597,10 @@ export function ProjectSection({
           value={draft?.description ?? ''}
           onChange={(e) => handleOverviewDraftChange(project.id, 'description', e.target.value)}
           rows={2}
-          className="w-full text-[11px] px-1.5 py-1 rounded border border-border bg-bg resize-y"
+          className="w-full text-ui-2xs px-1.5 py-1 rounded border border-border bg-bg resize-y"
           placeholder={t('sider.project.overview_description_placeholder')}
         />
-        <label className="block text-[10px] text-muted mb-0.5 mt-1.5">
+        <label className="block text-ui-2xs text-muted mb-0.5 mt-1.5">
           {t('sider.project.overview_instructions')}
         </label>
         <textarea
@@ -608,7 +608,7 @@ export function ProjectSection({
           value={draft?.instructions ?? ''}
           onChange={(e) => handleOverviewDraftChange(project.id, 'instructions', e.target.value)}
           rows={3}
-          className="w-full text-[11px] px-1.5 py-1 rounded border border-border bg-bg resize-y"
+          className="w-full text-ui-2xs px-1.5 py-1 rounded border border-border bg-bg resize-y"
           placeholder={t('sider.project.overview_instructions_placeholder')}
         />
       </div>
@@ -628,7 +628,7 @@ export function ProjectSection({
         data-testid="project-materials-panel"
       >
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] text-muted uppercase tracking-wide">
+          <span className="text-ui-2xs text-muted uppercase tracking-wide">
             {t('sider.project.materials_title')}
           </span>
           <button
@@ -641,7 +641,7 @@ export function ProjectSection({
                 ? t('sider.project.save_answer_title')
                 : t('sider.project.save_answer_no_session')
             }
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
           >
             <FilePlus2 className="w-3 h-3" aria-hidden="true" />
             {t('sider.project.save_answer')}
@@ -649,7 +649,7 @@ export function ProjectSection({
         </div>
 
         {isLoading ? (
-          <div className="text-[10px] text-muted py-1" data-testid="project-materials-loading">
+          <div className="text-ui-2xs text-muted py-1" data-testid="project-materials-loading">
             {t('sider.project.materials_loading')}
           </div>
         ) : list && list.length > 0 ? (
@@ -663,7 +663,7 @@ export function ProjectSection({
               >
                 <FileText className="w-3 h-3 mt-0.5 shrink-0 text-muted" aria-hidden="true" />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 text-[10px]">
+                  <div className="flex items-center gap-1.5 text-ui-2xs">
                     <MaterialStatusBadge status={m.status} />
                     <span className="text-muted truncate">
                       {m.sourceMessageId
@@ -679,7 +679,7 @@ export function ProjectSection({
                   </div>
                   {m.status === 'failed' && m.errorMessage && (
                     <div
-                      className="text-[10px] text-warning mt-0.5 truncate"
+                      className="text-ui-2xs text-warning mt-0.5 truncate"
                       title={m.errorMessage}
                       data-testid="project-material-error"
                     >
@@ -687,7 +687,7 @@ export function ProjectSection({
                     </div>
                   )}
                   {m.status === 'ready' && m.content && (
-                    <div className="text-[10px] text-text-secondary mt-0.5 line-clamp-2">
+                    <div className="text-ui-2xs text-text-secondary mt-0.5 line-clamp-2">
                       {m.content.slice(0, 120)}
                       {m.content.length > 120 ? '…' : ''}
                     </div>
@@ -707,7 +707,7 @@ export function ProjectSection({
             ))}
           </ul>
         ) : (
-          <div className="text-[10px] text-muted py-1" data-testid="project-materials-empty">
+          <div className="text-ui-2xs text-muted py-1" data-testid="project-materials-empty">
             {t('sider.project.materials_empty')}
           </div>
         )}
@@ -721,7 +721,7 @@ export function ProjectSection({
             }
             rows={3}
             placeholder={t('sider.project.material_input_placeholder')}
-            className="w-full text-[11px] px-1.5 py-1 rounded border border-border bg-bg resize-y"
+            className="w-full text-ui-2xs px-1.5 py-1 rounded border border-border bg-bg resize-y"
           />
           <div className="flex justify-end">
             <button
@@ -729,7 +729,7 @@ export function ProjectSection({
               data-testid="project-material-add"
               disabled={isAdding || !draftText.trim()}
               onClick={() => void handleAddMaterial(project)}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-ui-2xs text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Plus className="w-3 h-3" aria-hidden="true" />
               {t('sider.project.material_add')}
@@ -843,11 +843,11 @@ export function ProjectSection({
                           />
                         )}
                       </div>
-                      <div className="text-[10px] text-muted truncate">{project.path}</div>
+                      <div className="text-ui-2xs text-muted truncate">{project.path}</div>
                     </div>
                     {project.sessionCount > 0 && (
                       <span
-                        className="shrink-0 text-[10px] text-muted tabular-nums"
+                        className="shrink-0 text-ui-2xs text-muted tabular-nums"
                         title={t('sider.project.session_count').replace(
                           '{count}',
                           String(project.sessionCount),

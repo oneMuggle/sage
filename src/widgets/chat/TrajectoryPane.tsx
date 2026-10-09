@@ -114,7 +114,7 @@ export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
                   data-testid={`trajectory-filter-${opt.id}`}
                   aria-pressed={roleFilter === opt.id}
                   onClick={() => setRoleFilter(opt.id)}
-                  className={`px-2 py-0.5 rounded text-[11px] transition-colors ${
+                  className={`px-2 py-0.5 rounded text-ui-2xs transition-colors ${
                     roleFilter === opt.id
                       ? 'bg-primary/15 text-primary font-medium'
                       : 'bg-bg-muted text-muted hover:text-text'
@@ -125,7 +125,7 @@ export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
               ))}
             </div>
             <div
-              className="text-[10px] text-muted flex items-center gap-2 flex-wrap"
+              className="text-ui-2xs text-muted flex items-center gap-2 flex-wrap"
               data-testid="trajectory-summary"
             >
               <span>{summary.totalEntries} 条轨迹</span>
@@ -165,7 +165,7 @@ export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
               >
                 <div className="flex items-center gap-2">
                   <span
-                    className={`inline-flex items-center px-1.5 h-5 rounded text-[10px] ${badge.className}`}
+                    className={`inline-flex items-center px-1.5 h-5 rounded text-ui-2xs ${badge.className}`}
                   >
                     {badge.label}
                   </span>
@@ -173,7 +173,7 @@ export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
                     {entry.preview}
                   </span>
                 </div>
-                <div className="mt-0.5 text-[10px] text-muted truncate">
+                <div className="mt-0.5 text-ui-2xs text-muted truncate">
                   {[
                     formatTime(entry.createdAt),
                     entry.model,
@@ -202,12 +202,12 @@ export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
                   data-testid="trajectory-detail"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-muted font-mono">{entry.messageId}</span>
+                    <span className="text-ui-2xs text-muted font-mono">{entry.messageId}</span>
                     <button
                       type="button"
                       data-testid="trajectory-copy-json"
                       onClick={() => handleCopyJson(entry)}
-                      className="px-1.5 py-0.5 rounded text-[10px] bg-bg hover:bg-bg-hover text-text-secondary"
+                      className="px-1.5 py-0.5 rounded text-ui-2xs bg-bg hover:bg-bg-hover text-text-secondary"
                     >
                       {copiedId === entry.messageId ? '已复制' : '复制 JSON'}
                     </button>
