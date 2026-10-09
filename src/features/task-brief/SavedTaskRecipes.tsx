@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 import { readTaskRecipes, reviewTaskRecipe, RECIPE_EVENT, type TaskRecipe } from './taskRecipes';
 
@@ -63,19 +64,19 @@ export function SavedTaskRecipes({ onUse }: { onUse: (recipe: TaskRecipe) => voi
               type="button"
               className="text-ui-sm underline"
               onClick={() => {
-                if (
-                  window.confirm(
-                    en
-                      ? 'Have you reviewed the deliverable and its sources? This records only your manual review.'
-                      : '是否已检查交付物和来源？此操作只记录你的人工核对，不冒充自动验真。',
-                  )
-                ) {
+                void confirmDialog({
+                  title: en ? 'Record manual review' : '记录人工核对',
+                  message: en
+                    ? 'Have you reviewed the deliverable and its sources? This records only your manual review.'
+                    : '是否已检查交付物和来源？此操作只记录你的人工核对，不冒充自动验真。',
+                }).then((ok) => {
+                  if (!ok) return;
                   try {
                     reviewTaskRecipe(recipe.id);
                   } catch {
                     setError(true);
                   }
-                }
+                });
               }}
             >
               {en ? 'Record my review' : '记录人工核对'}

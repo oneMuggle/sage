@@ -11,6 +11,7 @@ import { ConstraintManager } from '../../../src/features/project-type/Constraint
 import { GitStatusWidget } from '../../../src/features/project-type/GitStatusWidget';
 import { MilestoneManager } from '../../../src/features/project-type/MilestoneManager';
 import { projectApi } from '../../../src/shared/api';
+import * as confirmService from '../../../src/shared/ui/ConfirmDialog/confirmService';
 
 import { received, releaseBackend, strictBody, useBackend } from './harness';
 
@@ -48,6 +49,7 @@ const milestone = (id: string, title: string, status = 'pending') => ({
 
 beforeEach(() => {
   vi.spyOn(window, 'confirm').mockReturnValue(true);
+  vi.spyOn(confirmService, 'confirmDialog').mockResolvedValue(true);
 });
 afterEach(() => {
   cleanup();

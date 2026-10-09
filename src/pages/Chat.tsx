@@ -64,14 +64,7 @@ function fill(template: string, vars: Record<string, string | number>): string {
 /** 稳定空数组: toolCalls 缺省时避免每次渲染产生新引用击穿 RightPanel memo (F1) */
 const EMPTY_TOOL_CALLS: readonly never[] = [];
 
-/**
- * Sticky-bottom 阈值(scrollTop 距底部 ≤ 此值视作"在底部")。
- *
- * - 太大会让用户微调 scrollbar 也算"在底部"→ 流式 token 抢焦点
- * - 太小会让 1px 误差就让"跳到最新"按钮闪出/消失
- * 96px 约 10 行文字：流式时每帧可新增数行,48px 会把"距底 60px"判成非底部,
- * 按钮在一次滚轮微调内反复闪现。滚轮 1-2 击仍能停在阈值内。
- */
+/** Sticky-bottom 阈值(scrollTop 距底部 ≤ 此值视作"在底部")。 - 太大会让用户微调 scrollbar 也算"在底部"→ 流式 token 抢焦点 - 太小会让 1px 误差就让"跳到最新"按钮闪出/消失 96px 约 10 行文字：流式时每帧可新增数行,48px 会把"距底 60px"判成非底部, 按钮在一次滚轮微调内反复闪现。滚轮 1-2 击仍能停在阈值内。 */
 const BOTTOM_THRESHOLD_PX = 96;
 
 export function Chat() {
@@ -99,7 +92,6 @@ export function Chat() {
     cancelPending, // P1-6: 撤回单条排队消息
     clearPendingForSession, // P1-6: 清空本会话排队消息
   } = useChat();
-  // P1 (UI 优化方案 2026-09-13): 开关状态持久化 —— 重启恢复上次的面板开合
   // right-panel R1 批次 A: 开合上抬 rightPanelStore（自动唤起/内联卡片需要
   // 跨组件写面板状态）；localStorage 迁移进 store，此处只读订阅。
   const isMobile = useIsMobile();
@@ -115,8 +107,8 @@ export function Chat() {
     removeMessage,
   } = useStore();
   const [tempChatSessions, setTempChatSessions] = useSessionMemoryPause(currentSessionId);
+  const [orchMode, setOrchMode] = useState<string>('auto');
 
-  // R25-D4: 挂载/切会话时探测后端活跃流并重接 —— renderer 重载（升级、
   // 崩溃恢复）后长任务输出不再丢失。内部有会话级去重守卫。
   useEffect(() => {
     if (!currentSessionId) return;
@@ -143,7 +135,6 @@ export function Chat() {
     void sendMessage(lastUser.content, currentSessionId);
   }, [currentSessionId, messages, sendMessage]);
 
-  // Task 11 (2026-09-17): topic shift 横幅 — 监听当前会话的 shiftInfo 槽位;
   // 仅在当前会话命中时显示,避免后台会话触发的事件串台。`handleRetreat`
   // 由 TopicShiftBanner 在用户点"恢复完整上下文"后调用,组件已先调
   // sessionApi.retreatSegment 删 separator,这里再 loadMessages 重拉并清
@@ -191,7 +182,6 @@ export function Chat() {
   // 原 messages 中最后一条仍是占位符 '🤔 思考中…'。
   // 依赖:消息条数 + 最后一条 content + reasoning + tool_call 数 — 任一变化都触发滚动。
   //
-  // Task 2 (Win7 parity) sticky-bottom UX:
   // - 之前未实现时,流式 token 每来一次都强制 scrollTop=scrollHeight,
   //   用户上滚读历史时焦点被频繁拉回底部,无法阅读 — Win7 packaged 后端
   //   日志记录到该 UX 退化。
@@ -211,7 +201,6 @@ export function Chat() {
   // 否则用户上滑会被紧随其后的程序滚动"洗白"回底部状态。
   const programmaticTopRef = useRef<number | null>(null);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
-  // R17-A2: 压缩成功后 toast「查看归档」入口
   const [archivesOpen, setArchivesOpen] = useState(false);
   const lastMsg = messages[messages.length - 1];
   const previousMessagesRef = useRef<typeof messages>([]);
@@ -427,21 +416,16 @@ export function Chat() {
         attachments?: { name: string; size: number; type: string; dataUrl?: string }[];
         images?: { name: string; size: number; type: string; dataUrl?: string }[];
         officeRefs?: readonly ChatOfficeRef[];
-        // Wave 3 C6: 放宽为 string —— 编排模式条可传 'template:<id>' 等。
         orchestrationMode?: string;
         // PM1 (round8): /plan 计划模式 —— 本次 run 只读 + 计划产出。
         planMode?: boolean;
-        /**
-         * Task 5 (2026-09-17): 上下文重置标记 —— "新话题" 按钮触发，
-         * 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。
-         */
+        /** Task 5 (2026-09-17): 上下文重置标记 —— "新话题" 按钮触发， 后端在本轮消息前插入 topic_separator 并清空 LLM 历史窗口。 */
         contextReset?: boolean;
       },
     ) => {
       clearError();
       const officeRefs = options?.officeRefs;
       const orchestrationMode = options?.orchestrationMode;
-      // R23-D2: 图片通道打通 —— data URL 直传后端 ChatRequest.images。
       // 后端口径: ≤4 张、单张解码后 ≤5MiB；前端先行裁剪并提示。
       const MAX_IMAGES = 4;
 
@@ -462,7 +446,6 @@ export function Chat() {
       if (sized.length > MAX_IMAGES) {
         toast.warning(`最多发送 ${MAX_IMAGES} 张图片，已截取前 ${MAX_IMAGES} 张`);
       }
-      // R37/r75: 文档附件（txt/md/pdf/docx）→ 上传并收集 media id（与图片通道并行）
       const attachmentMediaIds: string[] = [];
       for (const att of options?.attachments ?? []) {
         if (!att.dataUrl) continue;
@@ -499,7 +482,6 @@ export function Chat() {
           images,
           attachmentMediaIds,
           attachmentRag,
-          // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
           contextReset: options?.contextReset,
         });
       } else {
@@ -509,7 +491,6 @@ export function Chat() {
           images,
           attachmentMediaIds,
           attachmentRag,
-          // Task 5 (2026-09-17): 上下文重置 —— "新话题" 按钮触发
           contextReset: options?.contextReset,
         });
       }
@@ -533,7 +514,6 @@ export function Chat() {
             after: result.after,
             removed: result.removed,
           }),
-          // R17-A2: 被移除的前缀已归档，提供直达入口
           { action: { label: '查看归档', onClick: () => setArchivesOpen(true) } },
         );
         await loadMessages(currentSessionId);
@@ -551,7 +531,6 @@ export function Chat() {
     }
   }, [currentSessionId, isLoading, loadMessages, t]);
 
-  // Task 12 (2026-08-03): /learn slash action — 触发 Background Review
   // 当前会话，产生技能草案候选。成功后跳转到 Skills 页面的 Pending Drafts tab。
   // 与 /compact 对齐：流式中 early-return。
   const handleLearn = useCallback(async () => {
@@ -613,7 +592,6 @@ export function Chat() {
     [loadSessions, setCurrentSessionId, t],
   );
 
-  // U5' (对标增强第五轮批次 A): 编辑重发。
   // ① 点击 user 消息的编辑按钮 → 原文回填输入框 + 进入编辑态（editResendTarget）；
   // ② 用户改写后发送 → fork 当前会话（before_message 开区间截到该消息之前，
   //    首条消息得到空前缀会话）→ 对 fork 会话发送改写内容 → 跳转 fork 会话。
@@ -624,7 +602,6 @@ export function Chat() {
     text: string;
     nonce: number;
   } | null>(null);
-  // P0-1: 引用到对话 —— 复用 editResendTarget 的 injectedDraft 通道把引用块
   // 注入输入框。与编辑重发互斥时以编辑态优先。A4/A5: 追加而非覆盖草稿，
   // 划词引用走同一通道（一次性事件，见 useQuoteDraft）。
   const { quotedDraft, quoteText } = useQuoteDraft();
@@ -656,7 +633,6 @@ export function Chat() {
     }
   }, [rightPanelOpen, currentSessionId, artifactEventCount]);
 
-  // P1: Ctrl/Cmd+Shift+P 切换右面板（与 Tooltip 提示对应）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
@@ -668,7 +644,6 @@ export function Chat() {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleToggleRightPanel]);
 
-  // Phase 3 (2026-09-25): Ctrl+` 切换底部终端面板（VS Code 风格快捷键）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === '`') {
@@ -734,7 +709,6 @@ export function Chat() {
     ],
   );
 
-  // R18-A: 重新生成 —— 对 assistant 回答重跑一次。复用编辑重发的
   // 非破坏性链路: 找到其前驱最近的 user 消息 → fork 截到该消息之前
   // （beforeMessage 开区间）→ 切到 fork 会话原文重发。原会话保留,
   // 可对比两次回答。失败提示,不降级重发（避免原会话出现重复轮次）。
@@ -783,7 +757,6 @@ export function Chat() {
     void sendMessage(t('chat.continue_prompt'), currentSessionId);
   }, [currentSessionId, isLoading, sendMessage, t]);
 
-  // R17-B: 删除单条消息 —— messageApi.delete 落库后本地同步移除；
   // 失败提示但不移动视图（历史保持可见）。
   const handleDeleteMessage = useCallback(
     async (messageId: string) => {
@@ -797,13 +770,11 @@ export function Chat() {
     [removeMessage],
   );
 
-  // P0-1: 引用到对话 —— 消息正文转 Markdown 引用块追加到输入框。
   const handleQuote = useCallback(
     (message: MessageType) => quoteText(message.content),
     [quoteText],
   );
 
-  // P0-1: 保存到记忆 —— 消息正文写入长期记忆（semantic，标注来源便于检索）。
   const handleSaveToMemory = useCallback(
     async (message: MessageType) => {
       try {
@@ -820,12 +791,7 @@ export function Chat() {
     [t],
   );
 
-  /**
-   * P0-6: 气泡内记忆引用可回溯 —— 跳记忆库并带 focus 参数定位。
-   *
-   * 此前参考来源只展示 memory_type + 截断 preview，用户看到答案受某条
-   * 记忆影响却无法核对来源（对标 Claude「明确声明用了哪条记忆」）。
-   */
+  /** P0-6: 气泡内记忆引用可回溯 —— 跳记忆库并带 focus 参数定位。 此前参考来源只展示 memory_type + 截断 preview，用户看到答案受某条 记忆影响却无法核对来源（对标 Claude「明确声明用了哪条记忆」）。 */
   const handleOpenMemory = useCallback(
     (memoryId: string) => {
       navigate(`/memory?focus=${encodeURIComponent(memoryId)}`);
@@ -833,7 +799,6 @@ export function Chat() {
     [navigate],
   );
 
-  // R19-W1: 网页访问拦截卡片动作 —— 把后端的建议动作翻译成前端语义。
   // login_to_site: 发一条消息请 agent 用 browser_login 工具登录（用户只需在弹出浏览器中完成登录）；
   // open_browser: 发一条消息请 agent 用 browser_navigate 打开（走完整工具链）；
   // configure_credentials / configure_proxy: 跳设置网络 tab（凭据库 + 代理配置）；
@@ -870,7 +835,6 @@ export function Chat() {
     [sendMessage, navigate],
   );
 
-  // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
   // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
   // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
   // M1：取消失败也照常清理，避免计划卡永久锁定 + unhandled rejection。
@@ -905,18 +869,53 @@ export function Chat() {
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* 页面头部 */}
-      <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
-        <div className="flex items-center gap-4 min-w-0">
+      {/* 页面头部：统一承载会话级模型/权限/上下文水位/编排模式/新话题，彻底释放底部输入区 */}
+      <div className="min-h-12 py-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-4 border-b border-border bg-surface flex-shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
           <h2 className="text-sm font-semibold text-text shrink-0">对话</h2>
           {/* 项目模块 P3: 当前会话绑定的项目标识（无绑定不渲染） */}
           <ProjectBadge workspacePath={workspacePath} />
           {/* worktree 模式 (2026-09-18): 会话级分支/worktree 切换入口 */}
           <WorkspaceBranchPicker sessionId={currentSessionId} />
-          {/* U14: 会话用量徽章。模型 / 上下文 / 权限已移入输入框（UX-IA R1 批次 D） */}
+          {/* U14: 会话用量徽章 */}
           <SessionUsageBadge sessionId={currentSessionId} />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap" data-testid="chat-header-controls">
+          <SessionModelPicker sessionId={currentSessionId} placement="bottom" />
+          <PermissionModeSwitch sessionId={currentSessionId} placement="bottom" />
+          <ContextMeter sessionId={currentSessionId} placement="bottom" />
+          <div className="flex items-center gap-1 text-xs">
+            <label htmlFor="chat-header-orch-mode" className="text-text-tertiary hidden xl:inline">
+              {t('chat.orchMode.label')}
+            </label>
+            <select
+              id="chat-header-orch-mode"
+              data-testid="orch-mode-select"
+              aria-label={t('chat.orchMode.label')}
+              value={orchMode}
+              onChange={(e) => setOrchMode(e.target.value)}
+              className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-surface text-text-secondary hover:bg-bg-hover outline-none"
+            >
+              <option value="auto">{t('chat.orchMode.auto')}</option>
+              <option value="force_multi">{t('chat.orchMode.forceMulti')}</option>
+              <option value="template:research-write">
+                {t('chat.orchMode.templateResearchWrite')}
+              </option>
+              <option value="template:gather-analyze-report">
+                {t('chat.orchMode.templateGatherAnalyzeReport')}
+              </option>
+            </select>
+          </div>
+          <button
+            type="button"
+            data-testid="chat-new-topic"
+            disabled={isLoading || !hasConfig}
+            onClick={() => void handleSendMessageWithEditResend('', { contextReset: true })}
+            title="新话题（重置上下文）"
+            className="px-2 py-1 text-xs border border-border rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text disabled:opacity-50 transition-colors"
+          >
+            + 新话题
+          </button>
           {currentSessionId && (
             <button
               type="button"
@@ -942,6 +941,7 @@ export function Chat() {
             </button>
           )}
           <button
+            type="button"
             onClick={handleNewSession}
             className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-hover transition-colors"
           >
@@ -1231,13 +1231,10 @@ export function Chat() {
             workspacePath={workspacePath}
             injectedDraft={editResendTarget ?? quotedDraft}
             editResendNotice={editResendNotice}
-            composerControls={
-              <>
-                <PermissionModeSwitch sessionId={currentSessionId} />
-                <ContextMeter sessionId={currentSessionId} />
-                <SessionModelPicker sessionId={currentSessionId} />
-              </>
-            }
+            orchestrationMode={orchMode}
+            onOrchestrationModeChange={setOrchMode}
+            hideOrchModeBar
+            hideNewTopic
           />
           {/* Phase 3 (2026-09-25): 底部终端面板（VS Code 风格），Ctrl+` 切换 */}
           <TerminalPanel />

@@ -178,25 +178,27 @@ export function PanelHeader({
   // list 视图:Progress / Artifacts tabs + 档位/最大化/× 按钮
   if (tab !== undefined && onTabChange) {
     return (
-      <div className="flex border-b border-border items-center pr-1">
-        {RIGHT_PANEL_TABS.map((t) => (
-          <button
-            key={t}
-            className={
-              'flex-1 min-w-0 py-2 text-sm font-medium transition-colors ' +
-              (tab === t
-                ? 'text-primary border-b-2 border-primary'
-                : 'text-text-secondary hover:text-text')
-            }
-            onClick={() => onTabChange(t)}
-          >
-            {t === 'artifacts' && artifactCount > 0
-              ? `${TAB_LABELS[t]} (${artifactCount})`
-              : t === 'changes' && changesCount > 0
-                ? `${TAB_LABELS[t]} (${changesCount})`
-                : TAB_LABELS[t]}
-          </button>
-        ))}
+      <div className="flex border-b border-border items-center pr-1 min-w-0">
+        <div className="flex-1 min-w-0 flex items-center overflow-x-auto no-scrollbar">
+          {RIGHT_PANEL_TABS.map((t) => (
+            <button
+              key={t}
+              className={
+                'shrink-0 whitespace-nowrap px-2 py-2 text-xs font-medium transition-colors ' +
+                (tab === t
+                  ? 'text-primary border-b-2 border-primary'
+                  : 'text-text-secondary hover:text-text')
+              }
+              onClick={() => onTabChange(t)}
+            >
+              {t === 'artifacts' && artifactCount > 0
+                ? `${TAB_LABELS[t]} (${artifactCount})`
+                : t === 'changes' && changesCount > 0
+                  ? `${TAB_LABELS[t]} (${changesCount})`
+                  : TAB_LABELS[t]}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-0.5 ml-1 shrink-0">
           {showAutoOpenToggle && <AutoOpenToggle />}
           {presets}

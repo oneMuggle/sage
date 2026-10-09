@@ -12,6 +12,7 @@ import { projectApi, type ProjectConstraint, type ProjectType } from '../../shar
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 import { ConstraintEditor } from './ConstraintEditor';
 
@@ -55,7 +56,8 @@ export function ConstraintManager({ projectId, projectType }: ConstraintManagerP
   };
 
   const handleDelete = async (constraintId: string) => {
-    if (!confirm('确定要删除此约束吗？')) return;
+    const ok = await confirmDialog({ title: '删除约束', message: '确定要删除此约束吗？', danger: true });
+    if (!ok) return;
     try {
       await projectApi.deleteConstraint(projectId, constraintId);
       await fetchConstraints();
