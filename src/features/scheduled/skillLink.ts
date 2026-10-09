@@ -83,3 +83,43 @@ export function removeSkillRef(content: string, name: string): string {
     .replace(/[ \t]{2,}/g, ' ')
     .trimEnd();
 }
+
+
+export interface TaskSkillHealth {
+  totalRefs: number;
+  known: string[];
+  invalidLabels: string[];
+  hasInvalid: boolean;
+  skillsLoaded: boolean;
+}
+
+/**
+ * 汇总单条定时任务正文的技能引用健康度（供任务列表页渲染失效引用告警徽标）。
+ * 当 `skills` 为 `null`（IPC 尚未返回或不可用）时，`skillsLoaded=false` 且不误报 `hasInvalid`。
+ */
+export function summarizeTaskSkillHealth(
+  content: string,
+  skills: Skill[] | null,
+  unknownLabel = '未注册',
+  disabledLabel = '已停用',
+): TaskSkillHealth {
+  const refs = parseSkillRefs(content);
+  if (skills === null) {
+    return {
+      totalRefs: refs.length,
+      known: [],
+      invalidLabels: [],
+      hasInvalid: false,
+      skillsLoaded: false,
+    };
+  }
+  const validated = validateSkillRefs(content, skills);
+  const invalidLabels = invalidRefLabels(validated, unknownLabel, disabledLabel);
+  return {
+    totalRefs: refs.length,
+    known: validated.known,
+    invalidLabels,
+    hasInvalid: invalidLabels.length > 0,
+    skillsLoaded: true,
+  };
+}

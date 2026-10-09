@@ -6,6 +6,7 @@ import {
   invalidRefLabels,
   parseSkillRefs,
   removeSkillRef,
+  summarizeTaskSkillHealth,
   validateSkillRefs,
 } from '../skillLink';
 
@@ -60,5 +61,21 @@ describe('scheduled/skillLink', () => {
   it('空正文插入时不会留下多余空格', () => {
     expect(insertSkillRef('', 'writer')).toBe('/writer');
     expect(insertSkillRef('   ', 'writer')).toBe('/writer');
+  });
+
+  it('summarizeTaskSkillHealth 汇总任务列表卡片技能引用健康度', () => {
+    const unloaded = summarizeTaskSkillHealth('执行 /writer 与 /ghost', null);
+    expect(unloaded.skillsLoaded).toBe(false);
+    expect(unloaded.hasInvalid).toBe(false);
+    expect(unloaded.totalRefs).toBe(2);
+
+    const loaded = summarizeTaskSkillHealth('执行 /writer 与 /ghost 和 /search', [
+      skill('writer', true),
+      skill('search', false),
+    ]);
+    expect(loaded.skillsLoaded).toBe(true);
+    expect(loaded.hasInvalid).toBe(true);
+    expect(loaded.known).toEqual(['writer']);
+    expect(loaded.invalidLabels).toEqual(['/ghost（未注册）', '/search（已停用）']);
   });
 });

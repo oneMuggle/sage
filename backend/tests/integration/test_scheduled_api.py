@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.api.scheduled_router import build_router
-from backend.services.scheduler import SchedulerService
+from backend.services.scheduler import SchedulerService, ValidationError
 
 
 @pytest.fixture()
@@ -262,3 +262,66 @@ class TestScheduledAuditContracts:
     def test_unknown_fields_are_rejected(self, client):
         created = client.post("/api/v1/scheduled/tasks", json=self.payload()).json()
         assert client.patch("/api/v1/scheduled/tasks/" + created["id"], json={"unimplemented": True}).status_code == 422
+
+
+    def test_create_and_run_task_with_max_runs_budget(self, client: TestClient) -> None:
+        created = client.post(
+            "/api/v1/scheduled/tasks",
+            json={
+                "name": "Capped recurring",
+                "type": "recurring",
+                "schedule": {"kind": "recurring", "cron": "0 8 * * *"},
+                "session_id": "s-1",
+                "content": "run once and pause",
+                "max_runs": 1,
+            },
+        )
+        assert created.status_code == 201
+        task = created.json()
+        assert task["max_runs"] == 1
+        assert task["run_count"] == 0
+
+        ran = client.post(f"/api/v1/scheduled/tasks/{task['id']}/run")
+        assert ran.status_code == 200
+        updated = ran.json()
+        assert updated["run_count"] == 1
+        assert updated["enabled"] is False
+
+
+    def test_recurring_task_auto_pauses_when_max_runs_budget_reached(
+        self, scheduler: SchedulerService
+    ) -> None:
+        task = scheduler.add_task(
+            name="Budgeted recurring",
+            task_type="recurring",
+            schedule={"kind": "recurring", "cron": "0 9 * * *"},
+            session_id="s-1",
+            content="digest",
+            max_runs=2,
+        )
+        assert task.run_count == 0
+        assert task.max_runs == 2
+
+        scheduler.run_now(task.id)
+        after_first = scheduler.get_task(task.id)
+        assert after_first.run_count == 1
+        assert after_first.enabled is True
+        assert after_first.next_run is not None
+
+        scheduler.run_now(task.id)
+        after_second = scheduler.get_task(task.id)
+        assert after_second.run_count == 2
+        assert after_second.enabled is False
+        assert after_second.next_run is None
+        assert after_second.last_status == "succeeded"
+
+    def test_rejects_non_positive_max_runs(self, scheduler: SchedulerService) -> None:
+        with pytest.raises(ValidationError):
+            scheduler.add_task(
+                name="Zero budget",
+                task_type="recurring",
+                schedule={"kind": "recurring", "cron": "0 9 * * *"},
+                session_id="s-1",
+                content="digest",
+                max_runs=0,
+            )

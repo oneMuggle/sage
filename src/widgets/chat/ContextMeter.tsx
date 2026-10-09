@@ -129,7 +129,7 @@ export function ContextMeter({ sessionId, refreshKey = 0 }: ContextMeterProps) {
     <span className="relative shrink-0" ref={panelRef}>
       <button
         type="button"
-        className="flex items-center gap-1.5 text-[11px] text-text-secondary hover:text-text-primary"
+        className="flex items-center gap-1.5 text-ui-2xs text-text-secondary hover:text-text-primary"
         title={title}
         aria-expanded={open}
         data-testid="context-meter"
@@ -182,7 +182,7 @@ export function ContextMeter({ sessionId, refreshKey = 0 }: ContextMeterProps) {
                 return (
                   <span
                     key={key}
-                    className="flex items-center justify-between gap-2 py-0.5 text-[11px] text-text-secondary"
+                    className="flex items-center justify-between gap-2 py-0.5 text-ui-2xs text-text-secondary"
                   >
                     <span className="flex items-center gap-1.5">
                       <span className={`h-2 w-2 rounded-full ${color}`} />
@@ -196,7 +196,7 @@ export function ContextMeter({ sessionId, refreshKey = 0 }: ContextMeterProps) {
                 );
               })}
               {remaining > 0 && (
-                <span className="flex items-center justify-between gap-2 py-0.5 text-[11px] text-text-muted">
+                <span className="flex items-center justify-between gap-2 py-0.5 text-ui-2xs text-text-muted">
                   <span className="flex items-center gap-1.5">
                     <span className="h-2 w-2 rounded-full bg-bg-muted ring-1 ring-border" />
                     剩余空间
@@ -207,7 +207,7 @@ export function ContextMeter({ sessionId, refreshKey = 0 }: ContextMeterProps) {
                   </span>
                 </span>
               )}
-              <span className="mt-1.5 block border-t border-border pt-1.5 text-[10px] text-text-muted">
+              <span className="mt-1.5 block border-t border-border pt-1.5 text-ui-2xs text-text-muted">
                 {breakdown?.calibrated
                   ? '按上一轮请求 provider 实报 prompt 等比校准的分类估算'
                   : '本地估算口径（未获 provider 实报校准），仅示意占比'}
@@ -215,7 +215,7 @@ export function ContextMeter({ sessionId, refreshKey = 0 }: ContextMeterProps) {
               </span>
             </span>
           ) : (
-            <span className="block text-[11px] text-text-muted">
+            <span className="block text-ui-2xs text-text-muted">
               暂无分类明细（该请求记录早于明细分桶上线，或明细采集失败）。
             </span>
           )}
@@ -255,7 +255,7 @@ function ContextSourceRow({ source }: { source: ContextSource }) {
         type="button"
         aria-expanded={open}
         data-testid={`context-meter-source-toggle-${source.key}`}
-        className="flex w-full items-center justify-between gap-2 py-0.5 text-left text-[11px] text-text-secondary hover:text-text-primary"
+        className="flex w-full items-center justify-between gap-2 py-0.5 text-left text-ui-2xs text-text-secondary hover:text-text-primary"
         onClick={() => setOpen((v) => !v)}
       >
         <span className="flex min-w-0 items-center gap-1.5">
@@ -263,7 +263,7 @@ function ContextSourceRow({ source }: { source: ContextSource }) {
           <span className="truncate">{label}</span>
           {source.excluded ? (
             <span
-              className="shrink-0 rounded bg-warning/15 px-1 text-[10px] text-warning"
+              className="shrink-0 rounded bg-warning/15 px-1 text-ui-2xs text-warning"
               data-testid={`context-source-excluded-${source.key}`}
               title="整条未进入本轮注入（超出该来源预算）"
             >
@@ -272,7 +272,7 @@ function ContextSourceRow({ source }: { source: ContextSource }) {
           ) : null}
           {source.trimmed ? (
             <span
-              className="shrink-0 rounded bg-warning/15 px-1 text-[10px] text-warning"
+              className="shrink-0 rounded bg-warning/15 px-1 text-ui-2xs text-warning"
               data-testid={`context-source-trimmed-${source.key}`}
               title="因注入预算被截断的部分（保留了开头）"
             >
@@ -285,7 +285,7 @@ function ContextSourceRow({ source }: { source: ContextSource }) {
 
       {open ? (
         <span
-          className="mt-0.5 block pl-4 text-[10px] text-text-muted"
+          className="mt-0.5 block pl-4 text-ui-2xs text-text-muted"
           data-testid={`context-meter-source-detail-${source.key}`}
         >
           {source.identifiable && items.length > 0 ? (
@@ -329,12 +329,12 @@ export function ContextSourceList({ sources }: { sources?: ContextSource[] | nul
   const trimmedTotal = sources.reduce((a, s) => a + (s.trimmed ?? 0), 0);
   return (
     <span className="mt-2 block border-t border-border pt-2" data-testid="context-meter-sources">
-      <span className="mb-1 block text-[11px] font-medium text-text-primary">
+      <span className="mb-1 block text-ui-2xs font-medium text-text-primary">
         上一轮请求的来源分类（非内容验真）
       </span>
       {trimmedTotal > 0 && (
         <span
-          className="mb-1 block text-[10px] text-warning"
+          className="mb-1 block text-ui-2xs text-warning"
           data-testid="context-meter-trimmed-notice"
         >
           注入内容超出预算（窗口的 35%），已截掉约 {formatTokens(trimmedTotal)} tokens 低优先级内容
