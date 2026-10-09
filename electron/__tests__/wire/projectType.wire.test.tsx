@@ -49,6 +49,7 @@ const milestone = (id: string, title: string, status = 'pending') => ({
 
 beforeEach(() => {
   vi.spyOn(window, 'confirm').mockReturnValue(true);
+  vi.spyOn(confirmService, 'confirmDialog').mockResolvedValue(true);
 });
 afterEach(() => {
   cleanup();
