@@ -268,3 +268,25 @@ ightarrow$ 会话」合并树（批次 B-2）+ `TrajectoryPane` 二期后端事�
    - 升级 `src/widgets/chat/TrajectoryPane.tsx`：新增顶部汇总遥测条（`trajectory-summary`）、角色与工具快筛胶囊（`全部 / 用户 / 模型 / 含工具`）、单步相对耗时热度条（`trajectory-latency-bar`）及展开详情一键复制 JSON（`trajectory-copy-json`）。
 4. **U2（左栏项目-会话树快捷新建防呆与当前会话高亮）**：
    - 升级 `src/widgets/sidebar/sections/ProjectSection.tsx`：`handleNewChatInProject` 补齐 `410 project_path_missing` 失效目录徽标标记与专属提示（成功创建时自动清除失效标记），并为展开子会话行增加 `aria-current="page"` 语义无障碍标注，同时通过 `architecture-check.mjs --tighten` 将 `ProjectSection.tsx` 基线进一步收紧（`924 -> 923`）。
+---
+
+## 九、P2 第三批落地实施记录（2026-10-08）
+
+### 9.1 P1 第二批双轨合入闭环
+
+- **PR #1917 (`main`) & PR #1916 (`release/win7`)**：完成 L2-R187（`approval_decision_repo` / `project_repo` / `session_todo_repo` / `artifact_version_repo` 契约单测）、L3（`check_silent_exceptions.py` AST 棘轮门禁与核心编排层静默异常清理）、F4（`TrajectoryPane` 二期遥测汇总、角色/工具快筛、耗时热度条与复制 JSON）及 U2（左栏项目-会话树快捷新建 410 防呆与当前会话无障碍高亮），100% CI 门禁通过后 Squash Merge 合入 `main`（`d474a0751`）与 `release/win7`（`35f735ce8`）。
+
+### 9.2 P2 第三批（U5 + U3 + L2-R188 + L5）实施明细
+
+1. **U5（`i18n/{en,zh}.ts` 分域拆分并正式退出架构超限基线）**：
+   - 将 `src/shared/lib/i18n/zh.ts`（1,290 行）与 `src/shared/lib/i18n/en.ts`（1,324 行）按业务域拆分为 `src/shared/lib/i18n/locales/{zh,en}/{chatAndSider,settingsAndModels,workspaceAndTools}.ts`（每个子文件约 410–438 行，均远低于 800 行新文件上限）。
+   - `zh.ts` 与 `en.ts` 收敛为 20 行聚合入口，完整保留 `TranslationKey = keyof typeof zh` 字面量联合类型与 `Record<TranslationKey, string>` 编译期双向完备性校验。
+   - 执行 `node scripts/architecture-check.mjs --tighten`，将 `en.ts` 与 `zh.ts` 从 `architecture-baseline.json` **彻底移除**（单次消除 **2,581 行**架构基线配额）。
+2. **U3（`check-font-scale.mjs` 字号标尺棘轮门禁 + 50 处高频组件迁移）**：
+   - 新增 `scripts/check-font-scale.mjs`、`scripts/font-scale-baseline.json` 与契约单测 `src/shared/lib/__tests__/fontScaleGate.test.ts`，对 `src/` 非测试文件中的硬编码 `text-[Npx]` 实施逐文件只降不增棘轮保护（支持 `--tighten` 与 `--max-slack=0`）。
+   - 将 `TrajectoryPane.tsx`、`ContextMeter.tsx`、`TaskTreeSection.tsx`、`ProjectSection.tsx` 四大高频组件中的 **50 处** `text-[10px]` / `text-[11px]` 统一迁移至随 `--ui-font-size` 等比缩放的 `text-ui-2xs`，将全仓基线从 236 处直接压降至 **186 处**（`main`）/ **179 处**（`release/win7`）。
+3. **L2-R188（`SessionRepository` / `SessionEventRepository` / `SettingsRepository` 契约单测）**：
+   - 新增 `backend/tests/unit/data_repo/test_session_and_settings_repo_r188.py`，覆盖 `SessionRepository`（创建、父子关联、标题搜索、置顶排序、运行态更新、遗留 `running -> failed` 启动恢复、归档与物理清理）、`SessionEventRepository`（单调递增 `seq` 分配、事件回放、`surface_op` JSON 序列化）以及 `SettingsRepository`（白名单校验、字符串/JSON 读写、按分类枚举与删除）。
+4. **L5（`backend/api/office_routes.py` 期刊模板子路由拆分减负）**：
+   - 将 `backend/api/office_routes.py` 中的期刊模板子系统（5 条端点 + 9 个请求/响应模型）拆出至独立模块 `backend/api/office_journal_routes.py`，通过 `router.include_router` 挂载并保持原模块 `__all__` 导出向后兼容。
+   - 执行 `node scripts/architecture-check.mjs --tighten`，将 `backend/api/office_routes.py` 基线永久下调 **251 行**（`1,496 -> 1,245`）。
