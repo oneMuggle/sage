@@ -4,7 +4,7 @@
     "backend/agents/profiles.py": 1008,
     "backend/api/legacy_routes.py": 2326,
     "backend/api/llm_proxy_routes.py": 1169,
-    "backend/api/office_routes.py": 1473,
+    "backend/api/office_routes.py": 1222,
     "backend/api/orchestration_router.py": 807,
     "backend/api/wiki_routes.py": 1654,
     "backend/application/services/chat_service.py": 1222,
