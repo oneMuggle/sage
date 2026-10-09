@@ -1,24 +1,18 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import { PlanCard } from '../components/PlanCard';
 import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
-import { regenerateInPlace } from '../features/chat/answerVersions';
-import { useQuoteDraft } from '../features/chat/useQuoteDraft';
 import { useSessionMemoryPause } from '../features/chat/useSessionMemoryPause';
 import { useSettings } from '../features/manage-settings/useSettings';
 import { useRightPanelStore } from '../features/right-panel/rightPanelStore';
-import { useChatStreamStore, type TaskBoardState } from '../features/send-message/chatStreamStore';
+import { useChatStreamStore } from '../features/send-message/chatStreamStore';
 import { restoreRunToBoard } from '../features/send-message/orchestrationEvents';
 import { useChat } from '../features/send-message/useChat';
 import { useTerminalPanelStore } from '../features/terminal-panel/terminalPanelStore';
-import { sessionApi, learnApi, messageApi, memoryApi, type ChatOfficeRef } from '../shared/api';
-import { orchRunClient } from '../shared/api/orchRunClient';
-import { useI18n } from '../shared/lib/i18n';
+import { type ChatOfficeRef } from '../shared/api';
 import { useStore } from '../shared/lib/store';
-import type { Message as MessageType } from '../shared/lib/store';
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
 import { LoadingState } from '../shared/ui/LoadingState';
@@ -31,36 +25,23 @@ import {
 } from '../widgets/chat';
 import { ChatInlineError } from '../widgets/chat/ChatInlineError';
 import { CHAT_NOTICE_PRIORITY, ChatNoticeStack } from '../widgets/chat/ChatNoticeStack';
-import { ContextMeter } from '../widgets/chat/ContextMeter';
-import { ContextPressureBadge } from '../widgets/chat/ContextPressureBadge';
 import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../widgets/chat/InterruptedRunBanner';
 import { KeyboardShortcutsHelp } from '../widgets/chat/KeyboardShortcutsHelp';
 import { MemoryWriteHints } from '../widgets/chat/MemoryWriteHints';
-import { PermissionModeSwitch } from '../widgets/chat/PermissionModeSwitch';
-import { ProjectBadge } from '../widgets/chat/ProjectBadge';
 import { RightPanel } from '../widgets/chat/RightPanel';
-import { RightPanelToggle } from '../widgets/chat/RightPanelToggle';
-import { SessionModelPicker } from '../widgets/chat/SessionModelPicker';
-import { SessionUsageBadge } from '../widgets/chat/SessionUsageBadge';
 import { TerminalPanel } from '../widgets/chat/TerminalPanel';
 import { TopicShiftBanner } from '../widgets/chat/TopicShiftBanner';
-import { WorkspaceBranchPicker } from '../widgets/chat/WorkspaceBranchPicker';
 import { RewindDialog } from '../widgets/chat/rewind/RewindDialog';
 import { ArchivesModal } from '../widgets/session';
 
-/** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
-function fill(template: string, vars: Record<string, string | number>): string {
-  return Object.entries(vars).reduce(
-    (acc, [key, value]) => acc.replace(`{${key}}`, String(value)),
-    template,
-  );
-}
+import { ChatHeaderBar } from './chat/ChatHeaderBar';
+import { PlanApprovalBar } from './chat/PlanApprovalBar';
+import { useChatMessageActions } from './chat/useChatMessageActions';
+import { useChatStickyScroll } from './chat/useChatStickyScroll';
 
 /** 稳定空数组: toolCalls 缺省时避免每次渲染产生新引用击穿 RightPanel memo (F1) */
 const EMPTY_TOOL_CALLS: readonly never[] = [];
 
-/** Sticky-bottom 阈值(scrollTop 距底部 ≤ 此值视作"在底部")。 - 太大会让用户微调 scrollbar 也算"在底部"→ 流式 token 抢焦点 - 太小会让 1px 误差就让"跳到最新"按钮闪出/消失 96px 约 10 行文字：流式时每帧可新增数行,48px 会把"距底 60px"判成非底部, 按钮在一次滚轮微调内反复闪现。滚轮 1-2 击仍能停在阈值内。 */
-const BOTTOM_THRESHOLD_PX = 96;
 
 export function Chat() {
   const {
@@ -156,8 +137,6 @@ export function Chat() {
     await loadMessages(currentSessionId);
   }, [currentSessionId, loadMessages]);
   const showTopicShiftBanner = currentSessionId != null && shiftInfo != null && !isLoading;
-
-  const { t } = useI18n();
   const isTempChat = currentSessionId != null && tempChatSessions.has(currentSessionId);
   const { settings, isLoading: settingsLoading } = useSettings();
   const navigate = useNavigate();
@@ -168,142 +147,13 @@ export function Chat() {
   // be migrated onto this context in a follow-up PR.
   const workspacePath = useCurrentWorkspace();
   const pendingSentRef = useRef(false);
-  // 必须用 derivedMessages 而非 messages —— 流式 override 只在 derivedMessages 里,
-  // 原 messages 中最后一条仍是占位符 '🤔 思考中…'。
-  // 依赖:消息条数 + 最后一条 content + reasoning + tool_call 数 — 任一变化都触发滚动。
-  //
-  // - 之前未实现时,流式 token 每来一次都强制 scrollTop=scrollHeight,
-  //   用户上滚读历史时焦点被频繁拉回底部,无法阅读 — Win7 packaged 后端
-  //   日志记录到该 UX 退化。
-  // - 修法:加 ``wasAtBottomRef`` + ``BOTTOM_THRESHOLD_PX`` 跟踪,只在
-  //   上次 scroll 事件时位于阈值内才 auto-scroll。
-  // - ``lastMsgLengthRef`` 检测"用户刚发了新消息"(消息条数增加)→ 强制一次
-  //   scroll,不依赖 wasAtBottomRef。
-  // - "跳到最新"按钮在 ``wasAtBottomRef.current === false && streamingMessageId`` 时渲染,
-  //   固定右下角,a11y ``aria-label="跳到最新"``。
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const wasAtBottomRef = useRef(true);
-  const lastMsgLengthRef = useRef(0);
-  // 避免每个 token 都同步写布局属性、与用户手势争抢主线程。
-  const scrollRafRef = useRef<number | null>(null);
-  // 我们自己写入的 scrollTop —— 用来把"程序滚动"和"用户手势"区分开,
-  // 否则用户上滑会被紧随其后的程序滚动"洗白"回底部状态。
-  const programmaticTopRef = useRef<number | null>(null);
-  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [archivesOpen, setArchivesOpen] = useState(false);
-  const lastMsg = messages[messages.length - 1];
-  const previousMessagesRef = useRef<typeof messages>([]);
-  // Round 2 (2026-09-19): 计划批准条"按计划执行（编排）"防双击 —— 结构化
-  // 请求在途时忽略再次点击，避免重复创建编排 run。
-  const planOrchBusyRef = useRef(false);
-
-  // A session switch replaces the scrollable content; discard the previous
-  // session's sticky-bottom state before the new message list is measured.
-  useEffect(() => {
-    wasAtBottomRef.current = true;
-    lastMsgLengthRef.current = 0;
-    previousMessagesRef.current = [];
-    setShowJumpToLatest(false);
-  }, [currentSessionId]);
-
-  // 旧实现每个 token 同步写一次 scrollTop;流式一帧内可来多个 delta,
-  // 每次写都强制重排,与用户滚动手势争抢。加 rAF 后一帧只写一次,
-  // 且在 paint 前完成,不会闪出中间帧。
-  useLayoutEffect(() => {
-    const prevLength = lastMsgLengthRef.current;
-    const currentLength = messages.length;
-    const previousMessages = previousMessagesRef.current;
-    const addedUserMessage =
-      currentLength > prevLength &&
-      messages.slice(previousMessages.length).some((message) => message.role === 'user');
-    lastMsgLengthRef.current = currentLength;
-    previousMessagesRef.current = messages;
-
-    if (!addedUserMessage && !wasAtBottomRef.current) return;
-    if (scrollRafRef.current !== null) return; // 本帧已排队,等它统一写
-
-    scrollRafRef.current = requestAnimationFrame(() => {
-      scrollRafRef.current = null;
-      const el = scrollRef.current;
-      if (!el) return;
-      const top = el.scrollHeight;
-      programmaticTopRef.current = top;
-      el.scrollTop = top;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- messages 本身不加入 deps，避免每次 render 都触发；通过 messages.length + lastMsg 字段变化驱动
-  }, [
-    messages.length,
-    lastMsg?.content,
-    lastMsg?.reasoning_content,
-    lastMsg?.tool_calls?.length,
-    // streamingMessageId 变化时也需要滚 (新 stream 开始)
+  const { scrollRef, showJumpToLatest, scrollToLatest } = useChatStickyScroll({
+    currentSessionId,
+    messages,
     streamingMessageId,
-  ]);
-
-  // 卸载时撤掉排队中的帧,避免对已卸载的节点写 scrollTop。
-  useEffect(
-    () => () => {
-      if (scrollRafRef.current !== null) {
-        cancelAnimationFrame(scrollRafRef.current);
-        scrollRafRef.current = null;
-      }
-    },
-    [],
-  );
-
-  // Scroll listener: 维护 wasAtBottomRef + showJumpToLatest UI state。
-  // 用 ``wasAtBottomRef`` 同步标记 + ``useState`` 异步刷新,避免 setState 触发的
-  // re-render 打断滚动节奏(scrollTop 频繁跳变会让 wasAtBottom 状态本身抖动)。
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-
-    const onScroll = () => {
-      // 撤掉排队中的程序滚动,别在用户上滑的同一帧把人拽回底部。
-      if (programmaticTopRef.current !== null && el.scrollTop !== programmaticTopRef.current) {
-        programmaticTopRef.current = null;
-        if (scrollRafRef.current !== null) {
-          cancelAnimationFrame(scrollRafRef.current);
-          scrollRafRef.current = null;
-        }
-      }
-      const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
-      const atBottom = distance <= BOTTOM_THRESHOLD_PX;
-      wasAtBottomRef.current = atBottom;
-      // ``showJumpToLatest`` 仅在流式进行 + 离开底部时显示
-      setShowJumpToLatest(!atBottom && Boolean(streamingMessageId));
-    };
-    el.addEventListener('scroll', onScroll, { passive: true });
-    // 初始挂载时跑一次,让 wasAtBottom 反映真实初始状态
-    onScroll();
-    return () => {
-      el.removeEventListener('scroll', onScroll);
-    };
-  }, [streamingMessageId]);
-
-  // Fix #4 (2026-09-06): PlanCard 出现时自动滚动到可视区域。
-  // 当 taskBoard 首次设置且未派发时，PlanCard 在消息列表下方渲染，
-  // 但自动滚动依赖项（messages.length 等）不变，用户可能看不到。
-  // 此 effect 在 taskBoard.runId 变化（新计划到达）或 dispatchedAt 从 null
-  // 变为非 null（已派发）时触发，将 PlanCard 滚动到视口中心。
-  useEffect(() => {
-    if (taskBoard && !taskBoard.dispatchedAt && scrollRef.current) {
-      const planCard = scrollRef.current.querySelector('[data-testid="plan-card"]');
-      // ``typeof scrollIntoView === 'function'`` 守卫 jsdom 等不支持的测试环境。
-      if (planCard && typeof planCard.scrollIntoView === 'function') {
-        planCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- taskBoard 整体不加入依赖，仅跟踪 runId + dispatchedAt 变化
-  }, [taskBoard?.runId, taskBoard?.dispatchedAt]);
-
-  const scrollToLatest = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-    wasAtBottomRef.current = true;
-    setShowJumpToLatest(false);
-  };
+    taskBoard,
+  });
 
   const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
   const hasConfig =
@@ -316,44 +166,6 @@ export function Chat() {
     }
   }, [currentSessionId, loadMessages]);
 
-  // C1 (2026-09-09): 历史任务板恢复 —— 会话切换时拉取该会话最近的编排
-  // run（plan + tasks + 终态），重开历史会话也能看到当时的任务树与结果
-  // 预览（时间线经既有 snapshot/events 回放通道按 runId 订阅）。会话正在
-  // 流式中（直播板已存在）时跳过，避免覆盖实时状态。
-  useEffect(() => {
-    if (!currentSessionId) return;
-    let cancelled = false;
-    const { getState } = useChatStreamStore;
-    const slots = getState().sessions[currentSessionId];
-    if (slots?.streaming || slots?.taskBoard) return;
-    orchRunClient
-      .listSessionRuns(currentSessionId)
-      .then((resp) => {
-        if (cancelled) return;
-        const run = resp.runs[0];
-        if (!run) return;
-        // RD20 (round43): 映射抽取为纯函数 restoreRunToBoard —— RT24 字段
-        // used_tokens/duration_ms 与 endedAt 一并恢复（历史任务树可显示
-        // 量化徽章；BU16 时长显示原始总时长而非从恢复时刻起算）。
-        const restored = restoreRunToBoard(run);
-        if (!restored) return;
-        const board: TaskBoardState = {
-          runId: run.run_id,
-          plan: restored.plan,
-          statuses: restored.statuses,
-          progress: restored.progress,
-          dispatchedAt: restored.dispatchedAt,
-          endedAt: restored.endedAt,
-        };
-        useChatStreamStore.getState().setTaskBoard(currentSessionId, board);
-      })
-      .catch(() => {
-        /* 历史恢复是增强能力：失败静默（无编排历史的常态路径） */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentSessionId]);
 
   // Auto-send pending message passed from Welcome page via router state
   const pendingMessage = (location.state as { pendingMessage?: string } | null)?.pendingMessage;
@@ -469,128 +281,47 @@ export function Chat() {
     [clearError, currentSessionId, createSession, sendMessage, tempChatSessions],
   );
 
-  // M4: /compact slash action — 调后端压缩当前会话，成功后重载消息
-  // （续接摘要行由后端持久化，重载后即显示在聊天列表中）。
-  // MEDIUM-1: 流式中（isLoading）early-return —— 两个并发手动压缩会在后端
-  // 各自通过 should_compact 检查并写出重复续接行；前端守卫是必须的修复，
-  // 后端 409 compact_in_progress 只是兜底。
-  const handleCompact = useCallback(async () => {
-    if (!currentSessionId || isLoading) return;
-    try {
-      const result = await sessionApi.compact(currentSessionId);
-      if (result.ok && result.compacted) {
-        toast.success(
-          fill(t('chat.compact_success'), {
-            before: result.before,
-            after: result.after,
-            removed: result.removed,
-          }),
-          { action: { label: '查看归档', onClick: () => setArchivesOpen(true) } },
-        );
-        await loadMessages(currentSessionId);
-      } else if (result.ok) {
-        toast.info(t('chat.compact_skipped'));
-      } else {
-        toast.error(
-          fill(t('chat.compact_failed'), { message: result.message ?? result.error ?? '' }),
-        );
-      }
-    } catch (e) {
-      toast.error(
-        fill(t('chat.compact_failed'), { message: e instanceof Error ? e.message : String(e) }),
-      );
-    }
-  }, [currentSessionId, isLoading, loadMessages, t]);
+  const {
+    handleCompact,
+    handleLearn,
+    handleFork,
+    rewindTarget,
+    setRewindTarget,
+    handleRewind,
+    handleRewindForked,
+    editResendTarget,
+    editResendNotice,
+    quotedDraft,
+    quoteText,
+    handleStartEditResend,
+    handleSendMessageWithEditResend,
+    handleRegenerate,
+    handleAnswerVersionChange,
+    handleContinue,
+    handleDeleteMessage,
+    handleQuote,
+    handleSaveToMemory,
+    handleCancelRun,
+    handleRerunFailed,
+  } = useChatMessageActions({
+    currentSessionId,
+    isLoading,
+    messages,
+    loadMessages,
+    loadSessions,
+    setCurrentSessionId,
+    removeMessage,
+    sendMessage: sendMessage as never,
+    handleSendMessage: handleSendMessage as never,
+    clearTaskBoard,
+    setArchivesOpen,
+    navigate,
+  });
 
-  // 当前会话，产生技能草案候选。成功后跳转到 Skills 页面的 Pending Drafts tab。
-  // 与 /compact 对齐：流式中 early-return。
-  const handleLearn = useCallback(async () => {
-    if (!currentSessionId || isLoading) return;
-    try {
-      toast.info(t('chat.learn_reviewing'));
-      await learnApi.trigger(currentSessionId);
-      toast.success(t('chat.learn_queued'));
-      navigate('/skills?tab=drafts');
-    } catch (e) {
-      toast.error(
-        fill(t('chat.learn_failed'), { error: e instanceof Error ? e.message : String(e) }),
-      );
-    }
-  }, [currentSessionId, isLoading, navigate, t]);
-
-  // M4: 消息级分叉 — 非破坏性操作（无需确认）。成功后切换到新会话
-  // （复用现有 session-switch 路径：setCurrentSessionId → loadMessages effect）。
-  // MEDIUM-1: 流式中（isLoading）early-return —— 流式写入与 fork 前缀复制
-  // 并发会复制出不完整的消息序列，且中途切换会话会打断流式 UI。
-  const handleFork = useCallback(
-    async (messageId: string) => {
-      if (!currentSessionId || isLoading) return;
-      try {
-        const forked = await sessionApi.fork(currentSessionId, messageId);
-        toast.success(t('chat.fork_success'));
-        void loadSessions(); // 刷新侧栏（含 fork 徽标）
-        setCurrentSessionId(forked.id);
-      } catch (e) {
-        toast.error(
-          fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
-        );
-      }
-    },
-    [currentSessionId, isLoading, loadSessions, setCurrentSessionId, t],
-  );
-
-  // W1 (主流对标): 消息级「回滚到此处」——对话框内可选「对话+文件」或「仅对话」；
-  // 文件恢复用工作区检查点（不晚于消息时刻的最近快照），对话回滚复用 session_fork。
-  const [rewindTarget, setRewindTarget] = useState<{ messageId: string; createdAt: number } | null>(
-    null,
-  );
-  const handleRewind = useCallback(
-    (messageId: string) => {
-      if (!currentSessionId || isLoading) return;
-      const target = messagesRef.current.find((m) => m.id === messageId);
-      if (!target) return;
-      setRewindTarget({ messageId, createdAt: target.created_at });
-    },
-    [currentSessionId, isLoading],
-  );
-  const handleRewindForked = useCallback(
-    async (forkedId: string) => {
-      toast.success(t('chat.rewind_success'));
-      setRewindTarget(null);
-      void loadSessions();
-      setCurrentSessionId(forkedId);
-    },
-    [loadSessions, setCurrentSessionId, t],
-  );
-
-  // ① 点击 user 消息的编辑按钮 → 原文回填输入框 + 进入编辑态（editResendTarget）；
-  // ② 用户改写后发送 → fork 当前会话（before_message 开区间截到该消息之前，
-  //    首条消息得到空前缀会话）→ 对 fork 会话发送改写内容 → 跳转 fork 会话。
-  // 原会话完整保留（透明可控：编辑重发不截断历史）。fork 会话经 B1 继承
-  // 源会话工作区绑定，agent 上下文不断链。
-  const [editResendTarget, setEditResendTarget] = useState<{
-    messageId: string;
-    text: string;
-    nonce: number;
-  } | null>(null);
-  // 注入输入框。与编辑重发互斥时以编辑态优先。A4/A5: 追加而非覆盖草稿，
-  // 划词引用走同一通道（一次性事件，见 useQuoteDraft）。
-  const { quotedDraft, quoteText } = useQuoteDraft();
-  // 传给 memo 组件的 props 引用需稳定: 内联箭头函数/对象字面量每次渲染
-  // 都是新引用, 会击穿 React.memo (F1)。
-  const cancelEditResend = useCallback(() => setEditResendTarget(null), []);
-  const editResendNotice = useMemo(
-    () => (editResendTarget ? { onCancel: cancelEditResend } : null),
-    [cancelEditResend, editResendTarget],
-  );
-  // right-panel R1 批次 A: 开合逻辑迁入 store（含 localStorage 持久化），
-  // 此处只保留稳定引用的切换回调（按钮 + 快捷键共用）
   const handleToggleRightPanel = useCallback(() => {
     useRightPanelStore.getState().toggle();
   }, []);
 
-  // right-panel R1 批次 B: 未读产物徽标 —— 本次运行内产物事件计数与
-  // "面板打开时已见基线"之差；面板开着即视为已见（对齐 Claude 的红点语义）。
   const artifactEventCount = useArtifactEventsStore((s) =>
     currentSessionId ? (s.counts[currentSessionId] ?? 0) : 0,
   );
@@ -626,263 +357,27 @@ export function Chat() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // messages 每 token 换新引用, 直接进 deps 会击穿 memo —— 经 ref 读取,
-  // 回调引用保持恒定 (F1)。
-  const messagesRef = useRef(messages);
-  messagesRef.current = messages;
-  const handleStartEditResend = useCallback((messageId: string) => {
-    const target = messagesRef.current.find((m) => m.id === messageId);
-    if (!target || target.role !== 'user') return;
-    setEditResendTarget({
-      messageId,
-      text: target.content,
-      nonce: Date.now(),
-    });
-  }, []);
-
-  const handleSendMessageWithEditResend = useCallback(
-    async (content: string, options?: Parameters<typeof handleSendMessage>[1]) => {
-      if (!editResendTarget) {
-        await handleSendMessage(content, options);
-        return;
-      }
-      const target = editResendTarget;
-      setEditResendTarget(null); // 先清编辑态，防 fork 失败重试时二次分叉
-      if (!currentSessionId || isLoading) {
-        await handleSendMessage(content, options);
-        return;
-      }
-      try {
-        const forked = await sessionApi.fork(currentSessionId, target.messageId, undefined, {
-          beforeMessage: true,
-        });
-        toast.success(t('chat.edit_resend_forked'));
-        void loadSessions();
-        setCurrentSessionId(forked.id);
-        await sendMessage(content, forked.id);
-      } catch (e) {
-        toast.error(
-          fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
-        );
-        // fork 失败退回普通发送，改写内容不丢
-        await handleSendMessage(content, options);
-      }
-    },
-    [
-      currentSessionId,
-      editResendTarget,
-      handleSendMessage,
-      isLoading,
-      loadSessions,
-      sendMessage,
-      setCurrentSessionId,
-      t,
-    ],
-  );
-
-  // R18-A: 重新生成 —— 对 assistant 回答重跑一次。复用编辑重发的
-  // 非破坏性链路: 找到其前驱最近的 user 消息 → fork 截到该消息之前
-  // （beforeMessage 开区间）→ 切到 fork 会话原文重发。原会话保留,
-  // 可对比两次回答。失败提示,不降级重发（避免原会话出现重复轮次）。
-  const handleRegenerate = useCallback(
-    async (assistantMessageId: string) => {
-      if (!currentSessionId || isLoading) return;
-      const msgs = messagesRef.current;
-      const idx = msgs.findIndex((m) => m.id === assistantMessageId);
-      if (idx < 0) return;
-      // 第二轮 C2: 最后一轮原位重新生成（旧回答归档为版本，可在回答下方切换）
-      if (regenerateInPlace(msgs, idx, currentSessionId, { removeMessage, sendMessage })) return;
-      let userIdx = -1;
-      for (let i = idx - 1; i >= 0; i--) {
-        if (msgs[i].role === 'user') {
-          userIdx = i;
-          break;
-        }
-      }
-      if (userIdx < 0) return;
-      const userMsg = msgs[userIdx];
-      try {
-        const forked = await sessionApi.fork(currentSessionId, userMsg.id, undefined, {
-          beforeMessage: true,
-        });
-        toast.success(t('chat.regenerate_forked'));
-        void loadSessions();
-        setCurrentSessionId(forked.id);
-        await sendMessage(userMsg.content, forked.id);
-      } catch (e) {
-        toast.error(
-          fill(t('chat.fork_failed'), { message: e instanceof Error ? e.message : String(e) }),
-        );
-      }
-    },
-    [currentSessionId, isLoading, loadSessions, removeMessage, sendMessage, setCurrentSessionId, t],
-  );
-
-  // 第二轮 C2: 回答版本切换后按服务端重拉消息
-  const handleAnswerVersionChange = useCallback(() => {
-    if (currentSessionId) void loadMessages(currentSessionId);
-  }, [currentSessionId, loadMessages]);
-
-  // 第二轮 B2: 截断回答「继续生成」—— 发一条续写消息，原回答保留、历史可追溯
-  const handleContinue = useCallback(() => {
-    if (!currentSessionId || isLoading) return;
-    void sendMessage(t('chat.continue_prompt'), currentSessionId);
-  }, [currentSessionId, isLoading, sendMessage, t]);
-
-  // R17-B: 删除单条消息 —— messageApi.delete 落库后本地同步移除；
-  // 失败提示但不移动视图（历史保持可见）。
-  const handleDeleteMessage = useCallback(
-    async (messageId: string) => {
-      try {
-        await messageApi.delete(messageId);
-        removeMessage(messageId);
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : String(e));
-      }
-    },
-    [removeMessage],
-  );
-
-  // P0-1: 引用到对话 —— 消息正文转 Markdown 引用块追加到输入框。
-  const handleQuote = useCallback(
-    (message: MessageType) => quoteText(message.content),
-    [quoteText],
-  );
-
-  // P0-1: 保存到记忆 —— 消息正文写入长期记忆（semantic，标注来源便于检索）。
-  const handleSaveToMemory = useCallback(
-    async (message: MessageType) => {
-      try {
-        await memoryApi.saveMemory(message.content, 'semantic', 5, ['来自对话']);
-        toast.success(t('chat.save_to_memory_success'));
-      } catch (e) {
-        toast.error(
-          fill(t('chat.save_to_memory_failed'), {
-            error: e instanceof Error ? e.message : String(e),
-          }),
-        );
-      }
-    },
-    [t],
-  );
-
-  // Wave 3 C4+H1 (2026-08-15): 统一取消语义 —— 未派发/已派发/运行中一律调
-  // cancelRun（后端置 cancelled + dispatcher.cancel() 阻止自动派发，避免空转
-  // 烧 token），成功或 409 等错误都清空 taskBoard（board 信息已过时）。
-  // M1：取消失败也照常清理，避免计划卡永久锁定 + unhandled rejection。
-  const handleCancelRun = async (runId: string) => {
-    try {
-      await orchRunClient.cancelRun(runId);
-    } catch {
-      // 409（run 已终态）等 → 前端照常清空计划卡（board 信息过时）
-    }
-    clearTaskBoard();
-  };
-
-  // RV3 (round8): 只重跑失败任务 —— 调 rerun-failed 拿 planOverride
-  // （done 子任务带 preset_output 回放），经 chatStream 重发全新 run。
-  // RV4 (round27): taskIds 提供时为单任务重试（只重建所选任务及其下游）。
-  const handleRerunFailed = async (runId: string, taskIds?: string[]) => {
-    if (!currentSessionId) return;
-    try {
-      const res = await orchRunClient.rerunFailed(runId, taskIds);
-      const sid = res.session_id ?? currentSessionId;
-      await sendMessage(res.goal, sid, undefined, 'force_multi', {
-        planOverride: res.plan_override,
-      });
-    } catch {
-      toast.error('重跑失败任务请求失败（run 未终态或无失败任务）');
-    }
-  };
-
   // R17-D: 顶层错误不再整页替换 —— 历史消息全部被顶掉、上下文丢失
   // 是主流应用的反模式。改为在消息区下方渲染内联错误条，历史与输入框
   // 保持可见可用，用户可"关闭"清除错误继续对话。
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
-      {/* 页面头部：统一承载会话级模型/权限/上下文水位/编排模式/新话题，彻底释放底部输入区 */}
-      <div className="min-h-12 py-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-4 border-b border-border bg-surface flex-shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-          <h2 className="text-sm font-semibold text-text shrink-0">对话</h2>
-          <ProjectBadge workspacePath={workspacePath} />
-          <WorkspaceBranchPicker sessionId={currentSessionId} />
-          <SessionUsageBadge sessionId={currentSessionId} />
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap" data-testid="chat-header-controls">
-          <SessionModelPicker sessionId={currentSessionId} placement="bottom" />
-          <PermissionModeSwitch sessionId={currentSessionId} placement="bottom" />
-          <ContextMeter sessionId={currentSessionId} placement="bottom" />
-          <div className="flex items-center gap-1 text-xs">
-            <label htmlFor="chat-header-orch-mode" className="text-text-tertiary hidden xl:inline">
-              {t('chat.orchMode.label')}
-            </label>
-            <select
-              id="chat-header-orch-mode"
-              data-testid="orch-mode-select"
-              aria-label={t('chat.orchMode.label')}
-              value={orchMode}
-              onChange={(e) => setOrchMode(e.target.value)}
-              className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-surface text-text-secondary hover:bg-bg-hover outline-none"
-            >
-              <option value="auto">{t('chat.orchMode.auto')}</option>
-              <option value="force_multi">{t('chat.orchMode.forceMulti')}</option>
-              <option value="template:research-write">
-                {t('chat.orchMode.templateResearchWrite')}
-              </option>
-              <option value="template:gather-analyze-report">
-                {t('chat.orchMode.templateGatherAnalyzeReport')}
-              </option>
-            </select>
-          </div>
-          <button
-            type="button"
-            data-testid="chat-new-topic"
-            disabled={isLoading || !hasConfig}
-            onClick={() => void handleSendMessageWithEditResend('', { contextReset: true })}
-            title="新话题（重置上下文）"
-            className="px-2 py-1 text-xs border border-border rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text disabled:opacity-50 transition-colors"
-          >
-            + 新话题
-          </button>
-          {currentSessionId && (
-            <button
-              type="button"
-              onClick={() =>
-                setTempChatSessions((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(currentSessionId)) next.delete(currentSessionId);
-                  else next.add(currentSessionId);
-                  return next;
-                })
-              }
-              aria-pressed={isTempChat}
-              title={isTempChat ? t('chat.temp_chat_on') : t('chat.temp_chat_off')}
-              data-testid="temp-chat-toggle"
-              className={`px-2 py-1 text-xs border rounded-radius-sm transition-colors ${
-                isTempChat
-                  ? 'border-warning text-warning bg-warning/10'
-                  : 'border-border hover:bg-bg-hover'
-              }`}
-            >
-              {isTempChat ? '🕶 ' : ''}
-              {t('chat.temp_chat')}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={handleNewSession}
-            className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-hover transition-colors"
-          >
-            + 新对话
-          </button>
-          <RightPanelToggle
-            open={rightPanelOpen}
-            onClick={handleToggleRightPanel}
-            unseenCount={unseenArtifactCount}
-          />
-        </div>
-      </div>
+      <ChatHeaderBar
+        workspacePath={workspacePath}
+        currentSessionId={currentSessionId}
+        orchMode={orchMode}
+        setOrchMode={setOrchMode}
+        isLoading={isLoading}
+        hasConfig={hasConfig}
+        onNewTopic={() => void handleSendMessageWithEditResend('', { contextReset: true })}
+        isTempChat={isTempChat}
+        setTempChatSessions={setTempChatSessions}
+        onNewSession={handleNewSession}
+        rightPanelOpen={rightPanelOpen}
+        onToggleRightPanel={handleToggleRightPanel}
+        unseenArtifactCount={unseenArtifactCount}
+      />
 
       {/* P1 (UI 优化方案 2026-09-13): 内容行 —— 右面板 push 模式参与 flex
           布局（挤压主区成三栏，对齐 Claude artifacts）；窄屏回退 overlay。
@@ -952,119 +447,16 @@ export function Chat() {
             )}
             {/* 对标 S2: 内联记忆提示（"已记住"可撤销）；临时聊天不显示 */}
             {!isTempChat && <MemoryWriteHints sessionId={currentSessionId} />}
-            {/* PM2 (round8): 计划批准条 —— /plan run 完成后出现;批准即衔接执行 */}
-            {planApprovalFor != null && planApprovalFor === currentSessionId && (
-              <div className="px-4 pb-2" data-testid="plan-approval-bar">
-                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded border border-primary/40 bg-primary/5">
-                  <span className="text-xs text-text-secondary">
-                    计划已生成 —— 批准后将严格按上述计划执行
-                  </span>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      type="button"
-                      data-testid="plan-approve"
-                      className="px-2 py-1 text-xs rounded bg-primary text-bg-inv font-medium"
-                      onClick={() => {
-                        const sid = planApprovalFor;
-                        clearPlanApproval();
-                        if (sid) {
-                          void sendMessage(
-                            '请严格按上述计划执行，不要重新规划。',
-                            sid,
-                            undefined,
-                            'force_single',
-                          );
-                        }
-                      }}
-                    >
-                      按计划执行
-                    </button>
-                    {/* Round 2 (2026-09-19): 计划模式 × 编排打通 —— 计划文本
-                    经 /orch/plan-items 结构化为任务项，走 plan_override 派发
-                    （PlanCard 确认门可再编辑）。失败 toast 引导回落上方单
-                    agent 按钮。 */}
-                    <button
-                      type="button"
-                      data-testid="plan-approve-orch"
-                      className="px-2 py-1 text-xs rounded border border-primary/60 text-primary font-medium"
-                      onClick={() => {
-                        const sid = planApprovalFor;
-                        if (!sid || planOrchBusyRef.current) return;
-                        const planText =
-                          [...messages].reverse().find((m) => m.role === 'assistant')?.content ??
-                          '';
-                        if (!planText.trim()) {
-                          toast.error('找不到可结构化的计划内容');
-                          return;
-                        }
-                        planOrchBusyRef.current = true;
-                        orchRunClient
-                          .planItemsFromText(planText)
-                          .then(({ items }) => {
-                            clearPlanApproval();
-                            if (items.length > 0) {
-                              void sendMessage(
-                                '请按上述已批准的计划编排执行（已生成任务卡，确认后并行执行）。',
-                                sid,
-                                undefined,
-                                undefined,
-                                { planOverride: items },
-                              );
-                            } else {
-                              toast.error('未能从计划解析出任务，请改用「按计划执行」');
-                            }
-                          })
-                          .catch((err: unknown) => {
-                            toast.error(
-                              err instanceof Error
-                                ? `计划转编排失败：${err.message.slice(0, 120)}`
-                                : '计划转编排失败（需要已配置 LLM 端点）',
-                            );
-                          })
-                          .finally(() => {
-                            planOrchBusyRef.current = false;
-                          });
-                      }}
-                    >
-                      按计划执行（编排）
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="plan-dismiss"
-                      className="px-2 py-1 text-xs rounded border border-border text-text-secondary"
-                      onClick={() => clearPlanApproval()}
-                    >
-                      忽略
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            {/* Round 3 (2026-09-19): 编排拆解前置指示 —— 澄清/侦察窗口期
-            的状态可见性。taskBoard 出现（task_plan 到达）即消失。 */}
-            {preflightPhase && !taskBoard && (
-              <div className="px-4 pb-2" data-testid="orch-preflight-indicator">
-                <div className="flex items-center gap-2 px-3 py-2 rounded border border-border bg-bg-muted/40">
-                  <span className="text-xs text-text-secondary animate-pulse">
-                    {preflightPhase === 'clarify'
-                      ? '正在澄清需求…（如在输入框中回答提问，将据此生成更准的计划）'
-                      : '正在侦察收集事实…（随后生成任务计划）'}
-                  </span>
-                </div>
-              </div>
-            )}
-            {/* 编排计划确认卡 (Fix #2): 未派发时在主对话区域显示,方便用户查看和确认 */}
-            {taskBoard && !taskBoard.dispatchedAt && (
-              <div className="px-4 pb-2">
-                <PlanCard
-                  runId={taskBoard.runId}
-                  plan={taskBoard.plan}
-                  locked={false}
-                  needConfirm={true}
-                  onCancel={() => void handleCancelRun(taskBoard.runId)}
-                />
-              </div>
-            )}
+            <PlanApprovalBar
+              planApprovalFor={planApprovalFor}
+              currentSessionId={currentSessionId}
+              clearPlanApproval={clearPlanApproval}
+              messages={messages}
+              sendMessage={sendMessage as never}
+              preflightPhase={preflightPhase}
+              taskBoard={taskBoard ?? null}
+              onCancelRun={handleCancelRun}
+            />
             {/* Task 2: sticky-bottom "跳到最新" 按钮 — 用户离开底部 + 流式进行中显示,
             固定右下角,a11y ``aria-label="跳到最新"``。点击后 scrollTop=scrollHeight
             并把 wasAtBottomRef 重置。 */}
@@ -1120,7 +512,6 @@ export function Chat() {
           )}
 
           {/* TM2 (DSH 对标 R11): 上下文水位徽章（≥0.6 才渲染） */}
-          <ContextPressureBadge sessionId={currentSessionId} />
           <KeyboardShortcutsHelp />
           <ChatInput
             onSend={handleSendMessageWithEditResend}
