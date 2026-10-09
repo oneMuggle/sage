@@ -159,7 +159,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium text-text">{name}</span>
                 {discoveredModels.length > 0 && (
-                  <span className="text-[11px] text-muted">{discoveredModels.length} 个模型</span>
+                  <span className="text-ui-2xs text-muted">{discoveredModels.length} 个模型</span>
                 )}
               </div>
               <div className="flex items-center gap-1.5">
@@ -182,7 +182,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                 )}
                 <button
                   onClick={() => handleDelete(ep.id)}
-                  className="text-xs text-error hover:text-red-700 transition-colors"
+                  className="text-xs text-error hover:text-error/80 transition-colors"
                 >
                   删除
                 </button>
@@ -238,7 +238,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                   </select>
                 </div>
                 <div className="opacity-75">
-                  <label className="text-[11px] text-muted/80 block mb-1">
+                  <label className="text-ui-2xs text-muted/80 block mb-1">
                     模型 ID（高级，可选）
                   </label>
                   <input
@@ -246,9 +246,9 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                     value={modelId}
                     onChange={(e) => setEditForm({ ...form, modelId: e.target.value })}
                     placeholder="留空走 ModelsTab 选择"
-                    className="w-full px-2 py-1 border border-border rounded-radius-sm text-[11px] font-mono bg-surface text-text"
+                    className="w-full px-2 py-1 border border-border rounded-radius-sm text-ui-2xs font-mono bg-surface text-text"
                   />
-                  <p className="text-[10px] text-muted/70 mt-0.5">
+                  <p className="text-ui-xs text-muted/70 mt-0.5">
                     仅作 OpenAI 兼容服务的兜底；正常选择走"模型"页。
                   </p>
                 </div>
@@ -295,7 +295,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                         'px-3 py-1.5 text-xs rounded-radius-sm border transition-colors',
                         probingId === ep.id
                           ? 'border-border text-muted cursor-wait'
-                          : 'border-purple-400 text-purple-500 hover:bg-purple-50',
+                          : 'border-primary/50 text-primary hover:bg-primary/10',
                       )}
                       title="探测模型元数据（上下文窗口、架构、量化等）"
                     >
@@ -307,7 +307,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                   <span
                     className={clsx(
                       'text-xs font-medium',
-                      result.success ? 'text-green-600' : 'text-red-600',
+                      result.success ? 'text-success' : 'text-error',
                     )}
                   >
                     {result.message}
@@ -344,7 +344,7 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                         'px-2 py-1 text-xs rounded-radius-sm border transition-colors',
                         probingId === ep.id
                           ? 'border-border text-muted cursor-wait'
-                          : 'border-purple-400 text-purple-500 hover:bg-purple-50',
+                          : 'border-primary/50 text-primary hover:bg-primary/10',
                       )}
                       title="探测模型元数据"
                     >
@@ -355,14 +355,14 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                     <span
                       className={clsx(
                         'text-xs font-medium',
-                        result.success ? 'text-green-600' : 'text-red-600',
+                        result.success ? 'text-success' : 'text-error',
                       )}
                     >
                       {result.message}
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-3 text-[10px] text-muted/70">
+                <div className="flex items-center gap-3 text-ui-xs text-muted/70">
                   <span>协议: {ep.protocol}</span>
                   {ep.modelId && <span>模型(高级): {ep.modelId}</span>}
                 </div>
@@ -386,15 +386,15 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
  */
 function ProbeStatusDisplay({ result }: { result: ProbeResult }) {
   const statusConfig = {
-    success: { label: '探测成功', color: 'text-green-600', bg: 'bg-green-50' },
-    unsupported: { label: '不支持探测', color: 'text-yellow-600', bg: 'bg-yellow-50' },
-    error: { label: '探测失败', color: 'text-red-600', bg: 'bg-red-50' },
+    success: { label: '探测成功', color: 'text-success', bg: 'bg-success/10' },
+    unsupported: { label: '不支持探测', color: 'text-warning', bg: 'bg-warning/10' },
+    error: { label: '探测失败', color: 'text-error', bg: 'bg-error/10' },
   } as const;
 
   const config = statusConfig[result.status];
 
   return (
-    <div className={clsx('mt-2 px-2 py-1.5 rounded-radius-sm text-[11px]', config.bg)}>
+    <div className={clsx('mt-2 px-2 py-1.5 rounded-radius-sm text-ui-2xs', config.bg)}>
       <span className={clsx('font-medium', config.color)}>{config.label}</span>
       {result.adapter !== 'unknown' && (
         <span className="text-muted ml-2">适配器: {result.adapter}</span>
@@ -412,10 +412,10 @@ function ProbeStatusDisplay({ result }: { result: ProbeResult }) {
         </div>
       )}
       {result.status === 'error' && result.error && (
-        <div className="mt-0.5 text-red-500">{result.error}</div>
+        <div className="mt-0.5 text-error">{result.error}</div>
       )}
       {result.status === 'unsupported' && result.error && (
-        <div className="mt-0.5 text-yellow-600">{result.error}</div>
+        <div className="mt-0.5 text-warning">{result.error}</div>
       )}
     </div>
   );

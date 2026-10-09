@@ -20,22 +20,22 @@ const TYPE_CONFIG: Record<ProjectType, { label: string; icon: React.ReactNode; c
   coding: {
     label: '编码',
     icon: <Code className="h-3 w-3" />,
-    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300',
+    color: 'bg-role-blue text-role-blue-text',
   },
   research: {
     label: '科研',
     icon: <BookOpen className="h-3 w-3" />,
-    color: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300',
+    color: 'bg-role-purple text-role-purple-text',
   },
   business: {
     label: '事务',
     icon: <Briefcase className="h-3 w-3" />,
-    color: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300',
+    color: 'bg-role-green text-role-green-text',
   },
   personal: {
     label: '个人',
     icon: <User className="h-3 w-3" />,
-    color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300',
+    color: 'bg-role-orange text-role-orange-text',
   },
 };
 
@@ -62,7 +62,7 @@ export function ProjectTypeBadge({ type, detected, className }: ProjectTypeBadge
       className={clsx(
         'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium',
         config.color,
-        detected && 'ring-1 ring-blue-400 ring-offset-1 dark:ring-offset-gray-900',
+        detected && 'ring-1 ring-info ring-offset-1 ring-offset-surface',
         className,
       )}
       title={detected ? '自动检测的项目类型' : '手动设置的项目类型'}

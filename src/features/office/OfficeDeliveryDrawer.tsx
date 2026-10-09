@@ -126,11 +126,11 @@ export function OfficeDeliveryDrawer({
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-medium truncate">{t('office.delivery.title')}</span>
           {decided ? (
-            <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0">
+            <span className="text-xs px-2 py-0.5 rounded bg-success/15 text-success shrink-0">
               {t('office.delivery.archived')}
             </span>
           ) : (
-            <span className="text-xs px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 shrink-0">
+            <span className="text-xs px-2 py-0.5 rounded bg-warning/15 text-warning shrink-0">
               {t('office.delivery.awaiting')}
             </span>
           )}
@@ -160,7 +160,7 @@ export function OfficeDeliveryDrawer({
           )}
           {lintState === 'error' && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-red-600">{t('office.delivery.lintFailed')}</span>
+              <span className="text-xs text-error">{t('office.delivery.lintFailed')}</span>
               <button
                 type="button"
                 onClick={() => setLintSeq((n) => n + 1)}
@@ -175,11 +175,11 @@ export function OfficeDeliveryDrawer({
             <div data-testid="lint-result">
               <div className="flex items-center gap-2 mb-2">
                 {lint.ok ? (
-                  <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                  <span className="text-xs px-2 py-0.5 rounded bg-success/15 text-success">
                     {t('office.delivery.lintPass')}
                   </span>
                 ) : (
-                  <span className="text-xs px-2 py-0.5 rounded bg-red-100 text-red-800">
+                  <span className="text-xs px-2 py-0.5 rounded bg-error/15 text-error">
                     {t('office.delivery.lintFail')}
                   </span>
                 )}
@@ -198,7 +198,7 @@ export function OfficeDeliveryDrawer({
                     <li key={`${issue.rule_id}-${issue.message}`} className="text-xs">
                       <span
                         className={
-                          issue.severity === 'error' ? 'text-red-600 font-medium' : 'text-yellow-700 font-medium'
+                          issue.severity === 'error' ? 'text-error font-medium' : 'text-warning font-medium'
                         }
                       >
                         [{issue.rule_id}]
@@ -262,7 +262,7 @@ export function OfficeDeliveryDrawer({
             <button
               type="button"
               onClick={handleReject}
-              className="flex-1 text-sm px-3 py-1.5 rounded border border-red-300 text-red-600 hover:bg-red-50"
+              className="flex-1 text-sm px-3 py-1.5 rounded border border-error/40 text-error hover:bg-error/10"
               data-testid="decision-reject"
             >
               {t('office.delivery.reject')}

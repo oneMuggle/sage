@@ -21,9 +21,9 @@ import type { TranslationKey } from '../../shared/lib/i18n/zh';
 import { Toggle } from './components';
 
 const STATE_BADGE_CLASSES: Record<McpServerState, string> = {
-  ready: 'bg-green-500/15 text-green-500',
-  discovering: 'bg-amber-500/15 text-amber-500',
-  failed: 'bg-red-500/15 text-red-500',
+  ready: 'bg-success/15 text-success',
+  discovering: 'bg-warning/15 text-warning',
+  failed: 'bg-error/15 text-error',
   disabled: 'bg-faint/15 text-faint',
 };
 
@@ -197,12 +197,12 @@ export function McpTab() {
         <p className="text-xs text-muted mb-3">{t('settings.mcp.desc')}</p>
 
         {loadError && (
-          <div role="alert" className="text-xs text-red-500 mb-3">
+          <div role="alert" className="text-xs text-error mb-3">
             {loadError}
           </div>
         )}
         {actionError && (
-          <div role="alert" className="text-xs text-red-500 mb-3">
+          <div role="alert" className="text-xs text-error mb-3">
             {actionError}
           </div>
         )}
@@ -230,7 +230,7 @@ export function McpTab() {
                     <td className="py-2 text-text font-mono">
                       {srv.name}
                       {srv.required && (
-                        <span className="ml-1 text-amber-500" title={t('settings.mcp.required')}>
+                        <span className="ml-1 text-warning" title={t('settings.mcp.required')}>
                           *
                         </span>
                       )}
@@ -239,7 +239,7 @@ export function McpTab() {
                       <span
                         data-testid={`state-badge-${srv.name}`}
                         className={clsx(
-                          'px-2 py-0.5 rounded-full text-[11px] font-medium',
+                          'px-2 py-0.5 rounded-full text-ui-2xs font-medium',
                           STATE_BADGE_CLASSES[state],
                         )}
                       >
@@ -264,7 +264,7 @@ export function McpTab() {
                           'px-2 py-0.5 text-xs rounded-radius-sm border',
                           srv.builtin
                             ? 'border-border text-muted opacity-50 cursor-not-allowed'
-                            : 'border-red-500/40 text-red-500 hover:bg-red-500/10',
+                            : 'border-error/40 text-error hover:bg-error/10',
                         )}
                         disabled={srv.builtin}
                         title={srv.builtin ? t('settings.mcp.builtin_hint') : t('common.delete')}
@@ -363,7 +363,7 @@ export function McpTab() {
           </label>
         </div>
         {formError && (
-          <div role="alert" className="text-xs text-red-500 mt-2">
+          <div role="alert" className="text-xs text-error mt-2">
             {formError}
           </div>
         )}

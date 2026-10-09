@@ -273,9 +273,9 @@ export function PromptTemplatesTab() {
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium text-text">{tpl.name}</div>
                   {tpl.description && (
-                    <div className="text-[11px] text-text-secondary">{tpl.description}</div>
+                    <div className="text-ui-2xs text-text-secondary">{tpl.description}</div>
                   )}
-                  <div className="text-[11px] text-text-secondary font-mono mt-1 line-clamp-2">
+                  <div className="text-ui-2xs text-text-secondary font-mono mt-1 line-clamp-2">
                     {tpl.content.length > 120 ? `${tpl.content.slice(0, 120)}…` : tpl.content}
                   </div>
                 </div>
@@ -289,7 +289,7 @@ export function PromptTemplatesTab() {
                       if (entries.length === 0) return null;
                       return (
                         <span
-                          className="text-[11px] text-text-secondary mr-1"
+                          className="text-ui-2xs text-text-secondary mr-1"
                           data-testid={`prompts-memory-${tpl.id}`}
                         >
                           记忆 {entries.length} 项
@@ -333,7 +333,7 @@ export function PromptTemplatesTab() {
                     className="p-1 rounded hover:bg-error/10 text-muted hover:text-error"
                     title="删除"
                   >
-                    <span className="text-[11px]">删除</span>
+                    <span className="text-ui-2xs">删除</span>
                   </button>
                 </div>
               </div>

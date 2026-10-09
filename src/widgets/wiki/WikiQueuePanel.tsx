@@ -27,11 +27,11 @@ const STATUS_LABEL: Record<QueueStatus, string> = {
 };
 
 const STATUS_COLOR: Record<QueueStatus, string> = {
-  pending: 'bg-gray-100 text-gray-700',
-  processing: 'bg-blue-100 text-blue-700',
-  completed: 'bg-green-100 text-green-700',
-  failed: 'bg-red-100 text-red-700',
-  cancelled: 'bg-stone-100 text-stone-500',
+  pending: 'bg-bg-subtle text-text-secondary',
+  processing: 'bg-info/15 text-info',
+  completed: 'bg-success/15 text-success',
+  failed: 'bg-error/15 text-error',
+  cancelled: 'bg-bg-muted text-muted',
 };
 
 function formatRelativeTime(iso: string | null): string {
@@ -83,10 +83,10 @@ export function WikiQueuePanel({ projectPath }: WikiQueuePanelProps) {
   return (
     <div className="flex h-full flex-col">
       {/* 状态摘要 */}
-      <div className="border-b border-stone-200 bg-stone-50 p-3">
+      <div className="border-b border-border bg-bg-muted p-3">
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-stone-800">摄入队列</h3>
-          <span className="text-xs text-stone-500">共 {totalCount} 个任务</span>
+          <h3 className="text-sm font-semibold text-text">摄入队列</h3>
+          <span className="text-xs text-muted">共 {totalCount} 个任务</span>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -102,15 +102,15 @@ export function WikiQueuePanel({ projectPath }: WikiQueuePanelProps) {
       </div>
 
       {/* 过滤标签 */}
-      <div className="flex gap-1 border-b border-stone-200 px-3 py-2">
+      <div className="flex gap-1 border-b border-border px-3 py-2">
         {STATUS_FILTERS.map((f) => (
           <button
             key={f.value}
             onClick={() => setFilter(f.value)}
             className={`rounded px-2 py-1 text-xs transition-colors ${
               filter === f.value
-                ? 'bg-stone-800 text-white'
-                : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                ? 'bg-primary text-text-inverse'
+                : 'bg-bg-subtle text-text-secondary hover:bg-bg-hover'
             }`}
           >
             {f.label}
@@ -119,18 +119,18 @@ export function WikiQueuePanel({ projectPath }: WikiQueuePanelProps) {
       </div>
 
       {/* 错误提示 */}
-      {error && <div className="bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>}
+      {error && <div className="bg-error/10 px-3 py-2 text-xs text-error">{error}</div>}
 
       {/* 任务列表 */}
       <div className="flex-1 overflow-y-auto">
         {loading && tasks.length === 0 ? (
-          <div className="p-6 text-center text-sm text-stone-400">加载中...</div>
+          <div className="p-6 text-center text-sm text-muted">加载中...</div>
         ) : visibleTasks.length === 0 ? (
-          <div className="p-6 text-center text-sm text-stone-400">
+          <div className="p-6 text-center text-sm text-muted">
             {filter === 'all' ? '队列为空' : `没有${STATUS_LABEL[filter as QueueStatus]}任务`}
           </div>
         ) : (
-          <ul className="divide-y divide-stone-100">
+          <ul className="divide-y divide-border">
             {visibleTasks.map((task) => (
               <TaskRow
                 key={task.task_id}
@@ -144,11 +144,11 @@ export function WikiQueuePanel({ projectPath }: WikiQueuePanelProps) {
       </div>
 
       {/* 底部操作栏 */}
-      <div className="flex items-center justify-between border-t border-stone-200 bg-stone-50 px-3 py-2">
+      <div className="flex items-center justify-between border-t border-border bg-bg-muted px-3 py-2">
         <button
           onClick={() => clearCompleted(projectPath)}
           disabled={statusSummary.completed === 0 || loading}
-          className="rounded bg-stone-200 px-2 py-1 text-xs text-stone-700 transition-colors hover:bg-stone-300 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded bg-bg-subtle px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           清除已完成 ({statusSummary.completed})
         </button>
@@ -163,7 +163,7 @@ export function WikiQueuePanel({ projectPath }: WikiQueuePanelProps) {
             });
           }}
           disabled={totalCount === 0 || loading}
-          className="rounded bg-red-100 px-2 py-1 text-xs text-red-700 transition-colors hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded bg-error/15 px-2 py-1 text-xs text-error transition-colors hover:bg-error/25 disabled:cursor-not-allowed disabled:opacity-50"
         >
           清除全部
         </button>
@@ -183,22 +183,22 @@ function TaskRow({ task, onCancel, onRetry }: TaskRowProps) {
   const canRetry = task.status === 'failed' && task.retry_count < task.max_retries;
 
   return (
-    <li className="px-3 py-2 hover:bg-stone-50">
+    <li className="px-3 py-2 hover:bg-bg-hover">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span
-              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+              className={`rounded px-1.5 py-0.5 text-ui-xs font-medium ${
                 STATUS_COLOR[task.status]
               }`}
             >
               {STATUS_LABEL[task.status]}
             </span>
-            <span className="truncate text-xs text-stone-600" title={task.source_path}>
+            <span className="truncate text-xs text-text-secondary" title={task.source_path}>
               {task.source_path.split('/').pop()}
             </span>
           </div>
-          <div className="mt-1 text-[10px] text-stone-400">
+          <div className="mt-1 text-ui-xs text-muted">
             <span>任务 {task.task_id}</span>
             <span className="mx-1">·</span>
             <span>创建 {formatRelativeTime(task.created_at)}</span>
@@ -212,7 +212,7 @@ function TaskRow({ task, onCancel, onRetry }: TaskRowProps) {
             )}
           </div>
           {task.error_message && (
-            <div className="mt-1 truncate text-[10px] text-red-600" title={task.error_message}>
+            <div className="mt-1 truncate text-ui-xs text-error" title={task.error_message}>
               ⚠️ {task.error_message}
             </div>
           )}
@@ -222,7 +222,7 @@ function TaskRow({ task, onCancel, onRetry }: TaskRowProps) {
           {canRetry && (
             <button
               onClick={onRetry}
-              className="rounded bg-blue-100 px-2 py-0.5 text-[10px] text-blue-700 hover:bg-blue-200"
+              className="rounded bg-info/15 px-2 py-0.5 text-ui-xs text-info hover:bg-info/25"
               title="重试"
             >
               重试
@@ -231,7 +231,7 @@ function TaskRow({ task, onCancel, onRetry }: TaskRowProps) {
           {canCancel && (
             <button
               onClick={onCancel}
-              className="rounded bg-stone-100 px-2 py-0.5 text-[10px] text-stone-700 hover:bg-stone-200"
+              className="rounded bg-bg-subtle px-2 py-0.5 text-ui-xs text-text-secondary hover:bg-bg-hover"
               title="取消"
             >
               取消
