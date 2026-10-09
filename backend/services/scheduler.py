@@ -71,6 +71,8 @@ class ScheduledTask:
     last_attempt: Optional[int] = None
     last_status: str = "never"
     last_error: Optional[str] = None
+    run_count: int = 0
+    max_runs: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -91,6 +93,8 @@ class ScheduledTask:
             last_attempt=raw.get("last_attempt"),
             last_status=str(raw.get("last_status", "succeeded" if raw.get("last_run") else "never")),
             last_error=raw.get("last_error"),
+            run_count=int(raw.get("run_count", 0) or 0),
+            max_runs=int(raw["max_runs"]) if raw.get("max_runs") is not None else None,
         )
 
 
@@ -188,6 +192,7 @@ class SchedulerService:
         session_id: str,
         content: str,
         enabled: bool = True,
+        max_runs: Optional[int] = None,
     ) -> ScheduledTask:
         if not name or not name.strip():
             raise ValidationError("name must not be empty")
@@ -195,6 +200,8 @@ class SchedulerService:
             raise ValidationError("content must not be empty")
         if not isinstance(enabled, bool):
             raise ValidationError("enabled must be bool")
+        if max_runs is not None and (isinstance(max_runs, bool) or not isinstance(max_runs, int) or max_runs < 1):
+            raise ValidationError("max_runs must be a positive integer")
         if not self._session_repo_exists(session_id):
             raise ValidationError(f"session not found: {session_id}")
         validated_schedule = self._validate_schedule(task_type, schedule)
@@ -203,6 +210,7 @@ class SchedulerService:
             schedule=validated_schedule, session_id=session_id, content=content,
             enabled=enabled, created_at=int(time.time() * 1000),
             next_run=self._next_run_for(validated_schedule, enabled),
+            max_runs=max_runs,
         )
         with self._lock:
             self._tasks[task.id] = task
@@ -218,7 +226,7 @@ class SchedulerService:
             if task_id in self._running:
                 raise ValidationError("task is running; retry editing after it finishes")
             current = self._tasks[task_id]
-            allowed = {"name", "enabled", "type", "schedule", "content", "session_id"}
+            allowed = {"name", "enabled", "type", "schedule", "content", "session_id", "max_runs"}
             if set(changes) - allowed:
                 raise ValidationError("unknown task field")
             new_name = changes.get("name", current.name)
@@ -227,12 +235,15 @@ class SchedulerService:
             new_session = changes.get("session_id", current.session_id)
             new_type = changes.get("type", current.type)
             schedule = changes.get("schedule", current.schedule)
+            new_max_runs = changes.get("max_runs", current.max_runs)
             if not isinstance(new_name, str) or not new_name.strip():
                 raise ValidationError("name must not be empty")
             if not isinstance(new_content, str) or not new_content.strip():
                 raise ValidationError("content must not be empty")
             if not isinstance(new_enabled, bool):
                 raise ValidationError("enabled must be bool")
+            if new_max_runs is not None and (isinstance(new_max_runs, bool) or not isinstance(new_max_runs, int) or new_max_runs < 1):
+                raise ValidationError("max_runs must be a positive integer")
             if new_session != current.session_id and not self._session_repo_exists(new_session):
                 raise ValidationError(f"session not found: {new_session}")
             if not isinstance(schedule, dict):
@@ -246,6 +257,7 @@ class SchedulerService:
                 current, name=new_name.strip(), enabled=new_enabled, type=new_type,
                 schedule=validated, content=new_content, session_id=new_session,
                 next_run=self._next_run_for(validated, new_enabled),
+                max_runs=new_max_runs,
             )
             self._tasks[task_id] = updated
             self._save_to_disk()
@@ -505,14 +517,21 @@ class SchedulerService:
             now = int(time.time() * 1000)
             # Failed one-shots are paused, NOT completed. No automatic replay:
             # a failed response can be ambiguous after a successful commit.
-            enabled = current.enabled if current.type == "recurring" else False
+            new_run_count = current.run_count if error else current.run_count + 1
+            budget_reached = (
+                error is None
+                and current.max_runs is not None
+                and new_run_count >= current.max_runs
+            )
+            enabled = (current.enabled and not budget_reached) if current.type == "recurring" else False
             self._tasks[task.id] = replace(
                 current, enabled=enabled,
                 last_attempt=now, last_status="failed" if error else "succeeded",
                 last_error=error, last_run=current.last_run if error else now,
                 next_run=self._next_run_for(current.schedule, enabled),
+                run_count=new_run_count,
             )
-            if current.type == "once":
+            if current.type == "once" or budget_reached:
                 with suppress(JobLookupError):
                     self._scheduler.remove_job(current.id)
             self._save_to_disk()

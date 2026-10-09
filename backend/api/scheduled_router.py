@@ -40,6 +40,7 @@ class CreateTaskIn(BaseModel):
     session_id: str = Field(min_length=1, max_length=64)
     content: str = Field(min_length=1, max_length=4000)
     enabled: bool = True
+    max_runs: Optional[int] = Field(default=None, ge=1)
 
 
 class UpdateTaskIn(BaseModel):
@@ -49,6 +50,7 @@ class UpdateTaskIn(BaseModel):
     schedule: Optional[ScheduleIn] = None
     session_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
     content: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+    max_runs: Optional[int] = Field(default=None, ge=1)
 
     class Config:
         extra = "forbid"
@@ -68,6 +70,8 @@ class TaskOut(BaseModel):
     last_attempt: Optional[int] = None
     last_status: str = "never"
     last_error: Optional[str] = None
+    run_count: int = 0
+    max_runs: Optional[int] = None
 
 
 def _task_to_dict(task: Any) -> Dict[str, Any]:
@@ -85,6 +89,8 @@ def _task_to_dict(task: Any) -> Dict[str, Any]:
         "last_attempt": getattr(task, "last_attempt", None),
         "last_status": getattr(task, "last_status", "never"),
         "last_error": getattr(task, "last_error", None),
+        "run_count": getattr(task, "run_count", 0),
+        "max_runs": getattr(task, "max_runs", None),
     }
 
 
@@ -134,6 +140,7 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
                 session_id=payload.session_id,
                 content=payload.content,
                 enabled=payload.enabled,
+                max_runs=payload.max_runs,
             )
         except ValidationError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -150,7 +157,7 @@ def build_router(get_service: Callable[[], SchedulerService | None]) -> APIRoute
             changes["name"] = payload.name
         if payload.enabled is not None:
             changes["enabled"] = payload.enabled
-        for field in ("type", "session_id", "content"):
+        for field in ("type", "session_id", "content", "max_runs"):
             value = getattr(payload, field)
             if value is not None:
                 changes[field] = value
