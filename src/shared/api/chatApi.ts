@@ -162,6 +162,11 @@ export const chatApi = {
     // 流已死, 以 onError+onDone 终态化, 用户可重发。默认 180s: 正常长工具
     // 执行 / 长 LLM 思考期间 reasoning/tool 事件持续流出, 不会误伤。
     const STREAM_WATCHDOG_SILENCE_MS = 180_000;
+    // 追踪变量：watchdog 超时时输出详细诊断信息
+    const _wd_streamStartedAt = Date.now();
+    let _wd_lastEventAt = Date.now();
+    let _wd_eventCount = 0;
+    let _wd_lastEventState: string | null = null;
     let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
     const clearWatchdog = (): void => {
       if (watchdogTimer) {
@@ -176,7 +181,12 @@ export const chatApi = {
         if (settled) return;
         clientLogger.error('chatStream: watchdog timeout, no events', {
           streamId,
-          silenceMs: STREAM_WATCHDOG_SILENCE_MS,
+          sessionId,
+          actualSilenceMs: Date.now() - _wd_lastEventAt,
+          eventCount: _wd_eventCount,
+          lastEventState: _wd_lastEventState,
+          streamStartedAt: new Date(_wd_streamStartedAt).toISOString(),
+          lastEventAt: new Date(_wd_lastEventAt).toISOString(),
         });
         finishOnce(() => {
           if (handlers.onError) {
@@ -222,6 +232,10 @@ export const chatApi = {
       const subscribed = await listen<AgentEvent>(eventName, (evt) => {
         if (settled) return;
         const payload = evt.payload;
+        // 更新 watchdog 追踪变量
+        _wd_eventCount++;
+        _wd_lastEventAt = Date.now();
+        _wd_lastEventState = payload?.state ?? null;
         feedWatchdog();
         // DIAG(2026-07-30): 仅在 state=failed 时 dump 整轮事件,定位 max_iterations 根因
         trace.push(payload);
@@ -319,6 +333,11 @@ export const chatApi = {
     let settled = false;
 
     const STREAM_WATCHDOG_SILENCE_MS = 180_000;
+    // 追踪变量：watchdog 超时时输出详细诊断信息
+    const _wd_streamStartedAt = Date.now();
+    let _wd_lastEventAt = Date.now();
+    let _wd_eventCount = 0;
+    let _wd_lastEventState: string | null = null;
     let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
     const clearWatchdog = (): void => {
       if (watchdogTimer) {
@@ -355,7 +374,11 @@ export const chatApi = {
         if (settled) return;
         clientLogger.error('listenStream: watchdog timeout, no events', {
           streamId,
-          silenceMs: STREAM_WATCHDOG_SILENCE_MS,
+          actualSilenceMs: Date.now() - _wd_lastEventAt,
+          eventCount: _wd_eventCount,
+          lastEventState: _wd_lastEventState,
+          streamStartedAt: new Date(_wd_streamStartedAt).toISOString(),
+          lastEventAt: new Date(_wd_lastEventAt).toISOString(),
         });
         finishOnce(() => {
           if (handlers.onError) {
@@ -374,6 +397,10 @@ export const chatApi = {
       const subscribed = await listen<AgentEvent>(eventName, (evt) => {
         if (settled) return;
         const payload = evt.payload;
+        // 更新 watchdog 追踪变量
+        _wd_eventCount++;
+        _wd_lastEventAt = Date.now();
+        _wd_lastEventState = payload?.state ?? null;
         feedWatchdog();
         try {
           handlers.onEvent(payload);
