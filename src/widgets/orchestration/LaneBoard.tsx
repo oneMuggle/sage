@@ -19,11 +19,11 @@ import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
 const STATUS_COLORS: Record<LaneStatus, string> = {
   created: 'bg-bg-subtle text-text-secondary',
-  ready: 'bg-blue-100 text-blue-800',
-  running: 'bg-green-100 text-green-800',
-  blocked: 'bg-yellow-100 text-yellow-800',
-  succeeded: 'bg-emerald-100 text-emerald-800',
-  failed: 'bg-red-100 text-red-800',
+  ready: 'bg-info/15 text-info',
+  running: 'bg-success/15 text-success',
+  blocked: 'bg-warning/15 text-warning',
+  succeeded: 'bg-success/15 text-success',
+  failed: 'bg-error/15 text-error',
   stopped: 'bg-line text-muted',
   cancelled: 'bg-line text-muted',
 };
@@ -77,7 +77,7 @@ function LaneCard({ lane, onCancel, onSelect }: LaneCardProps) {
           {source === 'subagent' && (
             <span
               data-testid="lane-source-badge"
-              className="px-2 py-0.5 text-xs rounded-full whitespace-nowrap bg-purple-100 text-purple-800"
+              className="px-2 py-0.5 text-xs rounded-full whitespace-nowrap bg-role-purple text-role-purple-text"
             >
               {t('orchestration.badge.subagent')}
             </span>
@@ -85,7 +85,7 @@ function LaneCard({ lane, onCancel, onSelect }: LaneCardProps) {
           {source === 'planner' && (
             <span
               data-testid="lane-source-badge"
-              className="px-2 py-0.5 text-xs rounded-full whitespace-nowrap bg-indigo-100 text-indigo-800"
+              className="px-2 py-0.5 text-xs rounded-full whitespace-nowrap bg-primary/15 text-primary"
             >
               {t('orchestration.badge.planner')}
             </span>
@@ -107,7 +107,7 @@ function LaneCard({ lane, onCancel, onSelect }: LaneCardProps) {
         </span>
       </div>
       {lane.error && (
-        <div className="mt-1 text-xs text-red-600 truncate" title={lane.error}>
+        <div className="mt-1 text-xs text-error truncate" title={lane.error}>
           {lane.error}
         </div>
       )}
@@ -117,7 +117,7 @@ function LaneCard({ lane, onCancel, onSelect }: LaneCardProps) {
             e.stopPropagation();
             onCancel(lane.lane_id);
           }}
-          className="mt-2 text-xs text-red-600 hover:text-red-800"
+          className="mt-2 text-xs text-error hover:text-error/80"
         >
           {t('common.cancel')}
         </button>
@@ -135,9 +135,9 @@ interface ColumnProps {
 
 /** P2-5: overall_level → 色徽章映射（fresh=green / stale=yellow / dead=red）。 */
 const FRESHNESS_LEVEL_COLORS: Record<FreshnessSummaryInfo['overall_level'], string> = {
-  fresh: 'bg-green-100 text-green-800',
-  stale: 'bg-yellow-100 text-yellow-800',
-  dead: 'bg-red-100 text-red-800',
+  fresh: 'bg-success/15 text-success',
+  stale: 'bg-warning/15 text-warning',
+  dead: 'bg-error/15 text-error',
 };
 
 const FRESHNESS_LEVEL_I18N: Record<
@@ -245,7 +245,7 @@ export function LaneBoard() {
 
   if (error) {
     return (
-      <div className="p-4 text-center text-red-600">
+      <div className="p-4 text-center text-error">
         {t('orchestration.error')} {error}
       </div>
     );

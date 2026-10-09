@@ -41,28 +41,28 @@ const PROJECT_TYPES: ProjectTypeOption[] = [
     label: '编码项目',
     description: '软件开发、编程项目。集成 Git 版本控制，代码约束，技术文档。',
     icon: <Code className="h-6 w-6" />,
-    color: 'text-blue-500',
+    color: 'text-info',
   },
   {
     value: 'research',
     label: '科研项目',
     description: '学术研究、论文写作。文献管理，实验记录，学术写作规范。',
     icon: <BookOpen className="h-6 w-6" />,
-    color: 'text-purple-500',
+    color: 'text-primary',
   },
   {
     value: 'business',
     label: '事务项目',
     description: '商业文档、报告撰写。模板约束，审批流程，格式规范。',
     icon: <Briefcase className="h-6 w-6" />,
-    color: 'text-green-500',
+    color: 'text-success',
   },
   {
     value: 'personal',
     label: '个人项目',
     description: '个人笔记、日记、学习。灵活组织，隐私保护。',
     icon: <User className="h-6 w-6" />,
-    color: 'text-orange-500',
+    color: 'text-warning',
   },
 ];
 
@@ -131,19 +131,19 @@ export function ProjectTypeSelector({
           )}
 
           {detection && !detecting && (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950">
+            <div className="rounded-lg border border-info/30 bg-info/10 p-3">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-blue-500" />
-                <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                <Sparkles className="h-4 w-4 text-info" />
+                <span className="text-sm font-medium text-text">
                   自动检测结果：
                   {PROJECT_TYPES.find((t) => t.value === detection.detectedType)?.label}
                 </span>
-                <span className="text-xs text-blue-600 dark:text-blue-400">
+                <span className="text-xs text-info">
                   (置信度 {Math.round(detection.confidence * 100)}%)
                 </span>
               </div>
               {detection.signals.length > 0 && (
-                <div className="mt-2 text-xs text-blue-700 dark:text-blue-300">
+                <div className="mt-2 text-xs text-text-secondary">
                   检测依据：{detection.signals.slice(0, 3).join('、')}
                 </div>
               )}
@@ -169,7 +169,7 @@ export function ProjectTypeSelector({
                 >
                   {isDetected && (
                     <div className="absolute right-2 top-2">
-                      <Sparkles className="h-3 w-3 text-blue-500" />
+                      <Sparkles className="h-3 w-3 text-info" />
                     </div>
                   )}
                   <div className={type.color}>{type.icon}</div>

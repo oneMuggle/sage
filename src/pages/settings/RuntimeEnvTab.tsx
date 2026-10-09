@@ -172,7 +172,7 @@ export function RuntimeEnvTab() {
     <div className="space-y-6">
       <section>
         <div className="mb-3">
-          <h3 className="text-[15px] font-semibold text-ink">本机运行时</h3>
+          <h3 className="text-ui-md font-semibold text-ink">本机运行时</h3>
           <p className="text-xs text-muted mt-1">
             自动发现 Python、Node.js 等运行时。仅只读探测，不触发执行。
           </p>
@@ -182,7 +182,7 @@ export function RuntimeEnvTab() {
 
       <section>
         <div className="mb-3">
-          <h3 className="text-[15px] font-semibold text-ink">项目诊断</h3>
+          <h3 className="text-ui-md font-semibold text-ink">项目诊断</h3>
           <p className="text-xs text-muted mt-1">
             根据工作区推断项目类型，比对所需运行时是否齐备。
           </p>
@@ -217,7 +217,7 @@ function ProbePanel({ state, onRetry }: { state: ProbeState; onRetry: () => void
   if (state.kind === 'error') {
     return (
       <div className="space-y-2">
-        <div className="text-sm text-red-600">探测失败: {state.message}</div>
+        <div className="text-sm text-error">探测失败: {state.message}</div>
         <button
           type="button"
           className="px-3 py-1 text-xs bg-primary text-text-inverse rounded"
@@ -257,18 +257,18 @@ function ProbePanel({ state, onRetry }: { state: ProbeState; onRetry: () => void
                 </span>
                 <span className="text-xs text-muted font-mono">{rt.path}</span>
                 {rt.is_default && (
-                  <span className="text-[10px] px-1 py-0.5 rounded bg-primary/10 text-primary">
+                  <span className="text-ui-xs px-1 py-0.5 rounded bg-primary/10 text-primary">
                     推荐
                   </span>
                 )}
-                <span className="text-[10px] text-muted">{rt.source}</span>
+                <span className="text-ui-xs text-muted">{rt.source}</span>
               </li>
             ))}
           </ul>
         </li>
       ))}
       {data.errors.length > 0 && (
-        <li className="text-xs text-amber-600">警告: {data.errors.join('; ')}</li>
+        <li className="text-xs text-warning">警告: {data.errors.join('; ')}</li>
       )}
     </ul>
   );
@@ -281,7 +281,7 @@ function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () =
   if (state.kind === 'error') {
     return (
       <div className="space-y-2">
-        <div className="text-sm text-red-600">诊断失败: {state.message}</div>
+        <div className="text-sm text-error">诊断失败: {state.message}</div>
         <button
           type="button"
           className="px-3 py-1 text-xs bg-primary text-text-inverse rounded"
@@ -308,9 +308,9 @@ function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () =
     }[data.level] ?? '未知等级';
   const levelClassName =
     {
-      satisfied: 'text-green-600',
-      partial: 'text-amber-600',
-      unsatisfied: 'text-red-600',
+      satisfied: 'text-success',
+      partial: 'text-warning',
+      unsatisfied: 'text-error',
     }[data.level] ?? 'text-muted';
   return (
     <div className="space-y-2">
@@ -341,7 +341,7 @@ function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () =
         </ul>
       )}
       {probeErrors.length > 0 && (
-        <div className="text-xs text-amber-600">探测警告: {probeErrors.join('; ')}</div>
+        <div className="text-xs text-warning">探测警告: {probeErrors.join('; ')}</div>
       )}
     </div>
   );
@@ -349,14 +349,14 @@ function DiagnosePanel({ state, onRetry }: { state: DiagnoseState; onRetry: () =
 
 function SeverityBadge({ severity }: { severity: Diagnostic['severity'] }) {
   const styles: Record<'info' | 'warning' | 'error', string> = {
-    info: 'bg-blue-100 text-blue-700',
-    warning: 'bg-amber-100 text-amber-700',
-    error: 'bg-red-100 text-red-700',
+    info: 'bg-info/15 text-info',
+    warning: 'bg-warning/15 text-warning',
+    error: 'bg-error/15 text-error',
   };
   const fallback = 'bg-bg-muted text-muted';
   return (
     <span
-      className={`inline-block px-1.5 py-0.5 text-[10px] rounded uppercase font-semibold ${
+      className={`inline-block px-1.5 py-0.5 text-ui-xs rounded uppercase font-semibold ${
         styles[severity as 'info' | 'warning' | 'error'] ?? fallback
       }`}
     >
@@ -430,7 +430,7 @@ function ExecOutput({ state }: { state: ExecState }) {
   }
   if (state.kind === 'denied') {
     return (
-      <div className="text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded">
+      <div className="text-sm text-warning bg-warning/10 px-3 py-2 rounded">
         权限被拒绝: {state.message}
       </div>
     );
@@ -438,7 +438,7 @@ function ExecOutput({ state }: { state: ExecState }) {
   if (state.kind === 'error') {
     return (
       <div className="space-y-2">
-        <div className="text-sm text-red-700 bg-red-50 px-3 py-2 rounded">
+        <div className="text-sm text-error bg-error/10 px-3 py-2 rounded">
           执行失败: {state.message}
         </div>
         {state.result && <ExecResultBody result={state.result} tone="error" />}
@@ -464,21 +464,21 @@ function ExecResultBody({ result, tone }: { result: ExecResultView; tone: 'succe
   return (
     <>
       <div className="text-xs text-muted">
-        <span className={tone === 'error' ? 'text-red-600' : undefined}>{exitLabel}</span>
+        <span className={tone === 'error' ? 'text-error' : undefined}>{exitLabel}</span>
         {' · '}耗时 {result.duration.toFixed(2)}s
         {result.outputTruncated && (
-          <span className="ml-2 text-amber-700" title="单个流（stdout / stderr）超过 64 KiB 被截断">
+          <span className="ml-2 text-warning" title="单个流（stdout / stderr）超过 64 KiB 被截断">
             ⚠ 输出已截断
           </span>
         )}
       </div>
       {result.error && (
-        <div className="text-sm text-red-600" title="子进程报告的致命错误（如 spawn 失败、超时）">
+        <div className="text-sm text-error" title="子进程报告的致命错误（如 spawn 失败、超时）">
           错误: {result.error}
         </div>
       )}
       {result.command && result.command.length > 0 && tone === 'error' && (
-        <div className="text-[11px] text-muted font-mono truncate" title={result.command.join(' ')}>
+        <div className="text-ui-2xs text-muted font-mono truncate" title={result.command.join(' ')}>
           命令: {result.command.join(' ')}
         </div>
       )}
@@ -488,7 +488,7 @@ function ExecResultBody({ result, tone }: { result: ExecResultView; tone: 'succe
         </pre>
       )}
       {result.stderr && (
-        <pre className="text-xs font-mono bg-red-50 text-red-700 px-2 py-1 rounded whitespace-pre-wrap">
+        <pre className="text-xs font-mono bg-error/10 text-error px-2 py-1 rounded whitespace-pre-wrap">
           {result.stderr}
         </pre>
       )}

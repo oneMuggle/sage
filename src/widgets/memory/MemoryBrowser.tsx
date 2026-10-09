@@ -308,7 +308,7 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
       {/* P1 scope 轴:作用域筛选(前端过滤) */}
       {viewMode === 'all' && (
         <div className="flex items-center gap-1.5 mb-4 flex-wrap">
-          <span className="text-[11px] text-muted font-mono mr-1">作用域</span>
+          <span className="text-ui-2xs text-muted font-mono mr-1">作用域</span>
           {Object.entries(SCOPE_FILTER_LABELS).map(([key, label]) => (
             <button
               key={key}
@@ -420,20 +420,20 @@ function MemoryItemCard({
         <span className="font-semibold text-sm text-text truncate flex-1">{title}</span>
         <div className="flex items-center gap-1.5">
           <span
-            className={`text-[11px] px-2 py-0.5 rounded font-mono ${scopeClass}`}
+            className={`text-ui-2xs px-2 py-0.5 rounded font-mono ${scopeClass}`}
             title={scopeTitle}
           >
             {scopeLabel}
           </span>
           <span
-            className={`text-[11px] px-2 py-0.5 rounded font-mono ${sourceClass}`}
+            className={`text-ui-2xs px-2 py-0.5 rounded font-mono ${sourceClass}`}
             title={`来源: ${source}`}
           >
             {sourceLabel}
           </span>
           {statusLabel && (
             <span
-              className={`text-[11px] px-2 py-0.5 rounded font-mono ${
+              className={`text-ui-2xs px-2 py-0.5 rounded font-mono ${
                 status === 'failed'
                   ? 'bg-error/10 text-error'
                   : status === 'pending'
@@ -450,7 +450,7 @@ function MemoryItemCard({
       <div className="text-xs text-muted leading-relaxed">
         {content.length > 80 ? content.substring(0, 80) + '...' : content}
       </div>
-      <div className="text-[11px] text-muted mt-1.5 font-mono flex items-center gap-2 flex-wrap">
+      <div className="text-ui-2xs text-muted mt-1.5 font-mono flex items-center gap-2 flex-wrap">
         <span>
           创建于 {formatDate(timestampMs)} · 引用 {accessCount} 次 · 置信度{' '}
           {(importance / 10).toFixed(2)}

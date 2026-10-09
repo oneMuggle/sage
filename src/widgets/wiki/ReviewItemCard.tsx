@@ -12,32 +12,32 @@ const TYPE_CONFIG = {
   contradiction: {
     icon: AlertTriangle,
     label: '矛盾',
-    color: 'text-red-500',
-    bgColor: 'bg-red-500/10',
+    color: 'text-error',
+    bgColor: 'bg-error/10',
   },
   duplicate: {
     icon: Copy,
     label: '重复',
-    color: 'text-blue-500',
-    bgColor: 'bg-blue-500/10',
+    color: 'text-info',
+    bgColor: 'bg-info/10',
   },
   'missing-page': {
     icon: FileQuestion,
     label: '缺页',
-    color: 'text-purple-500',
-    bgColor: 'bg-purple-500/10',
+    color: 'text-primary',
+    bgColor: 'bg-primary/10',
   },
   confirm: {
     icon: HelpCircle,
     label: '待确认',
-    color: 'text-yellow-500',
-    bgColor: 'bg-yellow-500/10',
+    color: 'text-warning',
+    bgColor: 'bg-warning/10',
   },
   suggestion: {
     icon: Lightbulb,
     label: '建议',
-    color: 'text-green-500',
-    bgColor: 'bg-green-500/10',
+    color: 'text-success',
+    bgColor: 'bg-success/10',
   },
 };
 

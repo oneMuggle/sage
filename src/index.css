@@ -165,7 +165,7 @@
   --density-sidebar-item-py: 8px;
 
   /* ZCode-inspired semantic UI tokens */
-  --ui-font-size: 14px;
+  --ui-font-size: var(--font-size-ui, 14px);
   --color-ui-page: #ffffff;
   --color-ui-page-rgb: 255 255 255;
   --color-ui-panel: #f9fafb;
@@ -314,7 +314,7 @@
   --header-height: 48px;
 
   /* ZCode-inspired surface hierarchy (dark) */
-  --ui-font-size: 14px;
+  --ui-font-size: var(--font-size-ui, 14px);
   --color-ui-page: #0f172a;
   --color-ui-page-rgb: 15 23 42;
   --color-ui-panel: #162032;

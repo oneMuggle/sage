@@ -52,8 +52,8 @@ interface ChangesSectionProps {
 /** worktree 状态 → 徽章配色（porcelain v1 首两列） */
 function statusColor(status: string): string {
   if (!status || status === '?') return 'text-text-secondary';
-  if (status === '!') return 'text-red-500';
-  return 'text-green-600 dark:text-green-400';
+  if (status === '!') return 'text-error';
+  return 'text-success';
 }
 
 function statusLabel(entry: { indexStatus: string; worktreeStatus: string }): string {
@@ -414,11 +414,11 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
             fileContentLoading ? (
               <div className="text-sm text-muted p-2">加载文件…</div>
             ) : fileContentError ? (
-              <div className="text-sm text-red-500 p-2">{fileContentError}</div>
+              <div className="text-sm text-error p-2">{fileContentError}</div>
             ) : fileContent !== null ? (
               <>
                 {fileContentTruncated && (
-                  <div className="text-xs text-amber-600 dark:text-amber-400 p-1">
+                  <div className="text-xs text-warning p-1">
                     文件过长，已截断显示前 512KiB
                   </div>
                 )}
@@ -438,7 +438,7 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
           ) : splitView ? (
             <>
               {diffTruncated && (
-                <div className="text-xs text-amber-600 dark:text-amber-400 p-1">
+                <div className="text-xs text-warning p-1">
                   diff 过长,已截断显示前 64KiB
                 </div>
               )}
@@ -447,7 +447,7 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
           ) : (
             <>
               {diffTruncated && (
-                <div className="text-xs text-amber-600 dark:text-amber-400 p-1">
+                <div className="text-xs text-warning p-1">
                   diff 过长,已截断显示前 64KiB
                 </div>
               )}
@@ -637,7 +637,7 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
       )}
       <div className="flex-1 overflow-y-auto">
         {error ? (
-          <div className="p-3 text-sm text-red-500">{error}</div>
+          <div className="p-3 text-sm text-error">{error}</div>
         ) : loading && !changes ? (
           <div className="p-3 text-sm text-muted">加载变更…</div>
         ) : !changes || changes.changes.length === 0 ? (
@@ -674,7 +674,7 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
                     {/* right-panel R5: +/- 行数徽章（numstat；null=二进制/未知不渲染） */}
                     {entry.insertions !== null && entry.insertions > 0 && (
                       <span
-                        className="shrink-0 font-mono text-[11px] text-green-600 dark:text-green-400"
+                        className="shrink-0 font-mono text-ui-2xs text-success"
                         data-testid="change-insertions"
                       >
                         +{entry.insertions}
@@ -682,7 +682,7 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
                     )}
                     {entry.deletions !== null && entry.deletions > 0 && (
                       <span
-                        className="shrink-0 font-mono text-[11px] text-red-500"
+                        className="shrink-0 font-mono text-ui-2xs text-error"
                         data-testid="change-deletions"
                       >
                         −{entry.deletions}
