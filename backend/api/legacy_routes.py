@@ -24,6 +24,11 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+# LLM 调用总 wall-clock 超时（秒）。默认 600（10 分钟）。
+# httpx.Timeout(60) 只是 chunk 间读超时，慢连接持续有小数据块就永不触发。
+# 此超时包裹整个 agent.run_loop()，防止 LLM API hang 住导致 session 永远 running。
+_SAGE_LLM_TOTAL_TIMEOUT_S = float(os.environ.get("SAGE_LLM_TOTAL_TIMEOUT_S", "600"))
+
 from fastapi import APIRouter, HTTPException, Request
 
 from backend.api.chat_request_policy import (  # C2b: 唯一实现，原五份逐字重复收编
@@ -1792,174 +1797,213 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 "writer": _orch.max_writer_iterations,
             }.get(_profile_name, _orch.max_primary_iterations)
 
-            async for evt in agent.run_loop(
-                messages, llm_config=llm_config, session_id=data.session_id,
-                max_iterations=_profile_max_iter,
-            ):
-                # L2 真流式: run_loop 流式 THINKING 产出的内容增量直接转发
-                # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
-                if evt.state.value == "content_delta":
-                    streamed_content_delta = True
-                    streamed_partial_parts.append(str(evt.content or ""))
-                    await entry.queue.put(evt.to_dict())
-                # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
-                # 真 LLM streaming 已由 run_loop 的 CONTENT_DELTA 覆盖(streamed_content_delta
-                # 置位时跳过);非流式回退路径(不支持的 provider / 流式首块前失败)
-                # 仍走这里,保持旧视觉行为。
-                elif evt.state.value == "done" and evt.content:
-                    done_content = evt.content
-                    if not streamed_content_delta:
-                        content = evt.content
-                        for i in range(0, len(content), _STREAMING_CHUNK_SIZE):
-                            delta = content[i : i + _STREAMING_CHUNK_SIZE]
+            # Wall-clock timeout: 包裹 agent.run_loop() 防止 LLM API hang
+            # 导致 session 永远 running。默认 600s，可通过环境变量覆盖。
+            _producer_started_at = time.monotonic()
+
+            async def _consume_run_loop():
+                """Execute agent.run_loop() with event processing.
+
+                Extracted to enable asyncio.wait_for() wall-clock timeout.
+                Mutates enclosing scope via nonlocal.
+                """
+                nonlocal done_content, run_outcome, done_reasoning
+                nonlocal streamed_content_delta, done_event
+                nonlocal accumulated_tool_calls, streamed_partial_parts
+                nonlocal r38_memory_refs_written, r81_rag_citations_written
+                nonlocal r81_pushed_sources_len
+
+                async for evt in agent.run_loop(
+                    messages, llm_config=llm_config, session_id=data.session_id,
+                    max_iterations=_profile_max_iter,
+                ):
+                    # L2 真流式: run_loop 流式 THINKING 产出的内容增量直接转发
+                    # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
+                    if evt.state.value == "content_delta":
+                        streamed_content_delta = True
+                        streamed_partial_parts.append(str(evt.content or ""))
+                        await entry.queue.put(evt.to_dict())
+                    # I5: DONE 事件的 content 拆成 chunk 逐个入队,前端累积实现逐字显示。
+                    # 真 LLM streaming 已由 run_loop 的 CONTENT_DELTA 覆盖(streamed_content_delta
+                    # 置位时跳过);非流式回退路径(不支持的 provider / 流式首块前失败)
+                    # 仍走这里,保持旧视觉行为。
+                    elif evt.state.value == "done" and evt.content:
+                        done_content = evt.content
+                        if not streamed_content_delta:
+                            content = evt.content
+                            for i in range(0, len(content), _STREAMING_CHUNK_SIZE):
+                                delta = content[i : i + _STREAMING_CHUNK_SIZE]
+                                await entry.queue.put(
+                                    {
+                                        "state": "content_delta",
+                                        "iteration": evt.iteration,
+                                        "content": delta,
+                                    }
+                                )
+                                await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
+                        # 暂存 DONE 事件，不立即推入队列 —
+                        # 待 post-loop 标题生成 + session_updated 事件后再推送，
+                        # 保证前端 onDone → loadSessions() 时标题已落盘。
+                        done_event = evt
+                        run_outcome = "completed"
+                    elif evt.state.value == "reasoning" and evt.reasoning:
+                        # PR-7b: 累积 reasoning 事件,持久化时一起写入 DB
+                        if done_reasoning is None:
+                            done_reasoning = evt.reasoning
+                        else:
+                            done_reasoning += evt.reasoning
+                        # 流式输出 reasoning: 拆成小块逐个入队,模拟逐字显示效果
+                        reasoning = evt.reasoning
+                        for i in range(0, len(reasoning), _STREAMING_CHUNK_SIZE):
+                            delta = reasoning[i : i + _STREAMING_CHUNK_SIZE]
                             await entry.queue.put(
                                 {
-                                    "state": "content_delta",
+                                    "state": "reasoning_delta",
                                     "iteration": evt.iteration,
-                                    "content": delta,
+                                    "reasoning": delta,
+                                    "agent_id": evt.agent_id,
                                 }
                             )
                             await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
-                    # 暂存 DONE 事件，不立即推入队列 —
-                    # 待 post-loop 标题生成 + session_updated 事件后再推送，
-                    # 保证前端 onDone → loadSessions() 时标题已落盘。
-                    done_event = evt
-                    run_outcome = "completed"
-                elif evt.state.value == "reasoning" and evt.reasoning:
-                    # PR-7b: 累积 reasoning 事件,持久化时一起写入 DB
-                    if done_reasoning is None:
-                        done_reasoning = evt.reasoning
-                    else:
-                        done_reasoning += evt.reasoning
-                    # 流式输出 reasoning: 拆成小块逐个入队,模拟逐字显示效果
-                    reasoning = evt.reasoning
-                    for i in range(0, len(reasoning), _STREAMING_CHUNK_SIZE):
-                        delta = reasoning[i : i + _STREAMING_CHUNK_SIZE]
+                        # 2026-09-02 bug fix: 之前用 evt.to_dict() 复制出来的 final 事件
+                        # state 字段是 "reasoning",前端 appendReasoning 又把它当作增量追加,
+                        # 导致 reasoning_delta + reasoning 双重累积 (用户视觉上"重复两遍")。
+                        # 改成显式 state="reasoning_final" 区分:
+                        #   - reasoning_delta: 增量,前端 append
+                        #   - reasoning_final: 全量(对齐持久化字段),前端 replace 兜底
+                        # 不再依赖 evt.to_dict() 的隐式 state,避免类似 future 漂移。
                         await entry.queue.put(
                             {
-                                "state": "reasoning_delta",
+                                "state": "reasoning_final",
                                 "iteration": evt.iteration,
-                                "reasoning": delta,
                                 "agent_id": evt.agent_id,
+                                "reasoning": done_reasoning,
                             }
                         )
-                        await asyncio.sleep(_STREAMING_CHUNK_DELAY_S)
-                    # 2026-09-02 bug fix: 之前用 evt.to_dict() 复制出来的 final 事件
-                    # state 字段是 "reasoning",前端 appendReasoning 又把它当作增量追加,
-                    # 导致 reasoning_delta + reasoning 双重累积 (用户视觉上"重复两遍")。
-                    # 改成显式 state="reasoning_final" 区分:
-                    #   - reasoning_delta: 增量,前端 append
-                    #   - reasoning_final: 全量(对齐持久化字段),前端 replace 兜底
-                    # 不再依赖 evt.to_dict() 的隐式 state,避免类似 future 漂移。
-                    await entry.queue.put(
-                        {
-                            "state": "reasoning_final",
-                            "iteration": evt.iteration,
-                            "agent_id": evt.agent_id,
-                            "reasoning": done_reasoning,
-                        }
-                    )
-                # alpha.36 (Bug #4): 累积工具调用请求(ACTING)和结果(OBSERVING),
-                # 持久化时写入 assistant 消息的 tool_calls 字段。
-                elif evt.state.value == "acting" and evt.tool_call:
-                    tc = evt.tool_call
-                    accumulated_tool_calls.append(
-                        {
-                            "id": tc.id,
-                            "name": tc.name,
-                            "args": dict(tc.arguments) if isinstance(tc.arguments, dict) else {},
-                        }
-                    )
-                    await entry.queue.put(evt.to_dict())
-                elif evt.state.value == "observing" and evt.tool_result:
-                    # 把结果回填到最后一条匹配的 tool_call(按 id)
-                    tr = evt.tool_result
-                    for tc in reversed(accumulated_tool_calls):
-                        if tc.get("id") == tr.tool_call_id:
-                            tc["result"] = tr.content
-                            break
-                    # R81: 检索类工具命中 → 解析成参考来源条目（fail-safe）
-                    r81_tool_name = getattr(evt.tool_call, "name", "") or ""
-                    if r81_tool_name:
-                        r81_turn_sources[:] = merge_sources(
-                            r81_turn_sources,
-                            extract_sources_from_tool(r81_tool_name, tr.content),
+                    # alpha.36 (Bug #4): 累积工具调用请求(ACTING)和结果(OBSERVING),
+                    # 持久化时写入 assistant 消息的 tool_calls 字段。
+                    elif evt.state.value == "acting" and evt.tool_call:
+                        tc = evt.tool_call
+                        accumulated_tool_calls.append(
+                            {
+                                "id": tc.id,
+                                "name": tc.name,
+                                "args": dict(tc.arguments) if isinstance(tc.arguments, dict) else {},
+                            }
                         )
-                    await entry.queue.put(evt.to_dict())
-                # 2026-09 step-by-step: 每完成一次 ReAct 迭代(OBSERVING 之后),
-                # agent.py 在该迭代边界 yield STEP_DONE。这里把"当前 step 的累加器"
-                # 快照成一行 assistant 消息,重置累加器准备下一步。最终步骤由 done
-                # 分支单独处理(无 tool_calls,只含 LLM 终稿 content)。
-                elif evt.state.value == "step_done":
-                    try:
-                        step_now = int(time.time() * 1000)
-                        step_content = "".join(streamed_partial_parts)
-                        step_tool_calls_json = (
-                            json.dumps(accumulated_tool_calls, ensure_ascii=False)
-                            if accumulated_tool_calls
-                            else None
-                        )
-                        message_repo.save(
-                            DbMessage(
-                                id=str(uuid.uuid4()),
-                                session_id=data.session_id,
-                                role="assistant",
-                                content=step_content,
-                                reasoning_content=done_reasoning,
-                                tool_calls=step_tool_calls_json,
-                                # step_index=evt.step_index (== evt.iteration,
-                                # agent.py 在并行/串行路径都同步设置)
-                                step_index=evt.step_index,
-                                # R38: 记忆召回挂本轮首条 assistant 行
-                                memory_refs=(
-                                    r38_memory_refs_json
-                                    if not r38_memory_refs_written
-                                    else None
-                                ),
-                                # R81: 附件检索 citations 同挂首条 assistant 行
-                                rag_citations=(
-                                    r81_rag_citations_json
-                                    if not r81_rag_citations_written
-                                    else None
-                                ),
-                                created_at=step_now,
-                                model=(llm_config.get("model") if llm_config else "local"),
-                            ),
-                        )
-                        if r38_memory_refs_json and not r38_memory_refs_written:
-                            r38_memory_refs_written = True
-                        if r81_rag_citations_json and not r81_rag_citations_written:
-                            r81_rag_citations_written = True
-                    except Exception as step_db_err:
-                        logger.warning(
-                            f"[REQ {request_id}] step {evt.step_index} 持久化失败: {step_db_err}"
-                        )
-                    # 重置 per-step 累加器,让下一步的 delta/reasoning/tool_call
-                    # 累积到空 buffer(后续 STEP_DONE 看到的是干净的当前 step)。
-                    accumulated_tool_calls = []
-                    done_reasoning = None
-                    streamed_partial_parts = []
-                    # R83 增量推送: 有新增来源时在 step 边界推送累积快照 ——
-                    # 前端 updateMessage 对 sources 是整体替换语义,快照幂等。
-                    if len(r81_turn_sources) > r81_pushed_sources_len:
-                        r81_pushed_sources_len = len(r81_turn_sources)
+                        await entry.queue.put(evt.to_dict())
+                    elif evt.state.value == "observing" and evt.tool_result:
+                        # 把结果回填到最后一条匹配的 tool_call(按 id)
+                        tr = evt.tool_result
+                        for tc in reversed(accumulated_tool_calls):
+                            if tc.get("id") == tr.tool_call_id:
+                                tc["result"] = tr.content
+                                break
+                        # R81: 检索类工具命中 → 解析成参考来源条目（fail-safe）
+                        r81_tool_name = getattr(evt.tool_call, "name", "") or ""
+                        if r81_tool_name:
+                            r81_turn_sources[:] = merge_sources(
+                                r81_turn_sources,
+                                extract_sources_from_tool(r81_tool_name, tr.content),
+                            )
+                        await entry.queue.put(evt.to_dict())
+                    # 2026-09 step-by-step: 每完成一次 ReAct 迭代(OBSERVING 之后),
+                    # agent.py 在该迭代边界 yield STEP_DONE。这里把"当前 step 的累加器"
+                    # 快照成一行 assistant 消息,重置累加器准备下一步。最终步骤由 done
+                    # 分支单独处理(无 tool_calls,只含 LLM 终稿 content)。
+                    elif evt.state.value == "step_done":
                         try:
-                            await entry.queue.put(
-                                {
-                                    "state": "sources_used",
-                                    "session_id": data.session_id,
-                                    "sources": list(r81_turn_sources),
-                                }
+                            step_now = int(time.time() * 1000)
+                            step_content = "".join(streamed_partial_parts)
+                            step_tool_calls_json = (
+                                json.dumps(accumulated_tool_calls, ensure_ascii=False)
+                                if accumulated_tool_calls
+                                else None
                             )
-                        except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
-                            logger.debug(
-                                f"[REQ {request_id}] incremental sources_used push failed, ignored"
+                            message_repo.save(
+                                DbMessage(
+                                    id=str(uuid.uuid4()),
+                                    session_id=data.session_id,
+                                    role="assistant",
+                                    content=step_content,
+                                    reasoning_content=done_reasoning,
+                                    tool_calls=step_tool_calls_json,
+                                    # step_index=evt.step_index (== evt.iteration,
+                                    # agent.py 在并行/串行路径都同步设置)
+                                    step_index=evt.step_index,
+                                    # R38: 记忆召回挂本轮首条 assistant 行
+                                    memory_refs=(
+                                        r38_memory_refs_json
+                                        if not r38_memory_refs_written
+                                        else None
+                                    ),
+                                    # R81: 附件检索 citations 同挂首条 assistant 行
+                                    rag_citations=(
+                                        r81_rag_citations_json
+                                        if not r81_rag_citations_written
+                                        else None
+                                    ),
+                                    created_at=step_now,
+                                    model=(llm_config.get("model") if llm_config else "local"),
+                                ),
                             )
-                    # STEP_DONE 转发到前端,前端据此把当前 streaming 气泡快照成
-                    # completed step + 重置 streaming 准备下一步。
-                    await entry.queue.put(evt.to_dict())
-                else:
-                    await entry.queue.put(evt.to_dict())
+                            if r38_memory_refs_json and not r38_memory_refs_written:
+                                r38_memory_refs_written = True
+                            if r81_rag_citations_json and not r81_rag_citations_written:
+                                r81_rag_citations_written = True
+                        except Exception as step_db_err:
+                            logger.warning(
+                                f"[REQ {request_id}] step {evt.step_index} 持久化失败: {step_db_err}"
+                            )
+                        # 重置 per-step 累加器,让下一步的 delta/reasoning/tool_call
+                        # 累积到空 buffer(后续 STEP_DONE 看到的是干净的当前 step)。
+                        accumulated_tool_calls = []
+                        done_reasoning = None
+                        streamed_partial_parts = []
+                        # R83 增量推送: 有新增来源时在 step 边界推送累积快照 ——
+                        # 前端 updateMessage 对 sources 是整体替换语义,快照幂等。
+                        if len(r81_turn_sources) > r81_pushed_sources_len:
+                            r81_pushed_sources_len = len(r81_turn_sources)
+                            try:
+                                await entry.queue.put(
+                                    {
+                                        "state": "sources_used",
+                                        "session_id": data.session_id,
+                                        "sources": list(r81_turn_sources),
+                                    }
+                                )
+                            except Exception:  # noqa: BLE001 — 队列满/关闭不阻塞主流程
+                                logger.debug(
+                                    f"[REQ {request_id}] incremental sources_used push failed, ignored"
+                                )
+                        # STEP_DONE 转发到前端,前端据此把当前 streaming 气泡快照成
+                        # completed step + 重置 streaming 准备下一步。
+                        await entry.queue.put(evt.to_dict())
+                    else:
+                        await entry.queue.put(evt.to_dict())
+
+            try:
+                await asyncio.wait_for(
+                    _consume_run_loop(),
+                    timeout=_SAGE_LLM_TOTAL_TIMEOUT_S,
+                )
+            except asyncio.TimeoutError:  # noqa: UP041 — py3.8 兼容显式标注
+                _wall = time.monotonic() - _producer_started_at
+                _producer_error = (
+                    f"LLM 调用总耗时 {_wall:.1f}s 超过上限 "
+                    f"{_SAGE_LLM_TOTAL_TIMEOUT_S:.0f}s，已强制终止。"
+                    f"session_id={data.session_id}, stream_id={stream_id}"
+                )
+                logger.error(f"[REQ {request_id}] {_producer_error}")
+                await entry.queue.put(
+                    {
+                        "state": "failed",
+                        "error": {
+                            "type": "llm_total_timeout",
+                            "message": f"LLM 调用超时（{_wall:.0f}s），请重试或缩短输入。",
+                        },
+                    }
+                )
 
             # run_loop 正常结束 (DONE) → 持久化 assistant + 更新 session。
             # LLMError 走 except 分支,此块不执行 (无 assistant 可保存)。
