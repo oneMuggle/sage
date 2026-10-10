@@ -70,6 +70,7 @@ class VectorStore:
             return
 
         # 同表维度防护：存量表维度 != 当前 embedder 维度 → 重建
+        rebuild = False
         existing_dim = self._existing_table_dimension(conn)
         if existing_dim is not None and existing_dim != self.dimensions:
             logger.warning(
@@ -79,11 +80,22 @@ class VectorStore:
                 existing_dim,
                 self.dimensions,
             )
+            rebuild = True
+        # schema 升级防护：存量虚拟表缺少 session_id 列 → 重建
+        # （IF NOT EXISTS 对已存在的虚拟表是 no-op，旧表缺列会让所有 add/search
+        #  静默失败——安装包升级场景最常见）
+        if not rebuild and existing_dim is not None and not self._table_has_session_id(conn):
+            logger.warning(
+                "向量表 schema 升级: %s 缺少 session_id 列，重建向量表",
+                self.table_name,
+            )
+            rebuild = True
+        if rebuild:
             try:
                 conn.execute(f"DROP TABLE IF EXISTS {self.table_name}")
                 conn.commit()
             except Exception as e:
-                logger.warning(f"向量表维度迁移失败（向量检索不可用）: {e}")
+                logger.warning(f"向量表 schema 迁移失败（向量检索不可用）: {e}")
                 return
 
         # 创建虚拟表
@@ -118,6 +130,24 @@ class VectorStore:
             return int(m.group(1)) if m else None
         except Exception:
             return None
+
+    def _table_has_session_id(self, conn: Any) -> bool:
+        """检查存量虚拟表的建表 SQL 是否包含 session_id 列。
+
+        sqlite-vec 的 ``CREATE VIRTUAL TABLE IF NOT EXISTS`` 在表已存在时
+        是 no-op —— 旧版安装包升级后表结构不含 session_id，add/search 都
+        会静默失败。此方法用于触发重建。
+        """
+        try:
+            row = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+                (self.table_name,),
+            ).fetchone()
+            if not row or not row[0]:
+                return False
+            return "session_id" in str(row[0])
+        except Exception:
+            return False
 
     def add(
         self,
