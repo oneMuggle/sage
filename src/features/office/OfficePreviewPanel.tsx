@@ -882,7 +882,7 @@ export function WordPreview({ data }: { data: OfficeWordReadResult }) {
                   {comment.author ?? t('office.preview.commentAnonymous')}
                 </span>
                 {/* P3-A: 显示 id —— 删除批注 op 需要 comment_id */}
-                <span className="font-mono text-[10px]">#{comment.id}</span>
+                <span className="font-mono text-ui-xs">#{comment.id}</span>
                 {comment.date && <span>{new Date(comment.date).toLocaleString()}</span>}
               </div>
               {comment.anchor_text && (

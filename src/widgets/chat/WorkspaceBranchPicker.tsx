@@ -185,7 +185,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
             {branchLabel ? ` · ${branchLabel}` : ''}
           </span>
           {inWorktree && (
-            <span className="text-[10px] text-primary shrink-0">worktree</span>
+            <span className="text-ui-xs text-primary shrink-0">worktree</span>
           )}
         </button>
       </Popover.Trigger>
@@ -344,7 +344,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
 
 function Section({ children }: { children: ReactNode }) {
   return (
-    <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-text-tertiary">
+    <div className="px-3 pt-2 pb-1 text-ui-xs uppercase tracking-wide text-text-tertiary">
       {children}
     </div>
   );
@@ -394,11 +394,11 @@ function Row({
       <span className="flex-1 min-w-0">
         <span className="block truncate text-text">{title}</span>
         {subtitle && (
-          <span className="block truncate text-[10px] text-text-tertiary">{subtitle}</span>
+          <span className="block truncate text-ui-xs text-text-tertiary">{subtitle}</span>
         )}
       </span>
       {badge && (
-        <span className="shrink-0 text-[10px] text-amber-600 dark:text-amber-400">{badge}</span>
+        <span className="shrink-0 text-ui-xs text-amber-600 dark:text-amber-400">{badge}</span>
       )}
       {actions}
       {active && <Check className="w-3.5 h-3.5 shrink-0 text-primary" />}

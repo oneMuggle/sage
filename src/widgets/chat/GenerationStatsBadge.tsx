@@ -47,7 +47,7 @@ export function GenerationStatsBadge({ stats }: GenerationStatsBadgeProps) {
   return (
     <span
       data-testid="generation-stats"
-      className="ml-auto flex items-center gap-1 text-[11px] text-text-muted tabular-nums select-none"
+      className="ml-auto flex items-center gap-1 text-ui-2xs text-text-muted tabular-nums select-none"
       title={details.join('\n')}
     >
       <Gauge className="w-3 h-3" aria-hidden="true" />

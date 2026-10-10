@@ -179,7 +179,7 @@ function SummaryCards({ summary }: { summary: UsageSummary }) {
           >
             {c.value}
           </div>
-          {c.subtitle && <div className="text-[10px] text-text-muted mt-0.5">{c.subtitle}</div>}
+          {c.subtitle && <div className="text-ui-xs text-text-muted mt-0.5">{c.subtitle}</div>}
         </Card>
       ))}
     </div>
@@ -228,7 +228,7 @@ function TrendChart({ trend }: { trend: UsageTrend }) {
       <div className="flex items-center gap-2 mb-3">
         <TrendingUp className="w-4 h-4 text-primary" />
         <h4 className="text-sm font-medium text-text">Token 消耗趋势</h4>
-        <div className="ml-auto flex items-center gap-3 text-[10px]">
+        <div className="ml-auto flex items-center gap-3 text-ui-xs">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full" style={{ background: COLORS.prompt }} />
             输入

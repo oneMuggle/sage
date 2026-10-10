@@ -263,7 +263,7 @@ export function ApprovalDialog() {
                 placeholder={t('permission.deny_reason.placeholder')}
                 className="w-full text-xs rounded border border-border bg-bg-input p-2 focus:border-primary focus:outline-none placeholder:text-muted resize-none"
               />
-              <p className="text-[10px] text-muted">{t('permission.deny_reason.hint')}</p>
+              <p className="text-ui-xs text-muted">{t('permission.deny_reason.hint')}</p>
             </div>
           )}
 

@@ -114,7 +114,7 @@ export function ActivityPanel() {
           <ActivityIcon className="h-3.5 w-3.5" />
           活动
           {activeCount > 0 && (
-            <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-blue-500 text-white">
+            <span className="px-1.5 py-0.5 text-ui-xs rounded-full bg-blue-500 text-white">
               {activeCount}
             </span>
           )}

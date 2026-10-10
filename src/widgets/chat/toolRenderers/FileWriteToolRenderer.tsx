@@ -38,14 +38,14 @@ export function FileWriteToolRenderer({ tc }: { tc: ToolCall }) {
       }
       summary={
         filePath ? (
-          <span className="text-[10px] max-w-[100px] truncate" title={filePath}>
+          <span className="text-ui-xs max-w-[100px] truncate" title={filePath}>
             {filePath.length > 30 ? '…' + filePath.slice(-27) : filePath}
           </span>
         ) : undefined
       }
       defaultCollapsed
     >
-      <div className="font-mono text-[11px] text-text-secondary py-0.5">{filePath}</div>
+      <div className="font-mono text-ui-2xs text-text-secondary py-0.5">{filePath}</div>
     </ToolCallCard>
   );
 }

@@ -66,13 +66,13 @@ export function KeyboardShortcutsHelp() {
           {SHORTCUTS.map((s) => (
             <li key={s.keys} className="flex items-center justify-between text-xs">
               <span className="text-slate-600 dark:text-slate-400">{s.description}</span>
-              <kbd className="rounded border border-slate-300 px-1.5 py-0.5 font-mono text-[11px] text-slate-500 dark:border-slate-600 dark:text-slate-400">
+              <kbd className="rounded border border-slate-300 px-1.5 py-0.5 font-mono text-ui-2xs text-slate-500 dark:border-slate-600 dark:text-slate-400">
                 {formatKeys(s.keys)}
               </kbd>
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-[10px] text-slate-400">
+        <p className="mt-3 text-ui-xs text-slate-400">
           按 Esc 关闭
         </p>
       </div>

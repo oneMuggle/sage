@@ -224,7 +224,7 @@ export function UsagePanel() {
           {/* Task 6 (2026-09-15): 部分估算 badge — 同时存在 known 与 unknown 请求 */}
           {summary.has_partial_estimates && (
             <div
-              className="text-[11px] text-text-muted flex items-center gap-1"
+              className="text-ui-2xs text-text-muted flex items-center gap-1"
               data-testid="usage-partial-estimate"
               role="status"
               aria-live="polite"
@@ -235,7 +235,7 @@ export function UsagePanel() {
             </div>
           )}
           {/* Task 6 (2026-09-15): 费用脚注 — 标明基础估算不含缓存和阶梯折扣 */}
-          <p className="text-[11px] text-text-muted" data-testid="usage-cost-note">
+          <p className="text-ui-2xs text-text-muted" data-testid="usage-cost-note">
             <span aria-hidden="true">ℹ</span> {t('settings.usage.costNote')}
           </p>
         </>

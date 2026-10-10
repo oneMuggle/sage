@@ -59,7 +59,7 @@ export function ToolCallCard({
 
   return (
     <div
-      className="rounded border border-border bg-bg-subtle text-[12px] overflow-hidden"
+      className="rounded border border-border bg-bg-subtle text-ui-sm overflow-hidden"
       data-testid="tool-call-card"
     >
       {/* Header — 可点击折叠 */}

@@ -12,6 +12,7 @@ describe('PanelShell', () => {
       </PanelShell>,
     );
     expect(screen.getByTestId('panel-shell-header')).toBeInTheDocument();
+    expect(screen.getByTestId('panel-shell-header').className).toContain('h-12');
     expect(screen.getByText('深度研究')).toBeInTheDocument();
     expect(screen.getByText('内容')).toBeInTheDocument();
   });

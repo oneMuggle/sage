@@ -17,7 +17,7 @@ export function MaterialStatusBadge({ status }: { status: ProjectMaterial['statu
   return (
     <span
       data-testid={`project-material-status-${status}`}
-      className={`shrink-0 px-1 py-px rounded border text-[9px] ${palette[status]}`}
+      className={`shrink-0 px-1 py-px rounded border text-ui-xs ${palette[status]}`}
     >
       {t(labelKey[status])}
     </span>

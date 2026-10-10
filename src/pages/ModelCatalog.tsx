@@ -187,7 +187,7 @@ export default function ModelCatalog() {
           className="h-12 flex items-center px-5 border-b border-border bg-surface flex-shrink-0 gap-3"
           data-testid="model-catalog-header"
         >
-          <h2 className="text-[18px] font-semibold text-text">模型目录</h2>
+          <h2 className="text-ui-xl font-semibold text-text">模型目录</h2>
           <input
             type="search"
             placeholder="搜索模型 (按 model_id / provider)"

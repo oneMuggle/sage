@@ -107,7 +107,7 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
             <span className="text-text-tertiary shrink-0 w-16 tabular-nums">
               {formatTime(event.occurred_at)}
             </span>
-            <span className="text-primary shrink-0 w-12 tabular-nums text-[10px]" data-testid={`event-timeline-offset-${event.event_id}`}>
+            <span className="text-primary shrink-0 w-12 tabular-nums text-ui-xs" data-testid={`event-timeline-offset-${event.event_id}`}>
               {formatOffset(offset)}
             </span>
             <span className={`shrink-0 w-3 text-center ${eventColor(event)}`}>
@@ -120,7 +120,7 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
               <span className="text-text-secondary truncate">{preview}</span>
             )}
             {event.entity.step_id && isStepEvent(event) && (
-              <span className="text-text-tertiary text-[10px] shrink-0">
+              <span className="text-text-tertiary text-ui-xs shrink-0">
                 #{event.entity.step_id.slice(0, 8)}
               </span>
             )}
