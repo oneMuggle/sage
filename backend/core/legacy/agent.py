@@ -933,8 +933,8 @@ class SageAgent:
             orch_val = getattr(orch, "max_tool_calls_per_run", 0)
             if isinstance(orch_val, int) and orch_val >= 1:
                 return orch_val
-        except Exception:  # noqa: BLE001 — 读设置失败回落 tool_policy 默认
-            pass
+        except Exception as exc:  # noqa: BLE001 — 读设置失败回落 tool_policy 默认
+            logger.debug("OrchSettings 读取失败，回落 tool_policy 默认: %s", exc)
         return int(getattr(self.tool_policy, "max_tool_calls_per_run", 25) or 25)
 
     def _compact_if_over_budget(
