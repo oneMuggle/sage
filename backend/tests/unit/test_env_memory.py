@@ -203,7 +203,10 @@ async def test_environment_fact_routed_to_profile_with_dedup_inputs():
     )
     assert stored == 2
     assert port.profiles[0]["category"] == "environment"
-    assert port.stored[0]["content"] == "普通事实"
+    # 防御：LLM 输出 category="fact" 时 remap 为 "preference"，路由到画像库
+    # 而非 episodic memory（避免画像库长期饥饿）。
+    assert port.profiles[1]["content"] == "普通事实"
+    assert port.profiles[1]["category"] == "preference"
     # existing_facts 修复：不再是恒空
     assert extractor.received["existing_facts"] == ["近期事实A", "近期事实B"]
     assert extractor.received["tool_observations"] == "shell fallback note"

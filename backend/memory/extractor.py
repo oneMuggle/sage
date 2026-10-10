@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # 提取提示词（借鉴 Mem0 的 fact extraction prompt）
+# 注意：category 只允许 preference/goal/environment，与
+# extract_and_store_memory() 的 profile_categories 路由白名单完全对齐。
+# 若允许 fact/event 等类别，会被路由到 episodic memory 而非用户画像库，
+# 导致画像长期为空（review 2026-10 发现此问题）。
 EXTRACTION_PROMPT = """从以下对话中提取值得记住的关键事实。每个事实应该是：
 - 独立的、原子化的（一个事实一句话）
 - 长期有效的（不是临时的状态）
@@ -35,8 +39,14 @@ environment 类事实的直接来源）：
 以 JSON 数组格式输出，每项包含：
 - content: 事实内容（一句话，中文）
 - importance: 重要性 1-10（环境/版本类 8-10，偏好/身份类 7-9，普通事实 4-6）
-- category: preference/fact/goal/event/environment 之一
+- category: **只允许以下三种**：
+  - preference：用户偏好、沟通风格、工作习惯、身份特征
+  - goal：用户当前目标、计划、关注方向
+  - environment：本机运行环境的长期事实（工具链/版本/路径/限制）
 - tags: 相关标签（1-3 个）
+
+**重要**：不要把 category 写成 fact 或 event，这两类无法被记忆系统正确处理。
+所有关于用户的事实都应归入 preference 或 goal；环境事实归入 environment。
 
 如果没有值得提取的事实，返回空数组 []。
 只输出 JSON，不要其他文字。"""
