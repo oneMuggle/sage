@@ -64,6 +64,19 @@ export const projectRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/projects/${enc(a.id)}`,
     body: (a) => pick(a, { project_type: ['project_type', 'projectType'] }),
   },
+  // Project archetype scaffold: initialize standard folders, SAGE.md, constraints, milestones.
+  projects_scaffold: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/scaffold`,
+    body: (a) =>
+      pick(a, {
+        project_type: ['project_type', 'projectType'],
+        create_directories: ['create_directories', 'createDirectories'],
+        create_sage_md: ['create_sage_md', 'createSageMd'],
+        import_default_constraints: ['import_default_constraints', 'importDefaultConstraints'],
+        seed_default_milestones: ['seed_default_milestones', 'seedDefaultMilestones'],
+      }),
+  },
   // Not-a-repo answers 200 with is_repo=false.
   projects_git_status: {
     method: 'GET',
@@ -169,6 +182,10 @@ export const projectRoutes: Record<string, CommandRoute> = {
       const body: Record<string, unknown> = {};
       if (a.description !== undefined) body.description = a.description;
       if (a.instructions !== undefined) body.instructions = a.instructions;
+      if (a.project_type !== undefined) body.project_type = a.project_type;
+      else if (a.projectType !== undefined) body.project_type = a.projectType;
+      if (a.project_stage !== undefined) body.project_stage = a.project_stage;
+      else if (a.projectStage !== undefined) body.project_stage = a.projectStage;
       return body;
     },
   },

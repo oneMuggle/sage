@@ -170,6 +170,25 @@ export interface ProjectMaterial {
 export interface ProjectUpdatePatch {
   description?: string | null;
   instructions?: string | null;
+  project_type?: ProjectType | null;
+  project_stage?: string | null;
+}
+
+export interface ProjectScaffoldOptions {
+  projectType?: ProjectType;
+  createDirectories?: boolean;
+  createSageMd?: boolean;
+  importDefaultConstraints?: boolean;
+  seedDefaultMilestones?: boolean;
+}
+
+export interface ProjectScaffoldResult {
+  project: ProjectSummary;
+  createdDirectories: string[];
+  createdFiles: string[];
+  importedConstraintsCount: number;
+  seededMilestonesCount: number;
+  recommendedTemplates: string[];
 }
 
 interface ProjectWire {
@@ -502,6 +521,40 @@ export const projectApi = {
         project_type: projectType,
       });
       return mapProject(project);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 按项目形态（coding / business / research / personal）一键初始化标准目录、SAGE.md、默认约束与阶段里程碑 */
+  async scaffold(
+    projectId: string,
+    options: ProjectScaffoldOptions = {},
+  ): Promise<ProjectScaffoldResult> {
+    try {
+      const raw = await invoke<{
+        project: ProjectWire;
+        created_directories?: string[];
+        created_files?: string[];
+        imported_constraints_count?: number;
+        seeded_milestones_count?: number;
+        recommended_templates?: string[];
+      }>('projects_scaffold', {
+        projectId,
+        projectType: options.projectType,
+        createDirectories: options.createDirectories,
+        createSageMd: options.createSageMd,
+        importDefaultConstraints: options.importDefaultConstraints,
+        seedDefaultMilestones: options.seedDefaultMilestones,
+      });
+      return {
+        project: mapProject(raw.project),
+        createdDirectories: raw.created_directories ?? [],
+        createdFiles: raw.created_files ?? [],
+        importedConstraintsCount: raw.imported_constraints_count ?? 0,
+        seededMilestonesCount: raw.seeded_milestones_count ?? 0,
+        recommendedTemplates: raw.recommended_templates ?? [],
+      };
     } catch (error) {
       throw handleApiError(error);
     }

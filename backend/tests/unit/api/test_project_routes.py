@@ -464,3 +464,66 @@ def test_git_status_repo(client, tmp_path: Path) -> None:
     assert body["current_branch"] == "main"
     assert "b.txt" in body["untracked_files"]
     assert body["recent_commits"][0]["message"] == "init"
+
+
+
+# ---------------------------------------------------------------------------
+# 多项目形态组织脚手架 (coding / business / research)
+# ---------------------------------------------------------------------------
+
+
+def test_scaffold_business_archive_project(client, tmp_path: Path) -> None:
+    dossier_dir = tmp_path / "dossier-2026"
+    dossier_dir.mkdir()
+    pid = _register(client, dossier_dir)["id"]
+
+    resp = client.post(
+        f"/projects/{pid}/scaffold",
+        json={"project_type": "business"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["project"]["project_type"] == "business"
+    assert body["project"]["project_stage"] == "initiation"
+    assert set(body["created_directories"]) == {
+        "00_立项与背景材料",
+        "01_原始依据与佐证",
+        "02_编制中工作稿",
+        "03_定稿与签发归档",
+    }
+    assert body["created_files"] == ["SAGE.md"]
+    assert (dossier_dir / "01_原始依据与佐证").is_dir()
+    assert (dossier_dir / "SAGE.md").is_file()
+    assert body["imported_constraints_count"] >= 3
+    assert body["seeded_milestones_count"] >= 3
+
+    # 幂等再调一次：不重复创建已存在的目录/SAGE.md、不重复导入约束和里程碑
+    resp_again = client.post(f"/projects/{pid}/scaffold", json={"project_type": "business"})
+    assert resp_again.status_code == 200
+    again_body = resp_again.json()
+    assert again_body["created_directories"] == []
+    assert again_body["created_files"] == []
+    assert again_body["imported_constraints_count"] == 0
+    assert again_body["seeded_milestones_count"] == 0
+
+
+def test_scaffold_research_project(client, tmp_path: Path) -> None:
+    lab_dir = tmp_path / "llm-paper"
+    lab_dir.mkdir()
+    pid = _register(client, lab_dir)["id"]
+
+    resp = client.post(
+        f"/projects/{pid}/scaffold",
+        json={"project_type": "research"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["project"]["project_type"] == "research"
+    assert body["project"]["project_stage"] == "proposal"
+    assert set(body["created_directories"]) == {
+        "01_literature",
+        "02_experiments_and_data",
+        "03_manuscript",
+        "04_submission_and_rebuttal",
+    }
+    assert "零幻觉引用铁律" in (lab_dir / "SAGE.md").read_text(encoding="utf-8")

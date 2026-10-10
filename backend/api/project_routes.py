@@ -1,7 +1,7 @@
-"""Typed HTTP routes for the projects registry (项目模块 P1, 2026-09-13).
+"""Typed HTTP routes for the projects registry (项目模块 P1, 2026-09-13; 多形态组织增强, 2026-10-10).
 
 "项目" = 用户在侧边栏显式登记的工作目录（对标 Cursor Recent Workspaces /
-Claude Code 项目 → 会话归属）。路由面刻意保持最小：
+Claude Code 项目 → 会话归属）。路由面涵盖：
 
 - ``GET  /projects``                     清单（按最近打开排序，附会话聚合）
 - ``POST /projects``                     登记目录（validate_workspace 校验，幂等）
@@ -9,19 +9,51 @@ Claude Code 项目 → 会话归属）。路由面刻意保持最小：
 - ``POST /projects/{project_id}/open``   打开项目：复用最近会话或新建并绑定
 - ``POST /projects/{project_id}/sessions`` 在项目下显式新建会话并绑定目录（总是新建）
 - ``GET  /projects/{project_id}/sessions`` 项目下未归档会话（新→旧）
-
-会话与目录的归属复用 ``session_workspace_bindings`` 活跃绑定（见
-``backend/data/project_repo.py`` 模块注释），本文件不做第二份归属数据。
+- ``POST /projects/{project_id}/scaffold`` 按项目类型一键初始化目录结构、SAGE.md、默认约束与里程碑
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
 
+from backend.api.project_schemas import (
+    ConstraintCreateRequest,
+    ConstraintModel,
+    ConstraintsResponse,
+    ConstraintTemplateImportRequest,
+    ConstraintTemplatesResponse,
+    ConstraintUpdateRequest,
+    DetectionSignalModel,
+    GitCommitModel,
+    GitStatusResponse,
+    MaterialMutationResponse,
+    MilestoneCreateRequest,
+    MilestoneModel,
+    MilestonesResponse,
+    MilestoneUpdateRequest,
+    ProjectAllowedPathsRequest,
+    ProjectAllowedPathsResponse,
+    ProjectListResponse,
+    ProjectMaterialAddRequest,
+    ProjectMaterialModel,
+    ProjectMaterialsResponse,
+    ProjectModel,
+    ProjectMutationResponse,
+    ProjectOpenResponse,
+    ProjectRegisterRequest,
+    ProjectScaffoldRequest,
+    ProjectScaffoldResponse,
+    ProjectSessionsResponse,
+    ProjectTypeConfigResponse,
+    ProjectTypeDetectRequest,
+    ProjectTypeDetectResponse,
+    ProjectUpdateRequest,
+    SaveAnswerRequest,
+)
 from backend.data.database import get_database, make_with_db_lock
 from backend.data.project_constraint_repo import (
     CONSTRAINT_TEMPLATES,
@@ -29,7 +61,6 @@ from backend.data.project_constraint_repo import (
     ProjectConstraintRepository,
 )
 from backend.data.project_material_repo import (
-    MAX_MATERIAL_CONTENT_CHARS,
     ProjectMaterial,
     ProjectMaterialContentTooLargeError,
     ProjectMaterialRepository,
@@ -50,9 +81,9 @@ from backend.data.project_repo import (
 )
 from backend.data.session_repo import MessageRepository
 from backend.office.errors import OfficePathError
-from backend.office.models import _constrained_list
 from backend.office.session_workspace import get_workspace_binding
 from backend.services.git_integration import GitIntegration
+from backend.services.project_archetype_scaffold import scaffold_project_archetype
 from backend.services.project_type_detector import (
     DetectionResult,
     detect_project_type,
@@ -63,260 +94,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["projects"])
 
 
-# review HIGH #3 fix: 用本地装饰器模式（参见 backend/api/legacy_routes.py
-# 同样的做法, 23 处引用）。所有 SQL 读写统一串行化到进程级 _SQLITE_LOCK。
 def with_db_lock(func):
     return make_with_db_lock(globals())(func)
-
-
-class ProjectRegisterRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    path: str = Field(min_length=1, max_length=1024)
-    allowed_paths: Optional[_constrained_list(str, max_length=50)] = Field(default=None)
-    # Project type classification (2026-09-24)
-    project_type: Optional[str] = Field(
-        default=None,
-        pattern="^(coding|research|business|personal)$",
-        description="项目类型。null = 使用自动检测结果",
-    )
-
-
-class ProjectModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    id: str
-    path: str
-    name: str
-    created_at: int
-    last_opened_at: int
-    allowed_paths: List[str] = Field(default_factory=list)
-    description: Optional[str] = None
-    instructions: Optional[str] = None
-    # Project type classification (2026-09-24)
-    project_type: Optional[str] = None
-    project_stage: Optional[str] = None
-    vcs_mode: str = "builtin"
-    detected_type: Optional[str] = None
-    session_count: int = 0
-    last_session_id: Optional[str] = None
-
-
-class ProjectUpdateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    description: Optional[str] = Field(default=None, max_length=4000)
-    instructions: Optional[str] = Field(default=None, max_length=16000)
-    # Project type classification (2026-09-24)
-    project_type: Optional[str] = Field(
-        default=None,
-        pattern="^(coding|research|business|personal)$",
-    )
-    project_stage: Optional[str] = Field(default=None, max_length=64)
-
-
-class ProjectMaterialAddRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    content: str = Field(min_length=1, max_length=MAX_MATERIAL_CONTENT_CHARS)
-    source_message_id: Optional[str] = Field(default=None, max_length=256)
-
-
-class ProjectMaterialModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    id: str
-    project_id: str
-    source_message_id: Optional[str]
-    content_hash: str
-    content: str
-    status: str
-    wiki_page_path: Optional[str]
-    error_message: Optional[str]
-    created_at: int
-
-
-class ProjectMaterialsResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    materials: List[ProjectMaterialModel]
-
-
-class MaterialMutationResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    removed: bool
-
-
-class SaveAnswerRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    message_id: str = Field(min_length=1, max_length=256)
-
-
-class ProjectListResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    projects: List[ProjectModel]
-
-
-class ProjectMutationResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    removed: bool
-
-
-class ProjectOpenResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    project: ProjectModel
-    session: Dict[str, Any]
-    created: bool
-
-
-class ProjectSessionsResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    sessions: List[Dict[str, Any]]
-
-
-class ProjectAllowedPathsRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    allowed_paths: _constrained_list(str, max_length=50) = Field(...)
-
-
-class ProjectAllowedPathsResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    id: str
-    allowed_paths: List[str]
-
-
-# Project type detection (2026-09-24)
-class ProjectTypeDetectRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    path: str = Field(min_length=1, max_length=1024)
-
-
-class DetectionSignalModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    type: str
-    weight: float
-
-
-class ProjectTypeDetectResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    project_type: Optional[str]
-    confidence: float
-    signals: List[DetectionSignalModel]
-
-
-# Project constraints (2026-09-24)
-class ConstraintCreateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    category: str = Field(min_length=1, max_length=64)
-    content: str = Field(min_length=1, max_length=4000)
-    trigger_pattern: Optional[str] = Field(default=None, max_length=256)
-    priority: int = Field(default=5, ge=1, le=10)
-
-
-class ConstraintUpdateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    category: Optional[str] = Field(default=None, min_length=1, max_length=64)
-    content: Optional[str] = Field(default=None, min_length=1, max_length=4000)
-    trigger_pattern: Optional[str] = Field(default=None, max_length=256)
-    priority: Optional[int] = Field(default=None, ge=1, le=10)
-    enabled: Optional[bool] = None
-
-
-class ConstraintModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    id: str
-    project_id: str
-    category: str
-    content: str
-    trigger_pattern: Optional[str]
-    priority: int
-    enabled: bool
-    created_at: int
-    updated_at: int
-
-
-class ConstraintsResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    constraints: List[ConstraintModel]
-
-
-class ConstraintTemplateImportRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    template: str = Field(min_length=1, max_length=64)
-
-
-class ConstraintTemplatesResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    templates: Dict[str, List[Dict[str, Any]]]
-
-
-# Project milestones (2026-09-24)
-class MilestoneCreateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    title: str = Field(min_length=1, max_length=256)
-    description: Optional[str] = Field(default=None, max_length=2000)
-    stage: Optional[str] = Field(default=None, max_length=64)
-    due_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
-    sort_order: int = Field(default=0, ge=0)
-
-
-class MilestoneUpdateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    title: Optional[str] = Field(default=None, min_length=1, max_length=256)
-    description: Optional[str] = Field(default=None, max_length=2000)
-    stage: Optional[str] = Field(default=None, max_length=64)
-    due_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
-    status: Optional[str] = Field(
-        default=None, pattern=r"^(pending|in_progress|completed|blocked)$"
-    )
-    sort_order: Optional[int] = Field(default=None, ge=0)
-
-
-class MilestoneModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    id: str
-    project_id: str
-    title: str
-    description: Optional[str]
-    stage: Optional[str]
-    due_date: Optional[str]
-    completed_at: Optional[int]
-    status: str
-    sort_order: int
-    created_at: int
-
-
-class MilestonesResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    milestones: List[MilestoneModel]
-
-
-class ProjectTypeConfigResponse(BaseModel):
-    """项目类型配置（阶段枚举、约束模板列表）。"""
-
-    model_config = ConfigDict(extra="forbid")
-    stage_enum: Dict[str, Optional[List[str]]]
-    milestone_status: List[str]
-    constraint_templates: List[str]
-
-
-# --- Git 状态模型 (项目类型分类系统, 2026-09-24) ---
-
-
-class GitCommitModel(BaseModel):
-    """Git 提交记录。"""
-
-    model_config = ConfigDict(extra="forbid")
-    sha: str
-    author: str
-    date: str
-    message: str
-
-
-class GitStatusResponse(BaseModel):
-    """Git 仓库状态响应。"""
-
-    model_config = ConfigDict(extra="forbid")
-    is_repo: bool
-    current_branch: Optional[str] = None
-    modified_files: List[str] = Field(default_factory=list)
-    staged_files: List[str] = Field(default_factory=list)
-    untracked_files: List[str] = Field(default_factory=list)
-    recent_commits: List[GitCommitModel] = Field(default_factory=list)
 
 
 def _error(status_code: int, code: str, message: str) -> HTTPException:
@@ -364,15 +143,12 @@ def list_projects() -> ProjectListResponse:
 @with_db_lock
 def register_project(request: ProjectRegisterRequest) -> ProjectModel:
     try:
-        # 自动类型检测（如果用户未显式指定）
         detected_type = None
         project_type = request.project_type
         if project_type is None:
-            from pathlib import Path
-
             result = detect_project_type(Path(request.path))
             detected_type = result.project_type
-            project_type = detected_type  # 使用检测结果作为默认值
+            project_type = detected_type
 
         project = ProjectRepository().register(
             request.path,
@@ -395,12 +171,11 @@ def update_project(project_id: str, request: ProjectUpdateRequest) -> ProjectMod
     if project is None:
         raise _error(404, "project_not_found", "项目不存在")
 
-    fields_set = getattr(request, "model_fields_set", request.__fields_set__)
+    fields_set = getattr(request, "model_fields_set", None) or getattr(request, "__fields_set__", set())
     if "description" in fields_set:
         repo.update_description(project_id, request.description)
     if "instructions" in fields_set:
         repo.update_instructions(project_id, request.instructions)
-    # Project type classification (2026-09-24)
     if "project_type" in fields_set:
         repo.update_project_type(project_id, request.project_type)
     if "project_stage" in fields_set:
@@ -416,10 +191,7 @@ def update_project(project_id: str, request: ProjectUpdateRequest) -> ProjectMod
 def update_project_allowed_paths(
     project_id: str, request: ProjectAllowedPathsRequest
 ) -> ProjectAllowedPathsResponse:
-    """更新项目 allowed_paths（2026-09-17 扩展）。
-
-    用户可在前端项目详情面板管理额外允许访问的路径规则。
-    """
+    """更新项目 allowed_paths。"""
     repo = ProjectRepository()
     _get_project_or_404(project_id)
     updated = repo.update_allowed_paths(project_id, request.allowed_paths)
@@ -485,17 +257,11 @@ def remove_project_material(project_id: str, material_id: str) -> MaterialMutati
 def save_answer_as_project_material(
     project_id: str, request: SaveAnswerRequest
 ) -> ProjectMaterialModel:
-    """把当前项目绑定会话中的可见回答保存为项目资料。
-
-    security MEDIUM fix: 仅允许 role == "assistant" 的消息——用户消息
-    (role=user) 内容可能携带 prompt injection 指令,不应直接进入项目
-    资料上下文(后续会被注入 LLM prompt)。
-    """
+    """把当前项目绑定会话中的可见回答保存为项目资料。"""
     project = _get_project_or_404(project_id)
     message = MessageRepository().get(request.message_id)
     if message is None:
         raise _error(404, "message_not_found", "消息不存在")
-    # security: 拒绝非 assistant 消息——避免 user-role 内容注入项目资料
     if message.role != "assistant":
         raise _error(
             400,
@@ -530,11 +296,7 @@ def remove_project(project_id: str) -> ProjectMutationResponse:
 @router.post("/{project_id}/open", response_model=ProjectOpenResponse)
 @with_db_lock
 def open_project_route(project_id: str) -> ProjectOpenResponse:
-    """打开项目：最近活跃会话优先，否则新建会话并绑定项目目录。
-
-    目录在磁盘上已消失 → 410 ``project_path_missing``（前端据此提示
-    移除该项目或重新选择目录），不静默重建绑定。
-    """
+    """打开项目：最近活跃会话优先，否则新建会话并绑定项目目录。"""
     try:
         project, session, created = open_project(project_id)
     except ProjectNotFoundError as exc:
@@ -552,11 +314,7 @@ def open_project_route(project_id: str) -> ProjectOpenResponse:
 @router.post("/{project_id}/sessions", response_model=ProjectOpenResponse, status_code=201)
 @with_db_lock
 def create_project_session_route(project_id: str) -> ProjectOpenResponse:
-    """在项目下显式新建一个会话并绑定项目目录（总是新建，不复用）。
-
-    与 ``/open`` 的区别：open 复用最近活跃会话，本端点服务侧栏项目行的「+」按钮，
-    每次都开一个新会话。目录在磁盘上已消失 → 410 ``project_path_missing``。
-    """
+    """在项目下显式新建一个会话并绑定项目目录（总是新建，不复用）。"""
     try:
         project, session = create_project_session(project_id)
     except ProjectNotFoundError as exc:
@@ -582,16 +340,9 @@ def list_project_sessions(project_id: str) -> ProjectSessionsResponse:
     return ProjectSessionsResponse(sessions=[s.to_dict() for s in sessions])
 
 
-# Project type detection API (2026-09-24)
 @router.post("/detect-type", response_model=ProjectTypeDetectResponse)
 def detect_project_type_route(request: ProjectTypeDetectRequest) -> ProjectTypeDetectResponse:
-    """预览项目类型检测结果（不注册项目）。
-
-    扫描目录内容推断项目类型，返回检测结果和置信度，
-    供前端在项目创建向导中显示建议类型。
-    """
-    from pathlib import Path
-
+    """预览项目类型检测结果（不注册项目）。"""
     try:
         path = Path(request.path).expanduser().resolve()
         if not path.is_dir():
@@ -606,11 +357,75 @@ def detect_project_type_route(request: ProjectTypeDetectRequest) -> ProjectTypeD
         raise _error(400, "path_error", f"路径错误: {exc}") from exc
 
 
+@router.post("/{project_id}/scaffold", response_model=ProjectScaffoldResponse)
+@with_db_lock
+def scaffold_project_route(
+    project_id: str, request: ProjectScaffoldRequest
+) -> ProjectScaffoldResponse:
+    """按项目形态（代码工程/一般档案/科研课题/个人空间）一键初始化标准子目录、SAGE.md、预设约束与阶段里程碑。"""
+    repo = ProjectRepository()
+    project = _get_project_or_404(project_id)
+    ws_path = Path(project.path)
+    if not ws_path.is_dir():
+        raise _error(410, "project_path_missing", "项目目录不存在或已被移动")
+
+    effective_type = request.project_type or project.project_type or project.detected_type or "business"
+    if request.project_type and request.project_type != project.project_type:
+        repo.update_project_type(project_id, request.project_type)
+
+    scaffold_result = scaffold_project_archetype(
+        ws_path,
+        effective_type,
+        project_name=project.name,
+        create_directories=request.create_directories,
+        create_sage_md=request.create_sage_md,
+    )
+
+    imported_constraints_count = 0
+    if request.import_default_constraints and effective_type in CONSTRAINT_TEMPLATES:
+        c_repo = ProjectConstraintRepository()
+        if not c_repo.list_by_project(project_id):
+            created_constraints = c_repo.import_template(project_id, effective_type)
+            imported_constraints_count = len(created_constraints)
+
+    created_milestones_count = 0
+    if request.seed_default_milestones:
+        m_repo = ProjectMilestoneRepository()
+        if not m_repo.list_by_project(project_id):
+            for idx, item in enumerate(scaffold_result["default_milestones"]):
+                m_repo.create(
+                    project_id=project_id,
+                    title=item["title"],
+                    description=item.get("description"),
+                    stage=item.get("stage"),
+                    sort_order=idx + 1,
+                )
+                created_milestones_count += 1
+
+    default_stage = scaffold_result.get("default_stage")
+    final_stage = project.project_stage
+    if not final_stage and default_stage:
+        repo.update_project_stage(project_id, default_stage)
+        final_stage = default_stage
+
+    updated_project = _get_project_or_404(project_id)
+    return ProjectScaffoldResponse(
+        project=_with_stats(updated_project, repo.session_stats()),
+        project_id=project_id,
+        project_type=scaffold_result["project_type"],
+        created_directories=scaffold_result["created_directories"],
+        created_files=scaffold_result["created_files"],
+        imported_constraints_count=imported_constraints_count,
+        created_milestones_count=created_milestones_count,
+        seeded_milestones_count=created_milestones_count,
+        recommended_templates=scaffold_result["recommended_templates"],
+        project_stage=final_stage,
+    )
+
+
 # ── Project constraints routes (2026-09-24) ──────────────────────────────────
 
 
-# 注意：字面量段路由必须先于 /{project_id}/constraints 注册——FastAPI 按定义
-# 顺序匹配，"templates" 会被先注册的 {project_id} 吃掉导致本端点永远 404。
 @router.get("/templates/constraints", response_model=ConstraintTemplatesResponse)
 def list_constraint_templates() -> ConstraintTemplatesResponse:
     """列出可用的约束模板。"""
@@ -657,7 +472,7 @@ def update_constraint(
     if constraint is None or constraint.project_id != project_id:
         raise _error(404, "constraint_not_found", "约束不存在")
 
-    fields_set = getattr(request, "model_fields_set", request.__fields_set__)
+    fields_set = getattr(request, "model_fields_set", None) or getattr(request, "__fields_set__", set())
     updated = repo.update(
         constraint_id,
         category=request.category if "category" in fields_set else None,
@@ -750,7 +565,7 @@ def update_milestone(
     if milestone is None or milestone.project_id != project_id:
         raise _error(404, "milestone_not_found", "里程碑不存在")
 
-    fields_set = getattr(request, "model_fields_set", request.__fields_set__)
+    fields_set = getattr(request, "model_fields_set", None) or getattr(request, "__fields_set__", set())
     try:
         updated = repo.update(
             milestone_id,
@@ -765,7 +580,13 @@ def update_milestone(
         raise _error(400, "invalid_status", str(exc)) from exc
     if not updated:
         raise _error(404, "milestone_not_found", "里程碑不存在")
-    return _milestone_model(repo.get(milestone_id))
+    return _constraint_or_milestone_get(repo, milestone_id)
+
+
+def _constraint_or_milestone_get(repo: ProjectMilestoneRepository, milestone_id: str) -> MilestoneModel:
+    row = repo.get(milestone_id)
+    assert row is not None
+    return _milestone_model(row)
 
 
 @router.post(
@@ -781,7 +602,7 @@ def complete_milestone(project_id: str, milestone_id: str) -> MilestoneModel:
     if milestone is None or milestone.project_id != project_id:
         raise _error(404, "milestone_not_found", "里程碑不存在")
     repo.mark_completed(milestone_id)
-    return _milestone_model(repo.get(milestone_id))
+    return _constraint_or_milestone_get(repo, milestone_id)
 
 
 @router.delete(
@@ -800,9 +621,6 @@ def delete_milestone(project_id: str, milestone_id: str) -> MaterialMutationResp
     return MaterialMutationResponse(removed=True)
 
 
-# ── Project type config (2026-09-24) ─────────────────────────────────────────
-
-
 @router.get("/config/types", response_model=ProjectTypeConfigResponse)
 def get_project_type_config() -> ProjectTypeConfigResponse:
     """获取项目类型配置（阶段枚举、约束模板列表）。"""
@@ -813,16 +631,9 @@ def get_project_type_config() -> ProjectTypeConfigResponse:
     )
 
 
-# ── Git 状态 (项目类型分类系统, 2026-09-24) ───────────────────────────────────
-
-
 @router.get("/{project_id}/git-status", response_model=GitStatusResponse)
 def get_project_git_status(project_id: str) -> GitStatusResponse:
-    """获取项目 Git 仓库状态（分支、未提交变更、最近提交）。
-
-    仅对 coding 类型项目有意义，但 API 对所有类型项目可用（非 git 仓库返回
-    is_repo=False）。
-    """
+    """获取项目 Git 仓库状态（分支、未提交变更、最近提交）。"""
     project = _get_project_or_404(project_id)
 
     git = GitIntegration(project.path)
