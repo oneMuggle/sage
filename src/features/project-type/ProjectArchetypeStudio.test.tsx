@@ -8,6 +8,10 @@ const mockUpdateAllowedPaths = vi.fn();
 const mockListConstraints = vi.fn();
 const mockListMilestones = vi.fn();
 const mockGetGitStatus = vi.fn();
+const mockGetContextBudget = vi.fn();
+const mockGetWorkspaceOverview = vi.fn();
+const mockGetProjectProfile = vi.fn();
+const mockCreateProjectProfile = vi.fn();
 
 vi.mock('../../shared/api', () => ({
   projectApi: {
@@ -18,6 +22,12 @@ vi.mock('../../shared/api', () => ({
     listConstraints: (...args: unknown[]) => mockListConstraints(...args),
     listMilestones: (...args: unknown[]) => mockListMilestones(...args),
     getGitStatus: (...args: unknown[]) => mockGetGitStatus(...args),
+    getContextBudget: (...args: unknown[]) => mockGetContextBudget(...args),
+    getWorkspaceOverview: (...args: unknown[]) => mockGetWorkspaceOverview(...args),
+  },
+  memoryApi: {
+    getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
+    createProjectProfile: (...args: unknown[]) => mockCreateProjectProfile(...args),
   },
 }));
 
@@ -47,6 +57,65 @@ beforeEach(() => {
   mockUpdateAllowedPaths.mockReset();
   mockListConstraints.mockResolvedValue([]);
   mockListMilestones.mockResolvedValue([]);
+  mockGetContextBudget.mockResolvedValue({
+    projectId: 'proj-1',
+    l1ConventionsChars: 420,
+    l2MetadataChars: 120,
+    l2ConstraintsChars: 180,
+    l3ProfileChars: 240,
+    l4MaterialsChars: 3200,
+    totalChars: 4160,
+    capChars: 16000,
+    perFileCapChars: 8000,
+    usageRatio: 0.26,
+    activeMaterialsCount: 2,
+    totalMaterialsCount: 3,
+    enabledConstraintsCount: 3,
+  });
+  mockGetWorkspaceOverview.mockResolvedValue({
+    projectId: 'proj-1',
+    hasSageMd: true,
+    hasHooksJson: false,
+    codingIndicators: ['package.json', 'pyproject.toml'],
+    officeDeliverables: [
+      {
+        name: '采购合同审阅意见书.docx',
+        relativePath: '03_定稿与签发归档/采购合同审阅意见书.docx',
+        ext: '.docx',
+        category: 'Word 文书',
+        sizeBytes: 24576,
+        modifiedAt: 1700000000,
+      },
+    ],
+    researchArtifacts: [
+      {
+        name: 'survey2026.pdf',
+        relativePath: '01_literature/survey2026.pdf',
+        ext: '.pdf',
+        category: '文献 PDF',
+        sizeBytes: 1048576,
+        modifiedAt: 1700000000,
+      },
+    ],
+    directorySummary: [
+      { name: '00_立项与背景材料', fileCount: 2 },
+      { name: '03_定稿与签发归档', fileCount: 1 },
+    ],
+  });
+  mockGetProjectProfile.mockResolvedValue({
+    project_key: 'D:/Archives/Contract2026',
+    projects: ['D:/Archives/Contract2026'],
+    categories: ['convention', 'architecture', 'decision', 'goal', 'note'],
+    items: [
+      {
+        id: 'pf-1',
+        content: 'RQ1: 验证多跳检索召回率 — HotpotQA 基准',
+        category: 'goal',
+        importance: 5,
+      },
+    ],
+  });
+  mockCreateProjectProfile.mockReset();
   mockGetGitStatus.mockResolvedValue({
     isRepo: false,
     branch: null,
@@ -132,5 +201,54 @@ describe('ProjectArchetypeStudio', () => {
         'E:/Regulations/2026/**',
       ]),
     );
+  });
+
+  it('renders 5-layer context budget watermark and polymorphic cards across business and research', async () => {
+    mockList.mockResolvedValueOnce([SAMPLE_PROJECT]);
+    mockUpdate.mockResolvedValueOnce({
+      ...SAMPLE_PROJECT,
+      projectType: 'research',
+      projectStage: 'literature',
+    });
+    mockCreateProjectProfile.mockResolvedValueOnce({ id: 'pf-2', content: 'RQ2: 跨目录文献引文对齐精度 — BibTeX 校验集', category: 'goal', importance: 5 });
+
+    render(<ProjectArchetypeStudio />);
+
+    const budgetCard = await screen.findByTestId('context-budget-watermark-card');
+    await waitFor(() => {
+      expect(budgetCard.textContent).toContain('2/3 启用');
+    });
+
+    // Business polymorphic card is shown initially
+    const businessCard = await screen.findByTestId('polymorphic-card-business');
+    expect(businessCard.textContent).toContain('采购合同审阅意见书.docx');
+
+    // Switch active project archetype to research
+    const typeSelect = screen.getByLabelText('切换项目形态');
+    fireEvent.change(typeSelect, { target: { value: 'research' } });
+
+    const researchCard = await screen.findByTestId('polymorphic-card-research');
+    expect(researchCard.textContent).toContain('survey2026.pdf');
+    expect(researchCard.textContent).toContain('RQ1: 验证多跳检索召回率');
+
+    // Add a new Research Question
+    fireEvent.change(screen.getByTestId('research-rq-input'), {
+      target: { value: 'RQ2: 跨目录文献引文对齐精度' },
+    });
+    fireEvent.change(screen.getByTestId('research-rq-reason'), {
+      target: { value: 'BibTeX 校验集' },
+    });
+    fireEvent.click(screen.getByTestId('research-rq-add'));
+
+    await waitFor(() => {
+      expect(mockCreateProjectProfile).toHaveBeenCalledWith(
+        'RQ2: 跨目录文献引文对齐精度 — BibTeX 校验集',
+        {
+          projectKey: 'D:/Archives/Contract2026',
+          category: 'goal',
+          importance: 5,
+        },
+      );
+    });
   });
 });

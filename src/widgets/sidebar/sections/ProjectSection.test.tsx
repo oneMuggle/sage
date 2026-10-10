@@ -20,6 +20,7 @@ const listMaterialsMock = vi.fn();
 const addMaterialMock = vi.fn();
 const removeMaterialMock = vi.fn();
 const saveAnswerAsMaterialMock = vi.fn();
+const updateMaterialMock = vi.fn();
 
 vi.mock('../../../shared/api/projectApi', () => ({
   projectApi: {
@@ -34,6 +35,7 @@ vi.mock('../../../shared/api/projectApi', () => ({
     addMaterial: (...args: unknown[]) => addMaterialMock(...args),
     removeMaterial: (...args: unknown[]) => removeMaterialMock(...args),
     saveAnswerAsMaterial: (...args: unknown[]) => saveAnswerAsMaterialMock(...args),
+    updateMaterial: (...args: unknown[]) => updateMaterialMock(...args),
   },
 }));
 
@@ -50,11 +52,11 @@ const projects: ProjectSummary[] = [
     name: 'demo',
     createdAt: 1,
     lastOpenedAt: 10,
+    allowedPaths: [],
     sessionCount: 2,
     lastSessionId: 's1',
     description: 'desc-p1',
     instructions: 'instr-p1',
-    allowedPaths: [],
   },
   {
     id: 'p2',
@@ -62,9 +64,9 @@ const projects: ProjectSummary[] = [
     name: 'empty',
     createdAt: 2,
     lastOpenedAt: 5,
+    allowedPaths: [],
     sessionCount: 0,
     lastSessionId: null,
-    allowedPaths: [],
   },
 ];
 
@@ -137,6 +139,7 @@ describe('ProjectSection', () => {
       addMaterialMock,
       removeMaterialMock,
       saveAnswerAsMaterialMock,
+      updateMaterialMock,
     ].forEach((m) => m.mockReset());
     listMock.mockResolvedValue([]);
     listMaterialsMock.mockResolvedValue([]);
@@ -725,5 +728,28 @@ describe('ProjectSection', () => {
     // 失败 → 不触发 refreshMaterials（用 listMaterialsMock 调用次数判定）
     await new Promise((r) => setTimeout(r, 50));
     expect(listMaterialsMock).toHaveBeenCalledTimes(1); // 仅首次拉取
+  });
+  it('renders context budget watermark and toggles material injection state', async () => {
+    listMock.mockResolvedValue(projects);
+    listSessionsMock.mockResolvedValue([]);
+    listMaterialsMock.mockResolvedValue(materialsFixture);
+    updateMaterialMock.mockResolvedValue({ ...materialsFixture[0], enabled: false });
+
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    const expandBtns = await screen.findAllByTestId('project-expand');
+    fireEvent.click(expandBtns[0]);
+
+    const watermark = await screen.findByTestId('project-materials-watermark');
+    expect(watermark.textContent).toContain('1/1');
+
+    const toggles = await screen.findAllByTestId('project-material-toggle');
+    expect(toggles[0]).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(toggles[0]);
+
+    await waitFor(() => {
+      expect(updateMaterialMock).toHaveBeenCalledWith('p1', 'm1', { enabled: false });
+      expect(toggles[0]).toHaveAttribute('aria-pressed', 'false');
+    });
+    expect(watermark.textContent).toContain('0/1');
   });
 });

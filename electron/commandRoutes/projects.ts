@@ -206,6 +206,20 @@ export const projectRoutes: Record<string, CommandRoute> = {
     path: (a) =>
       `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials/${encodeURIComponent(String(a.materialId))}`,
   },
+  projects_update_material: {
+    method: 'PATCH',
+    path: (a) =>
+      `/api/v1/projects/${encodeURIComponent(String(a.id ?? a.projectId))}/materials/${encodeURIComponent(String(a.materialId))}`,
+    body: (a) => ({ enabled: Boolean(a.enabled) }),
+  },
+  projects_context_budget: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${projectId(a)}/context-budget`,
+  },
+  projects_workspace_overview: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${projectId(a)}/workspace-overview`,
+  },
   projects_save_answer: {
     method: 'POST',
     path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials/save-answer`,

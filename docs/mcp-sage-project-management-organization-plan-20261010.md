@@ -252,3 +252,13 @@
    - **一般档案项目 (`business`)**：在工作台内嵌 **“本案卷 Office 文档台账卡”**（直接查询当前项目 `workspace_path` 下的 `office_documents` 列表，提供一键预览、版本对比与审校状态标记）。
    - **代码工程项目 (`coding`)**：在工作台内嵌 **“环境满足度与 Hooks 状态卡”**（联动 `project_diagnose` 与 `ProjectHooksPanel`）。
    - **科研项目 (`research`)**：在工作台内嵌 **“研究问题 (RQ) 与文献证据矩阵卡”**（支持将 AI 带有引用的回答一键转化为结构化文献笔记并同步至项目 Wiki）。
+
+---
+
+## 八、落地实施进度台账 (Implementation Status · 2026-10-10)
+
+| 阶段 | 核心能力模块 | 关键交付文件 | 状态 |
+|---|---|---|---|
+| **Phase P0** | 激活 11 个类型化项目组件、打通创建三步向导与工作区一键脚手架 (`POST /projects/{id}/scaffold`) | `src/features/project-type/ProjectArchetypeStudio.tsx`、`src/features/project-type/archetypeBlueprints.ts`、`backend/api/project_routes.py` | 已完成 (PR #1936 / #1937) |
+| **Phase P1** | 扩展三大项目形态的预设约束包 (`archive_dossier_cn` / `contract_legal_cn` / `finance_audit_cn` / `empirical_ml` / `lit_review_cn`) 与跨目录只读白名单 (`allowed_paths`) 治理面板 | `backend/api/project_routes.py`、`src/features/project-type/ConstraintManager.tsx`、`src/features/project-type/ProjectArchetypeStudio.tsx` | 已完成 (PR #1936 / #1937) |
+| **Phase P2** | 1. NotebookLM 式资料源受控开关 (`enabled` 字段与 `PATCH /projects/{id}/materials/{mid}`)<br>2. 五层受控上下文注入预算水位 API (`GET /projects/{id}/context-budget`) 与进度条<br>3. 多态项目工作区资产台账探测 (`GET /projects/{id}/workspace-overview`) 与专属工作台卡片（代码工程 ADR 卡 / 一般档案四分目录与 Office 文书台账卡 / 科学研究 RQ 矩阵与文献实验产物卡） | `backend/data/project_material_repo.py`、`backend/chat/project_context.py`、`backend/services/project_workspace_inspector.py`、`src/widgets/sidebar/sections/ProjectExpandedPanels.tsx`、`src/features/project-type/PolymorphicArchetypeCards.tsx` | 已完成 |
