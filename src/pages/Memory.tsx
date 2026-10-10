@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { memoryApi } from '../shared/api';
 import type { Memory } from '../shared/api/types';
 import { useStore } from '../shared/lib/store';
+import { PageHeader } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { NewMemoryModal, ProjectProfileCard, UserProfileCard } from '../widgets/memory';
 import { MemoryCard, type MemoryItem } from '../widgets/memory/MemoryCard';
@@ -337,10 +338,11 @@ export function Memory() {
   const showSearch = tab === 'all';
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">🧠 记忆管理</h1>
-        <div className="flex gap-2">
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <PageHeader
+        title="🧠 记忆管理"
+        actions={
+          <div className="flex gap-2">
         <button
           data-testid="memory-add"
           onClick={() => setShowNewMemory(true)}
@@ -359,8 +361,10 @@ export function Memory() {
           <Download className="w-3.5 h-3.5" />
           {exporting ? '导出中...' : '导出'}
         </button>
-        </div>
-      </div>
+          </div>
+        }
+      />
+      <div className="flex-1 overflow-y-auto p-6 max-w-4xl mx-auto w-full">
 
       <NewMemoryModal
         isOpen={showNewMemory}
@@ -450,6 +454,7 @@ export function Memory() {
       ) : (
         memories.map((m) => <MemoryCard key={m.id} memory={m} onDelete={handleDelete} />)
       )}
+      </div>
     </div>
   );
 }

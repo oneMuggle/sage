@@ -10,6 +10,7 @@ import { useLaneBoardStore } from '../entities/orchestration/laneBoardStore';
 import { useChatStreamStore } from '../features/send-message/chatStreamStore';
 import { subscribeOrchEvents } from '../shared/api/orchEventStream';
 import { useI18n } from '../shared/lib/i18n';
+import { PageHeader } from '../shared/ui';
 import { LaneBoard } from '../widgets/orchestration/LaneBoard';
 
 /** 同时订阅的活动 run 数上限（防订阅风暴）。 */
@@ -90,12 +91,10 @@ export function Orchestration() {
   };
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        <header className="mb-4">
-          <h1 className="text-2xl font-semibold">{t('orchestration.title')}</h1>
-          <p className="text-xs text-text-secondary mt-1">{t('orchestration.subtitle')}</p>
-        </header>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <PageHeader title={t('orchestration.title')} subtitle={t('orchestration.subtitle')} />
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-7xl mx-auto px-6 py-6">
 
         <form
           data-testid="orch-create"
@@ -126,6 +125,7 @@ export function Orchestration() {
         </form>
 
         <LaneBoard />
+        </div>
       </div>
     </div>
   );
