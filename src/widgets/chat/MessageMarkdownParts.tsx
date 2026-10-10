@@ -1,4 +1,4 @@
-import { Brain, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { Brain, Check, ChevronDown, Copy, Eye, EyeOff } from 'lucide-react';
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
@@ -67,6 +67,53 @@ function PlainCodeBlock({ className, children }: { className?: string; children:
   );
 }
 
+function MarkdownTable({ children }: { children?: ReactNode }) {
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyTable = async () => {
+    if (!tableRef.current) return;
+    const rows = Array.from(tableRef.current.querySelectorAll('tr'));
+    const tsv = rows
+      .map((row) =>
+        Array.from(row.querySelectorAll('th, td'))
+          .map((cell) => (cell.textContent ?? '').replace(/\s+/g, ' ').trim())
+          .join('\t'),
+      )
+      .join('\n');
+    try {
+      await navigator.clipboard.writeText(tsv);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard unavailable
+    }
+  };
+
+  return (
+    <div className="relative group/table my-3 rounded-radius-sm border border-border overflow-hidden">
+      <div className="flex items-center justify-end px-2 py-1 bg-bg-subtle border-b border-border/60">
+        <button
+          type="button"
+          onClick={() => void handleCopyTable()}
+          data-testid="markdown-table-copy"
+          aria-label={copied ? '已复制表格' : '复制表格'}
+          title="复制为 TSV（可直接粘贴至 Excel / 表格）"
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-text-secondary hover:text-text hover:bg-bg-hover transition-colors"
+        >
+          {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
+          <span>{copied ? '已复制' : '复制表格'}</span>
+        </button>
+      </div>
+      <div className="overflow-x-auto max-h-80 overflow-y-auto">
+        <table ref={tableRef} className="min-w-full text-ui-sm border-collapse">
+          {children}
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /** 自定义 component 映射 — 模块级单例（原先内联在 JSX 里，每次渲染重建整个映射对象） */
 const markdownComponents = {
   code({ className, children }: { className?: string; children: unknown }) {
@@ -98,15 +145,7 @@ const markdownComponents = {
     return <>{children}</>;
   },
   table({ children }: { children?: ReactNode }) {
-    return (
-      // P2: 长表格纵向限高滚动 + 表头粘性（此前只能横向滚动，数十行的表
-      // 把整条消息拉得极长）
-      <div className="overflow-x-auto my-3 max-h-80 overflow-y-auto">
-        <table className="min-w-full text-ui-sm border-collapse border border-border">
-          {children}
-        </table>
-      </div>
-    );
+    return <MarkdownTable>{children}</MarkdownTable>;
   },
   th({ children }: { children?: ReactNode }) {
     return (

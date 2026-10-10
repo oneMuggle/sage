@@ -1,3 +1,4 @@
+import { MessageSquarePlus, RotateCcw } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
@@ -43,9 +44,13 @@ export function ChatHeaderBar({
   const { t } = useI18n();
 
   return (
-    <div className="min-h-12 py-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 px-4 border-b border-border bg-surface flex-shrink-0">
-      <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-        <h2 className="text-sm font-semibold text-text shrink-0">对话</h2>
+    <div
+      data-testid="chat-header-bar"
+      data-compact={rightPanelOpen ? 'true' : 'false'}
+      className="min-h-12 py-1.5 flex flex-wrap items-center justify-between gap-x-2.5 gap-y-1.5 px-4 border-b border-border bg-surface flex-shrink-0"
+    >
+      <div className="flex items-center gap-2 min-w-0 flex-wrap">
+        <h2 className="text-ui-sm font-semibold text-text shrink-0">对话</h2>
         <ProjectBadge workspacePath={workspacePath} />
         <WorkspaceBranchPicker sessionId={currentSessionId} />
         <SessionUsageBadge sessionId={currentSessionId} />
@@ -54,8 +59,15 @@ export function ChatHeaderBar({
         <SessionModelPicker sessionId={currentSessionId} placement="bottom" />
         <PermissionModeSwitch sessionId={currentSessionId} placement="bottom" />
         <ContextMeter sessionId={currentSessionId} placement="bottom" />
-        <div className="flex items-center gap-1 text-xs">
-          <label htmlFor="chat-header-orch-mode" className="text-text-tertiary hidden xl:inline">
+        <div className="flex items-center gap-1 text-ui-xs">
+          <label
+            htmlFor="chat-header-orch-mode"
+            className={
+              rightPanelOpen
+                ? 'text-text-tertiary hidden 2xl:inline'
+                : 'text-text-tertiary hidden xl:inline'
+            }
+          >
             {t('chat.orchMode.label')}
           </label>
           <select
@@ -64,7 +76,11 @@ export function ChatHeaderBar({
             aria-label={t('chat.orchMode.label')}
             value={orchMode}
             onChange={(e) => setOrchMode(e.target.value)}
-            className="px-2 py-1 text-xs border border-border rounded-radius-sm bg-surface text-text-secondary hover:bg-bg-hover outline-none"
+            className={`px-2 py-1 text-ui-xs border rounded-radius-sm outline-none transition-colors ${
+              orchMode !== 'auto'
+                ? 'border-primary/40 bg-primary/10 text-primary font-medium'
+                : 'border-border bg-surface text-text-secondary hover:bg-bg-hover'
+            }`}
           >
             <option value="auto">{t('chat.orchMode.auto')}</option>
             <option value="force_multi">{t('chat.orchMode.forceMulti')}</option>
@@ -79,12 +95,16 @@ export function ChatHeaderBar({
         <button
           type="button"
           data-testid="chat-new-topic"
+          aria-label="+ 新话题"
           disabled={isLoading || !hasConfig}
           onClick={onNewTopic}
           title="新话题（重置上下文）"
-          className="px-2 py-1 text-xs border border-border rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-1 px-2 py-1 text-ui-xs border border-border rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text disabled:opacity-50 transition-colors"
         >
-          + 新话题
+          <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+          <span className={rightPanelOpen ? 'hidden 2xl:inline' : 'hidden sm:inline'}>
+            + 新话题
+          </span>
         </button>
         {currentSessionId && (
           <button
@@ -98,24 +118,33 @@ export function ChatHeaderBar({
               })
             }
             aria-pressed={isTempChat}
+            aria-label={t('chat.temp_chat')}
             title={isTempChat ? t('chat.temp_chat_on') : t('chat.temp_chat_off')}
             data-testid="temp-chat-toggle"
-            className={`px-2 py-1 text-xs border rounded-radius-sm transition-colors ${
+            className={`inline-flex items-center gap-1 px-2 py-1 text-ui-xs border rounded-radius-sm transition-colors ${
               isTempChat
                 ? 'border-warning text-warning bg-warning/10'
                 : 'border-border hover:bg-bg-hover'
             }`}
           >
-            {isTempChat ? '🕶 ' : ''}
-            {t('chat.temp_chat')}
+            <span aria-hidden="true">🕶</span>
+            <span className={rightPanelOpen ? 'hidden 2xl:inline' : 'hidden lg:inline'}>
+              {t('chat.temp_chat')}
+            </span>
           </button>
         )}
         <button
           type="button"
+          data-testid="chat-new-session"
+          aria-label="+ 新对话"
+          title="新对话"
           onClick={onNewSession}
-          className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-hover transition-colors"
+          className="inline-flex items-center gap-1 px-2 py-1 text-ui-xs border border-border rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
         >
-          + 新对话
+          <MessageSquarePlus className="w-3.5 h-3.5 shrink-0" />
+          <span className={rightPanelOpen ? 'hidden 2xl:inline' : 'hidden xl:inline'}>
+            + 新对话
+          </span>
         </button>
         <RightPanelToggle
           open={rightPanelOpen}

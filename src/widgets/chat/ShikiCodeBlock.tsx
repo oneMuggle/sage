@@ -124,10 +124,10 @@ export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
   return (
     <div className="relative group my-2">
       {/* 头部栏 */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#282c34] rounded-t-md text-xs text-gray-300">
+      <div data-testid="code-block-header" className="sticky top-0 z-10 flex items-center justify-between px-3 py-1.5 bg-[#282c34]/95 backdrop-blur-sm border-b border-white/10 rounded-t-md text-ui-xs text-gray-300">
         <span className="font-mono">{language || 'text'}</span>
         {/* P20: 行数徽章 */}
-        <span className="text-gray-500 text-[10px] ml-1">{lineCount} lines</span>
+        <span className="text-gray-400 text-ui-2xs ml-1">{lineCount} lines</span>
         <div className="flex items-center gap-1">
           {/* P2: 自动换行切换 —— 长行代码在宽屏上免横向滚动 */}
           <button
@@ -205,7 +205,7 @@ export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
           <button
             onClick={() => setFolded(true)}
             data-testid="code-collapse"
-            className="flex items-center gap-1 px-3 py-0.5 rounded text-[11px] text-muted hover:text-text hover:bg-bg-hover transition-colors"
+            className="flex items-center gap-1 px-3 py-0.5 rounded text-ui-2xs text-muted hover:text-text hover:bg-bg-hover transition-colors"
           >
             <ArrowUp className="w-3 h-3" />
             {t('codeBlock.collapseLines')}
