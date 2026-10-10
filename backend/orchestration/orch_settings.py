@@ -28,6 +28,7 @@ _RAW_KEYS = {
     "runTokenBudget": "run_token_budget",
     "runWallClockLimitMinutes": "run_wall_clock_limit_min",
     "maxRetryOfChains": "max_retry_of_chains",
+    "maxToolCallsPerRun": "max_tool_calls_per_run",
     "planPreflightEnabled": "plan_preflight_enabled",
     "planScoutEnabled": "plan_scout_enabled",
 }
@@ -65,6 +66,10 @@ class OrchSettings:
     #: RD14 (round22): 每 run 重派（retry_of）上限 —— 防止 conductor 误判
     #: 时无限链式重派（t3←t2←t1…），token/时长成本失控。超限降级普通任务。
     max_retry_of_chains: int = 10
+    #: 单 run 工具调用总数守卫（串行路径 + 并行批次累计）。
+    #: 与 ``ToolPolicy.max_tool_calls_per_run`` 同源语义，此处开放 UI 可调。
+    #: 默认 25（与 ToolPolicy dataclass 默认一致）。0 = 不限制。
+    max_tool_calls_per_run: int = 25
     #: 计划前置 (2026-09-19): multi 拆解前的澄清+侦察总开关。关闭后拆解
     #: 行为与 2026-09-19 之前完全一致（decompose_request(context=None)）。
     #: env 总闸 ``SAGE_ORCH_PLAN_PREFLIGHT``（tests conftest 置 0）优先于本值。

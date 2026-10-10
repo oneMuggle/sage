@@ -357,6 +357,7 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
   'orch.runWallClockLimitMinutes': orchNumber('orch.runWallClockLimitMinutes', 'Run 墙钟上限', '单个 Run 时间上限，0 表示不限', 0, 0),
   'orch.subagentTaskTimeoutS': orchNumber('orch.subagentTaskTimeoutS', '单子任务超时', '子任务超时秒数，0 表示不限', 900, 0),
   'orch.maxRetryOfChains': orchNumber('orch.maxRetryOfChains', '重派链上限', 'retry_of 链式重派上限', 10, 1, 100),
+  'orch.maxToolCallsPerRun': orchNumber('orch.maxToolCallsPerRun', '工具调用预算', '单 run 工具调用总数上限，0 表示不限', 25, 0),
   'orch.subagentApprovalMode': enumSetting(
     'orch.subagentApprovalMode',
     '子代理自动批准',
