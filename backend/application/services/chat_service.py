@@ -1040,6 +1040,12 @@ async def extract_and_store_memory(
         )
         for fact in facts:
             category = fact.get("category", "fact")
+            # 防御：LLM 仍可能输出 prompt 已禁止的 "fact" / "event" 类别。
+            # "fact" 几乎都是关于用户的事实（提取 prompt 的语义），remap 到
+            # "preference" 让其正确路由到 UserProfileStore，避免画像库长期饥饿。
+            if category == "fact":
+                category = "preference"
+                fact["category"] = category
             if category in profile_categories and callable(store_profile):
                 pid = await store_profile(
                     content=fact["content"],

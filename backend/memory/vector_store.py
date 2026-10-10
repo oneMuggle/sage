@@ -53,11 +53,12 @@ class VectorStore:
         """初始化 sqlite-vec 虚拟表
 
         加载 sqlite-vec 扩展并创建虚拟表 (表名见 self.table_name)。
-        表结构：embedding (float32 向量) + memory_id + memory_type。
+        表结构：embedding (float32 向量) + memory_id + memory_type + session_id。
 
-        同表维度防护 (Round 1): 表名相同但存量维度与当前 embedder 不同时
-        （如 ModelEmbedder 改了 SAGE_EMBED_DIM 复用同名表），DROP + 重建
-        —— 向量是可再生的派生索引, 由 backfill_from_tables() 重嵌。
+        重建触发条件（向量是可再生的派生索引，重建安全）：
+        - 存量表维度 != 当前 embedder 维度
+        - 存量表缺少 session_id 列（v1→v2 schema 升级）
+        重建后由 backfill_from_tables() 回填存量记忆向量。
         """
         conn = self._db.get_connection()
 
@@ -69,7 +70,9 @@ class VectorStore:
             logger.warning(f"sqlite-vec 扩展加载失败（向量检索不可用）: {e}")
             return
 
-        # 同表维度防护：存量表维度 != 当前 embedder 维度 → 重建
+        rebuild = False
+
+        # 防护 1：存量表维度 != 当前 embedder 维度 → 重建
         existing_dim = self._existing_table_dimension(conn)
         if existing_dim is not None and existing_dim != self.dimensions:
             logger.warning(
@@ -79,11 +82,25 @@ class VectorStore:
                 existing_dim,
                 self.dimensions,
             )
+            rebuild = True
+
+        # 防护 2：存量表缺少 session_id 列（v1 schema → v2 schema 升级）
+        # 旧表只有 (embedding, memory_id, memory_type)，新代码 INSERT/SELECT
+        # 均引用 session_id，不重建则所有向量写入和检索静默失败。
+        if not rebuild and existing_dim is not None and not self._table_has_session_id(conn):
+            logger.warning(
+                "向量表 schema 升级: %s 缺少 session_id 列，重建向量表"
+                "（backfill 将重嵌存量记忆）",
+                self.table_name,
+            )
+            rebuild = True
+
+        if rebuild:
             try:
                 conn.execute(f"DROP TABLE IF EXISTS {self.table_name}")
                 conn.commit()
             except Exception as e:
-                logger.warning(f"向量表维度迁移失败（向量检索不可用）: {e}")
+                logger.warning(f"向量表重建失败（向量检索不可用）: {e}")
                 return
 
         # 创建虚拟表
@@ -118,6 +135,24 @@ class VectorStore:
             return int(m.group(1)) if m else None
         except Exception:
             return None
+
+    def _table_has_session_id(self, conn: Any) -> bool:
+        """检查存量虚拟表的建 SQL 是否包含 session_id 列。
+
+        v1 schema 只有 (embedding, memory_id, memory_type)；v2 新增 session_id。
+        通过解析 sqlite_master.sql 判断，避免对 vec0 虚拟表执行 PRAGMA table_info
+        （vec0 不支持该 PRAGMA）。
+        """
+        try:
+            row = conn.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+                (self.table_name,),
+            ).fetchone()
+            if not row or not row[0]:
+                return False
+            return "session_id" in str(row[0])
+        except Exception:
+            return False
 
     def add(
         self,
