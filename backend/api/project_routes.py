@@ -37,10 +37,12 @@ from backend.api.project_schemas import (
     MilestoneUpdateRequest,
     ProjectAllowedPathsRequest,
     ProjectAllowedPathsResponse,
+    ProjectContextBudgetResponse,
     ProjectListResponse,
     ProjectMaterialAddRequest,
     ProjectMaterialModel,
     ProjectMaterialsResponse,
+    ProjectMaterialUpdateRequest,
     ProjectModel,
     ProjectMutationResponse,
     ProjectOpenResponse,
@@ -52,6 +54,7 @@ from backend.api.project_schemas import (
     ProjectTypeDetectRequest,
     ProjectTypeDetectResponse,
     ProjectUpdateRequest,
+    ProjectWorkspaceOverviewResponse,
     SaveAnswerRequest,
 )
 from backend.data.database import get_database, make_with_db_lock
@@ -87,6 +90,10 @@ from backend.services.project_archetype_scaffold import scaffold_project_archety
 from backend.services.project_type_detector import (
     DetectionResult,
     detect_project_type,
+)
+from backend.services.project_workspace_inspector import (
+    inspect_project_context_budget,
+    inspect_project_workspace_overview,
 )
 
 logger = logging.getLogger(__name__)
@@ -230,6 +237,48 @@ def add_project_material(
     except ProjectMaterialContentTooLargeError as exc:
         raise _error(413, "material_too_large", str(exc)) from exc
     return _material_model(material)
+
+
+@router.patch(
+    "/{project_id}/materials/{material_id}",
+    response_model=ProjectMaterialModel,
+)
+@with_db_lock
+def update_project_material(
+    project_id: str, material_id: str, request: ProjectMaterialUpdateRequest
+) -> ProjectMaterialModel:
+    """切换项目资料是否参与系统提示词上下文注入 (NotebookLM 式资料源开关)。"""
+    _get_project_or_404(project_id)
+    materials = ProjectMaterialRepository()
+    existing = materials.get(material_id)
+    if existing is None or existing.project_id != project_id:
+        raise _error(404, "material_not_found", "资料不存在")
+    updated = materials.set_enabled(material_id, request.enabled)
+    if updated is None:
+        raise _error(404, "material_not_found", "资料不存在")
+    return _material_model(updated)
+
+
+@router.get(
+    "/{project_id}/context-budget",
+    response_model=ProjectContextBudgetResponse,
+)
+@with_db_lock
+def get_project_context_budget(project_id: str) -> ProjectContextBudgetResponse:
+    """获取项目五层受控上下文水位统计。"""
+    project = _get_project_or_404(project_id)
+    return ProjectContextBudgetResponse(**inspect_project_context_budget(project))
+
+
+@router.get(
+    "/{project_id}/workspace-overview",
+    response_model=ProjectWorkspaceOverviewResponse,
+)
+@with_db_lock
+def get_project_workspace_overview(project_id: str) -> ProjectWorkspaceOverviewResponse:
+    """获取项目工作区多态资产台账（案卷文书、科研文献/实验产物、代码工程指示器）。"""
+    project = _get_project_or_404(project_id)
+    return ProjectWorkspaceOverviewResponse(**inspect_project_workspace_overview(project))
 
 
 @router.delete(

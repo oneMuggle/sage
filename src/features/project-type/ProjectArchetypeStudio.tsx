@@ -34,6 +34,7 @@ import { Card } from '../../shared/ui/Card';
 
 import { ConstraintManager } from './ConstraintManager';
 import { MilestoneManager } from './MilestoneManager';
+import { PolymorphicArchetypeCards } from './PolymorphicArchetypeCards';
 import { ProjectCreationWizard } from './ProjectCreationWizard';
 import { ProjectOverviewWidgets } from './ProjectOverviewWidgets';
 import { ProjectTypeBadge } from './ProjectTypeBadge';
@@ -460,7 +461,15 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           </div>
 
           {/* 子面板内容 */}
-          {activeTab === 'overview' && <ProjectOverviewWidgets project={activeProject} />}
+          {activeTab === 'overview' && (
+            <div className="space-y-4">
+              <PolymorphicArchetypeCards
+                project={activeProject}
+                projectType={activeProjectType}
+              />
+              <ProjectOverviewWidgets project={activeProject} />
+            </div>
+          )}
 
           {activeTab === 'constraints' && (
             <ConstraintManager projectId={activeProject.id} projectType={activeProjectType} />

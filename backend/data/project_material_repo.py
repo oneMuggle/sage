@@ -59,6 +59,7 @@ class ProjectMaterial:
     wiki_page_path: Optional[str]
     error_message: Optional[str]
     created_at: int
+    enabled: bool = True
 
     def to_dict(self) -> dict:
         return {
@@ -71,6 +72,7 @@ class ProjectMaterial:
             "wiki_page_path": self.wiki_page_path,
             "error_message": self.error_message,
             "created_at": self.created_at,
+            "enabled": self.enabled,
         }
 
 
@@ -85,6 +87,7 @@ def _row_to_material(row) -> ProjectMaterial:  # noqa: ANN001 — sqlite3.Row
         wiki_page_path=row["wiki_page_path"],
         error_message=row["error_message"],
         created_at=row["created_at"],
+        enabled=bool(row["enabled"]) if "enabled" in row.keys() and row["enabled"] is not None else True,
     )
 
 
@@ -98,6 +101,23 @@ class ProjectMaterialRepository:
 
     def __init__(self):
         self.db = get_database()
+        self._ensure_enabled_column()
+
+    def _ensure_enabled_column(self) -> None:
+        """幂等补齐 project_materials.enabled 列（NotebookLM 式资料源受控开关，2026-10-10）。"""
+        try:
+            conn = self.db.get_connection()
+            cols = {
+                row[1] if isinstance(row, tuple) else row["name"]
+                for row in conn.execute("PRAGMA table_info(project_materials)").fetchall()
+            }
+            if "enabled" not in cols:
+                conn.execute(
+                    "ALTER TABLE project_materials ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1"
+                )
+                conn.commit()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("ensure project_materials.enabled skipped: %s", exc)
 
     def add(
         self,
@@ -257,15 +277,30 @@ class ProjectMaterialRepository:
         conn.commit()
         return cursor.rowcount > 0
 
+    def set_enabled(
+        self, material_id: str, enabled: bool
+    ) -> Optional[ProjectMaterial]:
+        """切换资料是否参与系统提示词注入（Source-Grounded Toggle）。不存在返回 None。"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE project_materials SET enabled = ? WHERE id = ?",
+            (1 if enabled else 0, material_id),
+        )
+        conn.commit()
+        if cursor.rowcount <= 0:
+            return None
+        return self.get(material_id)
+
     def get_active_materials_for_project(
         self, project_id: str
     ) -> List[ProjectMaterial]:
-        """返回 ready 状态资料，按 created_at ASC（旧的先注入），供上下文拼接。"""
+        """返回 ready 且 enabled=1 的资料，按 created_at ASC（旧的先注入），供上下文拼接。"""
         conn = self.db.get_connection()
         rows = conn.execute(
             """
             SELECT * FROM project_materials
-            WHERE project_id = ? AND status = 'ready'
+            WHERE project_id = ? AND status = 'ready' AND COALESCE(enabled, 1) = 1
             ORDER BY created_at ASC, id ASC
             """,
             (project_id,),
