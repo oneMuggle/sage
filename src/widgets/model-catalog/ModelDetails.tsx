@@ -223,7 +223,7 @@ export function ModelDetails({ item, endpointId, onStatusChange, onReload }: Mod
         <h3 className="text-sm font-semibold">
           <span aria-hidden="true">🔍</span> {modelKey}
         </h3>
-        <div className="text-[11px] text-text-muted">
+        <div className="text-ui-2xs text-text-muted">
           来源: {sourceLabel(effective?.provenance?.native)}
           {effective?.provenance?.price &&
           effective.provenance.price !== effective.provenance.native
@@ -285,7 +285,7 @@ export function ModelDetails({ item, endpointId, onStatusChange, onReload }: Mod
       </div>
 
       {probe && (
-        <div className="text-[11px] text-text-muted" data-testid="model-details-probe-result">
+        <div className="text-ui-2xs text-text-muted" data-testid="model-details-probe-result">
           探测状态: {probe.status} · 适配器: {probe.adapter}
         </div>
       )}
@@ -379,7 +379,7 @@ export function ModelDetails({ item, endpointId, onStatusChange, onReload }: Mod
               {saveBusy ? '保存中…' : '保存覆盖'}
             </button>
           </div>
-          <div className="text-[10px] text-text-muted">
+          <div className="text-ui-xs text-text-muted">
             注: 空值代表「未知」(区别于 0); 价格保持字符串原样, 浏览器不参与计算。
           </div>
         </div>

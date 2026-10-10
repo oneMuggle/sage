@@ -76,7 +76,7 @@ export function IconSidebar() {
             >
               <Icon className="h-5 w-5" />
               {view === 'review' && pendingReviewCount > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-ui-xs font-bold text-white">
                   {pendingReviewCount > 99 ? '99+' : pendingReviewCount}
                 </span>
               )}
@@ -102,7 +102,7 @@ export function IconSidebar() {
         >
           <Globe className="h-5 w-5" />
           {researchActiveCount > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-bold text-white">
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-500 px-1 text-ui-xs font-bold text-white">
               {researchActiveCount}
             </span>
           )}

@@ -53,7 +53,7 @@ export function WikiIngestProgress({ progress, done, error }: Props) {
           style={{ width: `${progress.percent}%` }}
         />
       </div>
-      <div className="text-muted text-[10px]">{progress.percent}%</div>
+      <div className="text-muted text-ui-xs">{progress.percent}%</div>
     </div>
   );
 }

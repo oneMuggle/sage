@@ -33,7 +33,7 @@ export function TurnList({ items, onSelect }: TurnListProps) {
           data-testid={`turn-item-${item.index}`}
           onClick={onSelect ? () => onSelect(item) : undefined}
         >
-          <span className="mt-0.5 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded bg-bg-muted text-[10px] text-text-secondary">
+          <span className="mt-0.5 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded bg-bg-muted text-ui-xs text-text-secondary">
             {item.index}
           </span>
           <span className="text-sm truncate text-text-secondary">{item.preview}</span>

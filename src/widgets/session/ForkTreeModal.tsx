@@ -101,7 +101,7 @@ export function ForkTreeModal({
                   </span>
                   {isCurrent && (
                     <span
-                      className="text-[10px] px-1 rounded bg-bg-subtle border border-border text-text-secondary flex-shrink-0"
+                      className="text-ui-xs px-1 rounded bg-bg-subtle border border-border text-text-secondary flex-shrink-0"
                       data-testid="fork-tree-current-badge"
                     >
                       {t('session.fork_tree_current')}

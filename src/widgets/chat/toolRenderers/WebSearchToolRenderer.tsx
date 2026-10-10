@@ -38,12 +38,12 @@ export function WebSearchToolRenderer({ tc }: { tc: ToolCall }) {
       }
       summary={
         resultCount !== null ? (
-          <span className="text-[10px]">{resultCount} results</span>
+          <span className="text-ui-xs">{resultCount} results</span>
         ) : undefined
       }
       defaultCollapsed
     >
-      <div className="text-[11px] text-text-secondary py-0.5">
+      <div className="text-ui-2xs text-text-secondary py-0.5">
         <span className="text-text-muted">Query: </span>
         <span className="text-text">{query}</span>
       </div>

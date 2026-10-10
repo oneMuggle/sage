@@ -53,7 +53,7 @@ export function Knowledge() {
         <IconSidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="h-12 flex items-center px-5 border-b border-border bg-surface flex-shrink-0">
-            <h2 className="text-[18px] font-semibold text-text">知识库</h2>
+            <h2 className="text-ui-xl font-semibold text-text">知识库</h2>
           </div>
           <div className="flex-1 overflow-hidden">
             <WikiProjectPicker />
@@ -83,7 +83,7 @@ export function Knowledge() {
           data-view={activeView}
           className="h-12 flex items-center px-5 border-b border-border bg-surface flex-shrink-0"
         >
-          <h2 className="text-[18px] font-semibold text-text">
+          <h2 className="text-ui-xl font-semibold text-text">
             知识库 · {VIEW_TITLES[activeView] || activeView}
           </h2>
           <span className="ml-auto text-xs text-muted">

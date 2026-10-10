@@ -45,7 +45,7 @@ export function QuickActionBar({ actions }: QuickActionBarProps) {
             <span
               data-testid="quick-action-badge"
               className={clsx(
-                'ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium',
+                'ml-1 px-1.5 py-0.5 rounded text-ui-xs font-medium',
                 badgeColorMap[action.badge.variant],
               )}
             >

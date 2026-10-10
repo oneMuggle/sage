@@ -80,7 +80,7 @@ export function Memory() {
   return (
     <div className="flex-1 overflow-y-auto p-5">
       <div className="flex items-center justify-between mb-5">
-        <h2 className="text-[18px] font-semibold text-text">记忆库</h2>
+        <h2 className="text-ui-xl font-semibold text-text">记忆库</h2>
         <div className="flex gap-2">
           <button
             data-testid="memory-add"

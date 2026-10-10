@@ -33,18 +33,18 @@ export function BashToolRenderer({ tc }: { tc: ToolCall }) {
         </span>
       }
       summary={
-        command ? <code className="text-[10px] max-w-[120px] truncate">{command}</code> : undefined
+        command ? <code className="text-ui-xs max-w-[120px] truncate">{command}</code> : undefined
       }
       defaultCollapsed={!!result}
     >
       {/* Command */}
-      <div className="mt-1 rounded bg-bg px-2 py-1 font-mono text-[11px] text-text overflow-x-auto">
+      <div className="mt-1 rounded bg-bg px-2 py-1 font-mono text-ui-2xs text-text overflow-x-auto">
         <span className="text-success">$</span> {command}
       </div>
 
       {/* Output */}
       {outputPreview && (
-        <pre className="mt-1 rounded bg-bg px-2 py-1 font-mono text-[11px] text-text-secondary overflow-x-auto whitespace-pre-wrap">
+        <pre className="mt-1 rounded bg-bg px-2 py-1 font-mono text-ui-2xs text-text-secondary overflow-x-auto whitespace-pre-wrap">
           {outputPreview}
           {truncated && '\n…'}
         </pre>

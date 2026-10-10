@@ -146,6 +146,31 @@ function MessageComponent({
   // R81: 统一参考来源 —— 记忆召回 + 附件检索溯源 + 工具命中(web/wiki/MCP)
   // 收编为一个折叠区块（类文章引用列表），N=0 时整个 chip 不渲染。
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const [toolGroupExpanded, setToolGroupExpanded] = useState(false);
+  const canGroupToolCalls = useMemo(
+    () =>
+      !isStreaming &&
+      toolCalls.length >= 3 &&
+      !toolCalls.some(
+        (tc) =>
+          Boolean(tc.metadata?.blockReason) ||
+          Boolean(tc.metadata?.imageData) ||
+          Boolean(tc.metadata?.mediaRefs?.length) ||
+          Boolean(tc.id && artifactsByToolCall?.[tc.id]?.length),
+      ),
+    [isStreaming, toolCalls, artifactsByToolCall],
+  );
+  const toolGroupSummary = useMemo(() => {
+    if (!canGroupToolCalls) return '';
+    const counts = new Map<string, number>();
+    for (const tc of toolCalls) {
+      counts.set(tc.name, (counts.get(tc.name) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .slice(0, 3)
+      .map(([name, cnt]) => (cnt > 1 ? `${name}×${cnt}` : name))
+      .join(' · ');
+  }, [canGroupToolCalls, toolCalls]);
   const memoryRefs = message.memory_refs ?? [];
   const ragCitations = message.rag_citations ?? [];
   const toolSources = message.sources ?? [];
@@ -234,7 +259,31 @@ function MessageComponent({
         {/* 工具调用展示（ReAct 模式）— 在消息内容之前，因为工具调用先于最终回答 */}
         {toolCalls.length > 0 && (
           <div className="mb-2 flex flex-col gap-1.5">
-            {toolCalls.map((tc, idx) => {
+            {canGroupToolCalls && (
+              <button
+                type="button"
+                data-testid="tool-calls-group-toggle"
+                aria-expanded={toolGroupExpanded}
+                onClick={() => setToolGroupExpanded((v) => !v)}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-radius-sm border border-border bg-bg-subtle hover:bg-bg-hover text-ui-xs text-text-secondary transition-colors text-left"
+              >
+                <Wrench className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="font-medium text-text">
+                  已执行 {toolCalls.length} 步工具调用
+                </span>
+                <span className="text-text-tertiary truncate font-mono text-ui-2xs">
+                  ({toolGroupSummary})
+                </span>
+                <span className="ml-auto inline-flex items-center gap-0.5 text-ui-2xs text-primary shrink-0">
+                  {toolGroupExpanded ? '收起明细' : '展开明细'}
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 transition-transform ${toolGroupExpanded ? 'rotate-180' : ''}`}
+                  />
+                </span>
+              </button>
+            )}
+            {(!canGroupToolCalls || toolGroupExpanded) &&
+              toolCalls.map((tc, idx) => {
               const hasImage = tc.metadata?.imageData;
               // right-panel R5: 写文件工具的内联 diff 卡片（展开懒加载,
               // 点击面板按钮直达右侧变更 Tab）

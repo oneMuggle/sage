@@ -150,7 +150,7 @@ export function SessionModelPicker({ sessionId, placement = 'top' }: SessionMode
         ))}
       </select>
       {override && (
-        <span className="text-[10px] text-amber-600 dark:text-amber-400 shrink-0">覆盖</span>
+        <span className="text-ui-xs text-amber-600 dark:text-amber-400 shrink-0">覆盖</span>
       )}
       {pendingSwitch && (
         <span

@@ -299,9 +299,9 @@ export function CreateTaskModal({
           data-testid="scheduled-skill-link"
         >
           <span>{t('scheduled.skill.title')}</span>
-          <span className="text-[11px] text-text-muted">{t('scheduled.skill.hint')}</span>
+          <span className="text-ui-2xs text-text-muted">{t('scheduled.skill.hint')}</span>
           {skillsUnavailable ? (
-            <span className="text-[11px] text-warning" data-testid="scheduled-skill-unavailable">
+            <span className="text-ui-2xs text-warning" data-testid="scheduled-skill-unavailable">
               {t('scheduled.skill.list_unavailable')}
             </span>
           ) : null}
@@ -316,7 +316,7 @@ export function CreateTaskModal({
                   <span className="font-mono">/{name}</span>
                   <button
                     type="button"
-                    className="text-[10px] text-text-muted hover:text-text-primary"
+                    className="text-ui-xs text-text-muted hover:text-text-primary"
                     onClick={() => setContent((current) => removeSkillRef(current, name))}
                   >
                     {t('scheduled.skill.remove')}

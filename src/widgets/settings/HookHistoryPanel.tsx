@@ -65,7 +65,7 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
         <span className="text-xs text-text-secondary">Hook 执行历史</span>
         <button
           type="button"
-          className="text-[10px] text-text-secondary hover:text-red-500 disabled:opacity-50"
+          className="text-ui-xs text-text-secondary hover:text-red-500 disabled:opacity-50"
           onClick={() => void clear()}
           disabled={clearing || records.length === 0}
         >
@@ -73,15 +73,15 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
         </button>
       </div>
       {loading ? (
-        <div className="text-[10px] text-muted">加载中…</div>
+        <div className="text-ui-xs text-muted">加载中…</div>
       ) : records.length === 0 ? (
-        <div className="text-[10px] text-muted">暂无执行记录</div>
+        <div className="text-ui-xs text-muted">暂无执行记录</div>
       ) : (
         <div className="space-y-1.5 max-h-52 overflow-y-auto">
           {records.map((record) => (
             <div
               key={record.id}
-              className="flex items-start gap-2 text-[10px] border-b border-border/50 pb-1.5"
+              className="flex items-start gap-2 text-ui-xs border-b border-border/50 pb-1.5"
             >
               <span
                 className={

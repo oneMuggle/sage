@@ -204,7 +204,7 @@ export function MermaidBlock({ code }: { code: string }) {
       <ToolButton label="缩小" onClick={() => zoomBy(1 / ZOOM_STEP)}>
         <ZoomOut className="w-3.5 h-3.5" />
       </ToolButton>
-      <span className="text-[10px] text-muted w-8 text-center tabular-nums">
+      <span className="text-ui-xs text-muted w-8 text-center tabular-nums">
         {Math.round(zoom * 100)}%
       </span>
       <ToolButton label="放大" onClick={() => zoomBy(ZOOM_STEP)}>

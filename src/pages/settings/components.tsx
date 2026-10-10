@@ -83,7 +83,7 @@ export function ApplyModeBadge({ mode, compact = false }: { mode: ApplyMode; com
     <span
       data-testid={`setting-apply-mode-${mode}`}
       title={label.en}
-      className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium ${
+      className={`inline-flex items-center rounded px-1.5 py-0.5 text-ui-xs font-medium ${
         mode === 'restart'
           ? 'bg-error/10 text-error'
           : mode === 'immediate'

@@ -178,7 +178,7 @@ export function PanelHeader({
   // list 视图:Progress / Artifacts tabs + 档位/最大化/× 按钮
   if (tab !== undefined && onTabChange) {
     return (
-      <div className="flex border-b border-border items-center pr-1 min-w-0">
+      <div className="h-12 flex border-b border-border items-center pr-1 min-w-0" data-testid="right-panel-header">
         <div className="flex-1 min-w-0 flex items-center overflow-x-auto no-scrollbar">
           {RIGHT_PANEL_TABS.map((t) => (
             <button
@@ -211,7 +211,7 @@ export function PanelHeader({
 
   // ArtifactViewer 视图:最大化/× 按钮
   return (
-    <div className="flex justify-end border-b border-border items-center h-10 px-2 gap-0.5">
+    <div className="flex justify-end border-b border-border items-center h-12 px-2 gap-0.5" data-testid="right-panel-header">
       {maximizeButton}
       {closeButton}
     </div>
@@ -406,7 +406,7 @@ function RightPanelInner({
             {/* 对标 U1: 轮次导航——目录上方，按用户输入切分对话 */}
             <div className="pt-2">
               <div
-                className="px-3 pb-1 text-[11px] font-medium text-muted"
+                className="px-3 pb-1 text-ui-2xs font-medium text-muted"
                 data-testid="turn-list-heading"
               >
                 轮次

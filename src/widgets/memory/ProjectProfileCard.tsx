@@ -234,11 +234,11 @@ export function ProjectProfileCard() {
           {items.map((e) => (
             <li key={e.id} className="py-2 first:pt-0 last:pb-0" data-testid="project-profile-item">
               <div className="flex items-start gap-2">
-                <span className="mt-0.5 px-1.5 py-0.5 text-[10px] rounded bg-bg-hover text-text-secondary shrink-0">
+                <span className="mt-0.5 px-1.5 py-0.5 text-ui-xs rounded bg-bg-hover text-text-secondary shrink-0">
                   {labelOf(e.category)}
                 </span>
                 <p className="flex-1 min-w-0 text-xs text-text break-words">{e.content}</p>
-                <span className="text-[10px] text-text-secondary shrink-0" title="重要性">
+                <span className="text-ui-xs text-text-secondary shrink-0" title="重要性">
                   ★{e.importance}
                 </span>
                 <button

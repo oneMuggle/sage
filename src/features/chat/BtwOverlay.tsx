@@ -105,7 +105,7 @@ export function BtwOverlay() {
             <button
               type="button"
               onClick={() => setSourcesExpanded((v) => !v)}
-              className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+              className="inline-flex items-center gap-1 text-ui-2xs text-primary hover:underline"
               data-testid="btw-sources-toggle"
             >
               <BookOpen className="w-3 h-3" />

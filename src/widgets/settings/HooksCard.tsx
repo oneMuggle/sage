@@ -205,7 +205,7 @@ export function HooksCard(): JSX.Element | null {
                   <Icon className="w-4 h-4 text-text-secondary flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium">{builtin.name}</div>
-                    <div className="text-[10px] text-muted truncate">{builtin.description}</div>
+                    <div className="text-ui-xs text-muted truncate">{builtin.description}</div>
                   </div>
                   <button
                     type="button"
@@ -292,7 +292,7 @@ export function HooksCard(): JSX.Element | null {
           <Plus className="w-3 h-3" /> 添加钩子
         </button>
         {saving && <span className="text-xs text-muted">保存中…</span>}
-        <span className="text-[10px] text-muted">
+        <span className="text-ui-xs text-muted">
           修改即时保存;事件点: 工具前/后、消息提交、回复结束、会话创建/删除、工具出错
         </span>
       </div>

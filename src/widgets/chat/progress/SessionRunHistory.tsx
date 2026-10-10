@@ -117,7 +117,7 @@ export function SessionRunHistory({ sessionId, onSelectRun, excludeRunId }: Sess
                 {totalTokens.toLocaleString()} tokens
               </span>
             )}
-            <span className="text-text-tertiary shrink-0 text-[10px]">
+            <span className="text-text-tertiary shrink-0 text-ui-xs">
               {formatRelative(run.created_at)}
             </span>
           </button>

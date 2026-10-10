@@ -29,13 +29,13 @@ export function TodoItem({ todo }: TodoItemProps) {
       <div className="flex-1 min-w-0">
         <div className={`text-sm truncate ${urgencyColor}`}>{todo.title}</div>
         {todo.due_at && (
-          <div className="text-[10px] text-text-muted">
+          <div className="text-ui-xs text-text-muted">
             Due {new Date(todo.due_at).toLocaleDateString()}
           </div>
         )}
       </div>
       <span
-        className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+        className={`text-ui-xs px-1.5 py-0.5 rounded-full ${
           todo.priority === 'high'
             ? 'bg-red-100 text-red-700'
             : todo.priority === 'medium'

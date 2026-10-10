@@ -543,7 +543,7 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
 
           {/* 底部状态栏：连接状态文字 + 版本号 */}
           <div className="px-2 pt-2 border-t border-border flex-shrink-0">
-            <div className="flex items-center gap-2 px-2 py-1.5 text-[11px] text-muted">
+            <div className="flex items-center gap-2 px-2 py-1.5 text-ui-2xs text-muted">
               <span title={latency != null ? `延迟 ${latency}ms` : ''}>
                 {connectionStatus === 'connected' &&
                   `已连接${latency != null ? ` · ${latency}ms` : ''}`}

@@ -466,7 +466,7 @@ function StatusBadge({ status, classification }: StatusBadgeProps) {
   }[classification];
   return (
     <span
-      className="text-[11px] inline-flex items-center gap-1"
+      className="text-ui-2xs inline-flex items-center gap-1"
       data-testid={`status-${status}-${classification}`}
     >
       <span aria-hidden="true">{cls.icon}</span>
@@ -489,7 +489,7 @@ function FieldSourceBadge({
   } as const;
   const cls = map[classification];
   return (
-    <span className="text-[11px] inline-flex items-center gap-1">
+    <span className="text-ui-2xs inline-flex items-center gap-1">
       <span aria-hidden="true">{cls.icon}</span>
       <span>{cls.text}</span>
     </span>

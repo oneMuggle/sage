@@ -38,7 +38,7 @@ export function PendingQueueStrip({ items, onCancel, onClearAll }: PendingQueueS
       aria-label="排队待发送消息"
       className="flex flex-col gap-1 px-3 pt-2 shrink-0"
     >
-      <div className="flex items-center gap-2 text-[11px] text-text-tertiary">
+      <div className="flex items-center gap-2 text-ui-2xs text-text-tertiary">
         <span data-testid="pending-queue-count">已排队 {items.length} 条</span>
         <span className="text-text-tertiary">· 当前回复结束后自动发送</span>
         <button
@@ -50,12 +50,12 @@ export function PendingQueueStrip({ items, onCancel, onClearAll }: PendingQueueS
           全部清空
         </button>
       </div>
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-col gap-1 max-h-32 overflow-y-auto">
         {items.map((item) => (
           <li
             key={item.id}
             data-testid="pending-queue-item"
-            className="flex items-center gap-2 px-2 py-1 rounded-radius-sm bg-bg-secondary text-xs text-text-secondary"
+            className="flex items-center gap-2 px-2 py-1 rounded-radius-sm bg-bg-secondary text-ui-xs text-text-secondary"
           >
             <span className="truncate flex-1" title={item.content}>
               {item.content}
