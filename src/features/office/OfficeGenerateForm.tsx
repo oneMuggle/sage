@@ -28,13 +28,17 @@ import { officeApi } from '../../shared/api/officeApi';
 import type {
   OfficeDocType,
   OfficeTemplateMeta,
-  OfficeTemplatePlaceholder,
   PdfPageSize,
 } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { useElapsedSeconds } from '../../shared/lib/useElapsedSeconds';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
 
+import {
+  OfficeTemplatePicker,
+  type TemplateLoadState,
+  type TemplateModeType,
+} from './OfficeGenerateSubforms';
 import { pollOfficeProgress } from './officeProgress';
 
 export interface OfficeGenerateFormProps {
@@ -50,8 +54,7 @@ export interface OfficeGenerateFormProps {
 
 type GenerateMode = 'freeform' | 'template';
 /** Tabs that carry the free-form/template toggle (round-3 N2). */
-type TemplateModeType = Exclude<OfficeDocType, 'pdf'>;
-type TemplateLoadState = 'idle' | 'loading' | 'ready' | 'error';
+
 
 /** File extension per template doc_type (round-3 N2). */
 const TEMPLATE_EXT: Record<OfficeTemplateMeta['doc_type'], string> = {
@@ -402,52 +405,6 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
   const inputClass =
     'w-full px-3 py-1.5 text-sm border border-border rounded bg-surface text-text';
 
-  /** One dynamic field per template placeholder (item 3.2 field rules). */
-  const renderPlaceholderField = (ph: OfficeTemplatePlaceholder) => {
-    const value = templateData[ph.name] ?? '';
-    if (ph.type === 'image') {
-      return (
-        <div key={ph.name} data-testid={`office-template-field-${ph.name}`}>
-          <label className="block text-xs text-muted mb-1">{ph.name}</label>
-          <p className="text-xs text-muted bg-bg-subtle border border-border rounded px-2 py-1.5">
-            {t('office.template.hint.image')}
-          </p>
-        </div>
-      );
-    }
-    const isLongForm = ph.type === 'table' || ph.type === 'rich_text';
-    return (
-      <div key={ph.name} data-testid={`office-template-field-${ph.name}`}>
-        <label className="block text-xs text-muted mb-1">{ph.name}</label>
-        {isLongForm ? (
-          <textarea
-            value={value}
-            onChange={(e) => setPlaceholderValue(ph.name, e.target.value)}
-            rows={3}
-            className={inputClass}
-            data-testid={`office-template-input-${ph.name}`}
-          />
-        ) : (
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => setPlaceholderValue(ph.name, e.target.value)}
-            placeholder={ph.type === 'date' ? t('office.template.hint.date') : undefined}
-            className={inputClass}
-            data-testid={`office-template-input-${ph.name}`}
-          />
-        )}
-        {(ph.type === 'table' || ph.type === 'rich_text') && (
-          <p className="text-xs text-muted mt-0.5">{t('office.template.hint.rich')}</p>
-        )}
-        {ph.type === 'date' && (
-          <p className="text-xs text-muted mt-0.5">{t('office.template.hint.date')}</p>
-        )}
-        {ph.description && <p className="text-xs text-muted mt-0.5">{ph.description}</p>}
-      </div>
-    );
-  };
-
   /** Free-form structured fields for one OOXML tab (Phase 1.4 originals). */
   const renderFreeformFields = (type: TemplateModeType) => {
     if (type === 'word') {
@@ -550,115 +507,6 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
     );
   };
 
-  /**
-   * Template picker for one OOXML tab (item 3.2; round-3 N2 extends it
-   * beyond Word). The fetched list covers every doc_type — filter to the
-   * tab's kind so a word template can never be instantiated from the
-   * excel tab (and vice versa). The dynamic fields render only for a
-   * pick matching the tab (switchDocType clears cross-tab picks anyway).
-   */
-  const renderTemplatePicker = (type: TemplateModeType) => {
-    const visibleTemplates = templates.filter((tpl) => tpl.doc_type === type);
-    return (
-      <div className="space-y-2" data-testid="office-template-picker">
-        <div className="text-xs text-muted">{t('office.template.pickTitle')}</div>
-
-        {templateLoad === 'loading' && (
-          <p className="text-xs text-muted" data-testid="office-template-loading">
-            {t('office.template.loading')}
-          </p>
-        )}
-
-        {templateLoad === 'error' && (
-          <div className="space-y-1" data-testid="office-template-error">
-            <p className="text-xs text-error">{t('office.template.loadFailed')}</p>
-            <button
-              type="button"
-              onClick={() => void loadTemplates()}
-              className="px-2 py-1 text-xs border border-border rounded text-text-secondary hover:bg-bg-hover"
-            >
-              {t('office.template.retry')}
-            </button>
-          </div>
-        )}
-
-        {templateLoad === 'ready' && visibleTemplates.length === 0 && (
-          <p className="text-xs text-muted" data-testid="office-template-empty">
-            {t('office.template.empty')}
-          </p>
-        )}
-
-        {templateLoad === 'ready' &&
-          visibleTemplates.map((tpl) => (
-            <button
-              key={`${tpl.source}-${tpl.id}`}
-              type="button"
-              onClick={() => pickTemplate(tpl)}
-              data-testid={`office-template-option-${tpl.id}`}
-              className={[
-                'w-full text-left px-3 py-2 rounded border text-sm',
-                selectedTemplate?.id === tpl.id && selectedTemplate.source === tpl.source
-                  ? 'border-primary bg-primary/10'
-                  : 'border-border hover:bg-bg-hover',
-              ].join(' ')}
-            >
-              <span className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-text">{tpl.name}</span>
-                <span
-                  data-testid="office-template-source"
-                  className={[
-                    'px-1.5 py-0.5 rounded text-xs',
-                    tpl.source === 'builtin'
-                      ? 'bg-primary/10 text-primary'
-                      : 'bg-bg-hover text-text-secondary border border-border',
-                  ].join(' ')}
-                >
-                  {tpl.source === 'builtin'
-                    ? t('office.template.source.builtin')
-                    : t('office.template.source.workspace')}
-                </span>
-              </span>
-              {tpl.description && (
-                <span className="block text-xs text-muted mt-0.5">{tpl.description}</span>
-              )}
-            </button>
-          ))}
-
-        {selectedTemplate && selectedTemplate.doc_type === type && (
-          <div className="space-y-2 pt-1" data-testid="office-template-fields">
-            {/* Round C P5: 首页缩略图（按需生成，服务端磁盘缓存；失败静默） */}
-            {(() => {
-              const thumbKey = `${selectedTemplate.source}-${selectedTemplate.id}`;
-              const thumb = thumbnails[thumbKey];
-              if (thumb) {
-                return (
-                  <img
-                    src={thumb}
-                    alt={selectedTemplate.name}
-                    data-testid="office-template-thumbnail"
-                    className="w-40 rounded border border-border shadow-sm bg-white"
-                  />
-                );
-              }
-              if (thumbnailLoading) {
-                return (
-                  <div
-                    className="w-40 h-52 rounded border border-dashed border-border flex items-center justify-center text-xs text-muted"
-                    data-testid="office-template-thumbnail-loading"
-                  >
-                    {t('office.template.thumbnailLoading')}
-                  </div>
-                );
-              }
-              return null;
-            })()}
-            {selectedTemplate.placeholders.map((ph) => renderPlaceholderField(ph))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
   /** Mode toggle + free-form/template sections for one OOXML tab (N2). */
   const renderModeSection = (type: TemplateModeType) => {
     if (docType !== type) return null;
@@ -692,7 +540,21 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
 
         {modes[type] === 'freeform' && renderFreeformFields(type)}
 
-        {modes[type] === 'template' && renderTemplatePicker(type)}
+        {modes[type] === 'template' && (
+          <OfficeTemplatePicker
+            type={type}
+            templates={templates}
+            templateLoad={templateLoad}
+            selectedTemplate={selectedTemplate}
+            templateData={templateData}
+            thumbnails={thumbnails}
+            thumbnailLoading={thumbnailLoading}
+            inputClass={inputClass}
+            onRetryLoad={() => void loadTemplates()}
+            onPickTemplate={pickTemplate}
+            onChangePlaceholder={setPlaceholderValue}
+          />
+        )}
       </div>
     );
   };

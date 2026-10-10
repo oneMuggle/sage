@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useChatStreamStore } from '../../../features/send-message/chatStreamStore';
@@ -7,11 +8,16 @@ import { useTerminalPanelStore } from '../../../features/terminal-panel/terminal
 import { ChatHeaderBar } from '../../../pages/chat/ChatHeaderBar';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Message as MessageType } from '../../../shared/lib/store';
+import { PageHeader } from '../../../shared/ui';
 import { Message } from '../Message';
 import { SubagentLivePanel } from '../SubagentLivePanel';
 
 const renderWithI18n = (ui: React.ReactElement) =>
-  render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
+  render(
+    <MemoryRouter>
+      <I18nProvider defaultLocale="zh">{ui}</I18nProvider>
+    </MemoryRouter>,
+  );
 
 describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () => {
   it('auto-collapses >= 3 completed tool calls into a group summary and expands on click', () => {
@@ -66,37 +72,33 @@ describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () =>
 
   it('sets data-compact on ChatHeaderBar when rightPanelOpen is true while preserving new-session aria-label', () => {
     const noop = vi.fn();
+    const baseProps = {
+      workspacePath: null,
+      currentSessionId: 's1',
+      orchMode: 'direct',
+      setOrchMode: noop,
+      isLoading: false,
+      hasConfig: true,
+      onNewTopic: noop,
+      isTempChat: false,
+      setTempChatSessions: noop,
+      onNewSession: noop,
+      onToggleRightPanel: noop,
+      unseenArtifactCount: 0,
+    };
     const { rerender } = renderWithI18n(
-      <ChatHeaderBar
-        hasActiveSession={true}
-        isTemporarySession={false}
-        isStreaming={false}
-        orchestrationMode="direct"
-        onOrchestrationModeChange={noop}
-        onNewTopic={noop}
-        onToggleTemporary={noop}
-        onNewSession={noop}
-        rightPanelOpen={false}
-      />,
+      <ChatHeaderBar {...baseProps} rightPanelOpen={false} />,
     );
 
     expect(screen.getByTestId('chat-header-bar')).toHaveAttribute('data-compact', 'false');
     expect(screen.getByRole('button', { name: /新对话/ })).toBeInTheDocument();
 
     rerender(
-      <I18nProvider defaultLocale="zh">
-        <ChatHeaderBar
-          hasActiveSession={true}
-          isTemporarySession={false}
-          isStreaming={false}
-          orchestrationMode="direct"
-          onOrchestrationModeChange={noop}
-          onNewTopic={noop}
-          onToggleTemporary={noop}
-          onNewSession={noop}
-          rightPanelOpen={true}
-        />
-      </I18nProvider>,
+      <MemoryRouter>
+        <I18nProvider defaultLocale="zh">
+          <ChatHeaderBar {...baseProps} rightPanelOpen={true} />
+        </I18nProvider>
+      </MemoryRouter>,
     );
 
     expect(screen.getByTestId('chat-header-bar')).toHaveAttribute('data-compact', 'true');
@@ -104,7 +106,7 @@ describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () =>
   });
 
   it('supports manual and terminal-open auto-collapse on SubagentLivePanel', () => {
-    useTerminalPanelStore.setState({ isOpen: false });
+    useTerminalPanelStore.setState({ open: false });
     const store = useChatStreamStore.getState();
     store.startStream('s1', 'm1');
     store.setStreamingMeta('s1', 'm1', {
@@ -115,8 +117,8 @@ describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () =>
     store.setTaskBoard('s1', {
       runId: 'r1',
       plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'Search docs', depends_on: [] }],
-      statuses: { t1: { status: 'running' } },
-      live: { t1: { liveStep: '正在分析接口契约', updatedAt: 1000 } },
+      statuses: { t1: { status: 'running' } as never },
+      live: { t1: { liveStep: '正在分析接口契约', updatedAt: 1000 } as never },
       dispatchedAt: 1000,
     });
 
@@ -126,7 +128,7 @@ describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () =>
     expect(screen.getByText('正在分析接口契约')).toBeInTheDocument();
 
     act(() => {
-      useTerminalPanelStore.setState({ isOpen: true });
+      useTerminalPanelStore.setState({ open: true });
     });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText('正在分析接口契约')).not.toBeInTheDocument();
@@ -134,5 +136,20 @@ describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () =>
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('正在分析接口契约')).toBeInTheDocument();
+  });
+
+  it('renders unified PageHeader with h-12 shell, title, subtitle, and actions', () => {
+    render(
+      <PageHeader
+        title="技能"
+        subtitle="管理内置与外部技能"
+        actions={<button type="button">刷新</button>}
+      />,
+    );
+    const header = screen.getByTestId('page-header');
+    expect(header.className).toContain('h-12');
+    expect(screen.getByText('技能')).toBeInTheDocument();
+    expect(screen.getByText('管理内置与外部技能')).toBeInTheDocument();
+    expect(screen.getByText('刷新')).toBeInTheDocument();
   });
 });

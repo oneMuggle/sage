@@ -10,6 +10,7 @@ import { skillsApi } from '../shared/api/skillsApi';
 import type { ScheduledTask, Skill } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
+import { PageHeader } from '../shared/ui';
 import { confirmDialog } from '../shared/ui/ConfirmDialog/confirmService';
 
 export function ScheduledTasks() {
@@ -82,24 +83,25 @@ export function ScheduledTasks() {
   };
 
   return (
-    <div className="flex flex-col h-full p-6 gap-4 overflow-y-auto">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-semibold text-text">{t('scheduled.title')}</h1>
-          <p className="text-xs text-text-secondary">{t('scheduled.subtitle')}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            setEditing(undefined);
-            setCreateOpen(true);
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary/90"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>{t('scheduled.create')}</span>
-        </button>
-      </header>
+    <div className="flex flex-col h-full overflow-hidden">
+      <PageHeader
+        title={t('scheduled.title')}
+        subtitle={t('scheduled.subtitle')}
+        actions={
+          <button
+            type="button"
+            onClick={() => {
+              setEditing(undefined);
+              setCreateOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-ui-sm bg-primary text-text-inverse rounded-radius-sm hover:bg-primary/90"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>{t('scheduled.create')}</span>
+          </button>
+        }
+      />
+      <div className="flex-1 flex flex-col p-6 gap-4 overflow-y-auto">
 
       {/* 初载闪空态修复: store 有 loading 字段但此前未消费, 初次 load 期间
           tasks.length === 0 会先渲染"暂无任务"再跳成列表。 */}
@@ -214,6 +216,7 @@ export function ScheduledTasks() {
         sessions={sessions}
         task={editing}
       />
+      </div>
     </div>
   );
 }
