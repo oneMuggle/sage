@@ -20,6 +20,7 @@ import { useEffect, useState } from 'react';
 import { useTodoStore } from '../entities/todo/todoStore';
 import type { Todo } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
+import { PageHeader } from '../shared/ui';
 
 export function TodoPage() {
   const { t } = useI18n();
@@ -53,10 +54,9 @@ export function TodoPage() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 max-w-3xl mx-auto w-full">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">{t('todos.title')}</h1>
-      </div>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <PageHeader title={t('todos.title')} />
+      <div className="flex-1 overflow-y-auto p-6 max-w-3xl mx-auto w-full">
 
       <form
         onSubmit={(e) => {
@@ -124,6 +124,7 @@ export function TodoPage() {
           ))}
         </ul>
       )}
+      </div>
     </div>
   );
 }
@@ -150,7 +151,7 @@ function TodoRow({ todo, onComplete, onCancel, onDelete }: TodoRowProps) {
           {todo.title}
         </span>
         {todo.priority && todo.priority !== 'medium' && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-muted/20 text-text-muted">
+          <span className="text-ui-xs px-1.5 py-0.5 rounded-full bg-bg-muted/20 text-text-muted">
             {todo.priority}
           </span>
         )}

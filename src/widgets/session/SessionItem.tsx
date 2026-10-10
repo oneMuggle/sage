@@ -323,7 +323,7 @@ export function SessionItem({
             <span
               data-testid="session-artifacts-badge"
               title={t('session.artifacts_badge').replace('{count}', String(artifactCount))}
-              className="inline-flex flex-shrink-0 items-center gap-0.5 text-[10px] text-muted"
+              className="inline-flex flex-shrink-0 items-center gap-0.5 text-ui-xs text-muted"
             >
               <Paperclip className="w-3 h-3" />
               {artifactCount}
@@ -334,7 +334,7 @@ export function SessionItem({
             <span
               data-testid="session-changes-badge"
               title={t('session.changes_badge').replace('{count}', String(changeCount))}
-              className="inline-flex flex-shrink-0 text-[10px] font-medium text-primary"
+              className="inline-flex flex-shrink-0 text-ui-xs font-medium text-primary"
             >
               +{changeCount}
             </span>
@@ -344,7 +344,7 @@ export function SessionItem({
             <span
               data-testid="session-message-hits"
               title={t('session.message_hits').replace('{count}', String(messageHits))}
-              className="inline-flex flex-shrink-0 items-center gap-0.5 text-[10px] font-medium text-primary"
+              className="inline-flex flex-shrink-0 items-center gap-0.5 text-ui-xs font-medium text-primary"
             >
               <Search className="w-3 h-3" />
               {messageHits}
@@ -378,7 +378,7 @@ export function SessionItem({
                 style={{ width: `${progressPercent(progress, todoDone, todoTotal)}%` }}
               />
             </div>
-            <span className="text-[10px] text-muted flex-shrink-0">
+            <span className="text-ui-xs text-muted flex-shrink-0">
               {progress != null ? `${progress.done}/${progress.total}` : `${todoDone}/${todoTotal}`}
             </span>
           </div>

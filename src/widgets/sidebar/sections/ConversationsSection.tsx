@@ -198,14 +198,14 @@ export function ConversationsSection({
               type="button"
               data-testid="toggle-archived"
               onClick={() => setShowArchived((v) => !v)}
-              className={`text-[11px] whitespace-nowrap ${showArchived ? 'text-primary' : 'text-muted hover:text-text'}`}
+              className={`text-ui-2xs whitespace-nowrap ${showArchived ? 'text-primary' : 'text-muted hover:text-text'}`}
             >
               {showArchived ? '隐藏归档' : '归档'}
             </button>
           </div>
           {showArchived && (
             <div
-              className="px-2 pb-1 flex items-center gap-2 text-[11px] text-muted"
+              className="px-2 pb-1 flex items-center gap-2 text-ui-2xs text-muted"
               data-testid="archived-toolbar"
             >
               <label className="whitespace-nowrap flex items-center gap-1">
@@ -214,7 +214,7 @@ export function ConversationsSection({
                   data-testid="auto-archive-select"
                   value={autoArchiveDays}
                   onChange={(e) => setAutoArchiveDays(Number(e.target.value))}
-                  className="h-5 rounded bg-bg-hover border border-transparent focus:border-primary focus:outline-none text-[11px]"
+                  className="h-5 rounded bg-bg-hover border border-transparent focus:border-primary focus:outline-none text-ui-2xs"
                 >
                   <option value={0}>关闭</option>
                   <option value={3}>3 天</option>

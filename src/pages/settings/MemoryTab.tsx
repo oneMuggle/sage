@@ -260,7 +260,7 @@ export function MemoryTab() {
                   {downloadingModel ? '下载中…' : '下载语义模型（约 90 MB）'}
                 </button>
                 {downloadingModel && modelDownload?.file && (
-                  <span className="text-[10px] text-muted tabular-nums">{modelDownload.file}</span>
+                  <span className="text-ui-xs text-muted tabular-nums">{modelDownload.file}</span>
                 )}
                 {downloadingModel && (
                   <button
@@ -271,7 +271,7 @@ export function MemoryTab() {
                         ?.cancel('bge-small-zh-v1.5')
                         .catch(() => undefined);
                     }}
-                    className="text-[10px] text-muted hover:text-text underline"
+                    className="text-ui-xs text-muted hover:text-text underline"
                   >
                     取消
                   </button>
@@ -394,7 +394,7 @@ export function MemoryTab() {
                   data-testid={`restore-${b.name}`}
                   disabled={restoringName !== null}
                   onClick={() => void handleRestore(b.name)}
-                  className={`px-2 py-0.5 rounded border text-[11px] disabled:opacity-50 ${
+                  className={`px-2 py-0.5 rounded border text-ui-2xs disabled:opacity-50 ${
                     restoreArmed === b.name
                       ? 'border-error text-error bg-error/5'
                       : 'border-border hover:bg-bg-hover'

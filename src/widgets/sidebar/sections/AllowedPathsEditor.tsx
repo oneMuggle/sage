@@ -94,7 +94,7 @@ export function AllowedPathsEditor({ project, onUpdated }: AllowedPathsEditorPro
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] uppercase tracking-wide text-muted">
+        <span className="text-ui-xs uppercase tracking-wide text-muted">
           {t('sider.project.allowed_paths_label')}
         </span>
         {!editing && (
@@ -115,7 +115,7 @@ export function AllowedPathsEditor({ project, onUpdated }: AllowedPathsEditorPro
       {editing && (
         <div className="flex flex-col gap-1">
           {draft.length === 0 ? (
-            <div className="text-[10px] text-muted italic" data-testid="allowed-paths-empty">
+            <div className="text-ui-xs text-muted italic" data-testid="allowed-paths-empty">
               {t('sider.project.allowed_paths_empty')}
             </div>
           ) : (
@@ -123,7 +123,7 @@ export function AllowedPathsEditor({ project, onUpdated }: AllowedPathsEditorPro
               {draft.map((rule, idx) => (
                 <li
                   key={`${rule}-${idx}`}
-                  className="flex items-center gap-1 group/rule text-[11px] font-mono"
+                  className="flex items-center gap-1 group/rule text-ui-2xs font-mono"
                   data-testid="allowed-paths-row"
                 >
                   <span className="flex-1 min-w-0 truncate text-text-secondary" title={rule}>
@@ -158,7 +158,7 @@ export function AllowedPathsEditor({ project, onUpdated }: AllowedPathsEditorPro
                   addDraftRow();
                 }
               }}
-              className="flex-1 min-w-0 px-1.5 py-0.5 text-[11px] font-mono rounded border border-border bg-bg focus:outline-none focus:border-primary"
+              className="flex-1 min-w-0 px-1.5 py-0.5 text-ui-2xs font-mono rounded border border-border bg-bg focus:outline-none focus:border-primary"
             />
             <button
               type="button"
@@ -179,7 +179,7 @@ export function AllowedPathsEditor({ project, onUpdated }: AllowedPathsEditorPro
               data-testid="allowed-paths-cancel"
               onClick={cancelEdit}
               disabled={saving}
-              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded text-text-secondary hover:bg-bg-hover disabled:opacity-50"
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded text-text-secondary hover:bg-bg-hover disabled:opacity-50"
             >
               <X className="w-2.5 h-2.5" />
               {t('sider.project.allowed_paths_cancel')}
@@ -189,7 +189,7 @@ export function AllowedPathsEditor({ project, onUpdated }: AllowedPathsEditorPro
               data-testid="allowed-paths-save"
               onClick={() => void save()}
               disabled={saving}
-              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] rounded bg-primary text-primary-fg hover:opacity-90 disabled:opacity-50"
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-ui-xs rounded bg-primary text-primary-fg hover:opacity-90 disabled:opacity-50"
             >
               <Check className="w-2.5 h-2.5" />
               {t('sider.project.allowed_paths_save')}
@@ -202,7 +202,7 @@ export function AllowedPathsEditor({ project, onUpdated }: AllowedPathsEditorPro
       {!editing && (
         <div>
           {project.allowedPaths.length === 0 ? (
-            <div className="text-[10px] text-muted italic" data-testid="allowed-paths-empty">
+            <div className="text-ui-xs text-muted italic" data-testid="allowed-paths-empty">
               {t('sider.project.allowed_paths_empty')}
             </div>
           ) : (
@@ -210,7 +210,7 @@ export function AllowedPathsEditor({ project, onUpdated }: AllowedPathsEditorPro
               {project.allowedPaths.map((rule, idx) => (
                 <li
                   key={`${rule}-${idx}`}
-                  className="text-[11px] font-mono text-text-secondary truncate"
+                  className="text-ui-2xs font-mono text-text-secondary truncate"
                   title={rule}
                 >
                   {rule}
@@ -218,7 +218,7 @@ export function AllowedPathsEditor({ project, onUpdated }: AllowedPathsEditorPro
               ))}
             </ul>
           )}
-          <div className="text-[9px] text-muted mt-1 leading-tight">
+          <div className="text-ui-xs text-muted mt-1 leading-tight">
             {t('sider.project.allowed_paths_hint')}
           </div>
         </div>

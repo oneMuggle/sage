@@ -181,7 +181,7 @@ function TrustEscalationSection(): JSX.Element {
               return (
                 <li
                   key={key}
-                  className="rounded border border-border px-1.5 py-0.5 text-[11px] text-text-secondary"
+                  className="rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary"
                 >
                   {tool} · {n}
                   {n >= threshold ? ' · 已达阈值' : ''}

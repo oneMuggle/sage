@@ -395,12 +395,12 @@ export function ZoteroTab() {
                                     <p className="text-secondary mt-0.5">{a.comment}</p>
                                   )}
                                   {a.page_label && (
-                                    <p className="text-faint text-[10px]">p. {a.page_label}</p>
+                                    <p className="text-faint text-ui-xs">p. {a.page_label}</p>
                                   )}
                                 </div>
                               ))}
                               {annotations.length > 10 && (
-                                <p className="text-faint text-[10px]">
+                                <p className="text-faint text-ui-xs">
                                   +{annotations.length - 10} {t('settings.zotero.annotations.more')}
                                 </p>
                               )}

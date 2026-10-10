@@ -141,7 +141,7 @@ export function TemplateFillDialog({ content, onConfirm, onCancel }: TemplateFil
               type="button"
               data-testid="tplfill-clear-memory"
               onClick={handleClearMemory}
-              className="mr-auto text-[11px] text-muted hover:text-error hover:underline"
+              className="mr-auto text-ui-2xs text-muted hover:text-error hover:underline"
             >
               {t('tplfill.clear_memory')}
             </button>

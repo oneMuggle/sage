@@ -677,7 +677,7 @@ function InputCardInner({
       )}
 
       {(hint || value.length > CHAR_VISIBLE_THRESHOLD) && (
-        <div className="flex items-center justify-between text-[11px] text-muted mt-1.5 px-1">
+        <div className="flex items-center justify-between text-ui-2xs text-muted mt-1.5 px-1">
           <span className="flex-1 text-center">{hint}</span>
           {value.length > CHAR_VISIBLE_THRESHOLD && (
             <span

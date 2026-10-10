@@ -33,7 +33,7 @@ export function AttnBadge({ count, title, className }: AttnBadgeProps) {
       title={resolvedTitle}
       className={clsx(
         'inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full',
-        'bg-accent text-text-inverse text-[10px] font-semibold leading-none flex-shrink-0',
+        'bg-accent text-text-inverse text-ui-xs font-semibold leading-none flex-shrink-0',
         className,
       )}
     >

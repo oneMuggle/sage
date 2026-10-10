@@ -95,6 +95,7 @@ export default {
         'ui-base': 'var(--ui-font-size, 14px)',
         'ui-caption': 'calc(var(--ui-font-size, 14px) - 1px)',
         'ui-sm': 'calc(var(--ui-font-size, 14px) - 2px)',
+        'ui-2xs': 'calc(var(--ui-font-size, 14px) - 3px)',
         'ui-xs': 'calc(var(--ui-font-size, 14px) - 4px)',
       },
       spacing: {

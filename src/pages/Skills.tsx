@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { skillsApi, type ConsolidationSuggestion, type Skill } from '../shared/api';
+import { PageHeader } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { RetryButton } from '../shared/ui/RetryButton';
@@ -258,9 +259,7 @@ const Skills: React.FC = () => {
   if (loading && skills.length === 0 && error) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
-          <h2 className="text-[18px] font-semibold text-text">技能</h2>
-        </div>
+        <PageHeader title="技能" />
         <div className="flex-1 flex items-center justify-center p-4">
           <ErrorState
             title="技能加载失败"
@@ -276,9 +275,7 @@ const Skills: React.FC = () => {
   if (loading && skills.length === 0) {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
-          <h2 className="text-[18px] font-semibold text-text">技能</h2>
-        </div>
+        <PageHeader title="技能" />
         <div className="flex-1 flex items-center justify-center">
           <LoadingState label="加载技能中..." />
         </div>
@@ -289,9 +286,10 @@ const Skills: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* 页面头部 */}
-      <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
-        <h2 className="text-[18px] font-semibold text-text">技能</h2>
-        <div className="flex items-center gap-3">
+      <PageHeader
+        title="技能"
+        actions={
+          <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
             <input
               type="checkbox"
@@ -334,8 +332,9 @@ const Skills: React.FC = () => {
           >
             <Upload className={`w-4 h-4 ${importLoading ? 'animate-pulse' : ''}`} />
           </button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       <Tabs
         value={activeTab}

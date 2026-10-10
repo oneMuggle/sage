@@ -37,7 +37,7 @@ export function SiderSection({
           onClick={onToggleCollapsed}
           aria-expanded={!collapsed}
           aria-label={collapsed ? t('sider.expand') : t('sider.collapse')}
-          className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted hover:text-text"
+          className="inline-flex items-center gap-1.5 text-ui-2xs font-semibold uppercase tracking-wide text-muted hover:text-text"
         >
           <Chevron className="w-3 h-3" aria-hidden="true" />
           <Icon className="w-3.5 h-3.5" aria-hidden="true" />

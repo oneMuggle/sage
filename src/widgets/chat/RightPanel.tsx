@@ -198,7 +198,7 @@ function PanelOptionsMenu({
         >
           {onApplyPreset && (
             <>
-              <div className="px-3 pt-1 pb-0.5 text-[10px] text-text-muted">面板宽度</div>
+              <div className="px-3 pt-1 pb-0.5 text-ui-xs text-text-muted">面板宽度</div>
               {WIDTH_PRESETS.map((p) => (
                 <button
                   key={p.label}
@@ -274,7 +274,7 @@ export function PanelHeader({
     const countOf = (t: RightPanelTab) =>
       t === 'artifacts' ? artifactCount : t === 'changes' ? changesCount : 0;
     return (
-      <div className="flex border-b border-border items-center pr-1 min-w-0">
+      <div className="h-12 flex border-b border-border items-center pr-1 min-w-0" data-testid="right-panel-header">
         <div className="flex-1 min-w-0 flex items-center overflow-x-auto no-scrollbar">
         {RIGHT_PANEL_TABS.map((t) => {
           const count = countOf(t);
@@ -295,7 +295,7 @@ export function PanelHeader({
             >
               {TAB_LABELS[t]}
               {count > 0 && (
-                <span className="ml-0.5 text-[10px] tabular-nums opacity-70">{count}</span>
+                <span className="ml-0.5 text-ui-xs tabular-nums opacity-70">{count}</span>
               )}
             </button>
           );
@@ -316,7 +316,7 @@ export function PanelHeader({
 
   // ArtifactViewer 视图:最大化/× 按钮
   return (
-    <div className="flex justify-end border-b border-border items-center h-10 px-2 gap-0.5">
+    <div className="flex justify-end border-b border-border items-center h-12 px-2 gap-0.5" data-testid="right-panel-header">
       {maximizeButton}
       {closeButton}
     </div>
@@ -517,7 +517,7 @@ function RightPanelInner({
             {/* 对标 U1: 轮次导航——目录上方，按用户输入切分对话 */}
             <div className="pt-2">
               <div
-                className="px-3 pb-1 text-[11px] font-medium text-muted"
+                className="px-3 pb-1 text-ui-2xs font-medium text-muted"
                 data-testid="turn-list-heading"
               >
                 轮次

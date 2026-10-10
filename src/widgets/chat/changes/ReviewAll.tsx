@@ -97,7 +97,7 @@ export function ReviewAll({ sessionId, onBack }: ReviewAllProps) {
           {sections.map((section, i) => (
             <button
               key={section.path}
-              className="px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-[11px] text-text-secondary max-w-56 truncate"
+              className="px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-ui-2xs text-text-secondary max-w-56 truncate"
               title={`跳到 ${section.path}`}
               data-testid={`review-all-jump-${section.path}`}
               onClick={() =>
@@ -146,12 +146,12 @@ export function ReviewAll({ sessionId, onBack }: ReviewAllProps) {
                       {section.path}
                     </span>
                     {fileStats?.insertions != null && fileStats.insertions > 0 && (
-                      <span className="shrink-0 font-mono text-[11px] text-green-600 dark:text-green-400">
+                      <span className="shrink-0 font-mono text-ui-2xs text-green-600 dark:text-green-400">
                         +{fileStats.insertions}
                       </span>
                     )}
                     {fileStats?.deletions != null && fileStats.deletions > 0 && (
-                      <span className="shrink-0 font-mono text-[11px] text-red-500">
+                      <span className="shrink-0 font-mono text-ui-2xs text-red-500">
                         −{fileStats.deletions}
                       </span>
                     )}

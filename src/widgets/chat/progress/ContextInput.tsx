@@ -186,7 +186,7 @@ export function ContextInput({
       />
       <div className="flex items-center justify-between mt-1">
         <span
-          className={`text-[10px] ${overLimit ? 'text-error' : 'text-text-tertiary'}`}
+          className={`text-ui-xs ${overLimit ? 'text-error' : 'text-text-tertiary'}`}
         >
           {byteLength.toLocaleString()} / {CONTENT_MAX_BYTES.toLocaleString()} bytes
         </span>

@@ -260,7 +260,7 @@ function ModelSelector({
             </optgroup>
           ))}
         </select>
-        {required && !hasValue && <span className="text-[11px] text-error">必填</span>}
+        {required && !hasValue && <span className="text-ui-2xs text-error">必填</span>}
       </div>
     </SettingRow>
   );
