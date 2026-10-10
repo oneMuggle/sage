@@ -47,6 +47,29 @@ describe('project-type IPC commands (never registered before)', () => {
     });
   });
 
+  it('projects_scaffold posts snake_cased scaffold options to /projects/{id}/scaffold', async () => {
+    expect(
+      await wire('projects_scaffold', {
+        projectId: 'p1',
+        projectType: 'business',
+        createDirectories: true,
+        createSageMd: true,
+        importDefaultConstraints: true,
+        seedDefaultMilestones: true,
+      }),
+    ).toEqual({
+      url: `${P}/p1/scaffold`,
+      method: 'POST',
+      body: {
+        project_type: 'business',
+        create_directories: true,
+        create_sage_md: true,
+        import_default_constraints: true,
+        seed_default_milestones: true,
+      },
+    });
+  });
+
   it('projects_git_status is a body-less GET', async () => {
     expect(await wire('projects_git_status', { projectId: 'p 1' })).toEqual({
       url: `${P}/p%201/git-status`,

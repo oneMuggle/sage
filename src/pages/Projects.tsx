@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 
+import { ProjectArchetypeStudio } from '../features/project-type';
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { PageHeader } from '../shared/ui';
@@ -20,34 +21,39 @@ export function Projects() {
         }
       />
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
-        <div className="max-w-5xl mx-auto">
-        <ProjectSection
-          collapsed={false}
-          onToggleCollapsed={() => undefined}
-          presentation="workbench"
-          onOpenSession={(sessionId) => {
-            useStore.getState().setCurrentSessionId(sessionId);
-            navigate('/chat');
-          }}
-        />
-        <div className="flex gap-2 mt-4">
-          <button
-            type="button"
-            onClick={() => navigate('/welcome')}
-            className="px-3 py-2 border border-ui-border rounded text-ui-base"
-          >
-            {locale === 'en' ? 'New deliverable' : '开始新的交付任务'}
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/office')}
-            className="px-3 py-2 border border-ui-border rounded text-ui-base"
-          >
-            {locale === 'en' ? 'Open documents and reviews' : '查看文档与验收'}
-          </button>
-        </div>
+        <div className="max-w-5xl mx-auto space-y-4">
+          <ProjectArchetypeStudio />
+
+          <ProjectSection
+            collapsed={false}
+            onToggleCollapsed={() => undefined}
+            presentation="workbench"
+            onOpenSession={(sessionId) => {
+              useStore.getState().setCurrentSessionId(sessionId);
+              navigate('/chat');
+            }}
+          />
+
+          <div className="flex gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => navigate('/welcome')}
+              className="px-3 py-2 border border-ui-border rounded text-ui-base"
+            >
+              {locale === 'en' ? 'New deliverable' : '开始新的交付任务'}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/office')}
+              className="px-3 py-2 border border-ui-border rounded text-ui-base"
+            >
+              {locale === 'en' ? 'Open documents and reviews' : '查看文档与验收'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+export default Projects;

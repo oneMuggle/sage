@@ -295,3 +295,34 @@ class TestConstraintResolveActive:
         active = constraint_repo.resolve_active(project.id)
         assert active[0].content == "high"
         assert active[1].content == "low"
+
+
+    def test_resolve_active_files_and_nested_glob(self, constraint_repo, project):
+        """支持 active_files 列表以及相对路径/文件名的 glob 触发匹配。"""
+        constraint_repo.create(
+            project_id=project.id,
+            category="ts",
+            content="react token rule",
+            trigger_pattern="src/**/*.tsx",
+            priority=7,
+        )
+        constraint_repo.create(
+            project_id=project.id,
+            category="doc",
+            content="docx format rule",
+            trigger_pattern="*.docx",
+            priority=8,
+        )
+
+        active = constraint_repo.resolve_active(
+            project.id,
+            active_files=["02_编制中工作稿/采购合同.docx"],
+        )
+        assert [c.category for c in active] == ["doc"]
+
+        active_both = constraint_repo.resolve_active(
+            project.id,
+            current_file="src/pages/Projects.tsx",
+            active_files=["02_编制中工作稿/采购合同.docx"],
+        )
+        assert [c.category for c in active_both] == ["doc", "ts"]

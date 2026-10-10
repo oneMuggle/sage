@@ -1,17 +1,29 @@
 /**
- * 项目类型分类系统 (2026-09-24)
- *
- * Phase 4: 前端项目类型 UI
+ * 项目类型分类系统组件导出 (2026-09-25；多形态项目工作台扩展 2026-10-10)
  */
 
-export { ProjectTypeSelector } from './ProjectTypeSelector';
-export type { ProjectTypeSelectorProps } from './ProjectTypeSelector';
+export {
+  ARCHETYPE_BLUEPRINTS,
+  ARCHETYPE_ORDER,
+  getArchetypeBlueprint,
+} from './archetypeBlueprints';
+export type {
+  ArchetypeBlueprintMeta,
+  ArchetypeStageMeta,
+  ArchetypeTemplateMeta,
+} from './archetypeBlueprints';
 
 export { ProjectTypeBadge } from './ProjectTypeBadge';
 export type { ProjectTypeBadgeProps } from './ProjectTypeBadge';
 
-export { ProjectOverviewWidgets } from './ProjectOverviewWidgets';
-export type { ProjectOverviewWidgetsProps } from './ProjectOverviewWidgets';
+export { ProjectTypeSelector } from './ProjectTypeSelector';
+export type { ProjectTypeSelectorProps } from './ProjectTypeSelector';
+
+export { TypeDetectionPreview } from './TypeDetectionPreview';
+export type { TypeDetectionPreviewProps } from './TypeDetectionPreview';
+
+export { ProjectCreationWizard } from './ProjectCreationWizard';
+export type { ProjectCreationWizardProps } from './ProjectCreationWizard';
 
 export { GitStatusWidget } from './GitStatusWidget';
 export type { GitStatusWidgetProps } from './GitStatusWidget';
@@ -21,6 +33,9 @@ export type { ConstraintSummaryWidgetProps } from './ConstraintSummaryWidget';
 
 export { MilestoneProgressWidget } from './MilestoneProgressWidget';
 export type { MilestoneProgressWidgetProps } from './MilestoneProgressWidget';
+
+export { ProjectOverviewWidgets } from './ProjectOverviewWidgets';
+export type { ProjectOverviewWidgetsProps } from './ProjectOverviewWidgets';
 
 export { ConstraintManager } from './ConstraintManager';
 export type { ConstraintManagerProps } from './ConstraintManager';
@@ -34,8 +49,5 @@ export type { MilestoneManagerProps } from './MilestoneManager';
 export { MilestoneEditor } from './MilestoneEditor';
 export type { MilestoneEditorProps } from './MilestoneEditor';
 
-export { TypeDetectionPreview } from './TypeDetectionPreview';
-export type { TypeDetectionPreviewProps } from './TypeDetectionPreview';
-
-export { ProjectCreationWizard } from './ProjectCreationWizard';
-export type { ProjectCreationWizardProps } from './ProjectCreationWizard';
+export { ProjectArchetypeStudio } from './ProjectArchetypeStudio';
+export type { ProjectArchetypeStudioProps } from './ProjectArchetypeStudio';
