@@ -74,6 +74,26 @@ describe('projectApi', () => {
     );
   });
 
+  it('scaffold() invokes projects_scaffold and maps wire response', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      project: { ...WIRE, project_type: 'research', project_stage: 'proposal', vcs_mode: 'builtin' },
+      created_directories: ['01_literature', '02_experiments'],
+      created_files: ['SAGE.md'],
+      imported_constraints_count: 5,
+      seeded_milestones_count: 6,
+      recommended_templates: ['research', 'citation_strict', 'grant_proposal'],
+    });
+    const r = await projectApi.scaffold('p1', { projectType: 'research' });
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'projects_scaffold',
+      expect.objectContaining({ projectId: 'p1', projectType: 'research' }),
+    );
+    expect(r.project.projectType).toBe('research');
+    expect(r.createdDirectories).toContain('01_literature');
+    expect(r.importedConstraintsCount).toBe(5);
+    expect(r.seededMilestonesCount).toBe(6);
+  });
+
   it('propagates invoke errors', async () => {
     mockInvoke.mockRejectedValueOnce(new Error('project not found'));
     await expect(projectApi.list()).rejects.toThrow('project not found');

@@ -26,6 +26,8 @@ export type {
   UpdateConstraintPayload,
   CreateMilestonePayload,
   UpdateMilestonePayload,
+  ProjectScaffoldOptions,
+  ProjectScaffoldResult,
 } from './projectApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';

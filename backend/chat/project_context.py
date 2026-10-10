@@ -312,7 +312,11 @@ def build_project_materials_block(materials: List[ProjectMaterial]) -> str:
 CONSTRAINTS_HEADER = "项目约束 (行为指导规则):"
 
 
-def build_constraints_block(project_id: Optional[str]) -> str:
+def build_constraints_block(
+    project_id: Optional[str],
+    current_file: Optional[str] = None,
+    active_files: Optional[List[str]] = None,
+) -> str:
     """渲染项目约束为可注入 system prompt 的文本块（项目类型分类系统，2026-09-24）。
 
     从 project_constraints 表查询启用的约束，按优先级降序排列。
@@ -330,9 +334,13 @@ def build_constraints_block(project_id: Optional[str]) -> str:
     try:
         from backend.data.project_constraint_repo import ProjectConstraintRepository
 
-        constraints = ProjectConstraintRepository().list_by_project(
-            project_id, enabled_only=True
-        )
+        repo = ProjectConstraintRepository()
+        if current_file is not None or active_files is not None:
+            constraints = repo.resolve_active(
+                project_id, current_file=current_file, active_files=active_files
+            )
+        else:
+            constraints = repo.list_by_project(project_id, enabled_only=True)
         if not constraints:
             return ""
 
