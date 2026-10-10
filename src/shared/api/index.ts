@@ -27,6 +27,10 @@ export type {
   UpdateMilestonePayload,
   ProjectScaffoldOptions,
   ProjectScaffoldResult,
+  ProjectContextBudget,
+  ProjectWorkspaceOverview,
+  WorkspaceArtifactItem,
+  WorkspaceDirectorySummary,
 } from './projectApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';

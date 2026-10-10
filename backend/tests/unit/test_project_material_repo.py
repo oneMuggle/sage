@@ -234,3 +234,26 @@ class TestProjectMaterialGetActive:
         # 旧的在前——按注入顺序
         assert active[0].id == m1.id
         assert active[1].id == m2.id
+
+
+    def test_set_enabled_filters_active_materials(
+        self, material_repo, project
+    ):
+        """set_enabled(False) 暂停注入，set_enabled(True) 恢复注入。"""
+        m1 = material_repo.add(project.id, "# Source 1", "msg_1", now_ms=1000)
+        m2 = material_repo.add(project.id, "# Source 2", "msg_2", now_ms=2000)
+        assert m1.enabled is True
+        assert m2.enabled is True
+
+        toggled = material_repo.set_enabled(m1.id, False)
+        assert toggled is not None
+        assert toggled.enabled is False
+
+        active = material_repo.get_active_materials_for_project(project.id)
+        assert [m.id for m in active] == [m2.id]
+
+        restored = material_repo.set_enabled(m1.id, True)
+        assert restored is not None
+        assert restored.enabled is True
+        active_after = material_repo.get_active_materials_for_project(project.id)
+        assert [m.id for m in active_after] == [m1.id, m2.id]
