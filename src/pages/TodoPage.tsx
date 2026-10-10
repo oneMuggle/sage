@@ -151,7 +151,7 @@ function TodoRow({ todo, onComplete, onCancel, onDelete }: TodoRowProps) {
           {todo.title}
         </span>
         {todo.priority && todo.priority !== 'medium' && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-bg-muted/20 text-text-muted">
+          <span className="text-ui-xs px-1.5 py-0.5 rounded-full bg-bg-muted/20 text-text-muted">
             {todo.priority}
           </span>
         )}

@@ -1,7 +1,7 @@
 import type { SettingsSearchEntry, SettingsTabKey } from './settingsSearchIndex';
 
 const GROUPS = [
-  { id: 'basic', zh: '基础与外观', en: 'Basics and appearance', keys: ['basic'] },
+  { id: 'basic', zh: '基础与外观', en: 'Basics and appearance', keys: ['general', 'basic'] },
   { id: 'models', zh: '模型与服务', en: 'Models and services', keys: ['endpoints', 'models'] },
   {
     id: 'knowledge',

@@ -1,14 +1,13 @@
 // src/shared/ui/PanelShell.tsx
-// UX-IA R3 批次 A-1：侧边面板统一外壳。
+// 通用侧栏/底栏外壳（UX-IA R4 批次 A）。
 //
-// 立项背景见 docs/plans/2026-10-01_ux-ia-round3-panel-slot.md §1.2：右栏此前有三套
-// 各自实现（chat 的 5 tab 一行挤满 / wiki 的 uppercase 标题 + 垂直二分 /
-// ModelCatalog 的裸 w-96 栏），头部形态、点击热区、拖拽手柄、空态各写一套。
-// 本组件收敛「头部 + 内容 + 边缘拖拽 + 空态」四件事，槽位与互斥交给
-// features/app-panels/panelRegistry + usePanelStore。
+// 抽自 RightPanel.tsx 的 40px 头部 + 可选 tabs + 动作槽 + 左边缘拖拽手柄 + 滚动体 + 空态。
+// 后续批次 B（LeftListSlot）与批次 C（RightPanel / DeepResearchProgress /
+// ArtifactViewer / PreviewPanel / TerminalPanel）都会复用这份外壳，避免每个面板各自
+// 维护一套 36px/40px 头部、各自定义一套关闭按钮热区。
 //
-// 不负责开合动画：push（挤压主区）/ overlay（覆盖层）两种模式的动画语义不同，
-// 由各宿主在自身布局层处理（对齐 RightPanel.tsx:466-482 的既有分工）。
+// 注意：外壳只管面板「内部结构」，不接管外层容器的开合动画 —— push 与 overlay 的
+// 动画语义不同，由各宿主在自身布局层处理（对齐 RightPanel.tsx:466-482 的既有分工）。
 import { clsx } from 'clsx';
 import type { ReactNode } from 'react';
 
@@ -109,11 +108,11 @@ export function PanelShell({
 
       {(title || showTabs || actions) && (
         <header
-          className="h-10 flex items-center border-b border-border px-2 gap-1 flex-shrink-0"
+          className="h-12 flex items-center border-b border-border px-2 gap-1 flex-shrink-0"
           data-testid="panel-shell-header"
         >
           {showTabs ? (
-            <div className="flex items-center flex-1 min-w-0 overflow-x-auto">
+            <div className="flex items-center flex-1 min-w-0 overflow-x-auto h-full">
               {tabs!.map((tab) => (
                 <button
                   key={tab.id}
@@ -121,7 +120,7 @@ export function PanelShell({
                   onClick={() => onTabChange!(tab.id)}
                   aria-current={activeTab === tab.id}
                   className={clsx(
-                    'px-2 h-full text-sm font-medium transition-colors whitespace-nowrap',
+                    'px-2 h-full text-ui-sm font-medium transition-colors whitespace-nowrap',
                     activeTab === tab.id
                       ? 'text-primary border-b-2 border-primary'
                       : 'text-text-secondary hover:text-text',
@@ -134,7 +133,7 @@ export function PanelShell({
             </div>
           ) : (
             title && (
-              <h2 className="text-sm font-semibold text-text truncate px-1">{title}</h2>
+              <h2 className="text-ui-sm font-semibold text-text truncate px-1">{title}</h2>
             )
           )}
           {actions && <div className="flex items-center gap-0.5 ml-auto flex-shrink-0">{actions}</div>}
@@ -143,7 +142,7 @@ export function PanelShell({
 
       <div className="flex-1 min-h-0 overflow-y-auto" data-testid="panel-shell-body">
         {empty ? (
-          <p className="py-8 text-center text-sm text-text-muted px-4">{emptyLabel}</p>
+          <p className="py-8 text-center text-ui-sm text-text-muted px-4">{emptyLabel}</p>
         ) : (
           children
         )}

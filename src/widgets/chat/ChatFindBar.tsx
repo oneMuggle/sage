@@ -151,7 +151,7 @@ function ChatFindPanel({ messages, focusNonce, onClose }: ChatFindPanelProps) {
           className="w-48 bg-transparent text-xs outline-none placeholder:text-muted"
         />
         <span
-          className="min-w-[3rem] text-right text-[11px] text-muted tabular-nums"
+          className="min-w-[3rem] text-right text-ui-2xs text-muted tabular-nums"
           aria-live="polite"
           data-testid="chat-find-count"
         >

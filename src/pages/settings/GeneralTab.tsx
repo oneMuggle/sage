@@ -142,7 +142,7 @@ function DemoModeSection() {
           保存失败：{persistError}
         </div>
       )}
-      <p className="text-[10px] text-muted mt-2 leading-relaxed">
+      <p className="text-ui-xs text-muted mt-2 leading-relaxed">
         注意：「跳过后端」在下次启动 Electron 时生效；页面数据切换即时生效。
       </p>
     </>

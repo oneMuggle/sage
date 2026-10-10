@@ -74,7 +74,7 @@ export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
             type="button"
             data-testid="markdown-image-retry"
             onClick={() => setStatus('loading')}
-            className="px-2 py-0.5 rounded border border-border text-[11px] text-primary hover:bg-primary/10 transition-colors"
+            className="px-2 py-0.5 rounded border border-border text-ui-2xs text-primary hover:bg-primary/10 transition-colors"
           >
             重试
           </button>

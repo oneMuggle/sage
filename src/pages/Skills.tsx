@@ -261,7 +261,7 @@ const Skills: React.FC = () => {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
-          <h2 className="text-[18px] font-semibold text-text">技能</h2>
+          <h2 className="text-ui-xl font-semibold text-text">技能</h2>
         </div>
         <div className="flex-1 flex items-center justify-center p-4">
           <ErrorState
@@ -279,7 +279,7 @@ const Skills: React.FC = () => {
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
-          <h2 className="text-[18px] font-semibold text-text">技能</h2>
+          <h2 className="text-ui-xl font-semibold text-text">技能</h2>
         </div>
         <div className="flex-1 flex items-center justify-center">
           <LoadingState label="加载技能中..." />
@@ -292,7 +292,7 @@ const Skills: React.FC = () => {
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* 页面头部 */}
       <div className="h-12 flex items-center justify-between px-5 border-b border-border bg-surface flex-shrink-0">
-        <h2 className="text-[18px] font-semibold text-text">技能</h2>
+        <h2 className="text-ui-xl font-semibold text-text">技能</h2>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
             <input

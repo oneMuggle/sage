@@ -18,7 +18,7 @@ export function TruncationNotice({ finishReason, onContinue }: TruncationNoticeP
   if (!finishReason || !TRUNCATED_REASONS.has(finishReason)) return null;
   return (
     <div
-      className="flex items-center gap-2 mt-1 text-[11px] text-warning"
+      className="flex items-center gap-2 mt-1 text-ui-2xs text-warning"
       data-testid="message-truncated"
     >
       <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />

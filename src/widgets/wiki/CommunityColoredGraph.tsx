@@ -151,7 +151,7 @@ export function CommunityColoredGraph({
                   <span className="flex-1 text-left">
                     社区 {c.community_id} ({c.size})
                   </span>
-                  <span className="text-muted text-[10px]">{(c.cohesion * 100).toFixed(0)}%</span>
+                  <span className="text-muted text-ui-xs">{(c.cohesion * 100).toFixed(0)}%</span>
                 </button>
               );
             })}

@@ -67,7 +67,7 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
 
   return (
     <span
-      className="flex items-center gap-1 text-[11px] text-text-secondary shrink-0"
+      className="flex items-center gap-1 text-ui-2xs text-text-secondary shrink-0"
       title="本会话累计用量 (token / 估算成本 / 缓存命中率)"
       data-testid="session-usage-badge"
     >

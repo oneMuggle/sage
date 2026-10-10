@@ -102,7 +102,7 @@ export function VirtualSessionList({
             return (
               <div
                 key={`group-${item.label}`}
-                className="text-[11px] font-semibold uppercase tracking-wide text-muted px-3 py-1 sticky top-0 bg-surface"
+                className="text-ui-2xs font-semibold uppercase tracking-wide text-muted px-3 py-1 sticky top-0 bg-surface"
                 style={{
                   position: 'absolute',
                   top: virtualRow.start,

@@ -94,7 +94,7 @@ export function WikiSearch() {
                 <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-text truncate">{result.title}</div>
-                  <div className="text-[11px] text-muted truncate">{result.path}</div>
+                  <div className="text-ui-2xs text-muted truncate">{result.path}</div>
                 </div>
               </div>
               <p className="text-xs text-muted line-clamp-2">{result.snippet}</p>

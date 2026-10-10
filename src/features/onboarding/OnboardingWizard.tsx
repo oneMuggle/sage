@@ -169,7 +169,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
       )}
       <fieldset disabled={saving} className="m-0 min-w-0 border-0 p-0">
         {/* 步骤指示 */}
-        <div className="flex items-center gap-1 mt-3 text-[11px] text-text-secondary">
+        <div className="flex items-center gap-1 mt-3 text-ui-2xs text-text-secondary">
           {[0, 1, 2].map((i) => (
             <span
               key={i}
@@ -196,7 +196,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                 <div className="text-xs font-medium text-text">
                   {t(p.labelKey as Parameters<typeof t>[0])}
                 </div>
-                <div className="text-[11px] text-text-secondary">{p.hint}</div>
+                <div className="text-ui-2xs text-text-secondary">{p.hint}</div>
               </button>
             ))}
             <button
