@@ -22,6 +22,7 @@ import {
   type ArenaAccount,
 } from '../entities/arena';
 import { BackendRequestError } from '../shared/api/backendRequest';
+import { PageHeader } from '../shared/ui/PageHeader';
 import { AccountTable, BatchRegisterPanel, DrawPanel, ObservationFeed, RegisterAssist, TokenWindowCard } from '../widgets/arena';
 
 type TabKey = 'accounts' | 'register' | 'draw';
@@ -81,24 +82,24 @@ export default function Arena() {
   const disabled = error.includes('未启用');
 
   return (
-    <div className="p-4 space-y-3 max-w-6xl mx-auto" data-testid="arena-page">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-base font-medium">Arena 控制台</h1>
-          <p className="text-xs text-text-muted">
-            账号池 · 批量注册 · 抽卡（密码加密存储；任务日志 after_seq 断点续传）
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void reload()}
-          disabled={loading}
-          data-testid="arena-reload"
-          className="text-xs rounded border border-border px-3 py-1.5 hover:bg-bg-hover disabled:opacity-50"
-        >
-          刷新
-        </button>
-      </header>
+    <div className="flex-1 flex flex-col overflow-hidden" data-testid="arena-page">
+      <PageHeader
+        title="Arena 控制台"
+        subtitle="账号池 · 批量注册 · 抽卡（密码加密存储；任务日志 after_seq 断点续传）"
+        actions={
+          <button
+            type="button"
+            onClick={() => void reload()}
+            disabled={loading}
+            data-testid="arena-reload"
+            className="text-xs rounded border border-border px-3 py-1.5 hover:bg-bg-hover disabled:opacity-50"
+          >
+            刷新
+          </button>
+        }
+      />
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-3 max-w-6xl mx-auto">
 
       <nav className="flex gap-1 border-b border-border" data-testid="arena-tabs">
         {TABS.map((item) => (
@@ -174,6 +175,8 @@ export default function Arena() {
           <DrawPanel />
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

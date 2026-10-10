@@ -21,6 +21,7 @@ import {
 } from '../entities/model-catalog/api';
 import type { CandidateModel, SnapshotMeta } from '../entities/model-catalog/types';
 import { useSettings } from '../features/manage-settings/useSettings';
+import { PageHeader } from '../shared/ui';
 import {
   CatalogTable,
   ModelDetails,
@@ -183,11 +184,11 @@ export default function ModelCatalog() {
   return (
     <div className="flex flex-1 overflow-hidden">
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div
-          className="h-12 flex items-center px-5 border-b border-border bg-surface flex-shrink-0 gap-3"
-          data-testid="model-catalog-header"
-        >
-          <h2 className="text-ui-xl font-semibold text-text">模型目录</h2>
+        <PageHeader
+          title="模型目录"
+          testId="model-catalog-header"
+          actions={
+            <>
           <input
             type="search"
             placeholder="搜索模型 (按 model_id / provider)"
@@ -252,7 +253,9 @@ export default function ModelCatalog() {
               <span aria-hidden="true">ℹ️</span> {pageStatus}
             </span>
           )}
-        </div>
+            </>
+          }
+        />
 
         {pageError && (
           <div
