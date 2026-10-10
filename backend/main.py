@@ -289,6 +289,17 @@ def _build_chat_service(lifecycle=None) -> ChatService:
     memory_adapter = MemoryAdapter(memory_manager)
     logger.info("MemoryAdapter 已装配（三层记忆系统：Working/Episodic/Semantic，全局单例）")
 
+    # M2 工具调用预算守卫：从 OrchSettings（UI 可调，持久化到 app_settings）
+    # 读 max_tool_calls_per_run，注入 ToolPolicy 传给 ChatService。
+    from backend.domain.tool_policy import ToolPolicy
+    from backend.orchestration.orch_settings import load_orch_settings
+
+    try:
+        orch = load_orch_settings()
+        tool_policy = ToolPolicy(max_tool_calls_per_run=orch.max_tool_calls_per_run)
+    except Exception:  # noqa: BLE001 — 读设置失败回落默认 ToolPolicy
+        tool_policy = ToolPolicy()
+
     return ChatService(
         llm=HttpxLLMAdapter(),
         tools=tools,
@@ -298,6 +309,7 @@ def _build_chat_service(lifecycle=None) -> ChatService:
         events=FileEventAdapter(),
         memory=memory_adapter,  # MemoryPort for memory integration
         lifecycle=lifecycle,  # Task 4 / Gap A — optional MemoryLifecycleManager
+        tool_policy=tool_policy,  # M2: UI 可调工具预算
         wake_store=get_wake_store(),  # A4: 会话挂起 / 唤醒注册
         context_window_resolver=_resolve_default_context_window,  # UX-IA R2-D 注入预算
     )

@@ -911,10 +911,14 @@ class SageAgent:
         return True, None
 
     def _effective_max_tool_calls_per_run(self) -> int:
-        """L7: 每-run 工具调用数上限（env ``SAGE_MAX_TOOL_CALLS_PER_RUN`` 可覆盖）。
+        """L7: 每-run 工具调用数上限。
 
-        默认取 ``self.tool_policy.max_tool_calls_per_run``（ToolPolicy 默认 25）。
-        env 非法值静默回退，本方法永不抛错。
+        优先级（高→低）：
+        1. env ``SAGE_MAX_TOOL_CALLS_PER_RUN``（CI/测试覆盖用）
+        2. ``OrchSettings.max_tool_calls_per_run``（UI 可调，持久化到 app_settings）
+        3. ``self.tool_policy.max_tool_calls_per_run``（ToolPolicy 默认 25）
+
+        env/UI 均非法或为 0 时回退 policy 默认；本方法永不抛错。
         """
         raw = os.environ.get("SAGE_MAX_TOOL_CALLS_PER_RUN", "").strip()
         if raw:
@@ -923,7 +927,17 @@ class SageAgent:
                 if value >= 1:
                     return value
             except ValueError:
-                logger.warning("env SAGE_MAX_TOOL_CALLS_PER_RUN=%r 非法,回退 policy 默认", raw)
+                logger.warning("env SAGE_MAX_TOOL_CALLS_PER_RUN=%r 非法,回退 orch/policy 默认", raw)
+        # UI 可调路径：从 app_settings 读 OrchSettings（SQLite，轻量）
+        try:
+            from backend.orchestration.orch_settings import load_orch_settings
+
+            orch = load_orch_settings()
+            orch_val = getattr(orch, "max_tool_calls_per_run", 0)
+            if isinstance(orch_val, int) and orch_val >= 1:
+                return orch_val
+        except Exception as exc:  # noqa: BLE001 — 读设置失败回落 tool_policy 默认
+            logger.debug("OrchSettings 读取失败，回落 tool_policy 默认: %s", exc)
         return int(getattr(self.tool_policy, "max_tool_calls_per_run", 25) or 25)
 
     def _compact_if_over_budget(
