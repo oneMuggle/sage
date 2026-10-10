@@ -1141,6 +1141,8 @@ async def extract_and_store_memory(
         # 用户画像类事实类别（extractor 产出）→ 路由到 store_profile。
         # environment（本机工具链事实）进画像后随 USER PROFILE 快照置顶注入，
         # 绕开 episodic recency/decay 限制（PR 环境记忆化）。
+        # F4 new→old 分类兼容：extractor 输出 user_pref（新分类），路由需
+        # 映射为 preference（UserProfileStore 接受的旧分类）。
         profile_categories = ("preference", "goal", "environment")
         # 结构性探测 store_profile（MemoryPort 协议外的扩展方法）:
         # 用**类级** hasattr（而非实例 getattr）—— 无 spec 的 Mock 在实例上
@@ -1151,7 +1153,16 @@ async def extract_and_store_memory(
             else None
         )
         for fact in facts:
-            category = fact.get("category", "fact")
+            category = fact.get("category", "project_fact")
+            # 防御：extractor 新分类 (user_pref / project_fact / decision /
+            # task_summary / cross_session_pattern) 与 UserProfileStore 接
+            # 受的旧分类 (preference / goal / environment) 不一致。将 user_pref
+            # 映射为 preference，让事实正确路由到画像库，避免画像库长期饥饿。
+            # 同时兼容 LLM 仍输出旧分类 "fact" / "preference" 的情况（F4
+            # normalize 双向防御），统一 remap 到 profile 可接受的词汇。
+            if category in ("user_pref", "fact"):
+                category = "preference"
+                fact["category"] = category
             if category in profile_categories and callable(store_profile):
                 pid = await store_profile(
                     content=fact["content"],
