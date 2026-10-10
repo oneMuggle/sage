@@ -14,7 +14,7 @@ export function SubagentLivePanel({ sessionId }: { sessionId: string | null | un
     const slots = selectSessionSlots(s, sessionId);
     return slots.streaming !== null && slots.streaming.state !== 'done';
   });
-  const terminalOpen = useTerminalPanelStore((s) => s.isOpen);
+  const terminalOpen = useTerminalPanelStore((s) => s.open);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {

@@ -25,7 +25,7 @@ export function RunSummaryPanel({ sessionId, onRerunFailed }: RunSummaryPanelPro
   const changes = useChangesListStore((s) => (sessionId ? s.bySession[sessionId] : undefined));
   const changesError = useChangesListStore((s) => (sessionId ? s.errors[sessionId] : undefined));
   const fetchChanges = useChangesListStore((s) => s.fetch);
-  const terminalOpen = useTerminalPanelStore((s) => s.isOpen);
+  const terminalOpen = useTerminalPanelStore((s) => s.open);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {

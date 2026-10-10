@@ -34,12 +34,8 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
-  FilePlus2,
-  FileText,
   Folder,
   Plus,
-  Save,
-  Trash2,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -57,7 +53,12 @@ import { formatRelativeTime } from '../../../shared/lib/utils';
 import { SiderSection } from '../SiderSection';
 import { TwoStepDelete } from '../TwoStepDelete';
 
-import { MaterialStatusBadge } from './MaterialStatusBadge';
+import {
+  FolderMinusIcon,
+  MessageDot,
+  ProjectMaterialsPanel,
+  ProjectOverviewPanel,
+} from './ProjectExpandedPanels';
 
 interface ProjectSectionProps {
   collapsed: boolean;
@@ -564,182 +565,6 @@ export function ProjectSection({
     ));
   };
 
-  /** P3 渲染: 概览面板 (description + instructions 编辑) */
-  const renderOverviewPanel = (project: ProjectSummary) => {
-    if (!expandedIds.has(project.id)) return null;
-    const draft = overviewDraft[project.id];
-    const saving = overviewSavingId === project.id;
-    return (
-      <div
-        className="ml-5 mr-1.5 mt-1 p-2 rounded border border-border/50 bg-bg/40"
-        data-testid="project-overview-panel"
-      >
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-ui-2xs text-muted uppercase tracking-wide">
-            {t('sider.project.overview_title')}
-          </span>
-          <button
-            type="button"
-            data-testid="project-overview-save"
-            disabled={!draft?.dirty || saving}
-            onClick={() => void handleOverviewSave(project)}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <Save className="w-3 h-3" aria-hidden="true" />
-            {saving ? t('sider.project.overview_saving') : t('sider.project.overview_save')}
-          </button>
-        </div>
-        <label className="block text-ui-2xs text-muted mb-0.5">
-          {t('sider.project.overview_description')}
-        </label>
-        <textarea
-          data-testid="project-overview-description"
-          value={draft?.description ?? ''}
-          onChange={(e) => handleOverviewDraftChange(project.id, 'description', e.target.value)}
-          rows={2}
-          className="w-full text-ui-2xs px-1.5 py-1 rounded border border-border bg-bg resize-y"
-          placeholder={t('sider.project.overview_description_placeholder')}
-        />
-        <label className="block text-ui-2xs text-muted mb-0.5 mt-1.5">
-          {t('sider.project.overview_instructions')}
-        </label>
-        <textarea
-          data-testid="project-overview-instructions"
-          value={draft?.instructions ?? ''}
-          onChange={(e) => handleOverviewDraftChange(project.id, 'instructions', e.target.value)}
-          rows={3}
-          className="w-full text-ui-2xs px-1.5 py-1 rounded border border-border bg-bg resize-y"
-          placeholder={t('sider.project.overview_instructions_placeholder')}
-        />
-      </div>
-    );
-  };
-
-  /** P3 渲染: 资料管理面板 */
-  const renderMaterialsPanel = (project: ProjectSummary) => {
-    if (!expandedIds.has(project.id)) return null;
-    const list = materials[project.id];
-    const isLoading = loadingMaterials.has(project.id) && !list;
-    const isAdding = addingMaterial.has(project.id);
-    const draftText = materialDraft[project.id] ?? '';
-    return (
-      <div
-        className="ml-5 mr-1.5 mt-1 p-2 rounded border border-border/50 bg-bg/40"
-        data-testid="project-materials-panel"
-      >
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-ui-2xs text-muted uppercase tracking-wide">
-            {t('sider.project.materials_title')}
-          </span>
-          <button
-            type="button"
-            data-testid="project-save-answer"
-            disabled={savingAnswerProjectId === project.id || !currentSessionId}
-            onClick={() => void handleSaveAnswerAsMaterial(project)}
-            title={
-              currentSessionId
-                ? t('sider.project.save_answer_title')
-                : t('sider.project.save_answer_no_session')
-            }
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <FilePlus2 className="w-3 h-3" aria-hidden="true" />
-            {t('sider.project.save_answer')}
-          </button>
-        </div>
-
-        {isLoading ? (
-          <div className="text-ui-2xs text-muted py-1" data-testid="project-materials-loading">
-            {t('sider.project.materials_loading')}
-          </div>
-        ) : list && list.length > 0 ? (
-          <ul className="space-y-1" data-testid="project-material-list">
-            {list.map((m) => (
-              <li
-                key={m.id}
-                data-testid="project-material-row"
-                data-status={m.status}
-                className="flex items-start gap-1.5 px-1.5 py-1 rounded bg-bg/60 border border-border/30"
-              >
-                <FileText className="w-3 h-3 mt-0.5 shrink-0 text-muted" aria-hidden="true" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 text-ui-2xs">
-                    <MaterialStatusBadge status={m.status} />
-                    <span className="text-muted truncate">
-                      {m.sourceMessageId
-                        ? t('sider.project.material_from_message').replace(
-                            '{id}',
-                            m.sourceMessageId,
-                          )
-                        : t('sider.project.material_direct')}
-                    </span>
-                    <span className="text-muted/60 tabular-nums ml-auto">
-                      {formatRelativeTime(m.createdAt)}
-                    </span>
-                  </div>
-                  {m.status === 'failed' && m.errorMessage && (
-                    <div
-                      className="text-ui-2xs text-warning mt-0.5 truncate"
-                      title={m.errorMessage}
-                      data-testid="project-material-error"
-                    >
-                      {m.errorMessage}
-                    </div>
-                  )}
-                  {m.status === 'ready' && m.content && (
-                    <div className="text-ui-2xs text-text-secondary mt-0.5 line-clamp-2">
-                      {m.content.slice(0, 120)}
-                      {m.content.length > 120 ? '…' : ''}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  data-testid="project-material-remove"
-                  aria-label={t('sider.project.material_remove')}
-                  disabled={removingMaterialId === m.id}
-                  onClick={() => void handleRemoveMaterial(project, m.id)}
-                  className="shrink-0 inline-flex items-center justify-center w-4 h-4 rounded text-muted hover:text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Trash2 className="w-3 h-3" aria-hidden="true" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="text-ui-2xs text-muted py-1" data-testid="project-materials-empty">
-            {t('sider.project.materials_empty')}
-          </div>
-        )}
-
-        <div className="mt-2 space-y-1">
-          <textarea
-            data-testid="project-material-input"
-            value={draftText}
-            onChange={(e) =>
-              setMaterialDraft((prev) => ({ ...prev, [project.id]: e.target.value }))
-            }
-            rows={3}
-            placeholder={t('sider.project.material_input_placeholder')}
-            className="w-full text-ui-2xs px-1.5 py-1 rounded border border-border bg-bg resize-y"
-          />
-          <div className="flex justify-end">
-            <button
-              type="button"
-              data-testid="project-material-add"
-              disabled={isAdding || !draftText.trim()}
-              onClick={() => void handleAddMaterial(project)}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-ui-2xs text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Plus className="w-3 h-3" aria-hidden="true" />
-              {t('sider.project.material_add')}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <SiderSection
       sectionKey="project"
@@ -883,8 +708,33 @@ export function ProjectSection({
                     </div>
                   </div>
                   {renderSubSessions(project)}
-                  {renderOverviewPanel(project)}
-                  {renderMaterialsPanel(project)}
+                  {expandedIds.has(project.id) && (
+                    <>
+                      <ProjectOverviewPanel
+                        project={project}
+                        draft={overviewDraft[project.id]}
+                        saving={overviewSavingId === project.id}
+                        onSave={(p) => void handleOverviewSave(p)}
+                        onChange={handleOverviewDraftChange}
+                      />
+                      <ProjectMaterialsPanel
+                        project={project}
+                        list={materials[project.id]}
+                        isLoading={loadingMaterials.has(project.id) && !materials[project.id]}
+                        isAdding={addingMaterial.has(project.id)}
+                        draftText={materialDraft[project.id] ?? ''}
+                        currentSessionId={currentSessionId}
+                        savingAnswer={savingAnswerProjectId === project.id}
+                        removingMaterialId={removingMaterialId}
+                        onSaveAnswer={(p) => void handleSaveAnswerAsMaterial(p)}
+                        onRemoveMaterial={(p, mid) => void handleRemoveMaterial(p, mid)}
+                        onDraftChange={(pid, text) =>
+                          setMaterialDraft((prev) => ({ ...prev, [pid]: text }))
+                        }
+                        onAddMaterial={(p) => void handleAddMaterial(p)}
+                      />
+                    </>
+                  )}
                 </div>
               );
             })
@@ -895,28 +745,3 @@ export function ProjectSection({
   );
 }
 
-/** 子行前缀圆点：层级指示，弱于图标避免与主行混淆 */
-function MessageDot() {
-  return (
-    <span className="w-1 h-1 rounded-full bg-current opacity-40 shrink-0" aria-hidden="true" />
-  );
-}
-
-/** 移除按钮图标：与 Folder 语义呼应，弱化"删除文件"的误读 */
-function FolderMinusIcon() {
-  return (
-    <svg
-      className="h-4 w-4"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
-      <path d="M9 13h6" />
-    </svg>
-  );
-}

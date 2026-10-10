@@ -37,3 +37,6 @@ export type { LightboxProps } from './Lightbox/Lightbox';
 // P1: 统一 Tooltip（radix）— 替代原生 title
 export { Tooltip } from './Tooltip/Tooltip';
 export type { TooltipProps } from './Tooltip/Tooltip';
+
+// UI-R2-P2-2: 二级页面统一 48px 顶栏
+export { PageHeader } from './PageHeader';
