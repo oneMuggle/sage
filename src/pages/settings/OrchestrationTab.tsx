@@ -240,6 +240,14 @@ export function OrchestrationTab() {
           value={settings.orch.maxRetryOfChains}
           onChange={(v) => setOrch({ maxRetryOfChains: v })}
         />
+        <NumberField
+          anchor="orch.maxToolCallsPerRun"
+          label="工具调用预算（次/run，0=不限）"
+          desc="单个 run 内工具调用总数上限（串行 + 并行累计），超限后本次 run 终止并归因 tool_budget_exceeded"
+          dataTestId="orch-max-tool-calls-per-run"
+          value={settings.orch.maxToolCallsPerRun}
+          onChange={(v) => setOrch({ maxToolCallsPerRun: v })}
+        />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">隔离与审批</h3>
