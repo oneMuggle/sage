@@ -112,6 +112,10 @@ export interface OrchSettings {
   // RD14 (round22): retry_of 重派链上限——同一任务被连续重派超过 N 次后
   // 拒绝再次重派，防失败计划 rerun 无限循环。
   maxRetryOfChains: number; // 10
+  // 单 run 工具调用总数守卫（串行路径 + 并行批次累计）。
+  // 与后端 ``OrchSettings.max_tool_calls_per_run`` camelCase 对齐。
+  // 默认 25；0 = 不限制。
+  maxToolCallsPerRun: number; // 25
   // Round 1 (2026-09-19) 计划前置: multi 拆解前的澄清+侦察总开关（默认开）。
   // 与后端 OrchSettings.plan_preflight_enabled camelCase 对齐。
   planPreflightEnabled: boolean; // true
@@ -202,6 +206,7 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   runWallClockLimitMinutes: 0,
   subagentTaskTimeoutS: 900,
   maxRetryOfChains: 10,
+  maxToolCallsPerRun: 25,
   planPreflightEnabled: true,
   planScoutEnabled: true,
 };

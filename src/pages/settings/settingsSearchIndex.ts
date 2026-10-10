@@ -319,6 +319,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'orch 编排 截断 字符 maxsubagentresultchars',
   },
   {
+    key: 'orch.maxToolCallsPerRun',
+    tab: 'orchestration',
+    label: '工具调用预算',
+    labelEn: 'Tool calls per run',
+    keywords: 'orch 编排 工具 调用 预算 maxtoolcallsperrun',
+  },
+  {
     key: 'orch.runTokenBudget',
     tab: 'orchestration',
     label: 'Run token 预算',
