@@ -1,4 +1,4 @@
-import type { OfficeDocumentSummary, ReferenceSpec } from './officeDocTypes';
+import type { OfficeDocumentSummary, ReferenceSpec } from '../types';
 
 export interface OfficeUpdateOp {
   op: string;

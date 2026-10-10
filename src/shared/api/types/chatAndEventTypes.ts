@@ -1,6 +1,5 @@
 import type { LLMErrorResponse } from '../../lib/errorMapping';
-
-import type { OfficeDocType } from './officeDocTypes';
+import type { OfficeDocType } from '../types';
 
 /**
  * Sage API - 类型定义
