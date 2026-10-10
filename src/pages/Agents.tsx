@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
 import { agentsApi, type AgentProfile, type AgentUpdate } from '../shared/api';
-import { Button } from '../shared/ui';
+import { Button, PageHeader } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { LoadingState } from '../shared/ui/LoadingState';
 import { RetryButton } from '../shared/ui/RetryButton';
@@ -71,30 +71,34 @@ export function Agents() {
   // 首次加载且失败 + 尚无数据：整页 ErrorState + 重试
   if (loading && agents.length === 0 && error) {
     return (
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-bold">Agent 管理</h1>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <PageHeader
+          title="Agent 管理"
+          actions={
             <Button variant="primary" onClick={loadAgents}>
               刷新
             </Button>
-          </div>
+          }
+        />
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-4xl mx-auto">
           <ErrorState
             title="Agent 列表加载失败"
             message={error}
             onRetry={loadAgents}
             retryLabel="重新加载"
           />
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Agent 管理</h1>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <PageHeader
+        title="Agent 管理"
+        actions={
           <div className="flex items-center gap-2">
             <Button variant="primary" onClick={loadAgents}>
               刷新
@@ -103,7 +107,10 @@ export function Agents() {
               <RetryButton onRetry={loadAgents} label="重试" className="!px-3 !py-1.5 !text-xs" />
             )}
           </div>
-        </div>
+        }
+      />
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-4xl mx-auto">
 
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-error/10 text-error text-sm flex items-center justify-between">
@@ -163,6 +170,7 @@ export function Agents() {
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

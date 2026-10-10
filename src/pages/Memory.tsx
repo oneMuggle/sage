@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 
 import { memoryApi } from '../shared/api';
 import type { Memory } from '../shared/api/types';
+import { PageHeader } from '../shared/ui';
 import { ErrorState } from '../shared/ui/ErrorState';
 import { MemoryBrowser, NewMemoryModal, ProjectProfileCard, UserProfileCard } from '../widgets/memory';
 
@@ -78,10 +79,11 @@ export function Memory() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-5">
-      <div className="flex items-center justify-between mb-5">
-        <h2 className="text-ui-xl font-semibold text-text">记忆库</h2>
-        <div className="flex gap-2">
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <PageHeader
+        title="记忆库"
+        actions={
+          <div className="flex gap-2">
           <button
             data-testid="memory-add"
             onClick={handleNewMemory}
@@ -98,8 +100,10 @@ export function Memory() {
             <Download className="w-3.5 h-3.5" />
             {exporting ? '导出中...' : '导出'}
           </button>
-        </div>
-      </div>
+          </div>
+        }
+      />
+      <div className="flex-1 overflow-y-auto p-5">
 
       {exportError && (
         <div className="mb-4">
@@ -128,6 +132,7 @@ export function Memory() {
       <ProjectProfileCard />
 
       <MemoryBrowser initialType="all" refreshKey={refreshKey} focusMemoryId={focusMemoryId} />
+      </div>
     </div>
   );
 }
