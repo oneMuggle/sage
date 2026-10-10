@@ -467,11 +467,6 @@ def test_git_status_repo(client, tmp_path: Path) -> None:
 
 
 
-# ---------------------------------------------------------------------------
-# 多项目形态组织脚手架 (coding / business / research)
-# ---------------------------------------------------------------------------
-
-
 def test_scaffold_business_archive_project(client, tmp_path: Path) -> None:
     dossier_dir = tmp_path / "dossier-2026"
     dossier_dir.mkdir()
