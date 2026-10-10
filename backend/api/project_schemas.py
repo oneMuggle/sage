@@ -67,11 +67,17 @@ class ProjectMaterialModel(BaseModel):
     wiki_page_path: Optional[str]
     error_message: Optional[str]
     created_at: int
+    enabled: bool = True
 
 
 class ProjectMaterialsResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     materials: List[ProjectMaterialModel]
+
+
+class ProjectMaterialUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
 
 
 class MaterialMutationResponse(BaseModel):
@@ -279,3 +285,55 @@ class ProjectScaffoldResponse(BaseModel):
     seeded_milestones_count: int = 0
     recommended_templates: List[str] = Field(default_factory=list)
     project_stage: Optional[str] = None
+
+
+class ProjectContextBudgetResponse(BaseModel):
+    """项目五层受控上下文水位统计响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+    project_id: str
+    l1_conventions_chars: int = 0
+    l2_metadata_chars: int = 0
+    l2_constraints_chars: int = 0
+    l3_profile_chars: int = 0
+    l4_materials_chars: int = 0
+    total_chars: int = 0
+    cap_chars: int = 16000
+    per_file_cap_chars: int = 8000
+    usage_ratio: float = 0.0
+    active_materials_count: int = 0
+    total_materials_count: int = 0
+    enabled_constraints_count: int = 0
+
+
+class WorkspaceArtifactItemModel(BaseModel):
+    """工作区扫描出的文书/科研资产条目。"""
+
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    relative_path: str
+    ext: str
+    category: str
+    size_bytes: int
+    modified_at: int
+
+
+class WorkspaceDirectorySummaryModel(BaseModel):
+    """工作区一级子目录文件统计。"""
+
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    file_count: int
+
+
+class ProjectWorkspaceOverviewResponse(BaseModel):
+    """多形态项目工作区资产与环境概览响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+    project_id: str
+    has_sage_md: bool = False
+    has_hooks_json: bool = False
+    coding_indicators: List[str] = Field(default_factory=list)
+    office_deliverables: List[WorkspaceArtifactItemModel] = Field(default_factory=list)
+    research_artifacts: List[WorkspaceArtifactItemModel] = Field(default_factory=list)
+    directory_summary: List[WorkspaceDirectorySummaryModel] = Field(default_factory=list)

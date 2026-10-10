@@ -522,3 +522,45 @@ def test_scaffold_research_project(client, tmp_path: Path) -> None:
         "04_submission_and_rebuttal",
     }
     assert "零幻觉引用铁律" in (lab_dir / "SAGE.md").read_text(encoding="utf-8")
+
+
+def test_material_toggle_context_budget_and_workspace_overview(
+    client, tmp_path: Path
+) -> None:
+    ws_dir = tmp_path / "polymorphic-ws"
+    ws_dir.mkdir()
+    (ws_dir / "SAGE.md").write_text("# 项目宪法\n遵守规范", encoding="utf-8")
+    (ws_dir / "01_literature").mkdir()
+    (ws_dir / "01_literature" / "refs.bib").write_text("@article{k2026}", encoding="utf-8")
+    (ws_dir / "03_定稿与签批归档").mkdir()
+    (ws_dir / "03_定稿与签批归档" / "report.docx").write_bytes(b"PK\x03\x04dummy")
+
+    pid = _register(client, ws_dir)["id"]
+    mat = client.post(
+        f"/projects/{pid}/materials",
+        json={"content": "核心文献摘要：Transformer 架构与注意力机制"},
+    ).json()
+    assert mat["enabled"] is True
+
+    budget1 = client.get(f"/projects/{pid}/context-budget").json()
+    assert budget1["active_materials_count"] == 1
+    assert budget1["total_materials_count"] == 1
+    assert budget1["l1_conventions_chars"] > 0
+    assert budget1["l4_materials_chars"] > 0
+
+    patched = client.patch(
+        f"/projects/{pid}/materials/{mat['id']}",
+        json={"enabled": False},
+    )
+    assert patched.status_code == 200
+    assert patched.json()["enabled"] is False
+
+    budget2 = client.get(f"/projects/{pid}/context-budget").json()
+    assert budget2["active_materials_count"] == 0
+    assert budget2["total_materials_count"] == 1
+    assert budget2["l4_materials_chars"] == 0
+
+    overview = client.get(f"/projects/{pid}/workspace-overview").json()
+    assert overview["has_sage_md"] is True
+    assert any(item["name"] == "report.docx" for item in overview["office_deliverables"])
+    assert any(item["name"] == "refs.bib" for item in overview["research_artifacts"])

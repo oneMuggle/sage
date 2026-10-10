@@ -276,6 +276,8 @@ def build_project_materials_block(materials: List[ProjectMaterial]) -> str:
     used = 0
     excluded = 0
     for material in materials:
+        if not getattr(material, "enabled", True):
+            continue
         if not material.content:
             continue
         # 预算耗尽 → 后续全部排除

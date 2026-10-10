@@ -51,3 +51,6 @@ export type { MilestoneEditorProps } from './MilestoneEditor';
 
 export { ProjectArchetypeStudio } from './ProjectArchetypeStudio';
 export type { ProjectArchetypeStudioProps } from './ProjectArchetypeStudio';
+
+export { PolymorphicArchetypeCards } from './PolymorphicArchetypeCards';
+export type { PolymorphicArchetypeCardsProps } from './PolymorphicArchetypeCards';
