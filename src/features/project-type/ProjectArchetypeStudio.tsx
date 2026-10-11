@@ -688,6 +688,14 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
             <StudioCharterTabPanel
               projectId={activeProject.id}
               projectPath={activeProject.path}
+              projectType={activeProjectType}
+              initialDescription={activeProject.description}
+              initialInstructions={activeProject.instructions}
+              onMetadataUpdated={(patch) => {
+                setProjects((prev) =>
+                  prev.map((p) => (p.id === activeProject.id ? { ...p, ...patch } : p)),
+                );
+              }}
             />
           )}
 
