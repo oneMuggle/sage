@@ -266,3 +266,16 @@
 | **Phase P4** | 1. 代码项目环境满足度、测试命令与 `.sage/hooks.json` 诊断接口 (`GET /api/v1/projects/{id}/diagnose`) + IPC 桥接与 `PolymorphicArchetypeCards` 环境诊断面板<br>2. 项目概览展开面板挂载 `ProjectOverviewWidgets`（`GitStatusWidget` + `ConstraintSummaryWidget` + `MilestoneProgressWidget`）<br>3. 一般档案项目 (`business`) 审校口径与合规结论固化录入器（注入 L3 项目画像） | `backend/services/project_workspace_inspector.py`、`backend/api/project_routes.py`、`electron/commandRoutes/projects.ts`、`src/features/project-type/PolymorphicArchetypeCards.tsx`、`src/widgets/sidebar/sections/ProjectExpandedPanels.tsx` | 已完成 (PR #1944 / #1945) |
 | **Phase P5** | 1. 工作台独立 **L3 项目记忆画像 (`MEMORY.md`)** 治理标签页 (`studio-tab-profile`，支持按项目路径过滤、五类画像条目创建与删除）<br>2. `ProjectMaterialsPanel` 工作区相对路径文件一键入库栏 (`project-material-file-input` + `project-material-file-add`)<br>3. 个人知识空间 (`personal`) 卡片盒双链与 GTD 规则包 (`concise_note_taking`) 及四分目录 (`00_inbox` ~ `03_archive`) 与长期偏好录入器 | `backend/data/project_constraint_repo.py`、`src/features/project-type/archetypeBlueprints.ts`、`src/features/project-type/ProjectArchetypeStudio.tsx`、`src/features/project-type/PolymorphicArchetypeCards.tsx`、`src/widgets/sidebar/sections/ProjectExpandedPanels.tsx` | 已完成 (PR #1946 / #1947) |
 | **Phase P6** | 1. 双轨版本控制模式切换 (`PATCH /projects/{id}` 支持 `vcs_mode: git | builtin` + `studio-vcs-mode-select`) 与内置检查点快照统计探测 (`.sage/checkpoints` `checkpoint_count` / `latest_checkpoint_at` + `vcs-checkpoint-status`)<br>2. 科研与一般档案项目截稿/交稿日倒计时与逾期预警胶囊 (`project-deadline-capsule`)<br>3. 表五预设约束模板名全量对齐 (`typescript_strict` / `architecture_guard` / `contract_compliance` / `citation_zero_hallucination` / `nsfc_grant_style`) | `backend/data/project_repo.py`、`backend/api/project_schemas.py`、`backend/api/project_routes.py`、`backend/services/project_workspace_inspector.py`、`backend/data/project_constraint_repo.py`、`electron/commandRoutes/projects.ts`、`src/features/project-type/ProjectArchetypeStudio.tsx`、`src/features/project-type/PolymorphicArchetypeCards.tsx` | 已完成 |
+
+### Phase P11：L2 项目目标与显式系统指令编辑 + 内置快照内容预览（已完成）
+
+- **交付内容**：
+  - **后端快照增强与详情查询 (`backend/services/project_workspace_inspector.py`, `backend/api/project_routes.py`)**：
+    - 升级 `create_project_checkpoint(project, label)`，除 `SAGE.md` 与形态标准产物外，自动扫描工作区根目录及一级子目录中的 `.md` / `.txt` 文稿纳入内置版本快照；
+    - 新增 `get_project_checkpoint_detail(project, checkpoint_id)` 与 `GET /api/v1/projects/{project_id}/checkpoints/{checkpoint_id}` (`WorkspaceCheckpointDetailResponse`)，返回检查点跟踪文件列表与已保存的文本快照字典 (`snapshots`)；
+  - **IPC 与前端 API 桥接 (`electron/commandRoutes/projects.ts`, `src/shared/api/projectApi.ts`)**：
+    - 新增 `projects_get_checkpoint` IPC 路由与 `projectApi.getCheckpoint(projectId, checkpointId)`；
+    - 将约束/里程碑 Wire 映射 (`mapConstraint` / `mapMilestone`) 收敛至 `src/shared/api/projectApiTypes.ts`，确保 `src/shared/api/projectApi.ts` 保持在 800 行架构水位红线以下；
+  - **前端内置快照预览与 L2 元数据治理 (`BuiltinCheckpointAndStyleBar.tsx`, `StudioMaterialsAndProfilePanels.tsx`, `ProjectArchetypeStudio.tsx`)**：
+    - 在内置版本快照栏 (`BuiltinCheckpointAndStyleBar`) 每个检查点行新增 **`[预览快照]`** 按钮，点击即可展开查看该快照包含的文本快照份数与各文件正文摘要；
+    - 在「项目总纲 (`SAGE.md`)」标签页 (`StudioCharterTabPanel`) 下方新增 **L2 项目目标 (`description`) 与高优系统指令 (`instructions`)** 编辑面板，支持按当前项目形态一键填入推荐系统提示词指令并直接调用 `projectApi.update` 持久化，打通五层上下文管线 L1 + L2 的完整在线配置闭环。
