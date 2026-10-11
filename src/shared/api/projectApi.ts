@@ -263,6 +263,7 @@ export const projectApi = {
         active_materials_count: number;
         total_materials_count: number;
         enabled_constraints_count: number;
+        synthesized_preview?: string;
       }>('projects_context_budget', { projectId });
       return {
         projectId: raw.project_id,
@@ -278,6 +279,7 @@ export const projectApi = {
         activeMaterialsCount: raw.active_materials_count ?? 0,
         totalMaterialsCount: raw.total_materials_count ?? 0,
         enabledConstraintsCount: raw.enabled_constraints_count ?? 0,
+        synthesizedPreview: raw.synthesized_preview ?? '',
       };
     } catch (error) {
       throw handleApiError(error);

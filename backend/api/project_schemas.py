@@ -316,6 +316,7 @@ class ProjectContextBudgetResponse(BaseModel):
     active_materials_count: int = 0
     total_materials_count: int = 0
     enabled_constraints_count: int = 0
+    synthesized_preview: str = ""
 
 
 class WorkspaceArtifactItemModel(BaseModel):

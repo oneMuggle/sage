@@ -279,3 +279,14 @@
   - **前端内置快照预览与 L2 元数据治理 (`BuiltinCheckpointAndStyleBar.tsx`, `StudioMaterialsAndProfilePanels.tsx`, `ProjectArchetypeStudio.tsx`)**：
     - 在内置版本快照栏 (`BuiltinCheckpointAndStyleBar`) 每个检查点行新增 **`[预览快照]`** 按钮，点击即可展开查看该快照包含的文本快照份数与各文件正文摘要；
     - 在「项目总纲 (`SAGE.md`)」标签页 (`StudioCharterTabPanel`) 下方新增 **L2 项目目标 (`description`) 与高优系统指令 (`instructions`)** 编辑面板，支持按当前项目形态一键填入推荐系统提示词指令并直接调用 `projectApi.update` 持久化，打通五层上下文管线 L1 + L2 的完整在线配置闭环。
+
+### Phase P12：五层受控上下文合成预览 (`synthesized_preview`) + 阶段一键推进与跨形态 Git 联动（已完成）
+
+- **交付内容**：
+  - **后端五层合成上下文组装 (`backend/services/project_workspace_inspector.py`, `backend/api/project_schemas.py`)**：
+    - 升级 `inspect_project_context_budget(project)`，在统计五层字符水位的同时，按 `[L1 · SAGE.md 本地规约]`、`[L2 · 项目目标、系统指令与强约束]`、`[L3 · 项目演化画像]`、`[L4 · 受控置顶资料池]` 与 `[L5 · 跨目录只读白名单]` 组装完整合成预览文本 `synthesized_preview` 并随 `GET /api/v1/projects/{project_id}/context-budget` 返回；
+  - **前端五层合成上下文透视抽屉 (`PolymorphicArchetypeCards.tsx`, `projectApi.ts`)**：
+    - 在五层上下文注入预算水位卡头部新增 **`[预览合成上下文]`** 开关（`toggle-synthesized-context-preview`），展开后直接透视每轮会话注入 LLM System Prompt 的完整五层规约与资料合成内容，并支持 **`[复制合成上下文]`**（`copy-synthesized-context-btn`）；
+  - **项目生命周期阶段一键推进与跨形态 Git 联动 (`ProjectArchetypeStudio.tsx`, `ProjectOverviewWidgets.tsx`)**：
+    - 在项目治理头部阶段选择器旁新增 **`[推进至「下一阶段」→]`** 快捷按钮（`studio-advance-stage-btn`），支持按当前形态生命周期管线顺次推进项目阶段；
+    - 升级 `ProjectOverviewWidgets`，当非代码项目（如科研手稿或大型档案工程）将版本控制切换为 `vcsMode === 'git'` 时，同样自动挂载 `GitStatusWidget` 展示实时分支与未提交变更。
