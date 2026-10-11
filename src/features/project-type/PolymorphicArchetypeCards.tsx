@@ -122,7 +122,7 @@ export function PolymorphicArchetypeCards({
     try {
       await memoryApi.createProjectProfile(fullContent, {
         projectKey: project.path,
-        category: projectType === 'research' ? researchCategory : 'decision',
+        category: projectType === 'research' ? researchCategory : projectType === 'personal' ? 'note' : 'decision',
         importance: 5,
       });
       setDecisionInput('');
@@ -633,25 +633,54 @@ export function PolymorphicArchetypeCards({
       )}
 
       {projectType === 'personal' && (
-        <Card className="p-4 space-y-2.5" data-testid="polymorphic-card-personal">
-          <div className="flex items-center gap-2">
-            <Layers className="h-4 w-4 text-amber-500" />
-            <h3 className="text-xs font-semibold text-foreground">
-              个人知识空间工作台 · 笔记目录与想法沉淀
-            </h3>
+        <Card className="p-4 space-y-3" data-testid="polymorphic-card-personal">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-amber-500" />
+              <h3 className="text-xs font-semibold text-foreground">
+                个人知识空间工作台 · 卡片盒目录与长期偏好沉淀
+              </h3>
+            </div>
+            <span className="text-ui-2xs text-muted-foreground">
+              已沉淀 {decisions.length} 条个人知识偏好
+            </span>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {['notes', 'clippings', 'outputs'].map((dir) => {
+            {['00_inbox', '01_notes', '02_references', '03_archive'].map((dir) => {
               const found = overview?.directorySummary.find((d) => d.name === dir);
               return (
                 <span
                   key={dir}
                   className="rounded border border-border bg-muted/30 px-2.5 py-1 font-mono text-xs text-foreground"
                 >
-                  {dir}/ ({found ? `${found.fileCount} 项` : '待创建'})
+                  {dir}/ ({found ? `${found.fileCount} 项` : '待初始化'})
                 </span>
               );
             })}
+          </div>
+          <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2">
+            <div className="text-xs font-medium text-foreground">
+              个人写作偏好与常驻卡片约定 (注入 L3 项目画像)
+            </div>
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={decisionInput}
+                onChange={(e) => setDecisionInput(e.target.value)}
+                placeholder="记录个人写作风格或分类约定（如：读书笔记默认按「核心论点-金句摘录-行动启发」三段式整理）"
+                className="flex-1 rounded border border-input bg-background px-2 py-1 text-xs"
+                data-testid="personal-note-input"
+              />
+              <Button
+                size="sm"
+                onClick={() => void handleAddDecision()}
+                disabled={!decisionInput.trim() || savingDecision}
+                data-testid="personal-note-add"
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                沉淀偏好
+              </Button>
+            </div>
           </div>
         </Card>
       )}
