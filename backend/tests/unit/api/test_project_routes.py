@@ -673,3 +673,28 @@ def test_create_project_checkpoint_and_timeline(client, ws_dir: Path):
     ov = ov_resp.json()
     assert ov["checkpoint_count"] >= 1
     assert any(item["label"] == "法务终审前版本快照" for item in ov["recent_checkpoints"])
+
+
+def test_restore_project_checkpoint_and_coding_hooks_scaffold(client, ws_dir: Path):
+    """POST /projects/{id}/checkpoints/{cid}/restore 还原快照文件；coding 脚手架自动创建 .sage/hooks.json。"""
+    (ws_dir / "SAGE.md").write_text("# 初始规范 v1", encoding="utf-8")
+    pid = _register(client, ws_dir)["id"]
+
+    cp_resp = client.post(f"/projects/{pid}/checkpoints", json={"label": "v1 规范备份"})
+    assert cp_resp.status_code == 201
+    cid = cp_resp.json()["id"]
+
+    (ws_dir / "SAGE.md").write_text("# 被修改后的规范 v2", encoding="utf-8")
+    restore_resp = client.post(f"/projects/{pid}/checkpoints/{cid}/restore")
+    assert restore_resp.status_code == 200
+    restored = restore_resp.json()
+    assert "SAGE.md" in restored["restored_files"]
+    assert (ws_dir / "SAGE.md").read_text(encoding="utf-8") == "# 初始规范 v1"
+
+    sc_resp = client.post(
+        f"/projects/{pid}/scaffold",
+        json={"project_type": "coding", "create_directories": True, "create_sage_md": True},
+    )
+    assert sc_resp.status_code == 200
+    assert (ws_dir / ".sage" / "hooks.json").is_file()
+    assert (ws_dir / ".sage" / "checkpoints").is_dir()

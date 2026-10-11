@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 import time
@@ -524,6 +525,20 @@ def create_project_checkpoint(project: Project, label: str = "") -> Dict[str, An
     ]
     if (root / "SAGE.md").is_file():
         tracked_files.insert(0, "SAGE.md")
+    snapshots: Dict[str, str] = {}
+    text_exts = {".md", ".tex", ".bib", ".txt", ".json", ".csv"}
+    for rel_path in tracked_files[:20]:
+        candidate = (root / rel_path).resolve()
+        try:
+            candidate.relative_to(root.resolve())
+        except ValueError:
+            continue
+        if candidate.is_file() and candidate.suffix.lower() in text_exts:
+            try:
+                if candidate.stat().st_size <= 32768:
+                    snapshots[rel_path] = candidate.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
     cp_dir = root / ".sage" / "checkpoints"
     cp_dir.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -533,6 +548,7 @@ def create_project_checkpoint(project: Project, label: str = "") -> Dict[str, An
         "created_at": now_ms,
         "file_count": len(tracked_files),
         "files": tracked_files[:50],
+        "snapshots": snapshots,
     }
     (cp_dir / f"{cp_id}.json").write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
@@ -543,4 +559,48 @@ def create_project_checkpoint(project: Project, label: str = "") -> Dict[str, An
         "label": clean_label,
         "created_at": now_ms,
         "file_count": len(tracked_files),
+    }
+
+
+def restore_project_checkpoint(project: Project, checkpoint_id: str) -> Dict[str, Any]:
+    """从项目工作区 .sage/checkpoints 还原指定版本快照中的文本与规范文件。"""
+    root = Path(project.path)
+    if not root.is_dir():
+        raise ValueError("项目目录不存在")
+    clean_cid = (checkpoint_id or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", clean_cid):
+        raise ValueError("无效的检查点 ID")
+    cp_file = root / ".sage" / "checkpoints" / f"{clean_cid}.json"
+    if not cp_file.is_file():
+        raise FileNotFoundError(f"检查点不存在: {clean_cid}")
+    try:
+        raw_cp = json.loads(cp_file.read_text(encoding="utf-8", errors="ignore"))
+    except (OSError, ValueError, TypeError) as exc:
+        raise ValueError("检查点元数据损坏") from exc
+    if not isinstance(raw_cp, dict):
+        raise ValueError("检查点格式无效")
+    snapshots = raw_cp.get("snapshots")
+    restored_files: List[str] = []
+    root_resolved = root.resolve()
+    if isinstance(snapshots, dict):
+        for rel_path, content in snapshots.items():
+            if not isinstance(rel_path, str) or not isinstance(content, str):
+                continue
+            target = (root_resolved / rel_path).resolve()
+            try:
+                target.relative_to(root_resolved)
+            except ValueError:
+                continue
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content, encoding="utf-8")
+                restored_files.append(rel_path)
+            except OSError:
+                continue
+    now_ms = int(time.time() * 1000)
+    return {
+        "id": str(raw_cp.get("id") or clean_cid),
+        "label": str(raw_cp.get("label") or clean_cid),
+        "restored_files": restored_files,
+        "restored_at": now_ms,
     }

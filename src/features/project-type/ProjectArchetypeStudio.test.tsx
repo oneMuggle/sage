@@ -13,6 +13,8 @@ const mockGetWorkspaceOverview = vi.fn();
 const mockAddMaterialFromFile = vi.fn();
 const mockDiagnose = vi.fn();
 const mockCreateCheckpoint = vi.fn();
+const mockRestoreCheckpoint = vi.fn();
+const mockListMaterials = vi.fn();
 const mockCreateConstraint = vi.fn();
 const mockCreateMilestone = vi.fn();
 const mockGetProjectProfile = vi.fn();
@@ -33,6 +35,8 @@ vi.mock('../../shared/api', () => ({
     addMaterialFromFile: (...args: unknown[]) => mockAddMaterialFromFile(...args),
     diagnose: (...args: unknown[]) => mockDiagnose(...args),
     createCheckpoint: (...args: unknown[]) => mockCreateCheckpoint(...args),
+    restoreCheckpoint: (...args: unknown[]) => mockRestoreCheckpoint(...args),
+    listMaterials: (...args: unknown[]) => mockListMaterials(...args),
     createConstraint: (...args: unknown[]) => mockCreateConstraint(...args),
     createMilestone: (...args: unknown[]) => mockCreateMilestone(...args),
   },
@@ -102,6 +106,14 @@ beforeEach(() => {
     hasSageMd: true,
     hasHooksJson: false,
     codingIndicators: ['package.json', 'pyproject.toml'],
+    recentCheckpoints: [
+      {
+        id: 'cp_1',
+        label: '初稿备份',
+        createdAt: 1500,
+        fileCount: 2,
+      },
+    ],
     officeDeliverables: [
       {
         name: '采购合同审阅意见书.docx',
@@ -296,6 +308,10 @@ describe('ProjectArchetypeStudio', () => {
     await waitFor(() => {
       expect(mockCreateCheckpoint).toHaveBeenCalledWith('proj-1', '法务二审定稿前备份');
     });
+    fireEvent.click(screen.getByTestId('restore-checkpoint-cp_1'));
+    await waitFor(() => {
+      expect(mockRestoreCheckpoint).toHaveBeenCalledWith('proj-1', 'cp_1');
+    });
 
     // Switch active project archetype to research
     const typeSelect = screen.getByLabelText('切换项目形态');
@@ -338,6 +354,19 @@ describe('ProjectArchetypeStudio', () => {
           priority: 8,
         }),
       );
+    });
+
+    // Switch to L4 Controlled Materials tab and import a file
+    fireEvent.click(screen.getByTestId('studio-tab-materials'));
+    await waitFor(() => {
+      expect(screen.getByTestId('project-materials-studio-panel')).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByTestId('studio-material-file-input'), {
+      target: { value: '01_literature/references.bib' },
+    });
+    fireEvent.click(screen.getByTestId('studio-material-file-add'));
+    await waitFor(() => {
+      expect(mockAddMaterialFromFile).toHaveBeenCalledWith('proj-1', '01_literature/references.bib');
     });
 
     // Switch to Milestones tab and seed recommended milestones for the active archetype
