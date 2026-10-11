@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator, List, Optional, Tuple, Union
@@ -311,6 +312,59 @@ def build_project_materials_block(materials: List[ProjectMaterial]) -> str:
     return "\n".join(parts)
 
 
+
+_FILE_TOKEN_RE = re.compile(
+    r"(?:[\w./\\-]+\.(?:py|ts|tsx|js|jsx|rs|go|java|cpp|c|h|md|txt|json|yaml|yml|toml|docx|xlsx|pptx|pdf|bib|tex|ipynb|csv|tsv|sql|sh))"
+)
+
+STAGE_MILESTONES_HEADER = "项目形态与阶段目标:"
+
+
+def extract_active_files_from_text(text: Optional[str]) -> List[str]:
+    """从用户消息文本中提取提及的文件名或相对路径，用于动态匹配 trigger_pattern。"""
+    if not text:
+        return []
+    matches = _FILE_TOKEN_RE.findall(text)
+    seen: List[str] = []
+    for item in matches:
+        cleaned = item.strip().replace("\\", "/")
+        if cleaned and cleaned not in seen:
+            seen.append(cleaned)
+    return seen
+
+
+def build_project_stage_milestones_block(project: Optional[Project]) -> str:
+    """渲染项目形态 (project_type)、当前阶段 (project_stage) 与活跃里程碑摘要。"""
+    if project is None:
+        return ""
+    project_id = getattr(project, "id", None)
+    project_type = getattr(project, "project_type", None) or getattr(project, "detected_type", None)
+    project_stage = getattr(project, "project_stage", None)
+    lines: List[str] = []
+    if project_type or project_stage:
+        meta_parts: List[str] = []
+        if project_type:
+            meta_parts.append(f"type={project_type}")
+        if project_stage:
+            meta_parts.append(f"stage={project_stage}")
+        lines.append("当前项目状态: " + ", ".join(meta_parts))
+    if project_id:
+        try:
+            from backend.data.project_milestone_repo import ProjectMilestoneRepository
+
+            milestones = ProjectMilestoneRepository().list_by_project(project_id)
+            active_ms = [
+                m for m in milestones if getattr(m, "status", "pending") in ("in_progress", "pending")
+            ][:5]
+            if active_ms:
+                ms_summary = "; ".join(f"[{m.status}] {m.title}" for m in active_ms)
+                lines.append(f"近期阶段里程碑: {ms_summary}")
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("build_project_stage_milestones_block skip: %s", exc)
+    if not lines:
+        return ""
+    return STAGE_MILESTONES_HEADER + "\n" + "\n".join(lines)
+
 CONSTRAINTS_HEADER = "项目约束 (行为指导规则):"
 
 
@@ -349,8 +403,13 @@ def build_constraints_block(
         parts: List[str] = [CONSTRAINTS_HEADER]
         used = 0
         for c in constraints:
-            # 单条约束格式 —— 类别标签 + 正文内容
-            line = f"[{c.category}] {c.content}"
+            # 单条约束格式 —— 类别标签 + 触发范围 + 正文内容
+            scope_note = (
+                f" ({c.trigger_pattern})"
+                if c.trigger_pattern and c.trigger_pattern not in ("always", "*")
+                else ""
+            )
+            line = f"[{c.category}]{scope_note} {c.content}"
             if used + len(line) > TOTAL_CHAR_CAP:
                 parts.append("(另有约束超出预算被省略)")
                 break
@@ -373,7 +432,10 @@ __all__ = [
     "SOURCE_CLAUDE_MD",
     "SOURCE_SAGE_MD",
     "TOTAL_CHAR_CAP",
+    "STAGE_MILESTONES_HEADER",
     "build_constraints_block",
+    "build_project_stage_milestones_block",
+    "extract_active_files_from_text",
     "build_project_materials_block",
     "build_project_metadata_block",
     "discover_project_context",

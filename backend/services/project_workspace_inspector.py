@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -260,3 +261,106 @@ __all__ = [
     "inspect_project_context_budget",
     "inspect_project_workspace_overview",
 ]
+
+
+def extract_workspace_file_as_material_content(
+    workspace_root: Path, relative_path: str
+) -> str:
+    """安全读取工作区内指定相对路径文件并提取为可注入受控资料池的文本。
+
+    支持纯文本/代码/Markdown/BibTeX/LaTeX/CSV、Jupyter Notebook (.ipynb)
+    以及 Office 文档 (.docx / .xlsx / .pptx) 的结构化文本提取。
+    拒绝任何越界路径或符号链接逃逸。
+    """
+    clean_rel = (relative_path or "").strip().replace("\\", "/").lstrip("/")
+    if not clean_rel or ".." in clean_rel.split("/"):
+        raise ValueError("非法的相对路径")
+
+    root_real = Path(os.path.realpath(str(workspace_root)))
+    candidate = root_real / clean_rel
+    resolved = Path(os.path.realpath(str(candidate)))
+
+    try:
+        resolved.relative_to(root_real)
+    except ValueError as exc:
+        raise ValueError("文件路径越界，仅允许读取项目工作区内部文件") from exc
+
+    if not resolved.is_file():
+        raise FileNotFoundError(f"文件不存在: {clean_rel}")
+
+    ext = resolved.suffix.lower()
+    extracted = ""
+
+    if ext == ".docx":
+        try:
+            import docx  # type: ignore[import-not-found]
+
+            doc = docx.Document(str(resolved))
+            paras = [p.text.strip() for p in doc.paragraphs if p.text and p.text.strip()]
+            extracted = "\n".join(paras)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("docx extract fallback for %s: %s", clean_rel, exc)
+            extracted = f"[Word 文档: {clean_rel}, 大小: {resolved.stat().st_size} 字节]"
+    elif ext == ".xlsx":
+        try:
+            import openpyxl  # type: ignore[import-not-found]
+
+            wb = openpyxl.load_workbook(str(resolved), read_only=True, data_only=True)
+            sheet_lines: List[str] = []
+            for sheet_name in wb.sheetnames[:5]:
+                ws = wb[sheet_name]
+                sheet_lines.append(f"### 工作表: {sheet_name}")
+                for row in list(ws.iter_rows(values_only=True))[:40]:
+                    vals = [str(cell) if cell is not None else "" for cell in row]
+                    if any(vals):
+                        sheet_lines.append(" | ".join(vals))
+            wb.close()
+            extracted = "\n".join(sheet_lines)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("xlsx extract fallback for %s: %s", clean_rel, exc)
+            extracted = f"[Excel 表格: {clean_rel}, 大小: {resolved.stat().st_size} 字节]"
+    elif ext == ".pptx":
+        try:
+            import pptx  # type: ignore[import-not-found]
+
+            prs = pptx.Presentation(str(resolved))
+            slide_lines: List[str] = []
+            for idx, slide in enumerate(prs.slides, start=1):
+                texts = [
+                    shape.text.strip()
+                    for shape in slide.shapes
+                    if getattr(shape, "has_text_frame", False) and shape.text.strip()
+                ]
+                if texts:
+                    slide_lines.append(f"### Slide {idx}\n" + "\n".join(texts))
+            extracted = "\n".join(slide_lines)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("pptx extract fallback for %s: %s", clean_rel, exc)
+            extracted = f"[PPT 演示文稿: {clean_rel}, 大小: {resolved.stat().st_size} 字节]"
+    elif ext == ".ipynb":
+        try:
+            nb = json.loads(resolved.read_text(encoding="utf-8", errors="replace"))
+            cell_lines: List[str] = []
+            for cell in nb.get("cells", [])[:40]:
+                ctype = cell.get("cell_type", "code")
+                src = "".join(cell.get("source", [])).strip()
+                if src:
+                    cell_lines.append(f"[{ctype}]\n{src}")
+            extracted = "\n\n".join(cell_lines)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("ipynb extract fallback for %s: %s", clean_rel, exc)
+            extracted = resolved.read_text(encoding="utf-8", errors="replace")
+    elif ext == ".pdf":
+        extracted = f"[PDF 文献/案卷: {clean_rel}, 大小: {resolved.stat().st_size} 字节]"
+    else:
+        extracted = resolved.read_text(encoding="utf-8", errors="replace")
+
+    body = (extracted or "").strip()
+    if not body:
+        body = f"[文件: {clean_rel}, 大小: {resolved.stat().st_size} 字节]"
+
+    header = f"[来源文件: {clean_rel}]\n"
+    max_body = max(PER_FILE_CHAR_CAP - len(header), 1000)
+    if len(body) > max_body:
+        body = body[:max_body] + "\n...[文件内容已按单资料预算截断]"
+    return header + body
