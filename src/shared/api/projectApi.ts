@@ -439,6 +439,19 @@ export const projectApi = {
     }
   },
 
+  /** Phase P13: 删除指定内置版本控制检查点快照。 */
+  async deleteCheckpoint(projectId: string, checkpointId: string): Promise<boolean> {
+    try {
+      const res = await invoke<{ removed: boolean }>('projects_delete_checkpoint', {
+        projectId,
+        checkpointId,
+      });
+      return Boolean(res.removed);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
   /** Phase P9: 将项目还原到指定内置版本控制快照检查点。 */
   async restoreCheckpoint(
     projectId: string,
