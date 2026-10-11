@@ -349,3 +349,15 @@ export function mapMaterial(m: ProjectMaterialWire): ProjectMaterial {
   };
 }
 
+
+export interface ProjectDiagnoseResult {
+  projectId: string;
+  level: 'satisfied' | 'partial' | 'unsatisfied' | string;
+  detectedLanguages: string[];
+  availableRuntimes: string[];
+  testCommands: string[];
+  hooksConfigExists: boolean;
+  hooksCount: number;
+  hooksTrusted: boolean;
+  recommendations: string[];
+}

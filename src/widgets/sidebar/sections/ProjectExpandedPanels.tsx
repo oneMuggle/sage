@@ -2,6 +2,7 @@ import { CheckSquare, FilePlus2, FileText, Plus, Save, Square, Trash2 } from 'lu
 import { useState } from 'react';
 import { toast } from 'sonner';
 
+import { ProjectOverviewWidgets } from '../../../features/project-type/ProjectOverviewWidgets';
 import { projectApi, type ProjectMaterial, type ProjectSummary } from '../../../shared/api/projectApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { formatRelativeTime } from '../../../shared/lib/utils';
@@ -35,6 +36,11 @@ export function ProjectOverviewPanel({
       className="ml-5 mr-1.5 mt-1 p-2 rounded border border-border/50 bg-bg/40"
       data-testid="project-overview-panel"
     >
+      {Boolean(project.projectType || project.detectedType) && (
+        <div className="mb-2" data-testid="project-overview-widgets-slot">
+          <ProjectOverviewWidgets project={project} />
+        </div>
+      )}
       <div className="flex items-center justify-between mb-1.5">
         <span className="text-ui-2xs text-muted uppercase tracking-wide">
           {t('sider.project.overview_title')}

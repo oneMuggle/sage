@@ -126,6 +126,7 @@
     "projects_delete_constraint": { "method": "DELETE", "path": "/api/v1/projects/{projectId}/constraints/{constraintId}" },
     "projects_delete_milestone": { "method": "DELETE", "path": "/api/v1/projects/{projectId}/milestones/{milestoneId}" },
     "projects_detect_type": { "method": "POST", "path": "/api/v1/projects/detect-type" },
+    "projects_diagnose": { "method": "GET", "path": "/api/v1/projects/{projectId}/diagnose" },
     "projects_git_status": { "method": "GET", "path": "/api/v1/projects/{projectId}/git-status" },
     "projects_import_constraints": { "method": "POST", "path": "/api/v1/projects/{projectId}/constraints/import-template" },
     "projects_list": { "method": "GET", "path": "/api/v1/projects" },
