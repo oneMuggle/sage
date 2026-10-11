@@ -44,6 +44,7 @@ import { Card } from '../../shared/ui/Card';
 import {
   BuiltinCheckpointTimelineBar,
   CodingHooksGovernanceBar,
+  PersonalZettelkastenFooter,
   ResearchCitationAndToneBar,
 } from './BuiltinCheckpointAndStyleBar';
 
@@ -762,6 +763,12 @@ export function PolymorphicArchetypeCards({
               </Button>
             </div>
           </div>
+          <PersonalZettelkastenFooter
+            projectId={project.id}
+            decisions={decisions}
+            checkpoints={overview?.recentCheckpoints ?? []}
+            onCreated={loadData}
+          />
         </Card>
       )}
     </div>

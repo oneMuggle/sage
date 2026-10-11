@@ -575,6 +575,12 @@ def create_project_checkpoint(project: Project, label: str = "") -> Dict[str, An
                     snapshots[rel_path] = candidate.read_text(encoding="utf-8", errors="ignore")
             except OSError:
                 continue
+    try:
+        budget_preview = inspect_project_context_budget(project).get("synthesized_preview", "")
+        if isinstance(budget_preview, str) and budget_preview.strip():
+            snapshots[".sage/context-snapshot.md"] = budget_preview
+    except (OSError, ValueError, TypeError):
+        pass
     cp_dir = root / ".sage" / "checkpoints"
     cp_dir.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -715,3 +721,21 @@ def get_project_checkpoint_detail(project: Project, checkpoint_id: str) -> Dict[
         "files": files,
         "snapshots": snapshots,
     }
+
+
+def delete_project_checkpoint(project: Project, checkpoint_id: str) -> bool:
+    """删除指定内置版本控制检查点快照文件。"""
+    root = Path(project.path)
+    if not root.is_dir():
+        raise ValueError("项目目录不存在")
+    clean_cid = (checkpoint_id or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", clean_cid):
+        raise ValueError("无效的检查点 ID")
+    cp_file = root / ".sage" / "checkpoints" / f"{clean_cid}.json"
+    if not cp_file.is_file():
+        raise FileNotFoundError(f"检查点不存在: {clean_cid}")
+    try:
+        cp_file.unlink()
+    except OSError as exc:
+        raise ValueError(f"删除检查点失败: {exc}") from exc
+    return True
