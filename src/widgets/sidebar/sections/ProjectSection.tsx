@@ -664,7 +664,6 @@ export function ProjectSection({
                         <ProjectTypeBadge
                           type={project.projectType ?? project.detectedType}
                           detected={!project.projectType && Boolean(project.detectedType)}
-                          size="sm"
                         />
                         {missing && (
                           <AlertTriangle
