@@ -297,3 +297,13 @@
   1. **内置检查点自动固化 5 层合成上下文快照**：`create_project_checkpoint(project, label)` 创建检查点时，自动调用 `inspect_project_context_budget(project)` 并将 `synthesized_preview` 以 `.sage/context-snapshot.md` 键归档进检查点 `snapshots` 字典，支持通过 `GET /api/v1/projects/{project_id}/checkpoints/{checkpoint_id}` 在快照详情抽屉中直接预览当时的 5 层上下文全貌。
   2. **内置检查点删除治理 (`DELETE /api/v1/projects/{project_id}/checkpoints/{checkpoint_id}`)**：新增 `delete_project_checkpoint(project, checkpoint_id)` 后端服务、FastAPI 路由、IPC 桥接命令 `projects_delete_checkpoint`（`electron/ipc-manifest.json` 249 条命令）及 `projectApi.deleteCheckpoint(projectId, checkpointId)`；在 `BuiltinCheckpointTimelineBar` 时间轴列表中新增 `[删除]` (`data-testid="delete-checkpoint-{id}"`) 按钮，支持一键清理冗余版本快照。
   3. **个人与知识库 (`personal`) 卡片笔记列表与内置版本时间轴 (`PersonalZettelkastenFooter`)**：在 `BuiltinCheckpointAndStyleBar.tsx` 中提炼 `PersonalZettelkastenFooter` 组件并挂载至 `PolymorphicArchetypeCards.tsx` 的 `polymorphic-card-personal`，实时展示最近沉淀的个人偏好/卡片笔记列表 (`data-testid="personal-notes-list"`) 并支持个人知识库内置版本快照创建、预览、还原与删除，同时保持所有前后端模块文件严格 `<= 800` 行。
+
+### Phase P14：L4 资料库直接入库/自动发现/批量开关与预览、L1 总纲一键快照、多态版本概览卡片（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **L4 授信隔离资料库 (`StudioMaterialsTabPanel`) 全闭环增强**：
+     - **纯文本/摘要直接入库 (`studio-material-text-input` + `studio-material-text-add`)**：支持直接在 L4 面板粘贴合同关键条款、文献核心摘要或会议纪要结论，调用 `projectApi.addMaterial(projectId, { content })` 一键沉淀入库。
+     - **工作区可入库文件自动发现 (`studio-discoverable-files-bar`)**：自动聚合 `getWorkspaceOverview` 扫描出的 `officeDeliverables` 与 `researchArtifacts` 文件路径胶囊，点击即可一键提取入库。
+     - **批量 Source-Grounded 上下文开关与资料内容内联预览**：新增 `[全选参与上下文]` (`studio-materials-enable-all`)、`[全部隔离]` (`studio-materials-disable-all`) 以及每条资料的 `[预览/收起]` (`studio-material-preview-toggle-{id}` / `studio-material-preview-body-{id}`) 内容抽屉。
+  2. **L1 项目总纲 (`StudioCharterTabPanel`) 一键保存并固化版本快照 (`studio-charter-checkpoint-btn`)**：新增 `[保存并固化快照]` 按钮，在更新 `SAGE.md` 后自动调用 `projectApi.createCheckpoint(projectId, 'SAGE.md 规范更新快照')`，将最新 `SAGE.md` 与 5 层合成上下文快照同步归档。
+  3. **多形态项目概览版本保护与阶段状态卡片 (`ProjectOverviewWidgets.tsx`)**：新增 `workspace-vcs-summary-widget` 卡片，动态展示当前项目的生命周期阶段徽章、版本保护模式（`Git 版本控制` / `内置快照时间轴 (.sage/checkpoints)` / `无版本控制`）及最近快照数量 (`workspace-vcs-checkpoint-count`)。

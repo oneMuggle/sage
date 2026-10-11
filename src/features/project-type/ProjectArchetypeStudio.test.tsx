@@ -11,6 +11,7 @@ const mockGetGitStatus = vi.fn();
 const mockGetContextBudget = vi.fn();
 const mockGetWorkspaceOverview = vi.fn();
 const mockAddMaterialFromFile = vi.fn();
+const mockAddMaterial = vi.fn();
 const mockDiagnose = vi.fn();
 const mockCreateCheckpoint = vi.fn();
 const mockRestoreCheckpoint = vi.fn();
@@ -35,6 +36,7 @@ vi.mock('../../shared/api', () => ({
     getContextBudget: (...args: unknown[]) => mockGetContextBudget(...args),
     getWorkspaceOverview: (...args: unknown[]) => mockGetWorkspaceOverview(...args),
     addMaterialFromFile: (...args: unknown[]) => mockAddMaterialFromFile(...args),
+    addMaterial: (...args: unknown[]) => mockAddMaterial(...args),
     diagnose: (...args: unknown[]) => mockDiagnose(...args),
     createCheckpoint: (...args: unknown[]) => mockCreateCheckpoint(...args),
     restoreCheckpoint: (...args: unknown[]) => mockRestoreCheckpoint(...args),
@@ -168,6 +170,18 @@ beforeEach(() => {
     hooksCount: 2,
     hooksTrusted: true,
     recommendations: [],
+  });
+  mockAddMaterial.mockResolvedValue({
+    id: 'mat-text-1',
+    projectId: 'proj-1',
+    sourceMessageId: null,
+    contentHash: 'h-text',
+    content: '合同关键违约责任上限：不超过合同总额 20%',
+    status: 'ready',
+    wikiPagePath: null,
+    errorMessage: null,
+    createdAt: 1000,
+    enabled: true,
   });
   mockAddMaterialFromFile.mockResolvedValue({
     id: 'mat-file-1',
@@ -371,6 +385,18 @@ describe('ProjectArchetypeStudio', () => {
     fireEvent.click(screen.getByTestId('studio-material-file-add'));
     await waitFor(() => {
       expect(mockAddMaterialFromFile).toHaveBeenCalledWith('proj-1', '01_literature/references.bib');
+    });
+
+    // Discoverable files bar & direct text snippet ingestion in L4 Materials
+    expect(screen.getByTestId('studio-discoverable-files-bar')).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('studio-material-text-input'), {
+      target: { value: '合同关键违约责任上限：不超过合同总额 20%' },
+    });
+    fireEvent.click(screen.getByTestId('studio-material-text-add'));
+    await waitFor(() => {
+      expect(mockAddMaterial).toHaveBeenCalledWith('proj-1', {
+        content: '合同关键违约责任上限：不超过合同总额 20%',
+      });
     });
 
     // Switch to Milestones tab and seed recommended milestones for the active archetype
