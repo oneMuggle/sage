@@ -198,8 +198,8 @@ def inspect_project_workspace_overview(project: Project) -> Dict[str, Any]:
                                 cp_label = str(raw_cp.get("label") or cp_label)
                                 cp_files = int(raw_cp.get("file_count") or 0)
                                 mtime_ms = int(raw_cp.get("created_at") or mtime_ms)
-                        except Exception:  # noqa: BLE001
-                            pass
+                        except (OSError, ValueError, TypeError):
+                            continue
                     recent_checkpoints.append(
                         {
                             "id": cp_id,
