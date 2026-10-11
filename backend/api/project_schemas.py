@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.project_material_repo import MAX_MATERIAL_CONTENT_CHARS
 from backend.office.models import _constrained_list
 
@@ -354,6 +353,16 @@ class CreateCheckpointRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
     label: Optional[str] = Field(default=None, max_length=200)
+
+
+class RestoreCheckpointResponse(BaseModel):
+    """还原内置版本控制检查点响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    label: str
+    restored_files: List[str] = Field(default_factory=list)
+    restored_at: int
 
 
 class ProjectWorkspaceOverviewResponse(BaseModel):

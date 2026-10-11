@@ -36,6 +36,7 @@ import {
   type UpdateConstraintPayload,
   type UpdateMilestonePayload,
   type WorkspaceArtifactItem,
+  type RestoreCheckpointResult,
   type WorkspaceCheckpointItem,
   type WorkspaceDirectorySummary,
 } from './projectApiTypes';
@@ -62,6 +63,7 @@ export type {
   UpdateConstraintPayload,
   UpdateMilestonePayload,
   WorkspaceArtifactItem,
+  RestoreCheckpointResult,
   WorkspaceCheckpointItem,
   WorkspaceDirectorySummary,
 };
@@ -393,6 +395,29 @@ export const projectApi = {
         label: raw.label,
         createdAt: raw.created_at,
         fileCount: raw.file_count,
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** Phase P9: 将项目还原到指定内置版本控制快照检查点。 */
+  async restoreCheckpoint(
+    projectId: string,
+    checkpointId: string,
+  ): Promise<RestoreCheckpointResult> {
+    try {
+      const raw = await invoke<{
+        id: string;
+        label: string;
+        restored_files: string[];
+        restored_at: number;
+      }>('projects_restore_checkpoint', { projectId, checkpointId });
+      return {
+        id: raw.id,
+        label: raw.label,
+        restoredFiles: raw.restored_files ?? [],
+        restoredAt: raw.restored_at,
       };
     } catch (error) {
       throw handleApiError(error);

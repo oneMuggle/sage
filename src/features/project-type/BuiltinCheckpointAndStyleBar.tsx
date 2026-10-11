@@ -2,7 +2,7 @@
  * Phase P7: 内置版本快照时间轴与科研引用格式/学术文风快速切换栏 (2026-10-10)
  */
 
-import { BookOpenCheck, History, Plus, ShieldCheck, ShieldOff } from 'lucide-react';
+import { BookOpenCheck, History, Plus, RotateCcw, ShieldCheck, ShieldOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -23,6 +23,8 @@ export function BuiltinCheckpointTimelineBar({
 }: BuiltinCheckpointTimelineBarProps) {
   const [label, setLabel] = useState('');
   const [creating, setCreating] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [restoredHint, setRestoredHint] = useState<string | null>(null);
 
   const handleCreate = async () => {
     if (creating || typeof projectApi?.createCheckpoint !== 'function') return;
@@ -38,6 +40,20 @@ export function BuiltinCheckpointTimelineBar({
     }
   };
 
+  const handleRestore = async (checkpointId: string, cpLabel: string) => {
+    if (restoringId || typeof projectApi?.restoreCheckpoint !== 'function') return;
+    setRestoringId(checkpointId);
+    try {
+      const res = await projectApi.restoreCheckpoint(projectId, checkpointId);
+      setRestoredHint(`已还原快照「${res.label || cpLabel}」（${res.restoredFiles.length} 份文件）`);
+      await onCreated();
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
   return (
     <div
       className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2"
@@ -49,7 +65,13 @@ export function BuiltinCheckpointTimelineBar({
           内置版本保护时间轴 (.sage/checkpoints)
         </div>
         <span className="text-ui-2xs text-muted-foreground">
-          无需安装 Git，一键固化当前案卷文书与配置快照
+          {restoredHint ? (
+            <span className="font-medium text-emerald-600" data-testid="checkpoint-restored-hint">
+              {restoredHint}
+            </span>
+          ) : (
+            '无需安装 Git，一键固化或还原案卷文书与配置快照'
+          )}
         </span>
       </div>
 
@@ -84,9 +106,21 @@ export function BuiltinCheckpointTimelineBar({
               className="flex items-center justify-between gap-2 rounded border border-border/60 bg-background px-2.5 py-1 text-xs"
             >
               <span className="truncate font-medium text-foreground">{cp.label}</span>
-              <span className="shrink-0 font-mono text-ui-2xs text-muted-foreground">
-                {cp.fileCount} 份文件 · {cp.id}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="font-mono text-ui-2xs text-muted-foreground">
+                  {cp.fileCount} 份文件 · {cp.id}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleRestore(cp.id, cp.label)}
+                  disabled={restoringId === cp.id}
+                  data-testid={`restore-checkpoint-${cp.id}`}
+                  className="inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-ui-2xs font-medium text-emerald-600 hover:bg-emerald-500/20"
+                >
+                  <RotateCcw className="h-2.5 w-2.5" />
+                  还原快照
+                </button>
+              </div>
             </li>
           ))}
         </ul>

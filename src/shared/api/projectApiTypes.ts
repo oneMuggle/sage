@@ -220,6 +220,13 @@ export interface WorkspaceCheckpointItem {
   fileCount: number;
 }
 
+export interface RestoreCheckpointResult {
+  id: string;
+  label: string;
+  restoredFiles: string[];
+  restoredAt: number;
+}
+
 export interface ProjectWorkspaceOverview {
   projectId: string;
   hasSageMd: boolean;
