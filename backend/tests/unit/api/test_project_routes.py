@@ -615,3 +615,16 @@ def test_project_diagnose_endpoint(client, ws_dir: Path):
     assert "npm run lint" in body["test_commands"]
     assert body["hooks_config_exists"] is True
     assert body["hooks_count"] == 1
+
+
+def test_import_concise_note_taking_template(client, ws_dir: Path):
+    """POST /projects/{id}/constraints/import-template 支持个人知识空间 concise_note_taking 规则包。"""
+    pid = _register(client, ws_dir)["id"]
+    resp = client.post(
+        f"/projects/{pid}/constraints/import-template",
+        json={"template": "concise_note_taking"},
+    )
+    assert resp.status_code == 201
+    items = resp.json()["constraints"]
+    assert len(items) == 2
+    assert any(item["category"] == "gtd_workflow" for item in items)

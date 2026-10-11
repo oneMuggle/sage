@@ -14,6 +14,7 @@ const mockAddMaterialFromFile = vi.fn();
 const mockDiagnose = vi.fn();
 const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
+const mockDeleteProjectProfile = vi.fn();
 
 vi.mock('../../shared/api', () => ({
   projectApi: {
@@ -32,6 +33,7 @@ vi.mock('../../shared/api', () => ({
   memoryApi: {
     getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
     createProjectProfile: (...args: unknown[]) => mockCreateProjectProfile(...args),
+    deleteProjectProfile: (...args: unknown[]) => mockDeleteProjectProfile(...args),
   },
 }));
 
@@ -120,6 +122,7 @@ beforeEach(() => {
     ],
   });
   mockCreateProjectProfile.mockReset();
+  mockDeleteProjectProfile.mockReset();
   mockDiagnose.mockResolvedValue({
     projectId: 'proj-1',
     level: 'satisfied',
@@ -282,6 +285,30 @@ describe('ProjectArchetypeStudio', () => {
           category: 'goal',
           importance: 5,
         },
+      );
+    });
+
+    // Switch to L3 Project Profile governance tab and add a project convention entry
+    mockCreateProjectProfile.mockResolvedValueOnce({
+      id: 'pf-3',
+      content: '实验随机种子统一固定为 42',
+      category: 'convention',
+      importance: 5,
+    });
+    fireEvent.click(screen.getByTestId('studio-tab-profile'));
+    expect(await screen.findByTestId('project-profile-studio-panel')).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('studio-profile-input'), {
+      target: { value: '实验随机种子统一固定为 42' },
+    });
+    fireEvent.click(screen.getByTestId('studio-profile-add-btn'));
+    await waitFor(() => {
+      expect(mockCreateProjectProfile).toHaveBeenCalledWith(
+        '实验随机种子统一固定为 42',
+        expect.objectContaining({
+          projectKey: 'D:/Archives/Contract2026',
+          category: 'convention',
+          importance: 5,
+        }),
       );
     });
   });
