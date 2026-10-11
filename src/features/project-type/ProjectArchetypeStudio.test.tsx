@@ -10,6 +10,7 @@ const mockListMilestones = vi.fn();
 const mockGetGitStatus = vi.fn();
 const mockGetContextBudget = vi.fn();
 const mockGetWorkspaceOverview = vi.fn();
+const mockAddMaterialFromFile = vi.fn();
 const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
 
@@ -24,6 +25,7 @@ vi.mock('../../shared/api', () => ({
     getGitStatus: (...args: unknown[]) => mockGetGitStatus(...args),
     getContextBudget: (...args: unknown[]) => mockGetContextBudget(...args),
     getWorkspaceOverview: (...args: unknown[]) => mockGetWorkspaceOverview(...args),
+    addMaterialFromFile: (...args: unknown[]) => mockAddMaterialFromFile(...args),
   },
   memoryApi: {
     getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
@@ -116,6 +118,18 @@ beforeEach(() => {
     ],
   });
   mockCreateProjectProfile.mockReset();
+  mockAddMaterialFromFile.mockResolvedValue({
+    id: 'mat-file-1',
+    projectId: 'proj-1',
+    sourceMessageId: null,
+    contentHash: 'h-file',
+    content: '[来源文件: 03_定稿与签批归档/采购合同审阅意见书.docx]',
+    status: 'ready',
+    wikiPagePath: null,
+    errorMessage: null,
+    createdAt: 1000,
+    enabled: true,
+  });
   mockGetGitStatus.mockResolvedValue({
     isRepo: false,
     branch: null,
@@ -219,9 +233,16 @@ describe('ProjectArchetypeStudio', () => {
       expect(budgetCard.textContent).toContain('2/3 启用');
     });
 
-    // Business polymorphic card is shown initially
+    // Business polymorphic card is shown initially and supports one-click file pinning
     const businessCard = await screen.findByTestId('polymorphic-card-business');
     expect(businessCard.textContent).toContain('采购合同审阅意见书.docx');
+    fireEvent.click(screen.getByTestId('pin-artifact-to-materials'));
+    await waitFor(() => {
+      expect(mockAddMaterialFromFile).toHaveBeenCalledWith(
+        'proj-1',
+        '03_定稿与签发归档/采购合同审阅意见书.docx',
+      );
+    });
 
     // Switch active project archetype to research
     const typeSelect = screen.getByLabelText('切换项目形态');

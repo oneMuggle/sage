@@ -200,6 +200,19 @@ export const projectApi = {
     }
   },
 
+  /** Phase P3: 将工作区内的文献/案卷文件一键提取并纳入受控资料池。 */
+  async addMaterialFromFile(id: string, relativePath: string): Promise<ProjectMaterial> {
+    try {
+      const material = await invoke<ProjectMaterialWire>('projects_add_material_from_file', {
+        id,
+        relativePath,
+      });
+      return mapMaterial(material);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
   /** Phase P2: 切换资料是否参与系统提示词注入（NotebookLM 式资料源开关）。 */
   async updateMaterial(
     id: string,
