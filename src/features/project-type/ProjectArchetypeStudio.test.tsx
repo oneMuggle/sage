@@ -12,6 +12,8 @@ const mockGetContextBudget = vi.fn();
 const mockGetWorkspaceOverview = vi.fn();
 const mockAddMaterialFromFile = vi.fn();
 const mockDiagnose = vi.fn();
+const mockCreateCheckpoint = vi.fn();
+const mockCreateConstraint = vi.fn();
 const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
 const mockDeleteProjectProfile = vi.fn();
@@ -29,6 +31,8 @@ vi.mock('../../shared/api', () => ({
     getWorkspaceOverview: (...args: unknown[]) => mockGetWorkspaceOverview(...args),
     addMaterialFromFile: (...args: unknown[]) => mockAddMaterialFromFile(...args),
     diagnose: (...args: unknown[]) => mockDiagnose(...args),
+    createCheckpoint: (...args: unknown[]) => mockCreateCheckpoint(...args),
+    createConstraint: (...args: unknown[]) => mockCreateConstraint(...args),
   },
   memoryApi: {
     getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
@@ -282,6 +286,15 @@ describe('ProjectArchetypeStudio', () => {
       );
     });
 
+    // Create a builtin checkpoint snapshot on the business card
+    fireEvent.change(screen.getByTestId('checkpoint-label-input'), {
+      target: { value: '法务二审定稿前备份' },
+    });
+    fireEvent.click(screen.getByTestId('create-checkpoint-btn'));
+    await waitFor(() => {
+      expect(mockCreateCheckpoint).toHaveBeenCalledWith('proj-1', '法务二审定稿前备份');
+    });
+
     // Switch active project archetype to research
     const typeSelect = screen.getByLabelText('切换项目形态');
     fireEvent.change(typeSelect, { target: { value: 'research' } });
@@ -307,6 +320,21 @@ describe('ProjectArchetypeStudio', () => {
           category: 'goal',
           importance: 5,
         },
+      );
+    });
+
+    // Apply academic citation style & writing tone on the research card
+    fireEvent.change(screen.getByTestId('research-citation-style-select'), {
+      target: { value: 'IEEE' },
+    });
+    fireEvent.click(screen.getByTestId('research-apply-style-btn'));
+    await waitFor(() => {
+      expect(mockCreateConstraint).toHaveBeenCalledWith(
+        'proj-1',
+        expect.objectContaining({
+          category: 'academic_writing',
+          priority: 8,
+        }),
       );
     });
 

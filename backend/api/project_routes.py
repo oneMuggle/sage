@@ -28,6 +28,7 @@ from backend.api.project_schemas import (
     ConstraintTemplateImportRequest,
     ConstraintTemplatesResponse,
     ConstraintUpdateRequest,
+    CreateCheckpointRequest,
     DetectionSignalModel,
     GitCommitModel,
     GitStatusResponse,
@@ -58,6 +59,7 @@ from backend.api.project_schemas import (
     ProjectUpdateRequest,
     ProjectWorkspaceOverviewResponse,
     SaveAnswerRequest,
+    WorkspaceCheckpointItemModel,
 )
 from backend.data.database import get_database, make_with_db_lock
 from backend.data.project_constraint_repo import (
@@ -94,6 +96,7 @@ from backend.services.project_type_detector import (
     detect_project_type,
 )
 from backend.services.project_workspace_inspector import (
+    create_project_checkpoint,
     extract_workspace_file_as_material_content,
     inspect_project_context_budget,
     inspect_project_runtime_and_hooks,
@@ -285,6 +288,24 @@ def get_project_workspace_overview(project_id: str) -> ProjectWorkspaceOverviewR
     """获取项目工作区多态资产台账（案卷文书、科研文献/实验产物、代码工程指示器）。"""
     project = _get_project_or_404(project_id)
     return ProjectWorkspaceOverviewResponse(**inspect_project_workspace_overview(project))
+
+
+@router.post(
+    "/{project_id}/checkpoints",
+    response_model=WorkspaceCheckpointItemModel,
+    status_code=201,
+)
+@with_db_lock
+def create_project_workspace_checkpoint(
+    project_id: str, request: CreateCheckpointRequest
+) -> WorkspaceCheckpointItemModel:
+    """为内置版本控制 (builtin VCS) 项目创建手动版本快照检查点。"""
+    project = _get_project_or_404(project_id)
+    try:
+        cp = create_project_checkpoint(project, request.label or "")
+    except ValueError as exc:
+        raise _error(400, "checkpoint_failed", str(exc)) from exc
+    return WorkspaceCheckpointItemModel(**cp)
 
 
 @router.delete(
