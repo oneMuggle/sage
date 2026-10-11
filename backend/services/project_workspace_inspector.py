@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -364,3 +366,96 @@ def extract_workspace_file_as_material_content(
     if len(body) > max_body:
         body = body[:max_body] + "\n...[文件内容已按单资料预算截断]"
     return header + body
+
+
+def inspect_project_runtime_and_hooks(project_id: str, workspace_root: str) -> Dict[str, Any]:
+    """轻量只读诊断项目语言清单、本地运行时满足度、测试命令入口与 .sage/hooks.json 状态。"""
+    root = Path(workspace_root)
+    detected_languages: List[str] = []
+    test_commands: List[str] = []
+    recommendations: List[str] = []
+
+    if root.exists() and root.is_dir():
+        pkg_json = root / "package.json"
+        if pkg_json.is_file():
+            detected_languages.append("TypeScript/Node.js" if (root / "tsconfig.json").is_file() else "Node.js")
+            try:
+                pkg_data = json.loads(pkg_json.read_text(encoding="utf-8", errors="replace"))
+                scripts = pkg_data.get("scripts") or {}
+                if isinstance(scripts, dict):
+                    for key in ("test", "lint", "typecheck", "build", "dev"):
+                        if key in scripts:
+                            test_commands.append(f"npm run {key}")
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("package.json parse skipped: %s", exc)
+
+        if (root / "pyproject.toml").is_file() or (root / "requirements.txt").is_file() or (root / "pytest.ini").is_file():
+            detected_languages.append("Python")
+            test_commands.append("pytest")
+
+        if (root / "Cargo.toml").is_file():
+            detected_languages.append("Rust")
+            test_commands.append("cargo test")
+
+        if (root / "go.mod").is_file():
+            detected_languages.append("Go")
+            test_commands.append("go test ./...")
+
+    available_runtimes: List[str] = []
+    if sys.executable:
+        available_runtimes.append("python")
+    for bin_name in ("node", "git", "cargo", "go"):
+        if shutil.which(bin_name):
+            available_runtimes.append(bin_name)
+
+    missing_runtimes: List[str] = []
+    for lang in detected_languages:
+        if "Node.js" in lang and "node" not in available_runtimes:
+            missing_runtimes.append("node")
+        if lang == "Rust" and "cargo" not in available_runtimes:
+            missing_runtimes.append("cargo")
+        if lang == "Go" and "go" not in available_runtimes:
+            missing_runtimes.append("go")
+
+    if missing_runtimes:
+        level = "unsatisfied" if len(missing_runtimes) == len(detected_languages) else "partial"
+        recommendations.append("缺少本地运行时: " + ", ".join(missing_runtimes))
+    else:
+        level = "satisfied"
+
+    if not (root / "SAGE.md").is_file() and not (root / "CLAUDE.md").is_file() and not (root / "AGENTS.md").is_file():
+        recommendations.append("建议生成 SAGE.md 声明构建/测试命令与模块边界")
+
+    hooks_file = root / ".sage" / "hooks.json"
+    hooks_config_exists = hooks_file.is_file()
+    hooks_count = 0
+    if hooks_config_exists:
+        try:
+            hooks_raw = json.loads(hooks_file.read_text(encoding="utf-8", errors="replace"))
+            if isinstance(hooks_raw, dict):
+                hooks_list = hooks_raw.get("hooks", hooks_raw)
+                hooks_count = len(hooks_list) if isinstance(hooks_list, (list, dict)) else 1  # noqa: UP038
+            elif isinstance(hooks_raw, list):
+                hooks_count = len(hooks_raw)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("hooks.json parse skipped: %s", exc)
+
+    hooks_trusted = False
+    try:
+        from backend.hooks.project_hooks import is_project_trusted  # type: ignore[import-not-found]
+
+        hooks_trusted = bool(is_project_trusted(str(root)))
+    except Exception:  # noqa: BLE001
+        hooks_trusted = False
+
+    return {
+        "project_id": project_id,
+        "level": level,
+        "detected_languages": detected_languages,
+        "available_runtimes": available_runtimes,
+        "test_commands": test_commands[:6],
+        "hooks_config_exists": hooks_config_exists,
+        "hooks_count": hooks_count,
+        "hooks_trusted": hooks_trusted,
+        "recommendations": recommendations,
+    }
