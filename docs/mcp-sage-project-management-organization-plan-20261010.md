@@ -290,3 +290,10 @@
   - **项目生命周期阶段一键推进与跨形态 Git 联动 (`ProjectArchetypeStudio.tsx`, `ProjectOverviewWidgets.tsx`)**：
     - 在项目治理头部阶段选择器旁新增 **`[推进至「下一阶段」→]`** 快捷按钮（`studio-advance-stage-btn`），支持按当前形态生命周期管线顺次推进项目阶段；
     - 升级 `ProjectOverviewWidgets`，当非代码项目（如科研手稿或大型档案工程）将版本控制切换为 `vcsMode === 'git'` 时，同样自动挂载 `GitStatusWidget` 展示实时分支与未提交变更。
+
+### Phase P13：内置版本快照 5 层上下文归档、检查点清理治理与个人知识库时间轴（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **内置检查点自动固化 5 层合成上下文快照**：`create_project_checkpoint(project, label)` 创建检查点时，自动调用 `inspect_project_context_budget(project)` 并将 `synthesized_preview` 以 `.sage/context-snapshot.md` 键归档进检查点 `snapshots` 字典，支持通过 `GET /api/v1/projects/{project_id}/checkpoints/{checkpoint_id}` 在快照详情抽屉中直接预览当时的 5 层上下文全貌。
+  2. **内置检查点删除治理 (`DELETE /api/v1/projects/{project_id}/checkpoints/{checkpoint_id}`)**：新增 `delete_project_checkpoint(project, checkpoint_id)` 后端服务、FastAPI 路由、IPC 桥接命令 `projects_delete_checkpoint`（`electron/ipc-manifest.json` 249 条命令）及 `projectApi.deleteCheckpoint(projectId, checkpointId)`；在 `BuiltinCheckpointTimelineBar` 时间轴列表中新增 `[删除]` (`data-testid="delete-checkpoint-{id}"`) 按钮，支持一键清理冗余版本快照。
+  3. **个人与知识库 (`personal`) 卡片笔记列表与内置版本时间轴 (`PersonalZettelkastenFooter`)**：在 `BuiltinCheckpointAndStyleBar.tsx` 中提炼 `PersonalZettelkastenFooter` 组件并挂载至 `PolymorphicArchetypeCards.tsx` 的 `polymorphic-card-personal`，实时展示最近沉淀的个人偏好/卡片笔记列表 (`data-testid="personal-notes-list"`) 并支持个人知识库内置版本快照创建、预览、还原与删除，同时保持所有前后端模块文件严格 `<= 800` 行。

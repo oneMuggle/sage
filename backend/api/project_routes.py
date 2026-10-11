@@ -101,6 +101,7 @@ from backend.services.project_type_detector import (
 )
 from backend.services.project_workspace_inspector import (
     create_project_checkpoint,
+    delete_project_checkpoint,
     extract_workspace_file_as_material_content,
     get_project_checkpoint_detail,
     inspect_project_context_budget,
@@ -276,10 +277,7 @@ def update_project_material(
     return _material_model(updated)
 
 
-@router.get(
-    "/{project_id}/context-budget",
-    response_model=ProjectContextBudgetResponse,
-)
+@router.get("/{project_id}/context-budget", response_model=ProjectContextBudgetResponse)
 @with_db_lock
 def get_project_context_budget(project_id: str) -> ProjectContextBudgetResponse:
     """获取项目五层受控上下文水位统计。"""
@@ -287,10 +285,7 @@ def get_project_context_budget(project_id: str) -> ProjectContextBudgetResponse:
     return ProjectContextBudgetResponse(**inspect_project_context_budget(project))
 
 
-@router.get(
-    "/{project_id}/workspace-overview",
-    response_model=ProjectWorkspaceOverviewResponse,
-)
+@router.get("/{project_id}/workspace-overview", response_model=ProjectWorkspaceOverviewResponse)
 @with_db_lock
 def get_project_workspace_overview(project_id: str) -> ProjectWorkspaceOverviewResponse:
     """获取项目工作区多态资产台账（案卷文书、科研文献/实验产物、代码工程指示器）。"""
@@ -298,11 +293,7 @@ def get_project_workspace_overview(project_id: str) -> ProjectWorkspaceOverviewR
     return ProjectWorkspaceOverviewResponse(**inspect_project_workspace_overview(project))
 
 
-@router.post(
-    "/{project_id}/checkpoints",
-    response_model=WorkspaceCheckpointItemModel,
-    status_code=201,
-)
+@router.post("/{project_id}/checkpoints", response_model=WorkspaceCheckpointItemModel, status_code=201)
 @with_db_lock
 def create_project_workspace_checkpoint(
     project_id: str, request: CreateCheckpointRequest
@@ -316,10 +307,7 @@ def create_project_workspace_checkpoint(
     return WorkspaceCheckpointItemModel(**cp)
 
 
-@router.get(
-    "/{project_id}/checkpoints/{checkpoint_id}",
-    response_model=WorkspaceCheckpointDetailResponse,
-)
+@router.get("/{project_id}/checkpoints/{checkpoint_id}", response_model=WorkspaceCheckpointDetailResponse)
 @with_db_lock
 def get_project_workspace_checkpoint(
     project_id: str, checkpoint_id: str
@@ -335,10 +323,20 @@ def get_project_workspace_checkpoint(
     return WorkspaceCheckpointDetailResponse(**detail)
 
 
-@router.post(
-    "/{project_id}/checkpoints/{checkpoint_id}/restore",
-    response_model=RestoreCheckpointResponse,
-)
+@router.delete("/{project_id}/checkpoints/{checkpoint_id}", response_model=MaterialMutationResponse)
+@with_db_lock
+def delete_project_workspace_checkpoint(project_id: str, checkpoint_id: str) -> MaterialMutationResponse:
+    project = _get_project_or_404(project_id)
+    try:
+        delete_project_checkpoint(project, checkpoint_id)
+    except FileNotFoundError as exc:
+        raise _error(404, "checkpoint_not_found", str(exc)) from exc
+    except ValueError as exc:
+        raise _error(400, "checkpoint_delete_failed", str(exc)) from exc
+    return MaterialMutationResponse(removed=True)
+
+
+@router.post("/{project_id}/checkpoints/{checkpoint_id}/restore", response_model=RestoreCheckpointResponse)
 @with_db_lock
 def restore_project_workspace_checkpoint(
     project_id: str, checkpoint_id: str
@@ -376,10 +374,7 @@ def update_project_charter(
     return ProjectCharterResponse(**res)
 
 
-@router.delete(
-    "/{project_id}/materials/{material_id}",
-    response_model=MaterialMutationResponse,
-)
+@router.delete("/{project_id}/materials/{material_id}", response_model=MaterialMutationResponse)
 @with_db_lock
 def remove_project_material(project_id: str, material_id: str) -> MaterialMutationResponse:
     _get_project_or_404(project_id)
@@ -392,11 +387,7 @@ def remove_project_material(project_id: str, material_id: str) -> MaterialMutati
     return MaterialMutationResponse(removed=True)
 
 
-@router.post(
-    "/{project_id}/materials/from-file",
-    response_model=ProjectMaterialModel,
-    status_code=201,
-)
+@router.post("/{project_id}/materials/from-file", response_model=ProjectMaterialModel, status_code=201)
 @with_db_lock
 def add_project_material_from_file(
     project_id: str, request: AddMaterialFromFileRequest
@@ -420,11 +411,7 @@ def add_project_material_from_file(
     return _material_model(material)
 
 
-@router.post(
-    "/{project_id}/materials/save-answer",
-    response_model=ProjectMaterialModel,
-    status_code=201,
-)
+@router.post("/{project_id}/materials/save-answer", response_model=ProjectMaterialModel, status_code=201)
 @with_db_lock
 def save_answer_as_project_material(
     project_id: str, request: SaveAnswerRequest
@@ -617,10 +604,7 @@ def update_constraint(
     return _constraint_model(repo.get(constraint_id))
 
 
-@router.delete(
-    "/{project_id}/constraints/{constraint_id}",
-    response_model=MaterialMutationResponse,
-)
+@router.delete("/{project_id}/constraints/{constraint_id}", response_model=MaterialMutationResponse)
 @with_db_lock
 def delete_constraint(project_id: str, constraint_id: str) -> MaterialMutationResponse:
     """删除约束。"""
@@ -633,11 +617,7 @@ def delete_constraint(project_id: str, constraint_id: str) -> MaterialMutationRe
     return MaterialMutationResponse(removed=True)
 
 
-@router.post(
-    "/{project_id}/constraints/import-template",
-    response_model=ConstraintsResponse,
-    status_code=201,
-)
+@router.post("/{project_id}/constraints/import-template", response_model=ConstraintsResponse, status_code=201)
 @with_db_lock
 def import_constraint_template(
     project_id: str, request: ConstraintTemplateImportRequest
@@ -664,11 +644,7 @@ def list_milestones(project_id: str, status: Optional[str] = None) -> Milestones
     return MilestonesResponse(milestones=[_milestone_model(m) for m in milestones])
 
 
-@router.post(
-    "/{project_id}/milestones",
-    response_model=MilestoneModel,
-    status_code=201,
-)
+@router.post("/{project_id}/milestones", response_model=MilestoneModel, status_code=201)
 @with_db_lock
 def create_milestone(project_id: str, request: MilestoneCreateRequest) -> MilestoneModel:
     """创建一个里程碑。"""
@@ -720,10 +696,7 @@ def _constraint_or_milestone_get(repo: ProjectMilestoneRepository, milestone_id:
     return _milestone_model(row)
 
 
-@router.post(
-    "/{project_id}/milestones/{milestone_id}/complete",
-    response_model=MilestoneModel,
-)
+@router.post("/{project_id}/milestones/{milestone_id}/complete", response_model=MilestoneModel)
 @with_db_lock
 def complete_milestone(project_id: str, milestone_id: str) -> MilestoneModel:
     """标记里程碑为已完成。"""
@@ -736,10 +709,7 @@ def complete_milestone(project_id: str, milestone_id: str) -> MilestoneModel:
     return _constraint_or_milestone_get(repo, milestone_id)
 
 
-@router.delete(
-    "/{project_id}/milestones/{milestone_id}",
-    response_model=MaterialMutationResponse,
-)
+@router.delete("/{project_id}/milestones/{milestone_id}", response_model=MaterialMutationResponse)
 @with_db_lock
 def delete_milestone(project_id: str, milestone_id: str) -> MaterialMutationResponse:
     """删除里程碑。"""

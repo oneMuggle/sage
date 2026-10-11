@@ -241,6 +241,11 @@ export const projectRoutes: Record<string, CommandRoute> = {
     path: (a) =>
       `/api/v1/projects/${projectId(a)}/checkpoints/${enc(a.checkpointId ?? a.checkpoint_id)}`,
   },
+  projects_delete_checkpoint: {
+    method: 'DELETE',
+    path: (a) =>
+      `/api/v1/projects/${projectId(a)}/checkpoints/${enc(a.checkpointId ?? a.checkpoint_id)}`,
+  },
   projects_restore_checkpoint: {
     method: 'POST',
     path: (a) =>
