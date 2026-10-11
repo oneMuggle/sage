@@ -5,29 +5,33 @@
  * 里程碑的 CRUD 界面：列表、创建、编辑、删除、状态更新
  */
 
-import { Plus, Edit2, Trash2, Target, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Plus, Edit2, Trash2, Target, CheckCircle2, Clock, AlertCircle, Sparkles } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 
-import { projectApi, type ProjectMilestone } from '../../shared/api';
+import { projectApi, type ProjectMilestone, type ProjectType } from '../../shared/api';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 import { MilestoneEditor } from './MilestoneEditor';
+import { getArchetypeBlueprint } from './archetypeBlueprints';
 
 export interface MilestoneManagerProps {
   projectId: string;
+  projectType?: ProjectType;
 }
 
-export function MilestoneManager({ projectId }: MilestoneManagerProps) {
+export function MilestoneManager({ projectId, projectType = 'business' }: MilestoneManagerProps) {
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | null>(null);
+  const blueprint = getArchetypeBlueprint(projectType);
 
-  const fetchMilestones = async () => {
+  const fetchMilestones = useCallback(async () => {
     try {
       setLoading(true);
       const list = await projectApi.listMilestones(projectId);
@@ -38,15 +42,39 @@ export function MilestoneManager({ projectId }: MilestoneManagerProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
-    fetchMilestones();
-  }, [projectId]);
+    void fetchMilestones();
+  }, [fetchMilestones]);
 
   const handleCreate = () => {
     setEditingMilestone(null);
     setEditorOpen(true);
+  };
+
+  const handleSeedRecommendedMilestones = async () => {
+    if (seeding || typeof projectApi?.createMilestone !== 'function') return;
+    setSeeding(true);
+    setError(null);
+    try {
+      const existingTitles = new Set(milestones.map((m) => m.title));
+      let nextOrder = milestones.length;
+      for (const item of blueprint.recommendedMilestones) {
+        if (existingTitles.has(item.title)) continue;
+        await projectApi.createMilestone(projectId, {
+          title: item.title,
+          description: item.description,
+          stage: item.stage,
+          sortOrder: nextOrder++,
+        });
+      }
+      await fetchMilestones();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '导入推荐里程碑失败');
+    } finally {
+      setSeeding(false);
+    }
   };
 
   const handleEdit = (milestone: ProjectMilestone) => {
@@ -104,10 +132,22 @@ export function MilestoneManager({ projectId }: MilestoneManagerProps) {
               <Target className="h-5 w-5" />
               里程碑管理
             </CardTitle>
-            <Button size="sm" onClick={handleCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              新建里程碑
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void handleSeedRecommendedMilestones()}
+                disabled={seeding}
+                data-testid="seed-archetype-milestones-btn"
+              >
+                <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
+                {seeding ? '导入中...' : `一键导入「${blueprint.label}」推荐里程碑`}
+              </Button>
+              <Button size="sm" onClick={handleCreate}>
+                <Plus className="mr-2 h-4 w-4" />
+                新建里程碑
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

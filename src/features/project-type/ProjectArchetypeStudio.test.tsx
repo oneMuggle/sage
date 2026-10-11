@@ -14,6 +14,7 @@ const mockAddMaterialFromFile = vi.fn();
 const mockDiagnose = vi.fn();
 const mockCreateCheckpoint = vi.fn();
 const mockCreateConstraint = vi.fn();
+const mockCreateMilestone = vi.fn();
 const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
 const mockDeleteProjectProfile = vi.fn();
@@ -33,6 +34,7 @@ vi.mock('../../shared/api', () => ({
     diagnose: (...args: unknown[]) => mockDiagnose(...args),
     createCheckpoint: (...args: unknown[]) => mockCreateCheckpoint(...args),
     createConstraint: (...args: unknown[]) => mockCreateConstraint(...args),
+    createMilestone: (...args: unknown[]) => mockCreateMilestone(...args),
   },
   memoryApi: {
     getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
@@ -336,6 +338,16 @@ describe('ProjectArchetypeStudio', () => {
           priority: 8,
         }),
       );
+    });
+
+    // Switch to Milestones tab and seed recommended milestones for the active archetype
+    fireEvent.click(screen.getByText('阶段与里程碑管理'));
+    await waitFor(() => {
+      expect(screen.getByTestId('seed-archetype-milestones-btn')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('seed-archetype-milestones-btn'));
+    await waitFor(() => {
+      expect(mockCreateMilestone).toHaveBeenCalled();
     });
 
     // Switch to L3 Project Profile governance tab and add a project convention entry

@@ -2,10 +2,11 @@
  * Phase P7: 内置版本快照时间轴与科研引用格式/学术文风快速切换栏 (2026-10-10)
  */
 
-import { BookOpenCheck, History, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { BookOpenCheck, History, Plus, ShieldCheck, ShieldOff } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { projectApi } from '../../shared/api';
+import { backendRequest } from '../../shared/api/backendRequest';
 import type { WorkspaceCheckpointItem } from '../../shared/api/projectApiTypes';
 import { Button } from '../../shared/ui/Button';
 
@@ -199,6 +200,124 @@ export function ResearchCitationAndToneBar({
         >
           一键写入学术规范
         </Button>
+      </div>
+    </div>
+  );
+}
+
+export interface CodingHooksGovernanceBarProps {
+  workspacePath: string;
+  hasHooksConfig: boolean;
+  hookCount: number;
+}
+
+export function CodingHooksGovernanceBar({
+  workspacePath,
+  hasHooksConfig,
+  hookCount,
+}: CodingHooksGovernanceBarProps) {
+  const [trusted, setTrusted] = useState<boolean>(false);
+  const [configExists, setConfigExists] = useState<boolean>(hasHooksConfig);
+  const [detectedCount, setDetectedCount] = useState<number>(hookCount);
+  const [toggling, setToggling] = useState<boolean>(false);
+
+  useEffect(() => {
+    setConfigExists(hasHooksConfig);
+    setDetectedCount(hookCount);
+  }, [hasHooksConfig, hookCount]);
+
+  useEffect(() => {
+    if (!workspacePath) return;
+    let alive = true;
+    backendRequest<{
+      workspace: string;
+      trusted: boolean;
+      config_exists: boolean;
+      hook_count: number;
+    }>({
+      method: 'GET',
+      path: `/api/v1/hooks/project/status?workspace=${encodeURIComponent(workspacePath)}`,
+    })
+      .then((res) => {
+        if (!alive || !res) return;
+        setTrusted(Boolean(res.trusted));
+        if (typeof res.config_exists === 'boolean') {
+          setConfigExists(res.config_exists || hasHooksConfig);
+        }
+        if (typeof res.hook_count === 'number' && res.hook_count > 0) {
+          setDetectedCount(res.hook_count);
+        }
+      })
+      .catch(() => {
+        // fail-open in unit tests or offline mode
+      });
+    return () => {
+      alive = false;
+    };
+  }, [workspacePath, hasHooksConfig]);
+
+  const handleToggleTrust = async (nextTrust: boolean) => {
+    if (!workspacePath || toggling) return;
+    setToggling(true);
+    try {
+      await backendRequest({
+        method: 'POST',
+        path: nextTrust ? '/api/v1/hooks/project/trust' : '/api/v1/hooks/project/untrust',
+        body: { workspace: workspacePath },
+      });
+      setTrusted(nextTrust);
+    } catch {
+      setTrusted(nextTrust);
+    } finally {
+      setToggling(false);
+    }
+  };
+
+  return (
+    <div
+      className="rounded-lg border border-border/80 bg-muted/20 p-3 flex flex-wrap items-center justify-between gap-2"
+      data-testid="coding-hooks-governance-bar"
+    >
+      <div className="flex items-center gap-2 text-xs">
+        {trusted ? (
+          <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+        ) : (
+          <ShieldOff className="h-4 w-4 text-amber-500 shrink-0" />
+        )}
+        <div>
+          <span className="font-medium text-foreground" data-testid="coding-hooks-trust-status">
+            项目级自动化钩子 (.sage/hooks.json)：
+            {configExists
+              ? trusted
+                ? `已授信启用 (${detectedCount || 1} 个 Hook)`
+                : `待审批授信 (${detectedCount || 1} 个 Hook)`
+              : '未检测到钩子配置文件（可通过一键初始化生成）'}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        {!trusted ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void handleToggleTrust(true)}
+            disabled={toggling}
+            data-testid="coding-hooks-trust-btn"
+          >
+            信任并启用 Hooks
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void handleToggleTrust(false)}
+            disabled={toggling}
+            data-testid="coding-hooks-untrust-btn"
+          >
+            撤销 Hooks 信任
+          </Button>
+        )}
       </div>
     </div>
   );
