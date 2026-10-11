@@ -515,6 +515,25 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 ))}
               </select>
 
+              {(() => {
+                const stages = activeBlueprint.stages;
+                const curIdx = stages.findIndex((s) => s.id === activeProject.projectStage);
+                const nextStage =
+                  curIdx === -1 ? stages[0] : curIdx + 1 < stages.length ? stages[curIdx + 1] : null;
+                if (!nextStage) return null;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => void handleChangeProjectStage(nextStage.id)}
+                    data-testid="studio-advance-stage-btn"
+                    title={`推进至下一阶段：${nextStage.label}`}
+                    className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/15"
+                  >
+                    推进至「{nextStage.label}」→
+                  </button>
+                );
+              })()}
+
               <select
                 value={activeProject.vcsMode === 'git' ? 'git' : 'builtin'}
                 onChange={(e) => void handleChangeVcsMode(e.target.value as 'git' | 'builtin')}

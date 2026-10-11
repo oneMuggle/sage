@@ -27,7 +27,9 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
       <MilestoneProgressWidget projectId={project.id} />
 
       {/* Coding 项目显示 Git 状态 */}
-      {projectType === 'coding' && <GitStatusWidget projectId={project.id} />}
+      {(projectType === 'coding' || project.vcsMode === 'git') && (
+        <GitStatusWidget projectId={project.id} />
+      )}
     </div>
   );
 }
