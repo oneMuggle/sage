@@ -236,6 +236,11 @@ export const projectRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/projects/${projectId(a)}/checkpoints`,
     body: (a) => ({ label: a.label ?? null }),
   },
+  projects_get_checkpoint: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/projects/${projectId(a)}/checkpoints/${enc(a.checkpointId ?? a.checkpoint_id)}`,
+  },
   projects_restore_checkpoint: {
     method: 'POST',
     path: (a) =>
