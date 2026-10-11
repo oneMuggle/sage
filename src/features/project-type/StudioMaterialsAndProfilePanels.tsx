@@ -2,7 +2,7 @@
  * Phase P9 & P10: 多态项目工作台 L1 项目总纲 (SAGE.md) + L4 受控资料库 + L3 项目记忆画像 + L5 只读白名单面板
  */
 
-import { CheckCircle2, FilePlus2, FileText, FolderLock, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { CheckCircle2, Eye, FilePlus2, FileText, FolderLock, History, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -82,14 +82,19 @@ export function StudioCharterTabPanel({
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (withCheckpoint = false) => {
     if (saving || typeof projectApi?.updateCharter !== 'function') return;
     setSaving(true);
     try {
       const updated = await projectApi.updateCharter(projectId, draft);
       setCharter(updated);
       setDraft(updated.content);
-      setSavedHint(`已保存 SAGE.md（${updated.charCount} 字符）`);
+      if (withCheckpoint && typeof projectApi?.createCheckpoint === 'function') {
+        const cp = await projectApi.createCheckpoint(projectId, 'SAGE.md 规范更新快照');
+        setSavedHint(`已保存 SAGE.md 并固化快照（${cp.id}）`);
+      } else {
+        setSavedHint(`已保存 SAGE.md（${updated.charCount} 字符）`);
+      }
     } catch {
       // ignore in test/offline mode
     } finally {
@@ -168,7 +173,17 @@ export function StudioCharterTabPanel({
             </Button>
             <Button
               size="sm"
-              onClick={() => void handleSave()}
+              variant="secondary"
+              onClick={() => void handleSave(true)}
+              disabled={saving}
+              data-testid="studio-charter-checkpoint-btn"
+            >
+              <History className="mr-1 h-3.5 w-3.5 text-emerald-500" />
+              保存并固化快照
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void handleSave(false)}
               disabled={saving}
               data-testid="studio-charter-save-btn"
             >
@@ -414,16 +429,36 @@ export function StudioMaterialsTabPanel({
   projectPath,
 }: StudioMaterialsTabPanelProps) {
   const [materials, setMaterials] = useState<ProjectMaterial[]>([]);
+  const [discoverablePaths, setDiscoverablePaths] = useState<string[]>([]);
   const [filePathInput, setFilePathInput] = useState('');
+  const [textSnippetInput, setTextSnippetInput] = useState('');
   const [addingFile, setAddingFile] = useState(false);
+  const [addingSnippet, setAddingSnippet] = useState(false);
+  const [previewMaterialId, setPreviewMaterialId] = useState<string | null>(null);
 
   const loadMaterials = useCallback(async () => {
-    if (!projectId || typeof projectApi?.listMaterials !== 'function') return;
-    try {
-      const list = await projectApi.listMaterials(projectId);
-      setMaterials(Array.isArray(list) ? list : []);
-    } catch {
-      setMaterials([]);
+    if (!projectId) return;
+    if (typeof projectApi?.listMaterials === 'function') {
+      try {
+        const list = await projectApi.listMaterials(projectId);
+        setMaterials(Array.isArray(list) ? list : []);
+      } catch {
+        setMaterials([]);
+      }
+    }
+    if (typeof projectApi?.getWorkspaceOverview === 'function') {
+      try {
+        const ov = await projectApi.getWorkspaceOverview(projectId);
+        const paths = Array.from(
+          new Set([
+            ...(ov.officeDeliverables ?? []).map((f) => f.relativePath),
+            ...(ov.researchArtifacts ?? []).map((f) => f.relativePath),
+          ]),
+        ).slice(0, 6);
+        setDiscoverablePaths(paths);
+      } catch {
+        setDiscoverablePaths([]);
+      }
     }
   }, [projectId]);
 
@@ -431,13 +466,13 @@ export function StudioMaterialsTabPanel({
     void loadMaterials();
   }, [loadMaterials]);
 
-  const handleAddFromFile = async () => {
-    const rel = filePathInput.trim();
+  const handleAddFromFile = async (targetPath?: string) => {
+    const rel = (targetPath ?? filePathInput).trim();
     if (!rel || addingFile || typeof projectApi?.addMaterialFromFile !== 'function') return;
     setAddingFile(true);
     try {
       await projectApi.addMaterialFromFile(projectId, rel);
-      setFilePathInput('');
+      if (!targetPath) setFilePathInput('');
       await loadMaterials();
     } catch {
       // ignore in test/offline mode
@@ -446,10 +481,39 @@ export function StudioMaterialsTabPanel({
     }
   };
 
+  const handleAddSnippet = async () => {
+    const text = textSnippetInput.trim();
+    if (!text || addingSnippet || typeof projectApi?.addMaterial !== 'function') return;
+    setAddingSnippet(true);
+    try {
+      await projectApi.addMaterial(projectId, { content: text });
+      setTextSnippetInput('');
+      await loadMaterials();
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setAddingSnippet(false);
+    }
+  };
+
   const handleToggleEnabled = async (m: ProjectMaterial) => {
     if (typeof projectApi?.updateMaterial !== 'function') return;
     try {
       await projectApi.updateMaterial(projectId, m.id, { enabled: m.enabled === false });
+      await loadMaterials();
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleBatchToggle = async (enabled: boolean) => {
+    if (typeof projectApi?.updateMaterial !== 'function' || materials.length === 0) return;
+    try {
+      for (const m of materials) {
+        if ((m.enabled !== false) !== enabled) {
+          await projectApi.updateMaterial(projectId, m.id, { enabled });
+        }
+      }
       await loadMaterials();
     } catch {
       // ignore
@@ -468,11 +532,54 @@ export function StudioMaterialsTabPanel({
 
   return (
     <div className="space-y-3" data-testid="project-materials-studio-panel">
-      <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-        L4 授信隔离资料与文献语料池（绑定工作区 <code className="font-mono">{projectPath}</code>
-        ）：支持一键将工作区内的 <code className="font-mono">.bib / .tex / .docx / .xlsx / .md</code>{' '}
-        文件提取入库并按需勾选参与本轮对话上下文（Source-Grounded Toggle）。
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+        <div>
+          L4 授信隔离资料与文献语料池（绑定工作区 <code className="font-mono">{projectPath}</code>
+          ）：支持工作区文件提取或纯文本条款/摘要入库，按需勾选参与本轮对话上下文（Source-Grounded Toggle）。
+        </div>
+        {materials.length > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => void handleBatchToggle(true)}
+              data-testid="studio-materials-enable-all"
+              className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+            >
+              全选参与上下文
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBatchToggle(false)}
+              data-testid="studio-materials-disable-all"
+              className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted"
+            >
+              全部隔离
+            </button>
+          </div>
+        )}
       </div>
+
+      {discoverablePaths.length > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-1.5"
+          data-testid="studio-discoverable-files-bar"
+        >
+          <span className="text-ui-2xs text-muted-foreground">工作区发现可入库文件：</span>
+          {discoverablePaths.map((relPath, idx) => (
+            <button
+              key={relPath}
+              type="button"
+              disabled={addingFile}
+              onClick={() => void handleAddFromFile(relPath)}
+              data-testid={`studio-discoverable-file-${idx}`}
+              className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 font-mono text-ui-2xs text-primary hover:bg-primary/10"
+            >
+              <Plus className="h-2.5 w-2.5" />
+              {relPath}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <input
@@ -494,6 +601,27 @@ export function StudioMaterialsTabPanel({
         </Button>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <input
+          type="text"
+          value={textSnippetInput}
+          onChange={(e) => setTextSnippetInput(e.target.value)}
+          placeholder="或直接粘贴纯文本参考片段（如合同关键条款、文献核心摘要、会议纪要结论）..."
+          data-testid="studio-material-text-input"
+          className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs"
+        />
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => void handleAddSnippet()}
+          disabled={!textSnippetInput.trim() || addingSnippet}
+          data-testid="studio-material-text-add"
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          添加文本资料
+        </Button>
+      </div>
+
       {materials.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
           当前项目暂无入库受控资料
@@ -503,33 +631,55 @@ export function StudioMaterialsTabPanel({
           {materials.map((m) => {
             const isEnabled = m.enabled !== false;
             const summaryLabel = (m.content || '').split('\n')[0]?.trim().slice(0, 80) || m.id;
+            const isPreviewOpen = previewMaterialId === m.id;
             return (
               <div
                 key={m.id}
-                className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs"
+                className="rounded-md border border-border bg-card px-3 py-2 text-xs space-y-1.5"
               >
-                <label className="flex items-center gap-2 min-w-0 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isEnabled}
-                    onChange={() => void handleToggleEnabled(m)}
-                    data-testid={`studio-material-toggle-${m.id}`}
-                    className="h-3.5 w-3.5 rounded border-border"
-                  />
-                  <span className="truncate font-medium text-foreground">{summaryLabel}</span>
-                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-ui-2xs text-muted-foreground">
-                    {m.status === 'ready' ? '已索引 Wiki' : '待索引'}
-                  </span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => void handleDelete(m.id)}
-                  aria-label={`移除资料：${summaryLabel}`}
-                  data-testid={`studio-material-delete-${m.id}`}
-                  className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 min-w-0 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isEnabled}
+                      onChange={() => void handleToggleEnabled(m)}
+                      data-testid={`studio-material-toggle-${m.id}`}
+                      className="h-3.5 w-3.5 rounded border-border"
+                    />
+                    <span className="truncate font-medium text-foreground">{summaryLabel}</span>
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-ui-2xs text-muted-foreground">
+                      {m.status === 'ready' ? '已索引 Wiki' : '待索引'}
+                    </span>
+                  </label>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMaterialId(isPreviewOpen ? null : m.id)}
+                      data-testid={`studio-material-preview-toggle-${m.id}`}
+                      className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                    >
+                      <Eye className="h-2.5 w-2.5" />
+                      {isPreviewOpen ? '收起' : '预览'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(m.id)}
+                      aria-label={`移除资料：${summaryLabel}`}
+                      data-testid={`studio-material-delete-${m.id}`}
+                      className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                {isPreviewOpen && (
+                  <pre
+                    data-testid={`studio-material-preview-body-${m.id}`}
+                    className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded border border-border/60 bg-muted/20 p-2 font-mono text-ui-2xs text-muted-foreground"
+                  >
+                    {m.content}
+                  </pre>
+                )}
               </div>
             );
           })}
