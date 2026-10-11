@@ -15,6 +15,7 @@ import logging
 import os
 import shutil
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -157,6 +158,7 @@ def inspect_project_workspace_overview(project: Project) -> Dict[str, Any]:
             "has_hooks_json": False,
             "checkpoint_count": 0,
             "latest_checkpoint_at": None,
+            "recent_checkpoints": [],
             "coding_indicators": [],
             "office_deliverables": [],
             "research_artifacts": [],
@@ -173,6 +175,7 @@ def inspect_project_workspace_overview(project: Project) -> Dict[str, Any]:
 
     checkpoint_count = 0
     latest_checkpoint_at = None
+    recent_checkpoints: List[Dict[str, Any]] = []
     for cp_dir_name in ("checkpoints", "snapshots"):
         cp_dir = root / ".sage" / cp_dir_name
         if cp_dir.is_dir():
@@ -184,8 +187,30 @@ def inspect_project_workspace_overview(project: Project) -> Dict[str, Any]:
                     mtime_ms = int(cp_item.stat().st_mtime * 1000)
                     if latest_checkpoint_at is None or mtime_ms > latest_checkpoint_at:
                         latest_checkpoint_at = mtime_ms
+                    cp_id = cp_item.stem
+                    cp_label = cp_item.stem
+                    cp_files = 0
+                    if cp_item.is_file() and cp_item.suffix.lower() == ".json":
+                        try:
+                            raw_cp = json.loads(cp_item.read_text(encoding="utf-8", errors="ignore"))
+                            if isinstance(raw_cp, dict):
+                                cp_id = str(raw_cp.get("id") or cp_id)
+                                cp_label = str(raw_cp.get("label") or cp_label)
+                                cp_files = int(raw_cp.get("file_count") or 0)
+                                mtime_ms = int(raw_cp.get("created_at") or mtime_ms)
+                        except (OSError, ValueError, TypeError):
+                            continue
+                    recent_checkpoints.append(
+                        {
+                            "id": cp_id,
+                            "label": cp_label,
+                            "created_at": mtime_ms,
+                            "file_count": cp_files,
+                        }
+                    )
             except OSError:
                 pass
+    recent_checkpoints.sort(key=lambda item: item["created_at"], reverse=True)
 
     if (root / ".git").exists():
         coding_indicators.append(".git")
@@ -234,6 +259,7 @@ def inspect_project_workspace_overview(project: Project) -> Dict[str, Any]:
         "has_hooks_json": has_hooks_json,
         "checkpoint_count": checkpoint_count,
         "latest_checkpoint_at": latest_checkpoint_at,
+        "recent_checkpoints": recent_checkpoints[:10],
         "coding_indicators": coding_indicators,
         "office_deliverables": office_deliverables[:30],
         "research_artifacts": research_artifacts[:30],
@@ -478,4 +504,43 @@ def inspect_project_runtime_and_hooks(project_id: str, workspace_root: str) -> D
         "hooks_count": hooks_count,
         "hooks_trusted": hooks_trusted,
         "recommendations": recommendations,
+    }
+
+
+def create_project_checkpoint(project: Project, label: str = "") -> Dict[str, Any]:
+    """在项目工作区 .sage/checkpoints 下创建内置版本快照检查点记录。"""
+    root = Path(project.path)
+    if not root.is_dir():
+        raise ValueError("项目目录不存在")
+    overview = inspect_project_workspace_overview(project)
+    now_ms = int(time.time() * 1000)
+    cp_id = f"cp_{now_ms}"
+    clean_label = (label or "").strip() or "工作区手动版本快照"
+    tracked_files = [
+        item["relative_path"]
+        for item in (
+            overview.get("office_deliverables", []) + overview.get("research_artifacts", [])
+        )
+    ]
+    if (root / "SAGE.md").is_file():
+        tracked_files.insert(0, "SAGE.md")
+    cp_dir = root / ".sage" / "checkpoints"
+    cp_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "id": cp_id,
+        "project_id": project.id,
+        "label": clean_label,
+        "created_at": now_ms,
+        "file_count": len(tracked_files),
+        "files": tracked_files[:50],
+    }
+    (cp_dir / f"{cp_id}.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return {
+        "id": cp_id,
+        "label": clean_label,
+        "created_at": now_ms,
+        "file_count": len(tracked_files),
     }

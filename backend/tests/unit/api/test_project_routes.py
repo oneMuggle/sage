@@ -652,3 +652,24 @@ def test_update_vcs_mode_and_checkpoint_overview(client, ws_dir: Path):
         r = client.post(f"/projects/{pid}/constraints/import-template", json={"template": tpl})
         assert r.status_code == 201
         assert len(r.json()["constraints"]) >= 2
+
+
+def test_create_project_checkpoint_and_timeline(client, ws_dir: Path):
+    """POST /projects/{id}/checkpoints 创建内置版本快照并在 workspace-overview 返回 recent_checkpoints。"""
+    (ws_dir / "SAGE.md").write_text("# 案卷规范", encoding="utf-8")
+    doc_dir = ws_dir / "03_定稿与签发归档"
+    doc_dir.mkdir(parents=True, exist_ok=True)
+    (doc_dir / "合同终稿.docx").write_text("dummy", encoding="utf-8")
+    pid = _register(client, ws_dir)["id"]
+
+    cp_resp = client.post(f"/projects/{pid}/checkpoints", json={"label": "法务终审前版本快照"})
+    assert cp_resp.status_code == 201
+    cp = cp_resp.json()
+    assert cp["label"] == "法务终审前版本快照"
+    assert cp["file_count"] >= 2
+
+    ov_resp = client.get(f"/projects/{pid}/workspace-overview")
+    assert ov_resp.status_code == 200
+    ov = ov_resp.json()
+    assert ov["checkpoint_count"] >= 1
+    assert any(item["label"] == "法务终审前版本快照" for item in ov["recent_checkpoints"])

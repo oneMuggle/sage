@@ -36,6 +36,7 @@ import {
   type UpdateConstraintPayload,
   type UpdateMilestonePayload,
   type WorkspaceArtifactItem,
+  type WorkspaceCheckpointItem,
   type WorkspaceDirectorySummary,
 } from './projectApiTypes';
 import type { Session } from './types';
@@ -61,6 +62,7 @@ export type {
   UpdateConstraintPayload,
   UpdateMilestonePayload,
   WorkspaceArtifactItem,
+  WorkspaceCheckpointItem,
   WorkspaceDirectorySummary,
 };
 
@@ -310,6 +312,12 @@ export const projectApi = {
         has_hooks_json: boolean;
         checkpoint_count?: number;
         latest_checkpoint_at?: number | null;
+        recent_checkpoints?: Array<{
+          id: string;
+          label: string;
+          created_at: number;
+          file_count: number;
+        }>;
         coding_indicators: string[];
         office_deliverables: Array<{
           name: string;
@@ -338,6 +346,12 @@ export const projectApi = {
         hasHooksJson: Boolean(raw.has_hooks_json),
         checkpointCount: raw.checkpoint_count ?? 0,
         latestCheckpointAt: raw.latest_checkpoint_at ?? null,
+        recentCheckpoints: (raw.recent_checkpoints ?? []).map((cp) => ({
+          id: cp.id,
+          label: cp.label,
+          createdAt: cp.created_at,
+          fileCount: cp.file_count,
+        })),
         codingIndicators: raw.coding_indicators ?? [],
         officeDeliverables: (raw.office_deliverables ?? []).map((item) => ({
           name: item.name,
@@ -359,6 +373,26 @@ export const projectApi = {
           name: d.name,
           fileCount: d.file_count,
         })),
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** Phase P7: 为项目创建内置版本控制快照检查点。 */
+  async createCheckpoint(projectId: string, label?: string): Promise<WorkspaceCheckpointItem> {
+    try {
+      const raw = await invoke<{
+        id: string;
+        label: string;
+        created_at: number;
+        file_count: number;
+      }>('projects_create_checkpoint', { projectId, label });
+      return {
+        id: raw.id,
+        label: raw.label,
+        createdAt: raw.created_at,
+        fileCount: raw.file_count,
       };
     } catch (error) {
       throw handleApiError(error);
