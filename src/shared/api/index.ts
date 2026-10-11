@@ -28,6 +28,7 @@ export type {
   ProjectScaffoldOptions,
   ProjectScaffoldResult,
   ProjectContextBudget,
+  ProjectDiagnoseResult,
   ProjectWorkspaceOverview,
   WorkspaceArtifactItem,
   WorkspaceDirectorySummary,

@@ -39,6 +39,7 @@ from backend.api.project_schemas import (
     ProjectAllowedPathsRequest,
     ProjectAllowedPathsResponse,
     ProjectContextBudgetResponse,
+    ProjectDiagnoseResponse,
     ProjectListResponse,
     ProjectMaterialAddRequest,
     ProjectMaterialModel,
@@ -95,6 +96,7 @@ from backend.services.project_type_detector import (
 from backend.services.project_workspace_inspector import (
     extract_workspace_file_as_material_content,
     inspect_project_context_budget,
+    inspect_project_runtime_and_hooks,
     inspect_project_workspace_overview,
 )
 
@@ -733,6 +735,14 @@ def get_project_git_status(project_id: str) -> GitStatusResponse:
             for c in commits
         ],
     )
+
+
+@router.get("/{project_id}/diagnose", response_model=ProjectDiagnoseResponse)
+def get_project_diagnose(project_id: str) -> ProjectDiagnoseResponse:
+    """获取项目本地运行环境满足度、测试命令入口与 Hooks 信任状态。"""
+    project = _get_project_or_404(project_id)
+    data = inspect_project_runtime_and_hooks(project.id, project.path)
+    return ProjectDiagnoseResponse(**data)
 
 
 __all__ = ["router"]

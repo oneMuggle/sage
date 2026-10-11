@@ -345,3 +345,18 @@ class ProjectWorkspaceOverviewResponse(BaseModel):
     office_deliverables: List[WorkspaceArtifactItemModel] = Field(default_factory=list)
     research_artifacts: List[WorkspaceArtifactItemModel] = Field(default_factory=list)
     directory_summary: List[WorkspaceDirectorySummaryModel] = Field(default_factory=list)
+
+
+class ProjectDiagnoseResponse(BaseModel):
+    """项目运行环境满足度、测试入口与 Hooks 状态诊断响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+    project_id: str
+    level: str = "satisfied"
+    detected_languages: List[str] = Field(default_factory=list)
+    available_runtimes: List[str] = Field(default_factory=list)
+    test_commands: List[str] = Field(default_factory=list)
+    hooks_config_exists: bool = False
+    hooks_count: int = 0
+    hooks_trusted: bool = False
+    recommendations: List[str] = Field(default_factory=list)

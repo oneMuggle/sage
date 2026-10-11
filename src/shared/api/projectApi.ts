@@ -15,6 +15,7 @@ import {
   type ProjectAllowedPathsWire,
   type ProjectConstraint,
   type ProjectContextBudget,
+  type ProjectDiagnoseResult,
   type ProjectListWire,
   type ProjectMaterial,
   type ProjectMaterialStatus,
@@ -45,6 +46,7 @@ export type {
   CreateMilestonePayload,
   ProjectConstraint,
   ProjectContextBudget,
+  ProjectDiagnoseResult,
   ProjectMaterial,
   ProjectMaterialStatus,
   ProjectMilestone,
@@ -263,6 +265,36 @@ export const projectApi = {
         activeMaterialsCount: raw.active_materials_count ?? 0,
         totalMaterialsCount: raw.total_materials_count ?? 0,
         enabledConstraintsCount: raw.enabled_constraints_count ?? 0,
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** Phase P4: 获取项目本地运行环境满足度、测试命令入口与 Hooks 信任状态。 */
+  async diagnose(projectId: string): Promise<ProjectDiagnoseResult> {
+    try {
+      const raw = await invoke<{
+        project_id: string;
+        level: string;
+        detected_languages: string[];
+        available_runtimes: string[];
+        test_commands: string[];
+        hooks_config_exists: boolean;
+        hooks_count: number;
+        hooks_trusted: boolean;
+        recommendations: string[];
+      }>('projects_diagnose', { projectId });
+      return {
+        projectId: raw.project_id,
+        level: raw.level ?? 'satisfied',
+        detectedLanguages: raw.detected_languages ?? [],
+        availableRuntimes: raw.available_runtimes ?? [],
+        testCommands: raw.test_commands ?? [],
+        hooksConfigExists: Boolean(raw.hooks_config_exists),
+        hooksCount: raw.hooks_count ?? 0,
+        hooksTrusted: Boolean(raw.hooks_trusted),
+        recommendations: raw.recommendations ?? [],
       };
     } catch (error) {
       throw handleApiError(error);

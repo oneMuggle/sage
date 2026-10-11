@@ -221,6 +221,10 @@ export const projectRoutes: Record<string, CommandRoute> = {
     method: 'GET',
     path: (a) => `/api/v1/projects/${projectId(a)}/context-budget`,
   },
+  projects_diagnose: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${projectId(a)}/diagnose`,
+  },
   projects_workspace_overview: {
     method: 'GET',
     path: (a) => `/api/v1/projects/${projectId(a)}/workspace-overview`,
