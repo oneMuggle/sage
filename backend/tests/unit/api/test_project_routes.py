@@ -564,3 +564,31 @@ def test_material_toggle_context_budget_and_workspace_overview(
     assert overview["has_sage_md"] is True
     assert any(item["name"] == "report.docx" for item in overview["office_deliverables"])
     assert any(item["name"] == "refs.bib" for item in overview["research_artifacts"])
+
+
+def test_add_material_from_workspace_file(client, ws_dir: Path):
+    """POST /projects/{id}/materials/from-file 支持将工作区文献/案卷文件一键纳入受控资料池并拦截越界路径。"""
+    pid = _register(client, ws_dir)["id"]
+
+    lit_dir = ws_dir / "01_literature"
+    lit_dir.mkdir(exist_ok=True)
+    bib_file = lit_dir / "references.bib"
+    bib_file.write_text("@article{vaswani2017attention, title={Attention is All You Need}}", encoding="utf-8")
+
+    pin_res = client.post(
+        f"/projects/{pid}/materials/from-file",
+        json={"relative_path": "01_literature/references.bib"},
+    )
+    assert pin_res.status_code == 201
+    mat = pin_res.json()
+    assert mat["status"] == "ready"
+    assert mat["enabled"] is True
+    assert "[来源文件: 01_literature/references.bib]" in mat["content"]
+    assert "vaswani2017attention" in mat["content"]
+
+    # Path traversal is rejected with 400
+    bad_res = client.post(
+        f"/projects/{pid}/materials/from-file",
+        json={"relative_path": "../outside.txt"},
+    )
+    assert bad_res.status_code == 400

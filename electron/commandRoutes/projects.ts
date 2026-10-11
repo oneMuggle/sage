@@ -206,6 +206,11 @@ export const projectRoutes: Record<string, CommandRoute> = {
     path: (a) =>
       `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials/${encodeURIComponent(String(a.materialId))}`,
   },
+  projects_add_material_from_file: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/materials/from-file`,
+    body: (a) => ({ relative_path: a.relativePath ?? a.relative_path }),
+  },
   projects_update_material: {
     method: 'PATCH',
     path: (a) =>

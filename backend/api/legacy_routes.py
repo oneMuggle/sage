@@ -1073,10 +1073,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     build_constraints_block,
                     build_project_materials_block,
                     build_project_metadata_block,
+                    build_project_stage_milestones_block,
+                    extract_active_files_from_text,
                 )
-                from backend.data.project_material_repo import (
-                    ProjectMaterialRepository,
-                )
+                from backend.data.project_material_repo import ProjectMaterialRepository
                 from backend.data.project_repo import ProjectRepository
                 from backend.office.session_workspace import get_workspace_binding
 
@@ -1084,20 +1084,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     get_database().get_connection(), data.session_id
                 )
                 if m3_binding is not None and m3_binding.workspace_path:
-                    m3_project = (
-                        ProjectRepository()
-                        .get_project_for_workspace(m3_binding.workspace_path)
+                    m3_project = ProjectRepository().get_project_for_workspace(
+                        m3_binding.workspace_path
                     )
-                    metadata_block = build_project_metadata_block(m3_project)
-                    if metadata_block:
-                        system_content += "\n\n" + metadata_block
-                    # ===== 项目约束注入 BEGIN (项目类型分类系统, 2026-09-24) =====
-                    # 约束作为行为指导规则，优先级高于资料（materials）
-                    if m3_project is not None:
-                        constraints_block = build_constraints_block(m3_project.id)
-                        if constraints_block:
-                            system_content += "\n\n" + constraints_block
-                    # ===== 项目约束注入 END =====
+                    active_files = extract_active_files_from_text(data.message) or None
+                    for blk in (
+                        build_project_metadata_block(m3_project),
+                        build_project_stage_milestones_block(m3_project),
+                        build_constraints_block(m3_project.id, active_files=active_files)
+                        if m3_project is not None else "",
+                    ):
+                        if blk:
+                            system_content += "\n\n" + blk
                     if m3_project is not None:
                         active_materials = (
                             ProjectMaterialRepository()

@@ -85,6 +85,14 @@ class MaterialMutationResponse(BaseModel):
     removed: bool
 
 
+class AddMaterialFromFileRequest(BaseModel):
+    """POST /api/v1/projects/{id}/materials/from-file 请求体：将工作区文件纳入受控资料池。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    relative_path: str = Field(..., min_length=1, max_length=1024)
+
+
 class SaveAnswerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     message_id: str = Field(min_length=1, max_length=256)
