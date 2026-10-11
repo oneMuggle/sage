@@ -611,7 +611,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
             <ConstraintManager projectId={activeProject.id} projectType={activeProjectType} />
           )}
 
-          {activeTab === 'milestones' && <MilestoneManager projectId={activeProject.id} />}
+          {activeTab === 'milestones' && <MilestoneManager projectId={activeProject.id} projectType={activeProjectType} />}
 
           {activeTab === 'profile' && (
             <div className="space-y-3" data-testid="project-profile-studio-panel">
