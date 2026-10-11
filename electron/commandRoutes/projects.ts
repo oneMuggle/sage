@@ -236,6 +236,12 @@ export const projectRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/projects/${projectId(a)}/checkpoints`,
     body: (a) => ({ label: a.label ?? null }),
   },
+  projects_restore_checkpoint: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/projects/${projectId(a)}/checkpoints/${enc(a.checkpointId ?? a.checkpoint_id)}/restore`,
+    body: () => ({}),
+  },
   projects_save_answer: {
     method: 'POST',
     path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials/save-answer`,

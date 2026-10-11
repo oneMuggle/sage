@@ -19,6 +19,7 @@ import {
   FolderLock,
   BookMarked,
   CheckCircle2,
+  Database,
   Plus,
   Trash2,
 } from 'lucide-react';
@@ -43,6 +44,10 @@ import { ProjectCreationWizard } from './ProjectCreationWizard';
 import { ProjectOverviewWidgets } from './ProjectOverviewWidgets';
 import { ProjectTypeBadge } from './ProjectTypeBadge';
 import {
+  StudioMaterialsTabPanel,
+  StudioProfileTabPanel,
+} from './StudioMaterialsAndProfilePanels';
+import {
   ARCHETYPE_BLUEPRINTS,
   ARCHETYPE_ORDER,
   getArchetypeBlueprint,
@@ -55,7 +60,7 @@ const ARCHETYPE_ICONS: Record<ProjectType, ComponentType<{ className?: string }>
   personal: User,
 };
 
-type StudioTab = 'overview' | 'constraints' | 'milestones' | 'profile' | 'allowed_paths';
+type StudioTab = 'overview' | 'materials' | 'constraints' | 'milestones' | 'profile' | 'allowed_paths';
 
 export interface ProjectArchetypeStudioProps {
   className?: string;
@@ -547,6 +552,19 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
             </button>
             <button
               type="button"
+              onClick={() => setActiveTab('materials')}
+              data-testid="studio-tab-materials"
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                activeTab === 'materials'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Database className="h-3.5 w-3.5" />
+              L4 受控资料与语料库
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab('constraints')}
               className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                 activeTab === 'constraints'
@@ -613,76 +631,25 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
 
           {activeTab === 'milestones' && <MilestoneManager projectId={activeProject.id} projectType={activeProjectType} />}
 
+          {activeTab === 'materials' && (
+            <StudioMaterialsTabPanel
+              projectId={activeProject.id}
+              projectPath={activeProject.path}
+            />
+          )}
+
           {activeTab === 'profile' && (
-            <div className="space-y-3" data-testid="project-profile-studio-panel">
-              <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-                项目级冻结记忆画像（<code className="font-mono">MEMORY.md</code> · 绑定路径{' '}
-                <code className="font-mono">{activeProject.path}</code>
-                ），仅在当前项目会话中注入系统提示词，保障跨项目语境隔离与 Prefix Cache 命中率。
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <select
-                  value={profileCategory}
-                  onChange={(e) => setProfileCategory(e.target.value)}
-                  aria-label="选择画像类别"
-                  data-testid="studio-profile-category"
-                  className="rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground"
-                >
-                  <option value="convention">约定 (convention)</option>
-                  <option value="architecture">架构/方法论 (architecture)</option>
-                  <option value="decision">决策/审校口径 (decision)</option>
-                  <option value="goal">核心目标/研究问题 (goal)</option>
-                  <option value="note">阶段发现/备注 (note)</option>
-                </select>
-                <input
-                  type="text"
-                  value={profileDraft}
-                  onChange={(e) => setProfileDraft(e.target.value)}
-                  placeholder="输入要长期固化到本项目的约定、决策或核心目标..."
-                  data-testid="studio-profile-input"
-                  className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => void handleAddProfileEntry()}
-                  disabled={!profileDraft.trim() || savingProfile}
-                  data-testid="studio-profile-add-btn"
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" />
-                  添加画像条目
-                </Button>
-              </div>
-              {profileEntries.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-                  当前项目暂无冻结画像条目
-                </div>
-              ) : (
-                <div className="space-y-1.5" data-testid="studio-profile-list">
-                  {profileEntries.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-ui-2xs font-medium text-primary">
-                          {entry.category}
-                        </span>
-                        <span className="truncate text-foreground">{entry.content}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleDeleteProfileEntry(entry.id)}
-                        aria-label={`删除画像条目：${entry.content}`}
-                        data-testid={`studio-profile-delete-${entry.id}`}
-                        className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <StudioProfileTabPanel
+              projectPath={activeProject.path}
+              profileEntries={profileEntries}
+              profileCategory={profileCategory}
+              onCategoryChange={setProfileCategory}
+              profileDraft={profileDraft}
+              onDraftChange={setProfileDraft}
+              savingProfile={savingProfile}
+              onAddEntry={handleAddProfileEntry}
+              onDeleteEntry={handleDeleteProfileEntry}
+            />
           )}
 
           {activeTab === 'allowed_paths' && (
