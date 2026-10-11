@@ -29,6 +29,7 @@ import {
   memoryApi,
   projectApi,
   type ProjectContextBudget,
+  type ProjectDiagnoseResult,
   type ProjectSummary,
   type ProjectType,
   type ProjectWorkspaceOverview,
@@ -63,6 +64,7 @@ export function PolymorphicArchetypeCards({
 }: PolymorphicArchetypeCardsProps) {
   const [budget, setBudget] = useState<ProjectContextBudget | null>(null);
   const [overview, setOverview] = useState<ProjectWorkspaceOverview | null>(null);
+  const [diagnoseInfo, setDiagnoseInfo] = useState<ProjectDiagnoseResult | null>(null);
   const [profileItems, setProfileItems] = useState<ProjectProfileEntry[]>([]);
   const [decisionInput, setDecisionInput] = useState('');
   const [reasonInput, setReasonInput] = useState('');
@@ -79,6 +81,14 @@ export function PolymorphicArchetypeCards({
           .getContextBudget(project.id)
           .then((res) => setBudget(res))
           .catch(() => setBudget(null)),
+      );
+    }
+    if (typeof projectApi?.diagnose === 'function') {
+      tasks.push(
+        projectApi
+          .diagnose(project.id)
+          .then((res) => setDiagnoseInfo(res))
+          .catch(() => setDiagnoseInfo(null)),
       );
     }
     if (typeof projectApi?.getWorkspaceOverview === 'function') {
@@ -234,13 +244,30 @@ export function PolymorphicArchetypeCards({
               </span>
               <span
                 className={`rounded px-2 py-0.5 border ${
-                  overview?.hasHooksJson
+                  overview?.hasHooksJson || diagnoseInfo?.hooksConfigExists
                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600'
                     : 'border-border bg-muted text-muted-foreground'
                 }`}
               >
-                hooks.json {overview?.hasHooksJson ? '已配置' : '可选'}
+                hooks.json{' '}
+                {overview?.hasHooksJson || diagnoseInfo?.hooksConfigExists
+                  ? `已配置(${diagnoseInfo?.hooksCount ?? 1})`
+                  : '可选'}
               </span>
+              {diagnoseInfo && (
+                <span
+                  data-testid="coding-runtime-diagnose-badge"
+                  className={`rounded px-2 py-0.5 border ${
+                    diagnoseInfo.level === 'satisfied'
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600'
+                      : diagnoseInfo.level === 'partial'
+                        ? 'border-amber-500/40 bg-amber-500/10 text-amber-600'
+                        : 'border-red-500/40 bg-red-500/10 text-red-600'
+                  }`}
+                >
+                  运行环境：{diagnoseInfo.level === 'satisfied' ? '就绪' : diagnoseInfo.level === 'partial' ? '部分就绪' : '缺失'}
+                </span>
+              )}
             </div>
           </div>
 
@@ -263,6 +290,19 @@ export function PolymorphicArchetypeCards({
                   </span>
                 )}
               </div>
+              {(diagnoseInfo?.testCommands ?? []).length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-ui-2xs text-muted-foreground">快捷命令入口：</span>
+                  {diagnoseInfo?.testCommands.map((cmdStr: string) => (
+                    <span
+                      key={cmdStr}
+                      className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-ui-2xs text-emerald-600 dark:text-emerald-400"
+                    >
+                      {cmdStr}
+                    </span>
+                  ))}
+                </div>
+              )}
               {(overview?.directorySummary ?? []).length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {overview?.directorySummary.map((d) => (
@@ -317,6 +357,43 @@ export function PolymorphicArchetypeCards({
                 </ul>
               )}
             </div>
+          </div>
+
+          <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2">
+            <div className="text-xs font-medium text-foreground">
+              案卷审校纪要与口径约定登记 (注入 L3 项目画像)
+            </div>
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={decisionInput}
+                onChange={(e) => setDecisionInput(e.target.value)}
+                placeholder="登记本案卷审校结论或专用术语口径（如：合同违约金上限统一按总额 20% 审定）"
+                className="flex-1 rounded border border-input bg-background px-2 py-1 text-xs"
+                data-testid="business-decision-input"
+              />
+              <Button
+                size="sm"
+                onClick={() => void handleAddDecision()}
+                disabled={!decisionInput.trim() || savingDecision}
+                data-testid="business-decision-add"
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                记录审校口径
+              </Button>
+            </div>
+            {decisions.length > 0 && (
+              <ul className="space-y-1 max-h-24 overflow-y-auto" data-testid="business-decisions-list">
+                {decisions.slice(-3).map((d: ProjectProfileEntry) => (
+                  <li
+                    key={d.id}
+                    className="rounded border border-border/60 bg-background px-2 py-1 text-xs text-foreground"
+                  >
+                    {d.content}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </Card>
       )}

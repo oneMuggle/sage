@@ -592,3 +592,26 @@ def test_add_material_from_workspace_file(client, ws_dir: Path):
         json={"relative_path": "../outside.txt"},
     )
     assert bad_res.status_code == 400
+
+
+def test_project_diagnose_endpoint(client, ws_dir: Path):
+    """GET /projects/{id}/diagnose 返回代码项目的语言栈、测试命令入口与 hooks.json 状态。"""
+    (ws_dir / "package.json").write_text(
+        '{"name": "demo", "scripts": {"test": "vitest", "lint": "eslint ."}}',
+        encoding="utf-8",
+    )
+    (ws_dir / "tsconfig.json").write_text("{}", encoding="utf-8")
+    hooks_dir = ws_dir / ".sage"
+    hooks_dir.mkdir(exist_ok=True)
+    (hooks_dir / "hooks.json").write_text('{"hooks": [{"event": "post-edit"}]}', encoding="utf-8")
+
+    pid = _register(client, ws_dir)["id"]
+    resp = client.get(f"/projects/{pid}/diagnose")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["project_id"] == pid
+    assert "TypeScript/Node.js" in body["detected_languages"]
+    assert "npm run test" in body["test_commands"]
+    assert "npm run lint" in body["test_commands"]
+    assert body["hooks_config_exists"] is True
+    assert body["hooks_count"] == 1

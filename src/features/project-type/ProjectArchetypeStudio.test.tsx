@@ -11,6 +11,7 @@ const mockGetGitStatus = vi.fn();
 const mockGetContextBudget = vi.fn();
 const mockGetWorkspaceOverview = vi.fn();
 const mockAddMaterialFromFile = vi.fn();
+const mockDiagnose = vi.fn();
 const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
 
@@ -26,6 +27,7 @@ vi.mock('../../shared/api', () => ({
     getContextBudget: (...args: unknown[]) => mockGetContextBudget(...args),
     getWorkspaceOverview: (...args: unknown[]) => mockGetWorkspaceOverview(...args),
     addMaterialFromFile: (...args: unknown[]) => mockAddMaterialFromFile(...args),
+    diagnose: (...args: unknown[]) => mockDiagnose(...args),
   },
   memoryApi: {
     getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
@@ -118,6 +120,17 @@ beforeEach(() => {
     ],
   });
   mockCreateProjectProfile.mockReset();
+  mockDiagnose.mockResolvedValue({
+    projectId: 'proj-1',
+    level: 'satisfied',
+    detectedLanguages: ['TypeScript/Node.js', 'Python'],
+    availableRuntimes: ['node', 'python', 'git'],
+    testCommands: ['npm run test', 'pytest'],
+    hooksConfigExists: true,
+    hooksCount: 2,
+    hooksTrusted: true,
+    recommendations: [],
+  });
   mockAddMaterialFromFile.mockResolvedValue({
     id: 'mat-file-1',
     projectId: 'proj-1',
