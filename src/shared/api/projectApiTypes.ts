@@ -197,6 +197,7 @@ export interface ProjectContextBudget {
   activeMaterialsCount: number;
   totalMaterialsCount: number;
   enabledConstraintsCount: number;
+  synthesizedPreview?: string;
 }
 
 export interface WorkspaceArtifactItem {

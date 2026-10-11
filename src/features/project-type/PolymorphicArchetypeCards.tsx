@@ -18,6 +18,8 @@ import {
   FileSpreadsheet,
   FileText,
   FlaskConical,
+  Copy,
+  Eye,
   FolderCheck,
   Layers,
   Plus,
@@ -78,6 +80,8 @@ export function PolymorphicArchetypeCards({
   const [savingDecision, setSavingDecision] = useState(false);
   const [pinningPath, setPinningPath] = useState<string | null>(null);
   const [pinnedPaths, setPinnedPaths] = useState<Record<string, boolean>>({});
+  const [showContextPreview, setShowContextPreview] = useState(false);
+  const [copiedContext, setCopiedContext] = useState(false);
 
   const loadData = useCallback(async () => {
     const tasks: Promise<void>[] = [];
@@ -180,10 +184,21 @@ export function PolymorphicArchetypeCards({
               五层受控上下文注入预算水位 (5-Layer Context Budget Watermark)
             </span>
           </div>
-          <span className="text-xs font-mono text-muted-foreground">
-            总注入约 {totalChars.toLocaleString()} 字符 · L4 资料池上限 {capChars.toLocaleString()}{' '}
-            字符 ({usagePct}%)
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-muted-foreground">
+              总注入约 {totalChars.toLocaleString()} 字符 · L4 资料池上限 {capChars.toLocaleString()}{' '}
+              字符 ({usagePct}%)
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowContextPreview((prev) => !prev)}
+              data-testid="toggle-synthesized-context-preview"
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              <Eye className="h-3 w-3 text-primary" />
+              {showContextPreview ? '收起合成预览' : '预览合成上下文'}
+            </button>
+          </div>
         </div>
 
         <div className="h-2 w-full rounded-full bg-muted overflow-hidden flex">
@@ -226,6 +241,41 @@ export function PolymorphicArchetypeCards({
             </div>
           </div>
         </div>
+
+        {showContextPreview && (
+          <div
+            className="rounded-lg border border-border bg-muted/15 p-3 space-y-2 text-xs"
+            data-testid="synthesized-context-preview-panel"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium text-foreground">
+                五层受控上下文合成预览（随每轮会话自动注入 System Prompt）
+              </span>
+              <button
+                type="button"
+                data-testid="copy-synthesized-context-btn"
+                onClick={() => {
+                  const text = budget?.synthesizedPreview || '';
+                  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+                    void navigator.clipboard.writeText(text);
+                  }
+                  setCopiedContext(true);
+                }}
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+              >
+                <Copy className="h-3 w-3" />
+                {copiedContext ? '已复制' : '复制合成上下文'}
+              </button>
+            </div>
+            <pre
+              className="max-h-44 overflow-y-auto whitespace-pre-wrap rounded border border-border/70 bg-background p-2.5 font-mono text-ui-2xs text-foreground"
+              data-testid="synthesized-context-preview-content"
+            >
+              {budget?.synthesizedPreview?.trim() ||
+                '当前项目尚未配置 SAGE.md、目标指令或置顶资料，点击上方「项目总纲」或「一键初始化目录与规范」即可生成。'}
+            </pre>
+          </div>
+        )}
       </Card>
 
       {/* 2. 多态项目专属治理工作台卡片 */}
