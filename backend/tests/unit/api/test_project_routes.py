@@ -628,3 +628,27 @@ def test_import_concise_note_taking_template(client, ws_dir: Path):
     items = resp.json()["constraints"]
     assert len(items) == 2
     assert any(item["category"] == "gtd_workflow" for item in items)
+
+
+def test_update_vcs_mode_and_checkpoint_overview(client, ws_dir: Path):
+    """PATCH /projects/{id} 支持切换 vcs_mode，且 workspace-overview 探测 .sage/checkpoints 数量。"""
+    pid = _register(client, ws_dir)["id"]
+    cp_dir = ws_dir / ".sage" / "checkpoints"
+    cp_dir.mkdir(parents=True, exist_ok=True)
+    (cp_dir / "cp_001.json").write_text("{}", encoding="utf-8")
+    (cp_dir / "cp_002.json").write_text("{}", encoding="utf-8")
+
+    patch_resp = client.patch(f"/projects/{pid}", json={"vcs_mode": "builtin"})
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["vcs_mode"] == "builtin"
+
+    ov_resp = client.get(f"/projects/{pid}/workspace-overview")
+    assert ov_resp.status_code == 200
+    ov = ov_resp.json()
+    assert ov["checkpoint_count"] == 2
+    assert ov["latest_checkpoint_at"] is not None
+
+    for tpl in ("typescript_strict", "architecture_guard", "contract_compliance", "citation_zero_hallucination", "nsfc_grant_style"):
+        r = client.post(f"/projects/{pid}/constraints/import-template", json={"template": tpl})
+        assert r.status_code == 201
+        assert len(r.json()["constraints"]) >= 2

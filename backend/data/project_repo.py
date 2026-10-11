@@ -359,6 +359,17 @@ class ProjectRepository:
         conn.commit()
         return cursor.rowcount > 0
 
+    def update_vcs_mode(self, project_id: str, vcs_mode: str) -> bool:
+        """更新项目版本控制模式 ("git" | "builtin")。"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE projects SET vcs_mode = ? WHERE id = ?",
+            (vcs_mode, project_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
     def get_project_for_workspace(self, workspace_path: str) -> Optional[Project]:
         """按 workspace path 查找项目（用于上下文注入时定位 project_id）。"""
         conn = self.db.get_connection()

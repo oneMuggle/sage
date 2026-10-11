@@ -155,6 +155,8 @@ def inspect_project_workspace_overview(project: Project) -> Dict[str, Any]:
             "project_id": project.id,
             "has_sage_md": False,
             "has_hooks_json": False,
+            "checkpoint_count": 0,
+            "latest_checkpoint_at": None,
             "coding_indicators": [],
             "office_deliverables": [],
             "research_artifacts": [],
@@ -168,6 +170,22 @@ def inspect_project_workspace_overview(project: Project) -> Dict[str, Any]:
 
     if (root / ".sage" / "hooks.json").is_file():
         has_hooks_json = True
+
+    checkpoint_count = 0
+    latest_checkpoint_at = None
+    for cp_dir_name in ("checkpoints", "snapshots"):
+        cp_dir = root / ".sage" / cp_dir_name
+        if cp_dir.is_dir():
+            try:
+                for cp_item in cp_dir.iterdir():
+                    if cp_item.name.startswith("."):
+                        continue
+                    checkpoint_count += 1
+                    mtime_ms = int(cp_item.stat().st_mtime * 1000)
+                    if latest_checkpoint_at is None or mtime_ms > latest_checkpoint_at:
+                        latest_checkpoint_at = mtime_ms
+            except OSError:
+                pass
 
     if (root / ".git").exists():
         coding_indicators.append(".git")
@@ -214,6 +232,8 @@ def inspect_project_workspace_overview(project: Project) -> Dict[str, Any]:
         "project_id": project.id,
         "has_sage_md": has_sage_md,
         "has_hooks_json": has_hooks_json,
+        "checkpoint_count": checkpoint_count,
+        "latest_checkpoint_at": latest_checkpoint_at,
         "coding_indicators": coding_indicators,
         "office_deliverables": office_deliverables[:30],
         "research_artifacts": research_artifacts[:30],

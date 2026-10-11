@@ -407,9 +407,19 @@ export function PolymorphicArchetypeCards({
                 一般档案项目专属工作台 · 案卷目录核验与 Office 交付物台账
               </h3>
             </div>
-            <span className="text-ui-2xs text-muted-foreground">
-              检测到 {overview?.officeDeliverables.length ?? 0} 份文书/报表交付物
-            </span>
+            <div className="flex items-center gap-2">
+              <span
+                className="rounded bg-emerald-500/10 px-2 py-0.5 text-ui-2xs font-medium text-emerald-600"
+                data-testid="vcs-checkpoint-status"
+              >
+                {project.vcsMode === 'git'
+                  ? 'VCS: Git 版本控制'
+                  : `VCS: 内置快照保护中 · 检查点 ${overview?.checkpointCount ?? 0} 个`}
+              </span>
+              <span className="text-ui-2xs text-muted-foreground">
+                检测到 {overview?.officeDeliverables.length ?? 0} 份文书/报表交付物
+              </span>
+            </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
