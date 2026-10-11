@@ -769,3 +769,25 @@ def test_context_budget_synthesized_preview(client, ws_dir: Path):
     assert "[L2 · 项目目标、系统指令与强约束]" in preview
     assert "核心合同审校工程" in preview
     assert "[L5 · 跨目录只读白名单]" in preview
+
+
+def test_delete_checkpoint_and_context_snapshot(client, ws_dir: Path):
+    (ws_dir / "SAGE.md").write_text("# 项目总纲 v1\n", encoding="utf-8")
+    pid = _register(client, ws_dir)["id"]
+
+    cp_res = client.post(
+        f"/projects/{pid}/checkpoints",
+        json={"label": "Snapshot With Context"},
+    )
+    assert cp_res.status_code == 201
+    cp_id = cp_res.json()["id"]
+
+    detail = client.get(f"/projects/{pid}/checkpoints/{cp_id}").json()
+    assert ".sage/context-snapshot.md" in detail["snapshots"]
+
+    del_res = client.delete(f"/projects/{pid}/checkpoints/{cp_id}")
+    assert del_res.status_code == 200
+    assert del_res.json()["removed"] is True
+
+    after_get = client.get(f"/projects/{pid}/checkpoints/{cp_id}")
+    assert after_get.status_code == 404

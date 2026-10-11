@@ -2,7 +2,7 @@
  * Phase P7: 内置版本快照时间轴与科研引用格式/学术文风快速切换栏 (2026-10-10)
  */
 
-import { BookOpenCheck, Eye, History, Plus, RotateCcw, ShieldCheck, ShieldOff } from 'lucide-react';
+import { BookOpenCheck, Eye, History, Plus, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -11,6 +11,7 @@ import type {
   WorkspaceCheckpointDetail,
   WorkspaceCheckpointItem,
 } from '../../shared/api/projectApiTypes';
+import type { ProjectProfileEntry } from '../../shared/api/types';
 import { Button } from '../../shared/ui/Button';
 
 export interface BuiltinCheckpointTimelineBarProps {
@@ -53,6 +54,19 @@ export function BuiltinCheckpointTimelineBar({
     try {
       const detail = await projectApi.getCheckpoint(projectId, checkpointId);
       setPreviewDetail(detail);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
+  const handleDelete = async (checkpointId: string) => {
+    if (typeof projectApi?.deleteCheckpoint !== 'function') return;
+    try {
+      await projectApi.deleteCheckpoint(projectId, checkpointId);
+      if (previewDetail?.id === checkpointId) {
+        setPreviewDetail(null);
+      }
+      await onCreated();
     } catch {
       // ignore in test/offline mode
     }
@@ -146,6 +160,16 @@ export function BuiltinCheckpointTimelineBar({
                 >
                   <RotateCcw className="h-2.5 w-2.5" />
                   还原快照
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(cp.id)}
+                  data-testid={`delete-checkpoint-${cp.id}`}
+                  title="删除快照"
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/30 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-2.5 w-2.5" />
+                  删除
                 </button>
               </div>
             </li>
@@ -408,6 +432,43 @@ export function CodingHooksGovernanceBar({
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+
+export interface PersonalZettelkastenFooterProps {
+  projectId: string;
+  decisions: ProjectProfileEntry[];
+  checkpoints: WorkspaceCheckpointItem[];
+  onCreated: () => Promise<void> | void;
+}
+
+export function PersonalZettelkastenFooter({
+  projectId,
+  decisions,
+  checkpoints,
+  onCreated,
+}: PersonalZettelkastenFooterProps) {
+  return (
+    <div className="space-y-3">
+      {decisions.length > 0 && (
+        <ul className="space-y-1 max-h-24 overflow-y-auto" data-testid="personal-notes-list">
+          {decisions.slice(-4).map((d) => (
+            <li
+              key={d.id}
+              className="rounded border border-border/60 bg-background px-2.5 py-1 text-xs text-foreground"
+            >
+              {d.content}
+            </li>
+          ))}
+        </ul>
+      )}
+      <BuiltinCheckpointTimelineBar
+        projectId={projectId}
+        checkpoints={checkpoints}
+        onCreated={onCreated}
+      />
     </div>
   );
 }

@@ -118,6 +118,7 @@
     "projects_create_constraint": { "method": "POST", "path": "/api/v1/projects/{projectId}/constraints" },
     "projects_create_milestone": { "method": "POST", "path": "/api/v1/projects/{projectId}/milestones" },
     "projects_create_session": { "method": "POST", "path": "/api/v1/projects/{id}/sessions" },
+    "projects_delete_checkpoint": { "method": "DELETE", "path": "/api/v1/projects/{projectId}/checkpoints/{checkpointId}" },
     "projects_delete_constraint": { "method": "DELETE", "path": "/api/v1/projects/{projectId}/constraints/{constraintId}" },
     "projects_delete_milestone": { "method": "DELETE", "path": "/api/v1/projects/{projectId}/milestones/{milestoneId}" },
     "projects_detect_type": { "method": "POST", "path": "/api/v1/projects/detect-type" },
