@@ -21,6 +21,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException
 
 from backend.api.project_schemas import (
+    AddMaterialFromFileRequest,
     ConstraintCreateRequest,
     ConstraintModel,
     ConstraintsResponse,
@@ -92,6 +93,7 @@ from backend.services.project_type_detector import (
     detect_project_type,
 )
 from backend.services.project_workspace_inspector import (
+    extract_workspace_file_as_material_content,
     inspect_project_context_budget,
     inspect_project_workspace_overview,
 )
@@ -295,6 +297,34 @@ def remove_project_material(project_id: str, material_id: str) -> MaterialMutati
     if not materials.remove(material_id):
         raise _error(404, "material_not_found", "资料不存在")
     return MaterialMutationResponse(removed=True)
+
+
+@router.post(
+    "/{project_id}/materials/from-file",
+    response_model=ProjectMaterialModel,
+    status_code=201,
+)
+@with_db_lock
+def add_project_material_from_file(
+    project_id: str, request: AddMaterialFromFileRequest
+) -> ProjectMaterialModel:
+    """将项目工作区内的文件（文献 .bib/.tex/.md/.ipynb 或案卷 .docx/.xlsx/.pptx 等）一键纳入受控资料池。"""
+    project = _get_project_or_404(project_id)
+    try:
+        content = extract_workspace_file_as_material_content(
+            Path(project.path), request.relative_path
+        )
+    except FileNotFoundError as exc:
+        raise _error(404, "workspace_file_not_found", str(exc)) from exc
+    except ValueError as exc:
+        raise _error(400, "invalid_workspace_file_path", str(exc)) from exc
+
+    material = ProjectMaterialRepository().add(
+        project_id=project.id,
+        content=content,
+        source_message_id=None,
+    )
+    return _material_model(material)
 
 
 @router.post(

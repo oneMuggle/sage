@@ -43,6 +43,14 @@ export interface PolymorphicArchetypeCardsProps {
   projectType: ProjectType;
 }
 
+const RESEARCH_CATEGORY_LABELS: Record<string, string> = {
+  goal: '研究问题 (RQ)',
+  architecture: '方法论框架',
+  decision: '实验路线抉择',
+  convention: '符号与术语表',
+  note: '审稿与阶段发现',
+};
+
 function formatBytes(sizeBytes: number): string {
   if (sizeBytes < 1024) return `${sizeBytes} B`;
   if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
@@ -58,7 +66,10 @@ export function PolymorphicArchetypeCards({
   const [profileItems, setProfileItems] = useState<ProjectProfileEntry[]>([]);
   const [decisionInput, setDecisionInput] = useState('');
   const [reasonInput, setReasonInput] = useState('');
+  const [researchCategory, setResearchCategory] = useState<string>('goal');
   const [savingDecision, setSavingDecision] = useState(false);
+  const [pinningPath, setPinningPath] = useState<string | null>(null);
+  const [pinnedPaths, setPinnedPaths] = useState<Record<string, boolean>>({});
 
   const loadData = useCallback(async () => {
     const tasks: Promise<void>[] = [];
@@ -101,7 +112,7 @@ export function PolymorphicArchetypeCards({
     try {
       await memoryApi.createProjectProfile(fullContent, {
         projectKey: project.path,
-        category: projectType === 'research' ? 'goal' : 'decision',
+        category: projectType === 'research' ? researchCategory : 'decision',
         importance: 5,
       });
       setDecisionInput('');
@@ -112,6 +123,20 @@ export function PolymorphicArchetypeCards({
       // ignore in test/offline mode
     } finally {
       setSavingDecision(false);
+    }
+  };
+
+  const handlePinArtifact = async (relativePath: string) => {
+    if (pinningPath || typeof projectApi?.addMaterialFromFile !== 'function') return;
+    setPinningPath(relativePath);
+    try {
+      await projectApi.addMaterialFromFile(project.id, relativePath);
+      setPinnedPaths((prev) => ({ ...prev, [relativePath]: true }));
+      await loadData();
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setPinningPath(null);
     }
   };
 
@@ -369,9 +394,20 @@ export function PolymorphicArchetypeCards({
                           {item.category}
                         </span>
                       </div>
-                      <span className="shrink-0 font-mono text-ui-2xs text-muted-foreground">
-                        {formatBytes(item.sizeBytes)}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="font-mono text-ui-2xs text-muted-foreground">
+                          {formatBytes(item.sizeBytes)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void handlePinArtifact(item.relativePath)}
+                          disabled={pinningPath === item.relativePath || Boolean(pinnedPaths[item.relativePath])}
+                          data-testid="pin-artifact-to-materials"
+                          className="rounded border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-ui-2xs text-emerald-600 hover:bg-emerald-500/20 disabled:opacity-50"
+                        >
+                          {pinnedPaths[item.relativePath] ? '已入库' : '纳入资料'}
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -403,7 +439,20 @@ export function PolymorphicArchetypeCards({
                 <Sparkles className="h-3.5 w-3.5 text-purple-500" />
                 研究问题 (RQ) / 实验假设与方法论矩阵
               </div>
-              <div className="flex gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
+                <select
+                  value={researchCategory}
+                  onChange={(e) => setResearchCategory(e.target.value)}
+                  aria-label="选择学术画像类别"
+                  data-testid="research-profile-category"
+                  className="rounded border border-input bg-background px-2 py-1 text-xs text-foreground"
+                >
+                  {Object.entries(RESEARCH_CATEGORY_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
                 <input
                   type="text"
                   value={decisionInput}
@@ -442,8 +491,11 @@ export function PolymorphicArchetypeCards({
                       className="flex items-start gap-1.5 rounded border border-border/60 bg-background px-2.5 py-1.5 text-xs"
                     >
                       <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-purple-500" />
-                      <div className="min-w-0">
-                        <div className="font-medium text-foreground">{d.content}</div>
+                      <div className="min-w-0 flex items-center gap-1.5 flex-wrap">
+                        <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-ui-2xs text-purple-600 dark:text-purple-400">
+                          {RESEARCH_CATEGORY_LABELS[d.category] ?? d.category}
+                        </span>
+                        <span className="font-medium text-foreground">{d.content}</span>
                       </div>
                     </li>
                   ))}
@@ -480,9 +532,20 @@ export function PolymorphicArchetypeCards({
                           {item.category}
                         </span>
                       </div>
-                      <span className="shrink-0 font-mono text-ui-2xs text-muted-foreground">
-                        {item.relativePath}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="font-mono text-ui-2xs text-muted-foreground">
+                          {item.relativePath}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void handlePinArtifact(item.relativePath)}
+                          disabled={pinningPath === item.relativePath || Boolean(pinnedPaths[item.relativePath])}
+                          data-testid="pin-artifact-to-materials"
+                          className="rounded border border-purple-500/40 bg-purple-500/10 px-1.5 py-0.5 text-ui-2xs text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 disabled:opacity-50"
+                        >
+                          {pinnedPaths[item.relativePath] ? '已入库' : '纳入资料'}
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>

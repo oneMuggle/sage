@@ -40,6 +40,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
+import { ProjectTypeBadge } from '../../../features/project-type/ProjectTypeBadge';
 import type { InvokeError } from '../../../shared/api/desktopInvoke';
 import {
   projectApi,
@@ -660,6 +661,10 @@ export function ProjectSection({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
                         <span className="text-ui-sm text-text truncate">{project.name}</span>
+                        <ProjectTypeBadge
+                          type={project.projectType ?? project.detectedType}
+                          detected={!project.projectType && Boolean(project.detectedType)}
+                        />
                         {missing && (
                           <AlertTriangle
                             className="w-3 h-3 shrink-0 text-warning"

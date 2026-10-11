@@ -17,10 +17,14 @@ import pytest
 
 from backend.chat.project_context import (
     CONSTRAINTS_HEADER,
+    STAGE_MILESTONES_HEADER,
     TOTAL_CHAR_CAP,
     build_constraints_block,
+    build_project_stage_milestones_block,
+    extract_active_files_from_text,
 )
 from backend.data.project_constraint_repo import ProjectConstraintRepository
+from backend.data.project_milestone_repo import ProjectMilestoneRepository
 from backend.data.project_repo import ProjectRepository
 
 pytestmark = [pytest.mark.unit]
@@ -137,3 +141,54 @@ class TestBuildConstraintsBlock:
         """不存在的 project_id → 空串（无约束）。"""
         block = build_constraints_block("nonexistent-project-id")
         assert block == ""
+
+    def test_active_files_filters_trigger_patterns(self, constraint_repo, project):
+        """传入 active_files 时，仅激活 always/* 与匹配当前文件通配符的约束。"""
+        constraint_repo.create(
+            project_id=project.id,
+            category="security",
+            content="全局安全红线",
+            trigger_pattern="always",
+            priority=9,
+        )
+        constraint_repo.create(
+            project_id=project.id,
+            category="document_format",
+            content="Word 公文排版规范",
+            trigger_pattern="*.docx",
+            priority=8,
+        )
+        constraint_repo.create(
+            project_id=project.id,
+            category="experiment_record",
+            content="Notebook 实验记录规范",
+            trigger_pattern="*.ipynb",
+            priority=8,
+        )
+
+        files = extract_active_files_from_text("请帮我审阅 02_编制中工作稿/采购合同.docx 的条款")
+        assert files == ["02_编制中工作稿/采购合同.docx"]
+
+        block = build_constraints_block(project.id, active_files=files)
+        assert "全局安全红线" in block
+        assert "Word 公文排版规范" in block
+        assert "(*.docx)" in block
+        assert "Notebook 实验记录规范" not in block
+
+    def test_build_project_stage_milestones_block(self, project):
+        """渲染项目形态、当前阶段与未完成里程碑。"""
+        repo = ProjectRepository()
+        repo.update_project_type(project.id, "research")
+        repo.update_project_stage(project.id, "writing")
+        ms_repo = ProjectMilestoneRepository()
+        ms_repo.create(
+            project_id=project.id,
+            title="完成实验消融对比表",
+            stage="writing",
+        )
+        updated = repo.get(project.id)
+        block = build_project_stage_milestones_block(updated)
+        assert STAGE_MILESTONES_HEADER in block
+        assert "type=research" in block
+        assert "stage=writing" in block
+        assert "完成实验消融对比表" in block
