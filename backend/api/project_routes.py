@@ -58,6 +58,7 @@ from backend.api.project_schemas import (
     ProjectTypeDetectResponse,
     ProjectUpdateRequest,
     ProjectWorkspaceOverviewResponse,
+    RestoreCheckpointResponse,
     SaveAnswerRequest,
     WorkspaceCheckpointItemModel,
 )
@@ -101,6 +102,7 @@ from backend.services.project_workspace_inspector import (
     inspect_project_context_budget,
     inspect_project_runtime_and_hooks,
     inspect_project_workspace_overview,
+    restore_project_checkpoint,
 )
 
 logger = logging.getLogger(__name__)
@@ -306,6 +308,25 @@ def create_project_workspace_checkpoint(
     except ValueError as exc:
         raise _error(400, "checkpoint_failed", str(exc)) from exc
     return WorkspaceCheckpointItemModel(**cp)
+
+
+@router.post(
+    "/{project_id}/checkpoints/{checkpoint_id}/restore",
+    response_model=RestoreCheckpointResponse,
+)
+@with_db_lock
+def restore_project_workspace_checkpoint(
+    project_id: str, checkpoint_id: str
+) -> RestoreCheckpointResponse:
+    """将项目工作区内的文本与规范文件还原到指定内置检查点快照。"""
+    project = _get_project_or_404(project_id)
+    try:
+        res = restore_project_checkpoint(project, checkpoint_id)
+    except FileNotFoundError as exc:
+        raise _error(404, "checkpoint_not_found", str(exc)) from exc
+    except ValueError as exc:
+        raise _error(400, "checkpoint_restore_failed", str(exc)) from exc
+    return RestoreCheckpointResponse(**res)
 
 
 @router.delete(

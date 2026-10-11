@@ -163,6 +163,7 @@ def scaffold_project_archetype(
             if not target.exists():
                 target.mkdir(parents=True, exist_ok=True)
                 created_dirs.append(rel_dir)
+        (workspace_path / ".sage" / "checkpoints").mkdir(parents=True, exist_ok=True)
 
     created_files: List[str] = []
     sage_md_path = workspace_path / "SAGE.md"
@@ -170,6 +171,13 @@ def scaffold_project_archetype(
         content = blueprint.sage_md_template.format(project_name=name)
         sage_md_path.write_text(content, encoding="utf-8")
         created_files.append("SAGE.md")
+
+    if create_sage_md and blueprint.project_type == "coding":
+        hooks_path = workspace_path / ".sage" / "hooks.json"
+        if not hooks_path.exists():
+            hooks_path.parent.mkdir(parents=True, exist_ok=True)
+            hooks_path.write_text('{\n  "hooks": []\n}\n', encoding="utf-8")
+            created_files.append(".sage/hooks.json")
 
     return {
         "project_type": blueprint.project_type,
