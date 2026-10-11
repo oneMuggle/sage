@@ -20,8 +20,7 @@ import {
   BookMarked,
   CheckCircle2,
   Database,
-  Plus,
-  Trash2,
+  FileText,
 } from 'lucide-react';
 import { useCallback, useEffect, useState, type ComponentType } from 'react';
 
@@ -44,6 +43,8 @@ import { ProjectCreationWizard } from './ProjectCreationWizard';
 import { ProjectOverviewWidgets } from './ProjectOverviewWidgets';
 import { ProjectTypeBadge } from './ProjectTypeBadge';
 import {
+  StudioAllowedPathsTabPanel,
+  StudioCharterTabPanel,
   StudioMaterialsTabPanel,
   StudioProfileTabPanel,
 } from './StudioMaterialsAndProfilePanels';
@@ -60,7 +61,7 @@ const ARCHETYPE_ICONS: Record<ProjectType, ComponentType<{ className?: string }>
   personal: User,
 };
 
-type StudioTab = 'overview' | 'materials' | 'constraints' | 'milestones' | 'profile' | 'allowed_paths';
+type StudioTab = 'overview' | 'charter' | 'materials' | 'constraints' | 'milestones' | 'profile' | 'allowed_paths';
 
 export interface ProjectArchetypeStudioProps {
   className?: string;
@@ -237,6 +238,24 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
       // ignore
     } finally {
       setScaffolding(false);
+    }
+  };
+
+  const handleQuickAddPresetPath = async (pattern: string) => {
+    const trimmed = pattern.trim();
+    if (!activeProject || !trimmed || typeof projectApi?.updateAllowedPaths !== 'function') return;
+    const current = activeProject.allowedPaths ?? [];
+    if (current.includes(trimmed)) return;
+    setSavingPaths(true);
+    try {
+      const next = await projectApi.updateAllowedPaths(activeProject.id, [...current, trimmed]);
+      setProjects((prev) =>
+        prev.map((p) => (p.id === activeProject.id ? { ...p, allowedPaths: next } : p)),
+      );
+    } catch {
+      // ignore
+    } finally {
+      setSavingPaths(false);
     }
   };
 
@@ -552,6 +571,19 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
             </button>
             <button
               type="button"
+              onClick={() => setActiveTab('charter')}
+              data-testid="studio-tab-charter"
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                activeTab === 'charter'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <FileText className="h-3.5 w-3.5" />
+              L1 项目总纲 (SAGE.md)
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab('materials')}
               data-testid="studio-tab-materials"
               className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -652,67 +684,25 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
             />
           )}
 
+          {activeTab === 'charter' && (
+            <StudioCharterTabPanel
+              projectId={activeProject.id}
+              projectPath={activeProject.path}
+            />
+          )}
+
           {activeTab === 'allowed_paths' && (
-            <div className="space-y-3" data-testid="project-allowed-paths-panel">
-              <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground space-y-1">
-                <div className="font-medium text-foreground">
-                  读写非对称安全边界（Workspace Write + Allowed Paths Read-Only）
-                </div>
-                <p>
-                  • 主工作区目录（<code className="font-mono">{activeProject.path}</code>
-                  ）：允许 AI 读写文件与生成交付物。
-                </p>
-                <p>
-                  • 跨目录只读白名单（<code className="font-mono">allowed_paths</code>
-                  ）：适合挂载一般档案的「企业合同/公文范本库」、科研项目的「Zotero
-                  文献库或外部大型数据集」、代码项目的「共享 SDK 仓库」，仅允许只读检索，严禁写入篡改。
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newAllowedPath}
-                  onChange={(e) => setNewAllowedPath(e.target.value)}
-                  placeholder="输入外部只读参考目录路径或通配规则（如 D:/Templates/** 或 ~/Zotero/storage/**）"
-                  className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-mono"
-                />
-                <Button
-                  size="sm"
-                  onClick={() => void handleAddAllowedPath()}
-                  disabled={!newAllowedPath.trim() || savingPaths}
-                >
-                  <Plus className="mr-1 h-3.5 w-3.5" />
-                  添加只读路径
-                </Button>
-              </div>
-
-              {(activeProject.allowedPaths ?? []).length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-                  暂未配置额外只读路径（当前仅允许访问项目主目录 {activeProject.path}）
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {(activeProject.allowedPaths ?? []).map((rule) => (
-                    <div
-                      key={rule}
-                      className="flex items-center justify-between rounded-md border border-border bg-card px-3 py-2 text-xs"
-                    >
-                      <span className="font-mono text-foreground">{rule}</span>
-                      <button
-                        type="button"
-                        onClick={() => void handleRemoveAllowedPath(rule)}
-                        disabled={savingPaths}
-                        className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        aria-label={`移除只读路径：${rule}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <StudioAllowedPathsTabPanel
+              projectPath={activeProject.path}
+              projectType={activeProjectType}
+              allowedPaths={activeProject.allowedPaths ?? []}
+              newAllowedPath={newAllowedPath}
+              onNewAllowedPathChange={setNewAllowedPath}
+              savingPaths={savingPaths}
+              onAddAllowedPath={handleAddAllowedPath}
+              onQuickAddPresetPath={handleQuickAddPresetPath}
+              onRemoveAllowedPath={handleRemoveAllowedPath}
+            />
           )}
         </Card>
       )}
