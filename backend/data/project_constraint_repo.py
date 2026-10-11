@@ -130,6 +130,10 @@ CONSTRAINT_TEMPLATES = {
         {"category": "legal_compliance", "content": "合同审查须逐条核验权利义务对等性、违约责任上限、争议解决管辖与保密条款", "trigger_pattern": "always", "priority": 9},
         {"category": "terminology", "content": "合同正文与附件中的标的金额大小写、履行期限、主体全称必须完全一致", "trigger_pattern": "*.docx", "priority": 9},
     ],
+    "concise_note_taking": [
+        {"category": "note_structure", "content": "卡片笔记遵循一卡一概念与结论先行原则，标题概括核心论断并附双向链接或分类标签", "trigger_pattern": "*.md", "priority": 7},
+        {"category": "gtd_workflow", "content": "行动项与待办事项统一标注优先级与下一步可执行动作（Next Action）", "trigger_pattern": "always", "priority": 6},
+    ],
 }
 
 

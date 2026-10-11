@@ -117,6 +117,23 @@ export function ProjectMaterialsPanel({
   const { t } = useI18n();
   const [enabledOverrides, setEnabledOverrides] = useState<Record<string, boolean>>({});
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [filePathInput, setFilePathInput] = useState('');
+  const [addingFromFile, setAddingFromFile] = useState(false);
+
+  const handleAddFromFile = async () => {
+    const rel = filePathInput.trim();
+    if (!rel || addingFromFile || typeof projectApi.addMaterialFromFile !== 'function') return;
+    setAddingFromFile(true);
+    try {
+      await projectApi.addMaterialFromFile(project.id, rel);
+      setFilePathInput('');
+      toast.success(`已将工作区文件纳入资料池: ${rel}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '导入工作区文件失败');
+    } finally {
+      setAddingFromFile(false);
+    }
+  };
 
   const isMaterialEnabled = (m: ProjectMaterial): boolean => {
     if (m.id in enabledOverrides) return enabledOverrides[m.id];
@@ -280,6 +297,29 @@ export function ProjectMaterialsPanel({
       ) : (
         <div className="text-ui-2xs text-muted py-1" data-testid="project-materials-empty">
           {t('sider.project.materials_empty')}
+        </div>
+      )}
+
+      {typeof projectApi.addMaterialFromFile === 'function' && (
+        <div className="mt-2 flex items-center gap-1">
+          <input
+            type="text"
+            data-testid="project-material-file-input"
+            value={filePathInput}
+            onChange={(e) => setFilePathInput(e.target.value)}
+            placeholder="输入工作区相对路径一键入库 (如 01_literature/refs.bib 或 02_编制中工作稿/合同.docx)"
+            className="flex-1 text-ui-2xs px-1.5 py-1 rounded border border-border bg-bg font-mono"
+          />
+          <button
+            type="button"
+            data-testid="project-material-file-add"
+            disabled={addingFromFile || !filePathInput.trim()}
+            onClick={() => void handleAddFromFile()}
+            className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded border border-border/60 text-ui-2xs text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Plus className="w-3 h-3" aria-hidden="true" />
+            导入文件
+          </button>
         </div>
       )}
 

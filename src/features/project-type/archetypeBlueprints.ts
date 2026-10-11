@@ -144,7 +144,9 @@ export const ARCHETYPE_BLUEPRINTS: Record<ProjectType, ArchetypeBlueprintMeta> =
       '结构化沉淀：结论先行与卡片式要点提炼',
       '隐私安全护栏：敏感账号、证件与凭据信息自动脱敏',
     ],
-    subTemplates: [],
+    subTemplates: [
+      { key: 'concise_note_taking', label: '卡片盒双链笔记与 GTD 规范', description: '一卡一概念、结论先行与可执行行动项提炼' },
+    ],
     sageMdHint: '自动生成个人知识卡片组织与隐私保护约定 SAGE.md。',
   },
 };
