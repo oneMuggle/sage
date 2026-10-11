@@ -308,6 +308,8 @@ export const projectApi = {
         project_id: string;
         has_sage_md: boolean;
         has_hooks_json: boolean;
+        checkpoint_count?: number;
+        latest_checkpoint_at?: number | null;
         coding_indicators: string[];
         office_deliverables: Array<{
           name: string;
@@ -334,6 +336,8 @@ export const projectApi = {
         projectId: raw.project_id,
         hasSageMd: Boolean(raw.has_sage_md),
         hasHooksJson: Boolean(raw.has_hooks_json),
+        checkpointCount: raw.checkpoint_count ?? 0,
+        latestCheckpointAt: raw.latest_checkpoint_at ?? null,
         codingIndicators: raw.coding_indicators ?? [],
         officeDeliverables: (raw.office_deliverables ?? []).map((item) => ({
           name: item.name,

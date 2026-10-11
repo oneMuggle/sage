@@ -191,6 +191,8 @@ def update_project(project_id: str, request: ProjectUpdateRequest) -> ProjectMod
         repo.update_project_type(project_id, request.project_type)
     if "project_stage" in fields_set:
         repo.update_project_stage(project_id, request.project_stage)
+    if "vcs_mode" in fields_set and request.vcs_mode:
+        repo.update_vcs_mode(project_id, request.vcs_mode)
 
     updated = repo.get(project_id)
     assert updated is not None
