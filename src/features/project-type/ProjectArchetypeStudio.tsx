@@ -27,6 +27,7 @@ import { useCallback, useEffect, useState, type ComponentType } from 'react';
 import {
   memoryApi,
   projectApi,
+  type ProjectMilestone,
   type ProjectSummary,
   type ProjectType,
   type ProjectScaffoldResult,
@@ -74,6 +75,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const [profileCategory, setProfileCategory] = useState<string>('convention');
   const [profileDraft, setProfileDraft] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
+  const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
 
   const loadProjects = useCallback(async () => {
     if (typeof projectApi?.list !== 'function') return;
@@ -111,6 +113,22 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
       void loadActiveProfile(activeProject.path);
     }
   }, [activeProject?.path, loadActiveProfile]);
+
+  useEffect(() => {
+    if (!activeProject?.id || typeof projectApi?.listMilestones !== 'function') return;
+    let cancelled = false;
+    void projectApi
+      .listMilestones(activeProject.id)
+      .then((items) => {
+        if (!cancelled) setMilestones(Array.isArray(items) ? items : []);
+      })
+      .catch(() => {
+        if (!cancelled) setMilestones([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProject?.id]);
 
   const handleAddProfileEntry = async () => {
     const content = profileDraft.trim();
@@ -171,6 +189,30 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
       // ignore
     }
   };
+
+  const handleChangeVcsMode = async (nextVcs: 'git' | 'builtin') => {
+    if (!activeProject || typeof projectApi?.update !== 'function') return;
+    try {
+      const updated = await projectApi.update(activeProject.id, {
+        vcs_mode: nextVcs,
+      });
+      setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    } catch {
+      // ignore
+    }
+  };
+
+  const upcomingDeadline = (() => {
+    const withDue = milestones
+      .filter((m) => m.status !== 'completed' && m.dueDate)
+      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+    const next = withDue[0];
+    if (!next?.dueDate) return null;
+    const dueMs = Date.parse(`${next.dueDate}T23:59:59`);
+    if (Number.isNaN(dueMs)) return null;
+    const daysLeft = Math.ceil((dueMs - Date.now()) / (1000 * 60 * 60 * 24));
+    return { title: next.title, dueDate: next.dueDate, daysLeft };
+  })();
 
   const handleScaffoldActiveProject = async () => {
     if (!activeProject || typeof projectApi?.scaffold !== 'function') return;
@@ -400,6 +442,24 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 type={activeProject.projectType ?? activeProject.detectedType}
                 detected={!activeProject.projectType && Boolean(activeProject.detectedType)}
               />
+              {upcomingDeadline && (
+                <span
+                  data-testid="project-deadline-capsule"
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-ui-2xs font-medium ${
+                    upcomingDeadline.daysLeft < 0
+                      ? 'bg-destructive/15 text-destructive'
+                      : upcomingDeadline.daysLeft <= 7
+                        ? 'bg-amber-500/15 text-amber-600'
+                        : 'bg-emerald-500/15 text-emerald-600'
+                  }`}
+                >
+                  {upcomingDeadline.daysLeft < 0
+                    ? `已逾期 ${Math.abs(upcomingDeadline.daysLeft)} 天 · ${upcomingDeadline.title}`
+                    : upcomingDeadline.daysLeft <= 7
+                      ? `距截止仅剩 ${upcomingDeadline.daysLeft} 天 · ${upcomingDeadline.title}`
+                      : `下一节点：${upcomingDeadline.title} (${upcomingDeadline.dueDate})`}
+                </span>
+              )}
             </div>
 
             {/* 项目形态与阶段快速切换 */}
@@ -429,6 +489,17 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                     阶段：{st.label}
                   </option>
                 ))}
+              </select>
+
+              <select
+                value={activeProject.vcsMode === 'git' ? 'git' : 'builtin'}
+                onChange={(e) => void handleChangeVcsMode(e.target.value as 'git' | 'builtin')}
+                aria-label="切换版本控制模式"
+                data-testid="studio-vcs-mode-select"
+                className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
+              >
+                <option value="git">VCS：Git 仓库</option>
+                <option value="builtin">VCS：内置快照</option>
               </select>
 
               <Button

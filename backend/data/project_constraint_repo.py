@@ -134,6 +134,26 @@ CONSTRAINT_TEMPLATES = {
         {"category": "note_structure", "content": "卡片笔记遵循一卡一概念与结论先行原则，标题概括核心论断并附双向链接或分类标签", "trigger_pattern": "*.md", "priority": 7},
         {"category": "gtd_workflow", "content": "行动项与待办事项统一标注优先级与下一步可执行动作（Next Action）", "trigger_pattern": "always", "priority": 6},
     ],
+    "typescript_strict": [
+        {"category": "coding_style", "content": "TypeScript 启用 strict 类型检查，禁止使用裸 any 或非受检类型断言", "trigger_pattern": "*.ts*", "priority": 8},
+        {"category": "design_tokens", "content": "前端组件统一使用语义化字号与主题变量（text-ui-*），禁止硬编码像素字号", "trigger_pattern": "src/**/*.tsx", "priority": 7},
+    ],
+    "architecture_guard": [
+        {"category": "architecture", "content": "严格遵循 pages -> widgets -> features -> shared 单向依赖边界，禁止跨层逆向导入", "trigger_pattern": "src/**", "priority": 9},
+        {"category": "architecture", "content": "单文件行数控制在架构基线限额以内，超出时按职责拆分子模块", "trigger_pattern": "always", "priority": 7},
+    ],
+    "contract_compliance": [
+        {"category": "legal_compliance", "content": "合同与协议须逐条核验权利义务对等性、违约责任上限、争议解决管辖与保密条款", "trigger_pattern": "always", "priority": 9},
+        {"category": "terminology", "content": "全案卷主体简称、标的金额大小写（人民币大写与阿拉伯数字）及起止日期完全一致", "trigger_pattern": "*.docx", "priority": 9},
+    ],
+    "citation_zero_hallucination": [
+        {"category": "citation_integrity", "content": "零幻觉引用铁律：严禁编造任何参考文献、作者、年份或 DOI；无依据处必须显式标注 [待补充文献支撑]", "trigger_pattern": "always", "priority": 10},
+        {"category": "reproducibility", "content": "每个实验结论与图表须注明对应的数据集文件与脚本路径", "trigger_pattern": "always", "priority": 8},
+    ],
+    "nsfc_grant_style": [
+        {"category": "proposal_structure", "content": "基金申请书遵循「立项依据-研究内容-研究目标-拟解决关键科学问题-研究方案与可行性分析」逻辑闭环", "trigger_pattern": "always", "priority": 8},
+        {"category": "academic_writing", "content": "凝练科学问题与创新点，区分已有工作基础与本课题拟开展研究内容", "trigger_pattern": "always", "priority": 7},
+    ],
 }
 
 

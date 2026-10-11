@@ -62,7 +62,20 @@ beforeEach(() => {
   mockScaffold.mockReset();
   mockUpdateAllowedPaths.mockReset();
   mockListConstraints.mockResolvedValue([]);
-  mockListMilestones.mockResolvedValue([]);
+  mockListMilestones.mockResolvedValue([
+    {
+      id: 'ms-1',
+      projectId: 'proj-1',
+      title: '完成法务合规会签',
+      description: null,
+      stage: 'monitoring',
+      dueDate: '2026-10-15',
+      completedAt: null,
+      status: 'in_progress',
+      sortOrder: 1,
+      createdAt: 1000,
+    },
+  ]);
   mockGetContextBudget.mockResolvedValue({
     projectId: 'proj-1',
     l1ConventionsChars: 420,
@@ -248,6 +261,15 @@ describe('ProjectArchetypeStudio', () => {
     await waitFor(() => {
       expect(budgetCard.textContent).toContain('2/3 启用');
     });
+
+    // Deadline countdown capsule & VCS mode status are rendered
+    expect(await screen.findByTestId('project-deadline-capsule')).toHaveTextContent(
+      '完成法务合规会签',
+    );
+    expect(screen.getByTestId('vcs-checkpoint-status')).toHaveTextContent(
+      'VCS: 内置快照保护中',
+    );
+    expect(screen.getByTestId('studio-vcs-mode-select')).toHaveValue('builtin');
 
     // Business polymorphic card is shown initially and supports one-click file pinning
     const businessCard = await screen.findByTestId('polymorphic-card-business');

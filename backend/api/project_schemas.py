@@ -48,6 +48,10 @@ class ProjectUpdateRequest(BaseModel):
         pattern="^(coding|research|business|personal)$",
     )
     project_stage: Optional[str] = Field(default=None, max_length=64)
+    vcs_mode: Optional[str] = Field(
+        default=None,
+        pattern="^(git|builtin)$",
+    )
 
 
 class ProjectMaterialAddRequest(BaseModel):
@@ -341,6 +345,8 @@ class ProjectWorkspaceOverviewResponse(BaseModel):
     project_id: str
     has_sage_md: bool = False
     has_hooks_json: bool = False
+    checkpoint_count: int = 0
+    latest_checkpoint_at: Optional[int] = None
     coding_indicators: List[str] = Field(default_factory=list)
     office_deliverables: List[WorkspaceArtifactItemModel] = Field(default_factory=list)
     research_artifacts: List[WorkspaceArtifactItemModel] = Field(default_factory=list)

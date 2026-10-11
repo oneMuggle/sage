@@ -172,6 +172,7 @@ export interface ProjectUpdatePatch {
   instructions?: string | null;
   project_type?: ProjectType | null;
   project_stage?: string | null;
+  vcs_mode?: 'git' | 'builtin' | null;
 }
 
 export interface ProjectScaffoldOptions {
@@ -216,6 +217,8 @@ export interface ProjectWorkspaceOverview {
   projectId: string;
   hasSageMd: boolean;
   hasHooksJson: boolean;
+  checkpointCount?: number;
+  latestCheckpointAt?: number | null;
   codingIndicators: string[];
   officeDeliverables: WorkspaceArtifactItem[];
   researchArtifacts: WorkspaceArtifactItem[];
