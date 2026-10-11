@@ -19,6 +19,12 @@ export interface ArchetypeTemplateMeta {
   description: string;
 }
 
+export interface ArchetypeMilestoneSeedMeta {
+  title: string;
+  stage: string;
+  description: string;
+}
+
 export interface ArchetypeBlueprintMeta {
   type: ProjectType;
   label: string;
@@ -30,6 +36,7 @@ export interface ArchetypeBlueprintMeta {
   stages: ArchetypeStageMeta[];
   contextPillars: string[];
   subTemplates: ArchetypeTemplateMeta[];
+  recommendedMilestones: ArchetypeMilestoneSeedMeta[];
   sageMdHint: string;
 }
 
@@ -59,6 +66,12 @@ export const ARCHETYPE_BLUEPRINTS: Record<ProjectType, ArchetypeBlueprintMeta> =
       { key: 'python_default', label: 'Python 工程规范', description: 'PEP 8、单函数行数上限与单元测试门禁' },
       { key: 'typescript_react', label: 'TS/React 规范', description: '禁裸 any、显式 Props 接口与语义化 Token' },
       { key: 'security_basic', label: '安全红线基线', description: '禁硬编码密钥、参数化查询与输入校验' },
+    ],
+    recommendedMilestones: [
+      { title: '完成架构设计与 ADR 决策评审', stage: 'planning', description: '梳理模块分层边界、核心数据流与技术选型决策' },
+      { title: '核心模块编码与接口契约联调', stage: 'development', description: '按分层规范完成主干功能实现与类型校验' },
+      { title: '单元测试覆盖与安全扫描达标', stage: 'testing', description: '核心逻辑单测全绿并通过静态代码与依赖审计' },
+      { title: '版本构建发布与变更归档', stage: 'deployment', description: '完成构建产物验证、发布说明与里程碑归档' },
     ],
     sageMdHint: '自动生成包含构建命令、分层架构契约与研发红线的 SAGE.md。',
   },
@@ -90,6 +103,12 @@ export const ARCHETYPE_BLUEPRINTS: Record<ProjectType, ArchetypeBlueprintMeta> =
       { key: 'archive_dossier_cn', label: '中国行政公文案卷 (GB/T 9704)', description: '公文版式、Excel 公式台账与归档清单核验' },
       { key: 'contract_review', label: '法务合同审查规范', description: '权利义务对等、违约上限与金额大小写一致性' },
       { key: 'document_format', label: '通用文书版式与密级', description: '标准标题层级与保密等级标注' },
+    ],
+    recommendedMilestones: [
+      { title: '立卷建档与原始佐证材料归集', stage: 'initiation', description: '归集任务通知书、上级批复与原始参考凭据' },
+      { title: '核心文书/合同工作稿初稿完成', stage: 'execution', description: '依据公共范本与案卷规范完成初稿编制' },
+      { title: '法务合规会签与公文排版终检', stage: 'monitoring', description: '核查权利义务对等性、金额大小写与版式规范' },
+      { title: '正式定稿签发与数字案卷封卷', stage: 'closure', description: '固化最终版本快照并归入 03_定稿与签发归档' },
     ],
     sageMdHint: '自动生成包含案卷密级、甲乙方简称表与四级目录受控约定的 SAGE.md。',
   },
@@ -125,6 +144,12 @@ export const ARCHETYPE_BLUEPRINTS: Record<ProjectType, ArchetypeBlueprintMeta> =
       { key: 'academic_writing', label: '学术论文写作规范', description: 'APA/IEEE 引用格式、客观学术语态与实验四要素' },
       { key: 'grant_proposal', label: '基金课题申报书结构', description: '立项依据-研究内容-关键科学问题-技术路线标准框架' },
     ],
+    recommendedMilestones: [
+      { title: '完成核心文献综述与研究问题 (RQ) 界定', stage: 'proposal', description: '整理 references.bib 与精读对比矩阵，明确科学假设' },
+      { title: '跑通 Baseline 与消融实验并记录显著性检验', stage: 'analysis', description: '完整记录随机种子、超参数、均值±标准差与误差分析' },
+      { title: '完成论文手稿、图表美化与零幻觉引文核查', stage: 'writing', description: '核查所有正文引用与 .bib/入库资料一一对应' },
+      { title: '逐条回复审稿人意见 (Rebuttal) 与修回定稿', stage: 'revision', description: '构建审稿意见回复矩阵并同步更新论文修订版' },
+    ],
     sageMdHint: '自动生成包含研究问题 (RQ)、符号规范表与零幻觉引文护栏的 SAGE.md。',
   },
   personal: {
@@ -146,6 +171,10 @@ export const ARCHETYPE_BLUEPRINTS: Record<ProjectType, ArchetypeBlueprintMeta> =
     ],
     subTemplates: [
       { key: 'concise_note_taking', label: '卡片盒双链笔记与 GTD 规范', description: '一卡一概念、结论先行与可执行行动项提炼' },
+    ],
+    recommendedMilestones: [
+      { title: '清空 00_inbox 收集箱并提炼原子笔记卡片', stage: 'active', description: '遵循一卡一概念与结论先行原则整理近期收集内容' },
+      { title: '完成阶段复盘与历史专题归档', stage: 'archived', description: '将已完成专题移入 03_archive 并更新长期偏好画像' },
     ],
     sageMdHint: '自动生成个人知识卡片组织与隐私保护约定 SAGE.md。',
   },

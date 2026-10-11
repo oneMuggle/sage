@@ -41,6 +41,7 @@ import { Card } from '../../shared/ui/Card';
 
 import {
   BuiltinCheckpointTimelineBar,
+  CodingHooksGovernanceBar,
   ResearchCitationAndToneBar,
 } from './BuiltinCheckpointAndStyleBar';
 
@@ -400,6 +401,12 @@ export function PolymorphicArchetypeCards({
               </ul>
             )}
           </div>
+
+          <CodingHooksGovernanceBar
+            workspacePath={project.path}
+            hasHooksConfig={Boolean(overview?.hasHooksJson || diagnoseInfo?.hooksConfigExists)}
+            hookCount={diagnoseInfo?.hooksCount ?? (overview?.hasHooksJson ? 1 : 0)}
+          />
         </Card>
       )}
 

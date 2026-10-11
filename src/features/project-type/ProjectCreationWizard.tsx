@@ -50,6 +50,7 @@ export function ProjectCreationWizard({
   const [detectionError, setDetectionError] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<ProjectType | null>(null);
   const [autoScaffold, setAutoScaffold] = useState<boolean>(true);
+  const [selectedTemplateKeys, setSelectedTemplateKeys] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -61,6 +62,7 @@ export function ProjectCreationWizard({
     setDetectionError(null);
     setSelectedType(null);
     setAutoScaffold(true);
+    setSelectedTemplateKeys([]);
     setCreating(false);
     setCreateError(null);
   };
@@ -114,7 +116,15 @@ export function ProjectCreationWizard({
   };
 
   const handleNextToConfirm = () => {
+    const bp = getArchetypeBlueprint(selectedType);
+    setSelectedTemplateKeys(bp.subTemplates.map((t) => t.key));
     setStep('confirm');
+  };
+
+  const toggleTemplateKey = (key: string) => {
+    setSelectedTemplateKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
   };
 
   const handleCreate = async () => {
@@ -139,6 +149,15 @@ export function ProjectCreationWizard({
           project = res.project;
         } catch {
           // 脚手架初始化失败不阻断项目注册主流程
+        }
+      }
+      if (selectedTemplateKeys.length > 0 && typeof projectApi.importConstraints === 'function') {
+        for (const tplKey of selectedTemplateKeys) {
+          try {
+            await projectApi.importConstraints(project.id, tplKey);
+          } catch {
+            // 单个预设规则包导入失败不阻断创建流程
+          }
         }
       }
       onSuccess?.(project);
@@ -221,11 +240,11 @@ export function ProjectCreationWizard({
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs font-semibold text-foreground">{bp.label}</span>
-                          <span className="rounded bg-background/80 px-1.5 py-0.5 text-2xs text-muted-foreground">
+                          <span className="rounded bg-background/80 px-1.5 py-0.5 text-ui-2xs text-muted-foreground">
                             {bp.vcsLabel}
                           </span>
                         </div>
-                        <p className="mt-1 text-2xs text-muted-foreground line-clamp-2">
+                        <p className="mt-1 text-ui-2xs text-muted-foreground line-clamp-2">
                           {bp.positioning}
                         </p>
                       </button>
@@ -299,6 +318,26 @@ export function ProjectCreationWizard({
                           <span className="text-foreground">{st.label}</span>
                         </span>
                       ))}
+                    </div>
+                    <div className="space-y-1 pt-1">
+                      <span className="text-muted-foreground">勾选自动导入的预设规则包：</span>
+                      <div className="flex flex-wrap gap-2">
+                        {blueprint.subTemplates.map((tpl) => (
+                          <label
+                            key={tpl.key}
+                            className="inline-flex items-center gap-1.5 rounded border border-border bg-background px-2 py-1 text-xs cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedTemplateKeys.includes(tpl.key)}
+                              onChange={() => toggleTemplateKey(tpl.key)}
+                              data-testid={`wizard-template-checkbox-${tpl.key}`}
+                              className="h-3.5 w-3.5 rounded border-border"
+                            />
+                            <span className="font-medium text-foreground">{tpl.label}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
