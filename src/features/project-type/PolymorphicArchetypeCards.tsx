@@ -39,6 +39,11 @@ import type { ProjectProfileEntry } from '../../shared/api/types';
 import { Button } from '../../shared/ui/Button';
 import { Card } from '../../shared/ui/Card';
 
+import {
+  BuiltinCheckpointTimelineBar,
+  ResearchCitationAndToneBar,
+} from './BuiltinCheckpointAndStyleBar';
+
 export interface PolymorphicArchetypeCardsProps {
   project: ProjectSummary;
   projectType: ProjectType;
@@ -501,6 +506,12 @@ export function PolymorphicArchetypeCards({
               )}
             </div>
           </div>
+
+          <BuiltinCheckpointTimelineBar
+            projectId={project.id}
+            checkpoints={overview?.recentCheckpoints ?? []}
+            onCreated={loadData}
+          />
         </Card>
       )}
 
@@ -639,6 +650,8 @@ export function PolymorphicArchetypeCards({
               )}
             </div>
           </div>
+
+          <ResearchCitationAndToneBar projectId={project.id} onApplied={loadData} />
         </Card>
       )}
 

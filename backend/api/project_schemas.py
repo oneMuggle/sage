@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 from backend.compat.win7.pydantic_compat import ConfigDict
+
 from backend.data.project_material_repo import MAX_MATERIAL_CONTENT_CHARS
 from backend.office.models import _constrained_list
 
@@ -339,6 +340,23 @@ class WorkspaceDirectorySummaryModel(BaseModel):
     file_count: int
 
 
+class WorkspaceCheckpointItemModel(BaseModel):
+    """内置版本控制检查点快照摘要。"""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    label: str
+    created_at: int
+    file_count: int = 0
+
+
+class CreateCheckpointRequest(BaseModel):
+    """创建内置版本控制检查点请求体。"""
+
+    model_config = ConfigDict(extra="forbid")
+    label: Optional[str] = Field(default=None, max_length=200)
+
+
 class ProjectWorkspaceOverviewResponse(BaseModel):
     """多形态项目工作区资产与环境概览响应。"""
 
@@ -348,6 +366,7 @@ class ProjectWorkspaceOverviewResponse(BaseModel):
     has_hooks_json: bool = False
     checkpoint_count: int = 0
     latest_checkpoint_at: Optional[int] = None
+    recent_checkpoints: List[WorkspaceCheckpointItemModel] = Field(default_factory=list)
     coding_indicators: List[str] = Field(default_factory=list)
     office_deliverables: List[WorkspaceArtifactItemModel] = Field(default_factory=list)
     research_artifacts: List[WorkspaceArtifactItemModel] = Field(default_factory=list)

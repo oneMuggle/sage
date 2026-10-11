@@ -213,12 +213,20 @@ export interface WorkspaceDirectorySummary {
   fileCount: number;
 }
 
+export interface WorkspaceCheckpointItem {
+  id: string;
+  label: string;
+  createdAt: number;
+  fileCount: number;
+}
+
 export interface ProjectWorkspaceOverview {
   projectId: string;
   hasSageMd: boolean;
   hasHooksJson: boolean;
   checkpointCount?: number;
   latestCheckpointAt?: number | null;
+  recentCheckpoints?: WorkspaceCheckpointItem[];
   codingIndicators: string[];
   officeDeliverables: WorkspaceArtifactItem[];
   researchArtifacts: WorkspaceArtifactItem[];
