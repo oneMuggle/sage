@@ -39,6 +39,7 @@ from backend.api.project_schemas import (
     MilestoneUpdateRequest,
     ProjectAllowedPathsRequest,
     ProjectAllowedPathsResponse,
+    ProjectCharterResponse,
     ProjectContextBudgetResponse,
     ProjectDiagnoseResponse,
     ProjectListResponse,
@@ -60,6 +61,7 @@ from backend.api.project_schemas import (
     ProjectWorkspaceOverviewResponse,
     RestoreCheckpointResponse,
     SaveAnswerRequest,
+    UpdateProjectCharterRequest,
     WorkspaceCheckpointItemModel,
 )
 from backend.data.database import get_database, make_with_db_lock
@@ -91,7 +93,7 @@ from backend.data.session_repo import MessageRepository
 from backend.office.errors import OfficePathError
 from backend.office.session_workspace import get_workspace_binding
 from backend.services.git_integration import GitIntegration
-from backend.services.project_archetype_scaffold import scaffold_project_archetype
+from backend.services.project_archetype_scaffold import execute_project_scaffold
 from backend.services.project_type_detector import (
     DetectionResult,
     detect_project_type,
@@ -102,7 +104,9 @@ from backend.services.project_workspace_inspector import (
     inspect_project_context_budget,
     inspect_project_runtime_and_hooks,
     inspect_project_workspace_overview,
+    read_project_charter,
     restore_project_checkpoint,
+    write_project_charter,
 )
 
 logger = logging.getLogger(__name__)
@@ -329,6 +333,28 @@ def restore_project_workspace_checkpoint(
     return RestoreCheckpointResponse(**res)
 
 
+@router.get("/{project_id}/charter", response_model=ProjectCharterResponse)
+@with_db_lock
+def get_project_charter(project_id: str) -> ProjectCharterResponse:
+    """读取项目工作区 L1 规范文件 SAGE.md 及其形态化推荐模板。"""
+    project = _get_project_or_404(project_id)
+    return ProjectCharterResponse(**read_project_charter(project))
+
+
+@router.put("/{project_id}/charter", response_model=ProjectCharterResponse)
+@with_db_lock
+def update_project_charter(
+    project_id: str, body: UpdateProjectCharterRequest
+) -> ProjectCharterResponse:
+    """在线编辑并保存项目工作区 L1 规范文件 SAGE.md。"""
+    project = _get_project_or_404(project_id)
+    try:
+        res = write_project_charter(project, body.content)
+    except ValueError as exc:
+        raise _error(400, "charter_write_failed", str(exc)) from exc
+    return ProjectCharterResponse(**res)
+
+
 @router.delete(
     "/{project_id}/materials/{material_id}",
     response_model=MaterialMutationResponse,
@@ -487,64 +513,23 @@ def detect_project_type_route(request: ProjectTypeDetectRequest) -> ProjectTypeD
 def scaffold_project_route(
     project_id: str, request: ProjectScaffoldRequest
 ) -> ProjectScaffoldResponse:
-    """按项目形态（代码工程/一般档案/科研课题/个人空间）一键初始化标准子目录、SAGE.md、预设约束与阶段里程碑。"""
+    """按项目形态一键初始化标准子目录、SAGE.md、预设约束与阶段里程碑。"""
     repo = ProjectRepository()
     project = _get_project_or_404(project_id)
-    ws_path = Path(project.path)
-    if not ws_path.is_dir():
+    if not Path(project.path).is_dir():
         raise _error(410, "project_path_missing", "项目目录不存在或已被移动")
-
-    effective_type = request.project_type or project.project_type or project.detected_type or "business"
-    if request.project_type and request.project_type != project.project_type:
-        repo.update_project_type(project_id, request.project_type)
-
-    scaffold_result = scaffold_project_archetype(
-        ws_path,
-        effective_type,
-        project_name=project.name,
+    res = execute_project_scaffold(
+        project,
+        project_type=request.project_type,
         create_directories=request.create_directories,
         create_sage_md=request.create_sage_md,
+        import_default_constraints=request.import_default_constraints,
+        seed_default_milestones=request.seed_default_milestones,
     )
-
-    imported_constraints_count = 0
-    if request.import_default_constraints and effective_type in CONSTRAINT_TEMPLATES:
-        c_repo = ProjectConstraintRepository()
-        if not c_repo.list_by_project(project_id):
-            created_constraints = c_repo.import_template(project_id, effective_type)
-            imported_constraints_count = len(created_constraints)
-
-    created_milestones_count = 0
-    if request.seed_default_milestones:
-        m_repo = ProjectMilestoneRepository()
-        if not m_repo.list_by_project(project_id):
-            for idx, item in enumerate(scaffold_result["default_milestones"]):
-                m_repo.create(
-                    project_id=project_id,
-                    title=item["title"],
-                    description=item.get("description"),
-                    stage=item.get("stage"),
-                    sort_order=idx + 1,
-                )
-                created_milestones_count += 1
-
-    default_stage = scaffold_result.get("default_stage")
-    final_stage = project.project_stage
-    if not final_stage and default_stage:
-        repo.update_project_stage(project_id, default_stage)
-        final_stage = default_stage
-
     updated_project = _get_project_or_404(project_id)
     return ProjectScaffoldResponse(
         project=_with_stats(updated_project, repo.session_stats()),
-        project_id=project_id,
-        project_type=scaffold_result["project_type"],
-        created_directories=scaffold_result["created_directories"],
-        created_files=scaffold_result["created_files"],
-        imported_constraints_count=imported_constraints_count,
-        created_milestones_count=created_milestones_count,
-        seeded_milestones_count=created_milestones_count,
-        recommended_templates=scaffold_result["recommended_templates"],
-        project_stage=final_stage,
+        **res,
     )
 
 

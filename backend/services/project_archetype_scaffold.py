@@ -13,6 +13,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from backend.data.project_constraint_repo import (
+    CONSTRAINT_TEMPLATES,
+    ProjectConstraintRepository,
+)
+from backend.data.project_milestone_repo import ProjectMilestoneRepository
+from backend.data.project_repo import Project, ProjectRepository
+
 
 @dataclass(frozen=True)
 class ArchetypeBlueprint:
@@ -195,3 +202,65 @@ __all__ = [
     "get_archetype_blueprint",
     "scaffold_project_archetype",
 ]
+
+
+def execute_project_scaffold(
+    project: Project,
+    *,
+    project_type: Optional[str] = None,
+    create_directories: bool = True,
+    create_sage_md: bool = True,
+    import_default_constraints: bool = True,
+    seed_default_milestones: bool = True,
+) -> Dict[str, Any]:
+    """执行项目脚手架初始化并同步写入默认约束与里程碑。"""
+    repo = ProjectRepository()
+    ws_path = Path(project.path)
+    effective_type = project_type or project.project_type or project.detected_type or "business"
+    if project_type and project_type != project.project_type:
+        repo.update_project_type(project.id, project_type)
+
+    scaffold_result = scaffold_project_archetype(
+        ws_path,
+        effective_type,
+        project_name=project.name,
+        create_directories=create_directories,
+        create_sage_md=create_sage_md,
+    )
+    imported_constraints_count = 0
+    if import_default_constraints and effective_type in CONSTRAINT_TEMPLATES:
+        c_repo = ProjectConstraintRepository()
+        if not c_repo.list_by_project(project.id):
+            imported_constraints_count = len(c_repo.import_template(project.id, effective_type))
+
+    created_milestones_count = 0
+    if seed_default_milestones:
+        m_repo = ProjectMilestoneRepository()
+        if not m_repo.list_by_project(project.id):
+            for idx, item in enumerate(scaffold_result["default_milestones"]):
+                m_repo.create(
+                    project_id=project.id,
+                    title=item["title"],
+                    description=item.get("description"),
+                    stage=item.get("stage"),
+                    sort_order=idx + 1,
+                )
+                created_milestones_count += 1
+
+    default_stage = scaffold_result.get("default_stage")
+    final_stage = project.project_stage
+    if not final_stage and default_stage:
+        repo.update_project_stage(project.id, default_stage)
+        final_stage = default_stage
+
+    return {
+        "project_id": project.id,
+        "project_type": scaffold_result["project_type"],
+        "created_directories": scaffold_result["created_directories"],
+        "created_files": scaffold_result["created_files"],
+        "imported_constraints_count": imported_constraints_count,
+        "created_milestones_count": created_milestones_count,
+        "seeded_milestones_count": created_milestones_count,
+        "recommended_templates": scaffold_result["recommended_templates"],
+        "project_stage": final_stage,
+    }

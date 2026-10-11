@@ -365,6 +365,24 @@ class RestoreCheckpointResponse(BaseModel):
     restored_at: int
 
 
+class ProjectCharterResponse(BaseModel):
+    """项目 L1 本地规范文件 SAGE.md 读取与保存响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+    project_id: str
+    exists: bool
+    content: str
+    char_count: int
+    recommended_template: str
+
+
+class UpdateProjectCharterRequest(BaseModel):
+    """更新项目 L1 本地规范文件 SAGE.md 请求体。"""
+
+    model_config = ConfigDict(extra="forbid")
+    content: str = Field(default="", max_length=32000)
+
+
 class ProjectWorkspaceOverviewResponse(BaseModel):
     """多形态项目工作区资产与环境概览响应。"""
 

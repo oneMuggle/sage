@@ -379,3 +379,11 @@ export interface ProjectDiagnoseResult {
   hooksTrusted: boolean;
   recommendations: string[];
 }
+
+export interface ProjectCharter {
+  projectId: string;
+  exists: boolean;
+  content: string;
+  charCount: number;
+  recommendedTemplate: string;
+}

@@ -13,6 +13,7 @@ import {
   type CreateConstraintPayload,
   type CreateMilestonePayload,
   type ProjectAllowedPathsWire,
+  type ProjectCharter,
   type ProjectConstraint,
   type ProjectContextBudget,
   type ProjectDiagnoseResult,
@@ -46,6 +47,7 @@ import { handleApiError } from './utils';
 export type {
   CreateConstraintPayload,
   CreateMilestonePayload,
+  ProjectCharter,
   ProjectConstraint,
   ProjectContextBudget,
   ProjectDiagnoseResult,
@@ -418,6 +420,50 @@ export const projectApi = {
         label: raw.label,
         restoredFiles: raw.restored_files ?? [],
         restoredAt: raw.restored_at,
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** Phase P10: 读取项目 L1 本地规范文件 SAGE.md 及其推荐模板。 */
+  async getCharter(projectId: string): Promise<ProjectCharter> {
+    try {
+      const raw = await invoke<{
+        project_id: string;
+        exists: boolean;
+        content: string;
+        char_count: number;
+        recommended_template: string;
+      }>('projects_get_charter', { projectId });
+      return {
+        projectId: raw.project_id,
+        exists: Boolean(raw.exists),
+        content: raw.content ?? '',
+        charCount: raw.char_count ?? 0,
+        recommendedTemplate: raw.recommended_template ?? '',
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** Phase P10: 在线保存项目 L1 本地规范文件 SAGE.md。 */
+  async updateCharter(projectId: string, content: string): Promise<ProjectCharter> {
+    try {
+      const raw = await invoke<{
+        project_id: string;
+        exists: boolean;
+        content: string;
+        char_count: number;
+        recommended_template: string;
+      }>('projects_update_charter', { projectId, content });
+      return {
+        projectId: raw.project_id,
+        exists: Boolean(raw.exists),
+        content: raw.content ?? '',
+        charCount: raw.char_count ?? 0,
+        recommendedTemplate: raw.recommended_template ?? '',
       };
     } catch (error) {
       throw handleApiError(error);
