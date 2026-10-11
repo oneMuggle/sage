@@ -15,6 +15,8 @@ const mockDiagnose = vi.fn();
 const mockCreateCheckpoint = vi.fn();
 const mockRestoreCheckpoint = vi.fn();
 const mockListMaterials = vi.fn();
+const mockGetCharter = vi.fn();
+const mockUpdateCharter = vi.fn();
 const mockCreateConstraint = vi.fn();
 const mockCreateMilestone = vi.fn();
 const mockGetProjectProfile = vi.fn();
@@ -37,6 +39,8 @@ vi.mock('../../shared/api', () => ({
     createCheckpoint: (...args: unknown[]) => mockCreateCheckpoint(...args),
     restoreCheckpoint: (...args: unknown[]) => mockRestoreCheckpoint(...args),
     listMaterials: (...args: unknown[]) => mockListMaterials(...args),
+    getCharter: (...args: unknown[]) => mockGetCharter(...args),
+    updateCharter: (...args: unknown[]) => mockUpdateCharter(...args),
     createConstraint: (...args: unknown[]) => mockCreateConstraint(...args),
     createMilestone: (...args: unknown[]) => mockCreateMilestone(...args),
   },

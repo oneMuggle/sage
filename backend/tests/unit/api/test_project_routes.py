@@ -698,3 +698,25 @@ def test_restore_project_checkpoint_and_coding_hooks_scaffold(client, ws_dir: Pa
     assert sc_resp.status_code == 200
     assert (ws_dir / ".sage" / "hooks.json").is_file()
     assert (ws_dir / ".sage" / "checkpoints").is_dir()
+
+
+def test_project_charter_get_and_put(client, ws_dir: Path):
+    """GET/PUT /projects/{id}/charter 在线读取与更新工作区 L1 规范文件 SAGE.md。"""
+    pid = _register(client, ws_dir)["id"]
+    client.patch(f"/projects/{pid}", json={"project_type": "research"})
+
+    get_resp = client.get(f"/projects/{pid}/charter")
+    assert get_resp.status_code == 200
+    data = get_resp.json()
+    assert data["exists"] is False
+    assert "核心研究问题" in data["recommended_template"] or "SAGE" in data["recommended_template"]
+
+    put_resp = client.put(
+        f"/projects/{pid}/charter",
+        json={"content": "# 科研课题总纲\n- RQ1: 长上下文稀疏注意力机制"},
+    )
+    assert put_resp.status_code == 200
+    saved = put_resp.json()
+    assert saved["exists"] is True
+    assert "RQ1: 长上下文稀疏注意力机制" in saved["content"]
+    assert (ws_dir / "SAGE.md").read_text(encoding="utf-8") == "# 科研课题总纲\n- RQ1: 长上下文稀疏注意力机制"

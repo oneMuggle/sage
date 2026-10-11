@@ -33,6 +33,7 @@ from backend.data.project_constraint_repo import ProjectConstraintRepository
 from backend.data.project_material_repo import ProjectMaterialRepository
 from backend.data.project_repo import Project
 from backend.memory.project_profile import ProjectProfileStore
+from backend.services.project_archetype_scaffold import get_archetype_blueprint
 
 logger = logging.getLogger(__name__)
 
@@ -604,3 +605,43 @@ def restore_project_checkpoint(project: Project, checkpoint_id: str) -> Dict[str
         "restored_files": restored_files,
         "restored_at": now_ms,
     }
+
+
+def read_project_charter(project: Project) -> Dict[str, Any]:
+    """读取项目工作区 L1 本地规范文件 SAGE.md 及其形态化推荐模板。"""
+    root = Path(project.path)
+    blueprint = get_archetype_blueprint(project.project_type)
+    recommended_template = blueprint.sage_md_template.format(project_name=project.name or root.name or "Project")
+    sage_md = root / "SAGE.md"
+    exists = sage_md.is_file()
+    content = ""
+    if exists:
+        try:
+            content = sage_md.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            content = ""
+    return {
+        "project_id": project.id,
+        "exists": exists,
+        "content": content,
+        "char_count": len(content),
+        "recommended_template": recommended_template,
+    }
+
+
+def write_project_charter(project: Project, content: str) -> Dict[str, Any]:
+    """写入并保存项目工作区 L1 本地规范文件 SAGE.md。"""
+    root = Path(project.path)
+    if not root.is_dir():
+        raise ValueError("项目目录不存在")
+    clean_content = content if isinstance(content, str) else ""
+    if len(clean_content) > 32000:
+        raise ValueError("SAGE.md 内容超出最大长度限制 (32000 字符)")
+    root_resolved = root.resolve()
+    target = (root_resolved / "SAGE.md").resolve()
+    target.relative_to(root_resolved)
+    try:
+        target.write_text(clean_content, encoding="utf-8")
+    except OSError as exc:
+        raise ValueError(f"写入 SAGE.md 失败: {exc}") from exc
+    return read_project_charter(project)
