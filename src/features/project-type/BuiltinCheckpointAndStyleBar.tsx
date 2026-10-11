@@ -2,12 +2,15 @@
  * Phase P7: 内置版本快照时间轴与科研引用格式/学术文风快速切换栏 (2026-10-10)
  */
 
-import { BookOpenCheck, History, Plus, RotateCcw, ShieldCheck, ShieldOff } from 'lucide-react';
+import { BookOpenCheck, Eye, History, Plus, RotateCcw, ShieldCheck, ShieldOff } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { projectApi } from '../../shared/api';
 import { backendRequest } from '../../shared/api/backendRequest';
-import type { WorkspaceCheckpointItem } from '../../shared/api/projectApiTypes';
+import type {
+  WorkspaceCheckpointDetail,
+  WorkspaceCheckpointItem,
+} from '../../shared/api/projectApiTypes';
 import { Button } from '../../shared/ui/Button';
 
 export interface BuiltinCheckpointTimelineBarProps {
@@ -25,6 +28,7 @@ export function BuiltinCheckpointTimelineBar({
   const [creating, setCreating] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoredHint, setRestoredHint] = useState<string | null>(null);
+  const [previewDetail, setPreviewDetail] = useState<WorkspaceCheckpointDetail | null>(null);
 
   const handleCreate = async () => {
     if (creating || typeof projectApi?.createCheckpoint !== 'function') return;
@@ -37,6 +41,20 @@ export function BuiltinCheckpointTimelineBar({
       // ignore in test/offline mode
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handlePreview = async (checkpointId: string) => {
+    if (previewDetail?.id === checkpointId) {
+      setPreviewDetail(null);
+      return;
+    }
+    if (typeof projectApi?.getCheckpoint !== 'function') return;
+    try {
+      const detail = await projectApi.getCheckpoint(projectId, checkpointId);
+      setPreviewDetail(detail);
+    } catch {
+      // ignore in test/offline mode
     }
   };
 
@@ -112,6 +130,15 @@ export function BuiltinCheckpointTimelineBar({
                 </span>
                 <button
                   type="button"
+                  onClick={() => void handlePreview(cp.id)}
+                  data-testid={`preview-checkpoint-${cp.id}`}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  <Eye className="h-2.5 w-2.5" />
+                  {previewDetail?.id === cp.id ? '收起预览' : '预览快照'}
+                </button>
+                <button
+                  type="button"
                   onClick={() => void handleRestore(cp.id, cp.label)}
                   disabled={restoringId === cp.id}
                   data-testid={`restore-checkpoint-${cp.id}`}
@@ -124,6 +151,34 @@ export function BuiltinCheckpointTimelineBar({
             </li>
           ))}
         </ul>
+      )}
+
+      {previewDetail && (
+        <div
+          className="rounded border border-border bg-background p-2.5 space-y-1.5 text-xs"
+          data-testid="checkpoint-detail-preview"
+        >
+          <div className="flex items-center justify-between font-medium text-foreground">
+            <span>快照详情：{previewDetail.label}</span>
+            <span className="font-mono text-ui-2xs text-muted-foreground">
+              已备份文本快照 {Object.keys(previewDetail.snapshots).length} 份 / 跟踪文件{' '}
+              {previewDetail.files.length} 份
+            </span>
+          </div>
+          {Object.entries(previewDetail.snapshots).length > 0 && (
+            <div className="space-y-1 max-h-28 overflow-y-auto">
+              {Object.entries(previewDetail.snapshots).map(([relPath, text]) => (
+                <div
+                  key={relPath}
+                  className="rounded border border-border/60 bg-muted/20 px-2 py-1 font-mono text-ui-2xs"
+                >
+                  <div className="font-semibold text-foreground">{relPath}</div>
+                  <div className="truncate text-muted-foreground">{text.slice(0, 160)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

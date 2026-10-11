@@ -62,6 +62,7 @@ from backend.api.project_schemas import (
     RestoreCheckpointResponse,
     SaveAnswerRequest,
     UpdateProjectCharterRequest,
+    WorkspaceCheckpointDetailResponse,
     WorkspaceCheckpointItemModel,
 )
 from backend.data.database import get_database, make_with_db_lock
@@ -101,6 +102,7 @@ from backend.services.project_type_detector import (
 from backend.services.project_workspace_inspector import (
     create_project_checkpoint,
     extract_workspace_file_as_material_content,
+    get_project_checkpoint_detail,
     inspect_project_context_budget,
     inspect_project_runtime_and_hooks,
     inspect_project_workspace_overview,
@@ -312,6 +314,25 @@ def create_project_workspace_checkpoint(
     except ValueError as exc:
         raise _error(400, "checkpoint_failed", str(exc)) from exc
     return WorkspaceCheckpointItemModel(**cp)
+
+
+@router.get(
+    "/{project_id}/checkpoints/{checkpoint_id}",
+    response_model=WorkspaceCheckpointDetailResponse,
+)
+@with_db_lock
+def get_project_workspace_checkpoint(
+    project_id: str, checkpoint_id: str
+) -> WorkspaceCheckpointDetailResponse:
+    """获取指定内置版本控制检查点的文件清单与快照预览内容。"""
+    project = _get_project_or_404(project_id)
+    try:
+        detail = get_project_checkpoint_detail(project, checkpoint_id)
+    except FileNotFoundError as exc:
+        raise _error(404, "checkpoint_not_found", str(exc)) from exc
+    except ValueError as exc:
+        raise _error(400, "checkpoint_invalid", str(exc)) from exc
+    return WorkspaceCheckpointDetailResponse(**detail)
 
 
 @router.post(

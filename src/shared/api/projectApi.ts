@@ -6,8 +6,13 @@
 
 import { invoke } from './desktopInvoke';
 import {
+  mapConstraint,
   mapMaterial,
+  mapMilestone,
   mapProject,
+  type ConstraintWire,
+  type MilestoneWire,
+  type ProjectTypeDetectWire,
   syncAllowedPathsToMain,
   unregisterAllowedPathsFromMain,
   type CreateConstraintPayload,
@@ -38,6 +43,7 @@ import {
   type UpdateMilestonePayload,
   type WorkspaceArtifactItem,
   type RestoreCheckpointResult,
+  type WorkspaceCheckpointDetail,
   type WorkspaceCheckpointItem,
   type WorkspaceDirectorySummary,
 } from './projectApiTypes';
@@ -66,6 +72,7 @@ export type {
   UpdateMilestonePayload,
   WorkspaceArtifactItem,
   RestoreCheckpointResult,
+  WorkspaceCheckpointDetail,
   WorkspaceCheckpointItem,
   WorkspaceDirectorySummary,
 };
@@ -403,6 +410,33 @@ export const projectApi = {
     }
   },
 
+  /** Phase P11: 获取指定内置版本控制检查点的文件清单与快照预览内容。 */
+  async getCheckpoint(
+    projectId: string,
+    checkpointId: string,
+  ): Promise<WorkspaceCheckpointDetail> {
+    try {
+      const raw = await invoke<{
+        id: string;
+        label: string;
+        created_at: number;
+        file_count: number;
+        files: string[];
+        snapshots: Record<string, string>;
+      }>('projects_get_checkpoint', { projectId, checkpointId });
+      return {
+        id: raw.id,
+        label: raw.label,
+        createdAt: raw.created_at,
+        fileCount: raw.file_count,
+        files: raw.files ?? [],
+        snapshots: raw.snapshots ?? {},
+      };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
   /** Phase P9: 将项目还原到指定内置版本控制快照检查点。 */
   async restoreCheckpoint(
     projectId: string,
@@ -722,65 +756,3 @@ export const projectApi = {
   },
 };
 
-// ===== Wire types for constraints and milestones (2026-09-24) =====
-
-interface ConstraintWire {
-  id: string;
-  project_id: string;
-  category: string;
-  content: string;
-  trigger_pattern?: string | null;
-  priority: number;
-  enabled: boolean;
-  created_at: number;
-  updated_at: number;
-}
-
-interface MilestoneWire {
-  id: string;
-  project_id: string;
-  title: string;
-  description?: string | null;
-  stage?: string | null;
-  due_date?: string | null;
-  completed_at?: number | null;
-  status: string;
-  sort_order: number;
-  created_at: number;
-}
-
-/** POST /projects/detect-type 响应（后端 ProjectTypeDetectResponse）。 */
-interface ProjectTypeDetectWire {
-  project_type: string | null;
-  confidence: number;
-  signals: Array<{ type: string; weight: number }>;
-}
-
-function mapConstraint(c: ConstraintWire): ProjectConstraint {
-  return {
-    id: c.id,
-    projectId: c.project_id,
-    category: c.category,
-    content: c.content,
-    triggerPattern: c.trigger_pattern ?? null,
-    priority: c.priority,
-    enabled: c.enabled,
-    createdAt: c.created_at,
-    updatedAt: c.updated_at,
-  };
-}
-
-function mapMilestone(m: MilestoneWire): ProjectMilestone {
-  return {
-    id: m.id,
-    projectId: m.project_id,
-    title: m.title,
-    description: m.description ?? null,
-    stage: m.stage ?? null,
-    dueDate: m.due_date ?? null,
-    completedAt: m.completed_at ?? null,
-    status: m.status,
-    sortOrder: m.sort_order,
-    createdAt: m.created_at,
-  };
-}

@@ -720,3 +720,26 @@ def test_project_charter_get_and_put(client, ws_dir: Path):
     assert saved["exists"] is True
     assert "RQ1: 长上下文稀疏注意力机制" in saved["content"]
     assert (ws_dir / "SAGE.md").read_text(encoding="utf-8") == "# 科研课题总纲\n- RQ1: 长上下文稀疏注意力机制"
+
+
+def test_get_checkpoint_detail(client, ws_dir: Path):
+    (ws_dir / "draft.md").write_text("# v1 content\n", encoding="utf-8")
+    pid = _register(client, ws_dir)["id"]
+
+    cp_res = client.post(
+        f"/projects/{pid}/checkpoints",
+        json={"label": "Snapshot Alpha"},
+    )
+    assert cp_res.status_code == 201
+    cp_id = cp_res.json()["id"]
+
+    detail_res = client.get(f"/projects/{pid}/checkpoints/{cp_id}")
+    assert detail_res.status_code == 200
+    detail = detail_res.json()
+    assert detail["id"] == cp_id
+    assert detail["label"] == "Snapshot Alpha"
+    assert "draft.md" in detail["snapshots"]
+    assert "# v1 content" in detail["snapshots"]["draft.md"]
+
+    not_found = client.get(f"/projects/{pid}/checkpoints/cp-missing")
+    assert not_found.status_code == 404

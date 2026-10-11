@@ -365,6 +365,18 @@ class RestoreCheckpointResponse(BaseModel):
     restored_at: int
 
 
+class WorkspaceCheckpointDetailResponse(BaseModel):
+    """内置版本控制检查点详情与快照预览响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+    id: str
+    label: str
+    created_at: int
+    file_count: int
+    files: List[str] = Field(default_factory=list)
+    snapshots: Dict[str, str] = Field(default_factory=dict)
+
+
 class ProjectCharterResponse(BaseModel):
     """项目 L1 本地规范文件 SAGE.md 读取与保存响应。"""
 

@@ -387,3 +387,72 @@ export interface ProjectCharter {
   charCount: number;
   recommendedTemplate: string;
 }
+
+export interface WorkspaceCheckpointDetail {
+  id: string;
+  label: string;
+  createdAt: number;
+  fileCount: number;
+  files: string[];
+  snapshots: Record<string, string>;
+}
+
+export interface ConstraintWire {
+  id: string;
+  project_id: string;
+  category: string;
+  content: string;
+  trigger_pattern?: string | null;
+  priority: number;
+  enabled: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface MilestoneWire {
+  id: string;
+  project_id: string;
+  title: string;
+  description?: string | null;
+  stage?: string | null;
+  due_date?: string | null;
+  completed_at?: number | null;
+  status: string;
+  sort_order: number;
+  created_at: number;
+}
+
+export interface ProjectTypeDetectWire {
+  project_type: string | null;
+  confidence: number;
+  signals: Array<{ type: string; weight: number }>;
+}
+
+export function mapConstraint(c: ConstraintWire): ProjectConstraint {
+  return {
+    id: c.id,
+    projectId: c.project_id,
+    category: c.category,
+    content: c.content,
+    triggerPattern: c.trigger_pattern ?? null,
+    priority: c.priority,
+    enabled: c.enabled,
+    createdAt: c.created_at,
+    updatedAt: c.updated_at,
+  };
+}
+
+export function mapMilestone(m: MilestoneWire): ProjectMilestone {
+  return {
+    id: m.id,
+    projectId: m.project_id,
+    title: m.title,
+    description: m.description ?? null,
+    stage: m.stage ?? null,
+    dueDate: m.due_date ?? null,
+    completedAt: m.completed_at ?? null,
+    status: m.status,
+    sortOrder: m.sort_order,
+    createdAt: m.created_at,
+  };
+}

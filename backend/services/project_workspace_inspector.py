@@ -526,6 +526,21 @@ def create_project_checkpoint(project: Project, label: str = "") -> Dict[str, An
     ]
     if (root / "SAGE.md").is_file():
         tracked_files.insert(0, "SAGE.md")
+    try:
+        for entry in sorted(root.iterdir(), key=lambda item: item.name.lower()):
+            if entry.name.startswith(".") or entry.name in SKIP_DIRS:
+                continue
+            if entry.is_file() and entry.suffix.lower() in {".md", ".txt"}:
+                if entry.name not in tracked_files:
+                    tracked_files.append(entry.name)
+            elif entry.is_dir():
+                for child in sorted(entry.iterdir(), key=lambda item: item.name.lower()):
+                    if child.is_file() and child.suffix.lower() in {".md", ".txt"}:
+                        rel_child = f"{entry.name}/{child.name}"
+                        if rel_child not in tracked_files:
+                            tracked_files.append(rel_child)
+    except OSError:
+        pass
     snapshots: Dict[str, str] = {}
     text_exts = {".md", ".tex", ".bib", ".txt", ".json", ".csv"}
     for rel_path in tracked_files[:20]:
@@ -645,3 +660,38 @@ def write_project_charter(project: Project, content: str) -> Dict[str, Any]:
     except OSError as exc:
         raise ValueError(f"写入 SAGE.md 失败: {exc}") from exc
     return read_project_charter(project)
+
+
+def get_project_checkpoint_detail(project: Project, checkpoint_id: str) -> Dict[str, Any]:
+    """读取指定内置版本控制检查点的文件清单与文本快照详情。"""
+    root = Path(project.path)
+    if not root.is_dir():
+        raise ValueError("项目目录不存在")
+    clean_cid = (checkpoint_id or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", clean_cid):
+        raise ValueError("无效的检查点 ID")
+    cp_file = root / ".sage" / "checkpoints" / f"{clean_cid}.json"
+    if not cp_file.is_file():
+        raise FileNotFoundError(f"检查点不存在: {clean_cid}")
+    try:
+        raw_cp = json.loads(cp_file.read_text(encoding="utf-8", errors="ignore"))
+    except (OSError, ValueError, TypeError) as exc:
+        raise ValueError("检查点元数据损坏") from exc
+    if not isinstance(raw_cp, dict):
+        raise ValueError("检查点格式无效")
+    raw_files = raw_cp.get("files")
+    files = [str(f) for f in raw_files if isinstance(f, str)] if isinstance(raw_files, list) else []
+    raw_snaps = raw_cp.get("snapshots")
+    snapshots: Dict[str, str] = {}
+    if isinstance(raw_snaps, dict):
+        for k, v in raw_snaps.items():
+            if isinstance(k, str) and isinstance(v, str):
+                snapshots[k] = v
+    return {
+        "id": str(raw_cp.get("id") or clean_cid),
+        "label": str(raw_cp.get("label") or clean_cid),
+        "created_at": int(raw_cp.get("created_at") or 0),
+        "file_count": int(raw_cp.get("file_count") or len(files)),
+        "files": files,
+        "snapshots": snapshots,
+    }
