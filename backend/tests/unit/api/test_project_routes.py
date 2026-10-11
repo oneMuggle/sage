@@ -743,3 +743,29 @@ def test_get_checkpoint_detail(client, ws_dir: Path):
 
     not_found = client.get(f"/projects/{pid}/checkpoints/cp-missing")
     assert not_found.status_code == 404
+
+
+def test_context_budget_synthesized_preview(client, ws_dir: Path):
+    (ws_dir / "SAGE.md").write_text("# 项目规范总纲\n- 禁止魔法数字\n", encoding="utf-8")
+    pid = _register(client, ws_dir)["id"]
+    client.patch(
+        f"/projects/{pid}",
+        json={
+            "description": "核心合同审校工程",
+            "instructions": "输出必须标注条款依据",
+        },
+    )
+    client.put(
+        f"/projects/{pid}/allowed-paths",
+        json={"allowed_paths": ["~/Documents/EnterpriseTemplates/**"]},
+    )
+
+    resp = client.get(f"/projects/{pid}/context-budget")
+    assert resp.status_code == 200
+    data = resp.json()
+    preview = data.get("synthesized_preview", "")
+    assert "[L1 · SAGE.md 本地规约]" in preview
+    assert "禁止魔法数字" in preview
+    assert "[L2 · 项目目标、系统指令与强约束]" in preview
+    assert "核心合同审校工程" in preview
+    assert "[L5 · 跨目录只读白名单]" in preview

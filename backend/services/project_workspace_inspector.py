@@ -81,11 +81,13 @@ def inspect_project_context_budget(project: Project) -> Dict[str, Any]:
     c_repo = ProjectConstraintRepository()
     enabled_constraints = c_repo.list_by_project(project.id, enabled_only=True)
 
+    l3_profile_block = ""
     l3_profile_chars = 0
     try:
         profile_store = ProjectProfileStore(get_database())
         profile_store.load()
-        l3_profile_chars = len(profile_store.get_snapshot(project.path))
+        l3_profile_block = profile_store.get_snapshot(project.path) or ""
+        l3_profile_chars = len(l3_profile_block)
     except Exception as exc:  # noqa: BLE001
         logger.debug("inspect_project_context_budget profile skip: %s", exc)
 
@@ -99,6 +101,23 @@ def inspect_project_context_budget(project: Project) -> Dict[str, Any]:
     )
     cap_chars = TOTAL_CHAR_CAP
     usage_ratio = round(min(total_chars / float(cap_chars), 1.0), 4) if cap_chars > 0 else 0.0
+
+    preview_sections: List[str] = []
+    if l1_block.strip():
+        preview_sections.append(f"## [L1 · SAGE.md 本地规约]\n{l1_block.strip()}")
+    if l2_meta_block.strip() or l2_constraints_block.strip():
+        l2_combined = "\n\n".join(
+            part.strip() for part in (l2_meta_block, l2_constraints_block) if part.strip()
+        )
+        preview_sections.append(f"## [L2 · 项目目标、系统指令与强约束]\n{l2_combined}")
+    if l3_profile_block.strip():
+        preview_sections.append(f"## [L3 · 项目演化画像]\n{l3_profile_block.strip()}")
+    if l4_materials_block.strip():
+        preview_sections.append(f"## [L4 · 受控置顶资料池]\n{l4_materials_block.strip()}")
+    if project.allowed_paths:
+        allowed_lines = "\n".join(f"- {rule}" for rule in project.allowed_paths)
+        preview_sections.append(f"## [L5 · 跨目录只读白名单]\n{allowed_lines}")
+    synthesized_preview = "\n\n".join(preview_sections)
 
     return {
         "project_id": project.id,
@@ -114,6 +133,7 @@ def inspect_project_context_budget(project: Project) -> Dict[str, Any]:
         "active_materials_count": len(active_materials),
         "total_materials_count": len(all_materials),
         "enabled_constraints_count": len(enabled_constraints),
+        "synthesized_preview": synthesized_preview,
     }
 
 
