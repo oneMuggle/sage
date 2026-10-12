@@ -692,6 +692,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           {activeTab === 'profile' && (
             <StudioProfileTabPanel
               projectPath={activeProject.path}
+              projectType={activeProjectType}
               profileEntries={profileEntries}
               profileCategory={profileCategory}
               onCategoryChange={setProfileCategory}

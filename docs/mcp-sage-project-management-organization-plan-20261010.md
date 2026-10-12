@@ -343,3 +343,13 @@
      - 当用户当前选中的项目类型与自动检测结果不一致时，渲染 `[一键采用检测形态]` (`data-testid="apply-detected-type-btn"`) 按钮，一键切换为检测到的最佳项目形态。
   3. **聊天侧边栏资料面板批量 Source-Grounded 上下文开关 (`ProjectExpandedPanels.tsx`)**：
      - 在侧边栏内联展开的 `ProjectMaterialsPanel` 水位条 (`project-materials-watermark`) 中新增 `[全选]` (`data-testid="sidebar-materials-enable-all"`) 与 `[全停]` (`data-testid="sidebar-materials-disable-all"`) 快捷按钮，支持在 `/chat` 对话中一键批量启用或隔离全部就绪项目资料。
+
+### Phase P18：L3 项目演化画像独立模块化与形态预设/导出、项目类型选择器治理特性预览（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **L3 项目演化记忆画像面板模块化与形态预设 (`StudioProfileTabPanel.tsx` & `StudioMaterialsAndProfilePanels.tsx`)**：
+     - 将 `StudioProfileTabPanel` 提炼为独立模块（使 `StudioMaterialsAndProfilePanels.tsx` 从 786 行降至 691 行，严格留足 800 行架构水位）；
+     - 新增按项目形态动态切换的推荐画像预设胶囊栏 (`data-testid="studio-profile-presets-bar"` / `data-testid="studio-profile-preset-{idx}"`)，覆盖 `coding`（IPC 契约一致性 / 单文件 800 行红线）、`business`（大小写金额双轨核对 / 定稿签发前固化快照）、`research`（零幻觉文献引用铁律 / 实验可复现性基线）与 `personal`（原子化卡片盒笔记 / 每周行动项提炼）；
+     - 新增 `[复制 MEMORY.md 视图]` 按钮 (`data-testid="studio-profile-copy-md-btn"`)，一键将当前项目的冻结画像条目格式化为标准 Markdown 复制到剪贴板。
+  2. **项目类型选择器治理特性徽章 (`ProjectTypeSelector.tsx`)**：
+     - 在每个项目类型选项卡片底部新增形态治理规模徽章 (`data-testid="selector-governance-meta-{value}"`)，直观展示该形态的标准生命周期阶段数与内置细分规范包数量。

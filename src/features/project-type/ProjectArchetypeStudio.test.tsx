@@ -462,6 +462,12 @@ describe('ProjectArchetypeStudio', () => {
     });
     fireEvent.click(screen.getByTestId('studio-tab-profile'));
     expect(await screen.findByTestId('project-profile-studio-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('studio-profile-presets-bar')).toBeInTheDocument();
+    expect(screen.getByTestId('studio-profile-copy-md-btn')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('studio-profile-preset-0'));
+    fireEvent.change(screen.getByTestId('studio-profile-category'), {
+      target: { value: 'convention' },
+    });
     fireEvent.change(screen.getByTestId('studio-profile-input'), {
       target: { value: '实验随机种子统一固定为 42' },
     });
