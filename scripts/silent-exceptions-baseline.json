@@ -13,7 +13,7 @@
     "backend/scheduler": 1,
     "backend/services": 9,
     "backend/skills": 1,
-    "backend/tools": 10,
+    "backend/tools": 12,
     "backend/utils": 2,
     "backend/wiki": 2
   }
