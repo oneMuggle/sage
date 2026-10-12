@@ -12,6 +12,7 @@ import type {
   ProjectType,
 } from '../../shared/api/projectApiTypes';
 import { Button } from '../../shared/ui/Button';
+
 import { KnowledgeExtractionPanel } from './KnowledgeExtractionPanel';
 import { SemanticSearchPanel } from './SemanticSearchPanel';
 

@@ -4,6 +4,7 @@
  * 类型定义与 Wire 映射位于 ./projectApiTypes.ts。
  */
 
+/* eslint-disable import/order */
 import { invoke } from './desktopInvoke';
 import {
   mapConstraint,
@@ -77,6 +78,7 @@ import {
   mapSemanticSearch,
   mapIndexingStats,
 } from './projectApiTypes';
+/* eslint-enable import/order */
 
 // Re-export AI types for barrel consumption
 export type {
