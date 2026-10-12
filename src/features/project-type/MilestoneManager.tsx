@@ -252,6 +252,7 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
         open={editorOpen}
         onOpenChange={setEditorOpen}
         projectId={projectId}
+        projectType={projectType}
         milestone={editingMilestone}
         onSave={handleEditorSave}
       />

@@ -320,3 +320,14 @@
   3. **三步创建向导 Step 3 L2 核心目标与初始基线快照闭环 (`ProjectCreationWizard.tsx` & `projectApiTypes.ts`)**：
      - Step 3 (`confirm`) 新增可选「L2 项目核心目标摘要 (`description`)」输入框 (`data-testid="wizard-description-input"`) 与「版本控制策略 (`vcsMode`)」选择器 (`data-testid="wizard-vcs-mode-select"`)；
      - 创建项目时自动同步写入 `description` 与 `vcs_mode`，并在启用脚手架且选择 `builtin` 模式时自动创建首个「项目初始化基线快照」(`projectApi.createCheckpoint(project.id, '项目初始化基线快照')`)。
+
+### Phase P16：约束编辑器形态类别与目录 Glob 预设胶囊、里程碑阶段快捷胶囊及侧边栏概览一键快照（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **约束编辑器形态化快捷预设胶囊 (`ConstraintEditor.tsx` & `ConstraintManager.tsx`)**：
+     - 根据当前项目形态动态展示推荐类别胶囊 (`data-testid="constraint-editor-category-presets"`)，覆盖代码工程 (`code_style`/`git_commit`/`testing`/`architecture`)、档案文书 (`document_format`/`tone`/`review_process`/`compliance`)、科研课题 (`academic_writing`/`citation_style`/`data_integrity`/`reproducibility`) 与个人知识库 (`note_organization`/`knowledge_linking`/`action_extraction`)；
+     - 根据当前形态蓝图的标准目录结构动态生成 Glob 路径触发预设胶囊 (`data-testid="constraint-editor-glob-presets"`)，点击即可一键填入 `${dir}/**` 触发规则。
+  2. **里程碑编辑器形态阶段快捷胶囊 (`MilestoneEditor.tsx` & `MilestoneManager.tsx`)**：
+     - 在阶段输入框下方渲染当前项目形态的生命周期阶段胶囊 (`data-testid="milestone-editor-stage-presets"`)，一键将新建/编辑的里程碑绑定至标准形态阶段 ID。
+  3. **侧边栏概览面板一键版本快照 (`ProjectExpandedPanels.tsx`)**：
+     - 在聊天侧边栏内联展开的 `ProjectOverviewPanel` 头部，针对非 Git 模式项目提供 `[新建快照]` (`data-testid="sidebar-quick-checkpoint-btn"`) 快捷按钮，无需离开 `/chat` 即可随时创建 `.sage/checkpoints` 版本快照。

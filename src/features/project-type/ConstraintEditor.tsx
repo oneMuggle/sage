@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 
-import { projectApi, type ProjectConstraint } from '../../shared/api';
+import { projectApi, type ProjectConstraint, type ProjectType } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
 import {
   Dialog,
@@ -20,10 +20,20 @@ import {
 import { Input } from '../../shared/ui/Input';
 import { Textarea } from '../../shared/ui/Textarea';
 
+import { getArchetypeBlueprint } from './archetypeBlueprints';
+
+const CATEGORY_PRESETS: Record<ProjectType, string[]> = {
+  coding: ['code_style', 'git_commit', 'testing', 'architecture'],
+  business: ['document_format', 'tone', 'review_process', 'compliance'],
+  research: ['academic_writing', 'citation_style', 'data_integrity', 'reproducibility'],
+  personal: ['note_organization', 'knowledge_linking', 'action_extraction'],
+};
+
 export interface ConstraintEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
+  projectType?: ProjectType | null;
   constraint: ProjectConstraint | null; // null = create mode
   onSave: () => void;
 }
@@ -32,9 +42,12 @@ export function ConstraintEditor({
   open,
   onOpenChange,
   projectId,
+  projectType,
   constraint,
   onSave,
 }: ConstraintEditorProps) {
+  const blueprint = getArchetypeBlueprint(projectType);
+  const categoryPresets = CATEGORY_PRESETS[blueprint.type] ?? CATEGORY_PRESETS.coding;
   const [category, setCategory] = useState('');
   const [content, setContent] = useState('');
   const [triggerPattern, setTriggerPattern] = useState('');
@@ -124,6 +137,22 @@ export function ConstraintEditor({
               onChange={(e) => setCategory(e.target.value)}
               placeholder="例如: code-style, git-commit, writing-format"
             />
+            <div
+              className="flex flex-wrap items-center gap-1.5"
+              data-testid="constraint-editor-category-presets"
+            >
+              <span className="text-xs text-muted-foreground">推荐类别：</span>
+              {categoryPresets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setCategory(preset)}
+                  className="rounded border border-border bg-muted/40 px-2 py-0.5 font-mono text-xs text-foreground hover:bg-muted"
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -143,6 +172,22 @@ export function ConstraintEditor({
               onChange={(e) => setTriggerPattern(e.target.value)}
               placeholder="glob 模式（如 src/**/*.ts）或 'always'"
             />
+            <div
+              className="flex flex-wrap items-center gap-1.5"
+              data-testid="constraint-editor-glob-presets"
+            >
+              <span className="text-xs text-muted-foreground">目录触发预设：</span>
+              {blueprint.directories.map((dir) => (
+                <button
+                  key={dir}
+                  type="button"
+                  onClick={() => setTriggerPattern(`${dir}/**`)}
+                  className="rounded border border-border bg-muted/40 px-2 py-0.5 font-mono text-xs text-foreground hover:bg-muted"
+                >
+                  {dir}/**
+                </button>
+              ))}
+            </div>
             <p className="text-xs text-muted-foreground">留空表示 always（始终生效）</p>
           </div>
 

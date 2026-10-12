@@ -445,6 +445,9 @@ describe('ProjectArchetypeStudio', () => {
     await waitFor(() => {
       expect(screen.getByTestId('seed-archetype-milestones-btn')).toBeInTheDocument();
     });
+    fireEvent.click(screen.getByText('新建里程碑'));
+    expect(await screen.findByTestId('milestone-editor-stage-presets')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('取消'));
     fireEvent.click(screen.getByTestId('seed-archetype-milestones-btn'));
     await waitFor(() => {
       expect(mockCreateMilestone).toHaveBeenCalled();
