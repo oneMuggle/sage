@@ -20,6 +20,8 @@ const mockGetCharter = vi.fn();
 const mockUpdateCharter = vi.fn();
 const mockCreateConstraint = vi.fn();
 const mockCreateMilestone = vi.fn();
+const mockImportConstraints = vi.fn();
+const mockUpdateMilestone = vi.fn();
 const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
 const mockDeleteProjectProfile = vi.fn();
@@ -45,6 +47,8 @@ vi.mock('../../shared/api', () => ({
     updateCharter: (...args: unknown[]) => mockUpdateCharter(...args),
     createConstraint: (...args: unknown[]) => mockCreateConstraint(...args),
     createMilestone: (...args: unknown[]) => mockCreateMilestone(...args),
+    importConstraints: (...args: unknown[]) => mockImportConstraints(...args),
+    updateMilestone: (...args: unknown[]) => mockUpdateMilestone(...args),
   },
   memoryApi: {
     getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
@@ -78,6 +82,30 @@ beforeEach(() => {
   mockScaffold.mockReset();
   mockUpdateAllowedPaths.mockReset();
   mockListConstraints.mockResolvedValue([]);
+  mockImportConstraints.mockResolvedValue([
+    {
+      id: 'c-imp-1',
+      projectId: 'proj-1',
+      category: 'document_format',
+      content: '公文格式规范',
+      triggerPattern: '03_定稿与签发归档/**',
+      priority: 8,
+      enabled: true,
+      createdAt: 1000,
+    },
+  ]);
+  mockUpdateMilestone.mockResolvedValue({
+    id: 'ms-1',
+    projectId: 'proj-1',
+    title: '完成法务合规会签',
+    description: null,
+    stage: 'monitoring',
+    dueDate: '2026-10-15',
+    completedAt: 2000,
+    status: 'completed',
+    sortOrder: 1,
+    createdAt: 1000,
+  });
   mockListMilestones.mockResolvedValue([
     {
       id: 'ms-1',
@@ -306,6 +334,19 @@ describe('ProjectArchetypeStudio', () => {
       'VCS: 内置快照保护中',
     );
     expect(screen.getByTestId('studio-vcs-mode-select')).toHaveValue('builtin');
+    expect(await screen.findByTestId('workspace-vcs-summary-widget')).toBeInTheDocument();
+
+    // Quick import default constraints from ConstraintSummaryWidget empty state
+    fireEvent.click(await screen.findByTestId('constraint-summary-quick-import'));
+    await waitFor(() => {
+      expect(mockImportConstraints).toHaveBeenCalledWith('proj-1', 'business');
+    });
+
+    // Quick toggle milestone status from MilestoneProgressWidget
+    fireEvent.click(await screen.findByTestId('milestone-quick-toggle-ms-1'));
+    await waitFor(() => {
+      expect(mockUpdateMilestone).toHaveBeenCalledWith('proj-1', 'ms-1', { status: 'completed' });
+    });
 
     // Business polymorphic card is shown initially and supports one-click file pinning
     const businessCard = await screen.findByTestId('polymorphic-card-business');
