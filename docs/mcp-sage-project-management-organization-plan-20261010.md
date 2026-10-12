@@ -353,3 +353,17 @@
      - 新增 `[复制 MEMORY.md 视图]` 按钮 (`data-testid="studio-profile-copy-md-btn"`)，一键将当前项目的冻结画像条目格式化为标准 Markdown 复制到剪贴板。
   2. **项目类型选择器治理特性徽章 (`ProjectTypeSelector.tsx`)**：
      - 在每个项目类型选项卡片底部新增形态治理规模徽章 (`data-testid="selector-governance-meta-{value}"`)，直观展示该形态的标准生命周期阶段数与内置细分规范包数量。
+### Phase P19：内置快照时间轴预设与上下文快照复制、商务办公公文版式与审校强度护栏、商务案卷审校纪要归位（已交付）
+
+- **交付时间**：2026-10-12
+- **核心改进项**：
+  1. **内置快照时间轴快捷标签预设与五层上下文快照一键复制（`src/features/project-type/BuiltinCheckpointAndStyleBar.tsx`）**：
+     - 在 `BuiltinCheckpointTimelineBar` 中新增快捷标签预设胶囊栏（`data-testid="checkpoint-quick-presets"`：`定稿签发前备份`、`审校修订前基线`、`阶段里程碑留痕`），支持非 Git 用户一键填充快照说明并创建恢复点；
+     - 在内置快照详情抽屉（`data-testid="checkpoint-detail-preview"`）中新增 `复制上下文快照` 按钮（`data-testid="copy-checkpoint-context-btn"`），当快照包含 `.sage/context-snapshot.md` 时支持一键复制完整五层上下文快照 Markdown。
+  2. **商务办公公文版式与审校强度护栏（`BusinessDocumentStyleBar` in `BuiltinCheckpointAndStyleBar.tsx` & `PolymorphicArchetypeCards.tsx`）**：
+     - 新增 `BusinessDocumentStyleBar`（`data-testid="business-doc-style-bar"`），提供公文与商务版式标准选择器（`data-testid="business-doc-format-select"`：`GB/T 9704 公文版式`、`企业标准商务合同规范`、`招投标技术与商务响应`、`尽职调查与审计报告规范`）与审校口径强度选择器（`data-testid="business-review-level-select"`），并支持一键写入 L2 强制约束规则（`data-testid="business-apply-style-btn"`）。
+  3. **商务案卷审校纪要与口径约定归位（`src/features/project-type/PolymorphicArchetypeCards.tsx`）**：
+     - 将案卷审校纪要与口径约定登记（`data-testid="business-decision-input"` / `business-decision-add` / `business-decisions-list`）挂载于 `polymorphic-card-business` 卡片内，并保持 `PolymorphicArchetypeCards.tsx`（779 行）与 `BuiltinCheckpointAndStyleBar.tsx`（619 行）严格遵守 `src/` 单文件 `<= 800` 行架构红线。
+  4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `business-doc-style-bar`、`checkpoint-quick-presets` 及 `business-apply-style-btn` 交互断言，验证商务版式与审校护栏一键同步至项目 L2 强制约束库。
+
