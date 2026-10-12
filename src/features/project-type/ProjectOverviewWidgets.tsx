@@ -64,7 +64,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
       <ConstraintSummaryWidget projectId={project.id} projectType={projectType} />
 
       {/* 所有类型都显示里程碑进度 */}
-      <MilestoneProgressWidget projectId={project.id} />
+      <MilestoneProgressWidget projectId={project.id} projectType={projectType} />
 
       {/* 多态项目阶段与版本保护摘要 */}
       <div

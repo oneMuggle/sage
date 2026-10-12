@@ -51,6 +51,8 @@ export function ProjectCreationWizard({
   const [selectedType, setSelectedType] = useState<ProjectType | null>(null);
   const [autoScaffold, setAutoScaffold] = useState<boolean>(true);
   const [selectedTemplateKeys, setSelectedTemplateKeys] = useState<string[]>([]);
+  const [projectDescription, setProjectDescription] = useState<string>('');
+  const [vcsMode, setVcsMode] = useState<'git' | 'builtin' | 'none'>('builtin');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -63,6 +65,8 @@ export function ProjectCreationWizard({
     setSelectedType(null);
     setAutoScaffold(true);
     setSelectedTemplateKeys([]);
+    setProjectDescription('');
+    setVcsMode('builtin');
     setCreating(false);
     setCreateError(null);
   };
@@ -118,6 +122,7 @@ export function ProjectCreationWizard({
   const handleNextToConfirm = () => {
     const bp = getArchetypeBlueprint(selectedType);
     setSelectedTemplateKeys(bp.subTemplates.map((t) => t.key));
+    setVcsMode(bp.defaultVcsMode);
     setStep('confirm');
   };
 
@@ -158,6 +163,23 @@ export function ProjectCreationWizard({
           } catch {
             // 单个预设规则包导入失败不阻断创建流程
           }
+        }
+      }
+      if (typeof projectApi.update === 'function') {
+        try {
+          project = await projectApi.update(project.id, {
+            description: projectDescription.trim() || null,
+            vcs_mode: vcsMode,
+          });
+        } catch {
+          // ignore metadata update error
+        }
+      }
+      if (autoScaffold && vcsMode === 'builtin' && typeof projectApi.createCheckpoint === 'function') {
+        try {
+          await projectApi.createCheckpoint(project.id, '项目初始化基线快照');
+        } catch {
+          // ignore initial checkpoint error
         }
       }
       onSuccess?.(project);
@@ -272,8 +294,30 @@ export function ProjectCreationWizard({
                   </div>
                   <div>
                     <span className="text-xs font-medium text-muted-foreground">版本控制：</span>
-                    <span className="ml-1 text-xs text-foreground">{blueprint.vcsLabel}</span>
+                    <select
+                      value={vcsMode}
+                      onChange={(e) => setVcsMode(e.target.value as 'git' | 'builtin' | 'none')}
+                      data-testid="wizard-vcs-mode-select"
+                      className="ml-1 rounded border border-input bg-background px-2 py-0.5 text-xs text-foreground"
+                    >
+                      <option value="git">Git 仓库版本控制</option>
+                      <option value="builtin">内置快照 (.sage/checkpoints)</option>
+                      <option value="none">不启用版本控制</option>
+                    </select>
                   </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">
+                    L2 项目核心目标摘要（可选，注入五层上下文管线）：
+                  </label>
+                  <input
+                    type="text"
+                    value={projectDescription}
+                    onChange={(e) => setProjectDescription(e.target.value)}
+                    placeholder="如：2026 年度采购合同法务审查与定稿归档 / 多跳检索强化学习论文实验"
+                    data-testid="wizard-description-input"
+                    className="w-full rounded border border-input bg-background px-2.5 py-1 text-xs"
+                  />
                 </div>
               </div>
 

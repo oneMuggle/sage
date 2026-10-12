@@ -1,42 +1,79 @@
 /**
- * 里程碑进度 Widget (2026-09-25)
+ * 里程碑进度 Widget (2026-09-25; Phase P15 空状态一键播种与概览快捷完成切换 2026-10-12)
  *
  * 项目类型分类系统 - Phase 4.3
- * 显示项目里程碑的进度统计
+ * 显示项目里程碑的进度统计、空状态一键生成形态推荐里程碑与快捷状态切换
  */
 
-import { Target, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Target, CheckCircle2, Clock, AlertCircle, Sparkles } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 
-import { projectApi, type ProjectMilestone } from '../../shared/api';
+import { projectApi, type ProjectMilestone, type ProjectType } from '../../shared/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
 import { Progress } from '../../shared/ui/Progress';
 
+import { getArchetypeBlueprint } from './archetypeBlueprints';
+
 export interface MilestoneProgressWidgetProps {
   projectId: string;
+  projectType?: ProjectType | null;
 }
 
-export function MilestoneProgressWidget({ projectId }: MilestoneProgressWidgetProps) {
+export function MilestoneProgressWidget({ projectId, projectType }: MilestoneProgressWidgetProps) {
   const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function fetchMilestones() {
-      try {
-        setLoading(true);
-        const list = await projectApi.listMilestones(projectId);
-        setMilestones(list);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '获取里程碑失败');
-      } finally {
-        setLoading(false);
-      }
+  const fetchMilestones = useCallback(async () => {
+    try {
+      setLoading(true);
+      const list = await projectApi.listMilestones(projectId);
+      setMilestones(list);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '获取里程碑失败');
+    } finally {
+      setLoading(false);
     }
-
-    fetchMilestones();
   }, [projectId]);
+
+  useEffect(() => {
+    void fetchMilestones();
+  }, [fetchMilestones]);
+
+  const handleQuickSeed = async () => {
+    if (seeding || typeof projectApi?.createMilestone !== 'function') return;
+    setSeeding(true);
+    try {
+      const bp = getArchetypeBlueprint(projectType);
+      let order = 0;
+      for (const item of bp.recommendedMilestones) {
+        await projectApi.createMilestone(projectId, {
+          title: item.title,
+          description: item.description,
+          stage: item.stage,
+          sortOrder: order++,
+        });
+      }
+      await fetchMilestones();
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setSeeding(false);
+    }
+  };
+
+  const handleQuickToggleStatus = async (milestone: ProjectMilestone) => {
+    if (typeof projectApi?.updateMilestone !== 'function') return;
+    const nextStatus = milestone.status === 'completed' ? 'in_progress' : 'completed';
+    try {
+      await projectApi.updateMilestone(projectId, milestone.id, { status: nextStatus });
+      await fetchMilestones();
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
 
   if (loading) {
     return (
@@ -80,8 +117,18 @@ export function MilestoneProgressWidget({ projectId }: MilestoneProgressWidgetPr
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="text-xs text-muted-foreground">
-            暂无里程碑。设置里程碑以跟踪项目进度。
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>暂无里程碑。设置里程碑以跟踪项目进度。</span>
+            <button
+              type="button"
+              disabled={seeding}
+              onClick={() => void handleQuickSeed()}
+              data-testid="milestone-summary-quick-seed"
+              className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
+            >
+              <Sparkles className="h-3 w-3" />
+              {seeding ? '初始化中...' : '一键初始化推荐里程碑'}
+            </button>
           </div>
         </CardContent>
       </Card>
@@ -102,7 +149,6 @@ export function MilestoneProgressWidget({ projectId }: MilestoneProgressWidgetPr
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* 进度条 */}
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted-foreground">总体进度</span>
@@ -111,7 +157,6 @@ export function MilestoneProgressWidget({ projectId }: MilestoneProgressWidgetPr
           <Progress value={progress} className="h-2" />
         </div>
 
-        {/* 状态统计 */}
         <div className="grid grid-cols-3 gap-2 pt-2 border-t">
           <div className="flex items-center gap-1.5 text-xs">
             <CheckCircle2 className="h-3 w-3 text-green-500" />
@@ -130,20 +175,29 @@ export function MilestoneProgressWidget({ projectId }: MilestoneProgressWidgetPr
           </div>
         </div>
 
-        {/* 最近里程碑 */}
         {milestones.length > 0 && (
           <div className="pt-2 border-t">
             <div className="text-xs text-muted-foreground mb-1">最近里程碑</div>
             <div className="space-y-1">
               {milestones.slice(0, 3).map((milestone) => (
-                <div key={milestone.id} className="text-xs">
-                  <div className="flex items-center gap-1.5">
-                    {getStatusIcon(milestone.status)}
-                    <span className="font-medium truncate">{milestone.title}</span>
+                <div key={milestone.id} className="flex items-center justify-between gap-2 text-xs">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      {getStatusIcon(milestone.status)}
+                      <span className="font-medium truncate">{milestone.title}</span>
+                    </div>
+                    {milestone.dueDate && (
+                      <div className="text-muted-foreground ml-5">截止：{milestone.dueDate}</div>
+                    )}
                   </div>
-                  {milestone.dueDate && (
-                    <div className="text-muted-foreground ml-5">截止：{milestone.dueDate}</div>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handleQuickToggleStatus(milestone)}
+                    data-testid={`milestone-quick-toggle-${milestone.id}`}
+                    className="shrink-0 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {milestone.status === 'completed' ? '重开' : '标记完成'}
+                  </button>
                 </div>
               ))}
             </div>
