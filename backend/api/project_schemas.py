@@ -231,6 +231,8 @@ class MilestoneModel(BaseModel):
     status: str
     sort_order: int
     created_at: int
+    parent_id: Optional[str] = None
+    estimated_days: Optional[int] = None
 
 
 class MilestonesResponse(BaseModel):

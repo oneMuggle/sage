@@ -11,7 +11,7 @@
     "backend/office": 2,
     "backend/orchestration": 0,
     "backend/scheduler": 1,
-    "backend/services": 7,
+    "backend/services": 9,
     "backend/skills": 1,
     "backend/tools": 10,
     "backend/utils": 2,
