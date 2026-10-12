@@ -56,7 +56,7 @@
     "backend/services/arena_draw_engine.py": 1054,
     "backend/tools/web_render.py": 816,
     "backend/api/project_ai_routes.py": 859,
-    "src/shared/api/projectApi.ts": 1022,
+    "src/shared/api/projectApi.ts": 1024,
     "src/shared/api/projectApiTypes.ts": 937
   }
 }
