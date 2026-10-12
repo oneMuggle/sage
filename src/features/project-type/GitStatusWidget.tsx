@@ -5,8 +5,8 @@
  * Coding 项目专属：显示 Git 仓库状态
  */
 
-import { GitBranch, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { GitBranch, AlertCircle, CheckCircle2, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 
 import { invoke } from '../../shared/api/desktopInvoke';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
@@ -33,23 +33,24 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filesExpanded, setFilesExpanded] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      setLoading(true);
+      const result = await invoke<GitStatus>('projects_git_status', { projectId });
+      setStatus(result);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '获取 Git 状态失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
 
   useEffect(() => {
-    async function fetchStatus() {
-      try {
-        setLoading(true);
-        const result = await invoke<GitStatus>('projects_git_status', { projectId });
-        setStatus(result);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '获取 Git 状态失败');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchStatus();
-  }, [projectId]);
+    void fetchStatus();
+  }, [fetchStatus]);
 
   if (loading) {
     return (
@@ -92,10 +93,21 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <GitBranch className="h-4 w-4" />
-          Git 状态
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <GitBranch className="h-4 w-4" />
+            Git 状态
+          </CardTitle>
+          <button
+            type="button"
+            data-testid="git-status-refresh-btn"
+            onClick={() => void fetchStatus()}
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="刷新 Git 状态"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-2">
         {/* 分支信息 */}
@@ -126,6 +138,36 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                 <AlertCircle className="h-3 w-3 text-gray-500" />
                 <span className="text-muted-foreground">未跟踪：</span>
                 <span>{status.untracked_files.length} 个文件</span>
+              </div>
+            )}
+            <button
+              type="button"
+              data-testid="git-status-files-toggle"
+              onClick={() => setFilesExpanded((v) => !v)}
+              className="mt-1 text-xs font-medium text-primary hover:underline"
+            >
+              {filesExpanded ? '收起变更文件明细' : `展开变更文件 (${totalChanges})`}
+            </button>
+            {filesExpanded && (
+              <div
+                className="mt-1 max-h-28 overflow-y-auto rounded border border-border bg-muted/30 p-1.5 font-mono text-ui-2xs space-y-0.5"
+                data-testid="git-status-files-list"
+              >
+                {status.staged_files.map((f) => (
+                  <div key={`s:${f}`} className="truncate text-green-600 dark:text-green-400">
+                    [S] {f}
+                  </div>
+                ))}
+                {status.modified_files.map((f) => (
+                  <div key={`m:${f}`} className="truncate text-orange-600 dark:text-orange-400">
+                    [M] {f}
+                  </div>
+                ))}
+                {status.untracked_files.map((f) => (
+                  <div key={`u:${f}`} className="truncate text-muted-foreground">
+                    [U] {f}
+                  </div>
+                ))}
               </div>
             )}
           </div>

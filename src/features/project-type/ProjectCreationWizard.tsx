@@ -238,6 +238,7 @@ export function ProjectCreationWizard({
                 loading={detecting}
                 error={detectionError}
                 selectedType={selectedType}
+                onApplyDetectedType={setSelectedType}
               />
 
               <div>
