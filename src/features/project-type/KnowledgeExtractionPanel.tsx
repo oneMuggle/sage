@@ -171,16 +171,16 @@ export function KnowledgeExtractionPanel({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="text-[10px] shrink-0">
+                      <Badge variant="outline" className="text-ui-2xs shrink-0">
                         {CATEGORY_LABELS[entry.category] ?? entry.category}
                       </Badge>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-ui-2xs text-muted-foreground">
                         重要性 {entry.importance}/10
                       </span>
                     </div>
                     <p className="mt-0.5 text-foreground">{entry.content}</p>
                     {entry.reasoning && (
-                      <p className="mt-0.5 text-muted-foreground text-[10px]">{entry.reasoning}</p>
+                      <p className="mt-0.5 text-muted-foreground text-ui-2xs">{entry.reasoning}</p>
                     )}
                   </div>
                 </label>

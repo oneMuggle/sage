@@ -196,13 +196,13 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                   {risks.map((risk, idx) => (
                     <li key={idx} className="text-xs">
                       <span
-                        className={`inline-block px-1 py-0.5 rounded text-[10px] border mr-1 ${severityBadge(risk.severity)}`}
+                        className={`inline-block px-1 py-0.5 rounded text-ui-2xs border mr-1 ${severityBadge(risk.severity)}`}
                       >
                         {risk.severity}
                       </span>
                       <span>{risk.description}</span>
                       {risk.suggestion && (
-                        <div className="text-[10px] text-muted ml-6 mt-0.5">
+                        <div className="text-ui-2xs text-muted ml-6 mt-0.5">
                           → {risk.suggestion}
                         </div>
                       )}
@@ -223,7 +223,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                   {suggestions.map((sug, idx) => (
                     <li key={idx} className="text-xs flex items-start gap-1">
                       <span
-                        className={`inline-block px-1 py-0.5 rounded text-[10px] shrink-0 ${priorityBadge(sug.priority)}`}
+                        className={`inline-block px-1 py-0.5 rounded text-ui-2xs shrink-0 ${priorityBadge(sug.priority)}`}
                       >
                         {sug.priority}
                       </span>
@@ -240,7 +240,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                         </button>
                       )}
                       {sug.reason && (
-                        <div className="text-[10px] text-muted ml-6 mt-0.5 w-full">
+                        <div className="text-ui-2xs text-muted ml-6 mt-0.5 w-full">
                           原因: {sug.reason}
                         </div>
                       )}
@@ -254,7 +254,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
 
         {/* 缓存时间 */}
         {advice.cachedAt && (
-          <div className="text-[10px] text-muted/60 mt-1">
+          <div className="text-ui-2xs text-muted/60 mt-1">
             缓存于 {new Date(advice.cachedAt).toLocaleTimeString()}
           </div>
         )}
