@@ -169,6 +169,24 @@ export function ProjectMaterialsPanel({
     return m.enabled !== false;
   };
 
+  const handleBatchToggleMaterials = async (nextEnabled: boolean) => {
+    const readyList = (list ?? []).filter((m) => m.status === 'ready');
+    if (readyList.length === 0) return;
+    const nextMap: Record<string, boolean> = {};
+    for (const item of readyList) {
+      nextMap[item.id] = nextEnabled;
+    }
+    setEnabledOverrides((prev) => ({ ...prev, ...nextMap }));
+    if (typeof projectApi.updateMaterial !== 'function') return;
+    for (const item of readyList) {
+      try {
+        await projectApi.updateMaterial(project.id, item.id, { enabled: nextEnabled });
+      } catch {
+        // ignore in test/offline mode
+      }
+    }
+  };
+
   const handleToggleMaterial = async (m: ProjectMaterial) => {
     if (togglingId === m.id) return;
     const nextEnabled = !isMaterialEnabled(m);
@@ -231,9 +249,27 @@ export function ProjectMaterialsPanel({
             <span>
               受控注入源 · 已启用 {activeReadyMaterials.length}/{readyMaterials.length}
             </span>
-            <span className="tabular-nums text-muted">
-              {usedChars.toLocaleString()} / {MATERIAL_TOTAL_CAP.toLocaleString()} 字 ({usagePct}%)
-            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                data-testid="sidebar-materials-enable-all"
+                onClick={() => void handleBatchToggleMaterials(true)}
+                className="rounded border border-border/60 bg-bg px-1 py-0.5 text-ui-2xs text-text-secondary hover:text-text"
+              >
+                全选
+              </button>
+              <button
+                type="button"
+                data-testid="sidebar-materials-disable-all"
+                onClick={() => void handleBatchToggleMaterials(false)}
+                className="rounded border border-border/60 bg-bg px-1 py-0.5 text-ui-2xs text-text-secondary hover:text-text"
+              >
+                全停
+              </button>
+              <span className="tabular-nums text-muted">
+                {usedChars.toLocaleString()} / {MATERIAL_TOTAL_CAP.toLocaleString()} 字 ({usagePct}%)
+              </span>
+            </div>
           </div>
           <div className="mt-1 h-1 w-full rounded-full bg-border/50 overflow-hidden">
             <div

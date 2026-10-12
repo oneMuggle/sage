@@ -331,3 +331,15 @@
      - 在阶段输入框下方渲染当前项目形态的生命周期阶段胶囊 (`data-testid="milestone-editor-stage-presets"`)，一键将新建/编辑的里程碑绑定至标准形态阶段 ID。
   3. **侧边栏概览面板一键版本快照 (`ProjectExpandedPanels.tsx`)**：
      - 在聊天侧边栏内联展开的 `ProjectOverviewPanel` 头部，针对非 Git 模式项目提供 `[新建快照]` (`data-testid="sidebar-quick-checkpoint-btn"`) 快捷按钮，无需离开 `/chat` 即可随时创建 `.sage/checkpoints` 版本快照。
+
+### Phase P17：Git 状态微件变更文件明细抽屉与一键刷新、类型检测蓝图预览与一键采用、侧边栏资料池批量注入开关（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **Git 状态微件变更文件抽屉与手动刷新 (`GitStatusWidget.tsx`)**：
+     - 卡片头部新增 `[刷新]` 按钮 (`data-testid="git-status-refresh-btn"`)，支持在 AI 修改或本地提交后即时刷新分支与变更状态；
+     - 当存在暂存/修改/未跟踪文件时，提供 `[展开变更文件 (N)]` (`data-testid="git-status-files-toggle"`) 抽屉开关，展开后按 `[S]`（已暂存）、`[M]`（已修改）、`[U]`（未跟踪）列出文件路径清单 (`data-testid="git-status-files-list"`)。
+  2. **自动检测预览蓝图透视与一键采用 (`TypeDetectionPreview.tsx` & `ProjectCreationWizard.tsx`)**：
+     - 检测结果卡片内新增对应形态的蓝图推荐预览 (`data-testid="detection-blueprint-preview"`)，直观展示推荐版本策略 (`vcsLabel`) 与标准工作区目录胶囊；
+     - 当用户当前选中的项目类型与自动检测结果不一致时，渲染 `[一键采用检测形态]` (`data-testid="apply-detected-type-btn"`) 按钮，一键切换为检测到的最佳项目形态。
+  3. **聊天侧边栏资料面板批量 Source-Grounded 上下文开关 (`ProjectExpandedPanels.tsx`)**：
+     - 在侧边栏内联展开的 `ProjectMaterialsPanel` 水位条 (`project-materials-watermark`) 中新增 `[全选]` (`data-testid="sidebar-materials-enable-all"`) 与 `[全停]` (`data-testid="sidebar-materials-disable-all"`) 快捷按钮，支持在 `/chat` 对话中一键批量启用或隔离全部就绪项目资料。
