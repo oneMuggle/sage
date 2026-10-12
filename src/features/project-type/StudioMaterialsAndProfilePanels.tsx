@@ -12,6 +12,8 @@ import type {
   ProjectType,
 } from '../../shared/api/projectApiTypes';
 import { Button } from '../../shared/ui/Button';
+import { KnowledgeExtractionPanel } from './KnowledgeExtractionPanel';
+import { SemanticSearchPanel } from './SemanticSearchPanel';
 
 const ARCHETYPE_INSTRUCTIONS_PRESETS: Record<ProjectType, string> = {
   coding:
@@ -30,10 +32,7 @@ export interface StudioCharterTabPanelProps {
   projectType?: ProjectType;
   initialDescription?: string | null;
   initialInstructions?: string | null;
-  onMetadataUpdated?: (patch: {
-    description: string | null;
-    instructions: string | null;
-  }) => void;
+  onMetadataUpdated?: (patch: { description: string | null; instructions: string | null }) => void;
 }
 
 export function StudioCharterTabPanel({
@@ -148,7 +147,8 @@ export function StudioCharterTabPanel({
               </span>
             </div>
             <p className="text-muted-foreground">
-              作为五层上下文注入体系的第 1 层（最高优先级），用于定义代码工程规范、一般档案封面元数据或科研课题总纲与符号表。
+              作为五层上下文注入体系的第 1
+              层（最高优先级），用于定义代码工程规范、一般档案封面元数据或科研课题总纲与符号表。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -215,7 +215,8 @@ export function StudioCharterTabPanel({
               L2 项目目标与高优系统指令（Description & System Instructions）
             </div>
             <p className="text-ui-2xs text-muted-foreground">
-              注入五层上下文管线第 2 层，优先级高于全局风格偏好，适合定义本项目的角色定位、审校红线或答复体裁。
+              注入五层上下文管线第 2
+              层，优先级高于全局风格偏好，适合定义本项目的角色定位、审校红线或答复体裁。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -423,10 +424,7 @@ export interface StudioMaterialsTabPanelProps {
   projectPath: string;
 }
 
-export function StudioMaterialsTabPanel({
-  projectId,
-  projectPath,
-}: StudioMaterialsTabPanelProps) {
+export function StudioMaterialsTabPanel({ projectId, projectPath }: StudioMaterialsTabPanelProps) {
   const [materials, setMaterials] = useState<ProjectMaterial[]>([]);
   const [discoverablePaths, setDiscoverablePaths] = useState<string[]>([]);
   const [filePathInput, setFilePathInput] = useState('');
@@ -684,6 +682,9 @@ export function StudioMaterialsTabPanel({
           })}
         </div>
       )}
+
+      {/* M4: 语义检索面板 (2026-10-12) */}
+      <SemanticSearchPanel projectId={projectId} />
     </div>
   );
 }
