@@ -172,7 +172,7 @@ export interface ProjectUpdatePatch {
   instructions?: string | null;
   project_type?: ProjectType | null;
   project_stage?: string | null;
-  vcs_mode?: 'git' | 'builtin' | null;
+  vcs_mode?: 'git' | 'builtin' | 'none' | null;
 }
 
 export interface ProjectScaffoldOptions {

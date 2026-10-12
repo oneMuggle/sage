@@ -307,3 +307,16 @@
      - **批量 Source-Grounded 上下文开关与资料内容内联预览**：新增 `[全选参与上下文]` (`studio-materials-enable-all`)、`[全部隔离]` (`studio-materials-disable-all`) 以及每条资料的 `[预览/收起]` (`studio-material-preview-toggle-{id}` / `studio-material-preview-body-{id}`) 内容抽屉。
   2. **L1 项目总纲 (`StudioCharterTabPanel`) 一键保存并固化版本快照 (`studio-charter-checkpoint-btn`)**：新增 `[保存并固化快照]` 按钮，在更新 `SAGE.md` 后自动调用 `projectApi.createCheckpoint(projectId, 'SAGE.md 规范更新快照')`，将最新 `SAGE.md` 与 5 层合成上下文快照同步归档。
   3. **多形态项目概览版本保护与阶段状态卡片 (`ProjectOverviewWidgets.tsx`)**：新增 `workspace-vcs-summary-widget` 卡片，动态展示当前项目的生命周期阶段徽章、版本保护模式（`Git 版本控制` / `内置快照时间轴 (.sage/checkpoints)` / `无版本控制`）及最近快照数量 (`workspace-vcs-checkpoint-count`)。
+
+### Phase P15：概览卡片快速治理（约束一键导入与 Glob 统计、里程碑一键播种与快捷完成）及向导 L2 目标/初始快照闭环（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **约束摘要卡片快速治理 (`ConstraintSummaryWidget.tsx`)**：
+     - 空状态新增 `[一键导入默认规范]` (`data-testid="constraint-summary-quick-import"`) 按钮，无需跳转页签即可导入当前项目形态的默认规范模板。
+     - 新增已启用约束中按路径 Glob 条件注入（`triggerPattern` 非空）的统计徽章 (`data-testid="constraint-summary-glob-count"`)。
+  2. **里程碑进度卡片快速治理 (`MilestoneProgressWidget.tsx` & `ProjectOverviewWidgets.tsx`)**：
+     - 空状态新增 `[一键初始化推荐里程碑]` (`data-testid="milestone-summary-quick-seed"`) 按钮，按当前项目形态蓝图 (`getArchetypeBlueprint(projectType).recommendedMilestones`) 批量播种推荐阶段里程碑。
+     - 最近里程碑列表每项新增 `[标记完成/重开]` (`data-testid="milestone-quick-toggle-{id}"`) 快捷按钮，支持在项目概览页直接推进里程碑状态并实时更新进度条。
+  3. **三步创建向导 Step 3 L2 核心目标与初始基线快照闭环 (`ProjectCreationWizard.tsx` & `projectApiTypes.ts`)**：
+     - Step 3 (`confirm`) 新增可选「L2 项目核心目标摘要 (`description`)」输入框 (`data-testid="wizard-description-input"`) 与「版本控制策略 (`vcsMode`)」选择器 (`data-testid="wizard-vcs-mode-select"`)；
+     - 创建项目时自动同步写入 `description` 与 `vcs_mode`，并在启用脚手架且选择 `builtin` 模式时自动创建首个「项目初始化基线快照」(`projectApi.createCheckpoint(project.id, '项目初始化基线快照')`)。
