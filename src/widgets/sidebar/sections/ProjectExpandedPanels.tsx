@@ -1,4 +1,4 @@
-import { CheckSquare, FilePlus2, FileText, Plus, Save, Square, Trash2 } from 'lucide-react';
+import { CheckSquare, FilePlus2, FileText, History, Plus, Save, Square, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -31,6 +31,21 @@ export function ProjectOverviewPanel({
   onChange,
 }: ProjectOverviewPanelProps) {
   const { t } = useI18n();
+  const [creatingCheckpoint, setCreatingCheckpoint] = useState(false);
+
+  const handleQuickCheckpoint = async () => {
+    if (creatingCheckpoint || typeof projectApi?.createCheckpoint !== 'function') return;
+    setCreatingCheckpoint(true);
+    try {
+      const cp = await projectApi.createCheckpoint(project.id, '侧边栏快速版本快照');
+      toast.success(`已创建版本快照：${cp.id}`);
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setCreatingCheckpoint(false);
+    }
+  };
+
   return (
     <div
       className="ml-5 mr-1.5 mt-1 p-2 rounded border border-border/50 bg-bg/40"
@@ -45,6 +60,19 @@ export function ProjectOverviewPanel({
         <span className="text-ui-2xs text-muted uppercase tracking-wide">
           {t('sider.project.overview_title')}
         </span>
+        <div className="flex items-center gap-1">
+          {project.vcsMode !== 'git' && project.projectType !== 'coding' && (
+            <button
+              type="button"
+              data-testid="sidebar-quick-checkpoint-btn"
+              disabled={creatingCheckpoint}
+              onClick={() => void handleQuickCheckpoint()}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-40"
+            >
+              <History className="w-3 h-3" aria-hidden="true" />
+              {creatingCheckpoint ? '快照中...' : '新建快照'}
+            </button>
+          )}
         <button
           type="button"
           data-testid="project-overview-save"
@@ -55,6 +83,7 @@ export function ProjectOverviewPanel({
           <Save className="w-3 h-3" aria-hidden="true" />
           {saving ? t('sider.project.overview_saving') : t('sider.project.overview_save')}
         </button>
+        </div>
       </div>
       <label className="block text-ui-2xs text-muted mb-0.5">
         {t('sider.project.overview_description')}

@@ -259,6 +259,7 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
         open={editorOpen}
         onOpenChange={setEditorOpen}
         projectId={projectId}
+        projectType={projectType}
         constraint={editingConstraint}
         onSave={handleSave}
       />

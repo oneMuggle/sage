@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 
-import { projectApi, type ProjectMilestone } from '../../shared/api';
+import { projectApi, type ProjectMilestone, type ProjectType } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
 import {
   Dialog,
@@ -20,10 +20,13 @@ import {
 import { Input } from '../../shared/ui/Input';
 import { Textarea } from '../../shared/ui/Textarea';
 
+import { getArchetypeBlueprint } from './archetypeBlueprints';
+
 export interface MilestoneEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
+  projectType?: ProjectType | null;
   milestone: ProjectMilestone | null; // null = create mode
   onSave: () => void;
 }
@@ -32,9 +35,11 @@ export function MilestoneEditor({
   open,
   onOpenChange,
   projectId,
+  projectType,
   milestone,
   onSave,
 }: MilestoneEditorProps) {
+  const blueprint = getArchetypeBlueprint(projectType);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [stage, setStage] = useState('');
@@ -148,6 +153,21 @@ export function MilestoneEditor({
                 onChange={(e) => setStage(e.target.value)}
                 placeholder="例如: 开发阶段、测试阶段"
               />
+              <div
+                className="flex flex-wrap items-center gap-1"
+                data-testid="milestone-editor-stage-presets"
+              >
+                {blueprint.stages.map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setStage(st.id)}
+                    className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">
