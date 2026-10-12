@@ -26,7 +26,9 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
+
+from backend.utils import py_compat
 
 logger = logging.getLogger(__name__)
 
@@ -277,11 +279,11 @@ class ProjectWikiGenerator:
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef):
                 for item in node.body:
-                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):  # noqa: UP038
                         class_body_func_ids.add(id(item))
 
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef):
+            if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
                 # 跳过已在 ClassDef 内处理过的方法
                 if id(node) in class_body_func_ids:
                     continue
@@ -314,7 +316,7 @@ class ProjectWikiGenerator:
 
                 # 类方法
                 for item in node.body:
-                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):  # noqa: UP038
                         kind = "async_method" if isinstance(item, ast.AsyncFunctionDef) else "method"
                         symbols.append(SymbolInfo(
                             name=item.name,
@@ -344,21 +346,21 @@ class ProjectWikiGenerator:
         if node is None:
             return None
         try:
-            return ast.unparse(node)
+            return py_compat.ast_unparse(node)
         except Exception:
             return None
 
     def _format_base(self, node: ast.expr) -> str:
         """格式化类继承基类。"""
         try:
-            return ast.unparse(node)
+            return py_compat.ast_unparse(node)
         except Exception:
             return "Unknown"
 
     def _format_decorator(self, node: ast.expr) -> str:
         """格式化装饰器。"""
         try:
-            return ast.unparse(node)
+            return py_compat.ast_unparse(node)
         except Exception:
             return "unknown"
 
@@ -400,15 +402,13 @@ class ProjectWikiGenerator:
                                     kind="import",
                                 ))
 
-                    elif isinstance(node, ast.ImportFrom):
-                        if node.module:
-                            target = self._resolve_import(node.module, file_set)
-                            if target:
-                                edges.append(DependencyEdge(
-                                    source=sf.path,
-                                    target=target,
-                                    kind="import",
-                                ))
+                    elif isinstance(node, ast.ImportFrom):  # noqa: SIM102
+                        if node.module and (target := self._resolve_import(node.module, file_set)):
+                            edges.append(DependencyEdge(
+                                source=sf.path,
+                                target=target,
+                                kind="import",
+                            ))
 
             except Exception as exc:
                 logger.debug("依赖分析失败 %s: %s", sf.path, exc)

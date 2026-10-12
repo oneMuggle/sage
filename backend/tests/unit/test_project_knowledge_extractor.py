@@ -18,8 +18,8 @@ import pytest
 
 from backend.services.project_knowledge_extractor import (
     ExtractionResult,
-    ProposedKnowledgeEntry,
     ProjectKnowledgeExtractor,
+    ProposedKnowledgeEntry,
 )
 
 pytestmark = [pytest.mark.unit]
@@ -390,7 +390,7 @@ class TestBuildPrompt:
 
 
 class TestExtract:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_extract_calls_llm(self, extractor, mock_llm):
         with (
             patch.object(
@@ -417,7 +417,7 @@ class TestExtract:
         assert len(result.entries) > 0
         assert result.raw_json is not None
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_extract_empty_messages(self, extractor):
         with (
             patch.object(
@@ -439,7 +439,7 @@ class TestExtract:
         assert result.entries == []
         assert "没有可分析的消息" in result.reasoning
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_extract_not_available(self):
         extractor = ProjectKnowledgeExtractor(llm_client=None)
         extractor._llm = None
@@ -449,12 +449,12 @@ class TestExtract:
                 session_id="session-1",
             )
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_extract_llm_failure(self, extractor):
         extractor._llm.complete = AsyncMock(
             side_effect=Exception("LLM timeout")
         )
-        with (
+        with (  # noqa: SIM117
             patch.object(
                 extractor, "_load_project", return_value=MagicMock(
                     project_type="coding",

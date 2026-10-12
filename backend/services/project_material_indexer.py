@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from dataclasses import dataclass
 from typing import Any, List, Optional, Tuple
 
@@ -258,11 +257,10 @@ class ProjectMaterialIndexer:
         if not self._available:
             return 0
 
+        from backend.data.database import get_database
         from backend.data.project_material_repo import (
-            ProjectMaterialRepository,
             MATERIAL_STATUS_PENDING,
         )
-        from backend.data.database import get_database
 
         db = get_database()
         conn = db.get_connection()
@@ -391,7 +389,7 @@ class ProjectMaterialIndexer:
             f"SELECT COUNT(*) FROM project_materials "
             f"{'WHERE' if not where_clause else where_clause + ' AND'} "
             f"status = 'pending_index'"
-            + (f" AND project_id = ?" if project_id else ""),
+            + (" AND project_id = ?" if project_id else ""),
             params + ("pending_index",) if project_id else ("pending_index",),
         ).fetchone()[0]
 
@@ -399,7 +397,7 @@ class ProjectMaterialIndexer:
             f"SELECT COUNT(*) FROM project_materials "
             f"{'WHERE' if not where_clause else where_clause + ' AND'} "
             f"status = 'failed'"
-            + (f" AND project_id = ?" if project_id else ""),
+            + (" AND project_id = ?" if project_id else ""),
             params + ("failed",) if project_id else ("failed",),
         ).fetchone()[0]
 
@@ -469,7 +467,7 @@ class ProjectMaterialIndexer:
         except Exception as exc:
             logger.debug("wiki chunk_markdown 失败: %s, 回退段落分割", exc)
 
-        # 回退: 按双换行分割段落
+        # 回退 — 按双换行分割段落
         paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
 
         # 合并短段落，分割超长段落
@@ -517,7 +515,7 @@ def _split_sentences(text: str) -> List[str]:
     """按句子分割文本（支持中英文标点）。"""
     import re
     # 中英文句子结束标点
-    pattern = r'(?<=[.。!！?？\n])\s*'
+    pattern = r"(?<=[.。!！?？\n])\s*"
     parts = re.split(pattern, text)
     return [p.strip() for p in parts if p.strip()]
 

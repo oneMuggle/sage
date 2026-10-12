@@ -17,8 +17,8 @@ import pytest
 
 from backend.chat.project_context import (
     TOTAL_CHAR_CAP,
-    build_project_materials_block_semantic,
     _fallback_full_injection,
+    build_project_materials_block_semantic,
 )
 
 pytestmark = [pytest.mark.unit]

@@ -106,8 +106,8 @@ from backend.api.office_routes import (
 )
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.permission_routes import router as permission_router
-from backend.api.project_routes import router as project_router
 from backend.api.project_ai_routes import router as project_ai_router
+from backend.api.project_routes import router as project_router
 from backend.api.prompt_routes import router as prompt_router
 from backend.api.question_routes import router as question_router
 from backend.api.runtime_routes import router as runtime_router

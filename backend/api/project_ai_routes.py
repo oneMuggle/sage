@@ -69,7 +69,7 @@ class PreviewMilestoneNode(BaseModel):
     stage: Optional[str] = None
     due_date: Optional[str] = None
     estimated_days: Optional[float] = None
-    children: List["PreviewMilestoneNode"] = Field(default_factory=list)
+    children: List[PreviewMilestoneNode] = Field(default_factory=list)
 
 
 # 解决自引用
@@ -298,8 +298,8 @@ def decompose_tasks_apply(
     project_id: str, request: DecomposeApplyRequest
 ) -> DecomposeApplyResponse:
     """将预览结果写入 DB（批量创建里程碑）。"""
-    from backend.data.project_repo import ProjectRepository
     from backend.data.project_milestone_repo import ProjectMilestoneRepository
+    from backend.data.project_repo import ProjectRepository
 
     # 验证项目存在
     project = ProjectRepository().get(project_id)

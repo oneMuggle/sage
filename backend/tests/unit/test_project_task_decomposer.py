@@ -375,7 +375,7 @@ class TestSafeFloat:
 
 
 class TestDecompose:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_decompose_calls_llm(self, decomposer, mock_llm):
         with (
             patch.object(
@@ -402,7 +402,7 @@ class TestDecompose:
         assert len(result.milestones) > 0
         assert result.raw_json is not None
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_decompose_not_available(self):
         decomposer = ProjectTaskDecomposer(llm_client=None)
         decomposer._llm = None
@@ -412,12 +412,12 @@ class TestDecompose:
                 requirement="test",
             )
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_decompose_llm_failure(self, decomposer):
         decomposer._llm.complete = AsyncMock(
             side_effect=Exception("LLM timeout")
         )
-        with (
+        with (  # noqa: SIM117
             patch.object(
                 decomposer, "_load_project", return_value=MagicMock(
                     project_type="coding",

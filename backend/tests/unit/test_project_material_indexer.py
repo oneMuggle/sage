@@ -48,8 +48,7 @@ def indexer(mock_embedder):
         "backend.services.project_material_indexer._SQLITE_VEC_AVAILABLE",
         True,
     ):
-        idx = ProjectMaterialIndexer(embedder=mock_embedder)
-    return idx
+        return ProjectMaterialIndexer(embedder=mock_embedder)
 
 
 # ── SemanticSearchResult ──────────────────────────────────────────────────────

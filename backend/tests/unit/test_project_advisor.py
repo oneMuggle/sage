@@ -114,7 +114,7 @@ class TestAdvisorInit:
 
 
 class TestAnalyze:
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_analyze_cache_miss(self, advisor, mock_llm):
         """cache miss 时应调用 LLM。"""
         with (
@@ -158,7 +158,7 @@ class TestAnalyze:
         assert len(result.suggestions) == 1
         mock_llm.complete.assert_called_once()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_analyze_cache_hit(self, advisor, mock_llm):
         """cache hit 时不应调用 LLM。"""
         # 先写入缓存
@@ -181,7 +181,7 @@ class TestAnalyze:
         mock_llm.complete.assert_not_called()
         mock_collect.assert_not_called()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_analyze_force_refresh(self, advisor, mock_llm):
         """force_refresh=True 时忽略缓存。"""
         # 先写入缓存

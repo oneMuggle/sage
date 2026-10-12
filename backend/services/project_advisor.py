@@ -93,12 +93,12 @@ class ProjectAdvisor:
         if llm_client is not None:
             self._llm = llm_client
         else:
-            from backend.orchestration.llm_factory import (
+            from backend.orchestration.llm_factory import (  # noqa: ERA001
                 build_llm_client_from_settings,
             )
             self._llm = build_llm_client_from_settings()
 
-        # 内存缓存: {project_id: (timestamp_ms, AdviceResult)}
+        # 内存缓存 — {project_id: (timestamp_ms, AdviceResult)}
         self._cache: Dict[str, tuple] = {}
 
     @property
@@ -178,8 +178,8 @@ class ProjectAdvisor:
 
     def _collect_data(self, project_id: str) -> Dict[str, Any]:
         """收集项目多维度数据。"""
-        from backend.data.project_repo import ProjectRepository
         from backend.data.project_milestone_repo import ProjectMilestoneRepository
+        from backend.data.project_repo import ProjectRepository
         from backend.memory.project_profile import get_project_profile
 
         project = ProjectRepository().get(project_id)
@@ -365,8 +365,8 @@ def _days_between(date_a: str, date_b: str) -> int:
     try:
         from datetime import datetime
 
-        da = datetime.strptime(date_a, "%Y-%m-%d")
-        db = datetime.strptime(date_b, "%Y-%m-%d")
+        da = datetime.strptime(date_a, "%Y-%m-%d")  # noqa: DTZ007
+        db = datetime.strptime(date_b, "%Y-%m-%d")  # noqa: DTZ007
         return (db - da).days
     except (ValueError, TypeError):
         return 0

@@ -36,7 +36,7 @@ class DecomposedMilestone:
     sort_order: int = 0
     _ref: Optional[str] = None
     parent_ref: Optional[str] = None
-    children: List["DecomposedMilestone"] = field(default_factory=list)
+    children: List[DecomposedMilestone] = field(default_factory=list)
 
     def to_create_dict(self) -> dict:
         """转为 create_batch() 接受的 dict 格式。"""
