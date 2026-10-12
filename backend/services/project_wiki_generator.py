@@ -283,7 +283,7 @@ class ProjectWikiGenerator:
                         class_body_func_ids.add(id(item))
 
         for node in ast.walk(tree):
-            if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
+            if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):  # noqa: UP038
                 # 跳过已在 ClassDef 内处理过的方法
                 if id(node) in class_body_func_ids:
                     continue
