@@ -19,6 +19,8 @@ import {
   DialogFooter,
 } from '../../shared/ui/Dialog/Dialog';
 
+import { getArchetypeBlueprint } from './archetypeBlueprints';
+
 export interface ProjectTypeSelectorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -155,6 +157,7 @@ export function ProjectTypeSelector({
             {PROJECT_TYPES.map((type) => {
               const isSelected = selectedType === type.value;
               const isDetected = detection?.detectedType === type.value;
+              const bp = getArchetypeBlueprint(type.value);
 
               return (
                 <button
@@ -175,6 +178,17 @@ export function ProjectTypeSelector({
                   <div className={type.color}>{type.icon}</div>
                   <div className="font-medium">{type.label}</div>
                   <div className="text-xs text-muted-foreground">{type.description}</div>
+                  <div
+                    className="mt-1 flex flex-wrap items-center gap-1"
+                    data-testid={`selector-governance-meta-${type.value}`}
+                  >
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-ui-2xs text-muted-foreground">
+                      {bp.stages.length} 阶段管线
+                    </span>
+                    <span className="rounded bg-muted px-1.5 py-0.5 text-ui-2xs text-muted-foreground">
+                      {bp.subTemplates.length} 套细分规范包
+                    </span>
+                  </div>
                 </button>
               );
             })}
