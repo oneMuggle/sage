@@ -5,7 +5,17 @@
  * 里程碑的 CRUD 界面：列表、创建、编辑、删除、状态更新
  */
 
-import { Plus, Edit2, Trash2, Target, CheckCircle2, Clock, AlertCircle, Sparkles } from 'lucide-react';
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  Target,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Sparkles,
+  BrainCircuit,
+} from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
 import { projectApi, type ProjectMilestone, type ProjectType } from '../../shared/api';
@@ -15,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 import { MilestoneEditor } from './MilestoneEditor';
+import { TaskDecomposeDialog } from './TaskDecomposeDialog';
 import { getArchetypeBlueprint } from './archetypeBlueprints';
 
 export interface MilestoneManagerProps {
@@ -29,6 +40,7 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | null>(null);
+  const [decomposeDialogOpen, setDecomposeDialogOpen] = useState(false);
   const blueprint = getArchetypeBlueprint(projectType);
 
   const fetchMilestones = useCallback(async () => {
@@ -83,7 +95,11 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
   };
 
   const handleDelete = async (milestoneId: string) => {
-    const ok = await confirmDialog({ title: '删除里程碑', message: '确定要删除此里程碑吗？', danger: true });
+    const ok = await confirmDialog({
+      title: '删除里程碑',
+      message: '确定要删除此里程碑吗？',
+      danger: true,
+    });
     if (!ok) return;
     try {
       await projectApi.deleteMilestone(projectId, milestoneId);
@@ -133,6 +149,15 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
               里程碑管理
             </CardTitle>
             <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setDecomposeDialogOpen(true)}
+                data-testid="ai-decompose-tasks-btn"
+              >
+                <BrainCircuit className="mr-1.5 h-3.5 w-3.5 text-primary" />
+                AI 任务分解
+              </Button>
               <Button
                 variant="secondary"
                 size="sm"
@@ -255,6 +280,13 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
         projectType={projectType}
         milestone={editingMilestone}
         onSave={handleEditorSave}
+      />
+
+      <TaskDecomposeDialog
+        open={decomposeDialogOpen}
+        onOpenChange={setDecomposeDialogOpen}
+        projectId={projectId}
+        onApplied={fetchMilestones}
       />
     </>
   );

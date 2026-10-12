@@ -158,6 +158,53 @@ def _v5_artifacts_office_columns(conn: Any) -> None:
 register_migration(5, "artifacts_office_columns", _v5_artifacts_office_columns)
 
 
+def _v6_project_milestones_hierarchy(conn: Any) -> None:
+    """v6：project_milestones 表新增 parent_id / estimated_days 列。
+
+    支撑 AI 任务分解（M1）：里程碑可嵌套为树形结构，子里程碑指向父节点；
+    estimated_days 记录 AI 估算工时，供项目进度顾问（M3）使用。
+    幂等：PRAGMA 检查列存在性，已存在则跳过。
+    """
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(project_milestones)")
+    columns = {row["name"] for row in cursor.fetchall()}
+    if "parent_id" not in columns:
+        cursor.execute(
+            "ALTER TABLE project_milestones ADD COLUMN parent_id TEXT"
+        )
+        conn.commit()
+    if "estimated_days" not in columns:
+        cursor.execute(
+            "ALTER TABLE project_milestones ADD COLUMN estimated_days REAL"
+        )
+        conn.commit()
+    # parent_id 索引（get_tree 查询子节点用）
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_milestones_parent"
+        " ON project_milestones(parent_id)"
+    )
+    conn.commit()
+
+
+register_migration(6, "project_milestones_hierarchy", _v6_project_milestones_hierarchy)
+
+
+def _v7_material_semantic_index_marker(conn: Any) -> None:
+    """v7：M4 语义索引管线激活标记。
+
+    向量表 ``project_materials_vec_{dims}`` 由 ProjectMaterialIndexer
+    在首次索引时按需创建（sqlite-vec virtual table），不在此处硬编码。
+    此迁移仅标记 schema 版本已升级到 M4，同时删除 P0 backfill 的残留
+    （P0 backfill 此前在 database.py init_db 中把 pending_index 全量回填
+    为 ready，M4 接入后不再需要）。
+    """
+    # No-op: 向量表由 indexer 动态创建
+    # P0 backfill 删除在 database.py 中同步执行
+
+
+register_migration(7, "material_semantic_index", _v7_material_semantic_index_marker)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(

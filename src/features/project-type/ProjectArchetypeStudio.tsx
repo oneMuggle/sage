@@ -61,7 +61,14 @@ const ARCHETYPE_ICONS: Record<ProjectType, ComponentType<{ className?: string }>
   personal: User,
 };
 
-type StudioTab = 'overview' | 'charter' | 'materials' | 'constraints' | 'milestones' | 'profile' | 'allowed_paths';
+type StudioTab =
+  | 'overview'
+  | 'charter'
+  | 'materials'
+  | 'constraints'
+  | 'milestones'
+  | 'profile'
+  | 'allowed_paths';
 
 export interface ProjectArchetypeStudioProps {
   className?: string;
@@ -138,7 +145,13 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
 
   const handleAddProfileEntry = async () => {
     const content = profileDraft.trim();
-    if (!activeProject?.path || !content || savingProfile || typeof memoryApi?.createProjectProfile !== 'function') return;
+    if (
+      !activeProject?.path ||
+      !content ||
+      savingProfile ||
+      typeof memoryApi?.createProjectProfile !== 'function'
+    )
+      return;
     setSavingProfile(true);
     try {
       await memoryApi.createProjectProfile(content, {
@@ -369,9 +382,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           data-testid={`archetype-blueprint-detail-${blueprint.type}`}
         >
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-foreground">
-              1. 标准工作区目录结构 & VCS
-            </div>
+            <div className="text-xs font-semibold text-foreground">1. 标准工作区目录结构 & VCS</div>
             <p className="text-xs text-muted-foreground">{blueprint.positioning}</p>
             <div className="flex flex-wrap gap-1.5 pt-1">
               {blueprint.directories.map((dir) => (
@@ -392,9 +403,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           </div>
 
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-foreground">
-              2. 五层上下文注入与护栏重点
-            </div>
+            <div className="text-xs font-semibold text-foreground">2. 五层上下文注入与护栏重点</div>
             <ul className="space-y-1 text-xs text-muted-foreground">
               {blueprint.contextPillars.map((pillar, idx) => (
                 <li key={idx} className="flex items-start gap-1.5">
@@ -406,9 +415,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           </div>
 
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-foreground">
-              3. 阶段推进管线与预设规则包
-            </div>
+            <div className="text-xs font-semibold text-foreground">3. 阶段推进管线与预设规则包</div>
             <div className="flex flex-wrap items-center gap-1.5">
               {blueprint.stages.map((st, idx) => (
                 <span
@@ -519,7 +526,11 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 const stages = activeBlueprint.stages;
                 const curIdx = stages.findIndex((s) => s.id === activeProject.projectStage);
                 const nextStage =
-                  curIdx === -1 ? stages[0] : curIdx + 1 < stages.length ? stages[curIdx + 1] : null;
+                  curIdx === -1
+                    ? stages[0]
+                    : curIdx + 1 < stages.length
+                      ? stages[curIdx + 1]
+                      : null;
                 if (!nextStage) return null;
                 return (
                   <button
@@ -668,10 +679,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           {/* 子面板内容 */}
           {activeTab === 'overview' && (
             <div className="space-y-4">
-              <PolymorphicArchetypeCards
-                project={activeProject}
-                projectType={activeProjectType}
-              />
+              <PolymorphicArchetypeCards project={activeProject} projectType={activeProjectType} />
               <ProjectOverviewWidgets project={activeProject} />
             </div>
           )}
@@ -680,7 +688,9 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
             <ConstraintManager projectId={activeProject.id} projectType={activeProjectType} />
           )}
 
-          {activeTab === 'milestones' && <MilestoneManager projectId={activeProject.id} projectType={activeProjectType} />}
+          {activeTab === 'milestones' && (
+            <MilestoneManager projectId={activeProject.id} projectType={activeProjectType} />
+          )}
 
           {activeTab === 'materials' && (
             <StudioMaterialsTabPanel
@@ -693,6 +703,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
             <StudioProfileTabPanel
               projectPath={activeProject.path}
               projectType={activeProjectType}
+              projectId={activeProject.id}
               profileEntries={profileEntries}
               profileCategory={profileCategory}
               onCategoryChange={setProfileCategory}

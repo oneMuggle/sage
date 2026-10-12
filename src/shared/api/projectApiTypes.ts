@@ -127,6 +127,40 @@ export interface UpdateMilestonePayload {
   sortOrder?: number;
 }
 
+/** AI 任务分解：预览里程碑节点（可嵌套） */
+export interface PreviewMilestoneNode {
+  title: string;
+  description?: string | null;
+  stage?: string | null;
+  dueDate?: string | null;
+  estimatedDays?: number | null;
+  children: PreviewMilestoneNode[];
+}
+
+/** AI 任务分解：预览响应 */
+export interface DecomposePreviewResult {
+  reasoning: string;
+  milestones: PreviewMilestoneNode[];
+  totalCount: number;
+}
+
+/** AI 任务分解：预览请求参数 */
+export interface DecomposePreviewPayload {
+  requirement: string;
+  context?: string;
+}
+
+/** AI 任务分解：应用请求参数 */
+export interface DecomposeApplyPayload {
+  milestones: PreviewMilestoneNode[];
+}
+
+/** AI 任务分解：应用响应 */
+export interface DecomposeApplyResult {
+  createdCount: number;
+  milestoneIds: string[];
+}
+
 /** 项目类型检测结果 */
 export interface ProjectTypeDetectionResult {
   detectedType: ProjectType;
@@ -368,7 +402,6 @@ export function mapMaterial(m: ProjectMaterialWire): ProjectMaterial {
   };
 }
 
-
 export interface ProjectDiagnoseResult {
   projectId: string;
   level: 'satisfied' | 'partial' | 'unsatisfied' | string;
@@ -423,6 +456,29 @@ export interface MilestoneWire {
   created_at: number;
 }
 
+/** AI 任务分解：预览里程碑节点（snake_case wire 格式） */
+export interface PreviewMilestoneNodeWire {
+  title: string;
+  description?: string | null;
+  stage?: string | null;
+  due_date?: string | null;
+  estimated_days?: number | null;
+  children: PreviewMilestoneNodeWire[];
+}
+
+/** AI 任务分解：预览响应（wire 格式） */
+export interface DecomposePreviewWire {
+  reasoning: string;
+  milestones: PreviewMilestoneNodeWire[];
+  total_count: number;
+}
+
+/** AI 任务分解：应用响应（wire 格式） */
+export interface DecomposeApplyWire {
+  created_count: number;
+  milestone_ids: string[];
+}
+
 export interface ProjectTypeDetectWire {
   project_type: string | null;
   confidence: number;
@@ -455,5 +511,426 @@ export function mapMilestone(m: MilestoneWire): ProjectMilestone {
     status: m.status,
     sortOrder: m.sort_order,
     createdAt: m.created_at,
+  };
+}
+
+/** 递归映射预览里程碑节点（wire → camelCase） */
+export function mapPreviewMilestoneNode(w: PreviewMilestoneNodeWire): PreviewMilestoneNode {
+  return {
+    title: w.title,
+    description: w.description ?? null,
+    stage: w.stage ?? null,
+    dueDate: w.due_date ?? null,
+    estimatedDays: w.estimated_days ?? null,
+    children: w.children.map(mapPreviewMilestoneNode),
+  };
+}
+
+/** 映射 AI 任务分解预览响应 */
+export function mapDecomposePreview(w: DecomposePreviewWire): DecomposePreviewResult {
+  return {
+    reasoning: w.reasoning,
+    milestones: w.milestones.map(mapPreviewMilestoneNode),
+    totalCount: w.total_count,
+  };
+}
+
+/** 映射 AI 任务分解应用响应 */
+export function mapDecomposeApply(w: DecomposeApplyWire): DecomposeApplyResult {
+  return {
+    createdCount: w.created_count,
+    milestoneIds: w.milestone_ids,
+  };
+}
+
+// ── M2: 对话知识沉淀 (2026-10-12) ───────────────────────────────────────────
+
+/** M2: LLM 建议的知识条目（camelCase，渲染端消费） */
+export interface KnowledgeEntryProposal {
+  content: string;
+  category: string;
+  importance: number;
+  sourceMessageIds: string[];
+  reasoning?: string | null;
+}
+
+/** M2: 知识提取预览响应 */
+export interface ExtractKnowledgeResult {
+  reasoning: string;
+  entries: KnowledgeEntryProposal[];
+  projectKey: string;
+}
+
+/** M2: 知识提取请求参数 */
+export interface ExtractKnowledgePayload {
+  sessionId: string;
+  maxMessages?: number;
+}
+
+/** M2: 知识确认请求参数 */
+export interface ConfirmKnowledgePayload {
+  entries: KnowledgeEntryProposal[];
+}
+
+/** M2: 知识确认响应 */
+export interface ConfirmKnowledgeResult {
+  created: number;
+  skipped: number;
+  ids: string[];
+}
+
+/** M2: 知识条目 wire 格式（snake_case） */
+export interface KnowledgeEntryProposalWire {
+  content: string;
+  category: string;
+  importance: number;
+  source_message_ids: string[];
+  reasoning?: string | null;
+}
+
+/** M2: 知识提取预览响应 wire 格式 */
+export interface ExtractKnowledgeWire {
+  reasoning: string;
+  entries: KnowledgeEntryProposalWire[];
+  project_key: string;
+}
+
+/** M2: 知识确认响应 wire 格式 */
+export interface ConfirmKnowledgeWire {
+  created: number;
+  skipped: number;
+  ids: string[];
+}
+
+/** M2: 映射知识条目 wire -> camelCase */
+export function mapKnowledgeEntryProposal(w: KnowledgeEntryProposalWire): KnowledgeEntryProposal {
+  return {
+    content: w.content,
+    category: w.category,
+    importance: w.importance,
+    sourceMessageIds: w.source_message_ids ?? [],
+    reasoning: w.reasoning ?? null,
+  };
+}
+
+/** M2: 映射知识提取预览响应 */
+export function mapExtractKnowledge(w: ExtractKnowledgeWire): ExtractKnowledgeResult {
+  return {
+    reasoning: w.reasoning,
+    entries: w.entries.map(mapKnowledgeEntryProposal),
+    projectKey: w.project_key,
+  };
+}
+
+/** M2: 映射知识确认响应 */
+export function mapConfirmKnowledge(w: ConfirmKnowledgeWire): ConfirmKnowledgeResult {
+  return {
+    created: w.created,
+    skipped: w.skipped,
+    ids: w.ids,
+  };
+}
+
+// ── M3: 项目进度顾问 (2026-10-12) ───────────────────────────────────────────
+
+/** M3: 顾问识别的风险项（camelCase） */
+export interface AdvisorRisk {
+  description: string;
+  severity: string;
+  suggestion?: string | null;
+}
+
+/** M3: 顾问给出的改进建议（camelCase） */
+export interface AdvisorSuggestion {
+  action: string;
+  reason?: string | null;
+  priority: string;
+}
+
+/** M3: 顾问分析结果（camelCase） */
+export interface AdviceResult {
+  healthScore: number;
+  summary: string;
+  risks: AdvisorRisk[];
+  suggestions: AdvisorSuggestion[];
+  cachedAt?: number | null;
+}
+
+/** M3: 风险项 wire 格式（snake_case） */
+export interface AdvisorRiskWire {
+  description: string;
+  severity: string;
+  suggestion?: string | null;
+}
+
+/** M3: 建议项 wire 格式（snake_case） */
+export interface AdvisorSuggestionWire {
+  action: string;
+  reason?: string | null;
+  priority: string;
+}
+
+/** M3: 顾问分析响应 wire 格式 */
+export interface AdviceWire {
+  health_score: number;
+  summary: string;
+  risks: AdvisorRiskWire[];
+  suggestions: AdvisorSuggestionWire[];
+  cached_at?: number | null;
+}
+
+/** M3: 映射风险项 wire -> camelCase */
+export function mapAdvisorRisk(w: AdvisorRiskWire): AdvisorRisk {
+  return {
+    description: w.description,
+    severity: w.severity,
+    suggestion: w.suggestion ?? null,
+  };
+}
+
+/** M3: 映射建议项 wire -> camelCase */
+export function mapAdvisorSuggestion(w: AdvisorSuggestionWire): AdvisorSuggestion {
+  return {
+    action: w.action,
+    reason: w.reason ?? null,
+    priority: w.priority,
+  };
+}
+
+/** M3: 映射顾问分析响应 wire -> camelCase */
+export function mapAdvice(w: AdviceWire): AdviceResult {
+  return {
+    healthScore: w.health_score,
+    summary: w.summary,
+    risks: w.risks.map(mapAdvisorRisk),
+    suggestions: w.suggestions.map(mapAdvisorSuggestion),
+    cachedAt: w.cached_at ?? null,
+  };
+}
+
+// ── M5: 代码→Wiki 生成 (2026-10-12) ─────────────────────────────────────────
+
+/** M5: Wiki 生成请求 */
+export interface WikiGeneratePayload {
+  incremental: boolean;
+}
+
+/** M5: Wiki 生成结果（camelCase） */
+export interface WikiGenerateResult {
+  pagesGenerated: number;
+  pagesUpdated: number;
+  pagesSkipped: number;
+  errors: string[];
+  wikiPaths: string[];
+}
+
+/** M5: 文件扫描结果项（camelCase） */
+export interface ScannedFile {
+  path: string;
+  language: string;
+  sizeBytes: number;
+  contentHash: string;
+}
+
+/** M5: 文件扫描结果 */
+export interface FileScanResult {
+  files: ScannedFile[];
+  total: number;
+}
+
+/** M5: 符号信息（camelCase） */
+export interface ExtractedSymbol {
+  name: string;
+  kind: string;
+  lineno: number;
+  endLineno: number | null;
+  docstring: string | null;
+  decorators: string[];
+  parent: string | null;
+  filePath: string;
+  args: string[];
+  returnType: string | null;
+  bases: string[];
+}
+
+/** M5: 符号提取结果 */
+export interface SymbolExtractResult {
+  symbols: ExtractedSymbol[];
+  total: number;
+}
+
+/** M5: Wiki 生成 wire 格式（snake_case） */
+export interface WikiGenerateWire {
+  pages_generated: number;
+  pages_updated: number;
+  pages_skipped: number;
+  errors: string[];
+  wiki_paths: string[];
+}
+
+/** M5: 文件扫描 wire 格式 */
+export interface FileScanWire {
+  files: Array<{
+    path: string;
+    language: string;
+    size_bytes: number;
+    content_hash: string;
+  }>;
+  total: number;
+}
+
+/** M5: 符号提取 wire 格式 */
+export interface SymbolExtractWire {
+  symbols: Array<{
+    name: string;
+    kind: string;
+    lineno: number;
+    end_lineno: number | null;
+    docstring: string | null;
+    decorators: string[];
+    parent: string | null;
+    file_path: string;
+    args: string[];
+    return_type: string | null;
+    bases: string[];
+  }>;
+  total: number;
+}
+
+/** M5: 映射 Wiki 生成结果 wire -> camelCase */
+export function mapWikiGenerate(w: WikiGenerateWire): WikiGenerateResult {
+  return {
+    pagesGenerated: w.pages_generated,
+    pagesUpdated: w.pages_updated,
+    pagesSkipped: w.pages_skipped,
+    errors: w.errors,
+    wikiPaths: w.wiki_paths,
+  };
+}
+
+/** M5: 映射扫描文件 wire -> camelCase */
+function mapScannedFile(f: FileScanWire['files'][number]): ScannedFile {
+  return {
+    path: f.path,
+    language: f.language,
+    sizeBytes: f.size_bytes,
+    contentHash: f.content_hash,
+  };
+}
+
+/** M5: 映射文件扫描结果 wire -> camelCase */
+export function mapFileScan(w: FileScanWire): FileScanResult {
+  return {
+    files: w.files.map(mapScannedFile),
+    total: w.total,
+  };
+}
+
+/** M5: 映射符号 wire -> camelCase */
+function mapExtractedSymbol(s: SymbolExtractWire['symbols'][number]): ExtractedSymbol {
+  return {
+    name: s.name,
+    kind: s.kind,
+    lineno: s.lineno,
+    endLineno: s.end_lineno,
+    docstring: s.docstring,
+    decorators: s.decorators,
+    parent: s.parent,
+    filePath: s.file_path,
+    args: s.args,
+    returnType: s.return_type,
+    bases: s.bases,
+  };
+}
+
+/** M5: 映射符号提取结果 wire -> camelCase */
+export function mapSymbolExtract(w: SymbolExtractWire): SymbolExtractResult {
+  return {
+    symbols: w.symbols.map(mapExtractedSymbol),
+    total: w.total,
+  };
+}
+
+// ── M4: 语义检索 (2026-10-12) ─────────────────────────────────────────────
+
+/** M4: 语义检索结果单项 */
+export interface SemanticSearchHit {
+  materialId: string;
+  chunkIndex: number;
+  content: string;
+  score: number;
+  projectId: string;
+}
+
+/** M4: 语义检索结果 */
+export interface SemanticSearchResult {
+  results: SemanticSearchHit[];
+  total: number;
+  embedderType: string;
+  embedderDims: number;
+}
+
+/** M4: 索引统计 */
+export interface IndexingStats {
+  totalMaterials: number;
+  indexedMaterials: number;
+  pendingMaterials: number;
+  failedMaterials: number;
+  totalChunks: number;
+  embedderType: string;
+  embedderDims: number;
+}
+
+/** M4: 语义检索 wire 格式 */
+export interface SemanticSearchWire {
+  results: Array<{
+    material_id: string;
+    chunk_index: number;
+    content: string;
+    score: number;
+    project_id: string;
+  }>;
+  total: number;
+  embedder_type: string;
+  embedder_dims: number;
+}
+
+/** M4: 索引统计 wire 格式 */
+export interface IndexingStatsWire {
+  total_materials: number;
+  indexed_materials: number;
+  pending_materials: number;
+  failed_materials: number;
+  total_chunks: number;
+  embedder_type: string;
+  embedder_dims: number;
+}
+
+/** M4: 映射语义检索结果 wire -> camelCase */
+export function mapSemanticSearch(w: SemanticSearchWire): SemanticSearchResult {
+  return {
+    results: w.results.map((r) => ({
+      materialId: r.material_id,
+      chunkIndex: r.chunk_index,
+      content: r.content,
+      score: r.score,
+      projectId: r.project_id,
+    })),
+    total: w.total,
+    embedderType: w.embedder_type,
+    embedderDims: w.embedder_dims,
+  };
+}
+
+/** M4: 映射索引统计 wire -> camelCase */
+export function mapIndexingStats(w: IndexingStatsWire): IndexingStats {
+  return {
+    totalMaterials: w.total_materials,
+    indexedMaterials: w.indexed_materials,
+    pendingMaterials: w.pending_materials,
+    failedMaterials: w.failed_materials,
+    totalChunks: w.total_chunks,
+    embedderType: w.embedder_type,
+    embedderDims: w.embedder_dims,
   };
 }
