@@ -13,7 +13,6 @@ import type {
 } from '../../shared/api/projectApiTypes';
 import { Button } from '../../shared/ui/Button';
 
-import { KnowledgeExtractionPanel } from './KnowledgeExtractionPanel';
 import { SemanticSearchPanel } from './SemanticSearchPanel';
 
 const ARCHETYPE_INSTRUCTIONS_PRESETS: Record<ProjectType, string> = {
