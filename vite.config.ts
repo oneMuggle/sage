@@ -128,6 +128,7 @@ export default defineConfig({
           'vendor-flow': ['@xyflow/react'],
           'vendor-markdown': ['react-markdown', 'remark-gfm'],
           'vendor-state': ['zustand'],
+          'vendor-motion': ['framer-motion'],
         },
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',
