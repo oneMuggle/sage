@@ -359,6 +359,17 @@ describe('ProjectArchetypeStudio', () => {
       );
     });
 
+    // Business document style bar & quick checkpoint presets on the business card
+    expect(screen.getByTestId('business-doc-style-bar')).toBeInTheDocument();
+    expect(screen.getByTestId('checkpoint-quick-presets')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('business-apply-style-btn'));
+    await waitFor(() => {
+      expect(mockCreateConstraint).toHaveBeenCalledWith(
+        'proj-1',
+        expect.objectContaining({ category: 'document_format' }),
+      );
+    });
+
     // Create a builtin checkpoint snapshot on the business card
     fireEvent.change(screen.getByTestId('checkpoint-label-input'), {
       target: { value: '法务二审定稿前备份' },
