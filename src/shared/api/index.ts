@@ -33,6 +33,33 @@ export type {
   ProjectWorkspaceOverview,
   WorkspaceArtifactItem,
   WorkspaceDirectorySummary,
+  // AI 任务分解 M1 (2026-10-12)
+  PreviewMilestoneNode,
+  DecomposePreviewResult,
+  DecomposePreviewPayload,
+  DecomposeApplyPayload,
+  DecomposeApplyResult,
+  // AI 知识沉淀 M2 (2026-10-12)
+  KnowledgeEntryProposal,
+  ExtractKnowledgeResult,
+  ExtractKnowledgePayload,
+  ConfirmKnowledgePayload,
+  ConfirmKnowledgeResult,
+  // AI 项目顾问 M3 (2026-10-12)
+  AdvisorRisk,
+  AdvisorSuggestion,
+  AdviceResult,
+  // AI 代码→Wiki 生成 M5 (2026-10-12)
+  WikiGeneratePayload,
+  WikiGenerateResult,
+  ScannedFile,
+  FileScanResult,
+  ExtractedSymbol,
+  SymbolExtractResult,
+  // M4: 语义检索 (2026-10-12)
+  SemanticSearchHit,
+  SemanticSearchResult,
+  IndexingStats,
 } from './projectApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';

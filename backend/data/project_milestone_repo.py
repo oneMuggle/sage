@@ -33,6 +33,8 @@ class ProjectMilestone:
     status: str = "pending"  # pending | in_progress | completed | blocked
     sort_order: int = 0
     created_at: int = 0
+    parent_id: Optional[str] = None
+    estimated_days: Optional[float] = None
 
     def to_dict(self) -> dict:
         return {
@@ -46,6 +48,8 @@ class ProjectMilestone:
             "status": self.status,
             "sort_order": self.sort_order,
             "created_at": self.created_at,
+            "parent_id": self.parent_id,
+            "estimated_days": self.estimated_days,
         }
 
 
@@ -61,6 +65,8 @@ def _row_to_milestone(row) -> ProjectMilestone:  # noqa: ANN001 — sqlite3.Row
         status=row["status"],
         sort_order=row["sort_order"],
         created_at=row["created_at"],
+        parent_id=row["parent_id"],
+        estimated_days=row["estimated_days"],
     )
 
 
@@ -95,6 +101,8 @@ class ProjectMilestoneRepository:
         due_date: Optional[str] = None,
         sort_order: int = 0,
         now_ms: Optional[int] = None,
+        parent_id: Optional[str] = None,
+        estimated_days: Optional[float] = None,
     ) -> ProjectMilestone:
         """创建一个里程碑。
 
@@ -105,6 +113,8 @@ class ProjectMilestoneRepository:
             stage: 所属阶段（按项目类型有不同枚举）
             due_date: 到期日（YYYY-MM-DD 格式，可选）
             sort_order: 排序序号
+            parent_id: 父里程碑 ID（可选，用于层级结构）
+            estimated_days: AI 估算工时天数（可选）
         """
         ts = _now_ms(now_ms)
         conn = self.db.get_connection()
@@ -113,10 +123,12 @@ class ProjectMilestoneRepository:
         cursor.execute(
             """
             INSERT INTO project_milestones
-                (id, project_id, title, description, stage, due_date, status, sort_order, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+                (id, project_id, title, description, stage, due_date,
+                 status, sort_order, created_at, parent_id, estimated_days)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
             """,
-            (milestone_id, project_id, title, description, stage, due_date, sort_order, ts),
+            (milestone_id, project_id, title, description, stage, due_date,
+             sort_order, ts, parent_id, estimated_days),
         )
         conn.commit()
         return ProjectMilestone(
@@ -130,6 +142,8 @@ class ProjectMilestoneRepository:
             status="pending",
             sort_order=sort_order,
             created_at=ts,
+            parent_id=parent_id,
+            estimated_days=estimated_days,
         )
 
     def get(self, milestone_id: str) -> Optional[ProjectMilestone]:
@@ -272,6 +286,106 @@ class ProjectMilestoneRepository:
         for row in rows:
             result[row["status"]] = row["cnt"]
         return result
+
+    def create_batch(
+        self,
+        project_id: str,
+        items: List[dict],
+        now_ms: Optional[int] = None,
+    ) -> List[ProjectMilestone]:
+        """批量创建里程碑（AI 任务分解用）。
+
+        每个 item dict 支持的键（与 create() 参数对齐）：
+            title (str, 必填), description, stage, due_date,
+            sort_order, parent_id, estimated_days
+
+        parent_id 引用同批次内其他 item 时，使用 item 的临时 ``_ref``
+        键（字符串标识符），create_batch 内部映射为真实 UUID。
+
+        Returns:
+            创建的 ProjectMilestone 列表（含真实 id）。
+        """
+        ts = _now_ms(now_ms)
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        created: List[ProjectMilestone] = []
+        ref_map: dict = {}  # _ref → real uuid
+
+        # Pass 1: 分配 UUID，建立 ref 映射
+        for item in items:
+            mid = str(uuid.uuid4())
+            ref = item.get("_ref")
+            if ref:
+                ref_map[ref] = mid
+
+        # Pass 2: 插入，解析 parent_id 引用
+        for idx, item in enumerate(items):
+            mid = ref_map.get(item["_ref"]) if item.get("_ref") else str(uuid.uuid4())
+            raw_parent = item.get("parent_id")
+            resolved_parent = ref_map.get(raw_parent) if raw_parent else None
+
+            cursor.execute(
+                """
+                INSERT INTO project_milestones
+                    (id, project_id, title, description, stage, due_date,
+                     status, sort_order, created_at, parent_id, estimated_days)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
+                """,
+                (
+                    mid,
+                    project_id,
+                    item["title"],
+                    item.get("description"),
+                    item.get("stage"),
+                    item.get("due_date"),
+                    item.get("sort_order", idx),
+                    ts,
+                    resolved_parent,
+                    item.get("estimated_days"),
+                ),
+            )
+            created.append(ProjectMilestone(
+                id=mid,
+                project_id=project_id,
+                title=item["title"],
+                description=item.get("description"),
+                stage=item.get("stage"),
+                due_date=item.get("due_date"),
+                completed_at=None,
+                status="pending",
+                sort_order=item.get("sort_order", idx),
+                created_at=ts,
+                parent_id=resolved_parent,
+                estimated_days=item.get("estimated_days"),
+            ))
+
+        conn.commit()
+        return created
+
+    def get_tree(self, project_id: str) -> List[dict]:
+        """获取项目的里程碑树（嵌套结构）。
+
+        Returns:
+            顶层里程碑列表，每个里程碑含 ``children`` 键嵌套子里程碑。
+            格式: [{"id": ..., "title": ..., "children": [...]}]
+        """
+        all_ms = self.list_by_project(project_id)
+        by_parent: dict = {}
+        roots: List[ProjectMilestone] = []
+        for ms in all_ms:
+            if ms.parent_id is None:
+                roots.append(ms)
+            else:
+                by_parent.setdefault(ms.parent_id, []).append(ms)
+
+        def _nest(ms: ProjectMilestone) -> dict:
+            d = ms.to_dict()
+            d["children"] = [
+                _nest(child) for child in by_parent.get(ms.id, [])
+            ]
+            return d
+
+        return [_nest(r) for r in roots]
 
 
 __all__ = [
