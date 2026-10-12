@@ -4,10 +4,11 @@
  * 项目类型分类系统 - Phase 4.6
  */
 
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
 
 import { ProjectTypeBadge } from './ProjectTypeBadge';
+import { TypeDetectionPreview } from './TypeDetectionPreview';
 
 describe('ProjectTypeBadge', () => {
   it('renders coding type with correct label and icon', () => {
@@ -56,5 +57,27 @@ describe('ProjectTypeBadge', () => {
     const { container } = render(<ProjectTypeBadge type="coding" className="custom-class" />);
     const badge = container.firstChild as HTMLElement;
     expect(badge.className).toContain('custom-class');
+  });
+});
+
+describe('TypeDetectionPreview', () => {
+  it('renders detected blueprint preview and allows one-click apply when selectedType differs', () => {
+    const onApply = vi.fn();
+    render(
+      <TypeDetectionPreview
+        result={{
+          detectedType: 'research',
+          confidence: 0.88,
+          signals: ['发现 .bib 与 .tex 文件'],
+        }}
+        selectedType="coding"
+        onApplyDetectedType={onApply}
+      />,
+    );
+
+    expect(screen.getByTestId('detection-blueprint-preview')).toBeInTheDocument();
+    const applyBtn = screen.getByTestId('apply-detected-type-btn');
+    fireEvent.click(applyBtn);
+    expect(onApply).toHaveBeenCalledWith('research');
   });
 });
