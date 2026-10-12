@@ -10,6 +10,8 @@ import type { ProjectType } from '../../shared/api/projectApiTypes';
 import type { ProjectProfileEntry } from '../../shared/api/types';
 import { Button } from '../../shared/ui/Button';
 
+import { KnowledgeExtractionPanel } from './KnowledgeExtractionPanel';
+
 interface ProfilePresetItem {
   category: string;
   label: string;
@@ -70,6 +72,8 @@ const PROFILE_PRESETS_BY_TYPE: Record<ProjectType, ProfilePresetItem[]> = {
 export interface StudioProfileTabPanelProps {
   projectPath: string;
   projectType?: ProjectType;
+  /** M2: AI 知识提取需要 projectId 调用后端 API */
+  projectId?: string;
   profileEntries: ProjectProfileEntry[];
   profileCategory: string;
   onCategoryChange: (cat: string) => void;
@@ -83,6 +87,7 @@ export interface StudioProfileTabPanelProps {
 export function StudioProfileTabPanel({
   projectPath,
   projectType = 'coding',
+  projectId,
   profileEntries,
   profileCategory,
   onCategoryChange,
@@ -130,6 +135,9 @@ export function StudioProfileTabPanel({
           </button>
         )}
       </div>
+
+      {/* M2: AI 对话知识提取 (2026-10-12) */}
+      {projectId && <KnowledgeExtractionPanel projectId={projectId} onConfirmed={onAddEntry} />}
 
       <div
         className="flex flex-wrap items-center gap-1.5"

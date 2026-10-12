@@ -1072,12 +1072,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             try:
                 from backend.chat.project_context import (
                     build_constraints_block,
-                    build_project_materials_block,
+                    build_project_materials_block_semantic,
                     build_project_metadata_block,
                     build_project_stage_milestones_block,
                     extract_active_files_from_text,
                 )
-                from backend.data.project_material_repo import ProjectMaterialRepository
                 from backend.data.project_repo import ProjectRepository
                 from backend.office.session_workspace import get_workspace_binding
 
@@ -1098,12 +1097,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         if blk:
                             system_content += "\n\n" + blk
                     if m3_project is not None:
-                        active_materials = (
-                            ProjectMaterialRepository()
-                            .get_active_materials_for_project(m3_project.id)
-                        )
-                        materials_block = build_project_materials_block(
-                            active_materials
+                        # L4 语义检索注入 (M4, 2026-10-12): 用用户消息做语义匹配,
+                        # 只注入最相关的 chunks; 降级时自动回退到全量注入。
+                        materials_block = build_project_materials_block_semantic(
+                            m3_project.id, data.message
                         )
                         if materials_block:
                             system_content += "\n\n" + materials_block

@@ -3,6 +3,8 @@
  *
  * 项目类型分类系统 - Phase 4.3
  * 根据项目类型与版本控制策略显示对应的概览 Widget
+ *
+ * 2026-10-12: M3→M1 联动 — 顾问建议可触发任务分解对话框
  */
 
 import { History, Layers } from 'lucide-react';
@@ -13,6 +15,9 @@ import { projectApi, type ProjectSummary } from '../../shared/api';
 import { ConstraintSummaryWidget } from './ConstraintSummaryWidget';
 import { GitStatusWidget } from './GitStatusWidget';
 import { MilestoneProgressWidget } from './MilestoneProgressWidget';
+import { ProjectAdvisorCard } from './ProjectAdvisorCard';
+import { TaskDecomposeDialog } from './TaskDecomposeDialog';
+import { WikiGenerationPanel } from './WikiGenerationPanel';
 import { getArchetypeBlueprint } from './archetypeBlueprints';
 
 export interface ProjectOverviewWidgetsProps {
@@ -29,6 +34,8 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const projectType = project.projectType;
   const blueprint = getArchetypeBlueprint(projectType);
   const [checkpointCount, setCheckpointCount] = useState<number>(0);
+  const [decomposeDialogOpen, setDecomposeDialogOpen] = useState(false);
+  const [milestoneRefreshKey, setMilestoneRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!project.id || typeof projectApi?.getWorkspaceOverview !== 'function') return;
@@ -63,8 +70,14 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
       {/* 所有类型都显示约束摘要 */}
       <ConstraintSummaryWidget projectId={project.id} projectType={projectType} />
 
-      {/* 所有类型都显示里程碑进度 */}
-      <MilestoneProgressWidget projectId={project.id} projectType={projectType} />
+      {/* 所有类型都显示里程碑进度（key 变化时重新挂载以刷新数据） */}
+      <MilestoneProgressWidget key={milestoneRefreshKey} projectId={project.id} projectType={projectType} />
+
+      {/* 所有类型都显示 AI 顾问卡片 (M3, 2026-10-12) */}
+      <ProjectAdvisorCard
+        projectId={project.id}
+        onDecomposeTask={() => setDecomposeDialogOpen(true)}
+      />
 
       {/* 多态项目阶段与版本保护摘要 */}
       <div
@@ -92,6 +105,22 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
       {/* Coding 或显式启用 Git 的项目显示 Git 状态 */}
       {(projectType === 'coding' || project.vcsMode === 'git') && (
         <GitStatusWidget projectId={project.id} />
+      )}
+
+      {/* M3→M1 联动：顾问建议 → 任务分解对话框 */}
+      <TaskDecomposeDialog
+        open={decomposeDialogOpen}
+        onOpenChange={setDecomposeDialogOpen}
+        projectId={project.id}
+        onApplied={() => {
+          setDecomposeDialogOpen(false);
+          setMilestoneRefreshKey((k) => k + 1);
+        }}
+      />
+
+      {/* AI 代码→Wiki 生成 (M5, 仅 coding/git 项目) */}
+      {(projectType === 'coding' || project.vcsMode === 'git') && (
+        <WikiGenerationPanel projectId={project.id} />
       )}
     </div>
   );
