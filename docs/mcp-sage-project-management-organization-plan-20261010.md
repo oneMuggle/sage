@@ -366,4 +366,19 @@
      - 将案卷审校纪要与口径约定登记（`data-testid="business-decision-input"` / `business-decision-add` / `business-decisions-list`）挂载于 `polymorphic-card-business` 卡片内，并保持 `PolymorphicArchetypeCards.tsx`（779 行）与 `BuiltinCheckpointAndStyleBar.tsx`（619 行）严格遵守 `src/` 单文件 `<= 800` 行架构红线。
   4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
      - 新增 `business-doc-style-bar`、`checkpoint-quick-presets` 及 `business-apply-style-btn` 交互断言，验证商务版式与审校护栏一键同步至项目 L2 强制约束库。
+### Phase P20：L2 约束规则批量启停与 Glob 触发测试器、里程碑阶段筛选与路线图 Markdown 导出、概览 L1 宪章状态与快捷快照（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **L2 强制约束规则批量启停、Glob 触发测试器与规则清单 Markdown 导出（`src/features/project-type/ConstraintManager.tsx`，438 行）**：
+     - 新增当前分类下约束规则的一键批量启停按钮（`data-testid="constraint-batch-enable"` / `data-testid="constraint-batch-disable"`）与一键复制生效 L2 约束规则 Markdown 清单按钮（`data-testid="constraint-copy-md-btn"`）；
+     - 新增交互式 **Glob 路径触发测试栏**（`data-testid="constraint-glob-tester-bar"` / `data-testid="constraint-glob-test-input"`），输入工作区相对路径即可实时计算命中规则数量（`data-testid="constraint-glob-match-count"`）并在规则卡片上高亮标注 `当前路径命中`（`data-testid="constraint-glob-hit-{id}"`）。
+  2. **阶段与里程碑管理器进度汇总、阶段胶囊筛选与路线图 Markdown 导出（`src/features/project-type/MilestoneManager.tsx`，445 行）**：
+     - 新增总体达成进度汇总与阶段筛选胶囊栏（`data-testid="milestone-manager-progress"` / `data-testid="milestone-stage-filter-bar"`），支持按项目形态生命周期阶段筛选里程碑并展示中文阶段名称；
+     - 新增一键复制里程碑路线图 Markdown 按钮（`data-testid="milestone-copy-roadmap-btn"`），便于直接粘贴至项目周报或 `SAGE.md`。
+  3. **项目概览 L1 宪章就绪徽标与一键快捷快照留痕（`src/features/project-type/ProjectOverviewWidgets.tsx`，142 行）**：
+     - 在 `workspace-vcs-summary-widget` 中展示 `L1 SAGE.md 已就绪 / 待初始化` 状态徽标（`data-testid="workspace-charter-status-badge"`）及工作区受管文件总数；
+     - 新增 **「快捷快照」** 按钮（`data-testid="overview-quick-checkpoint-btn"`），支持在项目概览页或侧边栏展开槽位一键创建当前阶段内置快照并刷新快照计数。
+  4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `workspace-charter-status-badge`、`overview-quick-checkpoint-btn`、`constraint-glob-tester-bar`、`constraint-glob-match-count`、`milestone-manager-progress`、`milestone-stage-filter-bar` 及 `milestone-copy-roadmap-btn` 端到端断言。
 
