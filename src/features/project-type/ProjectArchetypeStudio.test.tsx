@@ -335,6 +335,8 @@ describe('ProjectArchetypeStudio', () => {
     );
     expect(screen.getByTestId('studio-vcs-mode-select')).toHaveValue('builtin');
     expect(await screen.findByTestId('workspace-vcs-summary-widget')).toBeInTheDocument();
+    expect(await screen.findByTestId('workspace-charter-status-badge')).toBeInTheDocument();
+    expect(screen.getByTestId('overview-quick-checkpoint-btn')).toBeInTheDocument();
 
     // Quick import default constraints from ConstraintSummaryWidget empty state
     fireEvent.click(await screen.findByTestId('constraint-summary-quick-import'));
@@ -451,10 +453,23 @@ describe('ProjectArchetypeStudio', () => {
       });
     });
 
+    // Switch to Constraints tab and test Glob trigger path tester
+    fireEvent.click(screen.getByText('AI 行为约束规则'));
+    await waitFor(() => {
+      expect(screen.getByTestId('constraint-glob-tester-bar')).toBeInTheDocument();
+    });
+    fireEvent.change(screen.getByTestId('constraint-glob-test-input'), {
+      target: { value: '02_审校与修订过程/合同.docx' },
+    });
+    expect(screen.getByTestId('constraint-glob-match-count')).toBeInTheDocument();
+
     // Switch to Milestones tab and seed recommended milestones for the active archetype
     fireEvent.click(screen.getByText('阶段与里程碑管理'));
     await waitFor(() => {
       expect(screen.getByTestId('seed-archetype-milestones-btn')).toBeInTheDocument();
+      expect(screen.getByTestId('milestone-manager-progress')).toBeInTheDocument();
+      expect(screen.getByTestId('milestone-stage-filter-bar')).toBeInTheDocument();
+      expect(screen.getByTestId('milestone-copy-roadmap-btn')).toBeInTheDocument();
     });
     fireEvent.click(screen.getByText('新建里程碑'));
     expect(await screen.findByTestId('milestone-editor-stage-presets')).toBeInTheDocument();

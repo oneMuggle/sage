@@ -1,8 +1,8 @@
 /**
- * 里程碑管理器 (2026-09-25)
+ * 里程碑管理器 (2026-09-25；Phase P20 阶段筛选、进度汇总与路线图 Markdown 导出 2026-10-12)
  *
  * 项目类型分类系统 - Phase 4.5
- * 里程碑的 CRUD 界面：列表、创建、编辑、删除、状态更新
+ * 里程碑的 CRUD 界面：列表、创建、编辑、删除、状态更新、阶段筛选与路线图导出
  */
 
 import {
@@ -14,18 +14,19 @@ import {
   Clock,
   AlertCircle,
   Sparkles,
-  BrainCircuit,
+  Copy,
+  Check,
 } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 
 import { projectApi, type ProjectMilestone, type ProjectType } from '../../shared/api';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
+import { Progress } from '../../shared/ui/Progress';
 
 import { MilestoneEditor } from './MilestoneEditor';
-import { TaskDecomposeDialog } from './TaskDecomposeDialog';
 import { getArchetypeBlueprint } from './archetypeBlueprints';
 
 export interface MilestoneManagerProps {
@@ -40,8 +41,17 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | null>(null);
-  const [decomposeDialogOpen, setDecomposeDialogOpen] = useState(false);
+  const [stageFilter, setStageFilter] = useState<string>('all');
+  const [copiedRoadmap, setCopiedRoadmap] = useState(false);
   const blueprint = getArchetypeBlueprint(projectType);
+
+  const stageLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of blueprint.stages) {
+      map.set(s.id, s.label);
+    }
+    return map;
+  }, [blueprint.stages]);
 
   const fetchMilestones = useCallback(async () => {
     try {
@@ -89,17 +99,34 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
     }
   };
 
+  const handleCopyRoadmap = async () => {
+    if (milestones.length === 0) return;
+    const lines = [
+      `# ${blueprint.label} · 里程碑路线图`,
+      '',
+      ...milestones.map((m) => {
+        const mark = m.status === 'completed' ? '[x]' : '[ ]';
+        const stg = m.stage ? ` (${stageLabelMap.get(m.stage) ?? m.stage})` : '';
+        const due = m.dueDate ? ` · 截止: ${m.dueDate}` : '';
+        return `- ${mark} **${m.title}**${stg}${due}${m.description ? ` — ${m.description}` : ''}`;
+      }),
+    ];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedRoadmap(true);
+      setTimeout(() => setCopiedRoadmap(false), 1800);
+    } catch {
+      // ignore clipboard errors in headless mode
+    }
+  };
+
   const handleEdit = (milestone: ProjectMilestone) => {
     setEditingMilestone(milestone);
     setEditorOpen(true);
   };
 
   const handleDelete = async (milestoneId: string) => {
-    const ok = await confirmDialog({
-      title: '删除里程碑',
-      message: '确定要删除此里程碑吗？',
-      danger: true,
-    });
+    const ok = await confirmDialog({ title: '删除里程碑', message: '确定要删除此里程碑吗？', danger: true });
     if (!ok) return;
     try {
       await projectApi.deleteMilestone(projectId, milestoneId);
@@ -123,6 +150,11 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
     await fetchMilestones();
   };
 
+  const completedCount = milestones.filter((m) => m.status === 'completed').length;
+  const completionPct = milestones.length > 0 ? Math.round((completedCount / milestones.length) * 100) : 0;
+  const filteredMilestones =
+    stageFilter === 'all' ? milestones : milestones.filter((m) => m.stage === stageFilter);
+
   if (loading) {
     return (
       <Card>
@@ -141,23 +173,34 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
 
   return (
     <>
-      <Card>
+      <Card data-testid="milestone-manager-panel">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
               里程碑管理
             </CardTitle>
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setDecomposeDialogOpen(true)}
-                data-testid="ai-decompose-tasks-btn"
-              >
-                <BrainCircuit className="mr-1.5 h-3.5 w-3.5 text-primary" />
-                AI 任务分解
-              </Button>
+              {milestones.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void handleCopyRoadmap()}
+                  data-testid="milestone-copy-roadmap-btn"
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground hover:bg-muted"
+                >
+                  {copiedRoadmap ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-500" />
+                      已复制路线图
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                      复制路线图 Markdown
+                    </>
+                  )}
+                </button>
+              )}
               <Button
                 variant="secondary"
                 size="sm"
@@ -175,15 +218,65 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {error && (
-            <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
               <AlertCircle className="h-4 w-4" />
               {error}
             </div>
           )}
 
-          {milestones.length === 0 ? (
+          {milestones.length > 0 && (
+            <div
+              className="space-y-2 rounded-lg border border-border/70 bg-muted/15 p-3"
+              data-testid="milestone-manager-progress"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-medium text-foreground">
+                  总体达成进度：{completedCount} / {milestones.length} ({completionPct}%)
+                </span>
+                <div
+                  className="flex flex-wrap items-center gap-1.5"
+                  data-testid="milestone-stage-filter-bar"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setStageFilter('all')}
+                    data-testid="milestone-stage-filter-all"
+                    className={`rounded px-2 py-0.5 text-ui-2xs font-medium transition-colors ${
+                      stageFilter === 'all'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    全部 ({milestones.length})
+                  </button>
+                  {blueprint.stages.map((stg) => {
+                    const cnt = milestones.filter((m) => m.stage === stg.id).length;
+                    if (cnt === 0) return null;
+                    return (
+                      <button
+                        key={stg.id}
+                        type="button"
+                        onClick={() => setStageFilter(stg.id)}
+                        data-testid={`milestone-stage-filter-${stg.id}`}
+                        className={`rounded px-2 py-0.5 text-ui-2xs font-medium transition-colors ${
+                          stageFilter === stg.id
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-background text-muted-foreground hover:bg-muted'
+                        }`}
+                      >
+                        {stg.label} ({cnt})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <Progress value={completionPct} className="h-1.5" />
+            </div>
+          )}
+
+          {filteredMilestones.length === 0 ? (
             <div className="py-8 text-center">
               <Target className="mx-auto h-12 w-12 text-muted-foreground/50" />
               <p className="mt-4 text-sm text-muted-foreground">暂无里程碑</p>
@@ -191,16 +284,20 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
             </div>
           ) : (
             <div className="space-y-3">
-              {milestones.map((milestone) => (
+              {filteredMilestones.map((milestone) => (
                 <div
                   key={milestone.id}
                   className="flex items-start justify-between rounded-lg border p-3"
                 >
                   <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-medium">{milestone.title}</span>
                       <StatusBadge status={milestone.status} />
-                      {milestone.stage && <Badge variant="outline">{milestone.stage}</Badge>}
+                      {milestone.stage && (
+                        <Badge variant="outline">
+                          {stageLabelMap.get(milestone.stage) ?? milestone.stage}
+                        </Badge>
+                      )}
                     </div>
                     {milestone.description && (
                       <p className="text-sm text-muted-foreground">{milestone.description}</p>
@@ -282,12 +379,6 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
         onSave={handleEditorSave}
       />
 
-      <TaskDecomposeDialog
-        open={decomposeDialogOpen}
-        onOpenChange={setDecomposeDialogOpen}
-        projectId={projectId}
-        onApplied={fetchMilestones}
-      />
     </>
   );
 }
