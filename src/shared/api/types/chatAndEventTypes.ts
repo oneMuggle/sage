@@ -5,7 +5,6 @@ import type { OfficeDocType } from '../types';
  * Sage API - 类型定义
  */
 
-
 // ==================== Session & Message 类型 ====================
 
 export interface Session {
@@ -210,6 +209,9 @@ export type AgentState =
   | 'suspended' // A4 Suspend-Resume: producer 主动让出, 等 wake 触发下一轮 (2026-09 补齐, 与后端 chat_stream_registry 一致)
   | 'observing'
   | 'content_delta'
+  // 2026-10-13: LLM 请求失败触发自动重试时推送,携带 retry_info 载荷,
+  // 前端渲染"重试中 (2/3) | 原因: 请求超时 | 等待 2秒"提示。
+  | 'retry'
   | 'done'
   | 'failed'
   // 2026-09 step-by-step: 每次 ReAct 迭代结束（OBSERVING 之后）由后端产出,
@@ -517,6 +519,15 @@ export interface GenerationStats {
   latency_ms?: number;
 }
 
+/** 2026-10-13: LLM 重试事件载荷（随 state='retry' 推送） */
+export interface RetryInfo {
+  attempt: number;
+  max_attempts: number;
+  error_type: string;
+  error_message: string;
+  delay: number;
+}
+
 /** 流式聊天事件 (NDJSON 协议的一行) */
 export interface AgentEvent {
   state: AgentState;
@@ -543,6 +554,8 @@ export interface AgentEvent {
   permission_request?: PermissionRequest;
   /** M2 part B: state === 'ask_user_question' 时携带的提问详情 */
   user_question?: UserQuestion;
+  /** 2026-10-13: state === 'retry' 时携带的重试详情 */
+  retry_info?: RetryInfo;
   /** 会话元数据更新事件 (非 agent 事件, 由 producer 在流末尾推送) */
   type?: string;
   subtype?: string;

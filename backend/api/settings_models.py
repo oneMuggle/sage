@@ -141,6 +141,14 @@ class SettingsPayload(BaseModel):
     version: Optional[str] = None
     orch: Optional[dict] = None
 
+    # ----- LLM 重试配置 (2026-10-13) -----
+    # 最大重试次数（0 = 禁用重试）
+    llmRetryMaxAttempts: Optional[int] = None  # noqa: N815
+    # 退避基数（秒）：第一次重试前的等待时间
+    llmRetryBaseDelayS: Optional[float] = None  # noqa: N815
+    # 最大退避时间（秒）：单次等待上限
+    llmRetryMaxDelayS: Optional[float] = None  # noqa: N815
+
     # ----- Legacy fields (兼容旧客户端, 不写入存储) -----
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None  # noqa: S105 — 字段名占位; 不存储
@@ -184,6 +192,14 @@ class LegacySettingsPayload(BaseModel):
     wiki: Optional[dict] = None
     version: Optional[str] = None
     orch: Optional[dict] = None
+
+    # ----- LLM 重试配置 (2026-10-13) -----
+    # 最大重试次数（0 = 禁用重试）
+    llmRetryMaxAttempts: Optional[int] = None  # noqa: N815
+    # 退避基数（秒）：第一次重试前的等待时间
+    llmRetryBaseDelayS: Optional[float] = None  # noqa: N815
+    # 最大退避时间（秒）：单次等待上限
+    llmRetryMaxDelayS: Optional[float] = None  # noqa: N815
 
     # ----- Legacy fields (deprecated, 兼容旧客户端, 不写入存储) -----
     api_base_url: Optional[str] = None

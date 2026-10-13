@@ -26,6 +26,10 @@ class AgentState(str, Enum):
     # I4: 流式 LLM 响应时,每个 token chunk 推一个 CONTENT_DELTA 事件,
     # 前端 appendContent 累积,实现逐字流式
     CONTENT_DELTA = "content_delta"
+    # 2026-10-13: LLM 请求失败触发自动重试时推一个 RETRY 事件,携带重试
+    # 次数/上限/原因/等待秒数,前端渲染"重试中"提示 —— 此前重试过程完全
+    # 不可见,用户把正在退避等待误认为卡死。
+    RETRY = "retry"
     # M1 工具安全加固: 工具调用需要用户审批时,在执行前推一个
     # PERMISSION_REQUEST 事件(携带 permission_request 字段),前端渲染
     # 审批对话框并 POST /api/v1/permissions/{request_id}/answer。
@@ -108,6 +112,10 @@ class AgentEvent:
     # 字段为输入输出 tokens、首字延迟、总耗时, 缺失项省略; 前端据此显示生成速度,
     # 同一值随终稿 assistant 行落库 (messages.generation_stats 列)。
     generation_stats: Optional[Dict[str, int]] = None
+    # 2026-10-13: state=RETRY 时携带重试详情（attempt / max_attempts /
+    # error_type / error_message / delay），前端据此渲染"重试中 (2/3) | 原因:
+    # 请求超时 | 等待 2秒"。其他状态为 None。
+    retry_info: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         # finish_reason 只接受字符串: 测试替身 (MagicMock 响应) 等非 str 值归一为
@@ -167,4 +175,6 @@ class AgentEvent:
             d["finish_reason"] = self.finish_reason
         if self.generation_stats:
             d["generation_stats"] = self.generation_stats
+        if self.retry_info is not None:
+            d["retry_info"] = self.retry_info
         return d

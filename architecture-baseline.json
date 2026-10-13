@@ -7,8 +7,8 @@
     "backend/api/orchestration_router.py": 807,
     "backend/api/wiki_routes.py": 1656,
     "backend/application/services/chat_service.py": 1115,
-    "backend/core/legacy/agent.py": 2542,
-    "backend/core/legacy/llm_client.py": 1097,
+    "backend/core/legacy/agent.py": 2577,
+    "backend/core/legacy/llm_client.py": 1176,
     "backend/data/database.py": 1962,
     "backend/data/session_repo.py": 1056,
     "backend/main.py": 1199,
@@ -55,9 +55,10 @@
     "backend/api/arena_routes.py": 873,
     "backend/services/arena_draw_engine.py": 1054,
     "backend/tools/web_render.py": 816,
-    "backend/api/project_ai_routes.py": 859,
+"backend/api/project_ai_routes.py": 859,
     "src/shared/api/projectApi.ts": 1024,
     "src/shared/api/projectApiTypes.ts": 937,
-    "src/widgets/chat/ChatInput.tsx": 809
+    "src/widgets/chat/ChatInput.tsx": 809,
+    "src/features/send-message/useChat.ts": 803
   }
 }
