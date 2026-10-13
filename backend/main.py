@@ -605,6 +605,37 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: BLE001 — 装配失败不阻塞启动
         logger.exception("Arena 自动化装配失败（忽略）")
 
+    # Design Studio 装配（LLM 驱动的 HTML 原型 / 演示稿生成）。fail-safe：
+    # 失败只降级设计子系统，绝不拖垮聊天主链路。
+    try:
+        from backend.data.design_repo import DesignRepo
+        from backend.design.design_studio import DesignStudio
+        from backend.design.generator import DesignGenerator
+        from backend.design.systems import DesignSystemRegistry
+        from backend.design.templates import DesignTemplateRegistry
+
+        # 同 scheduled_tasks / arena 的约定：优先写 SAGE_USER_DATA_DIR，
+        # 回退到 <cwd>/backend/data（打包后 Program Files 下不可写）。
+        _design_content_dir = Path(__file__).parent / "design" / "content"
+        _design_workspace = (
+            Path(os.environ.get("SAGE_USER_DATA_DIR") or "backend/data") / "workspace"
+        )
+        design_studio = DesignStudio(
+            repo=DesignRepo(db.get_connection()),
+            generator=DesignGenerator(llm_client=HttpxLLMAdapter()),
+            systems=DesignSystemRegistry(_design_content_dir),
+            templates=DesignTemplateRegistry(_design_content_dir),
+            workspace_dir=_design_workspace,
+        )
+        app.state.design_studio = design_studio
+        _startup_mark("design_studio")
+    except Exception:  # noqa: BLE001 — 装配失败不阻塞启动
+        logger.exception("DesignStudio 装配失败（ignored）")
+        try:
+            db.get_connection().rollback()
+        except Exception:
+            logger.error("rollback failed after design studio error", exc_info=True)
+
     # A4 Suspend-Resume: wake 仓储 + 唤醒调度器 — tick 扫描到期 wake,
     # 在对应 session 注入新一轮对话恢复挂起的 agent。resumer 走
     # ChatService.run_turn（hex 模式装配后可用）；legacy 模式下记录并跳过。
