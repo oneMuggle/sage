@@ -1149,6 +1149,11 @@ from backend.api.arena_routes import router as arena_router
 
 app.include_router(arena_router)
 
+# Design studio: /api/v1/design/{systems,templates,projects,...}
+from backend.api.v1.design_routes import router as design_router
+
+app.include_router(design_router, prefix="/api/v1")
+
 
 @app.get("/health/proof")
 async def health_proof(request: Request):
