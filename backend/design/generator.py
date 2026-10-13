@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from sage_core import Message, Role
+
 from backend.design.artifact_parser import ArtifactParser, ParsedArtifact
 from backend.design.errors import DesignGenerationError
 from backend.design.models import DesignSystem, DesignTemplate
@@ -45,7 +47,7 @@ class DesignGenerator:
             iteration_context=iteration_context,
         )
 
-        messages = [{"role": "user", "content": prompt}]
+        messages = [Message(role=Role.USER, content=prompt)]
         response = await self._llm.chat(messages)
         raw_output = response.content
 

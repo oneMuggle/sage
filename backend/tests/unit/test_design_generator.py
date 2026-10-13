@@ -9,6 +9,7 @@ import pytest
 from backend.design.errors import DesignGenerationError
 from backend.design.generator import DesignGenerator
 from backend.design.models import DesignSystem, DesignTemplate
+from backend.design.prompt_composer import PromptComposer
 
 
 @pytest.fixture()
@@ -78,3 +79,32 @@ class TestDesignGenerator:
         generator = DesignGenerator(llm_client=mock_llm)
         with pytest.raises(DesignGenerationError):
             await generator.generate(system, template, "test")
+
+    @pytest.mark.asyncio()
+    async def test_generate_sends_domain_messages(
+        self, system, template, mock_llm,
+    ):
+        """The LLM adapter expects domain.Message, not plain dicts — a dict
+        would raise AttributeError on the adapter's attribute access.
+        """
+        from sage_core import Message, Role
+
+        mock_llm.chat.return_value = MagicMock(
+            content=(
+                '<artifact identifier="landing-page" type="text/html"'
+                ' title="Landing Page">\n'
+                "<!DOCTYPE html><html><body><h1>Test</h1></body></html>"
+                "\n</artifact>"
+            )
+        )
+        generator = DesignGenerator(llm_client=mock_llm)
+        await generator.generate(system, template, "Create a landing page")
+        messages = mock_llm.chat.call_args.args[0]
+        assert len(messages) == 1
+        assert isinstance(messages[0], Message)
+        assert messages[0].role is Role.USER
+        assert messages[0].content == PromptComposer.compose(
+            design_system=system,
+            template=template,
+            brief="Create a landing page",
+        )
