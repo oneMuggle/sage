@@ -4,7 +4,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useFileUpload } from '../useFileUpload';
+import { CHAT_DOCUMENT_EXTENSIONS, useFileUpload } from '../useFileUpload';
 
 function makeFile(name: string, type: string) {
   return { name, size: 100, type } as File;
@@ -97,7 +97,11 @@ describe('useFileUpload', () => {
   it('handlePaste 只取剪贴板中的图片项', async () => {
     const flush = mockFileReader();
     const { result } = renderHook(() => useFileUpload());
-    const imgItem = { kind: 'file', type: 'image/png', getAsFile: () => makeFile('p.png', 'image/png') };
+    const imgItem = {
+      kind: 'file',
+      type: 'image/png',
+      getAsFile: () => makeFile('p.png', 'image/png'),
+    };
     const textItem = { kind: 'string', type: 'text/plain', getAsFile: () => null };
     const clipboardData = { items: [imgItem, textItem] };
     const evt = { preventDefault: vi.fn(), clipboardData } as unknown as React.ClipboardEvent;
@@ -155,5 +159,31 @@ describe('useFileUpload', () => {
     });
     expect(result.current.isDragOver).toBe(true);
     expect(evt.preventDefault).toHaveBeenCalled();
+  });
+});
+
+describe('CHAT_DOCUMENT_EXTENSIONS', () => {
+  it('包含基础文本格式', () => {
+    for (const ext of ['txt', 'md', 'csv']) {
+      expect(CHAT_DOCUMENT_EXTENSIONS.has(ext)).toBe(true);
+    }
+  });
+
+  it('包含常见编程语言', () => {
+    for (const ext of ['py', 'js', 'ts', 'java', 'go', 'rs', 'cpp']) {
+      expect(CHAT_DOCUMENT_EXTENSIONS.has(ext)).toBe(true);
+    }
+  });
+
+  it('包含二进制文档格式', () => {
+    for (const ext of ['pdf', 'docx', 'xlsx']) {
+      expect(CHAT_DOCUMENT_EXTENSIONS.has(ext)).toBe(true);
+    }
+  });
+
+  it('不包含图片格式（图片走 images 通道）', () => {
+    for (const ext of ['png', 'jpg', 'gif', 'webp']) {
+      expect(CHAT_DOCUMENT_EXTENSIONS.has(ext)).toBe(false);
+    }
   });
 });

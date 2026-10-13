@@ -58,6 +58,7 @@
     "backend/memory/manager.py": 848,
     "backend/api/project_ai_routes.py": 862,
     "src/shared/api/projectApi.ts": 1024,
-    "src/shared/api/projectApiTypes.ts": 937
+    "src/shared/api/projectApiTypes.ts": 937,
+    "src/widgets/chat/ChatInput.tsx": 809
   }
 }

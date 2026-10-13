@@ -202,7 +202,12 @@ function InputCardInner({
   focusRequest,
 }: InputCardProps) {
   const { t } = useI18n();
-  const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0 || officeRefs.length > 0 || audioAttachments.length > 0;
+  const hasAttachments =
+    files.length > 0 ||
+    images.length > 0 ||
+    knowledgeRefs.length > 0 ||
+    officeRefs.length > 0 ||
+    audioAttachments.length > 0;
 
   // U20: Emacs-style editing keys (Ctrl+A/E/K/U/W, Alt+B/F) in the textarea.
   const { ref: emacsRef, handleKeyDown: handleEmacsKeyDown } = useEmacsKeybindings({
@@ -669,7 +674,7 @@ function InputCardInner({
         <input
           type="file"
           id="chat-input-file"
-          accept=".txt,.md,.pdf,.docx"
+          accept=".txt,.md,.csv,.pdf,.docx,.xlsx,.json,.yaml,.yml,.xml,.html,.css,.py,.js,.ts,.jsx,.tsx,.java,.go,.rs,.sh,.bash,.bat,.sql,.log,.ini,.cfg,.conf,.toml"
           multiple
           className="hidden"
           onChange={onFileSelect}
