@@ -4,7 +4,7 @@ import { useBtwState } from '../../entities/chat/btwState';
 import { usePermissionState } from '../../entities/permission/permissionState';
 import { useQuestionState } from '../../entities/question/questionState';
 import type { AppSettings, EndpointConfig } from '../../entities/setting/types';
-import type { AgentEvent } from '../../shared/api';
+import type { AgentEvent, ChatConfig } from '../../shared/api';
 import { clearSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { logger } from '../../shared/lib/logger';
 import { chatApi, type Message, useStore } from '../../shared/lib/store';
@@ -57,6 +57,17 @@ export interface ActiveStreamHandle {
   cancel: (() => void) | null;
   /** finishStream —— interrupt 时触发清理（HIGH-4） */
   finish: (() => void) | null;
+}
+
+/**
+ * U5: 入队等待发送的消息 —— 当前会话流式中用户继续发送时暂存,
+ * 当前回复结束后自动发送。按会话隔离。
+ */
+export interface PendingChatMessage {
+  id: string;
+  content: string;
+  sid?: string;
+  orchestrationMode?: ChatConfig['orchestrationMode'];
 }
 
 // A1 (parity-s4): module-level registry of live stream handles.

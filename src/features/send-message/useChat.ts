@@ -30,7 +30,6 @@ import {
   cancelSessionStream,
   deleteSessionCascade,
   inferProviderFromBaseUrl,
-  type PendingChatMessage,
   type TaskBoard,
   useChatReattachAndBtw,
 } from './chatStreamRuntime';
@@ -79,8 +78,9 @@ export function useChat() {
   // widget 看到 '🤔 思考中…' 占位符看不到真实 LLM 进度。
   // S2: 读当前会话的槽位 —— 切到会话 B 就看 B 的实时进度(A 的流在后台
   // 继续累积,切回 A 时内容完整可见)。
-  const { streaming, streamingToolCalls, taskBoard, preflightPhase } =
-    useChatStreamStore((s) => selectSessionSlots(s, currentSessionId));
+  const { streaming, streamingToolCalls, taskBoard, preflightPhase } = useChatStreamStore((s) =>
+    selectSessionSlots(s, currentSessionId),
+  );
 
   // Phase 6: /btw 补充消息状态(component-local,与流式 chat 无关)
   const [isBtwStreaming, setIsBtwStreaming] = useState(false);
