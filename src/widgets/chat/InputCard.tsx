@@ -15,7 +15,6 @@ import type React from 'react';
 
 import { AttachmentUpload } from '../../features/send-message/AttachmentUpload';
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
-import { CHAT_DOCUMENT_ACCEPT } from '../../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { ComposerPlusMenu, type ComposerPlusMenuItem } from './ComposerPlusMenu';
@@ -675,7 +674,7 @@ function InputCardInner({
         <input
           type="file"
           id="chat-input-file"
-          accept={CHAT_DOCUMENT_ACCEPT}
+          accept=".txt,.md,.csv,.pdf,.docx,.xlsx,.json,.yaml,.yml,.xml,.html,.css,.py,.js,.ts,.jsx,.tsx,.java,.go,.rs,.sh,.bash,.bat,.sql,.log,.ini,.cfg,.conf,.toml"
           multiple
           className="hidden"
           onChange={onFileSelect}
