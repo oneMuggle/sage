@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -108,7 +109,7 @@ class DesignRepo:
         self._conn.commit()
 
     def delete_project(self, project_id: str) -> None:
-        """删除项目；关联 artifacts 由外键 ON DELETE CASCADE 清理。"""
+        """删除项目。若 schema 含 ON DELETE CASCADE，关联 artifacts 自动清理。"""
         self._conn.execute(
             "DELETE FROM design_projects WHERE id = ?", (project_id,)
         )
@@ -149,7 +150,6 @@ class DesignRepo:
 
     def _load_artifact_row(self, row: tuple) -> DesignArtifact:
         """从 design_artifacts 行构造模型；HTML 内容从磁盘回读。"""
-        import contextlib
         html_content = ""
         with contextlib.suppress(FileNotFoundError):
             html_content = Path(row[3]).read_text(encoding="utf-8")
