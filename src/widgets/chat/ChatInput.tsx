@@ -335,7 +335,7 @@ function ChatInputInner({
   const handleSend = () => {
     // RT5 (round7): 运行中允许发送 —— onSend（useChat.sendMessage）按会话
     // 活跃流先走 steering 注入当前 run，失败回退队列；不再 UI 硬拦截。
-if (
+    if (
       !value.trim() &&
       files.length === 0 &&
       images.length === 0 &&
