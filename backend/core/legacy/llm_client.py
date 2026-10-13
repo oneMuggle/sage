@@ -14,7 +14,7 @@ import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from datetime import timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -70,10 +70,42 @@ def _is_context_overflow_text(text: str) -> bool:
     return any(marker in lowered for marker in _CONTEXT_OVERFLOW_MARKERS)
 
 
-def _retry_settings() -> Tuple[int, float]:
-    """读重试配置：env 覆盖 > 默认。任何解析失败回退默认，永不抛错。"""
+def _retry_settings() -> Tuple[int, float, float]:
+    """读重试配置：app_settings > env > 默认。任何解析失败回退默认，永不抛错。
+
+    优先级：
+    1. app_settings.llmRetryMaxAttempts/BaseDelayS/MaxDelayS
+    2. 环境变量 SAGE_LLM_RETRY_MAX_ATTEMPTS/BASE_DELAY_S
+    3. 硬编码默认值
+
+    Returns:
+        (max_attempts, base_delay, max_delay) 元组
+    """
     max_attempts = _LLM_RETRY_MAX_ATTEMPTS
     base_delay = _LLM_RETRY_BASE_DELAY_S
+    max_delay = _LLM_RETRY_MAX_DELAY_S
+
+    # 优先从 app_settings 读取
+    try:
+        from backend.data.settings_repo import SettingsRepository
+        raw = SettingsRepository().get_json("app_settings") or {}
+        if isinstance(raw, dict):
+            # 读取重试配置（camelCase 键名）
+            retry_max = raw.get("llmRetryMaxAttempts")
+            if isinstance(retry_max, int) and retry_max >= 0:
+                max_attempts = retry_max
+
+            retry_base = raw.get("llmRetryBaseDelayS")
+            if isinstance(retry_base, (int, float)) and retry_base >= 0:  # noqa: UP038
+                base_delay = float(retry_base)
+
+            retry_max_delay = raw.get("llmRetryMaxDelayS")
+            if isinstance(retry_max_delay, (int, float)) and retry_max_delay >= 1.0:  # noqa: UP038
+                max_delay = float(retry_max_delay)
+    except (ImportError, OSError, ValueError, TypeError):
+        pass  # 读配置失败回退 env/默认
+
+    # 环境变量覆盖（用于调试/测试）
     raw_attempts = os.environ.get("SAGE_LLM_RETRY_MAX_ATTEMPTS", "").strip()
     if raw_attempts:
         try:
@@ -82,6 +114,7 @@ def _retry_settings() -> Tuple[int, float]:
                 max_attempts = value
         except ValueError:
             logger.warning("env SAGE_LLM_RETRY_MAX_ATTEMPTS=%r 非法,回退默认", raw_attempts)
+
     raw_delay = os.environ.get("SAGE_LLM_RETRY_BASE_DELAY_S", "").strip()
     if raw_delay:
         try:
@@ -90,14 +123,35 @@ def _retry_settings() -> Tuple[int, float]:
                 base_delay = value
         except ValueError:
             logger.warning("env SAGE_LLM_RETRY_BASE_DELAY_S=%r 非法,回退默认", raw_delay)
-    return max_attempts, base_delay
+
+    return max_attempts, base_delay, max_delay
 
 
-def _retry_backoff_seconds(err: LLMError, attempt: int, base_delay: float) -> float:
+def _retry_backoff_seconds(err: LLMError, attempt: int, base_delay: float, max_delay: float) -> float:
     """第 attempt 次失败后的退避秒数：retry-after 优先,否则指数退避封顶。"""
     if err.retry_after:
-        return min(float(err.retry_after), _LLM_RETRY_MAX_DELAY_S)
-    return min(base_delay * (2 ** (attempt - 1)), _LLM_RETRY_MAX_DELAY_S)
+        return min(float(err.retry_after), max_delay)
+    return min(base_delay * (2 ** (attempt - 1)), max_delay)
+
+
+@dataclass
+class RetryEvent:
+    """LLM 请求重试事件（2026-10-13）。
+
+    当 LLM 请求失败触发重试时，通过回调推送此事件到前端，让用户感知重试状态。
+
+    Attributes:
+        attempt: 当前重试次数（从 1 开始）
+        max_attempts: 最大重试次数
+        error_type: 错误类型（timeout/network_error/server_error/rate_limited）
+        error_message: 错误消息
+        delay: 本次重试前的等待时间（秒）
+    """
+    attempt: int
+    max_attempts: int
+    error_type: str  # LLMErrorType.value
+    error_message: str
+    delay: float
 
 
 def extract_cached_tokens(usage: Dict[str, Any]) -> int:
@@ -531,6 +585,7 @@ class LLMClient:
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[str] = None,
+        retry_callback: Optional[Callable[[RetryEvent], None]] = None,
     ) -> LLMResponse:
         """
         发送聊天请求（非流式）
@@ -539,6 +594,7 @@ class LLMClient:
             messages: 消息列表，每条包含 role 和 content
             tools: OpenAI 格式工具 schema 列表（可选）
             tool_choice: "auto" | "none" | "required"（默认 "auto"，仅当 tools 非空时写入请求体）
+            retry_callback: 重试回调函数，签名 callback(RetryEvent)（可选）
 
         Returns:
             LLM 回复
@@ -577,7 +633,7 @@ class LLMClient:
 
         # L3 重试退避: 限流/服务端错误/超时/网络失败按指数退避重试
         # （尊重 retry-after）。请求整体重放安全——非流式,无部分产出。
-        max_attempts, base_delay = _retry_settings()
+        max_attempts, base_delay, max_delay = _retry_settings()
         attempt = 0
         fallback_used = False
         while True:
@@ -614,7 +670,7 @@ class LLMClient:
                             )
                             continue
                         raise
-                    delay = _retry_backoff_seconds(llm_err, attempt, base_delay)
+                    delay = _retry_backoff_seconds(llm_err, attempt, base_delay, max_delay)
                     logger.warning(
                         "LLM 请求失败(%s/%s): %s — %.1fs 后重试",
                         attempt,
@@ -622,6 +678,17 @@ class LLMClient:
                         llm_err.message,
                         delay,
                     )
+                    # 推送重试事件到回调（如 SSE）
+                    if retry_callback:
+                        retry_callback(
+                            RetryEvent(
+                                attempt=attempt,
+                                max_attempts=max_attempts,
+                                error_type=llm_err.type.value,
+                                error_message=llm_err.message,
+                                delay=delay,
+                            )
+                        )
                     await asyncio.sleep(delay)
 
         elapsed = time.time() - start_time
@@ -895,7 +962,7 @@ class LLMClient:
         # L3 重试退避（流式版）: 仅在"尚未产出任何增量"时重试——此时重放
         # 安全（调用方没收到过任何事件）;已有增量后失败无法安全重放,按原
         # 错误面终止（调用方语义见 run_loop）。
-        max_attempts, base_delay = _retry_settings()
+        max_attempts, base_delay, max_delay = _retry_settings()
         attempt = 0
         fallback_used = False
         # 第二轮 C1: 首字延迟 / 总耗时计时（含重试等待，即用户实际等待的时间）
@@ -990,13 +1057,25 @@ class LLMClient:
                             stream_usage = None
                             continue
                         raise
-                    delay = _retry_backoff_seconds(llm_err, attempt, base_delay)
+                    delay = _retry_backoff_seconds(llm_err, attempt, base_delay, max_delay)
                     logger.warning(
                         "LLM 流式请求失败(%s/%s): %s — %.1fs 后重试",
                         attempt,
                         max_attempts,
                         llm_err.message,
                         delay,
+                    )
+                    # 推送重试事件：与 content_delta 同一事件通道，agent.run_loop
+                    # 转成 AgentEvent 后由 SSE 下发，前端实时显示"重试中"。
+                    yield (
+                        "retry",
+                        RetryEvent(
+                            attempt=attempt,
+                            max_attempts=max_attempts,
+                            error_type=llm_err.type.value,
+                            error_message=llm_err.message,
+                            delay=delay,
+                        ),
                     )
                     # 重置累积器,保证重放从零开始
                     aggregator = StreamToolCallAggregator()

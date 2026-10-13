@@ -12,7 +12,7 @@ import { useI18n } from '../../shared/lib/i18n';
 
 import { FontSettingsSection } from './FontSettingsSection';
 import { ThemeSelector } from './ThemeSelector';
-import { SettingRow, Toggle } from './components';
+import { AdvancedSection, SettingRow, Toggle } from './components';
 
 /** U10: 界面语言切换 — useI18n.setLocale + localStorage 持久化 */
 function LanguageSelect(): JSX.Element {
@@ -93,9 +93,72 @@ export function BasicTab() {
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">外观</h3>
         <FontSettingsSection />
-        <SettingRow label="流式输出" desc="逐字显示 AI 回复，而非等待全部生成完成">
+        <SettingRow
+          anchor="streaming"
+          label="流式输出"
+          desc="逐字显示 AI 回复，而非等待全部生成完成"
+        >
           <Toggle value={settings.streaming} onChange={(v) => updateSettings({ streaming: v })} />
         </SettingRow>
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">LLM 重试</h3>
+        <SettingRow
+          anchor="llmRetryMaxAttempts"
+          label="最大重试次数"
+          desc="LLM 请求失败后自动重试的次数上限。设为 0 表示禁用自动重试。"
+        >
+          <input
+            type="number"
+            data-testid="settings-llm-retry-max-attempts"
+            min={0}
+            max={10}
+            value={settings.llmRetryMaxAttempts}
+            onChange={(e) => {
+              const v = Math.max(0, Math.min(10, parseInt(e.target.value, 10) || 0));
+              updateSettings({ llmRetryMaxAttempts: v });
+            }}
+            className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          />
+        </SettingRow>
+        <AdvancedSection title="高级选项" description="退避策略参数（通常无需修改）">
+          <SettingRow
+            anchor="llmRetryBaseDelayS"
+            label="退避基数（秒）"
+            desc="首次重试等待时间，后续按指数递增（base × 2^(attempt-1)）"
+          >
+            <input
+              type="number"
+              data-testid="settings-llm-retry-base-delay"
+              min={0.1}
+              step={0.5}
+              value={settings.llmRetryBaseDelayS}
+              onChange={(e) => {
+                const v = Math.max(0.1, parseFloat(e.target.value) || 1.0);
+                updateSettings({ llmRetryBaseDelayS: v });
+              }}
+              className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+          </SettingRow>
+          <SettingRow
+            anchor="llmRetryMaxDelayS"
+            label="最大退避（秒）"
+            desc="单次重试等待时间上限，防止指数退避过长"
+          >
+            <input
+              type="number"
+              data-testid="settings-llm-retry-max-delay"
+              min={1}
+              step={1}
+              value={settings.llmRetryMaxDelayS}
+              onChange={(e) => {
+                const v = Math.max(1, parseInt(e.target.value, 10) || 30);
+                updateSettings({ llmRetryMaxDelayS: v });
+              }}
+              className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+            />
+          </SettingRow>
+        </AdvancedSection>
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">时区</h3>

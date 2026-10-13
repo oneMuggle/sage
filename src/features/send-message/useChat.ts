@@ -30,14 +30,14 @@ import {
   cancelSessionStream,
   deleteSessionCascade,
   inferProviderFromBaseUrl,
-   type TaskBoard,
+  type TaskBoard,
   useChatReattachAndBtw,
 } from './chatStreamRuntime';
 import { selectSessionSlots, useChatStreamStore } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
+import { formatRetryEventText } from './retryEventText';
 import { notifySession, shouldNotify } from './sessionNotify';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
-
 
 export { cancelSessionStream, deleteSessionCascade, type TaskBoard };
 
@@ -78,8 +78,9 @@ export function useChat() {
   // widget 看到 '🤔 思考中…' 占位符看不到真实 LLM 进度。
   // S2: 读当前会话的槽位 —— 切到会话 B 就看 B 的实时进度(A 的流在后台
   // 继续累积,切回 A 时内容完整可见)。
-  const { streaming, streamingToolCalls, taskBoard, preflightPhase } =
-    useChatStreamStore((s) => selectSessionSlots(s, currentSessionId));
+  const { streaming, streamingToolCalls, taskBoard, preflightPhase } = useChatStreamStore((s) =>
+    selectSessionSlots(s, currentSessionId),
+  );
 
   // Phase 6: /btw 补充消息状态(component-local,与流式 chat 无关)
   const [isBtwStreaming, setIsBtwStreaming] = useState(false);
@@ -507,6 +508,17 @@ export function useChat() {
               // 抽取到 orchestrationEvents.applyOrchestrationEventToBoard，
               // 主路径与重接路径共用（重接重放时任务板完整重建）。
               if (applyOrchestrationEventToBoard(evt, sid)) {
+                return;
+              }
+
+              // 2026-10-13: LLM 重试事件 — 在消息气泡内显示动态重试提示
+              // （次数/原因/等待秒数），随后 return 跳过正常 uiText 流程。
+              // 文本格式化抽到 retryEventText.ts（主路径/重接路径共用）。
+              if (evt.state === 'retry' && evt.retry_info) {
+                replaceContent(formatRetryEventText(evt.retry_info));
+                useChatStreamStore
+                  .getState()
+                  .setStreamingMeta(sid, assistantId, { state: evt.state });
                 return;
               }
 

@@ -11,6 +11,8 @@ export type AgentState =
   | 'acting'
   | 'observing'
   | 'content_delta'
+  // 2026-10-13: LLM 重试事件（与 types/chatAndEventTypes.ts 同步）
+  | 'retry'
   | 'done'
   | 'failed'
   // Multi-Agent Orchestration (2026-08-11)
