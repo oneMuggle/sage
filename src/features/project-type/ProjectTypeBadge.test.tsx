@@ -1,14 +1,33 @@
 /**
- * ProjectTypeBadge 组件测试 (2026-09-25)
+ * ProjectTypeBadge 组件测试 (2026-09-25; Phase P29 TypeDetectionPreview, ProjectTypeSelector, StudioProfileTabPanel & KnowledgeExtractionPanel)
  *
- * 项目类型分类系统 - Phase 4.6
+ * 项目类型分类系统 - Phase 4.6 & Phase P29
  */
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { projectApi } from '../../shared/api';
+
+import { KnowledgeExtractionPanel } from './KnowledgeExtractionPanel';
 import { ProjectTypeBadge } from './ProjectTypeBadge';
+import { ProjectTypeSelector } from './ProjectTypeSelector';
+import { StudioProfileTabPanel } from './StudioProfileTabPanel';
 import { TypeDetectionPreview } from './TypeDetectionPreview';
+
+vi.mock('../../shared/api', async () => {
+  const actual = await vi.importActual<typeof import('../../shared/api')>('../../shared/api');
+  return {
+    ...actual,
+    projectApi: {
+      ...actual.projectApi,
+      detectType: vi.fn(),
+      listSessions: vi.fn(),
+      extractKnowledge: vi.fn(),
+      confirmKnowledge: vi.fn(),
+    },
+  };
+});
 
 describe('ProjectTypeBadge', () => {
   it('renders coding type with correct label and icon', () => {
@@ -60,8 +79,12 @@ describe('ProjectTypeBadge', () => {
   });
 });
 
-describe('TypeDetectionPreview', () => {
-  it('renders detected blueprint preview and allows one-click apply when selectedType differs', () => {
+describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders detected blueprint preview, stage pipeline, governance stats, and supports markdown copy & one-click apply', () => {
     const onApply = vi.fn();
     render(
       <TypeDetectionPreview
@@ -76,8 +99,132 @@ describe('TypeDetectionPreview', () => {
     );
 
     expect(screen.getByTestId('detection-blueprint-preview')).toBeInTheDocument();
+    expect(screen.getByTestId('detection-stages-preview')).toBeInTheDocument();
+    expect(screen.getByTestId('detection-governance-stats')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('detection-copy-md-btn'));
+
     const applyBtn = screen.getByTestId('apply-detected-type-btn');
     fireEvent.click(applyBtn);
     expect(onApply).toHaveBeenCalledWith('research');
+  });
+
+  it('supports ProjectTypeSelector redetect and apply detected type when confidence is below auto-select threshold', async () => {
+    vi.mocked(projectApi.detectType).mockResolvedValue({
+      detectedType: 'business',
+      confidence: 0.55,
+      signals: ['发现合同模板目录'],
+    });
+    const onSelect = vi.fn();
+
+    render(
+      <ProjectTypeSelector
+        open={true}
+        onOpenChange={vi.fn()}
+        projectPath="/workspace/contracts"
+        onSelect={onSelect}
+      />,
+    );
+
+    const applyDetectedBtn = await screen.findByTestId('selector-apply-detected-btn');
+    fireEvent.click(applyDetectedBtn);
+
+    fireEvent.click(screen.getByTestId('selector-redetect-btn'));
+    await waitFor(() => expect(projectApi.detectType).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByRole('button', { name: '确认选择' }));
+    expect(onSelect).toHaveBeenCalledWith('business');
+  });
+});
+
+describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('supports StudioProfileTabPanel keyword search, category filter, and clear filter', () => {
+    render(
+      <StudioProfileTabPanel
+        projectPath="/workspace/sage"
+        projectType="coding"
+        profileEntries={[
+          {
+            id: 'e-1',
+            project_key: '/workspace/sage',
+            category: 'convention',
+            content: '单文件严格保持 <= 800 行',
+            importance: 8,
+            source: 'manual',
+            created_at: 1,
+            updated_at: 1,
+          },
+          {
+            id: 'e-2',
+            project_key: '/workspace/sage',
+            category: 'architecture',
+            content: 'IPC 契约一致性检查',
+            importance: 9,
+            source: 'manual',
+            created_at: 2,
+            updated_at: 2,
+          },
+        ]}
+        profileCategory="convention"
+        onCategoryChange={vi.fn()}
+        profileDraft=""
+        onDraftChange={vi.fn()}
+        savingProfile={false}
+        onAddEntry={vi.fn()}
+        onDeleteEntry={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('studio-profile-filter-architecture'));
+    expect(screen.getByText('IPC 契约一致性检查')).toBeInTheDocument();
+    expect(screen.queryByText('单文件严格保持 <= 800 行')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('studio-profile-search-input'), {
+      target: { value: '不存在的关键词' },
+    });
+    fireEvent.click(screen.getByTestId('studio-profile-clear-filter'));
+    expect(screen.getByText('单文件严格保持 <= 800 行')).toBeInTheDocument();
+  });
+
+  it('supports KnowledgeExtractionPanel session refresh and extracted proposals markdown copy', async () => {
+    vi.mocked(projectApi.listSessions).mockResolvedValue([
+      {
+        id: 'sess-p29',
+        title: '研究计划讨论',
+        created_at: 1,
+        updated_at: 2,
+        last_message_at: 2,
+        message_count: 6,
+        is_pinned: false,
+      },
+    ]);
+    vi.mocked(projectApi.extractKnowledge).mockResolvedValue({
+      projectKey: '/workspace/sage',
+      reasoning: '从对话中提炼出实验可复现性规范',
+      entries: [
+        {
+          category: 'convention',
+          content: '固定随机种子为 42',
+          importance: 9,
+          reasoning: '保障消融实验可复现',
+          sourceMessageIds: ['m-1'],
+        },
+      ],
+    });
+
+    render(<KnowledgeExtractionPanel projectId="proj-p29" />);
+    await waitFor(() => expect(projectApi.listSessions).toHaveBeenCalledWith('proj-p29'));
+
+    fireEvent.click(screen.getByTestId('knowledge-refresh-sessions-btn'));
+    await waitFor(() => expect(projectApi.listSessions).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByTestId('knowledge-extract-btn'));
+    const copyMdBtn = await screen.findByTestId('knowledge-copy-md-btn');
+    fireEvent.click(copyMdBtn);
+    expect(screen.getByText('固定随机种子为 42')).toBeInTheDocument();
   });
 });
