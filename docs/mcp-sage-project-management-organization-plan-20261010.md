@@ -471,3 +471,20 @@
      - 在向导第 3 步（确认信息）新增 L2 系统高优指令输入框（`data-testid="wizard-instructions-input"`）与四大形态目标/指令预设胶囊（`data-testid="wizard-goal-presets"` / `data-testid="wizard-goal-preset-{idx}"`），并在创建项目时将 `description` 与 `instructions` 同步写入项目 L2 上下文管线。
   5. **单元测试与门禁加固（`ConstraintSummaryWidget.test.tsx` & `MilestoneProgressWidget.test.tsx`）**：
      - 新增 `ConstraintEditor`、`GitStatusWidget`、`MilestoneEditor` 与 `ProjectCreationWizard` 的 Phase P26 交互单测断言。
+### Phase P27：约束管理器四形态 Glob 样例与关键词检索、里程碑状态筛选与单节点 AI 子任务拆解、拆解方案勾选导出、AI 顾问报告导出（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **约束管理器四形态 Glob 触发样例胶囊与关键词过滤（`src/features/project-type/ConstraintManager.tsx`）**：
+     - 在 Glob 路径触发测试栏内置四大形态高频路径样例胶囊（`data-testid="constraint-glob-sample-{idx}"`）与「清空」按钮（`data-testid="constraint-glob-clear-btn"`），支持一键模拟目标文件命中的约束规则；
+     - 新增规则关键词搜索输入框（`data-testid="constraint-search-input"`），支持按规则正文、类别或触发 Glob 实时筛选。
+  2. **里程碑管理器状态筛选栏与单节点 AI 子任务拆解联动（`src/features/project-type/MilestoneManager.tsx`）**：
+     - 在里程碑进度栏新增状态筛选胶囊栏（`全部状态` / `进行中` / `待开始` / `已完成` / `阻塞`，`data-testid="milestone-status-filter-{id}"`），支持与生命周期阶段联合过滤；
+     - 在每个里程碑条目操作区新增「AI 拆解子任务」按钮（`data-testid="milestone-decompose-{id}"`），点击可将当前里程碑标题与描述一键带入 `TaskDecomposeDialog` 发起细粒度子任务拆解。
+  3. **M1 AI 任务拆解预览勾选采纳与 Markdown 方案导出（`src/features/project-type/TaskDecomposeDialog.tsx`）**：
+     - 在拆解预览阶段新增主节点复选框（`data-testid="decompose-node-checkbox-{idx}"`），支持按需勾选要采纳创建的里程碑分支；
+     - 新增「复制方案 Markdown」按钮（`data-testid="decompose-copy-md-btn"`），一键将需求、分解思路与多级里程碑树导出为 Markdown。
+  4. **M3 AI 顾问健康诊断报告一键导出（`src/features/project-type/ProjectAdvisorCard.tsx`）**：
+     - 在 `ProjectAdvisorCard` 标题栏新增「复制诊断」按钮（`data-testid="advisor-copy-md-btn"`），支持将项目健康评分、风险项与改进建议一键导出为结构化 Markdown 报告。
+  5. **单元测试与门禁加固（`ConstraintSummaryWidget.test.tsx` & `MilestoneProgressWidget.test.tsx`）**：
+     - 新增 `ConstraintManager`、`ProjectAdvisorCard`、`MilestoneManager` 与 `TaskDecomposeDialog` 的 Phase P27 端到端测试断言。

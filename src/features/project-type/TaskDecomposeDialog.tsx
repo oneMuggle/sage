@@ -9,7 +9,7 @@
  * 4. 用户确认后点击「采纳」→ 批量创建里程碑
  */
 
-import { Sparkles, Loader2, ChevronRight, ChevronDown, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Loader2, ChevronRight, ChevronDown, CheckCircle2, Copy, Check } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi, type PreviewMilestoneNode, type ProjectType } from '../../shared/api';
@@ -112,6 +112,8 @@ export function TaskDecomposeDialog({
   const [error, setError] = useState<string | null>(null);
   const [reasoning, setReasoning] = useState('');
   const [milestones, setMilestones] = useState<PreviewMilestoneNode[]>([]);
+  const [selectedRootIndices, setSelectedRootIndices] = useState<Set<number>>(new Set());
+  const [copiedPlan, setCopiedPlan] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
 
   const effectiveType: ProjectType = projectType ?? 'coding';
@@ -137,6 +139,7 @@ export function TaskDecomposeDialog({
       });
       setReasoning(result.reasoning);
       setMilestones(result.milestones);
+      setSelectedRootIndices(new Set(result.milestones.map((_, i) => i)));
       setTotalCount(result.totalCount);
       setPhase('preview');
     } catch (err) {
@@ -152,6 +155,7 @@ export function TaskDecomposeDialog({
     setError(null);
     setReasoning('');
     setMilestones([]);
+    setSelectedRootIndices(new Set());
     setTotalCount(0);
     onOpenChange(false);
   }, [onOpenChange]);
@@ -161,14 +165,42 @@ export function TaskDecomposeDialog({
     setError(null);
     setPhase('applying');
     try {
-      await projectApi.decomposeApply(projectId, { milestones });
+      const chosen = milestones.filter((_, idx) => selectedRootIndices.has(idx));
+      await projectApi.decomposeApply(projectId, { milestones: chosen.length > 0 ? chosen : milestones });
       onApplied();
       resetAndClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : '创建里程碑失败');
       setPhase('preview');
     }
-  }, [projectId, milestones, onApplied, resetAndClose]);
+  }, [projectId, milestones, selectedRootIndices, onApplied, resetAndClose]);
+
+  const handleCopyPreviewMarkdown = () => {
+    const lines = [
+      `# ${blueprint.label} · AI 任务拆解方案`,
+      `- **需求**: ${requirement.trim()}`,
+      reasoning ? `- **分解思路**: ${reasoning}` : '',
+      '',
+      '## 里程碑树',
+    ].filter(Boolean);
+    const walk = (nodes: PreviewMilestoneNode[], depth: number) => {
+      for (const n of nodes) {
+        const indent = '  '.repeat(depth);
+        const stg = n.stage ? ` [${stageLabelMap.get(n.stage) ?? n.stage}]` : '';
+        const days = n.estimatedDays != null ? ` (${n.estimatedDays}天)` : '';
+        lines.push(`${indent}- **${n.title}**${stg}${days}${n.description ? `：${n.description}` : ''}`);
+        if (n.children?.length) walk(n.children, depth + 1);
+      }
+    };
+    walk(milestones, 0);
+    try {
+      void navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedPlan(true);
+      setTimeout(() => setCopiedPlan(false), 1800);
+    } catch {
+      // ignore clipboard errors in test/offline mode
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={resetAndClose}>
@@ -253,15 +285,45 @@ export function TaskDecomposeDialog({
                 </div>
               )}
               <div className="space-y-1">
-                <div className="text-sm font-medium">将创建 {totalCount} 个里程碑：</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-medium">
+                    将创建 {totalCount} 个里程碑（已勾选 {selectedRootIndices.size}/{milestones.length} 个主节点）：
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="decompose-copy-md-btn"
+                    onClick={handleCopyPreviewMarkdown}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+                  >
+                    {copiedPlan ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                    {copiedPlan ? '已复制方案' : '复制方案 Markdown'}
+                  </button>
+                </div>
                 <div className="rounded-lg border p-3 space-y-1">
                   {milestones.map((ms, idx) => (
-                    <MilestoneTreeItem
-                      key={idx}
-                      node={ms}
-                      depth={0}
-                      stageLabelMap={stageLabelMap}
-                    />
+                    <div key={idx} className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedRootIndices.has(idx)}
+                        data-testid={`decompose-node-checkbox-${idx}`}
+                        onChange={() =>
+                          setSelectedRootIndices((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(idx)) next.delete(idx);
+                            else next.add(idx);
+                            return next;
+                          })
+                        }
+                        className="mt-2 h-3.5 w-3.5 rounded border-border"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <MilestoneTreeItem
+                          node={ms}
+                          depth={0}
+                          stageLabelMap={stageLabelMap}
+                        />
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>

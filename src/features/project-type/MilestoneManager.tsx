@@ -44,7 +44,10 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | null>(null);
   const [decomposeDialogOpen, setDecomposeDialogOpen] = useState(false);
+  const [decomposeInitReq, setDecomposeInitReq] = useState<string>('');
+  const [decomposeInitCtx, setDecomposeInitCtx] = useState<string>('');
   const [stageFilter, setStageFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [copiedRoadmap, setCopiedRoadmap] = useState(false);
   const blueprint = getArchetypeBlueprint(projectType);
 
@@ -155,8 +158,13 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
 
   const completedCount = milestones.filter((m) => m.status === 'completed').length;
   const completionPct = milestones.length > 0 ? Math.round((completedCount / milestones.length) * 100) : 0;
-  const filteredMilestones =
-    stageFilter === 'all' ? milestones : milestones.filter((m) => m.stage === stageFilter);
+  const filteredMilestones = useMemo(() => {
+    return milestones.filter((m) => {
+      if (stageFilter !== 'all' && m.stage !== stageFilter) return false;
+      if (statusFilter !== 'all' && m.status !== statusFilter) return false;
+      return true;
+    });
+  }, [milestones, stageFilter, statusFilter]);
 
   if (loading) {
     return (
@@ -207,7 +215,11 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => setDecomposeDialogOpen(true)}
+                onClick={() => {
+                  setDecomposeInitReq('');
+                  setDecomposeInitCtx('');
+                  setDecomposeDialogOpen(true);
+                }}
                 data-testid="ai-decompose-tasks-btn"
               >
                 <BrainCircuit className="mr-1.5 h-3.5 w-3.5 text-primary" />
@@ -285,6 +297,33 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                 </div>
               </div>
               <Progress value={completionPct} className="h-1.5" />
+              <div
+                className="flex flex-wrap items-center gap-1.5 pt-1"
+                data-testid="milestone-status-filter-bar"
+              >
+                <span className="text-ui-2xs text-muted-foreground">状态筛选：</span>
+                {[
+                  { id: 'all', label: '全部状态' },
+                  { id: 'in_progress', label: '进行中' },
+                  { id: 'pending', label: '待开始' },
+                  { id: 'completed', label: '已完成' },
+                  { id: 'blocked', label: '阻塞' },
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setStatusFilter(st.id)}
+                    data-testid={`milestone-status-filter-${st.id}`}
+                    className={`rounded px-2 py-0.5 text-ui-2xs font-medium transition-colors ${
+                      statusFilter === st.id
+                        ? 'bg-primary/15 text-primary border border-primary/30'
+                        : 'bg-background text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -357,7 +396,21 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid={`milestone-decompose-${milestone.id}`}
+                      onClick={() => {
+                        setDecomposeInitReq(milestone.title);
+                        setDecomposeInitCtx(milestone.description || '');
+                        setDecomposeDialogOpen(true);
+                      }}
+                      className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-1 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+                      title="基于此里程碑让 AI 拆解子任务"
+                    >
+                      <BrainCircuit className="h-3 w-3" />
+                      AI 拆解子任务
+                    </button>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -396,6 +449,8 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
         onOpenChange={setDecomposeDialogOpen}
         projectId={projectId}
         projectType={projectType}
+        initialRequirement={decomposeInitReq}
+        initialContext={decomposeInitCtx}
         onApplied={fetchMilestones}
       />
     </>
