@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock backendRequest
@@ -69,7 +69,7 @@ describe('ProjectHooksPanel', () => {
     expect(screen.getByText('/test/workspace')).toBeInTheDocument();
   });
 
-  it('显示已启用状态当已信任时', async () => {
+  it('显示已启用状态当已信任时并支持取消信任与复制路径 (Phase P28)', async () => {
     vi.mocked(useCurrentWorkspace).mockReturnValue('/test/workspace');
     vi.mocked(backendRequest).mockResolvedValue({
       workspace: '/test/workspace',
@@ -84,5 +84,12 @@ describe('ProjectHooksPanel', () => {
     });
 
     expect(screen.queryByText(/信任并启用/)).toBeNull();
+    expect(screen.getByTestId('project-hooks-copy-path-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('project-hooks-refresh-btn')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('project-hooks-untrust-btn'));
+    await vi.waitFor(() => {
+      expect(screen.getByText(/检测到项目级 Hook 配置/)).toBeInTheDocument();
+    });
   });
 });

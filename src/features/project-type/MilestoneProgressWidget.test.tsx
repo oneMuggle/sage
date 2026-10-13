@@ -13,6 +13,7 @@ import { MilestoneEditor } from './MilestoneEditor';
 import { MilestoneManager } from './MilestoneManager';
 import { MilestoneProgressWidget } from './MilestoneProgressWidget';
 import { ProjectCreationWizard } from './ProjectCreationWizard';
+import { ProjectOverviewWidgets } from './ProjectOverviewWidgets';
 
 // Mock projectApi
 vi.mock('../../shared/api', () => ({
@@ -317,5 +318,32 @@ describe('MilestoneProgressWidget', () => {
         ],
       });
     });
+  });
+
+  it('supports ProjectOverviewWidgets direct AI task decompose trigger and overview markdown copy (Phase P28)', async () => {
+    render(
+      <ProjectOverviewWidgets
+        project={{
+          id: 'test-project',
+          name: 'SageGovernance',
+          path: '/workspace/sage',
+          projectType: 'research',
+          projectStage: 'experiment',
+          vcsMode: 'builtin',
+          createdAt: 1000,
+          lastOpenedAt: 2000,
+          sessionCount: 3,
+          lastSessionId: 's-1',
+          allowedPaths: [],
+        }}
+      />,
+    );
+
+    const copyBtn = await screen.findByTestId('overview-copy-summary-md-btn');
+    fireEvent.click(copyBtn);
+
+    const decomposeBtn = screen.getByTestId('overview-open-decompose-btn');
+    fireEvent.click(decomposeBtn);
+    expect(await screen.findByTestId('decompose-requirement-input')).toBeInTheDocument();
   });
 });
