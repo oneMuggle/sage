@@ -501,3 +501,17 @@
 4. **项目概览工作台直接触发 AI 任务拆解与一键复制治理概览 Markdown（`src/features/project-type/ProjectOverviewWidgets.tsx`）**
    - 在多态项目阶段与版本保护概览卡片（`workspace-vcs-summary-widget`）新增 **`AI 拆解任务`** 快捷入口（`overview-open-decompose-btn`）与 **`复制概览 MD`** 按钮（`overview-copy-summary-md-btn`），支持直接打开 `TaskDecomposeDialog` 或导出项目治理概览 Markdown。
 
+### Phase P29：工作台 L3 画像检索过滤、M2 知识提取建议导出、自动检测阶段管线预览与选择器重新检测（2026-10-13 已完成）
+
+1. **L3 项目演化记忆画像面板关键词检索、类别过滤与中文类别标签（`src/features/project-type/StudioProfileTabPanel.tsx`）**
+   - 新增关键词实时搜索输入框（`studio-profile-search-input`）与六档类别过滤胶囊（`studio-profile-filter-${cat}`：`全部类别` / `约定` / `架构/方法论` / `决策/审校口径` / `核心目标/研究问题` / `阶段发现/备注`），以及筛选为空时的一键清空按钮（`studio-profile-clear-filter`）。
+   - 为每条冻结画像条目补充中英对照类别标签（如 `约定 (convention)`），并在复制 `MEMORY.md` 视图时同步输出中文类别说明。
+2. **AI 对话知识提取面板（M2）会话手动刷新与提取建议一键复制 Markdown（`src/features/project-type/KnowledgeExtractionPanel.tsx`）**
+   - 在输入栏新增 **`刷新项目会话列表`** 按钮（`knowledge-refresh-sessions-btn`），支持按需重新拉取项目已绑定的会话列表。
+   - 在审核阶段顶栏新增 **`复制提取结果 MD`** 按钮（`knowledge-copy-md-btn`），支持在确认入库前一键复制提取思路与全部知识建议的结构化 Markdown。
+3. **类型自动检测预览组件推荐阶段管线、治理套件统计与检测依据导出（`src/features/project-type/TypeDetectionPreview.tsx`）**
+   - 在蓝图预览卡片中新增**推荐阶段管线预览**（`detection-stages-preview`）与**推荐治理套件统计徽标**（`detection-governance-stats`：推荐里程碑数与细分规范包数）。
+   - 顶栏新增 **`复制检测依据`** 按钮（`detection-copy-md-btn`），一键导出包含检测形态、置信度、推荐版本策略、阶段管线与检测信号的结构化 Markdown 报告。
+4. **项目类型选择器手动重新检测、一键采用检测结果与卡片阶段管线展示（`src/features/project-type/ProjectTypeSelector.tsx`）**
+   - 在自动检测提示横幅中新增 **`采用检测结果`**（`selector-apply-detected-btn`）与 **`重新检测`**（`selector-redetect-btn`）按钮，并在四类项目形态卡片底部展示完整阶段流转管线摘要。
+

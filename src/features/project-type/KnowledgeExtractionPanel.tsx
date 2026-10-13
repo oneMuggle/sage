@@ -1,11 +1,11 @@
 /**
- * AI 对话知识提取面板 (M2, 2026-10-12；Phase P21 会话联动；Phase P24 跨项目状态重置与全选/清空切换)
+ * AI 对话知识提取面板 (M2, 2026-10-12；Phase P21 会话联动；Phase P24 跨项目状态重置与全选/清空切换；Phase P29 会话手动刷新与提取建议一键复制 Markdown)
  *
- * 嵌入项目画像 Profile Tab 顶部，支持从项目已绑定会话列表一键选择或手动输入会话 ID，
- * 提取知识建议并支持一键全选/清空与勾选确认后写入 ProjectProfileStore。
+ * 嵌入项目画像 Profile Tab 顶部，支持从项目已绑定会话列表一键选择、手动刷新会话或手动输入会话 ID，
+ * 提取知识建议并支持一键复制提取结果 Markdown、全选/清空与勾选确认后写入 ProjectProfileStore。
  */
 
-import { Sparkles, Loader2, CheckCircle2, Lightbulb } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle2, Lightbulb, RefreshCw, Copy, Check } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi, type KnowledgeEntryProposal, type Session } from '../../shared/api';
@@ -39,6 +39,7 @@ export function KnowledgeExtractionPanel({
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState('');
   const [boundSessions, setBoundSessions] = useState<Session[]>([]);
+  const [copiedMd, setCopiedMd] = useState(false);
 
   const resetPanel = useCallback(() => {
     setPhase('idle');
@@ -47,6 +48,21 @@ export function KnowledgeExtractionPanel({
     setReasoning('');
     setError(null);
   }, []);
+
+  const loadBoundSessions = useCallback(async () => {
+    if (!projectId || typeof projectApi?.listSessions !== 'function') {
+      setBoundSessions([]);
+      return;
+    }
+    try {
+      const list = await projectApi.listSessions(projectId);
+      if (!Array.isArray(list)) return;
+      setBoundSessions(list);
+      setSessionId((prev) => prev || (list[0]?.id ?? ''));
+    } catch {
+      setBoundSessions([]);
+    }
+  }, [projectId]);
 
   useEffect(() => {
     resetPanel();
@@ -110,6 +126,28 @@ export function KnowledgeExtractionPanel({
     }
   }, [projectId, entries, selected, onConfirmed, resetPanel]);
 
+  const handleCopyProposalsMarkdown = async () => {
+    if (entries.length === 0) return;
+    const lines = [
+      `# M2 对话知识提取建议 (会话 ${sessionId})`,
+      reasoning ? `> 提取思路：${reasoning}` : '',
+      '',
+      ...entries.map(
+        (entry, idx) =>
+          `${idx + 1}. **[${CATEGORY_LABELS[entry.category] ?? entry.category} · 重要性 ${entry.importance}/10]** ${entry.content}${
+            entry.reasoning ? ` _(${entry.reasoning})_` : ''
+          }`,
+      ),
+    ].filter(Boolean);
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedMd(true);
+      setTimeout(() => setCopiedMd(false), 1800);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
   const toggleEntry = (idx: number) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -161,6 +199,17 @@ export function KnowledgeExtractionPanel({
               ))}
             </select>
           )}
+          <button
+            type="button"
+            onClick={() => void loadBoundSessions()}
+            disabled={phase === 'loading'}
+            data-testid="knowledge-refresh-sessions-btn"
+            aria-label="刷新项目会话列表"
+            title="刷新项目会话列表"
+            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            <RefreshCw className="h-3 w-3" />
+          </button>
           <input
             type="text"
             value={sessionId}
@@ -206,16 +255,36 @@ export function KnowledgeExtractionPanel({
             </div>
           ) : (
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
                 <span>发现 {entries.length} 条建议，勾选要添加的：</span>
-                <button
-                  type="button"
-                  onClick={handleToggleSelectAll}
-                  data-testid="knowledge-toggle-select-all"
-                  className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                >
-                  {selected.size === entries.length ? '清空选择' : '全选建议'}
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyProposalsMarkdown()}
+                    data-testid="knowledge-copy-md-btn"
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {copiedMd ? (
+                      <>
+                        <Check className="h-3 w-3 text-emerald-500" />
+                        已复制
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3 text-primary" />
+                        复制提取结果 MD
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAll}
+                    data-testid="knowledge-toggle-select-all"
+                    className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {selected.size === entries.length ? '清空选择' : '全选建议'}
+                  </button>
+                </div>
               </div>
               {entries.map((entry, idx) => (
                 <label
