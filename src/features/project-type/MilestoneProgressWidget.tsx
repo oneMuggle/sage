@@ -1,11 +1,11 @@
 /**
- * 里程碑进度 Widget (2026-09-25; Phase P15 空状态一键播种与快捷完成切换; Phase P25 中文阶段胶囊与手动刷新)
+ * 里程碑进度 Widget (2026-09-25; Phase P15 空状态一键播种与快捷完成切换; Phase P25 中文阶段胶囊与手动刷新; Phase P30 逾期预警与进度报告导出)
  *
  * 项目类型分类系统 - Phase 4.3
- * 显示项目里程碑的进度统计、中文阶段胶囊、手动刷新、空状态一键生成形态推荐里程碑与快捷状态切换
+ * 显示项目里程碑的进度统计、逾期预警徽标、进度报告 Markdown 复制、中文阶段胶囊、手动刷新、空状态一键生成形态推荐里程碑与快捷状态切换
  */
 
-import { Target, CheckCircle2, Clock, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
+import { Target, CheckCircle2, Clock, AlertCircle, Sparkles, RefreshCw, Copy, Check } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
 import { projectApi, type ProjectMilestone, type ProjectType } from '../../shared/api';
@@ -24,6 +24,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedProgress, setCopiedProgress] = useState(false);
 
   const blueprint = getArchetypeBlueprint(projectType);
   const stageLabelMap = new Map(blueprint.stages.map((s) => [s.id, s.label]));
@@ -53,8 +54,9 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
     if (seeding || typeof projectApi?.createMilestone !== 'function') return;
     setSeeding(true);
     try {
+      const bp = getArchetypeBlueprint(projectType);
       let order = 0;
-      for (const item of blueprint.recommendedMilestones) {
+      for (const item of bp.recommendedMilestones) {
         await projectApi.createMilestone(projectId, {
           title: item.title,
           description: item.description,
@@ -115,24 +117,12 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
 
   if (milestones.length === 0) {
     return (
-      <Card data-testid="milestone-progress-widget">
+      <Card>
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2 text-sm">
-              <Target className="h-4 w-4" />
-              里程碑进度
-            </CardTitle>
-            <button
-              type="button"
-              onClick={() => void fetchMilestones()}
-              data-testid="milestone-summary-refresh-btn"
-              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="刷新里程碑"
-              aria-label="刷新里程碑"
-            >
-              <RefreshCw className="h-3 w-3" />
-            </button>
-          </div>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Target className="h-4 w-4" />
+            里程碑进度
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -157,6 +147,31 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const inProgress = milestones.filter((m) => m.status === 'in_progress').length;
   const blocked = milestones.filter((m) => m.status === 'blocked').length;
   const progress = (completed / milestones.length) * 100;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const overdueCount = milestones.filter(
+    (m) => m.status !== 'completed' && Boolean(m.dueDate && m.dueDate < todayStr),
+  ).length;
+
+  const handleCopyProgressMarkdown = async () => {
+    const lines = [
+      `# 项目里程碑进度报告 (${Math.round(progress)}%)`,
+      `- **总体进度**：${completed} / ${milestones.length} 已完成（进行中 ${inProgress} · 阻塞 ${blocked}${overdueCount > 0 ? ` · 逾期 ${overdueCount}` : ''}）`,
+      '',
+      '## 里程碑列表',
+      ...milestones.map((m) => {
+        const st = m.stage ? ` [${stageLabelMap.get(m.stage) ?? m.stage}]` : '';
+        const due = m.dueDate ? ` (截止: ${m.dueDate})` : '';
+        return `- [${m.status === 'completed' ? 'x' : ' '}] **${m.title}**${st} — \`${m.status}\`${due}`;
+      }),
+    ];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedProgress(true);
+      setTimeout(() => setCopiedProgress(false), 1800);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
 
   return (
     <Card data-testid="milestone-progress-widget">
@@ -166,22 +181,53 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
             <Target className="h-4 w-4" />
             里程碑进度
           </CardTitle>
-          <button
-            type="button"
-            onClick={() => void fetchMilestones()}
-            data-testid="milestone-summary-refresh-btn"
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="刷新里程碑"
-            aria-label="刷新里程碑"
-          >
-            <RefreshCw className="h-3 w-3" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => void handleCopyProgressMarkdown()}
+              data-testid="milestone-summary-copy-md-btn"
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="复制里程碑进度报告 Markdown"
+            >
+              {copiedProgress ? (
+                <>
+                  <Check className="h-3 w-3 text-emerald-500" />
+                  已复制
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3" />
+                  复制进度
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => void fetchMilestones()}
+              data-testid="milestone-summary-refresh-btn"
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="刷新里程碑"
+              aria-label="刷新里程碑"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">总体进度</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-muted-foreground">总体进度</span>
+              {overdueCount > 0 && (
+                <span
+                  className="rounded bg-amber-500/15 px-1.5 py-0.5 text-ui-2xs font-medium text-amber-600"
+                  data-testid="milestone-summary-overdue-badge"
+                >
+                  逾期 {overdueCount} 项
+                </span>
+              )}
+            </div>
             <span className="font-medium">{Math.round(progress)}%</span>
           </div>
           <Progress value={progress} className="h-2" />

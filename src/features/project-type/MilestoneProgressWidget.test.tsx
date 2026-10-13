@@ -8,6 +8,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { projectApi } from '../../shared/api';
+import { I18nProvider } from '../../shared/lib/i18n';
+import { ProjectMaterialsPanel, ProjectOverviewPanel } from '../../widgets/sidebar/sections/ProjectExpandedPanels';
 
 import { MilestoneEditor } from './MilestoneEditor';
 import { MilestoneManager } from './MilestoneManager';
@@ -345,5 +347,115 @@ describe('MilestoneProgressWidget', () => {
     const decomposeBtn = screen.getByTestId('overview-open-decompose-btn');
     fireEvent.click(decomposeBtn);
     expect(await screen.findByTestId('decompose-requirement-input')).toBeInTheDocument();
+  });
+
+  it('supports MilestoneProgressWidget overdue warning badge & progress Markdown export, and ProjectExpandedPanels L2 presets & L4 search/export (Phase P30)', async () => {
+    mockListMilestones.mockResolvedValue([
+      {
+        id: 'm-overdue-1',
+        projectId: 'test-project',
+        title: '历史逾期节点',
+        status: 'in_progress',
+        dueDate: '2020-01-01',
+        stage: 'experiment',
+        sortOrder: 1,
+        createdAt: 1000,
+      },
+    ]);
+
+    const onChange = vi.fn();
+    render(
+      <I18nProvider>
+        <ProjectOverviewPanel
+          project={{
+            id: 'p-1',
+            name: 'LabProject',
+            path: '/workspace/lab',
+            projectType: 'research',
+            createdAt: 1000,
+            lastOpenedAt: 2000,
+            sessionCount: 1,
+            lastSessionId: null,
+            allowedPaths: [],
+          }}
+          draft={{ description: '', instructions: '', dirty: false }}
+          saving={false}
+          onSave={vi.fn()}
+          onChange={onChange}
+        />
+        <ProjectMaterialsPanel
+          project={{
+            id: 'p-1',
+            name: 'LabProject',
+            path: '/workspace/lab',
+            projectType: 'research',
+            createdAt: 1000,
+            lastOpenedAt: 2000,
+            sessionCount: 1,
+            lastSessionId: null,
+            allowedPaths: [],
+          }}
+          list={[
+            {
+              id: 'mat-1',
+              projectId: 'p-1',
+              status: 'ready',
+              content: 'Transformer 消融实验核心超参表',
+              sourceMessageId: null,
+              contentHash: 'h1',
+              wikiPagePath: null,
+              errorMessage: null,
+              createdAt: 1000,
+              enabled: true,
+            },
+            {
+              id: 'mat-2',
+              projectId: 'p-1',
+              status: 'ready',
+              content: '无关基线日志记录',
+              sourceMessageId: null,
+              contentHash: 'h2',
+              wikiPagePath: null,
+              errorMessage: null,
+              createdAt: 1000,
+              enabled: true,
+            },
+          ]}
+          isLoading={false}
+          isAdding={false}
+          draftText=""
+          currentSessionId={null}
+          savingAnswer={false}
+          removingMaterialId={null}
+          onSaveAnswer={vi.fn()}
+          onRemoveMaterial={vi.fn()}
+          onDraftChange={vi.fn()}
+          onAddMaterial={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+
+    const overdueBadge = await screen.findByTestId('milestone-summary-overdue-badge');
+    expect(overdueBadge).toHaveTextContent('逾期 1 项');
+
+    fireEvent.click(screen.getByTestId('milestone-summary-copy-md-btn'));
+    expect(screen.getByTestId('milestone-summary-copy-md-btn')).toHaveTextContent(/已复制|复制进度/);
+
+    // L2 preset click
+    fireEvent.click(screen.getByTestId('sidebar-overview-preset-0'));
+    expect(onChange).toHaveBeenCalledWith(
+      'p-1',
+      'description',
+      '学术论文撰述、定量对比实验与可复现消融分析',
+    );
+    fireEvent.click(screen.getByTestId('sidebar-overview-copy-md'));
+
+    // L4 sidebar materials search & copy
+    fireEvent.click(screen.getByTestId('sidebar-materials-copy-md'));
+    fireEvent.change(screen.getByTestId('sidebar-materials-search-input'), {
+      target: { value: 'Transformer' },
+    });
+    expect(screen.getByText(/Transformer 消融实验核心超参表/)).toBeInTheDocument();
+    expect(screen.queryByText(/无关基线日志记录/)).not.toBeInTheDocument();
   });
 });

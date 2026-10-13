@@ -1,13 +1,67 @@
-import { CheckSquare, FilePlus2, FileText, History, Plus, Save, Square, Trash2 } from 'lucide-react';
+import { Check, CheckSquare, Copy, FilePlus2, FileText, History, Plus, Save, Search, Sparkles, Square, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { ProjectOverviewWidgets } from '../../../features/project-type/ProjectOverviewWidgets';
-import { projectApi, type ProjectMaterial, type ProjectSummary } from '../../../shared/api/projectApi';
+import { projectApi, type ProjectMaterial, type ProjectSummary, type ProjectType } from '../../../shared/api/projectApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { formatRelativeTime } from '../../../shared/lib/utils';
 
 import { MaterialStatusBadge } from './MaterialStatusBadge';
+
+const SIDEBAR_L2_PRESETS: Record<
+  ProjectType,
+  Array<{ label: string; description: string; instructions: string }>
+> = {
+  coding: [
+    {
+      label: '严格类型与单测门禁',
+      description: '全栈工程研发与模块化重构，保持零架构回归',
+      instructions: '所有新增逻辑必须附带类型定义与单元测试，严禁引入静默异常吞噬。',
+    },
+    {
+      label: '增量重构与小步提交',
+      description: '遗留系统渐进式解耦与性能调优',
+      instructions: '遵循最小改动面原则，先补充回归单测再修改核心路径，禁止破坏现有公开接口。',
+    },
+  ],
+  business: [
+    {
+      label: '法务合同与双轨校核',
+      description: '商务合同起草、公文签报与多轮合规审校',
+      instructions: '严格核对大小写金额、关键日期与违约责任条款，遵循 GB/T 9704 公文格式规范。',
+    },
+    {
+      label: '立卷归档与封卷审计',
+      description: '政企项目全周期文书立卷与审计备查归档',
+      instructions: '未签批定稿件严禁移入正式归档目录，所有修订意见必须留存对照记录。',
+    },
+  ],
+  research: [
+    {
+      label: '零幻觉文献与实验复现',
+      description: '学术论文撰述、定量对比实验与可复现消融分析',
+      instructions: '采用严谨客观的学术被动语态，所有文献引用必须真实可查，固定并记录全部实验随机种子。',
+    },
+    {
+      label: '审稿回复与图表溯源',
+      description: '期刊与顶会审稿意见逐条回复及补充实验验证',
+      instructions: '逐条采用 Point-by-Point 结构礼貌回应审稿人，正文所有修订段落显式标注变更位置。',
+    },
+  ],
+  personal: [
+    {
+      label: '卡片盒笔记与行动提取',
+      description: '个人双链知识库沉淀、阅读摘录卡片化与行动清单闭环',
+      instructions: '每张永久笔记仅阐述一个原子概念，使用 [[双链]] 关联已有卡片，并在末尾提炼可执行行动项。',
+    },
+    {
+      label: '长文创作与风格一致',
+      description: '专题文章连载、深度读书笔记与跨主题知识综合',
+      instructions: '保持自然流畅的个人叙事风格，引用原始素材时保留出处时间戳与上下文锚点。',
+    },
+  ],
+};
 
 interface OverviewDraftEntry {
   description: string;
@@ -32,6 +86,9 @@ export function ProjectOverviewPanel({
 }: ProjectOverviewPanelProps) {
   const { t } = useI18n();
   const [creatingCheckpoint, setCreatingCheckpoint] = useState(false);
+  const [copiedOverview, setCopiedOverview] = useState(false);
+  const archetype: ProjectType = project.projectType ?? project.detectedType ?? 'coding';
+  const presets = SIDEBAR_L2_PRESETS[archetype] ?? SIDEBAR_L2_PRESETS.coding;
 
   const handleQuickCheckpoint = async () => {
     if (creatingCheckpoint || typeof projectApi?.createCheckpoint !== 'function') return;
@@ -43,6 +100,27 @@ export function ProjectOverviewPanel({
       // ignore in test/offline mode
     } finally {
       setCreatingCheckpoint(false);
+    }
+  };
+
+  const handleCopyL2Markdown = async () => {
+    const desc = draft?.description ?? project.description ?? '';
+    const inst = draft?.instructions ?? project.instructions ?? '';
+    const lines = [
+      `# L2 项目目标与交付指令：${project.name}`,
+      '',
+      '## 项目目标',
+      desc || '（未设置）',
+      '',
+      '## 交付与审校指令',
+      inst || '（未设置）',
+    ];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedOverview(true);
+      setTimeout(() => setCopiedOverview(false), 1800);
+    } catch {
+      // ignore in test/offline mode
     }
   };
 
@@ -61,6 +139,25 @@ export function ProjectOverviewPanel({
           {t('sider.project.overview_title')}
         </span>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            data-testid="sidebar-overview-copy-md"
+            onClick={() => void handleCopyL2Markdown()}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-muted hover:text-text hover:bg-bg-hover"
+            title="复制 L2 目标与指令 Markdown"
+          >
+            {copiedOverview ? (
+              <>
+                <Check className="w-3 h-3 text-emerald-500" aria-hidden="true" />
+                已复制
+              </>
+            ) : (
+              <>
+                <Copy className="w-3 h-3" aria-hidden="true" />
+                复制指令 MD
+              </>
+            )}
+          </button>
           {project.vcsMode !== 'git' && project.projectType !== 'coding' && (
             <button
               type="button"
@@ -73,17 +170,40 @@ export function ProjectOverviewPanel({
               {creatingCheckpoint ? '快照中...' : '新建快照'}
             </button>
           )}
-        <button
-          type="button"
-          data-testid="project-overview-save"
-          disabled={!draft?.dirty || saving}
-          onClick={() => onSave(project)}
-          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Save className="w-3 h-3" aria-hidden="true" />
-          {saving ? t('sider.project.overview_saving') : t('sider.project.overview_save')}
-        </button>
+          <button
+            type="button"
+            data-testid="project-overview-save"
+            disabled={!draft?.dirty || saving}
+            onClick={() => onSave(project)}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Save className="w-3 h-3" aria-hidden="true" />
+            {saving ? t('sider.project.overview_saving') : t('sider.project.overview_save')}
+          </button>
         </div>
+      </div>
+      <div
+        className="mb-1.5 flex flex-wrap items-center gap-1"
+        data-testid="sidebar-overview-presets"
+      >
+        <span className="inline-flex items-center gap-0.5 text-ui-2xs text-muted">
+          <Sparkles className="w-2.5 h-2.5 text-primary" aria-hidden="true" />
+          快捷模板：
+        </span>
+        {presets.map((p, idx) => (
+          <button
+            key={p.label}
+            type="button"
+            data-testid={`sidebar-overview-preset-${idx}`}
+            onClick={() => {
+              onChange(project.id, 'description', p.description);
+              onChange(project.id, 'instructions', p.instructions);
+            }}
+            className="rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
       <label className="block text-ui-2xs text-muted mb-0.5">
         {t('sider.project.overview_description')}
@@ -148,6 +268,8 @@ export function ProjectMaterialsPanel({
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [filePathInput, setFilePathInput] = useState('');
   const [addingFromFile, setAddingFromFile] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [copiedBundle, setCopiedBundle] = useState(false);
 
   const handleAddFromFile = async () => {
     const rel = filePathInput.trim();
@@ -214,6 +336,35 @@ export function ProjectMaterialsPanel({
   );
   const usagePct = Math.min(100, Math.round((usedChars / MATERIAL_TOTAL_CAP) * 100));
 
+  const handleCopyActiveMaterialsMarkdown = async () => {
+    if (activeReadyMaterials.length === 0) return;
+    const lines = [
+      `# L4 受控资料合集：${project.name} (${activeReadyMaterials.length} 份启用资料)`,
+      '',
+      ...activeReadyMaterials.map(
+        (m, idx) =>
+          `## 资料 #${idx + 1} (${m.id})\n${m.content ?? ''}`,
+      ),
+    ];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n\n'));
+      setCopiedBundle(true);
+      setTimeout(() => setCopiedBundle(false), 1800);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
+  const q = searchQuery.trim().toLowerCase();
+  const filteredList = (list ?? []).filter((m) => {
+    if (!q) return true;
+    return (
+      (m.content ?? '').toLowerCase().includes(q) ||
+      (m.sourceMessageId ?? '').toLowerCase().includes(q) ||
+      m.id.toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div
       className="ml-5 mr-1.5 mt-1 p-2 rounded border border-border/50 bg-bg/40"
@@ -266,6 +417,27 @@ export function ProjectMaterialsPanel({
               >
                 全停
               </button>
+              {activeReadyMaterials.length > 0 && (
+                <button
+                  type="button"
+                  data-testid="sidebar-materials-copy-md"
+                  onClick={() => void handleCopyActiveMaterialsMarkdown()}
+                  className="inline-flex items-center gap-0.5 rounded border border-border/60 bg-bg px-1 py-0.5 text-ui-2xs text-text-secondary hover:text-text"
+                  title="复制启用资料合集 Markdown"
+                >
+                  {copiedBundle ? (
+                    <>
+                      <Check className="w-2.5 h-2.5 text-emerald-500" />
+                      已复制
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-2.5 h-2.5" />
+                      复制资料 MD
+                    </>
+                  )}
+                </button>
+              )}
               <span className="tabular-nums text-muted">
                 {usedChars.toLocaleString()} / {MATERIAL_TOTAL_CAP.toLocaleString()} 字 ({usagePct}%)
               </span>
@@ -282,80 +454,94 @@ export function ProjectMaterialsPanel({
         </div>
       )}
 
+      {list && list.length > 0 && (
+        <div className="mb-1.5 relative">
+          <Search className="w-3 h-3 text-muted absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜索侧边栏资料内容或消息来源..."
+            data-testid="sidebar-materials-search-input"
+            className="w-full text-ui-2xs pl-5 pr-1.5 py-0.5 rounded border border-border bg-bg"
+          />
+        </div>
+      )}
+
       {isLoading ? (
         <div className="text-ui-2xs text-muted py-1" data-testid="project-materials-loading">
           {t('sider.project.materials_loading')}
         </div>
       ) : list && list.length > 0 ? (
         <ul className="space-y-1" data-testid="project-material-list">
-          {list.map((m) => {
+          {filteredList.map((m) => {
             const enabled = isMaterialEnabled(m);
             return (
-            <li
-              key={m.id}
-              data-testid="project-material-row"
-              data-status={m.status}
-              data-enabled={String(enabled)}
-              className={`flex items-start gap-1.5 px-1.5 py-1 rounded bg-bg/60 border border-border/30 transition-opacity ${
-                enabled ? '' : 'opacity-60'
-              }`}
-            >
-              <button
-                type="button"
-                data-testid="project-material-toggle"
-                aria-pressed={enabled}
-                aria-label={enabled ? '暂停注入此资料' : '启用注入此资料'}
-                title={enabled ? '已参与本轮上下文注入（点击暂停）' : '已暂停注入（点击启用）'}
-                disabled={togglingId === m.id}
-                onClick={() => void handleToggleMaterial(m)}
-                className="mt-0.5 shrink-0 inline-flex items-center justify-center text-muted hover:text-primary disabled:opacity-40"
+              <li
+                key={m.id}
+                data-testid="project-material-row"
+                data-status={m.status}
+                data-enabled={String(enabled)}
+                className={`flex items-start gap-1.5 px-1.5 py-1 rounded bg-bg/60 border border-border/30 transition-opacity ${
+                  enabled ? '' : 'opacity-60'
+                }`}
               >
-                {enabled ? (
-                  <CheckSquare className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
-                ) : (
-                  <Square className="w-3.5 h-3.5" aria-hidden="true" />
-                )}
-              </button>
-              <FileText className="w-3 h-3 mt-0.5 shrink-0 text-muted" aria-hidden="true" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 text-ui-2xs">
-                  <MaterialStatusBadge status={m.status} />
-                  <span className="text-muted truncate">
-                    {m.sourceMessageId
-                      ? t('sider.project.material_from_message').replace('{id}', m.sourceMessageId)
-                      : t('sider.project.material_direct')}
-                  </span>
-                  <span className="text-muted/60 tabular-nums ml-auto">
-                    {formatRelativeTime(m.createdAt)}
-                  </span>
+                <button
+                  type="button"
+                  data-testid="project-material-toggle"
+                  aria-pressed={enabled}
+                  aria-label={enabled ? '暂停注入此资料' : '启用注入此资料'}
+                  title={enabled ? '已参与本轮上下文注入（点击暂停）' : '已暂停注入（点击启用）'}
+                  disabled={togglingId === m.id}
+                  onClick={() => void handleToggleMaterial(m)}
+                  className="mt-0.5 shrink-0 inline-flex items-center justify-center text-muted hover:text-primary disabled:opacity-40"
+                >
+                  {enabled ? (
+                    <CheckSquare className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
+                  ) : (
+                    <Square className="w-3.5 h-3.5" aria-hidden="true" />
+                  )}
+                </button>
+                <FileText className="w-3 h-3 mt-0.5 shrink-0 text-muted" aria-hidden="true" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 text-ui-2xs">
+                    <MaterialStatusBadge status={m.status} />
+                    <span className="text-muted truncate">
+                      {m.sourceMessageId
+                        ? t('sider.project.material_from_message').replace('{id}', m.sourceMessageId)
+                        : t('sider.project.material_direct')}
+                    </span>
+                    <span className="text-muted/60 tabular-nums ml-auto">
+                      {formatRelativeTime(m.createdAt)}
+                    </span>
+                  </div>
+                  {m.status === 'failed' && m.errorMessage && (
+                    <div
+                      className="text-ui-2xs text-warning mt-0.5 truncate"
+                      title={m.errorMessage}
+                      data-testid="project-material-error"
+                    >
+                      {m.errorMessage}
+                    </div>
+                  )}
+                  {m.status === 'ready' && m.content && (
+                    <div className="text-ui-2xs text-text-secondary mt-0.5 line-clamp-2">
+                      {m.content.slice(0, 120)}
+                      {m.content.length > 120 ? '…' : ''}
+                    </div>
+                  )}
                 </div>
-                {m.status === 'failed' && m.errorMessage && (
-                  <div
-                    className="text-ui-2xs text-warning mt-0.5 truncate"
-                    title={m.errorMessage}
-                    data-testid="project-material-error"
-                  >
-                    {m.errorMessage}
-                  </div>
-                )}
-                {m.status === 'ready' && m.content && (
-                  <div className="text-ui-2xs text-text-secondary mt-0.5 line-clamp-2">
-                    {m.content.slice(0, 120)}
-                    {m.content.length > 120 ? '…' : ''}
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                data-testid="project-material-remove"
-                aria-label={t('sider.project.material_remove')}
-                disabled={removingMaterialId === m.id}
-                onClick={() => onRemoveMaterial(project, m.id)}
-                className="shrink-0 inline-flex items-center justify-center w-4 h-4 rounded text-muted hover:text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <Trash2 className="w-3 h-3" aria-hidden="true" />
-              </button>
-            </li>
+                <button
+                  type="button"
+                  data-testid="project-material-remove"
+                  aria-label={t('sider.project.material_remove')}
+                  disabled={removingMaterialId === m.id}
+                  onClick={() => onRemoveMaterial(project, m.id)}
+                  className="shrink-0 inline-flex items-center justify-center w-4 h-4 rounded text-muted hover:text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Trash2 className="w-3 h-3" aria-hidden="true" />
+                </button>
+              </li>
             );
           })}
         </ul>
