@@ -712,6 +712,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
               savingProfile={savingProfile}
               onAddEntry={handleAddProfileEntry}
               onDeleteEntry={handleDeleteProfileEntry}
+              onRefreshProfile={() => void loadActiveProfile(activeProject.path)}
             />
           )}
 

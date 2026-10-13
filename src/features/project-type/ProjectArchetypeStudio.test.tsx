@@ -351,6 +351,7 @@ describe('ProjectArchetypeStudio', () => {
     expect(await screen.findByTestId('workspace-charter-status-badge')).toBeInTheDocument();
     expect(screen.getByTestId('overview-quick-checkpoint-btn')).toBeInTheDocument();
     expect(await screen.findByTestId('project-advisor-card')).toBeInTheDocument();
+    expect(screen.getByTestId('wiki-generation-panel')).toBeInTheDocument();
 
     // Quick import default constraints from ConstraintSummaryWidget empty state
     fireEvent.click(await screen.findByTestId('constraint-summary-quick-import'));
@@ -446,6 +447,8 @@ describe('ProjectArchetypeStudio', () => {
     fireEvent.click(screen.getByTestId('studio-tab-materials'));
     await waitFor(() => {
       expect(screen.getByTestId('project-materials-studio-panel')).toBeInTheDocument();
+      expect(screen.getByTestId('semantic-search-panel')).toBeInTheDocument();
+      expect(screen.getByTestId('semantic-stats-refresh-btn')).toBeInTheDocument();
     });
     fireEvent.change(screen.getByTestId('studio-material-file-input'), {
       target: { value: '01_literature/references.bib' },

@@ -1,5 +1,6 @@
 import { MessageSquarePlus, RotateCcw } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { useI18n } from '../../shared/lib/i18n';
 import { ContextMeter } from '../../widgets/chat/ContextMeter';
@@ -42,6 +43,7 @@ export function ChatHeaderBar({
   unseenArtifactCount,
 }: ChatHeaderBarProps) {
   const { t } = useI18n();
+  const navigate = useNavigate();
 
   return (
     <div
@@ -51,7 +53,7 @@ export function ChatHeaderBar({
     >
       <div className="flex items-center gap-2 min-w-0 flex-wrap">
         <h2 className="text-ui-sm font-semibold text-text shrink-0">对话</h2>
-        <ProjectBadge workspacePath={workspacePath} />
+        <ProjectBadge workspacePath={workspacePath} onOpenWorkbench={() => navigate('/projects')} />
         <WorkspaceBranchPicker sessionId={currentSessionId} />
         <SessionUsageBadge sessionId={currentSessionId} />
       </div>
