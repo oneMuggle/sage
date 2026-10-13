@@ -89,6 +89,27 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'streaming 流式 逐字 输出',
   },
   {
+    key: 'llmRetryMaxAttempts',
+    tab: 'basic',
+    label: '最大重试次数',
+    labelEn: 'Max retry attempts',
+    keywords: 'llm retry max attempts 重试 次数 最大 自动重试',
+  },
+  {
+    key: 'llmRetryBaseDelayS',
+    tab: 'basic',
+    label: '退避基数（秒）',
+    labelEn: 'Retry base delay (s)',
+    keywords: 'llm retry base delay 退避 基数 秒 指数退避',
+  },
+  {
+    key: 'llmRetryMaxDelayS',
+    tab: 'basic',
+    label: '最大退避（秒）',
+    labelEn: 'Max retry delay (s)',
+    keywords: 'llm retry max delay 最大 退避 上限 秒',
+  },
+  {
     key: 'timezone',
     tab: 'basic',
     label: 'IANA 时区',

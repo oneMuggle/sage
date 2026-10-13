@@ -133,7 +133,6 @@ export async function cancelSessionStream(sid: string): Promise<boolean> {
   return true;
 }
 
-
 export function applyTransparencyAndToolEvents(
   evt: AgentEvent,
   ctx: {
@@ -180,11 +179,7 @@ export function applyTransparencyAndToolEvents(
         budget_tokens: evt.context_pressure.budget_tokens,
       });
     } else {
-      logger.warn(
-        requestId,
-        'TM2.context_pressure.malformed',
-        evt.context_pressure,
-      );
+      logger.warn(requestId, 'TM2.context_pressure.malformed', evt.context_pressure);
     }
   }
   if (evt.state === 'compact_triggered' && evt.compact) {
@@ -270,10 +265,7 @@ export function applyTransparencyAndToolEvents(
     const tr = evt.tool_result;
     // HIGH-3: 用 tr.tool_call_id 查找匹配项;fallback 到最后一个 (兼容无 id 场景)
     const targetId = tr.tool_call_id;
-    const currentTcs = selectSessionSlots(
-      useChatStreamStore.getState(),
-      sid,
-    ).streamingToolCalls;
+    const currentTcs = selectSessionSlots(useChatStreamStore.getState(), sid).streamingToolCalls;
     const targetIdx = targetId
       ? currentTcs.findIndex((t) => t.id === targetId)
       : currentTcs.length - 1;
@@ -320,7 +312,6 @@ export function applyTransparencyAndToolEvents(
         );
     }
   }
-
 }
 
 export function useChatReattachAndBtw(params: {
@@ -456,13 +447,32 @@ export function useChatReattachAndBtw(params: {
             if (applyOrchestrationEventToBoard(evt, sid)) {
               return;
             }
+            // 2026-10-13: 重接路径同步处理 LLM 重试事件 — 在消息气泡内
+            // 显示动态重试提示（与主路径 useChat.ts 同格式）。
+            if (evt.state === 'retry' && evt.retry_info) {
+              const info = evt.retry_info;
+              const errorLabel: Record<string, string> = {
+                timeout: '请求超时',
+                network_error: '网络错误',
+                server_error: '服务端错误',
+                rate_limited: '频率限制',
+                auth_failed: '认证失败',
+                parsing_error: '响应解析失败',
+                context_overflow: '上下文溢出',
+                unknown: '未知错误',
+              };
+              const reason = errorLabel[info.error_type] ?? info.error_type;
+              const delayText =
+                info.delay >= 1 ? `${Math.round(info.delay)}` : info.delay.toFixed(1);
+              const retryText = `🔄 重试中 (${info.attempt}/${info.max_attempts}) | 原因: ${reason} | 等待 ${delayText}秒`;
+              useChatStreamStore.getState().replaceContent(sid, messageId, retryText);
+              useChatStreamStore.getState().setStreamingMeta(sid, messageId, { state: evt.state });
+              return;
+            }
             // r77: 重接路径补 memory_used —— 重放时 memory_refs 不丢失（与主路径同口径）
             // R87/R97: 载荷校验走共享 helper（transparencyPayload.ts）
             if (evt.state === 'memory_used' && evt.memories) {
-              if (
-                isValidMemoriesPayload(evt.memories) &&
-                evt.memories.length > 0
-              ) {
+              if (isValidMemoriesPayload(evt.memories) && evt.memories.length > 0) {
                 updateMessage(messageId, {
                   memory_refs: evt.memories,
                   memory_applied: evt.memories.length,

@@ -23,9 +23,9 @@ pytestmark = pytest.mark.unit
 # ---------------------- 枚举值 & 字符串继承 ----------------------
 
 
-def test_agent_state_enum_has_ten_states():
-    """状态机应有 11 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
-    CONTENT_DELTA/PERMISSION_REQUEST/ASK_USER_QUESTION/STEP_DONE/DONE/FAILED。
+def test_agent_state_enum_has_twelve_states():
+    """状态机应有 12 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
+    CONTENT_DELTA/RETRY/PERMISSION_REQUEST/ASK_USER_QUESTION/STEP_DONE/DONE/FAILED。
 
     CONTENT_DELTA 由 I4 引入,用于流式 LLM 响应 — 每个 token chunk 推一个
     CONTENT_DELTA 事件,前端 appendContent 累积实现逐字渲染。
@@ -36,8 +36,10 @@ def test_agent_state_enum_has_ten_states():
     提问时携带 user_question 字段,前端渲染提问对话框。
     STEP_DONE 由 step-by-step ReAct 引入 — 每个 ReAct 迭代完成时触发,
     前端据此快照当前步骤为独立气泡。
+    RETRY 由 LLM 重试可见性引入 — LLM 请求失败触发自动重试时推送,
+    前端渲染"重试中"提示。
     """
-    assert len(AgentState) == 11
+    assert len(AgentState) == 12
 
 
 def test_agent_state_enum_string_inheritance():
@@ -77,6 +79,7 @@ def test_agent_state_iteration_order():
         "acting",
         "observing",
         "content_delta",
+        "retry",  # 2026-10-13: LLM 重试可见性
         "permission_request",  # M1 工具安全加固
         "ask_user_question",  # M2 part B: AskUserQuestion
         "step_done",  # step-by-step ReAct: 每步完成信号
