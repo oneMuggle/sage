@@ -455,3 +455,19 @@
      - 在 `MilestoneProgressWidget`（`data-testid="milestone-progress-widget"`）中为最近里程碑条目增加中文生命周期阶段胶囊（`data-testid="milestone-summary-stage-{id}"`）与手动刷新按钮（`data-testid="milestone-summary-refresh-btn"`）。
   4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
      - 新增 `constraint-summary-refresh-btn`、`milestone-summary-refresh-btn`、`milestone-summary-stage-ms-1`、`semantic-query-presets`、`semantic-preset-0` 及 `semantic-copy-all-btn` 端到端测试断言。
+### Phase P26：四形态约束规则内容模板、里程碑交付物模板与相对截止日期、Git 状态报告导出、创建向导 L2 目标/指令双预设（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **约束编辑器四形态规则示例模板与全局触发快捷按钮（`src/features/project-type/ConstraintEditor.tsx`）**：
+     - 为 15 类约束规则预设胶囊补充中文名称标注，并新增四大形态规则内容示例模板栏（`data-testid="constraint-editor-content-presets"` / `data-testid="constraint-content-preset-{idx}"`），支持一键填入推荐类别、规则正文与推荐优先级；
+     - 在目录触发预设栏新增 `always (全局)` 按钮（`data-testid="constraint-glob-always-btn"`），便于从子目录 Glob 快速切回全局生效。
+  2. **里程碑编辑器四形态节点交付物模板与快捷相对截止日期（`src/features/project-type/MilestoneEditor.tsx`）**：
+     - 新增四大形态里程碑节点模板胶囊栏（`data-testid="milestone-editor-templates"` / `data-testid="milestone-template-{idx}"`），一键填充阶段性标题、交付物描述、生命周期阶段 ID 与排序权重；
+     - 在截止日期输入框下方新增相对日期快捷胶囊（`+3天`、`+7天`、`+14天`、`+30天` 与 `清空`，`data-testid="milestone-due-presets"` / `data-testid="milestone-due-plus-{days}"` / `data-testid="milestone-due-clear"`）。
+  3. **Git 仓库状态与近期提交 Markdown 报告一键导出（`src/features/project-type/GitStatusWidget.tsx`）**：
+     - 在 `GitStatusWidget` 标题栏新增「复制报告」按钮（`data-testid="git-status-copy-md-btn"`），支持将当前分支、已暂存/已修改/未跟踪文件列表及最近 5 条提交记录一键格式化为结构化 Markdown。
+  4. **项目创建向导确认步 L2 目标与系统指令双输入框及四形态快捷预设（`src/features/project-type/ProjectCreationWizard.tsx`）**：
+     - 在向导第 3 步（确认信息）新增 L2 系统高优指令输入框（`data-testid="wizard-instructions-input"`）与四大形态目标/指令预设胶囊（`data-testid="wizard-goal-presets"` / `data-testid="wizard-goal-preset-{idx}"`），并在创建项目时将 `description` 与 `instructions` 同步写入项目 L2 上下文管线。
+  5. **单元测试与门禁加固（`ConstraintSummaryWidget.test.tsx` & `MilestoneProgressWidget.test.tsx`）**：
+     - 新增 `ConstraintEditor`、`GitStatusWidget`、`MilestoneEditor` 与 `ProjectCreationWizard` 的 Phase P26 交互单测断言。
