@@ -240,4 +240,54 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(copyAdvisorBtn);
     expect(screen.getByTestId('advisor-copy-md-btn')).toHaveTextContent(/已复制|复制诊断/);
   });
+
+  it('supports ConstraintSummaryWidget top-priority preview toggle, active rules Markdown export, and ProjectAdvisorCard M3 Risk -> Constraint closed loop (Phase P30)', async () => {
+    mockListConstraints.mockResolvedValue([
+      {
+        id: 'c-p30-1',
+        projectId: 'test-project',
+        category: 'security',
+        content: '严禁将明文密钥提交至版本库',
+        triggerPattern: 'src/**',
+        priority: 9,
+        enabled: true,
+        createdAt: 1000,
+        updatedAt: 1000,
+      },
+    ]);
+
+    render(
+      <>
+        <ConstraintSummaryWidget projectId="test-project" projectType="coding" />
+        <ProjectAdvisorCard projectId="test-project" />
+      </>,
+    );
+
+    const copyRulesBtn = await screen.findByTestId('constraint-summary-copy-md-btn');
+    fireEvent.click(copyRulesBtn);
+    expect(screen.getByTestId('constraint-summary-copy-md-btn')).toHaveTextContent(/已复制|复制规则/);
+
+    const previewToggle = screen.getByTestId('constraint-summary-preview-toggle');
+    fireEvent.click(previewToggle);
+    expect(screen.getByTestId('constraint-summary-preview-list')).toHaveTextContent(
+      '严禁将明文密钥提交至版本库',
+    );
+
+    // Expand ProjectAdvisorCard details and convert risk #0 to AI constraint
+    const toggleDetails = await screen.findByTestId('advisor-toggle-details-btn');
+    fireEvent.click(toggleDetails);
+    const guardBtn = screen.getByTestId('advisor-risk-to-constraint-0');
+    fireEvent.click(guardBtn);
+    await waitFor(() => {
+      expect(projectApi.createConstraint).toHaveBeenCalledWith(
+        'test-project',
+        expect.objectContaining({
+          category: 'risk_guard',
+          content: '部分文书未留存快照 — 防护规范：创建归档快照',
+          priority: 7,
+        }),
+      );
+      expect(screen.getByTestId('advisor-risk-to-constraint-0')).toHaveTextContent('已固化约束');
+    });
+  });
 });
