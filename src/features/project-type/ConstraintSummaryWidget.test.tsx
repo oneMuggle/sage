@@ -10,14 +10,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { projectApi } from '../../shared/api';
 
 import { ConstraintEditor } from './ConstraintEditor';
+import { ConstraintManager } from './ConstraintManager';
 import { ConstraintSummaryWidget } from './ConstraintSummaryWidget';
 import { GitStatusWidget } from './GitStatusWidget';
+import { ProjectAdvisorCard } from './ProjectAdvisorCard';
 
 // Mock projectApi
 vi.mock('../../shared/api', () => ({
   projectApi: {
     listConstraints: vi.fn(),
     createConstraint: vi.fn().mockResolvedValue({}),
+    getAdvice: vi.fn().mockResolvedValue({
+      healthScore: 86,
+      summary: '项目约束与阶段运转健康',
+      risks: [{ severity: 'medium', description: '部分文书未留存快照', suggestion: '创建归档快照' }],
+      suggestions: [{ priority: 'high', action: '补齐法务复核', reason: '提升合规完备度' }],
+      cachedAt: 1700000000,
+    }),
   },
 }));
 
@@ -189,5 +198,46 @@ describe('ConstraintSummaryWidget', () => {
     await waitFor(() => {
       expect(screen.getByTestId('git-status-copy-md-btn')).toHaveTextContent(/已复制|复制报告/);
     });
+  });
+
+  it('supports ConstraintManager sample glob pills, clear button, keyword search, and ProjectAdvisorCard markdown copy (Phase P27)', async () => {
+    mockListConstraints.mockResolvedValue([
+      {
+        id: 'c-glob-1',
+        projectId: 'test-project',
+        category: 'document_format',
+        content: '严格遵循 GB/T 9704 公文格式',
+        triggerPattern: '02_审校与修订过程/**',
+        priority: 8,
+        enabled: true,
+        createdAt: 1000,
+        updatedAt: 1000,
+      },
+    ]);
+
+    render(
+      <>
+        <ConstraintManager projectId="test-project" projectType="business" />
+        <ProjectAdvisorCard projectId="test-project" />
+      </>,
+    );
+
+    const sampleBtn = await screen.findByTestId('constraint-glob-sample-1');
+    fireEvent.click(sampleBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('constraint-glob-match-count')).toHaveTextContent('命中 1 条生效约束');
+    });
+
+    fireEvent.click(screen.getByTestId('constraint-glob-clear-btn'));
+    expect(screen.getByTestId('constraint-glob-test-input')).toHaveValue('');
+
+    fireEvent.change(screen.getByTestId('constraint-search-input'), {
+      target: { value: 'GB/T 9704' },
+    });
+    expect(screen.getByText('严格遵循 GB/T 9704 公文格式')).toBeInTheDocument();
+
+    const copyAdvisorBtn = await screen.findByTestId('advisor-copy-md-btn');
+    fireEvent.click(copyAdvisorBtn);
+    expect(screen.getByTestId('advisor-copy-md-btn')).toHaveTextContent(/已复制|复制诊断/);
   });
 });
