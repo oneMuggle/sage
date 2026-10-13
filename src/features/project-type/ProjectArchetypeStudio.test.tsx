@@ -29,6 +29,8 @@ const mockWikiExtractSymbols = vi.fn();
 const mockWikiGenerate = vi.fn();
 const mockExtractKnowledge = vi.fn();
 const mockConfirmKnowledge = vi.fn();
+const mockSemanticSearchMaterials = vi.fn();
+const mockReindexMaterial = vi.fn();
 const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
 const mockDeleteProjectProfile = vi.fn();
@@ -63,6 +65,8 @@ vi.mock('../../shared/api', () => ({
     wikiGenerate: (...args: unknown[]) => mockWikiGenerate(...args),
     extractKnowledge: (...args: unknown[]) => mockExtractKnowledge(...args),
     confirmKnowledge: (...args: unknown[]) => mockConfirmKnowledge(...args),
+    semanticSearchMaterials: (...args: unknown[]) => mockSemanticSearchMaterials(...args),
+    reindexMaterial: (...args: unknown[]) => mockReindexMaterial(...args),
   },
   memoryApi: {
     getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
@@ -130,6 +134,17 @@ beforeEach(() => {
     ],
   });
   mockConfirmKnowledge.mockResolvedValue({ addedCount: 1 });
+  mockSemanticSearchMaterials.mockResolvedValue({
+    results: [
+      {
+        materialId: 'mat-file-01',
+        chunkIndex: 0,
+        score: 0.92,
+        content: 'HotpotQA 基准上多跳召回率提升 6.4%',
+      },
+    ],
+  });
+  mockReindexMaterial.mockResolvedValue({ chunkCount: 3 });
   mockImportConstraints.mockResolvedValue([
     {
       id: 'c-imp-1',
@@ -403,6 +418,11 @@ describe('ProjectArchetypeStudio', () => {
       expect(mockImportConstraints).toHaveBeenCalledWith('proj-1', 'business');
     });
 
+    // Verify refresh buttons and stage badge on ConstraintSummaryWidget & MilestoneProgressWidget
+    expect(await screen.findByTestId('constraint-summary-refresh-btn')).toBeInTheDocument();
+    expect(await screen.findByTestId('milestone-summary-refresh-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('milestone-summary-stage-ms-1')).toBeInTheDocument();
+
     // Quick toggle milestone status from MilestoneProgressWidget
     fireEvent.click(await screen.findByTestId('milestone-quick-toggle-ms-1'));
     await waitFor(() => {
@@ -502,7 +522,15 @@ describe('ProjectArchetypeStudio', () => {
       expect(screen.getByTestId('project-materials-studio-panel')).toBeInTheDocument();
       expect(screen.getByTestId('semantic-search-panel')).toBeInTheDocument();
       expect(screen.getByTestId('semantic-stats-refresh-btn')).toBeInTheDocument();
+      expect(screen.getByTestId('semantic-query-presets')).toBeInTheDocument();
     });
+    fireEvent.click(screen.getByTestId('semantic-preset-0'));
+    expect(await screen.findByTestId('semantic-copy-all-btn')).toBeInTheDocument();
+    expect(mockSemanticSearchMaterials).toHaveBeenCalledWith(
+      'proj-1',
+      '基线模型对比与消融实验结果',
+      10,
+    );
     fireEvent.change(screen.getByTestId('studio-material-file-input'), {
       target: { value: '01_literature/references.bib' },
     });

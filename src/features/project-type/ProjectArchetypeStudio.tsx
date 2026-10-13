@@ -696,6 +696,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
             <StudioMaterialsTabPanel
               projectId={activeProject.id}
               projectPath={activeProject.path}
+              projectType={activeProjectType}
             />
           )}
 

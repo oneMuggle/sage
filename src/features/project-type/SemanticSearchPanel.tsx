@@ -1,50 +1,72 @@
 /**
- * M4: 语义检索面板 (2026-10-12 / Phase P22 增强)
+ * M4: 语义检索面板 (2026-10-12 / Phase P22 跨项目同步 / Phase P25 四形态检索词预设与全量结果导出)
  *
  * 嵌入 StudioMaterialsTabPanel，提供语义检索入口：
- * - 输入框：输入查询文本
- * - 搜索按钮：调用后端语义检索 API
- * - 结果展示：显示匹配的 chunks（按相关性排序），支持一键复制片段
+ * - 四形态快捷检索词预设胶囊：一键触发当前形态高频语义查询
+ * - 输入框 + 搜索按钮：调用后端语义检索 API
+ * - 结果展示：显示匹配的 chunks（按相关性排序），支持单条复制与全量结果 Markdown 导出
  * - 索引状态：随项目切换自动同步索引统计，支持手动刷新统计
  */
 
-import { Search, Loader2, FileText, AlertCircle, Copy, Check, RefreshCw } from 'lucide-react';
+import { Search, Loader2, FileText, AlertCircle, Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi } from '../../shared/api';
-import type { SemanticSearchHit, IndexingStats } from '../../shared/api';
+import type { SemanticSearchHit, IndexingStats, ProjectType } from '../../shared/api';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 
+const SEMANTIC_QUERY_PRESETS: Record<ProjectType, string[]> = {
+  coding: ['核心架构与 IPC 通信边界', '错误处理与异常恢复策略', '鉴权与权限校验逻辑'],
+  business: ['违约责任与赔偿上限条款', '付款节点与发票开具约定', '保密期限与争议管辖法院'],
+  research: ['基线模型对比与消融实验结果', '核心假设与研究问题 (RQ)', '数据集划分与超参数设置'],
+  personal: ['核心概念定义与双链笔记', '待办行动项 (Next Actions)', '读书摘录与关键启发'],
+};
+
 export interface SemanticSearchPanelProps {
   projectId: string;
+  projectType?: ProjectType;
 }
 
-export function SemanticSearchPanel({ projectId }: SemanticSearchPanelProps) {
+export function SemanticSearchPanel({
+  projectId,
+  projectType = 'coding',
+}: SemanticSearchPanelProps) {
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<SemanticSearchHit[] | null>(null);
   const [stats, setStats] = useState<IndexingStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+  const [copiedAll, setCopiedAll] = useState(false);
+
+  const presets = SEMANTIC_QUERY_PRESETS[projectType] ?? SEMANTIC_QUERY_PRESETS.coding;
 
   /** 执行语义检索 */
+  const runSearch = useCallback(
+    async (targetQuery: string) => {
+      const trimmed = targetQuery.trim();
+      if (!trimmed || searching || typeof projectApi?.semanticSearchMaterials !== 'function') {
+        return;
+      }
+      setSearching(true);
+      setError(null);
+      setResults(null);
+      try {
+        const result = await projectApi.semanticSearchMaterials(projectId, trimmed, 10);
+        setResults(result.results);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '语义检索失败');
+      } finally {
+        setSearching(false);
+      }
+    },
+    [projectId, searching],
+  );
+
   const handleSearch = useCallback(async () => {
-    if (!query.trim() || searching || typeof projectApi?.semanticSearchMaterials !== 'function') {
-      return;
-    }
-    setSearching(true);
-    setError(null);
-    setResults(null);
-    try {
-      const result = await projectApi.semanticSearchMaterials(projectId, query.trim(), 10);
-      setResults(result.results);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '语义检索失败');
-    } finally {
-      setSearching(false);
-    }
-  }, [projectId, query, searching]);
+    await runSearch(query);
+  }, [query, runSearch]);
 
   /** 加载索引统计 */
   const loadStats = useCallback(async () => {
@@ -63,6 +85,26 @@ export function SemanticSearchPanel({ projectId }: SemanticSearchPanelProps) {
       await navigator.clipboard?.writeText(content);
       setCopiedIdx(idx);
       setTimeout(() => setCopiedIdx(null), 1500);
+    } catch {
+      // ignore in test env
+    }
+  };
+
+  /** 复制全部检索命中结果为 Markdown */
+  const handleCopyAllResults = async () => {
+    if (!results || results.length === 0) return;
+    const lines = [
+      `# M4 语义检索结果（查询：${query}）`,
+      '',
+      ...results.map(
+        (hit, i) =>
+          `### ${i + 1}. 材料 ${hit.materialId.slice(0, 8)} (chunk #${hit.chunkIndex} · 相似度 ${(hit.score * 100).toFixed(1)}%)\n${hit.content}`,
+      ),
+    ];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n\n'));
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 2000);
     } catch {
       // ignore in test env
     }
@@ -139,6 +181,29 @@ export function SemanticSearchPanel({ projectId }: SemanticSearchPanelProps) {
         </div>
       )}
 
+      {/* 四形态推荐检索词预设 */}
+      <div className="flex flex-wrap items-center gap-1.5" data-testid="semantic-query-presets">
+        <span className="inline-flex items-center gap-1 text-ui-2xs text-muted-foreground">
+          <Sparkles className="h-3 w-3 text-primary" />
+          快捷检索预设：
+        </span>
+        {presets.map((presetText, idx) => (
+          <button
+            key={presetText}
+            type="button"
+            disabled={searching}
+            data-testid={`semantic-preset-${idx}`}
+            onClick={() => {
+              setQuery(presetText);
+              void runSearch(presetText);
+            }}
+            className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs text-primary hover:bg-primary/10 disabled:opacity-50"
+          >
+            {presetText}
+          </button>
+        ))}
+      </div>
+
       {/* 错误 */}
       {error && (
         <div className="flex items-start gap-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -183,7 +248,27 @@ export function SemanticSearchPanel({ projectId }: SemanticSearchPanelProps) {
             </div>
           ) : (
             <>
-              <div className="text-xs text-muted-foreground">找到 {results.length} 个相关片段</div>
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>找到 {results.length} 个相关片段</span>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyAllResults()}
+                  data-testid="semantic-copy-all-btn"
+                  className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                >
+                  {copiedAll ? (
+                    <>
+                      <Check className="h-3 w-3 text-emerald-500" />
+                      已复制全部结果
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3 w-3 text-primary" />
+                      复制全部检索结果
+                    </>
+                  )}
+                </button>
+              </div>
               <div className="max-h-80 space-y-2 overflow-y-auto">
                 {results.map((hit, idx) => (
                   <div

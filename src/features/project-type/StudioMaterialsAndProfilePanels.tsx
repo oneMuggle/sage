@@ -2,7 +2,7 @@
  * Phase P9 & P10: 多态项目工作台 L1 项目总纲 (SAGE.md) + L4 受控资料库 + L3 项目记忆画像 + L5 只读白名单面板
  */
 
-import { Check, CheckCircle2, Copy, Eye, FilePlus2, FileText, FolderLock, History, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { Check, CheckCircle2, Copy, Eye, FilePlus2, FileText, FolderLock, History, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -82,15 +82,7 @@ export function StudioCharterTabPanel({
   };
 
   const handleCopyCharterMarkdown = async () => {
-    const lines = [
-      `# L1 项目总纲 (${projectPath}/SAGE.md)`,
-      '',
-      draft || '（未填写）',
-      '',
-      '## L2 项目目标与高优系统指令',
-      `- **项目目标**: ${descriptionDraft || '（未设置）'}`,
-      `- **系统指令**: ${instructionsDraft || '（未设置）'}`,
-    ];
+    const lines = [`# L1 项目总纲 (${projectPath}/SAGE.md)`, '', draft || '（未填写）', '', '## L2 项目目标与高优系统指令', `- **项目目标**: ${descriptionDraft || '（未设置）'}`, `- **系统指令**: ${instructionsDraft || '（未设置）'}`];
     try {
       await navigator.clipboard?.writeText(lines.join('\n'));
       setCopiedCharter(true);
@@ -363,11 +355,7 @@ export function StudioAllowedPathsTabPanel({
   const presets = ALLOWED_PATH_PRESETS[projectType] ?? ALLOWED_PATH_PRESETS.coding;
 
   const handleCopyAllowedPaths = async () => {
-    const lines = [
-      `# L5 跨目录只读白名单 (${projectPath})`,
-      '',
-      ...allowedPaths.map((p) => `- \`${p}\``),
-    ];
+    const lines = [`# L5 跨目录只读白名单 (${projectPath})`, '', ...allowedPaths.map((p) => `- \`${p}\``)];
     try {
       await navigator.clipboard?.writeText(lines.join('\n'));
       setCopiedPaths(true);
@@ -391,17 +379,8 @@ export function StudioAllowedPathsTabPanel({
               data-testid="allowed-paths-copy-md-btn"
               className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
             >
-              {copiedPaths ? (
-                <>
-                  <Check className="h-3 w-3 text-emerald-500" />
-                  已复制白名单
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3 w-3 text-primary" />
-                  复制白名单配置
-                </>
-              )}
+              {copiedPaths ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 text-primary" />}
+              {copiedPaths ? '已复制白名单' : '复制白名单配置'}
             </button>
           )}
         </div>
@@ -489,9 +468,14 @@ export function StudioAllowedPathsTabPanel({
 export interface StudioMaterialsTabPanelProps {
   projectId: string;
   projectPath: string;
+  projectType?: ProjectType;
 }
 
-export function StudioMaterialsTabPanel({ projectId, projectPath }: StudioMaterialsTabPanelProps) {
+export function StudioMaterialsTabPanel({
+  projectId,
+  projectPath,
+  projectType = 'coding',
+}: StudioMaterialsTabPanelProps) {
   const [materials, setMaterials] = useState<ProjectMaterial[]>([]);
   const [discoverablePaths, setDiscoverablePaths] = useState<string[]>([]);
   const [filePathInput, setFilePathInput] = useState('');
@@ -503,11 +487,7 @@ export function StudioMaterialsTabPanel({ projectId, projectPath }: StudioMateri
 
   const handleCopyMaterialsMarkdown = async () => {
     const enabledItems = materials.filter((m) => m.enabled !== false);
-    const lines = [
-      `# L4 生效受控资料摘要 (${projectPath})`,
-      '',
-      ...enabledItems.map((m, i) => `### ${i + 1}. ${m.id}\n${m.content}`),
-    ];
+    const lines = [`# L4 生效受控资料摘要 (${projectPath})`, '', ...enabledItems.map((m, i) => `### ${i + 1}. ${m.id}\n${m.content}`)];
     try {
       await navigator.clipboard?.writeText(lines.join('\n\n'));
       setCopiedMaterials(true);
@@ -605,6 +585,16 @@ export function StudioMaterialsTabPanel({ projectId, projectPath }: StudioMateri
     if (typeof projectApi?.removeMaterial !== 'function') return;
     try {
       await projectApi.removeMaterial(projectId, materialId);
+      await loadMaterials();
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleReindexMaterial = async (materialId: string) => {
+    if (typeof projectApi?.reindexMaterial !== 'function') return;
+    try {
+      await projectApi.reindexMaterial(projectId, materialId);
       await loadMaterials();
     } catch {
       // ignore
@@ -744,6 +734,16 @@ export function StudioMaterialsTabPanel({ projectId, projectPath }: StudioMateri
                   <div className="flex items-center gap-1 shrink-0">
                     <button
                       type="button"
+                      onClick={() => void handleReindexMaterial(m.id)}
+                      data-testid={`studio-material-reindex-${m.id}`}
+                      title="重建该资料向量索引"
+                      className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" />
+                      重建索引
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setPreviewMaterialId(isPreviewOpen ? null : m.id)}
                       data-testid={`studio-material-preview-toggle-${m.id}`}
                       className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
@@ -777,7 +777,7 @@ export function StudioMaterialsTabPanel({ projectId, projectPath }: StudioMateri
       )}
 
       {/* M4: 语义检索面板 (2026-10-12) */}
-      <SemanticSearchPanel projectId={projectId} />
+      <SemanticSearchPanel projectId={projectId} projectType={projectType} />
     </div>
   );
 }
