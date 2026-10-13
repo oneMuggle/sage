@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -19,7 +19,7 @@ class DesignSystem(BaseModel):
     design_md: str
     tokens_css: str
     design_tokens: dict
-    tags: list[str]
+    tags: List[str]
 
 
 class DesignTemplate(BaseModel):
@@ -32,8 +32,8 @@ class DesignTemplate(BaseModel):
     kind: Literal["prototype", "deck"]
     description: str
     skill_md: str
-    example_html: str | None = None
-    assets: dict[str, str]
+    example_html: Optional[str] = None
+    assets: Dict[str, str]
     design_system_required: bool
 
 
@@ -66,7 +66,7 @@ class DesignArtifact(BaseModel):
     title: str
     file_path: str
     kind: Literal["html", "deck", "standalone"]
-    export_formats: list[str]
+    export_formats: List[str]
     source_prompt: str
     created_at: datetime
 
@@ -80,7 +80,7 @@ class DesignGenerateRequest(BaseModel):
     brief: str
     system_id: str
     template_id: str
-    model_id: str | None = None
+    model_id: Optional[str] = None
 
 
 class DesignIterateRequest(BaseModel):
@@ -90,7 +90,7 @@ class DesignIterateRequest(BaseModel):
 
     project_id: str
     feedback: str
-    model_id: str | None = None
+    model_id: Optional[str] = None
 
 
 class DesignExportRequest(BaseModel):

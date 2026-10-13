@@ -613,6 +613,7 @@ async def lifespan(app: FastAPI):
         from backend.design.generator import DesignGenerator
         from backend.design.systems import DesignSystemRegistry
         from backend.design.templates import DesignTemplateRegistry
+        from backend.orchestration.llm_factory import build_llm_client_from_settings
 
         # 同 scheduled_tasks / arena 的约定：优先写 SAGE_USER_DATA_DIR，
         # 回退到 <cwd>/backend/data（打包后 Program Files 下不可写）。
@@ -622,7 +623,7 @@ async def lifespan(app: FastAPI):
         )
         design_studio = DesignStudio(
             repo=DesignRepo(db.get_connection()),
-            generator=DesignGenerator(llm_client=HttpxLLMAdapter()),
+            generator=DesignGenerator(llm_client=build_llm_client_from_settings()),
             systems=DesignSystemRegistry(_design_content_dir),
             templates=DesignTemplateRegistry(_design_content_dir),
             workspace_dir=_design_workspace,
