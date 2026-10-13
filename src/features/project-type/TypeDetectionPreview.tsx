@@ -10,6 +10,8 @@ import { Sparkles, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 
 import type { ProjectType, ProjectTypeDetectionResult } from '../../shared/api';
 
+import { getArchetypeBlueprint } from './archetypeBlueprints';
+
 export interface TypeDetectionPreviewProps {
   /** 检测结果，null 表示未检测或检测中 */
   result: ProjectTypeDetectionResult | null;
@@ -19,6 +21,8 @@ export interface TypeDetectionPreviewProps {
   error?: string | null;
   /** 当前选中的类型（用于高亮匹配项） */
   selectedType?: ProjectType | null;
+  /** 一键应用检测到的项目类型回调 */
+  onApplyDetectedType?: (type: ProjectType) => void;
   /** 自定义 className */
   className?: string;
 }
@@ -42,6 +46,7 @@ export function TypeDetectionPreview({
   loading = false,
   error = null,
   selectedType,
+  onApplyDetectedType,
   className,
 }: TypeDetectionPreviewProps) {
   if (loading) {
@@ -70,6 +75,7 @@ export function TypeDetectionPreview({
   const detectedColor = TYPE_COLORS[result.detectedType];
   const confidencePercent = Math.round(result.confidence * 100);
   const isMatch = selectedType === result.detectedType;
+  const detectedBlueprint = getArchetypeBlueprint(result.detectedType);
 
   return (
     <div
@@ -86,7 +92,20 @@ export function TypeDetectionPreview({
           <span className={detectedColor}>{detectedLabel}</span>
         </span>
         <span className="text-xs text-muted-foreground">(置信度 {confidencePercent}%)</span>
-        {isMatch && <CheckCircle2 className="ml-auto h-4 w-4 text-green-500" />}
+        {isMatch ? (
+          <CheckCircle2 className="ml-auto h-4 w-4 text-green-500" />
+        ) : (
+          onApplyDetectedType && (
+            <button
+              type="button"
+              data-testid="apply-detected-type-btn"
+              onClick={() => onApplyDetectedType(result.detectedType)}
+              className="ml-auto rounded border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20"
+            >
+              一键采用检测形态
+            </button>
+          )
+        )}
       </div>
 
       {result.signals.length > 0 && (
@@ -101,6 +120,26 @@ export function TypeDetectionPreview({
           </ul>
         </div>
       )}
+
+      <div
+        className="mt-2 rounded border border-border/60 bg-background/60 p-2 text-xs text-muted-foreground space-y-1"
+        data-testid="detection-blueprint-preview"
+      >
+        <div>
+          推荐版本策略：<span className="font-medium text-foreground">{detectedBlueprint.vcsLabel}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          <span>推荐标准目录：</span>
+          {detectedBlueprint.directories.map((dir) => (
+            <span
+              key={dir}
+              className="rounded border border-border bg-muted/40 px-1.5 py-0.5 font-mono text-ui-2xs text-foreground"
+            >
+              {dir}/
+            </span>
+          ))}
+        </div>
+      </div>
 
       {confidencePercent < 50 && (
         <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">

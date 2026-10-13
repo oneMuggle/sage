@@ -241,6 +241,11 @@ export const projectRoutes: Record<string, CommandRoute> = {
     path: (a) =>
       `/api/v1/projects/${projectId(a)}/checkpoints/${enc(a.checkpointId ?? a.checkpoint_id)}`,
   },
+  projects_delete_checkpoint: {
+    method: 'DELETE',
+    path: (a) =>
+      `/api/v1/projects/${projectId(a)}/checkpoints/${enc(a.checkpointId ?? a.checkpoint_id)}`,
+  },
   projects_restore_checkpoint: {
     method: 'POST',
     path: (a) =>
@@ -260,5 +265,83 @@ export const projectRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/projects/${encodeURIComponent(String(a.id))}/materials/save-answer`,
     body: (a) => ({ message_id: a.message_id }),
+  },
+
+  // ---- AI 任务分解 M1 (2026-10-12) -------------------------------------------
+  projects_decompose_preview: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/ai/decompose-tasks/preview`,
+    body: (a) => {
+      const body: Record<string, unknown> = { requirement: a.requirement };
+      if (a.context !== undefined) body.context = a.context;
+      return body;
+    },
+  },
+  projects_decompose_apply: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/ai/decompose-tasks/apply`,
+    body: (a) => ({ milestones: a.milestones }),
+  },
+
+  // ---- AI 知识沉淀 M2 (2026-10-12) -------------------------------------------
+  projects_extract_knowledge: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/ai/extract-knowledge`,
+    body: (a) => {
+      const body: Record<string, unknown> = { session_id: a.sessionId };
+      if (a.maxMessages !== undefined) body.max_messages = a.maxMessages;
+      return body;
+    },
+  },
+  projects_confirm_knowledge: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/ai/extract-knowledge/confirm`,
+    body: (a) => ({ entries: a.entries }),
+  },
+
+  // ---- AI 项目顾问 M3 (2026-10-12) ------------------------------------------
+  projects_get_advice: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${projectId(a)}/ai/advice`,
+  },
+  projects_refresh_advice: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/ai/advice/refresh`,
+  },
+
+  // ---- AI 代码→Wiki 生成 M5 (2026-10-12) ------------------------------------
+  projects_wiki_generate: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/ai/wiki/generate`,
+    body: (a) => ({ incremental: a.incremental ?? false }),
+  },
+  projects_wiki_scan_files: {
+    method: 'GET',
+    path: (a) => {
+      const languages = a.languages ?? 'python';
+      return `/api/v1/projects/${projectId(a)}/ai/wiki/scan-files?languages=${encodeURIComponent(String(languages))}`;
+    },
+  },
+  projects_wiki_extract_symbols: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${projectId(a)}/ai/wiki/extract-symbols`,
+  },
+
+  // ---- M4: 语义检索 (2026-10-12) --------------------------------------------
+  projects_materials_search: {
+    method: 'GET',
+    path: (a) => {
+      const query = encodeURIComponent(String(a.query ?? ''));
+      const topK = a.topK ?? 5;
+      return `/api/v1/projects/${projectId(a)}/ai/materials/search?query=${query}&top_k=${topK}`;
+    },
+  },
+  projects_materials_indexing_stats: {
+    method: 'GET',
+    path: (a) => `/api/v1/projects/${projectId(a)}/ai/materials/indexing-stats`,
+  },
+  projects_material_reindex: {
+    method: 'POST',
+    path: (a) => `/api/v1/projects/${projectId(a)}/ai/materials/${a.materialId}/index`,
   },
 };

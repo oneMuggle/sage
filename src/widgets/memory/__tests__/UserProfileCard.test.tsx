@@ -1,9 +1,15 @@
 // src/widgets/memory/__tests__/UserProfileCard.test.tsx
-// 对标 S2: "关于我" 可编辑画像卡片 —— memoryApi 全 mock。
+// 对标 S2: "关于我" 可编辑画像卡片 + Phase P28 ProjectProfileCard 四类原型画像预设与搜索导出 —— memoryApi 全 mock。
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { UserProfileEntry, UserProfileResponse } from '../../../shared/api/types';
+import type {
+  ProjectProfileEntry,
+  ProjectProfileResponse,
+  UserProfileEntry,
+  UserProfileResponse,
+} from '../../../shared/api/types';
+import { ProjectProfileCard } from '../ProjectProfileCard';
 import { UserProfileCard } from '../UserProfileCard';
 
 const getUserProfile = vi.fn<() => Promise<UserProfileResponse>>();
@@ -12,6 +18,10 @@ const createUserProfile =
 const updateUserProfile =
   vi.fn<(id: string, p: Record<string, unknown>) => Promise<UserProfileEntry | null>>();
 const deleteUserProfile = vi.fn<(id: string) => Promise<void>>();
+const getProjectProfile = vi.fn<() => Promise<ProjectProfileResponse>>();
+const createProjectProfile =
+  vi.fn<(c: string, opts: Record<string, unknown>) => Promise<ProjectProfileEntry | null>>();
+const deleteProjectProfile = vi.fn<(id: string) => Promise<void>>();
 
 vi.mock('../../../shared/api', () => ({
   memoryApi: {
@@ -19,6 +29,9 @@ vi.mock('../../../shared/api', () => ({
     createUserProfile: (...a: [string, string?, number?]) => createUserProfile(...a),
     updateUserProfile: (...a: [string, Record<string, unknown>]) => updateUserProfile(...a),
     deleteUserProfile: (id: string) => deleteUserProfile(id),
+    getProjectProfile: () => getProjectProfile(),
+    createProjectProfile: (...a: [string, Record<string, unknown>]) => createProjectProfile(...a),
+    deleteProjectProfile: (id: string) => deleteProjectProfile(id),
   },
 }));
 
@@ -132,5 +145,69 @@ describe('UserProfileCard', () => {
     fireEvent.click(screen.getByTestId('profile-delete'));
     await waitFor(() => expect(deleteUserProfile).toHaveBeenCalledWith('p1'));
     await waitFor(() => expect(screen.getByTestId('profile-empty')).toBeInTheDocument());
+  });
+});
+
+describe('ProjectProfileCard (Phase P28)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('支持四类原型画像预设填入、关键词/类别筛选与一键复制 Markdown', async () => {
+    getProjectProfile.mockResolvedValue({
+      project_key: '/workspace/sage',
+      projects: ['/workspace/sage'],
+      categories: ['convention', 'architecture', 'decision', 'goal', 'note'],
+      snapshot: '',
+      char_limit: 1200,
+      items: [
+        {
+          id: 'pp-1',
+          project_key: '/workspace/sage',
+          content: '接口统一遵循 RESTful + OpenAPI 契约',
+          category: 'convention',
+          importance: 8,
+          source: 'manual',
+          created_at: 1,
+          updated_at: 1,
+        },
+        {
+          id: 'pp-2',
+          project_key: '/workspace/sage',
+          content: '涉及金额须大小写双轨校核',
+          category: 'decision',
+          importance: 9,
+          source: 'manual',
+          created_at: 2,
+          updated_at: 2,
+        },
+      ],
+    });
+
+    render(<ProjectProfileCard />);
+    await waitFor(() => expect(screen.getAllByTestId('project-profile-item')).toHaveLength(2));
+
+    // Category filter
+    fireEvent.click(screen.getByTestId('project-profile-cat-filter-decision'));
+    expect(screen.getAllByTestId('project-profile-item')).toHaveLength(1);
+    expect(screen.getByText('涉及金额须大小写双轨校核')).toBeInTheDocument();
+
+    // Reset filter and search
+    fireEvent.click(screen.getByTestId('project-profile-cat-filter-all'));
+    fireEvent.change(screen.getByTestId('project-profile-search-input'), {
+      target: { value: 'RESTful' },
+    });
+    expect(screen.getAllByTestId('project-profile-item')).toHaveLength(1);
+
+    // Copy Markdown
+    fireEvent.click(screen.getByTestId('project-profile-copy-md-btn'));
+
+    // Open add editor and apply 4-archetype preset
+    fireEvent.click(screen.getByTestId('project-profile-add'));
+    expect(screen.getByTestId('project-profile-presets')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('project-profile-preset-1'));
+    expect(screen.getByTestId('project-profile-editor-content')).toHaveValue(
+      '所有实验结论须标注数据集版本与随机种子，文献引用零幻觉',
+    );
   });
 });

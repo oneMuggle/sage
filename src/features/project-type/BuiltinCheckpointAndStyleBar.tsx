@@ -2,7 +2,7 @@
  * Phase P7: 内置版本快照时间轴与科研引用格式/学术文风快速切换栏 (2026-10-10)
  */
 
-import { BookOpenCheck, Eye, History, Plus, RotateCcw, ShieldCheck, ShieldOff } from 'lucide-react';
+import { BookOpenCheck, Copy, Eye, FileCheck2, History, Plus, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -11,6 +11,7 @@ import type {
   WorkspaceCheckpointDetail,
   WorkspaceCheckpointItem,
 } from '../../shared/api/projectApiTypes';
+import type { ProjectProfileEntry } from '../../shared/api/types';
 import { Button } from '../../shared/ui/Button';
 
 export interface BuiltinCheckpointTimelineBarProps {
@@ -29,6 +30,7 @@ export function BuiltinCheckpointTimelineBar({
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoredHint, setRestoredHint] = useState<string | null>(null);
   const [previewDetail, setPreviewDetail] = useState<WorkspaceCheckpointDetail | null>(null);
+  const [copiedContext, setCopiedContext] = useState(false);
 
   const handleCreate = async () => {
     if (creating || typeof projectApi?.createCheckpoint !== 'function') return;
@@ -53,6 +55,19 @@ export function BuiltinCheckpointTimelineBar({
     try {
       const detail = await projectApi.getCheckpoint(projectId, checkpointId);
       setPreviewDetail(detail);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
+  const handleDelete = async (checkpointId: string) => {
+    if (typeof projectApi?.deleteCheckpoint !== 'function') return;
+    try {
+      await projectApi.deleteCheckpoint(projectId, checkpointId);
+      if (previewDetail?.id === checkpointId) {
+        setPreviewDetail(null);
+      }
+      await onCreated();
     } catch {
       // ignore in test/offline mode
     }
@@ -91,6 +106,20 @@ export function BuiltinCheckpointTimelineBar({
             '无需安装 Git，一键固化或还原案卷文书与配置快照'
           )}
         </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1" data-testid="checkpoint-quick-presets">
+        <span className="text-ui-2xs text-muted-foreground">快捷摘要：</span>
+        {['定稿签发前备份', '审校修订前基线', '阶段里程碑留痕'].map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            onClick={() => setLabel(preset)}
+            className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+          >
+            {preset}
+          </button>
+        ))}
       </div>
 
       <div className="flex gap-1.5">
@@ -147,6 +176,16 @@ export function BuiltinCheckpointTimelineBar({
                   <RotateCcw className="h-2.5 w-2.5" />
                   还原快照
                 </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDelete(cp.id)}
+                  data-testid={`delete-checkpoint-${cp.id}`}
+                  title="删除快照"
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/30 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="h-2.5 w-2.5" />
+                  删除
+                </button>
               </div>
             </li>
           ))}
@@ -158,12 +197,31 @@ export function BuiltinCheckpointTimelineBar({
           className="rounded border border-border bg-background p-2.5 space-y-1.5 text-xs"
           data-testid="checkpoint-detail-preview"
         >
-          <div className="flex items-center justify-between font-medium text-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-2 font-medium text-foreground">
             <span>快照详情：{previewDetail.label}</span>
-            <span className="font-mono text-ui-2xs text-muted-foreground">
-              已备份文本快照 {Object.keys(previewDetail.snapshots).length} 份 / 跟踪文件{' '}
-              {previewDetail.files.length} 份
-            </span>
+            <div className="flex items-center gap-2">
+              {previewDetail.snapshots['.sage/context-snapshot.md'] && (
+                <button
+                  type="button"
+                  data-testid="copy-checkpoint-context-btn"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(
+                      previewDetail.snapshots['.sage/context-snapshot.md'] ?? '',
+                    );
+                    setCopiedContext(true);
+                    setTimeout(() => setCopiedContext(false), 2000);
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  <Copy className="h-2.5 w-2.5" />
+                  {copiedContext ? '已复制 5 层快照' : '复制 5 层上下文快照'}
+                </button>
+              )}
+              <span className="font-mono text-ui-2xs text-muted-foreground">
+                已备份文本快照 {Object.keys(previewDetail.snapshots).length} 份 / 跟踪文件{' '}
+                {previewDetail.files.length} 份
+              </span>
+            </div>
           </div>
           {Object.entries(previewDetail.snapshots).length > 0 && (
             <div className="space-y-1 max-h-28 overflow-y-auto">
@@ -407,6 +465,154 @@ export function CodingHooksGovernanceBar({
             撤销 Hooks 信任
           </Button>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+export interface PersonalZettelkastenFooterProps {
+  projectId: string;
+  decisions: ProjectProfileEntry[];
+  checkpoints: WorkspaceCheckpointItem[];
+  onCreated: () => Promise<void> | void;
+}
+
+export function PersonalZettelkastenFooter({
+  projectId,
+  decisions,
+  checkpoints,
+  onCreated,
+}: PersonalZettelkastenFooterProps) {
+  return (
+    <div className="space-y-3">
+      {decisions.length > 0 && (
+        <ul className="space-y-1 max-h-24 overflow-y-auto" data-testid="personal-notes-list">
+          {decisions.slice(-4).map((d) => (
+            <li
+              key={d.id}
+              className="rounded border border-border/60 bg-background px-2.5 py-1 text-xs text-foreground"
+            >
+              {d.content}
+            </li>
+          ))}
+        </ul>
+      )}
+      <BuiltinCheckpointTimelineBar
+        projectId={projectId}
+        checkpoints={checkpoints}
+        onCreated={onCreated}
+      />
+    </div>
+  );
+}
+
+
+const BUSINESS_DOC_FORMATS: Record<string, string> = {
+  'GB/T 9704 公文版式': '严格遵循党政机关公文格式国家标准 GB/T 9704，标题、主送机关、正文层级（一、（一）、1.、（1））与落款规范统一',
+  '企业标准商务合同规范': '首部明确甲乙方全称与简称，权责条款对等，违约责任、争议解决与管辖法院条款完备且无歧义',
+  '招投标技术与商务响应': '逐条对齐招标文件评分点与实质性响应要求，关键偏离表与资质业绩索引清晰可查',
+  '尽职调查与审计报告规范': '事实陈述与核查结论严格绑定底稿证据编号，风险等级按高/中/低分级量化呈现',
+};
+
+const BUSINESS_REVIEW_LEVELS: Record<string, string> = {
+  '双人交叉复核（金额/主体强校验）': '所有金额同时标注人民币大写与阿拉伯数字，涉及比例、期限与主体名称处执行交叉核验',
+  '法务合规风控优先（零模糊兜底）': '严禁使用模糊兜底表述，所有承诺事项须具备明确触发条件、豁免边界与上限约束',
+  '高管决策摘要优先（结论先行）': '首段提供核心结论、关键风险点与可执行建议清单，正文采用高信息密度结构化条目',
+};
+
+export interface BusinessDocumentStyleBarProps {
+  projectId: string;
+  onApplied: () => Promise<void> | void;
+}
+
+export function BusinessDocumentStyleBar({
+  projectId,
+  onApplied,
+}: BusinessDocumentStyleBarProps) {
+  const [docFormat, setDocFormat] = useState<string>('GB/T 9704 公文版式');
+  const [reviewLevel, setReviewLevel] = useState<string>('双人交叉复核（金额/主体强校验）');
+  const [applying, setApplying] = useState(false);
+  const [appliedHint, setAppliedHint] = useState<string | null>(null);
+
+  const handleApply = async () => {
+    if (applying || typeof projectApi?.createConstraint !== 'function') return;
+    setApplying(true);
+    try {
+      const fmtDesc = BUSINESS_DOC_FORMATS[docFormat] ?? docFormat;
+      const revDesc = BUSINESS_REVIEW_LEVELS[reviewLevel] ?? reviewLevel;
+      await projectApi.createConstraint(projectId, {
+        category: 'document_format',
+        content: `【文书版式：${docFormat}】${fmtDesc}；【审校标准：${reviewLevel}】${revDesc}`,
+        triggerPattern: 'always',
+        priority: 8,
+      });
+      setAppliedHint(`已应用「${docFormat} + ${reviewLevel}」规范`);
+      await onApplied();
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  return (
+    <div
+      className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2"
+      data-testid="business-doc-style-bar"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+          <FileCheck2 className="h-3.5 w-3.5 text-emerald-500" />
+          档案公文版式与合规审校护栏快速配置 (GB/T 9704 / 商务合同 / 招投标)
+        </div>
+        {appliedHint && (
+          <span
+            className="text-ui-2xs font-medium text-emerald-600"
+            data-testid="business-style-applied-hint"
+          >
+            {appliedHint}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={docFormat}
+          onChange={(e) => setDocFormat(e.target.value)}
+          aria-label="选择文书版式标准"
+          data-testid="business-doc-format-select"
+          className="rounded border border-input bg-background px-2 py-1 text-xs text-foreground"
+        >
+          {Object.keys(BUSINESS_DOC_FORMATS).map((k) => (
+            <option key={k} value={k}>
+              版式：{k}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={reviewLevel}
+          onChange={(e) => setReviewLevel(e.target.value)}
+          aria-label="选择审校严密等级"
+          data-testid="business-review-level-select"
+          className="rounded border border-input bg-background px-2 py-1 text-xs text-foreground"
+        >
+          {Object.keys(BUSINESS_REVIEW_LEVELS).map((k) => (
+            <option key={k} value={k}>
+              审校：{k}
+            </option>
+          ))}
+        </select>
+
+        <Button
+          size="sm"
+          onClick={() => void handleApply()}
+          disabled={applying}
+          data-testid="business-apply-style-btn"
+        >
+          一键写入文书规范
+        </Button>
       </div>
     </div>
   );
