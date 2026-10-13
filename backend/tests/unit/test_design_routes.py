@@ -674,7 +674,12 @@ class TestDesignRoutes:
         frames = _sse_frames(resp.text)
         last_event, last_data = frames[-1]
         assert last_event == "error"
-        assert "empty response" in json.loads(last_data)["detail"]
+        # Exact equality, not substring: the catch-all emits a prefixed
+        # "Generation failed: ..." string, so a substring match would pass
+        # even if the DesignGenerationError branch were removed.
+        assert json.loads(last_data)["detail"] == (
+            "LLM returned empty response"
+        )
 
     async def test_iterate_generation_error_yields_error_frame(self, studio):
         """Iteration LLM failure surfaces as an `error` SSE frame."""
@@ -708,7 +713,8 @@ class TestDesignRoutes:
         frames = _sse_frames(resp.text)
         last_event, last_data = frames[-1]
         assert last_event == "error"
-        assert "unparseable artifact" in json.loads(last_data)["detail"]
+        # Exact equality — see the generate test above for why.
+        assert json.loads(last_data)["detail"] == "unparseable artifact"
 
     # ---------------------------------------------------------------
     # Review gap 2: registry errors -> 500 on the list endpoints
@@ -808,3 +814,69 @@ class TestDesignRoutes:
                 )
 
         assert resp.status_code == 422
+
+    # ---------------------------------------------------------------
+    # Fix round 2: LOW-4 delete guard + MEDIUM-1 regression coverage
+    # ---------------------------------------------------------------
+
+    async def test_delete_project_db_failure_returns_json_500(
+        self, studio,
+    ):
+        """A raising delete surfaces as JSON 500, not an unhandled error."""
+        from backend.main import app
+
+        project = studio.create_project(
+            "DelBoom", "prototype", "test-sys", "test-page", "brief",
+        )
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ), patch.object(
+            studio, "delete_project",
+            side_effect=sqlite3.OperationalError("database is locked"),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.request(
+                    "DELETE", f"/api/v1/design/projects/{project.id}",
+                )
+
+        assert resp.status_code == 500
+        assert "database is locked" in resp.json()["detail"]
+        # The row survives a failed delete.
+        assert studio.get_project(project.id).id == project.id
+
+    async def test_get_project_artifact_lookup_failure_returns_json_500(
+        self, studio,
+    ):
+        """Regression for MEDIUM-1: get_latest_artifact is inside the try."""
+        from backend.main import app
+
+        project = studio.create_project(
+            "GetBoom", "prototype", "test-sys", "test-page", "brief",
+        )
+        await studio.generate(project.id, "v1 brief")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ), patch.object(
+            studio, "get_latest_artifact",
+            side_effect=sqlite3.OperationalError("disk I/O error"),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.get(
+                    f"/api/v1/design/projects/{project.id}",
+                )
+
+        assert resp.status_code == 500
+        assert "disk I/O error" in resp.json()["detail"]
+        # The read failed, but the project itself is untouched.
+        assert studio.get_project(project.id).name == "GetBoom"
+        assert studio.get_latest_artifact(project.id).version == 1

@@ -235,7 +235,13 @@ async def delete_project(project_id: str):
         studio.get_project(project_id)
     except DesignProjectNotFoundError as exc:
         return _map_design_error(exc)
-    studio.delete_project(project_id)
+    try:
+        studio.delete_project(project_id)
+    except Exception as exc:
+        logger.exception("Failed to delete design project %s", project_id)
+        return JSONResponse(
+            status_code=500, content={"detail": str(exc)},
+        )
     return {"success": True}
 
 
