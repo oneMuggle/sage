@@ -4,18 +4,32 @@
  * 项目类型分类系统 - Phase 4.6
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { projectApi } from '../../shared/api';
 
+import { ConstraintEditor } from './ConstraintEditor';
 import { ConstraintSummaryWidget } from './ConstraintSummaryWidget';
+import { GitStatusWidget } from './GitStatusWidget';
 
 // Mock projectApi
 vi.mock('../../shared/api', () => ({
   projectApi: {
     listConstraints: vi.fn(),
+    createConstraint: vi.fn().mockResolvedValue({}),
   },
+}));
+
+vi.mock('../../shared/api/desktopInvoke', () => ({
+  invoke: vi.fn().mockResolvedValue({
+    is_repo: true,
+    current_branch: 'main',
+    modified_files: ['src/App.tsx'],
+    staged_files: ['README.md'],
+    untracked_files: [],
+    recent_commits: [{ sha: 'abc1234567', author: 'dev', date: '2026-10-13 10:00:00', message: 'feat: init' }],
+  }),
 }));
 
 const mockListConstraints = vi.mocked(projectApi.listConstraints);
@@ -135,6 +149,45 @@ describe('ConstraintSummaryWidget', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Network error')).toBeInTheDocument();
+    });
+  });
+
+  it('renders ConstraintEditor archetype rule content presets and always glob button (Phase P26)', async () => {
+    const onSave = vi.fn();
+    render(
+      <ConstraintEditor
+        open={true}
+        onOpenChange={vi.fn()}
+        projectId="test-project"
+        projectType="business"
+        constraint={null}
+        onSave={onSave}
+      />,
+    );
+
+    expect(screen.getByTestId('constraint-editor-content-presets')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('constraint-content-preset-0'));
+    fireEvent.click(screen.getByTestId('constraint-glob-always-btn'));
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+
+    await waitFor(() => {
+      expect(projectApi.createConstraint).toHaveBeenCalledWith(
+        'test-project',
+        expect.objectContaining({
+          category: 'compliance',
+          triggerPattern: 'always',
+          priority: 9,
+        }),
+      );
+    });
+  });
+
+  it('renders GitStatusWidget markdown copy button (Phase P26)', async () => {
+    render(<GitStatusWidget projectId="test-project" />);
+    const copyBtn = await screen.findByTestId('git-status-copy-md-btn');
+    fireEvent.click(copyBtn);
+    await waitFor(() => {
+      expect(screen.getByTestId('git-status-copy-md-btn')).toHaveTextContent(/已复制|复制报告/);
     });
   });
 });

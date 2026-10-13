@@ -1,5 +1,5 @@
 /**
- * 约束编辑器 (2026-09-25)
+ * 约束编辑器 (2026-09-25; Phase P26 四形态规则内容模板与全局触发快捷按钮 2026-10-13)
  *
  * 项目类型分类系统 - Phase 4.4
  * 创建/编辑约束的 Dialog
@@ -29,6 +29,86 @@ const CATEGORY_PRESETS: Record<ProjectType, string[]> = {
   personal: ['note_organization', 'knowledge_linking', 'action_extraction'],
 };
 
+const CATEGORY_LABELS: Record<string, string> = {
+  code_style: '代码风格',
+  git_commit: '提交规范',
+  testing: '测试门禁',
+  architecture: '架构边界',
+  document_format: '公文版式',
+  tone: '行文语调',
+  review_process: '审校流程',
+  compliance: '法务合规',
+  academic_writing: '学术写作',
+  citation_style: '文献引证',
+  data_integrity: '数据真实性',
+  reproducibility: '实验可复现',
+  note_organization: '卡片组织',
+  knowledge_linking: '双链索引',
+  action_extraction: '行动提炼',
+};
+
+const CONTENT_PRESETS: Record<
+  ProjectType,
+  Array<{ label: string; category: string; content: string; priority: number }>
+> = {
+  coding: [
+    {
+      label: 'TypeScript 严格类型',
+      category: 'code_style',
+      content: '禁止新增裸 any 类型，所有公共导出函数必须声明显式返回类型与入参契约。',
+      priority: 8,
+    },
+    {
+      label: '异常显式捕获',
+      category: 'architecture',
+      content: '严禁静默吞没异常（except Exception: pass），必须捕获具体异常元组并记录上下文。',
+      priority: 9,
+    },
+  ],
+  business: [
+    {
+      label: '金额双写与主体核验',
+      category: 'compliance',
+      content: '所有合同与请示金额须同时标注人民币大写与阿拉伯数字，并核验签约主体全称一致性。',
+      priority: 9,
+    },
+    {
+      label: 'GB/T 9704 层级序号',
+      category: 'document_format',
+      content: '正文结构严格遵循“一、（一）、1.、（1）”四级标题序号规范，严禁跨级混用。',
+      priority: 8,
+    },
+  ],
+  research: [
+    {
+      label: '零虚构文献引用',
+      category: 'citation_style',
+      content: '严禁捏造未在 references/ 或受控资料库中核实的文献条目、DOI 或实验基线数据。',
+      priority: 10,
+    },
+    {
+      label: '实验随机种子留痕',
+      category: 'reproducibility',
+      content: '所有定量实验与消融对比必须固定并记录随机种子、超参数配置与评估脚本路径。',
+      priority: 8,
+    },
+  ],
+  personal: [
+    {
+      label: '卡片双向链接',
+      category: 'knowledge_linking',
+      content: '沉淀长期笔记时优先建立 [[概念卡片]] 双向索引并提炼 3 条以内核心结论。',
+      priority: 7,
+    },
+    {
+      label: '待办行动项闭环',
+      category: 'action_extraction',
+      content: '每次周记或复盘末尾提炼可执行的下一步行动项（含截止日期与验收标准）。',
+      priority: 7,
+    },
+  ],
+};
+
 export interface ConstraintEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -48,6 +128,7 @@ export function ConstraintEditor({
 }: ConstraintEditorProps) {
   const blueprint = getArchetypeBlueprint(projectType);
   const categoryPresets = CATEGORY_PRESETS[blueprint.type] ?? CATEGORY_PRESETS.coding;
+  const contentPresets = CONTENT_PRESETS[blueprint.type] ?? CONTENT_PRESETS.coding;
   const [category, setCategory] = useState('');
   const [content, setContent] = useState('');
   const [triggerPattern, setTriggerPattern] = useState('');
@@ -149,7 +230,7 @@ export function ConstraintEditor({
                   onClick={() => setCategory(preset)}
                   className="rounded border border-border bg-muted/40 px-2 py-0.5 font-mono text-xs text-foreground hover:bg-muted"
                 >
-                  {preset}
+                  {CATEGORY_LABELS[preset] ? `${CATEGORY_LABELS[preset]} (${preset})` : preset}
                 </button>
               ))}
             </div>
@@ -163,6 +244,27 @@ export function ConstraintEditor({
               placeholder="描述具体的约束规则..."
               rows={4}
             />
+            <div
+              className="flex flex-wrap items-center gap-1.5"
+              data-testid="constraint-editor-content-presets"
+            >
+              <span className="text-xs text-muted-foreground">快速填入规则示例：</span>
+              {contentPresets.map((tpl, idx) => (
+                <button
+                  key={tpl.label}
+                  type="button"
+                  data-testid={`constraint-content-preset-${idx}`}
+                  onClick={() => {
+                    setCategory(tpl.category);
+                    setContent(tpl.content);
+                    setPriority(tpl.priority);
+                  }}
+                  className="rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs text-primary hover:bg-primary/10"
+                >
+                  {tpl.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -177,6 +279,14 @@ export function ConstraintEditor({
               data-testid="constraint-editor-glob-presets"
             >
               <span className="text-xs text-muted-foreground">目录触发预设：</span>
+              <button
+                type="button"
+                data-testid="constraint-glob-always-btn"
+                onClick={() => setTriggerPattern('always')}
+                className="rounded border border-primary/30 bg-primary/5 px-2 py-0.5 font-mono text-xs text-primary hover:bg-primary/10"
+              >
+                always (全局)
+              </button>
               {blueprint.directories.map((dir) => (
                 <button
                   key={dir}

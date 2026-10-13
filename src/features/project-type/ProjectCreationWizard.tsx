@@ -57,6 +57,60 @@ const WIZARD_ALLOWED_PATH_PRESETS: Record<ProjectType, Array<{ label: string; pa
   ],
 };
 
+const WIZARD_GOAL_PRESETS: Record<
+  ProjectType,
+  Array<{ label: string; description: string; instructions: string }>
+> = {
+  coding: [
+    {
+      label: '全栈工程研发',
+      description: '企业级前后端软件工程研发与自动化测试交付',
+      instructions: '遵循 TypeScript 与 Python 严格类型门禁，所有代码改动需同步补充单元测试与架构边界校验。',
+    },
+    {
+      label: '重构与性能优化',
+      description: '存量代码架构解耦、性能瓶颈治理与测试覆盖率提升',
+      instructions: '保持外部接口向后兼容，任何重构步骤均须先建立回归测试基线并控制单文件复杂度。',
+    },
+  ],
+  business: [
+    {
+      label: '公文与制度汇编',
+      description: '党政公文、请示报告与管理制度立卷编制及归档',
+      instructions: '严格遵循 GB/T 9704 公文格式规范，所有事实陈述与引用条款必须关联 sources/ 受控底稿。',
+    },
+    {
+      label: '合同审查与招投标',
+      description: '商务合同合规审校、招投标响应文件编制与风险核查',
+      instructions: '所有金额须同时标注人民币大写与阿拉伯数字，严禁模糊兜底承诺，逐条核验权责对等性。',
+    },
+  ],
+  research: [
+    {
+      label: '实证与算法论文',
+      description: '学术论文撰述、定量对比实验与可复现消融分析',
+      instructions: '采用严谨客观的学术被动语态，所有文献引用必须真实可查，固定并记录全部实验随机种子。',
+    },
+    {
+      label: '领域文献综述',
+      description: '前沿文献系统性调研、方法演进脉络梳理与研究空白分析',
+      instructions: '按问题定义、方法分类与评估基准构建对比矩阵，严禁虚构未核实的参考文献或 DOI。',
+    },
+  ],
+  personal: [
+    {
+      label: '双链卡片知识库',
+      description: '跨学科读书笔记、概念卡片沉淀与长期知识网络构建',
+      instructions: '优先提炼原子化概念卡片并建立 [[双向链接]]，每次总结控制在 3 条以内高信息密度结论。',
+    },
+    {
+      label: '目标规划与周期复盘',
+      description: '季度/周度OKR追踪、日常习惯复盘与下一步行动清单管理',
+      instructions: '聚焦可执行、可量化的下一步行动项（Next Actions），协助识别拖延瓶颈并给出拆解建议。',
+    },
+  ],
+};
+
 export function ProjectCreationWizard({
   open,
   onOpenChange,
@@ -72,6 +126,7 @@ export function ProjectCreationWizard({
   const [selectedTemplateKeys, setSelectedTemplateKeys] = useState<string[]>([]);
   const [selectedAllowedPaths, setSelectedAllowedPaths] = useState<string[]>([]);
   const [projectDescription, setProjectDescription] = useState<string>('');
+  const [projectInstructions, setProjectInstructions] = useState<string>('');
   const [vcsMode, setVcsMode] = useState<'git' | 'builtin' | 'none'>('builtin');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -87,6 +142,7 @@ export function ProjectCreationWizard({
     setSelectedTemplateKeys([]);
     setSelectedAllowedPaths([]);
     setProjectDescription('');
+    setProjectInstructions('');
     setVcsMode('builtin');
     setCreating(false);
     setCreateError(null);
@@ -196,6 +252,7 @@ export function ProjectCreationWizard({
         try {
           project = await projectApi.update(project.id, {
             description: projectDescription.trim() || null,
+            instructions: projectInstructions.trim() || null,
             vcs_mode: vcsMode,
           });
         } catch {
@@ -342,16 +399,45 @@ export function ProjectCreationWizard({
                     </select>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">
-                    L2 项目核心目标摘要（可选，注入五层上下文管线）：
-                  </label>
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <label className="block text-xs font-medium text-muted-foreground">
+                      L2 项目核心目标与系统指令（可选，注入五层上下文管线）：
+                    </label>
+                    <div
+                      className="flex flex-wrap items-center gap-1"
+                      data-testid="wizard-goal-presets"
+                    >
+                      {(WIZARD_GOAL_PRESETS[blueprint.type] ?? []).map((preset, idx) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          data-testid={`wizard-goal-preset-${idx}`}
+                          onClick={() => {
+                            setProjectDescription(preset.description);
+                            setProjectInstructions(preset.instructions);
+                          }}
+                          className="rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+                        >
+                          预设：{preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <input
                     type="text"
                     value={projectDescription}
                     onChange={(e) => setProjectDescription(e.target.value)}
                     placeholder="如：2026 年度采购合同法务审查与定稿归档 / 多跳检索强化学习论文实验"
                     data-testid="wizard-description-input"
+                    className="w-full rounded border border-input bg-background px-2.5 py-1 text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={projectInstructions}
+                    onChange={(e) => setProjectInstructions(e.target.value)}
+                    placeholder="L2 系统高优指令（如：严格遵循 GB/T 9704 公文规范，所有金额必须双写核验）"
+                    data-testid="wizard-instructions-input"
                     className="w-full rounded border border-input bg-background px-2.5 py-1 text-xs"
                   />
                 </div>
