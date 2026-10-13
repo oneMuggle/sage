@@ -1,14 +1,14 @@
 /**
- * M4: 语义检索面板 (2026-10-12 / Phase P22 跨项目同步 / Phase P25 四形态检索词预设与全量结果导出)
+ * M4: 语义检索面板 (2026-10-12 / Phase P22 跨项目同步 / Phase P25 四形态检索词预设与全量结果导出 / Phase P31 M4→L3 画像沉淀与相似度阈值过滤)
  *
  * 嵌入 StudioMaterialsTabPanel，提供语义检索入口：
  * - 四形态快捷检索词预设胶囊：一键触发当前形态高频语义查询
  * - 输入框 + 搜索按钮：调用后端语义检索 API
- * - 结果展示：显示匹配的 chunks（按相关性排序），支持单条复制与全量结果 Markdown 导出
+ * - 结果展示：显示匹配的 chunks（按相关性排序），支持相似度阈值过滤、单条复制、一键沉淀至 L3 项目画像与全量结果 Markdown 导出
  * - 索引状态：随项目切换自动同步索引统计，支持手动刷新统计
  */
 
-import { Search, Loader2, FileText, AlertCircle, Copy, Check, RefreshCw, Sparkles } from 'lucide-react';
+import { Search, Loader2, FileText, AlertCircle, Copy, Check, RefreshCw, Sparkles, BookmarkPlus } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -39,6 +39,8 @@ export function SemanticSearchPanel({
   const [error, setError] = useState<string | null>(null);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
+  const [minScorePct, setMinScorePct] = useState<number>(0);
+  const [savedProfileIndices, setSavedProfileIndices] = useState<Set<number>>(new Set());
 
   const presets = SEMANTIC_QUERY_PRESETS[projectType] ?? SEMANTIC_QUERY_PRESETS.coding;
 
@@ -52,6 +54,7 @@ export function SemanticSearchPanel({
       setSearching(true);
       setError(null);
       setResults(null);
+      setSavedProfileIndices(new Set());
       try {
         const result = await projectApi.semanticSearchMaterials(projectId, trimmed, 10);
         setResults(result.results);
@@ -90,13 +93,38 @@ export function SemanticSearchPanel({
     }
   };
 
+  /** M4 -> L3: 将高价值检索片段一键沉淀至 L3 项目画像 */
+  const handleSaveHitToProfile = async (hit: SemanticSearchHit, idx: number) => {
+    if (savedProfileIndices.has(idx) || typeof projectApi?.confirmKnowledge !== 'function') return;
+    try {
+      await projectApi.confirmKnowledge(projectId, {
+        entries: [
+          {
+            category: 'note',
+            content: hit.content.slice(0, 500),
+            importance: 7,
+            sourceMessageIds: [],
+            reasoning: 'M4 语义检索命中',
+          },
+        ],
+      });
+      setSavedProfileIndices((prev) => new Set(prev).add(idx));
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
+  const filteredResults = results
+    ? results.filter((hit) => hit.score * 100 >= minScorePct)
+    : null;
+
   /** 复制全部检索命中结果为 Markdown */
   const handleCopyAllResults = async () => {
-    if (!results || results.length === 0) return;
+    if (!filteredResults || filteredResults.length === 0) return;
     const lines = [
       `# M4 语义检索结果（查询：${query}）`,
       '',
-      ...results.map(
+      ...filteredResults.map(
         (hit, i) =>
           `### ${i + 1}. 材料 ${hit.materialId.slice(0, 8)} (chunk #${hit.chunkIndex} · 相似度 ${(hit.score * 100).toFixed(1)}%)\n${hit.content}`,
       ),
@@ -121,6 +149,8 @@ export function SemanticSearchPanel({
   useEffect(() => {
     setResults(null);
     setError(null);
+    setMinScorePct(0);
+    setSavedProfileIndices(new Set());
     void loadStats();
   }, [projectId, loadStats]);
 
@@ -240,16 +270,35 @@ export function SemanticSearchPanel({
       </div>
 
       {/* 搜索结果 */}
-      {results !== null && (
+      {filteredResults !== null && (
         <div className="space-y-2">
-          {results.length === 0 ? (
-            <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-              未找到相关内容
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>找到 {results.length} 个相关片段</span>
+          {results && results.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span>找到 {filteredResults.length} 个相关片段</span>
+                <div className="flex items-center gap-1" data-testid="semantic-score-filters">
+                  {[
+                    { pct: 0, label: '全部' },
+                    { pct: 50, label: '≥50%' },
+                    { pct: 75, label: '≥75%' },
+                  ].map((item) => (
+                    <button
+                      key={item.pct}
+                      type="button"
+                      onClick={() => setMinScorePct(item.pct)}
+                      data-testid={`semantic-score-filter-${item.pct}`}
+                      className={`rounded border px-1.5 py-0.5 text-ui-2xs ${
+                        minScorePct === item.pct
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {filteredResults.length > 0 && (
                 <button
                   type="button"
                   onClick={() => void handleCopyAllResults()}
@@ -268,9 +317,19 @@ export function SemanticSearchPanel({
                     </>
                   )}
                 </button>
-              </div>
-              <div className="max-h-80 space-y-2 overflow-y-auto">
-                {results.map((hit, idx) => (
+              )}
+            </div>
+          )}
+
+          {filteredResults.length === 0 ? (
+            <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+              未找到相关内容
+            </div>
+          ) : (
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {filteredResults.map((hit, idx) => {
+                const isSavedToProfile = savedProfileIndices.has(idx);
+                return (
                   <div
                     key={`${hit.materialId}-${hit.chunkIndex}-${idx}`}
                     className="rounded-md border border-border bg-card p-3 text-xs"
@@ -286,6 +345,26 @@ export function SemanticSearchPanel({
                         <Badge variant="outline" className="text-xs">
                           相似度: {(hit.score * 100).toFixed(1)}%
                         </Badge>
+                        <button
+                          type="button"
+                          disabled={isSavedToProfile}
+                          onClick={() => void handleSaveHitToProfile(hit, idx)}
+                          data-testid={`semantic-hit-save-profile-${idx}`}
+                          className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10 disabled:opacity-60"
+                          title="将此片段沉淀至 L3 项目画像"
+                        >
+                          {isSavedToProfile ? (
+                            <>
+                              <Check className="h-2.5 w-2.5 text-emerald-500" />
+                              已沉淀 L3
+                            </>
+                          ) : (
+                            <>
+                              <BookmarkPlus className="h-2.5 w-2.5" />
+                              沉淀至 L3 画像
+                            </>
+                          )}
+                        </button>
                         <button
                           type="button"
                           onClick={() => void handleCopyHit(hit.content, idx)}
@@ -310,9 +389,9 @@ export function SemanticSearchPanel({
                       {hit.content}
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
