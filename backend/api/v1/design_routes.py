@@ -26,6 +26,7 @@ from backend.design.errors import (
     DesignGenerationError,
     DesignProjectNotFoundError,
     DesignSystemNotFoundError,
+    DesignTemplateKindMismatchError,
     DesignTemplateNotFoundError,
 )
 
@@ -90,7 +91,11 @@ def _map_design_error(exc: DesignError) -> JSONResponse:
         DesignSystemNotFoundError,
         DesignTemplateNotFoundError,
     )
-    status = 404 if isinstance(exc, not_found) else 500
+    bad_request = DesignTemplateKindMismatchError
+    if isinstance(exc, bad_request):
+        status = 400
+    else:
+        status = 404 if isinstance(exc, not_found) else 500
     return JSONResponse(status_code=status, content={"detail": str(exc)})
 
 
@@ -279,6 +284,8 @@ async def generate_artifact(project_id: str, req: GenerateRequest):
             yield _sse_event("error", {"detail": str(exc)})
         except DesignGenerationError as exc:
             yield _sse_event("error", {"detail": str(exc)})
+        except DesignTemplateKindMismatchError as exc:
+            yield _sse_event("error", {"detail": str(exc)})
         except Exception as exc:
             logger.exception("Design generation failed")
             yield _sse_event("error", {
@@ -328,6 +335,8 @@ async def iterate_artifact(project_id: str, req: IterateRequest):
         except DesignProjectNotFoundError as exc:
             yield _sse_event("error", {"detail": str(exc)})
         except DesignGenerationError as exc:
+            yield _sse_event("error", {"detail": str(exc)})
+        except DesignTemplateKindMismatchError as exc:
             yield _sse_event("error", {"detail": str(exc)})
         except Exception as exc:
             logger.exception("Design iteration failed")

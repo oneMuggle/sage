@@ -13,6 +13,7 @@ from backend.design.errors import (
     DesignGenerationError,
     DesignProjectNotFoundError,
     DesignSystemNotFoundError,
+    DesignTemplateKindMismatchError,
     DesignTemplateNotFoundError,
 )
 from backend.design.systems import DesignSystemRegistry
@@ -189,3 +190,50 @@ class TestDesignStudio:
                 "Bad", "prototype", "test", "no-such-template", "b",
             )
         assert studio.list_projects() == []
+
+    def test_matching_kind_passes(self, studio):
+        """kind 与模板 frontmatter 一致时正常建项目。"""
+        project = studio.create_project(
+            "Matching", "prototype", "test", "test-page", "brief",
+        )
+        assert project.kind == "prototype"
+        assert project.template_id == "test-page"
+
+    def test_create_project_rejects_kind_mismatch(self, studio):
+        """模板 kind 与请求 kind 不一致时，建项目阶段就失败。"""
+        with pytest.raises(DesignTemplateKindMismatchError) as excinfo:
+            studio.create_project(
+                "Mismatch", "deck", "test", "test-page", "brief",
+            )
+        message = str(excinfo.value)
+        # 报错信息必须同时点明请求的 kind 与模板实际的 kind
+        assert "deck" in message
+        assert "prototype" in message
+        # 失败要发生在落库之前，不能留下半截项目行
+        assert studio.list_projects() == []
+
+    @pytest.mark.asyncio()
+    async def test_generate_rejects_kind_mismatch_after_template_edited(
+        self, studio, tmp_path,
+    ):
+        """项目建成后模板被改成别的 kind，generate 仍须拦下。"""
+        project = studio.create_project(
+            "Test", "prototype", "test", "test-page", "brief",
+        )
+        # 模板在磁盘上被改成 deck，项目行仍记着 prototype
+        skill_md = tmp_path / "content" / "templates" / "prototype" / (
+            "test-page"
+        ) / "SKILL.md"
+        skill_md.write_text(
+            "---\nname: test-page\nkind: deck\n"
+            "description: test\ndesign_system_required: true\n---\n"
+            "# Test"
+        )
+        studio._templates._cache.clear()
+
+        with pytest.raises(DesignTemplateKindMismatchError) as excinfo:
+            await studio.generate(project.id, "brief")
+
+        message = str(excinfo.value)
+        assert "prototype" in message  # 请求的 kind（项目行的）
+        assert "deck" in message  # 模板实际的 kind

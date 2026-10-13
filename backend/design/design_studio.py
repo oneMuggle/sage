@@ -8,7 +8,10 @@ from pathlib import Path
 from typing import Optional
 
 from backend.data.design_repo import DesignRepo
-from backend.design.errors import DesignProjectNotFoundError
+from backend.design.errors import (
+    DesignProjectNotFoundError,
+    DesignTemplateKindMismatchError,
+)
 from backend.design.generator import DesignGenerator
 from backend.design.models import (
     DesignArtifact,
@@ -37,6 +40,24 @@ class DesignStudio:
         self._templates = templates
         self._workspace = workspace_dir
 
+    def _resolve_template_for_kind(
+        self, template_id: str, kind: str,
+    ) -> DesignTemplate:
+        """Resolve a template and assert its kind matches the requested kind.
+
+        The check is repeated at every resolution point (create and generate)
+        because the project row may predate the template, and a template's
+        frontmatter may be edited on disk after a project was created.
+        """
+        template = self._templates.get_template(template_id)
+        if template.kind != kind:
+            raise DesignTemplateKindMismatchError(
+                f"Template '{template_id}' has kind '{template.kind}', "
+                f"but kind '{kind}' was requested. Pick a template whose "
+                f"kind matches, or change kind to '{template.kind}'."
+            )
+        return template
+
     def create_project(
         self,
         name: str,
@@ -47,7 +68,7 @@ class DesignStudio:
     ) -> DesignProject:
         """Create a new design project."""
         self._systems.get_system(system_id)
-        self._templates.get_template(template_id)
+        self._resolve_template_for_kind(template_id, kind)
 
         now = datetime.now(timezone.utc)  # noqa: UP017
         return self._repo.create_project(
@@ -97,7 +118,9 @@ class DesignStudio:
         """Generate an artifact for a project, appending a new version."""
         project = self._repo.get_project(project_id)
         system = self._systems.get_system(project.system_id)
-        template = self._templates.get_template(project.template_id)
+        template = self._resolve_template_for_kind(
+            project.template_id, project.kind,
+        )
 
         self._repo.update_project_status(project_id, "generating")
 
@@ -148,7 +171,9 @@ class DesignStudio:
             )
 
         system = self._systems.get_system(project.system_id)
-        template = self._templates.get_template(project.template_id)
+        template = self._resolve_template_for_kind(
+            project.template_id, project.kind,
+        )
 
         self._repo.update_project_status(project_id, "generating")
 

@@ -15,6 +15,10 @@ class DesignTemplateNotFoundError(DesignError):
     """Raised when a template ID is not found in the registry."""
 
 
+class DesignTemplateKindMismatchError(DesignError):
+    """Raised when a template's kind does not match the requested project kind."""
+
+
 class DesignGenerationError(DesignError):
     """Raised when LLM generation fails or produces unparseable output."""
 
