@@ -14,6 +14,7 @@ import {
   Clock,
   AlertCircle,
   Sparkles,
+  BrainCircuit,
   Copy,
   Check,
 } from 'lucide-react';
@@ -27,6 +28,7 @@ import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import { Progress } from '../../shared/ui/Progress';
 
 import { MilestoneEditor } from './MilestoneEditor';
+import { TaskDecomposeDialog } from './TaskDecomposeDialog';
 import { getArchetypeBlueprint } from './archetypeBlueprints';
 
 export interface MilestoneManagerProps {
@@ -41,6 +43,7 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestone | null>(null);
+  const [decomposeDialogOpen, setDecomposeDialogOpen] = useState(false);
   const [stageFilter, setStageFilter] = useState<string>('all');
   const [copiedRoadmap, setCopiedRoadmap] = useState(false);
   const blueprint = getArchetypeBlueprint(projectType);
@@ -201,6 +204,15 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                   )}
                 </button>
               )}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setDecomposeDialogOpen(true)}
+                data-testid="ai-decompose-tasks-btn"
+              >
+                <BrainCircuit className="mr-1.5 h-3.5 w-3.5 text-primary" />
+                AI 任务分解
+              </Button>
               <Button
                 variant="secondary"
                 size="sm"
@@ -379,6 +391,13 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
         onSave={handleEditorSave}
       />
 
+      <TaskDecomposeDialog
+        open={decomposeDialogOpen}
+        onOpenChange={setDecomposeDialogOpen}
+        projectId={projectId}
+        projectType={projectType}
+        onApplied={fetchMilestones}
+      />
     </>
   );
 }

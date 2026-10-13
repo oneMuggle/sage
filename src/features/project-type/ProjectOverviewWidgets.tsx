@@ -14,6 +14,7 @@ import { ConstraintSummaryWidget } from './ConstraintSummaryWidget';
 import { GitStatusWidget } from './GitStatusWidget';
 import { MilestoneProgressWidget } from './MilestoneProgressWidget';
 import { ProjectAdvisorCard } from './ProjectAdvisorCard';
+import { TaskDecomposeDialog } from './TaskDecomposeDialog';
 import { WikiGenerationPanel } from './WikiGenerationPanel';
 import { getArchetypeBlueprint } from './archetypeBlueprints';
 
@@ -34,6 +35,9 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [hasSageMd, setHasSageMd] = useState<boolean | null>(null);
   const [totalFiles, setTotalFiles] = useState<number | null>(null);
   const [creatingSnapshot, setCreatingSnapshot] = useState(false);
+  const [decomposeOpen, setDecomposeOpen] = useState(false);
+  const [decomposeReq, setDecomposeReq] = useState('');
+  const [decomposeCtx, setDecomposeCtx] = useState('');
 
   const loadOverviewMeta = useCallback(async () => {
     if (!project.id || typeof projectApi?.getWorkspaceOverview !== 'function') return;
@@ -135,14 +139,31 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
         </div>
       </div>
 
-      {/* M3: AI 项目健康顾问卡片 */}
-      <ProjectAdvisorCard projectId={project.id} />
+      {/* M3: AI 项目健康顾问卡片（支持一键将改进建议转入 M1 任务分解） */}
+      <ProjectAdvisorCard
+        projectId={project.id}
+        onDecomposeTask={(action, reason) => {
+          setDecomposeReq(action ?? '');
+          setDecomposeCtx(reason ?? '');
+          setDecomposeOpen(true);
+        }}
+      />
 
       {/* Coding 或显式启用 Git 的项目显示 Git 状态与 M5 代码→Wiki 生成面板 */}
       {(projectType === 'coding' || project.vcsMode === 'git') && (
         <GitStatusWidget projectId={project.id} />
       )}
       <WikiGenerationPanel projectId={project.id} projectType={projectType} />
+
+      <TaskDecomposeDialog
+        open={decomposeOpen}
+        onOpenChange={setDecomposeOpen}
+        projectId={project.id}
+        projectType={projectType}
+        initialRequirement={decomposeReq}
+        initialContext={decomposeCtx}
+        onApplied={() => void loadOverviewMeta()}
+      />
     </div>
   );
 }

@@ -410,3 +410,19 @@
      - 当当前会话绑定的工作区属于已登记项目时，在 Chat 顶栏 `ProjectBadge` 内联展示项目形态徽章（`data-testid="chat-project-type-badge"`）与当前生命周期阶段胶囊（`data-testid="chat-project-stage-badge"`），并提供一键跳转 `/projects` 项目工作台的快捷按钮（`data-testid="chat-project-workbench-btn"`）。
   5. **单元与集成测试加固（`ProjectBadge.test.tsx` & `ProjectArchetypeStudio.test.tsx`）**：
      - 新增 `chat-project-type-badge`、`chat-project-stage-badge`、`chat-project-workbench-btn`、`wiki-generation-panel`、`semantic-search-panel` 及 `semantic-stats-refresh-btn` 端到端测试断言。
+### Phase P23：M3 顾问建议一键转入 M1 任务分解闭环、四形态任务拆解预设、L5 只读白名单 Markdown 导出与侧边栏项目阶段徽标（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **M3 → M1 顾问建议一键转入任务分解闭环（`src/features/project-type/ProjectAdvisorCard.tsx` & `ProjectOverviewWidgets.tsx`）**：
+     - 将 `ProjectAdvisorCard` 的 `onDecomposeTask` 回调签名升级为 `(action?: string, reason?: string | null) => void`，并在改进建议项旁渲染「分解为任务」按钮（`data-testid="advisor-decompose-suggestion-{idx}"`）；
+     - 在 `ProjectOverviewWidgets` 中挂载 `TaskDecomposeDialog` 并注入 `onDecomposeTask` 回调，点击任意顾问建议即可直接打开任务分解对话框并自动预填需求描述（`sug.action`）与补充上下文（`sug.reason`）。
+  2. **M1 任务分解对话框四形态快捷需求预设与中文阶段映射（`src/features/project-type/TaskDecomposeDialog.tsx` & `MilestoneManager.tsx`）**：
+     - 新增 `projectType`、`initialRequirement`、`initialContext` 属性，内置四大项目形态（软件工程、一般档案与文书、科研课题、个人事务与PKM）快捷拆解需求预设胶囊栏（`data-testid="decompose-archetype-presets"` / `data-testid="decompose-preset-{idx}"`）；
+     - 在里程碑树预览节点（`MilestoneTreeItem`）中根据当前项目形态蓝图将英文阶段 ID 自动映射为中文阶段名称（如 `立卷归集`、`文书编制`、`文献调研`），并在 `release/win7` 的 `MilestoneManager.tsx` 中同步补齐「AI 任务分解」入口（`data-testid="ai-decompose-tasks-btn"`）。
+  3. **L5 跨目录只读白名单配置一键复制 Markdown（`src/features/project-type/StudioMaterialsAndProfilePanels.tsx`）**：
+     - 在 `StudioAllowedPathsTabPanel` 标题栏新增「复制白名单配置」按钮（`data-testid="allowed-paths-copy-md-btn"`），支持将当前项目的 L5 跨目录只读白名单路径一键导出为 Markdown 清单。
+  4. **侧边栏项目列表行内联展示当前生命周期阶段胶囊（`src/widgets/sidebar/sections/ProjectSection.tsx`）**：
+     - 当项目已设置 `projectStage` 时，在侧边栏项目行 `ProjectTypeBadge` 旁内联展示当前形态对应的中文生命周期阶段胶囊（`data-testid="project-row-stage-badge"`）。
+  5. **单元与集成测试加固（`ProjectArchetypeStudio.test.tsx` & `ProjectSection.test.tsx`）**：
+     - 新增 `advisor-toggle-details-btn`、`advisor-decompose-suggestion-0`、`decompose-archetype-presets`、`decompose-requirement-input`、`allowed-paths-copy-md-btn` 及 `project-row-stage-badge` 端到端断言。
