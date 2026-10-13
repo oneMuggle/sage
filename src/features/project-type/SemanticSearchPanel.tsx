@@ -1,15 +1,15 @@
 /**
- * M4: 语义检索面板 (2026-10-12)
+ * M4: 语义检索面板 (2026-10-12 / Phase P22 增强)
  *
  * 嵌入 StudioMaterialsTabPanel，提供语义检索入口：
  * - 输入框：输入查询文本
  * - 搜索按钮：调用后端语义检索 API
- * - 结果展示：显示匹配的 chunks（按相关性排序）
- * - 索引状态：显示索引统计信息
+ * - 结果展示：显示匹配的 chunks（按相关性排序），支持一键复制片段
+ * - 索引状态：随项目切换自动同步索引统计，支持手动刷新统计
  */
 
-import { Search, Loader2, FileText, AlertCircle } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { Search, Loader2, FileText, AlertCircle, Copy, Check, RefreshCw } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi } from '../../shared/api';
 import type { SemanticSearchHit, IndexingStats } from '../../shared/api';
@@ -26,10 +26,13 @@ export function SemanticSearchPanel({ projectId }: SemanticSearchPanelProps) {
   const [results, setResults] = useState<SemanticSearchHit[] | null>(null);
   const [stats, setStats] = useState<IndexingStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
   /** 执行语义检索 */
   const handleSearch = useCallback(async () => {
-    if (!query.trim() || searching) return;
+    if (!query.trim() || searching || typeof projectApi?.semanticSearchMaterials !== 'function') {
+      return;
+    }
     setSearching(true);
     setError(null);
     setResults(null);
@@ -45,6 +48,7 @@ export function SemanticSearchPanel({ projectId }: SemanticSearchPanelProps) {
 
   /** 加载索引统计 */
   const loadStats = useCallback(async () => {
+    if (!projectId || typeof projectApi?.getMaterialIndexingStats !== 'function') return;
     try {
       const s = await projectApi.getMaterialIndexingStats(projectId);
       setStats(s);
@@ -53,6 +57,17 @@ export function SemanticSearchPanel({ projectId }: SemanticSearchPanelProps) {
     }
   }, [projectId]);
 
+  /** 复制检索命中文本片段 */
+  const handleCopyHit = async (content: string, idx: number) => {
+    try {
+      await navigator.clipboard?.writeText(content);
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 1500);
+    } catch {
+      // ignore in test env
+    }
+  };
+
   /** Enter 键触发搜索 */
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -60,18 +75,31 @@ export function SemanticSearchPanel({ projectId }: SemanticSearchPanelProps) {
     }
   };
 
-  /** 面板挂载时加载统计 */
-  useState(() => {
+  /** 面板挂载或切换项目时重置检索结果并加载当前项目统计 */
+  useEffect(() => {
+    setResults(null);
+    setError(null);
     void loadStats();
-  });
+  }, [projectId, loadStats]);
 
   return (
     <div className="space-y-3" data-testid="semantic-search-panel">
       {/* 标题 */}
-      <div className="flex items-center gap-2">
-        <Search className="h-4 w-4 text-blue-500" />
-        <span className="text-sm font-medium">语义检索</span>
-        <Badge variant="default">M4</Badge>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Search className="h-4 w-4 text-blue-500" />
+          <span className="text-sm font-medium">语义检索</span>
+          <Badge variant="default">M4</Badge>
+        </div>
+        <button
+          type="button"
+          onClick={() => void loadStats()}
+          data-testid="semantic-stats-refresh-btn"
+          className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <RefreshCw className="h-2.5 w-2.5" />
+          刷新索引统计
+        </button>
       </div>
 
       <p className="text-xs text-muted-foreground">
@@ -80,7 +108,10 @@ export function SemanticSearchPanel({ projectId }: SemanticSearchPanelProps) {
 
       {/* 索引状态 */}
       {stats && (
-        <div className="rounded-md border border-border bg-muted/30 p-2 text-xs">
+        <div
+          className="rounded-md border border-border bg-muted/30 p-2 text-xs"
+          data-testid="semantic-indexing-stats"
+        >
           <div className="flex flex-wrap gap-3">
             <span>
               总材料: <strong>{stats.totalMaterials}</strong>
@@ -159,16 +190,36 @@ export function SemanticSearchPanel({ projectId }: SemanticSearchPanelProps) {
                     key={`${hit.materialId}-${hit.chunkIndex}-${idx}`}
                     className="rounded-md border border-border bg-card p-3 text-xs"
                   >
-                    <div className="mb-1.5 flex items-center justify-between">
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
                         <FileText className="h-3.5 w-3.5 text-blue-500" />
                         <span className="font-medium">
                           材料 {hit.materialId.slice(0, 8)}... (chunk #{hit.chunkIndex})
                         </span>
                       </div>
-                      <Badge variant="outline" className="text-xs">
-                        相似度: {(hit.score * 100).toFixed(1)}%
-                      </Badge>
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-xs">
+                          相似度: {(hit.score * 100).toFixed(1)}%
+                        </Badge>
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyHit(hit.content, idx)}
+                          data-testid={`semantic-hit-copy-${idx}`}
+                          className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                        >
+                          {copiedIdx === idx ? (
+                            <>
+                              <Check className="h-2.5 w-2.5 text-emerald-500" />
+                              已复制
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-2.5 w-2.5 text-muted-foreground" />
+                              复制片段
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                     <div className="max-h-32 overflow-y-auto rounded bg-muted/50 p-2 font-mono text-xs whitespace-pre-wrap">
                       {hit.content}

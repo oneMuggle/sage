@@ -1,6 +1,6 @@
 /**
- * Phase P18: L3 项目演化记忆画像面板 (MEMORY.md)
- * 支持四形态画像推荐预设胶囊与一键导出 MEMORY.md Markdown 视图
+ * Phase P18 & P22: L3 项目演化记忆画像面板 (MEMORY.md)
+ * 支持四形态画像推荐预设胶囊、一键导出 MEMORY.md Markdown 视图与 M2 知识提炼确认后自动刷新画像
  */
 
 import { Copy, Plus, Sparkles, Trash2 } from 'lucide-react';
@@ -82,6 +82,8 @@ export interface StudioProfileTabPanelProps {
   savingProfile: boolean;
   onAddEntry: () => Promise<void> | void;
   onDeleteEntry: (entryId: string) => Promise<void> | void;
+  /** Phase P22: M2 知识提取确认入库后触发画像与里程碑刷新 */
+  onRefreshProfile?: () => Promise<void> | void;
 }
 
 export function StudioProfileTabPanel({
@@ -96,6 +98,7 @@ export function StudioProfileTabPanel({
   savingProfile,
   onAddEntry,
   onDeleteEntry,
+  onRefreshProfile,
 }: StudioProfileTabPanelProps) {
   const [copiedMd, setCopiedMd] = useState(false);
   const presets = PROFILE_PRESETS_BY_TYPE[projectType] ?? PROFILE_PRESETS_BY_TYPE.coding;
@@ -137,7 +140,12 @@ export function StudioProfileTabPanel({
       </div>
 
       {/* M2: AI 对话知识提取 (2026-10-12) */}
-      {projectId && <KnowledgeExtractionPanel projectId={projectId} onConfirmed={onAddEntry} />}
+      {projectId && (
+        <KnowledgeExtractionPanel
+          projectId={projectId}
+          onConfirmed={() => void (onRefreshProfile ?? onAddEntry)()}
+        />
+      )}
 
       <div
         className="flex flex-wrap items-center gap-1.5"

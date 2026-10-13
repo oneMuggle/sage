@@ -395,3 +395,18 @@
   4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
      - 新增 `project-advisor-card` 与 `knowledge-session-select` 端到端渲染与数据联动断言。
 
+### Phase P22：M2 知识提取确认后画像自动刷新、M4 语义检索跨项目联动与片段复制、M5 全形态 Wiki 生成与 Chat 顶栏项目多态阶段徽标（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **M2 对话知识提取确认后自动刷新 L3 项目画像（`src/features/project-type/StudioProfileTabPanel.tsx` & `ProjectArchetypeStudio.tsx`）**：
+     - 修复 `StudioProfileTabPanel` 中 `KnowledgeExtractionPanel` 的 `onConfirmed` 回调原先误绑至手动草稿提交函数 `onAddEntry` 的问题；新增 `onRefreshProfile` 回调，在知识提取确认入库后自动重新拉取当前项目的 `MEMORY.md` 画像列表（`loadActiveProfile(activeProject.path)`）。
+  2. **M4 语义检索面板跨项目响应式刷新与命中片段一键复制（`src/features/project-type/SemanticSearchPanel.tsx`）**：
+     - 将索引统计加载从一次性 `useState` 初始化改为监听 `projectId` 的 `useEffect`，切换治理项目时自动清空旧检索结果并同步新项目索引统计；
+     - 新增手动「刷新索引统计」按钮（`data-testid="semantic-stats-refresh-btn"`）与检索命中片段一键「复制片段」按钮（`data-testid="semantic-hit-copy-{idx}"`），并补充 `typeof projectApi?.getMaterialIndexingStats === 'function'` 安全守卫。
+  3. **M5 项目 Wiki 自动生成面板全形态开放与跨项目状态重置（`src/features/project-type/ProjectOverviewWidgets.tsx` & `WikiGenerationPanel.tsx`）**：
+     - 在 `ProjectOverviewWidgets` 中将 `WikiGenerationPanel`（`data-testid="wiki-generation-panel"`）向四大项目形态全面开放，按 `projectType` 动态展示代码工程、商务案卷、科研课题与个人知识空间的 Wiki 生成说明，并在切换项目时自动重置预览状态。
+  4. **Chat 顶栏项目徽标多态类型、阶段胶囊与工作台快捷入口（`src/widgets/chat/ProjectBadge.tsx` & `src/pages/chat/ChatHeaderBar.tsx`）**：
+     - 当当前会话绑定的工作区属于已登记项目时，在 Chat 顶栏 `ProjectBadge` 内联展示项目形态徽章（`data-testid="chat-project-type-badge"`）与当前生命周期阶段胶囊（`data-testid="chat-project-stage-badge"`），并提供一键跳转 `/projects` 项目工作台的快捷按钮（`data-testid="chat-project-workbench-btn"`）。
+  5. **单元与集成测试加固（`ProjectBadge.test.tsx` & `ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `chat-project-type-badge`、`chat-project-stage-badge`、`chat-project-workbench-btn`、`wiki-generation-panel`、`semantic-search-panel` 及 `semantic-stats-refresh-btn` 端到端测试断言。

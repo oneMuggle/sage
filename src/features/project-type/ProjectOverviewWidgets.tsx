@@ -142,7 +142,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
       {(projectType === 'coding' || project.vcsMode === 'git') && (
         <GitStatusWidget projectId={project.id} />
       )}
-      {projectType === 'coding' && <WikiGenerationPanel projectId={project.id} />}
+      <WikiGenerationPanel projectId={project.id} projectType={projectType} />
     </div>
   );
 }
