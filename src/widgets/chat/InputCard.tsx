@@ -15,6 +15,7 @@ import type React from 'react';
 
 import { AttachmentUpload } from '../../features/send-message/AttachmentUpload';
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
+import { CHAT_DOCUMENT_ACCEPT } from '../../shared/lib/hooks/useFileUpload';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { ComposerPlusMenu, type ComposerPlusMenuItem } from './ComposerPlusMenu';
@@ -202,7 +203,12 @@ function InputCardInner({
   focusRequest,
 }: InputCardProps) {
   const { t } = useI18n();
-  const hasAttachments = files.length > 0 || images.length > 0 || knowledgeRefs.length > 0 || officeRefs.length > 0 || audioAttachments.length > 0;
+  const hasAttachments =
+    files.length > 0 ||
+    images.length > 0 ||
+    knowledgeRefs.length > 0 ||
+    officeRefs.length > 0 ||
+    audioAttachments.length > 0;
 
   // U20: Emacs-style editing keys (Ctrl+A/E/K/U/W, Alt+B/F) in the textarea.
   const { ref: emacsRef, handleKeyDown: handleEmacsKeyDown } = useEmacsKeybindings({
@@ -669,7 +675,7 @@ function InputCardInner({
         <input
           type="file"
           id="chat-input-file"
-          accept=".txt,.md,.pdf,.docx"
+          accept={CHAT_DOCUMENT_ACCEPT}
           multiple
           className="hidden"
           onChange={onFileSelect}
