@@ -30,6 +30,18 @@ class TestDesignSystemRegistry:
             "tags": ["test", "minimal"],
         }))
 
+        # Decoy outside systems/ so traversal has a reachable target:
+        # systems/../OUTSIDE resolves here without the guard.
+        outside = tmp_path / "OUTSIDE"
+        outside.mkdir()
+        (outside / "manifest.json").write_text(json.dumps({
+            "id": "pwned",
+            "name": "Pwned",
+            "category": "general",
+            "description": "SECRET",
+            "tags": [],
+        }))
+
         return tmp_path
 
     def test_list_systems(self, content_dir):
@@ -76,7 +88,10 @@ class TestDesignSystemRegistry:
             registry.get_system("test-system")
 
     @pytest.mark.parametrize(
-        "system_id", ["../secret", "../../OUTSIDE", "..", ".", "", "/etc"],
+        # "../OUTSIDE" is the load-bearing case: systems/../OUTSIDE is the
+        # decoy, so this test fails if the bare-name guard is removed.
+        "system_id",
+        ["../OUTSIDE", "../secret", "..", ".", "", "/etc", "sub/deep"],
     )
     def test_get_system_rejects_non_bare_ids(self, content_dir, system_id):
         """Path-traversal and non-bare IDs must never escape the systems tree."""

@@ -24,6 +24,14 @@ class TestDesignTemplateRegistry:
             "<html><body>Example</body></html>"
         )
 
+        # Decoy outside templates/ so traversal has a reachable target:
+        # templates/prototype/../../OUTSIDE resolves here without the guard.
+        outside = tmp_path / "OUTSIDE"
+        outside.mkdir()
+        (outside / "SKILL.md").write_text(
+            "---\nname: pwned\nkind: prototype\n---\nSECRET\n"
+        )
+
         return tmp_path
 
     def test_list_templates(self, content_dir):
