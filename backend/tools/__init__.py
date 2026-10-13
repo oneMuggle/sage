@@ -30,6 +30,11 @@ from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, Checkpoin
 from .codebase_search_tool import CodebaseSearchTool
 from .commit_message_tool import GitCommitMessageTool
 from .config_tool import ReadSageConfigTool, UpdateSageConfigTool
+from .design_export_tool import DesignExportTool
+from .design_generate_tool import DesignGenerateTool
+from .design_iterate_tool import DesignIterateTool
+from .design_list_systems_tool import DesignListSystemsTool
+from .design_list_templates_tool import DesignListTemplatesTool
 from .download_status_tool import DownloadCancelTool, DownloadStatusTool
 from .download_tool import HttpDownloadTool
 from .edit_tool import EditTool
@@ -356,6 +361,14 @@ def register_all_tools(
     registry.register(CompleteTodoTool(todo_service_getter=todo_service_getter, policy=policy))
     registry.register(UpdateTodoTool(todo_service_getter=todo_service_getter, policy=policy))
     registry.register(DeleteTodoTool(todo_service_getter=todo_service_getter, policy=policy))
+
+    # Design Studio tools (Task 13): 5 tools for HTML/CSS prototype and presentation generation.
+    # list_systems/list_templates are READ; generate/iterate/export are WRITE_LOCAL.
+    registry.register(DesignListSystemsTool(policy=policy))
+    registry.register(DesignListTemplatesTool(policy=policy))
+    registry.register(DesignGenerateTool(policy=policy))
+    registry.register(DesignIterateTool(policy=policy))
+    registry.register(DesignExportTool(policy=policy))
 
 
 __all__ = [

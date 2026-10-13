@@ -628,6 +628,9 @@ async def lifespan(app: FastAPI):
             workspace_dir=_design_workspace,
         )
         app.state.design_studio = design_studio
+        # Expose design_studio to tools via module-level getter
+        from backend.design import init_design_studio
+        init_design_studio(design_studio)
         _startup_mark("design_studio")
     except Exception:  # noqa: BLE001 — 装配失败不阻塞启动
         logger.exception("DesignStudio 装配失败（ignored）")

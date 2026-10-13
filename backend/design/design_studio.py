@@ -10,7 +10,12 @@ from typing import Optional
 from backend.data.design_repo import DesignRepo
 from backend.design.errors import DesignProjectNotFoundError
 from backend.design.generator import DesignGenerator
-from backend.design.models import DesignArtifact, DesignProject
+from backend.design.models import (
+    DesignArtifact,
+    DesignProject,
+    DesignSystem,
+    DesignTemplate,
+)
 from backend.design.systems import DesignSystemRegistry
 from backend.design.templates import DesignTemplateRegistry
 
@@ -65,6 +70,18 @@ class DesignStudio:
     ) -> list[DesignProject]:
         """List projects, optionally filtered by kind."""
         return self._repo.list_projects(kind=kind)
+
+    def list_systems(self) -> list[DesignSystem]:
+        """List all available design systems."""
+        return self._systems.list_systems()
+
+    def list_templates(self) -> list[DesignTemplate]:
+        """List all available design templates."""
+        return self._templates.list_templates()
+
+    def get_latest_artifact(self, project_id: str) -> Optional[DesignArtifact]:
+        """Return the newest artifact of a project, or None when none exist."""
+        return self._repo.get_latest_artifact(project_id)
 
     def delete_project(self, project_id: str) -> None:
         """Delete a project."""
