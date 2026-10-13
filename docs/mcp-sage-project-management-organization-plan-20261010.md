@@ -426,3 +426,18 @@
      - 当项目已设置 `projectStage` 时，在侧边栏项目行 `ProjectTypeBadge` 旁内联展示当前形态对应的中文生命周期阶段胶囊（`data-testid="project-row-stage-badge"`）。
   5. **单元与集成测试加固（`ProjectArchetypeStudio.test.tsx` & `ProjectSection.test.tsx`）**：
      - 新增 `advisor-toggle-details-btn`、`advisor-decompose-suggestion-0`、`decompose-archetype-presets`、`decompose-requirement-input`、`allowed-paths-copy-md-btn` 及 `project-row-stage-badge` 端到端断言。
+### Phase P24：M2 知识提取跨项目状态隔离与全选/清空切换、M5 Wiki 生成转入 L4 受控资料入库闭环与 L1/L2/L4 Markdown 导出（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **M2 对话知识提取跨项目状态隔离与全选/清空批量切换（`src/features/project-type/KnowledgeExtractionPanel.tsx`）**：
+     - 切换治理项目（`projectId` 变化）时自动调用 `resetPanel()` 并重置 `sessionId` 至新项目最近绑定的会话，防止旧项目的会话 ID 或待审条目跨项目残留；
+     - 在审核阶段新增「全选建议 / 清空选择」按钮（`data-testid="knowledge-toggle-select-all"`）与单条目复选框标识（`data-testid="knowledge-entry-checkbox-{idx}"`），并补充 `extractKnowledge` / `confirmKnowledge` 的函数存在性安全守卫。
+  2. **M5 Wiki 自动生成 → L4 受控资料一键入库闭环与扫描/生成摘要复制（`src/features/project-type/WikiGenerationPanel.tsx`）**：
+     - 在扫描预览阶段新增「复制扫描摘要」按钮（`data-testid="wiki-copy-preview-btn"`）、增量更新复选框标识（`data-testid="wiki-incremental-checkbox"`）及「生成 Wiki」按钮标识（`data-testid="wiki-generate-btn"`）；
+     - 在生成完成阶段新增「复制 Wiki 清单」按钮（`data-testid="wiki-copy-manifest-btn"`）以及每个生成页面旁的 **「纳入 L4 资料」** 按钮（`data-testid="wiki-ingest-material-{idx}"`），一键调用 `projectApi.addMaterialFromFile(projectId, wikiPath)` 将生成的 Wiki 文档纳入 L4 受控语料池并标记 `已纳入 L4`。
+  3. **L1+L2 宪章与系统指令及 L4 生效受控资料 Markdown 导出（`src/features/project-type/StudioMaterialsAndProfilePanels.tsx`）**：
+     - 在 `StudioCharterTabPanel` 新增「复制宪章与指令」按钮（`data-testid="studio-charter-copy-md-btn"`），支持一键导出 L1 `SAGE.md` 与 L2 项目目标/系统指令的组合 Markdown；
+     - 在 `StudioMaterialsTabPanel` 新增「复制生效资料摘要」按钮（`data-testid="studio-materials-copy-md-btn"`），支持一键导出当前启用参与上下文的所有 L4 资料摘要。
+  4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `wiki-preview-btn` → `wiki-copy-preview-btn` → `wiki-generate-btn` → `wiki-copy-manifest-btn` → `wiki-ingest-material-0`、`studio-charter-copy-md-btn` 及 `knowledge-extract-btn` → `knowledge-toggle-select-all` → `knowledge-confirm-btn` 端到端测试断言。

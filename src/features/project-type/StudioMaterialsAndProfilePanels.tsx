@@ -47,6 +47,7 @@ export function StudioCharterTabPanel({
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedHint, setSavedHint] = useState<string | null>(null);
+  const [copiedCharter, setCopiedCharter] = useState(false);
 
   const [descriptionDraft, setDescriptionDraft] = useState(initialDescription ?? '');
   const [instructionsDraft, setInstructionsDraft] = useState(initialInstructions ?? '');
@@ -77,6 +78,25 @@ export function StudioCharterTabPanel({
     if (charter?.recommendedTemplate) {
       setDraft(charter.recommendedTemplate);
       setSavedHint(null);
+    }
+  };
+
+  const handleCopyCharterMarkdown = async () => {
+    const lines = [
+      `# L1 项目总纲 (${projectPath}/SAGE.md)`,
+      '',
+      draft || '（未填写）',
+      '',
+      '## L2 项目目标与高优系统指令',
+      `- **项目目标**: ${descriptionDraft || '（未设置）'}`,
+      `- **系统指令**: ${instructionsDraft || '（未设置）'}`,
+    ];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedCharter(true);
+      setTimeout(() => setCopiedCharter(false), 2000);
+    } catch {
+      // ignore in test env
     }
   };
 
@@ -161,6 +181,15 @@ export function StudioCharterTabPanel({
                 {savedHint}
               </span>
             )}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void handleCopyCharterMarkdown()}
+              data-testid="studio-charter-copy-md-btn"
+            >
+              <Copy className="mr-1 h-3.5 w-3.5 text-primary" />
+              {copiedCharter ? '已复制宪章' : '复制宪章与指令'}
+            </Button>
             <Button
               size="sm"
               variant="secondary"
@@ -470,6 +499,23 @@ export function StudioMaterialsTabPanel({ projectId, projectPath }: StudioMateri
   const [addingFile, setAddingFile] = useState(false);
   const [addingSnippet, setAddingSnippet] = useState(false);
   const [previewMaterialId, setPreviewMaterialId] = useState<string | null>(null);
+  const [copiedMaterials, setCopiedMaterials] = useState(false);
+
+  const handleCopyMaterialsMarkdown = async () => {
+    const enabledItems = materials.filter((m) => m.enabled !== false);
+    const lines = [
+      `# L4 生效受控资料摘要 (${projectPath})`,
+      '',
+      ...enabledItems.map((m, i) => `### ${i + 1}. ${m.id}\n${m.content}`),
+    ];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n\n'));
+      setCopiedMaterials(true);
+      setTimeout(() => setCopiedMaterials(false), 2000);
+    } catch {
+      // ignore in test env
+    }
+  };
 
   const loadMaterials = useCallback(async () => {
     if (!projectId) return;
@@ -574,6 +620,15 @@ export function StudioMaterialsTabPanel({ projectId, projectPath }: StudioMateri
         </div>
         {materials.length > 0 && (
           <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => void handleCopyMaterialsMarkdown()}
+              data-testid="studio-materials-copy-md-btn"
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+            >
+              <Copy className="h-3 w-3 text-primary" />
+              {copiedMaterials ? '已复制资料摘要' : '复制生效资料摘要'}
+            </button>
             <button
               type="button"
               onClick={() => void handleBatchToggle(true)}

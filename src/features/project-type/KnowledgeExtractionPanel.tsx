@@ -1,8 +1,8 @@
 /**
- * AI 对话知识提取面板 (M2, 2026-10-12；Phase P21 项目绑定会话下拉选择联动 2026-10-13)
+ * AI 对话知识提取面板 (M2, 2026-10-12；Phase P21 会话联动；Phase P24 跨项目状态重置与全选/清空切换)
  *
  * 嵌入项目画像 Profile Tab 顶部，支持从项目已绑定会话列表一键选择或手动输入会话 ID，
- * 提取知识建议并勾选确认后写入 ProjectProfileStore。
+ * 提取知识建议并支持一键全选/清空与勾选确认后写入 ProjectProfileStore。
  */
 
 import { Sparkles, Loader2, CheckCircle2, Lightbulb } from 'lucide-react';
@@ -40,17 +40,28 @@ export function KnowledgeExtractionPanel({
   const [sessionId, setSessionId] = useState('');
   const [boundSessions, setBoundSessions] = useState<Session[]>([]);
 
+  const resetPanel = useCallback(() => {
+    setPhase('idle');
+    setEntries([]);
+    setSelected(new Set());
+    setReasoning('');
+    setError(null);
+  }, []);
+
   useEffect(() => {
-    if (!projectId || typeof projectApi?.listSessions !== 'function') return;
+    resetPanel();
+    setSessionId('');
+    if (!projectId || typeof projectApi?.listSessions !== 'function') {
+      setBoundSessions([]);
+      return;
+    }
     let active = true;
     projectApi
       .listSessions(projectId)
       .then((list) => {
         if (!active || !Array.isArray(list)) return;
         setBoundSessions(list);
-        if (list.length > 0) {
-          setSessionId((prev) => prev || list[0].id);
-        }
+        setSessionId(list[0]?.id ?? '');
       })
       .catch(() => {
         if (active) setBoundSessions([]);
@@ -58,13 +69,14 @@ export function KnowledgeExtractionPanel({
     return () => {
       active = false;
     };
-  }, [projectId]);
+  }, [projectId, resetPanel]);
 
   const handleExtract = useCallback(async () => {
     if (!sessionId.trim()) {
       setError('请输入会话 ID');
       return;
     }
+    if (typeof projectApi?.extractKnowledge !== 'function') return;
     setError(null);
     setPhase('loading');
     try {
@@ -82,7 +94,7 @@ export function KnowledgeExtractionPanel({
   }, [projectId, sessionId]);
 
   const handleConfirm = useCallback(async () => {
-    if (selected.size === 0) return;
+    if (selected.size === 0 || typeof projectApi?.confirmKnowledge !== 'function') return;
     setError(null);
     setPhase('confirming');
     try {
@@ -96,15 +108,7 @@ export function KnowledgeExtractionPanel({
       setError(err instanceof Error ? err.message : '确认失败');
       setPhase('review');
     }
-  }, [projectId, entries, selected, onConfirmed]);
-
-  const resetPanel = () => {
-    setPhase('idle');
-    setEntries([]);
-    setSelected(new Set());
-    setReasoning('');
-    setError(null);
-  };
+  }, [projectId, entries, selected, onConfirmed, resetPanel]);
 
   const toggleEntry = (idx: number) => {
     setSelected((prev) => {
@@ -116,6 +120,14 @@ export function KnowledgeExtractionPanel({
       }
       return next;
     });
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selected.size === entries.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(entries.map((_, i) => i)));
+    }
   };
 
   return (
@@ -194,8 +206,16 @@ export function KnowledgeExtractionPanel({
             </div>
           ) : (
             <div className="space-y-1.5">
-              <div className="text-xs font-medium text-muted-foreground">
-                发现 {entries.length} 条建议，勾选要添加的：
+              <div className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+                <span>发现 {entries.length} 条建议，勾选要添加的：</span>
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAll}
+                  data-testid="knowledge-toggle-select-all"
+                  className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  {selected.size === entries.length ? '清空选择' : '全选建议'}
+                </button>
               </div>
               {entries.map((entry, idx) => (
                 <label
@@ -206,6 +226,7 @@ export function KnowledgeExtractionPanel({
                     type="checkbox"
                     checked={selected.has(idx)}
                     onChange={() => toggleEntry(idx)}
+                    data-testid={`knowledge-entry-checkbox-${idx}`}
                     className="mt-0.5 shrink-0"
                   />
                   <div className="min-w-0 flex-1">
