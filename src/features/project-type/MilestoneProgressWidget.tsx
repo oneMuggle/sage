@@ -1,11 +1,11 @@
 /**
- * 里程碑进度 Widget (2026-09-25; Phase P15 空状态一键播种与概览快捷完成切换 2026-10-12)
+ * 里程碑进度 Widget (2026-09-25; Phase P15 空状态一键播种与快捷完成切换; Phase P25 中文阶段胶囊与手动刷新)
  *
  * 项目类型分类系统 - Phase 4.3
- * 显示项目里程碑的进度统计、空状态一键生成形态推荐里程碑与快捷状态切换
+ * 显示项目里程碑的进度统计、中文阶段胶囊、手动刷新、空状态一键生成形态推荐里程碑与快捷状态切换
  */
 
-import { Target, CheckCircle2, Clock, AlertCircle, Sparkles } from 'lucide-react';
+import { Target, CheckCircle2, Clock, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
 import { projectApi, type ProjectMilestone, type ProjectType } from '../../shared/api';
@@ -25,11 +25,18 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const blueprint = getArchetypeBlueprint(projectType);
+  const stageLabelMap = new Map(blueprint.stages.map((s) => [s.id, s.label]));
+
   const fetchMilestones = useCallback(async () => {
+    if (typeof projectApi?.listMilestones !== 'function') {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const list = await projectApi.listMilestones(projectId);
-      setMilestones(list);
+      setMilestones(Array.isArray(list) ? list : []);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取里程碑失败');
@@ -46,9 +53,8 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
     if (seeding || typeof projectApi?.createMilestone !== 'function') return;
     setSeeding(true);
     try {
-      const bp = getArchetypeBlueprint(projectType);
       let order = 0;
-      for (const item of bp.recommendedMilestones) {
+      for (const item of blueprint.recommendedMilestones) {
         await projectApi.createMilestone(projectId, {
           title: item.title,
           description: item.description,
@@ -109,12 +115,24 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
 
   if (milestones.length === 0) {
     return (
-      <Card>
+      <Card data-testid="milestone-progress-widget">
         <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Target className="h-4 w-4" />
-            里程碑进度
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Target className="h-4 w-4" />
+              里程碑进度
+            </CardTitle>
+            <button
+              type="button"
+              onClick={() => void fetchMilestones()}
+              data-testid="milestone-summary-refresh-btn"
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="刷新里程碑"
+              aria-label="刷新里程碑"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -141,12 +159,24 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const progress = (completed / milestones.length) * 100;
 
   return (
-    <Card>
+    <Card data-testid="milestone-progress-widget">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <Target className="h-4 w-4" />
-          里程碑进度
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Target className="h-4 w-4" />
+            里程碑进度
+          </CardTitle>
+          <button
+            type="button"
+            onClick={() => void fetchMilestones()}
+            data-testid="milestone-summary-refresh-btn"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="刷新里程碑"
+            aria-label="刷新里程碑"
+          >
+            <RefreshCw className="h-3 w-3" />
+          </button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="space-y-1">
@@ -185,6 +215,14 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                     <div className="flex items-center gap-1.5">
                       {getStatusIcon(milestone.status)}
                       <span className="font-medium truncate">{milestone.title}</span>
+                      {milestone.stage && (
+                        <span
+                          className="shrink-0 rounded bg-muted px-1 py-0.5 text-ui-2xs text-muted-foreground"
+                          data-testid={`milestone-summary-stage-${milestone.id}`}
+                        >
+                          {stageLabelMap.get(milestone.stage) ?? milestone.stage}
+                        </span>
+                      )}
                     </div>
                     {milestone.dueDate && (
                       <div className="text-muted-foreground ml-5">截止：{milestone.dueDate}</div>
