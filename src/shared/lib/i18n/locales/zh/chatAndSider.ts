@@ -127,7 +127,7 @@ export const zhChatAndSider = {
   'wizard.done.desc': '端点已保存并设为对话模型。之后可随时在 设置 → 服务端点 中修改。',
   'wizard.done.start': '开始使用 Sage',
   'chat.attachment_not_sent':
-    '提示：普通文件附件暂不随消息发送（即将支持）；图片可直接发送，@ 引用的文件会生效',
+    '以下文件类型暂不支持：{files}。支持：图片、代码/文本文件、PDF、Word、Excel',
   'chat.memory_toggle': '查看本次引用的记忆',
   'chat.delete_message': '删除这条消息',
   'chat.delete_message_confirm': '确认删除这条消息？',

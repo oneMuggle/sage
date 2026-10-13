@@ -92,7 +92,7 @@ class MediaStore:
                 MediaKind.IMAGE
                 if f.suffix in (".png", ".jpg", ".jpeg", ".webp")
                 else MediaKind.DOCUMENT
-                if f.suffix in (".pdf", ".docx", ".txt", ".md")
+                if f.suffix in (".pdf", ".docx", ".xlsx", ".txt", ".md")
                 else MediaKind.AUDIO
             )
             return MediaRef(

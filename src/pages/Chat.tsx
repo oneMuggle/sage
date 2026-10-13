@@ -12,6 +12,7 @@ import { restoreRunToBoard } from '../features/send-message/orchestrationEvents'
 import { useChat } from '../features/send-message/useChat';
 import { useTerminalPanelStore } from '../features/terminal-panel/terminalPanelStore';
 import { type ChatOfficeRef } from '../shared/api';
+import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
 import { useStore } from '../shared/lib/store';
 import { useIsMobile } from '../shared/lib/useIsMobile';
 import { useCurrentWorkspace } from '../shared/lib/workspaceContext';
@@ -41,7 +42,6 @@ import { useChatStickyScroll } from './chat/useChatStickyScroll';
 
 /** 稳定空数组: toolCalls 缺省时避免每次渲染产生新引用击穿 RightPanel memo (F1) */
 const EMPTY_TOOL_CALLS: readonly never[] = [];
-
 
 export function Chat() {
   const {
@@ -166,7 +166,6 @@ export function Chat() {
     }
   }, [currentSessionId, loadMessages]);
 
-
   // Auto-send pending message passed from Welcome page via router state
   const pendingMessage = (location.state as { pendingMessage?: string } | null)?.pendingMessage;
   useEffect(() => {
@@ -226,6 +225,14 @@ export function Chat() {
       const orchestrationMode = options?.orchestrationMode;
       // 后端口径: ≤4 张、单张解码后 ≤5MiB；前端先行裁剪并提示。
       const MAX_IMAGES = 4;
+
+      // r75: 聊天文档附件 MIME 映射（扩展名集合用 useFileUpload.CHAT_DOCUMENT_EXTENSIONS 共享口径）
+      // 2026-10-13: 新增 xlsx MIME（后端 openpyxl 解析需要正确 content-type）
+      const CHAT_DOC_MIME: Record<string, string> = {
+        pdf: 'application/pdf',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      };
       const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
       const dataUrls = (options?.images ?? [])
         .map((img) => img.dataUrl)
@@ -242,7 +249,7 @@ export function Chat() {
       for (const att of options?.attachments ?? []) {
         if (!att.dataUrl) continue;
         const ext = att.name.split('.').pop()?.toLowerCase() ?? '';
-        if (ext !== 'txt' && ext !== 'md') continue;
+        if (!CHAT_DOCUMENT_EXTENSIONS.has(ext)) continue;
         try {
           const bytes = atob(att.dataUrl.split(',')[1] ?? '');
           const buffer = new Uint8Array(bytes.length);
@@ -250,7 +257,7 @@ export function Chat() {
           const res = (await window.electronAPI?.media?.uploadAttachment?.(
             buffer.buffer,
             att.name,
-            att.type || 'text/plain',
+            att.type || CHAT_DOC_MIME[ext] || 'text/plain',
           )) as { media_ref?: { id?: string } } | undefined;
           if (res?.media_ref?.id) attachmentMediaIds.push(res.media_ref.id);
           else toast.warning(`附件上传失败: ${att.name}`);

@@ -131,7 +131,7 @@ export const enChatAndSider = {
     'Endpoint saved and set as chat model. Change it anytime in Settings → Endpoints.',
   'wizard.done.start': 'Start using Sage',
   'chat.attachment_not_sent':
-    'Note: regular file attachments are not sent yet; images are supported, and @-referenced files take effect',
+    'Unsupported file types: {files}. Supported: images, code/text files, PDF, Word, Excel',
   'chat.memory_toggle': 'View memories used for this reply',
   'chat.delete_message': 'Delete this message',
   'chat.delete_message_confirm': 'Delete this message?',
