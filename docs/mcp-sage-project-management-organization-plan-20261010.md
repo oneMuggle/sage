@@ -381,4 +381,17 @@
      - 新增 **「快捷快照」** 按钮（`data-testid="overview-quick-checkpoint-btn"`），支持在项目概览页或侧边栏展开槽位一键创建当前阶段内置快照并刷新快照计数。
   4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
      - 新增 `workspace-charter-status-badge`、`overview-quick-checkpoint-btn`、`constraint-glob-tester-bar`、`constraint-glob-match-count`、`milestone-manager-progress`、`milestone-stage-filter-bar` 及 `milestone-copy-roadmap-btn` 端到端断言。
+### Phase P21：M3 AI 项目健康顾问与 M5 代码→Wiki 面板概览挂载、M2 知识提取绑定会话下拉联动、创建向导 L5 只读白名单预设（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **M3 AI 项目健康顾问与 M5 代码→Wiki 生成面板挂载（`src/features/project-type/ProjectOverviewWidgets.tsx`、`ProjectAdvisorCard.tsx`、`WikiGenerationPanel.tsx`）**：
+     - 在 `ProjectOverviewWidgets` 中正式挂载 `ProjectAdvisorCard`（`data-testid="project-advisor-card"`），为所有形态项目提供健康度评分、风险识别与改进建议；并为 `coding` 形态项目挂载 `WikiGenerationPanel`（`data-testid="wiki-generation-panel"` / `data-testid="wiki-preview-btn"`）；
+     - 为 `ProjectAdvisorCard` 增加 `typeof projectApi?.getAdvice === 'function'` 安全守卫，确保离线或精简 Mock 测试环境下平滑降级。
+  2. **M2 对话知识提取面板绑定项目会话下拉联动（`src/features/project-type/KnowledgeExtractionPanel.tsx`，256 行）**：
+     - 自动拉取 `projectApi.listSessions(projectId)` 并渲染项目已绑定会话下拉选择器（`data-testid="knowledge-session-select"`），默认预选最近会话，免除用户手动查找并复制会话 UUID 的繁琐操作。
+  3. **创建向导 Step 3 新增 L5 跨目录只读白名单预设挂载（`src/features/project-type/ProjectCreationWizard.tsx`，517 行）**：
+     - 在向导第 3 步新增按形态推荐的 L5 跨目录只读参考路径复选框组（`data-testid="wizard-allowed-paths-presets"`，如企业合同范本库、全局 Zotero 文献库、跨仓共享 SDK 等），创建项目时自动调用 `projectApi.updateAllowedPaths` 完成挂载。
+  4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `project-advisor-card` 与 `knowledge-session-select` 端到端渲染与数据联动断言。
 
