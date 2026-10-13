@@ -303,11 +303,11 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
               >
                 <span className="text-ui-2xs text-muted-foreground">状态筛选：</span>
                 {[
-                  { id: 'all', label: '全部状态' },
-                  { id: 'in_progress', label: '进行中' },
-                  { id: 'pending', label: '待开始' },
-                  { id: 'completed', label: '已完成' },
-                  { id: 'blocked', label: '阻塞' },
+                  { id: 'all', label: '状态: 全部' },
+                  { id: 'in_progress', label: '状态: 进行中' },
+                  { id: 'pending', label: '状态: 待开始' },
+                  { id: 'completed', label: '状态: 已完成' },
+                  { id: 'blocked', label: '状态: 阻塞' },
                 ].map((st) => (
                   <button
                     key={st.id}
