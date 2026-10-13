@@ -158,6 +158,56 @@ def _v5_artifacts_office_columns(conn: Any) -> None:
 register_migration(5, "artifacts_office_columns", _v5_artifacts_office_columns)
 
 
+def _v6_add_design_tables(conn: Any) -> None:
+    """v6：创建设计工作室的 design_projects 与 design_artifacts 表。
+
+    design_projects 存储设计项目元数据（名称、类型、系统/模板 ID、简报、
+    状态机）；design_artifacts 存储每个项目产出的产物（版本化文件路径、
+    导出格式、来源 prompt）。外键 CASCADE 删除，索引覆盖常用查询路径。
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS design_projects (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('prototype', 'deck')),
+            system_id TEXT NOT NULL,
+            template_id TEXT NOT NULL,
+            brief TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft'
+                CHECK(status IN ('draft', 'generating', 'complete', 'error')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS design_artifacts (
+            id TEXT PRIMARY KEY,
+            project_id TEXT NOT NULL
+                REFERENCES design_projects(id) ON DELETE CASCADE,
+            version INTEGER NOT NULL,
+            file_path TEXT NOT NULL,
+            kind TEXT NOT NULL
+                CHECK(kind IN ('html', 'deck', 'standalone')),
+            title TEXT NOT NULL,
+            export_formats TEXT NOT NULL DEFAULT '[]',
+            source_prompt TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            UNIQUE(project_id, version)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_design_artifacts_project "
+        "ON design_artifacts(project_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_design_projects_status "
+        "ON design_projects(status)"
+    )
+
+
+register_migration(6, "add_design_tables", _v6_add_design_tables)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(
