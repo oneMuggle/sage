@@ -75,8 +75,12 @@ class DesignStudio:
         """List all available design systems."""
         return self._systems.list_systems()
 
-    def list_templates(self) -> list[DesignTemplate]:
-        """List all available design templates."""
+    def list_templates(
+        self, kind: Optional[str] = None,
+    ) -> list[DesignTemplate]:
+        """List available design templates, optionally filtered by kind."""
+        if kind:
+            return self._templates.list_templates_by_kind(kind)
         return self._templates.list_templates()
 
     def get_latest_artifact(self, project_id: str) -> Optional[DesignArtifact]:

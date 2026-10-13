@@ -637,3 +637,174 @@ class TestDesignRoutes:
         frames = _sse_frames(resp.text)
         event_types = [f[0] for f in frames]
         assert "error" in event_types
+
+    # ---------------------------------------------------------------
+    # Review gap 1: DesignGenerationError -> error frame in SSE stream
+    # ---------------------------------------------------------------
+
+    async def test_generate_generation_error_yields_error_frame(self, studio):
+        """LLM failure surfaces as an `error` SSE frame, not a raw 500."""
+        from backend.design.errors import DesignGenerationError
+        from backend.main import app
+
+        project = studio.create_project(
+            "Boom", "prototype", "test-sys", "test-page", "brief",
+        )
+
+        async def _raise(*_args, **_kwargs):
+            raise DesignGenerationError("LLM returned empty response")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ), patch.object(
+            studio._generator, "generate", side_effect=_raise,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    f"/api/v1/design/projects/{project.id}/generate",
+                    json={"brief": "x"},
+                )
+
+        assert resp.status_code == 200
+        assert "text/event-stream" in resp.headers["content-type"]
+        frames = _sse_frames(resp.text)
+        last_event, last_data = frames[-1]
+        assert last_event == "error"
+        assert "empty response" in json.loads(last_data)["detail"]
+
+    async def test_iterate_generation_error_yields_error_frame(self, studio):
+        """Iteration LLM failure surfaces as an `error` SSE frame."""
+        from backend.design.errors import DesignGenerationError
+        from backend.main import app
+
+        project = studio.create_project(
+            "BoomIter", "prototype", "test-sys", "test-page", "brief",
+        )
+        await studio.generate(project.id, "v1 brief")
+
+        async def _raise(*_args, **_kwargs):
+            raise DesignGenerationError("unparseable artifact")
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ), patch.object(
+            studio._generator, "generate", side_effect=_raise,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    f"/api/v1/design/projects/{project.id}/iterate",
+                    json={"feedback": "x"},
+                )
+
+        assert resp.status_code == 200
+        frames = _sse_frames(resp.text)
+        last_event, last_data = frames[-1]
+        assert last_event == "error"
+        assert "unparseable artifact" in json.loads(last_data)["detail"]
+
+    # ---------------------------------------------------------------
+    # Review gap 2: registry errors -> 500 on the list endpoints
+    # ---------------------------------------------------------------
+
+    async def test_list_systems_registry_error_returns_500(self, studio):
+        """A raising registry yields a mapped 500, not an unhandled error."""
+        from backend.main import app
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ), patch.object(
+            studio._systems, "list_systems",
+            side_effect=OSError("corrupt content dir"),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.get("/api/v1/design/systems")
+
+        assert resp.status_code == 500
+        assert "corrupt content dir" in resp.json()["detail"]
+
+    async def test_list_templates_registry_error_returns_500(self, studio):
+        """A raising template registry yields a mapped 500."""
+        from backend.main import app
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ), patch.object(
+            studio._templates, "list_templates",
+            side_effect=OSError("template dir unreadable"),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.get("/api/v1/design/templates")
+
+        assert resp.status_code == 500
+        assert "template dir unreadable" in resp.json()["detail"]
+
+    # ---------------------------------------------------------------
+    # Review gap 3: extra="forbid" rejects unknown request fields
+    # ---------------------------------------------------------------
+
+    async def test_create_project_rejects_unknown_field(self, studio):
+        """`extra="forbid"` turns a stray key into a 422, not a silent drop."""
+        from backend.main import app
+
+        payload = {
+            "name": "Extra Field",
+            "kind": "prototype",
+            "system_id": "test-sys",
+            "template_id": "test-page",
+            "brief": "brief",
+            "unexpected_key": "should be rejected",
+        }
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    "/api/v1/design/projects", json=payload,
+                )
+
+        assert resp.status_code == 422
+        assert "unexpected_key" in resp.text
+        # Nothing was persisted.
+        assert studio.list_projects() == []
+
+    async def test_generate_rejects_unknown_field(self, studio):
+        """GenerateRequest also forbids unknown fields."""
+        from backend.main import app
+
+        project = studio.create_project(
+            "ExtraGen", "prototype", "test-sys", "test-page", "brief",
+        )
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    f"/api/v1/design/projects/{project.id}/generate",
+                    json={"brief": "x", "bogus": 1},
+                )
+
+        assert resp.status_code == 422

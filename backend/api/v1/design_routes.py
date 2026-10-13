@@ -16,7 +16,7 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
@@ -74,8 +74,6 @@ class IterateRequest(BaseModel):
 
 def _require_studio():
     """Return the global DesignStudio or raise 404."""
-    from fastapi import HTTPException
-
     studio = get_design_studio()
     if studio is None:
         raise HTTPException(
@@ -139,10 +137,7 @@ async def list_templates(
     """Return all registered design templates, optionally filtered by kind."""
     studio = _require_studio()
     try:
-        if kind is not None:
-            templates = studio._templates.list_templates_by_kind(kind)
-        else:
-            templates = studio.list_templates()
+        templates = studio.list_templates(kind=kind)
     except Exception as exc:
         logger.exception("Failed to list design templates")
         return JSONResponse(
@@ -211,9 +206,14 @@ async def get_project(project_id: str):
     studio = _require_studio()
     try:
         project = studio.get_project(project_id)
+        artifact = studio.get_latest_artifact(project_id)
     except DesignProjectNotFoundError as exc:
         return _map_design_error(exc)
-    artifact = studio.get_latest_artifact(project_id)
+    except Exception as exc:
+        logger.exception("Failed to get design project %s", project_id)
+        return JSONResponse(
+            status_code=500, content={"detail": str(exc)},
+        )
     return {
         **project.model_dump(),
         "latest_artifact": (
