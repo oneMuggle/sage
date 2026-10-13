@@ -488,3 +488,16 @@
      - 在 `ProjectAdvisorCard` 标题栏新增「复制诊断」按钮（`data-testid="advisor-copy-md-btn"`），支持将项目健康评分、风险项与改进建议一键导出为结构化 Markdown 报告。
   5. **单元测试与门禁加固（`ConstraintSummaryWidget.test.tsx` & `MilestoneProgressWidget.test.tsx`）**：
      - 新增 `ConstraintManager`、`ProjectAdvisorCard`、`MilestoneManager` 与 `TaskDecomposeDialog` 的 Phase P27 端到端测试断言。
+
+### Phase P28：项目画像四类原型预设与导出、项目级 Hook 取消信任、对话顶栏路径复制与概览直接拆解（2026-10-13 已完成）
+
+1. **项目画像卡片四类原型预设、关键词/类别筛选与一键复制 Markdown（`src/widgets/memory/ProjectProfileCard.tsx`）**
+   - 在新增项目画像编辑器中补充**四类原型画像预设**胶囊条（`project-profile-presets` / `project-profile-preset-${idx}`），覆盖代码工程约定、科学研究铁律、公文商务校核与个人知识卡片四类长期记忆预设。
+   - 新增关键词实时搜索（`project-profile-search-input`）与类别筛选胶囊（`project-profile-cat-filter-${cat}`），并在顶栏提供 **`复制 MD`**（`project-profile-copy-md-btn`）与**手动刷新**（`project-profile-refresh-btn`），一键导出项目级 `MEMORY.md`。
+2. **项目级 Hook 安全治理面板取消信任、路径复制与手动刷新（`src/widgets/settings/ProjectHooksPanel.tsx`）**
+   - 在已信任项目级 Hook 状态下补齐 **`取消信任`** 按钮（`project-hooks-untrust-btn`），支持随时撤销工作区 Hook 执行授权；同时提供 **`复制路径`**（`project-hooks-copy-path-btn`）与 **`刷新`**（`project-hooks-refresh-btn`）按钮。
+3. **对话头部项目徽标版本保护标识与工作区路径一键复制（`src/widgets/chat/ProjectBadge.tsx`）**
+   - 在 Chat 头部项目徽标内补充版本保护模式短标签（`chat-project-vcs-badge`：`Git` / `快照`），并在徽标旁新增 **`复制项目路径`** 快捷按钮（`chat-project-copy-path-btn`）。
+4. **项目概览工作台直接触发 AI 任务拆解与一键复制治理概览 Markdown（`src/features/project-type/ProjectOverviewWidgets.tsx`）**
+   - 在多态项目阶段与版本保护概览卡片（`workspace-vcs-summary-widget`）新增 **`AI 拆解任务`** 快捷入口（`overview-open-decompose-btn`）与 **`复制概览 MD`** 按钮（`overview-copy-summary-md-btn`），支持直接打开 `TaskDecomposeDialog` 或导出项目治理概览 Markdown。
+
