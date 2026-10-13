@@ -515,3 +515,17 @@
 4. **项目类型选择器手动重新检测、一键采用检测结果与卡片阶段管线展示（`src/features/project-type/ProjectTypeSelector.tsx`）**
    - 在自动检测提示横幅中新增 **`采用检测结果`**（`selector-apply-detected-btn`）与 **`重新检测`**（`selector-redetect-btn`）按钮，并在四类项目形态卡片底部展示完整阶段流转管线摘要。
 
+### Phase P30：约束摘要高优规则预览、里程碑逾期预警、M3 风险固化为 AI 约束闭环与侧边栏 L2/L4 增强（2026-10-13 已完成）
+
+1. **约束摘要 Widget 高优规则展开预览与生效规则一键导出（`src/features/project-type/ConstraintSummaryWidget.tsx`）**
+   - 顶栏新增 **`复制规则`** 按钮（`constraint-summary-copy-md-btn`），支持将全部已启用约束按优先级排序导出为结构化 Markdown 清单。
+   - 新增 **`查看高优规则预览 / 收起高优规则预览`** 折叠区（`constraint-summary-preview-toggle` / `constraint-summary-preview-list`），在概览卡片内直接展示 Top 3 高优先级规则的优先级徽标、触发模式与规则正文。
+2. **里程碑进度 Widget 逾期节点自动预警与进度报告导出（`src/features/project-type/MilestoneProgressWidget.tsx`）**
+   - 自动检测未完成且截止日期早于当前日期的里程碑，在进度栏旁渲染琥珀色预警徽标（`milestone-summary-overdue-badge`：`逾期 N 项`）。
+   - 顶栏新增 **`复制进度`** 按钮（`milestone-summary-copy-md-btn`），一键导出总体完成率、状态分布与带阶段标签的完整里程碑复选框列表。
+3. **AI 顾问卡片 M3 风险一键固化为 AI 行为约束规则闭环（`src/features/project-type/ProjectAdvisorCard.tsx`）**
+   - 在展开的风险列表中为每条风险项新增 **`固化为约束 / 已固化约束`** 按钮（`advisor-risk-to-constraint-${idx}`），点击后自动调用 `projectApi.createConstraint` 生成 `risk_guard` 类别高优防护规则，形成 **“M3 诊断风险 → L1/L2 AI 行为约束”** 的治理闭环。
+4. **侧边栏/工作台展开面板 L2 四形态快捷模板与 L4 资料搜索/合集导出（`src/widgets/sidebar/sections/ProjectExpandedPanels.tsx`）**
+   - 在 `ProjectOverviewPanel` 中新增四形态 L2 目标与交付指令快捷模板胶囊（`sidebar-overview-preset-${idx}`）及 **`复制指令 MD`** 按钮（`sidebar-overview-copy-md`）。
+   - 在 `ProjectMaterialsPanel` 中新增侧边栏受控资料实时关键词搜索框（`sidebar-materials-search-input`）与 **`复制资料 MD`** 按钮（`sidebar-materials-copy-md`）。
+
