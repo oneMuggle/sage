@@ -6,7 +6,7 @@
  * 支持点击改进建议一键唤起 M1 任务分解对话框并自动带入建议内容与原因。
  */
 
-import { AlertTriangle, Lightbulb, PlusCircle, RefreshCw, Shield } from 'lucide-react';
+import { AlertTriangle, Check, Copy, Lightbulb, PlusCircle, RefreshCw, Shield } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { projectApi, type AdviceResult } from '../../shared/api';
@@ -65,6 +65,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [copiedReport, setCopiedReport] = useState(false);
 
   const fetchAdvice = useCallback(async () => {
     if (typeof projectApi?.getAdvice !== 'function') {
@@ -138,6 +139,33 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const { healthScore, summary, risks, suggestions } = advice;
   const hasDetails = risks.length > 0 || suggestions.length > 0;
 
+  const handleCopyAdvisorMarkdown = () => {
+    const lines = [
+      `# AI 项目健康顾问诊断报告 (健康度: ${healthScore}/100)`,
+      '',
+      `> ${summary}`,
+    ];
+    if (risks.length > 0) {
+      lines.push('', '## 风险项');
+      risks.forEach((r) => {
+        lines.push(`- **[${r.severity}]** ${r.description}${r.suggestion ? ` → 建议: ${r.suggestion}` : ''}`);
+      });
+    }
+    if (suggestions.length > 0) {
+      lines.push('', '## 改进建议');
+      suggestions.forEach((s) => {
+        lines.push(`- **[${s.priority}]** ${s.action}${s.reason ? ` (${s.reason})` : ''}`);
+      });
+    }
+    try {
+      void navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedReport(true);
+      setTimeout(() => setCopiedReport(false), 1800);
+    } catch {
+      // ignore clipboard errors in test/offline mode
+    }
+  };
+
   return (
     <Card data-testid="project-advisor-card">
       <CardHeader className="pb-2">
@@ -146,17 +174,29 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
             <Shield className="h-4 w-4" />
             AI 顾问
           </CardTitle>
-          <button
-            type="button"
-            onClick={() => void handleRefresh()}
-            disabled={refreshing}
-            data-testid="advisor-refresh-btn"
-            className="p-1 rounded hover:bg-bg-hover disabled:opacity-50"
-            title="刷新分析"
-            aria-label="刷新顾问分析"
-          >
-            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleCopyAdvisorMarkdown}
+              data-testid="advisor-copy-md-btn"
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover hover:text-text"
+              title="复制 AI 顾问诊断报告 Markdown"
+            >
+              {copiedReport ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+              {copiedReport ? '已复制' : '复制诊断'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRefresh()}
+              disabled={refreshing}
+              data-testid="advisor-refresh-btn"
+              className="p-1 rounded hover:bg-bg-hover disabled:opacity-50"
+              title="刷新分析"
+              aria-label="刷新顾问分析"
+            >
+              <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
       </CardHeader>
       <CardContent>

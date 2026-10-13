@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { projectApi } from '../../shared/api';
 
 import { MilestoneEditor } from './MilestoneEditor';
+import { MilestoneManager } from './MilestoneManager';
 import { MilestoneProgressWidget } from './MilestoneProgressWidget';
 import { ProjectCreationWizard } from './ProjectCreationWizard';
 
@@ -52,6 +53,15 @@ vi.mock('../../shared/api', () => ({
       vcsMode: patch.vcs_mode,
     })),
     createCheckpoint: vi.fn().mockResolvedValue({ id: 'cp-init' }),
+    decomposePreview: vi.fn().mockResolvedValue({
+      reasoning: '按科研生命周期拆解',
+      totalCount: 2,
+      milestones: [
+        { title: '主实验复现', description: '运行 baseline', stage: 'experiment', estimatedDays: 3, children: [] },
+        { title: '消融分析', description: '对比核心模块', stage: 'experiment', estimatedDays: 2, children: [] },
+      ],
+    }),
+    decomposeApply: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -264,6 +274,48 @@ describe('MilestoneProgressWidget', () => {
           instructions: '采用严谨客观的学术被动语态，所有文献引用必须真实可查，固定并记录全部实验随机种子。',
         }),
       );
+    });
+  });
+
+  it('supports MilestoneManager status filter, per-milestone subtask decompose, and TaskDecomposeDialog selective apply & markdown copy (Phase P27)', async () => {
+    mockListMilestones.mockResolvedValue([
+      {
+        id: 'ms-p27-1',
+        projectId: 'test-project',
+        title: '完成主实验复现与消融对比',
+        description: '验证多数据集指标',
+        stage: 'experiment',
+        status: 'in_progress',
+        sortOrder: 1,
+        createdAt: 1000,
+      },
+    ]);
+
+    render(<MilestoneManager projectId="test-project" projectType="research" />);
+
+    const statusBtn = await screen.findByTestId('milestone-status-filter-in_progress');
+    fireEvent.click(statusBtn);
+    expect(screen.getByText('完成主实验复现与消融对比')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('milestone-decompose-ms-p27-1'));
+    expect(await screen.findByTestId('decompose-requirement-input')).toHaveValue(
+      '完成主实验复现与消融对比',
+    );
+
+    fireEvent.click(screen.getByTestId('decompose-preview-btn'));
+    const copyPlanBtn = await screen.findByTestId('decompose-copy-md-btn');
+    fireEvent.click(copyPlanBtn);
+
+    // Deselect second milestone node and apply only first node
+    fireEvent.click(screen.getByTestId('decompose-node-checkbox-1'));
+    fireEvent.click(screen.getByTestId('decompose-apply-btn'));
+
+    await waitFor(() => {
+      expect(projectApi.decomposeApply).toHaveBeenCalledWith('test-project', {
+        milestones: [
+          expect.objectContaining({ title: '主实验复现' }),
+        ],
+      });
     });
   });
 });

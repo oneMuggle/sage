@@ -15,6 +15,21 @@ import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import { ConstraintEditor } from './ConstraintEditor';
 import { ArchetypeBlueprintMeta, getArchetypeBlueprint } from './archetypeBlueprints';
 
+const GLOB_SAMPLE_PATHS: Record<ProjectType, string[]> = {
+  coding: ['src/index.ts', 'tests/unit/app.test.ts', 'docs/architecture.md'],
+  business: [
+    '01_原始资料与法规依据/底稿.pdf',
+    '02_审校与修订过程/合同初稿.docx',
+    '03_定稿与签发归档/正式函件.pdf',
+  ],
+  research: [
+    '01_literature/survey.md',
+    '02_experiments/run_eval.py',
+    '03_manuscript/main.tex',
+  ],
+  personal: ['01_inbox/idea.md', '02_cards/concept.md', '03_reviews/weekly.md'],
+};
+
 export interface ConstraintManagerProps {
   projectId: string;
   projectType?: ProjectType | null;
@@ -62,6 +77,7 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
   const [editorOpen, setEditorOpen] = useState(false);
   const [importingKey, setImportingKey] = useState<string | null>(null);
   const [globTestPath, setGlobTestPath] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [copiedMd, setCopiedMd] = useState(false);
 
   const blueprint: ArchetypeBlueprintMeta = getArchetypeBlueprint(projectType);
@@ -201,10 +217,20 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
   };
 
   const categories = ['all', ...Array.from(new Set(constraints.map((c) => c.category)))];
-  const filteredConstraints =
-    selectedCategory === 'all'
-      ? constraints
-      : constraints.filter((c) => c.category === selectedCategory);
+  const filteredConstraints = useMemo(() => {
+    const byCat =
+      selectedCategory === 'all'
+        ? constraints
+        : constraints.filter((c) => c.category === selectedCategory);
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return byCat;
+    return byCat.filter(
+      (c) =>
+        c.category.toLowerCase().includes(q) ||
+        c.content.toLowerCase().includes(q) ||
+        (c.triggerPattern ?? '').toLowerCase().includes(q),
+    );
+  }, [constraints, selectedCategory, searchQuery]);
 
   const matchedIds = useMemo(() => {
     const trimmed = globTestPath.trim();
@@ -304,10 +330,33 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
           type="text"
           value={globTestPath}
           onChange={(e) => setGlobTestPath(e.target.value)}
-          placeholder="输入工作区文件相对路径（如 02_审校与修订过程/合同.docx、src/api/client.ts、03_manuscript/main.tex）验证生效规则..."
+          placeholder="输入工作区文件相对路径验证生效规则..."
           data-testid="constraint-glob-test-input"
-          className="flex-1 min-w-48 rounded border border-input bg-background px-2.5 py-1 font-mono text-xs"
+          className="flex-1 min-w-44 rounded border border-input bg-background px-2.5 py-1 font-mono text-xs"
         />
+        <div className="flex flex-wrap items-center gap-1" data-testid="constraint-glob-samples">
+          {(GLOB_SAMPLE_PATHS[blueprint.type] ?? GLOB_SAMPLE_PATHS.coding).map((sample, idx) => (
+            <button
+              key={sample}
+              type="button"
+              data-testid={`constraint-glob-sample-${idx}`}
+              onClick={() => setGlobTestPath(sample)}
+              className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {sample}
+            </button>
+          ))}
+          {globTestPath.trim() && (
+            <button
+              type="button"
+              data-testid="constraint-glob-clear-btn"
+              onClick={() => setGlobTestPath('')}
+              className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted"
+            >
+              清空
+            </button>
+          )}
+        </div>
         {globTestPath.trim() && (
           <span
             className="rounded bg-primary/10 px-2 py-0.5 font-mono text-ui-2xs font-medium text-primary"
@@ -316,6 +365,14 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
             命中 {matchedIds.size} 条生效约束
           </span>
         )}
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="搜索规则内容或类别..."
+          data-testid="constraint-search-input"
+          className="w-40 rounded border border-input bg-background px-2 py-1 text-xs"
+        />
       </div>
 
       {/* 细分领域预设规则包（按项目形态动态推荐） */}
