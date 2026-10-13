@@ -11,6 +11,7 @@ import { chatApi, type Message, useStore } from '../../shared/lib/store';
 
 import { selectSessionSlots, type TaskBoardState, useChatStreamStore } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
+import { formatRetryEventText } from './retryEventText';
 import {
   isValidCitationsPayload,
   isValidCompactPayload,
@@ -117,7 +118,6 @@ export async function cancelSessionStream(sid: string): Promise<boolean> {
   return true;
 }
 
-
 export function applyTransparencyAndToolEvents(
   evt: AgentEvent,
   ctx: {
@@ -164,11 +164,7 @@ export function applyTransparencyAndToolEvents(
         budget_tokens: evt.context_pressure.budget_tokens,
       });
     } else {
-      logger.warn(
-        requestId,
-        'TM2.context_pressure.malformed',
-        evt.context_pressure,
-      );
+      logger.warn(requestId, 'TM2.context_pressure.malformed', evt.context_pressure);
     }
   }
   if (evt.state === 'compact_triggered' && evt.compact) {
@@ -255,10 +251,7 @@ export function applyTransparencyAndToolEvents(
     const tr = evt.tool_result;
     // HIGH-3: 用 tr.tool_call_id 查找匹配项;fallback 到最后一个 (兼容无 id 场景)
     const targetId = tr.tool_call_id;
-    const currentTcs = selectSessionSlots(
-      useChatStreamStore.getState(),
-      sid,
-    ).streamingToolCalls;
+    const currentTcs = selectSessionSlots(useChatStreamStore.getState(), sid).streamingToolCalls;
     const targetIdx = targetId
       ? currentTcs.findIndex((t) => t.id === targetId)
       : currentTcs.length - 1;
@@ -302,7 +295,6 @@ export function applyTransparencyAndToolEvents(
       });
     }
   }
-
 }
 
 export function useChatReattachAndBtw(params: {
@@ -438,13 +430,18 @@ export function useChatReattachAndBtw(params: {
             if (applyOrchestrationEventToBoard(evt, sid)) {
               return;
             }
+            // 2026-10-13: 重接路径同步处理 LLM 重试事件 — 在消息气泡内
+            // 显示动态重试提示（与主路径 useChat.ts 同格式）。
+            // 文本格式化抽到 retryEventText.ts（主路径/重接路径共用）。
+            if (evt.state === 'retry' && evt.retry_info) {
+              useChatStreamStore.getState().replaceContent(sid, messageId, formatRetryEventText(evt.retry_info));
+              useChatStreamStore.getState().setStreamingMeta(sid, messageId, { state: evt.state });
+              return;
+            }
             // r77: 重接路径补 memory_used —— 重放时 memory_refs 不丢失（与主路径同口径）
             // R87/R97: 载荷校验走共享 helper（transparencyPayload.ts）
             if (evt.state === 'memory_used' && evt.memories) {
-              if (
-                isValidMemoriesPayload(evt.memories) &&
-                evt.memories.length > 0
-              ) {
+              if (isValidMemoriesPayload(evt.memories) && evt.memories.length > 0) {
                 updateMessage(messageId, {
                   memory_refs: evt.memories,
                   memory_applied: evt.memories.length,

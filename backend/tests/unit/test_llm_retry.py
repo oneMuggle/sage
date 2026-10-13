@@ -190,7 +190,8 @@ async def test_stream_retries_before_first_delta(monkeypatch):
         events.append((kind, payload))
 
     assert mock_http.stream.call_count == 3  # 前两次 500 重试,第三次成功
-    assert [k for k, _ in events] == ["content_delta", "response"]
+    # 2026-10-13: 重试前推送 retry 事件（可见性优化）
+    assert [k for k, _ in events] == ["retry", "retry", "content_delta", "response"]
     assert events[-1][1].content == "hi"
 
 
