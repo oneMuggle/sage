@@ -73,7 +73,7 @@ class DesignStudio:
     async def generate(
         self, project_id: str, brief: Optional[str] = None,
     ) -> DesignArtifact:
-        """Generate the first artifact for a project."""
+        """Generate an artifact for a project, appending a new version."""
         project = self._repo.get_project(project_id)
         system = self._systems.get_system(project.system_id)
         template = self._templates.get_template(project.template_id)
@@ -86,16 +86,19 @@ class DesignStudio:
                 system, template, use_brief,
             )
 
+            latest = self._repo.get_latest_artifact(project_id)
+            new_version = latest.version + 1 if latest else 1
             artifact_id = str(uuid.uuid4())
             file_path = str(
-                self._workspace / "design" / project_id / "v1.html"
+                self._workspace / "design" / project_id
+                / f"v{new_version}.html"
             )
             now = datetime.now(timezone.utc)  # noqa: UP017
 
             artifact = self._repo.create_artifact(
                 id=artifact_id,
                 project_id=project_id,
-                version=1,
+                version=new_version,
                 html_content=result.bundled_html,
                 title=result.parsed.title,
                 file_path=file_path,

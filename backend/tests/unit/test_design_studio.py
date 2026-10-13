@@ -9,6 +9,12 @@ import pytest
 
 from backend.data.design_repo import DesignRepo
 from backend.design.design_studio import DesignStudio
+from backend.design.errors import (
+    DesignGenerationError,
+    DesignProjectNotFoundError,
+    DesignSystemNotFoundError,
+    DesignTemplateNotFoundError,
+)
 from backend.design.systems import DesignSystemRegistry
 from backend.design.templates import DesignTemplateRegistry
 
@@ -119,3 +125,67 @@ class TestDesignStudio:
         await studio.generate(project.id, "v1 brief")
         artifact = await studio.iterate(project.id, "Make it better")
         assert artifact.version == 2
+
+    @pytest.mark.asyncio()
+    async def test_generate_twice_does_not_collide_on_version(self, studio):
+        """回归：第二次 generate() 必须递增版本，不能撞 UNIQUE(project_id, version)。"""
+        project = studio.create_project(
+            "Test", "prototype", "test", "test-page", "Create a page",
+        )
+        first = await studio.generate(project.id, "v1 brief")
+        assert first.version == 1
+        second = await studio.generate(project.id, "v2 brief")
+        assert second.version == 2
+        assert second.file_path.endswith("/v2.html")
+
+    @pytest.mark.asyncio()
+    async def test_generate_marks_project_complete(self, studio):
+        project = studio.create_project(
+            "Test", "prototype", "test", "test-page", "Create a page",
+        )
+        await studio.generate(project.id, "brief")
+        assert studio.get_project(project.id).status == "complete"
+
+    @pytest.mark.asyncio()
+    async def test_generate_marks_project_error_and_reraises(self, studio):
+        project = studio.create_project(
+            "Test", "prototype", "test", "test-page", "Create a page",
+        )
+        boom = DesignGenerationError("llm exploded")
+        studio._generator._llm.chat.side_effect = boom
+
+        with pytest.raises(DesignGenerationError) as excinfo:
+            await studio.generate(project.id, "brief")
+
+        assert excinfo.value is boom
+        assert studio.get_project(project.id).status == "error"
+
+    @pytest.mark.asyncio()
+    async def test_generate_persists_expected_file_path(self, studio, tmp_path):
+        project = studio.create_project(
+            "Test", "prototype", "test", "test-page", "Create a page",
+        )
+        artifact = await studio.generate(project.id, "brief")
+        expected = str(
+            tmp_path / "workspace" / "design" / project.id / "v1.html"
+        )
+        assert artifact.file_path == expected
+
+    @pytest.mark.asyncio()
+    async def test_iterate_without_artifacts_raises(self, studio):
+        project = studio.create_project(
+            "Test", "prototype", "test", "test-page", "Create a page",
+        )
+        with pytest.raises(DesignProjectNotFoundError):
+            await studio.iterate(project.id, "Make it better")
+
+    def test_create_project_rejects_unknown_ids(self, studio):
+        with pytest.raises(DesignSystemNotFoundError):
+            studio.create_project(
+                "Bad", "prototype", "no-such-system", "test-page", "b",
+            )
+        with pytest.raises(DesignTemplateNotFoundError):
+            studio.create_project(
+                "Bad", "prototype", "test", "no-such-template", "b",
+            )
+        assert studio.list_projects() == []
