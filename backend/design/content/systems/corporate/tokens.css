@@ -1,0 +1,65 @@
+/* Corporate Design System — CSS Custom Properties */
+/* Blue/gray palette, Inter font, 8px grid, subtle shadows */
+
+:root {
+  /* ── Colors ───────────────────────────────────────────── */
+  --color-bg:            #ffffff;
+  --color-bg-subtle:     #f4f6f8;
+  --color-fg:            #1a1a2e;
+  --color-fg-muted:      #5a6577;
+  --color-border:        #d1d9e0;
+  --color-border-subtle: #e8ecf0;
+  --color-primary:       #1a56db;
+  --color-primary-hover: #1648b8;
+  --color-primary-light: #e8effc;
+  --color-accent:        #0d9488;
+  --color-error:         #dc2626;
+  --color-error-light:   #fef2f2;
+  --color-success:       #16a34a;
+  --color-success-light: #f0fdf4;
+  --color-warning:       #d97706;
+  --color-warning-light: #fffbeb;
+
+  /* ── Typography ───────────────────────────────────────── */
+  --font-family:         "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-size-xs:        0.75rem;   /* 12px */
+  --font-size-sm:        0.875rem;  /* 14px */
+  --font-size-base:      1rem;      /* 16px */
+  --font-size-lg:        1.125rem;  /* 18px */
+  --font-size-xl:        1.25rem;   /* 20px */
+  --font-size-2xl:       1.5rem;    /* 24px */
+  --font-size-3xl:       1.875rem;  /* 30px */
+  --font-size-4xl:       2.25rem;   /* 36px */
+  --font-weight-normal:  400;
+  --font-weight-medium:  500;
+  --font-weight-semibold:600;
+  --font-weight-bold:    700;
+  --line-height:         1.6;
+
+  /* ── Spacing (8px grid) ──────────────────────────────── */
+  --space-1:  0.5rem;   /*  8px */
+  --space-2:  1rem;     /* 16px */
+  --space-3:  1.5rem;   /* 24px */
+  --space-4:  2rem;     /* 32px */
+  --space-5:  2.5rem;   /* 40px */
+  --space-6:  3rem;     /* 48px */
+  --space-8:  4rem;     /* 64px */
+  --space-10: 5rem;     /* 80px */
+  --space-12: 6rem;     /* 96px */
+
+  /* ── Borders ──────────────────────────────────────────── */
+  --border-width:  1px;
+  --border-radius-sm: 4px;
+  --border-radius:    6px;
+  --border-radius-lg: 8px;
+
+  /* ── Shadows ──────────────────────────────────────────── */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow:    0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+
+  /* ── Transitions ──────────────────────────────────────── */
+  --transition-fast:   150ms ease;
+  --transition-normal: 250ms ease;
+}
