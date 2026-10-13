@@ -2,7 +2,7 @@
  * Phase P9 & P10: 多态项目工作台 L1 项目总纲 (SAGE.md) + L4 受控资料库 + L3 项目记忆画像 + L5 只读白名单面板
  */
 
-import { CheckCircle2, Eye, FilePlus2, FileText, FolderLock, History, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { Check, CheckCircle2, Copy, Eye, FilePlus2, FileText, FolderLock, History, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -330,13 +330,51 @@ export function StudioAllowedPathsTabPanel({
   onQuickAddPresetPath,
   onRemoveAllowedPath,
 }: StudioAllowedPathsTabPanelProps) {
+  const [copiedPaths, setCopiedPaths] = useState(false);
   const presets = ALLOWED_PATH_PRESETS[projectType] ?? ALLOWED_PATH_PRESETS.coding;
+
+  const handleCopyAllowedPaths = async () => {
+    const lines = [
+      `# L5 跨目录只读白名单 (${projectPath})`,
+      '',
+      ...allowedPaths.map((p) => `- \`${p}\``),
+    ];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedPaths(true);
+      setTimeout(() => setCopiedPaths(false), 2000);
+    } catch {
+      // ignore in test env
+    }
+  };
 
   return (
     <div className="space-y-3" data-testid="project-allowed-paths-panel">
       <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground space-y-1">
-        <div className="font-medium text-foreground">
-          读写非对称安全边界（Workspace Write + Allowed Paths Read-Only）
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="font-medium text-foreground">
+            读写非对称安全边界（Workspace Write + Allowed Paths Read-Only）
+          </div>
+          {allowedPaths.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void handleCopyAllowedPaths()}
+              data-testid="allowed-paths-copy-md-btn"
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {copiedPaths ? (
+                <>
+                  <Check className="h-3 w-3 text-emerald-500" />
+                  已复制白名单
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3 text-primary" />
+                  复制白名单配置
+                </>
+              )}
+            </button>
+          )}
         </div>
         <p>
           • 主工作区目录（<code className="font-mono">{projectPath}</code>
