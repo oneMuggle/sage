@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FontProvider } from '../../../entities/font/useFontSettings';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
+import { BasicTab } from '../BasicTab';
 
 // ==================== Mocks ====================
 
@@ -55,8 +56,6 @@ vi.mock('../../../entities/font/fontStorage', () => ({
   }),
   saveFontSettings: async () => undefined,
 }));
-
-import { BasicTab } from '../BasicTab';
 
 function renderTab(): void {
   render(

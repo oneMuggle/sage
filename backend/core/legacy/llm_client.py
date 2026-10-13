@@ -95,11 +95,11 @@ def _retry_settings() -> Tuple[int, float, float]:
                 max_attempts = retry_max
 
             retry_base = raw.get("llmRetryBaseDelayS")
-            if isinstance(retry_base, (int, float)) and retry_base >= 0:
+            if isinstance(retry_base, (int, float)) and retry_base >= 0:  # noqa: UP038
                 base_delay = float(retry_base)
 
             retry_max_delay = raw.get("llmRetryMaxDelayS")
-            if isinstance(retry_max_delay, (int, float)) and retry_max_delay >= 1.0:
+            if isinstance(retry_max_delay, (int, float)) and retry_max_delay >= 1.0:  # noqa: UP038
                 max_delay = float(retry_max_delay)
     except (ImportError, OSError, ValueError, TypeError):
         pass  # 读配置失败回退 env/默认
@@ -589,7 +589,7 @@ class LLMClient:
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[str] = None,
-        retry_callback: Optional[Callable[["RetryEvent"], None]] = None,
+        retry_callback: Optional[Callable[[RetryEvent], None]] = None,
     ) -> LLMResponse:
         """
         发送聊天请求（非流式）

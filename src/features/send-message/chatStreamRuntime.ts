@@ -12,6 +12,7 @@ import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 
 import { selectSessionSlots, type TaskBoardState, useChatStreamStore } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
+import { formatRetryEventText } from './retryEventText';
 import {
   isValidCitationsPayload,
   isValidCompactPayload,
@@ -449,23 +450,9 @@ export function useChatReattachAndBtw(params: {
             }
             // 2026-10-13: 重接路径同步处理 LLM 重试事件 — 在消息气泡内
             // 显示动态重试提示（与主路径 useChat.ts 同格式）。
+            // 文本格式化抽到 retryEventText.ts（主路径/重接路径共用）。
             if (evt.state === 'retry' && evt.retry_info) {
-              const info = evt.retry_info;
-              const errorLabel: Record<string, string> = {
-                timeout: '请求超时',
-                network_error: '网络错误',
-                server_error: '服务端错误',
-                rate_limited: '频率限制',
-                auth_failed: '认证失败',
-                parsing_error: '响应解析失败',
-                context_overflow: '上下文溢出',
-                unknown: '未知错误',
-              };
-              const reason = errorLabel[info.error_type] ?? info.error_type;
-              const delayText =
-                info.delay >= 1 ? `${Math.round(info.delay)}` : info.delay.toFixed(1);
-              const retryText = `🔄 重试中 (${info.attempt}/${info.max_attempts}) | 原因: ${reason} | 等待 ${delayText}秒`;
-              useChatStreamStore.getState().replaceContent(sid, messageId, retryText);
+              useChatStreamStore.getState().replaceContent(sid, messageId, formatRetryEventText(evt.retry_info));
               useChatStreamStore.getState().setStreamingMeta(sid, messageId, { state: evt.state });
               return;
             }
