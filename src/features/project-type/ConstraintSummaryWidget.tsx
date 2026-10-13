@@ -1,11 +1,11 @@
 /**
- * 约束摘要 Widget (2026-09-25; Phase P15 空状态一键导入与 Glob 触发统计; Phase P25 中文类别映射与手动刷新)
+ * 约束摘要 Widget (2026-09-25; Phase P15 空状态一键导入与 Glob 触发统计; Phase P25 中文类别映射与手动刷新; Phase P30 高优规则预览与 Markdown 导出)
  *
  * 项目类型分类系统 - Phase 4.3
- * 显示项目的约束统计信息（启用数量、Glob 触发数量、中文类别分组、手动刷新及空状态快速导入）
+ * 显示项目的约束统计信息（启用数量、Glob 触发数量、中文类别分组、高优规则预览、复制规则 MD、手动刷新及空状态快速导入）
  */
 
-import { Shield, CheckCircle2, Sparkles, RefreshCw } from 'lucide-react';
+import { Shield, CheckCircle2, Sparkles, RefreshCw, Copy, Check } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
 import { projectApi, type ProjectConstraint, type ProjectType } from '../../shared/api';
@@ -27,6 +27,7 @@ const CONSTRAINT_CATEGORY_LABELS: Record<string, string> = {
   ethics_review: '科研伦理与数据合规',
   note_structure: '卡片盒笔记结构规范',
   privacy_guard: '个人隐私与本地隔离',
+  risk_guard: 'AI 顾问风险防护规则',
 };
 
 export interface ConstraintSummaryWidgetProps {
@@ -39,6 +40,8 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedRules, setCopiedRules] = useState(false);
+  const [previewExpanded, setPreviewExpanded] = useState(false);
 
   const fetchConstraints = useCallback(async () => {
     if (typeof projectApi?.listConstraints !== 'function') {
@@ -112,6 +115,28 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   enabledConstraints.forEach((c) => {
     categoryCount.set(c.category, (categoryCount.get(c.category) || 0) + 1);
   });
+  const topRules = [...enabledConstraints].sort((a, b) => b.priority - a.priority).slice(0, 3);
+
+  const handleCopyActiveRules = async () => {
+    if (enabledConstraints.length === 0) return;
+    const lines = [
+      `# 项目生效约束规则清单 (${enabledConstraints.length} 条)`,
+      '',
+      ...enabledConstraints
+        .sort((a, b) => b.priority - a.priority)
+        .map(
+          (c) =>
+            `- **[P${c.priority} · ${CONSTRAINT_CATEGORY_LABELS[c.category] ?? c.category}]** \`${c.triggerPattern || 'always'}\`：${c.content}`,
+        ),
+    ];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedRules(true);
+      setTimeout(() => setCopiedRules(false), 1800);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
 
   return (
     <Card data-testid="constraint-summary-widget">
@@ -121,16 +146,39 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
             <Shield className="h-4 w-4" />
             约束统计
           </CardTitle>
-          <button
-            type="button"
-            onClick={() => void fetchConstraints()}
-            data-testid="constraint-summary-refresh-btn"
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="刷新约束统计"
-            aria-label="刷新约束统计"
-          >
-            <RefreshCw className="h-3 w-3" />
-          </button>
+          <div className="flex items-center gap-1">
+            {enabledConstraints.length > 0 && (
+              <button
+                type="button"
+                onClick={() => void handleCopyActiveRules()}
+                data-testid="constraint-summary-copy-md-btn"
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="复制生效约束规则 Markdown"
+              >
+                {copiedRules ? (
+                  <>
+                    <Check className="h-3 w-3 text-emerald-500" />
+                    已复制
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3" />
+                    复制规则
+                  </>
+                )}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void fetchConstraints()}
+              data-testid="constraint-summary-refresh-btn"
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="刷新约束统计"
+              aria-label="刷新约束统计"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -168,6 +216,39 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                   </div>
                 ))}
             </div>
+          </div>
+        )}
+
+        {topRules.length > 0 && (
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={() => setPreviewExpanded((v) => !v)}
+              data-testid="constraint-summary-preview-toggle"
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              {previewExpanded
+                ? '收起高优规则预览'
+                : `查看高优规则预览 (${topRules.length})`}
+            </button>
+            {previewExpanded && (
+              <div
+                className="mt-1.5 space-y-1 rounded border border-border bg-muted/30 p-2 text-xs"
+                data-testid="constraint-summary-preview-list"
+              >
+                {topRules.map((rule) => (
+                  <div key={rule.id} className="flex items-start gap-1.5">
+                    <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 font-mono text-ui-2xs text-primary">
+                      P{rule.priority}
+                    </span>
+                    <span className="shrink-0 rounded bg-muted px-1 py-0.5 font-mono text-ui-2xs text-muted-foreground">
+                      {rule.triggerPattern || 'always'}
+                    </span>
+                    <span className="truncate text-foreground">{rule.content}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

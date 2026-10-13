@@ -1,9 +1,9 @@
 /**
- * 项目顾问卡片 (M3, 2026-10-12 / Phase P23 M3→M1 闭环增强)
+ * 项目顾问卡片 (M3, 2026-10-12 / Phase P23 M3→M1 闭环增强 / Phase P30 M3 风险一键固化为 AI 防护约束)
  *
  * 在项目概览面板中显示 AI 顾问的健康评分、风险和建议。
  * 自动加载一次，支持手动刷新（30min 缓存由后端管理），
- * 支持点击改进建议一键唤起 M1 任务分解对话框并自动带入建议内容与原因。
+ * 支持点击改进建议一键唤起 M1 任务分解对话框，或点击风险项一键固化为 AI 行为约束规则。
  */
 
 import { AlertTriangle, Check, Copy, Lightbulb, PlusCircle, RefreshCw, Shield } from 'lucide-react';
@@ -66,6 +66,8 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [copiedReport, setCopiedReport] = useState(false);
+  const [guardingIdx, setGuardingIdx] = useState<number | null>(null);
+  const [guardedRisks, setGuardedRisks] = useState<Set<number>>(new Set());
 
   const fetchAdvice = useCallback(async () => {
     if (typeof projectApi?.getAdvice !== 'function') {
@@ -99,6 +101,30 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
       setError(err instanceof Error ? err.message : '刷新失败');
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const handleCreateRiskConstraint = async (
+    risk: { severity: string; description: string; suggestion?: string | null },
+    idx: number,
+  ) => {
+    if (guardingIdx === idx || guardedRisks.has(idx) || typeof projectApi?.createConstraint !== 'function') {
+      return;
+    }
+    setGuardingIdx(idx);
+    try {
+      await projectApi.createConstraint(projectId, {
+        category: 'risk_guard',
+        content: risk.suggestion
+          ? `${risk.description} — 防护规范：${risk.suggestion}`
+          : risk.description,
+        priority: risk.severity === 'high' ? 9 : 7,
+      });
+      setGuardedRisks((prev) => new Set(prev).add(idx));
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setGuardingIdx(null);
     }
   };
 
@@ -241,21 +267,44 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                   <span className="text-xs font-medium text-orange-400">风险</span>
                 </div>
                 <ul className="space-y-1">
-                  {risks.map((risk, idx) => (
-                    <li key={idx} className="text-xs">
-                      <span
-                        className={`inline-block px-1 py-0.5 rounded text-ui-2xs border mr-1 ${severityBadge(risk.severity)}`}
-                      >
-                        {risk.severity}
-                      </span>
-                      <span>{risk.description}</span>
-                      {risk.suggestion && (
-                        <div className="text-ui-2xs text-muted ml-6 mt-0.5">
-                          → {risk.suggestion}
-                        </div>
-                      )}
-                    </li>
-                  ))}
+                  {risks.map((risk, idx) => {
+                    const isGuarded = guardedRisks.has(idx);
+                    return (
+                      <li key={idx} className="text-xs flex flex-wrap items-start gap-1">
+                        <span
+                          className={`inline-block px-1 py-0.5 rounded text-ui-2xs border shrink-0 ${severityBadge(risk.severity)}`}
+                        >
+                          {risk.severity}
+                        </span>
+                        <span className="flex-1">{risk.description}</span>
+                        <button
+                          type="button"
+                          disabled={isGuarded || guardingIdx === idx}
+                          onClick={() => void handleCreateRiskConstraint(risk, idx)}
+                          data-testid={`advisor-risk-to-constraint-${idx}`}
+                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-emerald-500 disabled:opacity-60"
+                          title="将此风险转化为项目 AI 防护约束"
+                        >
+                          {isGuarded ? (
+                            <>
+                              <Check className="h-3 w-3 text-emerald-500" />
+                              <span>已固化约束</span>
+                            </>
+                          ) : (
+                            <>
+                              <Shield className="h-3 w-3" />
+                              <span>固化为约束</span>
+                            </>
+                          )}
+                        </button>
+                        {risk.suggestion && (
+                          <div className="text-ui-2xs text-muted ml-6 mt-0.5 w-full">
+                            → {risk.suggestion}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
