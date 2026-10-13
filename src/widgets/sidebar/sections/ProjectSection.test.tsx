@@ -752,4 +752,17 @@ describe('ProjectSection', () => {
     });
     expect(watermark.textContent).toContain('0/1');
   });
+
+  it('renders localized project stage pill on project row when projectStage is set', async () => {
+    listMock.mockResolvedValue([
+      {
+        ...projects[0],
+        projectType: 'business',
+        projectStage: 'initiation',
+      },
+    ]);
+    renderWithI18n(<ProjectSection {...baseProps} />);
+    const stageBadge = await screen.findByTestId('project-row-stage-badge');
+    expect(stageBadge).toHaveTextContent('立卷归集');
+  });
 });

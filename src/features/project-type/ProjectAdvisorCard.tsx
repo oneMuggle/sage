@@ -1,8 +1,9 @@
 /**
- * 项目顾问卡片 (M3, 2026-10-12)
+ * 项目顾问卡片 (M3, 2026-10-12 / Phase P23 M3→M1 闭环增强)
  *
  * 在项目概览面板中显示 AI 顾问的健康评分、风险和建议。
- * 自动加载一次，支持手动刷新（30min 缓存由后端管理）。
+ * 自动加载一次，支持手动刷新（30min 缓存由后端管理），
+ * 支持点击改进建议一键唤起 M1 任务分解对话框并自动带入建议内容与原因。
  */
 
 import { AlertTriangle, Lightbulb, PlusCircle, RefreshCw, Shield } from 'lucide-react';
@@ -14,8 +15,8 @@ import { Progress } from '../../shared/ui/Progress';
 
 export interface ProjectAdvisorCardProps {
   projectId: string;
-  /** M3→M1 联动：点击建议项的"分解为任务"按钮时触发 */
-  onDecomposeTask?: () => void;
+  /** M3→M1 联动：点击建议项的"分解为任务"按钮时触发，带入建议动作与原因 */
+  onDecomposeTask?: (action?: string, reason?: string | null) => void;
 }
 
 /** 健康分数 → 颜色 */
@@ -83,10 +84,11 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   }, [projectId]);
 
   useEffect(() => {
-    fetchAdvice();
+    void fetchAdvice();
   }, [fetchAdvice]);
 
   const handleRefresh = async () => {
+    if (typeof projectApi?.refreshAdvice !== 'function') return;
     try {
       setRefreshing(true);
       setError(null);
@@ -146,8 +148,9 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
           </CardTitle>
           <button
             type="button"
-            onClick={handleRefresh}
+            onClick={() => void handleRefresh()}
             disabled={refreshing}
+            data-testid="advisor-refresh-btn"
             className="p-1 rounded hover:bg-bg-hover disabled:opacity-50"
             title="刷新分析"
             aria-label="刷新顾问分析"
@@ -178,6 +181,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
+            data-testid="advisor-toggle-details-btn"
             className="text-xs text-blue-400 hover:text-blue-300 mb-2"
           >
             {expanded
@@ -225,7 +229,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                 </div>
                 <ul className="space-y-1">
                   {suggestions.map((sug, idx) => (
-                    <li key={idx} className="text-xs flex items-start gap-1">
+                    <li key={idx} className="text-xs flex flex-wrap items-start gap-1">
                       <span
                         className={`inline-block px-1 py-0.5 rounded text-ui-2xs shrink-0 ${priorityBadge(sug.priority)}`}
                       >
@@ -235,12 +239,14 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       {onDecomposeTask && (
                         <button
                           type="button"
-                          onClick={onDecomposeTask}
-                          className="shrink-0 p-0.5 rounded hover:bg-bg-hover text-muted hover:text-blue-400"
+                          onClick={() => onDecomposeTask(sug.action, sug.reason)}
+                          data-testid={`advisor-decompose-suggestion-${idx}`}
+                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-blue-400"
                           title="将此建议分解为任务"
                           aria-label="分解为任务"
                         >
                           <PlusCircle className="h-3 w-3" />
+                          <span>分解为任务</span>
                         </button>
                       )}
                       {sug.reason && (
@@ -258,8 +264,8 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
 
         {/* 缓存时间 */}
         {advice.cachedAt && (
-          <div className="text-ui-2xs text-muted/60 mt-1">
-            缓存于 {new Date(advice.cachedAt).toLocaleTimeString()}
+          <div className="text-ui-2xs text-muted mt-2">
+            更新于 {new Date(advice.cachedAt * 1000).toLocaleTimeString()}
           </div>
         )}
       </CardContent>
