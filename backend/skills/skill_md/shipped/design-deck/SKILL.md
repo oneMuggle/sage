@@ -2,7 +2,7 @@
 name: design-deck
 description: 生成 HTML 幻灯片 deck 的完整工作流——先查可用模板、再定叙事节拍与设计系统、建项目生成首版、以叙事顺序或侧重为反馈多轮迭代、产物导出。当用户要做网页版幻灯片、在线 deck、演示页、路演/发布会页面时使用。
 license: Apache-2.0
-compatibility: 需要 design 工具面（design_list_systems / design_list_templates / design_generate / design_iterate / design_export），且 DesignStudio 已初始化；kind="deck" 的模板需已安装
+compatibility: 需要 design 工具面（design_list_systems / design_list_templates / design_generate / design_iterate / design_export），且 DesignStudio 已初始化；随包发布 `pitch-deck` 模板（kind="deck"）。design_* 五件套仅在 **coordinator（primary）** profile 的白名单里（backend/agents/profiles.py 的 DESIGN_TOOLS），子代理 profile 看不到这些工具——子代理被要求出 deck 时，交回主对话由本流程执行
 when_to_use: 当用户要做网页版幻灯片、在线 deck、演示页、路演页面、发布会页面，或用"做个网页版的 slides""做成在线演示""做套网页 deck"等表达时使用
 allowed-tools: design_list_systems design_list_templates design_generate design_iterate design_export read_file todo_write ask_user_question
 triggers: []
@@ -34,30 +34,70 @@ triggers: []
 | `design_iterate` | `project_id`、`feedback` | 基于最新产物生成下一个版本 |
 | `design_export` | `project_id` —— 只有这一个参数 | 返回最新产物的 `html_content` 与 `file_path`；**没有 `format` 参数** |
 
-漏掉任何必填参数返回 `missing_required_parameters`；模板 ID 不存在返回
-`generation_failed`。系统 ID / 模板 ID **只能用 `design_list_systems` /
-`design_list_templates` 返回值里的 ID，不要凭空编**。
+漏掉任何必填参数返回 `missing_required_parameters`；系统 ID / 模板 ID **只能用
+`design_list_systems` / `design_list_templates` 返回值里的 ID，不要凭空编**。
+模板 ID 不存在、或 `kind` 与模板不匹配，后端都返回 `generation_failed`，冒号后
+是具体原因（见下表）。
+
+### 错误码对照
+
+| 错误码 | 触发条件 | 怎么办 |
+|---|---|---|
+| `missing_required_parameters` | 任一必填参数没传 | 按上表补齐参数 |
+| `design_studio_not_initialized` | DesignStudio 未初始化（后端未起） | 环境问题，不是参数问题；如实告知用户，不要重试刷参数 |
+| `generation_failed: <原因>` | 模板 ID 不存在 / `kind` 与模板实际 kind 不匹配 / LLM 输出无法解析 | 看冒号后的原因：`not found` → 模板 ID 编错了，回第 1 步用 `design_list_templates` 的返回值；`kind` 不匹配 → 换同 kind 的模板或改 `kind` |
+| `iteration_failed: <原因>` | `design_iterate` 阶段失败（无历史产物 / LLM 失败） | 先确认已经跑过一次 `design_generate`（没有产物就没法迭代） |
+| `no_artifacts_found` | `design_export` 时该项目还没有任何产物 | 先 `design_generate` 出 v1 再导出 |
+| `export_failed: <原因>` | `design_export` 阶段失败 | 如实转述冒号后的原因 |
+
+> **子代理看不到 design 工具。** design_* 五件套只在 coordinator（primary）profile
+> 白名单里。子代理被要求"做个 deck"时不要让子代理自己去调 design_*，交回主对话执行。
 
 ## 工作流（五步）
 
 ### 1. 先查 deck 模板，再谈别的（可能直接终止）
 
 deck 生成**强依赖一个已安装的 `kind="deck"` 模板**——`template_id` 是必填项，
-且模板不存在会直接报错。所以第一步无条件先跑 `design_list_templates`，
-在返回值里筛出 `kind == "deck"` 的条目。
+且模板不存在、或模板 kind 不是 `deck`，都会直接报错。所以第一步无条件先跑
+`design_list_templates`，在返回值里筛出 `kind == "deck"` 的条目。
 
-- **有可用模板** → 把 `id` / `name` / `description` 列给用户，继续第 2 步；
-- **一条都没有** → **如实告诉用户：当前没有安装任何 deck 模板**，并把后果讲
-  清楚——`design_generate` 的 `template_id` 是必填且会被校验的，没有模板就
-  没法启动 deck 生成。然后给两个真实选项：
+**随包发布 `pitch-deck`**（id 与 `kind` 均为 `pitch-deck`，见下表），deck 的
+默认起点。用户没有特殊要求就直接用它，把 `id` / `name` / `description` 报给
+用户确认后继续第 2 步。
+
+- **筛选结果里有 `pitch-deck`** → 默认用它；用户想要别的主题（比如教学课件、
+  产品发布会、季度复盘）就问一句要不要换，**别默认就给**，也**别反复问**；
+- **用户明确要另一套 deck 形态**（比如带讲者备注页、带图表页的模板）→ 见下方
+  "换一套 deck 模板"；
+- **一条 deck 模板都没有**（被人删了 / 换了安装目录）→ **如实告诉用户：当前
+  找不到任何 deck 模板**，并把后果讲清楚——`template_id` 是必填且会被校验的，
+  没有模板就没法启动 deck 生成。给两个真实选项：
   1. 改做原型页 / 落地页（`kind="prototype"`，走 design-prototype 技能，
-     当前有模板可用）；
-  2. 先装一个 deck 模板——在 `backend/design/content/templates/deck/<template-id>/`
-     下放一个目录并附 `SKILL.md`（frontmatter 含 `name` / `kind: deck` /
-     `description`），装好后即可生成。
+     随包发布 `landing-page` 模板可用）；
+  2. 装回一个 deck 模板——见下方 "换一套 deck 模板"。
 
   **不要**编一个模板名硬传（必然 `generation_failed`），也**不要**把 prototype
-  模板当 deck 模板用——那会让模板里的结构要求与 deck 形态冲突，产出不伦不类。
+  模板当 deck 模板用——后端会按 kind 拦下（`kind` 不匹配），且模板里的结构
+  要求与 deck 形态本来就冲突。
+
+#### 换一套 deck 模板
+
+装一个新 deck 模板：在
+`backend/design/content/templates/deck/<template-id>/` 下建目录，放一份
+`SKILL.md`（可选再放 `example.html` 做参考样例），frontmatter 至少要有：
+
+```yaml
+---
+name: <template-id>        # 这个值就是模板 ID
+kind: deck                 # 必须
+description: 一句话说明这套模板的形态
+---
+```
+
+**frontmatter 的 `name` 字段就是模板 ID**（后端 `parsed.get("name") or
+目录名`，以 `name` 为准），所以目录名和 `name` 保持一致最省心——不一致的话
+调用时要传 `name` 那个值。装好后用 `design_list_templates` 确认它出现在
+`kind == "deck"` 的结果里，再让用户挑。
 
 ### 2. 选设计系统 + 定叙事节拍
 
@@ -120,8 +160,8 @@ deck 的修改意见通常落在**叙事顺序**和**强调重点**上，而不�
 
 ## 不做的事（YAGNI）
 
-- ❌ 不编造模板 ID——没有 deck 模板就如实说没有并给替代方案
-- ❌ 不把 prototype 模板当 deck 模板用
+- ❌ 不编造模板 ID——只用两个 list 工具的返回值里 `kind == "deck"` 的 ID
+- ❌ 不把 prototype 模板当 deck 模板用（后端按 kind 校验，必然 `generation_failed`）
 - ❌ 不替用户默选设计系统（用户明确授权除外）
 - ❌ 不在未确认节拍大纲时生成
 - ❌ 不在 brief 里编造数据、指标、客户名（缺失就问用户）

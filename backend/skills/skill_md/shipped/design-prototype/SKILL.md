@@ -2,7 +2,7 @@
 name: design-prototype
 description: 生成 HTML/CSS 原型页的完整工作流——设计系统与模板的显式选择、建项目与首版生成、以用户反馈为驱动力的多轮迭代、产物导出。当用户要做落地页、官网原型、后台界面、产品界面草图、网页 mockup 时使用。
 license: Apache-2.0
-compatibility: 需要 design 工具面（design_list_systems / design_list_templates / design_generate / design_iterate / design_export），且 DesignStudio 已初始化
+compatibility: 需要 design 工具面（design_list_systems / design_list_templates / design_generate / design_iterate / design_export），且 DesignStudio 已初始化。design_* 五件套仅在 **coordinator（primary）** profile 的白名单里（backend/agents/profiles.py 的 DESIGN_TOOLS），子代理 profile 看不到这些工具——子代理被要求出设计稿时，交回主对话由本流程执行
 when_to_use: 当用户要做一个网页原型、落地页、landing page、官网首页、产品界面草图、后台界面 mockup，或用"做个页面看看""搭个原型""设计个首页""画个界面"等表达时使用
 allowed-tools: design_list_systems design_list_templates design_generate design_iterate design_export read_file todo_write ask_user_question
 triggers: []
@@ -32,9 +32,21 @@ triggers: []
 | `design_iterate` | `project_id`、`feedback` | 基于最新产物生成下一个版本 |
 | `design_export` | `project_id` —— 只有这一个参数 | 返回最新产物的 `html_content` 与 `file_path`；**没有 `format` 参数** |
 
-漏掉任何必填参数返回 `missing_required_parameters`；模板 ID 不存在返回
-`generation_failed`。系统 ID / 模板 ID **只能用 `design_list_systems` /
-`design_list_templates` 返回值里的 ID，不要凭空编**。
+漏掉任何必填参数返回 `missing_required_parameters`；系统 ID / 模板 ID **只能用
+`design_list_systems` / `design_list_templates` 返回值里的 ID，不要凭空编**。
+模板 ID 不存在、或 `kind` 与模板不匹配，后端都返回 `generation_failed`，冒号后
+是具体原因（见下表）。
+
+### 错误码对照
+
+| 错误码 | 触发条件 | 怎么办 |
+|---|---|---|
+| `missing_required_parameters` | 任一必填参数没传 | 按上表补齐参数 |
+| `design_studio_not_initialized` | DesignStudio 未初始化（后端未起） | 这是环境问题，不是参数问题；如实告知用户，不要重试刷参数 |
+| `generation_failed: <原因>` | 模板 ID 不存在 / `kind` 与模板实际 kind 不匹配 / LLM 输出无法解析 | 看冒号后的原因：`not found` → 模板 ID 编错了，回第 2 步用 `design_list_templates` 的返回值；`kind` 不匹配 → 换同 kind 的模板或改 `kind` |
+| `iteration_failed: <原因>` | `design_iterate` 阶段失败（无历史产物 / LLM 失败） | 先确认已经跑过一次 `design_generate`（没有产物就没法迭代） |
+| `no_artifacts_found` | `design_export` 时该项目还没有任何产物 | 先 `design_generate` 出 v1 再导出 |
+| `export_failed: <原因>` | `design_export` 阶段失败 | 如实转述冒号后的原因 |
 
 ## 工作流（五步）
 
