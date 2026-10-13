@@ -441,3 +441,17 @@
      - 在 `StudioMaterialsTabPanel` 新增「复制生效资料摘要」按钮（`data-testid="studio-materials-copy-md-btn"`），支持一键导出当前启用参与上下文的所有 L4 资料摘要。
   4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
      - 新增 `wiki-preview-btn` → `wiki-copy-preview-btn` → `wiki-generate-btn` → `wiki-copy-manifest-btn` → `wiki-ingest-material-0`、`studio-charter-copy-md-btn` 及 `knowledge-extract-btn` → `knowledge-toggle-select-all` → `knowledge-confirm-btn` 端到端测试断言。
+### Phase P25：M4 四形态语义检索词预设与全量结果导出、L4 单条资料向量索引重建、概览约束与里程碑中文类别/阶段映射及刷新（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **M4 四形态语义检索词预设与全量检索结果 Markdown 导出（`src/features/project-type/SemanticSearchPanel.tsx` & `ProjectArchetypeStudio.tsx`）**：
+     - 将当前项目形态 `projectType` 透传至 `StudioMaterialsTabPanel` 与 `SemanticSearchPanel`，内置四大形态高频语义检索预设胶囊栏（`data-testid="semantic-query-presets"` / `data-testid="semantic-preset-{idx}"`），点击任意预设词即可自动填入并立即发起语义检索；
+     - 在检索结果列表顶部新增「复制全部检索结果」按钮（`data-testid="semantic-copy-all-btn"`），支持将命中的全部文本片段、材料 ID、chunk 序号与余弦相似度一键导出为结构化 Markdown。
+  2. **L4 受控资料单条向量索引手动重建（`src/features/project-type/StudioMaterialsAndProfilePanels.tsx`）**：
+     - 在 `StudioMaterialsTabPanel` 每条受控资料行操作区新增「重建索引」按钮（`data-testid="studio-material-reindex-{id}"`），支持调用 `projectApi.reindexMaterial(projectId, materialId)` 手动重建单条资料的向量分块索引并刷新列表。
+  3. **概览约束统计与里程碑进度卡片中文映射及手动刷新（`src/features/project-type/ConstraintSummaryWidget.tsx` & `MilestoneProgressWidget.tsx`）**：
+     - 在 `ConstraintSummaryWidget`（`data-testid="constraint-summary-widget"`）中新增 15 类约束规则的中文名称映射表与手动刷新按钮（`data-testid="constraint-summary-refresh-btn"`）；
+     - 在 `MilestoneProgressWidget`（`data-testid="milestone-progress-widget"`）中为最近里程碑条目增加中文生命周期阶段胶囊（`data-testid="milestone-summary-stage-{id}"`）与手动刷新按钮（`data-testid="milestone-summary-refresh-btn"`）。
+  4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `constraint-summary-refresh-btn`、`milestone-summary-refresh-btn`、`milestone-summary-stage-ms-1`、`semantic-query-presets`、`semantic-preset-0` 及 `semantic-copy-all-btn` 端到端测试断言。
