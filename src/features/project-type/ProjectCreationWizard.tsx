@@ -38,6 +38,25 @@ export interface ProjectCreationWizardProps {
 
 type WizardStep = 'folder' | 'type' | 'confirm';
 
+const WIZARD_ALLOWED_PATH_PRESETS: Record<ProjectType, Array<{ label: string; pattern: string }>> = {
+  coding: [
+    { label: '跨仓共享 SDK 目录', pattern: '../shared-sdk/**' },
+    { label: '公共 API 契约规范库', pattern: '~/Documents/APISpecs/**' },
+  ],
+  business: [
+    { label: '企业标准合同与公文范本库', pattern: '~/Documents/EnterpriseTemplates/**' },
+    { label: '国家政策法规与行业标准库', pattern: '~/Documents/Regulations/**' },
+  ],
+  research: [
+    { label: '全局 Zotero 文献 PDF 库', pattern: '~/Zotero/storage/**' },
+    { label: '公共科研数据集只读目录', pattern: '~/Datasets/**' },
+  ],
+  personal: [
+    { label: '网页剪藏归档库', pattern: '~/Documents/Clippings/**' },
+    { label: '个人电子书与文献库', pattern: '~/Documents/Ebooks/**' },
+  ],
+};
+
 export function ProjectCreationWizard({
   open,
   onOpenChange,
@@ -51,6 +70,7 @@ export function ProjectCreationWizard({
   const [selectedType, setSelectedType] = useState<ProjectType | null>(null);
   const [autoScaffold, setAutoScaffold] = useState<boolean>(true);
   const [selectedTemplateKeys, setSelectedTemplateKeys] = useState<string[]>([]);
+  const [selectedAllowedPaths, setSelectedAllowedPaths] = useState<string[]>([]);
   const [projectDescription, setProjectDescription] = useState<string>('');
   const [vcsMode, setVcsMode] = useState<'git' | 'builtin' | 'none'>('builtin');
   const [creating, setCreating] = useState(false);
@@ -65,6 +85,7 @@ export function ProjectCreationWizard({
     setSelectedType(null);
     setAutoScaffold(true);
     setSelectedTemplateKeys([]);
+    setSelectedAllowedPaths([]);
     setProjectDescription('');
     setVcsMode('builtin');
     setCreating(false);
@@ -132,6 +153,12 @@ export function ProjectCreationWizard({
     );
   };
 
+  const toggleAllowedPath = (pattern: string) => {
+    setSelectedAllowedPaths((prev) =>
+      prev.includes(pattern) ? prev.filter((p) => p !== pattern) : [...prev, pattern],
+    );
+  };
+
   const handleCreate = async () => {
     if (!folderPath) return;
 
@@ -173,6 +200,14 @@ export function ProjectCreationWizard({
           });
         } catch {
           // ignore metadata update error
+        }
+      }
+      if (selectedAllowedPaths.length > 0 && typeof projectApi.updateAllowedPaths === 'function') {
+        try {
+          const allowedPaths = await projectApi.updateAllowedPaths(project.id, selectedAllowedPaths);
+          project = { ...project, allowedPaths };
+        } catch {
+          // ignore allowed paths update error
         }
       }
       if (autoScaffold && vcsMode === 'builtin' && typeof projectApi.createCheckpoint === 'function') {
@@ -380,6 +415,31 @@ export function ProjectCreationWizard({
                               className="h-3.5 w-3.5 rounded border-border"
                             />
                             <span className="font-medium text-foreground">{tpl.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1 pt-1" data-testid="wizard-allowed-paths-presets">
+                      <span className="text-muted-foreground">
+                        L5 跨目录只读参考白名单挂载（可选，严禁 AI 写入）：
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {(WIZARD_ALLOWED_PATH_PRESETS[blueprint.type] ?? []).map((item) => (
+                          <label
+                            key={item.pattern}
+                            className="inline-flex items-center gap-1.5 rounded border border-border bg-background px-2 py-1 text-xs cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedAllowedPaths.includes(item.pattern)}
+                              onChange={() => toggleAllowedPath(item.pattern)}
+                              data-testid={`wizard-allowed-path-checkbox-${item.pattern}`}
+                              className="h-3.5 w-3.5 rounded border-border"
+                            />
+                            <span className="font-medium text-foreground">{item.label}</span>
+                            <code className="font-mono text-ui-2xs text-muted-foreground">
+                              ({item.pattern})
+                            </code>
                           </label>
                         ))}
                       </div>

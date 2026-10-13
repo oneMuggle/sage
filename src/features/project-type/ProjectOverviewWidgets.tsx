@@ -13,6 +13,8 @@ import { projectApi, type ProjectSummary } from '../../shared/api';
 import { ConstraintSummaryWidget } from './ConstraintSummaryWidget';
 import { GitStatusWidget } from './GitStatusWidget';
 import { MilestoneProgressWidget } from './MilestoneProgressWidget';
+import { ProjectAdvisorCard } from './ProjectAdvisorCard';
+import { WikiGenerationPanel } from './WikiGenerationPanel';
 import { getArchetypeBlueprint } from './archetypeBlueprints';
 
 export interface ProjectOverviewWidgetsProps {
@@ -133,10 +135,14 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
         </div>
       </div>
 
-      {/* Coding 或显式启用 Git 的项目显示 Git 状态 */}
+      {/* M3: AI 项目健康顾问卡片 */}
+      <ProjectAdvisorCard projectId={project.id} />
+
+      {/* Coding 或显式启用 Git 的项目显示 Git 状态与 M5 代码→Wiki 生成面板 */}
       {(projectType === 'coding' || project.vcsMode === 'git') && (
         <GitStatusWidget projectId={project.id} />
       )}
+      {projectType === 'coding' && <WikiGenerationPanel projectId={project.id} />}
     </div>
   );
 }
