@@ -1,12 +1,12 @@
 /**
- * 项目类型选择器 (2026-09-24)
+ * 项目类型选择器 (2026-09-24; Phase P29 手动重新检测、一键采用检测结果与生命周期阶段管线预览)
  *
  * 项目类型分类系统 - Phase 4.1
- * 用于在项目创建/编辑时选择项目类型，支持自动检测建议
+ * 用于在项目创建/编辑时选择项目类型，支持自动检测建议、重新检测与四形态阶段管线预览
  */
 
-import { Code, BookOpen, Briefcase, User, Sparkles } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Code, BookOpen, Briefcase, User, Sparkles, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 
 import { projectApi, type ProjectType, type ProjectTypeDetectionResult } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
@@ -79,27 +79,27 @@ export function ProjectTypeSelector({
   const [detection, setDetection] = useState<ProjectTypeDetectionResult | null>(null);
   const [detecting, setDetecting] = useState(false);
 
+  const runDetection = useCallback(async () => {
+    if (!projectPath || typeof projectApi?.detectType !== 'function') return;
+    setDetecting(true);
+    try {
+      const result = await projectApi.detectType(projectPath);
+      setDetection(result);
+      if (result.confidence >= 0.7) {
+        setSelectedType(result.detectedType);
+      }
+    } catch {
+      // 检测失败时不阻塞用户
+    } finally {
+      setDetecting(false);
+    }
+  }, [projectPath]);
+
   // 自动检测项目类型
   useEffect(() => {
     if (!open || !projectPath) return;
-
-    setDetecting(true);
-    projectApi
-      .detectType(projectPath)
-      .then((result) => {
-        setDetection(result);
-        // 置信度高时自动选择
-        if (result.confidence >= 0.7) {
-          setSelectedType(result.detectedType);
-        }
-      })
-      .catch(() => {
-        // 检测失败时不阻塞用户
-      })
-      .finally(() => {
-        setDetecting(false);
-      });
-  }, [open, projectPath]);
+    void runDetection();
+  }, [open, projectPath, runDetection]);
 
   const handleSelect = () => {
     if (selectedType) {
@@ -134,15 +134,39 @@ export function ProjectTypeSelector({
 
           {detection && !detecting && (
             <div className="rounded-lg border border-info/30 bg-info/10 p-3">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-info" />
-                <span className="text-sm font-medium text-text">
-                  自动检测结果：
-                  {PROJECT_TYPES.find((t) => t.value === detection.detectedType)?.label}
-                </span>
-                <span className="text-xs text-info">
-                  (置信度 {Math.round(detection.confidence * 100)}%)
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-info" />
+                  <span className="text-sm font-medium text-text">
+                    自动检测结果：
+                    {PROJECT_TYPES.find((t) => t.value === detection.detectedType)?.label}
+                  </span>
+                  <span className="text-xs text-info">
+                    (置信度 {Math.round(detection.confidence * 100)}%)
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {selectedType !== detection.detectedType && (
+                    <button
+                      type="button"
+                      data-testid="selector-apply-detected-btn"
+                      onClick={() => setSelectedType(detection.detectedType)}
+                      className="rounded border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20"
+                    >
+                      采用检测结果
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    data-testid="selector-redetect-btn"
+                    onClick={() => void runDetection()}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title="重新检测项目类型"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    重新检测
+                  </button>
+                </div>
               </div>
               {detection.signals.length > 0 && (
                 <div className="mt-2 text-xs text-text-secondary">
@@ -163,6 +187,7 @@ export function ProjectTypeSelector({
                 <button
                   key={type.value}
                   type="button"
+                  data-testid={`selector-option-${type.value}`}
                   onClick={() => setSelectedType(type.value)}
                   className={`relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-all ${
                     isSelected
@@ -187,6 +212,9 @@ export function ProjectTypeSelector({
                     </span>
                     <span className="rounded bg-muted px-1.5 py-0.5 text-ui-2xs text-muted-foreground">
                       {bp.subTemplates.length} 套细分规范包
+                    </span>
+                    <span className="w-full text-ui-2xs text-muted-foreground truncate">
+                      {bp.stages.map((s) => s.label).join(' → ')}
                     </span>
                   </div>
                 </button>
