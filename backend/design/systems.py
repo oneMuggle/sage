@@ -31,11 +31,19 @@ class DesignSystemRegistry:
         if system_id in self._cache:
             return self._cache[system_id]
 
+        not_found = DesignSystemNotFoundError(
+            f"Design system '{system_id}' not found"
+        )
+        if not self._systems_dir.exists():
+            raise not_found
+        if system_id != Path(system_id).name or system_id in (
+            "", ".", "..",
+        ):
+            raise not_found
+
         system_dir = self._systems_dir / system_id
         if not system_dir.exists() or not (system_dir / "manifest.json").exists():
-            raise DesignSystemNotFoundError(
-                f"Design system '{system_id}' not found"
-            )
+            raise not_found
 
         system = self._load_system(system_dir)
         self._cache[system_id] = system

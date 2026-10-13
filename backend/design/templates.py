@@ -1,4 +1,4 @@
-"""Template registry -- loads SKILL.md templates for design generation."""
+"""Template registry — loads SKILL.md templates for design generation."""
 from __future__ import annotations
 
 import re
@@ -75,6 +75,16 @@ class DesignTemplateRegistry:
         if template_id in self._cache:
             return self._cache[template_id]
 
+        not_found = DesignTemplateNotFoundError(
+            f"Template '{template_id}' not found"
+        )
+        if not self._templates_dir.exists():
+            raise not_found
+        if template_id != Path(template_id).name or template_id in (
+            "", ".", "..",
+        ):
+            raise not_found
+
         for kind_dir in self._templates_dir.iterdir():
             if not kind_dir.is_dir():
                 continue
@@ -87,9 +97,7 @@ class DesignTemplateRegistry:
                 self._cache[template_id] = template
                 return template
 
-        raise DesignTemplateNotFoundError(
-            f"Template '{template_id}' not found"
-        )
+        raise not_found
 
     def _load_template(
         self, template_dir: Path, kind: str,
@@ -120,15 +128,11 @@ class DesignTemplateRegistry:
                         encoding="utf-8"
                     )
 
-        template_id = parsed.get("name", template_dir.name)
+        template_id = parsed.get("name") or template_dir.name
 
         return DesignTemplate(
             id=template_id,
-            name=(
-                parsed.get("name", template_dir.name)
-                .replace("-", " ")
-                .title()
-            ),
+            name=template_id.replace("-", " ").title(),
             kind=parsed.get("kind", kind),
             description=parsed.get("description", ""),
             skill_md=parsed["skill_md"],

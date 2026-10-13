@@ -66,3 +66,20 @@ class TestDesignSystemRegistry:
         system = registry.get_system("test-system")
         assert "test" in system.tags
         assert "minimal" in system.tags
+
+    def test_get_system_missing_content_dir(self, tmp_path):
+        """A missing systems/ dir raises the domain error, not FileNotFoundError."""
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        registry = DesignSystemRegistry(empty_dir)
+        with pytest.raises(DesignSystemNotFoundError):
+            registry.get_system("test-system")
+
+    @pytest.mark.parametrize(
+        "system_id", ["../secret", "../../OUTSIDE", "..", ".", "", "/etc"],
+    )
+    def test_get_system_rejects_non_bare_ids(self, content_dir, system_id):
+        """Path-traversal and non-bare IDs must never escape the systems tree."""
+        registry = DesignSystemRegistry(content_dir)
+        with pytest.raises(DesignSystemNotFoundError):
+            registry.get_system(system_id)
