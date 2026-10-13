@@ -105,7 +105,7 @@ export function WikiGenerationPanel({ projectId, onGenerated }: WikiGenerationPa
   }, {});
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 rounded-lg border border-border bg-card p-3.5" data-testid="wiki-generation-panel">
       {/* 标题 */}
       <div className="flex items-center gap-2">
         <BookMarked className="h-4 w-4 text-blue-500" />
@@ -257,7 +257,7 @@ export function WikiGenerationPanel({ projectId, onGenerated }: WikiGenerationPa
 
       {/* 初始状态 */}
       {phase === 'idle' && (
-        <Button size="sm" onClick={handlePreview}>
+        <Button size="sm" onClick={handlePreview} data-testid="wiki-preview-btn">
           <FileCode2 className="mr-1.5 h-3.5 w-3.5" />
           预览可生成文档的源文件
         </Button>

@@ -1,14 +1,14 @@
 /**
- * AI 对话知识提取面板 (M2, 2026-10-12)
+ * AI 对话知识提取面板 (M2, 2026-10-12；Phase P21 项目绑定会话下拉选择联动 2026-10-13)
  *
- * 嵌入项目画像 Profile Tab 顶部，用户输入会话 ID 后一键提取知识建议，
- * 勾选确认后写入 ProjectProfileStore。
+ * 嵌入项目画像 Profile Tab 顶部，支持从项目已绑定会话列表一键选择或手动输入会话 ID，
+ * 提取知识建议并勾选确认后写入 ProjectProfileStore。
  */
 
 import { Sparkles, Loader2, CheckCircle2, Lightbulb } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
-import { projectApi, type KnowledgeEntryProposal } from '../../shared/api';
+import { projectApi, type KnowledgeEntryProposal, type Session } from '../../shared/api';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 
@@ -38,6 +38,27 @@ export function KnowledgeExtractionPanel({
   const [reasoning, setReasoning] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState('');
+  const [boundSessions, setBoundSessions] = useState<Session[]>([]);
+
+  useEffect(() => {
+    if (!projectId || typeof projectApi?.listSessions !== 'function') return;
+    let active = true;
+    projectApi
+      .listSessions(projectId)
+      .then((list) => {
+        if (!active || !Array.isArray(list)) return;
+        setBoundSessions(list);
+        if (list.length > 0) {
+          setSessionId((prev) => prev || list[0].id);
+        }
+      })
+      .catch(() => {
+        if (active) setBoundSessions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [projectId]);
 
   const handleExtract = useCallback(async () => {
     if (!sessionId.trim()) {
@@ -52,7 +73,6 @@ export function KnowledgeExtractionPanel({
       });
       setEntries(result.entries);
       setReasoning(result.reasoning);
-      // 默认全选
       setSelected(new Set(result.entries.map((_, i) => i)));
       setPhase('review');
     } catch (err) {
@@ -110,6 +130,25 @@ export function KnowledgeExtractionPanel({
       {(phase === 'idle' || phase === 'loading') && (
         <div className="flex flex-wrap gap-2 items-center">
           <Lightbulb className="h-3.5 w-3.5 text-primary shrink-0" />
+          {boundSessions.length > 0 && (
+            <select
+              value={boundSessions.some((s) => s.id === sessionId) ? sessionId : ''}
+              onChange={(e) => {
+                if (e.target.value) setSessionId(e.target.value);
+              }}
+              disabled={phase === 'loading'}
+              aria-label="选择项目绑定会话"
+              data-testid="knowledge-session-select"
+              className="rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground"
+            >
+              <option value="">选择项目会话 ({boundSessions.length})...</option>
+              {boundSessions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title || s.id}
+                </option>
+              ))}
+            </select>
+          )}
           <input
             type="text"
             value={sessionId}
