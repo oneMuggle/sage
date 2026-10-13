@@ -1,5 +1,5 @@
 /**
- * AI 代码→Wiki 生成面板 (M5, 2026-10-12)
+ * AI 代码→Wiki 生成面板 (M5, 2026-10-12 / Phase P22 多形态适配)
  *
  * 嵌入项目工作台，用户可预览将被扫描的文件与提取的符号，
  * 然后一键调用 LLM 生成 Wiki 文档写入 wiki/ 目录。
@@ -8,15 +8,16 @@
  */
 
 import { BookMarked, Loader2, CheckCircle2, AlertCircle, FileCode2, Sparkles } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi } from '../../shared/api';
-import type { ScannedFile, ExtractedSymbol, WikiGenerateResult } from '../../shared/api';
+import type { ScannedFile, ExtractedSymbol, WikiGenerateResult, ProjectType } from '../../shared/api';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 
 export interface WikiGenerationPanelProps {
   projectId: string;
+  projectType?: ProjectType | null;
   /** 生成完成后回调（外部可刷新 Wiki 列表等） */
   onGenerated?: () => void;
 }
@@ -42,7 +43,22 @@ const LANGUAGE_LABELS: Record<string, string> = {
   c: 'C',
 };
 
-export function WikiGenerationPanel({ projectId, onGenerated }: WikiGenerationPanelProps) {
+const ARCHETYPE_WIKI_HINTS: Record<ProjectType, string> = {
+  coding:
+    '扫描项目源文件，提取函数/类/方法符号，由 LLM 规划文档结构并自动生成 README、ARCHITECTURE、DECISIONS 与 API_INDEX。',
+  business:
+    '扫描项目工作区文书与脚本资产，自动梳理生成项目总览 README、组织架构与审校决策台账 Wiki 页面。',
+  research:
+    '扫描课题实验脚本、文献与分析代码，自动生成课题总览、实验架构说明与研究决策记录 Wiki 页面。',
+  personal:
+    '扫描个人知识空间脚本与结构化笔记，自动汇总生成索引导航 README 与知识演进台账 Wiki 页面。',
+};
+
+export function WikiGenerationPanel({
+  projectId,
+  projectType = 'coding',
+  onGenerated,
+}: WikiGenerationPanelProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [incremental, setIncremental] = useState(false);
   const [files, setFiles] = useState<ScannedFile[]>([]);
@@ -50,8 +66,27 @@ export function WikiGenerationPanel({ projectId, onGenerated }: WikiGenerationPa
   const [result, setResult] = useState<WikiGenerateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  /** 重置 */
+  const handleReset = useCallback(() => {
+    setPhase('idle');
+    setFiles([]);
+    setSymbols([]);
+    setResult(null);
+    setError(null);
+  }, []);
+
+  useEffect(() => {
+    handleReset();
+  }, [projectId, handleReset]);
+
   /** 预览：扫描文件 + 提取符号 */
   const handlePreview = useCallback(async () => {
+    if (
+      typeof projectApi?.wikiScanFiles !== 'function' ||
+      typeof projectApi?.wikiExtractSymbols !== 'function'
+    ) {
+      return;
+    }
     setError(null);
     setPhase('previewing');
     try {
@@ -70,6 +105,7 @@ export function WikiGenerationPanel({ projectId, onGenerated }: WikiGenerationPa
 
   /** 生成 Wiki */
   const handleGenerate = useCallback(async () => {
+    if (typeof projectApi?.wikiGenerate !== 'function') return;
     setError(null);
     setPhase('generating');
     try {
@@ -82,15 +118,6 @@ export function WikiGenerationPanel({ projectId, onGenerated }: WikiGenerationPa
       setPhase('previewed');
     }
   }, [projectId, incremental, onGenerated]);
-
-  /** 重置 */
-  const handleReset = useCallback(() => {
-    setPhase('idle');
-    setFiles([]);
-    setSymbols([]);
-    setResult(null);
-    setError(null);
-  }, []);
 
   // ── 语言分组统计 ──
   const fileCountByLang = files.reduce<Record<string, number>>((acc, f) => {
@@ -105,7 +132,10 @@ export function WikiGenerationPanel({ projectId, onGenerated }: WikiGenerationPa
   }, {});
 
   return (
-    <div className="space-y-3 rounded-lg border border-border bg-card p-3.5" data-testid="wiki-generation-panel">
+    <div
+      className="space-y-3 rounded-lg border border-border bg-card p-3.5"
+      data-testid="wiki-generation-panel"
+    >
       {/* 标题 */}
       <div className="flex items-center gap-2">
         <BookMarked className="h-4 w-4 text-blue-500" />
@@ -114,7 +144,7 @@ export function WikiGenerationPanel({ projectId, onGenerated }: WikiGenerationPa
       </div>
 
       <p className="text-xs text-muted-foreground">
-        扫描项目源文件，提取函数/类/方法符号，由 LLM 规划文档结构并逐模块生成 Wiki 页面。
+        {ARCHETYPE_WIKI_HINTS[projectType ?? 'coding'] ?? ARCHETYPE_WIKI_HINTS.coding}
       </p>
 
       {/* 错误 */}
@@ -249,17 +279,22 @@ export function WikiGenerationPanel({ projectId, onGenerated }: WikiGenerationPa
 
       {/* 加载状态 */}
       {(phase === 'previewing' || phase === 'generating') && (
-        <div className="flex items-center gap-2 rounded-md border border-border p-3 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          {phase === 'previewing' ? '扫描源文件并提取符号中...' : 'LLM 正在生成 Wiki 文档...'}
+          <span>{phase === 'previewing' ? '正在扫描文件并提取符号...' : '正在调用 LLM 生成 Wiki 页面...'}</span>
         </div>
       )}
 
-      {/* 初始状态 */}
+      {/* 空闲态：预览按钮 */}
       {phase === 'idle' && (
-        <Button size="sm" onClick={handlePreview} data-testid="wiki-preview-btn">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void handlePreview()}
+          data-testid="wiki-preview-btn"
+        >
           <FileCode2 className="mr-1.5 h-3.5 w-3.5" />
-          预览可生成文档的源文件
+          扫描并预览项目结构
         </Button>
       )}
     </div>
