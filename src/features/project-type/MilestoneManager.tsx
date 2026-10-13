@@ -395,6 +395,7 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
         open={decomposeDialogOpen}
         onOpenChange={setDecomposeDialogOpen}
         projectId={projectId}
+        projectType={projectType}
         onApplied={fetchMilestones}
       />
     </>

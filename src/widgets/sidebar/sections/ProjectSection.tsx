@@ -41,6 +41,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { ProjectTypeBadge } from '../../../features/project-type/ProjectTypeBadge';
+import { getArchetypeBlueprint } from '../../../features/project-type/archetypeBlueprints';
 import type { InvokeError } from '../../../shared/api/desktopInvoke';
 import {
   projectApi,
@@ -665,6 +666,17 @@ export function ProjectSection({
                           type={project.projectType ?? project.detectedType}
                           detected={!project.projectType && Boolean(project.detectedType)}
                         />
+                        {project.projectStage && (
+                          <span
+                            data-testid="project-row-stage-badge"
+                            className="shrink-0 rounded border border-border/60 bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-secondary"
+                          >
+                            {getArchetypeBlueprint(
+                              project.projectType ?? project.detectedType ?? 'coding',
+                            ).stages.find((s) => s.id === project.projectStage)?.label ??
+                              project.projectStage}
+                          </span>
+                        )}
                         {missing && (
                           <AlertTriangle
                             className="w-3 h-3 shrink-0 text-warning"

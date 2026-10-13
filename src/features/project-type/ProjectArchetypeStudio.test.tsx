@@ -309,6 +309,7 @@ describe('ProjectArchetypeStudio', () => {
     // Switch to allowed_paths tab and add a read-only reference directory
     fireEvent.click(screen.getByRole('button', { name: /跨目录只读白名单/ }));
     expect(await screen.findByTestId('project-allowed-paths-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('allowed-paths-copy-md-btn')).toBeInTheDocument();
     expect(screen.getByText('D:/Templates/Legal/**')).toBeInTheDocument();
 
     const input = screen.getByPlaceholderText(/输入外部只读参考目录路径/);
@@ -427,6 +428,15 @@ describe('ProjectArchetypeStudio', () => {
         },
       );
     });
+
+    // Expand M3 Advisor details and trigger M3->M1 suggestion decomposition dialog
+    fireEvent.click(await screen.findByTestId('advisor-toggle-details-btn'));
+    fireEvent.click(await screen.findByTestId('advisor-decompose-suggestion-0'));
+    expect(await screen.findByTestId('decompose-archetype-presets')).toBeInTheDocument();
+    expect(screen.getByTestId('decompose-requirement-input')).toHaveValue('补充二审归档快照');
+    expect(screen.getByTestId('decompose-context-input')).toHaveValue('定稿前保护');
+    fireEvent.click(screen.getByTestId('decompose-preset-0'));
+    fireEvent.click(screen.getByText('取消'));
 
     // Apply academic citation style & writing tone on the research card
     fireEvent.change(screen.getByTestId('research-citation-style-select'), {
