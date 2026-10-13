@@ -1,8 +1,8 @@
 /**
- * AI 代码→Wiki 生成面板 (M5, 2026-10-12 / Phase P22 多形态适配 / Phase P24 M5→L4 入库闭环与清单导出)
+ * AI 代码→Wiki 生成面板 (M5, 2026-10-12 / Phase P22 多形态适配 / Phase P24 M5→L4 入库闭环与清单导出 / Phase P31 全量批量纳入 L4 与扫描文件过滤)
  *
- * 嵌入项目工作台，用户可预览将被扫描的文件与提取的符号，
- * 一键调用 LLM 生成 Wiki 文档写入 wiki/ 目录，并支持将生成的 Wiki 页面直接纳入 L4 受控资料池。
+ * 嵌入项目工作台，用户可预览将被扫描的文件与提取的符号（支持按文件路径/语言筛选），
+ * 一键调用 LLM 生成 Wiki 文档写入 wiki/ 目录，并支持单页或全量批量将生成的 Wiki 页面纳入 L4 受控资料池。
  *
  * 流程: idle → previewing → previewed → generating → done
  */
@@ -17,6 +17,7 @@ import {
   Copy,
   Check,
   FilePlus2,
+  Search,
 } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
@@ -78,6 +79,8 @@ export function WikiGenerationPanel({
   const [copiedPreview, setCopiedPreview] = useState(false);
   const [copiedManifest, setCopiedManifest] = useState(false);
   const [ingestedPaths, setIngestedPaths] = useState<Set<string>>(new Set());
+  const [ingestingAll, setIngestingAll] = useState(false);
+  const [fileFilter, setFileFilter] = useState('');
 
   /** 重置 */
   const handleReset = useCallback(() => {
@@ -89,6 +92,8 @@ export function WikiGenerationPanel({
     setCopiedPreview(false);
     setCopiedManifest(false);
     setIngestedPaths(new Set());
+    setIngestingAll(false);
+    setFileFilter('');
   }, []);
 
   useEffect(() => {
@@ -146,6 +151,24 @@ export function WikiGenerationPanel({
     }
   };
 
+  /** M5 -> L4: 一键将全部生成的 Wiki 页面纳入 L4 受控资料池 */
+  const handleIngestAllToMaterials = async () => {
+    if (!result || ingestingAll || typeof projectApi?.addMaterialFromFile !== 'function') return;
+    setIngestingAll(true);
+    try {
+      for (const p of result.wikiPaths) {
+        if (!ingestedPaths.has(p)) {
+          await projectApi.addMaterialFromFile(projectId, p);
+        }
+      }
+      setIngestedPaths(new Set(result.wikiPaths));
+    } catch {
+      // ignore in offline/test mode
+    } finally {
+      setIngestingAll(false);
+    }
+  };
+
   const handleCopyPreviewSummary = async () => {
     const lines = [
       `# M5 Wiki 扫描与符号提取预览`,
@@ -192,6 +215,16 @@ export function WikiGenerationPanel({
     return acc;
   }, {});
 
+  const q = fileFilter.trim().toLowerCase();
+  const filteredFiles = files.filter((f) => {
+    if (!q) return true;
+    return f.path.toLowerCase().includes(q) || f.language.toLowerCase().includes(q);
+  });
+
+  const allIngested =
+    Boolean(result && result.wikiPaths.length > 0) &&
+    result!.wikiPaths.every((p) => ingestedPaths.has(p));
+
   return (
     <div
       className="space-y-3 rounded-lg border border-border bg-card p-3.5"
@@ -224,24 +257,47 @@ export function WikiGenerationPanel({
               <CheckCircle2 className="h-4 w-4" />
               Wiki 生成完成
             </div>
-            <button
-              type="button"
-              onClick={() => void handleCopyManifest()}
-              data-testid="wiki-copy-manifest-btn"
-              className="inline-flex items-center gap-1 rounded border border-green-300 bg-white/80 px-2 py-0.5 text-ui-2xs font-medium text-green-700 hover:bg-white"
-            >
-              {copiedManifest ? (
-                <>
-                  <Check className="h-3 w-3" />
-                  已复制清单
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3 w-3" />
-                  复制 Wiki 清单
-                </>
+            <div className="flex items-center gap-1.5">
+              {result.wikiPaths.length > 0 && (
+                <button
+                  type="button"
+                  disabled={allIngested || ingestingAll}
+                  onClick={() => void handleIngestAllToMaterials()}
+                  data-testid="wiki-ingest-all-btn"
+                  className="inline-flex items-center gap-1 rounded border border-green-300 bg-white/80 px-2 py-0.5 text-ui-2xs font-medium text-green-700 hover:bg-white disabled:opacity-60"
+                >
+                  {allIngested ? (
+                    <>
+                      <Check className="h-3 w-3" />
+                      已全部纳入 L4
+                    </>
+                  ) : (
+                    <>
+                      <FilePlus2 className="h-3 w-3" />
+                      全部纳入 L4 资料池
+                    </>
+                  )}
+                </button>
               )}
-            </button>
+              <button
+                type="button"
+                onClick={() => void handleCopyManifest()}
+                data-testid="wiki-copy-manifest-btn"
+                className="inline-flex items-center gap-1 rounded border border-green-300 bg-white/80 px-2 py-0.5 text-ui-2xs font-medium text-green-700 hover:bg-white"
+              >
+                {copiedManifest ? (
+                  <>
+                    <Check className="h-3 w-3" />
+                    已复制清单
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3" />
+                    复制 Wiki 清单
+                  </>
+                )}
+              </button>
+            </div>
           </div>
           <div className="flex flex-wrap gap-3 text-xs text-green-600">
             <span>新生成 {result.pagesGenerated} 页</span>
@@ -361,22 +417,35 @@ export function WikiGenerationPanel({
             )}
           </div>
 
-          {/* 文件列表（最多显示 10 个） */}
+          {/* 文件列表（支持按路径或语言筛选，最多显示 10 个） */}
           {files.length > 0 && (
-            <div className="max-h-24 overflow-y-auto rounded bg-muted/50 p-2">
-              {files.slice(0, 10).map((f) => (
-                <div key={f.path} className="flex items-center justify-between text-xs">
-                  <code className="truncate">{f.path}</code>
-                  <span className="shrink-0 text-muted-foreground">
-                    {(f.sizeBytes / 1024).toFixed(1)} KB
-                  </span>
-                </div>
-              ))}
-              {files.length > 10 && (
-                <div className="text-xs text-muted-foreground">
-                  ... 另有 {files.length - 10} 个文件
-                </div>
-              )}
+            <div className="space-y-1.5">
+              <div className="relative">
+                <Search className="h-3 w-3 text-muted-foreground absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={fileFilter}
+                  onChange={(e) => setFileFilter(e.target.value)}
+                  placeholder="按文件路径或语言筛选预览文件..."
+                  data-testid="wiki-preview-filter-input"
+                  className="w-full rounded border border-input bg-background pl-6 pr-2 py-1 text-ui-2xs"
+                />
+              </div>
+              <div className="max-h-24 overflow-y-auto rounded bg-muted/50 p-2">
+                {filteredFiles.slice(0, 10).map((f) => (
+                  <div key={f.path} className="flex items-center justify-between text-xs">
+                    <code className="truncate">{f.path}</code>
+                    <span className="shrink-0 text-muted-foreground">
+                      {(f.sizeBytes / 1024).toFixed(1)} KB
+                    </span>
+                  </div>
+                ))}
+                {filteredFiles.length > 10 && (
+                  <div className="text-xs text-muted-foreground">
+                    ... 另有 {filteredFiles.length - 10} 个文件
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
