@@ -22,6 +22,8 @@ const mockCreateConstraint = vi.fn();
 const mockCreateMilestone = vi.fn();
 const mockImportConstraints = vi.fn();
 const mockUpdateMilestone = vi.fn();
+const mockGetAdvice = vi.fn();
+const mockListSessions = vi.fn();
 const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
 const mockDeleteProjectProfile = vi.fn();
@@ -49,6 +51,8 @@ vi.mock('../../shared/api', () => ({
     createMilestone: (...args: unknown[]) => mockCreateMilestone(...args),
     importConstraints: (...args: unknown[]) => mockImportConstraints(...args),
     updateMilestone: (...args: unknown[]) => mockUpdateMilestone(...args),
+    getAdvice: (...args: unknown[]) => mockGetAdvice(...args),
+    listSessions: (...args: unknown[]) => mockListSessions(...args),
   },
   memoryApi: {
     getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
@@ -82,6 +86,15 @@ beforeEach(() => {
   mockScaffold.mockReset();
   mockUpdateAllowedPaths.mockReset();
   mockListConstraints.mockResolvedValue([]);
+  mockGetAdvice.mockResolvedValue({
+    healthScore: 86,
+    summary: '项目五层上下文结构完整，里程碑推进正常。',
+    risks: [],
+    suggestions: [{ priority: 'medium', action: '补充二审归档快照', reason: '定稿前保护' }],
+  });
+  mockListSessions.mockResolvedValue([
+    { id: 'sess-contract-01', title: '法务条款一审对话', createdAt: 1000, updatedAt: 2000 },
+  ]);
   mockImportConstraints.mockResolvedValue([
     {
       id: 'c-imp-1',
@@ -337,6 +350,7 @@ describe('ProjectArchetypeStudio', () => {
     expect(await screen.findByTestId('workspace-vcs-summary-widget')).toBeInTheDocument();
     expect(await screen.findByTestId('workspace-charter-status-badge')).toBeInTheDocument();
     expect(screen.getByTestId('overview-quick-checkpoint-btn')).toBeInTheDocument();
+    expect(await screen.findByTestId('project-advisor-card')).toBeInTheDocument();
 
     // Quick import default constraints from ConstraintSummaryWidget empty state
     fireEvent.click(await screen.findByTestId('constraint-summary-quick-import'));
@@ -488,6 +502,7 @@ describe('ProjectArchetypeStudio', () => {
     });
     fireEvent.click(screen.getByTestId('studio-tab-profile'));
     expect(await screen.findByTestId('project-profile-studio-panel')).toBeInTheDocument();
+    expect(await screen.findByTestId('knowledge-session-select')).toBeInTheDocument();
     expect(screen.getByTestId('studio-profile-presets-bar')).toBeInTheDocument();
     expect(screen.getByTestId('studio-profile-copy-md-btn')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('studio-profile-preset-0'));

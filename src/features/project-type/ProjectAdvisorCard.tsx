@@ -66,11 +66,15 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [expanded, setExpanded] = useState(false);
 
   const fetchAdvice = useCallback(async () => {
+    if (typeof projectApi?.getAdvice !== 'function') {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
       const result = await projectApi.getAdvice(projectId);
-      setAdvice(result);
+      setAdvice(result ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : '获取顾问建议失败');
     } finally {
@@ -133,7 +137,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const hasDetails = risks.length > 0 || suggestions.length > 0;
 
   return (
-    <Card>
+    <Card data-testid="project-advisor-card">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-sm">
