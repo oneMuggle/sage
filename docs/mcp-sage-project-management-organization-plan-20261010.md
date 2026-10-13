@@ -529,3 +529,18 @@
    - 在 `ProjectOverviewPanel` 中新增四形态 L2 目标与交付指令快捷模板胶囊（`sidebar-overview-preset-${idx}`）及 **`复制指令 MD`** 按钮（`sidebar-overview-copy-md`）。
    - 在 `ProjectMaterialsPanel` 中新增侧边栏受控资料实时关键词搜索框（`sidebar-materials-search-input`）与 **`复制资料 MD`** 按钮（`sidebar-materials-copy-md`）。
 
+### Phase P31：项目工作台全局台账工具栏、侧边栏 Git 变更筛选导出、M4→L3 画像沉淀与 M5 Wiki 批量纳入 L4（2026-10-13 已完成）
+
+1. **项目工作台全局统计、新建向导启动器与项目台账导出（`src/pages/Projects.tsx`）**
+   - 在项目工作台顶部新增全局摘要与快捷操作栏（`project-workbench-toolbar`），实时汇总已纳管项目总数（`workbench-project-count`）与四类项目形态分布徽标（`workbench-archetype-counts`）。
+   - 新增 **`新建/纳管项目向导`** 按钮（`workbench-open-wizard-btn`）直连 `ProjectCreationWizard`，以及 **`导出项目台账 MD`** 按钮（`workbench-export-registry-md-btn`）一键导出全量受控项目 Markdown 表格。
+2. **侧边栏 Git 状态面板变更类别筛选与 Markdown 复制（`src/widgets/sidebar/sections/GitStatusSection.tsx`）**
+   - 在侧边栏 Git 变更列表上方新增四档状态过滤胶囊（`git-sider-filter-all` / `staged` / `modified` / `untracked`：`全部` / `暂存` / `修改` / `未跟踪`）。
+   - 顶栏新增 **`复制 Git 变更清单 Markdown`** 按钮（`git-sider-copy-md-btn`）。
+3. **语义检索面板（M4）相似度阈值过滤与一键沉淀至 L3 项目画像（`src/features/project-type/SemanticSearchPanel.tsx`）**
+   - 新增三档相似度阈值筛选胶囊（`semantic-score-filter-0` / `50` / `75`：`全部` / `≥50%` / `≥75%`）。
+   - 在每条检索命中卡片顶栏新增 **`沉淀至 L3 画像 / 已沉淀 L3`** 按钮（`semantic-hit-save-profile-${idx}`），打通 **“M4 语义检索高价值片段 → L3 项目记忆画像”** 的知识闭环。
+4. **AI 代码→Wiki 生成面板（M5）预览文件过滤与全量批量纳入 L4 资料池（`src/features/project-type/WikiGenerationPanel.tsx`）**
+   - 在扫描预览阶段新增文件路径与语言实时筛选框（`wiki-preview-filter-input`）。
+   - 在生成完成阶段顶栏新增 **`全部纳入 L4 资料池 / 已全部纳入 L4`** 按钮（`wiki-ingest-all-btn`），支持一键批量将全部生成的 Wiki 文档纳入 L4 受控资料池。
+

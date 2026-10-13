@@ -1,13 +1,13 @@
 /**
- * GitStatusSection — ZCode-inspired 侧边栏 Git 状态面板。
+ * GitStatusSection — ZCode-inspired 侧边栏 Git 状态面板 (Phase P31 变更状态筛选与 Markdown 复制)。
  *
- * 显示当前工作区的分支 + 变更文件列表。
+ * 显示当前工作区的分支 + 变更文件列表，支持按状态（全部/暂存/修改/未跟踪）过滤及一键复制变更清单。
  * 数据来源: projectApi.list() 第一个（最近打开的）项目的 path。
  * 自动刷新: 30 秒轮询（组件可见时）。
  * 非 git 目录静默降级（不显示 section 内容）。
  */
 
-import { GitBranch, RefreshCw } from 'lucide-react';
+import { Check, Copy, GitBranch, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { getGitStatus, type GitFileChange, type GitStatusResponse } from '../../../shared/api/gitStatusApi';
@@ -19,6 +19,8 @@ interface GitStatusSectionProps {
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }
+
+type GitFilterCategory = 'all' | 'staged' | 'modified' | 'untracked';
 
 const REFRESH_INTERVAL = 30_000; // 30 seconds
 
@@ -67,6 +69,8 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [projectPath, setProjectPath] = useState<string | null>(null);
+  const [filterCategory, setFilterCategory] = useState<GitFilterCategory>('all');
+  const [copiedMd, setCopiedMd] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 获取第一个项目的路径
@@ -134,6 +138,27 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
     [fetchStatus],
   );
 
+  const handleCopyChangesMarkdown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!status || status.files.length === 0) return;
+      const lines = [
+        `# 侧边栏 Git 变更清单 (${status.branch || 'HEAD'})`,
+        '',
+        ...status.files.map((f) => `- [${statusBadge(f.status)}] \`${f.path}\``),
+      ];
+      try {
+        void navigator.clipboard?.writeText(lines.join('\n'));
+        setCopiedMd(true);
+        setTimeout(() => setCopiedMd(false), 1800);
+      } catch {
+        // ignore in test/offline mode
+      }
+    },
+    [status],
+  );
+
   // 非 git 仓库或无项目 → 不渲染内容
   if (!loading && status && !status.is_git_repo) {
     return (
@@ -190,6 +215,17 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
               {status.branch}
             </span>
           )}
+          {fileCount > 0 && (
+            <button
+              type="button"
+              onClick={handleCopyChangesMarkdown}
+              data-testid="git-sider-copy-md-btn"
+              title="复制 Git 变更清单 Markdown"
+              className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text hover:bg-bg-hover"
+            >
+              {copiedMd ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+            </button>
+          )}
           <button
             onClick={handleRefresh}
             title={t('git.refresh')}
@@ -217,30 +253,63 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
           );
         }
 
+        const filteredFiles = status.files.filter((f) => {
+          if (filterCategory === 'all') return true;
+          if (filterCategory === 'staged') return f.status === 'staged';
+          if (filterCategory === 'untracked') return f.status === 'untracked';
+          return f.status === 'modified' || f.status === 'deleted' || f.status === 'renamed' || f.status === 'conflicted';
+        });
+
         return (
-          <ul className="flex flex-col" data-testid="git-status-list">
-            {status.files.slice(0, 12).map((file) => (
-              <li
-                key={`${file.status}-${file.path}`}
-                className="group flex items-center gap-1.5 px-2 py-1 rounded-radius-sm hover:bg-bg-hover"
-                title={file.path}
-              >
-                <span
-                  className={`text-ui-xs font-mono w-3 text-center flex-shrink-0 ${statusColor(file.status)}`}
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-1 px-2 pt-0.5" data-testid="git-sider-filter-bar">
+              {(
+                [
+                  { id: 'all', label: '全部' },
+                  { id: 'staged', label: '暂存' },
+                  { id: 'modified', label: '修改' },
+                  { id: 'untracked', label: '未跟踪' },
+                ] as const
+              ).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setFilterCategory(item.id)}
+                  data-testid={`git-sider-filter-${item.id}`}
+                  className={`rounded px-1.5 py-0.5 text-ui-2xs transition-colors ${
+                    filterCategory === item.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-bg-secondary text-text-muted hover:text-text'
+                  }`}
                 >
-                  {statusBadge(file.status)}
-                </span>
-                <span className="text-ui-xs text-text truncate flex-1">
-                  {file.path}
-                </span>
-              </li>
-            ))}
-            {status.files.length > 12 && (
-              <li className="text-ui-xs text-text-muted px-2 py-0.5 italic">
-                +{status.files.length - 12} more
-              </li>
-            )}
-          </ul>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <ul className="flex flex-col" data-testid="git-status-list">
+              {filteredFiles.slice(0, 12).map((file) => (
+                <li
+                  key={`${file.status}-${file.path}`}
+                  className="group flex items-center gap-1.5 px-2 py-1 rounded-radius-sm hover:bg-bg-hover"
+                  title={file.path}
+                >
+                  <span
+                    className={`text-ui-xs font-mono w-3 text-center flex-shrink-0 ${statusColor(file.status)}`}
+                  >
+                    {statusBadge(file.status)}
+                  </span>
+                  <span className="text-ui-xs text-text truncate flex-1">
+                    {file.path}
+                  </span>
+                </li>
+              ))}
+              {filteredFiles.length > 12 && (
+                <li className="text-ui-xs text-text-muted px-2 py-0.5 italic">
+                  +{filteredFiles.length - 12} more
+                </li>
+              )}
+            </ul>
+          </div>
         );
       }}
     />
