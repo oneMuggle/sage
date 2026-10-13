@@ -1,13 +1,23 @@
 /**
- * AI 代码→Wiki 生成面板 (M5, 2026-10-12 / Phase P22 多形态适配)
+ * AI 代码→Wiki 生成面板 (M5, 2026-10-12 / Phase P22 多形态适配 / Phase P24 M5→L4 入库闭环与清单导出)
  *
  * 嵌入项目工作台，用户可预览将被扫描的文件与提取的符号，
- * 然后一键调用 LLM 生成 Wiki 文档写入 wiki/ 目录。
+ * 一键调用 LLM 生成 Wiki 文档写入 wiki/ 目录，并支持将生成的 Wiki 页面直接纳入 L4 受控资料池。
  *
  * 流程: idle → previewing → previewed → generating → done
  */
 
-import { BookMarked, Loader2, CheckCircle2, AlertCircle, FileCode2, Sparkles } from 'lucide-react';
+import {
+  BookMarked,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  FileCode2,
+  Sparkles,
+  Copy,
+  Check,
+  FilePlus2,
+} from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -65,6 +75,9 @@ export function WikiGenerationPanel({
   const [symbols, setSymbols] = useState<ExtractedSymbol[]>([]);
   const [result, setResult] = useState<WikiGenerateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copiedPreview, setCopiedPreview] = useState(false);
+  const [copiedManifest, setCopiedManifest] = useState(false);
+  const [ingestedPaths, setIngestedPaths] = useState<Set<string>>(new Set());
 
   /** 重置 */
   const handleReset = useCallback(() => {
@@ -73,6 +86,9 @@ export function WikiGenerationPanel({
     setSymbols([]);
     setResult(null);
     setError(null);
+    setCopiedPreview(false);
+    setCopiedManifest(false);
+    setIngestedPaths(new Set());
   }, []);
 
   useEffect(() => {
@@ -119,6 +135,51 @@ export function WikiGenerationPanel({
     }
   }, [projectId, incremental, onGenerated]);
 
+  /** M5 -> L4: 将生成的 Wiki 页面纳入 L4 受控资料池 */
+  const handleIngestToMaterials = async (wikiPath: string) => {
+    if (typeof projectApi?.addMaterialFromFile !== 'function' || ingestedPaths.has(wikiPath)) return;
+    try {
+      await projectApi.addMaterialFromFile(projectId, wikiPath);
+      setIngestedPaths((prev) => new Set(prev).add(wikiPath));
+    } catch {
+      // ignore in offline/test mode
+    }
+  };
+
+  const handleCopyPreviewSummary = async () => {
+    const lines = [
+      `# M5 Wiki 扫描与符号提取预览`,
+      `- 源文件总数: ${files.length}`,
+      `- 提取符号数: ${symbols.length}`,
+      '',
+      ...files.slice(0, 20).map((f) => `- \`${f.path}\` (${f.language})`),
+    ];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedPreview(true);
+      setTimeout(() => setCopiedPreview(false), 2000);
+    } catch {
+      // ignore in test env
+    }
+  };
+
+  const handleCopyManifest = async () => {
+    if (!result) return;
+    const lines = [
+      `# M5 Wiki 生成清单`,
+      `- 新生成: ${result.pagesGenerated} 页 | 更新: ${result.pagesUpdated} 页 | 跳过: ${result.pagesSkipped} 页`,
+      '',
+      ...result.wikiPaths.map((p) => `- \`${p}\``),
+    ];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedManifest(true);
+      setTimeout(() => setCopiedManifest(false), 2000);
+    } catch {
+      // ignore in test env
+    }
+  };
+
   // ── 语言分组统计 ──
   const fileCountByLang = files.reduce<Record<string, number>>((acc, f) => {
     acc[f.language] = (acc[f.language] ?? 0) + 1;
@@ -158,9 +219,29 @@ export function WikiGenerationPanel({
       {/* 结果展示 */}
       {phase === 'done' && result && (
         <div className="space-y-2 rounded-md border border-green-200 bg-green-50 p-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-green-700">
-            <CheckCircle2 className="h-4 w-4" />
-            Wiki 生成完成
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-medium text-green-700">
+              <CheckCircle2 className="h-4 w-4" />
+              Wiki 生成完成
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCopyManifest()}
+              data-testid="wiki-copy-manifest-btn"
+              className="inline-flex items-center gap-1 rounded border border-green-300 bg-white/80 px-2 py-0.5 text-ui-2xs font-medium text-green-700 hover:bg-white"
+            >
+              {copiedManifest ? (
+                <>
+                  <Check className="h-3 w-3" />
+                  已复制清单
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3" />
+                  复制 Wiki 清单
+                </>
+              )}
+            </button>
           </div>
           <div className="flex flex-wrap gap-3 text-xs text-green-600">
             <span>新生成 {result.pagesGenerated} 页</span>
@@ -169,14 +250,41 @@ export function WikiGenerationPanel({
           </div>
           {result.wikiPaths.length > 0 && (
             <div className="space-y-1">
-              <span className="text-xs text-green-700">生成的文件：</span>
-              <div className="max-h-32 overflow-y-auto">
-                {result.wikiPaths.map((p) => (
-                  <div key={p} className="flex items-center gap-1 text-xs text-green-600">
-                    <FileCode2 className="h-3 w-3" />
-                    <code>{p}</code>
-                  </div>
-                ))}
+              <span className="text-xs text-green-700">生成的文件（可一键纳入 L4 受控资料池）：</span>
+              <div className="max-h-32 overflow-y-auto space-y-1">
+                {result.wikiPaths.map((p, idx) => {
+                  const isIngested = ingestedPaths.has(p);
+                  return (
+                    <div
+                      key={p}
+                      className="flex items-center justify-between gap-2 text-xs text-green-600"
+                    >
+                      <div className="flex items-center gap-1 min-w-0">
+                        <FileCode2 className="h-3 w-3 shrink-0" />
+                        <code className="truncate">{p}</code>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isIngested}
+                        onClick={() => void handleIngestToMaterials(p)}
+                        data-testid={`wiki-ingest-material-${idx}`}
+                        className="shrink-0 inline-flex items-center gap-1 rounded border border-green-300 bg-white/80 px-1.5 py-0.5 text-ui-2xs text-green-700 hover:bg-white disabled:opacity-60"
+                      >
+                        {isIngested ? (
+                          <>
+                            <Check className="h-2.5 w-2.5" />
+                            已纳入 L4
+                          </>
+                        ) : (
+                          <>
+                            <FilePlus2 className="h-2.5 w-2.5" />
+                            纳入 L4 资料
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -201,9 +309,29 @@ export function WikiGenerationPanel({
         <div className="space-y-3 rounded-md border border-border p-3">
           {/* 文件统计 */}
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs font-medium">
-              <FileCode2 className="h-3.5 w-3.5" />
-              扫描到 {files.length} 个源文件
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-medium">
+                <FileCode2 className="h-3.5 w-3.5" />
+                扫描到 {files.length} 个源文件
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleCopyPreviewSummary()}
+                data-testid="wiki-copy-preview-btn"
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+              >
+                {copiedPreview ? (
+                  <>
+                    <Check className="h-3 w-3 text-emerald-500" />
+                    已复制摘要
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3 w-3 text-primary" />
+                    复制扫描摘要
+                  </>
+                )}
+              </button>
             </div>
             {Object.keys(fileCountByLang).length > 0 && (
               <div className="flex flex-wrap gap-1.5">
@@ -259,6 +387,7 @@ export function WikiGenerationPanel({
                 type="checkbox"
                 checked={incremental}
                 onChange={(e) => setIncremental(e.target.checked)}
+                data-testid="wiki-incremental-checkbox"
                 className="h-3.5 w-3.5"
               />
               增量更新（仅重新生成变化的文件）
@@ -266,7 +395,11 @@ export function WikiGenerationPanel({
           </div>
 
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleGenerate}>
+            <Button
+              size="sm"
+              onClick={() => void handleGenerate()}
+              data-testid="wiki-generate-btn"
+            >
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
               生成 Wiki
             </Button>

@@ -24,6 +24,11 @@ const mockImportConstraints = vi.fn();
 const mockUpdateMilestone = vi.fn();
 const mockGetAdvice = vi.fn();
 const mockListSessions = vi.fn();
+const mockWikiScanFiles = vi.fn();
+const mockWikiExtractSymbols = vi.fn();
+const mockWikiGenerate = vi.fn();
+const mockExtractKnowledge = vi.fn();
+const mockConfirmKnowledge = vi.fn();
 const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
 const mockDeleteProjectProfile = vi.fn();
@@ -53,6 +58,11 @@ vi.mock('../../shared/api', () => ({
     updateMilestone: (...args: unknown[]) => mockUpdateMilestone(...args),
     getAdvice: (...args: unknown[]) => mockGetAdvice(...args),
     listSessions: (...args: unknown[]) => mockListSessions(...args),
+    wikiScanFiles: (...args: unknown[]) => mockWikiScanFiles(...args),
+    wikiExtractSymbols: (...args: unknown[]) => mockWikiExtractSymbols(...args),
+    wikiGenerate: (...args: unknown[]) => mockWikiGenerate(...args),
+    extractKnowledge: (...args: unknown[]) => mockExtractKnowledge(...args),
+    confirmKnowledge: (...args: unknown[]) => mockConfirmKnowledge(...args),
   },
   memoryApi: {
     getProjectProfile: (...args: unknown[]) => mockGetProjectProfile(...args),
@@ -95,6 +105,31 @@ beforeEach(() => {
   mockListSessions.mockResolvedValue([
     { id: 'sess-contract-01', title: '法务条款一审对话', createdAt: 1000, updatedAt: 2000 },
   ]);
+  mockWikiScanFiles.mockResolvedValue({
+    files: [{ path: 'src/index.ts', language: 'typescript', sizeBytes: 2048 }],
+  });
+  mockWikiExtractSymbols.mockResolvedValue({
+    symbols: [{ name: 'bootstrap', kind: 'function', file: 'src/index.ts', line: 1 }],
+  });
+  mockWikiGenerate.mockResolvedValue({
+    pagesGenerated: 2,
+    pagesUpdated: 0,
+    pagesSkipped: 0,
+    wikiPaths: ['wiki/README.md', 'wiki/ARCHITECTURE.md'],
+    errors: [],
+  });
+  mockExtractKnowledge.mockResolvedValue({
+    reasoning: '从法务会签对话提炼关键金额校核约定',
+    entries: [
+      {
+        category: 'convention',
+        content: '所有补充协议须附原始合同编号',
+        importance: 8,
+        reasoning: '保障归档可追溯性',
+      },
+    ],
+  });
+  mockConfirmKnowledge.mockResolvedValue({ addedCount: 1 });
   mockImportConstraints.mockResolvedValue([
     {
       id: 'c-imp-1',
@@ -353,6 +388,14 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('overview-quick-checkpoint-btn')).toBeInTheDocument();
     expect(await screen.findByTestId('project-advisor-card')).toBeInTheDocument();
     expect(screen.getByTestId('wiki-generation-panel')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('wiki-preview-btn'));
+    expect(await screen.findByTestId('wiki-copy-preview-btn')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('wiki-generate-btn'));
+    expect(await screen.findByTestId('wiki-copy-manifest-btn')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('wiki-ingest-material-0'));
+    await waitFor(() => {
+      expect(mockAddMaterialFromFile).toHaveBeenCalledWith('proj-1', 'wiki/README.md');
+    });
 
     // Quick import default constraints from ConstraintSummaryWidget empty state
     fireEvent.click(await screen.findByTestId('constraint-summary-quick-import'));
@@ -513,9 +556,34 @@ describe('ProjectArchetypeStudio', () => {
       category: 'convention',
       importance: 5,
     });
+    // Switch to Charter tab and verify L1+L2 markdown copy button
+    mockGetCharter.mockResolvedValueOnce({
+      projectId: 'proj-1',
+      path: 'D:/Archives/Contract2026/SAGE.md',
+      exists: true,
+      content: '# Contract2026 总纲',
+      charCount: 18,
+      recommendedTemplate: '# 推荐模板',
+    });
+    fireEvent.click(screen.getByTestId('studio-tab-charter'));
+    expect(await screen.findByTestId('studio-charter-copy-md-btn')).toBeInTheDocument();
+
     fireEvent.click(screen.getByTestId('studio-tab-profile'));
     expect(await screen.findByTestId('project-profile-studio-panel')).toBeInTheDocument();
     expect(await screen.findByTestId('knowledge-session-select')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('knowledge-extract-btn'));
+    expect(await screen.findByTestId('knowledge-toggle-select-all')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('knowledge-toggle-select-all'));
+    fireEvent.click(screen.getByTestId('knowledge-toggle-select-all'));
+    fireEvent.click(screen.getByTestId('knowledge-confirm-btn'));
+    await waitFor(() => {
+      expect(mockConfirmKnowledge).toHaveBeenCalledWith(
+        'proj-1',
+        expect.objectContaining({
+          entries: [expect.objectContaining({ content: '所有补充协议须附原始合同编号' })],
+        }),
+      );
+    });
     expect(screen.getByTestId('studio-profile-presets-bar')).toBeInTheDocument();
     expect(screen.getByTestId('studio-profile-copy-md-btn')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('studio-profile-preset-0'));
