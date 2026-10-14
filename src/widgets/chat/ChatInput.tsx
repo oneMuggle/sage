@@ -19,7 +19,12 @@ import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
 
-import { InputCard, type AudioAttachmentChipType, type InputCardProps, type KnowledgeDocType } from './InputCard';
+import {
+  InputCard,
+  type AudioAttachmentChipType,
+  type InputCardProps,
+  type KnowledgeDocType,
+} from './InputCard';
 import { extractTemplateVars, TemplateFillDialog } from './TemplateFillDialog';
 import {
   commandToPrompt,
@@ -178,10 +183,13 @@ function ChatInputInner({
   // auto = LLM 二分类；force_multi = 强制编排；template:<id> = 确定性模板。
   const [internalOrchMode, setInternalOrchMode] = useState<string>('auto');
   const orchMode = controlledOrchMode ?? internalOrchMode;
-  const setOrchMode = useCallback((next: string) => {
-    setInternalOrchMode(next);
-    onOrchestrationModeChange?.(next);
-  }, [onOrchestrationModeChange]);
+  const setOrchMode = useCallback(
+    (next: string) => {
+      setInternalOrchMode(next);
+      onOrchestrationModeChange?.(next);
+    },
+    [onOrchestrationModeChange],
+  );
   const [audioAttachments, setAudioAttachments] = useState<AudioAttachmentChipType[]>([]);
 
   // Phase 6: @文件提及 + /btw 补充消息
@@ -327,7 +335,15 @@ function ChatInputInner({
   const handleSend = () => {
     // RT5 (round7): 运行中允许发送 —— onSend（useChat.sendMessage）按会话
     // 活跃流先走 steering 注入当前 run，失败回退队列；不再 UI 硬拦截。
-    if (!value.trim() && files.length === 0 && images.length === 0 && knowledgeRefs.length === 0 && officeRefs.length === 0 && audioAttachments.length === 0) return;
+    if (
+      !value.trim() &&
+      files.length === 0 &&
+      images.length === 0 &&
+      knowledgeRefs.length === 0 &&
+      officeRefs.length === 0 &&
+      audioAttachments.length === 0
+    )
+      return;
     // R37/r75 后 files（txt/md/pdf/docx）会随消息上传注入——仅对其余
     // 不受支持的扩展名提示（诚实提示而不是静默丢失）。
     const unsupportedFiles = files.filter((f) => {
@@ -336,7 +352,10 @@ function ChatInputInner({
     });
     if (unsupportedFiles.length > 0) {
       toast.warning(
-        `${t('chat.attachment_not_sent')}: ${unsupportedFiles.map((f) => f.name).join('、')}`,
+        t('chat.attachment_not_sent').replace(
+          '{files}',
+          unsupportedFiles.map((f) => f.name).join('、'),
+        ),
       );
     }
     onSend(value.trim(), {
@@ -471,7 +490,10 @@ function ChatInputInner({
       // 纯前端 action 直调 worktreeApi，不发消息；成功后 refresh 会话绑定。
       if (cmd.mode === 'worktree') {
         if (isLoading || disabled) return;
-        const raw = value.trim().replace(/^\/worktree\s*/i, '').trim();
+        const raw = value
+          .trim()
+          .replace(/^\/worktree\s*/i, '')
+          .trim();
         setValue('');
         void (async () => {
           if (!effectiveSessionId) {
@@ -596,20 +618,23 @@ function ChatInputInner({
   };
 
   // Phase 4 (2026-09-12): audio attachment upload handler — 落入可移除音频附件 Chip 列表
-  const handleAudioAttachment = useCallback((attachment: {
-    mediaRef: { id: string; mime_type: string; file_size: number };
-    apiUrl: string;
-  }) => {
-    setAudioAttachments((prev) => [
-      ...prev,
-      {
-        id: attachment.mediaRef.id,
-        mimeType: attachment.mediaRef.mime_type,
-        fileSize: attachment.mediaRef.file_size,
-        apiUrl: attachment.apiUrl,
-      },
-    ]);
-  }, []);
+  const handleAudioAttachment = useCallback(
+    (attachment: {
+      mediaRef: { id: string; mime_type: string; file_size: number };
+      apiUrl: string;
+    }) => {
+      setAudioAttachments((prev) => [
+        ...prev,
+        {
+          id: attachment.mediaRef.id,
+          mimeType: attachment.mediaRef.mime_type,
+          fileSize: attachment.mediaRef.file_size,
+          apiUrl: attachment.apiUrl,
+        },
+      ]);
+    },
+    [],
+  );
   const removeAudioAttachment = useCallback((id: string) => {
     setAudioAttachments((prev) => prev.filter((a) => a.id !== id));
   }, []);
@@ -741,24 +766,24 @@ function ChatInputInner({
         }
         orchModeBar={
           hideOrchModeBar ? undefined : (
-          <div className="flex items-center gap-2 px-2 py-1 mb-2 border-b border-border">
-            <label className="text-xs text-text-tertiary">{t('chat.orchMode.label')}</label>
-            <select
-              data-testid="orch-mode-select"
-              value={orchMode}
-              onChange={(e) => setOrchMode(e.target.value)}
-              className="px-2 py-0.5 text-xs border border-border rounded bg-bg text-text"
-            >
-              <option value="auto">{t('chat.orchMode.auto')}</option>
-              <option value="force_multi">{t('chat.orchMode.forceMulti')}</option>
-              <option value="template:research-write">
-                {t('chat.orchMode.templateResearchWrite')}
-              </option>
-              <option value="template:gather-analyze-report">
-                {t('chat.orchMode.templateGatherAnalyzeReport')}
-              </option>
-            </select>
-          </div>
+            <div className="flex items-center gap-2 px-2 py-1 mb-2 border-b border-border">
+              <label className="text-xs text-text-tertiary">{t('chat.orchMode.label')}</label>
+              <select
+                data-testid="orch-mode-select"
+                value={orchMode}
+                onChange={(e) => setOrchMode(e.target.value)}
+                className="px-2 py-0.5 text-xs border border-border rounded bg-bg text-text"
+              >
+                <option value="auto">{t('chat.orchMode.auto')}</option>
+                <option value="force_multi">{t('chat.orchMode.forceMulti')}</option>
+                <option value="template:research-write">
+                  {t('chat.orchMode.templateResearchWrite')}
+                </option>
+                <option value="template:gather-analyze-report">
+                  {t('chat.orchMode.templateGatherAnalyzeReport')}
+                </option>
+              </select>
+            </div>
           )
         }
         hint={t('chat.hint')}

@@ -2,7 +2,7 @@
  * Phase P9 & P10: 多态项目工作台 L1 项目总纲 (SAGE.md) + L4 受控资料库 + L3 项目记忆画像 + L5 只读白名单面板
  */
 
-import { CheckCircle2, FilePlus2, FileText, FolderLock, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { Check, CheckCircle2, Copy, Eye, FilePlus2, FileText, FolderLock, History, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -11,8 +11,9 @@ import type {
   ProjectMaterial,
   ProjectType,
 } from '../../shared/api/projectApiTypes';
-import type { ProjectProfileEntry } from '../../shared/api/types';
 import { Button } from '../../shared/ui/Button';
+
+import { SemanticSearchPanel } from './SemanticSearchPanel';
 
 const ARCHETYPE_INSTRUCTIONS_PRESETS: Record<ProjectType, string> = {
   coding:
@@ -31,10 +32,7 @@ export interface StudioCharterTabPanelProps {
   projectType?: ProjectType;
   initialDescription?: string | null;
   initialInstructions?: string | null;
-  onMetadataUpdated?: (patch: {
-    description: string | null;
-    instructions: string | null;
-  }) => void;
+  onMetadataUpdated?: (patch: { description: string | null; instructions: string | null }) => void;
 }
 
 export function StudioCharterTabPanel({
@@ -49,6 +47,7 @@ export function StudioCharterTabPanel({
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedHint, setSavedHint] = useState<string | null>(null);
+  const [copiedCharter, setCopiedCharter] = useState(false);
 
   const [descriptionDraft, setDescriptionDraft] = useState(initialDescription ?? '');
   const [instructionsDraft, setInstructionsDraft] = useState(initialInstructions ?? '');
@@ -82,14 +81,30 @@ export function StudioCharterTabPanel({
     }
   };
 
-  const handleSave = async () => {
+  const handleCopyCharterMarkdown = async () => {
+    const lines = [`# L1 项目总纲 (${projectPath}/SAGE.md)`, '', draft || '（未填写）', '', '## L2 项目目标与高优系统指令', `- **项目目标**: ${descriptionDraft || '（未设置）'}`, `- **系统指令**: ${instructionsDraft || '（未设置）'}`];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedCharter(true);
+      setTimeout(() => setCopiedCharter(false), 2000);
+    } catch {
+      // ignore in test env
+    }
+  };
+
+  const handleSave = async (withCheckpoint = false) => {
     if (saving || typeof projectApi?.updateCharter !== 'function') return;
     setSaving(true);
     try {
       const updated = await projectApi.updateCharter(projectId, draft);
       setCharter(updated);
       setDraft(updated.content);
-      setSavedHint(`已保存 SAGE.md（${updated.charCount} 字符）`);
+      if (withCheckpoint && typeof projectApi?.createCheckpoint === 'function') {
+        const cp = await projectApi.createCheckpoint(projectId, 'SAGE.md 规范更新快照');
+        setSavedHint(`已保存 SAGE.md 并固化快照（${cp.id}）`);
+      } else {
+        setSavedHint(`已保存 SAGE.md（${updated.charCount} 字符）`);
+      }
     } catch {
       // ignore in test/offline mode
     } finally {
@@ -144,7 +159,8 @@ export function StudioCharterTabPanel({
               </span>
             </div>
             <p className="text-muted-foreground">
-              作为五层上下文注入体系的第 1 层（最高优先级），用于定义代码工程规范、一般档案封面元数据或科研课题总纲与符号表。
+              作为五层上下文注入体系的第 1
+              层（最高优先级），用于定义代码工程规范、一般档案封面元数据或科研课题总纲与符号表。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -160,6 +176,15 @@ export function StudioCharterTabPanel({
             <Button
               size="sm"
               variant="secondary"
+              onClick={() => void handleCopyCharterMarkdown()}
+              data-testid="studio-charter-copy-md-btn"
+            >
+              <Copy className="mr-1 h-3.5 w-3.5 text-primary" />
+              {copiedCharter ? '已复制宪章' : '复制宪章与指令'}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
               onClick={handleFillTemplate}
               data-testid="studio-charter-fill-template"
             >
@@ -168,7 +193,17 @@ export function StudioCharterTabPanel({
             </Button>
             <Button
               size="sm"
-              onClick={() => void handleSave()}
+              variant="secondary"
+              onClick={() => void handleSave(true)}
+              disabled={saving}
+              data-testid="studio-charter-checkpoint-btn"
+            >
+              <History className="mr-1 h-3.5 w-3.5 text-emerald-500" />
+              保存并固化快照
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void handleSave(false)}
               disabled={saving}
               data-testid="studio-charter-save-btn"
             >
@@ -201,7 +236,8 @@ export function StudioCharterTabPanel({
               L2 项目目标与高优系统指令（Description & System Instructions）
             </div>
             <p className="text-ui-2xs text-muted-foreground">
-              注入五层上下文管线第 2 层，优先级高于全局风格偏好，适合定义本项目的角色定位、审校红线或答复体裁。
+              注入五层上下文管线第 2
+              层，优先级高于全局风格偏好，适合定义本项目的角色定位、审校红线或答复体裁。
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -315,13 +351,38 @@ export function StudioAllowedPathsTabPanel({
   onQuickAddPresetPath,
   onRemoveAllowedPath,
 }: StudioAllowedPathsTabPanelProps) {
+  const [copiedPaths, setCopiedPaths] = useState(false);
   const presets = ALLOWED_PATH_PRESETS[projectType] ?? ALLOWED_PATH_PRESETS.coding;
+
+  const handleCopyAllowedPaths = async () => {
+    const lines = [`# L5 跨目录只读白名单 (${projectPath})`, '', ...allowedPaths.map((p) => `- \`${p}\``)];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedPaths(true);
+      setTimeout(() => setCopiedPaths(false), 2000);
+    } catch {
+      // ignore in test env
+    }
+  };
 
   return (
     <div className="space-y-3" data-testid="project-allowed-paths-panel">
       <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground space-y-1">
-        <div className="font-medium text-foreground">
-          读写非对称安全边界（Workspace Write + Allowed Paths Read-Only）
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="font-medium text-foreground">
+            读写非对称安全边界（Workspace Write + Allowed Paths Read-Only）
+          </div>
+          {allowedPaths.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void handleCopyAllowedPaths()}
+              data-testid="allowed-paths-copy-md-btn"
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {copiedPaths ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 text-primary" />}
+              {copiedPaths ? '已复制白名单' : '复制白名单配置'}
+            </button>
+          )}
         </div>
         <p>
           • 主工作区目录（<code className="font-mono">{projectPath}</code>
@@ -407,23 +468,58 @@ export function StudioAllowedPathsTabPanel({
 export interface StudioMaterialsTabPanelProps {
   projectId: string;
   projectPath: string;
+  projectType?: ProjectType;
 }
 
 export function StudioMaterialsTabPanel({
   projectId,
   projectPath,
+  projectType = 'coding',
 }: StudioMaterialsTabPanelProps) {
   const [materials, setMaterials] = useState<ProjectMaterial[]>([]);
+  const [discoverablePaths, setDiscoverablePaths] = useState<string[]>([]);
   const [filePathInput, setFilePathInput] = useState('');
+  const [textSnippetInput, setTextSnippetInput] = useState('');
   const [addingFile, setAddingFile] = useState(false);
+  const [addingSnippet, setAddingSnippet] = useState(false);
+  const [previewMaterialId, setPreviewMaterialId] = useState<string | null>(null);
+  const [copiedMaterials, setCopiedMaterials] = useState(false);
+
+  const handleCopyMaterialsMarkdown = async () => {
+    const enabledItems = materials.filter((m) => m.enabled !== false);
+    const lines = [`# L4 生效受控资料摘要 (${projectPath})`, '', ...enabledItems.map((m, i) => `### ${i + 1}. ${m.id}\n${m.content}`)];
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n\n'));
+      setCopiedMaterials(true);
+      setTimeout(() => setCopiedMaterials(false), 2000);
+    } catch {
+      // ignore in test env
+    }
+  };
 
   const loadMaterials = useCallback(async () => {
-    if (!projectId || typeof projectApi?.listMaterials !== 'function') return;
-    try {
-      const list = await projectApi.listMaterials(projectId);
-      setMaterials(Array.isArray(list) ? list : []);
-    } catch {
-      setMaterials([]);
+    if (!projectId) return;
+    if (typeof projectApi?.listMaterials === 'function') {
+      try {
+        const list = await projectApi.listMaterials(projectId);
+        setMaterials(Array.isArray(list) ? list : []);
+      } catch {
+        setMaterials([]);
+      }
+    }
+    if (typeof projectApi?.getWorkspaceOverview === 'function') {
+      try {
+        const ov = await projectApi.getWorkspaceOverview(projectId);
+        const paths = Array.from(
+          new Set([
+            ...(ov.officeDeliverables ?? []).map((f) => f.relativePath),
+            ...(ov.researchArtifacts ?? []).map((f) => f.relativePath),
+          ]),
+        ).slice(0, 6);
+        setDiscoverablePaths(paths);
+      } catch {
+        setDiscoverablePaths([]);
+      }
     }
   }, [projectId]);
 
@@ -431,13 +527,13 @@ export function StudioMaterialsTabPanel({
     void loadMaterials();
   }, [loadMaterials]);
 
-  const handleAddFromFile = async () => {
-    const rel = filePathInput.trim();
+  const handleAddFromFile = async (targetPath?: string) => {
+    const rel = (targetPath ?? filePathInput).trim();
     if (!rel || addingFile || typeof projectApi?.addMaterialFromFile !== 'function') return;
     setAddingFile(true);
     try {
       await projectApi.addMaterialFromFile(projectId, rel);
-      setFilePathInput('');
+      if (!targetPath) setFilePathInput('');
       await loadMaterials();
     } catch {
       // ignore in test/offline mode
@@ -446,10 +542,39 @@ export function StudioMaterialsTabPanel({
     }
   };
 
+  const handleAddSnippet = async () => {
+    const text = textSnippetInput.trim();
+    if (!text || addingSnippet || typeof projectApi?.addMaterial !== 'function') return;
+    setAddingSnippet(true);
+    try {
+      await projectApi.addMaterial(projectId, { content: text });
+      setTextSnippetInput('');
+      await loadMaterials();
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setAddingSnippet(false);
+    }
+  };
+
   const handleToggleEnabled = async (m: ProjectMaterial) => {
     if (typeof projectApi?.updateMaterial !== 'function') return;
     try {
       await projectApi.updateMaterial(projectId, m.id, { enabled: m.enabled === false });
+      await loadMaterials();
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleBatchToggle = async (enabled: boolean) => {
+    if (typeof projectApi?.updateMaterial !== 'function' || materials.length === 0) return;
+    try {
+      for (const m of materials) {
+        if ((m.enabled !== false) !== enabled) {
+          await projectApi.updateMaterial(projectId, m.id, { enabled });
+        }
+      }
       await loadMaterials();
     } catch {
       // ignore
@@ -466,13 +591,75 @@ export function StudioMaterialsTabPanel({
     }
   };
 
+  const handleReindexMaterial = async (materialId: string) => {
+    if (typeof projectApi?.reindexMaterial !== 'function') return;
+    try {
+      await projectApi.reindexMaterial(projectId, materialId);
+      await loadMaterials();
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className="space-y-3" data-testid="project-materials-studio-panel">
-      <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-        L4 授信隔离资料与文献语料池（绑定工作区 <code className="font-mono">{projectPath}</code>
-        ）：支持一键将工作区内的 <code className="font-mono">.bib / .tex / .docx / .xlsx / .md</code>{' '}
-        文件提取入库并按需勾选参与本轮对话上下文（Source-Grounded Toggle）。
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+        <div>
+          L4 授信隔离资料与文献语料池（绑定工作区 <code className="font-mono">{projectPath}</code>
+          ）：支持工作区文件提取或纯文本条款/摘要入库，按需勾选参与本轮对话上下文（Source-Grounded Toggle）。
+        </div>
+        {materials.length > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => void handleCopyMaterialsMarkdown()}
+              data-testid="studio-materials-copy-md-btn"
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+            >
+              <Copy className="h-3 w-3 text-primary" />
+              {copiedMaterials ? '已复制资料摘要' : '复制生效资料摘要'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBatchToggle(true)}
+              data-testid="studio-materials-enable-all"
+              className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+            >
+              全选参与上下文
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBatchToggle(false)}
+              data-testid="studio-materials-disable-all"
+              className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted"
+            >
+              全部隔离
+            </button>
+          </div>
+        )}
       </div>
+
+      {discoverablePaths.length > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-1.5"
+          data-testid="studio-discoverable-files-bar"
+        >
+          <span className="text-ui-2xs text-muted-foreground">工作区发现可入库文件：</span>
+          {discoverablePaths.map((relPath, idx) => (
+            <button
+              key={relPath}
+              type="button"
+              disabled={addingFile}
+              onClick={() => void handleAddFromFile(relPath)}
+              data-testid={`studio-discoverable-file-${idx}`}
+              className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 font-mono text-ui-2xs text-primary hover:bg-primary/10"
+            >
+              <Plus className="h-2.5 w-2.5" />
+              {relPath}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <input
@@ -494,6 +681,27 @@ export function StudioMaterialsTabPanel({
         </Button>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        <input
+          type="text"
+          value={textSnippetInput}
+          onChange={(e) => setTextSnippetInput(e.target.value)}
+          placeholder="或直接粘贴纯文本参考片段（如合同关键条款、文献核心摘要、会议纪要结论）..."
+          data-testid="studio-material-text-input"
+          className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs"
+        />
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => void handleAddSnippet()}
+          disabled={!textSnippetInput.trim() || addingSnippet}
+          data-testid="studio-material-text-add"
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          添加文本资料
+        </Button>
+      </div>
+
       {materials.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
           当前项目暂无入库受控资料
@@ -503,134 +711,75 @@ export function StudioMaterialsTabPanel({
           {materials.map((m) => {
             const isEnabled = m.enabled !== false;
             const summaryLabel = (m.content || '').split('\n')[0]?.trim().slice(0, 80) || m.id;
+            const isPreviewOpen = previewMaterialId === m.id;
             return (
               <div
                 key={m.id}
-                className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs"
+                className="rounded-md border border-border bg-card px-3 py-2 text-xs space-y-1.5"
               >
-                <label className="flex items-center gap-2 min-w-0 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isEnabled}
-                    onChange={() => void handleToggleEnabled(m)}
-                    data-testid={`studio-material-toggle-${m.id}`}
-                    className="h-3.5 w-3.5 rounded border-border"
-                  />
-                  <span className="truncate font-medium text-foreground">{summaryLabel}</span>
-                  <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-ui-2xs text-muted-foreground">
-                    {m.status === 'ready' ? '已索引 Wiki' : '待索引'}
-                  </span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => void handleDelete(m.id)}
-                  aria-label={`移除资料：${summaryLabel}`}
-                  data-testid={`studio-material-delete-${m.id}`}
-                  className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 min-w-0 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isEnabled}
+                      onChange={() => void handleToggleEnabled(m)}
+                      data-testid={`studio-material-toggle-${m.id}`}
+                      className="h-3.5 w-3.5 rounded border-border"
+                    />
+                    <span className="truncate font-medium text-foreground">{summaryLabel}</span>
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-ui-2xs text-muted-foreground">
+                      {m.status === 'ready' ? '已索引 Wiki' : '待索引'}
+                    </span>
+                  </label>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => void handleReindexMaterial(m.id)}
+                      data-testid={`studio-material-reindex-${m.id}`}
+                      title="重建该资料向量索引"
+                      className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" />
+                      重建索引
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewMaterialId(isPreviewOpen ? null : m.id)}
+                      data-testid={`studio-material-preview-toggle-${m.id}`}
+                      className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                    >
+                      <Eye className="h-2.5 w-2.5" />
+                      {isPreviewOpen ? '收起' : '预览'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(m.id)}
+                      aria-label={`移除资料：${summaryLabel}`}
+                      data-testid={`studio-material-delete-${m.id}`}
+                      className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+                {isPreviewOpen && (
+                  <pre
+                    data-testid={`studio-material-preview-body-${m.id}`}
+                    className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded border border-border/60 bg-muted/20 p-2 font-mono text-ui-2xs text-muted-foreground"
+                  >
+                    {m.content}
+                  </pre>
+                )}
               </div>
             );
           })}
         </div>
       )}
+
+      {/* M4: 语义检索面板 (2026-10-12) */}
+      <SemanticSearchPanel projectId={projectId} projectType={projectType} />
     </div>
   );
 }
 
-export interface StudioProfileTabPanelProps {
-  projectPath: string;
-  profileEntries: ProjectProfileEntry[];
-  profileCategory: string;
-  onCategoryChange: (cat: string) => void;
-  profileDraft: string;
-  onDraftChange: (val: string) => void;
-  savingProfile: boolean;
-  onAddEntry: () => Promise<void> | void;
-  onDeleteEntry: (entryId: string) => Promise<void> | void;
-}
-
-export function StudioProfileTabPanel({
-  projectPath,
-  profileEntries,
-  profileCategory,
-  onCategoryChange,
-  profileDraft,
-  onDraftChange,
-  savingProfile,
-  onAddEntry,
-  onDeleteEntry,
-}: StudioProfileTabPanelProps) {
-  return (
-    <div className="space-y-3" data-testid="project-profile-studio-panel">
-      <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-        项目级冻结记忆画像（<code className="font-mono">MEMORY.md</code> · 绑定路径{' '}
-        <code className="font-mono">{projectPath}</code>
-        ），仅在当前项目会话中注入系统提示词，保障跨项目语境隔离与 Prefix Cache 命中率。
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <select
-          value={profileCategory}
-          onChange={(e) => onCategoryChange(e.target.value)}
-          aria-label="选择画像类别"
-          data-testid="studio-profile-category"
-          className="rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground"
-        >
-          <option value="convention">约定 (convention)</option>
-          <option value="architecture">架构/方法论 (architecture)</option>
-          <option value="decision">决策/审校口径 (decision)</option>
-          <option value="goal">核心目标/研究问题 (goal)</option>
-          <option value="note">阶段发现/备注 (note)</option>
-        </select>
-        <input
-          type="text"
-          value={profileDraft}
-          onChange={(e) => onDraftChange(e.target.value)}
-          placeholder="输入要长期固化到本项目的约定、决策或核心目标..."
-          data-testid="studio-profile-input"
-          className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs"
-        />
-        <Button
-          size="sm"
-          onClick={() => void onAddEntry()}
-          disabled={!profileDraft.trim() || savingProfile}
-          data-testid="studio-profile-add-btn"
-        >
-          <Plus className="mr-1 h-3.5 w-3.5" />
-          添加画像条目
-        </Button>
-      </div>
-      {profileEntries.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-          当前项目暂无冻结画像条目
-        </div>
-      ) : (
-        <div className="space-y-1.5" data-testid="studio-profile-list">
-          {profileEntries.map((entry) => (
-            <div
-              key={entry.id}
-              className="flex items-center justify-between gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-ui-2xs font-medium text-primary">
-                  {entry.category}
-                </span>
-                <span className="truncate text-foreground">{entry.content}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => void onDeleteEntry(entry.id)}
-                aria-label={`删除画像条目：${entry.content}`}
-                data-testid={`studio-profile-delete-${entry.id}`}
-                className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+export { StudioProfileTabPanel, type StudioProfileTabPanelProps } from './StudioProfileTabPanel';

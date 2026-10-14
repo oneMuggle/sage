@@ -49,6 +49,21 @@ export type { MilestoneManagerProps } from './MilestoneManager';
 export { MilestoneEditor } from './MilestoneEditor';
 export type { MilestoneEditorProps } from './MilestoneEditor';
 
+export { TaskDecomposeDialog } from './TaskDecomposeDialog';
+export type { TaskDecomposeDialogProps } from './TaskDecomposeDialog';
+
+export { KnowledgeExtractionPanel } from './KnowledgeExtractionPanel';
+export type { KnowledgeExtractionPanelProps } from './KnowledgeExtractionPanel';
+
+export { ProjectAdvisorCard } from './ProjectAdvisorCard';
+export type { ProjectAdvisorCardProps } from './ProjectAdvisorCard';
+
+export { WikiGenerationPanel } from './WikiGenerationPanel';
+export type { WikiGenerationPanelProps } from './WikiGenerationPanel';
+
+export { SemanticSearchPanel } from './SemanticSearchPanel';
+export type { SemanticSearchPanelProps } from './SemanticSearchPanel';
+
 export { ProjectArchetypeStudio } from './ProjectArchetypeStudio';
 export type { ProjectArchetypeStudioProps } from './ProjectArchetypeStudio';
 

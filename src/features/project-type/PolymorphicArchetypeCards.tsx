@@ -43,7 +43,9 @@ import { Card } from '../../shared/ui/Card';
 
 import {
   BuiltinCheckpointTimelineBar,
+  BusinessDocumentStyleBar,
   CodingHooksGovernanceBar,
+  PersonalZettelkastenFooter,
   ResearchCitationAndToneBar,
 } from './BuiltinCheckpointAndStyleBar';
 
@@ -415,43 +417,6 @@ export function PolymorphicArchetypeCards({
             </div>
           </div>
 
-          <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2">
-            <div className="text-xs font-medium text-foreground">
-              案卷审校纪要与口径约定登记 (注入 L3 项目画像)
-            </div>
-            <div className="flex gap-1.5">
-              <input
-                type="text"
-                value={decisionInput}
-                onChange={(e) => setDecisionInput(e.target.value)}
-                placeholder="登记本案卷审校结论或专用术语口径（如：合同违约金上限统一按总额 20% 审定）"
-                className="flex-1 rounded border border-input bg-background px-2 py-1 text-xs"
-                data-testid="business-decision-input"
-              />
-              <Button
-                size="sm"
-                onClick={() => void handleAddDecision()}
-                disabled={!decisionInput.trim() || savingDecision}
-                data-testid="business-decision-add"
-              >
-                <Plus className="mr-1 h-3 w-3" />
-                记录审校口径
-              </Button>
-            </div>
-            {decisions.length > 0 && (
-              <ul className="space-y-1 max-h-24 overflow-y-auto" data-testid="business-decisions-list">
-                {decisions.slice(-3).map((d: ProjectProfileEntry) => (
-                  <li
-                    key={d.id}
-                    className="rounded border border-border/60 bg-background px-2 py-1 text-xs text-foreground"
-                  >
-                    {d.content}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
           <CodingHooksGovernanceBar
             workspacePath={project.path}
             hasHooksConfig={Boolean(overview?.hasHooksJson || diagnoseInfo?.hooksConfigExists)}
@@ -563,6 +528,45 @@ export function PolymorphicArchetypeCards({
               )}
             </div>
           </div>
+
+          <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-2">
+            <div className="text-xs font-medium text-foreground">
+              案卷审校纪要与口径约定登记 (注入 L3 项目画像)
+            </div>
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={decisionInput}
+                onChange={(e) => setDecisionInput(e.target.value)}
+                placeholder="登记本案卷审校结论或专用术语口径（如：合同违约金上限统一按总额 20% 审定）"
+                className="flex-1 rounded border border-input bg-background px-2 py-1 text-xs"
+                data-testid="business-decision-input"
+              />
+              <Button
+                size="sm"
+                onClick={() => void handleAddDecision()}
+                disabled={!decisionInput.trim() || savingDecision}
+                data-testid="business-decision-add"
+              >
+                <Plus className="mr-1 h-3 w-3" />
+                记录审校口径
+              </Button>
+            </div>
+            {decisions.length > 0 && (
+              <ul className="space-y-1 max-h-24 overflow-y-auto" data-testid="business-decisions-list">
+                {decisions.slice(-3).map((d: ProjectProfileEntry) => (
+                  <li
+                    key={d.id}
+                    className="rounded border border-border/60 bg-background px-2 py-1 text-xs text-foreground"
+                  >
+                    {d.content}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <BusinessDocumentStyleBar projectId={project.id} onApplied={loadData} />
 
           <BuiltinCheckpointTimelineBar
             projectId={project.id}
@@ -762,6 +766,12 @@ export function PolymorphicArchetypeCards({
               </Button>
             </div>
           </div>
+          <PersonalZettelkastenFooter
+            projectId={project.id}
+            decisions={decisions}
+            checkpoints={overview?.recentCheckpoints ?? []}
+            onCreated={loadData}
+          />
         </Card>
       )}
     </div>

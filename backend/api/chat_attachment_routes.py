@@ -12,6 +12,7 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 import httpx
+import openpyxl
 import pymupdf
 from docx import Document as _Docx
 from fastapi import APIRouter, File, UploadFile
@@ -35,11 +36,35 @@ router = APIRouter(tags=["chat"])
 ALLOWED_AUDIO_TYPES = {"audio/mpeg", "audio/wav", "audio/ogg", "audio/webm", "audio/mp4", "audio/x-m4a"}
 ALLOWED_AUDIO_EXTENSIONS = {"mp3", "wav", "ogg", "webm", "m4a", "flac"}
 # R37: 文本文档直传（聊天上下文注入第一切片）—— 纯 utf-8 文本可全文注入
-ALLOWED_TEXT_TYPES = {"text/plain", "text/markdown"}
-ALLOWED_TEXT_EXTENSIONS = {"txt", "md"}
-# R39 第二切片: pdf/docx 提取文本注入（复用 office 模块既有依赖 pymupdf /
-# python-docx，零新增依赖）
-ALLOWED_DOC_EXTENSIONS = {"pdf", "docx"}
+# 2026-10-13: 扩展覆盖常见编程语言、配置、数据文件格式
+ALLOWED_TEXT_TYPES = {
+    "text/plain", "text/markdown", "text/csv", "text/html", "text/css",
+    "text/x-python", "text/x-java-source", "text/x-go", "text/x-rust",
+    "text/x-shellscript", "text/x-c", "text/x-c++", "text/x-r",
+    "application/json", "application/xml", "application/x-yaml",
+    "application/x-toml", "application/sql",
+}
+ALLOWED_TEXT_EXTENSIONS = {
+    # 基础文本
+    "txt", "md", "csv",
+    # 编程语言
+    "py", "js", "ts", "jsx", "tsx", "java", "go", "rs", "rb", "php",
+    "c", "cpp", "h", "hpp", "cs", "swift", "kt", "scala", "r",
+    # 前端
+    "html", "css", "scss", "less", "vue", "svelte",
+    # 数据/配置
+    "json", "yaml", "yml", "xml", "toml", "ini", "cfg", "conf",
+    # 脚本/构建
+    "sh", "bash", "bat", "ps1", "sql", "makefile", "cmake", "gradle",
+    # 特殊命名文件（无扩展名场景，由 legacy_routes 按 ext 匹配）
+    "dockerfile", "gitignore", "properties",
+    # 日志
+    "log",
+}
+# R39 第二切片: pdf/docx/xlsx 提取文本注入（复用 office 模块既有依赖 pymupdf /
+# python-docx / openpyxl，零新增依赖）
+# 2026-10-13: 新增 xlsx（openpyxl 已在 Office 模块中安装）
+ALLOWED_DOC_EXTENSIONS = {"pdf", "docx", "xlsx"}
 MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024  # 25 MB
 #: 文本附件注入上下文的字符上限（R37 切片口径）
 MAX_TEXT_INJECT_CHARS = 100_000
@@ -99,7 +124,7 @@ async def upload_chat_attachment(file: UploadFile = File(...)) -> dict:
 
 
 def _extract_document_text(content: bytes, ext: str) -> str:
-    """R39: pdf/docx 提取纯文本（零新增依赖，复用 office 模块库）。"""
+    """R39: pdf/docx/xlsx 提取纯文本（零新增依赖，复用 office 模块库）。"""
     ext = ext.lstrip(".").lower()
     if ext == "pdf":
         doc = pymupdf.open(stream=content, filetype="pdf")
@@ -110,12 +135,28 @@ def _extract_document_text(content: bytes, ext: str) -> str:
     if ext == "docx":
         doc = _Docx(io.BytesIO(content))
         return CH_NL.join(para.text for para in doc.paragraphs if para.text.strip())
+    if ext == "xlsx":
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        try:
+            sheets_text = []
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                rows = []
+                for row in ws.iter_rows(values_only=True):
+                    cells = [str(c) if c is not None else "" for c in row]
+                    if any(cells):
+                        rows.append("\t".join(cells))
+                if rows:
+                    sheets_text.append(f"[{sheet_name}]" + CH_NL + CH_NL.join(rows))
+            return CH_NL.join(sheets_text) if sheets_text else "(empty workbook)"
+        finally:
+            wb.close()
     raise ValueError(f"unsupported document extension: {ext}")
 
 
 @router.get("/chat/attachments/{media_id}/text")
 async def get_chat_attachment_text(media_id: str) -> dict:
-    """R37/R39: 读取已上传文档附件的全文（txt 直读、pdf/docx 提取）。
+    """R37/R39: 读取已上传文档附件的全文（txt 直读、pdf/docx/xlsx 提取）。
 
     聊天 producer 据此把附件内容注入上下文。非文档/不存在 → 404。
     """
@@ -127,17 +168,19 @@ async def get_chat_attachment_text(media_id: str) -> dict:
     if ref.kind != MediaKind.DOCUMENT:
         return JSONResponse(status_code=400, content={"error": "该附件不是文本文档"})
     ext = (ref.file_path or "").rsplit(".", 1)[-1].lower() if "." in (ref.file_path or "") else "txt"
+    # 2026-10-13: 需要二进制解析的格式走 _extract_document_text，其余直读 utf-8
+    _EXTRACT_EXTS = {"pdf", "docx", "xlsx"}
     try:
-        if ext == "pdf":
-            text = _extract_document_text(content, "pdf")[:MAX_TEXT_INJECT_CHARS]
-        elif ext == "docx":
-            text = _extract_document_text(content, "docx")[:MAX_TEXT_INJECT_CHARS]
+        if ext in _EXTRACT_EXTS:
+            text = _extract_document_text(content, ext)[:MAX_TEXT_INJECT_CHARS]
         else:
             text = content.decode("utf-8")[:MAX_TEXT_INJECT_CHARS]
     except UnicodeDecodeError:
         return JSONResponse(status_code=400, content={"error": "附件不是有效的 UTF-8 文本"})
     except ValueError:
-        return JSONResponse(status_code=400, content={"error": "附件不是有效的 UTF-8 文本"})
+        return JSONResponse(status_code=400, content={"error": f"不支持的附件格式: {ext}"})
+    except Exception as exc:
+        return JSONResponse(status_code=400, content={"error": f"附件解析失败: {exc}"})
     return {"media_id": media_id, "text": text}
 
 
@@ -184,17 +227,19 @@ def _load_document_text(store: MediaStore, media_id: str) -> Tuple[Optional[str]
     if ref.kind != MediaKind.DOCUMENT:
         return None, JSONResponse(status_code=400, content={"error": "该附件不是文本文档"})
     ext = (ref.file_path or "").rsplit(".", 1)[-1].lower() if "." in (ref.file_path or "") else "txt"
+    # 2026-10-13: 需要二进制解析的格式走 _extract_document_text，其余直读 utf-8
+    _EXTRACT_EXTS = {"pdf", "docx", "xlsx"}
     try:
-        if ext == "pdf":
-            text = _extract_document_text(content, "pdf")
-        elif ext == "docx":
-            text = _extract_document_text(content, "docx")
+        if ext in _EXTRACT_EXTS:
+            text = _extract_document_text(content, ext)
         else:
             text = content.decode("utf-8")
     except UnicodeDecodeError:
         return None, JSONResponse(status_code=400, content={"error": "附件不是有效的 UTF-8 文本"})
     except ValueError as exc:
         return None, JSONResponse(status_code=400, content={"error": f"文档解析失败: {exc}"})
+    except Exception as exc:
+        return None, JSONResponse(status_code=400, content={"error": f"附件解析失败: {exc}"})
     return text, None
 
 

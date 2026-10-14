@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { ProjectBadge } from '../ProjectBadge';
@@ -41,6 +41,43 @@ describe('ProjectBadge', () => {
       expect(screen.getByText('demo')).toBeInTheDocument();
     });
     expect(screen.getByTestId('chat-project-badge').getAttribute('title')).toBe('C:\\work\\demo');
+  });
+
+  it('已登记项目存在形态、阶段与版本保护时展示多态徽标并支持复制路径与打开工作台 (Phase P22 + P28)', async () => {
+    const onOpenWorkbench = vi.fn();
+    listMock.mockResolvedValue([
+      {
+        id: 'p2',
+        path: 'D:\\Archives\\Contract2026',
+        name: 'Contract2026',
+        projectType: 'business',
+        projectStage: 'execution',
+        vcsMode: 'builtin',
+        createdAt: 1,
+        lastOpenedAt: 1,
+        sessionCount: 2,
+        lastSessionId: 's2',
+      },
+    ]);
+    render(
+      <ProjectBadge
+        workspacePath={'D:\\Archives\\Contract2026'}
+        onOpenWorkbench={onOpenWorkbench}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('chat-project-type-badge')).toHaveTextContent('一般档案与文书');
+      expect(screen.getByTestId('chat-project-stage-badge')).toHaveTextContent('文书编制');
+      expect(screen.getByTestId('chat-project-vcs-badge')).toHaveTextContent('快照');
+    });
+
+    const copyBtn = screen.getByTestId('chat-project-copy-path-btn');
+    fireEvent.click(copyBtn);
+
+    const workbenchBtn = screen.getByTestId('chat-project-workbench-btn');
+    fireEvent.click(workbenchBtn);
+    expect(onOpenWorkbench).toHaveBeenCalledTimes(1);
   });
 
   it('路径未登记（历史绑定）回退为 basename 展示', async () => {

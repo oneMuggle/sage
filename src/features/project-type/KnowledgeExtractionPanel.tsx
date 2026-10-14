@@ -1,0 +1,346 @@
+/**
+ * AI 对话知识提取面板 (M2, 2026-10-12；Phase P21 会话联动；Phase P24 跨项目状态重置与全选/清空切换；Phase P29 会话手动刷新与提取建议一键复制 Markdown)
+ *
+ * 嵌入项目画像 Profile Tab 顶部，支持从项目已绑定会话列表一键选择、手动刷新会话或手动输入会话 ID，
+ * 提取知识建议并支持一键复制提取结果 Markdown、全选/清空与勾选确认后写入 ProjectProfileStore。
+ */
+
+import { Sparkles, Loader2, CheckCircle2, Lightbulb, RefreshCw, Copy, Check } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+
+import { projectApi, type KnowledgeEntryProposal, type Session } from '../../shared/api';
+import { Badge } from '../../shared/ui/Badge';
+import { Button } from '../../shared/ui/Button';
+
+export interface KnowledgeExtractionPanelProps {
+  projectId: string;
+  /** 提取并确认后回调（外部重新拉取画像列表） */
+  onConfirmed?: () => void;
+}
+
+type Phase = 'idle' | 'loading' | 'review' | 'confirming';
+
+const CATEGORY_LABELS: Record<string, string> = {
+  convention: '约定',
+  architecture: '架构',
+  decision: '决策',
+  goal: '目标',
+  note: '备注',
+};
+
+export function KnowledgeExtractionPanel({
+  projectId,
+  onConfirmed,
+}: KnowledgeExtractionPanelProps) {
+  const [phase, setPhase] = useState<Phase>('idle');
+  const [entries, setEntries] = useState<KnowledgeEntryProposal[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [reasoning, setReasoning] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState('');
+  const [boundSessions, setBoundSessions] = useState<Session[]>([]);
+  const [copiedMd, setCopiedMd] = useState(false);
+
+  const resetPanel = useCallback(() => {
+    setPhase('idle');
+    setEntries([]);
+    setSelected(new Set());
+    setReasoning('');
+    setError(null);
+  }, []);
+
+  const loadBoundSessions = useCallback(async () => {
+    if (!projectId || typeof projectApi?.listSessions !== 'function') {
+      setBoundSessions([]);
+      return;
+    }
+    try {
+      const list = await projectApi.listSessions(projectId);
+      if (!Array.isArray(list)) return;
+      setBoundSessions(list);
+      setSessionId((prev) => prev || (list[0]?.id ?? ''));
+    } catch {
+      setBoundSessions([]);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    resetPanel();
+    setSessionId('');
+    if (!projectId || typeof projectApi?.listSessions !== 'function') {
+      setBoundSessions([]);
+      return;
+    }
+    let active = true;
+    projectApi
+      .listSessions(projectId)
+      .then((list) => {
+        if (!active || !Array.isArray(list)) return;
+        setBoundSessions(list);
+        setSessionId(list[0]?.id ?? '');
+      })
+      .catch(() => {
+        if (active) setBoundSessions([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [projectId, resetPanel]);
+
+  const handleExtract = useCallback(async () => {
+    if (!sessionId.trim()) {
+      setError('请输入会话 ID');
+      return;
+    }
+    if (typeof projectApi?.extractKnowledge !== 'function') return;
+    setError(null);
+    setPhase('loading');
+    try {
+      const result = await projectApi.extractKnowledge(projectId, {
+        sessionId: sessionId.trim(),
+      });
+      setEntries(result.entries);
+      setReasoning(result.reasoning);
+      setSelected(new Set(result.entries.map((_, i) => i)));
+      setPhase('review');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '知识提取失败');
+      setPhase('idle');
+    }
+  }, [projectId, sessionId]);
+
+  const handleConfirm = useCallback(async () => {
+    if (selected.size === 0 || typeof projectApi?.confirmKnowledge !== 'function') return;
+    setError(null);
+    setPhase('confirming');
+    try {
+      const selectedEntries = [...selected].sort((a, b) => a - b).map((i) => entries[i]);
+      await projectApi.confirmKnowledge(projectId, {
+        entries: selectedEntries,
+      });
+      onConfirmed?.();
+      resetPanel();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '确认失败');
+      setPhase('review');
+    }
+  }, [projectId, entries, selected, onConfirmed, resetPanel]);
+
+  const handleCopyProposalsMarkdown = async () => {
+    if (entries.length === 0) return;
+    const lines = [
+      `# M2 对话知识提取建议 (会话 ${sessionId})`,
+      reasoning ? `> 提取思路：${reasoning}` : '',
+      '',
+      ...entries.map(
+        (entry, idx) =>
+          `${idx + 1}. **[${CATEGORY_LABELS[entry.category] ?? entry.category} · 重要性 ${entry.importance}/10]** ${entry.content}${
+            entry.reasoning ? ` _(${entry.reasoning})_` : ''
+          }`,
+      ),
+    ].filter(Boolean);
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedMd(true);
+      setTimeout(() => setCopiedMd(false), 1800);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
+  const toggleEntry = (idx: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selected.size === entries.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(entries.map((_, i) => i)));
+    }
+  };
+
+  return (
+    <div className="space-y-3" data-testid="knowledge-extraction-panel">
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          {error}
+        </div>
+      )}
+
+      {/* 输入阶段 */}
+      {(phase === 'idle' || phase === 'loading') && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <Lightbulb className="h-3.5 w-3.5 text-primary shrink-0" />
+          {boundSessions.length > 0 && (
+            <select
+              value={boundSessions.some((s) => s.id === sessionId) ? sessionId : ''}
+              onChange={(e) => {
+                if (e.target.value) setSessionId(e.target.value);
+              }}
+              disabled={phase === 'loading'}
+              aria-label="选择项目绑定会话"
+              data-testid="knowledge-session-select"
+              className="rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-foreground"
+            >
+              <option value="">选择项目会话 ({boundSessions.length})...</option>
+              {boundSessions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title || s.id}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            type="button"
+            onClick={() => void loadBoundSessions()}
+            disabled={phase === 'loading'}
+            data-testid="knowledge-refresh-sessions-btn"
+            aria-label="刷新项目会话列表"
+            title="刷新项目会话列表"
+            className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            <RefreshCw className="h-3 w-3" />
+          </button>
+          <input
+            type="text"
+            value={sessionId}
+            onChange={(e) => setSessionId(e.target.value)}
+            placeholder="输入要分析的会话 ID..."
+            disabled={phase === 'loading'}
+            data-testid="knowledge-session-id-input"
+            className="flex-1 min-w-[200px] rounded-md border border-input bg-background px-2.5 py-1.5 text-xs"
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void handleExtract()}
+            disabled={!sessionId.trim() || phase === 'loading'}
+            data-testid="knowledge-extract-btn"
+          >
+            {phase === 'loading' ? (
+              <>
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                分析中...
+              </>
+            ) : (
+              <>
+                <Sparkles className="mr-1 h-3 w-3 text-primary" />
+                AI 提取知识
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+
+      {/* 审核阶段 */}
+      {(phase === 'review' || phase === 'confirming') && (
+        <div className="space-y-2">
+          {reasoning && (
+            <div className="rounded-lg border bg-muted/50 p-2 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">提取思路：</span> {reasoning}
+            </div>
+          )}
+          {entries.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-3 text-center text-xs text-muted-foreground">
+              本次分析未发现值得提取的知识
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+                <span>发现 {entries.length} 条建议，勾选要添加的：</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyProposalsMarkdown()}
+                    data-testid="knowledge-copy-md-btn"
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {copiedMd ? (
+                      <>
+                        <Check className="h-3 w-3 text-emerald-500" />
+                        已复制
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3 text-primary" />
+                        复制提取结果 MD
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAll}
+                    data-testid="knowledge-toggle-select-all"
+                    className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {selected.size === entries.length ? '清空选择' : '全选建议'}
+                  </button>
+                </div>
+              </div>
+              {entries.map((entry, idx) => (
+                <label
+                  key={idx}
+                  className="flex items-start gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs cursor-pointer hover:bg-muted/30"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(idx)}
+                    onChange={() => toggleEntry(idx)}
+                    data-testid={`knowledge-entry-checkbox-${idx}`}
+                    className="mt-0.5 shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-ui-2xs shrink-0">
+                        {CATEGORY_LABELS[entry.category] ?? entry.category}
+                      </Badge>
+                      <span className="text-ui-2xs text-muted-foreground">
+                        重要性 {entry.importance}/10
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-foreground">{entry.content}</p>
+                    {entry.reasoning && (
+                      <p className="mt-0.5 text-muted-foreground text-ui-2xs">{entry.reasoning}</p>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={resetPanel}>
+              取消
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void handleConfirm()}
+              disabled={selected.size === 0 || phase === 'confirming'}
+              data-testid="knowledge-confirm-btn"
+            >
+              {phase === 'confirming' ? (
+                <>
+                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                  写入中...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                  确认添加 ({selected.size})
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

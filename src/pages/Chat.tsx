@@ -47,7 +47,6 @@ import { useChatStickyScroll } from './chat/useChatStickyScroll';
 /** 稳定空数组: toolCalls 缺省时避免每次渲染产生新引用击穿 RightPanel memo (F1) */
 const EMPTY_TOOL_CALLS: readonly never[] = [];
 
-
 export function Chat() {
   const {
     messages,
@@ -175,7 +174,6 @@ export function Chat() {
     }
   }, [currentSessionId, loadMessages]);
 
-
   // Auto-send pending message passed from Welcome page via router state
   const pendingMessage = (location.state as { pendingMessage?: string } | null)?.pendingMessage;
   useEffect(() => {
@@ -238,9 +236,11 @@ export function Chat() {
       const MAX_IMAGES = 4;
 
       // r75: 聊天文档附件 MIME 映射（扩展名集合用 useFileUpload.CHAT_DOCUMENT_EXTENSIONS 共享口径）
+      // 2026-10-13: 新增 xlsx MIME（后端 openpyxl 解析需要正确 content-type）
       const CHAT_DOC_MIME: Record<string, string> = {
         pdf: 'application/pdf',
         docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       };
       const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
       const dataUrls = (options?.images ?? [])
@@ -527,11 +527,7 @@ export function Chat() {
               位置相邻，用户视线不用跳。普通对话无 taskBoard → 组件自行返回 null。 */}
           <RunSummaryPanel
             sessionId={currentSessionId}
-            onRerunFailed={
-              taskBoard
-                ? () => void handleRerunFailed(taskBoard.runId)
-                : undefined
-            }
+            onRerunFailed={taskBoard ? () => void handleRerunFailed(taskBoard.runId) : undefined}
           />
 
           {showConfigWarning && (

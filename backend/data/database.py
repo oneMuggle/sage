@@ -1029,7 +1029,10 @@ class Database:
                 status TEXT NOT NULL DEFAULT 'pending',
                 sort_order INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL,
-                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+                parent_id TEXT,
+                estimated_days REAL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+                FOREIGN KEY (parent_id) REFERENCES project_milestones(id) ON DELETE SET NULL
             )
         """)
         cursor.execute(
@@ -1068,17 +1071,10 @@ class Database:
         )
         conn.commit()
 
-        # P0 修复 (2026-09-20): 资料添加后直接 ready。此前 add() 写入
-        # pending_index，而生产路径没有任何索引管线调用 mark_ready，导致
-        # 存量资料永远停留在 pending_index、从不注入 system prompt。这里把
-        # 遗留的 pending_index 行一次性回填为 ready（幂等：无匹配行即 no-op；
-        # failed 行不动）。注意：将来真正接入异步索引、add() 重新写
-        # pending_index 时，必须删除或按版本号门控此回填。
-        cursor.execute(
-            "UPDATE project_materials SET status = 'ready' "
-            "WHERE status = 'pending_index'"
-        )
-        conn.commit()
+        # P0 backfill 已移除 (M4, 2026-10-12): 语义索引管线接入后，
+        # project_materials 的 status 由 ProjectMaterialIndexer 管理
+        # (pending_index → ready/failed)。此处不再回填 pending_index 为 ready。
+        # 迁移 v7 标记此变更。
 
         # Office self-check history (round-3 Office parity, N4). Every
         # office write that produces a self_check readback (create / update

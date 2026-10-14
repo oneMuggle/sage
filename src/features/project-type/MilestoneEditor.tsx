@@ -1,5 +1,5 @@
 /**
- * 里程碑编辑器 (2026-09-25)
+ * 里程碑编辑器 (2026-09-25; Phase P26 四形态里程碑交付物模板与快捷相对截止日期 2026-10-13)
  *
  * 项目类型分类系统 - Phase 4.5
  * 创建/编辑里程碑的 Dialog
@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 
-import { projectApi, type ProjectMilestone } from '../../shared/api';
+import { projectApi, type ProjectMilestone, type ProjectType } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
 import {
   Dialog,
@@ -20,10 +20,120 @@ import {
 import { Input } from '../../shared/ui/Input';
 import { Textarea } from '../../shared/ui/Textarea';
 
+import { getArchetypeBlueprint } from './archetypeBlueprints';
+
+const MILESTONE_TEMPLATES: Record<
+  ProjectType,
+  Array<{ label: string; title: string; description: string; stage: string; sortOrder: number }>
+> = {
+  coding: [
+    {
+      label: '架构与接口冻结',
+      title: '完成核心架构设计与 API 契约评审',
+      description: '明确模块依赖边界、数据表 Schema 与核心 RPC/IPC 接口定义，输出架构设计说明。',
+      stage: 'design',
+      sortOrder: 1,
+    },
+    {
+      label: '核心功能联调',
+      title: '完成核心业务闭环编码与前后端联调',
+      description: '完成关键用户路径实现，补齐单元测试并消除类型与 Lint 告警。',
+      stage: 'implementation',
+      sortOrder: 2,
+    },
+    {
+      label: '门禁与发布验收',
+      title: '通过全量回归测试与发布门禁验收',
+      description: '完成端到端回归测试、性能基线核验与版本变更记录归档。',
+      stage: 'verification',
+      sortOrder: 3,
+    },
+  ],
+  business: [
+    {
+      label: '底稿与法规归集',
+      title: '完成背景材料、上位制度与底稿证据归集',
+      description: '梳理立项批复、历史往来函件与适用法律法规条款，建立受控资料索引。',
+      stage: 'initiation',
+      sortOrder: 1,
+    },
+    {
+      label: '文书编制与初审',
+      title: '完成正式文书/合同草拟与交叉复核',
+      description: '按 GB/T 9704 或标准合同版式完成正文编制，核验金额大小写与权责条款。',
+      stage: 'execution',
+      sortOrder: 2,
+    },
+    {
+      label: '法务终审与封卷',
+      title: '完成法务合规终审与定稿签发归档',
+      description: '闭环全部审校修订意见，导出定稿文书并留存终版归档快照。',
+      stage: 'closure',
+      sortOrder: 3,
+    },
+  ],
+  research: [
+    {
+      label: '文献与假设确立',
+      title: '完成核心文献综述与研究假设形式化',
+      description: '梳理领域代表性基线工作，界定创新点、理论推导边界与实验评估协议。',
+      stage: 'literature',
+      sortOrder: 1,
+    },
+    {
+      label: '基线与消融实验',
+      title: '完成主实验复现与关键消融对比',
+      description: '固定随机种子完成全量数据集定量评估，汇总统计显著性与超参数敏感度结果。',
+      stage: 'experiment',
+      sortOrder: 2,
+    },
+    {
+      label: '论文定稿与核验',
+      title: '完成论文手稿撰述、图表排版与引用核验',
+      description: '逐条核对 BibTeX 文献真实性、实验表格数值一致性及补充材料可复现性。',
+      stage: 'publication',
+      sortOrder: 3,
+    },
+  ],
+  personal: [
+    {
+      label: '素材收集与分类',
+      title: '完成近期灵感碎片、读书摘录与资料归集',
+      description: '将零散输入统一归入收件箱并标注主题标签与来源上下文。',
+      stage: 'capture',
+      sortOrder: 1,
+    },
+    {
+      label: '双链卡片提炼',
+      title: '完成核心概念原子化卡片与双向链接建立',
+      description: '提炼永久笔记卡片，串联跨主题关联并更新专题结构化索引。',
+      stage: 'distill',
+      sortOrder: 2,
+    },
+    {
+      label: '周期行动复盘',
+      title: '完成阶段复盘总结与下一周期行动计划',
+      description: '评估目标达成率，沉淀可复用经验原则并清空过期收件箱条目。',
+      stage: 'action',
+      sortOrder: 3,
+    },
+  ],
+};
+
+function formatRelativeDate(daysFromNow: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromNow);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export interface MilestoneEditorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId: string;
+  projectType?: ProjectType | null;
   milestone: ProjectMilestone | null; // null = create mode
   onSave: () => void;
 }
@@ -32,9 +142,12 @@ export function MilestoneEditor({
   open,
   onOpenChange,
   projectId,
+  projectType,
   milestone,
   onSave,
 }: MilestoneEditorProps) {
+  const blueprint = getArchetypeBlueprint(projectType);
+  const templates = MILESTONE_TEMPLATES[blueprint.type] ?? MILESTONE_TEMPLATES.coding;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [stage, setStage] = useState('');
@@ -121,6 +234,29 @@ export function MilestoneEditor({
             </div>
           )}
 
+          <div
+            className="flex flex-wrap items-center gap-1.5"
+            data-testid="milestone-editor-templates"
+          >
+            <span className="text-xs text-muted-foreground">推荐节点模板：</span>
+            {templates.map((tpl, idx) => (
+              <button
+                key={tpl.label}
+                type="button"
+                data-testid={`milestone-template-${idx}`}
+                onClick={() => {
+                  setTitle(tpl.title);
+                  setDescription(tpl.description);
+                  setStage(tpl.stage);
+                  setSortOrder(tpl.sortOrder);
+                }}
+                className="rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs text-primary hover:bg-primary/10"
+              >
+                {tpl.label}
+              </button>
+            ))}
+          </div>
+
           <div className="space-y-2">
             <label className="text-sm font-medium">标题 *</label>
             <Input
@@ -148,11 +284,52 @@ export function MilestoneEditor({
                 onChange={(e) => setStage(e.target.value)}
                 placeholder="例如: 开发阶段、测试阶段"
               />
+              <div
+                className="flex flex-wrap items-center gap-1"
+                data-testid="milestone-editor-stage-presets"
+              >
+                {blueprint.stages.map((st) => (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => setStage(st.id)}
+                    className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">截止日期</label>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <div
+                className="flex flex-wrap items-center gap-1"
+                data-testid="milestone-due-presets"
+              >
+                {[3, 7, 14, 30].map((days) => (
+                  <button
+                    key={days}
+                    type="button"
+                    data-testid={`milestone-due-plus-${days}`}
+                    onClick={() => setDueDate(formatRelativeDate(days))}
+                    className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    +{days}天
+                  </button>
+                ))}
+                {dueDate && (
+                  <button
+                    type="button"
+                    data-testid="milestone-due-clear"
+                    onClick={() => setDueDate('')}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted"
+                  >
+                    清空
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

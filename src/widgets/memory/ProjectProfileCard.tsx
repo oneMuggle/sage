@@ -1,13 +1,13 @@
 // src/widgets/memory/ProjectProfileCard.tsx
 //
-// P2 scope 轴: "项目画像" —— 项目级 MEMORY.md 的可编辑卡片。
+// P2 scope 轴: "项目画像" —— 项目级 MEMORY.md 的可编辑卡片 (Phase P28 四类原型预设、检索筛选与一键导出 Markdown)。
 // 与 UserProfileCard("关于我") 同构，但按 project_key(工作区绝对路径)分组：
 // 只有会话绑定了同一项目时，这些条目才会以冻结快照注入 system prompt。
 //
 // 数据源: GET/POST/DELETE /api/v1/memory/project-profile[/{id}]。
 
-import { Check, FolderGit2, Plus, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { Check, Copy, FolderGit2, Plus, RefreshCw, Search, Sparkles, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { memoryApi } from '../../shared/api';
 import type { ProjectProfileEntry } from '../../shared/api/types';
@@ -21,6 +21,38 @@ const CATEGORY_LABEL: Record<string, string> = {
 };
 
 const DEFAULT_CATEGORIES = Object.keys(CATEGORY_LABEL);
+
+const PROJECT_PROFILE_PRESETS: Array<{
+  label: string;
+  content: string;
+  category: string;
+  importance: number;
+}> = [
+  {
+    label: '代码工程约定',
+    content: '接口统一遵循 RESTful + OpenAPI 契约，禁止静默吞异常',
+    category: 'convention',
+    importance: 8,
+  },
+  {
+    label: '科学研究铁律',
+    content: '所有实验结论须标注数据集版本与随机种子，文献引用零幻觉',
+    category: 'convention',
+    importance: 9,
+  },
+  {
+    label: '公文商务校核',
+    content: '涉及金额与比例须大小写双轨校核，严禁泄露客户敏感信息',
+    category: 'decision',
+    importance: 9,
+  },
+  {
+    label: '个人知识卡片',
+    content: '笔记遵循原子化卡片盒原则，优先建立双向链接与可检验行动项',
+    category: 'goal',
+    importance: 7,
+  },
+];
 
 function labelOf(category: string): string {
   return CATEGORY_LABEL[category] ?? category;
@@ -51,6 +83,9 @@ export function ProjectProfileCard() {
     importance: 5,
   });
   const [busy, setBusy] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [copiedMd, setCopiedMd] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,7 +97,6 @@ export function ProjectProfileCard() {
       setItems(res.items);
       setProjects(res.projects);
       if (res.categories.length > 0) setCategories(res.categories);
-      // 首次进入且后端已解析出归属(或未指定)时,回填选择器
       if (!projectKey && res.project_key) setProjectKey(res.project_key);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载项目画像失败');
@@ -74,6 +108,43 @@ export function ProjectProfileCard() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const filteredItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return items.filter((item) => {
+      if (categoryFilter !== 'all' && item.category !== categoryFilter) {
+        return false;
+      }
+      if (!q) return true;
+      const catLabel = labelOf(item.category).toLowerCase();
+      return (
+        item.content.toLowerCase().includes(q) ||
+        item.category.toLowerCase().includes(q) ||
+        catLabel.includes(q)
+      );
+    });
+  }, [items, searchQuery, categoryFilter]);
+
+  const handleCopyMarkdown = async () => {
+    if (filteredItems.length === 0) return;
+    const title = projectKey ? basenameOf(projectKey) : '未命名项目';
+    const lines = [
+      `# 项目画像 (MEMORY.md) — ${title}`,
+      projectKey ? `> 工作区路径：\`${projectKey}\`` : '',
+      '',
+      ...filteredItems.map(
+        (item, idx) =>
+          `${idx + 1}. **[${labelOf(item.category)} · ★${item.importance}]** ${item.content}`,
+      ),
+    ].filter(Boolean);
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedMd(true);
+      setTimeout(() => setCopiedMd(false), 1800);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
 
   const run = async (op: () => Promise<void>, failMsg: string): Promise<boolean> => {
     setBusy(true);
@@ -123,7 +194,7 @@ export function ProjectProfileCard() {
             每个项目一份 MEMORY.md，仅在该项目的会话中注入
           </span>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <select
             value={projectKey}
             onChange={(e) => setProjectKey(e.target.value)}
@@ -137,6 +208,38 @@ export function ProjectProfileCard() {
               </option>
             ))}
           </select>
+          {items.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void handleCopyMarkdown()}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-bg-hover text-text-secondary"
+              data-testid="project-profile-copy-md-btn"
+              title="复制项目画像 Markdown"
+            >
+              {copiedMd ? (
+                <>
+                  <Check className="w-3 h-3 text-emerald-600" aria-hidden />
+                  已复制
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3" aria-hidden />
+                  复制 MD
+                </>
+              )}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading || busy}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-bg-hover disabled:opacity-50"
+            data-testid="project-profile-refresh-btn"
+            title="刷新项目画像"
+            aria-label="刷新项目画像"
+          >
+            <RefreshCw className="w-3 h-3" aria-hidden />
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -160,6 +263,32 @@ export function ProjectProfileCard() {
 
       {adding && (
         <div className="mb-3 p-2 rounded border border-primary/40 bg-primary/5">
+          <div
+            className="mb-2 flex flex-wrap items-center gap-1.5"
+            data-testid="project-profile-presets"
+          >
+            <span className="inline-flex items-center gap-1 text-ui-2xs text-text-secondary">
+              <Sparkles className="w-3 h-3 text-primary" aria-hidden />
+              四类原型画像预设：
+            </span>
+            {PROJECT_PROFILE_PRESETS.map((preset, idx) => (
+              <button
+                key={preset.label}
+                type="button"
+                data-testid={`project-profile-preset-${idx}`}
+                onClick={() =>
+                  setDraft({
+                    content: preset.content,
+                    category: preset.category,
+                    importance: preset.importance,
+                  })
+                }
+                className="rounded border border-border bg-bg px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:border-primary/40 hover:text-text"
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
           <textarea
             value={draft.content}
             onChange={(e) => setDraft((s) => ({ ...s, content: e.target.value }))}
@@ -221,6 +350,39 @@ export function ProjectProfileCard() {
         </div>
       )}
 
+      {items.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded border border-border/70 bg-bg/50 p-2">
+          <div className="relative flex-1 min-w-[160px]">
+            <Search className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-secondary" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索项目画像内容或类别..."
+              data-testid="project-profile-search-input"
+              className="w-full rounded border border-border bg-bg pl-7 pr-2 py-1 text-xs text-text focus:outline-none focus:border-primary"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            {['all', ...categories].map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                data-testid={`project-profile-cat-filter-${cat}`}
+                onClick={() => setCategoryFilter(cat)}
+                className={`rounded px-2 py-0.5 text-ui-2xs transition-colors ${
+                  categoryFilter === cat
+                    ? 'bg-primary text-text-inverse font-medium'
+                    : 'bg-bg text-text-secondary hover:bg-bg-hover'
+                }`}
+              >
+                {cat === 'all' ? '全部类别' : labelOf(cat)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {loading && items.length === 0 ? (
         <p className="text-xs text-text-secondary">加载中...</p>
       ) : items.length === 0 && !adding ? (
@@ -229,9 +391,24 @@ export function ProjectProfileCard() {
             ? '该项目还没有画像条目。约定、架构决策等"项目级长期记忆"适合写在这里。'
             : '选择项目后即可查看/维护该项目的画像。'}
         </p>
+      ) : filteredItems.length === 0 ? (
+        <div className="flex items-center justify-between text-xs text-text-secondary py-2">
+          <span>未找到匹配当前筛选条件的项目画像条目</span>
+          <button
+            type="button"
+            data-testid="project-profile-clear-filter"
+            onClick={() => {
+              setSearchQuery('');
+              setCategoryFilter('all');
+            }}
+            className="text-primary hover:underline"
+          >
+            清空筛选
+          </button>
+        </div>
       ) : (
         <ul className="flex flex-col divide-y divide-border">
-          {items.map((e) => (
+          {filteredItems.map((e) => (
             <li key={e.id} className="py-2 first:pt-0 last:pb-0" data-testid="project-profile-item">
               <div className="flex items-start gap-2">
                 <span className="mt-0.5 px-1.5 py-0.5 text-ui-xs rounded bg-bg-hover text-text-secondary shrink-0">

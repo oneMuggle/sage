@@ -1,13 +1,67 @@
 /**
- * ProjectTypeBadge 组件测试 (2026-09-25)
+ * ProjectTypeBadge 组件测试 (2026-09-25; Phase P29 TypeDetectionPreview, ProjectTypeSelector, StudioProfileTabPanel & KnowledgeExtractionPanel)
  *
- * 项目类型分类系统 - Phase 4.6
+ * 项目类型分类系统 - Phase 4.6 & Phase P29
  */
 
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { projectApi } from '../../shared/api';
+
+import { KnowledgeExtractionPanel } from './KnowledgeExtractionPanel';
 import { ProjectTypeBadge } from './ProjectTypeBadge';
+import { ProjectTypeSelector } from './ProjectTypeSelector';
+import { SemanticSearchPanel } from './SemanticSearchPanel';
+import { StudioProfileTabPanel } from './StudioProfileTabPanel';
+import { TypeDetectionPreview } from './TypeDetectionPreview';
+import { WikiGenerationPanel } from './WikiGenerationPanel';
+
+vi.mock('../../shared/api', async () => {
+  const actual = await vi.importActual<typeof import('../../shared/api')>('../../shared/api');
+  return {
+    ...actual,
+    projectApi: {
+      ...actual.projectApi,
+      detectType: vi.fn(),
+      listSessions: vi.fn(),
+      extractKnowledge: vi.fn(),
+      confirmKnowledge: vi.fn(),
+      getMaterialIndexingStats: vi.fn().mockResolvedValue({
+        totalMaterials: 3,
+        indexedMaterials: 3,
+        pendingMaterials: 0,
+        failedMaterials: 0,
+        totalChunks: 12,
+        embedderType: 'local',
+        embedderDims: 384,
+      }),
+      semanticSearchMaterials: vi.fn().mockResolvedValue({
+        results: [
+          { materialId: 'mat-high', chunkIndex: 0, score: 0.85, content: '高相似度实验结论' },
+          { materialId: 'mat-low', chunkIndex: 1, score: 0.42, content: '低相似度背景摘录' },
+        ],
+      }),
+      wikiScanFiles: vi.fn().mockResolvedValue({
+        files: [
+          { path: 'src/core.ts', language: 'typescript', sizeBytes: 2048 },
+          { path: 'scripts/run.py', language: 'python', sizeBytes: 1024 },
+        ],
+      }),
+      wikiExtractSymbols: vi.fn().mockResolvedValue({
+        symbols: [{ name: 'initCore', kind: 'function', filePath: 'src/core.ts', line: 1 }],
+      }),
+      wikiGenerate: vi.fn().mockResolvedValue({
+        pagesGenerated: 2,
+        pagesUpdated: 0,
+        pagesSkipped: 0,
+        wikiPaths: ['wiki/README.md', 'wiki/ARCHITECTURE.md'],
+        errors: [],
+      }),
+      addMaterialFromFile: vi.fn().mockResolvedValue({}),
+    },
+  };
+});
 
 describe('ProjectTypeBadge', () => {
   it('renders coding type with correct label and icon', () => {
@@ -56,5 +110,211 @@ describe('ProjectTypeBadge', () => {
     const { container } = render(<ProjectTypeBadge type="coding" className="custom-class" />);
     const badge = container.firstChild as HTMLElement;
     expect(badge.className).toContain('custom-class');
+  });
+});
+
+describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders detected blueprint preview, stage pipeline, governance stats, and supports markdown copy & one-click apply', () => {
+    const onApply = vi.fn();
+    render(
+      <TypeDetectionPreview
+        result={{
+          detectedType: 'research',
+          confidence: 0.88,
+          signals: ['发现 .bib 与 .tex 文件'],
+        }}
+        selectedType="coding"
+        onApplyDetectedType={onApply}
+      />,
+    );
+
+    expect(screen.getByTestId('detection-blueprint-preview')).toBeInTheDocument();
+    expect(screen.getByTestId('detection-stages-preview')).toBeInTheDocument();
+    expect(screen.getByTestId('detection-governance-stats')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('detection-copy-md-btn'));
+
+    const applyBtn = screen.getByTestId('apply-detected-type-btn');
+    fireEvent.click(applyBtn);
+    expect(onApply).toHaveBeenCalledWith('research');
+  });
+
+  it('supports ProjectTypeSelector redetect and apply detected type when confidence is below auto-select threshold', async () => {
+    vi.mocked(projectApi.detectType).mockResolvedValue({
+      detectedType: 'business',
+      confidence: 0.55,
+      signals: ['发现合同模板目录'],
+    });
+    const onSelect = vi.fn();
+
+    render(
+      <ProjectTypeSelector
+        open={true}
+        onOpenChange={vi.fn()}
+        projectPath="/workspace/contracts"
+        onSelect={onSelect}
+      />,
+    );
+
+    const applyDetectedBtn = await screen.findByTestId('selector-apply-detected-btn');
+    fireEvent.click(applyDetectedBtn);
+
+    fireEvent.click(screen.getByTestId('selector-redetect-btn'));
+    await waitFor(() => expect(projectApi.detectType).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByRole('button', { name: '确认选择' }));
+    expect(onSelect).toHaveBeenCalledWith('business');
+  });
+});
+
+describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('supports StudioProfileTabPanel keyword search, category filter, and clear filter', () => {
+    render(
+      <StudioProfileTabPanel
+        projectPath="/workspace/sage"
+        projectType="coding"
+        profileEntries={[
+          {
+            id: 'e-1',
+            project_key: '/workspace/sage',
+            category: 'convention',
+            content: '单文件严格保持 <= 800 行',
+            importance: 8,
+            source: 'manual',
+            created_at: 1,
+            updated_at: 1,
+          },
+          {
+            id: 'e-2',
+            project_key: '/workspace/sage',
+            category: 'architecture',
+            content: 'IPC 契约一致性检查',
+            importance: 9,
+            source: 'manual',
+            created_at: 2,
+            updated_at: 2,
+          },
+        ]}
+        profileCategory="convention"
+        onCategoryChange={vi.fn()}
+        profileDraft=""
+        onDraftChange={vi.fn()}
+        savingProfile={false}
+        onAddEntry={vi.fn()}
+        onDeleteEntry={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('studio-profile-filter-architecture'));
+    expect(screen.getByText('IPC 契约一致性检查')).toBeInTheDocument();
+    expect(screen.queryByText('单文件严格保持 <= 800 行')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('studio-profile-search-input'), {
+      target: { value: '不存在的关键词' },
+    });
+    fireEvent.click(screen.getByTestId('studio-profile-clear-filter'));
+    expect(screen.getByText('单文件严格保持 <= 800 行')).toBeInTheDocument();
+  });
+
+  it('supports KnowledgeExtractionPanel session refresh and extracted proposals markdown copy', async () => {
+    vi.mocked(projectApi.listSessions).mockResolvedValue([
+      {
+        id: 'sess-p29',
+        title: '研究计划讨论',
+        created_at: 1,
+        updated_at: 2,
+        last_message_at: 2,
+        message_count: 6,
+        is_pinned: false,
+      },
+    ]);
+    vi.mocked(projectApi.extractKnowledge).mockResolvedValue({
+      projectKey: '/workspace/sage',
+      reasoning: '从对话中提炼出实验可复现性规范',
+      entries: [
+        {
+          category: 'convention',
+          content: '固定随机种子为 42',
+          importance: 9,
+          reasoning: '保障消融实验可复现',
+          sourceMessageIds: ['m-1'],
+        },
+      ],
+    });
+
+    render(<KnowledgeExtractionPanel projectId="proj-p29" />);
+    await waitFor(() => expect(projectApi.listSessions).toHaveBeenCalledWith('proj-p29'));
+
+    fireEvent.click(screen.getByTestId('knowledge-refresh-sessions-btn'));
+    await waitFor(() => expect(projectApi.listSessions).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByTestId('knowledge-extract-btn'));
+    const copyMdBtn = await screen.findByTestId('knowledge-copy-md-btn');
+    fireEvent.click(copyMdBtn);
+    expect(screen.getByText('固定随机种子为 42')).toBeInTheDocument();
+  });
+});
+
+describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('supports SemanticSearchPanel similarity threshold filter and M4 -> L3 profile entry save', async () => {
+    render(<SemanticSearchPanel projectId="proj-p31" projectType="research" />);
+
+    fireEvent.click(screen.getByTestId('semantic-preset-0'));
+    await waitFor(() => {
+      expect(screen.getByText('高相似度实验结论')).toBeInTheDocument();
+      expect(screen.getByText('低相似度背景摘录')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('semantic-score-filter-75'));
+    expect(screen.getByText('高相似度实验结论')).toBeInTheDocument();
+    expect(screen.queryByText('低相似度背景摘录')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('semantic-hit-save-profile-0'));
+    await waitFor(() => {
+      expect(projectApi.confirmKnowledge).toHaveBeenCalledWith('proj-p31', {
+        entries: [
+          expect.objectContaining({
+            category: 'note',
+            content: '高相似度实验结论',
+          }),
+        ],
+      });
+      expect(screen.getByTestId('semantic-hit-save-profile-0')).toHaveTextContent('已沉淀 L3');
+    });
+  });
+
+  it('supports WikiGenerationPanel preview file filter and batch ingest all to L4 Materials', async () => {
+    render(<WikiGenerationPanel projectId="proj-p31" projectType="coding" />);
+
+    fireEvent.click(screen.getByTestId('wiki-preview-btn'));
+    const filterInput = await screen.findByTestId('wiki-preview-filter-input');
+    fireEvent.change(filterInput, { target: { value: 'python' } });
+    expect(screen.getByText('scripts/run.py')).toBeInTheDocument();
+    expect(screen.queryByText('src/core.ts')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('wiki-generate-btn'));
+    const ingestAllBtn = await screen.findByTestId('wiki-ingest-all-btn');
+    fireEvent.click(ingestAllBtn);
+
+    await waitFor(() => {
+      expect(projectApi.addMaterialFromFile).toHaveBeenCalledWith('proj-p31', 'wiki/README.md');
+      expect(projectApi.addMaterialFromFile).toHaveBeenCalledWith(
+        'proj-p31',
+        'wiki/ARCHITECTURE.md',
+      );
+      expect(screen.getByTestId('wiki-ingest-all-btn')).toHaveTextContent('已全部纳入 L4');
+    });
   });
 });

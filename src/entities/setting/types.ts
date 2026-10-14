@@ -156,6 +156,12 @@ export interface AppSettings {
   // Wave 3 P2-9
   orch: OrchSettings;
 
+  // 2026-10-13: LLM 自动重试参数（与后端 SettingsPayload.llmRetry* 对齐）。
+  // maxAttempts=0 表示禁用重试，无需额外开关。
+  llmRetryMaxAttempts: number; // 3
+  llmRetryBaseDelayS: number; // 1.0 (秒)
+  llmRetryMaxDelayS: number; // 30.0 (秒)
+
   // 演示模式开关 (2026-08-27): 启用后 Electron main 进程跳过 Python 后端
   // spawn, 前端可走 /demo 路由录屏. 关闭时回到正常 LLM 调用路径.
   demoMode: boolean;
@@ -251,6 +257,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   // Wave 3 P2-9
   orch: DEFAULT_ORCH_SETTINGS,
+
+  // 2026-10-13: LLM 自动重试默认值（与后端 _retry_settings() 默认值对齐）。
+  llmRetryMaxAttempts: 3,
+  llmRetryBaseDelayS: 1.0,
+  llmRetryMaxDelayS: 30.0,
 
   // 演示模式: 默认关闭. 开启后 main 进程跳过 Python 后端启动.
   demoMode: false,

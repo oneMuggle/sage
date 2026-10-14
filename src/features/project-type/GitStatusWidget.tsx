@@ -1,12 +1,12 @@
 /**
- * Git 状态 Widget (2026-09-25)
+ * Git 状态 Widget (2026-09-25; Phase P26 Git 状态与近期提交 Markdown 摘要一键复制 2026-10-13)
  *
  * 项目类型分类系统 - Phase 4.3
- * Coding 项目专属：显示 Git 仓库状态
+ * Coding 项目专属：显示 Git 仓库状态并支持复制 Markdown 状态报告
  */
 
-import { GitBranch, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { GitBranch, AlertCircle, CheckCircle2, Copy, Check, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 
 import { invoke } from '../../shared/api/desktopInvoke';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
@@ -33,23 +33,25 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filesExpanded, setFilesExpanded] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      setLoading(true);
+      const result = await invoke<GitStatus>('projects_git_status', { projectId });
+      setStatus(result);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '获取 Git 状态失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
 
   useEffect(() => {
-    async function fetchStatus() {
-      try {
-        setLoading(true);
-        const result = await invoke<GitStatus>('projects_git_status', { projectId });
-        setStatus(result);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '获取 Git 状态失败');
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchStatus();
-  }, [projectId]);
+    void fetchStatus();
+  }, [fetchStatus]);
 
   if (loading) {
     return (
@@ -89,13 +91,63 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const totalChanges =
     status.modified_files.length + status.staged_files.length + status.untracked_files.length;
 
+  const handleCopyMarkdown = () => {
+    const lines = [
+      `# Git 仓库状态报告 (${status.current_branch || 'HEAD'})`,
+      `- **分支**: \`${status.current_branch || 'HEAD'}\``,
+      `- **变更统计**: 暂存 ${status.staged_files.length} · 修改 ${status.modified_files.length} · 未跟踪 ${status.untracked_files.length}`,
+    ];
+    if (totalChanges > 0) {
+      lines.push('', '## 变更文件明细');
+      status.staged_files.forEach((f) => lines.push(`- [S] \`${f}\``));
+      status.modified_files.forEach((f) => lines.push(`- [M] \`${f}\``));
+      status.untracked_files.forEach((f) => lines.push(`- [U] \`${f}\``));
+    }
+    if (status.recent_commits.length > 0) {
+      lines.push('', '## 最近提交');
+      status.recent_commits.slice(0, 5).forEach((c) => {
+        lines.push(`- \`${c.sha.slice(0, 7)}\` ${c.message} (${c.author}, ${c.date.split(' ')[0]})`);
+      });
+    }
+    try {
+      void navigator.clipboard?.writeText(lines.join('\n'));
+      setCopiedMd(true);
+      setTimeout(() => setCopiedMd(false), 2000);
+    } catch {
+      // ignore clipboard errors in test/offline mode
+    }
+  };
+
   return (
-    <Card>
+    <Card data-testid="git-status-widget">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <GitBranch className="h-4 w-4" />
-          Git 状态
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <GitBranch className="h-4 w-4" />
+            Git 状态
+          </CardTitle>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-testid="git-status-copy-md-btn"
+              onClick={handleCopyMarkdown}
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="复制 Git 状态 Markdown 报告"
+            >
+              {copiedMd ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+              {copiedMd ? '已复制' : '复制报告'}
+            </button>
+            <button
+              type="button"
+              data-testid="git-status-refresh-btn"
+              onClick={() => void fetchStatus()}
+              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="刷新 Git 状态"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-2">
         {/* 分支信息 */}
@@ -126,6 +178,36 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                 <AlertCircle className="h-3 w-3 text-gray-500" />
                 <span className="text-muted-foreground">未跟踪：</span>
                 <span>{status.untracked_files.length} 个文件</span>
+              </div>
+            )}
+            <button
+              type="button"
+              data-testid="git-status-files-toggle"
+              onClick={() => setFilesExpanded((v) => !v)}
+              className="mt-1 text-xs font-medium text-primary hover:underline"
+            >
+              {filesExpanded ? '收起变更文件明细' : `展开变更文件 (${totalChanges})`}
+            </button>
+            {filesExpanded && (
+              <div
+                className="mt-1 max-h-28 overflow-y-auto rounded border border-border bg-muted/30 p-1.5 font-mono text-ui-2xs space-y-0.5"
+                data-testid="git-status-files-list"
+              >
+                {status.staged_files.map((f) => (
+                  <div key={`s:${f}`} className="truncate text-green-600 dark:text-green-400">
+                    [S] {f}
+                  </div>
+                ))}
+                {status.modified_files.map((f) => (
+                  <div key={`m:${f}`} className="truncate text-orange-600 dark:text-orange-400">
+                    [M] {f}
+                  </div>
+                ))}
+                {status.untracked_files.map((f) => (
+                  <div key={`u:${f}`} className="truncate text-muted-foreground">
+                    [U] {f}
+                  </div>
+                ))}
               </div>
             )}
           </div>

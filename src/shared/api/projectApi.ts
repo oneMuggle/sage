@@ -4,6 +4,7 @@
  * 类型定义与 Wire 映射位于 ./projectApiTypes.ts。
  */
 
+/* eslint-disable import/order */
 import { invoke } from './desktopInvoke';
 import {
   mapConstraint,
@@ -46,6 +47,67 @@ import {
   type WorkspaceCheckpointDetail,
   type WorkspaceCheckpointItem,
   type WorkspaceDirectorySummary,
+  // AI 任务分解 M1 (2026-10-12)
+  type DecomposeApplyPayload,
+  type DecomposePreviewPayload,
+  type DecomposePreviewWire,
+  type DecomposeApplyWire,
+  mapDecomposePreview,
+  mapDecomposeApply,
+  // AI 知识沉淀 M2 (2026-10-12)
+  type ExtractKnowledgePayload,
+  type ExtractKnowledgeWire,
+  type ConfirmKnowledgePayload,
+  type ConfirmKnowledgeWire,
+  mapExtractKnowledge,
+  mapConfirmKnowledge,
+  // AI 项目顾问 M3 (2026-10-12)
+  type AdviceWire,
+  mapAdvice,
+  // AI 代码→Wiki 生成 M5 (2026-10-12)
+  type WikiGeneratePayload,
+  type WikiGenerateWire,
+  type FileScanWire,
+  type SymbolExtractWire,
+  mapWikiGenerate,
+  mapFileScan,
+  mapSymbolExtract,
+  // M4: 语义检索 (2026-10-12)
+  type SemanticSearchWire,
+  type IndexingStatsWire,
+  mapSemanticSearch,
+  mapIndexingStats,
+} from './projectApiTypes';
+/* eslint-enable import/order */
+
+// Re-export AI types for barrel consumption
+export type {
+  PreviewMilestoneNode,
+  DecomposePreviewResult,
+  DecomposePreviewPayload,
+  DecomposeApplyPayload,
+  DecomposeApplyResult,
+  // M2
+  KnowledgeEntryProposal,
+  ExtractKnowledgeResult,
+  ExtractKnowledgePayload,
+  ConfirmKnowledgePayload,
+  ConfirmKnowledgeResult,
+  // M3
+  AdvisorRisk,
+  AdvisorSuggestion,
+  AdviceResult,
+  // M5
+  WikiGeneratePayload,
+  WikiGenerateResult,
+  ScannedFile,
+  FileScanResult,
+  ExtractedSymbol,
+  SymbolExtractResult,
+  // M4: 语义检索 (2026-10-12)
+  SemanticSearchHit,
+  SemanticSearchResult,
+  IndexingStats,
 } from './projectApiTypes';
 import type { Session } from './types';
 import { handleApiError } from './utils';
@@ -413,10 +475,7 @@ export const projectApi = {
   },
 
   /** Phase P11: 获取指定内置版本控制检查点的文件清单与快照预览内容。 */
-  async getCheckpoint(
-    projectId: string,
-    checkpointId: string,
-  ): Promise<WorkspaceCheckpointDetail> {
+  async getCheckpoint(projectId: string, checkpointId: string): Promise<WorkspaceCheckpointDetail> {
     try {
       const raw = await invoke<{
         id: string;
@@ -434,6 +493,19 @@ export const projectApi = {
         files: raw.files ?? [],
         snapshots: raw.snapshots ?? {},
       };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** Phase P13: 删除指定内置版本控制检查点快照。 */
+  async deleteCheckpoint(projectId: string, checkpointId: string): Promise<boolean> {
+    try {
+      const res = await invoke<{ removed: boolean }>('projects_delete_checkpoint', {
+        projectId,
+        checkpointId,
+      });
+      return Boolean(res.removed);
     } catch (error) {
       throw handleApiError(error);
     }
@@ -756,5 +828,196 @@ export const projectApi = {
       throw handleApiError(error);
     }
   },
-};
 
+  // ── AI 任务分解 M1 (2026-10-12) ──────────────────────────────────────────
+
+  /** AI 任务分解：预览（LLM 生成分解方案，不写入 DB） */
+  async decomposePreview(
+    projectId: string,
+    payload: DecomposePreviewPayload,
+  ): Promise<import('./projectApiTypes').DecomposePreviewResult> {
+    try {
+      const wire = await invoke<DecomposePreviewWire>('projects_decompose_preview', {
+        projectId,
+        requirement: payload.requirement,
+        context: payload.context,
+      });
+      return mapDecomposePreview(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** AI 任务分解：应用（将预览结果写入 DB） */
+  async decomposeApply(
+    projectId: string,
+    payload: DecomposeApplyPayload,
+  ): Promise<import('./projectApiTypes').DecomposeApplyResult> {
+    try {
+      const wire = await invoke<DecomposeApplyWire>('projects_decompose_apply', {
+        projectId,
+        milestones: payload.milestones,
+      });
+      return mapDecomposeApply(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ── AI 知识沉淀 M2 (2026-10-12) ──────────────────────────────────────────
+
+  /** M2: 知识提取预览（LLM 从会话历史提取建议，不写入 DB） */
+  async extractKnowledge(
+    projectId: string,
+    payload: ExtractKnowledgePayload,
+  ): Promise<import('./projectApiTypes').ExtractKnowledgeResult> {
+    try {
+      const wire = await invoke<ExtractKnowledgeWire>('projects_extract_knowledge', {
+        projectId,
+        sessionId: payload.sessionId,
+        maxMessages: payload.maxMessages ?? 50,
+      });
+      return mapExtractKnowledge(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** M2: 确认知识（将用户勾选的条目写入项目画像） */
+  async confirmKnowledge(
+    projectId: string,
+    payload: ConfirmKnowledgePayload,
+  ): Promise<import('./projectApiTypes').ConfirmKnowledgeResult> {
+    try {
+      const wire = await invoke<ConfirmKnowledgeWire>('projects_confirm_knowledge', {
+        projectId,
+        entries: payload.entries.map((e) => ({
+          content: e.content,
+          category: e.category,
+          importance: e.importance,
+          source_message_ids: e.sourceMessageIds,
+          reasoning: e.reasoning,
+        })),
+      });
+      return mapConfirmKnowledge(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ── AI 项目顾问 M3 (2026-10-12) ──────────────────────────────────────────
+
+  /** M3: 获取项目健康评分和建议（使用 30min 缓存） */
+  async getAdvice(projectId: string): Promise<import('./projectApiTypes').AdviceResult> {
+    try {
+      const wire = await invoke<AdviceWire>('projects_get_advice', { projectId });
+      return mapAdvice(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** M3: 强制刷新项目顾问分析（忽略缓存） */
+  async refreshAdvice(projectId: string): Promise<import('./projectApiTypes').AdviceResult> {
+    try {
+      const wire = await invoke<AdviceWire>('projects_refresh_advice', { projectId });
+      return mapAdvice(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ── AI 代码→Wiki 生成 M5 (2026-10-12) ──────────────────────────────────────
+
+  /** M5: 调用 LLM 生成项目 Wiki 文档 */
+  async wikiGenerate(
+    projectId: string,
+    payload: WikiGeneratePayload,
+  ): Promise<import('./projectApiTypes').WikiGenerateResult> {
+    try {
+      const wire = await invoke<WikiGenerateWire>('projects_wiki_generate', {
+        projectId,
+        incremental: payload.incremental,
+      });
+      return mapWikiGenerate(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** M5: 预览将被扫描的源文件 */
+  async wikiScanFiles(
+    projectId: string,
+    languages?: string,
+  ): Promise<import('./projectApiTypes').FileScanResult> {
+    try {
+      const wire = await invoke<FileScanWire>('projects_wiki_scan_files', {
+        projectId,
+        languages: languages ?? 'python',
+      });
+      return mapFileScan(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** M5: 预览将被提取的符号 */
+  async wikiExtractSymbols(
+    projectId: string,
+  ): Promise<import('./projectApiTypes').SymbolExtractResult> {
+    try {
+      const wire = await invoke<SymbolExtractWire>('projects_wiki_extract_symbols', {
+        projectId,
+      });
+      return mapSymbolExtract(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ── M4: 语义检索 (2026-10-12) ─────────────────────────────────────────────
+
+  /** M4: 语义检索项目资料 */
+  async semanticSearchMaterials(
+    projectId: string,
+    query: string,
+    topK = 5,
+  ): Promise<import('./projectApiTypes').SemanticSearchResult> {
+    try {
+      const wire = await invoke<SemanticSearchWire>('projects_materials_search', {
+        projectId,
+        query,
+        topK,
+      });
+      return mapSemanticSearch(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** M4: 获取索引统计 */
+  async getMaterialIndexingStats(
+    projectId: string,
+  ): Promise<import('./projectApiTypes').IndexingStats> {
+    try {
+      const wire = await invoke<IndexingStatsWire>('projects_materials_indexing_stats', {
+        projectId,
+      });
+      return mapIndexingStats(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** M4: 重新索引单个材料 */
+  async reindexMaterial(projectId: string, materialId: string): Promise<void> {
+    try {
+      await invoke<void>('projects_material_reindex', {
+        projectId,
+        materialId,
+      });
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+};

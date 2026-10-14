@@ -290,3 +290,257 @@
   - **项目生命周期阶段一键推进与跨形态 Git 联动 (`ProjectArchetypeStudio.tsx`, `ProjectOverviewWidgets.tsx`)**：
     - 在项目治理头部阶段选择器旁新增 **`[推进至「下一阶段」→]`** 快捷按钮（`studio-advance-stage-btn`），支持按当前形态生命周期管线顺次推进项目阶段；
     - 升级 `ProjectOverviewWidgets`，当非代码项目（如科研手稿或大型档案工程）将版本控制切换为 `vcsMode === 'git'` 时，同样自动挂载 `GitStatusWidget` 展示实时分支与未提交变更。
+
+### Phase P13：内置版本快照 5 层上下文归档、检查点清理治理与个人知识库时间轴（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **内置检查点自动固化 5 层合成上下文快照**：`create_project_checkpoint(project, label)` 创建检查点时，自动调用 `inspect_project_context_budget(project)` 并将 `synthesized_preview` 以 `.sage/context-snapshot.md` 键归档进检查点 `snapshots` 字典，支持通过 `GET /api/v1/projects/{project_id}/checkpoints/{checkpoint_id}` 在快照详情抽屉中直接预览当时的 5 层上下文全貌。
+  2. **内置检查点删除治理 (`DELETE /api/v1/projects/{project_id}/checkpoints/{checkpoint_id}`)**：新增 `delete_project_checkpoint(project, checkpoint_id)` 后端服务、FastAPI 路由、IPC 桥接命令 `projects_delete_checkpoint`（`electron/ipc-manifest.json` 249 条命令）及 `projectApi.deleteCheckpoint(projectId, checkpointId)`；在 `BuiltinCheckpointTimelineBar` 时间轴列表中新增 `[删除]` (`data-testid="delete-checkpoint-{id}"`) 按钮，支持一键清理冗余版本快照。
+  3. **个人与知识库 (`personal`) 卡片笔记列表与内置版本时间轴 (`PersonalZettelkastenFooter`)**：在 `BuiltinCheckpointAndStyleBar.tsx` 中提炼 `PersonalZettelkastenFooter` 组件并挂载至 `PolymorphicArchetypeCards.tsx` 的 `polymorphic-card-personal`，实时展示最近沉淀的个人偏好/卡片笔记列表 (`data-testid="personal-notes-list"`) 并支持个人知识库内置版本快照创建、预览、还原与删除，同时保持所有前后端模块文件严格 `<= 800` 行。
+
+### Phase P14：L4 资料库直接入库/自动发现/批量开关与预览、L1 总纲一键快照、多态版本概览卡片（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **L4 授信隔离资料库 (`StudioMaterialsTabPanel`) 全闭环增强**：
+     - **纯文本/摘要直接入库 (`studio-material-text-input` + `studio-material-text-add`)**：支持直接在 L4 面板粘贴合同关键条款、文献核心摘要或会议纪要结论，调用 `projectApi.addMaterial(projectId, { content })` 一键沉淀入库。
+     - **工作区可入库文件自动发现 (`studio-discoverable-files-bar`)**：自动聚合 `getWorkspaceOverview` 扫描出的 `officeDeliverables` 与 `researchArtifacts` 文件路径胶囊，点击即可一键提取入库。
+     - **批量 Source-Grounded 上下文开关与资料内容内联预览**：新增 `[全选参与上下文]` (`studio-materials-enable-all`)、`[全部隔离]` (`studio-materials-disable-all`) 以及每条资料的 `[预览/收起]` (`studio-material-preview-toggle-{id}` / `studio-material-preview-body-{id}`) 内容抽屉。
+  2. **L1 项目总纲 (`StudioCharterTabPanel`) 一键保存并固化版本快照 (`studio-charter-checkpoint-btn`)**：新增 `[保存并固化快照]` 按钮，在更新 `SAGE.md` 后自动调用 `projectApi.createCheckpoint(projectId, 'SAGE.md 规范更新快照')`，将最新 `SAGE.md` 与 5 层合成上下文快照同步归档。
+  3. **多形态项目概览版本保护与阶段状态卡片 (`ProjectOverviewWidgets.tsx`)**：新增 `workspace-vcs-summary-widget` 卡片，动态展示当前项目的生命周期阶段徽章、版本保护模式（`Git 版本控制` / `内置快照时间轴 (.sage/checkpoints)` / `无版本控制`）及最近快照数量 (`workspace-vcs-checkpoint-count`)。
+
+### Phase P15：概览卡片快速治理（约束一键导入与 Glob 统计、里程碑一键播种与快捷完成）及向导 L2 目标/初始快照闭环（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **约束摘要卡片快速治理 (`ConstraintSummaryWidget.tsx`)**：
+     - 空状态新增 `[一键导入默认规范]` (`data-testid="constraint-summary-quick-import"`) 按钮，无需跳转页签即可导入当前项目形态的默认规范模板。
+     - 新增已启用约束中按路径 Glob 条件注入（`triggerPattern` 非空）的统计徽章 (`data-testid="constraint-summary-glob-count"`)。
+  2. **里程碑进度卡片快速治理 (`MilestoneProgressWidget.tsx` & `ProjectOverviewWidgets.tsx`)**：
+     - 空状态新增 `[一键初始化推荐里程碑]` (`data-testid="milestone-summary-quick-seed"`) 按钮，按当前项目形态蓝图 (`getArchetypeBlueprint(projectType).recommendedMilestones`) 批量播种推荐阶段里程碑。
+     - 最近里程碑列表每项新增 `[标记完成/重开]` (`data-testid="milestone-quick-toggle-{id}"`) 快捷按钮，支持在项目概览页直接推进里程碑状态并实时更新进度条。
+  3. **三步创建向导 Step 3 L2 核心目标与初始基线快照闭环 (`ProjectCreationWizard.tsx` & `projectApiTypes.ts`)**：
+     - Step 3 (`confirm`) 新增可选「L2 项目核心目标摘要 (`description`)」输入框 (`data-testid="wizard-description-input"`) 与「版本控制策略 (`vcsMode`)」选择器 (`data-testid="wizard-vcs-mode-select"`)；
+     - 创建项目时自动同步写入 `description` 与 `vcs_mode`，并在启用脚手架且选择 `builtin` 模式时自动创建首个「项目初始化基线快照」(`projectApi.createCheckpoint(project.id, '项目初始化基线快照')`)。
+
+### Phase P16：约束编辑器形态类别与目录 Glob 预设胶囊、里程碑阶段快捷胶囊及侧边栏概览一键快照（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **约束编辑器形态化快捷预设胶囊 (`ConstraintEditor.tsx` & `ConstraintManager.tsx`)**：
+     - 根据当前项目形态动态展示推荐类别胶囊 (`data-testid="constraint-editor-category-presets"`)，覆盖代码工程 (`code_style`/`git_commit`/`testing`/`architecture`)、档案文书 (`document_format`/`tone`/`review_process`/`compliance`)、科研课题 (`academic_writing`/`citation_style`/`data_integrity`/`reproducibility`) 与个人知识库 (`note_organization`/`knowledge_linking`/`action_extraction`)；
+     - 根据当前形态蓝图的标准目录结构动态生成 Glob 路径触发预设胶囊 (`data-testid="constraint-editor-glob-presets"`)，点击即可一键填入 `${dir}/**` 触发规则。
+  2. **里程碑编辑器形态阶段快捷胶囊 (`MilestoneEditor.tsx` & `MilestoneManager.tsx`)**：
+     - 在阶段输入框下方渲染当前项目形态的生命周期阶段胶囊 (`data-testid="milestone-editor-stage-presets"`)，一键将新建/编辑的里程碑绑定至标准形态阶段 ID。
+  3. **侧边栏概览面板一键版本快照 (`ProjectExpandedPanels.tsx`)**：
+     - 在聊天侧边栏内联展开的 `ProjectOverviewPanel` 头部，针对非 Git 模式项目提供 `[新建快照]` (`data-testid="sidebar-quick-checkpoint-btn"`) 快捷按钮，无需离开 `/chat` 即可随时创建 `.sage/checkpoints` 版本快照。
+
+### Phase P17：Git 状态微件变更文件明细抽屉与一键刷新、类型检测蓝图预览与一键采用、侧边栏资料池批量注入开关（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **Git 状态微件变更文件抽屉与手动刷新 (`GitStatusWidget.tsx`)**：
+     - 卡片头部新增 `[刷新]` 按钮 (`data-testid="git-status-refresh-btn"`)，支持在 AI 修改或本地提交后即时刷新分支与变更状态；
+     - 当存在暂存/修改/未跟踪文件时，提供 `[展开变更文件 (N)]` (`data-testid="git-status-files-toggle"`) 抽屉开关，展开后按 `[S]`（已暂存）、`[M]`（已修改）、`[U]`（未跟踪）列出文件路径清单 (`data-testid="git-status-files-list"`)。
+  2. **自动检测预览蓝图透视与一键采用 (`TypeDetectionPreview.tsx` & `ProjectCreationWizard.tsx`)**：
+     - 检测结果卡片内新增对应形态的蓝图推荐预览 (`data-testid="detection-blueprint-preview"`)，直观展示推荐版本策略 (`vcsLabel`) 与标准工作区目录胶囊；
+     - 当用户当前选中的项目类型与自动检测结果不一致时，渲染 `[一键采用检测形态]` (`data-testid="apply-detected-type-btn"`) 按钮，一键切换为检测到的最佳项目形态。
+  3. **聊天侧边栏资料面板批量 Source-Grounded 上下文开关 (`ProjectExpandedPanels.tsx`)**：
+     - 在侧边栏内联展开的 `ProjectMaterialsPanel` 水位条 (`project-materials-watermark`) 中新增 `[全选]` (`data-testid="sidebar-materials-enable-all"`) 与 `[全停]` (`data-testid="sidebar-materials-disable-all"`) 快捷按钮，支持在 `/chat` 对话中一键批量启用或隔离全部就绪项目资料。
+
+### Phase P18：L3 项目演化画像独立模块化与形态预设/导出、项目类型选择器治理特性预览（已完成）
+- **状态**：已在 `main` 与 `release/win7` 双轨落地并通过全量门禁。
+- **交付内容**：
+  1. **L3 项目演化记忆画像面板模块化与形态预设 (`StudioProfileTabPanel.tsx` & `StudioMaterialsAndProfilePanels.tsx`)**：
+     - 将 `StudioProfileTabPanel` 提炼为独立模块（使 `StudioMaterialsAndProfilePanels.tsx` 从 786 行降至 691 行，严格留足 800 行架构水位）；
+     - 新增按项目形态动态切换的推荐画像预设胶囊栏 (`data-testid="studio-profile-presets-bar"` / `data-testid="studio-profile-preset-{idx}"`)，覆盖 `coding`（IPC 契约一致性 / 单文件 800 行红线）、`business`（大小写金额双轨核对 / 定稿签发前固化快照）、`research`（零幻觉文献引用铁律 / 实验可复现性基线）与 `personal`（原子化卡片盒笔记 / 每周行动项提炼）；
+     - 新增 `[复制 MEMORY.md 视图]` 按钮 (`data-testid="studio-profile-copy-md-btn"`)，一键将当前项目的冻结画像条目格式化为标准 Markdown 复制到剪贴板。
+  2. **项目类型选择器治理特性徽章 (`ProjectTypeSelector.tsx`)**：
+     - 在每个项目类型选项卡片底部新增形态治理规模徽章 (`data-testid="selector-governance-meta-{value}"`)，直观展示该形态的标准生命周期阶段数与内置细分规范包数量。
+### Phase P19：内置快照时间轴预设与上下文快照复制、商务办公公文版式与审校强度护栏、商务案卷审校纪要归位（已交付）
+
+- **交付时间**：2026-10-12
+- **核心改进项**：
+  1. **内置快照时间轴快捷标签预设与五层上下文快照一键复制（`src/features/project-type/BuiltinCheckpointAndStyleBar.tsx`）**：
+     - 在 `BuiltinCheckpointTimelineBar` 中新增快捷标签预设胶囊栏（`data-testid="checkpoint-quick-presets"`：`定稿签发前备份`、`审校修订前基线`、`阶段里程碑留痕`），支持非 Git 用户一键填充快照说明并创建恢复点；
+     - 在内置快照详情抽屉（`data-testid="checkpoint-detail-preview"`）中新增 `复制上下文快照` 按钮（`data-testid="copy-checkpoint-context-btn"`），当快照包含 `.sage/context-snapshot.md` 时支持一键复制完整五层上下文快照 Markdown。
+  2. **商务办公公文版式与审校强度护栏（`BusinessDocumentStyleBar` in `BuiltinCheckpointAndStyleBar.tsx` & `PolymorphicArchetypeCards.tsx`）**：
+     - 新增 `BusinessDocumentStyleBar`（`data-testid="business-doc-style-bar"`），提供公文与商务版式标准选择器（`data-testid="business-doc-format-select"`：`GB/T 9704 公文版式`、`企业标准商务合同规范`、`招投标技术与商务响应`、`尽职调查与审计报告规范`）与审校口径强度选择器（`data-testid="business-review-level-select"`），并支持一键写入 L2 强制约束规则（`data-testid="business-apply-style-btn"`）。
+  3. **商务案卷审校纪要与口径约定归位（`src/features/project-type/PolymorphicArchetypeCards.tsx`）**：
+     - 将案卷审校纪要与口径约定登记（`data-testid="business-decision-input"` / `business-decision-add` / `business-decisions-list`）挂载于 `polymorphic-card-business` 卡片内，并保持 `PolymorphicArchetypeCards.tsx`（779 行）与 `BuiltinCheckpointAndStyleBar.tsx`（619 行）严格遵守 `src/` 单文件 `<= 800` 行架构红线。
+  4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `business-doc-style-bar`、`checkpoint-quick-presets` 及 `business-apply-style-btn` 交互断言，验证商务版式与审校护栏一键同步至项目 L2 强制约束库。
+### Phase P20：L2 约束规则批量启停与 Glob 触发测试器、里程碑阶段筛选与路线图 Markdown 导出、概览 L1 宪章状态与快捷快照（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **L2 强制约束规则批量启停、Glob 触发测试器与规则清单 Markdown 导出（`src/features/project-type/ConstraintManager.tsx`，438 行）**：
+     - 新增当前分类下约束规则的一键批量启停按钮（`data-testid="constraint-batch-enable"` / `data-testid="constraint-batch-disable"`）与一键复制生效 L2 约束规则 Markdown 清单按钮（`data-testid="constraint-copy-md-btn"`）；
+     - 新增交互式 **Glob 路径触发测试栏**（`data-testid="constraint-glob-tester-bar"` / `data-testid="constraint-glob-test-input"`），输入工作区相对路径即可实时计算命中规则数量（`data-testid="constraint-glob-match-count"`）并在规则卡片上高亮标注 `当前路径命中`（`data-testid="constraint-glob-hit-{id}"`）。
+  2. **阶段与里程碑管理器进度汇总、阶段胶囊筛选与路线图 Markdown 导出（`src/features/project-type/MilestoneManager.tsx`，445 行）**：
+     - 新增总体达成进度汇总与阶段筛选胶囊栏（`data-testid="milestone-manager-progress"` / `data-testid="milestone-stage-filter-bar"`），支持按项目形态生命周期阶段筛选里程碑并展示中文阶段名称；
+     - 新增一键复制里程碑路线图 Markdown 按钮（`data-testid="milestone-copy-roadmap-btn"`），便于直接粘贴至项目周报或 `SAGE.md`。
+  3. **项目概览 L1 宪章就绪徽标与一键快捷快照留痕（`src/features/project-type/ProjectOverviewWidgets.tsx`，142 行）**：
+     - 在 `workspace-vcs-summary-widget` 中展示 `L1 SAGE.md 已就绪 / 待初始化` 状态徽标（`data-testid="workspace-charter-status-badge"`）及工作区受管文件总数；
+     - 新增 **「快捷快照」** 按钮（`data-testid="overview-quick-checkpoint-btn"`），支持在项目概览页或侧边栏展开槽位一键创建当前阶段内置快照并刷新快照计数。
+  4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `workspace-charter-status-badge`、`overview-quick-checkpoint-btn`、`constraint-glob-tester-bar`、`constraint-glob-match-count`、`milestone-manager-progress`、`milestone-stage-filter-bar` 及 `milestone-copy-roadmap-btn` 端到端断言。
+### Phase P21：M3 AI 项目健康顾问与 M5 代码→Wiki 面板概览挂载、M2 知识提取绑定会话下拉联动、创建向导 L5 只读白名单预设（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **M3 AI 项目健康顾问与 M5 代码→Wiki 生成面板挂载（`src/features/project-type/ProjectOverviewWidgets.tsx`、`ProjectAdvisorCard.tsx`、`WikiGenerationPanel.tsx`）**：
+     - 在 `ProjectOverviewWidgets` 中正式挂载 `ProjectAdvisorCard`（`data-testid="project-advisor-card"`），为所有形态项目提供健康度评分、风险识别与改进建议；并为 `coding` 形态项目挂载 `WikiGenerationPanel`（`data-testid="wiki-generation-panel"` / `data-testid="wiki-preview-btn"`）；
+     - 为 `ProjectAdvisorCard` 增加 `typeof projectApi?.getAdvice === 'function'` 安全守卫，确保离线或精简 Mock 测试环境下平滑降级。
+  2. **M2 对话知识提取面板绑定项目会话下拉联动（`src/features/project-type/KnowledgeExtractionPanel.tsx`，256 行）**：
+     - 自动拉取 `projectApi.listSessions(projectId)` 并渲染项目已绑定会话下拉选择器（`data-testid="knowledge-session-select"`），默认预选最近会话，免除用户手动查找并复制会话 UUID 的繁琐操作。
+  3. **创建向导 Step 3 新增 L5 跨目录只读白名单预设挂载（`src/features/project-type/ProjectCreationWizard.tsx`，517 行）**：
+     - 在向导第 3 步新增按形态推荐的 L5 跨目录只读参考路径复选框组（`data-testid="wizard-allowed-paths-presets"`，如企业合同范本库、全局 Zotero 文献库、跨仓共享 SDK 等），创建项目时自动调用 `projectApi.updateAllowedPaths` 完成挂载。
+  4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `project-advisor-card` 与 `knowledge-session-select` 端到端渲染与数据联动断言。
+
+### Phase P22：M2 知识提取确认后画像自动刷新、M4 语义检索跨项目联动与片段复制、M5 全形态 Wiki 生成与 Chat 顶栏项目多态阶段徽标（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **M2 对话知识提取确认后自动刷新 L3 项目画像（`src/features/project-type/StudioProfileTabPanel.tsx` & `ProjectArchetypeStudio.tsx`）**：
+     - 修复 `StudioProfileTabPanel` 中 `KnowledgeExtractionPanel` 的 `onConfirmed` 回调原先误绑至手动草稿提交函数 `onAddEntry` 的问题；新增 `onRefreshProfile` 回调，在知识提取确认入库后自动重新拉取当前项目的 `MEMORY.md` 画像列表（`loadActiveProfile(activeProject.path)`）。
+  2. **M4 语义检索面板跨项目响应式刷新与命中片段一键复制（`src/features/project-type/SemanticSearchPanel.tsx`）**：
+     - 将索引统计加载从一次性 `useState` 初始化改为监听 `projectId` 的 `useEffect`，切换治理项目时自动清空旧检索结果并同步新项目索引统计；
+     - 新增手动「刷新索引统计」按钮（`data-testid="semantic-stats-refresh-btn"`）与检索命中片段一键「复制片段」按钮（`data-testid="semantic-hit-copy-{idx}"`），并补充 `typeof projectApi?.getMaterialIndexingStats === 'function'` 安全守卫。
+  3. **M5 项目 Wiki 自动生成面板全形态开放与跨项目状态重置（`src/features/project-type/ProjectOverviewWidgets.tsx` & `WikiGenerationPanel.tsx`）**：
+     - 在 `ProjectOverviewWidgets` 中将 `WikiGenerationPanel`（`data-testid="wiki-generation-panel"`）向四大项目形态全面开放，按 `projectType` 动态展示代码工程、商务案卷、科研课题与个人知识空间的 Wiki 生成说明，并在切换项目时自动重置预览状态。
+  4. **Chat 顶栏项目徽标多态类型、阶段胶囊与工作台快捷入口（`src/widgets/chat/ProjectBadge.tsx` & `src/pages/chat/ChatHeaderBar.tsx`）**：
+     - 当当前会话绑定的工作区属于已登记项目时，在 Chat 顶栏 `ProjectBadge` 内联展示项目形态徽章（`data-testid="chat-project-type-badge"`）与当前生命周期阶段胶囊（`data-testid="chat-project-stage-badge"`），并提供一键跳转 `/projects` 项目工作台的快捷按钮（`data-testid="chat-project-workbench-btn"`）。
+  5. **单元与集成测试加固（`ProjectBadge.test.tsx` & `ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `chat-project-type-badge`、`chat-project-stage-badge`、`chat-project-workbench-btn`、`wiki-generation-panel`、`semantic-search-panel` 及 `semantic-stats-refresh-btn` 端到端测试断言。
+### Phase P23：M3 顾问建议一键转入 M1 任务分解闭环、四形态任务拆解预设、L5 只读白名单 Markdown 导出与侧边栏项目阶段徽标（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **M3 → M1 顾问建议一键转入任务分解闭环（`src/features/project-type/ProjectAdvisorCard.tsx` & `ProjectOverviewWidgets.tsx`）**：
+     - 将 `ProjectAdvisorCard` 的 `onDecomposeTask` 回调签名升级为 `(action?: string, reason?: string | null) => void`，并在改进建议项旁渲染「分解为任务」按钮（`data-testid="advisor-decompose-suggestion-{idx}"`）；
+     - 在 `ProjectOverviewWidgets` 中挂载 `TaskDecomposeDialog` 并注入 `onDecomposeTask` 回调，点击任意顾问建议即可直接打开任务分解对话框并自动预填需求描述（`sug.action`）与补充上下文（`sug.reason`）。
+  2. **M1 任务分解对话框四形态快捷需求预设与中文阶段映射（`src/features/project-type/TaskDecomposeDialog.tsx` & `MilestoneManager.tsx`）**：
+     - 新增 `projectType`、`initialRequirement`、`initialContext` 属性，内置四大项目形态（软件工程、一般档案与文书、科研课题、个人事务与PKM）快捷拆解需求预设胶囊栏（`data-testid="decompose-archetype-presets"` / `data-testid="decompose-preset-{idx}"`）；
+     - 在里程碑树预览节点（`MilestoneTreeItem`）中根据当前项目形态蓝图将英文阶段 ID 自动映射为中文阶段名称（如 `立卷归集`、`文书编制`、`文献调研`），并在 `release/win7` 的 `MilestoneManager.tsx` 中同步补齐「AI 任务分解」入口（`data-testid="ai-decompose-tasks-btn"`）。
+  3. **L5 跨目录只读白名单配置一键复制 Markdown（`src/features/project-type/StudioMaterialsAndProfilePanels.tsx`）**：
+     - 在 `StudioAllowedPathsTabPanel` 标题栏新增「复制白名单配置」按钮（`data-testid="allowed-paths-copy-md-btn"`），支持将当前项目的 L5 跨目录只读白名单路径一键导出为 Markdown 清单。
+  4. **侧边栏项目列表行内联展示当前生命周期阶段胶囊（`src/widgets/sidebar/sections/ProjectSection.tsx`）**：
+     - 当项目已设置 `projectStage` 时，在侧边栏项目行 `ProjectTypeBadge` 旁内联展示当前形态对应的中文生命周期阶段胶囊（`data-testid="project-row-stage-badge"`）。
+  5. **单元与集成测试加固（`ProjectArchetypeStudio.test.tsx` & `ProjectSection.test.tsx`）**：
+     - 新增 `advisor-toggle-details-btn`、`advisor-decompose-suggestion-0`、`decompose-archetype-presets`、`decompose-requirement-input`、`allowed-paths-copy-md-btn` 及 `project-row-stage-badge` 端到端断言。
+### Phase P24：M2 知识提取跨项目状态隔离与全选/清空切换、M5 Wiki 生成转入 L4 受控资料入库闭环与 L1/L2/L4 Markdown 导出（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **M2 对话知识提取跨项目状态隔离与全选/清空批量切换（`src/features/project-type/KnowledgeExtractionPanel.tsx`）**：
+     - 切换治理项目（`projectId` 变化）时自动调用 `resetPanel()` 并重置 `sessionId` 至新项目最近绑定的会话，防止旧项目的会话 ID 或待审条目跨项目残留；
+     - 在审核阶段新增「全选建议 / 清空选择」按钮（`data-testid="knowledge-toggle-select-all"`）与单条目复选框标识（`data-testid="knowledge-entry-checkbox-{idx}"`），并补充 `extractKnowledge` / `confirmKnowledge` 的函数存在性安全守卫。
+  2. **M5 Wiki 自动生成 → L4 受控资料一键入库闭环与扫描/生成摘要复制（`src/features/project-type/WikiGenerationPanel.tsx`）**：
+     - 在扫描预览阶段新增「复制扫描摘要」按钮（`data-testid="wiki-copy-preview-btn"`）、增量更新复选框标识（`data-testid="wiki-incremental-checkbox"`）及「生成 Wiki」按钮标识（`data-testid="wiki-generate-btn"`）；
+     - 在生成完成阶段新增「复制 Wiki 清单」按钮（`data-testid="wiki-copy-manifest-btn"`）以及每个生成页面旁的 **「纳入 L4 资料」** 按钮（`data-testid="wiki-ingest-material-{idx}"`），一键调用 `projectApi.addMaterialFromFile(projectId, wikiPath)` 将生成的 Wiki 文档纳入 L4 受控语料池并标记 `已纳入 L4`。
+  3. **L1+L2 宪章与系统指令及 L4 生效受控资料 Markdown 导出（`src/features/project-type/StudioMaterialsAndProfilePanels.tsx`）**：
+     - 在 `StudioCharterTabPanel` 新增「复制宪章与指令」按钮（`data-testid="studio-charter-copy-md-btn"`），支持一键导出 L1 `SAGE.md` 与 L2 项目目标/系统指令的组合 Markdown；
+     - 在 `StudioMaterialsTabPanel` 新增「复制生效资料摘要」按钮（`data-testid="studio-materials-copy-md-btn"`），支持一键导出当前启用参与上下文的所有 L4 资料摘要。
+  4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `wiki-preview-btn` → `wiki-copy-preview-btn` → `wiki-generate-btn` → `wiki-copy-manifest-btn` → `wiki-ingest-material-0`、`studio-charter-copy-md-btn` 及 `knowledge-extract-btn` → `knowledge-toggle-select-all` → `knowledge-confirm-btn` 端到端测试断言。
+### Phase P25：M4 四形态语义检索词预设与全量结果导出、L4 单条资料向量索引重建、概览约束与里程碑中文类别/阶段映射及刷新（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **M4 四形态语义检索词预设与全量检索结果 Markdown 导出（`src/features/project-type/SemanticSearchPanel.tsx` & `ProjectArchetypeStudio.tsx`）**：
+     - 将当前项目形态 `projectType` 透传至 `StudioMaterialsTabPanel` 与 `SemanticSearchPanel`，内置四大形态高频语义检索预设胶囊栏（`data-testid="semantic-query-presets"` / `data-testid="semantic-preset-{idx}"`），点击任意预设词即可自动填入并立即发起语义检索；
+     - 在检索结果列表顶部新增「复制全部检索结果」按钮（`data-testid="semantic-copy-all-btn"`），支持将命中的全部文本片段、材料 ID、chunk 序号与余弦相似度一键导出为结构化 Markdown。
+  2. **L4 受控资料单条向量索引手动重建（`src/features/project-type/StudioMaterialsAndProfilePanels.tsx`）**：
+     - 在 `StudioMaterialsTabPanel` 每条受控资料行操作区新增「重建索引」按钮（`data-testid="studio-material-reindex-{id}"`），支持调用 `projectApi.reindexMaterial(projectId, materialId)` 手动重建单条资料的向量分块索引并刷新列表。
+  3. **概览约束统计与里程碑进度卡片中文映射及手动刷新（`src/features/project-type/ConstraintSummaryWidget.tsx` & `MilestoneProgressWidget.tsx`）**：
+     - 在 `ConstraintSummaryWidget`（`data-testid="constraint-summary-widget"`）中新增 15 类约束规则的中文名称映射表与手动刷新按钮（`data-testid="constraint-summary-refresh-btn"`）；
+     - 在 `MilestoneProgressWidget`（`data-testid="milestone-progress-widget"`）中为最近里程碑条目增加中文生命周期阶段胶囊（`data-testid="milestone-summary-stage-{id}"`）与手动刷新按钮（`data-testid="milestone-summary-refresh-btn"`）。
+  4. **单元与集成测试加固（`src/features/project-type/ProjectArchetypeStudio.test.tsx`）**：
+     - 新增 `constraint-summary-refresh-btn`、`milestone-summary-refresh-btn`、`milestone-summary-stage-ms-1`、`semantic-query-presets`、`semantic-preset-0` 及 `semantic-copy-all-btn` 端到端测试断言。
+### Phase P26：四形态约束规则内容模板、里程碑交付物模板与相对截止日期、Git 状态报告导出、创建向导 L2 目标/指令双预设（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **约束编辑器四形态规则示例模板与全局触发快捷按钮（`src/features/project-type/ConstraintEditor.tsx`）**：
+     - 为 15 类约束规则预设胶囊补充中文名称标注，并新增四大形态规则内容示例模板栏（`data-testid="constraint-editor-content-presets"` / `data-testid="constraint-content-preset-{idx}"`），支持一键填入推荐类别、规则正文与推荐优先级；
+     - 在目录触发预设栏新增 `always (全局)` 按钮（`data-testid="constraint-glob-always-btn"`），便于从子目录 Glob 快速切回全局生效。
+  2. **里程碑编辑器四形态节点交付物模板与快捷相对截止日期（`src/features/project-type/MilestoneEditor.tsx`）**：
+     - 新增四大形态里程碑节点模板胶囊栏（`data-testid="milestone-editor-templates"` / `data-testid="milestone-template-{idx}"`），一键填充阶段性标题、交付物描述、生命周期阶段 ID 与排序权重；
+     - 在截止日期输入框下方新增相对日期快捷胶囊（`+3天`、`+7天`、`+14天`、`+30天` 与 `清空`，`data-testid="milestone-due-presets"` / `data-testid="milestone-due-plus-{days}"` / `data-testid="milestone-due-clear"`）。
+  3. **Git 仓库状态与近期提交 Markdown 报告一键导出（`src/features/project-type/GitStatusWidget.tsx`）**：
+     - 在 `GitStatusWidget` 标题栏新增「复制报告」按钮（`data-testid="git-status-copy-md-btn"`），支持将当前分支、已暂存/已修改/未跟踪文件列表及最近 5 条提交记录一键格式化为结构化 Markdown。
+  4. **项目创建向导确认步 L2 目标与系统指令双输入框及四形态快捷预设（`src/features/project-type/ProjectCreationWizard.tsx`）**：
+     - 在向导第 3 步（确认信息）新增 L2 系统高优指令输入框（`data-testid="wizard-instructions-input"`）与四大形态目标/指令预设胶囊（`data-testid="wizard-goal-presets"` / `data-testid="wizard-goal-preset-{idx}"`），并在创建项目时将 `description` 与 `instructions` 同步写入项目 L2 上下文管线。
+  5. **单元测试与门禁加固（`ConstraintSummaryWidget.test.tsx` & `MilestoneProgressWidget.test.tsx`）**：
+     - 新增 `ConstraintEditor`、`GitStatusWidget`、`MilestoneEditor` 与 `ProjectCreationWizard` 的 Phase P26 交互单测断言。
+### Phase P27：约束管理器四形态 Glob 样例与关键词检索、里程碑状态筛选与单节点 AI 子任务拆解、拆解方案勾选导出、AI 顾问报告导出（已交付）
+
+- **交付时间**：2026-10-13
+- **核心改进项**：
+  1. **约束管理器四形态 Glob 触发样例胶囊与关键词过滤（`src/features/project-type/ConstraintManager.tsx`）**：
+     - 在 Glob 路径触发测试栏内置四大形态高频路径样例胶囊（`data-testid="constraint-glob-sample-{idx}"`）与「清空」按钮（`data-testid="constraint-glob-clear-btn"`），支持一键模拟目标文件命中的约束规则；
+     - 新增规则关键词搜索输入框（`data-testid="constraint-search-input"`），支持按规则正文、类别或触发 Glob 实时筛选。
+  2. **里程碑管理器状态筛选栏与单节点 AI 子任务拆解联动（`src/features/project-type/MilestoneManager.tsx`）**：
+     - 在里程碑进度栏新增状态筛选胶囊栏（`全部状态` / `进行中` / `待开始` / `已完成` / `阻塞`，`data-testid="milestone-status-filter-{id}"`），支持与生命周期阶段联合过滤；
+     - 在每个里程碑条目操作区新增「AI 拆解子任务」按钮（`data-testid="milestone-decompose-{id}"`），点击可将当前里程碑标题与描述一键带入 `TaskDecomposeDialog` 发起细粒度子任务拆解。
+  3. **M1 AI 任务拆解预览勾选采纳与 Markdown 方案导出（`src/features/project-type/TaskDecomposeDialog.tsx`）**：
+     - 在拆解预览阶段新增主节点复选框（`data-testid="decompose-node-checkbox-{idx}"`），支持按需勾选要采纳创建的里程碑分支；
+     - 新增「复制方案 Markdown」按钮（`data-testid="decompose-copy-md-btn"`），一键将需求、分解思路与多级里程碑树导出为 Markdown。
+  4. **M3 AI 顾问健康诊断报告一键导出（`src/features/project-type/ProjectAdvisorCard.tsx`）**：
+     - 在 `ProjectAdvisorCard` 标题栏新增「复制诊断」按钮（`data-testid="advisor-copy-md-btn"`），支持将项目健康评分、风险项与改进建议一键导出为结构化 Markdown 报告。
+  5. **单元测试与门禁加固（`ConstraintSummaryWidget.test.tsx` & `MilestoneProgressWidget.test.tsx`）**：
+     - 新增 `ConstraintManager`、`ProjectAdvisorCard`、`MilestoneManager` 与 `TaskDecomposeDialog` 的 Phase P27 端到端测试断言。
+
+### Phase P28：项目画像四类原型预设与导出、项目级 Hook 取消信任、对话顶栏路径复制与概览直接拆解（2026-10-13 已完成）
+
+1. **项目画像卡片四类原型预设、关键词/类别筛选与一键复制 Markdown（`src/widgets/memory/ProjectProfileCard.tsx`）**
+   - 在新增项目画像编辑器中补充**四类原型画像预设**胶囊条（`project-profile-presets` / `project-profile-preset-${idx}`），覆盖代码工程约定、科学研究铁律、公文商务校核与个人知识卡片四类长期记忆预设。
+   - 新增关键词实时搜索（`project-profile-search-input`）与类别筛选胶囊（`project-profile-cat-filter-${cat}`），并在顶栏提供 **`复制 MD`**（`project-profile-copy-md-btn`）与**手动刷新**（`project-profile-refresh-btn`），一键导出项目级 `MEMORY.md`。
+2. **项目级 Hook 安全治理面板取消信任、路径复制与手动刷新（`src/widgets/settings/ProjectHooksPanel.tsx`）**
+   - 在已信任项目级 Hook 状态下补齐 **`取消信任`** 按钮（`project-hooks-untrust-btn`），支持随时撤销工作区 Hook 执行授权；同时提供 **`复制路径`**（`project-hooks-copy-path-btn`）与 **`刷新`**（`project-hooks-refresh-btn`）按钮。
+3. **对话头部项目徽标版本保护标识与工作区路径一键复制（`src/widgets/chat/ProjectBadge.tsx`）**
+   - 在 Chat 头部项目徽标内补充版本保护模式短标签（`chat-project-vcs-badge`：`Git` / `快照`），并在徽标旁新增 **`复制项目路径`** 快捷按钮（`chat-project-copy-path-btn`）。
+4. **项目概览工作台直接触发 AI 任务拆解与一键复制治理概览 Markdown（`src/features/project-type/ProjectOverviewWidgets.tsx`）**
+   - 在多态项目阶段与版本保护概览卡片（`workspace-vcs-summary-widget`）新增 **`AI 拆解任务`** 快捷入口（`overview-open-decompose-btn`）与 **`复制概览 MD`** 按钮（`overview-copy-summary-md-btn`），支持直接打开 `TaskDecomposeDialog` 或导出项目治理概览 Markdown。
+
+### Phase P29：工作台 L3 画像检索过滤、M2 知识提取建议导出、自动检测阶段管线预览与选择器重新检测（2026-10-13 已完成）
+
+1. **L3 项目演化记忆画像面板关键词检索、类别过滤与中文类别标签（`src/features/project-type/StudioProfileTabPanel.tsx`）**
+   - 新增关键词实时搜索输入框（`studio-profile-search-input`）与六档类别过滤胶囊（`studio-profile-filter-${cat}`：`全部类别` / `约定` / `架构/方法论` / `决策/审校口径` / `核心目标/研究问题` / `阶段发现/备注`），以及筛选为空时的一键清空按钮（`studio-profile-clear-filter`）。
+   - 为每条冻结画像条目补充中英对照类别标签（如 `约定 (convention)`），并在复制 `MEMORY.md` 视图时同步输出中文类别说明。
+2. **AI 对话知识提取面板（M2）会话手动刷新与提取建议一键复制 Markdown（`src/features/project-type/KnowledgeExtractionPanel.tsx`）**
+   - 在输入栏新增 **`刷新项目会话列表`** 按钮（`knowledge-refresh-sessions-btn`），支持按需重新拉取项目已绑定的会话列表。
+   - 在审核阶段顶栏新增 **`复制提取结果 MD`** 按钮（`knowledge-copy-md-btn`），支持在确认入库前一键复制提取思路与全部知识建议的结构化 Markdown。
+3. **类型自动检测预览组件推荐阶段管线、治理套件统计与检测依据导出（`src/features/project-type/TypeDetectionPreview.tsx`）**
+   - 在蓝图预览卡片中新增**推荐阶段管线预览**（`detection-stages-preview`）与**推荐治理套件统计徽标**（`detection-governance-stats`：推荐里程碑数与细分规范包数）。
+   - 顶栏新增 **`复制检测依据`** 按钮（`detection-copy-md-btn`），一键导出包含检测形态、置信度、推荐版本策略、阶段管线与检测信号的结构化 Markdown 报告。
+4. **项目类型选择器手动重新检测、一键采用检测结果与卡片阶段管线展示（`src/features/project-type/ProjectTypeSelector.tsx`）**
+   - 在自动检测提示横幅中新增 **`采用检测结果`**（`selector-apply-detected-btn`）与 **`重新检测`**（`selector-redetect-btn`）按钮，并在四类项目形态卡片底部展示完整阶段流转管线摘要。
+
+### Phase P30：约束摘要高优规则预览、里程碑逾期预警、M3 风险固化为 AI 约束闭环与侧边栏 L2/L4 增强（2026-10-13 已完成）
+
+1. **约束摘要 Widget 高优规则展开预览与生效规则一键导出（`src/features/project-type/ConstraintSummaryWidget.tsx`）**
+   - 顶栏新增 **`复制规则`** 按钮（`constraint-summary-copy-md-btn`），支持将全部已启用约束按优先级排序导出为结构化 Markdown 清单。
+   - 新增 **`查看高优规则预览 / 收起高优规则预览`** 折叠区（`constraint-summary-preview-toggle` / `constraint-summary-preview-list`），在概览卡片内直接展示 Top 3 高优先级规则的优先级徽标、触发模式与规则正文。
+2. **里程碑进度 Widget 逾期节点自动预警与进度报告导出（`src/features/project-type/MilestoneProgressWidget.tsx`）**
+   - 自动检测未完成且截止日期早于当前日期的里程碑，在进度栏旁渲染琥珀色预警徽标（`milestone-summary-overdue-badge`：`逾期 N 项`）。
+   - 顶栏新增 **`复制进度`** 按钮（`milestone-summary-copy-md-btn`），一键导出总体完成率、状态分布与带阶段标签的完整里程碑复选框列表。
+3. **AI 顾问卡片 M3 风险一键固化为 AI 行为约束规则闭环（`src/features/project-type/ProjectAdvisorCard.tsx`）**
+   - 在展开的风险列表中为每条风险项新增 **`固化为约束 / 已固化约束`** 按钮（`advisor-risk-to-constraint-${idx}`），点击后自动调用 `projectApi.createConstraint` 生成 `risk_guard` 类别高优防护规则，形成 **“M3 诊断风险 → L1/L2 AI 行为约束”** 的治理闭环。
+4. **侧边栏/工作台展开面板 L2 四形态快捷模板与 L4 资料搜索/合集导出（`src/widgets/sidebar/sections/ProjectExpandedPanels.tsx`）**
+   - 在 `ProjectOverviewPanel` 中新增四形态 L2 目标与交付指令快捷模板胶囊（`sidebar-overview-preset-${idx}`）及 **`复制指令 MD`** 按钮（`sidebar-overview-copy-md`）。
+   - 在 `ProjectMaterialsPanel` 中新增侧边栏受控资料实时关键词搜索框（`sidebar-materials-search-input`）与 **`复制资料 MD`** 按钮（`sidebar-materials-copy-md`）。
+
+### Phase P31：项目工作台全局台账工具栏、侧边栏 Git 变更筛选导出、M4→L3 画像沉淀与 M5 Wiki 批量纳入 L4（2026-10-13 已完成）
+
+1. **项目工作台全局统计、新建向导启动器与项目台账导出（`src/pages/Projects.tsx`）**
+   - 在项目工作台顶部新增全局摘要与快捷操作栏（`project-workbench-toolbar`），实时汇总已纳管项目总数（`workbench-project-count`）与四类项目形态分布徽标（`workbench-archetype-counts`）。
+   - 新增 **`新建/纳管项目向导`** 按钮（`workbench-open-wizard-btn`）直连 `ProjectCreationWizard`，以及 **`导出项目台账 MD`** 按钮（`workbench-export-registry-md-btn`）一键导出全量受控项目 Markdown 表格。
+2. **侧边栏 Git 状态面板变更类别筛选与 Markdown 复制（`src/widgets/sidebar/sections/GitStatusSection.tsx`）**
+   - 在侧边栏 Git 变更列表上方新增四档状态过滤胶囊（`git-sider-filter-all` / `staged` / `modified` / `untracked`：`全部` / `暂存` / `修改` / `未跟踪`）。
+   - 顶栏新增 **`复制 Git 变更清单 Markdown`** 按钮（`git-sider-copy-md-btn`）。
+3. **语义检索面板（M4）相似度阈值过滤与一键沉淀至 L3 项目画像（`src/features/project-type/SemanticSearchPanel.tsx`）**
+   - 新增三档相似度阈值筛选胶囊（`semantic-score-filter-0` / `50` / `75`：`全部` / `≥50%` / `≥75%`）。
+   - 在每条检索命中卡片顶栏新增 **`沉淀至 L3 画像 / 已沉淀 L3`** 按钮（`semantic-hit-save-profile-${idx}`），打通 **“M4 语义检索高价值片段 → L3 项目记忆画像”** 的知识闭环。
+4. **AI 代码→Wiki 生成面板（M5）预览文件过滤与全量批量纳入 L4 资料池（`src/features/project-type/WikiGenerationPanel.tsx`）**
+   - 在扫描预览阶段新增文件路径与语言实时筛选框（`wiki-preview-filter-input`）。
+   - 在生成完成阶段顶栏新增 **`全部纳入 L4 资料池 / 已全部纳入 L4`** 按钮（`wiki-ingest-all-btn`），支持一键批量将全部生成的 Wiki 文档纳入 L4 受控资料池。
+
