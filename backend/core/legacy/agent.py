@@ -16,7 +16,7 @@ import time
 import uuid
 from collections import deque
 from threading import Lock
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Optional, Tuple
 
 from backend.chat.empty_response_guard import (
     EMPTY_RESPONSE_FALLBACK_TEXT,
@@ -72,6 +72,9 @@ from backend.tools.executor import (
     tool_timeout_message,
     validate_required_args,
 )
+
+if TYPE_CHECKING:  # 仅类型标注用，避免 core → ports 的运行期导入边
+    from backend.ports.llm import ModelCapabilities
 
 #: M2b 审查加固: 连续未应答提问上限。超时软结果使循环继续, 若无此限,
 #: 被操纵/犯错的 LLM 可循环提问持续骚扰用户。超限后直接返回错误结果。
@@ -258,6 +261,14 @@ class SageAgent:
     - 调用工具
     - 维护上下文
     """
+
+    #: 能力查询 seam：``(model_id) -> Optional[ModelCapabilities]``。
+    #: 委托给 provider 层实现（见
+    #: ``backend/adapters/out/llm/provider_registry.get_model_capabilities``）
+    #: ——core 不直接 import adapters，保持依赖方向向内。
+    #: 默认 None = **能力未知**，此时按「可能支持 vision」乐观处理，
+    #: 保持既有用户直接注入图片的行为不变。接线由请求路径负责。
+    capability_resolver: Optional[Callable[[str], Optional[ModelCapabilities]]] = None
 
     def __init__(
         self,
@@ -672,24 +683,50 @@ class SageAgent:
         """解析当前 chatModel 的模型 id。
 
         ``chatModel`` 是前端设置概念，``SageAgent`` 不直接持有该字段；
-        后端等价物是 ``self.llm_config.model``。用 getattr 兜底，兼容
-        ``llm_config`` 为 None 的本地模拟模式（此时按空 id 推断能力）。
+        后端等价物是 ``LLMConfig.model``。``llm_config`` 在 ``__init__`` 里
+        一定被赋值（未配置时显式置 None），故这里直接取属性——用
+        ``getattr`` 兜底会把「属性不存在」和「属性为 None」混为一谈，
+        让重构掉属性时只报出难以定位的 NotImplementedError。
         """
-        llm_config = getattr(self, "llm_config", None)
-        return getattr(llm_config, "model", "") or ""
+        if self.llm_config is None:
+            return ""
+        return self.llm_config.model or ""
+
+    def _resolve_model_capabilities(self, model_id: str) -> Optional[ModelCapabilities]:
+        """查询 chatModel 能力。
+
+        Returns:
+            ModelCapabilities: provider seam 给出的能力判定；
+            **None 表示「能力未知」**（未接 resolver，或 resolver 判定失败）。
+            「未知」不等于「不支持」——调用方必须区分二者。
+        """
+        resolver = self.capability_resolver
+        if resolver is None:
+            return None
+        try:
+            return resolver(model_id)
+        except Exception:  # 能力探测失败不应让图片流程崩掉，退回「未知」
+            logger.warning("查询模型 %r 能力失败，按未知处理", model_id, exc_info=True)
+            return None
 
     async def _get_model_capabilities(self, model_id: str) -> List[str]:
-        """推断模型的能力列表。
+        """chatModel 能力列表，供图片路由使用。
 
-        当前按模型 id 关键字推断；model_catalog 的 ``capabilities`` 尚未
-        透传到 agent 层，后续可改为直接读目录解析结果。
+        「未知」与「确认不支持」区别对待：仅在 provider **明确**判定不支持
+        vision 时才不返回 ``"vision"``；能力未知时保守按支持处理，避免功能
+        开关一开就让现有用户的图片请求中途失败（设计文档 §1.2「优先使用
+        对话模型的原生多模态能力」）。
+
+        Args:
+            model_id: chatModel 的模型 id。
+
+        Returns:
+            能力名列表，恒含 ``"chat"``。
         """
         caps = ["chat"]
-        model_lower = model_id.lower() if model_id else ""
-
-        if any(kw in model_lower for kw in ("vision", "gpt-4o", "gemini", "claude-3")):
+        resolved = self._resolve_model_capabilities(model_id)
+        if resolved is None or resolved.vision:
             caps.append("vision")
-
         return caps
 
     async def _prepare_messages_with_images(
@@ -699,8 +736,9 @@ class SageAgent:
     ) -> List[Dict[str, Any]]:
         """根据 chatModel 能力智能处理图片。
 
-        chatModel 原生支持 vision 时直接注入图片（走标准 image_url
-        content 块）；否则降级到 visionModel 生成描述——该路径尚未实现。
+        chatModel 支持（或能力未知）vision 时直接注入图片，走标准
+        ``image_url`` content 块；确认不支持时降级到 visionModel 生成
+        描述——该降级路径尚未实现。
 
         Args:
             messages: 原始消息列表。
@@ -710,7 +748,7 @@ class SageAgent:
             处理后的消息列表。
 
         Raises:
-            NotImplementedError: chatModel 不支持 vision 且降级路径未实现。
+            NotImplementedError: chatModel 确认不支持 vision 且降级未实现。
         """
         if not images:
             return messages
@@ -729,25 +767,35 @@ class SageAgent:
     ) -> List[Dict[str, Any]]:
         """将图片注入到最后一条 user 消息的 content 中。
 
+        ``content`` 已是 content-segment 列表时直接追加图片段；为字符串时
+        先包成 ``{"type": "text"}`` 段。两种形态都避免产出
+        ``{"type": "text", "text": [<list>]}`` 这种畸形消息。
+
         末条不是 user 消息时原样返回——不跨消息搬运，避免把图片塞进
         tool/assistant 消息破坏协议。
+
+        Args:
+            messages: 原始消息列表（不被修改）。
+            images: 图片 data URL 列表。
+
+        Returns:
+            新的消息列表；原列表与其中的 dict 均保持不变。
         """
         if not messages:
             return messages
 
         result = list(messages)
         last_msg = result[-1]
-        if last_msg.get("role") == "user":
-            result[-1] = {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": last_msg.get("content", "")},
-                    *[
-                        {"type": "image_url", "image_url": {"url": img}}
-                        for img in images
-                    ],
-                ],
-            }
+        if last_msg.get("role") != "user":
+            return result
+
+        content = last_msg.get("content", "")
+        segments: List[Dict[str, Any]] = (
+            list(content) if isinstance(content, list) else [{"type": "text", "text": content}]
+        )
+        segments.extend({"type": "image_url", "image_url": {"url": img}} for img in images)
+        # 保留末条消息上的其他字段（如 name），只替换 content
+        result[-1] = {**last_msg, "content": segments}
 
         return result
 
