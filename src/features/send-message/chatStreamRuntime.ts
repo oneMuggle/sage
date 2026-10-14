@@ -445,7 +445,9 @@ export function useChatReattachAndBtw(params: {
             // 显示动态重试提示（与主路径 useChat.ts 同格式）。
             // 文本格式化抽到 retryEventText.ts（主路径/重接路径共用）。
             if (evt.state === 'retry' && evt.retry_info) {
-              useChatStreamStore.getState().replaceContent(sid, messageId, formatRetryEventText(evt.retry_info));
+              useChatStreamStore
+                .getState()
+                .replaceContent(sid, messageId, formatRetryEventText(evt.retry_info));
               useChatStreamStore.getState().setStreamingMeta(sid, messageId, { state: evt.state });
               return;
             }
