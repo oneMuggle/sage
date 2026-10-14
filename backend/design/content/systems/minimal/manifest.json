@@ -1,0 +1,7 @@
+{
+  "id": "minimal",
+  "name": "Minimal",
+  "category": "general",
+  "description": "A stripped-down black-and-white design system. No shadows, no gradients, just content. System-ui font stack, 4px spacing grid.",
+  "tags": ["minimal", "monochrome", "lightweight", "fast"]
+}
