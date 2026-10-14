@@ -17,6 +17,7 @@ from backend.domain.tool_names import (
     CHECKPOINT_TOOLS,
     CODE_SEARCH_TOOLS,
     CONFIG_TOOLS,
+    DESIGN_TOOLS,
     EXEC_TOOLS,
     GIT_TOOLS,
     JOURNAL_TOOLS,
@@ -148,6 +149,12 @@ _PRIMARY_SEED_TOOLS = (
     # SCHEDULE_TOOLS / CONFIG_TOOLS 同模式 coordinator-only，子代理白名单
     # 严禁纳入。
     *TODO_TOOLS,
+    # 2026-10-13 OpenDesign 集成 (Task 13): Design Studio 五件套 —— 两个目录
+    # 查询件 (READ) + 三个产件 (WRITE_LOCAL, 落 HTML 到工作区)。primary 作为
+    # coordinator 代用户「查可用设计系统/模板 → 生成 → 反馈迭代 → 导出」。
+    # 与 TODO_TOOLS / SCHEDULE_TOOLS / CONFIG_TOOLS 同模式 coordinator-only,
+    # 子代理白名单严禁纳入。
+    *DESIGN_TOOLS,
 )
 
 # coder：bash 三件齐备（同上）。2026-09-03 PR #381 把 TerminalTool 重写为

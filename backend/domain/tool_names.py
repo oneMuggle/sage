@@ -182,6 +182,23 @@ SCHEDULE_TOOLS = ("schedule_task", "list_scheduled_tasks", "cancel_scheduled_tas
 # （完成/删除同样改 SQLite）。ToolPolicy 层会按风险分级处理。
 TODO_TOOLS = ("add_todo", "list_todos", "update_todo", "complete_todo", "delete_todo")
 
+# Design Studio 工具面（2026-10-13 OpenDesign 集成 Task 13）：五件套。
+# 两个目录查询件（list_systems / list_templates）为 READ；三个产件
+# （generate / iterate / export）为 WRITE_LOCAL —— generate/iterate 写
+# design_projects + design_artifacts 两张 SQLite 表并在工作区落 HTML；
+# export 只读回最新产物内容，仍按产件族归 WRITE_LOCAL 以便审批闸口
+# 覆盖「把生成物交出工作区」这一动作。
+# 全部无条件注册；``get_design_studio()`` 在执行期解析 studio 是否就绪
+# （未就绪时返回 design_studio_not_initialized，不静默缺工具）——
+# 与 SCHEDULE_TOOLS / TODO_TOOLS 同模式。
+DESIGN_TOOLS = (
+    "design_list_systems",
+    "design_list_templates",
+    "design_generate",
+    "design_iterate",
+    "design_export",
+)
+
 #: 全部静态注册的内置工具名（排序去重）。新增内置工具时把名字加进对应
 #: 分组即可；tests/unit/test_tool_names.py 会对照 register_all_tools 的
 #: 实际注册面校验本清单无遗漏、无多余。
@@ -208,6 +225,7 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
         | set(CONFIG_TOOLS)
         | set(SCHEDULE_TOOLS)
         | set(TODO_TOOLS)
+        | set(DESIGN_TOOLS)
     )
 )
 
@@ -217,6 +235,7 @@ __all__ = [
     "CHECKPOINT_TOOLS",
     "CODE_SEARCH_TOOLS",
     "CONFIG_TOOLS",
+    "DESIGN_TOOLS",
     "EXEC_TOOLS",
     "FILE_TOOLS",
     "GIT_TOOLS",

@@ -1,0 +1,7 @@
+{
+  "id": "corporate",
+  "name": "Corporate",
+  "category": "business",
+  "description": "A professional blue-and-gray design system for business applications. Inter typeface, 8px spacing grid, subtle shadows for depth.",
+  "tags": ["corporate", "professional", "business", "blue"]
+}

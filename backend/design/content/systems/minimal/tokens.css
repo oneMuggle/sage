@@ -1,0 +1,47 @@
+/* Minimal Design System — CSS Custom Properties */
+/* Black/white, system-ui, 4px grid, no shadows */
+
+:root {
+  /* ── Colors ───────────────────────────────────────────── */
+  --color-bg:            #ffffff;
+  --color-fg:            #000000;
+  --color-muted:         #666666;
+  --color-border:        #cccccc;
+  --color-accent:        #000000;
+  --color-accent-hover:  #333333;
+  --color-error:         #cc0000;
+  --color-success:       #006600;
+
+  /* ── Typography ───────────────────────────────────────── */
+  --font-family:         system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-size-xs:        0.75rem;   /* 12px */
+  --font-size-sm:        0.875rem;  /* 14px */
+  --font-size-base:      1rem;      /* 16px */
+  --font-size-lg:        1.25rem;   /* 20px */
+  --font-size-xl:        1.5rem;    /* 24px */
+  --font-size-2xl:       2rem;      /* 32px */
+  --font-weight-normal:  400;
+  --font-weight-bold:    700;
+  --line-height:         1.5;
+
+  /* ── Spacing (4px grid) ──────────────────────────────── */
+  --space-1:  0.25rem;  /*  4px */
+  --space-2:  0.5rem;   /*  8px */
+  --space-3:  0.75rem;  /* 12px */
+  --space-4:  1rem;     /* 16px */
+  --space-6:  1.5rem;   /* 24px */
+  --space-8:  2rem;     /* 32px */
+  --space-12: 3rem;     /* 48px */
+  --space-16: 4rem;     /* 64px */
+
+  /* ── Borders ──────────────────────────────────────────── */
+  --border-width:  1px;
+  --border-radius: 0px;
+
+  /* ── Shadows ──────────────────────────────────────────── */
+  --shadow: none;
+
+  /* ── Transitions ──────────────────────────────────────── */
+  --transition-fast:   100ms ease;
+  --transition-normal: 200ms ease;
+}

@@ -1,17 +1,17 @@
 {
   "version": 1,
   "files": {
-    "backend/agents/profiles.py": 1008,
-    "backend/api/legacy_routes.py": 2370,
-    "backend/api/llm_proxy_routes.py": 1169,
+    "backend/agents/profiles.py": 1022,
+    "backend/api/legacy_routes.py": 2412,
+    "backend/api/llm_proxy_routes.py": 1171,
     "backend/api/orchestration_router.py": 807,
-    "backend/api/wiki_routes.py": 1654,
+    "backend/api/wiki_routes.py": 1656,
     "backend/application/services/chat_service.py": 1233,
     "backend/core/legacy/agent.py": 2670,
-    "backend/core/legacy/llm_client.py": 1172,
+    "backend/core/legacy/llm_client.py": 1176,
     "backend/data/database.py": 1995,
     "backend/data/session_repo.py": 1057,
-    "backend/main.py": 1516,
+    "backend/main.py": 1567,
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1188,
     "backend/office/excel.py": 952,
@@ -60,6 +60,7 @@
     "src/shared/api/projectApi.ts": 1024,
     "src/shared/api/projectApiTypes.ts": 937,
     "src/widgets/chat/ChatInput.tsx": 809,
-    "src/features/send-message/useChat.ts": 803
+    "src/features/send-message/useChat.ts": 803,
+    "backend/tests/unit/test_design_routes.py": 975
   }
 }
