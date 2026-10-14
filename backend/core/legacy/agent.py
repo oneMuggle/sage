@@ -668,6 +668,89 @@ class SageAgent:
         # 让 LLMError 透传给调用方，由 chat() 统一处理
         return await self.llm_client.chat(messages)
 
+    def _resolve_chat_model_id(self) -> str:
+        """解析当前 chatModel 的模型 id。
+
+        ``chatModel`` 是前端设置概念，``SageAgent`` 不直接持有该字段；
+        后端等价物是 ``self.llm_config.model``。用 getattr 兜底，兼容
+        ``llm_config`` 为 None 的本地模拟模式（此时按空 id 推断能力）。
+        """
+        llm_config = getattr(self, "llm_config", None)
+        return getattr(llm_config, "model", "") or ""
+
+    async def _get_model_capabilities(self, model_id: str) -> List[str]:
+        """推断模型的能力列表。
+
+        当前按模型 id 关键字推断；model_catalog 的 ``capabilities`` 尚未
+        透传到 agent 层，后续可改为直接读目录解析结果。
+        """
+        caps = ["chat"]
+        model_lower = model_id.lower() if model_id else ""
+
+        if any(kw in model_lower for kw in ("vision", "gpt-4o", "gemini", "claude-3")):
+            caps.append("vision")
+
+        return caps
+
+    async def _prepare_messages_with_images(
+        self,
+        messages: List[Dict[str, Any]],
+        images: List[str],
+    ) -> List[Dict[str, Any]]:
+        """根据 chatModel 能力智能处理图片。
+
+        chatModel 原生支持 vision 时直接注入图片（走标准 image_url
+        content 块）；否则降级到 visionModel 生成描述——该路径尚未实现。
+
+        Args:
+            messages: 原始消息列表。
+            images: 图片 data URL 列表。
+
+        Returns:
+            处理后的消息列表。
+
+        Raises:
+            NotImplementedError: chatModel 不支持 vision 且降级路径未实现。
+        """
+        if not images:
+            return messages
+
+        chat_model_caps = await self._get_model_capabilities(self._resolve_chat_model_id())
+
+        if "vision" in chat_model_caps:
+            return self._inject_images_as_content(messages, images)
+
+        raise NotImplementedError("visionModel fallback not yet implemented")
+
+    def _inject_images_as_content(
+        self,
+        messages: List[Dict[str, Any]],
+        images: List[str],
+    ) -> List[Dict[str, Any]]:
+        """将图片注入到最后一条 user 消息的 content 中。
+
+        末条不是 user 消息时原样返回——不跨消息搬运，避免把图片塞进
+        tool/assistant 消息破坏协议。
+        """
+        if not messages:
+            return messages
+
+        result = list(messages)
+        last_msg = result[-1]
+        if last_msg.get("role") == "user":
+            result[-1] = {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": last_msg.get("content", "")},
+                    *[
+                        {"type": "image_url", "image_url": {"url": img}}
+                        for img in images
+                    ],
+                ],
+            }
+
+        return result
+
     def _is_pool_eligible_call(  # noqa: PLR0911 — 守卫链逐条 return 可读性更好
         self, tc: Any, enforcer: Any
     ) -> bool:
