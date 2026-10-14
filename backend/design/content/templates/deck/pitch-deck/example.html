@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Q3 Business Review</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-snap-type: y mandatory; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #1a1a2e;
+      background: #f7f7fb;
+    }
+
+    section {
+      min-height: 100vh;
+      scroll-snap-align: start;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 4rem 8vw;
+    }
+
+    /* Title slide */
+    .slide-title {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #fff;
+      text-align: center;
+    }
+    .slide-title h1 { font-size: 3.5rem; margin-bottom: 1rem; }
+    .slide-title .team { font-size: 1.25rem; opacity: 0.8; margin-bottom: 0.5rem; }
+    .slide-title .occasion { font-size: 1rem; opacity: 0.6; }
+
+    /* Beat slides */
+    h2 {
+      font-size: 2.75rem;
+      line-height: 1.2;
+      margin-bottom: 2rem;
+      max-width: 20ch;
+    }
+
+    ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      font-size: 1.35rem;
+    }
+    ul li { padding-left: 1.5rem; position: relative; }
+    ul li::before {
+      content: "";
+      position: absolute;
+      left: 0; top: 0.55em;
+      width: 0.5rem; height: 0.5rem;
+      background: #4a4e8c;
+    }
+
+    /* Evidence: claim on the slide, number beside it */
+    .evidence {
+      display: flex;
+      align-items: baseline;
+      gap: 1.5rem;
+      margin-top: 2rem;
+      padding-top: 2rem;
+      border-top: 2px solid #e0e0ea;
+    }
+    .evidence .stat {
+      font-size: 4rem;
+      font-weight: 700;
+      color: #b0413e;
+      line-height: 1;
+    }
+    .evidence .source { font-size: 1rem; color: #666; }
+
+    /* Closer */
+    .slide-closer { text-align: center; background: #1a1a2e; color: #fff; }
+    .slide-closer h2 { margin: 0 auto 2rem; }
+    .cta {
+      display: inline-block;
+      padding: 0.875rem 2.5rem;
+      background: #fff;
+      color: #1a1a2e;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+
+    @media (max-width: 640px) {
+      section { padding: 2rem 1.5rem; }
+      .slide-title h1 { font-size: 2.25rem; }
+      h2 { font-size: 1.75rem; }
+      .evidence .stat { font-size: 2.75rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 1. Title slide -->
+  <section class="slide-title">
+    <h1>Q3 Growth Slowed Because Trial Conversion Collapsed</h1>
+    <p class="team">Growth Team</p>
+    <p class="occasion">Quarterly business review &middot; October 2026</p>
+  </section>
+
+  <!-- 2. Thesis -->
+  <section>
+    <h2>Three things happened this quarter, and only one of them is permanent</h2>
+    <ul>
+      <li>Signup volume grew 22% &mdash; acquisition is not the problem</li>
+      <li>Trial-to-paid conversion fell from 34% to 19%</li>
+      <li>The billing migration shipped in week 6 is the cause</li>
+    </ul>
+  </section>
+
+  <!-- 3. Beat: tension, with evidence on the same slide -->
+  <section>
+    <h2>Trial conversion fell 15 points in the six weeks after the billing migration</h2>
+    <ul>
+      <li>Drop is concentrated in self-serve signups, not sales-assisted</li>
+      <li>Error rate on the upgrade step tripled on the day of launch</li>
+      <li>Recovered partially after a hotfix, but never to baseline</li>
+    </ul>
+    <div class="evidence">
+      <span class="stat">19%</span>
+      <span class="source">trial&rarr;paid conversion, Q3 average<br>down from 34% in Q2</span>
+    </div>
+  </section>
+
+  <!-- 4. Beat: resolution -->
+  <section>
+    <h2>Reverting the upgrade step recovers two thirds of the loss</h2>
+    <ul>
+      <li>A/B test ran Sep 8 &ndash; Sep 22 on 12,400 trials</li>
+      <li>Legacy upgrade path: 27% conversion, significant at p &lt; 0.01</li>
+      <li>Shipping the revert for all self-serve accounts this sprint</li>
+    </ul>
+  </section>
+
+  <!-- 5. Closer -->
+  <section class="slide-closer">
+    <h2>Approve the billing revert and we return to 30%+ next quarter</h2>
+    <a class="cta" href="#">Read the full A/B analysis</a>
+  </section>
+
+  <script>
+    document.addEventListener('keydown', function (e) {
+      var slides = document.querySelectorAll('section');
+      var i = Math.round(window.scrollY / window.innerHeight);
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown') {
+        e.preventDefault();
+        slides[Math.min(i + 1, slides.length - 1)].scrollIntoView();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        slides[Math.max(i - 1, 0)].scrollIntoView();
+      }
+    });
+  </script>
+</body>
+</html>
