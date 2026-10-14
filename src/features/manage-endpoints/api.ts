@@ -235,6 +235,10 @@ async function testChatCompletion(
 /**
  * Test connectivity to an OpenAI-compatible endpoint.
  * Tests both /models discovery and /chat/completions.
+ *
+ * 容错：若 /v1/models 返回 404（管理员禁用模型列表接口），但调用方提供了
+ * chatModel，则跳过模型发现，直接用 chatModel 测试 /v1/chat/completions。
+ * 适用于 Higress 等网关禁用了 /models 端点但对话接口可用的场景。
  */
 export async function testEndpointConnection(
   baseUrl: string,
@@ -251,12 +255,67 @@ export async function testEndpointConnection(
       discoveredModels: DEMO_ENDPOINT_MODELS.map((model) => ({ ...model })),
     };
   }
-  try {
-    // Step 1: Test /models endpoint（R33: 按协议分发发现语义）
-    const models = await fetchModelsByProtocol(protocol, baseUrl, apiKey);
-    const modelDiscovery = `发现 ${models.length} 个模型`;
 
-    // R36: 非 openai 协议也做对话级连通测试（各家生成端点按协议构造）
+  // Step 1: 尝试发现模型列表
+  let models: DiscoveredModel[] = [];
+  let modelDiscoveryFailed = false;
+  let modelDiscoveryError: unknown = null;
+
+  try {
+    models = await fetchModelsByProtocol(protocol, baseUrl, apiKey);
+  } catch (error) {
+    modelDiscoveryFailed = true;
+    modelDiscoveryError = error;
+  }
+
+  // Step 2: 模型发现失败时的容错逻辑
+  if (modelDiscoveryFailed) {
+    // 如果是 404 且有手动指定的 chatModel，直接测试对话接口
+    if (chatModel && _isUpstream404Error(modelDiscoveryError)) {
+      try {
+        const chatResult =
+          protocol === 'openai-compatible'
+            ? await testChatCompletion(baseUrl, apiKey, chatModel)
+            : await testChatCompletionByProtocol(
+                protocol as Exclude<EndpointProtocol, 'openai-compatible'>,
+                baseUrl,
+                apiKey,
+                chatModel,
+              );
+        if (chatResult.success) {
+          return {
+            success: true,
+            message: `连接成功 · 模型列表不可用，但对话端点正常（使用手动指定的模型: ${chatModel}）`,
+            latency: Date.now() - start,
+            discoveredModels: [],
+          };
+        }
+        return {
+          success: false,
+          message: `模型列表不可用，对话端点异常: ${chatResult.message}`,
+          latency: Date.now() - start,
+        };
+      } catch (chatError) {
+        return {
+          success: false,
+          message: `模型列表不可用，对话测试失败: ${_parseUpstreamError(chatError)}`,
+          latency: Date.now() - start,
+        };
+      }
+    }
+    // 没有 chatModel 或不是 404 错误，返回原始错误
+    return {
+      success: false,
+      message: `连接失败: ${_parseUpstreamError(modelDiscoveryError)}`,
+      latency: Date.now() - start,
+    };
+  }
+
+  const modelDiscovery = `发现 ${models.length} 个模型`;
+
+  // Step 3+: 模型发现成功，继续测试对话端点
+  try {
+    // Step 3: 非 openai 协议的对话级连通测试
     if (protocol !== 'openai-compatible') {
       let chatTestModel = chatModel;
       if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
@@ -292,17 +351,13 @@ export async function testEndpointConnection(
       };
     }
 
-    // Step 2: 选定 chat 测试模型
-    // 优先用调用方传入的 chatModel, 但仅当它属于被测端点 (出现在 /v1/models 列表) 时;
-    // 否则回退到被测端点第一个非 embedding 模型。避免「用端点 A 的全局模型测端点 B」
-    // 触发上游网关 503 model_not_found (如 AgnesAI 按 token 分组路由模型), 也避免
-    // 拿纯 embedding 模型打 /chat/completions 触发假失败。
+    // Step 4: 选定 chat 测试模型
     let chatTestModel = chatModel;
     if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
       chatTestModel = models.find((m) => !isEmbeddingModel(m.id))?.id;
     }
 
-    // Step 3: Test /chat/completions if a chat model is available
+    // Step 5: Test /chat/completions if a chat model is available
     if (chatTestModel) {
       const chatResult = await testChatCompletion(baseUrl, apiKey, chatTestModel);
       if (!chatResult.success) {
@@ -328,14 +383,26 @@ export async function testEndpointConnection(
       discoveredModels: models,
     };
   } catch (error) {
-    // fetchModels 阶段抛出的 error 含 backend upstream_error envelope, _parseUpstreamError
-    // 会翻译成中文友好提示; 兜底时保留 raw message, 不抛错。
+    // 对话端点测试失败（如 401/403 等）
     return {
       success: false,
-      message: `连接失败: ${_parseUpstreamError(error)}`,
+      message: `${modelDiscovery}，但对话端点异常: ${_parseUpstreamError(error)}`,
       latency: Date.now() - start,
+      discoveredModels: models,
     };
   }
+}
+
+/**
+ * 检查 error 是否是上游返回 404 的错误。
+ * 用于判断 /v1/models 是否被管理员禁用。
+ */
+function _isUpstream404Error(error: unknown): boolean {
+  if (!error) return false;
+  const raw = error instanceof Error ? error.message : String(error);
+  // 匹配 "Backend request failed: 404" 或 "HTTP 404" 或 "上游返回 404"
+  const statusMatch = raw.match(/(?:Backend request failed:|HTTP\s+|上游返回\s*)(\d{3})/i);
+  return statusMatch !== null && statusMatch[1] === '404';
 }
 
 /**

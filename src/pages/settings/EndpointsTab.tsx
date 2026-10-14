@@ -73,12 +73,10 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
       ...prev,
       [ep.id]: { success: false, message: '测试中...', latency: 0 },
     }));
-    const result = await testEndpointConnection(
-      ep.baseUrl,
-      ep.apiKey,
-      settings.modelSelections.chatModel.modelId ?? undefined,
-      ep.protocol,
-    );
+    // 优先使用端点配置的 modelId（适用于 /v1/models 被禁用的场景），
+    // 回退到全局模型选择
+    const chatModel = ep.modelId || settings.modelSelections.chatModel.modelId || undefined;
+    const result = await testEndpointConnection(ep.baseUrl, ep.apiKey, chatModel, ep.protocol);
     setTestResult((prev) => ({ ...prev, [ep.id]: result }));
     setTestingId(null);
 
