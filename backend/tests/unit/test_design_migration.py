@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import sqlite3
+
 import pytest
 
 
@@ -19,7 +21,7 @@ class TestDesignMigration:
         from backend.data.migrations.runner import MIGRATIONS
 
         design_migration = None
-        for version, name, fn in MIGRATIONS:
+        for _, name, fn in MIGRATIONS:
             if "design" in name.lower():
                 design_migration = fn
                 break
@@ -36,7 +38,7 @@ class TestDesignMigration:
         from backend.data.migrations.runner import MIGRATIONS
 
         design_migration = None
-        for version, name, fn in MIGRATIONS:
+        for _, name, fn in MIGRATIONS:
             if "design" in name.lower():
                 design_migration = fn
                 break
@@ -52,7 +54,7 @@ class TestDesignMigration:
         from backend.data.migrations.runner import MIGRATIONS
 
         design_migration = None
-        for version, name, fn in MIGRATIONS:
+        for _, name, fn in MIGRATIONS:
             if "design" in name.lower():
                 design_migration = fn
                 break
@@ -71,7 +73,7 @@ class TestDesignMigration:
         from backend.data.migrations.runner import MIGRATIONS
 
         design_migration = None
-        for version, name, fn in MIGRATIONS:
+        for _, name, fn in MIGRATIONS:
             if "design" in name.lower():
                 design_migration = fn
                 break
@@ -90,7 +92,7 @@ class TestDesignMigration:
         from backend.data.migrations.runner import MIGRATIONS
 
         design_migration = None
-        for version, name, fn in MIGRATIONS:
+        for _, name, fn in MIGRATIONS:
             if "design" in name.lower():
                 design_migration = fn
                 break

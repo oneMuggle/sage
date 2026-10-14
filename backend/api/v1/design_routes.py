@@ -92,10 +92,11 @@ def _map_design_error(exc: DesignError) -> JSONResponse:
         DesignTemplateNotFoundError,
     )
     bad_request = DesignTemplateKindMismatchError
-    if isinstance(exc, bad_request):
-        status = 400
-    else:
-        status = 404 if isinstance(exc, not_found) else 500
+    status = (
+        400 if isinstance(exc, bad_request)
+        else 404 if isinstance(exc, not_found)
+        else 500
+    )
     return JSONResponse(status_code=status, content={"detail": str(exc)})
 
 
