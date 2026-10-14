@@ -1,15 +1,15 @@
-import { MessageSquarePlus, RotateCcw } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useI18n } from '../../shared/lib/i18n';
-import { ContextMeter } from '../../widgets/chat/ContextMeter';
-import { PermissionModeSwitch } from '../../widgets/chat/PermissionModeSwitch';
 import { ProjectBadge } from '../../widgets/chat/ProjectBadge';
 import { RightPanelToggle } from '../../widgets/chat/RightPanelToggle';
 import { SessionModelPicker } from '../../widgets/chat/SessionModelPicker';
 import { SessionUsageBadge } from '../../widgets/chat/SessionUsageBadge';
 import { WorkspaceBranchPicker } from '../../widgets/chat/WorkspaceBranchPicker';
+
+import { SessionSessionMenu } from './SessionSessionMenu';
+import { SessionSettingsMenu } from './SessionSettingsMenu';
 
 export interface ChatHeaderBarProps {
   workspacePath?: string | null;
@@ -59,8 +59,6 @@ export function ChatHeaderBar({
       </div>
       <div className="flex items-center gap-1.5 flex-wrap" data-testid="chat-header-controls">
         <SessionModelPicker sessionId={currentSessionId} placement="bottom" />
-        <PermissionModeSwitch sessionId={currentSessionId} placement="bottom" />
-        <ContextMeter sessionId={currentSessionId} placement="bottom" />
         <div className="flex items-center gap-1 text-ui-xs">
           <label
             htmlFor="chat-header-orch-mode"
@@ -94,60 +92,18 @@ export function ChatHeaderBar({
             </option>
           </select>
         </div>
-        <button
-          type="button"
-          data-testid="chat-new-topic"
-          aria-label="+ 新话题"
-          disabled={isLoading || !hasConfig}
-          onClick={onNewTopic}
-          title="新话题（重置上下文）"
-          className="inline-flex items-center gap-1 px-2 py-1 text-ui-xs border border-border rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text disabled:opacity-50 transition-colors"
-        >
-          <RotateCcw className="w-3.5 h-3.5 shrink-0" />
-          <span className={rightPanelOpen ? 'hidden 2xl:inline' : 'hidden sm:inline'}>
-            + 新话题
-          </span>
-        </button>
-        {currentSessionId && (
-          <button
-            type="button"
-            onClick={() =>
-              setTempChatSessions((prev) => {
-                const next = new Set(prev);
-                if (next.has(currentSessionId)) next.delete(currentSessionId);
-                else next.add(currentSessionId);
-                return next;
-              })
-            }
-            aria-pressed={isTempChat}
-            aria-label={t('chat.temp_chat')}
-            title={isTempChat ? t('chat.temp_chat_on') : t('chat.temp_chat_off')}
-            data-testid="temp-chat-toggle"
-            className={`inline-flex items-center gap-1 px-2 py-1 text-ui-xs border rounded-radius-sm transition-colors ${
-              isTempChat
-                ? 'border-warning text-warning bg-warning/10'
-                : 'border-border hover:bg-bg-hover'
-            }`}
-          >
-            <span aria-hidden="true">🕶</span>
-            <span className={rightPanelOpen ? 'hidden 2xl:inline' : 'hidden lg:inline'}>
-              {t('chat.temp_chat')}
-            </span>
-          </button>
-        )}
-        <button
-          type="button"
-          data-testid="chat-new-session"
-          aria-label="+ 新对话"
-          title="新对话"
-          onClick={onNewSession}
-          className="inline-flex items-center gap-1 px-2 py-1 text-ui-xs border border-border rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
-        >
-          <MessageSquarePlus className="w-3.5 h-3.5 shrink-0" />
-          <span className={rightPanelOpen ? 'hidden 2xl:inline' : 'hidden xl:inline'}>
-            + 新对话
-          </span>
-        </button>
+        {/* UI 优化 2026-10-14: 会话级设置收纳进齿轮浮层 */}
+        <SessionSettingsMenu sessionId={currentSessionId} />
+        {/* UI 优化 2026-10-14: 新对话/新话题/临时聊天合并进 + 下拉菜单 */}
+        <SessionSessionMenu
+          isLoading={isLoading}
+          hasConfig={hasConfig}
+          currentSessionId={currentSessionId}
+          onNewTopic={onNewTopic}
+          onNewSession={onNewSession}
+          isTempChat={isTempChat}
+          setTempChatSessions={setTempChatSessions}
+        />
         <RightPanelToggle
           open={rightPanelOpen}
           onClick={onToggleRightPanel}

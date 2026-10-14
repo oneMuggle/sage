@@ -120,8 +120,13 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
 
   // right-panel R5: 聊天流文件修改卡片（selectChange）直达入口 —— 消费
   // 一次性选中路径,打开对应文件的 diff 视图后立即清除,避免切会话串台。
+  // UI 优化 2026-10-14: 新增 autoPreviewMode 消费 —— 当 previewOnSelect 被
+  // selectPreview 设置时，打开 diff 后自动切到预览视图（原 preview Tab 已合入
+  // changes Tab）。clearPreview 同时清除 previewOnSelect 与 autoPreviewMode。
   const pendingChangePath = useRightPanelStore((s) => s.selectedChangePath);
   const clearSelectedChange = useRightPanelStore((s) => s.clearSelectedChange);
+  const autoPreviewMode = useRightPanelStore((s) => s.autoPreviewMode);
+  const clearPreview = useRightPanelStore((s) => s.clearPreview);
   const openDiff = useCallback(
     (path: string) => {
       if (!sessionId) return;
@@ -187,11 +192,31 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
   // right-panel R5: 消费 pendingChangePath 的 effect 刻意放在重置 effect
   // 之后 —— 面板从关闭态被 selectChange 唤起时组件是首次挂载,若声明在
   // 重置之前,同一 commit 内的重置 effect 会把 openDiff 的选中态清掉。
+  // UI 优化 2026-10-14: autoPreviewMode 为 true 时，openDiff 后立即切到预览。
+  // 注意：showPreview 依赖 selectedPath，需在 React 批处理后将 selectedPath
+  // 写入 state，因此不能在同一 effect 同步调用 showPreview —— 改为通过
+  // 一个中间 effect 监听 selectedPath + pendingAutoPreview 标志来触发。
+  const [pendingAutoPreview, setPendingAutoPreview] = useState(false);
   useEffect(() => {
     if (!pendingChangePath) return;
+    const shouldPreview = autoPreviewMode;
     openDiff(pendingChangePath);
     clearSelectedChange();
-  }, [pendingChangePath, openDiff, clearSelectedChange]);
+    if (shouldPreview) {
+      setPendingAutoPreview(true);
+      clearPreview();
+    }
+  }, [pendingChangePath, openDiff, clearSelectedChange, autoPreviewMode, clearPreview]);
+
+  // UI 优化 2026-10-14: 待 openDiff 写入 selectedPath 后触发 showPreview。
+  // 使用 effect 监听 selectedPath 变化，避免在 openDiff 同一帧调用 showPreview
+  // 时 selectedPath 尚未更新到 state。
+  useEffect(() => {
+    if (pendingAutoPreview && selectedPath) {
+      setPendingAutoPreview(false);
+      showPreview();
+    }
+  }, [pendingAutoPreview, selectedPath, showPreview]);
 
   // U19: 撤销单个文件的工作区改动 (未跟踪条目 = 删除)
   const revertFile = useCallback(
