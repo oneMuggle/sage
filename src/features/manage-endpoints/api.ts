@@ -352,23 +352,57 @@ export async function testEndpointConnection(
 
   const modelDiscovery = `发现 ${models.length} 个模型`;
 
-  // Step 3: 非 openai 协议的对话级连通测试
-  if (protocol !== 'openai-compatible') {
+  // Step 3+: 模型发现成功，继续测试对话端点
+  try {
+    // Step 3: 非 openai 协议的对话级连通测试
+    if (protocol !== 'openai-compatible') {
+      let chatTestModel = chatModel;
+      if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
+        chatTestModel = models.find((m) => !isEmbeddingModel(m.id))?.id;
+      }
+      if (chatTestModel) {
+        const chatResult = await testChatCompletionByProtocol(
+          protocol,
+          baseUrl,
+          apiKey,
+          chatTestModel,
+        );
+        if (!chatResult.success) {
+          return {
+            success: false,
+            message: `${modelDiscovery}，但对话端点异常: ${chatResult.message}`,
+            latency: Date.now() - start,
+            discoveredModels: models,
+          };
+        }
+        return {
+          success: true,
+          message: `连接成功 · ${modelDiscovery} · ${chatResult.message}`,
+          latency: Date.now() - start,
+          discoveredModels: models,
+        };
+      }
+      return {
+        success: true,
+        message: `连接成功，${modelDiscovery}（无可用于对话测试的模型）`,
+        latency: Date.now() - start,
+        discoveredModels: models,
+      };
+    }
+
+    // Step 4: 选定 chat 测试模型
     let chatTestModel = chatModel;
     if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
       chatTestModel = models.find((m) => !isEmbeddingModel(m.id))?.id;
     }
+
+    // Step 5: Test /chat/completions if a chat model is available
     if (chatTestModel) {
-      const chatResult = await testChatCompletionByProtocol(
-        protocol,
-        baseUrl,
-        apiKey,
-        chatTestModel,
-      );
+      const chatResult = await testChatCompletion(baseUrl, apiKey, chatTestModel);
       if (!chatResult.success) {
         return {
           success: false,
-          message: `${modelDiscovery}，但对话端点异常: ${chatResult.message}`,
+          message: `${modelDiscovery}，但聊天端点异常: ${chatResult.message}`,
           latency: Date.now() - start,
           discoveredModels: models,
         };
@@ -380,45 +414,22 @@ export async function testEndpointConnection(
         discoveredModels: models,
       };
     }
+
     return {
       success: true,
-      message: `连接成功，${modelDiscovery}（无可用于对话测试的模型）`,
+      message: `连接成功，${modelDiscovery}`,
+      latency: Date.now() - start,
+      discoveredModels: models,
+    };
+  } catch (error) {
+    // 对话端点测试失败（如 401/403 等）
+    return {
+      success: false,
+      message: `${modelDiscovery}，但对话端点异常: ${_parseUpstreamError(error)}`,
       latency: Date.now() - start,
       discoveredModels: models,
     };
   }
-
-  // Step 4: 选定 chat 测试模型
-  let chatTestModel = chatModel;
-  if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
-    chatTestModel = models.find((m) => !isEmbeddingModel(m.id))?.id;
-  }
-
-  // Step 5: Test /chat/completions if a chat model is available
-  if (chatTestModel) {
-    const chatResult = await testChatCompletion(baseUrl, apiKey, chatTestModel);
-    if (!chatResult.success) {
-      return {
-        success: false,
-        message: `${modelDiscovery}，但聊天端点异常: ${chatResult.message}`,
-        latency: Date.now() - start,
-        discoveredModels: models,
-      };
-    }
-    return {
-      success: true,
-      message: `连接成功 · ${modelDiscovery} · ${chatResult.message}`,
-      latency: Date.now() - start,
-      discoveredModels: models,
-    };
-  }
-
-  return {
-    success: true,
-    message: `连接成功，${modelDiscovery}`,
-    latency: Date.now() - start,
-    discoveredModels: models,
-  };
 }
 
 /**
