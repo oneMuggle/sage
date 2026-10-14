@@ -2,12 +2,15 @@
 """Top-level design studio orchestrator."""
 from __future__ import annotations
 
+import asyncio
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from backend.data.design_repo import DesignRepo
+from backend.design.async_bridge import run_sync
 from backend.design.errors import (
     DesignProjectNotFoundError,
     DesignTemplateKindMismatchError,
@@ -39,6 +42,7 @@ class DesignStudio:
         self._systems = systems
         self._templates = templates
         self._workspace = workspace_dir
+        self._version_lock = threading.Lock()
 
     def _resolve_template_for_kind(
         self, template_id: str, kind: str,
@@ -126,35 +130,52 @@ class DesignStudio:
 
         try:
             use_brief = brief or project.brief
-            result = await self._generator.generate(
-                system, template, use_brief,
+
+            # C1: delegate LLM call to bridge loop so the cached
+            # httpx.AsyncClient always runs on its owning loop.
+            caller_loop = asyncio.get_event_loop()
+            result = await caller_loop.run_in_executor(
+                None,
+                lambda: run_sync(
+                    self._generator.generate(system, template, use_brief),
+                ),
             )
 
-            latest = self._repo.get_latest_artifact(project_id)
-            new_version = latest.version + 1 if latest else 1
-            artifact_id = str(uuid.uuid4())
-            file_path = str(
-                self._workspace / "design" / project_id
-                / f"v{new_version}.html"
-            )
-            now = datetime.now(timezone.utc)  # noqa: UP017
+            # C3: yield to let a pending cancellation propagate before
+            # the sync artifact write (prevents ghost artifacts).
+            await asyncio.sleep(0)
 
-            artifact = self._repo.create_artifact(
-                id=artifact_id,
-                project_id=project_id,
-                version=new_version,
-                html_content=result.bundled_html,
-                title=result.parsed.title,
-                file_path=file_path,
-                kind="html",
-                export_formats=["html"],
-                source_prompt=result.source_prompt,
-                created_at=now,
-            )
+            # C2: hold the version lock across read + insert so two
+            # concurrent callers cannot compute the same version number.
+            with self._version_lock:
+                latest = self._repo.get_latest_artifact(project_id)
+                new_version = latest.version + 1 if latest else 1
+                artifact_id = str(uuid.uuid4())
+                file_path = str(
+                    self._workspace / "design" / project_id
+                    / f"v{new_version}.html"
+                )
+                now = datetime.now(timezone.utc)  # noqa: UP017
+
+                artifact = self._repo.create_artifact(
+                    id=artifact_id,
+                    project_id=project_id,
+                    version=new_version,
+                    html_content=result.bundled_html,
+                    title=result.parsed.title,
+                    file_path=file_path,
+                    kind="html",
+                    export_formats=["html"],
+                    source_prompt=result.source_prompt,
+                    created_at=now,
+                )
 
             self._repo.update_project_status(project_id, "complete")
             return artifact
 
+        except asyncio.CancelledError:
+            self._repo.update_project_status(project_id, "error")
+            raise
         except Exception:
             self._repo.update_project_status(project_id, "error")
             raise
@@ -178,38 +199,54 @@ class DesignStudio:
         self._repo.update_project_status(project_id, "generating")
 
         try:
-            result = await self._generator.generate(
-                system, template, project.brief,
-                iteration_context={
-                    "current_html": latest.html_content,
-                    "user_feedback": feedback,
-                },
+            # C1: delegate LLM call to bridge loop.
+            caller_loop = asyncio.get_event_loop()
+            result = await caller_loop.run_in_executor(
+                None,
+                lambda: run_sync(
+                    self._generator.generate(
+                        system, template, project.brief,
+                        iteration_context={
+                            "current_html": latest.html_content,
+                            "user_feedback": feedback,
+                        },
+                    ),
+                ),
             )
 
-            new_version = latest.version + 1
-            artifact_id = str(uuid.uuid4())
-            file_path = str(
-                self._workspace / "design" / project_id
-                / f"v{new_version}.html"
-            )
-            now = datetime.now(timezone.utc)  # noqa: UP017
+            # C3: yield to let pending cancellation propagate.
+            await asyncio.sleep(0)
 
-            artifact = self._repo.create_artifact(
-                id=artifact_id,
-                project_id=project_id,
-                version=new_version,
-                html_content=result.bundled_html,
-                title=result.parsed.title,
-                file_path=file_path,
-                kind="html",
-                export_formats=["html"],
-                source_prompt=result.source_prompt,
-                created_at=now,
-            )
+            # C2: re-read latest inside lock for safe version assignment.
+            with self._version_lock:
+                latest = self._repo.get_latest_artifact(project_id)
+                new_version = latest.version + 1 if latest else 1
+                artifact_id = str(uuid.uuid4())
+                file_path = str(
+                    self._workspace / "design" / project_id
+                    / f"v{new_version}.html"
+                )
+                now = datetime.now(timezone.utc)  # noqa: UP017
+
+                artifact = self._repo.create_artifact(
+                    id=artifact_id,
+                    project_id=project_id,
+                    version=new_version,
+                    html_content=result.bundled_html,
+                    title=result.parsed.title,
+                    file_path=file_path,
+                    kind="html",
+                    export_formats=["html"],
+                    source_prompt=result.source_prompt,
+                    created_at=now,
+                )
 
             self._repo.update_project_status(project_id, "complete")
             return artifact
 
+        except asyncio.CancelledError:
+            self._repo.update_project_status(project_id, "error")
+            raise
         except Exception:
             self._repo.update_project_status(project_id, "error")
             raise

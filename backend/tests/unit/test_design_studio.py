@@ -237,3 +237,32 @@ class TestDesignStudio:
         message = str(excinfo.value)
         assert "prototype" in message  # 请求的 kind（项目行的）
         assert "deck" in message  # 模板实际的 kind
+
+    @pytest.mark.asyncio()
+    async def test_iterate_rejects_kind_mismatch_after_template_edited(
+        self, studio, tmp_path,
+    ):
+        """iterate 同样须在再生成前校验模板 kind，防止模板被改后静默产出错误类型。"""
+        project = studio.create_project(
+            "IterKind", "prototype", "test", "test-page", "brief",
+        )
+        # v1 必须存在，否则 iterate 抛 DesignProjectNotFoundError
+        await studio.generate(project.id, "v1 brief")
+
+        # 模板在磁盘上被改成 deck，项目行仍记着 prototype
+        skill_md = tmp_path / "content" / "templates" / "prototype" / (
+            "test-page"
+        ) / "SKILL.md"
+        skill_md.write_text(
+            "---\nname: test-page\nkind: deck\n"
+            "description: test\ndesign_system_required: true\n---\n"
+            "# Test"
+        )
+        studio._templates._cache.clear()
+
+        with pytest.raises(DesignTemplateKindMismatchError) as excinfo:
+            await studio.iterate(project.id, "Make it brighter")
+
+        message = str(excinfo.value)
+        assert "prototype" in message  # 请求的 kind
+        assert "deck" in message  # 模板实际的 kind

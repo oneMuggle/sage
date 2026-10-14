@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from backend.design import get_design_studio
-from backend.design.async_bridge import run_sync
+from backend.design.async_bridge import DEFAULT_TIMEOUT, run_sync
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
@@ -89,7 +89,9 @@ class DesignGenerateTool(BaseTool):
             )
 
             # Generate artifact (coroutine → run to completion on shared loop)
-            artifact = run_sync(studio.generate(project.id))
+            artifact = run_sync(
+                studio.generate(project.id), timeout=DEFAULT_TIMEOUT,
+            )
 
             return ToolResult(
                 success=True,

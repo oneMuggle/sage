@@ -880,3 +880,95 @@ class TestDesignRoutes:
         # The read failed, but the project itself is untouched.
         assert studio.get_project(project.id).name == "GetBoom"
         assert studio.get_latest_artifact(project.id).version == 1
+
+    # ---------------------------------------------------------------
+    # M5: SSE error identity — exact message, no generic prefix
+    # ---------------------------------------------------------------
+
+    async def test_sse_kind_mismatch_emits_exact_error_message(self, studio):
+        """DesignTemplateKindMismatchError in SSE path must emit the exact
+        exception message, NOT a generic 'Generation failed: ...' prefix.
+
+        Mutation-verified: if the DesignTemplateKindMismatchError branch
+        were removed (falling through to the generic catch-all), the
+        detail would be prefixed with 'Generation failed: ' and this
+        assertion would fail.
+        """
+        from backend.design.errors import DesignTemplateKindMismatchError
+        from backend.main import app
+
+        project = studio.create_project(
+            "SseKind", "prototype", "test-sys", "test-page", "brief",
+        )
+
+        expected_msg = (
+            "Template 'test-page' has kind 'deck', "
+            "but kind 'prototype' was requested."
+        )
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ), patch.object(
+            studio, "generate",
+            side_effect=DesignTemplateKindMismatchError(expected_msg),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    f"/api/v1/design/projects/{project.id}/generate",
+                    json={"brief": "x"},
+                )
+
+        assert resp.status_code == 200
+        frames = _sse_frames(resp.text)
+        last_event, last_data = frames[-1]
+        assert last_event == "error"
+        # Exact equality — not substring — so a generic prefix would fail.
+        assert json.loads(last_data)["detail"] == expected_msg
+
+    async def test_sse_generation_error_emits_exact_error_message(
+        self, studio,
+    ):
+        """DesignGenerationError in SSE path must emit the exact exception
+        message, NOT a generic 'Generation failed: ...' prefix.
+
+        Mutation-verified: if the DesignGenerationError branch were removed,
+        the generic catch-all would add 'Generation failed: ' and this
+        assertion would fail.
+        """
+        from backend.design.errors import DesignGenerationError
+        from backend.main import app
+
+        project = studio.create_project(
+            "SseGen", "prototype", "test-sys", "test-page", "brief",
+        )
+
+        expected_msg = "LLM returned empty response"
+
+        async def _raise(*_args, **_kwargs):
+            raise DesignGenerationError(expected_msg)
+
+        with patch(
+            "backend.api.v1.design_routes.get_design_studio",
+            return_value=studio,
+        ), patch.object(
+            studio._generator, "generate", side_effect=_raise,
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport, base_url="http://test",
+            ) as client:
+                resp = await client.post(
+                    f"/api/v1/design/projects/{project.id}/generate",
+                    json={"brief": "x"},
+                )
+
+        assert resp.status_code == 200
+        frames = _sse_frames(resp.text)
+        last_event, last_data = frames[-1]
+        assert last_event == "error"
+        # Exact equality — the specific branch emits str(exc) verbatim.
+        assert json.loads(last_data)["detail"] == expected_msg

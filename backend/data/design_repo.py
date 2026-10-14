@@ -128,7 +128,19 @@ class DesignRepo:
         source_prompt: str,
         created_at: datetime,
     ) -> DesignArtifact:
-        """落库 artifact 元数据，并把 html_content 写入 file_path。"""
+        """落库 artifact 元数据，并把 html_content 写入 file_path。
+
+        H2: write the HTML file **before** the INSERT so that a write
+        failure never leaves a ghost row in the database.  The INSERT +
+        commit form a tight transaction window (H3) with no file I/O
+        between them.
+        """
+        # Write file first (outside any transaction)
+        p = Path(file_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(html_content, encoding="utf-8")
+
+        # Then DB insert + commit (tight window)
         self._conn.execute(
             f"""INSERT INTO design_artifacts ({_ARTIFACT_COLUMNS})
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -136,9 +148,6 @@ class DesignRepo:
              json.dumps(export_formats), source_prompt,
              created_at.isoformat()),
         )
-        p = Path(file_path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(html_content, encoding="utf-8")
         self._conn.commit()
         return DesignArtifact(
             id=id, project_id=project_id, version=version,

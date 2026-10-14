@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from backend.design import get_design_studio
-from backend.design.async_bridge import run_sync
+from backend.design.async_bridge import DEFAULT_TIMEOUT, run_sync
 from backend.domain.risk import RiskClass
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
@@ -62,7 +62,9 @@ class DesignIterateTool(BaseTool):
             return ToolResult(success=False, error="design_studio_not_initialized")
 
         try:
-            artifact = run_sync(studio.iterate(project_id, feedback))
+            artifact = run_sync(
+                studio.iterate(project_id, feedback), timeout=DEFAULT_TIMEOUT,
+            )
 
             return ToolResult(
                 success=True,

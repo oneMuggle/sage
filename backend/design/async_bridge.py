@@ -44,6 +44,9 @@ from typing import Awaitable, Optional, TypeVar
 
 T = TypeVar("T")
 
+#: Default timeout for LLM generation calls (seconds).
+DEFAULT_TIMEOUT: float = 120.0
+
 #: 进程级长生命周期事件循环（首次使用时惰性创建）。
 _loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -74,6 +77,17 @@ def _get_loop() -> asyncio.AbstractEventLoop:
     return _loop
 
 
+async def _run_with_timeout(coro: Awaitable, timeout: Optional[float]) -> T:
+    """Wrap *coro* with ``asyncio.wait_for`` when a timeout is given.
+
+    ``asyncio.wait_for`` **cancels** the inner coroutine on timeout, which
+    prevents ghost artifact writes after the caller has given up.
+    """
+    if timeout is not None:
+        return await asyncio.wait_for(coro, timeout=timeout)
+    return await coro
+
+
 def run_sync(coro: Awaitable, timeout: Optional[float] = None):
     """Run a coroutine on the shared design loop and return its result.
 
@@ -86,8 +100,9 @@ def run_sync(coro: Awaitable, timeout: Optional[float] = None):
 
     Args:
         coro: The awaitable to execute. Must not be shared across calls.
-        timeout: Optional seconds to wait before giving up. ``None`` waits
-            indefinitely (the tool policy timeout is applied by the caller).
+        timeout: Optional seconds to wait before giving up.  When set,
+            the coroutine is **cancelled** via ``asyncio.wait_for`` if the
+            timeout elapses, preventing ghost writes.
 
     Returns:
         Whatever the coroutine returns.
@@ -97,8 +112,10 @@ def run_sync(coro: Awaitable, timeout: Optional[float] = None):
         Exception: Whatever the coroutine raised.
     """
     loop = _get_loop()
-    future = asyncio.run_coroutine_threadsafe(coro, loop)
+    future = asyncio.run_coroutine_threadsafe(
+        _run_with_timeout(coro, timeout), loop,
+    )
     return future.result(timeout=timeout)
 
 
-__all__ = ["run_sync"]
+__all__ = ["run_sync", "DEFAULT_TIMEOUT"]

@@ -9,7 +9,7 @@ import pytest
 
 from backend.data.design_repo import DesignRepo
 from backend.design import init_design_studio
-from backend.design.async_bridge import run_sync
+from backend.design.async_bridge import DEFAULT_TIMEOUT, run_sync
 from backend.design.design_studio import DesignStudio
 from backend.design.generator import DesignGenerator
 from backend.design.systems import DesignSystemRegistry
@@ -386,3 +386,9 @@ def test_async_bridge_works_from_inside_running_loop():
         return run_sync(_inner())
 
     assert asyncio.run(_call()) == "ok"
+
+
+def test_default_timeout_is_positive():
+    """DEFAULT_TIMEOUT must be a positive number (sanity guard)."""
+    assert isinstance(DEFAULT_TIMEOUT, float)
+    assert DEFAULT_TIMEOUT > 0

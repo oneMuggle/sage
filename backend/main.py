@@ -621,9 +621,14 @@ async def lifespan(app: FastAPI):
         _design_workspace = (
             Path(os.environ.get("SAGE_USER_DATA_DIR") or "backend/data") / "workspace"
         )
+        # H1: check for unconfigured LLM before constructing DesignStudio
+        _llm_client = build_llm_client_from_settings()
+        if _llm_client is None:
+            logger.warning("DesignStudio: LLM client not configured, skipping assembly")
+            raise RuntimeError("LLM client not configured")
         design_studio = DesignStudio(
             repo=DesignRepo(db.get_connection()),
-            generator=DesignGenerator(llm_client=build_llm_client_from_settings()),
+            generator=DesignGenerator(llm_client=_llm_client),
             systems=DesignSystemRegistry(_design_content_dir),
             templates=DesignTemplateRegistry(_design_content_dir),
             workspace_dir=_design_workspace,
