@@ -19,11 +19,100 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional
 
-from backend.ports.llm import ProviderClient
+from backend.ports.llm import ModelCapabilities, ProviderClient
 
 logger = logging.getLogger(__name__)
 
 ProviderFactory = Callable[..., ProviderClient]
+
+# ``LLMConfig.provider``（core/legacy/llm_client.py:242）与注册表 provider id
+# 命名不一致，且 deepseek / custom 走 OpenAI 兼容协议。此表把前者的取值
+# 归一到后者，供能力查询用——只做名字归一，不改变注册表的注册语义。
+_PROVIDER_CAPABILITY_ALIASES = {
+    "openai": "openai",
+    "openai-compatible": "openai",
+    "azure": "openai",
+    "azure-openai": "openai",
+    "deepseek": "openai",  # DeepSeek 走 OpenAI 兼容端点
+    "custom": "openai",  # 自定义 base_url 同样按 OpenAI 兼容处理
+    "claude": "anthropic",  # core 用 claude，注册表用 anthropic
+    "anthropic": "anthropic",
+    "gemini": "gemini",
+    "google": "gemini",
+    "ollama": "ollama",
+}
+
+# provider id → 模块级纯函数 ``model_capabilities(model)``。
+# 刻意不构造 ProviderClient 实例：能力判定是纯启发式，而 provider 的
+# ``__init__`` 会建 httpx.AsyncClient（需要 aclose 才释放），仅为问一句
+# 能力就建/销毁 HTTP 客户端不合理。
+_CAPABILITY_RESOLVERS: Dict[str, Callable[[str], ModelCapabilities]] = {}
+
+
+def _resolve_capability_resolver(
+    provider_id: str,
+) -> Optional[Callable[[str], ModelCapabilities]]:
+    """返回 provider 的模块级能力判定函数；未知 provider 返回 None。"""
+    if provider_id in _CAPABILITY_RESOLVERS:
+        return _CAPABILITY_RESOLVERS[provider_id]
+
+    fn: Optional[Callable[[str], ModelCapabilities]] = None
+    if provider_id == "openai":
+        from backend.adapters.out.llm.openai_provider import model_capabilities
+
+        fn = model_capabilities
+    elif provider_id == "anthropic":
+        from backend.adapters.out.llm.anthropic_provider import model_capabilities
+
+        fn = model_capabilities
+    elif provider_id == "gemini":
+        from backend.adapters.out.llm.gemini_provider import model_capabilities
+
+        fn = model_capabilities
+    elif provider_id == "ollama":
+        from backend.adapters.out.llm.ollama_provider import model_capabilities
+
+        fn = model_capabilities
+
+    if fn is not None:
+        _CAPABILITY_RESOLVERS[provider_id] = fn
+    return fn
+
+
+def get_model_capabilities(provider: str, model: str) -> Optional[ModelCapabilities]:
+    """查询模型能力，**不构造 ProviderClient**。
+
+    与 ``ProviderClient.capabilities()`` 等价（各 provider 的实例方法都
+    委托到同一个模块级纯函数），但不需要 base_url / api_key，也不需要
+    为此新建并释放 httpx 客户端。
+
+    Args:
+        provider: provider 名，取值同 ``LLMConfig.provider``
+            （openai / claude / gemini / deepseek / ollama / custom …）。
+        model: 模型 id。
+
+    Returns:
+        ModelCapabilities：provider 可识别时返回其判定结果；
+        **provider 无法识别时返回 None，表示「能力未知」**——调用方必须把
+        未知与「确认不支持 vision」区分开，不要一律按 False 处理。
+    """
+    provider_id = _PROVIDER_CAPABILITY_ALIASES.get((provider or "").strip().lower())
+    if provider_id is None:
+        logger.debug("未知 provider %r，模型能力未知: %s", provider, model)
+        return None
+
+    resolver = _resolve_capability_resolver(provider_id)
+    if resolver is None:
+        logger.debug("provider %r 尚未接入能力判定，模型能力未知: %s", provider_id, model)
+        return None
+
+    try:
+        return resolver(model)
+    except Exception:  # 能力判定失败不该让调用方的图片流程崩掉
+        logger.warning(
+            "provider %r 判定模型 %r 能力失败，按未知处理", provider_id, model, exc_info=True
+        )
+        return None
 
 
 @dataclass(frozen=True)
