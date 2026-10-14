@@ -14,7 +14,9 @@ import {
 import { useConversationTurns, type TurnItem } from '../../features/chat/useConversationTurns';
 import {
   isArtifactAutoOpenEnabled,
+  isAutoCollapseSidebarEnabled,
   setArtifactAutoOpenEnabled,
+  setAutoCollapseSidebarEnabled,
   useRightPanelStore,
   type RightPanelTab,
 } from '../../features/right-panel/rightPanelStore';
@@ -23,12 +25,10 @@ import type { ToolCall } from '../../shared/lib/store';
 import { useResizablePanel } from '../../shared/lib/useResizablePanel';
 
 import { ConversationOutline } from './ConversationOutline';
-import { TrajectoryPane } from './TrajectoryPane';
 import { TurnList } from './TurnList';
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
 import { ArtifactsSection } from './artifacts/ArtifactsSection';
 import { ChangesSection } from './changes/ChangesSection';
-import { DocumentPreview } from './preview/DocumentPreview';
 import { ProgressSection } from './progress/ProgressSection';
 
 interface RightPanelProps {
@@ -56,9 +56,7 @@ interface RightPanelProps {
 const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
   'progress',
   'outline',
-  'trajectory',
   'changes',
-  'preview',
   'artifacts',
 ];
 
@@ -67,8 +65,6 @@ const TAB_LABELS: Record<RightPanelTab, string> = {
   artifacts: '产物',
   changes: '变更',
   outline: '目录',
-  trajectory: '轨迹',
-  preview: '预览',
 };
 
 /**
@@ -103,6 +99,8 @@ interface PanelHeaderProps {
   onApplyPreset?: (width: number) => void;
   /** 当前 Tab 是否为产物（决定是否显示自动唤起开关） */
   showAutoOpenToggle?: boolean;
+  /** UI 优化 2026-10-14: 显示「右栏打开时折叠左栏」开关 */
+  showAutoCollapseToggle?: boolean;
   /** R2 批次 C: 产物计数徽标（>0 时产物 Tab 显示 "产物 (N)"） */
   artifactCount?: number;
   /** R3 批次 C: 变更计数徽标（>0 时变更 Tab 显示 "变更 (N)"） */
@@ -135,10 +133,35 @@ function AutoOpenToggleRow() {
   );
 }
 
+/**
+ * UI 优化 2026-10-14: 右栏打开时自动折叠左栏开关。
+ * 默认关闭。右栏最大化时始终折叠（不受此开关影响）。
+ */
+function AutoCollapseSidebarToggleRow() {
+  const [enabled, setEnabled] = useState(() => isAutoCollapseSidebarEnabled());
+  return (
+    <button
+      aria-pressed={enabled}
+      className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-hover hover:text-text"
+      onClick={() => {
+        const next = !enabled;
+        setAutoCollapseSidebarEnabled(next);
+        setEnabled(next);
+      }}
+      title={enabled ? '右栏打开时自动折叠左栏：开' : '右栏打开时自动折叠左栏：关'}
+      data-testid="right-panel-auto-collapse-sidebar-toggle"
+    >
+      <span className="flex-1 text-left">右栏打开时折叠左栏</span>
+    </button>
+  );
+}
+
 interface PanelOptionsMenuProps {
   activePreset?: string | null;
   onApplyPreset?: (width: number) => void;
   showAutoOpenToggle?: boolean;
+  /** UI 优化 2026-10-14: 显示「右栏打开时折叠左栏」开关 */
+  showAutoCollapseToggle?: boolean;
 }
 
 /**
@@ -152,8 +175,9 @@ function PanelOptionsMenu({
   activePreset,
   onApplyPreset,
   showAutoOpenToggle,
+  showAutoCollapseToggle,
 }: PanelOptionsMenuProps) {
-  const hasItems = Boolean(onApplyPreset) || Boolean(showAutoOpenToggle);
+  const hasItems = Boolean(onApplyPreset) || Boolean(showAutoOpenToggle) || Boolean(showAutoCollapseToggle);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -228,6 +252,14 @@ function PanelOptionsMenu({
               <AutoOpenToggleRow />
             </>
           )}
+          {showAutoCollapseToggle && (
+            <>
+              {(onApplyPreset || showAutoOpenToggle) && (
+                <div className="my-1 border-t border-border" aria-hidden />
+              )}
+              <AutoCollapseSidebarToggleRow />
+            </>
+          )}
         </div>
       )}
     </div>
@@ -243,6 +275,7 @@ export function PanelHeader({
   activePreset,
   onApplyPreset,
   showAutoOpenToggle,
+  showAutoCollapseToggle,
   artifactCount = 0,
   changesCount = 0,
 }: PanelHeaderProps) {
@@ -306,6 +339,7 @@ export function PanelHeader({
             activePreset={activePreset}
             onApplyPreset={onApplyPreset}
             showAutoOpenToggle={showAutoOpenToggle}
+            showAutoCollapseToggle={showAutoCollapseToggle}
           />
           {maximizeButton}
           {closeButton}
@@ -485,6 +519,7 @@ function RightPanelInner({
         activePreset={activePreset}
         onApplyPreset={applyWidth}
         showAutoOpenToggle={activeTab === 'artifacts'}
+        showAutoCollapseToggle
         artifactCount={sessionId ? artifacts.length : 0}
         changesCount={changesCount}
       />
@@ -531,17 +566,6 @@ function RightPanelInner({
               onSelect={handleOutlineSelect}
             />
           </>
-        ) : tab === 'trajectory' ? (
-          /* 对标 F3: 模型轨迹——会话级时间线 + 搜索 + 工具 payload */
-          <TrajectoryPane sessionId={sessionId} />
-        ) : tab === 'preview' ? (
-          useRightPanelStore.getState().previewFilePath ? (
-            <DocumentPreview filePath={useRightPanelStore.getState().previewFilePath!} />
-          ) : (
-            <div className="flex items-center justify-center py-8 text-sm text-text-muted">
-              从变更卡片点击「预览」打开文档
-            </div>
-          )
         ) : (
           <ArtifactsSection
             artifacts={artifacts}

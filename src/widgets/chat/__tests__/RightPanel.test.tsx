@@ -281,12 +281,12 @@ describe('RightPanel', () => {
       });
     }
 
-    it('详情页仍渲染 5 个 Tab', async () => {
+    it('详情页仍渲染 4 个 Tab', async () => {
       await renderWithArtifactSelected();
       expect(screen.getByRole('button', { name: '返回' })).toBeInTheDocument();
       expect(screen.getByText('进度')).toBeInTheDocument();
       expect(screen.getByText('目录')).toBeInTheDocument();
-      expect(screen.getByText('预览')).toBeInTheDocument();
+      expect(screen.getByText('变更')).toBeInTheDocument();
     });
 
     it('详情页高亮「产物」Tab', async () => {
@@ -391,11 +391,17 @@ describe('RightPanel — 轮次导航（U1 对标）', () => {
   });
 });
 
-// 对标 F3（ZCode ModelTrajectoryPane）：轨迹 Tab 渲染会话级模型轨迹。
+// 对标 F3（ZCode ModelTrajectoryPane）：轨迹作为进度 Tab 的 sub-tab 渲染。
 // useConversationTrajectory 从 store.messages 派生——灌入 user+assistant 消息后
-// 断言「轨迹」Tab 点击后条目出现（搜索/展开细节由 TrajectoryPane 自身测试覆盖）。
-describe('RightPanel — 轨迹 Tab（F3 对标）', () => {
-  it('轨迹 Tab 渲染模型轨迹条目', () => {
+// 断言「进度」Tab 内「完整轨迹」sub-tab 点击后条目出现
+// （搜索/展开细节由 TrajectoryPane 自身测试覆盖）。
+describe('RightPanel — 轨迹 sub-tab（F3 对标，UI 优化 2026-10-14）', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetStore();
+  });
+
+  it('进度 Tab 内「完整轨迹」sub-tab 渲染模型轨迹条目', () => {
     const now = Date.now();
     useStore.setState({
       messages: [
@@ -416,8 +422,13 @@ describe('RightPanel — 轨迹 Tab（F3 对标）', () => {
       ] as never,
     });
 
+    // 确保面板打开且 Tab 为 progress
+    useRightPanelStore.getState().setOpen(true);
+    useRightPanelStore.getState().setTab('progress');
+
     render(<RightPanel {...props} sessionId="sess_001" />);
-    fireEvent.click(screen.getByText('轨迹'));
+    // 进度 Tab 默认已激活；点击「完整轨迹」sub-tab
+    fireEvent.click(screen.getByTestId('progress-subtab-trajectory'));
 
     expect(screen.getByTestId('trajectory-pane')).toBeInTheDocument();
     expect(screen.getAllByTestId('trajectory-entry')).toHaveLength(2);
