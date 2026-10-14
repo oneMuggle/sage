@@ -7,7 +7,7 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from backend.data.design_repo import DesignRepo
 from backend.design.async_bridge import run_sync
@@ -92,17 +92,17 @@ class DesignStudio:
 
     def list_projects(
         self, kind: Optional[str] = None,
-    ) -> list[DesignProject]:
+    ) -> List[DesignProject]:
         """List projects, optionally filtered by kind."""
         return self._repo.list_projects(kind=kind)
 
-    def list_systems(self) -> list[DesignSystem]:
+    def list_systems(self) -> List[DesignSystem]:
         """List all available design systems."""
         return self._systems.list_systems()
 
     def list_templates(
         self, kind: Optional[str] = None,
-    ) -> list[DesignTemplate]:
+    ) -> List[DesignTemplate]:
         """List available design templates, optionally filtered by kind."""
         if kind:
             return self._templates.list_templates_by_kind(kind)

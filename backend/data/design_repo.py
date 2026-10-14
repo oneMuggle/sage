@@ -7,7 +7,7 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from backend.design.errors import DesignProjectNotFoundError
 from backend.design.models import DesignArtifact, DesignProject
@@ -78,7 +78,7 @@ class DesignRepo:
 
     def list_projects(
         self, kind: Optional[str] = None, limit: int = 50,
-    ) -> list[DesignProject]:
+    ) -> List[DesignProject]:
         """列出项目，按 updated_at 降序；kind 非空时按类型过滤。"""
         if kind:
             cursor = self._conn.execute(
@@ -124,7 +124,7 @@ class DesignRepo:
         title: str,
         file_path: str,
         kind: str,
-        export_formats: list[str],
+        export_formats: List[str],
         source_prompt: str,
         created_at: datetime,
     ) -> DesignArtifact:
@@ -182,7 +182,7 @@ class DesignRepo:
             raise DesignProjectNotFoundError(f"Artifact {artifact_id}")
         return self._load_artifact_row(row)
 
-    def list_artifacts(self, project_id: str) -> list[DesignArtifact]:
+    def list_artifacts(self, project_id: str) -> List[DesignArtifact]:
         """列出项目的全部 artifact，按 version 升序。"""
         cursor = self._conn.execute(
             f"""SELECT {_ARTIFACT_COLUMNS}

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Optional
+from typing import List, Optional
 
 
 class StandaloneBundler:
@@ -19,7 +19,7 @@ class StandaloneBundler:
 
         Returns self-contained HTML string with all CSS inlined.
         """
-        all_css_parts: list[str] = []
+        all_css_parts: List[str] = []
         if css:
             all_css_parts.append(css)
         if assets:

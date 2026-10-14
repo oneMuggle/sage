@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Dict, List
 
 from backend.design.errors import DesignTemplateNotFoundError
 from backend.design.models import DesignTemplate
@@ -46,13 +47,13 @@ class DesignTemplateRegistry:
     def __init__(self, content_dir: Path) -> None:
         self._content_dir = content_dir
         self._templates_dir = content_dir / "templates"
-        self._cache: dict[str, DesignTemplate] = {}
+        self._cache: Dict[str, DesignTemplate] = {}
 
-    def list_templates(self) -> list[DesignTemplate]:
+    def list_templates(self) -> List[DesignTemplate]:
         """List all available templates."""
         if not self._templates_dir.exists():
             return []
-        templates: list[DesignTemplate] = []
+        templates: List[DesignTemplate] = []
         for kind_dir in sorted(self._templates_dir.iterdir()):
             if not kind_dir.is_dir():
                 continue
@@ -66,7 +67,7 @@ class DesignTemplateRegistry:
                     )
         return templates
 
-    def list_templates_by_kind(self, kind: str) -> list[DesignTemplate]:
+    def list_templates_by_kind(self, kind: str) -> List[DesignTemplate]:
         """List templates filtered by kind (prototype or deck)."""
         return [t for t in self.list_templates() if t.kind == kind]
 
@@ -115,7 +116,7 @@ class DesignTemplateRegistry:
             else None
         )
 
-        assets: dict[str, str] = {}
+        assets: Dict[str, str] = {}
         assets_dir = template_dir / "assets"
         if assets_dir.exists():
             for asset_file in assets_dir.rglob("*"):

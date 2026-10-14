@@ -1,6 +1,8 @@
 """Design system registry — loads and manages DESIGN.md packages."""
 from __future__ import annotations
 
+from typing import Dict, List
+
 import json
 from pathlib import Path
 
@@ -14,13 +16,13 @@ class DesignSystemRegistry:
     def __init__(self, content_dir: Path) -> None:
         self._content_dir = content_dir
         self._systems_dir = content_dir / "systems"
-        self._cache: dict[str, DesignSystem] = {}
+        self._cache: Dict[str, DesignSystem] = {}
 
-    def list_systems(self) -> list[DesignSystem]:
+    def list_systems(self) -> List[DesignSystem]:
         """List all available design systems."""
         if not self._systems_dir.exists():
             return []
-        systems: list[DesignSystem] = []
+        systems: List[DesignSystem] = []
         for system_dir in sorted(self._systems_dir.iterdir()):
             if system_dir.is_dir() and (system_dir / "manifest.json").exists():
                 systems.append(self._load_system(system_dir))
@@ -49,10 +51,10 @@ class DesignSystemRegistry:
         self._cache[system_id] = system
         return system
 
-    def search_systems(self, query: str) -> list[DesignSystem]:
+    def search_systems(self, query: str) -> List[DesignSystem]:
         """Search design systems by name, description, or tags."""
         query_lower = query.lower()
-        results: list[DesignSystem] = []
+        results: List[DesignSystem] = []
         for system in self.list_systems():
             if (
                 query_lower in system.name.lower()
