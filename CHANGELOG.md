@@ -31,6 +31,35 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
   并自动重新预览。**边界**：进程内锁不约束外部 Word/WPS（靠版本校验兜底），幂等台账
   不持久化，重启后退化为普通（仍做版本校验的）写入。
 
+## [v0.4.9-alpha.60-win7] - 2026-10-14
+
+### Added
+- feat(win7): LLM 重试可见性 — 聊天流实时提示 + 设置 UI 暴露退避参数 (#2010)
+- feat(project): phase P31 — workbench toolbar、git status filters、M4→L3 profile save、M5 batch L4 ingest (#2009)
+- feat(project): P30 — constraint preview、milestone overdue alert、risk guard、sidebar presets (#2007)
+- feat(project): P29 — studio profile filter、knowledge export、type detection stage preview (#2005)
+- feat(chat): 文件附件扩展到 ~50 种格式 + xlsx (#2001)
+- feat(project): P28 — profile presets & filter、hook untrust、badge path copy、overview decompose (#2000)
+- feat(project): P27 — glob sample pills & rule search、milestone subtask decompose、selective AI plan apply (#1998)
+- feat(project): P26 — archetype rule & milestone templates、Git markdown export、wizard L2 instructions presets (#1996)
+- feat(project): P25 — M4 archetype semantic query presets & batch copy、L4 material reindex、localized overview widgets (#1994)
+- feat(project): P24 — M2 cross-project isolation & batch toggle、M5→L4 wiki-to-material ingestion、L1/L2/L4 markdown export (#1992)
+- feat(project): P23 — M3→M1 advisor task decompose closed-loop、archetype presets、L5 whitelist copy、sidebar stage pill (#1989)
+- feat(project): P22 — auto-refresh profile on knowledge confirm、reactive semantic search、multi-archetype wiki & chat header project stage badge (#1987)
+- feat(project): P21 — mount advisor/wiki panels、session selector in knowledge extractor、wizard allowed-paths presets (#1985)
+- feat(project): P20 — constraint glob tester、milestone stage filter、overview quick snapshot (#1983)
+- feat(project-ai): M1–M5 智能项目管理子系统 (#1976 → #1981)
+- feat(project): P19 — builtin checkpoint presets、business document style bar (#1980)
+- feat(project): P18 — modularize L3 profile panel with archetype presets and selector governance badges (#1978)
+- feat(project): P17 — git status file drawer、detection blueprint preview、sidebar batch material toggle (#1975)
+- feat(project): P16 — archetype presets for constraint/milestone editors、sidebar quick checkpoint (#1973)
+- feat(projects): P15 — quick governance actions in constraint/milestone summary widgets、wizard baseline checkpointing (#1971)
+- feat(projects): P14 — L4 materials discovery/batch/preview、charter checkpointing、polymorphic VCS overview (#1969)
+- feat(projects): P13 — archive 5-layer context in checkpoints、checkpoint deletion、personal zettelkasten timeline (#1967)
+
+### Changed
+- style(chat): fix ChatInput handleSend indent (win7) (#2003)
+
 ## [v0.4.9-alpha.57-win7] - 2026-09-29
 
 ### Fixed
