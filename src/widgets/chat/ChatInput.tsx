@@ -114,19 +114,15 @@ function ChatInputInner({
   const { settings } = useSettings();
 
   // Task 9 (2026-10-15): vision 可用性检测
-  // 从 discoveredModels 查找当前 chatModel 的 capabilities
-  const chatEndpoint = resolveEndpoint(
-    settings.modelSelections.chatModel,
-    settings.endpoints,
-  );
-  const chatModelCaps =
-    chatEndpoint?.discoveredModels
-      ?.find((m) => m.id === settings.modelSelections.chatModel.modelId)
-      ?.capabilities ?? ['chat'];
+  // 从 discoveredModels 查找当前 chatModel 的 capabilities。
+  // 端点未探测时 capabilities 未知 —— fail-safe 取「支持 vision」，与后端
+  // 「unknown → vision-supported」策略一致，避免能力探测失败就禁掉图片上传。
+  const chatEndpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
+  const chatModelCaps = chatEndpoint?.discoveredModels?.find(
+    (m) => m.id === settings.modelSelections.chatModel.modelId,
+  )?.capabilities ?? ['chat', 'vision'];
   const supportsVision = chatModelCaps.includes('vision');
-  const visionModelConfigured = Boolean(
-    settings.modelSelections.visionModel?.modelId,
-  );
+  const visionModelConfigured = Boolean(settings.modelSelections.visionModel?.modelId);
   const visionUploadDisabled = !supportsVision && !visionModelConfigured;
   const visionFallbackMode = !supportsVision && visionModelConfigured;
 
