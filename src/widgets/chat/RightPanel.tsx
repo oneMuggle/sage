@@ -53,12 +53,7 @@ interface RightPanelProps {
   variant?: 'overlay' | 'push';
 }
 
-const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
-  'progress',
-  'outline',
-  'changes',
-  'artifacts',
-];
+const RIGHT_PANEL_TABS: readonly RightPanelTab[] = ['progress', 'outline', 'changes', 'artifacts'];
 
 const TAB_LABELS: Record<RightPanelTab, string> = {
   progress: '进度',
@@ -177,7 +172,8 @@ function PanelOptionsMenu({
   showAutoOpenToggle,
   showAutoCollapseToggle,
 }: PanelOptionsMenuProps) {
-  const hasItems = Boolean(onApplyPreset) || Boolean(showAutoOpenToggle) || Boolean(showAutoCollapseToggle);
+  const hasItems =
+    Boolean(onApplyPreset) || Boolean(showAutoOpenToggle) || Boolean(showAutoCollapseToggle);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -307,32 +303,35 @@ export function PanelHeader({
     const countOf = (t: RightPanelTab) =>
       t === 'artifacts' ? artifactCount : t === 'changes' ? changesCount : 0;
     return (
-      <div className="h-12 flex border-b border-border items-center pr-1 min-w-0" data-testid="right-panel-header">
+      <div
+        className="h-12 flex border-b border-border items-center pr-1 min-w-0"
+        data-testid="right-panel-header"
+      >
         <div className="flex-1 min-w-0 flex items-center overflow-x-auto no-scrollbar">
-        {RIGHT_PANEL_TABS.map((t) => {
-          const count = countOf(t);
-          return (
-            <button
-              key={t}
-              // 计数压成小号数字而非「(N)」后缀：Tab 行在 S 档下每个 Tab
-              // 只有 ~50px，带括号的形式会截断。aria-label 保留「产物 (N)」
-              // 完整读法，屏幕阅读器与既有测试断言不受影响。
-              aria-label={count > 0 ? `${TAB_LABELS[t]} (${count})` : TAB_LABELS[t]}
-              className={
-                'shrink-0 whitespace-nowrap px-2 py-2 text-xs font-medium transition-colors ' +
-                (tab === t
-                  ? 'text-primary border-b-2 border-primary'
-                  : 'text-text-secondary hover:text-text')
-              }
-              onClick={() => onTabChange(t)}
-            >
-              {TAB_LABELS[t]}
-              {count > 0 && (
-                <span className="ml-0.5 text-ui-xs tabular-nums opacity-70">{count}</span>
-              )}
-            </button>
-          );
-        })}
+          {RIGHT_PANEL_TABS.map((t) => {
+            const count = countOf(t);
+            return (
+              <button
+                key={t}
+                // 计数压成小号数字而非「(N)」后缀：Tab 行在 S 档下每个 Tab
+                // 只有 ~50px，带括号的形式会截断。aria-label 保留「产物 (N)」
+                // 完整读法，屏幕阅读器与既有测试断言不受影响。
+                aria-label={count > 0 ? `${TAB_LABELS[t]} (${count})` : TAB_LABELS[t]}
+                className={
+                  'shrink-0 whitespace-nowrap px-2 py-2 text-xs font-medium transition-colors ' +
+                  (tab === t
+                    ? 'text-primary border-b-2 border-primary'
+                    : 'text-text-secondary hover:text-text')
+                }
+                onClick={() => onTabChange(t)}
+              >
+                {TAB_LABELS[t]}
+                {count > 0 && (
+                  <span className="ml-0.5 text-ui-xs tabular-nums opacity-70">{count}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
         <div className="flex items-center gap-0.5 ml-1 shrink-0">
           <PanelOptionsMenu
@@ -350,7 +349,10 @@ export function PanelHeader({
 
   // ArtifactViewer 视图:最大化/× 按钮
   return (
-    <div className="flex justify-end border-b border-border items-center h-12 px-2 gap-0.5" data-testid="right-panel-header">
+    <div
+      className="flex justify-end border-b border-border items-center h-12 px-2 gap-0.5"
+      data-testid="right-panel-header"
+    >
       {maximizeButton}
       {closeButton}
     </div>

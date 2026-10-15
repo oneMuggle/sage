@@ -443,13 +443,9 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
             ) : fileContent !== null ? (
               <>
                 {fileContentTruncated && (
-                  <div className="text-xs text-warning p-1">
-                    文件过长，已截断显示前 512KiB
-                  </div>
+                  <div className="text-xs text-warning p-1">文件过长，已截断显示前 512KiB</div>
                 )}
-                <ShikiCodeBlock language={langFromPath(selectedPath)}>
-                  {fileContent}
-                </ShikiCodeBlock>
+                <ShikiCodeBlock language={langFromPath(selectedPath)}>{fileContent}</ShikiCodeBlock>
               </>
             ) : null
           ) : diffLoading ? (
@@ -463,18 +459,14 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
           ) : splitView ? (
             <>
               {diffTruncated && (
-                <div className="text-xs text-warning p-1">
-                  diff 过长,已截断显示前 64KiB
-                </div>
+                <div className="text-xs text-warning p-1">diff 过长,已截断显示前 64KiB</div>
               )}
               <SplitDiff diff={diff} />
             </>
           ) : (
             <>
               {diffTruncated && (
-                <div className="text-xs text-warning p-1">
-                  diff 过长,已截断显示前 64KiB
-                </div>
+                <div className="text-xs text-warning p-1">diff 过长,已截断显示前 64KiB</div>
               )}
               {hunks.length > 1 ? (
                 <>
