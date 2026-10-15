@@ -130,6 +130,12 @@ class SecurityError(SageError):
         )
 
 
+class VisionNotAvailableError(Exception):
+    """对话模型不支持视觉识别且未配置视觉理解模型时抛出。"""
+
+    pass
+
+
 def handle_sage_error(error: Exception) -> Dict[str, Any]:
     """
     将异常转换为统一错误格式
