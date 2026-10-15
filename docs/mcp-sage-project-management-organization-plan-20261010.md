@@ -573,3 +573,15 @@
    - 在每条提取建议卡片顶栏新增 **`转 L2 约束 / 已转 L2 约束`** 按钮（`knowledge-to-constraint-${idx}`），支持在沉淀 L3 画像的同时将关键约定直接固化为 L2 强制约束规则。
 4. **L3 项目演化记忆画像条目一键升格为 L2 约束规则（`src/features/project-type/StudioProfileTabPanel.tsx`）**
    - 在每条冻结画像条目右侧新增 **`升格为约束 / 已升格约束`** 按钮（`studio-profile-to-constraint-${entry.id}`），打通 **“L3 演化记忆画像 → L2 强约束规则”** 的双向治理闭环。
+
+### Phase P34：内置版本快照时间轴与双链笔记导出、M5 Wiki 符号分类筛选预览、M4 检索片段与 M3 改进建议一键固化 L2 约束闭环（2026-10-15 已完成）
+
+1. **内置版本快照时间轴与个人双链笔记一键导出 Markdown（`src/features/project-type/BuiltinCheckpointAndStyleBar.tsx`）**
+   - 在 `BuiltinCheckpointTimelineBar` 顶栏新增 **`复制时间轴 MD / 已复制时间轴`** 按钮（`checkpoint-copy-timeline-btn`），一键将 `.sage/checkpoints` 版本快照列表导出为结构化 Markdown。
+   - 在 `PersonalZettelkastenFooter` 永久卡片区域新增 **`复制双链笔记 MD / 已复制笔记`** 按钮（`personal-notes-copy-md-btn`），一键导出个人知识空间 Zettelkasten 永久卡片笔记。
+2. **M5 AI 代码→Wiki 扫描预览阶段符号分类筛选胶囊与符号明细预览（`src/features/project-type/WikiGenerationPanel.tsx`）**
+   - 将扫描预览阶段的符号统计升级为可交互的分类筛选胶囊栏（`wiki-symbol-filter-all` / `wiki-symbol-filter-${kind}`），并新增符号明细预览列表（`wiki-symbol-preview-list`），直观展示提取到的函数/类/方法名称与源码行号。
+3. **M4 语义检索命中片段一键固化为 L2 强约束规则（`src/features/project-type/SemanticSearchPanel.tsx`）**
+   - 在每条检索命中卡片顶栏除沉淀至 L3 画像外，新增 **`转 L2 约束 / 已转 L2 约束`** 按钮（`semantic-hit-to-constraint-${idx}`），支持将检索命中的关键合同条款、代码规范或实验准则直接固化为 L2 行为约束。
+4. **M3 AI 顾问改进建议一键固化为 L2 行为约束（`src/features/project-type/ProjectAdvisorCard.tsx`）**
+   - 在展开的改进建议列表中为每条建议新增 **`固化为约束 / 已固化约束`** 按钮（`advisor-suggestion-to-constraint-${idx}`），与原有的“分解为任务（M3→M1）”共同构成 **“M3 改进建议 → M1 里程碑 / L2 行为约束”** 双路闭环。

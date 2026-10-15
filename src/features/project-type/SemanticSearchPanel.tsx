@@ -8,7 +8,7 @@
  * - 索引状态：随项目切换自动同步索引统计，支持手动刷新统计
  */
 
-import { Search, Loader2, FileText, AlertCircle, Copy, Check, RefreshCw, Sparkles, BookmarkPlus } from 'lucide-react';
+import { Search, Loader2, FileText, AlertCircle, Copy, Check, RefreshCw, Sparkles, BookmarkPlus, ShieldPlus } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -41,6 +41,7 @@ export function SemanticSearchPanel({
   const [copiedAll, setCopiedAll] = useState(false);
   const [minScorePct, setMinScorePct] = useState<number>(0);
   const [savedProfileIndices, setSavedProfileIndices] = useState<Set<number>>(new Set());
+  const [savedConstraintIndices, setSavedConstraintIndices] = useState<Set<number>>(new Set());
 
   const presets = SEMANTIC_QUERY_PRESETS[projectType] ?? SEMANTIC_QUERY_PRESETS.coding;
 
@@ -55,6 +56,8 @@ export function SemanticSearchPanel({
       setError(null);
       setResults(null);
       setSavedProfileIndices(new Set());
+    setSavedConstraintIndices(new Set());
+      setSavedConstraintIndices(new Set());
       try {
         const result = await projectApi.semanticSearchMaterials(projectId, trimmed, 10);
         setResults(result.results);
@@ -90,6 +93,23 @@ export function SemanticSearchPanel({
       setTimeout(() => setCopiedIdx(null), 1500);
     } catch {
       // ignore in test env
+    }
+  };
+
+  /** M4 -> L2: 将检索命中片段直接固化为 L2 行为约束 */
+  const handleSaveHitToConstraint = async (hit: SemanticSearchHit, idx: number) => {
+    if (savedConstraintIndices.has(idx) || typeof projectApi?.createConstraint !== 'function') {
+      return;
+    }
+    try {
+      await projectApi.createConstraint(projectId, {
+        category: 'convention',
+        content: hit.content.slice(0, 300),
+        priority: 7,
+      });
+      setSavedConstraintIndices((prev) => new Set(prev).add(idx));
+    } catch {
+      // ignore in test/offline mode
     }
   };
 
@@ -151,6 +171,7 @@ export function SemanticSearchPanel({
     setError(null);
     setMinScorePct(0);
     setSavedProfileIndices(new Set());
+    setSavedConstraintIndices(new Set());
     void loadStats();
   }, [projectId, loadStats]);
 
@@ -364,6 +385,17 @@ export function SemanticSearchPanel({
                               沉淀至 L3 画像
                             </>
                           )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savedConstraintIndices.has(idx)}
+                          onClick={() => void handleSaveHitToConstraint(hit, idx)}
+                          data-testid={`semantic-hit-to-constraint-${idx}`}
+                          className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
+                          title="将此检索片段固化为 L2 强约束规则"
+                        >
+                          <ShieldPlus className="h-2.5 w-2.5 text-primary" />
+                          {savedConstraintIndices.has(idx) ? '已转 L2 约束' : '转 L2 约束'}
                         </button>
                         <button
                           type="button"

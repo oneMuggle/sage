@@ -81,6 +81,7 @@ export function WikiGenerationPanel({
   const [ingestedPaths, setIngestedPaths] = useState<Set<string>>(new Set());
   const [ingestingAll, setIngestingAll] = useState(false);
   const [fileFilter, setFileFilter] = useState('');
+  const [symbolKindFilter, setSymbolKindFilter] = useState<string>('all');
 
   /** 重置 */
   const handleReset = useCallback(() => {
@@ -94,6 +95,7 @@ export function WikiGenerationPanel({
     setIngestedPaths(new Set());
     setIngestingAll(false);
     setFileFilter('');
+    setSymbolKindFilter('all');
   }, []);
 
   useEffect(() => {
@@ -400,19 +402,61 @@ export function WikiGenerationPanel({
             )}
           </div>
 
-          {/* 符号统计 */}
-          <div className="space-y-1">
+          {/* 符号统计与分类筛选 */}
+          <div className="space-y-1.5">
             <div className="flex items-center gap-2 text-xs font-medium">
               <Sparkles className="h-3.5 w-3.5" />
               提取到 {symbols.length} 个符号
             </div>
             {Object.keys(symbolCountByKind).length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5" data-testid="wiki-symbol-filter-bar">
+                <button
+                  type="button"
+                  data-testid="wiki-symbol-filter-all"
+                  onClick={() => setSymbolKindFilter('all')}
+                  className={`rounded border px-2 py-0.5 text-ui-2xs font-medium transition-colors ${
+                    symbolKindFilter === 'all'
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  全部符号 ({symbols.length})
+                </button>
                 {Object.entries(symbolCountByKind).map(([kind, count]) => (
-                  <Badge key={kind} variant="outline" className="text-xs">
+                  <button
+                    key={kind}
+                    type="button"
+                    data-testid={`wiki-symbol-filter-${kind}`}
+                    onClick={() => setSymbolKindFilter(kind)}
+                    className={`rounded border px-2 py-0.5 text-ui-2xs font-medium transition-colors ${
+                      symbolKindFilter === kind
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
                     {KIND_LABELS[kind] ?? kind}: {count}
-                  </Badge>
+                  </button>
                 ))}
+              </div>
+            )}
+            {symbols.length > 0 && (
+              <div
+                className="max-h-24 overflow-y-auto rounded bg-muted/40 p-2 space-y-0.5 text-ui-2xs font-mono"
+                data-testid="wiki-symbol-preview-list"
+              >
+                {symbols
+                  .filter((s) => symbolKindFilter === 'all' || s.kind === symbolKindFilter)
+                  .slice(0, 8)
+                  .map((s, idx) => (
+                    <div key={`${s.filePath}-${s.name}-${idx}`} className="flex items-center justify-between gap-2">
+                      <span className="truncate text-foreground">
+                        [{KIND_LABELS[s.kind] ?? s.kind}] {s.name}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {s.filePath}:{s.lineno}
+                      </span>
+                    </div>
+                  ))}
               </div>
             )}
           </div>
