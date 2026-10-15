@@ -52,6 +52,7 @@ except ImportError:
 
 from backend.domain.agent_event import RunEventScope
 from backend.domain.tool_policy import ToolPolicy
+from backend.orchestration.orch_settings import resolve_tool_call_budget
 from backend.orchestration.permission import (
     AgentAction,
     LanePermission,
@@ -791,7 +792,10 @@ class ChatService:
         Returns:
             ``True`` 当预算被超额；否则 ``False``。
         """
-        budget = self._tool_policy.max_tool_calls_per_run
+        # 实时解析：env > UI 设置 (OrchSettings) > 快照 policy。
+        # 修复前此处直接读 self._tool_policy.max_tool_calls_per_run，
+        # 是启动时的 frozen 快照 —— UI 改 100 不重启后端永远不会生效。
+        budget = resolve_tool_call_budget(self._tool_policy.max_tool_calls_per_run)
         called = 0
         for tc in tool_calls:
             if called >= budget:
