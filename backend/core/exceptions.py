@@ -130,6 +130,11 @@ class SecurityError(SageError):
         )
 
 
+# VisionNotAvailableError 已迁移至 backend.core.errors（继承 LLMError），
+# 此处 re-export 仅为向后兼容（agent.py / test_agent_vision.py 仍通过此路径导入）。
+from backend.core.errors import VisionNotAvailableError  # noqa: E402,F401
+
+
 def handle_sage_error(error: Exception) -> Dict[str, Any]:
     """
     将异常转换为统一错误格式

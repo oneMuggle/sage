@@ -94,6 +94,8 @@ describe('chatApi.chatStream (PR-6)', () => {
       autoContext: null,
       // Task 5 (2026-09-17): 显式上下文重置, 缺省 false
       context_reset: false,
+      // Vision model fallback (2026-10-15): 前端传入的 chatModel 能力, 缺省 null
+      capabilities: null,
     });
     // 2) listen 订阅 chat-stream-{id} (从 {streamId} 对象解构得到)
     expect(listenMock).toHaveBeenCalledWith(`chat-stream-${streamId}`, expect.any(Function));

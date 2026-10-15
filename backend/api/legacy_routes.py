@@ -24,6 +24,8 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Set
 
+from backend.ports.llm import ModelCapabilities
+
 # LLM 调用总 wall-clock 超时（秒）。默认 600（10 分钟）。
 # httpx.Timeout(60) 只是 chunk 间读超时，慢连接持续有小数据块就永不触发。
 # 此超时包裹整个 agent.run_loop()，防止 LLM API hang 住导致 session 永远 running。
@@ -608,6 +610,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 agent_id=data.agent_id or "primary",
                 scheduler_service_getter=get_scheduler_service,
             )
+            # Task 8 (2026-10-15): 前端推断的 capabilities 覆盖后端 provider 推断。
+            # 前端从 discoveredModels 查找，比后端 heuristic 更准确（用户选了哪个模型）。
+            if data.capabilities:
+                _frontend_vision = "vision" in data.capabilities
+                _original_resolver = agent.capability_resolver
+
+                def _frontend_overridden_resolver(
+                    model_id: str,
+                    _fv: bool = _frontend_vision,
+                    _orig: object = _original_resolver,
+                ):
+                    return ModelCapabilities(vision=_fv)
+
+                agent.capability_resolver = _frontend_overridden_resolver
             # PM1 (round8): 计划模式 per-run 只读门 —— 实例级 enforcer 注入
             # （run_loop 对非空 permission_enforcer 直接复用），override 为
             # READ_ONLY；全局 settings 的 permission_mode 不动。失败降级为
@@ -1685,19 +1701,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         "[REQ %s] context_pressure 事件推送失败，忽略", request_id
                     )
 
-            # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）。
-            # 校验已在 attachment 之后提前完成,此处只做末条 user 消息的形态转换。
+            # G6 (2026-09-06): 图片附件处理。
+            # 智能降级：优先使用 chatModel 的原生 vision 能力，不足时降级到 visionModel。
             if data.images:
-                messages[-1] = {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": data.message},
-                        *[
-                            {"type": "image_url", "image_url": {"url": image_url}}
-                            for image_url in data.images
-                        ],
-                    ],
-                }
+                messages = await agent._prepare_messages_with_images(messages, data.images)
 
             # Task 5 (round 2): explicit reject when the assembled request
             # exceeds the catalog-resolved window. History was already

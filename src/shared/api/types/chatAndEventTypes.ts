@@ -647,6 +647,8 @@ export interface ChatConfig {
   apiKey?: string;
   apiUrl?: string;
   model?: string;
+  /** 前端推断的模型能力(chat / vision / embedding 等),供后端决策图片处理路径 */
+  capabilities?: string[];
   maxContext?: number;
   /** Task 5 (2026-09-15): auto-context resolution flag.
    * true = backend resolves effective window from catalog; false = use maxContext as fixed cap.

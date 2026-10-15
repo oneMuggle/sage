@@ -1,3 +1,4 @@
+import { getProviderDefinition } from '../../entities/endpoint/providerRegistry';
 import {
   DEMO_ENDPOINT_MODELS,
   type DiscoveredModel,
@@ -180,59 +181,19 @@ export async function fetchModels(baseUrl: string, apiKey: string): Promise<Disc
 }
 
 /**
- * R33: 按协议发现模型 —— anthropic/gemini/ollama 走各自的 /models 语义。
+ * R33 + A2: 按协议发现模型 —— 委托给 providerRegistry 中对应协议的定义。
  * 全部经本机后端 LLM 代理透传（X-LLM-Provider-Url 指定上游），自定义
- * 鉴权头（x-api-key / anthropic-version / x-goog-api-key）会被代理原样
- * 转发（_filter_request_headers 只剔除 hop-by-hop 与本地能力令牌）。
+ * 鉴权头由各 provider 定义自行构造。
  */
 export async function fetchModelsByProtocol(
   protocol: EndpointProtocol,
   baseUrl: string,
   apiKey: string,
 ): Promise<DiscoveredModel[]> {
-  if (protocol === 'openai-compatible') return fetchModels(baseUrl, apiKey);
-  const base = baseUrl.replace(/\/+$/, '');
   if (isDemoMode()) return DEMO_ENDPOINT_MODELS.map((model) => ({ ...model }));
-
-  const toModels = (ids: string[]): DiscoveredModel[] =>
-    ids.map((id) => ({ id, capabilities: inferCapabilities(id), endpointId: '' }));
-
-  if (protocol === 'anthropic') {
-    const response = await backendRequest<{ data?: Array<{ id?: string }> }>({
-      path: `${LLM_PROXY_BASE}/v1/models`,
-      method: 'GET',
-      headers: {
-        'X-LLM-Provider-Url': base,
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-    });
-    return toModels((response.data ?? []).map((m) => String(m.id ?? '')).filter(Boolean));
-  }
-
-  if (protocol === 'gemini') {
-    const response = await backendRequest<{ models?: Array<{ name?: string }> }>({
-      path: `${LLM_PROXY_BASE}/v1beta/models`,
-      method: 'GET',
-      headers: {
-        'X-LLM-Provider-Url': base,
-        'x-goog-api-key': apiKey,
-      },
-    });
-    return toModels(
-      (response.models ?? [])
-        .map((m) => String(m.name ?? '').replace(/^models\//, ''))
-        .filter(Boolean),
-    );
-  }
-
-  // ollama
-  const response = await backendRequest<{ models?: Array<{ name?: string }> }>({
-    path: `${LLM_PROXY_BASE}/api/tags`,
-    method: 'GET',
-    headers: { 'X-LLM-Provider-Url': base },
-  });
-  return toModels((response.models ?? []).map((m) => String(m.name ?? '')).filter(Boolean));
+  const provider = getProviderDefinition(protocol);
+  if (!provider) return [];
+  return provider.fetchModels(baseUrl, apiKey, backendRequest);
 }
 
 /**
@@ -274,10 +235,6 @@ async function testChatCompletion(
 /**
  * Test connectivity to an OpenAI-compatible endpoint.
  * Tests both /models discovery and /chat/completions.
- *
- * 容错：若 /v1/models 返回 404（管理员禁用模型列表接口），但调用方提供了
- * chatModel，则跳过模型发现，直接用 chatModel 测试 /v1/chat/completions。
- * 适用于 Higress 等网关禁用了 /models 端点但对话接口可用的场景。
  */
 export async function testEndpointConnection(
   baseUrl: string,
@@ -294,67 +251,12 @@ export async function testEndpointConnection(
       discoveredModels: DEMO_ENDPOINT_MODELS.map((model) => ({ ...model })),
     };
   }
-
-  // Step 1: 尝试发现模型列表
-  let models: DiscoveredModel[] = [];
-  let modelDiscoveryFailed = false;
-  let modelDiscoveryError: unknown = null;
-
   try {
-    models = await fetchModelsByProtocol(protocol, baseUrl, apiKey);
-  } catch (error) {
-    modelDiscoveryFailed = true;
-    modelDiscoveryError = error;
-  }
+    // Step 1: Test /models endpoint（R33: 按协议分发发现语义）
+    const models = await fetchModelsByProtocol(protocol, baseUrl, apiKey);
+    const modelDiscovery = `发现 ${models.length} 个模型`;
 
-  // Step 2: 模型发现失败时的容错逻辑
-  if (modelDiscoveryFailed) {
-    // 如果是 404 且有手动指定的 chatModel，直接测试对话接口
-    if (chatModel && _isUpstream404Error(modelDiscoveryError)) {
-      try {
-        const chatResult =
-          protocol === 'openai-compatible'
-            ? await testChatCompletion(baseUrl, apiKey, chatModel)
-            : await testChatCompletionByProtocol(
-                protocol as Exclude<EndpointProtocol, 'openai-compatible'>,
-                baseUrl,
-                apiKey,
-                chatModel,
-              );
-        if (chatResult.success) {
-          return {
-            success: true,
-            message: `连接成功 · 模型列表不可用，但对话端点正常（使用手动指定的模型: ${chatModel}）`,
-            latency: Date.now() - start,
-            discoveredModels: [],
-          };
-        }
-        return {
-          success: false,
-          message: `模型列表不可用，对话端点异常: ${chatResult.message}`,
-          latency: Date.now() - start,
-        };
-      } catch (chatError) {
-        return {
-          success: false,
-          message: `模型列表不可用，对话测试失败: ${_parseUpstreamError(chatError)}`,
-          latency: Date.now() - start,
-        };
-      }
-    }
-    // 没有 chatModel 或不是 404 错误，返回原始错误
-    return {
-      success: false,
-      message: `连接失败: ${_parseUpstreamError(modelDiscoveryError)}`,
-      latency: Date.now() - start,
-    };
-  }
-
-  const modelDiscovery = `发现 ${models.length} 个模型`;
-
-  // Step 3+: 模型发现成功，继续测试对话端点
-  try {
-    // Step 3: 非 openai 协议的对话级连通测试
+    // R36: 非 openai 协议也做对话级连通测试（各家生成端点按协议构造）
     if (protocol !== 'openai-compatible') {
       let chatTestModel = chatModel;
       if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
@@ -390,13 +292,17 @@ export async function testEndpointConnection(
       };
     }
 
-    // Step 4: 选定 chat 测试模型
+    // Step 2: 选定 chat 测试模型
+    // 优先用调用方传入的 chatModel, 但仅当它属于被测端点 (出现在 /v1/models 列表) 时;
+    // 否则回退到被测端点第一个非 embedding 模型。避免「用端点 A 的全局模型测端点 B」
+    // 触发上游网关 503 model_not_found (如 AgnesAI 按 token 分组路由模型), 也避免
+    // 拿纯 embedding 模型打 /chat/completions 触发假失败。
     let chatTestModel = chatModel;
     if (!chatTestModel || !models.some((m) => m.id === chatTestModel)) {
       chatTestModel = models.find((m) => !isEmbeddingModel(m.id))?.id;
     }
 
-    // Step 5: Test /chat/completions if a chat model is available
+    // Step 3: Test /chat/completions if a chat model is available
     if (chatTestModel) {
       const chatResult = await testChatCompletion(baseUrl, apiKey, chatTestModel);
       if (!chatResult.success) {
@@ -422,35 +328,19 @@ export async function testEndpointConnection(
       discoveredModels: models,
     };
   } catch (error) {
-    // 对话端点测试失败（如 401/403 等）
+    // fetchModels 阶段抛出的 error 含 backend upstream_error envelope, _parseUpstreamError
+    // 会翻译成中文友好提示; 兜底时保留 raw message, 不抛错。
     return {
       success: false,
-      message: `${modelDiscovery}，但对话端点异常: ${_parseUpstreamError(error)}`,
+      message: `连接失败: ${_parseUpstreamError(error)}`,
       latency: Date.now() - start,
-      discoveredModels: models,
     };
   }
 }
 
 /**
- * 检查 error 是否是上游返回 404 的错误。
- * 用于判断 /v1/models 是否被管理员禁用。
- */
-function _isUpstream404Error(error: unknown): boolean {
-  if (!error) return false;
-  const raw = error instanceof Error ? error.message : String(error);
-  // 匹配 "Backend request failed: 404" 或 "HTTP 404" 或 "上游返回 404"
-  const statusMatch = raw.match(/(?:Backend request failed:|HTTP\s+|上游返回\s*)(\d{3})/i);
-  return statusMatch !== null && statusMatch[1] === '404';
-}
-
-/**
- * R36: 非 openai 协议的对话级连通测试 —— 各家生成端点语义不同，
- * 按协议构造最小 completion。全部经本机 LLM 代理透传
- * （X-LLM-Provider-Url 指定上游 + 协议鉴权头原样转发）。
- *
- * 成功消息带模型与"对话连通"标记；上游非 2xx 时抛错（含代理的
- * 结构化 envelope），由调用方 _parseUpstreamError 统一翻译。
+ * R36 + A2: 非 openai 协议的对话级连通测试 —— 委托给 providerRegistry。
+ * 各家生成端点语义不同，由注册表中对应 provider 的 ``testChat`` 构造。
  */
 async function testChatCompletionByProtocol(
   protocol: Exclude<EndpointProtocol, 'openai-compatible'>,
@@ -458,59 +348,9 @@ async function testChatCompletionByProtocol(
   apiKey: string,
   model: string,
 ): Promise<{ success: boolean; message: string }> {
-  const base = baseUrl.replace(/\/+$/, '');
-
-  if (protocol === 'anthropic') {
-    const response = await backendRequest<{ content?: Array<{ text?: string }> }>({
-      path: `${LLM_PROXY_BASE}/v1/messages`,
-      method: 'POST',
-      headers: {
-        'X-LLM-Provider-Url': base,
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: {
-        model,
-        max_tokens: 16,
-        messages: [{ role: 'user', content: 'ping' }],
-      },
-    });
-    const text = response.content?.[0]?.text ?? '';
-    return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
-  }
-
-  if (protocol === 'gemini') {
-    const response = await backendRequest<{
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    }>({
-      path: `${LLM_PROXY_BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      method: 'POST',
-      headers: {
-        'X-LLM-Provider-Url': base,
-        'x-goog-api-key': apiKey,
-      },
-      body: {
-        contents: [{ parts: [{ text: 'ping' }] }],
-        generationConfig: { maxOutputTokens: 16 },
-      },
-    });
-    const text = response.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
-  }
-
-  // ollama
-  const response = await backendRequest<{ message?: { content?: string } }>({
-    path: `${LLM_PROXY_BASE}/api/chat`,
-    method: 'POST',
-    headers: { 'X-LLM-Provider-Url': base },
-    body: {
-      model,
-      messages: [{ role: 'user', content: 'ping' }],
-      stream: false,
-    },
-  });
-  const text = response.message?.content ?? '';
-  return { success: true, message: `对话连通 · ${model} · ${text.slice(0, 40)}` };
+  const provider = getProviderDefinition(protocol);
+  if (!provider) return { success: false, message: `未知协议: ${protocol}` };
+  return provider.testChat(baseUrl, apiKey, model, backendRequest);
 }
 
 /**
@@ -532,27 +372,79 @@ function inferCapabilities(modelId: string): ModelCapability[] {
   const lower = modelId.toLowerCase();
   const caps: ModelCapability[] = ['chat'];
 
-  if (
-    lower.includes('vision') ||
-    lower.includes('gpt-4o') ||
-    lower.includes('gemini') ||
-    lower.includes('claude-3') ||
-    lower.includes('image')
-  ) {
+  // ---- vision ----
+  // 非对话 / 非视觉模型(必须先于 vision 关键词判定,否则 embedding/whisper 误判)
+  const nonVisionMarkers = [
+    'embedding',
+    'moderation',
+    'dall-e',
+    'whisper',
+    'tts',
+    'asr',
+    'gpt-3.5',
+    'gpt-3',
+    'text-davinci',
+    'text-curie',
+    'text-babbage',
+    'text-ada',
+    'rerank',
+    'minilm',
+    'imagen',
+    'veo',
+    'claude-2',
+    'claude-instant', // Anthropic legacy
+  ];
+  const isNonVision = nonVisionMarkers.some((m) => lower.includes(m));
+
+  // 视觉模型族(所有 provider 的 vision markers 并集)
+  const visionMarkers = [
+    // OpenAI / OpenAI-compatible
+    'gpt-4',
+    'gpt-5',
+    'o1',
+    'o3',
+    'o4',
+    'vl',
+    '4v',
+    'internvl',
+    'llava',
+    'minicpm-v',
+    'gemma3',
+    'phi4',
+    // Anthropic (claude-3+ supports vision)
+    'claude-3',
+    'claude-sonnet-4',
+    'claude-opus-4',
+    'claude-haiku-4',
+    // Gemini (generative models)
+    'gemini',
+    // Ollama-specific
+    'moondream',
+    'bakllava',
+    // Generic
+    'vision',
+    'image',
+  ];
+  if (!isNonVision && visionMarkers.some((m) => lower.includes(m))) {
     caps.push('vision');
   }
+
+  // ---- embedding ----
   if (lower.includes('embed') || lower.includes('text-embedding') || lower.includes('vector')) {
     caps.push('embedding');
   }
-  // TTS
+
+  // ---- tts ----
   if (/tts|speech-|voice-/.test(lower)) {
     caps.push('tts');
   }
-  // ASR
+
+  // ---- asr ----
   if (/whisper|asr|transcri/.test(lower)) {
     caps.push('asr');
   }
-  // Image generation
+
+  // ---- image_gen ----
   if (/dall|image-gen|stable-diffusion|sdxl|flux/.test(lower)) {
     caps.push('image_gen');
   }

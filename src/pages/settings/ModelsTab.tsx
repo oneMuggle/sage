@@ -83,7 +83,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
       />
       <ModelSelector
         label="视觉理解模型"
-        desc="用于图片识别（选填）"
+        desc="选填。当对话模型不支持视觉识别时，自动使用此模型生成图片描述"
         groupedModels={visionModels}
         value={visionModel}
         onChange={(v) =>

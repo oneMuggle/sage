@@ -123,6 +123,7 @@ export const chatApi = {
       apiKey: config?.apiKey ?? null,
       apiUrl: config?.apiUrl ?? null,
       model: config?.model ?? null,
+      capabilities: config?.capabilities ?? null,
       maxContext: config?.maxContext ?? null,
       // Task 5 (2026-09-15): auto-context resolution flag.
       autoContext: config?.autoContext ?? null,
