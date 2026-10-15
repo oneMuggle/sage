@@ -302,3 +302,21 @@ class TestVisionFallback:
         assert "图片内容" in result[0]["content"][0]["text"]
         agent._generate_image_descriptions.assert_called_once_with(images)
         agent._replace_images_with_descriptions.assert_called_once()
+
+    @pytest.mark.asyncio()
+    async def test_no_vision_model_configured(self):
+        """chatModel 不支持 vision + visionModel 未配置时，抛出 VisionNotAvailableError。"""
+        from backend.core.exceptions import VisionNotAvailableError
+
+        agent = SageAgent.__new__(SageAgent)
+        agent.llm_config = LLMConfig(model="gpt-3.5-turbo", provider="openai")
+        agent.capability_resolver = MagicMock(
+            return_value=ModelCapabilities(vision=False)
+        )
+        agent._is_vision_model_configured = MagicMock(return_value=False)
+
+        messages = [{"role": "user", "content": "描述这张图片"}]
+        images = ["data:image/png;base64,AAAA"]
+
+        with pytest.raises(VisionNotAvailableError, match="视觉识别"):
+            await agent._prepare_messages_with_images(messages, images)
