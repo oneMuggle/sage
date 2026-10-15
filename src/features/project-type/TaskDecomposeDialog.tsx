@@ -285,19 +285,57 @@ export function TaskDecomposeDialog({
                 </div>
               )}
               <div className="space-y-1">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm font-medium">
-                    将创建 {totalCount} 个里程碑（已勾选 {selectedRootIndices.size}/{milestones.length} 个主节点）：
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                    <span>
+                      将创建 {totalCount} 个里程碑（已勾选 {selectedRootIndices.size}/{milestones.length} 个主节点）
+                    </span>
+                    <span
+                      className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-normal text-primary"
+                      data-testid="decompose-total-days-badge"
+                    >
+                      预计总工期{' '}
+                      {milestones
+                        .filter((_, idx) => selectedRootIndices.has(idx))
+                        .reduce((acc, n) => acc + (n.estimatedDays ?? 0), 0)}{' '}
+                      天
+                    </span>
                   </div>
-                  <button
-                    type="button"
-                    data-testid="decompose-copy-md-btn"
-                    onClick={handleCopyPreviewMarkdown}
-                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
-                  >
-                    {copiedPlan ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                    {copiedPlan ? '已复制方案' : '复制方案 Markdown'}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      data-testid="decompose-select-all-btn"
+                      onClick={() => setSelectedRootIndices(new Set(milestones.map((_, i) => i)))}
+                      className="rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+                    >
+                      全选
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="decompose-select-invert-btn"
+                      onClick={() =>
+                        setSelectedRootIndices((prev) => {
+                          const next = new Set<number>();
+                          milestones.forEach((_, i) => {
+                            if (!prev.has(i)) next.add(i);
+                          });
+                          return next;
+                        })
+                      }
+                      className="rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+                    >
+                      反选
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="decompose-copy-md-btn"
+                      onClick={handleCopyPreviewMarkdown}
+                      className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+                    >
+                      {copiedPlan ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+                      {copiedPlan ? '已复制方案' : '复制方案 Markdown'}
+                    </button>
+                  </div>
                 </div>
                 <div className="rounded-lg border p-3 space-y-1">
                   {milestones.map((ms, idx) => (

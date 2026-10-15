@@ -346,6 +346,33 @@ export function MilestoneEditor({
                 <option value="completed">已完成</option>
                 <option value="blocked">阻塞</option>
               </select>
+              <div
+                className="flex flex-wrap items-center gap-1"
+                data-testid="milestone-status-presets"
+              >
+                {(
+                  [
+                    { key: 'pending', label: '待开始' },
+                    { key: 'in_progress', label: '进行中' },
+                    { key: 'completed', label: '已完成' },
+                    { key: 'blocked', label: '阻塞' },
+                  ] as const
+                ).map((st) => (
+                  <button
+                    key={st.key}
+                    type="button"
+                    data-testid={`milestone-status-pill-${st.key}`}
+                    onClick={() => setStatus(st.key)}
+                    className={`rounded border px-1.5 py-0.5 text-ui-2xs transition-colors ${
+                      status === st.key
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">

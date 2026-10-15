@@ -311,6 +311,33 @@ export function ConstraintEditor({
                 value={priority}
                 onChange={(e) => setPriority(Number(e.target.value))}
               />
+              <div
+                className="flex flex-wrap items-center gap-1"
+                data-testid="constraint-priority-presets"
+              >
+                {(
+                  [
+                    { val: 10, label: 'P10 铁律' },
+                    { val: 8, label: 'P8 强规范' },
+                    { val: 5, label: 'P5 常规' },
+                    { val: 3, label: 'P3 建议' },
+                  ] as const
+                ).map((p) => (
+                  <button
+                    key={p.val}
+                    type="button"
+                    data-testid={`constraint-priority-preset-${p.val}`}
+                    onClick={() => setPriority(p.val)}
+                    className={`rounded border px-1.5 py-0.5 text-ui-2xs transition-colors ${
+                      priority === p.val
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">
