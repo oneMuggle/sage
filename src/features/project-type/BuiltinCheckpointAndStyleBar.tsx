@@ -31,6 +31,7 @@ export function BuiltinCheckpointTimelineBar({
   const [restoredHint, setRestoredHint] = useState<string | null>(null);
   const [previewDetail, setPreviewDetail] = useState<WorkspaceCheckpointDetail | null>(null);
   const [copiedContext, setCopiedContext] = useState(false);
+  const [copiedTimeline, setCopiedTimeline] = useState(false);
 
   const handleCreate = async () => {
     if (creating || typeof projectApi?.createCheckpoint !== 'function') return;
@@ -96,6 +97,32 @@ export function BuiltinCheckpointTimelineBar({
         <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
           <History className="h-3.5 w-3.5 text-emerald-500" />
           内置版本保护时间轴 (.sage/checkpoints)
+          {checkpoints.length > 0 && (
+            <button
+              type="button"
+              data-testid="checkpoint-copy-timeline-btn"
+              onClick={() => {
+                const lines = [
+                  '# 内置版本保护时间轴 (.sage/checkpoints)',
+                  '',
+                  ...checkpoints.map(
+                    (cp, i) => `${i + 1}. **${cp.label}** (\`${cp.id}\` · ${cp.fileCount} 份文件)`,
+                  ),
+                ];
+                try {
+                  void navigator.clipboard?.writeText(lines.join('\n'));
+                  setCopiedTimeline(true);
+                  setTimeout(() => setCopiedTimeline(false), 1800);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-normal text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Copy className="h-2.5 w-2.5" />
+              {copiedTimeline ? '已复制时间轴' : '复制时间轴 MD'}
+            </button>
+          )}
         </div>
         <span className="text-ui-2xs text-muted-foreground">
           {restoredHint ? (
@@ -484,10 +511,38 @@ export function PersonalZettelkastenFooter({
   checkpoints,
   onCreated,
 }: PersonalZettelkastenFooterProps) {
+  const [copiedNotes, setCopiedNotes] = useState(false);
+
   return (
     <div className="space-y-3">
       {decisions.length > 0 && (
-        <ul className="space-y-1 max-h-24 overflow-y-auto" data-testid="personal-notes-list">
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-ui-2xs text-muted-foreground">
+            <span>永久卡片与关键洞察 ({decisions.length})</span>
+            <button
+              type="button"
+              data-testid="personal-notes-copy-md-btn"
+              onClick={() => {
+                const lines = [
+                  '# 个人知识空间永久卡片笔记 (Zettelkasten)',
+                  '',
+                  ...decisions.map((d, i) => `${i + 1}. ${d.content}`),
+                ];
+                try {
+                  void navigator.clipboard?.writeText(lines.join('\n'));
+                  setCopiedNotes(true);
+                  setTimeout(() => setCopiedNotes(false), 1800);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+            >
+              <Copy className="h-2.5 w-2.5" />
+              {copiedNotes ? '已复制笔记' : '复制双链笔记 MD'}
+            </button>
+          </div>
+          <ul className="space-y-1 max-h-24 overflow-y-auto" data-testid="personal-notes-list">
           {decisions.slice(-4).map((d) => (
             <li
               key={d.id}
@@ -496,7 +551,8 @@ export function PersonalZettelkastenFooter({
               {d.content}
             </li>
           ))}
-        </ul>
+          </ul>
+        </div>
       )}
       <BuiltinCheckpointTimelineBar
         projectId={projectId}

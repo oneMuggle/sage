@@ -405,6 +405,9 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('wiki-generation-panel')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('wiki-preview-btn'));
     expect(await screen.findByTestId('wiki-copy-preview-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('wiki-symbol-preview-list')).toHaveTextContent('bootstrap');
+    fireEvent.click(screen.getByTestId('wiki-symbol-filter-function'));
+    fireEvent.click(screen.getByTestId('wiki-symbol-filter-all'));
     fireEvent.click(screen.getByTestId('wiki-generate-btn'));
     expect(await screen.findByTestId('wiki-copy-manifest-btn')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('wiki-ingest-material-0'));
@@ -443,6 +446,7 @@ describe('ProjectArchetypeStudio', () => {
     // Business document style bar & quick checkpoint presets on the business card
     expect(screen.getByTestId('business-doc-style-bar')).toBeInTheDocument();
     expect(screen.getByTestId('checkpoint-quick-presets')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('checkpoint-copy-timeline-btn'));
     fireEvent.click(screen.getByTestId('business-apply-style-btn'));
     await waitFor(() => {
       expect(mockCreateConstraint).toHaveBeenCalledWith(
@@ -492,8 +496,18 @@ describe('ProjectArchetypeStudio', () => {
       );
     });
 
-    // Expand M3 Advisor details and trigger M3->M1 suggestion decomposition dialog
+    // Expand M3 Advisor details, solidify suggestion to L2 constraint, and trigger M3->M1 suggestion decomposition dialog
     fireEvent.click(await screen.findByTestId('advisor-toggle-details-btn'));
+    fireEvent.click(await screen.findByTestId('advisor-suggestion-to-constraint-0'));
+    await waitFor(() => {
+      expect(mockCreateConstraint).toHaveBeenCalledWith(
+        'proj-1',
+        expect.objectContaining({
+          category: 'convention',
+          content: '补充二审归档快照（定稿前保护）',
+        }),
+      );
+    });
     fireEvent.click(await screen.findByTestId('advisor-decompose-suggestion-0'));
     expect(await screen.findByTestId('decompose-archetype-presets')).toBeInTheDocument();
     expect(screen.getByTestId('decompose-requirement-input')).toHaveValue('补充二审归档快照');
@@ -526,6 +540,16 @@ describe('ProjectArchetypeStudio', () => {
     });
     fireEvent.click(screen.getByTestId('semantic-preset-0'));
     expect(await screen.findByTestId('semantic-copy-all-btn')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('semantic-hit-to-constraint-0'));
+    await waitFor(() => {
+      expect(mockCreateConstraint).toHaveBeenCalledWith(
+        'proj-1',
+        expect.objectContaining({
+          category: 'convention',
+          content: 'HotpotQA 基准上多跳召回率提升 6.4%',
+        }),
+      );
+    });
     expect(mockSemanticSearchMaterials).toHaveBeenCalledWith(
       'proj-1',
       '基线模型对比与消融实验结果',
