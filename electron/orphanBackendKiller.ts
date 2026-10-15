@@ -19,6 +19,31 @@
 
 import { execSync as defaultExecSync } from 'node:child_process';
 
+/**
+ * Force-terminate a process and its children on Windows.
+ *
+ * `ChildProcess.kill('SIGKILL')` maps to `TerminateProcess` via libuv, but
+ * on Win7 the 'exit' event delivery for an already-terminating child is
+ * unreliable — the parent can hang waiting for an event that never lands.
+ * `taskkill /F /T` goes through the Windows task manager API instead and
+ * also reaps grandchildren (`/T`), which `TerminateProcess` does not.
+ *
+ * Returns true on success, false if the process was already gone or the
+ * call failed (both are benign for callers — the goal is best-effort
+ * removal of the PID).
+ */
+export function forceKillProcessTree(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 1) return false;
+  try {
+    defaultExecSync(`taskkill /PID ${pid} /F /T`, { encoding: 'utf8' });
+    return true;
+  } catch {
+    // Already exited, or the task is unkillable without elevation. Either
+    // way there is nothing further to do.
+    return false;
+  }
+}
+
 export interface KillOrphanOpts {
   /** TCP port to reclaim (default backend port 8765). */
   port: number;

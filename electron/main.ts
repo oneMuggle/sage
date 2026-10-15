@@ -106,7 +106,7 @@ import { resolveBackendLaunchCommand, resolveDoctorLaunchCommand } from './backe
 import { loadBuildManifest, ownsBackend, type BackendHealthEnvelope } from './buildManifest';
 import { isCurrentGeneration, type BackendGeneration } from './backendSupervisor';
 import { parseOrchEventName } from './eventRouting';
-import { killOrphanedBackendOnPort } from './orphanBackendKiller';
+import { killOrphanedBackendOnPort, forceKillProcessTree } from './orphanBackendKiller';
 import { createIncrementalUtf8Decoder } from './incrementalUtf8Decoder';
 import { BackendNotReadyError, invokeBackend } from './invoke';
 import { runDoctorCheck } from './doctor';
@@ -2026,44 +2026,41 @@ async function registerIpcHandlers(): Promise<void> {
   // ─── Phase 4 (2026-09-25): "在编辑器中打开" IPC handler ─────────────────
   // 接受 sessionId + 相对工作区路径，查询后端获取工作区根目录，
   // 拼接绝对路径后调用 shell.openPath 用系统默认编辑器打开。
-  ipcMain.handle(
-    'file:open-in-editor',
-    async (evt, opts: { sessionId: string; path: string }) => {
-      if (!isTrustedRenderer(evt.sender)) return { error: '未授权的窗口请求' };
-      if (!opts?.sessionId || !opts?.path) {
-        return { error: '缺少 sessionId 或 path 参数' };
-      }
-      try {
-        const res = await fetch(
-          `${BACKEND_URL}/api/v1/workspace?session_id=${encodeURIComponent(opts.sessionId)}`,
-          {
-            headers: {
-              ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
-            },
+  ipcMain.handle('file:open-in-editor', async (evt, opts: { sessionId: string; path: string }) => {
+    if (!isTrustedRenderer(evt.sender)) return { error: '未授权的窗口请求' };
+    if (!opts?.sessionId || !opts?.path) {
+      return { error: '缺少 sessionId 或 path 参数' };
+    }
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/v1/workspace?session_id=${encodeURIComponent(opts.sessionId)}`,
+        {
+          headers: {
+            ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
           },
-        );
-        if (!res.ok) {
-          return { error: `查询工作区失败 (HTTP ${res.status})` };
-        }
-        const data = (await res.json()) as {
-          binding: { workspace_path: string } | null;
-        };
-        if (!data.binding?.workspace_path) {
-          return { error: '此会话未绑定工作区' };
-        }
-        const absolutePath = join(data.binding.workspace_path, opts.path);
-        const openResult = await shell.openPath(absolutePath);
-        if (openResult) {
-          return { error: `打开失败：${openResult}` };
-        }
-        return { success: true };
-      } catch (err) {
-        return {
-          error: `打开文件失败：${err instanceof Error ? err.message : String(err)}`,
-        };
+        },
+      );
+      if (!res.ok) {
+        return { error: `查询工作区失败 (HTTP ${res.status})` };
       }
-    },
-  );
+      const data = (await res.json()) as {
+        binding: { workspace_path: string } | null;
+      };
+      if (!data.binding?.workspace_path) {
+        return { error: '此会话未绑定工作区' };
+      }
+      const absolutePath = join(data.binding.workspace_path, opts.path);
+      const openResult = await shell.openPath(absolutePath);
+      if (openResult) {
+        return { error: `打开失败：${openResult}` };
+      }
+      return { success: true };
+    } catch (err) {
+      return {
+        error: `打开文件失败：${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  });
 }
 
 const wikiChatOwners = new Map<string, string>();
@@ -2272,7 +2269,10 @@ async function shutdownBackend(): Promise<void> {
     return;
   }
   backendLifecycle = 'stopping';
-  logger.info('main: killing backend subprocess', { pid: proc.pid });
+  const pid = proc.pid;
+  const isWin32 = process.platform === 'win32';
+  logger.info('main: killing backend subprocess', { pid });
+
   const exited = new Promise<void>((resolve) => {
     let settled = false;
     const finish = () => {
@@ -2280,35 +2280,76 @@ async function shutdownBackend(): Promise<void> {
       settled = true;
       resolve();
     };
+
+    // Fix race condition: the process may have already exited between the
+    // null-check above and registering this listener. Without this guard,
+    // the 'exit' event has already fired, finish() is never called, and
+    // the Promise hangs forever — keeping Electron alive on Win7 after the
+    // user closes the window, which causes the NSIS installer to detect a
+    // still-running Sage.exe and show the "Sage cannot be closed" dialog.
+    if (proc.killed || proc.exitCode !== null || proc.signalCode !== null) {
+      finish();
+      return;
+    }
+
     proc.once('exit', finish);
-    // Send SIGTERM; on Win32 this maps to TerminateProcess.
+
+    // Send SIGTERM; on Win32 this maps to TerminateProcess via libuv.
     try {
       proc.kill('SIGTERM');
     } catch {
       // Already gone — `exit` will fire (or has fired) soon.
     }
+
     // Escalate to SIGKILL after the grace window if the child ignored
     // SIGTERM (Windows services / conda/python occasionally do).
     setTimeout(() => {
       if (proc.exitCode !== null || proc.signalCode !== null) return;
       logger.warn('main: backend did not exit on SIGTERM, escalating to SIGKILL', {
-        pid: proc.pid,
+        pid,
       });
-      try {
-        proc.kill('SIGKILL');
-      } catch {
-        /* process already gone */
+      if (isWin32 && pid !== undefined) {
+        // taskkill /F /T is more reliable than TerminateProcess on Win7 and
+        // also reaps grandchildren that python may have spawned.
+        forceKillProcessTree(pid);
+      } else {
+        try {
+          proc.kill('SIGKILL');
+        } catch {
+          /* process already gone */
+        }
       }
-      // Give SIGKILL a brief window; if it never resolves, finish() is
-      // still safe to call from the caller's timeout below.
-      setTimeout(finish, 500).unref();
+      setTimeout(finish, 800).unref();
     }, BACKEND_SHUTDOWN_TIMEOUT_MS).unref();
   });
-  await exited;
+
+  // Hard cap: resolve after SHUTDOWN_TIMEOUT + 2.5s regardless of whether
+  // the 'exit' event fires. Without this, a hung exit event (observed on
+  // Win7 when Python's DLL unloading stalls TerminateProcess notification)
+  // would keep Electron alive indefinitely on window-all-closed, blocking
+  // the NSIS installer update and producing "Sage cannot be closed" even
+  // though the user already closed the window.
+  //
+  // `.unref()` is essential: `before-quit` calls this fire-and-forget, so a
+  // ref'd timer would itself hold the event loop open and delay the very
+  // exit we are trying to unblock.
+  let hardCapSettle: () => void = () => {};
+  const hardCap = new Promise<void>((resolve) => {
+    hardCapSettle = resolve;
+  });
+  const hardTimer = setTimeout(() => {
+    logger.warn('main: shutdownBackend hard timeout reached, giving up', { pid });
+    if (isWin32 && pid !== undefined) forceKillProcessTree(pid);
+    hardCapSettle();
+  }, BACKEND_SHUTDOWN_TIMEOUT_MS + 2_500).unref();
+
+  await Promise.race([exited, hardCap]);
+  clearTimeout(hardTimer);
+
   // Wait briefly for the OS to release the listening port so the next
   // spawn doesn't hit EADDRINUSE. 500ms is empirical — typical Linux /
   // Windows TIME_WAIT cleanup is <100ms.
-  if (proc.pid !== undefined && proc.pid > 0) {
+  if (pid !== undefined && pid > 0) {
     await isPortReleased(BACKEND_PORT, 500);
   }
   backendProc = null;
