@@ -134,6 +134,10 @@ export const zhChatAndSider = {
   'chat.copy': '复制',
   'chat.copied': '已复制',
   'chat.delete_confirm': '确定要删除这个会话吗？',
+  // Task 9 (2026-10-15): vision model fallback UI
+  'chat.vision_not_available':
+    '当前对话模型不支持视觉识别，请配置视觉理解模型或更换支持视觉的对话模型',
+  'chat.vision_fallback_info': '图片将通过视觉理解模型识别后转为文本描述',
 
   // ─── M4 会话压缩 / 分叉 ───────────
   // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"

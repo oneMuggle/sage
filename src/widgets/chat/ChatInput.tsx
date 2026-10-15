@@ -1,13 +1,16 @@
+import { AlertTriangle, Info } from 'lucide-react';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useInRouterContext, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import { resolveEndpoint } from '../../entities/setting/types';
 import { AtFileMenu, useAtFileQuery, useBtwCommand } from '../../features/chat';
 // 对标 S3: 直接从源文件导入（而非 barrel），既有 Chat 页面测试整体 mock 了
 // '../../features/chat'，走 barrel 会拿到 undefined。
 import { AtEntityMenu } from '../../features/chat/AtEntityMenu';
 import { parseEntityRefQuery } from '../../features/chat/entityRefs';
 import { appendQuoteToDraft } from '../../features/chat/selectionQuote';
+import { useSettings } from '../../features/manage-settings/useSettings';
 import { importOfficeReference } from '../../features/office/importOfficeReference';
 import { knowledgeApi, promptApi, skillsApi } from '../../shared/api';
 import { type AtFileSelection } from '../../shared/api/fileSearchClient';
@@ -108,6 +111,24 @@ function ChatInputInner({
   hideNewTopic = false,
 }: ChatInputProps) {
   const { t } = useI18n();
+  const { settings } = useSettings();
+
+  // Task 9 (2026-10-15): vision 可用性检测
+  // 从 discoveredModels 查找当前 chatModel 的 capabilities
+  const chatEndpoint = resolveEndpoint(
+    settings.modelSelections.chatModel,
+    settings.endpoints,
+  );
+  const chatModelCaps =
+    chatEndpoint?.discoveredModels
+      ?.find((m) => m.id === settings.modelSelections.chatModel.modelId)
+      ?.capabilities ?? ['chat'];
+  const supportsVision = chatModelCaps.includes('vision');
+  const visionModelConfigured = Boolean(
+    settings.modelSelections.visionModel?.modelId,
+  );
+  const visionUploadDisabled = !supportsVision && !visionModelConfigured;
+  const visionFallbackMode = !supportsVision && visionModelConfigured;
 
   // Workspace context — provides sessionId + binding for the @ menu.
   // Falls back to the legacy `workspacePath` prop for callers that don't
@@ -709,6 +730,18 @@ function ChatInputInner({
           </button>
         </div>
       )}
+      {visionUploadDisabled && (
+        <div className="mx-3 mb-1 px-3 py-1.5 rounded-md bg-warning/10 text-warning text-xs flex items-center gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span>{t('chat.vision_not_available')}</span>
+        </div>
+      )}
+      {visionFallbackMode && (
+        <div className="mx-3 mb-1 px-3 py-1.5 rounded-md bg-info/10 text-info text-xs flex items-center gap-1.5">
+          <Info className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          <span>{t('chat.vision_fallback_info')}</span>
+        </div>
+      )}
       <InputCard
         value={value}
         onChange={handleChange}
@@ -735,7 +768,7 @@ function ChatInputInner({
           const doc = knowledgeDocs.find((d) => d.id === docId);
           if (doc) toggleKnowledgeRef(doc);
         }}
-        onImageSelect={handleImageSelect}
+        onImageSelect={visionUploadDisabled ? undefined : handleImageSelect}
         onFileSelect={handleFileSelect}
         onAudioAttachment={handleAudioAttachment}
         onDrop={handleDrop}
