@@ -320,3 +320,63 @@ class TestVisionFallback:
 
         with pytest.raises(VisionNotAvailableError, match="视觉识别"):
             await agent._prepare_messages_with_images(messages, images)
+
+
+class TestFrontendCapabilitiesOverride:
+    """Task 8: 前端 capabilities 覆盖后端 capability_resolver。"""
+
+    @pytest.mark.asyncio()
+    async def test_frontend_capabilities_overrides_resolver(self):
+        """前端说 vision=True 时，即使 resolver 返回 False 也按 True 处理。"""
+        agent = SageAgent.__new__(SageAgent)
+        agent.llm_config = LLMConfig(model="gpt-3.5-turbo", provider="openai")
+        # 后端 resolver 说 vision=False（gpt-3.5 确实不支持）
+        agent.capability_resolver = MagicMock(
+            return_value=ModelCapabilities(vision=False)
+        )
+
+        # 模拟 legacy_routes.py 的覆盖逻辑
+        frontend_caps = ["chat", "vision"]
+        _frontend_vision = "vision" in frontend_caps
+        _original_resolver = agent.capability_resolver
+
+        def _frontend_overridden_resolver(
+            model_id, _fv=_frontend_vision, _orig=_original_resolver
+        ):
+            return ModelCapabilities(vision=_fv)
+
+        agent.capability_resolver = _frontend_overridden_resolver
+
+        # Act
+        caps = await agent._get_model_capabilities("gpt-3.5-turbo")
+
+        # Assert — 前端 override 生效
+        assert "vision" in caps
+
+    @pytest.mark.asyncio()
+    async def test_frontend_no_vision_overrides_resolver(self):
+        """前端说 capabilities=['chat']（无 vision）时，即使 resolver 说 True 也按 False。"""
+        agent = SageAgent.__new__(SageAgent)
+        agent.llm_config = LLMConfig(model="gpt-4o", provider="openai")
+        # 后端 resolver 说 vision=True
+        agent.capability_resolver = MagicMock(
+            return_value=ModelCapabilities(vision=True)
+        )
+
+        # 模拟覆盖逻辑：前端说没有 vision
+        frontend_caps = ["chat"]
+        _frontend_vision = "vision" in frontend_caps
+
+        def _frontend_overridden_resolver(
+            model_id, _fv=_frontend_vision, _orig=None
+        ):
+            return ModelCapabilities(vision=_fv)
+
+        agent.capability_resolver = _frontend_overridden_resolver
+
+        # Act
+        caps = await agent._get_model_capabilities("gpt-4o")
+
+        # Assert — 前端 override 生效，vision 被移除
+        assert "vision" not in caps
+        assert caps == ["chat"]
