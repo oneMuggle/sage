@@ -152,7 +152,11 @@ export function Layout() {
                 </div>
               )}
             >
-              <Sidebar width={collapsed ? 56 : width} collapsed={collapsed} onToggleCollapse={() => setCollapsed((prev) => !prev)} />
+              <Sidebar
+                width={collapsed ? 56 : width}
+                collapsed={collapsed}
+                onToggleCollapse={() => setCollapsed((prev) => !prev)}
+              />
             </ErrorBoundary>
           </div>
 

@@ -86,9 +86,7 @@ describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () =>
       onToggleRightPanel: noop,
       unseenArtifactCount: 0,
     };
-    const { rerender } = renderWithI18n(
-      <ChatHeaderBar {...baseProps} rightPanelOpen={false} />,
-    );
+    const { rerender } = renderWithI18n(<ChatHeaderBar {...baseProps} rightPanelOpen={false} />);
 
     expect(screen.getByTestId('chat-header-bar')).toHaveAttribute('data-compact', 'false');
     expect(screen.getByTestId('session-session-menu-toggle')).toBeInTheDocument();
