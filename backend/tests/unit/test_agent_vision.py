@@ -14,6 +14,7 @@ import pytest
 
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.llm_client import LLMConfig
+from backend.ports.llm import ModelCapabilities
 
 PNG_URL = "data:image/png;base64,AAAA"
 JPEG_URL = "data:image/jpeg;base64,BBBB"
@@ -253,3 +254,49 @@ class TestVisionFallback:
 
         assert result is messages
         agent._get_model_capabilities.assert_not_called()
+
+    @pytest.mark.asyncio()
+    async def test_fallback_to_vision_model(self):
+        """chatModel 不支持 vision 时，降级到 visionModel 生成图片描述。
+
+        失败测试：当前 ``_prepare_messages_with_images`` 对 vision=False
+        分支直接抛 ``NotImplementedError``。Task 4 实现降级逻辑后本测试
+        应当通过——mock 的 ``_generate_image_descriptions`` 与
+        ``_replace_images_with_descriptions`` 被调用，返回包含描述文本的消息。
+        """
+        # Arrange
+        agent = SageAgent.__new__(SageAgent)
+        agent.llm_config = LLMConfig(model="gpt-3.5-turbo", provider="openai")
+        # capability_resolver 返 vision=False → _get_model_capabilities 不含 "vision"
+        agent.capability_resolver = MagicMock(
+            return_value=ModelCapabilities(vision=False)
+        )
+        # Task 4 将要接线的两个 seam：
+        agent._generate_image_descriptions = AsyncMock(
+            return_value=["一张蓝天白云的照片"]
+        )
+        agent._replace_images_with_descriptions = MagicMock(
+            return_value=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "[图片内容：一张蓝天白云的照片]\n\n描述这张图片",
+                        }
+                    ],
+                }
+            ]
+        )
+
+        messages = [{"role": "user", "content": "描述这张图片"}]
+        images = ["data:image/png;base64,AAAA"]
+
+        # Act
+        result = await agent._prepare_messages_with_images(messages, images)
+
+        # Assert — 降级路径产出含描述的消息，而非 image_url 块
+        assert len(result) == 1
+        assert "图片内容" in result[0]["content"][0]["text"]
+        agent._generate_image_descriptions.assert_called_once_with(images)
+        agent._replace_images_with_descriptions.assert_called_once()
