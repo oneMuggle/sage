@@ -845,16 +845,30 @@ class SageAgent:
             logger.warning("读取 visionModel 配置失败", exc_info=True)
             return False
 
+    @staticmethod
+    def _find_endpoint_by_id(camel: Dict[str, Any], endpoint_id: str) -> Optional[Dict[str, Any]]:
+        """按 ``endpointId`` 从 ``endpoints[]`` 反查端点配置（与 llm_factory 同款模式）。"""
+        return next(
+            (
+                ep
+                for ep in (camel.get("endpoints") or [])
+                if isinstance(ep, dict) and ep.get("id") == endpoint_id
+            ),
+            None,
+        )
+
     def _build_vision_config(self):
         """从设置中构建 visionModel 的 ``VisionConfig``。
 
-        未配置或提供者/模型缺失时返回 ``None``。
+        ``modelSelections.visionModel`` 只是指针（``endpointId`` + ``modelId``），
+        凭据必须从 ``endpoints[]`` 里按 ``endpointId`` 反查；未配置、端点缺失
+        或 provider 不支持时返回 ``None``。
         """
-        from backend.data.settings_canonicalizer import to_camel
-        from backend.data.settings_repo import SettingsRepository
-        from backend.wiki.vision import VisionConfig, VisionProvider
-
         try:
+            from backend.data.settings_canonicalizer import to_camel
+            from backend.data.settings_repo import SettingsRepository
+            from backend.wiki.vision import VisionConfig, VisionProvider
+
             raw = SettingsRepository().get_json("app_settings")
             if not isinstance(raw, dict):
                 return None
@@ -862,22 +876,32 @@ class SageAgent:
             selections = camel.get("modelSelections") or {}
             vision = selections.get("visionModel") or {}
 
-            provider_str = (vision.get("provider") or "openai").lower()
             model_id = vision.get("modelId")
-            if not model_id:
+            endpoint_id = vision.get("endpointId")
+            if not model_id or not endpoint_id:
                 return None
 
-            # 解析 provider 枚举
+            # 凭据（baseUrl / apiKey / protocol）只存在于 endpoints[]
+            endpoint = self._find_endpoint_by_id(camel, endpoint_id)
+            base_url = (endpoint or {}).get("baseUrl") or ""
+            if not isinstance(endpoint, dict) or not base_url:
+                logger.warning(
+                    "visionModel 端点不可用: endpointId=%s, 匹配到端点=%s, 有 baseUrl=%s",
+                    endpoint_id,
+                    isinstance(endpoint, dict),
+                    bool(base_url),
+                )
+                return None
+            api_key = endpoint.get("apiKey") or ""
+
+            # 端点用 protocol 表达供应商，openai-compatible 归一化为 openai
+            protocol = (endpoint.get("protocol") or "openai-compatible").lower()
+            provider_str = "openai" if protocol == "openai-compatible" else protocol
             try:
                 provider = VisionProvider(provider_str)
             except ValueError:
-                logger.warning("不支持的 visionModel 提供者: %s", provider_str)
+                logger.warning("不支持的 visionModel 提供者: %s", protocol)
                 return None
-
-            # baseUrl 和 apiKey 从 endpoint 解析（简化：直接从 vision selection 读）
-            # TODO: Task 6 接线时改为通过 endpointId 查询完整 endpoint 配置
-            base_url = vision.get("baseUrl") or ""
-            api_key = vision.get("apiKey") or ""
 
             return VisionConfig(
                 provider=provider,
@@ -901,34 +925,38 @@ class SageAgent:
         Returns:
             与 ``images`` 等长的描述文本列表。
         """
-        import base64
+        try:
+            import base64
 
-        from backend.wiki.vision import caption_image
+            from backend.wiki.vision import caption_image
 
-        vision_config = self._build_vision_config()
-        if vision_config is None:
-            return ["[图片识别失败：视觉模型未配置]"] * len(images)
+            vision_config = self._build_vision_config()
+            if vision_config is None:
+                return ["[图片识别失败：视觉模型未配置]"] * len(images)
 
-        descriptions: List[str] = []
-        for image_data in images:
-            try:
-                # 解析 data URL：去掉 ``data:image/...;base64,`` 前缀
-                if "," in image_data:
-                    image_bytes = base64.b64decode(image_data.split(",", 1)[1])
-                else:
-                    image_bytes = base64.b64decode(image_data)
+            descriptions: List[str] = []
+            for image_data in images:
+                try:
+                    # 解析 data URL：去掉 ``data:image/...;base64,`` 前缀
+                    if "," in image_data:
+                        image_bytes = base64.b64decode(image_data.split(",", 1)[1])
+                    else:
+                        image_bytes = base64.b64decode(image_data)
 
-                result = await caption_image(
-                    config=vision_config,
-                    image_data=image_bytes,
-                    context="请详细描述这张图片的内容",
-                )
-                descriptions.append(result.caption)
-            except Exception as e:
-                logger.error("visionModel 调用失败: %s", e, exc_info=True)
-                descriptions.append("[图片识别失败]")
+                    result = await caption_image(
+                        config=vision_config,
+                        image_data=image_bytes,
+                        context="请详细描述这张图片的内容",
+                    )
+                    descriptions.append(result.caption)
+                except Exception as e:
+                    logger.error("visionModel 调用失败: %s", e, exc_info=True)
+                    descriptions.append("[图片识别失败]")
 
-        return descriptions
+            return descriptions
+        except Exception:
+            logger.warning("图片描述生成流程异常", exc_info=True)
+            return ["[图片识别失败]"] * len(images)
 
     def _replace_images_with_descriptions(
         self,
