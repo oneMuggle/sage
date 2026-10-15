@@ -43,6 +43,34 @@ _FINISH_REASON_MAP = {
     "FUNCTION_CALL": "tool_calls",  # 旧版；新版用 tool_use
 }
 
+# 非生成式 Gemini 模型（embedding / rerank / 分类 / 图像视频生成）——它们
+# 不接受 image input 作为对话输入，必须先于「gemini 前缀即支持 vision」
+# 的判定排除，否则 ``gemini-embedding-001`` 会被误判为支持视觉。
+_GEMINI_NON_VISION_MARKERS = ("embedding", "rerank", "imagen", "veo")
+
+
+def model_capabilities(model: str) -> ModelCapabilities:
+    """推断 Gemini 模型的能力（纯函数，不构造 HTTP 客户端）。
+
+    Args:
+        model: 模型 id，如 ``"gemini-2.5-pro"`` / ``"gemini-embedding-001"``。
+
+    Returns:
+        ModelCapabilities：``vision`` 为启发式判定，非厂商权威声明。
+    """
+    lower = (model or "").lower()
+    is_non_generative = any(marker in lower for marker in _GEMINI_NON_VISION_MARKERS)
+    # 生成式 Gemini 模型（pro / flash）全部支持 vision
+    vision = "gemini" in lower and not is_non_generative
+    reasoning = "2.5" in lower or "flash-thinking" in lower
+    return ModelCapabilities(
+        tools=True,
+        vision=vision,
+        streaming=True,
+        parallel_tool_calls=True,
+        reasoning=reasoning,
+    )
+
 
 class GeminiProvider(ProviderClient):
     """Google Gemini provider。
@@ -120,17 +148,7 @@ class GeminiProvider(ProviderClient):
                 yield chunk
 
     def capabilities(self, model: str) -> ModelCapabilities:
-        lower = model.lower()
-        # Gemini 2.5+ 支持 vision / reasoning / tools
-        vision = "gemini" in lower  # 所有 Gemini 模型都支持 vision
-        reasoning = "2.5" in lower or "flash-thinking" in lower
-        return ModelCapabilities(
-            tools=True,
-            vision=vision,
-            streaming=True,
-            parallel_tool_calls=True,
-            reasoning=reasoning,
-        )
+        return model_capabilities(model)
 
     async def aclose(self) -> None:
         await self._client.aclose()

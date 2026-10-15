@@ -44,6 +44,70 @@ _FINISH_REASON_MAP = {
     "content_filter": "stop",
 }
 
+# 已知「纯文本 / 非对话」模型族——必须先于 vision 关键词判定，否则
+# ``text-embedding-3-*`` 之类会被误判成支持视觉。
+_OPENAI_NON_VISION_MARKERS = (
+    "embedding",
+    "moderation",
+    "dall-e",
+    "whisper",
+    "tts",
+    "gpt-3.5",  # GPT-3.5 系列不支持 image input
+    "gpt-3",
+    "text-davinci",
+    "text-curie",
+    "text-babbage",
+    "text-ada",
+)
+
+# 已知支持 image input 的家族。``gpt-4`` 覆盖 gpt-4 / gpt-4-turbo /
+# gpt-4o / gpt-4.1 / gpt-4-vision；``o1``/``o3``/``o4`` 为多模态推理系列。
+_OPENAI_VISION_MARKERS = ("gpt-4", "gpt-5", "o1", "o3", "o4")
+
+# OpenAI 兼容端点上常见的第三方 VL 家族（DeepSeek / Qwen / GLM / InternVL …）。
+# 这些厂商的协议与 OpenAI 一致，都由本 provider 承接，故判定也在这里。
+_OPENAI_COMPAT_VL_MARKERS = (
+    "vl",
+    "4v",
+    "internvl",
+    "llava",
+    "minicpm-v",
+    "gemma3",
+    "phi4",
+)
+
+
+def model_capabilities(model: str) -> ModelCapabilities:
+    """推断 OpenAI 系模型的能力（纯函数，不构造 HTTP 客户端）。
+
+    供 ``OpenAIProvider.capabilities()`` 与 provider registry 的
+    ``get_model_capabilities()`` 共用——后者需要在不新建 httpx 客户端的
+    前提下问能力，故把判定从实例方法下沉到模块级纯函数。
+
+    覆盖范围不止 OpenAI 官方：DeepSeek / Qwen / GLM / InternVL 等走
+    OpenAI 兼容端点的第三方模型也经由本 provider 判定。
+
+    Args:
+        model: 模型 id，如 ``"gpt-4o"`` / ``"deepseek-vl2"`` / ``"text-embedding-3-small"``。
+
+    Returns:
+        ModelCapabilities：``vision`` 为启发式判定，非厂商权威声明。
+    """
+    lower = (model or "").lower()
+    reasoning = lower.startswith(("o1", "o3", "o5", "o-"))
+    is_non_vision = any(marker in lower for marker in _OPENAI_NON_VISION_MARKERS)
+    vision = not is_non_vision and any(
+        marker in lower
+        for marker in _OPENAI_VISION_MARKERS + _OPENAI_COMPAT_VL_MARKERS
+    )
+    return ModelCapabilities(
+        tools=True,
+        vision=vision,
+        streaming=True,
+        parallel_tool_calls=not reasoning,  # o-系列不支持 parallel
+        reasoning=reasoning,
+    )
+
 
 class OpenAIProvider(ProviderClient):
     """OpenAI / OpenAI-compatible provider。
@@ -117,17 +181,7 @@ class OpenAIProvider(ProviderClient):
                 yield chunk
 
     def capabilities(self, model: str) -> ModelCapabilities:
-        # 启发式：o-系列支持 reasoning；gpt-4o/gpt-4o-mini 支持 vision
-        lower = model.lower()
-        reasoning = lower.startswith(("o1", "o3", "o5", "o-"))
-        vision = "4o" in lower or "gpt-4-vision" in lower
-        return ModelCapabilities(
-            tools=True,
-            vision=vision,
-            streaming=True,
-            parallel_tool_calls=not reasoning,  # o-系列不支持 parallel
-            reasoning=reasoning,
-        )
+        return model_capabilities(model)
 
     async def aclose(self) -> None:
         await self._client.aclose()

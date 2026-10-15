@@ -44,6 +44,33 @@ _STOP_REASON_MAP = {
 # Anthropic API 版本（固定到支持 tool use + streaming 的稳定版本）
 _ANTHROPIC_VERSION = "2023-06-01"
 
+# Claude 2 只支持纯文本；Claude 3 及之后（含 ``claude-sonnet-4-5`` 这类
+# 品牌化别名）全部原生支持 image input。故按「不是 2」判定，而不是枚举
+# ``claude-3`` / ``claude-4`` 子串——后者会漏掉别名形态。
+_ANTHROPIC_LEGACY_NON_VISION_MARKERS = ("claude-2", "claude-instant")
+
+
+def model_capabilities(model: str) -> ModelCapabilities:
+    """推断 Anthropic 模型的能力（纯函数，不构造 HTTP 客户端）。
+
+    Args:
+        model: 模型 id，如 ``"claude-sonnet-4-5"`` / ``"claude-3-5-sonnet"``。
+
+    Returns:
+        ModelCapabilities：``vision`` 为启发式判定，非厂商权威声明。
+    """
+    lower = (model or "").lower()
+    is_legacy = any(marker in lower for marker in _ANTHROPIC_LEGACY_NON_VISION_MARKERS)
+    vision = "claude" in lower and not is_legacy
+    reasoning = "claude-3-7" in lower or "claude-4" in lower
+    return ModelCapabilities(
+        tools=True,
+        vision=vision,
+        streaming=True,
+        parallel_tool_calls=True,
+        reasoning=reasoning,
+    )
+
 
 class AnthropicProvider(ProviderClient):
     """Anthropic Messages API provider。
@@ -115,17 +142,7 @@ class AnthropicProvider(ProviderClient):
                 yield chunk
 
     def capabilities(self, model: str) -> ModelCapabilities:
-        lower = model.lower()
-        # Claude 3.5+ 支持 vision；推理能力由 extended thinking 提供
-        vision = "claude-3" in lower or "claude-4" in lower
-        reasoning = "claude-3-7" in lower or "claude-4" in lower
-        return ModelCapabilities(
-            tools=True,
-            vision=vision,
-            streaming=True,
-            parallel_tool_calls=True,
-            reasoning=reasoning,
-        )
+        return model_capabilities(model)
 
     async def aclose(self) -> None:
         await self._client.aclose()

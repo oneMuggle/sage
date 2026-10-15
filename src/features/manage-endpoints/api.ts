@@ -372,27 +372,79 @@ function inferCapabilities(modelId: string): ModelCapability[] {
   const lower = modelId.toLowerCase();
   const caps: ModelCapability[] = ['chat'];
 
-  if (
-    lower.includes('vision') ||
-    lower.includes('gpt-4o') ||
-    lower.includes('gemini') ||
-    lower.includes('claude-3') ||
-    lower.includes('image')
-  ) {
+  // ---- vision ----
+  // 非对话 / 非视觉模型(必须先于 vision 关键词判定,否则 embedding/whisper 误判)
+  const nonVisionMarkers = [
+    'embedding',
+    'moderation',
+    'dall-e',
+    'whisper',
+    'tts',
+    'asr',
+    'gpt-3.5',
+    'gpt-3',
+    'text-davinci',
+    'text-curie',
+    'text-babbage',
+    'text-ada',
+    'rerank',
+    'minilm',
+    'imagen',
+    'veo',
+    'claude-2',
+    'claude-instant', // Anthropic legacy
+  ];
+  const isNonVision = nonVisionMarkers.some((m) => lower.includes(m));
+
+  // 视觉模型族(所有 provider 的 vision markers 并集)
+  const visionMarkers = [
+    // OpenAI / OpenAI-compatible
+    'gpt-4',
+    'gpt-5',
+    'o1',
+    'o3',
+    'o4',
+    'vl',
+    '4v',
+    'internvl',
+    'llava',
+    'minicpm-v',
+    'gemma3',
+    'phi4',
+    // Anthropic (claude-3+ supports vision)
+    'claude-3',
+    'claude-sonnet-4',
+    'claude-opus-4',
+    'claude-haiku-4',
+    // Gemini (generative models)
+    'gemini',
+    // Ollama-specific
+    'moondream',
+    'bakllava',
+    // Generic
+    'vision',
+    'image',
+  ];
+  if (!isNonVision && visionMarkers.some((m) => lower.includes(m))) {
     caps.push('vision');
   }
+
+  // ---- embedding ----
   if (lower.includes('embed') || lower.includes('text-embedding') || lower.includes('vector')) {
     caps.push('embedding');
   }
-  // TTS
+
+  // ---- tts ----
   if (/tts|speech-|voice-/.test(lower)) {
     caps.push('tts');
   }
-  // ASR
+
+  // ---- asr ----
   if (/whisper|asr|transcri/.test(lower)) {
     caps.push('asr');
   }
-  // Image generation
+
+  // ---- image_gen ----
   if (/dall|image-gen|stable-diffusion|sdxl|flux/.test(lower)) {
     caps.push('image_gen');
   }

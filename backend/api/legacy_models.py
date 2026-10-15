@@ -49,6 +49,10 @@ class ChatRequest(BaseModel):
 
     model: Optional[str] = None
 
+    # Task 8 (2026-10-15): 前端推断的模型能力，覆盖后端 provider 推断。
+    # 前端从 discoveredModels[].capabilities 查找，经 Electron relay 透传。
+    capabilities: Optional[List[str]] = None
+
     max_context: Optional[int] = None
 
     # Task 5 (2026-09-15): auto-context resolution flag.

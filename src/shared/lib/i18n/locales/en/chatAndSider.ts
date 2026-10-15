@@ -167,6 +167,11 @@ export const enChatAndSider = {
   'chat.copy': 'Copy',
   'chat.copied': 'Copied',
   'chat.delete_confirm': 'Are you sure you want to delete this session?',
+  // Task 9 (2026-10-15): vision model fallback UI
+  'chat.vision_not_available':
+    'Current chat model does not support vision. Please configure a vision model or switch to a vision-capable model',
+  'chat.vision_fallback_info':
+    'Images will be recognized by the vision model and converted to text descriptions',
 
   // ─── M4 session compact / fork ────
   // LOW-1: unified phrasing — "before → after messages (removed merged into summary)"
