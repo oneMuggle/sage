@@ -601,6 +601,18 @@ describe('ProjectArchetypeStudio', () => {
     expect(await screen.findByTestId('knowledge-session-select')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('knowledge-extract-btn'));
     expect(await screen.findByTestId('knowledge-toggle-select-all')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('knowledge-select-high-btn'));
+    fireEvent.click(screen.getByTestId('knowledge-to-constraint-0'));
+    await waitFor(() => {
+      expect(mockCreateConstraint).toHaveBeenCalledWith(
+        'proj-1',
+        expect.objectContaining({
+          category: 'convention',
+          content: '所有补充协议须附原始合同编号',
+          priority: 8,
+        }),
+      );
+    });
     fireEvent.click(screen.getByTestId('knowledge-toggle-select-all'));
     fireEvent.click(screen.getByTestId('knowledge-toggle-select-all'));
     fireEvent.click(screen.getByTestId('knowledge-confirm-btn'));
@@ -629,6 +641,17 @@ describe('ProjectArchetypeStudio', () => {
           projectKey: 'D:/Archives/Contract2026',
           category: 'convention',
           importance: 5,
+        }),
+      );
+    });
+    const promoteBtn = await screen.findByTestId('studio-profile-to-constraint-pf-1');
+    fireEvent.click(promoteBtn);
+    await waitFor(() => {
+      expect(mockCreateConstraint).toHaveBeenCalledWith(
+        'proj-1',
+        expect.objectContaining({
+          category: 'goal',
+          content: 'RQ1: 验证多跳检索召回率 — HotpotQA 基准',
         }),
       );
     });

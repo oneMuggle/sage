@@ -78,6 +78,8 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
   const [importingKey, setImportingKey] = useState<string | null>(null);
   const [globTestPath, setGlobTestPath] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [priorityFilter, setPriorityFilter] = useState<'all' | 'high'>('all');
+  const [globMatchedOnly, setGlobMatchedOnly] = useState<boolean>(false);
   const [copiedMd, setCopiedMd] = useState(false);
 
   const blueprint: ArchetypeBlueprintMeta = getArchetypeBlueprint(projectType);
@@ -216,22 +218,6 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
     setEditorOpen(false);
   };
 
-  const categories = ['all', ...Array.from(new Set(constraints.map((c) => c.category)))];
-  const filteredConstraints = useMemo(() => {
-    const byCat =
-      selectedCategory === 'all'
-        ? constraints
-        : constraints.filter((c) => c.category === selectedCategory);
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return byCat;
-    return byCat.filter(
-      (c) =>
-        c.category.toLowerCase().includes(q) ||
-        c.content.toLowerCase().includes(q) ||
-        (c.triggerPattern ?? '').toLowerCase().includes(q),
-    );
-  }, [constraints, selectedCategory, searchQuery]);
-
   const matchedIds = useMemo(() => {
     const trimmed = globTestPath.trim();
     if (!trimmed) return new Set<string>();
@@ -241,6 +227,28 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
         .map((c) => c.id),
     );
   }, [constraints, globTestPath]);
+
+  const categories = ['all', ...Array.from(new Set(constraints.map((c) => c.category)))];
+  const filteredConstraints = useMemo(() => {
+    let list =
+      selectedCategory === 'all'
+        ? constraints
+        : constraints.filter((c) => c.category === selectedCategory);
+    if (priorityFilter === 'high') {
+      list = list.filter((c) => c.priority >= 8);
+    }
+    if (globMatchedOnly && globTestPath.trim()) {
+      list = list.filter((c) => matchedIds.has(c.id));
+    }
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (c) =>
+        c.category.toLowerCase().includes(q) ||
+        c.content.toLowerCase().includes(q) ||
+        (c.triggerPattern ?? '').toLowerCase().includes(q),
+    );
+  }, [constraints, selectedCategory, priorityFilter, globMatchedOnly, globTestPath, matchedIds, searchQuery]);
 
   return (
     <div className={`space-y-4 ${className ?? ''}`} data-testid="constraint-manager-panel">
@@ -358,13 +366,53 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
           )}
         </div>
         {globTestPath.trim() && (
-          <span
-            className="rounded bg-primary/10 px-2 py-0.5 font-mono text-ui-2xs font-medium text-primary"
-            data-testid="constraint-glob-match-count"
-          >
-            命中 {matchedIds.size} 条生效约束
-          </span>
+          <>
+            <span
+              className="rounded bg-primary/10 px-2 py-0.5 font-mono text-ui-2xs font-medium text-primary"
+              data-testid="constraint-glob-match-count"
+            >
+              命中 {matchedIds.size} 条生效约束
+            </span>
+            <button
+              type="button"
+              data-testid="constraint-glob-matched-only-btn"
+              onClick={() => setGlobMatchedOnly((v) => !v)}
+              className={`rounded border px-2 py-0.5 text-ui-2xs font-medium transition-colors ${
+                globMatchedOnly
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              {globMatchedOnly ? '显示全部规则' : '仅看命中规则'}
+            </button>
+          </>
         )}
+        <div className="flex items-center gap-1" data-testid="constraint-priority-filter-bar">
+          <button
+            type="button"
+            data-testid="constraint-priority-filter-all"
+            onClick={() => setPriorityFilter('all')}
+            className={`rounded px-2 py-0.5 text-ui-2xs font-medium transition-colors ${
+              priorityFilter === 'all'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-background text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            全部优先级
+          </button>
+          <button
+            type="button"
+            data-testid="constraint-priority-filter-high"
+            onClick={() => setPriorityFilter('high')}
+            className={`rounded px-2 py-0.5 text-ui-2xs font-medium transition-colors ${
+              priorityFilter === 'high'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-background text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            高优 (≥P8)
+          </button>
+        </div>
         <input
           type="text"
           value={searchQuery}
