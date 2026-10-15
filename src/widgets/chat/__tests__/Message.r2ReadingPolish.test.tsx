@@ -86,12 +86,10 @@ describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () =>
       onToggleRightPanel: noop,
       unseenArtifactCount: 0,
     };
-    const { rerender } = renderWithI18n(
-      <ChatHeaderBar {...baseProps} rightPanelOpen={false} />,
-    );
+    const { rerender } = renderWithI18n(<ChatHeaderBar {...baseProps} rightPanelOpen={false} />);
 
     expect(screen.getByTestId('chat-header-bar')).toHaveAttribute('data-compact', 'false');
-    expect(screen.getByRole('button', { name: /新对话/ })).toBeInTheDocument();
+    expect(screen.getByTestId('session-session-menu-toggle')).toBeInTheDocument();
 
     rerender(
       <MemoryRouter>
@@ -102,7 +100,7 @@ describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () =>
     );
 
     expect(screen.getByTestId('chat-header-bar')).toHaveAttribute('data-compact', 'true');
-    expect(screen.getByRole('button', { name: /新对话/ })).toBeInTheDocument();
+    expect(screen.getByTestId('session-session-menu-toggle')).toBeInTheDocument();
   });
 
   it('supports manual and terminal-open auto-collapse on SubagentLivePanel', () => {
