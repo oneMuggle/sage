@@ -265,10 +265,9 @@ export function useChat() {
 
       // 从 discoveredModels 查找当前模型的 capabilities(设计:ModelSelection 只是指针,
       // capabilities 存在 DiscoveredModel 中)
-      const chatModelCapabilities =
-        chatEndpoint?.discoveredModels
-          ?.find((m) => m.id === settings.modelSelections.chatModel.modelId)
-          ?.capabilities ?? ['chat'];
+      const chatModelCapabilities = chatEndpoint?.discoveredModels?.find(
+        (m) => m.id === settings.modelSelections.chatModel.modelId,
+      )?.capabilities ?? ['chat', 'vision'];
 
       const config: ChatConfig = {
         apiKey: chatEndpoint.apiKey,
