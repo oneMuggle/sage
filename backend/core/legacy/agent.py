@@ -418,6 +418,19 @@ class SageAgent:
                 summary_store=self.memory_manager.summary_store,
             )
 
+        # 能力查询 seam：从 provider_registry 接线（per-instance，避免类属性共享）
+        try:
+            from backend.adapters.out.llm.provider_registry import get_model_capabilities
+
+            # 用闭包捕获 provider；此处使用 llm_config 的 provider（如有）
+            if self.llm_config and hasattr(self.llm_config, "provider"):
+                provider = self.llm_config.provider
+                self.capability_resolver = lambda mid, p=provider: get_model_capabilities(p, mid)
+        except Exception:
+            logger.debug(
+                "capability_resolver 接线失败，保持 None（能力未知）", exc_info=True
+            )
+
     async def _restore_llm_after_dynamic(
         self,
         llm_config: Optional[Dict[str, Any]],
@@ -758,7 +771,13 @@ class SageAgent:
         if "vision" in chat_model_caps:
             return self._inject_images_as_content(messages, images)
 
-        raise NotImplementedError("visionModel fallback not yet implemented")
+        if self._is_vision_model_configured():
+            descriptions = await self._generate_image_descriptions(images)
+            return self._replace_images_with_descriptions(messages, descriptions)
+
+        from backend.core.exceptions import VisionNotAvailableError
+
+        raise VisionNotAvailableError("对话模型不支持视觉识别，且未配置视觉理解模型")
 
     def _inject_images_as_content(
         self,
@@ -797,6 +816,171 @@ class SageAgent:
         # 保留末条消息上的其他字段（如 name），只替换 content
         result[-1] = {**last_msg, "content": segments}
 
+        return result
+
+    # ------------------------------------------------------------------
+    # Task 4: visionModel 降级路径
+    # ------------------------------------------------------------------
+
+    def _is_vision_model_configured(self) -> bool:
+        """检查是否配置了 visionModel。
+
+        从 SettingsRepository 读取 ``modelSelections.visionModel.modelId``；
+        非空字符串视为已配置。读取失败（repository 异常 / 字段缺失）保守
+        返回 False。
+        """
+        try:
+            from backend.data.settings_canonicalizer import to_camel
+            from backend.data.settings_repo import SettingsRepository
+
+            raw = SettingsRepository().get_json("app_settings")
+            if not isinstance(raw, dict):
+                return False
+            camel = to_camel(raw)
+            selections = camel.get("modelSelections") or {}
+            vision = selections.get("visionModel") or {}
+            model_id = vision.get("modelId")
+            return bool(model_id)
+        except Exception:
+            logger.warning("读取 visionModel 配置失败", exc_info=True)
+            return False
+
+    def _build_vision_config(self):
+        """从设置中构建 visionModel 的 ``VisionConfig``。
+
+        未配置或提供者/模型缺失时返回 ``None``。
+        """
+        from backend.data.settings_canonicalizer import to_camel
+        from backend.data.settings_repo import SettingsRepository
+        from backend.wiki.vision import VisionConfig, VisionProvider
+
+        try:
+            raw = SettingsRepository().get_json("app_settings")
+            if not isinstance(raw, dict):
+                return None
+            camel = to_camel(raw)
+            selections = camel.get("modelSelections") or {}
+            vision = selections.get("visionModel") or {}
+
+            provider_str = (vision.get("provider") or "openai").lower()
+            model_id = vision.get("modelId")
+            if not model_id:
+                return None
+
+            # 解析 provider 枚举
+            try:
+                provider = VisionProvider(provider_str)
+            except ValueError:
+                logger.warning("不支持的 visionModel 提供者: %s", provider_str)
+                return None
+
+            # baseUrl 和 apiKey 从 endpoint 解析（简化：直接从 vision selection 读）
+            # TODO: Task 6 接线时改为通过 endpointId 查询完整 endpoint 配置
+            base_url = vision.get("baseUrl") or ""
+            api_key = vision.get("apiKey") or ""
+
+            return VisionConfig(
+                provider=provider,
+                base_url=base_url,
+                api_key=api_key,
+                model=model_id,
+            )
+        except Exception:
+            logger.warning("构建 visionModel 配置失败", exc_info=True)
+            return None
+
+    async def _generate_image_descriptions(self, images: List[str]) -> List[str]:
+        """调用 visionModel 生成图片描述。
+
+        逐张调用 ``caption_image``；单张失败不中断整体，对应位置填入
+        ``"[图片识别失败]"`` 占位符。
+
+        Args:
+            images: base64 data URL 列表（形如 ``data:image/png;base64,...``）。
+
+        Returns:
+            与 ``images`` 等长的描述文本列表。
+        """
+        import base64
+
+        from backend.wiki.vision import caption_image
+
+        vision_config = self._build_vision_config()
+        if vision_config is None:
+            return ["[图片识别失败：视觉模型未配置]"] * len(images)
+
+        descriptions: List[str] = []
+        for image_data in images:
+            try:
+                # 解析 data URL：去掉 ``data:image/...;base64,`` 前缀
+                if "," in image_data:
+                    image_bytes = base64.b64decode(image_data.split(",", 1)[1])
+                else:
+                    image_bytes = base64.b64decode(image_data)
+
+                result = await caption_image(
+                    config=vision_config,
+                    image_data=image_bytes,
+                    context="请详细描述这张图片的内容",
+                )
+                descriptions.append(result.caption)
+            except Exception as e:
+                logger.error("visionModel 调用失败: %s", e, exc_info=True)
+                descriptions.append("[图片识别失败]")
+
+        return descriptions
+
+    def _replace_images_with_descriptions(
+        self,
+        messages: List[Dict[str, Any]],
+        descriptions: List[str],
+    ) -> List[Dict[str, Any]]:
+        """将图片替换为文本描述。
+
+        在最后一条 user 消息的 content 前拼接描述段。不可变：返回新列表，
+        原 ``messages`` 与其中的 dict 保持不变。
+
+        Args:
+            messages: 原始消息列表。
+            descriptions: 与图片等长的描述列表。
+
+        Returns:
+            替换后的消息列表。
+        """
+        if not messages:
+            return messages
+
+        result = list(messages)
+        last_msg = result[-1]
+        if last_msg.get("role") != "user":
+            return result
+
+        # 构建图片描述文本
+        desc_parts: List[str] = []
+        for i, desc in enumerate(descriptions, 1):
+            if len(descriptions) == 1:
+                desc_parts.append(f"[图片内容：{desc}]")
+            else:
+                desc_parts.append(f"[图片 {i} 内容：{desc}]")
+
+        desc_text = "\n".join(desc_parts)
+        original_content = last_msg.get("content", "")
+        # content 可能是字符串或 content-segment 列表
+        if isinstance(original_content, list):
+            original_text = "\n".join(
+                seg.get("text", "")
+                for seg in original_content
+                if seg.get("type") == "text"
+            )
+        else:
+            original_text = str(original_content)
+
+        combined_text = f"{desc_text}\n\n{original_text}" if original_text else desc_text
+
+        result[-1] = {
+            **last_msg,
+            "content": [{"type": "text", "text": combined_text}],
+        }
         return result
 
     def _is_pool_eligible_call(  # noqa: PLR0911 — 守卫链逐条 return 可读性更好

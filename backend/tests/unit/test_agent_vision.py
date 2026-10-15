@@ -271,6 +271,8 @@ class TestVisionFallback:
         agent.capability_resolver = MagicMock(
             return_value=ModelCapabilities(vision=False)
         )
+        # Task 4: _is_vision_model_configured 必须返回 True 才走降级路径
+        agent._is_vision_model_configured = MagicMock(return_value=True)
         # Task 4 将要接线的两个 seam：
         agent._generate_image_descriptions = AsyncMock(
             return_value=["一张蓝天白云的照片"]
