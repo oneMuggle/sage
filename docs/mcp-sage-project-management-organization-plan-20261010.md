@@ -544,3 +544,18 @@
    - 在扫描预览阶段新增文件路径与语言实时筛选框（`wiki-preview-filter-input`）。
    - 在生成完成阶段顶栏新增 **`全部纳入 L4 资料池 / 已全部纳入 L4`** 按钮（`wiki-ingest-all-btn`），支持一键批量将全部生成的 Wiki 文档纳入 L4 受控资料池。
 
+### Phase P32：项目概览阶段快捷切换与 L1 宪章一键初始化、Git 状态面板变更筛选与纳入 L4、M1 任务拆解工期汇总与全选反选、约束/里程碑编辑器语义档位胶囊（2026-10-13 已完成）
+
+1. **项目概览 Widget 阶段快捷切换胶囊与 L1 宪章一键初始化（`src/features/project-type/ProjectOverviewWidgets.tsx`）**
+   - 当检测到 `hasSageMd === false`（`L1 SAGE.md 待初始化`）时，在状态徽标右侧展示 **`一键生成 SAGE.md`** 按钮（`overview-init-sagemd-btn`），直连 `projectApi.scaffold` 生成标准目录与 `SAGE.md` 宪章。
+   - 在概览栏下方新增生命周期阶段快捷切换胶囊栏（`overview-stage-switcher` / `overview-stage-pill-${stageId}`），支持一键切换项目所处生命周期阶段并实时同步后端。
+2. **Git 状态 Widget 变更类别筛选胶囊与一键纳入 L4 资料池（`src/features/project-type/GitStatusWidget.tsx`）**
+   - 在展开变更文件明细区域新增四档状态筛选胶囊（`git-widget-filter-all` / `staged` / `modified` / `untracked`）。
+   - 为每条变更文件提供 **`+L4 / 已纳入 L4`** 快捷按钮（`git-widget-ingest-${filePath}`），支持将暂存、修改或新增的受控文件一键纳入 L4 资料池。
+3. **AI 智能任务分解对话框（M1）预计总工期汇总与全选/反选控制（`src/features/project-type/TaskDecomposeDialog.tsx`）**
+   - 在预览阶段顶部新增动态工期汇总徽标（`decompose-total-days-badge`），实时累加当前已勾选里程碑节点的预计天数。
+   - 新增 **`全选`**（`decompose-select-all-btn`）与 **`反选`**（`decompose-select-invert-btn`）快捷按钮。
+4. **约束与里程碑编辑器语义化档位胶囊（`ConstraintEditor.tsx` & `MilestoneEditor.tsx`）**
+   - 在 `ConstraintEditor.tsx` 中新增四档语义化优先级预设胶囊（`constraint-priority-preset-10` `P10 铁律` / `8` `P8 强规范` / `5` `P5 常规` / `3` `P3 建议`）。
+   - 在 `MilestoneEditor.tsx` 中新增四态状态快捷胶囊（`milestone-status-pill-pending` / `in_progress` / `completed` / `blocked`）。
+

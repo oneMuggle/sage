@@ -56,6 +56,11 @@ vi.mock('../../shared/api', () => ({
       vcsMode: patch.vcs_mode,
     })),
     createCheckpoint: vi.fn().mockResolvedValue({ id: 'cp-init' }),
+    getWorkspaceOverview: vi.fn().mockResolvedValue({
+      hasSageMd: false,
+      recentCheckpoints: [],
+      directorySummary: [{ name: 'literature', fileCount: 4 }],
+    }),
     decomposePreview: vi.fn().mockResolvedValue({
       reasoning: '按科研生命周期拆解',
       totalCount: 2,
@@ -457,5 +462,74 @@ describe('MilestoneProgressWidget', () => {
     });
     expect(screen.getByText(/Transformer 消融实验核心超参表/)).toBeInTheDocument();
     expect(screen.queryByText(/无关基线日志记录/)).not.toBeInTheDocument();
+  });
+
+  it('supports ProjectOverviewWidgets stage switcher & SAGE.md init, TaskDecomposeDialog total days & select-all/invert, and MilestoneEditor status pills (Phase P32)', async () => {
+    mockListMilestones.mockResolvedValue([]);
+
+    const { unmount } = render(
+      <ProjectOverviewWidgets
+        project={{
+          id: 'proj-p32',
+          name: 'ResearchP32',
+          path: '/workspace/research-p32',
+          projectType: 'research',
+          projectStage: 'proposal',
+          vcsMode: 'builtin',
+          createdAt: 1,
+          lastOpenedAt: 2,
+          sessionCount: 1,
+          lastSessionId: null,
+          allowedPaths: [],
+        }}
+      />,
+    );
+
+    const initSageBtn = await screen.findByTestId('overview-init-sagemd-btn');
+    fireEvent.click(initSageBtn);
+    await waitFor(() => {
+      expect(projectApi.scaffold).toHaveBeenCalledWith(
+        'proj-p32',
+        expect.objectContaining({ createSageMd: true }),
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('overview-stage-pill-analysis'));
+    await waitFor(() => {
+      expect(projectApi.update).toHaveBeenCalledWith('proj-p32', {
+        project_stage: 'analysis',
+      });
+    });
+
+    // Open TaskDecomposeDialog from overview bar and test total days & invert/select-all
+    fireEvent.click(screen.getByTestId('overview-open-decompose-btn'));
+    fireEvent.click(await screen.findByTestId('decompose-preset-0'));
+    fireEvent.click(screen.getByTestId('decompose-preview-btn'));
+
+    const daysBadge = await screen.findByTestId('decompose-total-days-badge');
+    expect(daysBadge).toHaveTextContent('预计总工期 5 天');
+
+    fireEvent.click(screen.getByTestId('decompose-select-invert-btn'));
+    expect(screen.getByTestId('decompose-total-days-badge')).toHaveTextContent('预计总工期 0 天');
+
+    fireEvent.click(screen.getByTestId('decompose-select-all-btn'));
+    expect(screen.getByTestId('decompose-total-days-badge')).toHaveTextContent('预计总工期 5 天');
+
+    unmount();
+
+    render(
+      <MilestoneEditor
+        open={true}
+        onOpenChange={vi.fn()}
+        projectId="proj-p32"
+        projectType="research"
+        milestone={null}
+        onSave={vi.fn()}
+      />,
+    );
+
+    // MilestoneEditor status pill
+    fireEvent.click(screen.getByTestId('milestone-status-pill-in_progress'));
+    expect(screen.getByDisplayValue('进行中')).toBeInTheDocument();
   });
 });
