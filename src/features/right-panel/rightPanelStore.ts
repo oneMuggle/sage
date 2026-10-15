@@ -15,25 +15,25 @@ import { create } from 'zustand';
 import { useStore } from '../../shared/lib/store';
 import { useArtifactEventsStore } from '../artifacts/artifactEventsStore';
 
-export type RightPanelTab =
-  | 'progress'
-  | 'artifacts'
-  | 'changes'
-  | 'outline'
-  | 'trajectory'
-  | 'preview';
+export type RightPanelTab = 'progress' | 'artifacts' | 'changes' | 'outline';
 
 const TAB_KEY = 'right-panel-tab';
 const OPEN_KEY = 'right-panel-open';
 
-const VALID_TABS: readonly RightPanelTab[] = [
-  'progress',
-  'artifacts',
-  'changes',
-  'outline',
-  'trajectory',
-  'preview',
-];
+const VALID_TABS: readonly RightPanelTab[] = ['progress', 'artifacts', 'changes', 'outline'];
+
+/**
+ * 旧 localStorage 值迁移：若用户上次用的是已移除的 tab（trajectory/preview），
+ * 回落到合法 tab。防止 loadInitialTab 读到非法值。
+ */
+function migrateLegacyTab(raw: string): RightPanelTab | null {
+  if ((VALID_TABS as readonly string[]).includes(raw)) return raw as RightPanelTab;
+  // trajectory → progress（轨迹降为进度 sub-tab）
+  if (raw === 'trajectory') return 'progress';
+  // preview → changes（预览合入变更 Tab 内联展示）
+  if (raw === 'preview') return 'changes';
+  return null;
+}
 
 /** 产物创建时是否自动展开面板（Bell 开关写入；缺省 = 开）。 */
 export function isArtifactAutoOpenEnabled(): boolean {
@@ -52,6 +52,26 @@ export function setArtifactAutoOpenEnabled(enabled: boolean): void {
   }
 }
 
+/**
+ * UI 优化 2026-10-14: 右栏打开时是否自动折叠左栏（Layout.tsx 消费）。
+ * 默认关闭 —— 用户可手动开启。右栏最大化时始终折叠（不受此开关影响）。
+ */
+export function isAutoCollapseSidebarEnabled(): boolean {
+  try {
+    return localStorage.getItem('right-panel-auto-collapse-sidebar') === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setAutoCollapseSidebarEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem('right-panel-auto-collapse-sidebar', enabled ? '1' : '0');
+  } catch {
+    // localStorage 不可用
+  }
+}
+
 function loadInitialOpen(): boolean {
   try {
     return localStorage.getItem(OPEN_KEY) === '1';
@@ -62,8 +82,11 @@ function loadInitialOpen(): boolean {
 
 function loadInitialTab(): RightPanelTab {
   try {
-    const raw = localStorage.getItem(TAB_KEY) as RightPanelTab | null;
-    if (raw && (VALID_TABS as readonly string[]).includes(raw)) return raw;
+    const raw = localStorage.getItem(TAB_KEY);
+    if (raw) {
+      const migrated = migrateLegacyTab(raw);
+      if (migrated) return migrated;
+    }
   } catch {
     // localStorage 不可用
   }
@@ -78,8 +101,17 @@ interface RightPanelState {
   selectedArtifactId: string | null;
   /** right-panel R5: 待在变更 Tab 打开的文件路径（ChangesSection 消费后清除） */
   selectedChangePath: string | null;
-  /** Phase 2 (2026-09-25): 预览 Tab 待展示的文件路径（相对工作区根） */
-  previewFilePath: string | null;
+  /**
+   * UI 优化 2026-10-14: 替代原 previewFilePath。selectPreview 调用时写入，
+   * ChangesSection 消费后清除。值为待预览的文件路径，配合 autoPreviewMode
+   * 让 ChangesSection 在打开文件时自动切到预览视图（而非 diff 视图）。
+   */
+  previewOnSelect: string | null;
+  /**
+   * 与 previewOnSelect 配套：ChangesSection 消费 selectedChangePath 时，
+   * 若此标记为 true 则自动调用 showPreview() 切到预览视图。
+   */
+  autoPreviewMode: boolean;
   /** 每会话"已见过的产物事件计数"基线（未读徽标 = counts - seen） */
   seenArtifactCount: Record<string, number>;
   setOpen: (open: boolean) => void;
@@ -92,7 +124,11 @@ interface RightPanelState {
   /** right-panel R5: 直达变更 diff：开面板 + 切变更 Tab + 选中文件（内联卡片入口） */
   selectChange: (path: string) => void;
   clearSelectedChange: () => void;
-  /** Phase 2 (2026-09-25): 直达文档预览：开面板 + 切预览 Tab + 设置文件路径 */
+  /**
+   * UI 优化 2026-10-14: 直达变更预览（原 preview Tab 已合入 changes Tab）。
+   * 开面板 + 切变更 Tab + 设置 selectedChangePath + autoPreviewMode，
+   * ChangesSection 打开文件后自动切到预览视图。
+   */
   selectPreview: (filePath: string) => void;
   clearPreview: () => void;
   /** 面板打开时把当前会话的未读计数清零（读 artifactEventsStore 的计数作基线） */
@@ -105,7 +141,8 @@ export const useRightPanelStore = create<RightPanelState>((set, get) => ({
   maximized: false,
   selectedArtifactId: null,
   selectedChangePath: null,
-  previewFilePath: null,
+  previewOnSelect: null,
+  autoPreviewMode: false,
   seenArtifactCount: {},
 
   setOpen: (open) => {
@@ -139,9 +176,18 @@ export const useRightPanelStore = create<RightPanelState>((set, get) => ({
 
   clearSelectedChange: () => set({ selectedChangePath: null }),
 
-  selectPreview: (filePath) => set({ open: true, tab: 'preview', previewFilePath: filePath }),
+  // UI 优化 2026-10-14: selectPreview 改为打开 changes tab + 设置 previewOnSelect +
+  // autoPreviewMode。ChangesSection 消费后会同时清除这两个字段。
+  selectPreview: (filePath) =>
+    set({
+      open: true,
+      tab: 'changes',
+      selectedChangePath: filePath,
+      previewOnSelect: filePath,
+      autoPreviewMode: true,
+    }),
 
-  clearPreview: () => set({ previewFilePath: null }),
+  clearPreview: () => set({ previewOnSelect: null, autoPreviewMode: false }),
 
   markArtifactsSeen: (sessionId) => {
     const counts = useArtifactEventsStore.getState().counts;

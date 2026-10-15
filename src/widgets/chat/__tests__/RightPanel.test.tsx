@@ -187,6 +187,8 @@ describe('RightPanel', () => {
 
     it('applies width presets and persists', () => {
       render(<RightPanel {...props} />);
+      // 宽度档位按钮已收进「选项」浮层（2026-09-29）
+      fireEvent.click(screen.getByTestId('right-panel-options-toggle'));
       fireEvent.click(screen.getByTestId('right-panel-preset-L'));
       expect(localStorage.getItem('right-panel-width')).toBe('560');
     });
@@ -202,6 +204,8 @@ describe('RightPanel', () => {
       render(<RightPanel {...props} />);
       expect(screen.queryByTestId('right-panel-auto-open-toggle')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: /产物/ }));
+      // 自动唤起开关已收进「选项」浮层（2026-09-29），需先打开浮层
+      fireEvent.click(screen.getByTestId('right-panel-options-toggle'));
       const bell = screen.getByTestId('right-panel-auto-open-toggle');
       expect(bell).toBeInTheDocument();
       fireEvent.click(bell);
@@ -210,7 +214,57 @@ describe('RightPanel', () => {
       expect(localStorage.getItem('right-panel-auto-open')).toBe('1');
     });
   });
-  
+  // 2026-09-29 面板密度调整: 详情页保留 Tab 行（此前是死胡同）
+  describe('right-panel 面板密度: 产物详情页保留 Tab 行', () => {
+    async function renderWithArtifactSelected() {
+      const { useArtifactContent } = await import('../../../features/artifacts/useArtifactContent');
+      vi.mocked(useArtifactContent).mockReturnValue({
+        content: { ok: true, kind: 'markdown', content: '# Hello' },
+        loading: false,
+        // win7 分支签名差异：useArtifactContent 额外返回 refresh
+        refresh: vi.fn(),
+      } as never);
+      const { useArtifacts } = await import('../../../features/artifacts/useArtifacts');
+      vi.mocked(useArtifacts).mockReturnValue({
+        artifacts: arts,
+        loading: false,
+        refresh: vi.fn(),
+      });
+      render(<RightPanel {...props} />);
+      act(() => {
+        useRightPanelStore.getState().selectArtifact('a1');
+      });
+    }
+
+    it('详情页仍渲染 4 个 Tab', async () => {
+      await renderWithArtifactSelected();
+      expect(screen.getByRole('button', { name: '返回' })).toBeInTheDocument();
+      expect(screen.getByText('进度')).toBeInTheDocument();
+      expect(screen.getByText('目录')).toBeInTheDocument();
+      expect(screen.getByText('变更')).toBeInTheDocument();
+    });
+
+    it('详情页高亮「产物」Tab', async () => {
+      await renderWithArtifactSelected();
+      // 该 fixture 有 1 个产物，Tab 的 aria-label 是「产物 (1)」
+      expect(screen.getByRole('button', { name: /^产物/ }).className).toContain('border-primary');
+    });
+
+    it('详情页点其他 Tab 即离开详情并切换', async () => {
+      await renderWithArtifactSelected();
+      fireEvent.click(screen.getByRole('button', { name: '进度' }));
+      expect(useRightPanelStore.getState().selectedArtifactId).toBeNull();
+      expect(useRightPanelStore.getState().tab).toBe('progress');
+    });
+
+    it('详情页点「产物」Tab 回列表（不是回详情）', async () => {
+      await renderWithArtifactSelected();
+      fireEvent.click(screen.getByRole('button', { name: /^产物/ }));
+      expect(useRightPanelStore.getState().selectedArtifactId).toBeNull();
+      expect(useRightPanelStore.getState().tab).toBe('artifacts');
+    });
+  });
+
   describe('right-panel R2 批次 B: overlay 抽屉三件套', () => {
     it('overlay 打开时渲染遮罩，点击遮罩关闭面板', () => {
       render(<RightPanel {...props} variant="overlay" />);
@@ -292,11 +346,17 @@ describe('RightPanel — 轮次导航（U1 对标）', () => {
   });
 });
 
-// 对标 F3（ZCode ModelTrajectoryPane）：轨迹 Tab 渲染会话级模型轨迹。
+// 对标 F3（ZCode ModelTrajectoryPane）：轨迹作为进度 Tab 的 sub-tab 渲染。
 // useConversationTrajectory 从 store.messages 派生——灌入 user+assistant 消息后
-// 断言「轨迹」Tab 点击后条目出现（搜索/展开细节由 TrajectoryPane 自身测试覆盖）。
-describe('RightPanel — 轨迹 Tab（F3 对标）', () => {
-  it('轨迹 Tab 渲染模型轨迹条目', () => {
+// 断言「进度」Tab 内「完整轨迹」sub-tab 点击后条目出现
+// （搜索/展开细节由 TrajectoryPane 自身测试覆盖）。
+describe('RightPanel — 轨迹 sub-tab（F3 对标，UI 优化 2026-10-14）', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetStore();
+  });
+
+  it('进度 Tab 内「完整轨迹」sub-tab 渲染模型轨迹条目', () => {
     const now = Date.now();
     useStore.setState({
       messages: [
@@ -317,8 +377,13 @@ describe('RightPanel — 轨迹 Tab（F3 对标）', () => {
       ] as never,
     });
 
+    // 确保面板打开且 Tab 为 progress
+    useRightPanelStore.getState().setOpen(true);
+    useRightPanelStore.getState().setTab('progress');
+
     render(<RightPanel {...props} sessionId="sess_001" />);
-    fireEvent.click(screen.getByText('轨迹'));
+    // 进度 Tab 默认已激活；点击「完整轨迹」sub-tab
+    fireEvent.click(screen.getByTestId('progress-subtab-trajectory'));
 
     expect(screen.getByTestId('trajectory-pane')).toBeInTheDocument();
     expect(screen.getAllByTestId('trajectory-entry')).toHaveLength(2);
