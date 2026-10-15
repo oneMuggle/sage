@@ -793,14 +793,10 @@ class ChatService:
             ``True`` 当预算被超额；否则 ``False``。
         """
         # 实时解析：env > UI 设置 (OrchSettings) > 快照 policy。
-        # 修复前此处直接读 self._tool_policy.max_tool_calls_per_run，
-        # 是启动时的 frozen 快照 —— UI 改 100 不重启后端永远不会生效。
-        # 但显式设定的非默认值（如测试传 3）必须保留，不能被子查询覆盖。
+        # 默认值 25 → 查 UI 设置（UI 改 100 不重启即生效）；
+        # 显式设定（测试传 3 或特殊路径传 0）→ 直接采纳，不被覆盖。
         policy_budget = self._tool_policy.max_tool_calls_per_run
-        if policy_budget == 25:  # ToolPolicy 默认值 → 查 UI 设置
-            budget = resolve_tool_call_budget()
-        else:  # 显式设定（测试或特殊路径）→ 直接采纳
-            budget = policy_budget
+        budget = resolve_tool_call_budget() if policy_budget == 25 else policy_budget
         called = 0
         for tc in tool_calls:
             if called >= budget:
