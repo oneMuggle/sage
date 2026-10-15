@@ -3,9 +3,10 @@
  * 支持四形态画像推荐预设胶囊、关键词检索与类别筛选、中文类别标签、一键导出 MEMORY.md Markdown 视图与 M2 知识提炼确认后自动刷新画像
  */
 
-import { Check, Copy, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
+import { Check, Copy, Plus, Search, ShieldPlus, Sparkles, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import { projectApi } from '../../shared/api';
 import type { ProjectType } from '../../shared/api/projectApiTypes';
 import type { ProjectProfileEntry } from '../../shared/api/types';
 import { Button } from '../../shared/ui/Button';
@@ -113,6 +114,7 @@ export function StudioProfileTabPanel({
   const [copiedMd, setCopiedMd] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [promotedIds, setPromotedIds] = useState<Set<string>>(new Set());
   const presets = PROFILE_PRESETS_BY_TYPE[projectType] ?? PROFILE_PRESETS_BY_TYPE.coding;
 
   const filteredEntries = useMemo(() => {
@@ -308,7 +310,37 @@ export function StudioProfileTabPanel({
                 </span>
                 <span className="truncate text-foreground">{entry.content}</span>
               </div>
-              <button
+              <div className="flex items-center gap-1 shrink-0">
+                {projectId && (
+                  <button
+                    type="button"
+                    data-testid={`studio-profile-to-constraint-${entry.id}`}
+                    onClick={async () => {
+                      if (
+                        promotedIds.has(entry.id) ||
+                        typeof projectApi?.createConstraint !== 'function'
+                      ) {
+                        return;
+                      }
+                      try {
+                        await projectApi.createConstraint(projectId, {
+                          category: entry.category || 'convention',
+                          content: entry.content,
+                          priority: Math.min(10, Math.max(1, entry.importance || 7)),
+                        });
+                        setPromotedIds((prev) => new Set(prev).add(entry.id));
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title="将此 L3 画像条目升格为 L2 强约束规则"
+                  >
+                    <ShieldPlus className="h-3 w-3 text-primary" />
+                    {promotedIds.has(entry.id) ? '已升格约束' : '升格为约束'}
+                  </button>
+                )}
+                <button
                 type="button"
                 onClick={() => void onDeleteEntry(entry.id)}
                 aria-label={`删除画像条目：${entry.content}`}
@@ -317,6 +349,7 @@ export function StudioProfileTabPanel({
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
+              </div>
             </div>
           ))}
         </div>
