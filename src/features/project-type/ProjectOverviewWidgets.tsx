@@ -1,8 +1,8 @@
 /**
- * 项目概览 Widget (2026-09-25; Phase P14 多态版本保护与阶段状态卡片 2026-10-12; Phase P20 L1 宪章就绪度与一键快照留痕 2026-10-12; Phase P28 快捷任务拆解入口与概览导出)
+ * 项目概览 Widget (2026-09-25; Phase P14 多态版本保护与阶段状态卡片 2026-10-12; Phase P20 L1 宪章就绪度与一键快照留痕 2026-10-12; Phase P28 快捷任务拆解入口与概览导出; Phase P32 阶段快捷切换胶囊与 L1 宪章一键初始化 2026-10-13)
  *
- * 项目类型分类系统 - Phase 4.3
- * 根据项目类型与版本控制策略显示对应的概览 Widget、L1 宪章就绪状态、快捷快照按钮、AI 任务拆解入口及概览 Markdown 复制
+ * 项目类型分类系统 - Phase 4.3 & Phase P32
+ * 根据项目类型与版本控制策略显示对应的概览 Widget、L1 宪章就绪状态与一键初始化、阶段快捷切换、快捷快照按钮、AI 任务拆解入口及概览 Markdown 复制
  */
 
 import { Check, Copy, FileText, History, Layers, Plus, Sparkles } from 'lucide-react';
@@ -35,10 +35,18 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [hasSageMd, setHasSageMd] = useState<boolean | null>(null);
   const [totalFiles, setTotalFiles] = useState<number | null>(null);
   const [creatingSnapshot, setCreatingSnapshot] = useState(false);
+  const [initializingSageMd, setInitializingSageMd] = useState(false);
+  const [activeStageId, setActiveStageId] = useState<string | null>(
+    project.projectStage ?? blueprint.stages[0]?.id ?? null,
+  );
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [decomposeReq, setDecomposeReq] = useState('');
   const [decomposeCtx, setDecomposeCtx] = useState('');
+
+  useEffect(() => {
+    setActiveStageId(project.projectStage ?? blueprint.stages[0]?.id ?? null);
+  }, [project.projectStage, blueprint.stages]);
 
   const loadOverviewMeta = useCallback(async () => {
     if (!project.id || typeof projectApi?.getWorkspaceOverview !== 'function') return;
@@ -61,10 +69,40 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   }, [loadOverviewMeta]);
 
   const stageLabel =
-    blueprint.stages.find((s) => s.id === project.projectStage)?.label ??
-    project.projectStage ??
+    blueprint.stages.find((s) => s.id === activeStageId)?.label ??
+    activeStageId ??
     blueprint.stages[0]?.label ??
     '默认阶段';
+
+  const handleSelectStage = async (stageId: string) => {
+    setActiveStageId(stageId);
+    if (!project.id || typeof projectApi?.update !== 'function') return;
+    try {
+      await projectApi.update(project.id, { project_stage: stageId });
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
+  const handleInitSageMd = async () => {
+    if (!project.id || initializingSageMd || typeof projectApi?.scaffold !== 'function') return;
+    setInitializingSageMd(true);
+    try {
+      await projectApi.scaffold(project.id, {
+        projectType: blueprint.type,
+        createDirectories: true,
+        createSageMd: true,
+        importDefaultConstraints: false,
+        seedDefaultMilestones: false,
+      });
+      setHasSageMd(true);
+      await loadOverviewMeta();
+    } catch {
+      // ignore in test/offline mode
+    } finally {
+      setInitializingSageMd(false);
+    }
+  };
 
   const handleQuickCheckpoint = async () => {
     if (!project.id || creatingSnapshot || typeof projectApi?.createCheckpoint !== 'function') {
@@ -114,84 +152,124 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
 
       {/* 多态项目阶段与版本保护摘要 */}
       <div
-        className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-xs"
+        className="space-y-2 rounded-lg border border-border bg-card px-3.5 py-2.5 text-xs"
         data-testid="workspace-vcs-summary-widget"
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <Layers className="h-3.5 w-3.5 text-primary" />
-          <span className="font-medium text-foreground">当前生命周期阶段：{stageLabel}</span>
-          {hasSageMd !== null && (
-            <span
-              className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ui-2xs font-medium ${
-                hasSageMd
-                  ? 'bg-emerald-500/10 text-emerald-600'
-                  : 'bg-amber-500/10 text-amber-600'
-              }`}
-              data-testid="workspace-charter-status-badge"
-            >
-              <FileText className="h-2.5 w-2.5" />
-              {hasSageMd ? 'L1 SAGE.md 已就绪' : 'L1 SAGE.md 待初始化'}
-            </span>
-          )}
-          {totalFiles !== null && (
-            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-ui-2xs text-muted-foreground">
-              {totalFiles} 个文件
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-          <History className="h-3.5 w-3.5 text-emerald-500" />
-          <span>{vcsLabel}</span>
-          {checkpointCount > 0 && (
-            <span
-              className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-ui-2xs text-emerald-600"
-              data-testid="workspace-vcs-checkpoint-count"
-            >
-              {checkpointCount} 个快照
-            </span>
-          )}
-          <button
-            type="button"
-            disabled={creatingSnapshot}
-            onClick={() => void handleQuickCheckpoint()}
-            data-testid="overview-quick-checkpoint-btn"
-            className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/5 px-2 py-0.5 text-ui-2xs font-medium text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-50"
-          >
-            <Plus className="h-2.5 w-2.5" />
-            {creatingSnapshot ? '留痕中...' : '快捷快照'}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setDecomposeReq('');
-              setDecomposeCtx('');
-              setDecomposeOpen(true);
-            }}
-            data-testid="overview-open-decompose-btn"
-            className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
-          >
-            <Sparkles className="h-2.5 w-2.5" />
-            AI 拆解任务
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCopyOverviewMarkdown()}
-            data-testid="overview-copy-summary-md-btn"
-            className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            title="复制项目治理概览 Markdown"
-          >
-            {copiedSummary ? (
-              <>
-                <Check className="h-2.5 w-2.5 text-emerald-600" />
-                已复制
-              </>
-            ) : (
-              <>
-                <Copy className="h-2.5 w-2.5" />
-                复制概览 MD
-              </>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Layers className="h-3.5 w-3.5 text-primary" />
+            <span className="font-medium text-foreground">当前生命周期阶段：{stageLabel}</span>
+            {hasSageMd !== null && (
+              <span
+                className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-ui-2xs font-medium ${
+                  hasSageMd
+                    ? 'bg-emerald-500/10 text-emerald-600'
+                    : 'bg-amber-500/10 text-amber-600'
+                }`}
+                data-testid="workspace-charter-status-badge"
+              >
+                <FileText className="h-2.5 w-2.5" />
+                {hasSageMd ? 'L1 SAGE.md 已就绪' : 'L1 SAGE.md 待初始化'}
+              </span>
             )}
-          </button>
+            {hasSageMd === false && (
+              <button
+                type="button"
+                disabled={initializingSageMd}
+                onClick={() => void handleInitSageMd()}
+                data-testid="overview-init-sagemd-btn"
+                className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-ui-2xs font-medium text-amber-700 hover:bg-amber-500/20 disabled:opacity-50 dark:text-amber-300"
+              >
+                <Sparkles className="h-2.5 w-2.5" />
+                {initializingSageMd ? '生成中...' : '一键生成 SAGE.md'}
+              </button>
+            )}
+            {totalFiles !== null && (
+              <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-ui-2xs text-muted-foreground">
+                {totalFiles} 个文件
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+            <History className="h-3.5 w-3.5 text-emerald-500" />
+            <span>{vcsLabel}</span>
+            {checkpointCount > 0 && (
+              <span
+                className="rounded bg-emerald-500/10 px-1.5 py-0.5 font-mono text-ui-2xs text-emerald-600"
+                data-testid="workspace-vcs-checkpoint-count"
+              >
+                {checkpointCount} 个快照
+              </span>
+            )}
+            <button
+              type="button"
+              disabled={creatingSnapshot}
+              onClick={() => void handleQuickCheckpoint()}
+              data-testid="overview-quick-checkpoint-btn"
+              className="inline-flex items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/5 px-2 py-0.5 text-ui-2xs font-medium text-emerald-600 hover:bg-emerald-500/10 disabled:opacity-50"
+            >
+              <Plus className="h-2.5 w-2.5" />
+              {creatingSnapshot ? '留痕中...' : '快捷快照'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDecomposeReq('');
+                setDecomposeCtx('');
+                setDecomposeOpen(true);
+              }}
+              data-testid="overview-open-decompose-btn"
+              className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+            >
+              <Sparkles className="h-2.5 w-2.5" />
+              AI 拆解任务
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCopyOverviewMarkdown()}
+              data-testid="overview-copy-summary-md-btn"
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+              title="复制项目治理概览 Markdown"
+            >
+              {copiedSummary ? (
+                <>
+                  <Check className="h-2.5 w-2.5 text-emerald-600" />
+                  已复制
+                </>
+              ) : (
+                <>
+                  <Copy className="h-2.5 w-2.5" />
+                  复制概览 MD
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Phase P32: 生命周期阶段快捷切换胶囊 */}
+        <div
+          className="flex flex-wrap items-center gap-1 pt-1 border-t border-border/60"
+          data-testid="overview-stage-switcher"
+        >
+          <span className="text-ui-2xs text-muted-foreground">阶段切换：</span>
+          {blueprint.stages.map((st) => {
+            const isCurrent = st.id === activeStageId;
+            return (
+              <button
+                key={st.id}
+                type="button"
+                data-testid={`overview-stage-pill-${st.id}`}
+                onClick={() => void handleSelectStage(st.id)}
+                className={`rounded px-1.5 py-0.5 text-ui-2xs transition-colors ${
+                  isCurrent
+                    ? 'bg-primary text-primary-foreground font-medium'
+                    : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                {st.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

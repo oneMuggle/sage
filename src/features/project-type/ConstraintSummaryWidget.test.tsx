@@ -20,6 +20,7 @@ vi.mock('../../shared/api', () => ({
   projectApi: {
     listConstraints: vi.fn(),
     createConstraint: vi.fn().mockResolvedValue({}),
+    addMaterialFromFile: vi.fn().mockResolvedValue({}),
     getAdvice: vi.fn().mockResolvedValue({
       healthScore: 86,
       summary: '项目约束与阶段运转健康',
@@ -289,5 +290,39 @@ describe('ConstraintSummaryWidget', () => {
       );
       expect(screen.getByTestId('advisor-risk-to-constraint-0')).toHaveTextContent('已固化约束');
     });
+  });
+
+  it('supports GitStatusWidget category filter pills & L4 ingest, and ConstraintEditor priority tier presets (Phase P32)', async () => {
+    render(
+      <>
+        <GitStatusWidget projectId="test-project" />
+        <ConstraintEditor
+          open={true}
+          onOpenChange={vi.fn()}
+          projectId="test-project"
+          projectType="coding"
+          constraint={null}
+          onSave={vi.fn()}
+        />
+      </>,
+    );
+
+    const toggleFilesBtn = await screen.findByTestId('git-status-files-toggle');
+    fireEvent.click(toggleFilesBtn);
+    expect(screen.getByText('[S] README.md')).toBeInTheDocument();
+    expect(screen.getByText('[M] src/App.tsx')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('git-widget-filter-staged'));
+    expect(screen.getByText('[S] README.md')).toBeInTheDocument();
+    expect(screen.queryByText('[M] src/App.tsx')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('git-widget-ingest-README.md'));
+    await waitFor(() => {
+      expect(projectApi.addMaterialFromFile).toHaveBeenCalledWith('test-project', 'README.md');
+      expect(screen.getByTestId('git-widget-ingest-README.md')).toHaveTextContent('已纳入 L4');
+    });
+
+    fireEvent.click(screen.getByTestId('constraint-priority-preset-10'));
+    expect(screen.getByDisplayValue('10')).toBeInTheDocument();
   });
 });
