@@ -263,10 +263,18 @@ export function useChat() {
         initialContent: THINKING_PLACEHOLDER,
       });
 
+      // 从 discoveredModels 查找当前模型的 capabilities(设计:ModelSelection 只是指针,
+      // capabilities 存在 DiscoveredModel 中)
+      const chatModelCapabilities =
+        chatEndpoint?.discoveredModels
+          ?.find((m) => m.id === settings.modelSelections.chatModel.modelId)
+          ?.capabilities ?? ['chat'];
+
       const config: ChatConfig = {
         apiKey: chatEndpoint.apiKey,
         apiUrl: chatEndpoint.baseUrl,
         model: settings.modelSelections.chatModel.modelId ?? undefined,
+        capabilities: chatModelCapabilities,
         // Task 5 (2026-09-15): send raw maxContext + autoContext to backend.
         // Backend resolves effective window from catalog and computes history budget.
         // No longer sending computed historyBudgetFor() — that was the bug.
