@@ -1,13 +1,14 @@
 /**
- * Git 状态 Widget (2026-09-25; Phase P26 Git 状态与近期提交 Markdown 摘要一键复制 2026-10-13)
+ * Git 状态 Widget (2026-09-25; Phase P26 Git 状态与近期提交 Markdown 摘要一键复制 2026-10-13; Phase P32 变更文件分类过滤与一键纳入 L4 资料池 2026-10-13)
  *
- * 项目类型分类系统 - Phase 4.3
- * Coding 项目专属：显示 Git 仓库状态并支持复制 Markdown 状态报告
+ * 项目类型分类系统 - Phase 4.3 & Phase P32
+ * Coding 项目专属：显示 Git 仓库状态、支持复制 Markdown 状态报告、按状态筛选变更文件并一键纳入 L4 资料池
  */
 
-import { GitBranch, AlertCircle, CheckCircle2, Copy, Check, RefreshCw } from 'lucide-react';
+import { GitBranch, AlertCircle, CheckCircle2, Copy, Check, RefreshCw, BookmarkPlus } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
+import { projectApi } from '../../shared/api';
 import { invoke } from '../../shared/api/desktopInvoke';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
 
@@ -34,6 +35,8 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filesExpanded, setFilesExpanded] = useState(false);
+  const [fileFilter, setFileFilter] = useState<'all' | 'staged' | 'modified' | 'untracked'>('all');
+  const [ingestedFiles, setIngestedFiles] = useState<Set<string>>(new Set());
   const [copiedMd, setCopiedMd] = useState(false);
 
   const fetchStatus = useCallback(async () => {
@@ -90,6 +93,18 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
 
   const totalChanges =
     status.modified_files.length + status.staged_files.length + status.untracked_files.length;
+
+  const handleIngestChangedFile = async (filePath: string) => {
+    if (ingestedFiles.has(filePath) || typeof projectApi?.addMaterialFromFile !== 'function') {
+      return;
+    }
+    try {
+      await projectApi.addMaterialFromFile(projectId, filePath);
+      setIngestedFiles((prev) => new Set(prev).add(filePath));
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
 
   const handleCopyMarkdown = () => {
     const lines = [
@@ -189,25 +204,87 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
               {filesExpanded ? '收起变更文件明细' : `展开变更文件 (${totalChanges})`}
             </button>
             {filesExpanded && (
-              <div
-                className="mt-1 max-h-28 overflow-y-auto rounded border border-border bg-muted/30 p-1.5 font-mono text-ui-2xs space-y-0.5"
-                data-testid="git-status-files-list"
-              >
-                {status.staged_files.map((f) => (
-                  <div key={`s:${f}`} className="truncate text-green-600 dark:text-green-400">
-                    [S] {f}
-                  </div>
-                ))}
-                {status.modified_files.map((f) => (
-                  <div key={`m:${f}`} className="truncate text-orange-600 dark:text-orange-400">
-                    [M] {f}
-                  </div>
-                ))}
-                {status.untracked_files.map((f) => (
-                  <div key={`u:${f}`} className="truncate text-muted-foreground">
-                    [U] {f}
-                  </div>
-                ))}
+              <div className="mt-1 space-y-1.5" data-testid="git-status-files-list">
+                <div className="flex flex-wrap items-center gap-1">
+                  {(
+                    [
+                      { key: 'all', label: `全部 (${totalChanges})` },
+                      { key: 'staged', label: `暂存 (${status.staged_files.length})` },
+                      { key: 'modified', label: `修改 (${status.modified_files.length})` },
+                      { key: 'untracked', label: `未跟踪 (${status.untracked_files.length})` },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      data-testid={`git-widget-filter-${tab.key}`}
+                      onClick={() => setFileFilter(tab.key)}
+                      className={`rounded px-1.5 py-0.5 text-ui-2xs transition-colors ${
+                        fileFilter === tab.key
+                          ? 'bg-primary text-primary-foreground font-medium'
+                          : 'bg-muted/60 text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="max-h-32 overflow-y-auto rounded border border-border bg-muted/30 p-1.5 font-mono text-ui-2xs space-y-1">
+                  {(fileFilter === 'all' || fileFilter === 'staged') &&
+                    status.staged_files.map((f) => (
+                      <div
+                        key={`s:${f}`}
+                        className="flex items-center justify-between gap-2 text-green-600 dark:text-green-400"
+                      >
+                        <span className="truncate">[S] {f}</span>
+                        <button
+                          type="button"
+                          data-testid={`git-widget-ingest-${f}`}
+                          onClick={() => void handleIngestChangedFile(f)}
+                          className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                        >
+                          <BookmarkPlus className="h-2.5 w-2.5" />
+                          {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
+                        </button>
+                      </div>
+                    ))}
+                  {(fileFilter === 'all' || fileFilter === 'modified') &&
+                    status.modified_files.map((f) => (
+                      <div
+                        key={`m:${f}`}
+                        className="flex items-center justify-between gap-2 text-orange-600 dark:text-orange-400"
+                      >
+                        <span className="truncate">[M] {f}</span>
+                        <button
+                          type="button"
+                          data-testid={`git-widget-ingest-${f}`}
+                          onClick={() => void handleIngestChangedFile(f)}
+                          className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                        >
+                          <BookmarkPlus className="h-2.5 w-2.5" />
+                          {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
+                        </button>
+                      </div>
+                    ))}
+                  {(fileFilter === 'all' || fileFilter === 'untracked') &&
+                    status.untracked_files.map((f) => (
+                      <div
+                        key={`u:${f}`}
+                        className="flex items-center justify-between gap-2 text-muted-foreground"
+                      >
+                        <span className="truncate">[U] {f}</span>
+                        <button
+                          type="button"
+                          data-testid={`git-widget-ingest-${f}`}
+                          onClick={() => void handleIngestChangedFile(f)}
+                          className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                        >
+                          <BookmarkPlus className="h-2.5 w-2.5" />
+                          {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
+                        </button>
+                      </div>
+                    ))}
+                </div>
               </div>
             )}
           </div>
