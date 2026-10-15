@@ -559,3 +559,17 @@
    - 在 `ConstraintEditor.tsx` 中新增四档语义化优先级预设胶囊（`constraint-priority-preset-10` `P10 铁律` / `8` `P8 强规范` / `5` `P5 常规` / `3` `P3 建议`）。
    - 在 `MilestoneEditor.tsx` 中新增四态状态快捷胶囊（`milestone-status-pill-pending` / `in_progress` / `completed` / `blocked`）。
 
+### Phase P33：约束管理器高优与 Glob 仅看命中筛选、里程碑搜索与逾期过滤及批量完成、M2 知识与 L3 画像一键升格 L2 约束闭环（2026-10-15 已完成）
+
+1. **约束管理器高优筛选胶囊与 Glob 仅看命中规则开关（`src/features/project-type/ConstraintManager.tsx`）**
+   - 新增优先级快速筛选胶囊栏（`constraint-priority-filter-all` `全部优先级` / `constraint-priority-filter-high` `高优 (≥P8)`），支持一键聚焦核心强制规范。
+   - 当输入 Glob 触发路径测试时，在命中数徽标右侧新增 **`仅看命中规则 / 显示全部规则`** 切换按钮（`constraint-glob-matched-only-btn`），支持直接过滤出当前文件路径命中的生效约束。
+2. **里程碑管理器关键词搜索、逾期预警过滤与进行中节点一键批量完成（`src/features/project-type/MilestoneManager.tsx`）**
+   - 在筛选栏新增实时关键词搜索框（`milestone-search-input`），支持按里程碑标题与描述快速过滤。
+   - 自动统计未完成且截止日期早于今日的逾期节点数，当存在逾期项时渲染 **`逾期预警 (N)`** 筛选胶囊（`milestone-overdue-filter-btn`）。
+   - 当当前筛选视图中存在 `进行中` 节点时，提供 **`一键完成进行中 (N)`** 批量推进按钮（`milestone-batch-complete-btn`）。
+3. **AI 对话知识提取（M2）高重要度快捷勾选与一键转 L2 约束闭环（`src/features/project-type/KnowledgeExtractionPanel.tsx`）**
+   - 在审核阶段顶栏新增 **`仅选高重要度 (≥8)`** 按钮（`knowledge-select-high-btn`），一键筛选高价值提炼条目。
+   - 在每条提取建议卡片顶栏新增 **`转 L2 约束 / 已转 L2 约束`** 按钮（`knowledge-to-constraint-${idx}`），支持在沉淀 L3 画像的同时将关键约定直接固化为 L2 强制约束规则。
+4. **L3 项目演化记忆画像条目一键升格为 L2 约束规则（`src/features/project-type/StudioProfileTabPanel.tsx`）**
+   - 在每条冻结画像条目右侧新增 **`升格为约束 / 已升格约束`** 按钮（`studio-profile-to-constraint-${entry.id}`），打通 **“L3 演化记忆画像 → L2 强约束规则”** 的双向治理闭环。

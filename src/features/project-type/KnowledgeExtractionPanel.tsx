@@ -5,7 +5,7 @@
  * 提取知识建议并支持一键复制提取结果 Markdown、全选/清空与勾选确认后写入 ProjectProfileStore。
  */
 
-import { Sparkles, Loader2, CheckCircle2, Lightbulb, RefreshCw, Copy, Check } from 'lucide-react';
+import { Sparkles, Loader2, CheckCircle2, Lightbulb, RefreshCw, Copy, Check, ShieldPlus } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi, type KnowledgeEntryProposal, type Session } from '../../shared/api';
@@ -40,11 +40,13 @@ export function KnowledgeExtractionPanel({
   const [sessionId, setSessionId] = useState('');
   const [boundSessions, setBoundSessions] = useState<Session[]>([]);
   const [copiedMd, setCopiedMd] = useState(false);
+  const [convertedConstraintIndices, setConvertedConstraintIndices] = useState<Set<number>>(new Set());
 
   const resetPanel = useCallback(() => {
     setPhase('idle');
     setEntries([]);
     setSelected(new Set());
+    setConvertedConstraintIndices(new Set());
     setReasoning('');
     setError(null);
   }, []);
@@ -168,6 +170,29 @@ export function KnowledgeExtractionPanel({
     }
   };
 
+  const handleSelectHighImportance = () => {
+    const highIndices = entries
+      .map((e, i) => (e.importance >= 8 ? i : -1))
+      .filter((i) => i >= 0);
+    setSelected(new Set(highIndices));
+  };
+
+  const handleConvertToConstraint = async (entry: KnowledgeEntryProposal, idx: number) => {
+    if (convertedConstraintIndices.has(idx) || typeof projectApi?.createConstraint !== 'function') {
+      return;
+    }
+    try {
+      await projectApi.createConstraint(projectId, {
+        category: entry.category || 'convention',
+        content: entry.content,
+        priority: Math.min(10, Math.max(1, entry.importance || 7)),
+      });
+      setConvertedConstraintIndices((prev) => new Set(prev).add(idx));
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
   return (
     <div className="space-y-3" data-testid="knowledge-extraction-panel">
       {error && (
@@ -278,6 +303,14 @@ export function KnowledgeExtractionPanel({
                   </button>
                   <button
                     type="button"
+                    onClick={handleSelectHighImportance}
+                    data-testid="knowledge-select-high-btn"
+                    className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    仅选高重要度 (≥8)
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleToggleSelectAll}
                     data-testid="knowledge-toggle-select-all"
                     className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
@@ -299,13 +332,29 @@ export function KnowledgeExtractionPanel({
                     className="mt-0.5 shrink-0"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <Badge variant="outline" className="text-ui-2xs shrink-0">
-                        {CATEGORY_LABELS[entry.category] ?? entry.category}
-                      </Badge>
-                      <span className="text-ui-2xs text-muted-foreground">
-                        重要性 {entry.importance}/10
-                      </span>
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Badge variant="outline" className="text-ui-2xs shrink-0">
+                          {CATEGORY_LABELS[entry.category] ?? entry.category}
+                        </Badge>
+                        <span className="text-ui-2xs text-muted-foreground">
+                          重要性 {entry.importance}/10
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`knowledge-to-constraint-${idx}`}
+                        onClick={(ev) => {
+                          ev.preventDefault();
+                          ev.stopPropagation();
+                          void handleConvertToConstraint(entry, idx);
+                        }}
+                        className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                        title="将此知识条目同步固化为 L2 项目约束"
+                      >
+                        <ShieldPlus className="h-3 w-3 text-primary" />
+                        {convertedConstraintIndices.has(idx) ? '已转 L2 约束' : '转 L2 约束'}
+                      </button>
                     </div>
                     <p className="mt-0.5 text-foreground">{entry.content}</p>
                     {entry.reasoning && (

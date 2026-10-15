@@ -325,4 +325,51 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('constraint-priority-preset-10'));
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
   });
+
+  it('supports ConstraintManager priority tier filter and Glob matched-only toggle (Phase P33)', async () => {
+    mockListConstraints.mockResolvedValue([
+      {
+        id: 'c-p33-high',
+        projectId: 'test-project',
+        category: 'security',
+        content: '高优禁止明文密钥提交',
+        triggerPattern: 'src/**',
+        priority: 9,
+        enabled: true,
+        createdAt: 1000,
+        updatedAt: 1000,
+      },
+      {
+        id: 'c-p33-low',
+        projectId: 'test-project',
+        category: 'style',
+        content: '低优代码注释建议',
+        triggerPattern: 'docs/**',
+        priority: 4,
+        enabled: true,
+        createdAt: 1000,
+        updatedAt: 1000,
+      },
+    ]);
+
+    render(<ConstraintManager projectId="test-project" projectType="coding" />);
+
+    expect(await screen.findByText('高优禁止明文密钥提交')).toBeInTheDocument();
+    expect(screen.getByText('低优代码注释建议')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('constraint-priority-filter-high'));
+    expect(screen.getByText('高优禁止明文密钥提交')).toBeInTheDocument();
+    expect(screen.queryByText('低优代码注释建议')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('constraint-priority-filter-all'));
+    expect(screen.getByText('低优代码注释建议')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('constraint-glob-test-input'), {
+      target: { value: 'src/index.ts' },
+    });
+    const matchedOnlyBtn = await screen.findByTestId('constraint-glob-matched-only-btn');
+    fireEvent.click(matchedOnlyBtn);
+    expect(screen.getByText('高优禁止明文密钥提交')).toBeInTheDocument();
+    expect(screen.queryByText('低优代码注释建议')).toBeNull();
+  });
 });

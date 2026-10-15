@@ -22,6 +22,7 @@ vi.mock('../../shared/api', () => ({
   projectApi: {
     listMilestones: vi.fn(),
     createMilestone: vi.fn().mockResolvedValue({}),
+    updateMilestone: vi.fn().mockResolvedValue({}),
     detectType: vi.fn().mockResolvedValue({
       detectedType: 'research',
       confidence: 0.9,
@@ -531,5 +532,63 @@ describe('MilestoneProgressWidget', () => {
     // MilestoneEditor status pill
     fireEvent.click(screen.getByTestId('milestone-status-pill-in_progress'));
     expect(screen.getByDisplayValue('进行中')).toBeInTheDocument();
+  });
+
+  it('supports MilestoneManager keyword search, overdue warning filter, and batch complete in-progress milestones (Phase P33)', async () => {
+    mockListMilestones.mockResolvedValue([
+      {
+        id: 'ms-p33-overdue',
+        projectId: 'test-project',
+        title: '逾期数据采集里程碑',
+        description: '需要补齐清洗日志',
+        stage: 'data_collection',
+        dueDate: '2020-01-01',
+        status: 'in_progress',
+        sortOrder: 1,
+        createdAt: 1000,
+      },
+      {
+        id: 'ms-p33-future',
+        projectId: 'test-project',
+        title: '未来论文终稿提交',
+        description: 'LaTeX 排版检查',
+        stage: 'submission',
+        dueDate: '2099-12-31',
+        status: 'pending',
+        sortOrder: 2,
+        createdAt: 1000,
+      },
+    ]);
+
+    render(<MilestoneManager projectId="test-project" projectType="research" />);
+
+    expect(await screen.findByText('逾期数据采集里程碑')).toBeInTheDocument();
+    expect(screen.getByText('未来论文终稿提交')).toBeInTheDocument();
+
+    // Search filter
+    fireEvent.change(screen.getByTestId('milestone-search-input'), {
+      target: { value: 'LaTeX' },
+    });
+    expect(screen.queryByText('逾期数据采集里程碑')).toBeNull();
+    expect(screen.getByText('未来论文终稿提交')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('milestone-search-input'), {
+      target: { value: '' },
+    });
+
+    // Overdue filter
+    fireEvent.click(screen.getByTestId('milestone-overdue-filter-btn'));
+    expect(screen.getByText('逾期数据采集里程碑')).toBeInTheDocument();
+    expect(screen.queryByText('未来论文终稿提交')).toBeNull();
+
+    // Batch complete in-progress
+    fireEvent.click(screen.getByTestId('milestone-batch-complete-btn'));
+    await waitFor(() => {
+      expect(projectApi.updateMilestone).toHaveBeenCalledWith(
+        'test-project',
+        'ms-p33-overdue',
+        { status: 'completed' },
+      );
+    });
   });
 });
