@@ -5,10 +5,15 @@
 """
 from __future__ import annotations
 
+import logging
+import os
 from dataclasses import dataclass, replace
 from pathlib import PurePath
+from typing import Optional
 
 from backend.data.settings_repo import SettingsRepository
+
+logger = logging.getLogger(__name__)
 
 #: app_settings.orch 段的 camelCase key → OrchSettings 字段名映射。
 #: 与前端 src/entities/setting/types.ts 的 OrchSettings interface 对齐。
@@ -141,3 +146,50 @@ def _sanitize_scratch_root(value: str, fallback: str) -> str:
     if "/" in value or "\\" in value:
         return fallback
     return value
+
+
+#: ``resolve_tool_call_budget`` 最末兜底值 —— 与 ToolPolicy 默认对齐。
+#: orch_settings 为工具调用预算单一事实源（env > UI > 默认）。
+_DEFAULT_FALLBACK_BUDGET = 25
+
+
+def resolve_tool_call_budget(fallback: Optional[int] = None) -> int:
+    """解析单-run 工具调用预算 —— 统一优先级链。
+
+    优先级（高→低）：
+      1. env ``SAGE_MAX_TOOL_CALLS_PER_RUN``（CI/测试覆盖用）
+      2. ``OrchSettings.max_tool_calls_per_run``（UI 可调，持久化到 app_settings）
+      3. ``fallback`` 参数（默认 25，与 ``ToolPolicy._DEFAULT_MAX_TOOL_CALLS_PER_RUN``
+         保持一致；调用方可传入自己的 ``tool_policy.max_tool_calls_per_run``）
+
+    ``OrchSettings`` 与 env 值必须 ≥ 1 才采纳，否则回落下一层（与
+    ``core/legacy/agent.py`` 的 legacy 行为一致；0 不视为"不限"而是回落）。
+    永不抛错 —— 任何读取异常回落 ``fallback``。
+    """
+    default_fallback = fallback if fallback is not None else _DEFAULT_FALLBACK_BUDGET
+    # 1) env 覆盖
+    raw_env = os.environ.get("SAGE_MAX_TOOL_CALLS_PER_RUN", "").strip()
+    if raw_env:
+        try:
+            env_val = int(raw_env)
+            if env_val >= 1:
+                return env_val
+            logger.warning(
+                "env SAGE_MAX_TOOL_CALLS_PER_RUN=%r 非法（<1）,回落 orch/policy",
+                raw_env,
+            )
+        except ValueError:
+            logger.warning(
+                "env SAGE_MAX_TOOL_CALLS_PER_RUN=%r 非法（非整数）,回落 orch/policy",
+                raw_env,
+            )
+    # 2) UI 可调路径：从 app_settings 读 OrchSettings
+    try:
+        orch = load_orch_settings()
+        orch_val = getattr(orch, "max_tool_calls_per_run", 0)
+        if isinstance(orch_val, int) and orch_val >= 1:
+            return orch_val
+    except Exception as exc:  # noqa: BLE001 — 读设置失败回落 fallback
+        logger.debug("OrchSettings 读取失败，回落 fallback: %s", exc)
+    # 3) fallback（默认 25）
+    return default_fallback

@@ -70,7 +70,7 @@ from backend.orchestration.events import EventProvenance, EventRecorder, LaneEve
 from backend.orchestration.lane_registry import LaneRegistry
 from backend.orchestration.llm_factory import build_llm_client_from_settings
 from backend.orchestration.models import Task
-from backend.orchestration.orch_settings import load_orch_settings
+from backend.orchestration.orch_settings import load_orch_settings, resolve_tool_call_budget
 from backend.orchestration.subagent_events import SubagentEventSink
 from backend.orchestration.task_registry import TaskRegistry
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
@@ -117,6 +117,9 @@ SUBAGENT_TOOL_WHITELIST: Tuple[str, ...] = (
 # ``OrchSettings.max_subagent_iterations`` (same default).
 SUBAGENT_MAX_ITERATIONS = 10  # 与 OrchSettings.max_subagent_iterations 默认对齐 (PR#898)
 SUBAGENT_ANSWER_CAP = 20_000
+# 与 ToolPolicy 默认 ``max_tool_calls_per_run`` 对齐 —— 用于识别"上游未显式
+# 注入预算，走了默认 25"的情况并实时重解析（env > UI > 默认）。
+_TOOL_POLICY_DEFAULT_BUDGET = 25
 
 
 def _resolve_subagent_iterations() -> int:
@@ -194,13 +197,20 @@ def _subagent_policy(policy: Optional[ToolPolicy]) -> Tuple[ToolPolicy, Optional
     parent = policy or ToolPolicy()
     owned_root = None if parent.workspace_root else _new_subagent_workspace()
     root = parent.workspace_root or str(owned_root)
+    # 修复：当 parent 是默认 ToolPolicy（未由上游显式注入预算），
+    # ``max_tool_calls_per_run`` 恒为 25 —— 即使 UI 设到 100 子 agent 仍卡 25 次。
+    # 经 ``resolve_tool_call_budget`` 实时解析 env > UI 设置 > 默认。
+    if policy is None or parent.max_tool_calls_per_run == _TOOL_POLICY_DEFAULT_BUDGET:
+        resolved_budget = resolve_tool_call_budget(parent.max_tool_calls_per_run)
+    else:
+        resolved_budget = parent.max_tool_calls_per_run
     return (
         ToolPolicy(
             timeout_seconds=parent.timeout_seconds,
             max_output_bytes=parent.max_output_bytes,
             max_result_items=parent.max_result_items,
             max_read_bytes=parent.max_read_bytes,
-            max_tool_calls_per_run=parent.max_tool_calls_per_run,
+            max_tool_calls_per_run=resolved_budget,
             workspace_root=root,
             subagent_only=True,
         ),

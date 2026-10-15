@@ -20,6 +20,7 @@ from backend.core.legacy.agent_state import AgentEvent
 from backend.domain.tool_policy import ToolPolicy
 from backend.orchestration.executor import LaneExecutor
 from backend.orchestration.models import Lane
+from backend.orchestration.orch_settings import resolve_tool_call_budget
 from backend.tools.structured_output_tool import validate_against_schema
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,16 @@ class SubagentRunner:
         scratch_dir = task.parameters.get("scratch_dir")
         workspace_dir = task.parameters.get("workspace_dir")
         policy_root = workspace_dir or scratch_dir
-        policy = ToolPolicy(workspace_root=policy_root) if policy_root else None
+        policy = (
+            ToolPolicy(
+                workspace_root=policy_root,
+                # 修复：子 agent 通道此前完全忽略 UI 设置，恒为默认 25 ——
+                # 即使主 agent 预算调到 100 子 agent 仍卡 25 次。
+                max_tool_calls_per_run=resolve_tool_call_budget(),
+            )
+            if policy_root
+            else None
+        )
 
         # P2 Task 1 (2026-08-23): 可选 output_schema —— 非 dict 视为未声明。
         schema = task.parameters.get("output_schema")

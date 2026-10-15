@@ -52,6 +52,7 @@ except ImportError:
 
 from backend.domain.agent_event import RunEventScope
 from backend.domain.tool_policy import ToolPolicy
+from backend.orchestration.orch_settings import resolve_tool_call_budget
 from backend.orchestration.permission import (
     AgentAction,
     LanePermission,
@@ -903,7 +904,11 @@ class ChatService:
         Returns:
             ``True`` 当预算被超额；否则 ``False``。
         """
-        budget = self._tool_policy.max_tool_calls_per_run
+        # 实时解析：env > UI 设置 (OrchSettings) > 快照 policy。
+        # 默认值 25 → 查 UI 设置（UI 改 100 不重启即生效）；
+        # 显式设定（测试传 3 或特殊路径传 0）→ 直接采纳，不被覆盖。
+        policy_budget = self._tool_policy.max_tool_calls_per_run
+        budget = resolve_tool_call_budget() if policy_budget == 25 else policy_budget
         called = 0
         for tc in tool_calls:
             if called >= budget:
