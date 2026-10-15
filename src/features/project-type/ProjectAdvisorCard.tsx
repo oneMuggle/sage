@@ -68,6 +68,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [copiedReport, setCopiedReport] = useState(false);
   const [guardingIdx, setGuardingIdx] = useState<number | null>(null);
   const [guardedRisks, setGuardedRisks] = useState<Set<number>>(new Set());
+  const [guardedSuggestions, setGuardedSuggestions] = useState<Set<number>>(new Set());
 
   const fetchAdvice = useCallback(async () => {
     if (typeof projectApi?.getAdvice !== 'function') {
@@ -325,6 +326,34 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                         {sug.priority}
                       </span>
                       <span className="flex-1">{sug.action}</span>
+                      <button
+                        type="button"
+                        disabled={guardedSuggestions.has(idx)}
+                        onClick={async () => {
+                          if (
+                            guardedSuggestions.has(idx) ||
+                            typeof projectApi?.createConstraint !== 'function'
+                          ) {
+                            return;
+                          }
+                          try {
+                            await projectApi.createConstraint(projectId, {
+                              category: 'convention',
+                              content: sug.reason ? `${sug.action}（${sug.reason}）` : sug.action,
+                              priority: sug.priority === 'high' ? 8 : 6,
+                            });
+                            setGuardedSuggestions((prev) => new Set(prev).add(idx));
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }}
+                        data-testid={`advisor-suggestion-to-constraint-${idx}`}
+                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-emerald-500 disabled:opacity-60"
+                        title="将此改进建议固化为 L2 行为约束"
+                      >
+                        <Shield className="h-3 w-3" />
+                        <span>{guardedSuggestions.has(idx) ? '已固化约束' : '固化为约束'}</span>
+                      </button>
                       {onDecomposeTask && (
                         <button
                           type="button"
