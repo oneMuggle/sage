@@ -39,6 +39,64 @@ class DiscoveredModel:
     size: Optional[int] = None  # 模型文件大小（bytes）
 
 
+# Ollama 上的 embedding / rerank 类模型——不接受 image input，需先排除。
+_OLLAMA_NON_VISION_MARKERS = ("embed", "rerank", "minilm")
+
+# 已知支持 image input 的 Ollama 模型族：
+#   llava* / bakllava / moondream  —— 经典视觉模型
+#   *vision* / llama3.2-vision    —— Llama 视觉变体
+#   qwen2.5-vl / minicpm-v         —— VL 后缀族
+#   glm-4v / internvl              —— GLM / InternVL 视觉模型
+#   gemma3 / phi4                  —— Gemma 3 起、Phi 4 多模态
+_OLLAMA_VISION_MARKERS = (
+    "llava",
+    "vision",
+    "vl",
+    "4v",
+    "internvl",
+    "moondream",
+    "minicpm-v",
+    "gemma3",
+    "phi4",
+)
+
+# 支持 tools 的 Ollama 模型族（llama3/4、mistral、qwen2/3、command-r、hermes）
+_OLLAMA_TOOL_MARKERS = (
+    "llama3",
+    "llama4",
+    "mistral",
+    "qwen2",
+    "qwen3",
+    "command-r",
+    "hermes",
+)
+
+
+def model_capabilities(model: str) -> ModelCapabilities:
+    """推断 Ollama 模型的能力（纯函数，不构造 HTTP 客户端）。
+
+    Ollama 的 ``/api/tags`` 不上报能力元数据，只能按模型名启发式判定；
+    未命中的模型按不支持处理，调用方据此走降级而非直接注入图片。
+
+    Args:
+        model: Ollama 模型名，如 ``"qwen2.5-vl:7b"`` / ``"llama3.1:8b"``。
+
+    Returns:
+        ModelCapabilities：``vision`` 为启发式判定，非权威声明。
+    """
+    lower = (model or "").lower()
+    is_non_vision = any(marker in lower for marker in _OLLAMA_NON_VISION_MARKERS)
+    supports_tools = any(marker in lower for marker in _OLLAMA_TOOL_MARKERS)
+    vision = not is_non_vision and any(marker in lower for marker in _OLLAMA_VISION_MARKERS)
+    return ModelCapabilities(
+        tools=supports_tools,
+        vision=vision,
+        streaming=True,
+        parallel_tool_calls=supports_tools,
+        reasoning=False,  # Ollama 暂不支持原生 reasoning
+    )
+
+
 class OllamaProvider(OpenAIProvider):
     """Ollama 本地推理 provider。
 
@@ -66,29 +124,7 @@ class OllamaProvider(OpenAIProvider):
             self._ollama_base = self._ollama_base[:-3]
 
     def capabilities(self, model: str) -> ModelCapabilities:
-        # Ollama 模型能力取决于具体模型；保守估计
-        lower = model.lower()
-        # llama3.1+ / mistral / qwen2.5 等支持 tools
-        supports_tools = any(
-            tag in lower
-            for tag in (
-                "llama3",
-                "llama4",
-                "mistral",
-                "qwen2",
-                "qwen3",
-                "command-r",
-                "hermes",
-            )
-        )
-        vision = "llava" in lower or "vision" in lower or "llama3.2" in lower
-        return ModelCapabilities(
-            tools=supports_tools,
-            vision=vision,
-            streaming=True,
-            parallel_tool_calls=supports_tools,
-            reasoning=False,  # Ollama 暂不支持原生 reasoning
-        )
+        return model_capabilities(model)
 
     async def discover_models(self) -> List[DiscoveredModel]:
         """查询 Ollama 本地已下载模型列表。
