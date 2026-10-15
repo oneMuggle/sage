@@ -7,7 +7,7 @@ LLM 错误类型定义
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional
 
@@ -50,3 +50,22 @@ class LLMError(Exception):
             "status_code": self.status_code,
             "retry_after": self.retry_after,
         }
+
+
+@dataclass
+class VisionNotAvailableError(LLMError):
+    """对话模型不支持视觉识别且未配置视觉理解模型时抛出。
+
+    继承 ``LLMError`` 以便 SSE producer 的 ``except LLMError`` 能够捕获，
+    通过 ``to_dict()`` 输出结构化错误并推送终态事件，避免前端永久 loading。
+    """
+
+    type: LLMErrorType = field(default=LLMErrorType.UNKNOWN, init=False, compare=False)
+    status_code: Optional[int] = field(default=None, init=False, compare=False)
+    retry_after: Optional[int] = field(default=None, init=False, compare=False)
+
+    def __init__(self, message: str = "视觉识别不可用") -> None:
+        super().__init__(
+            type=LLMErrorType.UNKNOWN,
+            message=message,
+        )

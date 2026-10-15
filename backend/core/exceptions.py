@@ -130,10 +130,9 @@ class SecurityError(SageError):
         )
 
 
-class VisionNotAvailableError(Exception):
-    """对话模型不支持视觉识别且未配置视觉理解模型时抛出。"""
-
-    pass
+# VisionNotAvailableError 已迁移至 backend.core.errors（继承 LLMError），
+# 此处 re-export 仅为向后兼容（agent.py / test_agent_vision.py 仍通过此路径导入）。
+from backend.core.errors import VisionNotAvailableError  # noqa: E402,F401
 
 
 def handle_sage_error(error: Exception) -> Dict[str, Any]:
