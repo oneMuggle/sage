@@ -751,7 +751,7 @@ class SageAgent:
 
         chatModel 支持（或能力未知）vision 时直接注入图片，走标准
         ``image_url`` content 块；确认不支持时降级到 visionModel 生成
-        描述——该降级路径尚未实现。
+        描述后以文本替换；均未配置时抛出 ``VisionNotAvailableError``。
 
         Args:
             messages: 原始消息列表。
@@ -761,7 +761,7 @@ class SageAgent:
             处理后的消息列表。
 
         Raises:
-            NotImplementedError: chatModel 确认不支持 vision 且降级未实现。
+            VisionNotAvailableError: chatModel 不支持 vision 且未配置 visionModel。
         """
         if not images:
             return messages
