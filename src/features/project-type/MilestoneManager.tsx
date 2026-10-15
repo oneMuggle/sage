@@ -48,6 +48,8 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
   const [decomposeInitCtx, setDecomposeInitCtx] = useState<string>('');
   const [stageFilter, setStageFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [overdueOnly, setOverdueOnly] = useState<boolean>(false);
   const [copiedRoadmap, setCopiedRoadmap] = useState(false);
   const blueprint = getArchetypeBlueprint(projectType);
 
@@ -158,13 +160,51 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
 
   const completedCount = milestones.filter((m) => m.status === 'completed').length;
   const completionPct = milestones.length > 0 ? Math.round((completedCount / milestones.length) * 100) : 0;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const overdueCount = useMemo(
+    () =>
+      milestones.filter(
+        (m) => m.status !== 'completed' && Boolean(m.dueDate) && String(m.dueDate) < todayIso,
+      ).length,
+    [milestones, todayIso],
+  );
+
   const filteredMilestones = useMemo(() => {
-    return milestones.filter((m) => {
+    let list = milestones.filter((m) => {
       if (stageFilter !== 'all' && m.stage !== stageFilter) return false;
       if (statusFilter !== 'all' && m.status !== statusFilter) return false;
       return true;
     });
-  }, [milestones, stageFilter, statusFilter]);
+    if (overdueOnly) {
+      list = list.filter(
+        (m) => m.status !== 'completed' && Boolean(m.dueDate) && String(m.dueDate) < todayIso,
+      );
+    }
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (m) =>
+        m.title.toLowerCase().includes(q) ||
+        (m.description ?? '').toLowerCase().includes(q),
+    );
+  }, [milestones, stageFilter, statusFilter, overdueOnly, todayIso, searchQuery]);
+
+  const inProgressMilestones = useMemo(
+    () => filteredMilestones.filter((m) => m.status === 'in_progress'),
+    [filteredMilestones],
+  );
+
+  const handleBatchCompleteInProgress = async () => {
+    if (inProgressMilestones.length === 0) return;
+    try {
+      for (const m of inProgressMilestones) {
+        await projectApi.updateMilestone(projectId, m.id, { status: 'completed' });
+      }
+      await fetchMilestones();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '批量完成里程碑失败');
+    }
+  };
 
   if (loading) {
     return (
@@ -323,6 +363,38 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                     {st.label}
                   </button>
                 ))}
+                {overdueCount > 0 && (
+                  <button
+                    type="button"
+                    data-testid="milestone-overdue-filter-btn"
+                    onClick={() => setOverdueOnly((v) => !v)}
+                    className={`rounded px-2 py-0.5 text-ui-2xs font-medium transition-colors ${
+                      overdueOnly
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-300'
+                    }`}
+                  >
+                    逾期预警 ({overdueCount})
+                  </button>
+                )}
+                {inProgressMilestones.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="milestone-batch-complete-btn"
+                    onClick={() => void handleBatchCompleteInProgress()}
+                    className="rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-ui-2xs font-medium text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-300"
+                  >
+                    一键完成进行中 ({inProgressMilestones.length})
+                  </button>
+                )}
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜索里程碑标题或描述..."
+                  data-testid="milestone-search-input"
+                  className="ml-auto w-44 rounded border border-input bg-background px-2 py-0.5 text-xs"
+                />
               </div>
             </div>
           )}
