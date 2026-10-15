@@ -1630,19 +1630,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         "[REQ %s] context_pressure 事件推送失败，忽略", request_id
                     )
 
-            # G6 (2026-09-06): 图片附件 → 多模态 user 消息（OpenAI content 分段格式）。
-            # 校验已在 attachment 之后提前完成,此处只做末条 user 消息的形态转换。
+            # G6 (2026-09-06): 图片附件处理。
+            # 智能降级：优先使用 chatModel 的原生 vision 能力，不足时降级到 visionModel。
             if data.images:
-                messages[-1] = {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": data.message},
-                        *[
-                            {"type": "image_url", "image_url": {"url": image_url}}
-                            for image_url in data.images
-                        ],
-                    ],
-                }
+                messages = await agent._prepare_messages_with_images(messages, data.images)
 
             # Task 5 (round 2): explicit reject when the assembled request
             # exceeds the catalog-resolved window. History was already
