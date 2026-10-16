@@ -18,6 +18,7 @@ export function ProjectHooksPanel(): JSX.Element | null {
   const [loading, setLoading] = useState(false);
   const [trusting, setTrusting] = useState(false);
   const [copiedPath, setCopiedPath] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     if (!workspace) {
@@ -106,6 +107,23 @@ export function ProjectHooksPanel(): JSX.Element | null {
     }
   };
 
+  const handleCopyAuditMd = async (): Promise<void> => {
+    if (!workspace || !status) return;
+    const md = [
+      '# 项目级 Hook 安全审计摘要',
+      `- **工作区路径**: \`${workspace}\``,
+      `- **信任状态**: ${status.trusted ? '已信任并启用' : '待信任确认'}`,
+      `- **Hook 数量**: ${status.hook_count} 个`,
+    ].join('\n');
+    try {
+      await navigator.clipboard?.writeText(md);
+      setCopiedMd(true);
+      setTimeout(() => setCopiedMd(false), 1800);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
   const handleCopyPath = async (): Promise<void> => {
     if (!workspace) return;
     try {
@@ -142,6 +160,16 @@ export function ProjectHooksPanel(): JSX.Element | null {
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={() => void handleCopyAuditMd()}
+              data-testid="project-hooks-copy-md-btn"
+              className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-ui-xs text-text-secondary hover:bg-bg-hover"
+              title="复制 Hook 安全审计摘要 Markdown"
+            >
+              {copiedMd ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+              {copiedMd ? '已复制摘要' : '复制审计摘要'}
+            </button>
             <button
               type="button"
               onClick={() => void handleCopyPath()}
@@ -200,6 +228,16 @@ export function ProjectHooksPanel(): JSX.Element | null {
               data-testid="project-hooks-trust-btn"
             >
               {trusting ? '信任中…' : '信任并启用'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCopyAuditMd()}
+              data-testid="project-hooks-copy-md-btn"
+              className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-ui-xs text-text-secondary hover:bg-bg-hover"
+              title="复制 Hook 安全审计摘要 Markdown"
+            >
+              {copiedMd ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+              {copiedMd ? '已复制摘要' : '复制审计摘要'}
             </button>
             <button
               type="button"
