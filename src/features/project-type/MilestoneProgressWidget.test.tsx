@@ -516,6 +516,14 @@ describe('MilestoneProgressWidget', () => {
       });
     });
 
+    fireEvent.click(screen.getByTestId('overview-next-stage-btn'));
+    await waitFor(() => {
+      expect(projectApi.update).toHaveBeenCalledWith('proj-p32', {
+        project_stage: 'writing',
+      });
+    });
+    fireEvent.click(screen.getByTestId('overview-refresh-meta-btn'));
+
     // Open TaskDecomposeDialog from overview bar and test total days & invert/select-all
     fireEvent.click(screen.getByTestId('overview-open-decompose-btn'));
     fireEvent.click(await screen.findByTestId('decompose-preset-0'));
@@ -543,9 +551,12 @@ describe('MilestoneProgressWidget', () => {
       />,
     );
 
-    // MilestoneEditor status pill
+    // MilestoneEditor status pill & Phase P37 sort presets / copy MD
     fireEvent.click(screen.getByTestId('milestone-status-pill-in_progress'));
     expect(screen.getByDisplayValue('进行中')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('milestone-sort-preset-10'));
+    expect(screen.getByDisplayValue('10')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('milestone-editor-copy-md-btn'));
   });
 
   it('supports MilestoneManager keyword search, overdue warning filter, and batch complete in-progress milestones (Phase P33)', async () => {

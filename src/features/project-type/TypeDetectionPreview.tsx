@@ -51,6 +51,7 @@ export function TypeDetectionPreview({
   className,
 }: TypeDetectionPreviewProps) {
   const [copiedMd, setCopiedMd] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   if (loading) {
     return (
@@ -192,7 +193,34 @@ export function TypeDetectionPreview({
               {dir}/
             </span>
           ))}
+          <button
+            type="button"
+            data-testid="detection-details-toggle-btn"
+            onClick={() => setShowDetails((v) => !v)}
+            className="ml-auto rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+          >
+            {showDetails ? '收起推荐规范与里程碑' : '展开推荐规范与里程碑'}
+          </button>
         </div>
+        {showDetails && (
+          <div
+            className="mt-1.5 border-t border-border/60 pt-1.5 space-y-1 text-ui-2xs"
+            data-testid="detection-details-panel"
+          >
+            <div>
+              <span className="text-muted-foreground">推荐规范包：</span>
+              <span className="font-medium text-foreground">
+                {detectedBlueprint.subTemplates.map((t) => t.label).join(' · ')}
+              </span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">默认里程碑：</span>
+              <span className="font-medium text-foreground">
+                {detectedBlueprint.recommendedMilestones.map((m) => m.title).join(' → ')}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {confidencePercent < 50 && (
