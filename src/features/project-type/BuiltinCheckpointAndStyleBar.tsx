@@ -374,6 +374,23 @@ export function ResearchCitationAndToneBar({
         >
           一键写入学术规范
         </Button>
+        <button
+          type="button"
+          data-testid="research-copy-style-md-btn"
+          onClick={() => {
+            const md = `# 科研规范配置\n- **引用格式**: ${citationStyle} (${CITATION_STYLES[citationStyle] ?? ''})\n- **学术文风**: ${writingTone} (${WRITING_TONES[writingTone] ?? ''})`;
+            try {
+              void navigator.clipboard?.writeText(md);
+              setAppliedHint('已复制学术规范 MD');
+            } catch {
+              // ignore in test/offline mode
+            }
+          }}
+          className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs text-foreground hover:bg-muted"
+        >
+          <Copy className="h-3 w-3" />
+          复制学术规范 MD
+        </button>
       </div>
     </div>
   );
@@ -471,6 +488,22 @@ export function CodingHooksGovernanceBar({
       </div>
 
       <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          data-testid="coding-hooks-copy-status-md-btn"
+          onClick={() => {
+            const md = `# Coding Hooks 状态 (${workspacePath})\n- 配置文件: ${configExists ? '已存在' : '未配置'}\n- 授信状态: ${trusted ? '已授信' : '待审批'}\n- Hook 数量: ${detectedCount}`;
+            try {
+              void navigator.clipboard?.writeText(md);
+            } catch {
+              // ignore in test/offline mode
+            }
+          }}
+          className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs text-foreground hover:bg-muted"
+        >
+          <Copy className="h-3 w-3" />
+          复制 Hooks 状态
+        </button>
         {!trusted ? (
           <Button
             size="sm"
@@ -669,6 +702,23 @@ export function BusinessDocumentStyleBar({
         >
           一键写入文书规范
         </Button>
+        <button
+          type="button"
+          data-testid="business-copy-style-md-btn"
+          onClick={() => {
+            const md = `# 一般档案文书规范配置\n- **版式标准**: ${docFormat} (${BUSINESS_DOC_FORMATS[docFormat] ?? ''})\n- **审校等级**: ${reviewLevel} (${BUSINESS_REVIEW_LEVELS[reviewLevel] ?? ''})`;
+            try {
+              void navigator.clipboard?.writeText(md);
+              setAppliedHint('已复制文书规范 MD');
+            } catch {
+              // ignore in test/offline mode
+            }
+          }}
+          className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs text-foreground hover:bg-muted"
+        >
+          <Copy className="h-3 w-3" />
+          复制文书规范 MD
+        </button>
       </div>
     </div>
   );
