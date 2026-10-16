@@ -156,6 +156,7 @@ export function MilestoneEditor({
   const [sortOrder, setSortOrder] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedMilestoneMd, setCopiedMilestoneMd] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -382,11 +383,58 @@ export function MilestoneEditor({
                 value={sortOrder}
                 onChange={(e) => setSortOrder(Number(e.target.value))}
               />
+              <div className="flex flex-wrap items-center gap-1" data-testid="milestone-sort-presets">
+                {(
+                  [
+                    { val: 1, label: '#1 首发' },
+                    { val: 5, label: '#5 中期' },
+                    { val: 10, label: '#10 收尾' },
+                  ] as const
+                ).map((s) => (
+                  <button
+                    key={s.val}
+                    type="button"
+                    data-testid={`milestone-sort-preset-${s.val}`}
+                    onClick={() => setSortOrder(s.val)}
+                    className={`rounded border px-1.5 py-0.5 text-ui-2xs transition-colors ${
+                      sortOrder === s.val
+                        ? 'border-primary bg-primary/10 text-primary font-medium'
+                        : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
         <DialogFooter>
+          <button
+            type="button"
+            data-testid="milestone-editor-copy-md-btn"
+            onClick={async () => {
+              const md = [
+                `# 里程碑节点：${title || '未命名'}`,
+                `- **阶段**: ${stage || '默认阶段'}`,
+                `- **截止日期**: ${dueDate || '未设置'}`,
+                `- **状态**: ${status}`,
+                '',
+                description || '（无详细交付说明）',
+              ].join('\n');
+              try {
+                await navigator.clipboard?.writeText(md);
+                setCopiedMilestoneMd(true);
+                setTimeout(() => setCopiedMilestoneMd(false), 1500);
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="mr-auto rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+          >
+            {copiedMilestoneMd ? '已复制节点 MD' : '复制节点 MD'}
+          </button>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             取消
           </Button>
