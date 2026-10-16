@@ -31,6 +31,19 @@ Win7 LTS adds `-win7` suffix after tier (e.g. `vX.Y.Z-beta.N-win7`).
   并自动重新预览。**边界**：进程内锁不约束外部 Word/WPS（靠版本校验兜底），幂等台账
   不持久化，重启后退化为普通（仍做版本校验的）写入。
 
+## [v0.4.9-alpha.62-win7] - 2026-10-15
+
+### Added
+- feat(project): deliver Phase P34 checkpoint/notes export, M5 symbol filters & M3/M4->L2 constraint loop (#2030)
+- feat: vision model fallback — 图片聊天智能降级 (#2028)
+- feat(project): deliver Phase P33 constraint/milestone filters & M2/L3->L2 constraint promotion (#2024)
+- feat(project): phase P32 overview stage switcher & SAGE.md init, git L4 ingest, M1 duration rollup & editor presets (#2022)
+- chore(win7): cherry-pick UI 优化 PR #2019 — 右栏 Tab 6→4 + 顶栏控件收敛 + 左右面板联动 (#2020)
+
+### Fixed
+- fix(orchestration): 工具调用预算 UI 设置实时生效 (#2032)
+- fix(endpoints): fallback to chat test when /v1/models returns 404 (#2016)
+
 ## [v0.4.9-alpha.60-win7] - 2026-10-14
 
 ### Added
