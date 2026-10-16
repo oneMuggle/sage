@@ -125,6 +125,7 @@ export function ProjectCreationWizard({
   const [autoScaffold, setAutoScaffold] = useState<boolean>(true);
   const [selectedTemplateKeys, setSelectedTemplateKeys] = useState<string[]>([]);
   const [selectedAllowedPaths, setSelectedAllowedPaths] = useState<string[]>([]);
+  const [customAllowedPath, setCustomAllowedPath] = useState<string>('');
   const [projectDescription, setProjectDescription] = useState<string>('');
   const [projectInstructions, setProjectInstructions] = useState<string>('');
   const [vcsMode, setVcsMode] = useState<'git' | 'builtin' | 'none'>('builtin');
@@ -141,6 +142,7 @@ export function ProjectCreationWizard({
     setAutoScaffold(true);
     setSelectedTemplateKeys([]);
     setSelectedAllowedPaths([]);
+    setCustomAllowedPath('');
     setProjectDescription('');
     setProjectInstructions('');
     setVcsMode('builtin');
@@ -486,7 +488,26 @@ export function ProjectCreationWizard({
                       ))}
                     </div>
                     <div className="space-y-1 pt-1">
-                      <span className="text-muted-foreground">勾选自动导入的预设规则包：</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">勾选自动导入的预设规则包：</span>
+                        <button
+                          type="button"
+                          data-testid="wizard-templates-toggle-all-btn"
+                          onClick={() => {
+                            const allKeys = blueprint.subTemplates.map((t) => t.key);
+                            if (selectedTemplateKeys.length === allKeys.length) {
+                              setSelectedTemplateKeys([]);
+                            } else {
+                              setSelectedTemplateKeys(allKeys);
+                            }
+                          }}
+                          className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                        >
+                          {selectedTemplateKeys.length === blueprint.subTemplates.length
+                            ? '清空规则包'
+                            : '全选规则包'}
+                        </button>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {blueprint.subTemplates.map((tpl) => (
                           <label
@@ -529,6 +550,46 @@ export function ProjectCreationWizard({
                           </label>
                         ))}
                       </div>
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <input
+                          type="text"
+                          value={customAllowedPath}
+                          onChange={(e) => setCustomAllowedPath(e.target.value)}
+                          placeholder="输入自定义外部只读目录（如 E:/Papers/2026/**）..."
+                          data-testid="wizard-custom-allowed-path-input"
+                          className="flex-1 rounded border border-input bg-background px-2 py-1 text-xs"
+                        />
+                        <button
+                          type="button"
+                          data-testid="wizard-custom-allowed-path-add-btn"
+                          onClick={() => {
+                            const trimmed = customAllowedPath.trim();
+                            if (!trimmed) return;
+                            if (!selectedAllowedPaths.includes(trimmed)) {
+                              setSelectedAllowedPaths((prev) => [...prev, trimmed]);
+                            }
+                            setCustomAllowedPath('');
+                          }}
+                          className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground hover:bg-muted"
+                        >
+                          + 添加只读路径
+                        </button>
+                      </div>
+                      {selectedAllowedPaths.length > 0 && (
+                        <div
+                          className="flex flex-wrap gap-1 pt-0.5"
+                          data-testid="wizard-selected-allowed-paths-list"
+                        >
+                          {selectedAllowedPaths.map((p) => (
+                            <span
+                              key={p}
+                              className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-ui-2xs text-primary"
+                            >
+                              {p}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

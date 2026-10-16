@@ -47,6 +47,7 @@ vi.mock('../../shared/api', () => ({
       seededMilestones: 3,
     }),
     importConstraints: vi.fn().mockResolvedValue([]),
+    updateAllowedPaths: vi.fn().mockResolvedValue(['E:/Papers/2026/**']),
     update: vi.fn().mockImplementation(async (_id, patch) => ({
       id: 'proj-wiz-1',
       name: 'research-lab',
@@ -207,6 +208,8 @@ describe('MilestoneProgressWidget', () => {
     await waitFor(() => {
       expect(screen.getByText('MVP Release')).toBeInTheDocument();
       expect(screen.getByText('Beta Testing')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('milestone-summary-filter-completed'));
+      fireEvent.click(screen.getByTestId('milestone-summary-filter-all'));
       expect(screen.getByText('截止：2026-10-15')).toBeInTheDocument();
       expect(screen.getByText('截止：2026-11-01')).toBeInTheDocument();
     });
@@ -266,6 +269,13 @@ describe('MilestoneProgressWidget', () => {
 
     const presetBtn = await screen.findByTestId('wizard-goal-preset-0');
     fireEvent.click(presetBtn);
+    fireEvent.click(screen.getByTestId('wizard-templates-toggle-all-btn'));
+    fireEvent.click(screen.getByTestId('wizard-templates-toggle-all-btn'));
+    fireEvent.change(screen.getByTestId('wizard-custom-allowed-path-input'), {
+      target: { value: 'E:/Papers/2026/**' },
+    });
+    fireEvent.click(screen.getByTestId('wizard-custom-allowed-path-add-btn'));
+    expect(screen.getByTestId('wizard-selected-allowed-paths-list')).toHaveTextContent('E:/Papers/2026/**');
 
     expect(screen.getByTestId('wizard-description-input')).toHaveValue(
       '学术论文撰述、定量对比实验与可复现消融分析',
