@@ -25,6 +25,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedProgress, setCopiedProgress] = useState(false);
+  const [recentFilter, setRecentFilter] = useState<'all' | 'active' | 'completed'>('all');
 
   const blueprint = getArchetypeBlueprint(projectType);
   const stageLabelMap = new Map(blueprint.stages.map((s) => [s.id, s.label]));
@@ -253,9 +254,43 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
 
         {milestones.length > 0 && (
           <div className="pt-2 border-t">
-            <div className="text-xs text-muted-foreground mb-1">最近里程碑</div>
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="text-xs text-muted-foreground">最近里程碑</div>
+              <div className="flex items-center gap-1" data-testid="milestone-summary-filter-bar">
+                {(
+                  [
+                    { id: 'all', label: '全部' },
+                    { id: 'active', label: '待办/进行' },
+                    { id: 'completed', label: '已完成' },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    data-testid={`milestone-summary-filter-${tab.id}`}
+                    onClick={() => setRecentFilter(tab.id)}
+                    className={`rounded px-1.5 py-0.5 text-ui-2xs transition-colors ${
+                      recentFilter === tab.id
+                        ? 'bg-primary text-primary-foreground font-medium'
+                        : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="space-y-1">
-              {milestones.slice(0, 3).map((milestone) => (
+              {milestones
+                .filter((m) =>
+                  recentFilter === 'all'
+                    ? true
+                    : recentFilter === 'completed'
+                      ? m.status === 'completed'
+                      : m.status !== 'completed',
+                )
+                .slice(0, 3)
+                .map((milestone) => (
                 <div key={milestone.id} className="flex items-center justify-between gap-2 text-xs">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
