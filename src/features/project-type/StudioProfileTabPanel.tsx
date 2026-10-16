@@ -115,6 +115,7 @@ export function StudioProfileTabPanel({
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [promotedIds, setPromotedIds] = useState<Set<string>>(new Set());
+  const [copiedEntryId, setCopiedEntryId] = useState<string | null>(null);
   const presets = PROFILE_PRESETS_BY_TYPE[projectType] ?? PROFILE_PRESETS_BY_TYPE.coding;
 
   const filteredEntries = useMemo(() => {
@@ -159,7 +160,40 @@ export function StudioProfileTabPanel({
           ），仅在当前项目会话中注入系统提示词，保障跨项目语境隔离与 Prefix Cache 命中率。
         </div>
         {profileEntries.length > 0 && (
-          <button
+          <div className="flex items-center gap-1.5">
+            {projectId && filteredEntries.length > 0 && (
+              <button
+                type="button"
+                data-testid="studio-profile-batch-promote-btn"
+                onClick={async () => {
+                  const unpromoted = filteredEntries.filter((e) => !promotedIds.has(e.id));
+                  if (unpromoted.length === 0) return;
+                  setPromotedIds((prev) => {
+                    const next = new Set(prev);
+                    unpromoted.forEach((e) => next.add(e.id));
+                    return next;
+                  });
+                  if (typeof projectApi?.createConstraint === 'function') {
+                    for (const entry of unpromoted) {
+                      try {
+                        await projectApi.createConstraint(projectId, {
+                          category: entry.category || 'convention',
+                          content: entry.content,
+                          priority: Math.min(10, Math.max(1, entry.importance || 7)),
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-1 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+              >
+                <ShieldPlus className="h-3 w-3" />
+                批量升格L2 ({filteredEntries.filter((e) => !promotedIds.has(e.id)).length})
+              </button>
+            )}
+            <button
             type="button"
             onClick={() => void handleCopyMarkdown()}
             data-testid="studio-profile-copy-md-btn"
@@ -177,6 +211,7 @@ export function StudioProfileTabPanel({
               </>
             )}
           </button>
+          </div>
         )}
       </div>
 
@@ -311,6 +346,25 @@ export function StudioProfileTabPanel({
                 <span className="truncate text-foreground">{entry.content}</span>
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  data-testid={`studio-profile-copy-entry-${entry.id}`}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard?.writeText(
+                        `[${CATEGORY_LABELS[entry.category] ?? entry.category}] ${entry.content}`,
+                      );
+                      setCopiedEntryId(entry.id);
+                      setTimeout(() => setCopiedEntryId(null), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <Copy className="h-2.5 w-2.5" />
+                  {copiedEntryId === entry.id ? '已复制' : '复制'}
+                </button>
                 {projectId && (
                   <button
                     type="button"
