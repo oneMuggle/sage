@@ -330,6 +330,13 @@ describe('ConstraintSummaryWidget', () => {
       expect(screen.getByTestId('git-widget-ingest-README.md')).toHaveTextContent('已纳入 L4');
     });
 
+    fireEvent.click(screen.getByTestId('git-widget-filter-all'));
+    fireEvent.click(screen.getByTestId('git-widget-ingest-all-btn'));
+    await waitFor(() => {
+      expect(projectApi.addMaterialFromFile).toHaveBeenCalledWith('test-project', 'src/App.tsx');
+    });
+    fireEvent.click(screen.getByTestId('git-widget-copy-sha-abc1234567'));
+
     fireEvent.click(screen.getByTestId('constraint-priority-preset-10'));
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
   });
