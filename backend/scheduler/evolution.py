@@ -54,15 +54,13 @@ class BaseEvolutionTask:
 
     def run(self):
         """同步执行任务（带 wall-clock 超时保护）"""
-        import asyncio
-
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
             return loop.run_until_complete(
                 asyncio.wait_for(self.run_async(), timeout=_EVOLUTION_TASK_TIMEOUT_S)
             )
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError:  # noqa: UP041 — py3.8 下 asyncio.TimeoutError 不等于内置 TimeoutError
             task_name = type(self).__name__
             logger.error(
                 f"Evolution task {task_name} timed out after "

@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -282,10 +283,9 @@ class SubagentRunner:
         finally:
             if watcher is not None:
                 watcher.cancel()
-                try:
-                    await watcher  # 等待 cancel 完成，避免任务泄漏
-                except asyncio.CancelledError:
-                    pass
+                # 等待 cancel 完成，避免任务泄漏
+                with contextlib.suppress(asyncio.CancelledError):
+                    await watcher
 
         if not collected:
             if self._interrupt_event is not None and self._interrupt_event.is_set():

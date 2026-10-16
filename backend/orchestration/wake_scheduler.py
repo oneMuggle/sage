@@ -118,7 +118,7 @@ class WakeScheduler:
                     wake.session_id,
                     wake.kind.value,
                 )
-            except asyncio.TimeoutError:
+            except asyncio.TimeoutError:  # noqa: UP041 — py3.8 下 asyncio.TimeoutError 不等于内置 TimeoutError
                 logger.warning(
                     "wake %s resumer timed out after %.1fs (session=%s), skipping",
                     wake.id,
