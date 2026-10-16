@@ -24,9 +24,10 @@ vi.mock('../../shared/api', async () => {
     projectApi: {
       ...actual.projectApi,
       detectType: vi.fn(),
-      listSessions: vi.fn(),
+      listSessions: vi.fn().mockResolvedValue([]),
       extractKnowledge: vi.fn(),
       confirmKnowledge: vi.fn(),
+      createConstraint: vi.fn().mockResolvedValue({}),
       getMaterialIndexingStats: vi.fn().mockResolvedValue({
         totalMaterials: 3,
         indexedMaterials: 3,
@@ -186,6 +187,7 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
       <StudioProfileTabPanel
         projectPath="/workspace/sage"
         projectType="coding"
+        projectId="proj-p38"
         profileEntries={[
           {
             id: 'e-1',
@@ -227,6 +229,10 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     });
     fireEvent.click(screen.getByTestId('studio-profile-clear-filter'));
     expect(screen.getByText('单文件严格保持 <= 800 行')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('studio-profile-copy-entry-e-1'));
+    fireEvent.click(screen.getByTestId('studio-profile-batch-promote-btn'));
+    expect(screen.getByTestId('studio-profile-to-constraint-e-1')).toHaveTextContent('已升格约束');
   });
 
   it('supports KnowledgeExtractionPanel session refresh and extracted proposals markdown copy', async () => {
@@ -265,6 +271,11 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     const copyMdBtn = await screen.findByTestId('knowledge-copy-md-btn');
     fireEvent.click(copyMdBtn);
     expect(screen.getByText('固定随机种子为 42')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('knowledge-category-filter-convention'));
+    fireEvent.click(screen.getByTestId('knowledge-category-filter-all'));
+    fireEvent.click(screen.getByTestId('knowledge-batch-to-constraint-btn'));
+    expect(screen.getByTestId('knowledge-to-constraint-0')).toHaveTextContent('已转 L2 约束');
   });
 });
 
@@ -298,6 +309,14 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
       });
       expect(screen.getByTestId('semantic-hit-save-profile-0')).toHaveTextContent('已沉淀 L3');
     });
+
+    fireEvent.click(screen.getByTestId('semantic-score-filter-0'));
+    fireEvent.click(screen.getByTestId('semantic-batch-save-profile-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('semantic-hit-save-profile-1')).toHaveTextContent('已沉淀 L3');
+    });
+    fireEvent.click(screen.getByTestId('semantic-clear-results-btn'));
+    expect(screen.queryByText('高相似度实验结论')).toBeNull();
   });
 
   it('supports WikiGenerationPanel preview file filter and batch ingest all to L4 Materials', async () => {
@@ -305,6 +324,11 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
 
     fireEvent.click(screen.getByTestId('wiki-preview-btn'));
     const filterInput = await screen.findByTestId('wiki-preview-filter-input');
+    fireEvent.click(screen.getByTestId('wiki-copy-symbols-btn'));
+    fireEvent.click(screen.getByTestId('wiki-save-symbols-profile-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('wiki-save-symbols-profile-btn')).toHaveTextContent('已沉淀符号至 L3');
+    });
     fireEvent.change(filterInput, { target: { value: 'python' } });
     expect(screen.getByText('scripts/run.py')).toBeInTheDocument();
     expect(screen.queryByText('src/core.ts')).toBeNull();
