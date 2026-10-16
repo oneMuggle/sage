@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { projectApi } from '../../shared/api';
 
+import { BusinessDocumentStyleBar, CodingHooksGovernanceBar, ResearchCitationAndToneBar } from './BuiltinCheckpointAndStyleBar';
 import { ConstraintEditor } from './ConstraintEditor';
 import { ConstraintManager } from './ConstraintManager';
 import { ConstraintSummaryWidget } from './ConstraintSummaryWidget';
@@ -410,5 +411,19 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(matchedOnlyBtn);
     expect(screen.getByText('高优禁止明文密钥提交')).toBeInTheDocument();
     expect(screen.queryByText('低优代码注释建议')).toBeNull();
+    fireEvent.click(screen.getByTestId('constraint-promote-profile-c-p33-high'));
+    expect(screen.getByTestId('constraint-promote-profile-c-p33-high')).toHaveTextContent('已存L3');
+    fireEvent.click(screen.getByTestId('constraint-copy-single-c-p33-high'));
+
+    render(
+      <>
+        <ResearchCitationAndToneBar projectId="test-project" onApplied={vi.fn()} />
+        <BusinessDocumentStyleBar projectId="test-project" onApplied={vi.fn()} />
+        <CodingHooksGovernanceBar workspacePath="/tmp/proj" hasHooksConfig={true} hookCount={2} />
+      </>,
+    );
+    fireEvent.click(screen.getByTestId('research-copy-style-md-btn'));
+    fireEvent.click(screen.getByTestId('business-copy-style-md-btn'));
+    fireEvent.click(screen.getByTestId('coding-hooks-copy-status-md-btn'));
   });
 });

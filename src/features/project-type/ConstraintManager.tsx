@@ -81,6 +81,8 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
   const [priorityFilter, setPriorityFilter] = useState<'all' | 'high'>('all');
   const [globMatchedOnly, setGlobMatchedOnly] = useState<boolean>(false);
   const [copiedMd, setCopiedMd] = useState(false);
+  const [promotedProfileIds, setPromotedProfileIds] = useState<Set<string>>(new Set());
+  const [copiedRuleId, setCopiedRuleId] = useState<string | null>(null);
 
   const blueprint: ArchetypeBlueprintMeta = getArchetypeBlueprint(projectType);
 
@@ -505,6 +507,53 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                   </div>
 
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid={`constraint-promote-profile-${constraint.id}`}
+                      onClick={async () => {
+                        if (promotedProfileIds.has(constraint.id)) return;
+                        setPromotedProfileIds((prev) => new Set(prev).add(constraint.id));
+                        if (typeof projectApi?.confirmKnowledge === 'function') {
+                          try {
+                            await projectApi.confirmKnowledge(projectId, {
+                              entries: [
+                                {
+                                  category: 'convention',
+                                  content: constraint.content,
+                                  importance: constraint.priority,
+                                  sourceMessageIds: [],
+                                  reasoning: 'L2 约束同步沉淀至 L3 画像',
+                                },
+                              ],
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      title="同步沉淀至 L3 项目画像"
+                    >
+                      {promotedProfileIds.has(constraint.id) ? '已存L3' : '+L3'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`constraint-copy-single-${constraint.id}`}
+                      onClick={() => {
+                        try {
+                          void navigator.clipboard?.writeText(
+                            `[P${constraint.priority} · ${constraint.category}] (${constraint.triggerPattern || 'always'}) ${constraint.content}`,
+                          );
+                          setCopiedRuleId(constraint.id);
+                          setTimeout(() => setCopiedRuleId(null), 1500);
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {copiedRuleId === constraint.id ? '已复制' : '复制'}
+                    </button>
                     <button
                       onClick={() => handleEdit(constraint)}
                       className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
