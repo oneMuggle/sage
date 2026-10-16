@@ -225,12 +225,10 @@ finally:
   - Conventional commit: `fix(scheduler): add wall-clock timeouts for long-running tasks`
   - PR description 说明修复的风险点
 
-### Phase 2（后续 PR）
+### Phase 2（已完成，独立 PR）
 
-- [ ] scheduled_tasks.json → SQLite 迁移
-  - 新建 `ScheduledTaskRepository`
-  - 迁移脚本
-  - 单元测试 + 集成测试
+- [x] scheduled_tasks.json → SQLite 迁移（详见
+      [`2026-10-16_scheduled-tasks-sqlite-migration.md`](./2026-10-16_scheduled-tasks-sqlite-migration.md)）
 
 ---
 
