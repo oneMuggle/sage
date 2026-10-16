@@ -42,6 +42,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [error, setError] = useState<string | null>(null);
   const [copiedRules, setCopiedRules] = useState(false);
   const [previewExpanded, setPreviewExpanded] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const fetchConstraints = useCallback(async () => {
     if (typeof projectApi?.listConstraints !== 'function') {
@@ -116,7 +117,11 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   enabledConstraints.forEach((c) => {
     categoryCount.set(c.category, (categoryCount.get(c.category) || 0) + 1);
   });
-  const topRules = [...enabledConstraints].sort((a, b) => b.priority - a.priority).slice(0, 3);
+  const disabledConstraints = constraints.filter((c) => !c.enabled);
+  const topRules = [...enabledConstraints]
+    .filter((c) => !selectedCategory || c.category === selectedCategory)
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, 3);
 
   const handleCopyActiveRules = async () => {
     if (enabledConstraints.length === 0) return;
@@ -190,6 +195,26 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
             <span className="font-medium">
               {enabledConstraints.length} / {constraints.length}
             </span>
+            {disabledConstraints.length > 0 && (
+              <button
+                type="button"
+                data-testid="constraint-summary-enable-all-btn"
+                onClick={async () => {
+                  if (typeof projectApi?.updateConstraint !== 'function') return;
+                  try {
+                    for (const c of disabledConstraints) {
+                      await projectApi.updateConstraint(projectId, c.id, { enabled: true });
+                    }
+                    await fetchConstraints();
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+              >
+                启用全部 ({disabledConstraints.length})
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             {highPriorityCount > 0 && (
@@ -213,18 +238,41 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
 
         {categoryCount.size > 0 && (
           <div className="pt-2 border-t">
-            <div className="text-xs text-muted-foreground mb-1">按类别</div>
+            <div className="flex items-center justify-between mb-1">
+              <div className="text-xs text-muted-foreground">按类别</div>
+              {selectedCategory && (
+                <button
+                  type="button"
+                  data-testid="constraint-summary-clear-cat"
+                  onClick={() => setSelectedCategory(null)}
+                  className="text-ui-2xs text-primary hover:underline"
+                >
+                  清除类别过滤
+                </button>
+              )}
+            </div>
             <div className="space-y-1">
               {Array.from(categoryCount.entries())
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5)
                 .map(([category, count]) => (
-                  <div key={category} className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">
+                  <button
+                    key={category}
+                    type="button"
+                    data-testid={`constraint-summary-cat-pill-${category}`}
+                    onClick={() => {
+                      setSelectedCategory((prev) => (prev === category ? null : category));
+                      setPreviewExpanded(true);
+                    }}
+                    className={`flex w-full items-center justify-between rounded px-1 py-0.5 text-xs transition-colors ${
+                      selectedCategory === category ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/50'
+                    }`}
+                  >
+                    <span className={selectedCategory === category ? 'text-primary' : 'text-muted-foreground'}>
                       {CONSTRAINT_CATEGORY_LABELS[category] ?? category}
                     </span>
                     <span className="font-medium">{count}</span>
-                  </div>
+                  </button>
                 ))}
             </div>
           </div>
