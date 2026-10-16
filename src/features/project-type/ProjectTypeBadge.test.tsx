@@ -163,6 +163,9 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     const applyDetectedBtn = await screen.findByTestId('selector-apply-detected-btn');
     fireEvent.click(applyDetectedBtn);
 
+    expect(screen.getByTestId('selector-selected-summary')).toHaveTextContent('一般档案与文书');
+    fireEvent.click(screen.getByTestId('selector-copy-detection-btn'));
+
     fireEvent.click(screen.getByTestId('selector-redetect-btn'));
     await waitFor(() => expect(projectApi.detectType).toHaveBeenCalledTimes(2));
 
