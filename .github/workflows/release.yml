@@ -64,6 +64,23 @@ jobs:
           node-version: '22.12'
           cache: 'npm'
 
+      - name: Sync version from git tag to package.json
+        # electron-builder reads version from package.json, but git tag is the source of truth.
+        # Tag format: v0.4.9-alpha.61 → package.json version: 0.4.9-alpha.61
+        run: |
+          TAG_VERSION="${{ github.ref_name }}"
+          # Remove 'v' prefix: v0.4.9-alpha.61 → 0.4.9-alpha.61
+          PKG_VERSION="${TAG_VERSION#v}"
+          echo "Syncing package.json version to $PKG_VERSION (from tag $TAG_VERSION)"
+          npm version "$PKG_VERSION" --no-git-tag-version --allow-same-version
+          # Verify
+          ACTUAL=$(node -p "require('./package.json').version")
+          if [ "$ACTUAL" != "$PKG_VERSION" ]; then
+            echo "::error::Version mismatch: package.json=$ACTUAL, expected=$PKG_VERSION"
+            exit 1
+          fi
+          echo "✓ package.json version synced to $PKG_VERSION"
+
       - name: Cache electron-builder downloads
         uses: actions/cache@v4
         with:

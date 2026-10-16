@@ -20,6 +20,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   并自动重新预览。**边界**：进程内锁不约束外部 Word/WPS（靠版本校验兜底），幂等台账
   不持久化，重启后退化为普通（仍做版本校验的）写入。
 
+## [v0.4.9-alpha.61] - 2026-10-16
+
+### Added
+- feat: Provider 抽象层 + Vision Model Fallback 同步到 main (#2031)
+- feat(project): deliver Phase P34 checkpoint/notes export, M5 symbol filters & M3/M4->L2 constraint loop (#2029)
+- feat(project): deliver Phase P33 constraint/milestone filters & M2/L3->L2 constraint promotion (#2023)
+- feat(project): phase P32 overview stage switcher & SAGE.md init, git L4 ingest, M1 duration rollup & editor presets (#2021)
+- feat(ui): collapse right-panel tabs 6→4 and consolidate header controls (#2019)
+- feat(design): integrate OpenDesign as Design Studio subsystem (#2013)
+
+### Fixed
+- fix(orchestration): 工具调用预算 UI 设置实时生效 (#2027)
+- fix(endpoints): fallback to chat test when /v1/models returns 404 (#2014)
+
 ## [v0.4.9-alpha.60] - 2026-10-14
 
 ### Added
