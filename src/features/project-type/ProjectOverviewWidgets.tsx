@@ -5,7 +5,7 @@
  * 根据项目类型与版本控制策略显示对应的概览 Widget、L1 宪章就绪状态与一键初始化、阶段快捷切换、快捷快照按钮、AI 任务拆解入口及概览 Markdown 复制
  */
 
-import { Check, Copy, FileText, History, Layers, Plus, Sparkles } from 'lucide-react';
+import { Check, Copy, FileText, History, Layers, Plus, RefreshCw, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { projectApi, type ProjectSummary } from '../../shared/api';
@@ -243,6 +243,15 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                 </>
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => void loadOverviewMeta()}
+              data-testid="overview-refresh-meta-btn"
+              title="刷新项目概览元数据"
+              className="inline-flex items-center rounded border border-border bg-muted/40 p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <RefreshCw className="h-2.5 w-2.5" />
+            </button>
           </div>
         </div>
 
@@ -270,6 +279,22 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               </button>
             );
           })}
+          {(() => {
+            const idx = blueprint.stages.findIndex((s) => s.id === activeStageId);
+            const nextStage =
+              idx >= 0 && idx + 1 < blueprint.stages.length ? blueprint.stages[idx + 1] : null;
+            if (!nextStage) return null;
+            return (
+              <button
+                type="button"
+                data-testid="overview-next-stage-btn"
+                onClick={() => void handleSelectStage(nextStage.id)}
+                className="ml-auto rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/20"
+              >
+                推进至：{nextStage.label} →
+              </button>
+            );
+          })()}
         </div>
       </div>
 

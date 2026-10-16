@@ -612,3 +612,15 @@
    - 在底部新增已选形态治理概览栏（`selector-selected-summary`），展示推荐版本保护策略、标准目录数与推荐里程碑数。
 4. **设置页项目级 Hook 安全审计摘要复制（`src/widgets/settings/ProjectHooksPanel.tsx`）**
    - 新增 **`复制审计摘要`** 按钮（`project-hooks-copy-md-btn`），一键导出工作区路径、信任状态与 Hook 数量的 Markdown 安全审计摘要。
+### 9.38 Phase P37 约束编辑器 Glob 验证与规则导出、里程碑排序预设与节点导出、类型检测规范明细展开与概览下一阶段快捷推进（2026-10-16 已落地验证）
+
+围绕「L2 约束编辑器实时 Glob 路径命中测试与规则 Markdown 导出、里程碑编辑器排序预设与节点 Markdown 导出、类型检测蓝图规范包与里程碑明细展开、项目概览下一阶段快捷推进与元数据手动刷新」，完成以下四项全栈闭环增强：
+
+1. **ConstraintEditor 实时 Glob 路径触发验证器与规则 Markdown 复制 (`src/features/project-type/ConstraintEditor.tsx`)**：
+   - 在 `触发模式 (Glob)` 输入框下方新增实时触发测试栏 (`constraint-editor-test-path-input`) 与命中状态徽标 (`constraint-editor-test-path-badge`，显示 `命中触发 / 不触发`)，并在弹窗底部新增 `复制规则 MD` 按钮 (`constraint-editor-copy-md-btn`)。
+2. **MilestoneEditor 排序顺序预设胶囊与节点规范 Markdown 复制 (`src/features/project-type/MilestoneEditor.tsx`)**：
+   - 在里程碑排序输入框下方新增快捷排序预设按钮 (`milestone-sort-preset-1` `#1 首发`、`milestone-sort-preset-5` `#5 中期`、`milestone-sort-preset-10` `#10 收尾`)，并在底部新增 `复制节点 MD` 按钮 (`milestone-editor-copy-md-btn`)。
+3. **TypeDetectionPreview 推荐规范包与默认里程碑明细展开 (`src/features/project-type/TypeDetectionPreview.tsx`)**：
+   - 在推荐蓝图预览卡新增 `展开推荐规范与里程碑 / 收起推荐规范与里程碑` 切换按钮 (`detection-details-toggle-btn`) 与明细面板 (`detection-details-panel`)，直观展示识别形态对应的子模板规范包与默认里程碑序列。
+4. **ProjectOverviewWidgets 下一阶段快捷推进与概览元数据手动刷新 (`src/features/project-type/ProjectOverviewWidgets.tsx`)**：
+   - 在项目生命周期阶段流水线右侧新增 `推进至：{下一阶段} →` 按钮 (`overview-next-stage-btn`)，并在顶部概览栏新增手动刷新按钮 (`overview-refresh-meta-btn`)。
