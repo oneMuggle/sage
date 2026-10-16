@@ -47,6 +47,23 @@ jobs:
           node-version: '22.12'
           cache: 'npm'
 
+      - name: Sync version from git tag to package.json
+        # electron-builder reads version from package.json, but git tag is the source of truth.
+        # Tag format: v0.4.9-alpha.62-win7 → package.json version: 0.4.9-alpha.62
+        run: |
+          $tagVersion = "${{ github.ref_name }}"
+          # Remove 'v' prefix and '-win7' suffix: v0.4.9-alpha.62-win7 → 0.4.9-alpha.62
+          $pkgVersion = $tagVersion -replace '^v', '' -replace '-win7$', ''
+          Write-Host "Syncing package.json version to $pkgVersion (from tag $tagVersion)"
+          npm version $pkgVersion --no-git-tag-version --allow-same-version
+          # Verify
+          $actual = node -p "require('./package.json').version"
+          if ($actual -ne $pkgVersion) {
+            Write-Error "::error::Version mismatch: package.json=$actual, expected=$pkgVersion"
+            exit 1
+          }
+          Write-Host "✓ package.json version synced to $pkgVersion"
+
       # CRITICAL (v0.4.5-alpha.2-win7 bundling fix):
       # hnswlib==0.8.0 source build requires Python.h from a FULL Python distribution
       # (the embeddable zip used previously lacks headers). Python 3.11+ requires
