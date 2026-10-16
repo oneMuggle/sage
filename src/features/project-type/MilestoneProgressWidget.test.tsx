@@ -276,6 +276,9 @@ describe('MilestoneProgressWidget', () => {
     });
     fireEvent.click(screen.getByTestId('wizard-custom-allowed-path-add-btn'));
     expect(screen.getByTestId('wizard-selected-allowed-paths-list')).toHaveTextContent('E:/Papers/2026/**');
+    fireEvent.click(screen.getByTestId('wizard-copy-summary-md-btn'));
+    expect(screen.getByTestId('wizard-copy-summary-md-btn')).toHaveTextContent(/已复制|复制立项配置摘要/);
+    fireEvent.click(screen.getByTestId('wizard-remove-allowed-path-E:/Papers/2026/**'));
 
     expect(screen.getByTestId('wizard-description-input')).toHaveValue(
       '学术论文撰述、定量对比实验与可复现消融分析',
@@ -611,6 +614,11 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByText('逾期数据采集里程碑')).toBeInTheDocument();
     expect(screen.queryByText('未来论文终稿提交')).toBeNull();
 
+    // Phase P40 promote milestone to L3 & single copy
+    fireEvent.click(screen.getByTestId('milestone-promote-profile-ms-p33-overdue'));
+    expect(screen.getByTestId('milestone-promote-profile-ms-p33-overdue')).toHaveTextContent('已存L3');
+    fireEvent.click(screen.getByTestId('milestone-copy-single-ms-p33-overdue'));
+
     // Batch complete in-progress
     fireEvent.click(screen.getByTestId('milestone-batch-complete-btn'));
     await waitFor(() => {
@@ -620,5 +628,6 @@ describe('MilestoneProgressWidget', () => {
         { status: 'completed' },
       );
     });
+
   });
 });

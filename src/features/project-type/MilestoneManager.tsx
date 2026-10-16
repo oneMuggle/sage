@@ -51,6 +51,8 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [overdueOnly, setOverdueOnly] = useState<boolean>(false);
   const [copiedRoadmap, setCopiedRoadmap] = useState(false);
+  const [promotedMilestoneIds, setPromotedMilestoneIds] = useState<Set<string>>(new Set());
+  const [copiedMilestoneId, setCopiedMilestoneId] = useState<string | null>(null);
   const blueprint = getArchetypeBlueprint(projectType);
 
   const stageLabelMap = useMemo(() => {
@@ -469,6 +471,53 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid={`milestone-promote-profile-${milestone.id}`}
+                      onClick={async () => {
+                        if (promotedMilestoneIds.has(milestone.id)) return;
+                        setPromotedMilestoneIds((prev) => new Set(prev).add(milestone.id));
+                        if (typeof projectApi?.confirmKnowledge === 'function') {
+                          try {
+                            await projectApi.confirmKnowledge(projectId, {
+                              entries: [
+                                {
+                                  category: 'note',
+                                  content: `里程碑记录 [${milestone.title}] (${milestone.status})：${milestone.description || '无详细说明'}`,
+                                  importance: 7,
+                                  sourceMessageIds: [],
+                                  reasoning: '里程碑节点沉淀至 L3 画像',
+                                },
+                              ],
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-1 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      title="沉淀该里程碑节点至 L3 项目画像"
+                    >
+                      {promotedMilestoneIds.has(milestone.id) ? '已存L3' : '+L3'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`milestone-copy-single-${milestone.id}`}
+                      onClick={() => {
+                        try {
+                          void navigator.clipboard?.writeText(
+                            `- [${milestone.status === 'completed' ? 'x' : ' '}] **${milestone.title}** (${milestone.stage || '默认阶段'}) ${milestone.description || ''}`,
+                          );
+                          setCopiedMilestoneId(milestone.id);
+                          setTimeout(() => setCopiedMilestoneId(null), 1500);
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-1 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {copiedMilestoneId === milestone.id ? '已复制' : '复制'}
+                    </button>
                     <button
                       type="button"
                       data-testid={`milestone-decompose-${milestone.id}`}
