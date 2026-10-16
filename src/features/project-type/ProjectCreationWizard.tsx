@@ -126,6 +126,7 @@ export function ProjectCreationWizard({
   const [selectedTemplateKeys, setSelectedTemplateKeys] = useState<string[]>([]);
   const [selectedAllowedPaths, setSelectedAllowedPaths] = useState<string[]>([]);
   const [customAllowedPath, setCustomAllowedPath] = useState<string>('');
+  const [copiedSummaryMd, setCopiedSummaryMd] = useState(false);
   const [projectDescription, setProjectDescription] = useState<string>('');
   const [projectInstructions, setProjectInstructions] = useState<string>('');
   const [vcsMode, setVcsMode] = useState<'git' | 'builtin' | 'none'>('builtin');
@@ -376,9 +377,37 @@ export function ProjectCreationWizard({
           {step === 'confirm' && (
             <div className="space-y-4">
               <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-2.5">
-                <div>
-                  <span className="text-xs font-medium text-muted-foreground">项目路径：</span>
-                  <div className="mt-0.5 text-sm font-mono break-all">{folderPath}</div>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-medium text-muted-foreground">项目路径：</span>
+                    <div className="mt-0.5 text-sm font-mono break-all">{folderPath}</div>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="wizard-copy-summary-md-btn"
+                    onClick={() => {
+                      const md = [
+                        `# 项目立项初始化摘要`,
+                        `- **路径**: \`${folderPath}\``,
+                        `- **项目形态**: ${blueprint.label} (${blueprint.type})`,
+                        `- **VCS 模式**: ${vcsMode}`,
+                        `- **L2 目标**: ${projectDescription || '未填写'}`,
+                        `- **L2 系统指令**: ${projectInstructions || '未填写'}`,
+                        `- **预设规则包**: ${selectedTemplateKeys.join(', ') || '无'}`,
+                        `- **L5 只读白名单**: ${selectedAllowedPaths.join(', ') || '无'}`,
+                      ].join('\n');
+                      try {
+                        void navigator.clipboard?.writeText(md);
+                        setCopiedSummaryMd(true);
+                        setTimeout(() => setCopiedSummaryMd(false), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="shrink-0 rounded border border-border bg-background px-2 py-1 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {copiedSummaryMd ? '已复制配置摘要' : '复制立项配置摘要'}
+                  </button>
                 </div>
                 <div className="flex flex-wrap items-center gap-4">
                   <div>
@@ -586,6 +615,14 @@ export function ProjectCreationWizard({
                               className="inline-flex items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-ui-2xs text-primary"
                             >
                               {p}
+                              <button
+                                type="button"
+                                data-testid={`wizard-remove-allowed-path-${p}`}
+                                onClick={() => toggleAllowedPath(p)}
+                                className="ml-0.5 hover:text-destructive"
+                              >
+                                ×
+                              </button>
                             </span>
                           ))}
                         </div>

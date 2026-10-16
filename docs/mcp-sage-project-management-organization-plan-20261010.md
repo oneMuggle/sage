@@ -648,3 +648,9 @@
    - 在 AI 顾问风险详情栏新增 `全部 / 仅高危` 过滤切换 (`advisor-risk-filter-all`、`advisor-risk-filter-high`) 与 `全部风险转约束` 按钮 (`advisor-guard-all-risks-btn`)。
 4. **TaskDecomposeDialog 预览阶段筛选与分解思路沉淀至 L3 画像 (`src/features/project-type/TaskDecomposeDialog.tsx`)**：
    - 在分解预览页新增按阶段筛选胶囊栏 (`decompose-stage-filter-all`、`decompose-stage-filter-${stage}`) 与 `沉淀思路至 L3 画像` 按钮 (`decompose-save-reasoning-profile-btn`)。
+
+### Phase P40（2026-10-16）：约束/里程碑单条沉淀 L3 与复制、学术/文书/Hooks 规范复制及立项向导配置摘要复制
+- **`src/features/project-type/ConstraintManager.tsx`**：支持单条 L2 约束一键沉淀至 L3 项目画像（`constraint-promote-profile-${constraint.id}`，`+L3 / 已存L3`）及单条规则 Markdown 复制（`constraint-copy-single-${constraint.id}`）。
+- **`src/features/project-type/MilestoneManager.tsx`**：支持单条里程碑节点一键沉淀至 L3 项目画像（`milestone-promote-profile-${milestone.id}`，`+L3 / 已存L3`）及单条里程碑任务复制（`milestone-copy-single-${milestone.id}`）。
+- **`src/features/project-type/BuiltinCheckpointAndStyleBar.tsx`**：新增科研规范配置 Markdown 复制（`research-copy-style-md-btn`）、一般档案文书规范配置 Markdown 复制（`business-copy-style-md-btn`）与 Coding Hooks 状态复制（`coding-hooks-copy-status-md-btn`）。
+- **`src/features/project-type/ProjectCreationWizard.tsx`**：立项向导第 3 步新增完整立项配置摘要 Markdown 复制（`wizard-copy-summary-md-btn`），并支持已选 L5 只读白名单标签内联移除（`wizard-remove-allowed-path-${p}`）。
