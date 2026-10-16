@@ -20,6 +20,7 @@ vi.mock('../../shared/api', () => ({
   projectApi: {
     listConstraints: vi.fn(),
     createConstraint: vi.fn().mockResolvedValue({}),
+    updateConstraint: vi.fn().mockResolvedValue({}),
     addMaterialFromFile: vi.fn().mockResolvedValue({}),
     getAdvice: vi.fn().mockResolvedValue({
       healthScore: 86,
@@ -268,11 +269,18 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(copyRulesBtn);
     expect(screen.getByTestId('constraint-summary-copy-md-btn')).toHaveTextContent(/已复制|复制规则/);
 
+    expect(screen.getByTestId('constraint-summary-high-priority-count')).toHaveTextContent('高优 ≥P8：1 条');
     const previewToggle = screen.getByTestId('constraint-summary-preview-toggle');
     fireEvent.click(previewToggle);
     expect(screen.getByTestId('constraint-summary-preview-list')).toHaveTextContent(
       '严禁将明文密钥提交至版本库',
     );
+    fireEvent.click(screen.getByTestId('constraint-summary-quick-toggle-c-p30-1'));
+    await waitFor(() => {
+      expect(projectApi.updateConstraint).toHaveBeenCalledWith('test-project', 'c-p30-1', {
+        enabled: false,
+      });
+    });
 
     // Expand ProjectAdvisorCard details and convert risk #0 to AI constraint
     const toggleDetails = await screen.findByTestId('advisor-toggle-details-btn');

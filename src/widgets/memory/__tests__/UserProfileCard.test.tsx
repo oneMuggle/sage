@@ -166,7 +166,7 @@ describe('ProjectProfileCard (Phase P28)', () => {
           project_key: '/workspace/sage',
           content: '接口统一遵循 RESTful + OpenAPI 契约',
           category: 'convention',
-          importance: 8,
+          importance: 6,
           source: 'manual',
           created_at: 1,
           updated_at: 1,
@@ -199,8 +199,15 @@ describe('ProjectProfileCard (Phase P28)', () => {
     });
     expect(screen.getAllByTestId('project-profile-item')).toHaveLength(1);
 
-    // Copy Markdown
+    // Copy Markdown & single item + high-importance filter (Phase P35)
     fireEvent.click(screen.getByTestId('project-profile-copy-md-btn'));
+    fireEvent.click(screen.getByTestId('project-profile-copy-item-pp-1'));
+    fireEvent.change(screen.getByTestId('project-profile-search-input'), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByTestId('project-profile-high-filter-btn'));
+    expect(screen.getAllByTestId('project-profile-item')).toHaveLength(1);
+    fireEvent.click(screen.getByTestId('project-profile-high-filter-btn'));
 
     // Open add editor and apply 4-archetype preset
     fireEvent.click(screen.getByTestId('project-profile-add'));
