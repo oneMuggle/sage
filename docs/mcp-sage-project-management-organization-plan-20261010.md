@@ -624,3 +624,15 @@
    - 在推荐蓝图预览卡新增 `展开推荐规范与里程碑 / 收起推荐规范与里程碑` 切换按钮 (`detection-details-toggle-btn`) 与明细面板 (`detection-details-panel`)，直观展示识别形态对应的子模板规范包与默认里程碑序列。
 4. **ProjectOverviewWidgets 下一阶段快捷推进与概览元数据手动刷新 (`src/features/project-type/ProjectOverviewWidgets.tsx`)**：
    - 在项目生命周期阶段流水线右侧新增 `推进至：{下一阶段} →` 按钮 (`overview-next-stage-btn`)，并在顶部概览栏新增手动刷新按钮 (`overview-refresh-meta-btn`)。
+### 9.39 Phase P38 L3 画像批量升格与单条复制、M2 知识提取类别筛选与批量转约束、M4 语义检索批量沉淀 L3 与结果清空、M5 Wiki 符号清单复制与架构快照沉淀（2026-10-16 已落地验证）
+
+围绕「L3 演化画像与 L2 强约束批量联动、M2 对话知识提炼分类筛选与批量转约束、M4 语义检索结果批量沉淀 L3 与一键清空、M5 符号提取清单复制与架构快照沉淀 L3」，完成以下四项全栈闭环增强：
+
+1. **StudioProfileTabPanel 批量升格 L2 约束与单条画像复制 (`src/features/project-type/StudioProfileTabPanel.tsx`)**：
+   - 新增 `批量升格L2 (N)` 按钮 (`studio-profile-batch-promote-btn`)，支持将当前筛选出的 L3 画像条目一键批量升格为 L2 行为约束规则；每条画像条目右侧新增 `复制` 按钮 (`studio-profile-copy-entry-${entry.id}`)。
+2. **KnowledgeExtractionPanel 提炼建议类别筛选与选中项批量转 L2 约束 (`src/features/project-type/KnowledgeExtractionPanel.tsx`)**：
+   - 在审核阶段新增按类别筛选胶囊栏 (`knowledge-category-filter-all`、`knowledge-category-filter-${cat}`) 与 `选中项同步转 L2 约束` 按钮 (`knowledge-batch-to-constraint-btn`)。
+3. **SemanticSearchPanel 检索命中批量沉淀 L3 画像与一键清空结果 (`src/features/project-type/SemanticSearchPanel.tsx`)**：
+   - 在检索结果工具栏新增 `批量沉淀 L3 (N)` 按钮 (`semantic-batch-save-profile-btn`) 与 `清空结果` 按钮 (`semantic-clear-results-btn`)。
+4. **WikiGenerationPanel 符号清单复制与符号架构摘要沉淀至 L3 画像 (`src/features/project-type/WikiGenerationPanel.tsx`)**：
+   - 在符号提取预览栏新增 `复制符号清单` (`wiki-copy-symbols-btn`) 与 `沉淀符号摘要至 L3` (`wiki-save-symbols-profile-btn`) 按钮，将扫描统计与核心符号一键写入 L3 架构画像。

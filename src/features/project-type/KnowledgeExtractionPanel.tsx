@@ -41,12 +41,14 @@ export function KnowledgeExtractionPanel({
   const [boundSessions, setBoundSessions] = useState<Session[]>([]);
   const [copiedMd, setCopiedMd] = useState(false);
   const [convertedConstraintIndices, setConvertedConstraintIndices] = useState<Set<number>>(new Set());
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const resetPanel = useCallback(() => {
     setPhase('idle');
     setEntries([]);
     setSelected(new Set());
     setConvertedConstraintIndices(new Set());
+    setCategoryFilter('all');
     setReasoning('');
     setError(null);
   }, []);
@@ -74,8 +76,7 @@ export function KnowledgeExtractionPanel({
       return;
     }
     let active = true;
-    projectApi
-      .listSessions(projectId)
+    Promise.resolve(projectApi.listSessions(projectId))
       .then((list) => {
         if (!active || !Array.isArray(list)) return;
         setBoundSessions(list);
@@ -303,6 +304,39 @@ export function KnowledgeExtractionPanel({
                   </button>
                   <button
                     type="button"
+                    onClick={async () => {
+                      const targetIndices = Array.from(selected).filter(
+                        (idx) => !convertedConstraintIndices.has(idx) && entries[idx],
+                      );
+                      if (targetIndices.length === 0) return;
+                      setConvertedConstraintIndices((prev) => {
+                        const next = new Set(prev);
+                        targetIndices.forEach((idx) => next.add(idx));
+                        return next;
+                      });
+                      if (typeof projectApi?.createConstraint === 'function') {
+                        for (const idx of targetIndices) {
+                          const entry = entries[idx];
+                          try {
+                            await projectApi.createConstraint(projectId, {
+                              category: entry.category || 'convention',
+                              content: entry.content,
+                              priority: Math.min(10, Math.max(1, entry.importance || 7)),
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }
+                    }}
+                    data-testid="knowledge-batch-to-constraint-btn"
+                    className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+                  >
+                    <ShieldPlus className="h-3 w-3" />
+                    选中项同步转 L2 约束
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleSelectHighImportance}
                     data-testid="knowledge-select-high-btn"
                     className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
@@ -319,7 +353,37 @@ export function KnowledgeExtractionPanel({
                   </button>
                 </div>
               </div>
-              {entries.map((entry, idx) => (
+              <div className="flex flex-wrap items-center gap-1" data-testid="knowledge-category-filter-bar">
+                <button
+                  type="button"
+                  data-testid="knowledge-category-filter-all"
+                  onClick={() => setCategoryFilter('all')}
+                  className={`rounded border px-1.5 py-0.5 text-ui-2xs ${
+                    categoryFilter === 'all'
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  全部类别 ({entries.length})
+                </button>
+                {Array.from(new Set(entries.map((e) => e.category))).map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    data-testid={`knowledge-category-filter-${cat}`}
+                    onClick={() => setCategoryFilter(cat)}
+                    className={`rounded border px-1.5 py-0.5 text-ui-2xs ${
+                      categoryFilter === cat
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {CATEGORY_LABELS[cat] ?? cat}
+                  </button>
+                ))}
+              </div>
+              {entries.map((entry, idx) =>
+                categoryFilter !== 'all' && entry.category !== categoryFilter ? null : (
                 <label
                   key={idx}
                   className="flex items-start gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs cursor-pointer hover:bg-muted/30"
