@@ -636,3 +636,15 @@
    - 在检索结果工具栏新增 `批量沉淀 L3 (N)` 按钮 (`semantic-batch-save-profile-btn`) 与 `清空结果` 按钮 (`semantic-clear-results-btn`)。
 4. **WikiGenerationPanel 符号清单复制与符号架构摘要沉淀至 L3 画像 (`src/features/project-type/WikiGenerationPanel.tsx`)**：
    - 在符号提取预览栏新增 `复制符号清单` (`wiki-copy-symbols-btn`) 与 `沉淀符号摘要至 L3` (`wiki-save-symbols-profile-btn`) 按钮，将扫描统计与核心符号一键写入 L3 架构画像。
+### 9.40 Phase P39 约束摘要类别联动过滤与一键恢复禁用、里程碑进度阶段分布条与一键完成进行中、AI 顾问高危风险过滤与全量风险转约束、任务分解阶段过滤与思路沉淀 L3（2026-10-16 已落地验证）
+
+围绕「项目概览态势卡片交互下钻与一键闭环治理、M3 AI 顾问与任务分解向 L2/L3 资产池双向沉淀」，完成以下四项全栈闭环增强：
+
+1. **ConstraintSummaryWidget 类别点击过滤预览与一键启用全部禁用规则 (`src/features/project-type/ConstraintSummaryWidget.tsx`)**：
+   - 当存在已禁用规则时显示 `启用全部 (N)` 按钮 (`constraint-summary-enable-all-btn`)；支持点击 `按类别` 统计行 (`constraint-summary-cat-pill-${category}`) 自动展开并按该类别过滤高优规则预览（支持 `清除类别过滤` `constraint-summary-clear-cat`）。
+2. **MilestoneProgressWidget 阶段分布摘要条与一键完成进行中里程碑 (`src/features/project-type/MilestoneProgressWidget.tsx`)**：
+   - 新增阶段分布统计条 (`milestone-summary-stage-bar`) 直观展示各生命周期阶段的里程碑分布；当存在进行中节点时提供 `完成进行中 (N)` 快捷按钮 (`milestone-summary-complete-active-btn`)。
+3. **ProjectAdvisorCard 风险严重度筛选与一键将全部风险转化为防护约束 (`src/features/project-type/ProjectAdvisorCard.tsx`)**：
+   - 在 AI 顾问风险详情栏新增 `全部 / 仅高危` 过滤切换 (`advisor-risk-filter-all`、`advisor-risk-filter-high`) 与 `全部风险转约束` 按钮 (`advisor-guard-all-risks-btn`)。
+4. **TaskDecomposeDialog 预览阶段筛选与分解思路沉淀至 L3 画像 (`src/features/project-type/TaskDecomposeDialog.tsx`)**：
+   - 在分解预览页新增按阶段筛选胶囊栏 (`decompose-stage-filter-all`、`decompose-stage-filter-${stage}`) 与 `沉淀思路至 L3 画像` 按钮 (`decompose-save-reasoning-profile-btn`)。

@@ -114,6 +114,8 @@ export function TaskDecomposeDialog({
   const [milestones, setMilestones] = useState<PreviewMilestoneNode[]>([]);
   const [selectedRootIndices, setSelectedRootIndices] = useState<Set<number>>(new Set());
   const [copiedPlan, setCopiedPlan] = useState(false);
+  const [savedReasoning, setSavedReasoning] = useState(false);
+  const [stageFilter, setStageFilter] = useState<string>('all');
   const [totalCount, setTotalCount] = useState(0);
 
   const effectiveType: ProjectType = projectType ?? 'coding';
@@ -280,8 +282,39 @@ export function TaskDecomposeDialog({
           {phase === 'preview' && (
             <div className="space-y-3">
               {reasoning && (
-                <div className="rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">分解思路：</span> {reasoning}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground">
+                  <div>
+                    <span className="font-medium text-foreground">分解思路：</span> {reasoning}
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="decompose-save-reasoning-profile-btn"
+                    disabled={savedReasoning}
+                    onClick={async () => {
+                      if (savedReasoning) return;
+                      setSavedReasoning(true);
+                      if (typeof projectApi?.confirmKnowledge === 'function') {
+                        try {
+                          await projectApi.confirmKnowledge(projectId, {
+                            entries: [
+                              {
+                                category: 'decision',
+                                content: `任务分解规划：${reasoning}`,
+                                importance: 8,
+                                sourceMessageIds: [],
+                                reasoning: 'M3 任务分解思路沉淀',
+                              },
+                            ],
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="shrink-0 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
+                  >
+                    {savedReasoning ? '已沉淀至 L3' : '沉淀思路至 L3 画像'}
+                  </button>
                 </div>
               )}
               <div className="space-y-1">
@@ -337,8 +370,40 @@ export function TaskDecomposeDialog({
                     </button>
                   </div>
                 </div>
+                {milestones.some((m) => m.stage) && (
+                  <div className="flex flex-wrap items-center gap-1" data-testid="decompose-stage-filter-bar">
+                    <button
+                      type="button"
+                      data-testid="decompose-stage-filter-all"
+                      onClick={() => setStageFilter('all')}
+                      className={`rounded border px-2 py-0.5 text-ui-2xs ${
+                        stageFilter === 'all'
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                      }`}
+                    >
+                      全部阶段 ({milestones.length})
+                    </button>
+                    {Array.from(new Set(milestones.map((m) => m.stage).filter(Boolean))).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        data-testid={`decompose-stage-filter-${st}`}
+                        onClick={() => setStageFilter(st!)}
+                        className={`rounded border px-2 py-0.5 text-ui-2xs ${
+                          stageFilter === st
+                            ? 'border-primary bg-primary text-primary-foreground'
+                            : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                        }`}
+                      >
+                        {stageLabelMap.get(st!) ?? st}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="rounded-lg border p-3 space-y-1">
-                  {milestones.map((ms, idx) => (
+                  {milestones.map((ms, idx) =>
+                    stageFilter !== 'all' && ms.stage !== stageFilter ? null : (
                     <div key={idx} className="flex items-start gap-2">
                       <input
                         type="checkbox"

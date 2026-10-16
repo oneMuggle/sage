@@ -453,6 +453,8 @@ describe('MilestoneProgressWidget', () => {
 
     const overdueBadge = await screen.findByTestId('milestone-summary-overdue-badge');
     expect(overdueBadge).toHaveTextContent('逾期 1 项');
+    expect(screen.getByTestId('milestone-summary-stage-bar')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('milestone-summary-complete-active-btn'));
 
     fireEvent.click(screen.getByTestId('milestone-summary-copy-md-btn'));
     expect(screen.getByTestId('milestone-summary-copy-md-btn')).toHaveTextContent(/已复制|复制进度/);
@@ -537,6 +539,9 @@ describe('MilestoneProgressWidget', () => {
 
     fireEvent.click(screen.getByTestId('decompose-select-all-btn'));
     expect(screen.getByTestId('decompose-total-days-badge')).toHaveTextContent('预计总工期 5 天');
+    fireEvent.click(screen.getByTestId('decompose-save-reasoning-profile-btn'));
+    expect(screen.getByTestId('decompose-save-reasoning-profile-btn')).toHaveTextContent('已沉淀至 L3');
+    fireEvent.click(screen.getByTestId('decompose-stage-filter-all'));
 
     unmount();
 
