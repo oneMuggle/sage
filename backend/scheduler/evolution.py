@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from datetime import datetime, timezone
@@ -16,6 +18,12 @@ from backend.data.database import get_database
 from backend.memory.vector_store import prune_orphan_vectors
 
 logger = logging.getLogger(__name__)
+
+# Wall-clock timeout for evolution tasks (default 30 minutes)
+# Prevents APScheduler thread from hanging indefinitely if LLM call stalls
+_EVOLUTION_TASK_TIMEOUT_S = float(
+    os.environ.get("SAGE_EVOLUTION_TASK_TIMEOUT_S", "1800")
+)
 
 
 def _utcnow_iso() -> str:
@@ -45,13 +53,22 @@ class BaseEvolutionTask:
         raise NotImplementedError
 
     def run(self):
-        """同步执行任务"""
+        """同步执行任务（带 wall-clock 超时保护）"""
         import asyncio
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            return loop.run_until_complete(self.run_async())
+            return loop.run_until_complete(
+                asyncio.wait_for(self.run_async(), timeout=_EVOLUTION_TASK_TIMEOUT_S)
+            )
+        except asyncio.TimeoutError:
+            task_name = type(self).__name__
+            logger.error(
+                f"Evolution task {task_name} timed out after "
+                f"{_EVOLUTION_TASK_TIMEOUT_S:.0f}s, forcing termination"
+            )
+            raise
         finally:
             loop.close()
 
