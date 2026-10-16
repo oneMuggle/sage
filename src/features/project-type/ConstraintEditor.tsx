@@ -7,6 +7,26 @@
 
 import { useState, useEffect } from 'react';
 
+function matchTriggerGlob(pattern: string, samplePath: string): boolean {
+  const p = pattern.trim();
+  if (!p || p === 'always' || p === '*' || p === '**' || p === '**/*') return true;
+  const normPath = samplePath.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+  const normPat = p.replace(/\\/g, '/').replace(/^\/+/, '');
+  if (normPat.endsWith('/**')) {
+    const prefix = normPat.slice(0, -3);
+    return normPath === prefix || normPath.startsWith(`${prefix}/`);
+  }
+  const escaped = normPat
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*/g, '.*')
+    .replace(/\*/g, '[^/]*');
+  try {
+    return new RegExp(`^${escaped}$`, 'i').test(normPath);
+  } catch {
+    return normPath.includes(normPat.replace(/\*/g, ''));
+  }
+}
+
 import { projectApi, type ProjectConstraint, type ProjectType } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
 import {
@@ -136,6 +156,8 @@ export function ConstraintEditor({
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [samplePath, setSamplePath] = useState('');
+  const [copiedRuleMd, setCopiedRuleMd] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -298,6 +320,28 @@ export function ConstraintEditor({
                 </button>
               ))}
             </div>
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="text"
+                value={samplePath}
+                onChange={(e) => setSamplePath(e.target.value)}
+                placeholder="输入相对路径测试是否触发（如 src/index.ts）..."
+                data-testid="constraint-editor-test-path-input"
+                className="flex-1 rounded border border-input bg-background px-2 py-1 font-mono text-xs"
+              />
+              {samplePath.trim() && (
+                <span
+                  data-testid="constraint-editor-test-path-badge"
+                  className={`rounded px-2 py-0.5 text-ui-2xs font-medium ${
+                    matchTriggerGlob(triggerPattern, samplePath)
+                      ? 'bg-emerald-500/15 text-emerald-600'
+                      : 'bg-amber-500/15 text-amber-600'
+                  }`}
+                >
+                  {matchTriggerGlob(triggerPattern, samplePath) ? '命中触发' : '不触发'}
+                </span>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">留空表示 always（始终生效）</p>
           </div>
 
@@ -359,6 +403,30 @@ export function ConstraintEditor({
         </div>
 
         <DialogFooter>
+          <button
+            type="button"
+            data-testid="constraint-editor-copy-md-btn"
+            onClick={async () => {
+              const md = [
+                `# L2 项目约束规则 (${category || '未分类'})`,
+                `- **优先级**: P${priority}`,
+                `- **触发模式**: \`${triggerPattern.trim() || 'always'}\``,
+                `- **状态**: ${enabled ? '启用' : '禁用'}`,
+                '',
+                content || '（空）',
+              ].join('\n');
+              try {
+                await navigator.clipboard?.writeText(md);
+                setCopiedRuleMd(true);
+                setTimeout(() => setCopiedRuleMd(false), 1500);
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="mr-auto rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+          >
+            {copiedRuleMd ? '已复制规则 MD' : '复制规则 MD'}
+          </button>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             取消
           </Button>

@@ -339,6 +339,12 @@ describe('ConstraintSummaryWidget', () => {
 
     fireEvent.click(screen.getByTestId('constraint-priority-preset-10'));
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('constraint-editor-test-path-input'), {
+      target: { value: 'src/index.ts' },
+    });
+    expect(screen.getByTestId('constraint-editor-test-path-badge')).toHaveTextContent('命中触发');
+    fireEvent.click(screen.getByTestId('constraint-editor-copy-md-btn'));
   });
 
   it('supports ConstraintManager priority tier filter and Glob matched-only toggle (Phase P33)', async () => {
