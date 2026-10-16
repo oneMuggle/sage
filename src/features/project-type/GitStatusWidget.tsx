@@ -38,6 +38,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [fileFilter, setFileFilter] = useState<'all' | 'staged' | 'modified' | 'untracked'>('all');
   const [ingestedFiles, setIngestedFiles] = useState<Set<string>>(new Set());
   const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedSha, setCopiedSha] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -93,6 +94,27 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
 
   const totalChanges =
     status.modified_files.length + status.staged_files.length + status.untracked_files.length;
+
+  const visibleChangedFiles = [
+    ...((fileFilter === 'all' || fileFilter === 'staged') ? status.staged_files : []),
+    ...((fileFilter === 'all' || fileFilter === 'modified') ? status.modified_files : []),
+    ...((fileFilter === 'all' || fileFilter === 'untracked') ? status.untracked_files : []),
+  ];
+
+  const handleBatchIngestChangedFiles = async () => {
+    if (typeof projectApi?.addMaterialFromFile !== 'function' || visibleChangedFiles.length === 0) {
+      return;
+    }
+    for (const filePath of visibleChangedFiles) {
+      if (ingestedFiles.has(filePath)) continue;
+      try {
+        await projectApi.addMaterialFromFile(projectId, filePath);
+        setIngestedFiles((prev) => new Set(prev).add(filePath));
+      } catch {
+        // ignore in test/offline mode
+      }
+    }
+  };
 
   const handleIngestChangedFile = async (filePath: string) => {
     if (ingestedFiles.has(filePath) || typeof projectApi?.addMaterialFromFile !== 'function') {
@@ -228,6 +250,17 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                       {tab.label}
                     </button>
                   ))}
+                  {visibleChangedFiles.length > 0 && (
+                    <button
+                      type="button"
+                      data-testid="git-widget-ingest-all-btn"
+                      onClick={() => void handleBatchIngestChangedFiles()}
+                      className="ml-auto inline-flex items-center gap-0.5 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+                    >
+                      <BookmarkPlus className="h-2.5 w-2.5" />
+                      批量纳入 L4 ({visibleChangedFiles.length})
+                    </button>
+                  )}
                 </div>
                 <div className="max-h-32 overflow-y-auto rounded border border-border bg-muted/30 p-1.5 font-mono text-ui-2xs space-y-1">
                   {(fileFilter === 'all' || fileFilter === 'staged') &&
@@ -302,7 +335,26 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
             <div className="space-y-1">
               {status.recent_commits.slice(0, 3).map((commit) => (
                 <div key={commit.sha} className="text-xs">
-                  <div className="font-medium truncate">{commit.message}</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="font-medium truncate">{commit.message}</div>
+                    <button
+                      type="button"
+                      data-testid={`git-widget-copy-sha-${commit.sha}`}
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard?.writeText(commit.sha);
+                          setCopiedSha(commit.sha);
+                          setTimeout(() => setCopiedSha(null), 1500);
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }}
+                      className="shrink-0 rounded border border-border bg-muted/40 px-1 py-0.2 font-mono text-ui-2xs text-muted-foreground hover:text-foreground"
+                      title="复制提交 SHA"
+                    >
+                      {copiedSha === commit.sha ? '已复制' : commit.sha.slice(0, 7)}
+                    </button>
+                  </div>
                   <div className="text-muted-foreground">
                     {commit.author} · {commit.date.split(' ')[0]}
                   </div>

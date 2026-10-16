@@ -5,7 +5,7 @@
  * 用于在项目创建/编辑时选择项目类型，支持自动检测建议、重新检测与四形态阶段管线预览
  */
 
-import { Code, BookOpen, Briefcase, User, Sparkles, RefreshCw } from 'lucide-react';
+import { Code, BookOpen, Briefcase, User, Sparkles, RefreshCw, Copy, Check } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
 import { projectApi, type ProjectType, type ProjectTypeDetectionResult } from '../../shared/api';
@@ -78,6 +78,7 @@ export function ProjectTypeSelector({
   const [selectedType, setSelectedType] = useState<ProjectType | null>(null);
   const [detection, setDetection] = useState<ProjectTypeDetectionResult | null>(null);
   const [detecting, setDetecting] = useState(false);
+  const [copiedDetection, setCopiedDetection] = useState(false);
 
   const runDetection = useCallback(async () => {
     if (!projectPath || typeof projectApi?.detectType !== 'function') return;
@@ -158,6 +159,45 @@ export function ProjectTypeSelector({
                   )}
                   <button
                     type="button"
+                    data-testid="selector-copy-detection-btn"
+                    onClick={async () => {
+                      const label =
+                        PROJECT_TYPES.find((t) => t.value === detection.detectedType)?.label ??
+                        detection.detectedType;
+                      const md = [
+                        '# 项目类型检测摘要',
+                        `- **检测类型**：${label} (${detection.detectedType})`,
+                        `- **置信度**：${Math.round(detection.confidence * 100)}%`,
+                        detection.signals.length > 0
+                          ? `- **检测依据**：${detection.signals.join('、')}`
+                          : '',
+                      ]
+                        .filter(Boolean)
+                        .join('\n');
+                      try {
+                        await navigator.clipboard?.writeText(md);
+                        setCopiedDetection(true);
+                        setTimeout(() => setCopiedDetection(false), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {copiedDetection ? (
+                      <>
+                        <Check className="h-3 w-3 text-emerald-500" />
+                        已复制
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3 w-3" />
+                        复制检测摘要
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
                     data-testid="selector-redetect-btn"
                     onClick={() => void runDetection()}
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -221,6 +261,23 @@ export function ProjectTypeSelector({
               );
             })}
           </div>
+
+          {selectedType && (() => {
+            const activeBp = getArchetypeBlueprint(selectedType);
+            return (
+              <div
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs"
+                data-testid="selector-selected-summary"
+              >
+                <span className="font-medium text-foreground">
+                  已选治理形态：{activeBp.label} · 推荐版本保护：{activeBp.vcsLabel}
+                </span>
+                <span className="text-muted-foreground">
+                  {activeBp.directories.length} 个标准目录 · {activeBp.recommendedMilestones.length} 个推荐里程碑
+                </span>
+              </div>
+            );
+          })()}
         </div>
 
         <DialogFooter>

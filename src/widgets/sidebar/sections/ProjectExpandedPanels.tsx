@@ -1,4 +1,4 @@
-import { Check, CheckSquare, Copy, FilePlus2, FileText, History, Plus, Save, Search, Sparkles, Square, Trash2 } from 'lucide-react';
+import { Check, CheckSquare, Copy, FilePlus2, FileText, History, Plus, Save, Search, ShieldPlus, Sparkles, Square, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -270,6 +270,8 @@ export function ProjectMaterialsPanel({
   const [addingFromFile, setAddingFromFile] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedBundle, setCopiedBundle] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
+  const [promotedConstraintIds, setPromotedConstraintIds] = useState<Set<string>>(new Set());
 
   const handleAddFromFile = async () => {
     const rel = filePathInput.trim();
@@ -357,6 +359,9 @@ export function ProjectMaterialsPanel({
 
   const q = searchQuery.trim().toLowerCase();
   const filteredList = (list ?? []).filter((m) => {
+    const enabled = isMaterialEnabled(m);
+    if (statusFilter === 'enabled' && !enabled) return false;
+    if (statusFilter === 'disabled' && enabled) return false;
     if (!q) return true;
     return (
       (m.content ?? '').toLowerCase().includes(q) ||
@@ -455,7 +460,31 @@ export function ProjectMaterialsPanel({
       )}
 
       {list && list.length > 0 && (
-        <div className="mb-1.5 relative">
+        <div className="mb-1.5 space-y-1">
+          <div className="flex items-center gap-1" data-testid="sidebar-materials-filter-bar">
+            {(
+              [
+                { id: 'all', label: '全部' },
+                { id: 'enabled', label: '已启用' },
+                { id: 'disabled', label: '已暂停' },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                data-testid={`sidebar-materials-filter-${tab.id}`}
+                onClick={() => setStatusFilter(tab.id)}
+                className={`rounded px-1.5 py-0.5 text-ui-2xs transition-colors ${
+                  statusFilter === tab.id
+                    ? 'bg-primary text-primary-foreground font-medium'
+                    : 'bg-bg text-muted hover:text-text'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="relative">
           <Search className="w-3 h-3 text-muted absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
@@ -465,6 +494,7 @@ export function ProjectMaterialsPanel({
             data-testid="sidebar-materials-search-input"
             className="w-full text-ui-2xs pl-5 pr-1.5 py-0.5 rounded border border-border bg-bg"
           />
+          </div>
         </div>
       )}
 
@@ -531,6 +561,35 @@ export function ProjectMaterialsPanel({
                     </div>
                   )}
                 </div>
+                {m.status === 'ready' && m.content && (
+                  <button
+                    type="button"
+                    data-testid={`sidebar-material-to-constraint-${m.id}`}
+                    onClick={async () => {
+                      if (promotedConstraintIds.has(m.id)) {
+                        return;
+                      }
+                      setPromotedConstraintIds((prev) => new Set(prev).add(m.id));
+                      if (typeof projectApi?.createConstraint !== 'function') {
+                        return;
+                      }
+                      try {
+                        await projectApi.createConstraint(project.id, {
+                          category: 'custom',
+                          content: (m.content ?? '').slice(0, 200),
+                          priority: 7,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    title="提炼为 L2 项目约束"
+                    className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border/60 bg-bg px-1 py-0.5 text-ui-2xs text-muted hover:text-primary"
+                  >
+                    <ShieldPlus className="w-2.5 h-2.5" aria-hidden="true" />
+                    {promotedConstraintIds.has(m.id) ? '已转L2' : '+L2'}
+                  </button>
+                )}
                 <button
                   type="button"
                   data-testid="project-material-remove"

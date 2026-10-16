@@ -598,3 +598,17 @@
    - 在最近里程碑列表标题栏新增三档状态筛选胶囊（`milestone-summary-filter-all` `全部` / `milestone-summary-filter-active` `待办/进行` / `milestone-summary-filter-completed` `已完成`）。
 4. **设置页项目画像卡片高重要度筛选与单条复制（`src/widgets/memory/ProjectProfileCard.tsx`）**
    - 在类别筛选栏新增 **`高重要度 (≥★8)`** 切换胶囊（`project-profile-high-filter-btn`），并在每条画像条目右侧新增单条复制按钮（`project-profile-copy-item-${e.id}`）。
+
+### Phase P36：Git 变更文件批量纳入 L4 与提交 SHA 复制、侧边栏 L4 资料状态筛选与转 L2 约束、类型选择器检测摘要复制与已选治理概览、Hook 安全审计摘要导出（2026-10-15 已完成）
+
+1. **Git 状态 Widget 变更文件批量纳入 L4 资料池与最近提交 SHA 复制（`src/features/project-type/GitStatusWidget.tsx`）**
+   - 在展开的变更文件筛选栏新增 **`批量纳入 L4 (N)`** 按钮（`git-widget-ingest-all-btn`），一键将当前筛选视图下的所有变更文件纳入 L4 资料池。
+   - 在最近提交列表每条记录右侧新增 **`复制 SHA`** 胶囊按钮（`git-widget-copy-sha-${commit.sha}`）。
+2. **侧边栏 L4 资料面板状态筛选与一键提炼为 L2 约束（`src/widgets/sidebar/sections/ProjectExpandedPanels.tsx`）**
+   - 新增三档状态筛选胶囊（`sidebar-materials-filter-all` `全部` / `sidebar-materials-filter-enabled` `已启用` / `sidebar-materials-filter-disabled` `已暂停`）。
+   - 在每条就绪资料行新增 **`+L2 / 已转L2`** 按钮（`sidebar-material-to-constraint-${m.id}`），支持将关键参考资料片段直接提炼为 L2 项目约束。
+3. **项目类型选择器检测摘要复制与已选治理形态概览栏（`src/features/project-type/ProjectTypeSelector.tsx`）**
+   - 在自动检测提示区新增 **`复制检测摘要`** 按钮（`selector-copy-detection-btn`）。
+   - 在底部新增已选形态治理概览栏（`selector-selected-summary`），展示推荐版本保护策略、标准目录数与推荐里程碑数。
+4. **设置页项目级 Hook 安全审计摘要复制（`src/widgets/settings/ProjectHooksPanel.tsx`）**
+   - 新增 **`复制审计摘要`** 按钮（`project-hooks-copy-md-btn`），一键导出工作区路径、信任状态与 Hook 数量的 Markdown 安全审计摘要。
