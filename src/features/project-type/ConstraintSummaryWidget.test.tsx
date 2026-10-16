@@ -256,6 +256,17 @@ describe('ConstraintSummaryWidget', () => {
         createdAt: 1000,
         updatedAt: 1000,
       },
+      {
+        id: 'c-p39-disabled',
+        projectId: 'test-project',
+        category: 'testing',
+        content: '禁用待恢复规则',
+        triggerPattern: 'tests/**',
+        priority: 6,
+        enabled: false,
+        createdAt: 1000,
+        updatedAt: 1000,
+      },
     ]);
 
     render(
@@ -270,8 +281,14 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('constraint-summary-copy-md-btn')).toHaveTextContent(/已复制|复制规则/);
 
     expect(screen.getByTestId('constraint-summary-high-priority-count')).toHaveTextContent('高优 ≥P8：1 条');
-    const previewToggle = screen.getByTestId('constraint-summary-preview-toggle');
-    fireEvent.click(previewToggle);
+    fireEvent.click(screen.getByTestId('constraint-summary-enable-all-btn'));
+    await waitFor(() => {
+      expect(projectApi.updateConstraint).toHaveBeenCalledWith('test-project', 'c-p39-disabled', {
+        enabled: true,
+      });
+    });
+    fireEvent.click(screen.getByTestId('constraint-summary-cat-pill-security'));
+    fireEvent.click(screen.getByTestId('constraint-summary-clear-cat'));
     expect(screen.getByTestId('constraint-summary-preview-list')).toHaveTextContent(
       '严禁将明文密钥提交至版本库',
     );
@@ -285,8 +302,9 @@ describe('ConstraintSummaryWidget', () => {
     // Expand ProjectAdvisorCard details and convert risk #0 to AI constraint
     const toggleDetails = await screen.findByTestId('advisor-toggle-details-btn');
     fireEvent.click(toggleDetails);
-    const guardBtn = screen.getByTestId('advisor-risk-to-constraint-0');
-    fireEvent.click(guardBtn);
+    fireEvent.click(screen.getByTestId('advisor-risk-filter-high'));
+    fireEvent.click(screen.getByTestId('advisor-risk-filter-all'));
+    fireEvent.click(screen.getByTestId('advisor-guard-all-risks-btn'));
     await waitFor(() => {
       expect(projectApi.createConstraint).toHaveBeenCalledWith(
         'test-project',

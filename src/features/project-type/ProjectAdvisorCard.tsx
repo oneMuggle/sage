@@ -69,6 +69,7 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [guardingIdx, setGuardingIdx] = useState<number | null>(null);
   const [guardedRisks, setGuardedRisks] = useState<Set<number>>(new Set());
   const [guardedSuggestions, setGuardedSuggestions] = useState<Set<number>>(new Set());
+  const [highRiskOnly, setHighRiskOnly] = useState(false);
 
   const fetchAdvice = useCallback(async () => {
     if (typeof projectApi?.getAdvice !== 'function') {
@@ -263,12 +264,51 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
             {/* 风险 */}
             {risks.length > 0 && (
               <div>
-                <div className="flex items-center gap-1 mb-1">
-                  <AlertTriangle className="h-3 w-3 text-orange-400" />
-                  <span className="text-xs font-medium text-orange-400">风险</span>
+                <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
+                  <div className="flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 text-orange-400" />
+                    <span className="text-xs font-medium text-orange-400">风险</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid="advisor-risk-filter-all"
+                      onClick={() => setHighRiskOnly(false)}
+                      className={`rounded border px-1.5 py-0.5 text-ui-2xs ${
+                        !highRiskOnly ? 'border-primary bg-primary/10 text-primary' : 'border-border/60 text-muted'
+                      }`}
+                    >
+                      全部
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="advisor-risk-filter-high"
+                      onClick={() => setHighRiskOnly(true)}
+                      className={`rounded border px-1.5 py-0.5 text-ui-2xs ${
+                        highRiskOnly ? 'border-primary bg-primary/10 text-primary' : 'border-border/60 text-muted'
+                      }`}
+                    >
+                      仅高危
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="advisor-guard-all-risks-btn"
+                      onClick={async () => {
+                        for (let i = 0; i < risks.length; i += 1) {
+                          if (!guardedRisks.has(i)) {
+                            await handleCreateRiskConstraint(risks[i], i);
+                          }
+                        }
+                      }}
+                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-emerald-500"
+                    >
+                      全部风险转约束
+                    </button>
+                  </div>
                 </div>
                 <ul className="space-y-1">
                   {risks.map((risk, idx) => {
+                    if (highRiskOnly && risk.severity !== 'high') return null;
                     const isGuarded = guardedRisks.has(idx);
                     return (
                       <li key={idx} className="text-xs flex flex-wrap items-start gap-1">

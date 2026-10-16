@@ -183,6 +183,26 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
             里程碑进度
           </CardTitle>
           <div className="flex items-center gap-1">
+            {inProgress > 0 && (
+              <button
+                type="button"
+                data-testid="milestone-summary-complete-active-btn"
+                onClick={async () => {
+                  if (typeof projectApi?.updateMilestone !== 'function') return;
+                  try {
+                    for (const m of milestones.filter((item) => item.status === 'in_progress')) {
+                      await projectApi.updateMilestone(projectId, m.id, { status: 'completed' });
+                    }
+                    await fetchMilestones();
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+              >
+                完成进行中 ({inProgress})
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void handleCopyProgressMarkdown()}
@@ -233,6 +253,25 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
           </div>
           <Progress value={progress} className="h-2" />
         </div>
+
+        {milestones.some((m) => m.stage) && (
+          <div className="flex flex-wrap items-center gap-1 pt-1" data-testid="milestone-summary-stage-bar">
+            {Array.from(
+              milestones.reduce((acc, m) => {
+                const st = m.stage || 'default';
+                acc.set(st, (acc.get(st) ?? 0) + 1);
+                return acc;
+              }, new Map<string, number>()),
+            ).map(([stageId, count]) => (
+              <span
+                key={stageId}
+                className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5 text-ui-2xs text-muted-foreground"
+              >
+                {stageLabelMap.get(stageId) ?? stageId}: {count}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-2 pt-2 border-t">
           <div className="flex items-center gap-1.5 text-xs">
