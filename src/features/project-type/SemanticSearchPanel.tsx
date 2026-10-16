@@ -320,7 +320,54 @@ export function SemanticSearchPanel({
                 </div>
               </div>
               {filteredResults.length > 0 && (
-                <button
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    data-testid="semantic-batch-save-profile-btn"
+                    onClick={async () => {
+                      const unsaved = filteredResults
+                        .map((hit, idx) => ({ hit, idx }))
+                        .filter(({ idx }) => !savedProfileIndices.has(idx));
+                      if (unsaved.length === 0 || typeof projectApi?.confirmKnowledge !== 'function') {
+                        return;
+                      }
+                      try {
+                        await projectApi.confirmKnowledge(projectId, {
+                          entries: unsaved.map(({ hit }) => ({
+                            category: 'note',
+                            content: hit.content.slice(0, 500),
+                            importance: 7,
+                            sourceMessageIds: [],
+                            reasoning: 'M4 语义检索批量沉淀',
+                          })),
+                        });
+                        setSavedProfileIndices((prev) => {
+                          const next = new Set(prev);
+                          unsaved.forEach(({ idx }) => next.add(idx));
+                          return next;
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+                  >
+                    <BookmarkPlus className="h-3 w-3" />
+                    批量沉淀 L3 ({filteredResults.filter((_, idx) => !savedProfileIndices.has(idx)).length})
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="semantic-clear-results-btn"
+                    onClick={() => {
+                      setResults(null);
+                      setQuery('');
+                      setMinScorePct(0);
+                    }}
+                    className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted"
+                  >
+                    清空结果
+                  </button>
+                  <button
                   type="button"
                   onClick={() => void handleCopyAllResults()}
                   data-testid="semantic-copy-all-btn"
@@ -338,6 +385,7 @@ export function SemanticSearchPanel({
                     </>
                   )}
                 </button>
+                </div>
               )}
             </div>
           )}

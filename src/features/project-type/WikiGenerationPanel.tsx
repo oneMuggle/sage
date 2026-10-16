@@ -82,6 +82,8 @@ export function WikiGenerationPanel({
   const [ingestingAll, setIngestingAll] = useState(false);
   const [fileFilter, setFileFilter] = useState('');
   const [symbolKindFilter, setSymbolKindFilter] = useState<string>('all');
+  const [copiedSymbols, setCopiedSymbols] = useState(false);
+  const [savedSymbolsProfile, setSavedSymbolsProfile] = useState(false);
 
   /** 重置 */
   const handleReset = useCallback(() => {
@@ -96,6 +98,8 @@ export function WikiGenerationPanel({
     setIngestingAll(false);
     setFileFilter('');
     setSymbolKindFilter('all');
+    setCopiedSymbols(false);
+    setSavedSymbolsProfile(false);
   }, []);
 
   useEffect(() => {
@@ -404,9 +408,68 @@ export function WikiGenerationPanel({
 
           {/* 符号统计与分类筛选 */}
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2 text-xs font-medium">
-              <Sparkles className="h-3.5 w-3.5" />
-              提取到 {symbols.length} 个符号
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-medium">
+                <Sparkles className="h-3.5 w-3.5" />
+                提取到 {symbols.length} 个符号
+              </div>
+              {symbols.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    data-testid="wiki-save-symbols-profile-btn"
+                    disabled={savedSymbolsProfile}
+                    onClick={async () => {
+                      if (savedSymbolsProfile || typeof projectApi?.confirmKnowledge !== 'function') {
+                        return;
+                      }
+                      const topSyms = symbols
+                        .slice(0, 6)
+                        .map((s) => `${s.name} (${s.filePath})`)
+                        .join(', ');
+                      try {
+                        await projectApi.confirmKnowledge(projectId, {
+                          entries: [
+                            {
+                              category: 'architecture',
+                              content: `M5 符号架构快照：共扫描 ${files.length} 个文件、提取 ${symbols.length} 个符号（核心符号：${topSyms}）`,
+                              importance: 8,
+                              sourceMessageIds: [],
+                              reasoning: 'M5 Wiki 符号提取沉淀',
+                            },
+                          ],
+                        });
+                        setSavedSymbolsProfile(true);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs text-primary hover:bg-primary/10 disabled:opacity-60"
+                  >
+                    {savedSymbolsProfile ? '已沉淀符号至 L3' : '沉淀符号摘要至 L3'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="wiki-copy-symbols-btn"
+                    onClick={async () => {
+                      const list = symbols
+                        .filter((s) => symbolKindFilter === 'all' || s.kind === symbolKindFilter)
+                        .map((s) => `- [${KIND_LABELS[s.kind] ?? s.kind}] ${s.name} (${s.filePath}:${s.lineno})`);
+                      try {
+                        await navigator.clipboard?.writeText(list.join('\n'));
+                        setCopiedSymbols(true);
+                        setTimeout(() => setCopiedSymbols(false), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    <Copy className="h-3 w-3 text-primary" />
+                    {copiedSymbols ? '已复制符号' : '复制符号清单'}
+                  </button>
+                </div>
+              )}
             </div>
             {Object.keys(symbolCountByKind).length > 0 && (
               <div className="flex flex-wrap gap-1.5" data-testid="wiki-symbol-filter-bar">
