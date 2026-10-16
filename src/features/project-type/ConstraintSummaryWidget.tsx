@@ -111,6 +111,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
 
   const enabledConstraints = constraints.filter((c) => c.enabled);
   const globCount = enabledConstraints.filter((c) => Boolean(c.triggerPattern?.trim())).length;
+  const highPriorityCount = enabledConstraints.filter((c) => c.priority >= 8).length;
   const categoryCount = new Map<string, number>();
   enabledConstraints.forEach((c) => {
     categoryCount.set(c.category, (categoryCount.get(c.category) || 0) + 1);
@@ -190,14 +191,24 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
               {enabledConstraints.length} / {constraints.length}
             </span>
           </div>
-          {globCount > 0 && (
-            <span
-              className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-ui-2xs text-primary"
-              data-testid="constraint-summary-glob-count"
-            >
-              Glob 按需触发：{globCount} 条
-            </span>
-          )}
+          <div className="flex items-center gap-1.5">
+            {highPriorityCount > 0 && (
+              <span
+                className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-ui-2xs font-medium text-amber-600"
+                data-testid="constraint-summary-high-priority-count"
+              >
+                高优 ≥P8：{highPriorityCount} 条
+              </span>
+            )}
+            {globCount > 0 && (
+              <span
+                className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-ui-2xs text-primary"
+                data-testid="constraint-summary-glob-count"
+              >
+                Glob 按需触发：{globCount} 条
+              </span>
+            )}
+          </div>
         </div>
 
         {categoryCount.size > 0 && (
@@ -237,14 +248,34 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                 data-testid="constraint-summary-preview-list"
               >
                 {topRules.map((rule) => (
-                  <div key={rule.id} className="flex items-start gap-1.5">
-                    <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 font-mono text-ui-2xs text-primary">
-                      P{rule.priority}
-                    </span>
-                    <span className="shrink-0 rounded bg-muted px-1 py-0.5 font-mono text-ui-2xs text-muted-foreground">
-                      {rule.triggerPattern || 'always'}
-                    </span>
-                    <span className="truncate text-foreground">{rule.content}</span>
+                  <div key={rule.id} className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="shrink-0 rounded bg-primary/10 px-1 py-0.5 font-mono text-ui-2xs text-primary">
+                        P{rule.priority}
+                      </span>
+                      <span className="shrink-0 rounded bg-muted px-1 py-0.5 font-mono text-ui-2xs text-muted-foreground">
+                        {rule.triggerPattern || 'always'}
+                      </span>
+                      <span className="truncate text-foreground">{rule.content}</span>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid={`constraint-summary-quick-toggle-${rule.id}`}
+                      onClick={async () => {
+                        if (typeof projectApi?.updateConstraint !== 'function') return;
+                        try {
+                          await projectApi.updateConstraint(projectId, rule.id, {
+                            enabled: !rule.enabled,
+                          });
+                          await fetchConstraints();
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }}
+                      className="shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      停用
+                    </button>
                   </div>
                 ))}
               </div>

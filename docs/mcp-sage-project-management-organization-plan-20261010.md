@@ -585,3 +585,16 @@
    - 在每条检索命中卡片顶栏除沉淀至 L3 画像外，新增 **`转 L2 约束 / 已转 L2 约束`** 按钮（`semantic-hit-to-constraint-${idx}`），支持将检索命中的关键合同条款、代码规范或实验准则直接固化为 L2 行为约束。
 4. **M3 AI 顾问改进建议一键固化为 L2 行为约束（`src/features/project-type/ProjectAdvisorCard.tsx`）**
    - 在展开的改进建议列表中为每条建议新增 **`固化为约束 / 已固化约束`** 按钮（`advisor-suggestion-to-constraint-${idx}`），与原有的“分解为任务（M3→M1）”共同构成 **“M3 改进建议 → M1 里程碑 / L2 行为约束”** 双路闭环。
+
+### Phase P35：创建向导规则包全选与自定义 L5 只读路径挂载、约束摘要高优计数与快捷停用、里程碑概览筛选、项目画像高重要度过滤与单条复制（2026-10-15 已完成）
+
+1. **项目创建向导规则包全选/清空与自定义 L5 跨目录只读路径挂载（`src/features/project-type/ProjectCreationWizard.tsx`）**
+   - 在向导第 3 步预设规则包区域新增 **`全选规则包 / 清空规则包`** 快捷切换按钮（`wizard-templates-toggle-all-btn`）。
+   - 在 L5 跨目录只读白名单挂载区域新增自定义路径输入框（`wizard-custom-allowed-path-input`）与 **`+ 添加只读路径`** 按钮（`wizard-custom-allowed-path-add-btn`），并实时展示已选路径标签（`wizard-selected-allowed-paths-list`）。
+2. **约束摘要 Widget 高优规则计数徽标与预览区一键停用（`src/features/project-type/ConstraintSummaryWidget.tsx`）**
+   - 新增高优先级（`≥P8`）生效规则数量徽标（`constraint-summary-high-priority-count`）。
+   - 在展开的高优规则预览列表中为每条规则提供 **`停用`** 快捷按钮（`constraint-summary-quick-toggle-${rule.id}`），支持直接在概览卡片内切换规则启用态。
+3. **里程碑进度 Widget 最近里程碑状态快捷筛选胶囊（`src/features/project-type/MilestoneProgressWidget.tsx`）**
+   - 在最近里程碑列表标题栏新增三档状态筛选胶囊（`milestone-summary-filter-all` `全部` / `milestone-summary-filter-active` `待办/进行` / `milestone-summary-filter-completed` `已完成`）。
+4. **设置页项目画像卡片高重要度筛选与单条复制（`src/widgets/memory/ProjectProfileCard.tsx`）**
+   - 在类别筛选栏新增 **`高重要度 (≥★8)`** 切换胶囊（`project-profile-high-filter-btn`），并在每条画像条目右侧新增单条复制按钮（`project-profile-copy-item-${e.id}`）。

@@ -86,6 +86,8 @@ export function ProjectProfileCard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [copiedMd, setCopiedMd] = useState(false);
+  const [highImportanceOnly, setHighImportanceOnly] = useState(false);
+  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -115,6 +117,9 @@ export function ProjectProfileCard() {
       if (categoryFilter !== 'all' && item.category !== categoryFilter) {
         return false;
       }
+      if (highImportanceOnly && item.importance < 8) {
+        return false;
+      }
       if (!q) return true;
       const catLabel = labelOf(item.category).toLowerCase();
       return (
@@ -123,7 +128,7 @@ export function ProjectProfileCard() {
         catLabel.includes(q)
       );
     });
-  }, [items, searchQuery, categoryFilter]);
+  }, [items, searchQuery, categoryFilter, highImportanceOnly]);
 
   const handleCopyMarkdown = async () => {
     if (filteredItems.length === 0) return;
@@ -379,6 +384,18 @@ export function ProjectProfileCard() {
                 {cat === 'all' ? '全部类别' : labelOf(cat)}
               </button>
             ))}
+            <button
+              type="button"
+              data-testid="project-profile-high-filter-btn"
+              onClick={() => setHighImportanceOnly((v) => !v)}
+              className={`rounded px-2 py-0.5 text-ui-2xs transition-colors ${
+                highImportanceOnly
+                  ? 'bg-amber-600 text-white font-medium'
+                  : 'bg-bg text-text-secondary hover:bg-bg-hover'
+              }`}
+            >
+              高重要度 (≥★8)
+            </button>
           </div>
         </div>
       )}
@@ -418,6 +435,27 @@ export function ProjectProfileCard() {
                 <span className="text-ui-xs text-text-secondary shrink-0" title="重要性">
                   ★{e.importance}
                 </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard?.writeText(e.content);
+                      setCopiedItemId(e.id);
+                      setTimeout(() => setCopiedItemId(null), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="p-1 rounded hover:bg-bg-hover text-text-secondary shrink-0"
+                  title="复制条目内容"
+                  data-testid={`project-profile-copy-item-${e.id}`}
+                >
+                  {copiedItemId === e.id ? (
+                    <Check className="w-3 h-3 text-emerald-600" aria-hidden />
+                  ) : (
+                    <Copy className="w-3 h-3" aria-hidden />
+                  )}
+                </button>
                 <button
                   type="button"
                   onClick={() => void handleDelete(e.id)}
