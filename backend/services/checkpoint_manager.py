@@ -208,7 +208,7 @@ class CheckpointManager:
             progress_percentage=progress_percentage,
         )
 
-    async def _verify_file_checkpoint(self, checkpoint: Checkpoint) -> VerificationResult:
+    async def _verify_file_checkpoint(self, checkpoint: Checkpoint) -> VerificationResult:  # noqa: PLR0911
         """
         验证文件检查点
 
@@ -296,7 +296,7 @@ class CheckpointManager:
                 error_message=f"Invalid regex pattern: {e}",
             )
 
-    async def _verify_command_checkpoint(self, checkpoint: Checkpoint) -> VerificationResult:
+    async def _verify_command_checkpoint(self, checkpoint: Checkpoint) -> VerificationResult:  # noqa: PLR0911
         """
         验证命令检查点
 
@@ -370,7 +370,7 @@ class CheckpointManager:
                 expected_value="exit_code=0",
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return VerificationResult(
                 checkpoint_id=checkpoint.id,
                 passed=False,

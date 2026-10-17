@@ -273,7 +273,7 @@ class Goal:
             checkpoints=[Checkpoint.from_dict(c) for c in data.get("checkpoints", [])],
             rounds=[ExecutionRound.from_dict(r) for r in data.get("rounds", [])],
             current_round=data.get("current_round", 0),
-            created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else datetime.utcnow(),
+            created_at=datetime.fromisoformat(data["created_at"]) if data.get("created_at") else datetime.utcnow(),  # noqa: DTZ003
             started_at=datetime.fromisoformat(data["started_at"]) if data.get("started_at") else None,
             completed_at=datetime.fromisoformat(data["completed_at"]) if data.get("completed_at") else None,
             total_tokens_used=data.get("total_tokens_used", 0),

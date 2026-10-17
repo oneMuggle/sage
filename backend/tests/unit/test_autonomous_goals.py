@@ -5,6 +5,8 @@
 - TimeWindowManager: 时间窗口判断、定价等级、执行决策
 - CheckpointManager: 检查点验证（文件、命令）
 """
+# ruff: noqa: DTZ001, DTZ003 — test fixtures intentionally use naive datetimes
+# to exercise time-window logic independent of host timezone.
 
 import tempfile
 from datetime import datetime
@@ -231,7 +233,7 @@ class TestCheckpointManager:
     def setup_method(self):
         self.manager = CheckpointManager()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_verify_file_exists(self):
         """测试文件存在性检查"""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
@@ -252,7 +254,7 @@ class TestCheckpointManager:
         finally:
             Path(file_path).unlink()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_verify_file_not_exists(self):
         """测试文件不存在"""
         checkpoint = Checkpoint(
@@ -266,7 +268,7 @@ class TestCheckpointManager:
         assert not result.passed
         assert result.actual_value == "file_not_found"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_verify_file_line_count(self):
         """测试文件行数检查"""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
@@ -290,7 +292,7 @@ class TestCheckpointManager:
         finally:
             Path(file_path).unlink()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_verify_file_regex_match(self):
         """测试文件正则匹配"""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
@@ -312,7 +314,7 @@ class TestCheckpointManager:
         finally:
             Path(file_path).unlink()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_verify_command_success(self):
         """测试命令执行成功"""
         checkpoint = Checkpoint(
@@ -326,7 +328,7 @@ class TestCheckpointManager:
         assert result.passed
         assert result.actual_value == "exit_code=0"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_verify_command_failure(self):
         """测试命令执行失败"""
         checkpoint = Checkpoint(
@@ -340,7 +342,7 @@ class TestCheckpointManager:
         assert not result.passed
         assert "exit_code=" in result.actual_value
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_verify_command_with_regex(self):
         """测试命令输出正则匹配"""
         checkpoint = Checkpoint(
@@ -355,7 +357,7 @@ class TestCheckpointManager:
         assert result.passed
         assert result.actual_value == "matched"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_verify_all_checkpoints(self):
         """测试批量验证检查点"""
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
@@ -386,7 +388,7 @@ class TestCheckpointManager:
         finally:
             Path(file_path).unlink()
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_verify_all_empty(self):
         """测试空检查点列表"""
         report = await self.manager.verify_all([])
@@ -452,7 +454,7 @@ class TestCheckpointManagerLLM:
         content = '{"type": "file", "description": "single object"}'
         assert self.manager._parse_checkpoints_json(content) == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_generate_checkpoints_no_llm_config(self):
         """测试无 LLM 配置返回空列表"""
         goal = Goal(
@@ -463,7 +465,7 @@ class TestCheckpointManagerLLM:
         result = await self.manager.generate_checkpoints(goal, llm_config=None)
         assert result == []
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_generate_checkpoints_with_mock_llm(self):
         """测试使用 mock LLM 生成检查点"""
         from unittest.mock import AsyncMock, MagicMock
@@ -495,7 +497,7 @@ class TestCheckpointManagerLLM:
         assert result[0].description == "报告文件存在"
         assert result[1].expected_pattern == "100"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_generate_checkpoints_llm_error(self):
         """测试 LLM 调用失败返回空列表"""
         from unittest.mock import AsyncMock, MagicMock

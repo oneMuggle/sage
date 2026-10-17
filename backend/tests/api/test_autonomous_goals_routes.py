@@ -17,7 +17,7 @@ from backend.main import app
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture
+@pytest.fixture()
 async def client():
     """创建测试客户端"""
     transport = ASGITransport(app=app)
@@ -28,7 +28,7 @@ async def client():
 class TestGoalsCRUD:
     """CRUD 端点测试"""
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_create_goal(self, client):
         """测试创建目标"""
         payload = {
@@ -43,7 +43,7 @@ class TestGoalsCRUD:
         assert data["status"] == "pending"
         assert data["id"].startswith("goal_")
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_create_goal_with_options(self, client):
         """测试创建目标（带时间窗口和预算）"""
         payload = {
@@ -66,7 +66,7 @@ class TestGoalsCRUD:
         assert data["time_window"]["off_peak_start"] == "23:00"
         assert data["budget"]["max_rounds"] == 5
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_list_goals(self, client):
         """测试列出目标"""
         # 先创建两个
@@ -79,7 +79,7 @@ class TestGoalsCRUD:
         assert data["total"] >= 2
         assert len(data["items"]) >= 2
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_list_goals_filter_status(self, client):
         """测试按状态过滤"""
         # 创建一个 pending 目标
@@ -92,7 +92,7 @@ class TestGoalsCRUD:
         data = resp.json()
         assert all(item["status"] == "pending" for item in data["items"])
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_get_goal(self, client):
         """测试获取目标详情"""
         create_resp = await client.post(
@@ -106,13 +106,13 @@ class TestGoalsCRUD:
         assert data["id"] == goal_id
         assert data["name"] == "Get Test"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_get_goal_not_found(self, client):
         """测试获取不存在目标"""
         resp = await client.get("/api/v1/goals/goal_nonexistent")
         assert resp.status_code == 404
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_update_goal(self, client):
         """测试更新目标"""
         create_resp = await client.post(
@@ -129,7 +129,7 @@ class TestGoalsCRUD:
         assert data["name"] == "Updated"
         assert data["description"] == "Updated desc"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_delete_goal(self, client):
         """测试删除目标"""
         create_resp = await client.post(
@@ -148,7 +148,7 @@ class TestGoalsCRUD:
 class TestGoalsExecutionControl:
     """执行控制端点测试"""
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_start_goal(self, client):
         """测试启动目标"""
         create_resp = await client.post(
@@ -161,13 +161,13 @@ class TestGoalsExecutionControl:
         data = resp.json()
         assert data["status"] == "running"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_start_goal_not_found(self, client):
         """测试启动不存在目标"""
         resp = await client.post("/api/v1/goals/goal_nonexistent/start")
         assert resp.status_code == 400
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_pause_goal(self, client):
         """测试暂停目标"""
         create_resp = await client.post(
@@ -186,7 +186,7 @@ class TestGoalsExecutionControl:
         data = resp.json()
         assert data["status"] == "paused"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_cancel_goal(self, client):
         """测试取消目标"""
         create_resp = await client.post(
@@ -203,7 +203,7 @@ class TestGoalsExecutionControl:
 class TestGoalsReport:
     """报告端点测试"""
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_get_report(self, client):
         """测试获取执行报告"""
         create_resp = await client.post(
@@ -218,7 +218,7 @@ class TestGoalsReport:
         assert data["goal_name"] == "Report Test"
         assert data["total_rounds"] == 0
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_get_report_not_found(self, client):
         """测试获取不存在目标的报告"""
         resp = await client.get("/api/v1/goals/goal_nonexistent/report")
@@ -228,7 +228,7 @@ class TestGoalsReport:
 class TestGoalsValidation:
     """输入验证测试"""
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_create_goal_missing_name(self, client):
         """测试缺少名称"""
         resp = await client.post(
@@ -236,13 +236,13 @@ class TestGoalsValidation:
         )
         assert resp.status_code == 422
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_create_goal_missing_description(self, client):
         """测试缺少描述"""
         resp = await client.post("/api/v1/goals", json={"name": "No desc"})
         assert resp.status_code == 422
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_create_goal_invalid_budget(self, client):
         """测试无效预算"""
         resp = await client.post(
@@ -255,7 +255,7 @@ class TestGoalsValidation:
         )
         assert resp.status_code == 422
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_list_goals_invalid_status(self, client):
         """测试无效状态过滤"""
         resp = await client.get("/api/v1/goals?status=invalid_status")

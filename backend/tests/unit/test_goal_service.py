@@ -9,6 +9,8 @@
 - _apply_degradation 逻辑
 - get_execution_report
 """
+# ruff: noqa: DTZ001, DTZ003 — test fixtures intentionally use naive datetimes
+# and utcnow() to exercise goal lifecycle logic independent of host timezone.
 
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -23,8 +25,8 @@ from backend.domain.autonomous_goals import (
     GoalStatus,
     TimeWindow,
 )
-from backend.services.goal_service import GoalService
 from backend.services.checkpoint_manager import CheckpointReport
+from backend.services.goal_service import GoalService
 
 
 class MockGoalRepository:
@@ -64,7 +66,7 @@ class TestGoalServiceCRUD:
         self.mock_repo = MockGoalRepository()
         self.service = GoalService(goal_repository=self.mock_repo)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_create_goal(self):
         """测试创建目标"""
         goal = await self.service.create_goal(
@@ -80,7 +82,7 @@ class TestGoalServiceCRUD:
         assert goal.budget.max_rounds == 5
         assert self.mock_repo.get(goal.id) is not None
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_get_goal(self):
         """测试获取目标"""
         created = await self.service.create_goal(name="Test", description="Desc")
@@ -90,13 +92,13 @@ class TestGoalServiceCRUD:
         assert fetched.id == created.id
         assert fetched.name == "Test"
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_get_goal_not_found(self):
         """测试获取不存在目标"""
         result = await self.service.get_goal("nonexistent")
         assert result is None
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_list_goals(self):
         """测试列出目标"""
         await self.service.create_goal(name="Goal 1", description="Desc 1")
@@ -105,7 +107,7 @@ class TestGoalServiceCRUD:
         goals = await self.service.list_goals()
         assert len(goals) == 2
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_list_goals_by_status(self):
         """测试按状态过滤"""
         g1 = await self.service.create_goal(name="Goal 1", description="Desc 1")
@@ -119,7 +121,7 @@ class TestGoalServiceCRUD:
         assert len(pending) == 1
         assert pending[0].id == g2.id
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_delete_goal(self):
         """测试删除目标"""
         goal = await self.service.create_goal(name="Test", description="Desc")
@@ -134,7 +136,7 @@ class TestGoalServiceExecutionControl:
         self.mock_repo = MockGoalRepository()
         self.service = GoalService(goal_repository=self.mock_repo)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_start_execution(self):
         """测试启动执行"""
         goal = await self.service.create_goal(name="Test", description="Desc")
@@ -146,13 +148,13 @@ class TestGoalServiceExecutionControl:
         assert started.status == GoalStatus.RUNNING
         assert started.started_at is not None
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_start_execution_not_found(self):
         """测试启动不存在目标"""
         with pytest.raises(ValueError, match="Goal not found"):
             await self.service.start_execution("nonexistent")
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_start_execution_wrong_status(self):
         """测试启动已完成目标"""
         goal = await self.service.create_goal(name="Test", description="Desc")
@@ -162,7 +164,7 @@ class TestGoalServiceExecutionControl:
         with pytest.raises(ValueError, match="Cannot start goal"):
             await self.service.start_execution(goal.id)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_pause_execution(self):
         """测试暂停执行"""
         goal = await self.service.create_goal(name="Test", description="Desc")
@@ -172,7 +174,7 @@ class TestGoalServiceExecutionControl:
         paused = await self.service.pause_execution(goal.id)
         assert paused.status == GoalStatus.PAUSED
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_cancel_execution(self):
         """测试取消执行"""
         goal = await self.service.create_goal(name="Test", description="Desc")
@@ -191,7 +193,7 @@ class TestShouldContinue:
         self.mock_repo = MockGoalRepository()
         self.service = GoalService(goal_repository=self.mock_repo)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_continue_running(self):
         """测试运行中应该继续"""
         goal = Goal(
@@ -203,7 +205,7 @@ class TestShouldContinue:
         )
         assert await self.service._should_continue(goal)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_stop_completed(self):
         """测试已完成不应继续"""
         goal = Goal(
@@ -215,7 +217,7 @@ class TestShouldContinue:
         )
         assert not await self.service._should_continue(goal)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_stop_failed(self):
         """测试失败不应继续"""
         goal = Goal(
@@ -227,7 +229,7 @@ class TestShouldContinue:
         )
         assert not await self.service._should_continue(goal)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_stop_cancelled(self):
         """测试取消不应继续"""
         goal = Goal(
@@ -239,7 +241,7 @@ class TestShouldContinue:
         )
         assert not await self.service._should_continue(goal)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_stop_max_rounds(self):
         """测试达到最大轮次不应继续"""
         goal = Goal(
@@ -252,7 +254,7 @@ class TestShouldContinue:
         )
         assert not await self.service._should_continue(goal)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_stop_max_hours(self):
         """测试超过时间预算不应继续"""
         goal = Goal(
@@ -265,7 +267,7 @@ class TestShouldContinue:
         )
         assert not await self.service._should_continue(goal)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_stop_max_tokens(self):
         """测试超过 token 预算不应继续"""
         goal = Goal(
@@ -286,7 +288,7 @@ class TestReviewCompletion:
         self.mock_repo = MockGoalRepository()
         self.service = GoalService(goal_repository=self.mock_repo)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_all_checkpoints_pass(self):
         """测试全部检查点通过"""
         goal = Goal(
@@ -307,7 +309,7 @@ class TestReviewCompletion:
 
         assert await self.service._review_completion(goal, report)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_high_completion_rate(self):
         """测试高完成率（>= 95%）"""
         goal = Goal(
@@ -328,7 +330,7 @@ class TestReviewCompletion:
 
         assert await self.service._review_completion(goal, report)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_low_completion_rate(self):
         """测试低完成率"""
         goal = Goal(
@@ -349,7 +351,7 @@ class TestReviewCompletion:
 
         assert not await self.service._review_completion(goal, report)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_no_checkpoints(self):
         """测试无检查点"""
         goal = Goal(
@@ -378,7 +380,7 @@ class TestApplyDegradation:
         self.mock_repo = MockGoalRepository()
         self.service = GoalService(goal_repository=self.mock_repo)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_first_failure_model_downgrade(self):
         """测试第一次失败降级模型"""
         goal = Goal(
@@ -398,7 +400,7 @@ class TestApplyDegradation:
         await self.service._apply_degradation(goal, Exception("Test error"))
         assert goal.degradation_level == DegradationLevel.MODEL_DOWNGRADE
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_second_failure_task_simplify(self):
         """测试第二次失败简化任务"""
         goal = Goal(
@@ -423,7 +425,7 @@ class TestApplyDegradation:
         await self.service._apply_degradation(goal, Exception("Test error"))
         assert goal.degradation_level == DegradationLevel.TASK_SIMPLIFY
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_third_failure_stop(self):
         """测试第三次失败停止"""
         goal = Goal(
@@ -462,7 +464,7 @@ class TestGetExecutionReport:
         self.mock_repo = MockGoalRepository()
         self.service = GoalService(goal_repository=self.mock_repo)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_report_basic(self):
         """测试基本报告"""
         goal = await self.service.create_goal(name="Test", description="Desc")
@@ -493,7 +495,7 @@ class TestGetExecutionReport:
         assert report["tasks_failed"] == 1
         assert report["total_tokens_used"] == 5000
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_report_not_found(self):
         """测试报告目标不存在"""
         with pytest.raises(ValueError, match="Goal not found"):
@@ -507,7 +509,7 @@ class TestReviewCompletionLLM:
         self.mock_repo = MockGoalRepository()
         self.service = GoalService(goal_repository=self.mock_repo)
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_review_no_llm_fallback(self):
         """测试无 LLM 回退到基础版"""
         goal = Goal(
@@ -524,7 +526,7 @@ class TestReviewCompletionLLM:
         assert result["is_complete"] is True
         assert "基础判断" in result["reasoning"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_review_with_mock_llm(self):
         """测试使用 mock LLM 审查"""
         import json
@@ -565,7 +567,7 @@ class TestReviewCompletionLLM:
         assert "大部分检查点通过" in result["reasoning"]
         assert len(result["suggestions"]) == 1
 
-    @pytest.mark.asyncio
+    @pytest.mark.asyncio()
     async def test_review_llm_error_fallback(self):
         """测试 LLM 错误时回退"""
 
