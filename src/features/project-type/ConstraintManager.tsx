@@ -83,6 +83,8 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
   const [copiedMd, setCopiedMd] = useState(false);
   const [promotedProfileIds, setPromotedProfileIds] = useState<Set<string>>(new Set());
   const [copiedRuleId, setCopiedRuleId] = useState<string | null>(null);
+  const [batchPromotedL3, setBatchPromotedL3] = useState(false);
+  const [milestoneRuleIds, setMilestoneRuleIds] = useState<Set<string>>(new Set());
 
   const blueprint: ArchetypeBlueprintMeta = getArchetypeBlueprint(projectType);
 
@@ -290,6 +292,32 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                 className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
               >
                 全部停用
+              </button>
+              <button
+                type="button"
+                data-testid="constraint-batch-promote-l3-btn"
+                onClick={async () => {
+                  if (batchPromotedL3 || filteredConstraints.length === 0) return;
+                  setBatchPromotedL3(true);
+                  if (typeof projectApi?.confirmKnowledge === 'function') {
+                    try {
+                      await projectApi.confirmKnowledge(projectId, {
+                        entries: filteredConstraints.slice(0, 8).map((c) => ({
+                          category: 'convention',
+                          content: c.content,
+                          importance: c.priority,
+                          sourceMessageIds: [],
+                          reasoning: '约束管理器批量沉淀规则至 L3 画像',
+                        })),
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground hover:bg-muted"
+              >
+                {batchPromotedL3 ? '已批量存 L3' : `批量存 L3 (${filteredConstraints.length})`}
               </button>
               <button
                 type="button"
@@ -535,6 +563,29 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                       title="同步沉淀至 L3 项目画像"
                     >
                       {promotedProfileIds.has(constraint.id) ? '已存L3' : '+L3'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`constraint-to-milestone-${constraint.id}`}
+                      onClick={async () => {
+                        if (milestoneRuleIds.has(constraint.id)) return;
+                        setMilestoneRuleIds((prev) => new Set(prev).add(constraint.id));
+                        if (typeof projectApi?.createMilestone === 'function') {
+                          try {
+                            await projectApi.createMilestone(projectId, {
+                              title: `[合规治理] ${constraint.content.slice(0, 48)}`,
+                              description: constraint.content,
+                              sortOrder: 10,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+                      title="将该约束规则转化为可执行里程碑"
+                    >
+                      {milestoneRuleIds.has(constraint.id) ? '已转里程碑' : '+里程碑'}
                     </button>
                     <button
                       type="button"

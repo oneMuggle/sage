@@ -79,6 +79,8 @@ export function ProjectTypeSelector({
   const [detection, setDetection] = useState<ProjectTypeDetectionResult | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [copiedDetection, setCopiedDetection] = useState(false);
+  const [showSuiteDetails, setShowSuiteDetails] = useState(false);
+  const [copiedBlueprint, setCopiedBlueprint] = useState(false);
 
   const runDetection = useCallback(async () => {
     if (!projectPath || typeof projectApi?.detectType !== 'function') return;
@@ -266,15 +268,63 @@ export function ProjectTypeSelector({
             const activeBp = getArchetypeBlueprint(selectedType);
             return (
               <div
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs"
+                className="space-y-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs"
                 data-testid="selector-selected-summary"
               >
-                <span className="font-medium text-foreground">
-                  已选治理形态：{activeBp.label} · 推荐版本保护：{activeBp.vcsLabel}
-                </span>
-                <span className="text-muted-foreground">
-                  {activeBp.directories.length} 个标准目录 · {activeBp.recommendedMilestones.length} 个推荐里程碑
-                </span>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">
+                    已选治理形态：{activeBp.label} · 推荐版本保护：{activeBp.vcsLabel}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground">
+                      {activeBp.directories.length} 个标准目录 · {activeBp.recommendedMilestones.length} 个推荐里程碑
+                    </span>
+                    <button
+                      type="button"
+                      data-testid="selector-copy-blueprint-btn"
+                      onClick={async () => {
+                        const md = [
+                          `# ${activeBp.label} 治理蓝图`,
+                          `- **版本保护**：${activeBp.vcsLabel}`,
+                          `- **阶段管线**：${activeBp.stages.map((s) => s.label).join(' → ')}`,
+                          `- **标准目录**：${activeBp.directories.join('、')}`,
+                          `- **推荐里程碑**：${activeBp.recommendedMilestones.map((m) => m.title).join(' → ')}`,
+                        ].join('\n');
+                        try {
+                          await navigator.clipboard?.writeText(md);
+                          setCopiedBlueprint(true);
+                          setTimeout(() => setCopiedBlueprint(false), 1500);
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                    >
+                      {copiedBlueprint ? '已复制蓝图' : '复制形态蓝图'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="selector-suite-toggle-btn"
+                      onClick={() => setShowSuiteDetails((v) => !v)}
+                      className="rounded border border-primary/30 bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+                    >
+                      {showSuiteDetails ? '收起治理清单' : '预览治理清单'}
+                    </button>
+                  </div>
+                </div>
+                {showSuiteDetails && (
+                  <div
+                    className="border-t border-primary/20 pt-1.5 text-ui-2xs text-muted-foreground space-y-1"
+                    data-testid="selector-suite-details"
+                  >
+                    <div>
+                      细分规范包：{activeBp.subTemplates.map((t) => t.label).join(' · ')}
+                    </div>
+                    <div>
+                      推荐里程碑：{activeBp.recommendedMilestones.map((m) => m.title).join(' → ')}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}

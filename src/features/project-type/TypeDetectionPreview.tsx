@@ -52,6 +52,8 @@ export function TypeDetectionPreview({
 }: TypeDetectionPreviewProps) {
   const [copiedMd, setCopiedMd] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [copiedSuite, setCopiedSuite] = useState(false);
+  const [copiedSignalIdx, setCopiedSignalIdx] = useState<number | null>(null);
 
   if (loading) {
     return (
@@ -157,8 +159,28 @@ export function TypeDetectionPreview({
           <div className="text-xs font-medium text-muted-foreground">检测依据：</div>
           <ul className="space-y-0.5">
             {result.signals.map((signal, idx) => (
-              <li key={idx} className="text-xs text-muted-foreground">
-                • {signal}
+              <li
+                key={idx}
+                data-testid={`detection-signal-item-${idx}`}
+                className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
+              >
+                <span>• {signal}</span>
+                <button
+                  type="button"
+                  data-testid={`detection-copy-signal-${idx}`}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard?.writeText(signal);
+                      setCopiedSignalIdx(idx);
+                      setTimeout(() => setCopiedSignalIdx(null), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedSignalIdx === idx ? '已复制' : '复制依据'}
+                </button>
               </li>
             ))}
           </ul>
@@ -193,14 +215,38 @@ export function TypeDetectionPreview({
               {dir}/
             </span>
           ))}
+          <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            data-testid="detection-copy-suite-btn"
+            onClick={async () => {
+              const md = [
+                `# ${detectedBlueprint.label} 推荐治理清单`,
+                `- **标准目录**：${detectedBlueprint.directories.join('、')}`,
+                `- **规范预设包**：${detectedBlueprint.subTemplates.map((t) => t.label).join(' · ')}`,
+                `- **默认里程碑**：${detectedBlueprint.recommendedMilestones.map((m) => m.title).join(' → ')}`,
+              ].join('\n');
+              try {
+                await navigator.clipboard?.writeText(md);
+                setCopiedSuite(true);
+                setTimeout(() => setCopiedSuite(false), 1500);
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+          >
+            {copiedSuite ? '已复制清单' : '复制治理清单'}
+          </button>
           <button
             type="button"
             data-testid="detection-details-toggle-btn"
             onClick={() => setShowDetails((v) => !v)}
-            className="ml-auto rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+            className="rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
           >
             {showDetails ? '收起推荐规范与里程碑' : '展开推荐规范与里程碑'}
           </button>
+          </div>
         </div>
         {showDetails && (
           <div

@@ -138,6 +138,8 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     expect(screen.getByTestId('detection-governance-stats')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('detection-copy-md-btn'));
+    fireEvent.click(screen.getByTestId('detection-copy-signal-0'));
+    fireEvent.click(screen.getByTestId('detection-copy-suite-btn'));
     fireEvent.click(screen.getByTestId('detection-details-toggle-btn'));
     expect(screen.getByTestId('detection-details-panel')).toHaveTextContent('推荐规范包：');
 
@@ -167,6 +169,9 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     fireEvent.click(applyDetectedBtn);
 
     expect(screen.getByTestId('selector-selected-summary')).toHaveTextContent('一般档案与文书');
+    fireEvent.click(screen.getByTestId('selector-copy-blueprint-btn'));
+    fireEvent.click(screen.getByTestId('selector-suite-toggle-btn'));
+    expect(screen.getByTestId('selector-suite-details')).toHaveTextContent('细分规范包：');
     fireEvent.click(screen.getByTestId('selector-copy-detection-btn'));
 
     fireEvent.click(screen.getByTestId('selector-redetect-btn'));

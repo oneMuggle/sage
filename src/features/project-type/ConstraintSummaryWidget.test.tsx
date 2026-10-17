@@ -426,6 +426,10 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(matchedOnlyBtn);
     expect(screen.getByText('高优禁止明文密钥提交')).toBeInTheDocument();
     expect(screen.queryByText('低优代码注释建议')).toBeNull();
+    fireEvent.click(screen.getByTestId('constraint-batch-promote-l3-btn'));
+    expect(screen.getByTestId('constraint-batch-promote-l3-btn')).toHaveTextContent('已批量存 L3');
+    fireEvent.click(screen.getByTestId('constraint-to-milestone-c-p33-high'));
+    expect(screen.getByTestId('constraint-to-milestone-c-p33-high')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('constraint-promote-profile-c-p33-high'));
     expect(screen.getByTestId('constraint-promote-profile-c-p33-high')).toHaveTextContent('已存L3');
     fireEvent.click(screen.getByTestId('constraint-copy-single-c-p33-high'));
