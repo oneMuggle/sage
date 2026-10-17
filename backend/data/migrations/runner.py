@@ -255,6 +255,95 @@ def _v8_add_design_tables(conn: Any) -> None:
 register_migration(8, "add_design_tables", _v8_add_design_tables)
 
 
+def _v9_add_autonomous_goals_tables(conn: Any) -> None:
+    """v9：新增自主目标执行系统表。
+
+    新增三张表：
+    - autonomous_goals：用户定义的自主目标
+    - goal_execution_rounds：执行轮次记录
+    - time_window_presets：时间窗口预设配置
+
+    所有表均使用 CREATE TABLE IF NOT EXISTS 确保幂等。
+    """
+    # 自主目标表
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS autonomous_goals (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            session_id TEXT,
+            time_window TEXT NOT NULL,
+            budget TEXT NOT NULL,
+            checkpoints TEXT DEFAULT '[]',
+            rounds TEXT DEFAULT '[]',
+            current_round INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            completed_at TEXT,
+            total_tokens_used INTEGER DEFAULT 0,
+            completion_percentage REAL DEFAULT 0.0,
+            degradation_level TEXT DEFAULT 'none',
+            last_error TEXT
+        )
+        """
+    )
+
+    # 执行轮次表
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS goal_execution_rounds (
+            id TEXT PRIMARY KEY,
+            goal_id TEXT NOT NULL,
+            round_number INTEGER NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            tasks_executed INTEGER DEFAULT 0,
+            tasks_succeeded INTEGER DEFAULT 0,
+            tasks_failed INTEGER DEFAULT 0,
+            tokens_used INTEGER DEFAULT 0,
+            checkpoints_verified INTEGER DEFAULT 0,
+            degradation_level TEXT DEFAULT 'none',
+            error_message TEXT,
+            llm_review TEXT,
+            FOREIGN KEY (goal_id) REFERENCES autonomous_goals(id) ON DELETE CASCADE
+        )
+        """
+    )
+
+    # 时间窗口预设表
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS time_window_presets (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            config TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+        """
+    )
+
+    # 创建索引
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_goals_status ON autonomous_goals(status)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_goals_created_at ON autonomous_goals(created_at DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_rounds_goal_id ON goal_execution_rounds(goal_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_rounds_started_at ON goal_execution_rounds(started_at DESC)"
+    )
+
+    conn.commit()
+
+
+register_migration(9, "add_autonomous_goals_tables", _v9_add_autonomous_goals_tables)
+
+
 def ensure_version_table(conn: Any) -> None:
     """建 `schema_version` 账本表（幂等）。"""
     conn.execute(
