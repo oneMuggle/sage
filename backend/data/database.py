@@ -1929,6 +1929,48 @@ class Database:
 
         conn.commit()
 
+        # 定时任务表 (2026-10-16): 取代 scheduled_tasks.json。此前 JSON 无事务、
+        # 无 WAL，文件损坏即全部任务丢失。所有时间字段为 epoch 毫秒 INTEGER，
+        # schedule 为 JSON 编码 TEXT，enabled 为 0/1 INTEGER。
+        # 旧数据由 ScheduledTaskRepository 的迁移入口幂等导入。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL CHECK(type IN ('once', 'recurring')),
+                schedule TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                content TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                last_run INTEGER,
+                next_run INTEGER,
+                last_attempt INTEGER,
+                last_status TEXT NOT NULL DEFAULT 'never',
+                last_error TEXT,
+                run_count INTEGER NOT NULL DEFAULT 0,
+                max_runs INTEGER
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_session "
+            "ON scheduled_tasks(session_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_next_run "
+            "ON scheduled_tasks(next_run) WHERE next_run IS NOT NULL"
+        )
+        # 迁移完成标记。仅凭 scheduled_tasks 是否为空来判断会导致「用户删光任务 →
+        # 重启后被陈旧 JSON 备份复活」,故显式记账。每个源路径一行。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scheduler_migrations (
+                source TEXT PRIMARY KEY,
+                migrated_at INTEGER NOT NULL,
+                imported INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        conn.commit()
+
         # C3 (DSH 对标 R9): schema 版本化迁移 —— 幂等应用所有未执行迁移。
         # 既有 DDL（CREATE IF NOT EXISTS / ALTER 防御块）保持原位，本框架
         # 服务于未来需要数据改写的迁移（纪律：只新增版本代，绝不覆写）。
