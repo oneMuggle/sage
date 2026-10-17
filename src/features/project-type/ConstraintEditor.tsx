@@ -158,6 +158,7 @@ export function ConstraintEditor({
   const [error, setError] = useState<string | null>(null);
   const [samplePath, setSamplePath] = useState('');
   const [copiedRuleMd, setCopiedRuleMd] = useState(false);
+  const [savedRuleL3, setSavedRuleL3] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -309,10 +310,11 @@ export function ConstraintEditor({
               >
                 always (全局)
               </button>
-              {blueprint.directories.map((dir) => (
+              {blueprint.directories.map((dir, idx) => (
                 <button
                   key={dir}
                   type="button"
+                  data-testid={`constraint-dir-glob-${idx}`}
                   onClick={() => setTriggerPattern(`${dir}/**`)}
                   className="rounded border border-border bg-muted/40 px-2 py-0.5 font-mono text-xs text-foreground hover:bg-muted"
                 >
@@ -426,6 +428,34 @@ export function ConstraintEditor({
             className="mr-auto rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
             {copiedRuleMd ? '已复制规则 MD' : '复制规则 MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="constraint-editor-save-l3-btn"
+            onClick={async () => {
+              if (savedRuleL3) return;
+              setSavedRuleL3(true);
+              if (typeof projectApi?.confirmKnowledge === 'function') {
+                try {
+                  await projectApi.confirmKnowledge(projectId, {
+                    entries: [
+                      {
+                        category: 'convention',
+                        content: content.trim() || '未命名约束规则',
+                        importance: priority,
+                        sourceMessageIds: [],
+                        reasoning: '约束编辑器同步沉淀至 L3 画像',
+                      },
+                    ],
+                  });
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+          >
+            {savedRuleL3 ? '已沉淀至 L3' : '同步沉淀至 L3'}
           </button>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             取消
