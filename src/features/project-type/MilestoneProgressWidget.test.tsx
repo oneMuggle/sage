@@ -629,7 +629,11 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByText('逾期数据采集里程碑')).toBeInTheDocument();
     expect(screen.queryByText('未来论文终稿提交')).toBeNull();
 
-    // Phase P40 promote milestone to L3 & single copy
+    // Phase P40 & P44 promote milestone to L3, convert to L2 constraint & batch L3
+    fireEvent.click(screen.getByTestId('milestone-batch-promote-l3-btn'));
+    expect(screen.getByTestId('milestone-batch-promote-l3-btn')).toHaveTextContent('已批量存 L3');
+    fireEvent.click(screen.getByTestId('milestone-to-constraint-ms-p33-overdue'));
+    expect(screen.getByTestId('milestone-to-constraint-ms-p33-overdue')).toHaveTextContent('已转L2');
     fireEvent.click(screen.getByTestId('milestone-promote-profile-ms-p33-overdue'));
     expect(screen.getByTestId('milestone-promote-profile-ms-p33-overdue')).toHaveTextContent('已存L3');
     fireEvent.click(screen.getByTestId('milestone-copy-single-ms-p33-overdue'));

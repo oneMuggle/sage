@@ -672,3 +672,9 @@
 - **`src/features/project-type/MilestoneProgressWidget.tsx`**：支持一键将总体里程碑进度快照沉淀至 L3 项目画像（`milestone-summary-save-l3-btn`），并将阶段分布胶囊升级为可点击筛选按钮（`milestone-summary-stage-pill-${stageId}`）。
 - **`src/features/project-type/ProjectAdvisorCard.tsx`**：支持将 AI 顾问诊断报告存为 L4 参考资料（`advisor-save-l4-btn`），并在改进建议行新增 **`+里程碑`** 一键转化按钮（`advisor-suggestion-to-milestone-${idx}`）。
 - **`src/features/project-type/TaskDecomposeDialog.tsx`**：支持将任务分解预览方案存为 L4 参考资料（`decompose-save-plan-l4-btn`），并在分解出的里程碑节点行新增 **`+L2 约束`** 验收规范转化按钮（`decompose-node-to-constraint-${idx}`）。
+
+### Phase P44（2026-10-17）：约束/里程碑管理器双向互转与批量存 L3、形态选择器与自动检测预览治理清单导出
+- **`src/features/project-type/ConstraintManager.tsx`**：支持将当前筛选后的约束批量沉淀至 L3 项目画像（`constraint-batch-promote-l3-btn`），并在每条约束规则卡片新增 **`+里程碑`** 一键转化按钮（`constraint-to-milestone-${constraint.id}`）。
+- **`src/features/project-type/MilestoneManager.tsx`**：支持将当前筛选后的里程碑批量沉淀至 L3 项目画像（`milestone-batch-promote-l3-btn`），并在每个里程碑节点卡片新增 **`+L2 约束`** 验收规范转化按钮（`milestone-to-constraint-${milestone.id}`）。
+- **`src/features/project-type/ProjectTypeSelector.tsx`**：在已选治理形态摘要栏新增 **`复制形态蓝图`**（`selector-copy-blueprint-btn`）与 **`预览治理清单`** 展开面板（`selector-suite-toggle-btn` / `selector-suite-details`）。
+- **`src/features/project-type/TypeDetectionPreview.tsx`**：支持单条检测信号依据一键复制（`detection-copy-signal-${idx}`），并在推荐治理套件栏新增 **`复制治理清单`** 按钮（`detection-copy-suite-btn`）。
