@@ -280,6 +280,8 @@ describe('ConstraintSummaryWidget', () => {
     const copyRulesBtn = await screen.findByTestId('constraint-summary-copy-md-btn');
     fireEvent.click(copyRulesBtn);
     expect(screen.getByTestId('constraint-summary-copy-md-btn')).toHaveTextContent(/已复制|复制规则/);
+    fireEvent.click(screen.getByTestId('constraint-summary-save-l3-btn'));
+    expect(screen.getByTestId('constraint-summary-save-l3-btn')).toHaveTextContent('已存高优 L3');
 
     expect(screen.getByTestId('constraint-summary-high-priority-count')).toHaveTextContent('高优 ≥P8：1 条');
     fireEvent.click(screen.getByTestId('constraint-summary-enable-all-btn'));
@@ -293,6 +295,8 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('constraint-summary-preview-list')).toHaveTextContent(
       '严禁将明文密钥提交至版本库',
     );
+    fireEvent.click(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1'));
+    expect(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1')).toHaveTextContent('已存 L3');
     fireEvent.click(screen.getByTestId('constraint-summary-quick-toggle-c-p30-1'));
     await waitFor(() => {
       expect(projectApi.updateConstraint).toHaveBeenCalledWith('test-project', 'c-p30-1', {
@@ -301,8 +305,12 @@ describe('ConstraintSummaryWidget', () => {
     });
 
     // Expand ProjectAdvisorCard details and convert risk #0 to AI constraint
+    fireEvent.click(await screen.findByTestId('advisor-save-l4-btn'));
+    expect(screen.getByTestId('advisor-save-l4-btn')).toHaveTextContent('已存 L4');
     const toggleDetails = await screen.findByTestId('advisor-toggle-details-btn');
     fireEvent.click(toggleDetails);
+    fireEvent.click(screen.getByTestId('advisor-suggestion-to-milestone-0'));
+    expect(screen.getByTestId('advisor-suggestion-to-milestone-0')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('advisor-risk-filter-high'));
     fireEvent.click(screen.getByTestId('advisor-risk-filter-all'));
     fireEvent.click(screen.getByTestId('advisor-guard-all-risks-btn'));

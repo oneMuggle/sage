@@ -26,6 +26,8 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [error, setError] = useState<string | null>(null);
   const [copiedProgress, setCopiedProgress] = useState(false);
   const [recentFilter, setRecentFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [selectedStageFilter, setSelectedStageFilter] = useState<string | null>(null);
+  const [savedProgressL3, setSavedProgressL3] = useState(false);
 
   const blueprint = getArchetypeBlueprint(projectType);
   const stageLabelMap = new Map(blueprint.stages.map((s) => [s.id, s.label]));
@@ -205,6 +207,34 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
             )}
             <button
               type="button"
+              data-testid="milestone-summary-save-l3-btn"
+              onClick={async () => {
+                if (savedProgressL3) return;
+                setSavedProgressL3(true);
+                if (typeof projectApi?.confirmKnowledge === 'function') {
+                  try {
+                    await projectApi.confirmKnowledge(projectId, {
+                      entries: [
+                        {
+                          category: 'goal',
+                          content: `项目里程碑进度快照：总体完成率 ${Math.round(progress)}%（已完成 ${completed}/${milestones.length}，进行中 ${inProgress}，阻塞 ${blocked}${overdueCount > 0 ? `，逾期 ${overdueCount}` : ''}）`,
+                          importance: 7,
+                          sourceMessageIds: [],
+                          reasoning: '里程碑进度摘要沉淀至 L3 画像',
+                        },
+                      ],
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {savedProgressL3 ? '已存进度 L3' : '沉淀进度至 L3'}
+            </button>
+            <button
+              type="button"
               onClick={() => void handleCopyProgressMarkdown()}
               data-testid="milestone-summary-copy-md-btn"
               className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -263,12 +293,19 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 return acc;
               }, new Map<string, number>()),
             ).map(([stageId, count]) => (
-              <span
+              <button
                 key={stageId}
-                className="rounded border border-border/70 bg-muted/30 px-1.5 py-0.5 text-ui-2xs text-muted-foreground"
+                type="button"
+                data-testid={`milestone-summary-stage-pill-${stageId}`}
+                onClick={() => setSelectedStageFilter((prev) => (prev === stageId ? null : stageId))}
+                className={`rounded border px-1.5 py-0.5 text-ui-2xs transition-colors ${
+                  selectedStageFilter === stageId
+                    ? 'border-primary bg-primary/10 text-primary font-medium'
+                    : 'border-border/70 bg-muted/30 text-muted-foreground hover:bg-muted'
+                }`}
               >
                 {stageLabelMap.get(stageId) ?? stageId}: {count}
-              </span>
+              </button>
             ))}
           </div>
         )}
@@ -322,11 +359,12 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
             <div className="space-y-1">
               {milestones
                 .filter((m) =>
-                  recentFilter === 'all'
+                  (!selectedStageFilter || (m.stage || 'default') === selectedStageFilter) &&
+                  (recentFilter === 'all'
                     ? true
                     : recentFilter === 'completed'
                       ? m.status === 'completed'
-                      : m.status !== 'completed',
+                      : m.status !== 'completed'),
                 )
                 .slice(0, 3)
                 .map((milestone) => (
