@@ -83,10 +83,9 @@ class TestGoalsCRUD:
     async def test_list_goals_filter_status(self, client):
         """测试按状态过滤"""
         # 创建一个 pending 目标
-        create_resp = await client.post(
+        await client.post(
             "/api/v1/goals", json={"name": "Filter Test", "description": "Test"}
         )
-        goal_id = create_resp.json()["id"]
 
         resp = await client.get("/api/v1/goals?status=pending")
         assert resp.status_code == 200

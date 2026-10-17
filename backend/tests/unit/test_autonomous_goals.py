@@ -6,9 +6,8 @@
 - CheckpointManager: 检查点验证（文件、命令）
 """
 
-import asyncio
 import tempfile
-from datetime import datetime, time
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -18,7 +17,6 @@ from backend.domain.autonomous_goals import (
     CheckpointType,
     ExecutionBudget,
     Goal,
-    GoalStatus,
     PricingTier,
     TimeWindow,
 )

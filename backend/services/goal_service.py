@@ -9,11 +9,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from backend.domain.autonomous_goals import (
-    Checkpoint,
     DegradationLevel,
     ExecutionBudget,
     ExecutionRound,
@@ -275,10 +274,8 @@ class GoalService:
         from backend.orchestration.planner import Planner
         from backend.orchestration.task_registry import TaskRegistry
         from backend.orchestration.team_registry import TeamRegistry
-        from backend.orchestration.lane_registry import LaneRegistry
         from backend.orchestration.models import TaskPacket, RecoveryPolicy
-        from backend.orchestration.subagent_runner import SubagentRunner, run_lane_with_retry
-        from backend.orchestration.executor import LaneExecutor
+        from backend.orchestration.subagent_runner import SubagentRunner
         from backend.orchestration.llm_factory import load_llm_config_from_settings
 
         goal = self.goal_repo.get(goal_id)
@@ -300,7 +297,6 @@ class GoalService:
             # 1. 初始化编排系统注册表
             task_registry = TaskRegistry()
             team_registry = TeamRegistry()
-            lane_registry = LaneRegistry()
 
             # 2. 使用 Planner 分解目标
             planner = Planner(

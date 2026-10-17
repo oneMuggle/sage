@@ -10,15 +10,12 @@
 - get_execution_report
 """
 
-import asyncio
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from backend.domain.autonomous_goals import (
-    Checkpoint,
-    CheckpointType,
     DegradationLevel,
     ExecutionBudget,
     ExecutionRound,
@@ -27,7 +24,7 @@ from backend.domain.autonomous_goals import (
     TimeWindow,
 )
 from backend.services.goal_service import GoalService
-from backend.services.checkpoint_manager import CheckpointReport, VerificationResult
+from backend.services.checkpoint_manager import CheckpointReport
 
 
 class MockGoalRepository:
@@ -530,7 +527,6 @@ class TestReviewCompletionLLM:
     @pytest.mark.asyncio
     async def test_review_with_mock_llm(self):
         """测试使用 mock LLM 审查"""
-        from unittest.mock import AsyncMock, MagicMock
         import json
 
         goal = Goal(
@@ -572,7 +568,6 @@ class TestReviewCompletionLLM:
     @pytest.mark.asyncio
     async def test_review_llm_error_fallback(self):
         """测试 LLM 错误时回退"""
-        from unittest.mock import AsyncMock, MagicMock
 
         goal = Goal(
             id="test_3",

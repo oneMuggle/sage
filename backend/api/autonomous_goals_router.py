@@ -24,7 +24,6 @@ from pydantic import BaseModel, Field
 
 from backend.domain.autonomous_goals import (
     Checkpoint,
-    CheckpointType,
     ExecutionBudget,
     Goal,
     GoalStatus,
@@ -32,7 +31,6 @@ from backend.domain.autonomous_goals import (
 )
 from backend.services.checkpoint_manager import CheckpointManager
 from backend.services.goal_service import GoalService
-from backend.services.time_window_manager import TimeWindowManager
 
 logger = logging.getLogger(__name__)
 
