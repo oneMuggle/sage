@@ -451,6 +451,8 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('business-doc-style-bar')).toBeInTheDocument();
     expect(screen.getByTestId('checkpoint-quick-presets')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('checkpoint-copy-timeline-btn'));
+    fireEvent.click(screen.getByTestId('business-save-style-l3-btn'));
+    expect(screen.getByTestId('business-style-applied-hint')).toHaveTextContent('已沉淀文书规范至 L3');
     fireEvent.click(screen.getByTestId('business-apply-style-btn'));
     await waitFor(() => {
       expect(mockCreateConstraint).toHaveBeenCalledWith(
@@ -523,6 +525,8 @@ describe('ProjectArchetypeStudio', () => {
     fireEvent.change(screen.getByTestId('research-citation-style-select'), {
       target: { value: 'IEEE' },
     });
+    fireEvent.click(screen.getByTestId('research-save-style-l3-btn'));
+    expect(screen.getByTestId('research-style-applied-hint')).toHaveTextContent('已沉淀学术规范至 L3');
     fireEvent.click(screen.getByTestId('research-apply-style-btn'));
     await waitFor(() => {
       expect(mockCreateConstraint).toHaveBeenCalledWith(
@@ -661,6 +665,10 @@ describe('ProjectArchetypeStudio', () => {
     });
     expect(screen.getByTestId('studio-profile-presets-bar')).toBeInTheDocument();
     expect(screen.getByTestId('studio-profile-copy-md-btn')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('studio-profile-save-l4-btn'));
+    expect(screen.getByTestId('studio-profile-save-l4-btn')).toHaveTextContent('已存为 L4 资料');
+    fireEvent.click(screen.getByTestId('studio-profile-imp-high'));
+    fireEvent.click(screen.getByTestId('studio-profile-imp-all'));
     fireEvent.click(screen.getByTestId('studio-profile-preset-0'));
     fireEvent.change(screen.getByTestId('studio-profile-category'), {
       target: { value: 'convention' },

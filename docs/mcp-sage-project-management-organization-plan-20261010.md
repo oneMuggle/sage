@@ -678,3 +678,9 @@
 - **`src/features/project-type/MilestoneManager.tsx`**：支持将当前筛选后的里程碑批量沉淀至 L3 项目画像（`milestone-batch-promote-l3-btn`），并在每个里程碑节点卡片新增 **`+L2 约束`** 验收规范转化按钮（`milestone-to-constraint-${milestone.id}`）。
 - **`src/features/project-type/ProjectTypeSelector.tsx`**：在已选治理形态摘要栏新增 **`复制形态蓝图`**（`selector-copy-blueprint-btn`）与 **`预览治理清单`** 展开面板（`selector-suite-toggle-btn` / `selector-suite-details`）。
 - **`src/features/project-type/TypeDetectionPreview.tsx`**：支持单条检测信号依据一键复制（`detection-copy-signal-${idx}`），并在推荐治理套件栏新增 **`复制治理清单`** 按钮（`detection-copy-suite-btn`）。
+
+### Phase P45（2026-10-17）：侧边栏 L2/L4 沉淀至 L3 画像、立项向导推荐里程碑预览与只读目录全选、科研/文书规范沉淀 L3 及画像快照存 L4
+- **`src/widgets/sidebar/sections/ProjectExpandedPanels.tsx`**：侧边栏概览头部新增 **`沉淀指令至 L3`** 按钮（`sidebar-overview-save-l3`），并在单条就绪 L4 参考资料行新增 **`+L3`** 归档画像按钮（`sidebar-material-to-l3-${m.id}`）。
+- **`src/features/project-type/ProjectCreationWizard.tsx`**：立项向导第 3 步新增 **`推荐里程碑预览`**（`wizard-recommended-milestones-preview`），并在 L5 只读参考目录区新增 **`全选只读预设 / 清空只读路径`** 切换按钮（`wizard-allowed-paths-toggle-all-btn`）。
+- **`src/features/project-type/BuiltinCheckpointAndStyleBar.tsx`**：科研规范栏与档案文书规范栏分别新增 **`沉淀规范至 L3`** 按钮（`research-save-style-l3-btn` / `business-save-style-l3-btn`），并在个人知识卡片列表新增单条卡片洞察转 L2 约束按钮（`personal-note-to-constraint-${d.id}`）。
+- **`src/features/project-type/StudioProfileTabPanel.tsx`**：L3 项目画像工作台新增 **`存为 L4 资料`** 按钮（`studio-profile-save-l4-btn`）及权重层级筛选按钮（`studio-profile-imp-all` / `studio-profile-imp-high`）。

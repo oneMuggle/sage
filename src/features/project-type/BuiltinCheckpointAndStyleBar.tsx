@@ -391,6 +391,31 @@ export function ResearchCitationAndToneBar({
           <Copy className="h-3 w-3" />
           复制学术规范 MD
         </button>
+        <button
+          type="button"
+          data-testid="research-save-style-l3-btn"
+          onClick={async () => {
+            setAppliedHint('已沉淀学术规范至 L3');
+            if (typeof projectApi?.confirmKnowledge === 'function') {
+              try {
+                await projectApi.confirmKnowledge(projectId, {
+                  entries: [{
+                    category: 'convention',
+                    content: `[科研引用与文风规范] 引用格式=${citationStyle} · 学术文风=${writingTone}`,
+                    importance: 8,
+                    sourceMessageIds: [],
+                    reasoning: '科研工作台一键沉淀学术规范至 L3 画像',
+                  }],
+                });
+              } catch {
+                // ignore in test/offline mode
+              }
+            }
+          }}
+          className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-1 text-ui-2xs text-primary hover:bg-primary/10"
+        >
+          沉淀规范至 L3
+        </button>
       </div>
     </div>
   );
@@ -545,6 +570,7 @@ export function PersonalZettelkastenFooter({
   onCreated,
 }: PersonalZettelkastenFooterProps) {
   const [copiedNotes, setCopiedNotes] = useState(false);
+  const [promotedCardConstraintIds, setPromotedCardConstraintIds] = useState<Set<string>>(new Set());
 
   return (
     <div className="space-y-3">
@@ -579,9 +605,31 @@ export function PersonalZettelkastenFooter({
           {decisions.slice(-4).map((d) => (
             <li
               key={d.id}
-              className="rounded border border-border/60 bg-background px-2.5 py-1 text-xs text-foreground"
+              className="flex items-center justify-between gap-2 rounded border border-border/60 bg-background px-2.5 py-1 text-xs text-foreground"
             >
-              {d.content}
+              <span className="truncate">{d.content}</span>
+              <button
+                type="button"
+                data-testid={`personal-note-to-constraint-${d.id}`}
+                onClick={async () => {
+                  if (promotedCardConstraintIds.has(d.id)) return;
+                  setPromotedCardConstraintIds((prev) => new Set(prev).add(d.id));
+                  if (typeof projectApi?.createConstraint === 'function') {
+                    try {
+                      await projectApi.createConstraint(projectId, {
+                        category: 'convention',
+                        content: `[卡片洞察规约] ${d.content}`,
+                        priority: 7,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="shrink-0 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+              >
+                {promotedCardConstraintIds.has(d.id) ? '已转L2' : '+L2'}
+              </button>
             </li>
           ))}
           </ul>
@@ -718,6 +766,31 @@ export function BusinessDocumentStyleBar({
         >
           <Copy className="h-3 w-3" />
           复制文书规范 MD
+        </button>
+        <button
+          type="button"
+          data-testid="business-save-style-l3-btn"
+          onClick={async () => {
+            setAppliedHint('已沉淀文书规范至 L3');
+            if (typeof projectApi?.confirmKnowledge === 'function') {
+              try {
+                await projectApi.confirmKnowledge(projectId, {
+                  entries: [{
+                    category: 'convention',
+                    content: `[文书版式与审校规范] 版式=${docFormat} · 审校等级=${reviewLevel}`,
+                    importance: 8,
+                    sourceMessageIds: [],
+                    reasoning: '档案文书工作台一键沉淀版式规范至 L3 画像',
+                  }],
+                });
+              } catch {
+                // ignore in test/offline mode
+              }
+            }
+          }}
+          className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-1 text-ui-2xs text-primary hover:bg-primary/10"
+        >
+          沉淀规范至 L3
         </button>
       </div>
     </div>
