@@ -21,11 +21,18 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import os
 from typing import Any, Callable, Optional
 
 from backend.application.services.wake_store import WakeStore
 
 logger = logging.getLogger(__name__)
+
+# Timeout for resumer callback (default 30s)
+# Prevents single slow resumer from blocking entire wake consumption loop
+_WAKE_RESUMER_TIMEOUT_S = float(
+    os.environ.get("SAGE_WAKE_RESUMER_TIMEOUT_S", "30")
+)
 
 # Python 3.8 不支持 typing.Awaitable[] subscript（与 chat_stream_registry
 # 同款约束）—— resumer 签名: async (Wake) -> None
@@ -100,7 +107,10 @@ class WakeScheduler:
         for wake in due:
             self.store.mark_fired(wake.id)
             try:
-                await self.resumer(wake)
+                await asyncio.wait_for(
+                    self.resumer(wake),
+                    timeout=_WAKE_RESUMER_TIMEOUT_S
+                )
                 resumed += 1
                 logger.info(
                     "wake %s 已消费：session=%s kind=%s",
@@ -108,6 +118,14 @@ class WakeScheduler:
                     wake.session_id,
                     wake.kind.value,
                 )
+            except asyncio.TimeoutError:  # noqa: UP041 — py3.8 下 asyncio.TimeoutError 不等于内置 TimeoutError
+                logger.warning(
+                    "wake %s resumer timed out after %.1fs (session=%s), skipping",
+                    wake.id,
+                    _WAKE_RESUMER_TIMEOUT_S,
+                    wake.session_id,
+                )
+                # fire-once semantics: mark consumed, don't retry
             except Exception:  # noqa: BLE001 — resumer 是不可信业务回调
                 logger.exception(
                     "wake %s 恢复会话失败（session=%s）",

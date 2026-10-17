@@ -1,9 +1,12 @@
 """APScheduler wrapper for Phase 8 scheduled tasks.
 
-Persistence: ``${SAGE_USER_DATA_DIR}/scheduled_tasks.json`` in packaged
-mode (env set by Electron at spawn → per-user ``<userData>``); falls back
-to ``backend/data/scheduled_tasks.json`` in dev / tests when env is unset.
-Concurrent write safety: a single ``threading.Lock`` guards JSON read/write.
+Persistence: SQLite ``scheduled_tasks`` table via
+:class:`ScheduledTaskRepository` when a :class:`Database` is supplied. Legacy
+JSON (``${SAGE_USER_DATA_DIR}/scheduled_tasks.json`` in packaged mode, else
+``backend/data/scheduled_tasks.json``) is still honoured when no ``db`` is
+passed, and is imported once on the first SQLite-backed startup.
+Concurrent write safety: a single ``threading.Lock`` guards the in-memory task
+map; SQLite access serialises on the shared ``_SQLITE_LOCK``.
 Failure mode: per-job exceptions are logged and never raised to the
 scheduler loop, so a bad task cannot kill the scheduler.
 """
@@ -43,6 +46,7 @@ from backend.domain.scheduler import (
     ScheduledTaskNotFoundError,
     ScheduledTaskValidationError,
 )
+from backend.services.scheduler_repository import ScheduledTaskRepository
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +120,7 @@ class SchedulerService:
         store_path: Path,
         message_repo: Any,
         session_repo: Any,
+        db: Any = None,
     ) -> None:
         self._store_path = Path(store_path)
         self._message_repo = message_repo
@@ -125,7 +130,12 @@ class SchedulerService:
         self._running = set()
         self._scheduler = BackgroundScheduler(daemon=True)
         self._evolution_tasks: Dict[str, "BaseEvolutionTask"] = {}  # noqa: UP037
-        self._load_from_disk()
+        self._repository = ScheduledTaskRepository(db) if db is not None else None
+        if self._repository is None:
+            self._load_from_disk()
+        else:
+            self._migrate_from_json()
+            self._load_from_repo()
         self._reschedule_all()
 
     # ---------- public API ----------
@@ -216,7 +226,7 @@ class SchedulerService:
         )
         with self._lock:
             self._tasks[task.id] = task
-            self._save_to_disk()
+            self._persist(task)
             self._schedule_job(task)
         logger.info("scheduled task added: %s (%s)", task.id, task.type)
         return task
@@ -262,7 +272,7 @@ class SchedulerService:
                 max_runs=new_max_runs,
             )
             self._tasks[task_id] = updated
-            self._save_to_disk()
+            self._persist(updated)
             self._reschedule_one(updated)
         logger.info("scheduled task updated: %s", task_id)
         return updated
@@ -282,7 +292,7 @@ class SchedulerService:
                 self._scheduler.remove_job(task_id)
             except Exception:  # noqa: BLE001 — APScheduler raises if job absent
                 logger.debug("apscheduler job %s already absent", task_id)
-            self._save_to_disk()
+            self._persist_delete(task_id)
         logger.info("scheduled task deleted: %s", task_id)
 
     def run_now(self, task_id: str) -> None:
@@ -536,9 +546,67 @@ class SchedulerService:
             if current.type == "once" or budget_reached:
                 with suppress(JobLookupError):
                     self._scheduler.remove_job(current.id)
-            self._save_to_disk()
+            self._persist(self._tasks[task.id])
 
     # ---------- persistence ----------
+
+    def _persist(self, task: ScheduledTask) -> None:
+        """Write one task through to durable storage."""
+        if self._repository is not None:
+            self._repository.upsert(task.to_dict())
+        else:
+            self._save_to_disk()
+
+    def _persist_delete(self, task_id: str) -> None:
+        if self._repository is not None:
+            self._repository.delete(task_id)
+        else:
+            self._save_to_disk()
+
+    def _load_from_repo(self) -> None:
+        assert self._repository is not None
+        for item in self._repository.list_all():
+            try:
+                task = ScheduledTask.from_dict(item)
+                self._tasks[task.id] = task
+            except Exception:  # noqa: BLE001 — 单条坏数据不得阻断启动
+                logger.warning("skipping malformed scheduled_tasks row: %s", item)
+
+    def _migrate_from_json(self) -> None:
+        """Import the legacy JSON store once, then leave it in place as backup.
+
+        Idempotent: the ``scheduler_migrations`` row is the marker, not table
+        emptiness — a user who deletes every task would otherwise have them
+        resurrected from the stale JSON on the next restart.
+        """
+        assert self._repository is not None
+        source = str(self._store_path)
+        if self._repository.has_migrated(source) or not self._store_path.exists():
+            return
+        try:
+            raw = json.loads(self._store_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("scheduled_tasks.json unreadable, starting empty: %s", exc)
+            self._repository.mark_migrated(source, 0, int(time.time() * 1000))
+            return
+        if raw.get("version", 1) != SCHEMA_VERSION:
+            logger.warning(
+                "scheduled_tasks.json schema=%s, expected %s, ignoring",
+                raw.get("version", 1), SCHEMA_VERSION,
+            )
+            self._repository.mark_migrated(source, 0, int(time.time() * 1000))
+            return
+        importable: List[Dict[str, Any]] = []
+        for item in raw.get("tasks", []):
+            try:
+                ScheduledTask.from_dict(item)
+            except Exception:  # noqa: BLE001
+                logger.warning("skipping malformed task entry: %s", item)
+                continue
+            importable.append(item)
+        imported = self._repository.bulk_upsert(importable)
+        self._repository.mark_migrated(source, imported, int(time.time() * 1000))
+        logger.info("migrated %d scheduled tasks from JSON to SQLite", imported)
 
     def _load_from_disk(self) -> None:
         if not self._store_path.exists():
@@ -584,6 +652,7 @@ def init_scheduler_service(
     store_path: Path,
     message_repo: Any,
     session_repo: Any,
+    db: Any = None,
 ) -> SchedulerService:
     """Initialise the global service. Must be called once during app startup."""
     global _global_service
@@ -591,5 +660,6 @@ def init_scheduler_service(
         store_path=store_path,
         message_repo=message_repo,
         session_repo=session_repo,
+        db=db,
     )
     return _global_service
