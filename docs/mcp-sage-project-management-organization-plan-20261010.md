@@ -684,3 +684,9 @@
 - **`src/features/project-type/ProjectCreationWizard.tsx`**：立项向导第 3 步新增 **`推荐里程碑预览`**（`wizard-recommended-milestones-preview`），并在 L5 只读参考目录区新增 **`全选只读预设 / 清空只读路径`** 切换按钮（`wizard-allowed-paths-toggle-all-btn`）。
 - **`src/features/project-type/BuiltinCheckpointAndStyleBar.tsx`**：科研规范栏与档案文书规范栏分别新增 **`沉淀规范至 L3`** 按钮（`research-save-style-l3-btn` / `business-save-style-l3-btn`），并在个人知识卡片列表新增单条卡片洞察转 L2 约束按钮（`personal-note-to-constraint-${d.id}`）。
 - **`src/features/project-type/StudioProfileTabPanel.tsx`**：L3 项目画像工作台新增 **`存为 L4 资料`** 按钮（`studio-profile-save-l4-btn`）及权重层级筛选按钮（`studio-profile-imp-all` / `studio-profile-imp-high`）。
+
+### Phase P46（2026-10-17）：M4 检索结果合集存 L4 与单条转里程碑、M2 建议批量转里程碑与单条复制、Git 变更批量护栏 L2 与提交转里程碑、概览存 L4 与当前阶段建里程碑
+- **`src/features/project-type/SemanticSearchPanel.tsx`**：支持将当前筛选后的 M4 语义检索命中合集一键归档为 L4 参考资料（`semantic-save-l4-bundle-btn`），并在单条命中卡片新增 **`+里程碑`** 跟进任务转化按钮（`semantic-hit-to-milestone-${idx}`）。
+- **`src/features/project-type/KnowledgeExtractionPanel.tsx`**：M2 对话知识提取审核栏新增 **`选中项转里程碑`** 批量转化按钮（`knowledge-batch-to-milestone-btn`），并在单条提取建议新增一键复制按钮（`knowledge-copy-entry-${idx}`）。
+- **`src/features/project-type/GitStatusWidget.tsx`**：支持将当前筛选的 Git 变更文件一键批量创建 L2 审查护栏（`git-widget-guard-all-btn`），并在最近提交记录行新增 **`+里程碑`** 节点转化按钮（`git-widget-commit-to-milestone-${commit.sha}`）。
+- **`src/features/project-type/ProjectOverviewWidgets.tsx`**：项目概览状态栏新增 **`存概览至 L4`**（`overview-save-l4-btn`）与 **`当前阶段建里程碑`**（`overview-stage-to-milestone-btn`）快捷动作。

@@ -364,8 +364,11 @@ describe('ConstraintSummaryWidget', () => {
     });
     fireEvent.click(screen.getByTestId('git-widget-guard-README.md'));
     expect(screen.getByTestId('git-widget-guard-README.md')).toHaveTextContent('已护栏');
+    fireEvent.click(screen.getByTestId('git-widget-guard-all-btn'));
     fireEvent.click(screen.getByTestId('git-widget-save-commits-l3-btn'));
     expect(screen.getByTestId('git-widget-save-commits-l3-btn')).toHaveTextContent('已沉淀至 L3');
+    fireEvent.click(screen.getByTestId('git-widget-commit-to-milestone-abc1234567'));
+    expect(screen.getByTestId('git-widget-commit-to-milestone-abc1234567')).toHaveTextContent('已建里程碑');
     fireEvent.click(screen.getByTestId('git-widget-copy-sha-abc1234567'));
 
     fireEvent.click(screen.getByTestId('constraint-priority-preset-10'));

@@ -541,6 +541,10 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('overview-prev-stage-btn'));
     fireEvent.click(screen.getByTestId('overview-save-stage-profile-btn'));
     expect(screen.getByTestId('overview-save-stage-profile-btn')).toHaveTextContent('已存阶段至 L3');
+    fireEvent.click(screen.getByTestId('overview-save-l4-btn'));
+    expect(screen.getByTestId('overview-save-l4-btn')).toHaveTextContent('已存概览 L4');
+    fireEvent.click(screen.getByTestId('overview-stage-to-milestone-btn'));
+    expect(screen.getByTestId('overview-stage-to-milestone-btn')).toHaveTextContent('已建阶段里程碑');
     fireEvent.click(screen.getByTestId('overview-refresh-meta-btn'));
 
     // Open TaskDecomposeDialog from overview bar and test total days & invert/select-all
