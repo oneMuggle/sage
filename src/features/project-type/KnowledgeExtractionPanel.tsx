@@ -41,6 +41,8 @@ export function KnowledgeExtractionPanel({
   const [boundSessions, setBoundSessions] = useState<Session[]>([]);
   const [copiedMd, setCopiedMd] = useState(false);
   const [convertedConstraintIndices, setConvertedConstraintIndices] = useState<Set<number>>(new Set());
+  const [convertedMilestoneIndices, setConvertedMilestoneIndices] = useState<Set<number>>(new Set());
+  const [savedReasoningL4, setSavedReasoningL4] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const resetPanel = useCallback(() => {
@@ -271,8 +273,30 @@ export function KnowledgeExtractionPanel({
       {(phase === 'review' || phase === 'confirming') && (
         <div className="space-y-2">
           {reasoning && (
-            <div className="rounded-lg border bg-muted/50 p-2 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">提取思路：</span> {reasoning}
+            <div className="flex items-start justify-between gap-2 rounded-lg border bg-muted/50 p-2 text-xs text-muted-foreground">
+              <div>
+                <span className="font-medium text-foreground">提取思路：</span> {reasoning}
+              </div>
+              <button
+                type="button"
+                data-testid="knowledge-save-reasoning-l4-btn"
+                onClick={async () => {
+                  if (savedReasoningL4) return;
+                  setSavedReasoningL4(true);
+                  if (typeof projectApi?.addMaterial === 'function') {
+                    try {
+                      await projectApi.addMaterial(projectId, {
+                        content: `[M2 对话知识提取摘要] ${reasoning}\n${entries.map((e) => `- [${e.category}] ${e.content}`).join('\n')}`,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+              >
+                {savedReasoningL4 ? '已存 L4 资料' : '思路存为 L4 资料'}
+              </button>
             </div>
           )}
           {entries.length === 0 ? (
@@ -405,9 +429,33 @@ export function KnowledgeExtractionPanel({
                           重要性 {entry.importance}/10
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        data-testid={`knowledge-to-constraint-${idx}`}
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          data-testid={`knowledge-to-milestone-${idx}`}
+                          onClick={(ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            if (convertedMilestoneIndices.has(idx)) return;
+                            setConvertedMilestoneIndices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.createMilestone === 'function') {
+                              void Promise.resolve(
+                                projectApi.createMilestone(projectId, {
+                                  title: entry.content.slice(0, 80),
+                                  description: entry.reasoning || '从 M2 对话知识提取转化',
+                                  status: 'pending',
+                                  sortOrder: idx + 1,
+                                }),
+                              ).catch(() => {});
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          {convertedMilestoneIndices.has(idx) ? '已转里程碑' : '转里程碑'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`knowledge-to-constraint-${idx}`}
                         onClick={(ev) => {
                           ev.preventDefault();
                           ev.stopPropagation();
@@ -418,7 +466,8 @@ export function KnowledgeExtractionPanel({
                       >
                         <ShieldPlus className="h-3 w-3 text-primary" />
                         {convertedConstraintIndices.has(idx) ? '已转 L2 约束' : '转 L2 约束'}
-                      </button>
+                        </button>
+                      </div>
                     </div>
                     <p className="mt-0.5 text-foreground">{entry.content}</p>
                     {entry.reasoning && (

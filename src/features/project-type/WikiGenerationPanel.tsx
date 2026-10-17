@@ -84,6 +84,7 @@ export function WikiGenerationPanel({
   const [symbolKindFilter, setSymbolKindFilter] = useState<string>('all');
   const [copiedSymbols, setCopiedSymbols] = useState(false);
   const [savedSymbolsProfile, setSavedSymbolsProfile] = useState(false);
+  const [guardedSymbolIndices, setGuardedSymbolIndices] = useState<Set<number>>(new Set());
 
   /** 重置 */
   const handleReset = useCallback(() => {
@@ -396,11 +397,33 @@ export function WikiGenerationPanel({
               </button>
             </div>
             {Object.keys(fileCountByLang).length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5" data-testid="wiki-lang-filter-bar">
+                <button
+                  type="button"
+                  data-testid="wiki-lang-filter-all"
+                  onClick={() => setFileFilter('')}
+                  className={`rounded border px-2 py-0.5 text-ui-2xs ${
+                    !fileFilter
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  全部语言 ({files.length})
+                </button>
                 {Object.entries(fileCountByLang).map(([lang, count]) => (
-                  <Badge key={lang} variant="secondary" className="text-xs">
+                  <button
+                    key={lang}
+                    type="button"
+                    data-testid={`wiki-lang-filter-${lang}`}
+                    onClick={() => setFileFilter(fileFilter === lang ? '' : lang)}
+                    className={`rounded border px-2 py-0.5 text-ui-2xs ${
+                      fileFilter === lang
+                        ? 'border-primary bg-primary text-primary-foreground'
+                        : 'border-border bg-background text-foreground hover:bg-muted'
+                    }`}
+                  >
                     {LANGUAGE_LABELS[lang] ?? lang}: {count}
-                  </Badge>
+                  </button>
                 ))}
               </div>
             )}
@@ -515,9 +538,34 @@ export function WikiGenerationPanel({
                       <span className="truncate text-foreground">
                         [{KIND_LABELS[s.kind] ?? s.kind}] {s.name}
                       </span>
-                      <span className="shrink-0 text-muted-foreground">
-                        {s.filePath}:{s.lineno}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-muted-foreground">
+                          {s.filePath}:{s.lineno}
+                        </span>
+                        <button
+                          type="button"
+                          data-testid={`wiki-symbol-to-constraint-${idx}`}
+                          onClick={async () => {
+                            if (guardedSymbolIndices.has(idx)) return;
+                            setGuardedSymbolIndices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.createConstraint === 'function') {
+                              try {
+                                await projectApi.createConstraint(projectId, {
+                                  category: 'architecture',
+                                  content: `核心符号契约保护：${s.name} (${s.filePath})`,
+                                  triggerPattern: s.filePath,
+                                  priority: 8,
+                                });
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }
+                          }}
+                          className="rounded border border-border bg-background px-1 py-0 text-ui-2xs text-primary hover:bg-primary/10"
+                        >
+                          {guardedSymbolIndices.has(idx) ? '已护栏' : '+L2'}
+                        </button>
+                      </div>
                     </div>
                   ))}
               </div>

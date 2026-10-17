@@ -654,3 +654,9 @@
 - **`src/features/project-type/MilestoneManager.tsx`**：支持单条里程碑节点一键沉淀至 L3 项目画像（`milestone-promote-profile-${milestone.id}`，`+L3 / 已存L3`）及单条里程碑任务复制（`milestone-copy-single-${milestone.id}`）。
 - **`src/features/project-type/BuiltinCheckpointAndStyleBar.tsx`**：新增科研规范配置 Markdown 复制（`research-copy-style-md-btn`）、一般档案文书规范配置 Markdown 复制（`business-copy-style-md-btn`）与 Coding Hooks 状态复制（`coding-hooks-copy-status-md-btn`）。
 - **`src/features/project-type/ProjectCreationWizard.tsx`**：立项向导第 3 步新增完整立项配置摘要 Markdown 复制（`wizard-copy-summary-md-btn`），并支持已选 L5 只读白名单标签内联移除（`wizard-remove-allowed-path-${p}`）。
+
+### Phase P41（2026-10-16）：L3 画像与 M2 提取转里程碑、M4 语义命中批量转 L2 约束与 Top-K 胶囊、M5 语言筛选与符号护栏
+- **`src/features/project-type/StudioProfileTabPanel.tsx`**：支持单条 L3 画像条目直接转化为项目里程碑（`studio-profile-to-milestone-${entry.id}`，`+里程碑 / 已转里程碑`），并在类别筛选按钮显示各分类实时计数。
+- **`src/features/project-type/KnowledgeExtractionPanel.tsx`**：M2 对话知识提取支持将提取思路与建议一键存为 L4 受控资料（`knowledge-save-reasoning-l4-btn`），并支持单条提取建议一键转为项目里程碑（`knowledge-to-milestone-${idx}`）。
+- **`src/features/project-type/SemanticSearchPanel.tsx`**：M4 语义检索新增 `Top 3 / Top 5 / Top 10` 快捷检索数量胶囊（`semantic-topk-pill-${k}`），并支持将筛选后的语义检索片段一键批量固化为 L2 引用规范约束（`semantic-batch-to-constraint-btn`）。
+- **`src/features/project-type/WikiGenerationPanel.tsx`**：M5 Wiki 扫描预览支持点击语言分类胶囊过滤源文件列表（`wiki-lang-filter-all` / `wiki-lang-filter-${lang}`），并支持将单条核心代码符号一键转化为 L2 架构契约保护规则（`wiki-symbol-to-constraint-${idx}`）。
