@@ -116,6 +116,8 @@ export function TaskDecomposeDialog({
   const [copiedPlan, setCopiedPlan] = useState(false);
   const [savedReasoning, setSavedReasoning] = useState(false);
   const [stageFilter, setStageFilter] = useState<string>('all');
+  const [savedPlanL4, setSavedPlanL4] = useState(false);
+  const [constraintNodeIndices, setConstraintNodeIndices] = useState<Set<number>>(new Set());
   const [totalCount, setTotalCount] = useState(0);
 
   const effectiveType: ProjectType = projectType ?? 'coding';
@@ -361,6 +363,26 @@ export function TaskDecomposeDialog({
                     </button>
                     <button
                       type="button"
+                      data-testid="decompose-save-plan-l4-btn"
+                      onClick={async () => {
+                        if (savedPlanL4) return;
+                        setSavedPlanL4(true);
+                        if (typeof projectApi?.addMaterial === 'function') {
+                          try {
+                            await projectApi.addMaterial(projectId, {
+                              content: `# 任务分解方案：${requirement.trim()}\n\n${reasoning}\n\n${milestones.map((m) => `- ${m.title} (${m.estimatedDays ?? 1}天)`).join('\n')}`,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+                    >
+                      {savedPlanL4 ? '已存为 L4' : '方案存为 L4'}
+                    </button>
+                    <button
+                      type="button"
                       data-testid="decompose-copy-md-btn"
                       onClick={handleCopyPreviewMarkdown}
                       className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
@@ -426,6 +448,28 @@ export function TaskDecomposeDialog({
                           stageLabelMap={stageLabelMap}
                         />
                       </div>
+                      <button
+                        type="button"
+                        data-testid={`decompose-node-to-constraint-${idx}`}
+                        onClick={async () => {
+                          if (constraintNodeIndices.has(idx)) return;
+                          setConstraintNodeIndices((prev) => new Set(prev).add(idx));
+                          if (typeof projectApi?.createConstraint === 'function') {
+                            try {
+                              await projectApi.createConstraint(projectId, {
+                                category: 'deliverable_guard',
+                                content: `分解任务验收规范 [${ms.title}]：${ms.description || '完成任务分解节点交付'}`,
+                                priority: 7,
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+                      >
+                        {constraintNodeIndices.has(idx) ? '已转 L2' : '+L2 约束'}
+                      </button>
                     </div>
                   ))}
                 </div>

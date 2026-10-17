@@ -70,6 +70,8 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [guardedRisks, setGuardedRisks] = useState<Set<number>>(new Set());
   const [guardedSuggestions, setGuardedSuggestions] = useState<Set<number>>(new Set());
   const [highRiskOnly, setHighRiskOnly] = useState(false);
+  const [savedL4Report, setSavedL4Report] = useState(false);
+  const [milestoneSuggestionIndices, setMilestoneSuggestionIndices] = useState<Set<number>>(new Set());
 
   const fetchAdvice = useCallback(async () => {
     if (typeof projectApi?.getAdvice !== 'function') {
@@ -203,6 +205,26 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
             AI 顾问
           </CardTitle>
           <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-testid="advisor-save-l4-btn"
+              onClick={async () => {
+                if (savedL4Report) return;
+                setSavedL4Report(true);
+                if (typeof projectApi?.addMaterial === 'function') {
+                  try {
+                    await projectApi.addMaterial(projectId, {
+                      content: `# AI 顾问健康诊断报告 (${healthScore}/100)\n\n${summary}\n\n风险数: ${risks.length} · 建议数: ${suggestions.length}`,
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover hover:text-text"
+            >
+              {savedL4Report ? '已存 L4' : '存为 L4 资料'}
+            </button>
             <button
               type="button"
               onClick={handleCopyAdvisorMarkdown}
@@ -393,6 +415,28 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       >
                         <Shield className="h-3 w-3" />
                         <span>{guardedSuggestions.has(idx) ? '已固化约束' : '固化为约束'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`advisor-suggestion-to-milestone-${idx}`}
+                        onClick={async () => {
+                          if (milestoneSuggestionIndices.has(idx)) return;
+                          setMilestoneSuggestionIndices((prev) => new Set(prev).add(idx));
+                          if (typeof projectApi?.createMilestone === 'function') {
+                            try {
+                              await projectApi.createMilestone(projectId, {
+                                title: sug.action.slice(0, 60),
+                                description: sug.reason || '来源于 AI 顾问改进建议',
+                                sortOrder: idx + 1,
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
+                      >
+                        <span>{milestoneSuggestionIndices.has(idx) ? '已转里程碑' : '+里程碑'}</span>
                       </button>
                       {onDecomposeTask && (
                         <button
