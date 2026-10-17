@@ -53,6 +53,8 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
   const [copiedRoadmap, setCopiedRoadmap] = useState(false);
   const [promotedMilestoneIds, setPromotedMilestoneIds] = useState<Set<string>>(new Set());
   const [copiedMilestoneId, setCopiedMilestoneId] = useState<string | null>(null);
+  const [batchSavedMilestonesL3, setBatchSavedMilestonesL3] = useState(false);
+  const [constraintMilestoneIds, setConstraintMilestoneIds] = useState<Set<string>>(new Set());
   const blueprint = getArchetypeBlueprint(projectType);
 
   const stageLabelMap = useMemo(() => {
@@ -379,6 +381,34 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                     逾期预警 ({overdueCount})
                   </button>
                 )}
+                {filteredMilestones.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="milestone-batch-promote-l3-btn"
+                    onClick={async () => {
+                      if (batchSavedMilestonesL3) return;
+                      setBatchSavedMilestonesL3(true);
+                      if (typeof projectApi?.confirmKnowledge === 'function') {
+                        try {
+                          await projectApi.confirmKnowledge(projectId, {
+                            entries: filteredMilestones.slice(0, 8).map((m) => ({
+                              category: 'goal',
+                              content: `里程碑节点 [${m.title}] (${m.status})：${m.description || '无详细说明'}`,
+                              importance: 7,
+                              sourceMessageIds: [],
+                              reasoning: '里程碑管理器批量沉淀至 L3 画像',
+                            })),
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {batchSavedMilestonesL3 ? '已批量存 L3' : `批量存 L3 (${filteredMilestones.length})`}
+                  </button>
+                )}
                 {inProgressMilestones.length > 0 && (
                   <button
                     type="button"
@@ -499,6 +529,29 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                       title="沉淀该里程碑节点至 L3 项目画像"
                     >
                       {promotedMilestoneIds.has(milestone.id) ? '已存L3' : '+L3'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`milestone-to-constraint-${milestone.id}`}
+                      onClick={async () => {
+                        if (constraintMilestoneIds.has(milestone.id)) return;
+                        setConstraintMilestoneIds((prev) => new Set(prev).add(milestone.id));
+                        if (typeof projectApi?.createConstraint === 'function') {
+                          try {
+                            await projectApi.createConstraint(projectId, {
+                              category: 'deliverable_guard',
+                              content: `里程碑交付验收要求 [${milestone.title}]：${milestone.description || '按期完成阶段交付'}`,
+                              priority: 8,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-1 text-ui-2xs text-primary hover:bg-primary/10"
+                      title="将该里程碑转化为 L2 交付约束"
+                    >
+                      {constraintMilestoneIds.has(milestone.id) ? '已转L2' : '+L2 约束'}
                     </button>
                     <button
                       type="button"
