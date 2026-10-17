@@ -39,6 +39,8 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [ingestedFiles, setIngestedFiles] = useState<Set<string>>(new Set());
   const [copiedMd, setCopiedMd] = useState(false);
   const [copiedSha, setCopiedSha] = useState<string | null>(null);
+  const [guardedFiles, setGuardedFiles] = useState<Set<string>>(new Set());
+  const [savedCommitsL3, setSavedCommitsL3] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -100,6 +102,23 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
     ...((fileFilter === 'all' || fileFilter === 'modified') ? status.modified_files : []),
     ...((fileFilter === 'all' || fileFilter === 'untracked') ? status.untracked_files : []),
   ];
+
+  const handleGuardChangedFile = async (relPath: string) => {
+    if (guardedFiles.has(relPath)) return;
+    setGuardedFiles((prev) => new Set(prev).add(relPath));
+    if (typeof projectApi?.createConstraint === 'function') {
+      try {
+        await projectApi.createConstraint(projectId, {
+          category: 'review_guard',
+          content: `重点审查变更文件契约一致性：${relPath}`,
+          triggerPattern: relPath,
+          priority: 8,
+        });
+      } catch {
+        // ignore in test/offline mode
+      }
+    }
+  };
 
   const handleBatchIngestChangedFiles = async () => {
     if (typeof projectApi?.addMaterialFromFile !== 'function' || visibleChangedFiles.length === 0) {
@@ -270,6 +289,15 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                         className="flex items-center justify-between gap-2 text-green-600 dark:text-green-400"
                       >
                         <span className="truncate">[S] {f}</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          data-testid={`git-widget-guard-${f}`}
+                          onClick={() => void handleGuardChangedFile(f)}
+                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
+                        >
+                          {guardedFiles.has(f) ? '已护栏' : '+L2'}
+                        </button>
                         <button
                           type="button"
                           data-testid={`git-widget-ingest-${f}`}
@@ -279,6 +307,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                           <BookmarkPlus className="h-2.5 w-2.5" />
                           {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
                         </button>
+                        </div>
                       </div>
                     ))}
                   {(fileFilter === 'all' || fileFilter === 'modified') &&
@@ -331,7 +360,37 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
         {/* 最近提交 */}
         {status.recent_commits.length > 0 && (
           <div className="pt-2 border-t">
-            <div className="text-xs text-muted-foreground mb-1">最近提交</div>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <div className="text-xs text-muted-foreground">最近提交</div>
+              <button
+                type="button"
+                data-testid="git-widget-save-commits-l3-btn"
+                onClick={async () => {
+                  if (savedCommitsL3) return;
+                  setSavedCommitsL3(true);
+                  if (typeof projectApi?.confirmKnowledge === 'function') {
+                    try {
+                      await projectApi.confirmKnowledge(projectId, {
+                        entries: [
+                          {
+                            category: 'note',
+                            content: `Git 最近提交摘要 (${status.current_branch})：${status.recent_commits.slice(0, 3).map((c) => `${c.sha.slice(0, 7)} ${c.message}`).join('；')}`,
+                            importance: 6,
+                            sourceMessageIds: [],
+                            reasoning: 'Git 最近提交沉淀至 L3 画像',
+                          },
+                        ],
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+              >
+                {savedCommitsL3 ? '已沉淀至 L3' : '沉淀提交摘要至 L3'}
+              </button>
+            </div>
             <div className="space-y-1">
               {status.recent_commits.slice(0, 3).map((commit) => (
                 <div key={commit.sha} className="text-xs">

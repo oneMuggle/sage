@@ -354,16 +354,23 @@ describe('ConstraintSummaryWidget', () => {
     await waitFor(() => {
       expect(projectApi.addMaterialFromFile).toHaveBeenCalledWith('test-project', 'src/App.tsx');
     });
+    fireEvent.click(screen.getByTestId('git-widget-guard-README.md'));
+    expect(screen.getByTestId('git-widget-guard-README.md')).toHaveTextContent('已护栏');
+    fireEvent.click(screen.getByTestId('git-widget-save-commits-l3-btn'));
+    expect(screen.getByTestId('git-widget-save-commits-l3-btn')).toHaveTextContent('已沉淀至 L3');
     fireEvent.click(screen.getByTestId('git-widget-copy-sha-abc1234567'));
 
     fireEvent.click(screen.getByTestId('constraint-priority-preset-10'));
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('constraint-dir-glob-0'));
 
     fireEvent.change(screen.getByTestId('constraint-editor-test-path-input'), {
       target: { value: 'src/index.ts' },
     });
     expect(screen.getByTestId('constraint-editor-test-path-badge')).toHaveTextContent('命中触发');
     fireEvent.click(screen.getByTestId('constraint-editor-copy-md-btn'));
+    fireEvent.click(screen.getByTestId('constraint-editor-save-l3-btn'));
+    expect(screen.getByTestId('constraint-editor-save-l3-btn')).toHaveTextContent('已沉淀至 L3');
   });
 
   it('supports ConstraintManager priority tier filter and Glob matched-only toggle (Phase P33)', async () => {

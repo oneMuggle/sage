@@ -527,6 +527,9 @@ describe('MilestoneProgressWidget', () => {
         project_stage: 'writing',
       });
     });
+    fireEvent.click(screen.getByTestId('overview-prev-stage-btn'));
+    fireEvent.click(screen.getByTestId('overview-save-stage-profile-btn'));
+    expect(screen.getByTestId('overview-save-stage-profile-btn')).toHaveTextContent('已存阶段至 L3');
     fireEvent.click(screen.getByTestId('overview-refresh-meta-btn'));
 
     // Open TaskDecomposeDialog from overview bar and test total days & invert/select-all
@@ -565,6 +568,10 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('milestone-sort-preset-10'));
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('milestone-editor-copy-md-btn'));
+    fireEvent.click(screen.getByTestId('milestone-editor-to-constraint-btn'));
+    expect(screen.getByTestId('milestone-editor-to-constraint-btn')).toHaveTextContent('已转 L2 约束');
+    fireEvent.click(screen.getByTestId('milestone-editor-save-l3-btn'));
+    expect(screen.getByTestId('milestone-editor-save-l3-btn')).toHaveTextContent('已沉淀 L3');
   });
 
   it('supports MilestoneManager keyword search, overdue warning filter, and batch complete in-progress milestones (Phase P33)', async () => {
