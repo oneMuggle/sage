@@ -87,6 +87,7 @@ export function ProjectOverviewPanel({
   const { t } = useI18n();
   const [creatingCheckpoint, setCreatingCheckpoint] = useState(false);
   const [copiedOverview, setCopiedOverview] = useState(false);
+  const [savedOverviewL3, setSavedOverviewL3] = useState(false);
   const archetype: ProjectType = project.projectType ?? project.detectedType ?? 'coding';
   const presets = SIDEBAR_L2_PRESETS[archetype] ?? SIDEBAR_L2_PRESETS.coding;
 
@@ -119,6 +120,30 @@ export function ProjectOverviewPanel({
       await navigator.clipboard?.writeText(lines.join('\n'));
       setCopiedOverview(true);
       setTimeout(() => setCopiedOverview(false), 1800);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
+  const handleSaveOverviewToL3 = async () => {
+    if (savedOverviewL3) return;
+    setSavedOverviewL3(true);
+    const desc = (draft?.description ?? project.description ?? '').trim();
+    const inst = (draft?.instructions ?? project.instructions ?? '').trim();
+    const summary = `[L2项目目标与指令] 目标: ${desc || '未设置'} | 指令: ${inst || '未设置'}`;
+    if (typeof projectApi?.confirmKnowledge !== 'function') return;
+    try {
+      await projectApi.confirmKnowledge(project.id, {
+        entries: [
+          {
+            category: 'goal',
+            content: summary.slice(0, 300),
+            importance: 8,
+            sourceMessageIds: [],
+            reasoning: '侧边栏 L2 目标与指令沉淀至 L3 画像',
+          },
+        ],
+      });
     } catch {
       // ignore in test/offline mode
     }
@@ -157,6 +182,15 @@ export function ProjectOverviewPanel({
                 复制指令 MD
               </>
             )}
+          </button>
+          <button
+            type="button"
+            data-testid="sidebar-overview-save-l3"
+            onClick={() => void handleSaveOverviewToL3()}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-primary hover:bg-primary/10"
+            title="将当前 L2 目标与指令沉淀至 L3 画像"
+          >
+            {savedOverviewL3 ? '已存L3' : '沉淀指令至 L3'}
           </button>
           {project.vcsMode !== 'git' && project.projectType !== 'coding' && (
             <button
@@ -272,6 +306,7 @@ export function ProjectMaterialsPanel({
   const [copiedBundle, setCopiedBundle] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
   const [promotedConstraintIds, setPromotedConstraintIds] = useState<Set<string>>(new Set());
+  const [promotedProfileMaterialIds, setPromotedProfileMaterialIds] = useState<Set<string>>(new Set());
 
   const handleAddFromFile = async () => {
     const rel = filePathInput.trim();
@@ -561,6 +596,40 @@ export function ProjectMaterialsPanel({
                     </div>
                   )}
                 </div>
+                {m.status === 'ready' && m.content && (
+                  <button
+                    type="button"
+                    data-testid={`sidebar-material-to-l3-${m.id}`}
+                    onClick={async () => {
+                      if (promotedProfileMaterialIds.has(m.id)) {
+                        return;
+                      }
+                      setPromotedProfileMaterialIds((prev) => new Set(prev).add(m.id));
+                      if (typeof projectApi?.confirmKnowledge !== 'function') {
+                        return;
+                      }
+                      try {
+                        await projectApi.confirmKnowledge(project.id, {
+                          entries: [
+                            {
+                              category: 'note',
+                              content: `[L4受控资料摘录] ${(m.content ?? '').slice(0, 200)}`,
+                              importance: 7,
+                              sourceMessageIds: [],
+                              reasoning: '侧边栏 L4 受控资料沉淀至 L3 画像',
+                            },
+                          ],
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    title="归档为 L3 项目画像"
+                    className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border/60 bg-bg px-1 py-0.5 text-ui-2xs text-muted hover:text-primary"
+                  >
+                    {promotedProfileMaterialIds.has(m.id) ? '已转L3' : '+L3'}
+                  </button>
+                )}
                 {m.status === 'ready' && m.content && (
                   <button
                     type="button"

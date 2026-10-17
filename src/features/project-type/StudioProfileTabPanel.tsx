@@ -114,6 +114,8 @@ export function StudioProfileTabPanel({
   const [copiedMd, setCopiedMd] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [importanceFilter, setImportanceFilter] = useState<'all' | 'high'>('all');
+  const [savedL4Bundle, setSavedL4Bundle] = useState(false);
   const [promotedIds, setPromotedIds] = useState<Set<string>>(new Set());
   const [milestonePromotedIds, setMilestonePromotedIds] = useState<Set<string>>(new Set());
   const [copiedEntryId, setCopiedEntryId] = useState<string | null>(null);
@@ -125,6 +127,9 @@ export function StudioProfileTabPanel({
       if (categoryFilter !== 'all' && entry.category !== categoryFilter) {
         return false;
       }
+      if (importanceFilter === 'high' && (entry.importance ?? 5) < 7) {
+        return false;
+      }
       if (!q) return true;
       const catLabel = (CATEGORY_LABELS[entry.category] ?? entry.category).toLowerCase();
       return (
@@ -133,7 +138,7 @@ export function StudioProfileTabPanel({
         catLabel.includes(q)
       );
     });
-  }, [profileEntries, searchQuery, categoryFilter]);
+  }, [profileEntries, searchQuery, categoryFilter, importanceFilter]);
 
   const handleCopyMarkdown = async () => {
     const lines = [
@@ -192,6 +197,35 @@ export function StudioProfileTabPanel({
               >
                 <ShieldPlus className="h-3 w-3" />
                 批量升格L2 ({filteredEntries.filter((e) => !promotedIds.has(e.id)).length})
+              </button>
+            )}
+            {projectId && filteredEntries.length > 0 && (
+              <button
+                type="button"
+                data-testid="studio-profile-save-l4-btn"
+                onClick={async () => {
+                  if (savedL4Bundle) return;
+                  setSavedL4Bundle(true);
+                  if (typeof projectApi?.addMaterial === 'function') {
+                    const md = [
+                      `# L3 项目画像快照 (${projectPath})`,
+                      ...filteredEntries.map(
+                        (e) =>
+                          `- [${CATEGORY_LABELS[e.category] ?? e.category}] ${e.content}`,
+                      ),
+                    ].join('\n');
+                    try {
+                      await projectApi.addMaterial(projectId, {
+                        content: md,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
+              >
+                {savedL4Bundle ? '已存为 L4 资料' : `存为 L4 资料 (${filteredEntries.length})`}
               </button>
             )}
             <button
@@ -312,6 +346,30 @@ export function StudioProfileTabPanel({
                   : `${CATEGORY_LABELS[cat] ?? cat} (${profileEntries.filter((e) => e.category === cat).length})`}
               </button>
             ))}
+            <button
+              type="button"
+              data-testid="studio-profile-imp-all"
+              onClick={() => setImportanceFilter('all')}
+              className={`rounded px-2 py-0.5 text-ui-2xs transition-colors ${
+                importanceFilter === 'all'
+                  ? 'bg-primary/15 text-primary font-medium'
+                  : 'bg-background text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              全部权重
+            </button>
+            <button
+              type="button"
+              data-testid="studio-profile-imp-high"
+              onClick={() => setImportanceFilter('high')}
+              className={`rounded px-2 py-0.5 text-ui-2xs transition-colors ${
+                importanceFilter === 'high'
+                  ? 'bg-primary/15 text-primary font-medium'
+                  : 'bg-background text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              高优 (≥7)
+            </button>
           </div>
         </div>
       )}
