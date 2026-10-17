@@ -666,3 +666,9 @@
 - **`src/features/project-type/GitStatusWidget.tsx`**：变更文件列表新增 `+L2` 审查护栏按钮（`git-widget-guard-${f}`），并支持将最近 Git 提交记录摘要一键沉淀至 L3 项目画像（`git-widget-save-commits-l3-btn`）。
 - **`src/features/project-type/ConstraintEditor.tsx`**：支持按目录索引测试触发预设（`constraint-dir-glob-${idx}`），并在底部工具栏新增 **`同步沉淀至 L3`** 按钮（`constraint-editor-save-l3-btn`）。
 - **`src/features/project-type/MilestoneEditor.tsx`**：底部工具栏新增 **`转 L2 交付约束`**（`milestone-editor-to-constraint-btn`）与 **`沉淀至 L3`**（`milestone-editor-save-l3-btn`）按钮，打通里程碑节点到 L2 规则与 L3 画像的同步沉淀闭环。
+
+### Phase P43（2026-10-17）：约束/里程碑摘要沉淀 L3 与阶段筛选、AI 顾问存 L4 与转里程碑、任务分解方案存 L4 与节点转 L2
+- **`src/features/project-type/ConstraintSummaryWidget.tsx`**：支持一键将当前生效高优约束沉淀至 L3 项目画像（`constraint-summary-save-l3-btn`），并在高优规则预览行新增单条规则 **`+L3`** 固化按钮（`constraint-summary-rule-to-l3-${rule.id}`）。
+- **`src/features/project-type/MilestoneProgressWidget.tsx`**：支持一键将总体里程碑进度快照沉淀至 L3 项目画像（`milestone-summary-save-l3-btn`），并将阶段分布胶囊升级为可点击筛选按钮（`milestone-summary-stage-pill-${stageId}`）。
+- **`src/features/project-type/ProjectAdvisorCard.tsx`**：支持将 AI 顾问诊断报告存为 L4 参考资料（`advisor-save-l4-btn`），并在改进建议行新增 **`+里程碑`** 一键转化按钮（`advisor-suggestion-to-milestone-${idx}`）。
+- **`src/features/project-type/TaskDecomposeDialog.tsx`**：支持将任务分解预览方案存为 L4 参考资料（`decompose-save-plan-l4-btn`），并在分解出的里程碑节点行新增 **`+L2 约束`** 验收规范转化按钮（`decompose-node-to-constraint-${idx}`）。

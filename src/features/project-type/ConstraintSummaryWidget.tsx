@@ -43,6 +43,8 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [copiedRules, setCopiedRules] = useState(false);
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [savedSummaryL3, setSavedSummaryL3] = useState(false);
+  const [promotedRuleL3Ids, setPromotedRuleL3Ids] = useState<Set<string>>(new Set());
 
   const fetchConstraints = useCallback(async () => {
     if (typeof projectApi?.listConstraints !== 'function') {
@@ -154,6 +156,35 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
           </CardTitle>
           <div className="flex items-center gap-1">
             {enabledConstraints.length > 0 && (
+              <>
+              <button
+                type="button"
+                data-testid="constraint-summary-save-l3-btn"
+                onClick={async () => {
+                  if (savedSummaryL3) return;
+                  setSavedSummaryL3(true);
+                  if (typeof projectApi?.confirmKnowledge === 'function') {
+                    try {
+                      await projectApi.confirmKnowledge(projectId, {
+                        entries: enabledConstraints
+                          .slice(0, 5)
+                          .map((c) => ({
+                            category: 'convention',
+                            content: c.content,
+                            importance: c.priority,
+                            sourceMessageIds: [],
+                            reasoning: '约束统计摘要高优规则沉淀至 L3 画像',
+                          })),
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {savedSummaryL3 ? '已存高优 L3' : '沉淀高优至 L3'}
+              </button>
               <button
                 type="button"
                 onClick={() => void handleCopyActiveRules()}
@@ -173,6 +204,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                   </>
                 )}
               </button>
+              </>
             )}
             <button
               type="button"
@@ -306,6 +338,35 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                       </span>
                       <span className="truncate text-foreground">{rule.content}</span>
                     </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      data-testid={`constraint-summary-rule-to-l3-${rule.id}`}
+                      onClick={async () => {
+                        if (promotedRuleL3Ids.has(rule.id)) return;
+                        setPromotedRuleL3Ids((prev) => new Set(prev).add(rule.id));
+                        if (typeof projectApi?.confirmKnowledge === 'function') {
+                          try {
+                            await projectApi.confirmKnowledge(projectId, {
+                              entries: [
+                                {
+                                  category: 'convention',
+                                  content: rule.content,
+                                  importance: rule.priority,
+                                  sourceMessageIds: [],
+                                  reasoning: '约束统计预览规则沉淀至 L3 画像',
+                                },
+                              ],
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+                    >
+                      {promotedRuleL3Ids.has(rule.id) ? '已存 L3' : '+L3'}
+                    </button>
                     <button
                       type="button"
                       data-testid={`constraint-summary-quick-toggle-${rule.id}`}
@@ -324,6 +385,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                     >
                       停用
                     </button>
+                    </div>
                   </div>
                 ))}
               </div>
