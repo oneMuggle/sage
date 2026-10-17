@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -246,11 +247,17 @@ class SubagentRunner:
 
         # P0-3 (2026-08-20): interrupt watcher —— 与 child.run_loop 并发，
         # 取消事件到达即置位子 agent 中断标志；正常结束时 finally 撤销。
+        # 2026-10-16: watcher 内部显式捕获 CancelledError，finally 中 await
+        # watcher 确保 cancel 完成，防止异常路径下任务泄漏。
         watcher: Optional[asyncio.Task] = None
         if self._interrupt_event is not None:
             async def _watch() -> None:
-                await self._interrupt_event.wait()
-                child.interrupt()
+                try:
+                    await self._interrupt_event.wait()
+                    child.interrupt()
+                except asyncio.CancelledError:
+                    # 显式捕获，避免 CancelledError 泄漏到事件循环
+                    pass
 
             watcher = asyncio.create_task(_watch())
 
@@ -276,6 +283,9 @@ class SubagentRunner:
         finally:
             if watcher is not None:
                 watcher.cancel()
+                # 等待 cancel 完成，避免任务泄漏
+                with contextlib.suppress(asyncio.CancelledError):
+                    await watcher
 
         if not collected:
             if self._interrupt_event is not None and self._interrupt_event.is_set():

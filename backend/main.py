@@ -505,6 +505,7 @@ async def lifespan(app: FastAPI):
         store_path=store_path,
         message_repo=MessageRepository(),
         session_repo=SessionRepository(),
+        db=get_database(),
     )
     scheduler_service.start()
     app.state.scheduler = scheduler_service
