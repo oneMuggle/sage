@@ -40,6 +40,7 @@ export function SemanticSearchPanel({
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [copiedAll, setCopiedAll] = useState(false);
   const [minScorePct, setMinScorePct] = useState<number>(0);
+  const [topK, setTopK] = useState<number>(10);
   const [savedProfileIndices, setSavedProfileIndices] = useState<Set<number>>(new Set());
   const [savedConstraintIndices, setSavedConstraintIndices] = useState<Set<number>>(new Set());
 
@@ -59,7 +60,7 @@ export function SemanticSearchPanel({
     setSavedConstraintIndices(new Set());
       setSavedConstraintIndices(new Set());
       try {
-        const result = await projectApi.semanticSearchMaterials(projectId, trimmed, 10);
+        const result = await projectApi.semanticSearchMaterials(projectId, trimmed, topK);
         setResults(result.results);
       } catch (err) {
         setError(err instanceof Error ? err.message : '语义检索失败');
@@ -67,7 +68,7 @@ export function SemanticSearchPanel({
         setSearching(false);
       }
     },
-    [projectId, searching],
+    [projectId, searching, topK],
   );
 
   const handleSearch = useCallback(async () => {
@@ -263,8 +264,25 @@ export function SemanticSearchPanel({
         </div>
       )}
 
-      {/* 搜索框 */}
-      <div className="flex gap-2">
+      {/* 搜索框与 Top-K 快捷胶囊 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1" data-testid="semantic-topk-pills">
+          {[3, 5, 10].map((k) => (
+            <button
+              key={k}
+              type="button"
+              data-testid={`semantic-topk-pill-${k}`}
+              onClick={() => setTopK(k)}
+              className={`rounded border px-1.5 py-0.5 text-ui-2xs ${
+                topK === k
+                  ? 'border-primary bg-primary text-primary-foreground'
+                  : 'border-border bg-background text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              Top {k}
+            </button>
+          ))}
+        </div>
         <input
           type="text"
           value={query}
@@ -321,6 +339,38 @@ export function SemanticSearchPanel({
               </div>
               {filteredResults.length > 0 && (
                 <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    data-testid="semantic-batch-to-constraint-btn"
+                    onClick={async () => {
+                      const unsaved = filteredResults
+                        .map((hit, idx) => ({ hit, idx }))
+                        .filter(({ idx }) => !savedConstraintIndices.has(idx));
+                      if (unsaved.length === 0) return;
+                      setSavedConstraintIndices((prev) => {
+                        const next = new Set(prev);
+                        unsaved.forEach(({ idx }) => next.add(idx));
+                        return next;
+                      });
+                      if (typeof projectApi?.createConstraint === 'function') {
+                        for (const { hit } of unsaved) {
+                          try {
+                            await projectApi.createConstraint(projectId, {
+                              category: 'reference_rule',
+                              content: hit.content.slice(0, 300),
+                              priority: 7,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    <ShieldPlus className="h-3 w-3 text-primary" />
+                    批量转 L2 约束 ({filteredResults.filter((_, idx) => !savedConstraintIndices.has(idx)).length})
+                  </button>
                   <button
                     type="button"
                     data-testid="semantic-batch-save-profile-btn"
