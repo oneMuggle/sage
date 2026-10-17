@@ -269,6 +269,9 @@ describe('MilestoneProgressWidget', () => {
 
     const presetBtn = await screen.findByTestId('wizard-goal-preset-0');
     fireEvent.click(presetBtn);
+    expect(screen.getByTestId('wizard-recommended-milestones-preview')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('wizard-allowed-paths-toggle-all-btn'));
+    fireEvent.click(screen.getByTestId('wizard-allowed-paths-toggle-all-btn'));
     fireEvent.click(screen.getByTestId('wizard-templates-toggle-all-btn'));
     fireEvent.click(screen.getByTestId('wizard-templates-toggle-all-btn'));
     fireEvent.change(screen.getByTestId('wizard-custom-allowed-path-input'), {
@@ -474,10 +477,14 @@ describe('MilestoneProgressWidget', () => {
       '学术论文撰述、定量对比实验与可复现消融分析',
     );
     fireEvent.click(screen.getByTestId('sidebar-overview-copy-md'));
+    fireEvent.click(screen.getByTestId('sidebar-overview-save-l3'));
+    expect(screen.getByTestId('sidebar-overview-save-l3')).toHaveTextContent('已存L3');
 
     // L4 sidebar materials status filter, promote to L2 constraint, search & copy (Phase P36)
     fireEvent.click(screen.getByTestId('sidebar-materials-filter-enabled'));
     fireEvent.click(screen.getByTestId('sidebar-materials-filter-all'));
+    fireEvent.click(screen.getByTestId('sidebar-material-to-l3-mat-1'));
+    expect(screen.getByTestId('sidebar-material-to-l3-mat-1')).toHaveTextContent('已转L3');
     fireEvent.click(screen.getByTestId('sidebar-material-to-constraint-mat-1'));
     expect(screen.getByTestId('sidebar-material-to-constraint-mat-1')).toHaveTextContent('已转L2');
     fireEvent.click(screen.getByTestId('sidebar-materials-copy-md'));

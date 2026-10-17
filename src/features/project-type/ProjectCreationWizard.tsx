@@ -516,6 +516,20 @@ export function ProjectCreationWizard({
                         </span>
                       ))}
                     </div>
+                    {blueprint.recommendedMilestones.length > 0 && (
+                      <div
+                        className="flex flex-wrap items-center gap-1.5"
+                        data-testid="wizard-recommended-milestones-preview"
+                      >
+                        <span className="text-muted-foreground">推荐里程碑预览：</span>
+                        {blueprint.recommendedMilestones.map((ms, idx) => (
+                          <span key={ms.title} className="text-muted-foreground">
+                            {idx > 0 ? '· ' : ''}
+                            <span className="text-foreground">{ms.title}</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <div className="space-y-1 pt-1">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-muted-foreground">勾选自动导入的预设规则包：</span>
@@ -556,9 +570,36 @@ export function ProjectCreationWizard({
                       </div>
                     </div>
                     <div className="space-y-1 pt-1" data-testid="wizard-allowed-paths-presets">
-                      <span className="text-muted-foreground">
-                        L5 跨目录只读参考白名单挂载（可选，严禁 AI 写入）：
-                      </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">
+                          L5 跨目录只读参考白名单挂载（可选，严禁 AI 写入）：
+                        </span>
+                        <button
+                          type="button"
+                          data-testid="wizard-allowed-paths-toggle-all-btn"
+                          onClick={() => {
+                            const presetPatterns = (
+                              WIZARD_ALLOWED_PATH_PRESETS[blueprint.type] ?? []
+                            ).map((p) => p.pattern);
+                            if (presetPatterns.every((p) => selectedAllowedPaths.includes(p))) {
+                              setSelectedAllowedPaths((prev) =>
+                                prev.filter((p) => !presetPatterns.includes(p)),
+                              );
+                            } else {
+                              setSelectedAllowedPaths((prev) =>
+                                Array.from(new Set([...prev, ...presetPatterns])),
+                              );
+                            }
+                          }}
+                          className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                        >
+                          {(WIZARD_ALLOWED_PATH_PRESETS[blueprint.type] ?? []).every((p) =>
+                            selectedAllowedPaths.includes(p.pattern),
+                          )
+                            ? '清空只读路径'
+                            : '全选只读预设'}
+                        </button>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {(WIZARD_ALLOWED_PATH_PRESETS[blueprint.type] ?? []).map((item) => (
                           <label
