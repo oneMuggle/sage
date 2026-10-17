@@ -115,6 +115,7 @@ export function StudioProfileTabPanel({
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [promotedIds, setPromotedIds] = useState<Set<string>>(new Set());
+  const [milestonePromotedIds, setMilestonePromotedIds] = useState<Set<string>>(new Set());
   const [copiedEntryId, setCopiedEntryId] = useState<string | null>(null);
   const presets = PROFILE_PRESETS_BY_TYPE[projectType] ?? PROFILE_PRESETS_BY_TYPE.coding;
 
@@ -306,7 +307,9 @@ export function StudioProfileTabPanel({
                     : 'bg-background text-muted-foreground hover:bg-muted'
                 }`}
               >
-                {cat === 'all' ? '全部类别' : (CATEGORY_LABELS[cat] ?? cat)}
+                {cat === 'all'
+                  ? `全部类别 (${profileEntries.length})`
+                  : `${CATEGORY_LABELS[cat] ?? cat} (${profileEntries.filter((e) => e.category === cat).length})`}
               </button>
             ))}
           </div>
@@ -366,6 +369,31 @@ export function StudioProfileTabPanel({
                   {copiedEntryId === entry.id ? '已复制' : '复制'}
                 </button>
                 {projectId && (
+                  <>
+                  <button
+                    type="button"
+                    data-testid={`studio-profile-to-milestone-${entry.id}`}
+                    onClick={async () => {
+                      if (milestonePromotedIds.has(entry.id)) return;
+                      setMilestonePromotedIds((prev) => new Set(prev).add(entry.id));
+                      if (typeof projectApi?.createMilestone === 'function') {
+                        try {
+                          await projectApi.createMilestone(projectId, {
+                            title: entry.content.slice(0, 80),
+                            description: `从 L3 项目画像 (${entry.category}) 转化`,
+                            status: 'pending',
+                            sortOrder: 10,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title="将此 L3 画像条目转化为项目里程碑"
+                  >
+                    {milestonePromotedIds.has(entry.id) ? '已转里程碑' : '+里程碑'}
+                  </button>
                   <button
                     type="button"
                     data-testid={`studio-profile-to-constraint-${entry.id}`}
@@ -393,6 +421,7 @@ export function StudioProfileTabPanel({
                     <ShieldPlus className="h-3 w-3 text-primary" />
                     {promotedIds.has(entry.id) ? '已升格约束' : '升格为约束'}
                   </button>
+                  </>
                 )}
                 <button
                 type="button"

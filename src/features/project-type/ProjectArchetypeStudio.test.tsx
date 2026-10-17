@@ -406,6 +406,10 @@ describe('ProjectArchetypeStudio', () => {
     fireEvent.click(screen.getByTestId('wiki-preview-btn'));
     expect(await screen.findByTestId('wiki-copy-preview-btn')).toBeInTheDocument();
     expect(screen.getByTestId('wiki-symbol-preview-list')).toHaveTextContent('bootstrap');
+    fireEvent.click(screen.getByTestId('wiki-lang-filter-typescript'));
+    fireEvent.click(screen.getByTestId('wiki-lang-filter-all'));
+    fireEvent.click(screen.getByTestId('wiki-symbol-to-constraint-0'));
+    expect(screen.getByTestId('wiki-symbol-to-constraint-0')).toHaveTextContent('已护栏');
     fireEvent.click(screen.getByTestId('wiki-symbol-filter-function'));
     fireEvent.click(screen.getByTestId('wiki-symbol-filter-all'));
     fireEvent.click(screen.getByTestId('wiki-generate-btn'));
@@ -538,8 +542,11 @@ describe('ProjectArchetypeStudio', () => {
       expect(screen.getByTestId('semantic-stats-refresh-btn')).toBeInTheDocument();
       expect(screen.getByTestId('semantic-query-presets')).toBeInTheDocument();
     });
+    fireEvent.click(screen.getByTestId('semantic-topk-pill-5'));
+    fireEvent.click(screen.getByTestId('semantic-topk-pill-10'));
     fireEvent.click(screen.getByTestId('semantic-preset-0'));
     expect(await screen.findByTestId('semantic-copy-all-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('semantic-batch-to-constraint-btn')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('semantic-hit-to-constraint-0'));
     await waitFor(() => {
       expect(mockCreateConstraint).toHaveBeenCalledWith(
@@ -625,6 +632,10 @@ describe('ProjectArchetypeStudio', () => {
     expect(await screen.findByTestId('knowledge-session-select')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('knowledge-extract-btn'));
     expect(await screen.findByTestId('knowledge-toggle-select-all')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('knowledge-save-reasoning-l4-btn'));
+    expect(screen.getByTestId('knowledge-save-reasoning-l4-btn')).toHaveTextContent('已存 L4 资料');
+    fireEvent.click(screen.getByTestId('knowledge-to-milestone-0'));
+    expect(screen.getByTestId('knowledge-to-milestone-0')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('knowledge-select-high-btn'));
     fireEvent.click(screen.getByTestId('knowledge-to-constraint-0'));
     await waitFor(() => {
@@ -668,6 +679,8 @@ describe('ProjectArchetypeStudio', () => {
         }),
       );
     });
+    fireEvent.click(await screen.findByTestId('studio-profile-to-milestone-pf-1'));
+    expect(screen.getByTestId('studio-profile-to-milestone-pf-1')).toHaveTextContent('已转里程碑');
     const promoteBtn = await screen.findByTestId('studio-profile-to-constraint-pf-1');
     fireEvent.click(promoteBtn);
     await waitFor(() => {
