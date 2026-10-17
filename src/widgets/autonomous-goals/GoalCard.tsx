@@ -7,14 +7,14 @@
  * - 进度条（GoalProgress）
  * - 操作按钮（start/pause/cancel/delete）
  */
-import { useNavigate } from 'react-router-dom';
 import { Play, Pause, XCircle, Trash2, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
+import { useGoalStore } from '../../entities/autonomous-goals/goalStore';
+import type { Goal, GoalStatus } from '../../entities/autonomous-goals/types';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card, CardContent } from '../../shared/ui/Card';
-import { useGoalStore } from '../../entities/autonomous-goals/goalStore';
-import type { Goal, GoalStatus } from '../../entities/autonomous-goals/types';
 
 import { GoalProgress } from './GoalProgress';
 

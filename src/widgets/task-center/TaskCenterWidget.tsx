@@ -22,10 +22,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
-import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import * as goalApi from '../../entities/autonomous-goals/goalApi';
 import { useGoalStore } from '../../entities/autonomous-goals/goalStore';
 import type { GoalStatus } from '../../entities/autonomous-goals/types';
+import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import { usePanelStore } from '../../features/app-panels/usePanelStore';
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { useChatStreamStore } from '../../features/send-message/chatStreamStore';

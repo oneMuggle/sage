@@ -3,8 +3,8 @@
  *
  * 集中管理目标列表状态与操作。
  */
-import { create } from 'zustand';
 import { toast } from 'sonner';
+import { create } from 'zustand';
 
 import * as goalApi from './goalApi';
 import type { CreateGoalInput, Goal, GoalStatus, UpdateGoalInput } from './types';

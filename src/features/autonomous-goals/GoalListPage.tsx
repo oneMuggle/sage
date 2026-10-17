@@ -7,12 +7,13 @@
 import { Plus, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { CreateGoalModal } from './CreateGoalModal';
 import { useGoalStore } from '../../entities/autonomous-goals/goalStore';
 import type { GoalStatus } from '../../entities/autonomous-goals/types';
 import { PageHeader } from '../../shared/ui';
 import { Button } from '../../shared/ui/Button';
 import { GoalCard } from '../../widgets/autonomous-goals/GoalCard';
+
+import { CreateGoalModal } from './CreateGoalModal';
 
 const STATUS_OPTIONS: { value: GoalStatus | null; label: string }[] = [
   { value: null, label: '全部' },

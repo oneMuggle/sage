@@ -3,9 +3,9 @@
  *
  * 展示目标完成百分比 + 轮次 / token 消耗摘要。
  */
+import type { Goal } from '../../entities/autonomous-goals/types';
 import { Progress } from '../../shared/ui/Progress';
 
-import type { Goal } from '../../entities/autonomous-goals/types';
 
 interface GoalProgressProps {
   goal: Goal;

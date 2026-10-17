@@ -13,10 +13,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import * as goalApi from '../../entities/autonomous-goals/goalApi';
 import { useGoalStore } from '../../entities/autonomous-goals/goalStore';
 import type { Checkpoint, Goal, GoalStatus } from '../../entities/autonomous-goals/types';
+import { PageHeader } from '../../shared/ui';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../../shared/ui/Card';
-import { PageHeader } from '../../shared/ui';
 import { GoalProgress } from '../../widgets/autonomous-goals/GoalProgress';
 
 const STATUS_LABEL: Record<GoalStatus, string> = {
