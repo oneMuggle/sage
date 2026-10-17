@@ -41,6 +41,8 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   );
   const [copiedSummary, setCopiedSummary] = useState(false);
   const [savedStageProfile, setSavedStageProfile] = useState(false);
+  const [savedOverviewL4, setSavedOverviewL4] = useState(false);
+  const [createdStageMilestone, setCreatedStageMilestone] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [decomposeReq, setDecomposeReq] = useState('');
   const [decomposeCtx, setDecomposeCtx] = useState('');
@@ -252,6 +254,49 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
             >
               {savedStageProfile ? '已存阶段至 L3' : '沉淀阶段至 L3'}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-save-l4-btn"
+              onClick={async () => {
+                if (savedOverviewL4) return;
+                setSavedOverviewL4(true);
+                if (typeof projectApi?.addMaterial === 'function') {
+                  try {
+                    await projectApi.addMaterial(project.id, {
+                      content: `# 项目治理概览快照：${project.name}\n- 形态：${blueprint.label}\n- 当前阶段：${stageLabel}\n- L1 宪章：${hasSageMd ? '已就绪' : '待初始化'}\n- 快照数：${checkpointCount}`,
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {savedOverviewL4 ? '已存概览 L4' : '存概览至 L4'}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-stage-to-milestone-btn"
+              onClick={async () => {
+                if (createdStageMilestone) return;
+                setCreatedStageMilestone(true);
+                if (typeof projectApi?.createMilestone === 'function') {
+                  try {
+                    await projectApi.createMilestone(project.id, {
+                      title: `[阶段目标] 完成「${stageLabel}」核心交付物`,
+                      description: `${blueprint.label} · 阶段 ${stageLabel} 关键节点`,
+                      stage: activeStageId ?? undefined,
+                      status: 'in_progress',
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {createdStageMilestone ? '已建阶段里程碑' : '当前阶段建里程碑'}
             </button>
             <button
               type="button"
