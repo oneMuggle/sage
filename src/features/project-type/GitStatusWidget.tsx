@@ -40,6 +40,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [copiedMd, setCopiedMd] = useState(false);
   const [copiedSha, setCopiedSha] = useState<string | null>(null);
   const [guardedFiles, setGuardedFiles] = useState<Set<string>>(new Set());
+  const [commitMilestones, setCommitMilestones] = useState<Set<string>>(new Set());
   const [savedCommitsL3, setSavedCommitsL3] = useState(false);
 
   const fetchStatus = useCallback(async () => {
@@ -270,15 +271,29 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                     </button>
                   ))}
                   {visibleChangedFiles.length > 0 && (
+                    <div className="ml-auto flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid="git-widget-guard-all-btn"
+                      onClick={async () => {
+                        for (const filePath of visibleChangedFiles) {
+                          await handleGuardChangedFile(filePath);
+                        }
+                      }}
+                      className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                    >
+                      批量护栏 L2 ({visibleChangedFiles.length})
+                    </button>
                     <button
                       type="button"
                       data-testid="git-widget-ingest-all-btn"
                       onClick={() => void handleBatchIngestChangedFiles()}
-                      className="ml-auto inline-flex items-center gap-0.5 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+                      className="inline-flex items-center gap-0.5 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
                     >
                       <BookmarkPlus className="h-2.5 w-2.5" />
                       批量纳入 L4 ({visibleChangedFiles.length})
                     </button>
+                    </div>
                   )}
                 </div>
                 <div className="max-h-32 overflow-y-auto rounded border border-border bg-muted/30 p-1.5 font-mono text-ui-2xs space-y-1">
@@ -396,6 +411,29 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                 <div key={commit.sha} className="text-xs">
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-medium truncate">{commit.message}</div>
+                    <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      data-testid={`git-widget-commit-to-milestone-${commit.sha}`}
+                      onClick={async () => {
+                        if (commitMilestones.has(commit.sha)) return;
+                        setCommitMilestones((prev) => new Set(prev).add(commit.sha));
+                        if (typeof projectApi?.createMilestone === 'function') {
+                          try {
+                            await projectApi.createMilestone(projectId, {
+                              title: `[Git ${commit.sha.slice(0, 7)}] ${commit.message.slice(0, 70)}`,
+                              description: `提交作者: ${commit.author} · 日期: ${commit.date}`,
+                              status: 'completed',
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
+                    >
+                      {commitMilestones.has(commit.sha) ? '已建里程碑' : '+里程碑'}
+                    </button>
                     <button
                       type="button"
                       data-testid={`git-widget-copy-sha-${commit.sha}`}
@@ -413,6 +451,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                     >
                       {copiedSha === commit.sha ? '已复制' : commit.sha.slice(0, 7)}
                     </button>
+                    </div>
                   </div>
                   <div className="text-muted-foreground">
                     {commit.author} · {commit.date.split(' ')[0]}

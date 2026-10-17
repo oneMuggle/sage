@@ -551,6 +551,10 @@ describe('ProjectArchetypeStudio', () => {
     fireEvent.click(screen.getByTestId('semantic-preset-0'));
     expect(await screen.findByTestId('semantic-copy-all-btn')).toBeInTheDocument();
     expect(screen.getByTestId('semantic-batch-to-constraint-btn')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('semantic-save-l4-bundle-btn'));
+    expect(screen.getByTestId('semantic-save-l4-bundle-btn')).toHaveTextContent('已存 L4 合集');
+    fireEvent.click(screen.getByTestId('semantic-hit-to-milestone-0'));
+    expect(screen.getByTestId('semantic-hit-to-milestone-0')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('semantic-hit-to-constraint-0'));
     await waitFor(() => {
       expect(mockCreateConstraint).toHaveBeenCalledWith(
@@ -638,8 +642,11 @@ describe('ProjectArchetypeStudio', () => {
     expect(await screen.findByTestId('knowledge-toggle-select-all')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('knowledge-save-reasoning-l4-btn'));
     expect(screen.getByTestId('knowledge-save-reasoning-l4-btn')).toHaveTextContent('已存 L4 资料');
+    fireEvent.click(screen.getByTestId('knowledge-copy-entry-0'));
+    expect(screen.getByTestId('knowledge-copy-entry-0')).toHaveTextContent('已复制');
     fireEvent.click(screen.getByTestId('knowledge-to-milestone-0'));
     expect(screen.getByTestId('knowledge-to-milestone-0')).toHaveTextContent('已转里程碑');
+    fireEvent.click(screen.getByTestId('knowledge-batch-to-milestone-btn'));
     fireEvent.click(screen.getByTestId('knowledge-select-high-btn'));
     fireEvent.click(screen.getByTestId('knowledge-to-constraint-0'));
     await waitFor(() => {

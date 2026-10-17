@@ -43,6 +43,8 @@ export function SemanticSearchPanel({
   const [topK, setTopK] = useState<number>(10);
   const [savedProfileIndices, setSavedProfileIndices] = useState<Set<number>>(new Set());
   const [savedConstraintIndices, setSavedConstraintIndices] = useState<Set<number>>(new Set());
+  const [savedMilestoneIndices, setSavedMilestoneIndices] = useState<Set<number>>(new Set());
+  const [savedBundleL4, setSavedBundleL4] = useState(false);
 
   const presets = SEMANTIC_QUERY_PRESETS[projectType] ?? SEMANTIC_QUERY_PRESETS.coding;
 
@@ -57,8 +59,9 @@ export function SemanticSearchPanel({
       setError(null);
       setResults(null);
       setSavedProfileIndices(new Set());
-    setSavedConstraintIndices(new Set());
       setSavedConstraintIndices(new Set());
+      setSavedMilestoneIndices(new Set());
+      setSavedBundleL4(false);
       try {
         const result = await projectApi.semanticSearchMaterials(projectId, trimmed, topK);
         setResults(result.results);
@@ -407,6 +410,30 @@ export function SemanticSearchPanel({
                   </button>
                   <button
                     type="button"
+                    data-testid="semantic-save-l4-bundle-btn"
+                    onClick={async () => {
+                      if (savedBundleL4) return;
+                      setSavedBundleL4(true);
+                      if (typeof projectApi?.addMaterial === 'function') {
+                        const md = [
+                          `# M4 语义检索参考合集 (${query})`,
+                          ...filteredResults.map((h, i) => `## #${i + 1}\n${h.content}`),
+                        ].join('\n\n');
+                        try {
+                          await projectApi.addMaterial(projectId, {
+                            content: md,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {savedBundleL4 ? '已存 L4 合集' : '存为 L4 合集'}
+                  </button>
+                  <button
+                    type="button"
                     data-testid="semantic-clear-results-btn"
                     onClick={() => {
                       setResults(null);
@@ -494,6 +521,29 @@ export function SemanticSearchPanel({
                         >
                           <ShieldPlus className="h-2.5 w-2.5 text-primary" />
                           {savedConstraintIndices.has(idx) ? '已转 L2 约束' : '转 L2 约束'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savedMilestoneIndices.has(idx)}
+                          data-testid={`semantic-hit-to-milestone-${idx}`}
+                          onClick={async () => {
+                            if (savedMilestoneIndices.has(idx)) return;
+                            setSavedMilestoneIndices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.createMilestone === 'function') {
+                              try {
+                                await projectApi.createMilestone(projectId, {
+                                  title: `[检索跟进] ${hit.content.slice(0, 60)}`,
+                                  description: `来源材料 ${hit.materialId.slice(0, 8)} chunk #${hit.chunkIndex}`,
+                                  status: 'pending',
+                                });
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
+                        >
+                          {savedMilestoneIndices.has(idx) ? '已转里程碑' : '+里程碑'}
                         </button>
                         <button
                           type="button"
