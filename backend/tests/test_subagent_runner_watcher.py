@@ -6,13 +6,14 @@ Verifies that the interrupt watcher task is properly cleaned up:
 - Watcher cleanup works correctly on both normal completion and exception paths
 """
 import asyncio
+from unittest.mock import AsyncMock, Mock, patch
+
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
 
 from backend.orchestration.subagent_runner import SubagentRunner
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_agent():
     """Create a mock SageAgent."""
     agent = Mock()
@@ -21,7 +22,7 @@ def mock_agent():
     return agent
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_task():
     """Create a mock orchestration task."""
     task = Mock()
@@ -32,7 +33,7 @@ def mock_task():
     return task
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_watcher_cleanup_on_normal_completion():
     """Test that watcher is properly cleaned up when run_loop completes normally."""
     interrupt_event = asyncio.Event()
@@ -68,7 +69,7 @@ async def test_watcher_cleanup_on_normal_completion():
         # but the fact that we completed without hanging is the key assertion)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_watcher_cleanup_on_exception():
     """Test that watcher is cleaned up even when run_loop raises an exception."""
     interrupt_event = asyncio.Event()
@@ -99,7 +100,7 @@ async def test_watcher_cleanup_on_exception():
         # Watcher cleanup happened in finally block (key assertion: no hang)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_watcher_cancelled_error_handling():
     """Test that watcher cleanup works when interrupt is triggered."""
     interrupt_event = asyncio.Event()
@@ -147,7 +148,7 @@ async def test_watcher_cancelled_error_handling():
         assert result["status"] == "succeeded"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_watcher_no_interrupt_event():
     """Test that runner works correctly when no interrupt_event is provided."""
     runner = SubagentRunner(interrupt_event=None)
@@ -179,7 +180,7 @@ async def test_watcher_no_interrupt_event():
         assert result["status"] == "succeeded"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_watcher_cleanup_on_multiple_exceptions():
     """Test watcher cleanup when multiple exceptions occur in sequence."""
     interrupt_event = asyncio.Event()

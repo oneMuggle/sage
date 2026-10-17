@@ -1,14 +1,17 @@
 """Test WakeScheduler resumer timeout."""
 import asyncio
-import pytest
-from unittest.mock import Mock, AsyncMock, patch
+import importlib
+import os
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, Mock, patch
 
-from backend.orchestration.wake_scheduler import WakeScheduler, _WAKE_RESUMER_TIMEOUT_S
+import pytest
+
 from backend.domain.wake import Wake, WakeKind, WakeState, to_utc_iso
+from backend.orchestration.wake_scheduler import WakeScheduler
 
 
-@pytest.fixture
+@pytest.fixture()
 def mock_store():
     """Create a mock WakeStore."""
     store = Mock()
@@ -17,7 +20,7 @@ def mock_store():
     return store
 
 
-@pytest.fixture
+@pytest.fixture()
 def sample_wake():
     """Create a sample Wake object."""
     return Wake(
@@ -25,12 +28,12 @@ def sample_wake():
         session_id="session-abc",
         kind=WakeKind.TIMER,
         state=WakeState.DUE,  # Ready to be consumed
-        fire_at=to_utc_iso(datetime.now(timezone.utc) - timedelta(minutes=1)),
+        fire_at=to_utc_iso(datetime.now(timezone.utc) - timedelta(minutes=1)),  # noqa: UP017 — py3.8 无 datetime.UTC
         note="test",
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_wake_scheduler_resumer_timeout(mock_store, sample_wake):
     """Test that slow resumer is terminated after timeout."""
     mock_store.get_due_wakes.return_value = [sample_wake]
@@ -51,7 +54,7 @@ async def test_wake_scheduler_resumer_timeout(mock_store, sample_wake):
         mock_store.mark_fired.assert_called_once_with(sample_wake.id)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_wake_scheduler_fast_resumer(mock_store, sample_wake):
     """Test that fast resumer completes successfully."""
     mock_store.get_due_wakes.return_value = [sample_wake]
@@ -70,7 +73,7 @@ async def test_wake_scheduler_fast_resumer(mock_store, sample_wake):
         mock_store.mark_fired.assert_called_once_with(sample_wake.id)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_wake_scheduler_resumer_exception(mock_store, sample_wake):
     """Test that resumer exception is caught and logged."""
     mock_store.get_due_wakes.return_value = [sample_wake]
@@ -92,49 +95,40 @@ async def test_wake_scheduler_resumer_exception(mock_store, sample_wake):
 
 def test_wake_scheduler_timeout_default_value():
     """Test that default timeout is 30s."""
-    import os
     original = os.environ.get("SAGE_WAKE_RESUMER_TIMEOUT_S")
 
     try:
-        # Remove env var to test default
         if "SAGE_WAKE_RESUMER_TIMEOUT_S" in os.environ:
             del os.environ["SAGE_WAKE_RESUMER_TIMEOUT_S"]
 
-        # Re-import to get fresh value
-        import importlib
         import backend.orchestration.wake_scheduler as ws_module
         importlib.reload(ws_module)
 
         assert ws_module._WAKE_RESUMER_TIMEOUT_S == 30.0
     finally:
-        # Restore env var
         if original is not None:
             os.environ["SAGE_WAKE_RESUMER_TIMEOUT_S"] = original
 
 
 def test_wake_scheduler_timeout_env_override():
     """Test that timeout can be overridden via environment variable."""
-    import os
     original = os.environ.get("SAGE_WAKE_RESUMER_TIMEOUT_S")
 
     try:
         os.environ["SAGE_WAKE_RESUMER_TIMEOUT_S"] = "60"
 
-        # Re-import to get fresh value
-        import importlib
         import backend.orchestration.wake_scheduler as ws_module
         importlib.reload(ws_module)
 
         assert ws_module._WAKE_RESUMER_TIMEOUT_S == 60.0
     finally:
-        # Restore env var
         if original is not None:
             os.environ["SAGE_WAKE_RESUMER_TIMEOUT_S"] = original
         elif "SAGE_WAKE_RESUMER_TIMEOUT_S" in os.environ:
             del os.environ["SAGE_WAKE_RESUMER_TIMEOUT_S"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_wake_scheduler_multiple_wakes(mock_store, sample_wake):
     """Test that timeout on one wake doesn't block others."""
     wake1 = sample_wake
@@ -143,7 +137,7 @@ async def test_wake_scheduler_multiple_wakes(mock_store, sample_wake):
         session_id="session-def",
         kind=WakeKind.TIMER,
         state=WakeState.DUE,
-        fire_at=to_utc_iso(datetime.now(timezone.utc) - timedelta(minutes=1)),
+        fire_at=to_utc_iso(datetime.now(timezone.utc) - timedelta(minutes=1)),  # noqa: UP017 — py3.8 无 datetime.UTC
         note="test2",
     )
     mock_store.get_due_wakes.return_value = [wake1, wake2]

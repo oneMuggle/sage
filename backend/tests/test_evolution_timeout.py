@@ -1,9 +1,12 @@
 """Test evolution task wall-clock timeout."""
 import asyncio
-import pytest
-from unittest.mock import Mock, patch
+import importlib
+import os
+from unittest.mock import patch
 
-from backend.scheduler.evolution import BaseEvolutionTask, _EVOLUTION_TASK_TIMEOUT_S
+import pytest
+
+from backend.scheduler.evolution import BaseEvolutionTask
 
 
 class SlowTask(BaseEvolutionTask):
@@ -44,44 +47,33 @@ def test_evolution_task_completes_before_timeout():
 
 def test_evolution_task_timeout_default_value():
     """Test that default timeout is 1800s (30 minutes)."""
-    # The constant should be set at module import time
-    # If env var is not set, it should default to 1800
-    import os
     original = os.environ.get("SAGE_EVOLUTION_TASK_TIMEOUT_S")
 
     try:
-        # Remove env var to test default
         if "SAGE_EVOLUTION_TASK_TIMEOUT_S" in os.environ:
             del os.environ["SAGE_EVOLUTION_TASK_TIMEOUT_S"]
 
-        # Re-import to get fresh value
-        import importlib
         import backend.scheduler.evolution as evolution_module
         importlib.reload(evolution_module)
 
         assert evolution_module._EVOLUTION_TASK_TIMEOUT_S == 1800.0
     finally:
-        # Restore env var
         if original is not None:
             os.environ["SAGE_EVOLUTION_TASK_TIMEOUT_S"] = original
 
 
 def test_evolution_task_timeout_env_override():
     """Test that timeout can be overridden via environment variable."""
-    import os
     original = os.environ.get("SAGE_EVOLUTION_TASK_TIMEOUT_S")
 
     try:
         os.environ["SAGE_EVOLUTION_TASK_TIMEOUT_S"] = "600"
 
-        # Re-import to get fresh value
-        import importlib
         import backend.scheduler.evolution as evolution_module
         importlib.reload(evolution_module)
 
         assert evolution_module._EVOLUTION_TASK_TIMEOUT_S == 600.0
     finally:
-        # Restore env var
         if original is not None:
             os.environ["SAGE_EVOLUTION_TASK_TIMEOUT_S"] = original
         elif "SAGE_EVOLUTION_TASK_TIMEOUT_S" in os.environ:
