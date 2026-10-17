@@ -157,6 +157,8 @@ export function MilestoneEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedMilestoneMd, setCopiedMilestoneMd] = useState(false);
+  const [convertedConstraint, setConvertedConstraint] = useState(false);
+  const [savedMilestoneL3, setSavedMilestoneL3] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -434,6 +436,56 @@ export function MilestoneEditor({
             className="mr-auto rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
             {copiedMilestoneMd ? '已复制节点 MD' : '复制节点 MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="milestone-editor-to-constraint-btn"
+            onClick={async () => {
+              if (convertedConstraint) return;
+              setConvertedConstraint(true);
+              if (typeof projectApi?.createConstraint === 'function') {
+                try {
+                  await projectApi.createConstraint(projectId, {
+                    category: 'deliverable_guard',
+                    content: `里程碑交付验收标准 [${title.trim() || '未命名'}]：${description.trim() || '按期完成阶段交付'}`,
+                    priority: 8,
+                  });
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+          >
+            {convertedConstraint ? '已转 L2 约束' : '转 L2 交付约束'}
+          </button>
+          <button
+            type="button"
+            data-testid="milestone-editor-save-l3-btn"
+            onClick={async () => {
+              if (savedMilestoneL3) return;
+              setSavedMilestoneL3(true);
+              if (typeof projectApi?.confirmKnowledge === 'function') {
+                try {
+                  await projectApi.confirmKnowledge(projectId, {
+                    entries: [
+                      {
+                        category: 'goal',
+                        content: `里程碑目标 [${title.trim() || '未命名'}] (${stage || '默认阶段'})：${description.trim() || '无'}`,
+                        importance: 7,
+                        sourceMessageIds: [],
+                        reasoning: '里程碑编辑器同步沉淀至 L3 画像',
+                      },
+                    ],
+                  });
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+          >
+            {savedMilestoneL3 ? '已沉淀 L3' : '沉淀至 L3'}
           </button>
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             取消

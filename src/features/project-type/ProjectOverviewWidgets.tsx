@@ -40,6 +40,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
     project.projectStage ?? blueprint.stages[0]?.id ?? null,
   );
   const [copiedSummary, setCopiedSummary] = useState(false);
+  const [savedStageProfile, setSavedStageProfile] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [decomposeReq, setDecomposeReq] = useState('');
   const [decomposeCtx, setDecomposeCtx] = useState('');
@@ -226,6 +227,34 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
             </button>
             <button
               type="button"
+              data-testid="overview-save-stage-profile-btn"
+              onClick={async () => {
+                if (savedStageProfile) return;
+                setSavedStageProfile(true);
+                if (typeof projectApi?.confirmKnowledge === 'function') {
+                  try {
+                    await projectApi.confirmKnowledge(project.id, {
+                      entries: [
+                        {
+                          category: 'note',
+                          content: `项目阶段快照 [${project.name}]：形态=${blueprint.label}，当前阶段=${stageLabel}，L1宪章=${hasSageMd ? '已就绪' : '待初始化'}，快照数=${checkpointCount}`,
+                          importance: 7,
+                          sourceMessageIds: [],
+                          reasoning: '概览阶段状态沉淀至 L3 画像',
+                        },
+                      ],
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {savedStageProfile ? '已存阶段至 L3' : '沉淀阶段至 L3'}
+            </button>
+            <button
+              type="button"
               onClick={() => void handleCopyOverviewMarkdown()}
               data-testid="overview-copy-summary-md-btn"
               className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
@@ -281,18 +310,33 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
           })}
           {(() => {
             const idx = blueprint.stages.findIndex((s) => s.id === activeStageId);
+            const prevStage = idx > 0 ? blueprint.stages[idx - 1] : null;
             const nextStage =
               idx >= 0 && idx + 1 < blueprint.stages.length ? blueprint.stages[idx + 1] : null;
-            if (!nextStage) return null;
+            if (!prevStage && !nextStage) return null;
             return (
-              <button
-                type="button"
-                data-testid="overview-next-stage-btn"
-                onClick={() => void handleSelectStage(nextStage.id)}
-                className="ml-auto rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/20"
-              >
-                推进至：{nextStage.label} →
-              </button>
+              <div className="ml-auto flex items-center gap-1">
+                {prevStage && (
+                  <button
+                    type="button"
+                    data-testid="overview-prev-stage-btn"
+                    onClick={() => void handleSelectStage(prevStage.id)}
+                    className="rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    ← 回退：{prevStage.label}
+                  </button>
+                )}
+                {nextStage && (
+                  <button
+                    type="button"
+                    data-testid="overview-next-stage-btn"
+                    onClick={() => void handleSelectStage(nextStage.id)}
+                    className="rounded border border-primary/30 bg-primary/10 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/20"
+                  >
+                    推进至：{nextStage.label} →
+                  </button>
+                )}
+              </div>
             );
           })()}
         </div>

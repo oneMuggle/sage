@@ -660,3 +660,9 @@
 - **`src/features/project-type/KnowledgeExtractionPanel.tsx`**：M2 对话知识提取支持将提取思路与建议一键存为 L4 受控资料（`knowledge-save-reasoning-l4-btn`），并支持单条提取建议一键转为项目里程碑（`knowledge-to-milestone-${idx}`）。
 - **`src/features/project-type/SemanticSearchPanel.tsx`**：M4 语义检索新增 `Top 3 / Top 5 / Top 10` 快捷检索数量胶囊（`semantic-topk-pill-${k}`），并支持将筛选后的语义检索片段一键批量固化为 L2 引用规范约束（`semantic-batch-to-constraint-btn`）。
 - **`src/features/project-type/WikiGenerationPanel.tsx`**：M5 Wiki 扫描预览支持点击语言分类胶囊过滤源文件列表（`wiki-lang-filter-all` / `wiki-lang-filter-${lang}`），并支持将单条核心代码符号一键转化为 L2 架构契约保护规则（`wiki-symbol-to-constraint-${idx}`）。
+
+### Phase P42（2026-10-16）：概览阶段沉淀 L3 与阶段回退、Git 变更文件护栏与提交摘要存 L3、约束/里程碑编辑器双向沉淀闭环
+- **`src/features/project-type/ProjectOverviewWidgets.tsx`**：支持一键将当前项目生命周期阶段状态快照沉淀至 L3 项目画像（`overview-save-stage-profile-btn`），并在阶段切换栏新增上一阶段快捷回退按钮（`overview-prev-stage-btn`）。
+- **`src/features/project-type/GitStatusWidget.tsx`**：变更文件列表新增 `+L2` 审查护栏按钮（`git-widget-guard-${f}`），并支持将最近 Git 提交记录摘要一键沉淀至 L3 项目画像（`git-widget-save-commits-l3-btn`）。
+- **`src/features/project-type/ConstraintEditor.tsx`**：支持按目录索引测试触发预设（`constraint-dir-glob-${idx}`），并在底部工具栏新增 **`同步沉淀至 L3`** 按钮（`constraint-editor-save-l3-btn`）。
+- **`src/features/project-type/MilestoneEditor.tsx`**：底部工具栏新增 **`转 L2 交付约束`**（`milestone-editor-to-constraint-btn`）与 **`沉淀至 L3`**（`milestone-editor-save-l3-btn`）按钮，打通里程碑节点到 L2 规则与 L3 画像的同步沉淀闭环。
