@@ -77,7 +77,9 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [l3RiskIndices, setL3RiskIndices] = useState<Set<number>>(new Set());
   const [l3SuggestionIndices, setL3SuggestionIndices] = useState<Set<number>>(new Set());
   const [l4RiskIndices, setL4RiskIndices] = useState<Set<number>>(new Set());
+  const [l4SuggestionIndices, setL4SuggestionIndices] = useState<Set<number>>(new Set());
   const [batchSuggestionsMilestoned, setBatchSuggestionsMilestoned] = useState(false);
+  const [batchSuggestionsConstrained, setBatchSuggestionsConstrained] = useState(false);
 
   const fetchAdvice = useCallback(async () => {
     if (typeof projectApi?.getAdvice !== 'function') {
@@ -484,32 +486,60 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                     <Lightbulb className="h-3 w-3 text-yellow-400" />
                     <span className="text-xs font-medium text-yellow-400">改进建议</span>
                   </div>
-                  <button
-                    type="button"
-                    data-testid="advisor-batch-suggestions-to-milestone-btn"
-                    onClick={async () => {
-                      if (batchSuggestionsMilestoned) return;
-                      setBatchSuggestionsMilestoned(true);
-                      setMilestoneSuggestionIndices(new Set(suggestions.map((_, i) => i)));
-                      if (typeof projectApi?.createMilestone === 'function') {
-                        for (let i = 0; i < suggestions.length; i += 1) {
-                          const sug = suggestions[i];
-                          try {
-                            await projectApi.createMilestone(projectId, {
-                              title: sug.action.slice(0, 60),
-                              description: sug.reason || '来源于 AI 顾问改进建议批量转化',
-                              sortOrder: i + 1,
-                            });
-                          } catch {
-                            // ignore in test/offline mode
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid="advisor-batch-suggestions-to-constraint-btn"
+                      onClick={async () => {
+                        if (batchSuggestionsConstrained) return;
+                        setBatchSuggestionsConstrained(true);
+                        setGuardedSuggestions(new Set(suggestions.map((_, i) => i)));
+                        if (typeof projectApi?.createConstraint === 'function') {
+                          for (let i = 0; i < suggestions.length; i += 1) {
+                            const sug = suggestions[i];
+                            try {
+                              await projectApi.createConstraint(projectId, {
+                                category: 'convention',
+                                content: sug.reason ? `${sug.action}（${sug.reason}）` : sug.action,
+                                priority: sug.priority === 'high' ? 8 : 6,
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
                           }
                         }
-                      }
-                    }}
-                    className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
-                  >
-                    {batchSuggestionsMilestoned ? '已全部转里程碑' : '全部建议转里程碑'}
-                  </button>
+                      }}
+                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-emerald-500"
+                    >
+                      {batchSuggestionsConstrained ? '已全部转约束' : '全部建议转约束'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="advisor-batch-suggestions-to-milestone-btn"
+                      onClick={async () => {
+                        if (batchSuggestionsMilestoned) return;
+                        setBatchSuggestionsMilestoned(true);
+                        setMilestoneSuggestionIndices(new Set(suggestions.map((_, i) => i)));
+                        if (typeof projectApi?.createMilestone === 'function') {
+                          for (let i = 0; i < suggestions.length; i += 1) {
+                            const sug = suggestions[i];
+                            try {
+                              await projectApi.createMilestone(projectId, {
+                                title: sug.action.slice(0, 60),
+                                description: sug.reason || '来源于 AI 顾问改进建议批量转化',
+                                sortOrder: i + 1,
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }
+                      }}
+                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
+                    >
+                      {batchSuggestionsMilestoned ? '已全部转里程碑' : '全部建议转里程碑'}
+                    </button>
+                  </div>
                 </div>
                 <ul className="space-y-1">
                   {suggestions.map((sug, idx) => (
@@ -597,6 +627,26 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                         className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
                       >
                         <span>{l3SuggestionIndices.has(idx) ? '已存L3' : '+L3'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`advisor-suggestion-to-l4-${idx}`}
+                        onClick={async () => {
+                          if (l4SuggestionIndices.has(idx)) return;
+                          setL4SuggestionIndices((prev) => new Set(prev).add(idx));
+                          if (typeof projectApi?.addMaterial === 'function') {
+                            try {
+                              await projectApi.addMaterial(projectId, {
+                                content: `# AI 顾问改进建议 [${sug.priority}]\n\n${sug.action}${sug.reason ? `\n\n原因：${sug.reason}` : ''}`,
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
+                      >
+                        <span>{l4SuggestionIndices.has(idx) ? '已存L4' : '+L4'}</span>
                       </button>
                       {onDecomposeTask && (
                         <button

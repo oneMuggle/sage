@@ -146,6 +146,7 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     expect(screen.getByTestId('detection-details-panel')).toHaveTextContent('推荐规范包：');
     fireEvent.click(screen.getByTestId('detection-copy-pillars-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-milestones-btn'));
+    fireEvent.click(screen.getByTestId('detection-copy-subtemplates-btn'));
 
     const applyBtn = screen.getByTestId('apply-detected-type-btn');
     fireEvent.click(applyBtn);
@@ -176,6 +177,7 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('selector-copy-blueprint-btn'));
     fireEvent.click(screen.getByTestId('selector-suite-toggle-btn'));
     expect(screen.getByTestId('selector-suite-details')).toHaveTextContent('细分规范包：');
+    fireEvent.click(screen.getByTestId('selector-copy-dirs-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-subtemplates-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-milestones-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-pillars-btn'));

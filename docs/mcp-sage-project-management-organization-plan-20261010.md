@@ -787,3 +787,18 @@
   - 在 `ProjectMaterialsPanel` 单条就绪资料行新增 **`+里程碑`**（`data-testid="sidebar-material-to-milestone-${m.id}"`），支持将侧边栏 L4 受控资料一键通过 `projectApi.createMilestone` 转化为 `[资料研读]` 里程碑并切换为 `已建里程碑`。
 - **单元测试与门禁验证**：
   - 扩展 `ProjectArchetypeStudio.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（2 个测试文件共 16 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
+### Phase P59 — 组织工作台当前蓝图导出与活跃项目快速脚手架、顾问建议批量转约束与单条存 L4、检测预览规范包列表复制及类型选择器标准目录复制（已完成）
+
+- **Phase 9.1 `ProjectArchetypeStudio` 组织工作台当前蓝图 Markdown 导出与活跃项目快速脚手架初始化（`src/features/project-type/ProjectArchetypeStudio.tsx`）**：
+  - 在多形态蓝图总览卡顶部新增 **`复制当前蓝图 MD`**（`data-testid="studio-copy-blueprint-md-btn"`），支持将当前选中形态的工作区定位、标准目录、版本控制、上下文支柱与阶段管线一键导出为 Markdown 清单并切换为 `已复制蓝图 MD`；
+  - 在活跃项目概览卡标题栏新增 **`一键脚手架初始化`**（`data-testid="studio-quick-scaffold-btn"`），支持无需跳转子页面即可直接调用 `projectApi.scaffold` 完成标准目录、总纲文件、默认约束与默认里程碑初始化并切换为 `已初始化脚手架`。
+- **M3 `ProjectAdvisorCard` 改进建议批量转 L2 约束与单条建议归档 L4 资料（`src/features/project-type/ProjectAdvisorCard.tsx`）**：
+  - 在改进建议列表顶部新增 **`全部建议转约束`**（`data-testid="advisor-batch-suggestions-to-constraint-btn"`），支持将全部改进建议一键通过 `projectApi.createConstraint`（`category: 'convention'`）批量固化为 L2 行为约束并切换为 `已全部转约束`；
+  - 在每条改进建议行新增 **`+L4`**（`data-testid="advisor-suggestion-to-l4-${idx}"`），支持将单条改进建议与原因说明一键通过 `projectApi.addMaterial` 归档为 L4 受控参考资料并切换为 `已存L4`。
+- **Phase 9.4 `TypeDetectionPreview` 检测详情推荐规范包列表一键复制（`src/features/project-type/TypeDetectionPreview.tsx`）**：
+  - 在 `detection-details-panel` 推荐规范包行旁新增 **`复制规范包列表`**（`data-testid="detection-copy-subtemplates-btn"`），支持一键复制检测形态细分规范包名称与键名列表至剪贴板并切换为 `已复制规范包`。
+- **Phase 9.4 `ProjectTypeSelector` 治理清单标准目录一键复制（`src/features/project-type/ProjectTypeSelector.tsx`）**：
+  - 在 `selector-suite-details` 治理清单面板顶部新增标准目录预览行与 **`复制标准目录`**（`data-testid="selector-copy-dirs-btn"`），支持在类型选择阶段一键复制推荐标准目录结构并切换为 `已复制目录`。
+- **单元测试与门禁验证**：
+  - 扩展 `ProjectArchetypeStudio.test.tsx` 与 `ProjectTypeBadge.test.tsx`（2 个测试文件共 18 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
