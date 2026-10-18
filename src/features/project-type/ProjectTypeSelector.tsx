@@ -82,6 +82,7 @@ export function ProjectTypeSelector({
   const [showSuiteDetails, setShowSuiteDetails] = useState(false);
   const [copiedBlueprint, setCopiedBlueprint] = useState(false);
   const [copiedMilestones, setCopiedMilestones] = useState(false);
+  const [copiedPillars, setCopiedPillars] = useState(false);
   const [copiedSignalIdx, setCopiedSignalIdx] = useState<number | null>(null);
 
   const runDetection = useCallback(async () => {
@@ -363,6 +364,27 @@ export function ProjectTypeSelector({
                         className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                       >
                         {copiedMilestones ? '已复制里程碑' : '复制推荐里程碑'}
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        护栏支柱：{activeBp.contextPillars.join(' · ')}
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="selector-copy-pillars-btn"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard?.writeText(activeBp.contextPillars.join('\n'));
+                            setCopiedPillars(true);
+                            setTimeout(() => setCopiedPillars(false), 1500);
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                      >
+                        {copiedPillars ? '已复制支柱' : '复制护栏支柱'}
                       </button>
                     </div>
                   </div>

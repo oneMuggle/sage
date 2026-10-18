@@ -330,6 +330,8 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('decompose-preview-btn'));
     const copyPlanBtn = await screen.findByTestId('decompose-copy-md-btn');
     fireEvent.click(copyPlanBtn);
+    fireEvent.click(screen.getByTestId('decompose-node-to-l4-0'));
+    expect(screen.getByTestId('decompose-node-to-l4-0')).toHaveTextContent('已存L4');
 
     // Deselect second milestone node and apply only first node
     fireEvent.click(screen.getByTestId('decompose-node-checkbox-1'));

@@ -74,6 +74,8 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [savedL3Report, setSavedL3Report] = useState(false);
   const [milestoneRiskIndices, setMilestoneRiskIndices] = useState<Set<number>>(new Set());
   const [milestoneSuggestionIndices, setMilestoneSuggestionIndices] = useState<Set<number>>(new Set());
+  const [l3RiskIndices, setL3RiskIndices] = useState<Set<number>>(new Set());
+  const [l3SuggestionIndices, setL3SuggestionIndices] = useState<Set<number>>(new Set());
 
   const fetchAdvice = useCallback(async () => {
     if (typeof projectApi?.getAdvice !== 'function') {
@@ -412,6 +414,34 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                         >
                           <span>{milestoneRiskIndices.has(idx) ? '已建里程碑' : '+里程碑'}</span>
                         </button>
+                        <button
+                          type="button"
+                          data-testid={`advisor-risk-to-l3-${idx}`}
+                          onClick={async () => {
+                            if (l3RiskIndices.has(idx)) return;
+                            setL3RiskIndices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.confirmKnowledge === 'function') {
+                              try {
+                                await projectApi.confirmKnowledge(projectId, {
+                                  entries: [
+                                    {
+                                      category: 'note',
+                                      content: `风险记录 [${risk.severity}]：${risk.description}${risk.suggestion ? `（建议：${risk.suggestion}）` : ''}`,
+                                      importance: risk.severity === 'high' ? 9 : 7,
+                                      sourceMessageIds: [],
+                                      reasoning: 'M3 AI 顾问单条风险沉淀至 L3 画像',
+                                    },
+                                  ],
+                                });
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }
+                          }}
+                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
+                        >
+                          <span>{l3RiskIndices.has(idx) ? '已存L3' : '+L3'}</span>
+                        </button>
                         {risk.suggestion && (
                           <div className="text-ui-2xs text-muted ml-6 mt-0.5 w-full">
                             → {risk.suggestion}
@@ -489,6 +519,34 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                         className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
                       >
                         <span>{milestoneSuggestionIndices.has(idx) ? '已转里程碑' : '+里程碑'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`advisor-suggestion-to-l3-${idx}`}
+                        onClick={async () => {
+                          if (l3SuggestionIndices.has(idx)) return;
+                          setL3SuggestionIndices((prev) => new Set(prev).add(idx));
+                          if (typeof projectApi?.confirmKnowledge === 'function') {
+                            try {
+                              await projectApi.confirmKnowledge(projectId, {
+                                entries: [
+                                  {
+                                    category: 'decision',
+                                    content: `改进决策 [${sug.priority}]：${sug.action}${sug.reason ? `（原因：${sug.reason}）` : ''}`,
+                                    importance: sug.priority === 'high' ? 8 : 6,
+                                    sourceMessageIds: [],
+                                    reasoning: 'M3 AI 顾问单条建议沉淀至 L3 画像',
+                                  },
+                                ],
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
+                      >
+                        <span>{l3SuggestionIndices.has(idx) ? '已存L3' : '+L3'}</span>
                       </button>
                       {onDecomposeTask && (
                         <button
