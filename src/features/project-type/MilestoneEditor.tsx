@@ -294,6 +294,23 @@ export function MilestoneEditor({
               placeholder="描述里程碑的具体目标和交付物..."
               rows={3}
             />
+            <div
+              className="flex flex-wrap items-center gap-1"
+              data-testid="milestone-editor-pillar-presets"
+            >
+              <span className="text-ui-2xs text-muted-foreground">追加护栏支柱：</span>
+              {blueprint.contextPillars.map((pillar, idx) => (
+                <button
+                  key={pillar}
+                  type="button"
+                  data-testid={`milestone-pillar-append-${idx}`}
+                  onClick={() => setDescription((prev) => (prev.trim() ? `${prev.trim()}；${pillar}` : pillar))}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  +支柱 #{idx + 1}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
