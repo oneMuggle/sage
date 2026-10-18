@@ -44,6 +44,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [savedOverviewL4, setSavedOverviewL4] = useState(false);
   const [createdStageMilestone, setCreatedStageMilestone] = useState(false);
   const [createdStageConstraint, setCreatedStageConstraint] = useState(false);
+  const [seededStageMilestones, setSeededStageMilestones] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [decomposeReq, setDecomposeReq] = useState('');
   const [decomposeCtx, setDecomposeCtx] = useState('');
@@ -332,6 +333,36 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
             >
               {createdStageConstraint ? '已设阶段约束' : '当前阶段设 L2 约束'}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-seed-stage-milestones-btn"
+              onClick={async () => {
+                if (seededStageMilestones) return;
+                setSeededStageMilestones(true);
+                const matched = blueprint.recommendedMilestones.filter(
+                  (m) => m.stage === activeStageId,
+                );
+                const list =
+                  matched.length > 0 ? matched : blueprint.recommendedMilestones.slice(0, 2);
+                if (typeof projectApi?.createMilestone === 'function') {
+                  for (const item of list) {
+                    try {
+                      await projectApi.createMilestone(project.id, {
+                        title: item.title,
+                        description: item.description,
+                        stage: item.stage,
+                        status: 'pending',
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {seededStageMilestones ? '已导入阶段里程碑' : '导入阶段推荐里程碑'}
             </button>
             <button
               type="button"

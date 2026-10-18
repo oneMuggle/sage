@@ -29,6 +29,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [selectedStageFilter, setSelectedStageFilter] = useState<string | null>(null);
   const [savedProgressL3, setSavedProgressL3] = useState(false);
   const [savedProgressL4, setSavedProgressL4] = useState(false);
+  const [convertedActiveL2, setConvertedActiveL2] = useState(false);
   const [promotedConstraintIds, setPromotedConstraintIds] = useState<Set<string>>(new Set());
   const [promotedL3Ids, setPromotedL3Ids] = useState<Set<string>>(new Set());
   const [promotedL4Ids, setPromotedL4Ids] = useState<Set<string>>(new Set());
@@ -256,6 +257,33 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
               className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
             >
               {savedProgressL4 ? '已存 L4' : '存 L4'}
+            </button>
+            <button
+              type="button"
+              data-testid="milestone-summary-active-to-l2-btn"
+              onClick={async () => {
+                if (convertedActiveL2) return;
+                setConvertedActiveL2(true);
+                const activeList = milestones
+                  .filter((m) => m.status !== 'completed')
+                  .slice(0, 3);
+                if (typeof projectApi?.createConstraint === 'function') {
+                  for (const m of activeList) {
+                    try {
+                      await projectApi.createConstraint(projectId, {
+                        category: 'deliverable_guard',
+                        content: `里程碑交付准入规范 [${m.title}]：${m.description || '完成节点交付'}`,
+                        priority: 8,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {convertedActiveL2 ? '已转 L2' : '未完转 L2'}
             </button>
             <button
               type="button"

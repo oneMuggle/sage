@@ -42,6 +42,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [guardedFiles, setGuardedFiles] = useState<Set<string>>(new Set());
   const [commitMilestones, setCommitMilestones] = useState<Set<string>>(new Set());
   const [commitL3Shas, setCommitL3Shas] = useState<Set<string>>(new Set());
+  const [commitL4Shas, setCommitL4Shas] = useState<Set<string>>(new Set());
   const [savedCommitsL3, setSavedCommitsL3] = useState(false);
   const [savedCommitsL4, setSavedCommitsL4] = useState(false);
 
@@ -486,6 +487,26 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                       className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
                     >
                       {commitL3Shas.has(commit.sha) ? '已存L3' : '+L3'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`git-widget-commit-to-l4-${commit.sha}`}
+                      onClick={async () => {
+                        if (commitL4Shas.has(commit.sha)) return;
+                        setCommitL4Shas((prev) => new Set(prev).add(commit.sha));
+                        if (typeof projectApi?.addMaterial === 'function') {
+                          try {
+                            await projectApi.addMaterial(projectId, {
+                              content: `# Git 提交记录 [${commit.sha.slice(0, 7)}]\n- 作者: ${commit.author}\n- 时间: ${commit.date}\n\n${commit.message}`,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
+                    >
+                      {commitL4Shas.has(commit.sha) ? '已存L4' : '+L4'}
                     </button>
                     <button
                       type="button"
