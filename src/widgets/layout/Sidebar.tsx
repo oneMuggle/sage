@@ -17,6 +17,7 @@ import {
   PanelLeftOpen,
   Search,
   PenSquare,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -47,10 +48,11 @@ import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import {
   ConversationsSection,
   GitStatusSection,
-  ProjectSection,
+  SidebarProjectList,
   useSiderSections,
 } from '../sidebar';
 
+import { NavGroup } from './NavGroup';
 import { SidebarNavItem, type SidebarNavItemData } from './SidebarNavItem';
 
 // UX-IA R1 A3（对标 ChatGPT / Claude Projects）：项目作为一级容器排在会话之上。
@@ -88,25 +90,53 @@ interface NavItem {
   icon: LucideIcon;
 }
 
-const primaryNavItems: NavItem[] = [
+// Scheme 2 (P1): 侧栏 rail 导航分 3 组 ——
+//   核心（始终展开）：对话 / 项目工作台 / 待办 / 记忆
+//   工具（可折叠）：文档与验收 / 知识库 / 定时任务 / 技能
+//   高级（可折叠，默认收起）：智能体 / 编排 / Arena / 帮助
+// 设置固定在底部，不属于任何组。
+interface NavGroupDef {
+  groupKey: string;
+  label: string;
+  icon: LucideIcon;
+  collapsible: boolean;
+  defaultCollapsed?: boolean;
+  items: NavItem[];
+}
+
+const coreNavItems: NavItem[] = [
   { path: '/chat', label: '对话', icon: MessageSquare },
   { path: '/projects', label: '项目工作台', icon: Folder },
-  { path: '/office', label: '文档与验收', icon: FileSpreadsheet },
   { path: '/todos', label: '待办', icon: ListTodo },
   { path: '/memory', label: '记忆', icon: Brain },
-  { path: '/knowledge', label: '知识库', icon: BookOpen },
 ];
-const settingsNavItem: NavItem = { path: '/settings', label: '设置', icon: Settings };
-const moreNavItems: NavItem[] = [
+const toolsNavItems: NavItem[] = [
+  { path: '/office', label: '文档与验收', icon: FileSpreadsheet },
+  { path: '/knowledge', label: '知识库', icon: BookOpen },
   { path: '/scheduled', label: '定时任务', icon: CalendarClock },
   { path: '/skills', label: '技能', icon: Sparkles },
+];
+const advancedNavItems: NavItem[] = [
   { path: '/agents', label: '智能体', labelKey: 'sidebar.nav.agents', icon: Bot },
   { path: '/orchestration', label: '编排', icon: Network },
   { path: '/arena', label: 'Arena', icon: UserCog },
   { path: '/help', label: '帮助', icon: HelpCircle },
 ];
-// rail 顺序 = 一级在前、次级在后（原先靠「更多」折叠分组表达的顺序感）。
-const railNavItems = [...primaryNavItems, ...moreNavItems, settingsNavItem];
+
+const navGroups: NavGroupDef[] = [
+  { groupKey: 'core', label: '核心', icon: Sparkles, collapsible: false, items: coreNavItems },
+  { groupKey: 'tools', label: '工具', icon: Wrench, collapsible: true, items: toolsNavItems },
+  {
+    groupKey: 'advanced',
+    label: '高级',
+    icon: Bot,
+    collapsible: true,
+    defaultCollapsed: true,
+    items: advancedNavItems,
+  },
+];
+
+const settingsNavItem: NavItem = { path: '/settings', label: '设置', icon: Settings };
 
 /**
  * P1-7: 未解锁高级入口的一句话说明。
@@ -367,7 +397,7 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
         );
       case 'project':
         return (
-          <ProjectSection
+          <SidebarProjectList
             collapsed={isCollapsed}
             onToggleCollapsed={() => toggleCollapsed(key)}
             onOpenSession={handleOpenSession}
@@ -399,37 +429,51 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
           data-testid="sidebar-rail-nav"
           className="flex-1 py-2 flex flex-col items-center gap-1 overflow-y-auto w-full"
         >
-          {railNavItems
-            .filter((item) => item.path !== settingsNavItem.path)
-            .map((item) => {
-              const state = disclosureState(item);
-              if (state === 'hidden') {
-                return null;
-              }
-
-              const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
-
-              return (
-                <SidebarNavItem
-                  key={item.path}
-                  item={toNavData(item)}
-                  active={isActivePath(item.path)}
-                  variant="rail"
-                  trailing={
-                    item.path === '/chat' ? <AttnBadge count={attentionCount} /> : undefined
+          {navGroups.map((group, groupIndex) => (
+            <div key={group.groupKey} className="flex flex-col items-center w-full">
+              {groupIndex > 0 && (
+                <div className="w-8 border-t border-border my-1" aria-hidden="true" />
+              )}
+              <NavGroup
+                groupKey={group.groupKey}
+                label={group.label}
+                icon={group.icon}
+                collapsible={group.collapsible}
+                defaultCollapsed={group.defaultCollapsed}
+              >
+                {group.items.map((item) => {
+                  const state = disclosureState(item);
+                  if (state === 'hidden') {
+                    return null;
                   }
-                  locked={
-                    state === 'locked'
-                      ? {
-                          hint: LOCKED_FEATURE_HINTS[featureKey] ?? t('sidebar.lockedHintGeneric'),
-                          badge: t('sidebar.lockedBadge'),
-                          onRequestUnlock: () => void requestUnlock(item, featureKey),
-                        }
-                      : undefined
-                  }
-                />
-              );
-            })}
+
+                  const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
+
+                  return (
+                    <SidebarNavItem
+                      key={item.path}
+                      item={toNavData(item)}
+                      active={isActivePath(item.path)}
+                      variant="rail"
+                      trailing={
+                        item.path === '/chat' ? <AttnBadge count={attentionCount} /> : undefined
+                      }
+                      locked={
+                        state === 'locked'
+                          ? {
+                              hint:
+                                LOCKED_FEATURE_HINTS[featureKey] ?? t('sidebar.lockedHintGeneric'),
+                              badge: t('sidebar.lockedBadge'),
+                              onRequestUnlock: () => void requestUnlock(item, featureKey),
+                            }
+                          : undefined
+                      }
+                    />
+                  );
+                })}
+              </NavGroup>
+            </div>
+          ))}
         </nav>
 
         {/* 底部：设置 → 存活点 → 折叠/展开 */}

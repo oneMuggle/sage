@@ -54,6 +54,10 @@ const Arena = lazy(() => import('./pages/Arena').then((m) => ({ default: m.defau
 // Task 12 (2026-09-21): 待办子系统 - 完整管理页
 // 与 sidebar TodoSection（预览前 5 条）互补：列出全部待办、新建 / 完成 / 取消 / 删除。
 const TodoPage = lazy(() => import('./pages/TodoPage').then((m) => ({ default: m.TodoPage })));
+// Scheme 1 (2026-10-18): 项目治理页 — 分层渐进式披露，7 个治理 Tab 从工作台独立路由
+const ProjectGovernance = lazy(() =>
+  import('./pages/ProjectGovernance').then((m) => ({ default: m.ProjectGovernance })),
+);
 
 // 2026-10-17: 闲时自主目标执行系统 — 列表页 + 详情页
 const GoalListPage = lazy(() =>
@@ -221,6 +225,7 @@ function App() {
             <Route path="agents" element={<Agents />} />
             <Route path="skills" element={<Skills />} />
             <Route path="office" element={<Office />} />
+            <Route path="projects/governance/:projectId" element={<ProjectGovernance />} />
             <Route path="projects" element={<Projects />} />
             <Route path="knowledge" element={<Knowledge />} />
             <Route path="scheduled" element={<ScheduledTasks />} />

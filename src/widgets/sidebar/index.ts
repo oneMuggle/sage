@@ -1,6 +1,7 @@
 export { ConversationsSection } from './sections/ConversationsSection';
 export { GitStatusSection } from './sections/GitStatusSection';
-export { ProjectSection } from './sections/ProjectSection';
+export { SidebarProjectList } from './sections/SidebarProjectList';
+export { WorkbenchProjectList } from './sections/WorkbenchProjectList';
 export { SiderSection } from './SiderSection';
 export { TwoStepDelete } from './TwoStepDelete';
 export { useSiderSections } from './useSiderSections';
