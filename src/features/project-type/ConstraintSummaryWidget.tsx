@@ -47,6 +47,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [savedSummaryL4, setSavedSummaryL4] = useState(false);
   const [promotedRuleL3Ids, setPromotedRuleL3Ids] = useState<Set<string>>(new Set());
   const [promotedRuleMilestoneIds, setPromotedRuleMilestoneIds] = useState<Set<string>>(new Set());
+  const [promotedRuleL4Ids, setPromotedRuleL4Ids] = useState<Set<string>>(new Set());
 
   const fetchConstraints = useCallback(async () => {
     if (typeof projectApi?.listConstraints !== 'function') {
@@ -410,6 +411,26 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                       className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
                       {promotedRuleMilestoneIds.has(rule.id) ? '已转里程碑' : '+里程碑'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`constraint-summary-rule-to-l4-${rule.id}`}
+                      onClick={async () => {
+                        if (promotedRuleL4Ids.has(rule.id)) return;
+                        setPromotedRuleL4Ids((prev) => new Set(prev).add(rule.id));
+                        if (typeof projectApi?.addMaterial === 'function') {
+                          try {
+                            await projectApi.addMaterial(projectId, {
+                              content: `# 高优约束归档 [P${rule.priority} · ${rule.category}]\n\n${rule.content}`,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {promotedRuleL4Ids.has(rule.id) ? '已存L4' : '+L4'}
                     </button>
                     <button
                       type="button"
