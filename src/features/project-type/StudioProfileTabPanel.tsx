@@ -12,6 +12,7 @@ import type { ProjectProfileEntry } from '../../shared/api/types';
 import { Button } from '../../shared/ui/Button';
 
 import { KnowledgeExtractionPanel } from './KnowledgeExtractionPanel';
+import { getArchetypeBlueprint } from './archetypeBlueprints';
 
 interface ProfilePresetItem {
   category: string;
@@ -121,6 +122,7 @@ export function StudioProfileTabPanel({
   const [l4PromotedIds, setL4PromotedIds] = useState<Set<string>>(new Set());
   const [copiedEntryId, setCopiedEntryId] = useState<string | null>(null);
   const presets = PROFILE_PRESETS_BY_TYPE[projectType] ?? PROFILE_PRESETS_BY_TYPE.coding;
+  const blueprint = getArchetypeBlueprint(projectType);
 
   const filteredEntries = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -310,6 +312,20 @@ export function StudioProfileTabPanel({
             className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
           >
             [{preset.category}] {preset.label}
+          </button>
+        ))}
+        {blueprint.contextPillars.map((pillar, idx) => (
+          <button
+            key={pillar}
+            type="button"
+            data-testid={`studio-profile-pillar-preset-${idx}`}
+            onClick={() => {
+              onCategoryChange('convention');
+              onDraftChange(pillar);
+            }}
+            className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            支柱 #{idx + 1}：{pillar.slice(0, 14)}
           </button>
         ))}
       </div>
