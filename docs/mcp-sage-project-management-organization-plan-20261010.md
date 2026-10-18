@@ -747,3 +747,17 @@
   - 在 `detection-details-panel` 默认里程碑行旁新增 **`复制默认里程碑`**（`data-testid="detection-copy-milestones-btn"`），支持一键导出检测形态推荐里程碑清单至剪贴板并切换为 `已复制里程碑`。
 - **单元测试与门禁验证**：
   - 扩展 `ProjectTypeBadge.test.tsx`、`ConstraintSummaryWidget.test.tsx`、`MilestoneProgressWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（4 个测试文件共 43 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
+### Phase P56 — 任务分解补充上下文支柱追加与选中节点批量存 L3、约束编辑器支柱快捷追加、类型选择器规范包列表复制及立项向导推荐里程碑复制（已完成）
+
+- **M1 `TaskDecomposeDialog` 补充上下文护栏支柱快捷追加与选中节点批量存 L3 画像（`src/features/project-type/TaskDecomposeDialog.tsx`）**：
+  - 在输入阶段补充上下文输入框下方新增形态上下文支柱快捷追加栏（`data-testid="decompose-pillar-presets"`），提供 **`+支柱 #1..#3`**（`data-testid="decompose-pillar-append-${idx}"`）一键填入或分号追加项目形态核心上下文支柱；
+  - 在预览阶段顶部批量工具栏新增 **`选中存 L3 画像`**（`data-testid="decompose-batch-to-l3-btn"`），支持将勾选的任务分解节点一键通过 `projectApi.confirmKnowledge`（`category: 'goal'`, `importance: 7`）批量沉淀至 L3 项目画像并切换为 `已批量存 L3`。
+- **M2 `ConstraintEditor` 约束内容护栏支柱分号追加（`src/features/project-type/ConstraintEditor.tsx`）**：
+  - 在 `constraint-editor-content-presets` 栏新增 **`+追加支柱 #1..#3`**（`data-testid="constraint-pillar-append-${idx}"`），支持在不覆盖已输入约束正文的前提下将形态核心上下文支柱分号追加至末尾。
+- **Phase 9.4 `ProjectTypeSelector` 细分规范包列表一键复制（`src/features/project-type/ProjectTypeSelector.tsx`）**：
+  - 在 `selector-suite-details` 细分规范包行旁新增 **`复制规范包列表`**（`data-testid="selector-copy-subtemplates-btn"`），支持一键复制当前形态细分规范包名称与键名清单至剪贴板并切换为 `已复制规范包`。
+- **Phase P3 `ProjectCreationWizard` 立项确认页推荐里程碑一键复制（`src/features/project-type/ProjectCreationWizard.tsx`）**：
+  - 在 `wizard-recommended-milestones-preview` 推荐里程碑预览行新增 **`复制推荐里程碑`**（`data-testid="wizard-copy-milestones-btn"`），支持在立项确认阶段一键导出推荐里程碑清单至剪贴板并切换为 `已复制里程碑`。
+- **单元测试与门禁验证**：
+  - 扩展 `ProjectTypeBadge.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（3 个测试文件共 40 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

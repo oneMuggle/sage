@@ -395,6 +395,7 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('constraint-priority-preset-10'));
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('constraint-pillar-preset-0'));
+    fireEvent.click(screen.getByTestId('constraint-pillar-append-0'));
     fireEvent.click(screen.getByTestId('constraint-dir-glob-0'));
 
     fireEvent.change(screen.getByTestId('constraint-editor-test-path-input'), {
