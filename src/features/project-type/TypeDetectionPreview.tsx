@@ -56,6 +56,7 @@ export function TypeDetectionPreview({
   const [copiedSignalIdx, setCopiedSignalIdx] = useState<number | null>(null);
   const [copiedStages, setCopiedStages] = useState(false);
   const [copiedDirs, setCopiedDirs] = useState(false);
+  const [copiedPillars, setCopiedPillars] = useState(false);
 
   if (loading) {
     return (
@@ -300,6 +301,30 @@ export function TypeDetectionPreview({
               <span className="font-medium text-foreground">
                 {detectedBlueprint.recommendedMilestones.map((m) => m.title).join(' → ')}
               </span>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="text-muted-foreground">护栏支柱：</span>
+                <span className="font-medium text-foreground">
+                  {detectedBlueprint.contextPillars.join(' · ')}
+                </span>
+              </div>
+              <button
+                type="button"
+                data-testid="detection-copy-pillars-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard?.writeText(detectedBlueprint.contextPillars.join('\n'));
+                    setCopiedPillars(true);
+                    setTimeout(() => setCopiedPillars(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+              >
+                {copiedPillars ? '已复制支柱' : '复制护栏支柱'}
+              </button>
             </div>
           </div>
         )}
