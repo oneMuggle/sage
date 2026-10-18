@@ -31,6 +31,7 @@ const mockWikiGenerate = vi.fn();
 const mockExtractKnowledge = vi.fn();
 const mockConfirmKnowledge = vi.fn();
 const mockSemanticSearchMaterials = vi.fn();
+const mockGetIndexingStats = vi.fn();
 const mockReindexMaterial = vi.fn();
 const mockGetProjectProfile = vi.fn();
 const mockCreateProjectProfile = vi.fn();
@@ -67,6 +68,7 @@ vi.mock('../../shared/api', () => ({
     extractKnowledge: (...args: unknown[]) => mockExtractKnowledge(...args),
     confirmKnowledge: (...args: unknown[]) => mockConfirmKnowledge(...args),
     semanticSearchMaterials: (...args: unknown[]) => mockSemanticSearchMaterials(...args),
+    getMaterialIndexingStats: (...args: unknown[]) => mockGetIndexingStats(...args),
     reindexMaterial: (...args: unknown[]) => mockReindexMaterial(...args),
   },
   memoryApi: {
@@ -77,6 +79,8 @@ vi.mock('../../shared/api', () => ({
 }));
 
 import { ProjectArchetypeStudio } from './ProjectArchetypeStudio';
+import { SemanticSearchPanel } from './SemanticSearchPanel';
+import { StudioProfileTabPanel } from './StudioProfileTabPanel';
 
 const SAMPLE_PROJECT = {
   id: 'proj-1',
@@ -144,6 +148,12 @@ beforeEach(() => {
         content: 'HotpotQA 基准上多跳召回率提升 6.4%',
       },
     ],
+  });
+  mockGetIndexingStats.mockResolvedValue({
+    totalMaterials: 3,
+    indexedMaterials: 2,
+    totalChunks: 12,
+    embedderType: 'local',
   });
   mockReindexMaterial.mockResolvedValue({ chunkCount: 3 });
   mockImportConstraints.mockResolvedValue([
@@ -435,5 +445,44 @@ describe('ProjectArchetypeStudio', () => {
 
     // "进入治理" button navigates to governance page
     expect(screen.getByTestId('enter-governance-btn')).toBeInTheDocument();
+  });
+
+  it('supports SemanticSearchPanel pillar quick query & stats L3 archive, and StudioProfileTabPanel pillar append (Phase P58)', async () => {
+    const onDraftChange = vi.fn();
+    render(
+      <div>
+        <SemanticSearchPanel projectId="proj-1" projectType="research" />
+        <StudioProfileTabPanel
+          projectPath="D:/Archives/Contract2026"
+          projectType="research"
+          projectId="proj-1"
+          profileEntries={[]}
+          profileCategory="convention"
+          onCategoryChange={vi.fn()}
+          profileDraft="初始画像规范"
+          onDraftChange={onDraftChange}
+          savingProfile={false}
+          onAddEntry={vi.fn()}
+          onDeleteEntry={vi.fn()}
+        />
+      </div>,
+    );
+
+    fireEvent.click(await screen.findByTestId('semantic-stats-save-l3-btn'));
+    expect(screen.getByTestId('semantic-stats-save-l3-btn')).toHaveTextContent('已存统计 L3');
+
+    fireEvent.click(screen.getByTestId('semantic-pillar-query-0'));
+    await waitFor(() => {
+      expect(mockSemanticSearchMaterials).toHaveBeenCalledWith(
+        'proj-1',
+        'SAGE.md：核心研究问题 (RQ)、科学假设与数学符号规范表 (Notation)',
+        10,
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('studio-profile-pillar-append-0'));
+    expect(onDraftChange).toHaveBeenCalledWith(
+      '初始画像规范；SAGE.md：核心研究问题 (RQ)、科学假设与数学符号规范表 (Notation)',
+    );
   });
 });

@@ -16,6 +16,8 @@ import type { SemanticSearchHit, IndexingStats, ProjectType } from '../../shared
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 
+import { getArchetypeBlueprint } from './archetypeBlueprints';
+
 const SEMANTIC_QUERY_PRESETS: Record<ProjectType, string[]> = {
   coding: ['核心架构与 IPC 通信边界', '错误处理与异常恢复策略', '鉴权与权限校验逻辑'],
   business: ['违约责任与赔偿上限条款', '付款节点与发票开具约定', '保密期限与争议管辖法院'],
@@ -46,8 +48,10 @@ export function SemanticSearchPanel({
   const [savedMilestoneIndices, setSavedMilestoneIndices] = useState<Set<number>>(new Set());
   const [savedL4Indices, setSavedL4Indices] = useState<Set<number>>(new Set());
   const [savedBundleL4, setSavedBundleL4] = useState(false);
+  const [savedStatsL3, setSavedStatsL3] = useState(false);
 
   const presets = SEMANTIC_QUERY_PRESETS[projectType] ?? SEMANTIC_QUERY_PRESETS.coding;
+  const blueprint = getArchetypeBlueprint(projectType);
 
   /** 执行语义检索 */
   const runSearch = useCallback(
@@ -229,6 +233,34 @@ export function SemanticSearchPanel({
             <span>
               总 chunks: <strong>{stats.totalChunks}</strong>
             </span>
+            <button
+              type="button"
+              data-testid="semantic-stats-save-l3-btn"
+              onClick={async () => {
+                if (savedStatsL3) return;
+                setSavedStatsL3(true);
+                if (typeof projectApi?.confirmKnowledge === 'function') {
+                  try {
+                    await projectApi.confirmKnowledge(projectId, {
+                      entries: [
+                        {
+                          category: 'architecture',
+                          content: `L4 资料向量索引统计：总材料 ${stats.totalMaterials}，已索引 ${stats.indexedMaterials}，总 chunks ${stats.totalChunks}`,
+                          importance: 6,
+                          sourceMessageIds: [],
+                          reasoning: 'M4 语义检索索引状态沉淀至 L3 画像',
+                        },
+                      ],
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="ml-auto rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+            >
+              {savedStatsL3 ? '已存统计 L3' : '索引统计存 L3'}
+            </button>
           </div>
           {stats.embedderType && stats.embedderType !== 'unavailable' && (
             <div className="mt-1 text-xs text-muted-foreground">
@@ -257,6 +289,21 @@ export function SemanticSearchPanel({
             className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs text-primary hover:bg-primary/10 disabled:opacity-50"
           >
             {presetText}
+          </button>
+        ))}
+        {blueprint.contextPillars.map((pillar, idx) => (
+          <button
+            key={`pillar-${pillar}`}
+            type="button"
+            disabled={searching}
+            data-testid={`semantic-pillar-query-${idx}`}
+            onClick={() => {
+              setQuery(pillar);
+              void runSearch(pillar);
+            }}
+            className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            支柱检索 #{idx + 1}
           </button>
         ))}
       </div>

@@ -774,3 +774,16 @@
   - 在 `workspace-vcs-summary-widget` 阶段治理栏新增 **`导入阶段推荐里程碑`**（`data-testid="overview-seed-stage-milestones-btn"`），支持按当前激活阶段筛选形态蓝图推荐里程碑并一键批量创建，切换为 `已导入阶段里程碑`。
 - **单元测试与门禁验证**：
   - 扩展 `ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（2 个测试文件共 25 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
+### Phase P58 — 语义检索上下文支柱快捷检索与索引统计沉淀 L3、L3 画像草稿支柱分号追加、侧边栏 L2 指令转约束及 L4 资料一键转里程碑（已完成）
+
+- **M4 `SemanticSearchPanel` 形态上下文支柱快捷检索与索引统计一键沉淀 L3 画像（`src/features/project-type/SemanticSearchPanel.tsx`）**：
+  - 在 `semantic-query-presets` 栏新增当前形态上下文支柱检索胶囊 **`支柱检索 #1..#3`**（`data-testid="semantic-pillar-query-${idx}"`），支持按项目形态蓝图核心上下文支柱一键发起 L4 语义检索；
+  - 在索引状态栏新增 **`索引统计存 L3`**（`data-testid="semantic-stats-save-l3-btn"`），支持将当前 L4 资料总材料数、已索引材料数与总 chunks 数一键通过 `projectApi.confirmKnowledge`（`category: 'architecture'`, `importance: 6`）沉淀至 L3 项目画像并切换为 `已存统计 L3`。
+- **L3 `StudioProfileTabPanel` 画像草稿上下文支柱分号追加（`src/features/project-type/StudioProfileTabPanel.tsx`）**：
+  - 在 `studio-profile-presets-bar` 栏新增 **`+追加支柱 #1..#3`**（`data-testid="studio-profile-pillar-append-${idx}"`），支持在不覆盖已输入画像草稿的前提下将当前形态上下文支柱以分号追加至末尾。
+- **侧边栏 `ProjectExpandedPanels` L2 指令转约束与 L4 资料一键转里程碑（`src/widgets/sidebar/sections/ProjectExpandedPanels.tsx`）**：
+  - 在 `ProjectOverviewPanel` 标题栏新增 **`指令转 L2`**（`data-testid="sidebar-overview-to-constraint"`），支持将当前项目概述与自定义指令一键通过 `projectApi.createConstraint`（`category: 'convention'`, `priority: 8`）固化为 L2 行为约束并切换为 `已转L2`；
+  - 在 `ProjectMaterialsPanel` 单条就绪资料行新增 **`+里程碑`**（`data-testid="sidebar-material-to-milestone-${m.id}"`），支持将侧边栏 L4 受控资料一键通过 `projectApi.createMilestone` 转化为 `[资料研读]` 里程碑并切换为 `已建里程碑`。
+- **单元测试与门禁验证**：
+  - 扩展 `ProjectArchetypeStudio.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（2 个测试文件共 16 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
