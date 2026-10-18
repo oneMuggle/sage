@@ -44,7 +44,9 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [savedSummaryL3, setSavedSummaryL3] = useState(false);
+  const [savedSummaryL4, setSavedSummaryL4] = useState(false);
   const [promotedRuleL3Ids, setPromotedRuleL3Ids] = useState<Set<string>>(new Set());
+  const [promotedRuleMilestoneIds, setPromotedRuleMilestoneIds] = useState<Set<string>>(new Set());
 
   const fetchConstraints = useCallback(async () => {
     if (typeof projectApi?.listConstraints !== 'function') {
@@ -184,6 +186,26 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                 className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 {savedSummaryL3 ? '已存高优 L3' : '沉淀高优至 L3'}
+              </button>
+              <button
+                type="button"
+                data-testid="constraint-summary-save-l4-btn"
+                onClick={async () => {
+                  if (savedSummaryL4) return;
+                  setSavedSummaryL4(true);
+                  if (typeof projectApi?.addMaterial === 'function') {
+                    try {
+                      await projectApi.addMaterial(projectId, {
+                        content: `# L2 生效约束规则快照 (${enabledConstraints.length} 条)\n${enabledConstraints.map((c) => `- [P${c.priority} · ${c.category}] ${c.content}`).join('\n')}`,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {savedSummaryL4 ? '已存 L4' : '存 L4'}
               </button>
               <button
                 type="button"
@@ -366,6 +388,28 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                       className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
                     >
                       {promotedRuleL3Ids.has(rule.id) ? '已存 L3' : '+L3'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`constraint-summary-rule-to-milestone-${rule.id}`}
+                      onClick={async () => {
+                        if (promotedRuleMilestoneIds.has(rule.id)) return;
+                        setPromotedRuleMilestoneIds((prev) => new Set(prev).add(rule.id));
+                        if (typeof projectApi?.createMilestone === 'function') {
+                          try {
+                            await projectApi.createMilestone(projectId, {
+                              title: `[规则验收] ${rule.content.slice(0, 60)}`,
+                              description: `来自 L2 高优规则 P${rule.priority} (${rule.category})`,
+                              status: 'pending',
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {promotedRuleMilestoneIds.has(rule.id) ? '已转里程碑' : '+里程碑'}
                     </button>
                     <button
                       type="button"
