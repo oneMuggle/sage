@@ -45,6 +45,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [savedSummaryL3, setSavedSummaryL3] = useState(false);
   const [savedSummaryL4, setSavedSummaryL4] = useState(false);
+  const [convertedTopMilestones, setConvertedTopMilestones] = useState(false);
   const [promotedRuleL3Ids, setPromotedRuleL3Ids] = useState<Set<string>>(new Set());
   const [promotedRuleMilestoneIds, setPromotedRuleMilestoneIds] = useState<Set<string>>(new Set());
   const [promotedRuleL4Ids, setPromotedRuleL4Ids] = useState<Set<string>>(new Set());
@@ -208,6 +209,30 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                 className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 {savedSummaryL4 ? '已存 L4' : '存 L4'}
+              </button>
+              <button
+                type="button"
+                data-testid="constraint-summary-top-to-milestone-btn"
+                onClick={async () => {
+                  if (convertedTopMilestones) return;
+                  setConvertedTopMilestones(true);
+                  if (typeof projectApi?.createMilestone === 'function') {
+                    for (const rule of topRules) {
+                      try {
+                        await projectApi.createMilestone(projectId, {
+                          title: `[高优约束验收] ${rule.content.slice(0, 60)}`,
+                          description: `来自 L2 高优规则 P${rule.priority} (${rule.category})`,
+                          status: 'pending',
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {convertedTopMilestones ? '已转里程碑' : '高优转里程碑'}
               </button>
               <button
                 type="button"

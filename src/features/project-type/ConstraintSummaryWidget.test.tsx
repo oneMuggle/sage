@@ -284,6 +284,8 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('constraint-summary-save-l3-btn')).toHaveTextContent('已存高优 L3');
     fireEvent.click(screen.getByTestId('constraint-summary-save-l4-btn'));
     expect(screen.getByTestId('constraint-summary-save-l4-btn')).toHaveTextContent('已存 L4');
+    fireEvent.click(screen.getByTestId('constraint-summary-top-to-milestone-btn'));
+    expect(screen.getByTestId('constraint-summary-top-to-milestone-btn')).toHaveTextContent('已转里程碑');
 
     expect(screen.getByTestId('constraint-summary-high-priority-count')).toHaveTextContent('高优 ≥P8：1 条');
     fireEvent.click(screen.getByTestId('constraint-summary-enable-all-btn'));
@@ -390,6 +392,8 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('git-widget-commit-to-milestone-abc1234567')).toHaveTextContent('已建里程碑');
     fireEvent.click(screen.getByTestId('git-widget-commit-to-l3-abc1234567'));
     expect(screen.getByTestId('git-widget-commit-to-l3-abc1234567')).toHaveTextContent('已存L3');
+    fireEvent.click(screen.getByTestId('git-widget-commit-to-l4-abc1234567'));
+    expect(screen.getByTestId('git-widget-commit-to-l4-abc1234567')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('git-widget-copy-sha-abc1234567'));
 
     fireEvent.click(screen.getByTestId('constraint-priority-preset-10'));

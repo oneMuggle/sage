@@ -469,6 +469,8 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('milestone-summary-save-l3-btn')).toHaveTextContent('已存进度 L3');
     fireEvent.click(screen.getByTestId('milestone-summary-save-l4-btn'));
     expect(screen.getByTestId('milestone-summary-save-l4-btn')).toHaveTextContent('已存 L4');
+    fireEvent.click(screen.getByTestId('milestone-summary-active-to-l2-btn'));
+    expect(screen.getByTestId('milestone-summary-active-to-l2-btn')).toHaveTextContent('已转 L2');
     fireEvent.click(screen.getByTestId('milestone-summary-to-constraint-m-overdue-1'));
     expect(screen.getByTestId('milestone-summary-to-constraint-m-overdue-1')).toHaveTextContent('已转L2');
     fireEvent.click(screen.getByTestId('milestone-summary-to-l3-m-overdue-1'));
@@ -558,6 +560,8 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('overview-stage-to-milestone-btn')).toHaveTextContent('已建阶段里程碑');
     fireEvent.click(screen.getByTestId('overview-stage-to-constraint-btn'));
     expect(screen.getByTestId('overview-stage-to-constraint-btn')).toHaveTextContent('已设阶段约束');
+    fireEvent.click(screen.getByTestId('overview-seed-stage-milestones-btn'));
+    expect(screen.getByTestId('overview-seed-stage-milestones-btn')).toHaveTextContent('已导入阶段里程碑');
     fireEvent.click(screen.getByTestId('overview-refresh-meta-btn'));
 
     // Open TaskDecomposeDialog from overview bar and test total days & invert/select-all
