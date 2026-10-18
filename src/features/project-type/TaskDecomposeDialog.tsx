@@ -119,6 +119,7 @@ export function TaskDecomposeDialog({
   const [savedPlanL4, setSavedPlanL4] = useState(false);
   const [constraintNodeIndices, setConstraintNodeIndices] = useState<Set<number>>(new Set());
   const [l3NodeIndices, setL3NodeIndices] = useState<Set<number>>(new Set());
+  const [l4NodeIndices, setL4NodeIndices] = useState<Set<number>>(new Set());
   const [batchConvertedL2, setBatchConvertedL2] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -525,6 +526,26 @@ export function TaskDecomposeDialog({
                         className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                       >
                         {l3NodeIndices.has(idx) ? '已存L3' : '+L3'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`decompose-node-to-l4-${idx}`}
+                        onClick={async () => {
+                          if (l4NodeIndices.has(idx)) return;
+                          setL4NodeIndices((prev) => new Set(prev).add(idx));
+                          if (typeof projectApi?.addMaterial === 'function') {
+                            try {
+                              await projectApi.addMaterial(projectId, {
+                                content: `# 分解任务档案：${ms.title}\n- 阶段: ${ms.stage || '默认阶段'}\n\n${ms.description || '无详细说明'}`,
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        {l4NodeIndices.has(idx) ? '已存L4' : '+L4'}
                       </button>
                     </div>
                   ))}
