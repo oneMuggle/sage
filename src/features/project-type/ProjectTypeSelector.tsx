@@ -83,6 +83,7 @@ export function ProjectTypeSelector({
   const [copiedBlueprint, setCopiedBlueprint] = useState(false);
   const [copiedMilestones, setCopiedMilestones] = useState(false);
   const [copiedPillars, setCopiedPillars] = useState(false);
+  const [copiedSubtemplates, setCopiedSubtemplates] = useState(false);
   const [copiedSignalIdx, setCopiedSignalIdx] = useState<number | null>(null);
 
   const runDetection = useCallback(async () => {
@@ -339,8 +340,29 @@ export function ProjectTypeSelector({
                     className="border-t border-primary/20 pt-1.5 text-ui-2xs text-muted-foreground space-y-1"
                     data-testid="selector-suite-details"
                   >
-                    <div>
-                      细分规范包：{activeBp.subTemplates.map((t) => t.label).join(' · ')}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        细分规范包：{activeBp.subTemplates.map((t) => t.label).join(' · ')}
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="selector-copy-subtemplates-btn"
+                        onClick={async () => {
+                          const md = activeBp.subTemplates
+                            .map((t, i) => `${i + 1}. ${t.label} (${t.key})`)
+                            .join('\n');
+                          try {
+                            await navigator.clipboard?.writeText(md);
+                            setCopiedSubtemplates(true);
+                            setTimeout(() => setCopiedSubtemplates(false), 1500);
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                      >
+                        {copiedSubtemplates ? '已复制规范包' : '复制规范包列表'}
+                      </button>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>
