@@ -705,3 +705,8 @@
 - **`src/features/project-type/WikiGenerationPanel.tsx`**：M5 Wiki 生成完成横幅新增 **`沉淀清单至 L3`**（`wiki-save-manifest-l3-btn`），并在核心符号预览行新增 **`+里程碑`** 审校任务转化按钮（`wiki-symbol-to-milestone-${idx}`）。
 - **`src/features/project-type/ConstraintManager.tsx`**：约束管理器顶部工具栏新增 **`批量存 L4`**（`constraint-batch-save-l4-btn`），并在每条约束卡片新增 **`+L4`** 规范归档按钮（`constraint-to-l4-${constraint.id}`）。
 - **`src/features/project-type/MilestoneManager.tsx`**：里程碑管理器工具栏新增 **`批量存 L4`**（`milestone-batch-save-l4-btn`），并在每个里程碑节点卡片新增 **`+L4`** 路线图档案归档按钮（`milestone-to-l4-${milestone.id}`）。
+### Phase P50（2026-10-18）：概览阶段准出设 L2 约束、里程碑进度单条存 L3、Git 提交记录存 L4、高优约束预览单条存 L4
+- **`src/features/project-type/ProjectOverviewWidgets.tsx`**：概览生命周期阶段控制栏新增 **`当前阶段设 L2 约束`**（`overview-stage-to-constraint-btn`），支持将当前生命周期阶段的准出红线一键固化为 L2 阶段门禁约束（`projectApi.createConstraint`）。
+- **`src/features/project-type/MilestoneProgressWidget.tsx`**：里程碑进度摘要列表的每个节点旁新增 **`+L3`** 按钮（`milestone-summary-to-l3-${milestone.id}`），支持将单条里程碑进展沉淀至 L3 项目画像。
+- **`src/features/project-type/GitStatusWidget.tsx`**：Git 状态卡片近期提交头部新增 **`存提交至 L4`**（`git-widget-save-l4-btn`），支持将当前分支与最近提交记录一键归档至 L4 资料库。
+- **`src/features/project-type/ConstraintSummaryWidget.tsx`**：约束摘要卡片高优规则预览列表每条规则旁新增 **`+L4`** 按钮（`constraint-summary-rule-to-l4-${rule.id}`），支持将高优规则独立归档至 L4 资料库。

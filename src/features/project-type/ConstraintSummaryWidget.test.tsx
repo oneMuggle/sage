@@ -301,6 +301,8 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1')).toHaveTextContent('已存 L3');
     fireEvent.click(screen.getByTestId('constraint-summary-rule-to-milestone-c-p30-1'));
     expect(screen.getByTestId('constraint-summary-rule-to-milestone-c-p30-1')).toHaveTextContent('已转里程碑');
+    fireEvent.click(screen.getByTestId('constraint-summary-rule-to-l4-c-p30-1'));
+    expect(screen.getByTestId('constraint-summary-rule-to-l4-c-p30-1')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('constraint-summary-quick-toggle-c-p30-1'));
     await waitFor(() => {
       expect(projectApi.updateConstraint).toHaveBeenCalledWith('test-project', 'c-p30-1', {
@@ -375,6 +377,8 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('git-widget-guard-all-btn'));
     fireEvent.click(screen.getByTestId('git-widget-save-commits-l3-btn'));
     expect(screen.getByTestId('git-widget-save-commits-l3-btn')).toHaveTextContent('已沉淀至 L3');
+    fireEvent.click(screen.getByTestId('git-widget-save-l4-btn'));
+    expect(screen.getByTestId('git-widget-save-l4-btn')).toHaveTextContent('已存提交至 L4');
     fireEvent.click(screen.getByTestId('git-widget-commit-to-milestone-abc1234567'));
     expect(screen.getByTestId('git-widget-commit-to-milestone-abc1234567')).toHaveTextContent('已建里程碑');
     fireEvent.click(screen.getByTestId('git-widget-copy-sha-abc1234567'));
