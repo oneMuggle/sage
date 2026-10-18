@@ -118,6 +118,7 @@ export function StudioProfileTabPanel({
   const [savedL4Bundle, setSavedL4Bundle] = useState(false);
   const [promotedIds, setPromotedIds] = useState<Set<string>>(new Set());
   const [milestonePromotedIds, setMilestonePromotedIds] = useState<Set<string>>(new Set());
+  const [l4PromotedIds, setL4PromotedIds] = useState<Set<string>>(new Set());
   const [copiedEntryId, setCopiedEntryId] = useState<string | null>(null);
   const presets = PROFILE_PRESETS_BY_TYPE[projectType] ?? PROFILE_PRESETS_BY_TYPE.coding;
 
@@ -197,6 +198,37 @@ export function StudioProfileTabPanel({
               >
                 <ShieldPlus className="h-3 w-3" />
                 批量升格L2 ({filteredEntries.filter((e) => !promotedIds.has(e.id)).length})
+              </button>
+            )}
+            {projectId && filteredEntries.length > 0 && (
+              <button
+                type="button"
+                data-testid="studio-profile-batch-milestone-btn"
+                onClick={async () => {
+                  const unpromoted = filteredEntries.filter((e) => !milestonePromotedIds.has(e.id));
+                  if (unpromoted.length === 0) return;
+                  setMilestonePromotedIds((prev) => {
+                    const next = new Set(prev);
+                    unpromoted.forEach((e) => next.add(e.id));
+                    return next;
+                  });
+                  if (typeof projectApi?.createMilestone === 'function') {
+                    for (const entry of unpromoted) {
+                      try {
+                        await projectApi.createMilestone(projectId, {
+                          title: entry.content.slice(0, 80),
+                          description: `从 L3 项目画像 (${entry.category}) 批量转化`,
+                          status: 'pending',
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
+              >
+                批量转里程碑 ({filteredEntries.filter((e) => !milestonePromotedIds.has(e.id)).length})
               </button>
             )}
             {projectId && filteredEntries.length > 0 && (
@@ -428,6 +460,26 @@ export function StudioProfileTabPanel({
                 </button>
                 {projectId && (
                   <>
+                  <button
+                    type="button"
+                    data-testid={`studio-profile-to-l4-${entry.id}`}
+                    onClick={async () => {
+                      if (l4PromotedIds.has(entry.id)) return;
+                      setL4PromotedIds((prev) => new Set(prev).add(entry.id));
+                      if (typeof projectApi?.addMaterial === 'function') {
+                        try {
+                          await projectApi.addMaterial(projectId, {
+                            content: `# L3 画像条目归档 [${CATEGORY_LABELS[entry.category] ?? entry.category}]\n\n${entry.content}`,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {l4PromotedIds.has(entry.id) ? '已存L4' : '+L4'}
+                  </button>
                   <button
                     type="button"
                     data-testid={`studio-profile-to-milestone-${entry.id}`}

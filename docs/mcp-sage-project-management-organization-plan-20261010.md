@@ -700,3 +700,8 @@
 - **`src/features/project-type/TaskDecomposeDialog.tsx`**：任务分解预览工具栏新增 **`选中转 L2 约束`** 批量转化按钮（`decompose-batch-to-constraint-btn`），并在单条预览节点旁新增 **`+L3`** 阶段目标沉淀按钮（`decompose-node-to-l3-${idx}`）。
 - **`src/features/project-type/ProjectTypeSelector.tsx`**：自动检测提示栏支持单条检测依据独立复制（`selector-copy-signal-${idx}`），并在治理清单展开面板新增 **`复制推荐里程碑`** 按钮（`selector-copy-milestones-btn`）。
 - **`src/features/project-type/TypeDetectionPreview.tsx`**：形态自动检测预览面板新增 **`复制阶段管线`**（`detection-copy-stages-btn`）与 **`复制目录列表`**（`detection-copy-dirs-btn`）快捷导出按钮。
+### Phase P49（2026-10-18）：L3 画像工作台批量转里程碑与单条存 L4、Wiki 生成清单存 L3 与符号转里程碑、约束/里程碑管理器批量及单条存 L4
+- **`src/features/project-type/StudioProfileTabPanel.tsx`**：L3 画像工作台头部新增 **`批量转里程碑`**（`studio-profile-batch-milestone-btn`），并在单条画像条目旁新增 **`+L4`** 资料归档按钮（`studio-profile-to-l4-${entry.id}`）。
+- **`src/features/project-type/WikiGenerationPanel.tsx`**：M5 Wiki 生成完成横幅新增 **`沉淀清单至 L3`**（`wiki-save-manifest-l3-btn`），并在核心符号预览行新增 **`+里程碑`** 审校任务转化按钮（`wiki-symbol-to-milestone-${idx}`）。
+- **`src/features/project-type/ConstraintManager.tsx`**：约束管理器顶部工具栏新增 **`批量存 L4`**（`constraint-batch-save-l4-btn`），并在每条约束卡片新增 **`+L4`** 规范归档按钮（`constraint-to-l4-${constraint.id}`）。
+- **`src/features/project-type/MilestoneManager.tsx`**：里程碑管理器工具栏新增 **`批量存 L4`**（`milestone-batch-save-l4-btn`），并在每个里程碑节点卡片新增 **`+L4`** 路线图档案归档按钮（`milestone-to-l4-${milestone.id}`）。
