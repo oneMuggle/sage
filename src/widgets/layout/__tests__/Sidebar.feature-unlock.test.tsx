@@ -37,6 +37,10 @@ vi.mock('../../../features/manage-endpoints/api', () => ({
 
 beforeEach(() => {
   localStorage.clear();
+  // Scheme 2: 高级组默认折叠，但本测试需要断言其中的灰态入口。
+  // 强制展开所有导航分组以匹配测试预期。
+  localStorage.setItem('sage:nav-group:tools', '0');
+  localStorage.setItem('sage:nav-group:advanced', '0');
   confirmDialogMock.mockReset();
   const setState = useStore.setState as unknown as (partial: Record<string, unknown>) => void;
   setState({ currentSessionId: null, sessions: [] });
@@ -174,6 +178,9 @@ describe('Sidebar — progressive disclosure (U10, P1-7 灰态可见)', () => {
 
     // 旧路径 /arena-accounts（重定向到 /arena）同样保留解锁语义
     localStorage.clear();
+    // Scheme 2: clear() 也清除了导航分组折叠状态，需重新设置
+    localStorage.setItem('sage:nav-group:tools', '0');
+    localStorage.setItem('sage:nav-group:advanced', '0');
     renderSidebarAt('/arena-accounts');
     const storedLegacy = JSON.parse(localStorage.getItem(FEATURE_UNLOCK_STORAGE_KEY) as string);
     expect(storedLegacy).toContain('arena-accounts');
