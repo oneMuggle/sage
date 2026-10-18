@@ -58,6 +58,7 @@ export function TypeDetectionPreview({
   const [copiedDirs, setCopiedDirs] = useState(false);
   const [copiedPillars, setCopiedPillars] = useState(false);
   const [copiedMilestones, setCopiedMilestones] = useState(false);
+  const [copiedSubtemplates, setCopiedSubtemplates] = useState(false);
 
   if (loading) {
     return (
@@ -291,11 +292,32 @@ export function TypeDetectionPreview({
             className="mt-1.5 border-t border-border/60 pt-1.5 space-y-1 text-ui-2xs"
             data-testid="detection-details-panel"
           >
-            <div>
-              <span className="text-muted-foreground">推荐规范包：</span>
-              <span className="font-medium text-foreground">
-                {detectedBlueprint.subTemplates.map((t) => t.label).join(' · ')}
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="text-muted-foreground">推荐规范包：</span>
+                <span className="font-medium text-foreground">
+                  {detectedBlueprint.subTemplates.map((t) => t.label).join(' · ')}
+                </span>
+              </div>
+              <button
+                type="button"
+                data-testid="detection-copy-subtemplates-btn"
+                onClick={async () => {
+                  const md = detectedBlueprint.subTemplates
+                    .map((t, i) => `${i + 1}. ${t.label} (${t.key})`)
+                    .join('\n');
+                  try {
+                    await navigator.clipboard?.writeText(md);
+                    setCopiedSubtemplates(true);
+                    setTimeout(() => setCopiedSubtemplates(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+              >
+                {copiedSubtemplates ? '已复制规范包' : '复制规范包列表'}
+              </button>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
