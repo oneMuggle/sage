@@ -259,6 +259,22 @@ export function MilestoneEditor({
                 {tpl.label}
               </button>
             ))}
+            {blueprint.recommendedMilestones.slice(0, 3).map((rm, idx) => (
+              <button
+                key={rm.title}
+                type="button"
+                data-testid={`milestone-blueprint-tpl-${idx}`}
+                onClick={() => {
+                  setTitle(rm.title);
+                  setDescription(rm.description);
+                  setStage(rm.stage);
+                  setSortOrder(idx + 1);
+                }}
+                className="rounded border border-border bg-muted/40 px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+              >
+                蓝图 #{idx + 1}
+              </button>
+            ))}
           </div>
 
           <div className="space-y-2">
