@@ -84,7 +84,9 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
   const [promotedProfileIds, setPromotedProfileIds] = useState<Set<string>>(new Set());
   const [copiedRuleId, setCopiedRuleId] = useState<string | null>(null);
   const [batchPromotedL3, setBatchPromotedL3] = useState(false);
+  const [batchSavedL4, setBatchSavedL4] = useState(false);
   const [milestoneRuleIds, setMilestoneRuleIds] = useState<Set<string>>(new Set());
+  const [l4RuleIds, setL4RuleIds] = useState<Set<string>>(new Set());
 
   const blueprint: ArchetypeBlueprintMeta = getArchetypeBlueprint(projectType);
 
@@ -318,6 +320,28 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                 className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground hover:bg-muted"
               >
                 {batchPromotedL3 ? '已批量存 L3' : `批量存 L3 (${filteredConstraints.length})`}
+              </button>
+              <button
+                type="button"
+                data-testid="constraint-batch-save-l4-btn"
+                onClick={async () => {
+                  if (batchSavedL4 || filteredConstraints.length === 0) return;
+                  setBatchSavedL4(true);
+                  if (typeof projectApi?.addMaterial === 'function') {
+                    try {
+                      await projectApi.addMaterial(projectId, {
+                        content: `# ${blueprint.label} · L2 约束合集 (${filteredConstraints.length} 条)\n${filteredConstraints
+                          .map((c) => `- [P${c.priority} · ${c.category}] (${c.triggerPattern || 'always'}) ${c.content}`)
+                          .join('\n')}`,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground hover:bg-muted"
+              >
+                {batchSavedL4 ? '已批量存 L4' : `批量存 L4 (${filteredConstraints.length})`}
               </button>
               <button
                 type="button"
@@ -586,6 +610,26 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                       title="将该约束规则转化为可执行里程碑"
                     >
                       {milestoneRuleIds.has(constraint.id) ? '已转里程碑' : '+里程碑'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`constraint-to-l4-${constraint.id}`}
+                      onClick={async () => {
+                        if (l4RuleIds.has(constraint.id)) return;
+                        setL4RuleIds((prev) => new Set(prev).add(constraint.id));
+                        if (typeof projectApi?.addMaterial === 'function') {
+                          try {
+                            await projectApi.addMaterial(projectId, {
+                              content: `# L2 约束规范 [${constraint.category} · P${constraint.priority}]\n- 触发: ${constraint.triggerPattern || 'always'}\n\n${constraint.content}`,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {l4RuleIds.has(constraint.id) ? '已存L4' : '+L4'}
                     </button>
                     <button
                       type="button"

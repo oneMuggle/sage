@@ -242,6 +242,10 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('studio-profile-copy-entry-e-1'));
     fireEvent.click(screen.getByTestId('studio-profile-batch-promote-btn'));
     expect(screen.getByTestId('studio-profile-to-constraint-e-1')).toHaveTextContent('已升格约束');
+    fireEvent.click(screen.getByTestId('studio-profile-to-l4-e-1'));
+    expect(screen.getByTestId('studio-profile-to-l4-e-1')).toHaveTextContent('已存L4');
+    fireEvent.click(screen.getByTestId('studio-profile-batch-milestone-btn'));
+    expect(screen.getByTestId('studio-profile-to-milestone-e-1')).toHaveTextContent('已转里程碑');
   });
 
   it('supports KnowledgeExtractionPanel session refresh and extracted proposals markdown copy', async () => {
@@ -338,6 +342,8 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('wiki-save-symbols-profile-btn')).toHaveTextContent('已沉淀符号至 L3');
     });
+    fireEvent.click(screen.getByTestId('wiki-symbol-to-milestone-0'));
+    expect(screen.getByTestId('wiki-symbol-to-milestone-0')).toHaveTextContent('已建里程碑');
     fireEvent.change(filterInput, { target: { value: 'python' } });
     expect(screen.getByText('scripts/run.py')).toBeInTheDocument();
     expect(screen.queryByText('src/core.ts')).toBeNull();
@@ -345,6 +351,8 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
     fireEvent.click(screen.getByTestId('wiki-generate-btn'));
     const ingestAllBtn = await screen.findByTestId('wiki-ingest-all-btn');
     fireEvent.click(ingestAllBtn);
+    fireEvent.click(screen.getByTestId('wiki-save-manifest-l3-btn'));
+    expect(screen.getByTestId('wiki-save-manifest-l3-btn')).toHaveTextContent('已沉淀至 L3');
 
     await waitFor(() => {
       expect(projectApi.addMaterialFromFile).toHaveBeenCalledWith('proj-p31', 'wiki/README.md');

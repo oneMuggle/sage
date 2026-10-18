@@ -443,8 +443,12 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.queryByText('低优代码注释建议')).toBeNull();
     fireEvent.click(screen.getByTestId('constraint-batch-promote-l3-btn'));
     expect(screen.getByTestId('constraint-batch-promote-l3-btn')).toHaveTextContent('已批量存 L3');
+    fireEvent.click(screen.getByTestId('constraint-batch-save-l4-btn'));
+    expect(screen.getByTestId('constraint-batch-save-l4-btn')).toHaveTextContent('已批量存 L4');
     fireEvent.click(screen.getByTestId('constraint-to-milestone-c-p33-high'));
     expect(screen.getByTestId('constraint-to-milestone-c-p33-high')).toHaveTextContent('已转里程碑');
+    fireEvent.click(screen.getByTestId('constraint-to-l4-c-p33-high'));
+    expect(screen.getByTestId('constraint-to-l4-c-p33-high')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('constraint-promote-profile-c-p33-high'));
     expect(screen.getByTestId('constraint-promote-profile-c-p33-high')).toHaveTextContent('已存L3');
     fireEvent.click(screen.getByTestId('constraint-copy-single-c-p33-high'));
