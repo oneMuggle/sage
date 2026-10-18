@@ -88,6 +88,7 @@ export function ProjectOverviewPanel({
   const [creatingCheckpoint, setCreatingCheckpoint] = useState(false);
   const [copiedOverview, setCopiedOverview] = useState(false);
   const [savedOverviewL3, setSavedOverviewL3] = useState(false);
+  const [savedOverviewL2, setSavedOverviewL2] = useState(false);
   const archetype: ProjectType = project.projectType ?? project.detectedType ?? 'coding';
   const presets = SIDEBAR_L2_PRESETS[archetype] ?? SIDEBAR_L2_PRESETS.coding;
 
@@ -191,6 +192,29 @@ export function ProjectOverviewPanel({
             title="将当前 L2 目标与指令沉淀至 L3 画像"
           >
             {savedOverviewL3 ? '已存L3' : '沉淀指令至 L3'}
+          </button>
+          <button
+            type="button"
+            data-testid="sidebar-overview-to-constraint"
+            onClick={async () => {
+              if (savedOverviewL2) return;
+              setSavedOverviewL2(true);
+              const desc = (draft?.description ?? project.description ?? '').trim();
+              const inst = (draft?.instructions ?? project.instructions ?? '').trim();
+              if (typeof projectApi?.createConstraint !== 'function') return;
+              try {
+                await projectApi.createConstraint(project.id, {
+                  category: 'convention',
+                  content: `L2 目标与指令约束：${desc || '核心目标'} — ${inst || '遵循项目规范'}`,
+                  priority: 8,
+                });
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-muted hover:text-text hover:bg-bg-hover"
+          >
+            {savedOverviewL2 ? '已转L2' : '指令转 L2'}
           </button>
           {project.vcsMode !== 'git' && project.projectType !== 'coding' && (
             <button
@@ -307,6 +331,7 @@ export function ProjectMaterialsPanel({
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
   const [promotedConstraintIds, setPromotedConstraintIds] = useState<Set<string>>(new Set());
   const [promotedProfileMaterialIds, setPromotedProfileMaterialIds] = useState<Set<string>>(new Set());
+  const [promotedMilestoneMaterialIds, setPromotedMilestoneMaterialIds] = useState<Set<string>>(new Set());
 
   const handleAddFromFile = async () => {
     const rel = filePathInput.trim();
@@ -601,13 +626,9 @@ export function ProjectMaterialsPanel({
                     type="button"
                     data-testid={`sidebar-material-to-l3-${m.id}`}
                     onClick={async () => {
-                      if (promotedProfileMaterialIds.has(m.id)) {
-                        return;
-                      }
+                      if (promotedProfileMaterialIds.has(m.id)) return;
                       setPromotedProfileMaterialIds((prev) => new Set(prev).add(m.id));
-                      if (typeof projectApi?.confirmKnowledge !== 'function') {
-                        return;
-                      }
+                      if (typeof projectApi?.confirmKnowledge !== 'function') return;
                       try {
                         await projectApi.confirmKnowledge(project.id, {
                           entries: [
@@ -635,13 +656,9 @@ export function ProjectMaterialsPanel({
                     type="button"
                     data-testid={`sidebar-material-to-constraint-${m.id}`}
                     onClick={async () => {
-                      if (promotedConstraintIds.has(m.id)) {
-                        return;
-                      }
+                      if (promotedConstraintIds.has(m.id)) return;
                       setPromotedConstraintIds((prev) => new Set(prev).add(m.id));
-                      if (typeof projectApi?.createConstraint !== 'function') {
-                        return;
-                      }
+                      if (typeof projectApi?.createConstraint !== 'function') return;
                       try {
                         await projectApi.createConstraint(project.id, {
                           category: 'custom',
@@ -657,6 +674,29 @@ export function ProjectMaterialsPanel({
                   >
                     <ShieldPlus className="w-2.5 h-2.5" aria-hidden="true" />
                     {promotedConstraintIds.has(m.id) ? '已转L2' : '+L2'}
+                  </button>
+                )}
+                {m.status === 'ready' && m.content && (
+                  <button
+                    type="button"
+                    data-testid={`sidebar-material-to-milestone-${m.id}`}
+                    onClick={async () => {
+                      if (promotedMilestoneMaterialIds.has(m.id)) return;
+                      setPromotedMilestoneMaterialIds((prev) => new Set(prev).add(m.id));
+                      if (typeof projectApi?.createMilestone !== 'function') return;
+                      try {
+                        await projectApi.createMilestone(project.id, {
+                          title: `[资料研读] ${(m.content ?? '').slice(0, 48)}`,
+                          description: `源自侧边栏 L4 资料 (${m.id})`,
+                          status: 'pending',
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border/60 bg-bg px-1 py-0.5 text-ui-2xs text-muted hover:text-primary"
+                  >
+                    {promotedMilestoneMaterialIds.has(m.id) ? '已建里程碑' : '+里程碑'}
                   </button>
                 )}
                 <button
@@ -730,24 +770,13 @@ export function ProjectMaterialsPanel({
 
 /** 子行前缀圆点：层级指示，弱于图标避免与主行混淆 */
 export function MessageDot() {
-  return (
-    <span className="w-1 h-1 rounded-full bg-current opacity-40 shrink-0" aria-hidden="true" />
-  );
+  return <span className="w-1 h-1 rounded-full bg-current opacity-40 shrink-0" aria-hidden="true" />;
 }
 
 /** 移除按钮图标：与 Folder 语义呼应，弱化"删除文件"的误读 */
 export function FolderMinusIcon() {
   return (
-    <svg
-      className="h-4 w-4"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
       <path d="M9 13h6" />
     </svg>

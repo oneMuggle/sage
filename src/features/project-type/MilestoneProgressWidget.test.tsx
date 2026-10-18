@@ -492,6 +492,8 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('sidebar-overview-copy-md'));
     fireEvent.click(screen.getByTestId('sidebar-overview-save-l3'));
     expect(screen.getByTestId('sidebar-overview-save-l3')).toHaveTextContent('已存L3');
+    fireEvent.click(screen.getByTestId('sidebar-overview-to-constraint'));
+    expect(screen.getByTestId('sidebar-overview-to-constraint')).toHaveTextContent('已转L2');
 
     // L4 sidebar materials status filter, promote to L2 constraint, search & copy (Phase P36)
     fireEvent.click(screen.getByTestId('sidebar-materials-filter-enabled'));
@@ -500,6 +502,8 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('sidebar-material-to-l3-mat-1')).toHaveTextContent('已转L3');
     fireEvent.click(screen.getByTestId('sidebar-material-to-constraint-mat-1'));
     expect(screen.getByTestId('sidebar-material-to-constraint-mat-1')).toHaveTextContent('已转L2');
+    fireEvent.click(screen.getByTestId('sidebar-material-to-milestone-mat-1'));
+    expect(screen.getByTestId('sidebar-material-to-milestone-mat-1')).toHaveTextContent('已建里程碑');
     fireEvent.click(screen.getByTestId('sidebar-materials-copy-md'));
     fireEvent.change(screen.getByTestId('sidebar-materials-search-input'), {
       target: { value: 'Transformer' },
