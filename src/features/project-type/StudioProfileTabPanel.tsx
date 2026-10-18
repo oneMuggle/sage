@@ -328,6 +328,19 @@ export function StudioProfileTabPanel({
             支柱 #{idx + 1}：{pillar.slice(0, 14)}
           </button>
         ))}
+        {blueprint.contextPillars.map((pillar, idx) => (
+          <button
+            key={`append-${pillar}`}
+            type="button"
+            data-testid={`studio-profile-pillar-append-${idx}`}
+            onClick={() => {
+              onDraftChange(profileDraft.trim() ? `${profileDraft.trim()}；${pillar}` : pillar);
+            }}
+            className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            +追加支柱 #{idx + 1}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-wrap gap-2">
