@@ -54,6 +54,8 @@ export function TypeDetectionPreview({
   const [showDetails, setShowDetails] = useState(false);
   const [copiedSuite, setCopiedSuite] = useState(false);
   const [copiedSignalIdx, setCopiedSignalIdx] = useState<number | null>(null);
+  const [copiedStages, setCopiedStages] = useState(false);
+  const [copiedDirs, setCopiedDirs] = useState(false);
 
   if (loading) {
     return (
@@ -202,8 +204,26 @@ export function TypeDetectionPreview({
             {detectedBlueprint.recommendedMilestones.length} 个推荐里程碑 · {detectedBlueprint.subTemplates.length} 套细分规范包
           </span>
         </div>
-        <div data-testid="detection-stages-preview">
-          推荐阶段管线：<span className="font-medium text-foreground">{stagesFlow}</span>
+        <div className="flex flex-wrap items-center justify-between gap-2" data-testid="detection-stages-preview">
+          <div>
+            推荐阶段管线：<span className="font-medium text-foreground">{stagesFlow}</span>
+          </div>
+          <button
+            type="button"
+            data-testid="detection-copy-stages-btn"
+            onClick={async () => {
+              try {
+                await navigator.clipboard?.writeText(stagesFlow);
+                setCopiedStages(true);
+                setTimeout(() => setCopiedStages(false), 1500);
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+          >
+            {copiedStages ? '已复制管线' : '复制阶段管线'}
+          </button>
         </div>
         <div className="flex flex-wrap items-center gap-1">
           <span>推荐标准目录：</span>
@@ -216,6 +236,22 @@ export function TypeDetectionPreview({
             </span>
           ))}
           <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            data-testid="detection-copy-dirs-btn"
+            onClick={async () => {
+              try {
+                await navigator.clipboard?.writeText(detectedBlueprint.directories.map((d) => `${d}/`).join('\n'));
+                setCopiedDirs(true);
+                setTimeout(() => setCopiedDirs(false), 1500);
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+          >
+            {copiedDirs ? '已复制目录' : '复制目录列表'}
+          </button>
           <button
             type="button"
             data-testid="detection-copy-suite-btn"
