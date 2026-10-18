@@ -42,6 +42,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [guardedFiles, setGuardedFiles] = useState<Set<string>>(new Set());
   const [commitMilestones, setCommitMilestones] = useState<Set<string>>(new Set());
   const [savedCommitsL3, setSavedCommitsL3] = useState(false);
+  const [savedCommitsL4, setSavedCommitsL4] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -404,6 +405,29 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                 className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
               >
                 {savedCommitsL3 ? '已沉淀至 L3' : '沉淀提交摘要至 L3'}
+              </button>
+              <button
+                type="button"
+                data-testid="git-widget-save-l4-btn"
+                onClick={async () => {
+                  if (savedCommitsL4) return;
+                  setSavedCommitsL4(true);
+                  if (typeof projectApi?.addMaterial === 'function') {
+                    try {
+                      await projectApi.addMaterial(projectId, {
+                        content: `# Git 最近提交记录 (${status.current_branch ?? 'default'})\n${status.recent_commits
+                          .slice(0, 5)
+                          .map((c) => `- \`${c.sha.slice(0, 7)}\` ${c.message} (${c.author})`)
+                          .join('\n')}`,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+              >
+                {savedCommitsL4 ? '已存提交至 L4' : '存提交至 L4'}
               </button>
             </div>
             <div className="space-y-1">

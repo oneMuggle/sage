@@ -30,6 +30,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [savedProgressL3, setSavedProgressL3] = useState(false);
   const [savedProgressL4, setSavedProgressL4] = useState(false);
   const [promotedConstraintIds, setPromotedConstraintIds] = useState<Set<string>>(new Set());
+  const [promotedL3Ids, setPromotedL3Ids] = useState<Set<string>>(new Set());
 
   const blueprint = getArchetypeBlueprint(projectType);
   const stageLabelMap = new Map(blueprint.stages.map((s) => [s.id, s.label]));
@@ -430,6 +431,34 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                     className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
                   >
                     {promotedConstraintIds.has(milestone.id) ? '已转L2' : '+L2'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`milestone-summary-to-l3-${milestone.id}`}
+                    onClick={async () => {
+                      if (promotedL3Ids.has(milestone.id)) return;
+                      setPromotedL3Ids((prev) => new Set(prev).add(milestone.id));
+                      if (typeof projectApi?.confirmKnowledge === 'function') {
+                        try {
+                          await projectApi.confirmKnowledge(projectId, {
+                            entries: [
+                              {
+                                category: 'decision',
+                                content: `里程碑进展 [${milestone.title}] (${milestone.status})`,
+                                importance: 7,
+                                sourceMessageIds: [],
+                                reasoning: '里程碑进度摘要单条沉淀至 L3 画像',
+                              },
+                            ],
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {promotedL3Ids.has(milestone.id) ? '已存L3' : '+L3'}
                   </button>
                   <button
                     type="button"
