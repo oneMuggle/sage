@@ -289,6 +289,20 @@ export function ConstraintEditor({
                   {tpl.label}
                 </button>
               ))}
+              {blueprint.contextPillars.slice(0, 3).map((pillar, idx) => (
+                <button
+                  key={pillar}
+                  type="button"
+                  data-testid={`constraint-pillar-preset-${idx}`}
+                  onClick={() => {
+                    setContent(pillar);
+                    setPriority(8);
+                  }}
+                  className="rounded border border-border bg-muted/40 px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+                >
+                  支柱 #{idx + 1}
+                </button>
+              ))}
             </div>
           </div>
 
