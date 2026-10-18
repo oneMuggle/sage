@@ -733,3 +733,17 @@
   - 在 `studio-profile-presets-bar` 接入 `getArchetypeBlueprint(projectType).contextPillars`，渲染 **`支柱 #1..#3`**（`data-testid="studio-profile-pillar-preset-${idx}"`），支持一键将项目形态核心上下文支柱填入 L3 画像草稿（`category: 'convention'`）。
 - **单元测试与门禁验证**：
   - 扩展 `ProjectTypeBadge.test.tsx`、`ConstraintSummaryWidget.test.tsx`、`MilestoneProgressWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（4 个测试文件共 43 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P55 — 对话知识提取思路沉淀 L3 与建议反选、顾问风险转 L4 与建议批量转里程碑、里程碑编辑器支柱追加及检测预览默认里程碑复制（已完成）
+
+- **M2 `KnowledgeExtractionPanel` 提取思路沉淀 L3 与建议一键反选（`src/features/project-type/KnowledgeExtractionPanel.tsx`）**：
+  - 在提取思路展示栏新增 **`思路存为 L3`**（`data-testid="knowledge-save-reasoning-l3-btn"`），一键通过 `projectApi.confirmKnowledge`（`category: 'note'`, `importance: 6`）将 AI 对话提取思路归档至 L3 项目画像并切换为 `已存 L3`；
+  - 在建议勾选工具栏新增 **`反选建议`**（`data-testid="knowledge-select-invert-btn"`），支持一键反选当前建议列表勾选状态。
+- **M3 `ProjectAdvisorCard` 单条风险入库 L4 与改进建议批量转里程碑（`src/features/project-type/ProjectAdvisorCard.tsx`）**：
+  - 在风险列表每条记录旁新增 **`+L4`**（`data-testid="advisor-risk-to-l4-${idx}"`），支持一键调用 `projectApi.addMaterial` 将风险描述与整改建议归档为 L4 受控参考资料并切换为 `已存L4`；
+  - 在改进建议标题栏新增 **`全部建议转里程碑`**（`data-testid="advisor-batch-suggestions-to-milestone-btn"`），支持将当前全部顾问改进建议一键批量转化为项目里程碑并切换为 `已全部转里程碑`。
+- **M1 `MilestoneEditor` 交付描述护栏支柱快捷追加（`src/features/project-type/MilestoneEditor.tsx`）**：
+  - 在里程碑描述输入框下方新增形态上下文支柱快捷追加栏（`data-testid="milestone-editor-pillar-presets"`），提供 **`+支柱 #1..#3`**（`data-testid="milestone-pillar-append-${idx}"`）一键填入或分号追加项目形态核心上下文支柱。
+- **Phase 9.4 `TypeDetectionPreview` 检测详情默认里程碑一键复制（`src/features/project-type/TypeDetectionPreview.tsx`）**：
+  - 在 `detection-details-panel` 默认里程碑行旁新增 **`复制默认里程碑`**（`data-testid="detection-copy-milestones-btn"`），支持一键导出检测形态推荐里程碑清单至剪贴板并切换为 `已复制里程碑`。
+- **单元测试与门禁验证**：
+  - 扩展 `ProjectTypeBadge.test.tsx`、`ConstraintSummaryWidget.test.tsx`、`MilestoneProgressWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（4 个测试文件共 43 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

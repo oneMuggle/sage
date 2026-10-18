@@ -324,6 +324,8 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('advisor-suggestion-to-milestone-0')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('advisor-risk-to-l3-0'));
     expect(screen.getByTestId('advisor-risk-to-l3-0')).toHaveTextContent('已存L3');
+    fireEvent.click(screen.getByTestId('advisor-risk-to-l4-0'));
+    expect(screen.getByTestId('advisor-risk-to-l4-0')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('advisor-suggestion-to-l3-0'));
     expect(screen.getByTestId('advisor-suggestion-to-l3-0')).toHaveTextContent('已存L3');
     fireEvent.click(screen.getByTestId('advisor-risk-filter-high'));

@@ -145,6 +145,7 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('detection-details-toggle-btn'));
     expect(screen.getByTestId('detection-details-panel')).toHaveTextContent('推荐规范包：');
     fireEvent.click(screen.getByTestId('detection-copy-pillars-btn'));
+    fireEvent.click(screen.getByTestId('detection-copy-milestones-btn'));
 
     const applyBtn = screen.getByTestId('apply-detected-type-btn');
     fireEvent.click(applyBtn);

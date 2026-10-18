@@ -44,6 +44,7 @@ export function KnowledgeExtractionPanel({
   const [convertedMilestoneIndices, setConvertedMilestoneIndices] = useState<Set<number>>(new Set());
   const [convertedL4Indices, setConvertedL4Indices] = useState<Set<number>>(new Set());
   const [savedReasoningL4, setSavedReasoningL4] = useState(false);
+  const [savedReasoningL3, setSavedReasoningL3] = useState(false);
   const [copiedEntryIdx, setCopiedEntryIdx] = useState<number | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
@@ -279,26 +280,56 @@ export function KnowledgeExtractionPanel({
               <div>
                 <span className="font-medium text-foreground">提取思路：</span> {reasoning}
               </div>
-              <button
-                type="button"
-                data-testid="knowledge-save-reasoning-l4-btn"
-                onClick={async () => {
-                  if (savedReasoningL4) return;
-                  setSavedReasoningL4(true);
-                  if (typeof projectApi?.addMaterial === 'function') {
-                    try {
-                      await projectApi.addMaterial(projectId, {
-                        content: `[M2 对话知识提取摘要] ${reasoning}\n${entries.map((e) => `- [${e.category}] ${e.content}`).join('\n')}`,
-                      });
-                    } catch {
-                      // ignore in test/offline mode
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  data-testid="knowledge-save-reasoning-l3-btn"
+                  onClick={async () => {
+                    if (savedReasoningL3) return;
+                    setSavedReasoningL3(true);
+                    if (typeof projectApi?.confirmKnowledge === 'function') {
+                      try {
+                        await projectApi.confirmKnowledge(projectId, {
+                          entries: [
+                            {
+                              category: 'note',
+                              content: `[M2 对话知识提取思路 (${sessionId})] ${reasoning}`,
+                              importance: 6,
+                              sourceMessageIds: [],
+                              reasoning: 'M2 对话知识提取思路沉淀至 L3 画像',
+                            },
+                          ],
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
                     }
-                  }
-                }}
-                className="shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-              >
-                {savedReasoningL4 ? '已存 L4 资料' : '思路存为 L4 资料'}
-              </button>
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  {savedReasoningL3 ? '已存 L3' : '思路存为 L3'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="knowledge-save-reasoning-l4-btn"
+                  onClick={async () => {
+                    if (savedReasoningL4) return;
+                    setSavedReasoningL4(true);
+                    if (typeof projectApi?.addMaterial === 'function') {
+                      try {
+                        await projectApi.addMaterial(projectId, {
+                          content: `[M2 对话知识提取摘要] ${reasoning}\n${entries.map((e) => `- [${e.category}] ${e.content}`).join('\n')}`,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  {savedReasoningL4 ? '已存 L4 资料' : '思路存为 L4 资料'}
+                </button>
+              </div>
             </div>
           )}
           {entries.length === 0 ? (
@@ -431,6 +462,16 @@ export function KnowledgeExtractionPanel({
                     className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                   >
                     仅选高重要度 (≥8)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelected((prev) => new Set(entries.map((_, i) => i).filter((i) => !prev.has(i))));
+                    }}
+                    data-testid="knowledge-select-invert-btn"
+                    className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    反选建议
                   </button>
                   <button
                     type="button"
