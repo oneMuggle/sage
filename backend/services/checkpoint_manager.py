@@ -370,7 +370,7 @@ class CheckpointManager:
                 expected_value="exit_code=0",
             )
 
-        except (TimeoutError, asyncio.TimeoutError):
+        except (TimeoutError, asyncio.TimeoutError):  # noqa: UP041 — py3.8/3.10 compat
             return VerificationResult(
                 checkpoint_id=checkpoint.id,
                 passed=False,
