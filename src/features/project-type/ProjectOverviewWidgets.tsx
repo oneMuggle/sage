@@ -43,6 +43,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [savedStageProfile, setSavedStageProfile] = useState(false);
   const [savedOverviewL4, setSavedOverviewL4] = useState(false);
   const [createdStageMilestone, setCreatedStageMilestone] = useState(false);
+  const [createdStageConstraint, setCreatedStageConstraint] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [decomposeReq, setDecomposeReq] = useState('');
   const [decomposeCtx, setDecomposeCtx] = useState('');
@@ -297,6 +298,28 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
             >
               {createdStageMilestone ? '已建阶段里程碑' : '当前阶段建里程碑'}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-stage-to-constraint-btn"
+              onClick={async () => {
+                if (createdStageConstraint) return;
+                setCreatedStageConstraint(true);
+                if (typeof projectApi?.createConstraint === 'function') {
+                  try {
+                    await projectApi.createConstraint(project.id, {
+                      category: 'stage_gate',
+                      content: `阶段准出红线 [${stageLabel}]：完成阶段必选交付物并通过校核后方可推进`,
+                      priority: 8,
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {createdStageConstraint ? '已设阶段约束' : '当前阶段设 L2 约束'}
             </button>
             <button
               type="button"
