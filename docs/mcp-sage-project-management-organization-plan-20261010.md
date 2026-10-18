@@ -761,3 +761,16 @@
   - 在 `wizard-recommended-milestones-preview` 推荐里程碑预览行新增 **`复制推荐里程碑`**（`data-testid="wizard-copy-milestones-btn"`），支持在立项确认阶段一键导出推荐里程碑清单至剪贴板并切换为 `已复制里程碑`。
 - **单元测试与门禁验证**：
   - 扩展 `ProjectTypeBadge.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（3 个测试文件共 40 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
+### Phase P57 — 约束摘要高优规则批量转里程碑、里程碑摘要未完项批量转 L2 护栏、Git 单条提交归档 L4 及概览当前阶段推荐里程碑一键导入（已完成）
+
+- **Phase 4.3 `ConstraintSummaryWidget` 顶部高优规则批量转化为里程碑（`src/features/project-type/ConstraintSummaryWidget.tsx`）**：
+  - 在卡片顶部工具栏新增 **`高优转里程碑`**（`data-testid="constraint-summary-top-to-milestone-btn"`），支持将当前排序最高的前 3 条生效约束一键通过 `projectApi.createMilestone` 转化为 `[高优约束验收]` 里程碑并切换为 `已转里程碑`。
+- **Phase 4.3 `MilestoneProgressWidget` 顶部未完里程碑批量转化为 L2 交付护栏（`src/features/project-type/MilestoneProgressWidget.tsx`）**：
+  - 在卡片顶部工具栏新增 **`未完转 L2`**（`data-testid="milestone-summary-active-to-l2-btn"`），支持将前 3 个未完成里程碑一键通过 `projectApi.createConstraint`（`category: 'deliverable_guard'`, `priority: 8`）转化为 L2 交付准入规范并切换为 `已转 L2`。
+- **Phase 4.3 `GitStatusWidget` 单条提交记录归档至 L4 资料库（`src/features/project-type/GitStatusWidget.tsx`）**：
+  - 在最近提交列表每条提交行旁新增 **`+L4`**（`data-testid="git-widget-commit-to-l4-${commit.sha}"`），支持一键调用 `projectApi.addMaterial` 将单条提交 SHA、作者、时间与提交说明归档为 L4 受控参考资料并切换为 `已存L4`。
+- **Phase 4.3 `ProjectOverviewWidgets` 当前阶段推荐里程碑一键导入（`src/features/project-type/ProjectOverviewWidgets.tsx`）**：
+  - 在 `workspace-vcs-summary-widget` 阶段治理栏新增 **`导入阶段推荐里程碑`**（`data-testid="overview-seed-stage-milestones-btn"`），支持按当前激活阶段筛选形态蓝图推荐里程碑并一键批量创建，切换为 `已导入阶段里程碑`。
+- **单元测试与门禁验证**：
+  - 扩展 `ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（2 个测试文件共 25 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
