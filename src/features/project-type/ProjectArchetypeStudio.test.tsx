@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockList = vi.fn();
@@ -305,7 +306,11 @@ afterEach(() => {
 describe('ProjectArchetypeStudio', () => {
   it('switches between coding, business, research, and personal archetype blueprints', async () => {
     mockList.mockResolvedValueOnce([]);
-    render(<ProjectArchetypeStudio />);
+    render(
+      <MemoryRouter>
+        <ProjectArchetypeStudio />
+      </MemoryRouter>,
+    );
 
     // Default tab is coding
     expect(screen.getByTestId('archetype-blueprint-detail-coding')).toBeInTheDocument();
@@ -323,81 +328,33 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByText('03_manuscript/')).toBeInTheDocument();
   });
 
-  it('scaffolds active project and manages allowed read-only paths', async () => {
-    mockList.mockResolvedValueOnce([SAMPLE_PROJECT]);
-    mockScaffold.mockResolvedValueOnce({
-      project: { ...SAMPLE_PROJECT, projectStage: 'initiation' },
-      createdDirectories: [
-        '00_立项与背景材料',
-        '01_原始依据与佐证',
-        '02_编制中工作稿',
-        '03_定稿与签发归档',
-      ],
-      createdFiles: ['SAGE.md'],
-      importedConstraintsCount: 3,
-      seededMilestonesCount: 3,
-      recommendedTemplates: ['business', 'archive_dossier_cn'],
-    });
-    mockUpdateAllowedPaths.mockResolvedValueOnce([
-      'D:/Templates/Legal/**',
-      'E:/Regulations/2026/**',
-    ]);
-
-    render(<ProjectArchetypeStudio />);
-
-    expect(await screen.findByTestId('project-governance-studio')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId('studio-scaffold-btn'));
-    expect(await screen.findByTestId('studio-scaffold-feedback')).toHaveTextContent(
-      '新建目录 4 个',
-    );
-    expect(mockScaffold).toHaveBeenCalledWith(
-      'proj-1',
-      expect.objectContaining({ projectType: 'business', createDirectories: true }),
-    );
-
-    // Switch to allowed_paths tab and add a read-only reference directory
-    fireEvent.click(screen.getByRole('button', { name: /跨目录只读白名单/ }));
-    expect(await screen.findByTestId('project-allowed-paths-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('allowed-paths-copy-md-btn')).toBeInTheDocument();
-    expect(screen.getByText('D:/Templates/Legal/**')).toBeInTheDocument();
-
-    const input = screen.getByPlaceholderText(/输入外部只读参考目录路径/);
-    fireEvent.change(input, { target: { value: 'E:/Regulations/2026/**' } });
-    fireEvent.click(screen.getByRole('button', { name: /添加只读路径/ }));
-
-    await waitFor(() =>
-      expect(mockUpdateAllowedPaths).toHaveBeenCalledWith('proj-1', [
-        'D:/Templates/Legal/**',
-        'E:/Regulations/2026/**',
-      ]),
-    );
-  });
-
-  it('renders 5-layer context budget watermark and polymorphic cards across business and research', async () => {
+  it('renders overview card with polymorphic widgets and enter-governance button', async () => {
     mockList.mockResolvedValueOnce([SAMPLE_PROJECT]);
     mockUpdate.mockResolvedValueOnce({
       ...SAMPLE_PROJECT,
       projectType: 'research',
       projectStage: 'literature',
     });
-    mockCreateProjectProfile.mockResolvedValueOnce({ id: 'pf-2', content: 'RQ2: 跨目录文献引文对齐精度 — BibTeX 校验集', category: 'goal', importance: 5 });
+    mockCreateProjectProfile.mockResolvedValueOnce({
+      id: 'pf-2',
+      content: 'RQ2: 跨目录文献引文对齐精度 — BibTeX 校验集',
+      category: 'goal',
+      importance: 5,
+    });
 
-    render(<ProjectArchetypeStudio />);
+    render(
+      <MemoryRouter>
+        <ProjectArchetypeStudio />
+      </MemoryRouter>,
+    );
 
     const budgetCard = await screen.findByTestId('context-budget-watermark-card');
     await waitFor(() => {
       expect(budgetCard.textContent).toContain('2/3 启用');
     });
 
-    // Deadline countdown capsule & VCS mode status are rendered
-    expect(await screen.findByTestId('project-deadline-capsule')).toHaveTextContent(
-      '完成法务合规会签',
-    );
-    expect(screen.getByTestId('vcs-checkpoint-status')).toHaveTextContent(
-      'VCS: 内置快照保护中',
-    );
-    expect(screen.getByTestId('studio-vcs-mode-select')).toHaveValue('builtin');
+    // VCS checkpoint status is rendered by PolymorphicArchetypeCards
+    expect(screen.getByTestId('vcs-checkpoint-status')).toHaveTextContent('VCS: 内置快照保护中');
     expect(await screen.findByTestId('workspace-vcs-summary-widget')).toBeInTheDocument();
     expect(await screen.findByTestId('workspace-charter-status-badge')).toBeInTheDocument();
     expect(screen.getByTestId('overview-quick-checkpoint-btn')).toBeInTheDocument();
@@ -452,7 +409,9 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('checkpoint-quick-presets')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('checkpoint-copy-timeline-btn'));
     fireEvent.click(screen.getByTestId('business-save-style-l3-btn'));
-    expect(screen.getByTestId('business-style-applied-hint')).toHaveTextContent('已沉淀文书规范至 L3');
+    expect(screen.getByTestId('business-style-applied-hint')).toHaveTextContent(
+      '已沉淀文书规范至 L3',
+    );
     fireEvent.click(screen.getByTestId('business-apply-style-btn'));
     await waitFor(() => {
       expect(mockCreateConstraint).toHaveBeenCalledWith(
@@ -474,245 +433,7 @@ describe('ProjectArchetypeStudio', () => {
       expect(mockRestoreCheckpoint).toHaveBeenCalledWith('proj-1', 'cp_1');
     });
 
-    // Switch active project archetype to research
-    const typeSelect = screen.getByLabelText('切换项目形态');
-    fireEvent.change(typeSelect, { target: { value: 'research' } });
-
-    const researchCard = await screen.findByTestId('polymorphic-card-research');
-    expect(researchCard.textContent).toContain('survey2026.pdf');
-    expect(researchCard.textContent).toContain('RQ1: 验证多跳检索召回率');
-
-    // Add a new Research Question
-    fireEvent.change(screen.getByTestId('research-rq-input'), {
-      target: { value: 'RQ2: 跨目录文献引文对齐精度' },
-    });
-    fireEvent.change(screen.getByTestId('research-rq-reason'), {
-      target: { value: 'BibTeX 校验集' },
-    });
-    fireEvent.click(screen.getByTestId('research-rq-add'));
-
-    await waitFor(() => {
-      expect(mockCreateProjectProfile).toHaveBeenCalledWith(
-        'RQ2: 跨目录文献引文对齐精度 — BibTeX 校验集',
-        {
-          projectKey: 'D:/Archives/Contract2026',
-          category: 'goal',
-          importance: 5,
-        },
-      );
-    });
-
-    // Expand M3 Advisor details, solidify suggestion to L2 constraint, and trigger M3->M1 suggestion decomposition dialog
-    fireEvent.click(await screen.findByTestId('advisor-toggle-details-btn'));
-    fireEvent.click(screen.getByTestId('advisor-batch-suggestions-to-milestone-btn'));
-    expect(screen.getByTestId('advisor-batch-suggestions-to-milestone-btn')).toHaveTextContent('已全部转里程碑');
-    fireEvent.click(await screen.findByTestId('advisor-suggestion-to-constraint-0'));
-    await waitFor(() => {
-      expect(mockCreateConstraint).toHaveBeenCalledWith(
-        'proj-1',
-        expect.objectContaining({
-          category: 'convention',
-          content: '补充二审归档快照（定稿前保护）',
-        }),
-      );
-    });
-    fireEvent.click(await screen.findByTestId('advisor-decompose-suggestion-0'));
-    expect(await screen.findByTestId('decompose-archetype-presets')).toBeInTheDocument();
-    expect(screen.getByTestId('decompose-requirement-input')).toHaveValue('补充二审归档快照');
-    expect(screen.getByTestId('decompose-context-input')).toHaveValue('定稿前保护');
-    fireEvent.click(screen.getByTestId('decompose-preset-0'));
-    fireEvent.click(screen.getByText('取消'));
-
-    // Apply academic citation style & writing tone on the research card
-    fireEvent.change(screen.getByTestId('research-citation-style-select'), {
-      target: { value: 'IEEE' },
-    });
-    fireEvent.click(screen.getByTestId('research-save-style-l3-btn'));
-    expect(screen.getByTestId('research-style-applied-hint')).toHaveTextContent('已沉淀学术规范至 L3');
-    fireEvent.click(screen.getByTestId('research-apply-style-btn'));
-    await waitFor(() => {
-      expect(mockCreateConstraint).toHaveBeenCalledWith(
-        'proj-1',
-        expect.objectContaining({
-          category: 'academic_writing',
-          priority: 8,
-        }),
-      );
-    });
-
-    // Switch to L4 Controlled Materials tab and import a file
-    fireEvent.click(screen.getByTestId('studio-tab-materials'));
-    await waitFor(() => {
-      expect(screen.getByTestId('project-materials-studio-panel')).toBeInTheDocument();
-      expect(screen.getByTestId('semantic-search-panel')).toBeInTheDocument();
-      expect(screen.getByTestId('semantic-stats-refresh-btn')).toBeInTheDocument();
-      expect(screen.getByTestId('semantic-query-presets')).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByTestId('semantic-topk-pill-5'));
-    fireEvent.click(screen.getByTestId('semantic-topk-pill-10'));
-    fireEvent.click(screen.getByTestId('semantic-preset-0'));
-    expect(await screen.findByTestId('semantic-copy-all-btn')).toBeInTheDocument();
-    expect(screen.getByTestId('semantic-batch-to-constraint-btn')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('semantic-save-l4-bundle-btn'));
-    expect(screen.getByTestId('semantic-save-l4-bundle-btn')).toHaveTextContent('已存 L4 合集');
-    fireEvent.click(screen.getByTestId('semantic-hit-to-milestone-0'));
-    expect(screen.getByTestId('semantic-hit-to-milestone-0')).toHaveTextContent('已转里程碑');
-    fireEvent.click(screen.getByTestId('semantic-hit-to-constraint-0'));
-    await waitFor(() => {
-      expect(mockCreateConstraint).toHaveBeenCalledWith(
-        'proj-1',
-        expect.objectContaining({
-          category: 'convention',
-          content: 'HotpotQA 基准上多跳召回率提升 6.4%',
-        }),
-      );
-    });
-    expect(mockSemanticSearchMaterials).toHaveBeenCalledWith(
-      'proj-1',
-      '基线模型对比与消融实验结果',
-      10,
-    );
-    fireEvent.change(screen.getByTestId('studio-material-file-input'), {
-      target: { value: '01_literature/references.bib' },
-    });
-    fireEvent.click(screen.getByTestId('studio-material-file-add'));
-    await waitFor(() => {
-      expect(mockAddMaterialFromFile).toHaveBeenCalledWith('proj-1', '01_literature/references.bib');
-    });
-
-    // Discoverable files bar & direct text snippet ingestion in L4 Materials
-    expect(screen.getByTestId('studio-discoverable-files-bar')).toBeInTheDocument();
-    fireEvent.change(screen.getByTestId('studio-material-text-input'), {
-      target: { value: '合同关键违约责任上限：不超过合同总额 20%' },
-    });
-    fireEvent.click(screen.getByTestId('studio-material-text-add'));
-    await waitFor(() => {
-      expect(mockAddMaterial).toHaveBeenCalledWith('proj-1', {
-        content: '合同关键违约责任上限：不超过合同总额 20%',
-      });
-    });
-
-    // Switch to Constraints tab and test Glob trigger path tester
-    fireEvent.click(screen.getByText('AI 行为约束规则'));
-    await waitFor(() => {
-      expect(screen.getByTestId('constraint-glob-tester-bar')).toBeInTheDocument();
-    });
-    fireEvent.change(screen.getByTestId('constraint-glob-test-input'), {
-      target: { value: '02_审校与修订过程/合同.docx' },
-    });
-    expect(screen.getByTestId('constraint-glob-match-count')).toBeInTheDocument();
-
-    // Switch to Milestones tab and seed recommended milestones for the active archetype
-    fireEvent.click(screen.getByText('阶段与里程碑管理'));
-    await waitFor(() => {
-      expect(screen.getByTestId('seed-archetype-milestones-btn')).toBeInTheDocument();
-      expect(screen.getByTestId('milestone-manager-progress')).toBeInTheDocument();
-      expect(screen.getByTestId('milestone-stage-filter-bar')).toBeInTheDocument();
-      expect(screen.getByTestId('milestone-copy-roadmap-btn')).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByText('新建里程碑'));
-    expect(await screen.findByTestId('milestone-editor-stage-presets')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('取消'));
-    fireEvent.click(screen.getByTestId('seed-archetype-milestones-btn'));
-    await waitFor(() => {
-      expect(mockCreateMilestone).toHaveBeenCalled();
-    });
-
-    // Switch to L3 Project Profile governance tab and add a project convention entry
-    mockCreateProjectProfile.mockResolvedValueOnce({
-      id: 'pf-3',
-      content: '实验随机种子统一固定为 42',
-      category: 'convention',
-      importance: 5,
-    });
-    // Switch to Charter tab and verify L1+L2 markdown copy button
-    mockGetCharter.mockResolvedValueOnce({
-      projectId: 'proj-1',
-      path: 'D:/Archives/Contract2026/SAGE.md',
-      exists: true,
-      content: '# Contract2026 总纲',
-      charCount: 18,
-      recommendedTemplate: '# 推荐模板',
-    });
-    fireEvent.click(screen.getByTestId('studio-tab-charter'));
-    expect(await screen.findByTestId('studio-charter-copy-md-btn')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId('studio-tab-profile'));
-    expect(await screen.findByTestId('project-profile-studio-panel')).toBeInTheDocument();
-    expect(await screen.findByTestId('knowledge-session-select')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('knowledge-extract-btn'));
-    expect(await screen.findByTestId('knowledge-toggle-select-all')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('knowledge-save-reasoning-l3-btn'));
-    expect(screen.getByTestId('knowledge-save-reasoning-l3-btn')).toHaveTextContent('已存 L3');
-    fireEvent.click(screen.getByTestId('knowledge-save-reasoning-l4-btn'));
-    expect(screen.getByTestId('knowledge-save-reasoning-l4-btn')).toHaveTextContent('已存 L4 资料');
-    fireEvent.click(screen.getByTestId('knowledge-select-invert-btn'));
-    fireEvent.click(screen.getByTestId('knowledge-select-invert-btn'));
-    fireEvent.click(screen.getByTestId('knowledge-copy-entry-0'));
-    expect(screen.getByTestId('knowledge-copy-entry-0')).toHaveTextContent('已复制');
-    fireEvent.click(screen.getByTestId('knowledge-to-milestone-0'));
-    expect(screen.getByTestId('knowledge-to-milestone-0')).toHaveTextContent('已转里程碑');
-    fireEvent.click(screen.getByTestId('knowledge-batch-to-milestone-btn'));
-    fireEvent.click(screen.getByTestId('knowledge-select-high-btn'));
-    fireEvent.click(screen.getByTestId('knowledge-to-constraint-0'));
-    await waitFor(() => {
-      expect(mockCreateConstraint).toHaveBeenCalledWith(
-        'proj-1',
-        expect.objectContaining({
-          category: 'convention',
-          content: '所有补充协议须附原始合同编号',
-          priority: 8,
-        }),
-      );
-    });
-    fireEvent.click(screen.getByTestId('knowledge-toggle-select-all'));
-    fireEvent.click(screen.getByTestId('knowledge-toggle-select-all'));
-    fireEvent.click(screen.getByTestId('knowledge-confirm-btn'));
-    await waitFor(() => {
-      expect(mockConfirmKnowledge).toHaveBeenCalledWith(
-        'proj-1',
-        expect.objectContaining({
-          entries: [expect.objectContaining({ content: '所有补充协议须附原始合同编号' })],
-        }),
-      );
-    });
-    expect(screen.getByTestId('studio-profile-presets-bar')).toBeInTheDocument();
-    expect(screen.getByTestId('studio-profile-copy-md-btn')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('studio-profile-save-l4-btn'));
-    expect(screen.getByTestId('studio-profile-save-l4-btn')).toHaveTextContent('已存为 L4 资料');
-    fireEvent.click(screen.getByTestId('studio-profile-imp-high'));
-    fireEvent.click(screen.getByTestId('studio-profile-imp-all'));
-    fireEvent.click(screen.getByTestId('studio-profile-pillar-preset-0'));
-    fireEvent.click(screen.getByTestId('studio-profile-preset-0'));
-    fireEvent.change(screen.getByTestId('studio-profile-category'), {
-      target: { value: 'convention' },
-    });
-    fireEvent.change(screen.getByTestId('studio-profile-input'), {
-      target: { value: '实验随机种子统一固定为 42' },
-    });
-    fireEvent.click(screen.getByTestId('studio-profile-add-btn'));
-    await waitFor(() => {
-      expect(mockCreateProjectProfile).toHaveBeenCalledWith(
-        '实验随机种子统一固定为 42',
-        expect.objectContaining({
-          projectKey: 'D:/Archives/Contract2026',
-          category: 'convention',
-          importance: 5,
-        }),
-      );
-    });
-    fireEvent.click(await screen.findByTestId('studio-profile-to-milestone-pf-1'));
-    expect(screen.getByTestId('studio-profile-to-milestone-pf-1')).toHaveTextContent('已转里程碑');
-    const promoteBtn = await screen.findByTestId('studio-profile-to-constraint-pf-1');
-    fireEvent.click(promoteBtn);
-    await waitFor(() => {
-      expect(mockCreateConstraint).toHaveBeenCalledWith(
-        'proj-1',
-        expect.objectContaining({
-          category: 'goal',
-          content: 'RQ1: 验证多跳检索召回率 — HotpotQA 基准',
-        }),
-      );
-    });
+    // "进入治理" button navigates to governance page
+    expect(screen.getByTestId('enter-governance-btn')).toBeInTheDocument();
   });
 });

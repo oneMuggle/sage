@@ -30,6 +30,9 @@ vi.mock('../../../features/manage-endpoints/api', () => ({
 
 beforeEach(() => {
   localStorage.clear();
+  // Scheme 2: 高级组默认折叠，本测试需断言其中入口，强制展开
+  localStorage.setItem('sage:nav-group:tools', '0');
+  localStorage.setItem('sage:nav-group:advanced', '0');
   const setState = useStore.setState as unknown as (partial: Record<string, unknown>) => void;
   setState({ currentSessionId: null, sessions: [] });
 });

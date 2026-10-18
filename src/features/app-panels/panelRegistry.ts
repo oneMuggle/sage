@@ -114,7 +114,7 @@ export const PANEL_DEFINITIONS: readonly PanelDefinition[] = [
     slot: 'left-list',
     label: '项目',
     migrationBatch: 'B',
-    currentOwner: 'widgets/sidebar/sections/ProjectSection.tsx',
+    currentOwner: 'widgets/sidebar/sections/SidebarProjectList.tsx',
   },
   {
     id: 'sider-conversations',

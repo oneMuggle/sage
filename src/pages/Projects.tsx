@@ -12,7 +12,7 @@ import { projectApi, type ProjectSummary, type ProjectType } from '../shared/api
 import { useI18n } from '../shared/lib/i18n';
 import { useStore } from '../shared/lib/store';
 import { PageHeader } from '../shared/ui';
-import { ProjectSection } from '../widgets/sidebar/sections/ProjectSection';
+import { WorkbenchProjectList } from '../widgets/sidebar/sections/WorkbenchProjectList';
 
 /** A spacious view of the same project APIs, not a second project registry. */
 export function Projects() {
@@ -91,7 +91,10 @@ export function Projects() {
               <span className="font-medium text-foreground" data-testid="workbench-project-count">
                 已纳管项目：{projects.length} 个
               </span>
-              <div className="flex flex-wrap items-center gap-1" data-testid="workbench-archetype-counts">
+              <div
+                className="flex flex-wrap items-center gap-1"
+                data-testid="workbench-archetype-counts"
+              >
                 {ARCHETYPE_ORDER.map((t) => {
                   const bp = getArchetypeBlueprint(t);
                   return (
@@ -138,10 +141,7 @@ export function Projects() {
 
           <ProjectArchetypeStudio />
 
-          <ProjectSection
-            collapsed={false}
-            onToggleCollapsed={() => undefined}
-            presentation="workbench"
+          <WorkbenchProjectList
             onOpenSession={(sessionId) => {
               useStore.getState().setCurrentSessionId(sessionId);
               navigate('/chat');
