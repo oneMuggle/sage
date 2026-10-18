@@ -690,3 +690,8 @@
 - **`src/features/project-type/KnowledgeExtractionPanel.tsx`**：M2 对话知识提取审核栏新增 **`选中项转里程碑`** 批量转化按钮（`knowledge-batch-to-milestone-btn`），并在单条提取建议新增一键复制按钮（`knowledge-copy-entry-${idx}`）。
 - **`src/features/project-type/GitStatusWidget.tsx`**：支持将当前筛选的 Git 变更文件一键批量创建 L2 审查护栏（`git-widget-guard-all-btn`），并在最近提交记录行新增 **`+里程碑`** 节点转化按钮（`git-widget-commit-to-milestone-${commit.sha}`）。
 - **`src/features/project-type/ProjectOverviewWidgets.tsx`**：项目概览状态栏新增 **`存概览至 L4`**（`overview-save-l4-btn`）与 **`当前阶段建里程碑`**（`overview-stage-to-milestone-btn`）快捷动作。
+### Phase P47（2026-10-18）：约束/里程碑编辑器存 L4 与互转里程碑、约束统计存 L4 与单条规则转里程碑、里程碑进度存 L4 与单条节点转 L2
+- **`src/features/project-type/ConstraintEditor.tsx`**：约束编辑器底部栏新增 **`转里程碑`**（`constraint-editor-to-milestone-btn`）与 **`存为 L4 资料`**（`constraint-editor-save-l4-btn`），打通 L2 规则草稿向里程碑核查任务与 L4 受控规范文档的闭环转化。
+- **`src/features/project-type/MilestoneEditor.tsx`**：里程碑编辑器底部栏新增 **`存为 L4 资料`**（`milestone-editor-save-l4-btn`），支持将里程碑交付规范一键归档至 L4 参考资料。
+- **`src/features/project-type/ConstraintSummaryWidget.tsx`**：约束统计摘要卡头部新增 **`存 L4`**（`constraint-summary-save-l4-btn`），并在高优规则预览行新增 **`+里程碑`** 转化按钮（`constraint-summary-rule-to-milestone-${rule.id}`）。
+- **`src/features/project-type/MilestoneProgressWidget.tsx`**：里程碑进度摘要卡头部新增 **`存 L4`**（`milestone-summary-save-l4-btn`），并在最近里程碑行新增 **`+L2`** 交付准入约束转化按钮（`milestone-summary-to-constraint-${milestone.id}`）。

@@ -464,6 +464,10 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('milestone-summary-stage-pill-experiment'));
     fireEvent.click(screen.getByTestId('milestone-summary-save-l3-btn'));
     expect(screen.getByTestId('milestone-summary-save-l3-btn')).toHaveTextContent('已存进度 L3');
+    fireEvent.click(screen.getByTestId('milestone-summary-save-l4-btn'));
+    expect(screen.getByTestId('milestone-summary-save-l4-btn')).toHaveTextContent('已存 L4');
+    fireEvent.click(screen.getByTestId('milestone-summary-to-constraint-m-overdue-1'));
+    expect(screen.getByTestId('milestone-summary-to-constraint-m-overdue-1')).toHaveTextContent('已转L2');
     fireEvent.click(screen.getByTestId('milestone-summary-complete-active-btn'));
 
     fireEvent.click(screen.getByTestId('milestone-summary-copy-md-btn'));
@@ -589,6 +593,8 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('milestone-editor-copy-md-btn'));
     fireEvent.click(screen.getByTestId('milestone-editor-to-constraint-btn'));
     expect(screen.getByTestId('milestone-editor-to-constraint-btn')).toHaveTextContent('已转 L2 约束');
+    fireEvent.click(screen.getByTestId('milestone-editor-save-l4-btn'));
+    expect(screen.getByTestId('milestone-editor-save-l4-btn')).toHaveTextContent('已存 L4');
     fireEvent.click(screen.getByTestId('milestone-editor-save-l3-btn'));
     expect(screen.getByTestId('milestone-editor-save-l3-btn')).toHaveTextContent('已沉淀 L3');
   });

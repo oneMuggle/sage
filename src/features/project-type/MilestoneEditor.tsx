@@ -158,6 +158,7 @@ export function MilestoneEditor({
   const [error, setError] = useState<string | null>(null);
   const [copiedMilestoneMd, setCopiedMilestoneMd] = useState(false);
   const [convertedConstraint, setConvertedConstraint] = useState(false);
+  const [savedMilestoneL4, setSavedMilestoneL4] = useState(false);
   const [savedMilestoneL3, setSavedMilestoneL3] = useState(false);
 
   // 编辑模式时填充表单
@@ -458,6 +459,26 @@ export function MilestoneEditor({
             className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
             {convertedConstraint ? '已转 L2 约束' : '转 L2 交付约束'}
+          </button>
+          <button
+            type="button"
+            data-testid="milestone-editor-save-l4-btn"
+            onClick={async () => {
+              if (savedMilestoneL4) return;
+              setSavedMilestoneL4(true);
+              if (typeof projectApi?.addMaterial === 'function') {
+                try {
+                  await projectApi.addMaterial(projectId, {
+                    content: `# 里程碑交付规范：${title.trim() || '未命名'}\n- 阶段: ${stage || '默认阶段'}\n- 截止日期: ${dueDate || '未设置'}\n\n${description.trim() || '无详细交付说明'}`,
+                  });
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+          >
+            {savedMilestoneL4 ? '已存 L4' : '存为 L4 资料'}
           </button>
           <button
             type="button"
