@@ -504,6 +504,8 @@ describe('ProjectArchetypeStudio', () => {
 
     // Expand M3 Advisor details, solidify suggestion to L2 constraint, and trigger M3->M1 suggestion decomposition dialog
     fireEvent.click(await screen.findByTestId('advisor-toggle-details-btn'));
+    fireEvent.click(screen.getByTestId('advisor-batch-suggestions-to-milestone-btn'));
+    expect(screen.getByTestId('advisor-batch-suggestions-to-milestone-btn')).toHaveTextContent('已全部转里程碑');
     fireEvent.click(await screen.findByTestId('advisor-suggestion-to-constraint-0'));
     await waitFor(() => {
       expect(mockCreateConstraint).toHaveBeenCalledWith(
@@ -640,8 +642,12 @@ describe('ProjectArchetypeStudio', () => {
     expect(await screen.findByTestId('knowledge-session-select')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('knowledge-extract-btn'));
     expect(await screen.findByTestId('knowledge-toggle-select-all')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('knowledge-save-reasoning-l3-btn'));
+    expect(screen.getByTestId('knowledge-save-reasoning-l3-btn')).toHaveTextContent('已存 L3');
     fireEvent.click(screen.getByTestId('knowledge-save-reasoning-l4-btn'));
     expect(screen.getByTestId('knowledge-save-reasoning-l4-btn')).toHaveTextContent('已存 L4 资料');
+    fireEvent.click(screen.getByTestId('knowledge-select-invert-btn'));
+    fireEvent.click(screen.getByTestId('knowledge-select-invert-btn'));
     fireEvent.click(screen.getByTestId('knowledge-copy-entry-0'));
     expect(screen.getByTestId('knowledge-copy-entry-0')).toHaveTextContent('已复制');
     fireEvent.click(screen.getByTestId('knowledge-to-milestone-0'));

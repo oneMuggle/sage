@@ -606,6 +606,7 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('milestone-sort-preset-10'));
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('milestone-blueprint-tpl-0'));
+    fireEvent.click(screen.getByTestId('milestone-pillar-append-0'));
     fireEvent.click(screen.getByTestId('milestone-editor-copy-md-btn'));
     fireEvent.click(screen.getByTestId('milestone-editor-to-constraint-btn'));
     expect(screen.getByTestId('milestone-editor-to-constraint-btn')).toHaveTextContent('已转 L2 约束');
