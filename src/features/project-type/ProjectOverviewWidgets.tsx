@@ -230,6 +230,18 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
             </button>
             <button
               type="button"
+              onClick={() => {
+                setDecomposeReq(`完成「${stageLabel}」阶段核心交付与核查`);
+                setDecomposeCtx(`项目形态：${blueprint.label}；护栏支柱：${blueprint.contextPillars.join('、')}`);
+                setDecomposeOpen(true);
+              }}
+              data-testid="overview-decompose-stage-btn"
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              拆解当前阶段
+            </button>
+            <button
+              type="button"
               data-testid="overview-save-stage-profile-btn"
               onClick={async () => {
                 if (savedStageProfile) return;

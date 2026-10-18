@@ -31,6 +31,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [savedProgressL4, setSavedProgressL4] = useState(false);
   const [promotedConstraintIds, setPromotedConstraintIds] = useState<Set<string>>(new Set());
   const [promotedL3Ids, setPromotedL3Ids] = useState<Set<string>>(new Set());
+  const [promotedL4Ids, setPromotedL4Ids] = useState<Set<string>>(new Set());
 
   const blueprint = getArchetypeBlueprint(projectType);
   const stageLabelMap = new Map(blueprint.stages.map((s) => [s.id, s.label]));
@@ -459,6 +460,26 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                     className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                   >
                     {promotedL3Ids.has(milestone.id) ? '已存L3' : '+L3'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`milestone-summary-to-l4-${milestone.id}`}
+                    onClick={async () => {
+                      if (promotedL4Ids.has(milestone.id)) return;
+                      setPromotedL4Ids((prev) => new Set(prev).add(milestone.id));
+                      if (typeof projectApi?.addMaterial === 'function') {
+                        try {
+                          await projectApi.addMaterial(projectId, {
+                            content: `# 里程碑摘要归档：${milestone.title}\n- 状态：${milestone.status}\n- 阶段：${milestone.stage || '默认阶段'}`,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {promotedL4Ids.has(milestone.id) ? '已存L4' : '+L4'}
                   </button>
                   <button
                     type="button"

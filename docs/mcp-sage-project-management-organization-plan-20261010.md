@@ -715,3 +715,8 @@
 - **`src/features/project-type/SemanticSearchPanel.tsx`**：M4 语义检索工具栏新增 **`批量转里程碑`**（`semantic-batch-to-milestone-btn`），并在单条命中片段旁新增 **`+L4`** 按钮（`semantic-hit-to-l4-${idx}`）。
 - **`src/features/project-type/ConstraintEditor.tsx`**：约束编辑器内容预设栏新增蓝图上下文护栏支柱快捷填入胶囊 **`支柱 #1..#3`**（`constraint-pillar-preset-${idx}`）。
 - **`src/features/project-type/MilestoneEditor.tsx`**：里程碑编辑器模板预设栏新增蓝图推荐里程碑快捷填入胶囊 **`蓝图 #1..#3`**（`milestone-blueprint-tpl-${idx}`）。
+### Phase P53（2026-10-18）：Git 单条提交沉淀 L3、里程碑摘要单条归档 L4、高优约束预览单条复制、概览当前阶段一键 AI 拆解
+- **`src/features/project-type/GitStatusWidget.tsx`**：在近期提交列表每条提交旁新增 **`+L3`** 沉淀按钮（`git-widget-commit-to-l3-${commit.sha}`），支持将单条关键提交记录独立沉淀至 L3 项目画像。
+- **`src/features/project-type/MilestoneProgressWidget.tsx`**：在最近里程碑摘要列表每个节点旁新增 **`+L4`** 归档按钮（`milestone-summary-to-l4-${milestone.id}`），支持将单条里程碑摘要独立归档至 L4 参考资料。
+- **`src/features/project-type/ConstraintSummaryWidget.tsx`**：在高优规则预览列表每条规则旁新增 **`复制`** 按钮（`constraint-summary-rule-copy-${rule.id}`），支持一键复制单条高优约束规则。
+- **`src/features/project-type/ProjectOverviewWidgets.tsx`**：在生命周期阶段控制栏新增 **`拆解当前阶段`** 按钮（`overview-decompose-stage-btn`），一键拉起带当前阶段目标与形态护栏支柱上下文的 M1 AI 任务拆解弹窗。
