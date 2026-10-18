@@ -55,6 +55,7 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
   const [copiedMilestoneId, setCopiedMilestoneId] = useState<string | null>(null);
   const [batchSavedMilestonesL3, setBatchSavedMilestonesL3] = useState(false);
   const [batchSavedMilestonesL4, setBatchSavedMilestonesL4] = useState(false);
+  const [batchConvertedConstraints, setBatchConvertedConstraints] = useState(false);
   const [constraintMilestoneIds, setConstraintMilestoneIds] = useState<Set<string>>(new Set());
   const [l4MilestoneIds, setL4MilestoneIds] = useState<Set<string>>(new Set());
   const blueprint = getArchetypeBlueprint(projectType);
@@ -433,6 +434,32 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                     className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
                     {batchSavedMilestonesL4 ? '已批量存 L4' : `批量存 L4 (${filteredMilestones.length})`}
+                  </button>
+                )}
+                {filteredMilestones.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="milestone-batch-to-constraint-btn"
+                    onClick={async () => {
+                      if (batchConvertedConstraints) return;
+                      setBatchConvertedConstraints(true);
+                      if (typeof projectApi?.createConstraint === 'function') {
+                        for (const m of filteredMilestones.slice(0, 6)) {
+                          try {
+                            await projectApi.createConstraint(projectId, {
+                              category: 'deliverable_guard',
+                              content: `里程碑交付验收要求 [${m.title}]：${m.description || '按期完成阶段交付'}`,
+                              priority: 8,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {batchConvertedConstraints ? '已批量转 L2' : `批量转 L2 (${filteredMilestones.length})`}
                   </button>
                 )}
                 {inProgressMilestones.length > 0 && (

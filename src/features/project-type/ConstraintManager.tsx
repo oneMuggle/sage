@@ -85,6 +85,7 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
   const [copiedRuleId, setCopiedRuleId] = useState<string | null>(null);
   const [batchPromotedL3, setBatchPromotedL3] = useState(false);
   const [batchSavedL4, setBatchSavedL4] = useState(false);
+  const [batchConvertedMilestones, setBatchConvertedMilestones] = useState(false);
   const [milestoneRuleIds, setMilestoneRuleIds] = useState<Set<string>>(new Set());
   const [l4RuleIds, setL4RuleIds] = useState<Set<string>>(new Set());
 
@@ -342,6 +343,30 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
                 className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground hover:bg-muted"
               >
                 {batchSavedL4 ? '已批量存 L4' : `批量存 L4 (${filteredConstraints.length})`}
+              </button>
+              <button
+                type="button"
+                data-testid="constraint-batch-to-milestone-btn"
+                onClick={async () => {
+                  if (batchConvertedMilestones || filteredConstraints.length === 0) return;
+                  setBatchConvertedMilestones(true);
+                  if (typeof projectApi?.createMilestone === 'function') {
+                    for (const c of filteredConstraints.slice(0, 6)) {
+                      try {
+                        await projectApi.createMilestone(projectId, {
+                          title: `[合规治理] ${c.content.slice(0, 48)}`,
+                          description: c.content,
+                          sortOrder: 10,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1 text-xs text-foreground hover:bg-muted"
+              >
+                {batchConvertedMilestones ? '已批量转里程碑' : `批量转里程碑 (${filteredConstraints.length})`}
               </button>
               <button
                 type="button"

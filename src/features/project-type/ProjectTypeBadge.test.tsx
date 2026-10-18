@@ -352,6 +352,10 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
     });
     fireEvent.click(screen.getByTestId('wiki-symbol-to-milestone-0'));
     expect(screen.getByTestId('wiki-symbol-to-milestone-0')).toHaveTextContent('已建里程碑');
+    fireEvent.click(screen.getByTestId('wiki-symbol-to-l3-0'));
+    expect(screen.getByTestId('wiki-symbol-to-l3-0')).toHaveTextContent('已存L3');
+    fireEvent.click(screen.getByTestId('wiki-file-to-l4-src/core.ts'));
+    expect(screen.getByTestId('wiki-file-to-l4-src/core.ts')).toHaveTextContent('已入库L4');
     fireEvent.change(filterInput, { target: { value: 'python' } });
     expect(screen.getByText('scripts/run.py')).toBeInTheDocument();
     expect(screen.queryByText('src/core.ts')).toBeNull();

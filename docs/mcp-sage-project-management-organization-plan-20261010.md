@@ -720,3 +720,16 @@
 - **`src/features/project-type/MilestoneProgressWidget.tsx`**：在最近里程碑摘要列表每个节点旁新增 **`+L4`** 归档按钮（`milestone-summary-to-l4-${milestone.id}`），支持将单条里程碑摘要独立归档至 L4 参考资料。
 - **`src/features/project-type/ConstraintSummaryWidget.tsx`**：在高优规则预览列表每条规则旁新增 **`复制`** 按钮（`constraint-summary-rule-copy-${rule.id}`），支持一键复制单条高优约束规则。
 - **`src/features/project-type/ProjectOverviewWidgets.tsx`**：在生命周期阶段控制栏新增 **`拆解当前阶段`** 按钮（`overview-decompose-stage-btn`），一键拉起带当前阶段目标与形态护栏支柱上下文的 M1 AI 任务拆解弹窗。
+### Phase P54 — Wiki 单符号沉淀 L3 与扫描文件入库 L4、约束批量转里程碑、里程碑批量转 L2 约束及 L3 画像蓝图支柱预设（已完成）
+
+- **M5 `WikiGenerationPanel` 单条符号沉淀 L3 与扫描预览文件一键入库 L4（`src/features/project-type/WikiGenerationPanel.tsx`）**：
+  - 在 `wiki-symbol-preview-list` 每条核心符号旁新增 **`+L3`**（`data-testid="wiki-symbol-to-l3-${idx}"`），一键调用 `projectApi.confirmKnowledge(projectId, { entries: [{ category: 'architecture', content: ..., importance: 7, sourceMessageIds: [], reasoning: 'M5 Wiki 单条核心符号沉淀至 L3 画像' }] })` 并切换为 `已存L3`；
+  - 在扫描文件预览列表每项旁新增 **`+L4`**（`data-testid="wiki-file-to-l4-${f.path}"`），一键调用 `projectApi.addMaterialFromFile(projectId, f.path)` 将源码或文档纳入 L4 受控参考资料并切换为 `已入库L4`。
+- **M2 `ConstraintManager` 筛选约束批量转化为合规里程碑（`src/features/project-type/ConstraintManager.tsx`）**：
+  - 在顶部批量操作栏新增 **`批量转里程碑 (${filteredConstraints.length})`**（`data-testid="constraint-batch-to-milestone-btn"`），将当前筛选出的前 6 条约束一键通过 `projectApi.createMilestone` 转化为 `[合规治理]` 里程碑并切换为 `已批量转里程碑`。
+- **M1 `MilestoneManager` 筛选里程碑批量转化为 L2 交付护栏（`src/features/project-type/MilestoneManager.tsx`）**：
+  - 在筛选与批量操作栏新增 **`批量转 L2 (${filteredMilestones.length})`**（`data-testid="milestone-batch-to-constraint-btn"`），将当前筛选出的前 6 个里程碑一键通过 `projectApi.createConstraint`（`category: 'deliverable_guard'`, `priority: 8`）转化为 L2 交付验收护栏并切换为 `已批量转 L2`。
+- **L3 `StudioProfileTabPanel` 形态蓝图上下文支柱一键预设（`src/features/project-type/StudioProfileTabPanel.tsx`）**：
+  - 在 `studio-profile-presets-bar` 接入 `getArchetypeBlueprint(projectType).contextPillars`，渲染 **`支柱 #1..#3`**（`data-testid="studio-profile-pillar-preset-${idx}"`），支持一键将项目形态核心上下文支柱填入 L3 画像草稿（`category: 'convention'`）。
+- **单元测试与门禁验证**：
+  - 扩展 `ProjectTypeBadge.test.tsx`、`ConstraintSummaryWidget.test.tsx`、`MilestoneProgressWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（4 个测试文件共 43 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

@@ -457,6 +457,8 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('constraint-batch-promote-l3-btn')).toHaveTextContent('已批量存 L3');
     fireEvent.click(screen.getByTestId('constraint-batch-save-l4-btn'));
     expect(screen.getByTestId('constraint-batch-save-l4-btn')).toHaveTextContent('已批量存 L4');
+    fireEvent.click(screen.getByTestId('constraint-batch-to-milestone-btn'));
+    expect(screen.getByTestId('constraint-batch-to-milestone-btn')).toHaveTextContent('已批量转里程碑');
     fireEvent.click(screen.getByTestId('constraint-to-milestone-c-p33-high'));
     expect(screen.getByTestId('constraint-to-milestone-c-p33-high')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('constraint-to-l4-c-p33-high'));

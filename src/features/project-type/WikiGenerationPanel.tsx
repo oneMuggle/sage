@@ -86,6 +86,7 @@ export function WikiGenerationPanel({
   const [savedSymbolsProfile, setSavedSymbolsProfile] = useState(false);
   const [guardedSymbolIndices, setGuardedSymbolIndices] = useState<Set<number>>(new Set());
   const [milestoneSymbolIndices, setMilestoneSymbolIndices] = useState<Set<number>>(new Set());
+  const [l3SymbolIndices, setL3SymbolIndices] = useState<Set<number>>(new Set());
   const [savedManifestL3, setSavedManifestL3] = useState(false);
 
   /** 重置 */
@@ -617,6 +618,34 @@ export function WikiGenerationPanel({
                         >
                           {milestoneSymbolIndices.has(idx) ? '已建里程碑' : '+里程碑'}
                         </button>
+                        <button
+                          type="button"
+                          data-testid={`wiki-symbol-to-l3-${idx}`}
+                          onClick={async () => {
+                            if (l3SymbolIndices.has(idx)) return;
+                            setL3SymbolIndices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.confirmKnowledge === 'function') {
+                              try {
+                                await projectApi.confirmKnowledge(projectId, {
+                                  entries: [
+                                    {
+                                      category: 'architecture',
+                                      content: `核心符号 [${KIND_LABELS[s.kind] ?? s.kind}] ${s.name} (${s.filePath}:${s.lineno})`,
+                                      importance: 7,
+                                      sourceMessageIds: [],
+                                      reasoning: 'M5 Wiki 单条核心符号沉淀至 L3 画像',
+                                    },
+                                  ],
+                                });
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }
+                          }}
+                          className="rounded border border-border bg-background px-1 py-0 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          {l3SymbolIndices.has(idx) ? '已存L3' : '+L3'}
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -642,9 +671,29 @@ export function WikiGenerationPanel({
                 {filteredFiles.slice(0, 10).map((f) => (
                   <div key={f.path} className="flex items-center justify-between text-xs">
                     <code className="truncate">{f.path}</code>
-                    <span className="shrink-0 text-muted-foreground">
-                      {(f.sizeBytes / 1024).toFixed(1)} KB
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-muted-foreground">
+                        {(f.sizeBytes / 1024).toFixed(1)} KB
+                      </span>
+                      <button
+                        type="button"
+                        data-testid={`wiki-file-to-l4-${f.path}`}
+                        onClick={async () => {
+                          if (ingestedPaths.has(f.path)) return;
+                          setIngestedPaths((prev) => new Set(prev).add(f.path));
+                          if (typeof projectApi?.addMaterialFromFile === 'function') {
+                            try {
+                              await projectApi.addMaterialFromFile(projectId, f.path);
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1 py-0 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        {ingestedPaths.has(f.path) ? '已入库L4' : '+L4'}
+                      </button>
+                    </div>
                   </div>
                 ))}
                 {filteredFiles.length > 10 && (
