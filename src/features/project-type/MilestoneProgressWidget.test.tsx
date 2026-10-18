@@ -472,6 +472,8 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('milestone-summary-to-constraint-m-overdue-1')).toHaveTextContent('已转L2');
     fireEvent.click(screen.getByTestId('milestone-summary-to-l3-m-overdue-1'));
     expect(screen.getByTestId('milestone-summary-to-l3-m-overdue-1')).toHaveTextContent('已存L3');
+    fireEvent.click(screen.getByTestId('milestone-summary-to-l4-m-overdue-1'));
+    expect(screen.getByTestId('milestone-summary-to-l4-m-overdue-1')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('milestone-summary-complete-active-btn'));
 
     fireEvent.click(screen.getByTestId('milestone-summary-copy-md-btn'));
@@ -558,7 +560,10 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('overview-refresh-meta-btn'));
 
     // Open TaskDecomposeDialog from overview bar and test total days & invert/select-all
-    fireEvent.click(screen.getByTestId('overview-open-decompose-btn'));
+    fireEvent.click(screen.getByTestId('overview-decompose-stage-btn'));
+    expect(await screen.findByTestId('decompose-requirement-input')).toHaveValue(
+      '完成「实验分析」阶段核心交付与核查',
+    );
     fireEvent.click(await screen.findByTestId('decompose-preset-0'));
     fireEvent.click(screen.getByTestId('decompose-preview-btn'));
 
