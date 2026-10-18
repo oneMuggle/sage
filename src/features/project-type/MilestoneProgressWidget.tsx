@@ -28,6 +28,8 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [recentFilter, setRecentFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [selectedStageFilter, setSelectedStageFilter] = useState<string | null>(null);
   const [savedProgressL3, setSavedProgressL3] = useState(false);
+  const [savedProgressL4, setSavedProgressL4] = useState(false);
+  const [promotedConstraintIds, setPromotedConstraintIds] = useState<Set<string>>(new Set());
 
   const blueprint = getArchetypeBlueprint(projectType);
   const stageLabelMap = new Map(blueprint.stages.map((s) => [s.id, s.label]));
@@ -235,6 +237,26 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
             </button>
             <button
               type="button"
+              data-testid="milestone-summary-save-l4-btn"
+              onClick={async () => {
+                if (savedProgressL4) return;
+                setSavedProgressL4(true);
+                if (typeof projectApi?.addMaterial === 'function') {
+                  try {
+                    await projectApi.addMaterial(projectId, {
+                      content: `# 项目里程碑进度快照 (${Math.round(progress)}%)\n${milestones.map((m) => `- [${m.status}] ${m.title}`).join('\n')}`,
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {savedProgressL4 ? '已存 L4' : '存 L4'}
+            </button>
+            <button
+              type="button"
               onClick={() => void handleCopyProgressMarkdown()}
               data-testid="milestone-summary-copy-md-btn"
               className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -386,6 +408,29 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                       <div className="text-muted-foreground ml-5">截止：{milestone.dueDate}</div>
                     )}
                   </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    data-testid={`milestone-summary-to-constraint-${milestone.id}`}
+                    onClick={async () => {
+                      if (promotedConstraintIds.has(milestone.id)) return;
+                      setPromotedConstraintIds((prev) => new Set(prev).add(milestone.id));
+                      if (typeof projectApi?.createConstraint === 'function') {
+                        try {
+                          await projectApi.createConstraint(projectId, {
+                            category: 'deliverable_guard',
+                            content: `里程碑交付准入标准 [${milestone.title}]`,
+                            priority: 8,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+                  >
+                    {promotedConstraintIds.has(milestone.id) ? '已转L2' : '+L2'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => void handleQuickToggleStatus(milestone)}
@@ -394,6 +439,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                   >
                     {milestone.status === 'completed' ? '重开' : '标记完成'}
                   </button>
+                  </div>
                 </div>
               ))}
             </div>

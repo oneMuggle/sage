@@ -282,6 +282,8 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('constraint-summary-copy-md-btn')).toHaveTextContent(/已复制|复制规则/);
     fireEvent.click(screen.getByTestId('constraint-summary-save-l3-btn'));
     expect(screen.getByTestId('constraint-summary-save-l3-btn')).toHaveTextContent('已存高优 L3');
+    fireEvent.click(screen.getByTestId('constraint-summary-save-l4-btn'));
+    expect(screen.getByTestId('constraint-summary-save-l4-btn')).toHaveTextContent('已存 L4');
 
     expect(screen.getByTestId('constraint-summary-high-priority-count')).toHaveTextContent('高优 ≥P8：1 条');
     fireEvent.click(screen.getByTestId('constraint-summary-enable-all-btn'));
@@ -297,6 +299,8 @@ describe('ConstraintSummaryWidget', () => {
     );
     fireEvent.click(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1'));
     expect(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1')).toHaveTextContent('已存 L3');
+    fireEvent.click(screen.getByTestId('constraint-summary-rule-to-milestone-c-p30-1'));
+    expect(screen.getByTestId('constraint-summary-rule-to-milestone-c-p30-1')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('constraint-summary-quick-toggle-c-p30-1'));
     await waitFor(() => {
       expect(projectApi.updateConstraint).toHaveBeenCalledWith('test-project', 'c-p30-1', {
@@ -382,6 +386,10 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('constraint-editor-copy-md-btn'));
     fireEvent.click(screen.getByTestId('constraint-editor-save-l3-btn'));
     expect(screen.getByTestId('constraint-editor-save-l3-btn')).toHaveTextContent('已沉淀至 L3');
+    fireEvent.click(screen.getByTestId('constraint-editor-to-milestone-btn'));
+    expect(screen.getByTestId('constraint-editor-to-milestone-btn')).toHaveTextContent('已转里程碑');
+    fireEvent.click(screen.getByTestId('constraint-editor-save-l4-btn'));
+    expect(screen.getByTestId('constraint-editor-save-l4-btn')).toHaveTextContent('已存 L4');
   });
 
   it('supports ConstraintManager priority tier filter and Glob matched-only toggle (Phase P33)', async () => {

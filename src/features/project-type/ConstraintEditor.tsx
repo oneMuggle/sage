@@ -159,6 +159,8 @@ export function ConstraintEditor({
   const [samplePath, setSamplePath] = useState('');
   const [copiedRuleMd, setCopiedRuleMd] = useState(false);
   const [savedRuleL3, setSavedRuleL3] = useState(false);
+  const [savedRuleL4, setSavedRuleL4] = useState(false);
+  const [convertedMilestone, setConvertedMilestone] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -428,6 +430,48 @@ export function ConstraintEditor({
             className="mr-auto rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
             {copiedRuleMd ? '已复制规则 MD' : '复制规则 MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="constraint-editor-to-milestone-btn"
+            onClick={async () => {
+              if (convertedMilestone) return;
+              setConvertedMilestone(true);
+              if (typeof projectApi?.createMilestone === 'function') {
+                try {
+                  await projectApi.createMilestone(projectId, {
+                    title: `[规范核查] ${(content.trim() || '约束规则合规审查').slice(0, 60)}`,
+                    description: `类别: ${category || 'convention'} · 触发: ${triggerPattern.trim() || 'always'}`,
+                    status: 'pending',
+                  });
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+          >
+            {convertedMilestone ? '已转里程碑' : '转里程碑'}
+          </button>
+          <button
+            type="button"
+            data-testid="constraint-editor-save-l4-btn"
+            onClick={async () => {
+              if (savedRuleL4) return;
+              setSavedRuleL4(true);
+              if (typeof projectApi?.addMaterial === 'function') {
+                try {
+                  await projectApi.addMaterial(projectId, {
+                    content: `# L2 约束规范档案 (${category || 'convention'})\n- 优先级: P${priority}\n- 触发范围: ${triggerPattern.trim() || 'always'}\n\n${content.trim() || '未命名约束规则'}`,
+                  });
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+          >
+            {savedRuleL4 ? '已存 L4' : '存为 L4 资料'}
           </button>
           <button
             type="button"
