@@ -41,6 +41,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [copiedSha, setCopiedSha] = useState<string | null>(null);
   const [guardedFiles, setGuardedFiles] = useState<Set<string>>(new Set());
   const [commitMilestones, setCommitMilestones] = useState<Set<string>>(new Set());
+  const [commitL3Shas, setCommitL3Shas] = useState<Set<string>>(new Set());
   const [savedCommitsL3, setSavedCommitsL3] = useState(false);
   const [savedCommitsL4, setSavedCommitsL4] = useState(false);
 
@@ -457,6 +458,34 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                       className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
                     >
                       {commitMilestones.has(commit.sha) ? '已建里程碑' : '+里程碑'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`git-widget-commit-to-l3-${commit.sha}`}
+                      onClick={async () => {
+                        if (commitL3Shas.has(commit.sha)) return;
+                        setCommitL3Shas((prev) => new Set(prev).add(commit.sha));
+                        if (typeof projectApi?.confirmKnowledge === 'function') {
+                          try {
+                            await projectApi.confirmKnowledge(projectId, {
+                              entries: [
+                                {
+                                  category: 'decision',
+                                  content: `Git 提交记录 [${commit.sha.slice(0, 7)}]：${commit.message} (${commit.author})`,
+                                  importance: 7,
+                                  sourceMessageIds: [],
+                                  reasoning: 'Git 单条提交记录沉淀至 L3 画像',
+                                },
+                              ],
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
+                    >
+                      {commitL3Shas.has(commit.sha) ? '已存L3' : '+L3'}
                     </button>
                     <button
                       type="button"

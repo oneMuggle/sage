@@ -48,6 +48,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [promotedRuleL3Ids, setPromotedRuleL3Ids] = useState<Set<string>>(new Set());
   const [promotedRuleMilestoneIds, setPromotedRuleMilestoneIds] = useState<Set<string>>(new Set());
   const [promotedRuleL4Ids, setPromotedRuleL4Ids] = useState<Set<string>>(new Set());
+  const [copiedRuleId, setCopiedRuleId] = useState<string | null>(null);
 
   const fetchConstraints = useCallback(async () => {
     if (typeof projectApi?.listConstraints !== 'function') {
@@ -431,6 +432,24 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                       className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
                       {promotedRuleL4Ids.has(rule.id) ? '已存L4' : '+L4'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`constraint-summary-rule-copy-${rule.id}`}
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard?.writeText(
+                            `[P${rule.priority}] (${rule.triggerPattern || 'always'}) ${rule.content}`,
+                          );
+                          setCopiedRuleId(rule.id);
+                          setTimeout(() => setCopiedRuleId(null), 1500);
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {copiedRuleId === rule.id ? '已复制' : '复制'}
                     </button>
                     <button
                       type="button"
