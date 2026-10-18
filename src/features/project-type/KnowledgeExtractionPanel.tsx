@@ -42,6 +42,7 @@ export function KnowledgeExtractionPanel({
   const [copiedMd, setCopiedMd] = useState(false);
   const [convertedConstraintIndices, setConvertedConstraintIndices] = useState<Set<number>>(new Set());
   const [convertedMilestoneIndices, setConvertedMilestoneIndices] = useState<Set<number>>(new Set());
+  const [convertedL4Indices, setConvertedL4Indices] = useState<Set<number>>(new Set());
   const [savedReasoningL4, setSavedReasoningL4] = useState(false);
   const [copiedEntryIdx, setCopiedEntryIdx] = useState<number | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -395,6 +396,36 @@ export function KnowledgeExtractionPanel({
                   </button>
                   <button
                     type="button"
+                    data-testid="knowledge-batch-to-l4-btn"
+                    onClick={async () => {
+                      const targetIndices = Array.from(selected).filter(
+                        (idx) => !convertedL4Indices.has(idx) && entries[idx],
+                      );
+                      if (targetIndices.length === 0) return;
+                      setConvertedL4Indices((prev) => {
+                        const next = new Set(prev);
+                        targetIndices.forEach((idx) => next.add(idx));
+                        return next;
+                      });
+                      if (typeof projectApi?.addMaterial === 'function') {
+                        for (const idx of targetIndices) {
+                          const entry = entries[idx];
+                          try {
+                            await projectApi.addMaterial(projectId, {
+                              content: `# M2 提炼知识归档 [${CATEGORY_LABELS[entry.category] ?? entry.category}]\n\n${entry.content}`,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    选中项转 L4 资料
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleSelectHighImportance}
                     data-testid="knowledge-select-high-btn"
                     className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
@@ -505,6 +536,26 @@ export function KnowledgeExtractionPanel({
                           className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
                           {convertedMilestoneIndices.has(idx) ? '已转里程碑' : '转里程碑'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`knowledge-to-l4-${idx}`}
+                          onClick={(ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            if (convertedL4Indices.has(idx)) return;
+                            setConvertedL4Indices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.addMaterial === 'function') {
+                              void Promise.resolve(
+                                projectApi.addMaterial(projectId, {
+                                  content: `# M2 提炼知识归档 [${CATEGORY_LABELS[entry.category] ?? entry.category}]\n\n${entry.content}`,
+                                }),
+                              ).catch(() => {});
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          {convertedL4Indices.has(idx) ? '已存L4' : '+L4'}
                         </button>
                         <button
                           type="button"

@@ -710,3 +710,8 @@
 - **`src/features/project-type/MilestoneProgressWidget.tsx`**：里程碑进度摘要列表的每个节点旁新增 **`+L3`** 按钮（`milestone-summary-to-l3-${milestone.id}`），支持将单条里程碑进展沉淀至 L3 项目画像。
 - **`src/features/project-type/GitStatusWidget.tsx`**：Git 状态卡片近期提交头部新增 **`存提交至 L4`**（`git-widget-save-l4-btn`），支持将当前分支与最近提交记录一键归档至 L4 资料库。
 - **`src/features/project-type/ConstraintSummaryWidget.tsx`**：约束摘要卡片高优规则预览列表每条规则旁新增 **`+L4`** 按钮（`constraint-summary-rule-to-l4-${rule.id}`），支持将高优规则独立归档至 L4 资料库。
+### Phase P51（2026-10-18）：M2 知识提炼批量及单条存 L4、M4 语义检索批量转里程碑与单条存 L4、约束/里程碑编辑器蓝图支柱与推荐节点快捷填入
+- **`src/features/project-type/KnowledgeExtractionPanel.tsx`**：M2 对话知识提炼操作栏新增 **`选中项转 L4 资料`**（`knowledge-batch-to-l4-btn`），并在每条建议条目旁新增 **`+L4`** 按钮（`knowledge-to-l4-${idx}`），支持将提炼知识同步归档为 L4 资料。
+- **`src/features/project-type/SemanticSearchPanel.tsx`**：M4 语义检索工具栏新增 **`批量转里程碑`**（`semantic-batch-to-milestone-btn`），并在单条命中片段旁新增 **`+L4`** 按钮（`semantic-hit-to-l4-${idx}`）。
+- **`src/features/project-type/ConstraintEditor.tsx`**：约束编辑器内容预设栏新增蓝图上下文护栏支柱快捷填入胶囊 **`支柱 #1..#3`**（`constraint-pillar-preset-${idx}`）。
+- **`src/features/project-type/MilestoneEditor.tsx`**：里程碑编辑器模板预设栏新增蓝图推荐里程碑快捷填入胶囊 **`蓝图 #1..#3`**（`milestone-blueprint-tpl-${idx}`）。
