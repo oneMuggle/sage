@@ -303,6 +303,17 @@ export function ConstraintEditor({
                   支柱 #{idx + 1}
                 </button>
               ))}
+              {blueprint.contextPillars.slice(0, 3).map((pillar, idx) => (
+                <button
+                  key={`append-${pillar}`}
+                  type="button"
+                  data-testid={`constraint-pillar-append-${idx}`}
+                  onClick={() => setContent((prev) => (prev.trim() ? `${prev.trim()}；${pillar}` : pillar))}
+                  className="rounded border border-border bg-background px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  +追加支柱 #{idx + 1}
+                </button>
+              ))}
             </div>
           </div>
 

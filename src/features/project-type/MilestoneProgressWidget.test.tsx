@@ -270,6 +270,7 @@ describe('MilestoneProgressWidget', () => {
     const presetBtn = await screen.findByTestId('wizard-goal-preset-0');
     fireEvent.click(presetBtn);
     expect(screen.getByTestId('wizard-recommended-milestones-preview')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('wizard-copy-milestones-btn'));
     fireEvent.click(screen.getByTestId('wizard-allowed-paths-toggle-all-btn'));
     fireEvent.click(screen.getByTestId('wizard-allowed-paths-toggle-all-btn'));
     fireEvent.click(screen.getByTestId('wizard-templates-toggle-all-btn'));
@@ -565,6 +566,7 @@ describe('MilestoneProgressWidget', () => {
       '完成「实验分析」阶段核心交付与核查',
     );
     fireEvent.click(await screen.findByTestId('decompose-preset-0'));
+    fireEvent.click(screen.getByTestId('decompose-pillar-append-0'));
     fireEvent.click(screen.getByTestId('decompose-preview-btn'));
 
     const daysBadge = await screen.findByTestId('decompose-total-days-badge');
@@ -579,6 +581,8 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('decompose-save-reasoning-profile-btn')).toHaveTextContent('已沉淀至 L3');
     fireEvent.click(screen.getByTestId('decompose-batch-to-constraint-btn'));
     expect(screen.getByTestId('decompose-batch-to-constraint-btn')).toHaveTextContent('已转 L2 约束');
+    fireEvent.click(screen.getByTestId('decompose-batch-to-l3-btn'));
+    expect(screen.getByTestId('decompose-batch-to-l3-btn')).toHaveTextContent('已批量存 L3');
     fireEvent.click(screen.getByTestId('decompose-save-plan-l4-btn'));
     expect(screen.getByTestId('decompose-save-plan-l4-btn')).toHaveTextContent('已存为 L4');
     fireEvent.click(screen.getByTestId('decompose-node-to-constraint-0'));

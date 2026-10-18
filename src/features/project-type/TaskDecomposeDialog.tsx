@@ -121,6 +121,7 @@ export function TaskDecomposeDialog({
   const [l3NodeIndices, setL3NodeIndices] = useState<Set<number>>(new Set());
   const [l4NodeIndices, setL4NodeIndices] = useState<Set<number>>(new Set());
   const [batchConvertedL2, setBatchConvertedL2] = useState(false);
+  const [batchSavedL3, setBatchSavedL3] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
 
   const effectiveType: ProjectType = projectType ?? 'coding';
@@ -279,6 +280,24 @@ export function TaskDecomposeDialog({
                   disabled={phase === 'loading'}
                   data-testid="decompose-context-input"
                 />
+                <div
+                  className="flex flex-wrap items-center gap-1"
+                  data-testid="decompose-pillar-presets"
+                >
+                  <span className="text-ui-2xs text-muted-foreground">追加护栏支柱：</span>
+                  {blueprint.contextPillars.map((pillar, idx) => (
+                    <button
+                      key={pillar}
+                      type="button"
+                      disabled={phase === 'loading'}
+                      data-testid={`decompose-pillar-append-${idx}`}
+                      onClick={() => setContext((prev) => (prev.trim() ? `${prev.trim()}；${pillar}` : pillar))}
+                      className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted disabled:opacity-50"
+                    >
+                      +支柱 #{idx + 1}
+                    </button>
+                  ))}
+                </div>
               </div>
             </>
           )}
@@ -389,6 +408,34 @@ export function TaskDecomposeDialog({
                       className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
                     >
                       {batchConvertedL2 ? '已转 L2 约束' : '选中转 L2 约束'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="decompose-batch-to-l3-btn"
+                      onClick={async () => {
+                        if (batchSavedL3) return;
+                        setBatchSavedL3(true);
+                        const chosen = milestones.filter((_, idx) => selectedRootIndices.has(idx));
+                        const list = chosen.length > 0 ? chosen : milestones;
+                        if (typeof projectApi?.confirmKnowledge === 'function') {
+                          try {
+                            await projectApi.confirmKnowledge(projectId, {
+                              entries: list.map((node) => ({
+                                category: 'goal',
+                                content: `分解里程碑目标 [${node.title}]：${node.description || '按期完成分解节点交付'}`,
+                                importance: 7,
+                                sourceMessageIds: [],
+                                reasoning: 'M1 任务分解方案选中节点批量沉淀至 L3 画像',
+                              })),
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+                    >
+                      {batchSavedL3 ? '已批量存 L3' : '选中存 L3 画像'}
                     </button>
                     <button
                       type="button"
