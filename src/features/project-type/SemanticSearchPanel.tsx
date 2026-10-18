@@ -44,6 +44,7 @@ export function SemanticSearchPanel({
   const [savedProfileIndices, setSavedProfileIndices] = useState<Set<number>>(new Set());
   const [savedConstraintIndices, setSavedConstraintIndices] = useState<Set<number>>(new Set());
   const [savedMilestoneIndices, setSavedMilestoneIndices] = useState<Set<number>>(new Set());
+  const [savedL4Indices, setSavedL4Indices] = useState<Set<number>>(new Set());
   const [savedBundleL4, setSavedBundleL4] = useState(false);
 
   const presets = SEMANTIC_QUERY_PRESETS[projectType] ?? SEMANTIC_QUERY_PRESETS.coding;
@@ -61,6 +62,7 @@ export function SemanticSearchPanel({
       setSavedProfileIndices(new Set());
       setSavedConstraintIndices(new Set());
       setSavedMilestoneIndices(new Set());
+      setSavedL4Indices(new Set());
       setSavedBundleL4(false);
       try {
         const result = await projectApi.semanticSearchMaterials(projectId, trimmed, topK);
@@ -376,6 +378,37 @@ export function SemanticSearchPanel({
                   </button>
                   <button
                     type="button"
+                    data-testid="semantic-batch-to-milestone-btn"
+                    onClick={async () => {
+                      const unsaved = filteredResults
+                        .map((hit, idx) => ({ hit, idx }))
+                        .filter(({ idx }) => !savedMilestoneIndices.has(idx));
+                      if (unsaved.length === 0) return;
+                      setSavedMilestoneIndices((prev) => {
+                        const next = new Set(prev);
+                        unsaved.forEach(({ idx }) => next.add(idx));
+                        return next;
+                      });
+                      if (typeof projectApi?.createMilestone === 'function') {
+                        for (const { hit } of unsaved) {
+                          try {
+                            await projectApi.createMilestone(projectId, {
+                              title: `[检索跟进] ${hit.content.slice(0, 60)}`,
+                              description: `来源材料 ${hit.materialId.slice(0, 8)} chunk #${hit.chunkIndex}`,
+                              status: 'pending',
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    批量转里程碑 ({filteredResults.filter((_, idx) => !savedMilestoneIndices.has(idx)).length})
+                  </button>
+                  <button
+                    type="button"
                     data-testid="semantic-batch-save-profile-btn"
                     onClick={async () => {
                       const unsaved = filteredResults
@@ -544,6 +577,27 @@ export function SemanticSearchPanel({
                           className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
                         >
                           {savedMilestoneIndices.has(idx) ? '已转里程碑' : '+里程碑'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={savedL4Indices.has(idx)}
+                          data-testid={`semantic-hit-to-l4-${idx}`}
+                          onClick={async () => {
+                            if (savedL4Indices.has(idx)) return;
+                            setSavedL4Indices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.addMaterial === 'function') {
+                              try {
+                                await projectApi.addMaterial(projectId, {
+                                  content: `# 检索片段归档 (${hit.materialId.slice(0, 8)} #${hit.chunkIndex})\n\n${hit.content}`,
+                                });
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-60"
+                        >
+                          {savedL4Indices.has(idx) ? '已存L4' : '+L4'}
                         </button>
                         <button
                           type="button"

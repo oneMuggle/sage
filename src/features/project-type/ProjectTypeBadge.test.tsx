@@ -289,6 +289,8 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('knowledge-category-filter-all'));
     fireEvent.click(screen.getByTestId('knowledge-batch-to-constraint-btn'));
     expect(screen.getByTestId('knowledge-to-constraint-0')).toHaveTextContent('已转 L2 约束');
+    fireEvent.click(screen.getByTestId('knowledge-batch-to-l4-btn'));
+    expect(screen.getByTestId('knowledge-to-l4-0')).toHaveTextContent('已存L4');
   });
 });
 
@@ -328,6 +330,10 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('semantic-hit-save-profile-1')).toHaveTextContent('已沉淀 L3');
     });
+    fireEvent.click(screen.getByTestId('semantic-hit-to-l4-0'));
+    expect(screen.getByTestId('semantic-hit-to-l4-0')).toHaveTextContent('已存L4');
+    fireEvent.click(screen.getByTestId('semantic-batch-to-milestone-btn'));
+    expect(screen.getByTestId('semantic-hit-to-milestone-0')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('semantic-clear-results-btn'));
     expect(screen.queryByText('高相似度实验结论')).toBeNull();
   });
