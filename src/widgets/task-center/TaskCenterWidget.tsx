@@ -22,6 +22,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
+import * as goalApi from '../../entities/autonomous-goals/goalApi';
+import { useGoalStore } from '../../entities/autonomous-goals/goalStore';
+import type { GoalStatus } from '../../entities/autonomous-goals/types';
 import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import { usePanelStore } from '../../features/app-panels/usePanelStore';
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
@@ -38,7 +41,7 @@ import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { productMessages } from '../../shared/lib/productMessages';
 import { useStore } from '../../shared/lib/store';
 
-type EntrySource = 'registry' | 'chat' | 'lane';
+type EntrySource = 'registry' | 'chat' | 'lane' | 'goal';
 
 interface Entry {
   id: string;
@@ -53,6 +56,8 @@ interface Entry {
   cancellable: boolean;
   sessionId?: string;
   laneId?: string;
+  /** 2026-10-17: goal source entries carry the underlying goal id for cancel. */
+  goalId?: string;
   /** A4b: office 交付包坐标（awaiting 条目开抽屉用）。 */
   deliveryRef?: OfficeDeliveryRef | null;
   /** P11: 关联文档名（office 条目跳转后高亮文档行）。 */
@@ -112,6 +117,28 @@ function isLaneCancellable(status: LaneStatus): boolean {
 }
 
 /**
+ * 2026-10-17: 自主目标状态 → TaskCenter 状态映射。
+ * pending（等待闲时窗口）显示为 queued；running/paused/failed 直接映射；
+ * completed/cancelled 属于终态，在任务中心显示为已完成。
+ */
+function goalStatusToTaskCenter(status: GoalStatus): TaskCenterStatus {
+  switch (status) {
+    case 'pending':
+      return 'queued';
+    case 'running':
+      return 'running';
+    case 'paused':
+      return 'paused';
+    case 'failed':
+      return 'failed';
+    case 'completed':
+      return 'succeeded';
+    case 'cancelled':
+      return 'cancelled';
+  }
+}
+
+/**
  * P19: 状态优先级排序 —— 最重要的任务排在展开列表顶部。
  * 优先级：failed > awaiting_approval > running > paused > queued > succeeded > cancelled
  */
@@ -162,8 +189,8 @@ export function TaskCenterWidget() {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const rightPanelMaximized = useRightPanelStore((s) => s.maximized && s.open);
-  const appPanelMaximized = usePanelStore(
-    (s) => Boolean(s.slots.right?.maximized || s.slots.bottom?.maximized),
+  const appPanelMaximized = usePanelStore((s) =>
+    Boolean(s.slots.right?.maximized || s.slots.bottom?.maximized),
   );
   const panelMaximized = rightPanelMaximized || appPanelMaximized;
 
@@ -180,6 +207,7 @@ export function TaskCenterWidget() {
   const streamSessions = useChatStreamStore((s) => s.sessions);
   const lanes = useLaneBoardStore((s) => s.lanes);
   const cancelLane = useLaneBoardStore((s) => s.cancel);
+  const goals = useGoalStore((s) => s.goals);
   const sessions = useStore((s) => s.sessions);
   const currentSessionId = useStore((s) => s.currentSessionId);
 
@@ -253,10 +281,25 @@ export function TaskCenterWidget() {
         laneId: lane.lane_id,
         opensDelivery: isLaneAwaitingDecision(lane),
       }));
-    return sortEntries([...registryEntries, ...chatEntries, ...laneEntries]);
+    // 2026-10-17: 闲时自主目标 — 非终态目标 + 失败/取消后保留至用户清除
+    const goalEntries: Entry[] = goals
+      .filter((g) => g.status !== 'completed' || !g.completed_at)
+      .map((g) => ({
+        id: `goal:${g.id}`,
+        source: 'goal',
+        title: g.name,
+        status: goalStatusToTaskCenter(g.status),
+        startedAt: g.started_at ? new Date(g.started_at).getTime() : null,
+        route: `/goals/${g.id}`,
+        percent: g.status === 'running' ? g.completion_percentage : null,
+        error: g.last_error,
+        cancellable: g.status === 'running' || g.status === 'paused',
+        goalId: g.id,
+      }));
+    return sortEntries([...registryEntries, ...chatEntries, ...laneEntries, ...goalEntries]);
     // streamStartsRef is a ref and stays out of deps: entries read it after
     // the maintenance effect above, so first-seen times are already present.
-  }, [registryTasks, activeStreamIds, lanes, sessions, t]);
+  }, [registryTasks, activeStreamIds, lanes, sessions, goals, t]);
 
   const busy = entries.length > 0;
   const runningCount = entries.filter((e) => e.status === 'running').length;
@@ -281,6 +324,8 @@ export function TaskCenterWidget() {
         if (!ok) toast.error(t('taskCenter.cancelFailed'));
       } else if (entry.source === 'lane' && entry.laneId) {
         await cancelLane(entry.laneId);
+      } else if (entry.source === 'goal' && entry.goalId) {
+        await goalApi.cancelGoal(entry.goalId);
       }
     } catch {
       toast.error(t('taskCenter.cancelFailed'));

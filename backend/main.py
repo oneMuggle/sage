@@ -566,6 +566,15 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("daily backup job registration failed (ignored)")
 
+    # 闲时自主目标调度器：每 5 分钟扫描 pending 目标，符合条件则自动启动
+    try:
+        from backend.services.autonomous_goal_scheduler import get_autonomous_scheduler
+
+        autonomous_scheduler = get_autonomous_scheduler()
+        autonomous_scheduler.register_to_scheduler(scheduler_service, cron_expr="*/5 * * * *")
+    except Exception:
+        logger.exception("autonomous goal scheduler registration failed (ignored)")
+
     # PR-C §5.2: 把 ReviewService + SkillDraftStore 注入到全局 ReviewQueue,
     # 然后启动后台 worker。否则 hex/legacy 路径 enqueue 的 review_events
     # 永远在 SQLite 里堆积、不出草稿。和 init_scheduler_service 同 pattern。
@@ -1092,6 +1101,11 @@ app.include_router(system_router, prefix="/api/v1")
 app.include_router(prompt_router, prefix="/api/v1")
 # Artifacts 面板: /sessions/{id}/artifacts (list / content / reveal)
 app.include_router(artifact_router, prefix="/api/v1")
+
+# 闲时自主目标执行系统: /api/v1/goals/*
+from backend.api.autonomous_goals_router import router as autonomous_goals_router
+
+app.include_router(autonomous_goals_router, prefix="/api/v1")
 
 # P1-3.7 (UI 优化方案 2026-09-13): 全局搜索 /api/v1/search/global
 from backend.api.search_routes import router as search_router
