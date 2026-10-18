@@ -1,9 +1,11 @@
 /**
- * 多形态项目组织与治理工作台面板 (2026-10-10)
+ * 多形态项目组织蓝图工作台 (2026-10-10；2026-10-18 Scheme 1 重构)
  *
- * 将代码工程项目 (coding)、一般档案项目 (business)、科学研究项目 (research) 与个人知识空间 (personal)
- * 的三层架构（组织蓝图预览 + 活跃项目类型/阶段/脚手架一键初始化 + 约束/里程碑/跨目录白名单深度治理）
- * 统一挂载到 `/projects` 工作台。
+ * 方案 1（分层渐进式披露）后：
+ *   Card 1（蓝图总览）+ 形态切换 + 当前选中形态的三维组织详情 +
+ *   「进入治理」按钮（跳转 /projects/governance/:projectId）。
+ *
+ * 原 Card 2 的 7 个治理 Tab 已迁移至 /projects/governance/:projectId。
  */
 
 import {
@@ -13,46 +15,21 @@ import {
   User,
   Sparkles,
   FolderPlus,
-  Layers,
-  ShieldCheck,
-  Target,
-  FolderLock,
-  BookMarked,
-  CheckCircle2,
-  Database,
-  FileText,
+  ArrowRight,
 } from 'lucide-react';
-import { useCallback, useEffect, useState, type ComponentType } from 'react';
+import { type ComponentType } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import {
-  memoryApi,
-  projectApi,
-  type ProjectMilestone,
-  type ProjectSummary,
-  type ProjectType,
-  type ProjectScaffoldResult,
-} from '../../shared/api';
-import type { ProjectProfileEntry } from '../../shared/api/types';
+import { type ProjectType } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
 import { Card } from '../../shared/ui/Card';
 
-import { ConstraintManager } from './ConstraintManager';
-import { MilestoneManager } from './MilestoneManager';
 import { PolymorphicArchetypeCards } from './PolymorphicArchetypeCards';
 import { ProjectCreationWizard } from './ProjectCreationWizard';
 import { ProjectOverviewWidgets } from './ProjectOverviewWidgets';
 import { ProjectTypeBadge } from './ProjectTypeBadge';
-import {
-  StudioAllowedPathsTabPanel,
-  StudioCharterTabPanel,
-  StudioMaterialsTabPanel,
-  StudioProfileTabPanel,
-} from './StudioMaterialsAndProfilePanels';
-import {
-  ARCHETYPE_BLUEPRINTS,
-  ARCHETYPE_ORDER,
-  getArchetypeBlueprint,
-} from './archetypeBlueprints';
+import { ARCHETYPE_BLUEPRINTS, ARCHETYPE_ORDER } from './archetypeBlueprints';
+import { useStudioState } from './useStudioState';
 
 const ARCHETYPE_ICONS: Record<ProjectType, ComponentType<{ className?: string }>> = {
   coding: Code2,
@@ -61,257 +38,16 @@ const ARCHETYPE_ICONS: Record<ProjectType, ComponentType<{ className?: string }>
   personal: User,
 };
 
-type StudioTab =
-  | 'overview'
-  | 'charter'
-  | 'materials'
-  | 'constraints'
-  | 'milestones'
-  | 'profile'
-  | 'allowed_paths';
-
 export interface ProjectArchetypeStudioProps {
   className?: string;
 }
 
 export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProps) {
-  const [selectedArchetype, setSelectedArchetype] = useState<ProjectType>('coding');
-  const [projects, setProjects] = useState<ProjectSummary[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<StudioTab>('overview');
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [scaffolding, setScaffolding] = useState(false);
-  const [scaffoldResult, setScaffoldResult] = useState<ProjectScaffoldResult | null>(null);
-  const [newAllowedPath, setNewAllowedPath] = useState('');
-  const [savingPaths, setSavingPaths] = useState(false);
-  const [profileEntries, setProfileEntries] = useState<ProjectProfileEntry[]>([]);
-  const [profileCategory, setProfileCategory] = useState<string>('convention');
-  const [profileDraft, setProfileDraft] = useState('');
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [milestones, setMilestones] = useState<ProjectMilestone[]>([]);
+  const navigate = useNavigate();
+  const { activeProject, selectedArchetype, setSelectedArchetype, wizardOpen, setWizardOpen } =
+    useStudioState();
 
-  const loadProjects = useCallback(async () => {
-    if (typeof projectApi?.list !== 'function') return;
-    try {
-      const list = await projectApi.list();
-      if (!Array.isArray(list)) return;
-      setProjects(list);
-      setSelectedProjectId((prev) => {
-        if (prev && list.some((p) => p.id === prev)) return prev;
-        return list[0]?.id ?? null;
-      });
-    } catch {
-      // 测试或未连接后端时静默降级
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadProjects();
-  }, [loadProjects]);
-
-  const activeProject = projects.find((p) => p.id === selectedProjectId) ?? null;
-
-  const loadActiveProfile = useCallback(async (projectPath?: string) => {
-    if (!projectPath || typeof memoryApi?.getProjectProfile !== 'function') return;
-    try {
-      const res = await memoryApi.getProjectProfile({ projectKey: projectPath });
-      setProfileEntries(res?.items ?? []);
-    } catch {
-      setProfileEntries([]);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeProject?.path) {
-      void loadActiveProfile(activeProject.path);
-    }
-  }, [activeProject?.path, loadActiveProfile]);
-
-  useEffect(() => {
-    if (!activeProject?.id || typeof projectApi?.listMilestones !== 'function') return;
-    let cancelled = false;
-    void projectApi
-      .listMilestones(activeProject.id)
-      .then((items) => {
-        if (!cancelled) setMilestones(Array.isArray(items) ? items : []);
-      })
-      .catch(() => {
-        if (!cancelled) setMilestones([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeProject?.id]);
-
-  const handleAddProfileEntry = async () => {
-    const content = profileDraft.trim();
-    if (
-      !activeProject?.path ||
-      !content ||
-      savingProfile ||
-      typeof memoryApi?.createProjectProfile !== 'function'
-    )
-      return;
-    setSavingProfile(true);
-    try {
-      await memoryApi.createProjectProfile(content, {
-        projectKey: activeProject.path,
-        category: profileCategory,
-        importance: 5,
-      });
-      setProfileDraft('');
-      await loadActiveProfile(activeProject.path);
-    } catch {
-      // ignore
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-
-  const handleDeleteProfileEntry = async (entryId: string) => {
-    if (!activeProject?.path || typeof memoryApi?.deleteProjectProfile !== 'function') return;
-    try {
-      await memoryApi.deleteProjectProfile(entryId);
-      await loadActiveProfile(activeProject.path);
-    } catch {
-      // ignore
-    }
-  };
-  const activeProjectType: ProjectType =
-    (activeProject?.projectType ?? activeProject?.detectedType ?? selectedArchetype) || 'business';
-  const blueprint = getArchetypeBlueprint(selectedArchetype);
-  const activeBlueprint = getArchetypeBlueprint(activeProjectType);
-
-  const handleChangeProjectType = async (nextType: ProjectType) => {
-    if (!activeProject || typeof projectApi?.update !== 'function') return;
-    try {
-      const nextStage = getArchetypeBlueprint(nextType).stages[0]?.id ?? null;
-      const updated = await projectApi.update(activeProject.id, {
-        project_type: nextType,
-        project_stage: nextStage,
-      });
-      setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-      setSelectedArchetype(nextType);
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleChangeProjectStage = async (nextStage: string) => {
-    if (!activeProject || typeof projectApi?.update !== 'function') return;
-    try {
-      const updated = await projectApi.update(activeProject.id, {
-        project_stage: nextStage,
-      });
-      setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    } catch {
-      // ignore
-    }
-  };
-
-  const handleChangeVcsMode = async (nextVcs: 'git' | 'builtin') => {
-    if (!activeProject || typeof projectApi?.update !== 'function') return;
-    try {
-      const updated = await projectApi.update(activeProject.id, {
-        vcs_mode: nextVcs,
-      });
-      setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    } catch {
-      // ignore
-    }
-  };
-
-  const upcomingDeadline = (() => {
-    const withDue = milestones
-      .filter((m) => m.status !== 'completed' && m.dueDate)
-      .sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
-    const next = withDue[0];
-    if (!next?.dueDate) return null;
-    const dueMs = Date.parse(`${next.dueDate}T23:59:59`);
-    if (Number.isNaN(dueMs)) return null;
-    const daysLeft = Math.ceil((dueMs - Date.now()) / (1000 * 60 * 60 * 24));
-    return { title: next.title, dueDate: next.dueDate, daysLeft };
-  })();
-
-  const handleScaffoldActiveProject = async () => {
-    if (!activeProject || typeof projectApi?.scaffold !== 'function') return;
-    setScaffolding(true);
-    setScaffoldResult(null);
-    try {
-      const res = await projectApi.scaffold(activeProject.id, {
-        projectType: activeProjectType,
-        createDirectories: true,
-        createSageMd: true,
-        importDefaultConstraints: true,
-        seedDefaultMilestones: true,
-      });
-      setScaffoldResult(res);
-      setProjects((prev) => prev.map((p) => (p.id === res.project.id ? res.project : p)));
-    } catch {
-      // ignore
-    } finally {
-      setScaffolding(false);
-    }
-  };
-
-  const handleQuickAddPresetPath = async (pattern: string) => {
-    const trimmed = pattern.trim();
-    if (!activeProject || !trimmed || typeof projectApi?.updateAllowedPaths !== 'function') return;
-    const current = activeProject.allowedPaths ?? [];
-    if (current.includes(trimmed)) return;
-    setSavingPaths(true);
-    try {
-      const next = await projectApi.updateAllowedPaths(activeProject.id, [...current, trimmed]);
-      setProjects((prev) =>
-        prev.map((p) => (p.id === activeProject.id ? { ...p, allowedPaths: next } : p)),
-      );
-    } catch {
-      // ignore
-    } finally {
-      setSavingPaths(false);
-    }
-  };
-
-  const handleAddAllowedPath = async () => {
-    const trimmed = newAllowedPath.trim();
-    if (!activeProject || !trimmed || typeof projectApi?.updateAllowedPaths !== 'function') return;
-    const current = activeProject.allowedPaths ?? [];
-    if (current.includes(trimmed)) {
-      setNewAllowedPath('');
-      return;
-    }
-    setSavingPaths(true);
-    try {
-      const next = await projectApi.updateAllowedPaths(activeProject.id, [...current, trimmed]);
-      setProjects((prev) =>
-        prev.map((p) => (p.id === activeProject.id ? { ...p, allowedPaths: next } : p)),
-      );
-      setNewAllowedPath('');
-    } catch {
-      // ignore
-    } finally {
-      setSavingPaths(false);
-    }
-  };
-
-  const handleRemoveAllowedPath = async (targetPath: string) => {
-    if (!activeProject || typeof projectApi?.updateAllowedPaths !== 'function') return;
-    const current = activeProject.allowedPaths ?? [];
-    setSavingPaths(true);
-    try {
-      const next = await projectApi.updateAllowedPaths(
-        activeProject.id,
-        current.filter((item) => item !== targetPath),
-      );
-      setProjects((prev) =>
-        prev.map((p) => (p.id === activeProject.id ? { ...p, allowedPaths: next } : p)),
-      );
-    } catch {
-      // ignore
-    } finally {
-      setSavingPaths(false);
-    }
-  };
+  const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
 
   return (
     <div className={`space-y-4 ${className ?? ''}`} data-testid="project-archetype-studio">
@@ -447,304 +183,37 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
         </div>
       </Card>
 
-      {/* 2. 已登记项目的深度治理工作台（激活 11 个类型化组件） */}
-      {projects.length > 0 && activeProject && (
-        <Card className="p-4 space-y-4" data-testid="project-governance-studio">
+      {/* 2. 活跃项目态势概览 + 进入治理 */}
+      {activeProject && (
+        <Card className="p-4 space-y-4" data-testid="studio-active-project-overview">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="text-xs font-medium text-muted-foreground">当前治理项目：</span>
-              <select
-                value={activeProject.id}
-                onChange={(e) => {
-                  setSelectedProjectId(e.target.value);
-                  setScaffoldResult(null);
-                }}
-                aria-label="选择治理项目"
-                className="rounded-md border border-input bg-background px-2.5 py-1 text-sm font-medium text-foreground"
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.path})
-                  </option>
-                ))}
-              </select>
-
+              <span className="text-xs font-medium text-muted-foreground">当前项目：</span>
+              <span className="text-sm font-semibold text-foreground">{activeProject.name}</span>
               <ProjectTypeBadge
                 type={activeProject.projectType ?? activeProject.detectedType}
                 detected={!activeProject.projectType && Boolean(activeProject.detectedType)}
               />
-              {upcomingDeadline && (
-                <span
-                  data-testid="project-deadline-capsule"
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-ui-2xs font-medium ${
-                    upcomingDeadline.daysLeft < 0
-                      ? 'bg-destructive/15 text-destructive'
-                      : upcomingDeadline.daysLeft <= 7
-                        ? 'bg-amber-500/15 text-amber-600'
-                        : 'bg-emerald-500/15 text-emerald-600'
-                  }`}
-                >
-                  {upcomingDeadline.daysLeft < 0
-                    ? `已逾期 ${Math.abs(upcomingDeadline.daysLeft)} 天 · ${upcomingDeadline.title}`
-                    : upcomingDeadline.daysLeft <= 7
-                      ? `距截止仅剩 ${upcomingDeadline.daysLeft} 天 · ${upcomingDeadline.title}`
-                      : `下一节点：${upcomingDeadline.title} (${upcomingDeadline.dueDate})`}
-                </span>
-              )}
+              <span className="text-xs text-muted-foreground font-mono">{activeProject.path}</span>
             </div>
-
-            {/* 项目形态与阶段快速切换 */}
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={activeProjectType}
-                onChange={(e) => void handleChangeProjectType(e.target.value as ProjectType)}
-                aria-label="切换项目形态"
-                className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
-              >
-                {ARCHETYPE_ORDER.map((t) => (
-                  <option key={t} value={t}>
-                    形态：{ARCHETYPE_BLUEPRINTS[t].label}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={activeProject.projectStage ?? ''}
-                onChange={(e) => void handleChangeProjectStage(e.target.value)}
-                aria-label="切换项目阶段"
-                className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
-              >
-                <option value="">阶段：未设置</option>
-                {activeBlueprint.stages.map((st) => (
-                  <option key={st.id} value={st.id}>
-                    阶段：{st.label}
-                  </option>
-                ))}
-              </select>
-
-              {(() => {
-                const stages = activeBlueprint.stages;
-                const curIdx = stages.findIndex((s) => s.id === activeProject.projectStage);
-                const nextStage =
-                  curIdx === -1
-                    ? stages[0]
-                    : curIdx + 1 < stages.length
-                      ? stages[curIdx + 1]
-                      : null;
-                if (!nextStage) return null;
-                return (
-                  <button
-                    type="button"
-                    onClick={() => void handleChangeProjectStage(nextStage.id)}
-                    data-testid="studio-advance-stage-btn"
-                    title={`推进至下一阶段：${nextStage.label}`}
-                    className="inline-flex items-center gap-1 rounded-md border border-primary/30 bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/15"
-                  >
-                    推进至「{nextStage.label}」→
-                  </button>
-                );
-              })()}
-
-              <select
-                value={activeProject.vcsMode === 'git' ? 'git' : 'builtin'}
-                onChange={(e) => void handleChangeVcsMode(e.target.value as 'git' | 'builtin')}
-                aria-label="切换版本控制模式"
-                data-testid="studio-vcs-mode-select"
-                className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
-              >
-                <option value="git">VCS：Git 仓库</option>
-                <option value="builtin">VCS：内置快照</option>
-              </select>
-
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => void handleScaffoldActiveProject()}
-                disabled={scaffolding}
-                data-testid="studio-scaffold-btn"
-              >
-                <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
-                {scaffolding ? '初始化中...' : '一键初始化目录与规范'}
-              </Button>
-            </div>
+            <Button
+              size="sm"
+              onClick={() => navigate(`/projects/governance/${activeProject.id}`)}
+              data-testid="enter-governance-btn"
+            >
+              进入治理
+              <ArrowRight className="ml-1.5 h-4 w-4" />
+            </Button>
           </div>
 
-          {scaffoldResult && (
-            <div
-              className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-foreground"
-              data-testid="studio-scaffold-feedback"
-            >
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-              <span>
-                已按「{activeBlueprint.label}」完成初始化：新建目录{' '}
-                {scaffoldResult.createdDirectories.length} 个、新建文件{' '}
-                {scaffoldResult.createdFiles.join(', ') || '无（保留已有 SAGE.md）'}、导入约束{' '}
-                {scaffoldResult.importedConstraintsCount} 条、初始化里程碑{' '}
-                {scaffoldResult.seededMilestonesCount} 项。
-              </span>
-            </div>
-          )}
-
-          {/* 四个深度治理子面板切换 */}
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab('overview')}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'overview'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Layers className="h-3.5 w-3.5" />
-              态势卡片 (Git / 约束 / 里程碑汇总)
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('charter')}
-              data-testid="studio-tab-charter"
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'charter'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <FileText className="h-3.5 w-3.5" />
-              L1 项目总纲 (SAGE.md)
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('materials')}
-              data-testid="studio-tab-materials"
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'materials'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Database className="h-3.5 w-3.5" />
-              L4 受控资料与语料库
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('constraints')}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'constraints'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <ShieldCheck className="h-3.5 w-3.5" />
-              AI 行为约束规则
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('milestones')}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'milestones'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Target className="h-3.5 w-3.5" />
-              阶段与里程碑管理
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('profile')}
-              data-testid="studio-tab-profile"
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'profile'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <BookMarked className="h-3.5 w-3.5" />
-              L3 项目记忆画像 ({profileEntries.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('allowed_paths')}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                activeTab === 'allowed_paths'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <FolderLock className="h-3.5 w-3.5" />
-              跨目录只读白名单 ({activeProject.allowedPaths?.length ?? 0})
-            </button>
-          </div>
-
-          {/* 子面板内容 */}
-          {activeTab === 'overview' && (
-            <div className="space-y-4">
-              <PolymorphicArchetypeCards project={activeProject} projectType={activeProjectType} />
-              <ProjectOverviewWidgets project={activeProject} />
-            </div>
-          )}
-
-          {activeTab === 'constraints' && (
-            <ConstraintManager projectId={activeProject.id} projectType={activeProjectType} />
-          )}
-
-          {activeTab === 'milestones' && (
-            <MilestoneManager projectId={activeProject.id} projectType={activeProjectType} />
-          )}
-
-          {activeTab === 'materials' && (
-            <StudioMaterialsTabPanel
-              projectId={activeProject.id}
-              projectPath={activeProject.path}
-              projectType={activeProjectType}
-            />
-          )}
-
-          {activeTab === 'profile' && (
-            <StudioProfileTabPanel
-              projectPath={activeProject.path}
-              projectType={activeProjectType}
-              projectId={activeProject.id}
-              profileEntries={profileEntries}
-              profileCategory={profileCategory}
-              onCategoryChange={setProfileCategory}
-              profileDraft={profileDraft}
-              onDraftChange={setProfileDraft}
-              savingProfile={savingProfile}
-              onAddEntry={handleAddProfileEntry}
-              onDeleteEntry={handleDeleteProfileEntry}
-              onRefreshProfile={() => void loadActiveProfile(activeProject.path)}
-            />
-          )}
-
-          {activeTab === 'charter' && (
-            <StudioCharterTabPanel
-              projectId={activeProject.id}
-              projectPath={activeProject.path}
-              projectType={activeProjectType}
-              initialDescription={activeProject.description}
-              initialInstructions={activeProject.instructions}
-              onMetadataUpdated={(patch) => {
-                setProjects((prev) =>
-                  prev.map((p) => (p.id === activeProject.id ? { ...p, ...patch } : p)),
-                );
-              }}
-            />
-          )}
-
-          {activeTab === 'allowed_paths' && (
-            <StudioAllowedPathsTabPanel
-              projectPath={activeProject.path}
-              projectType={activeProjectType}
-              allowedPaths={activeProject.allowedPaths ?? []}
-              newAllowedPath={newAllowedPath}
-              onNewAllowedPathChange={setNewAllowedPath}
-              savingPaths={savingPaths}
-              onAddAllowedPath={handleAddAllowedPath}
-              onQuickAddPresetPath={handleQuickAddPresetPath}
-              onRemoveAllowedPath={handleRemoveAllowedPath}
-            />
-          )}
+          {/* 态势卡片：多形态类型卡 + Git/约束/里程碑/资料概览 */}
+          <PolymorphicArchetypeCards
+            project={activeProject}
+            projectType={
+              (activeProject.projectType ?? activeProject.detectedType ?? 'business') as ProjectType
+            }
+          />
+          <ProjectOverviewWidgets project={activeProject} />
         </Card>
       )}
 
@@ -753,8 +222,6 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
         open={wizardOpen}
         onOpenChange={setWizardOpen}
         onSuccess={(created) => {
-          setProjects((prev) => [created, ...prev.filter((p) => p.id !== created.id)]);
-          setSelectedProjectId(created.id);
           if (created.projectType) {
             setSelectedArchetype(created.projectType);
           }

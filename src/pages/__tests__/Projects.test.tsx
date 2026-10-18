@@ -7,8 +7,8 @@ import { Projects } from '../Projects';
 
 vi.mock('../../shared/lib/i18n', () => ({ useI18n: () => ({ locale: 'en' }) }));
 const { props } = vi.hoisted(() => ({ props: vi.fn() }));
-vi.mock('../../widgets/sidebar/sections/ProjectSection', () => ({
-  ProjectSection: (value: unknown) => {
+vi.mock('../../widgets/sidebar/sections/WorkbenchProjectList', () => ({
+  WorkbenchProjectList: (value: unknown) => {
     props(value);
     return <div data-testid="projects-existing-api-view" />;
   },
@@ -58,7 +58,7 @@ describe('project workbench', () => {
     );
 
     expect(props).toHaveBeenCalledWith(
-      expect.objectContaining({ presentation: 'workbench', collapsed: false }),
+      expect.objectContaining({ onOpenSession: expect.any(Function) }),
     );
     expect(screen.getByText(/folder binding still controls file access/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'New deliverable' }));
