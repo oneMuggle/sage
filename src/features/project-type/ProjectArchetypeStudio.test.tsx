@@ -325,6 +325,8 @@ describe('ProjectArchetypeStudio', () => {
     // Default tab is coding
     expect(screen.getByTestId('archetype-blueprint-detail-coding')).toBeInTheDocument();
     expect(screen.getByText('src/')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('studio-copy-blueprint-md-btn'));
+    expect(screen.getByTestId('studio-copy-blueprint-md-btn')).toHaveTextContent(/已复制蓝图 MD|复制当前蓝图 MD/);
 
     // Switch to business (general archive)
     fireEvent.click(screen.getByTestId('archetype-tab-business'));
@@ -369,7 +371,14 @@ describe('ProjectArchetypeStudio', () => {
     expect(await screen.findByTestId('workspace-charter-status-badge')).toBeInTheDocument();
     expect(screen.getByTestId('overview-quick-checkpoint-btn')).toBeInTheDocument();
     expect(await screen.findByTestId('project-advisor-card')).toBeInTheDocument();
+    fireEvent.click(await screen.findByTestId('advisor-toggle-details-btn'));
+    fireEvent.click(screen.getByTestId('advisor-batch-suggestions-to-constraint-btn'));
+    expect(screen.getByTestId('advisor-batch-suggestions-to-constraint-btn')).toHaveTextContent('已全部转约束');
+    fireEvent.click(screen.getByTestId('advisor-suggestion-to-l4-0'));
+    expect(screen.getByTestId('advisor-suggestion-to-l4-0')).toHaveTextContent('已存L4');
     expect(screen.getByTestId('wiki-generation-panel')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('studio-quick-scaffold-btn'));
+    expect(screen.getByTestId('studio-quick-scaffold-btn')).toHaveTextContent('已初始化脚手架');
     fireEvent.click(screen.getByTestId('wiki-preview-btn'));
     expect(await screen.findByTestId('wiki-copy-preview-btn')).toBeInTheDocument();
     expect(screen.getByTestId('wiki-symbol-preview-list')).toHaveTextContent('bootstrap');

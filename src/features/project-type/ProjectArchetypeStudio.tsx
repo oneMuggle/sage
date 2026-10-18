@@ -17,10 +17,10 @@ import {
   FolderPlus,
   ArrowRight,
 } from 'lucide-react';
-import { type ComponentType } from 'react';
+import { type ComponentType, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { type ProjectType } from '../../shared/api';
+import { projectApi, type ProjectType } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
 import { Card } from '../../shared/ui/Card';
 
@@ -46,6 +46,8 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const navigate = useNavigate();
   const { activeProject, selectedArchetype, setSelectedArchetype, wizardOpen, setWizardOpen } =
     useStudioState();
+  const [copiedBlueprint, setCopiedBlueprint] = useState(false);
+  const [scaffolded, setScaffolded] = useState(false);
 
   const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
 
@@ -66,14 +68,40 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
             </p>
           </div>
 
-          <Button
-            size="sm"
-            onClick={() => setWizardOpen(true)}
-            data-testid="project-wizard-open-btn"
-          >
-            <FolderPlus className="mr-1.5 h-4 w-4" />
-            向导新建项目
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="studio-copy-blueprint-md-btn"
+              onClick={async () => {
+                const md = [
+                  `# ${blueprint.label} (${blueprint.englishLabel}) 组织规范蓝图`,
+                  `- **工作区定位**：${blueprint.positioning}`,
+                  `- **标准目录**：${blueprint.directories.map((d) => `${d}/`).join(' · ')}`,
+                  `- **版本控制**：${blueprint.vcsLabel}`,
+                  `- **上下文支柱**：${blueprint.contextPillars.join('；')}`,
+                  `- **阶段管线**：${blueprint.stages.map((s) => s.label).join(' → ')}`,
+                ].join('\n');
+                try {
+                  await navigator.clipboard?.writeText(md);
+                  setCopiedBlueprint(true);
+                  setTimeout(() => setCopiedBlueprint(false), 1500);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+            >
+              {copiedBlueprint ? '已复制蓝图 MD' : '复制当前蓝图 MD'}
+            </button>
+            <Button
+              size="sm"
+              onClick={() => setWizardOpen(true)}
+              data-testid="project-wizard-open-btn"
+            >
+              <FolderPlus className="mr-1.5 h-4 w-4" />
+              向导新建项目
+            </Button>
+          </div>
         </div>
 
         {/* 四大形态切换标签 */}
@@ -196,14 +224,40 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
               />
               <span className="text-xs text-muted-foreground font-mono">{activeProject.path}</span>
             </div>
-            <Button
-              size="sm"
-              onClick={() => navigate(`/projects/governance/${activeProject.id}`)}
-              data-testid="enter-governance-btn"
-            >
-              进入治理
-              <ArrowRight className="ml-1.5 h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="studio-quick-scaffold-btn"
+                onClick={async () => {
+                  if (scaffolded) return;
+                  setScaffolded(true);
+                  if (typeof projectApi?.scaffold === 'function') {
+                    try {
+                      await projectApi.scaffold(activeProject.id, {
+                        projectType: (activeProject.projectType ?? activeProject.detectedType ?? 'business') as ProjectType,
+                        createDirectories: true,
+                        createSageMd: true,
+                        importDefaultConstraints: true,
+                        seedDefaultMilestones: true,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+              >
+                {scaffolded ? '已初始化脚手架' : '一键脚手架初始化'}
+              </button>
+              <Button
+                size="sm"
+                onClick={() => navigate(`/projects/governance/${activeProject.id}`)}
+                data-testid="enter-governance-btn"
+              >
+                进入治理
+                <ArrowRight className="ml-1.5 h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           {/* 态势卡片：多形态类型卡 + Git/约束/里程碑/资料概览 */}
