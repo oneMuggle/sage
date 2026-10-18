@@ -309,10 +309,14 @@ describe('ConstraintSummaryWidget', () => {
     });
 
     // Expand ProjectAdvisorCard details and convert risk #0 to AI constraint
+    fireEvent.click(await screen.findByTestId('advisor-save-l3-btn'));
+    expect(screen.getByTestId('advisor-save-l3-btn')).toHaveTextContent('已沉淀 L3');
     fireEvent.click(await screen.findByTestId('advisor-save-l4-btn'));
     expect(screen.getByTestId('advisor-save-l4-btn')).toHaveTextContent('已存 L4');
     const toggleDetails = await screen.findByTestId('advisor-toggle-details-btn');
     fireEvent.click(toggleDetails);
+    fireEvent.click(screen.getByTestId('advisor-risk-to-milestone-0'));
+    expect(screen.getByTestId('advisor-risk-to-milestone-0')).toHaveTextContent('已建里程碑');
     fireEvent.click(screen.getByTestId('advisor-suggestion-to-milestone-0'));
     expect(screen.getByTestId('advisor-suggestion-to-milestone-0')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('advisor-risk-filter-high'));

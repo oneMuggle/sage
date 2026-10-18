@@ -71,6 +71,8 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [guardedSuggestions, setGuardedSuggestions] = useState<Set<number>>(new Set());
   const [highRiskOnly, setHighRiskOnly] = useState(false);
   const [savedL4Report, setSavedL4Report] = useState(false);
+  const [savedL3Report, setSavedL3Report] = useState(false);
+  const [milestoneRiskIndices, setMilestoneRiskIndices] = useState<Set<number>>(new Set());
   const [milestoneSuggestionIndices, setMilestoneSuggestionIndices] = useState<Set<number>>(new Set());
 
   const fetchAdvice = useCallback(async () => {
@@ -205,6 +207,34 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
             AI 顾问
           </CardTitle>
           <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-testid="advisor-save-l3-btn"
+              onClick={async () => {
+                if (savedL3Report) return;
+                setSavedL3Report(true);
+                if (typeof projectApi?.confirmKnowledge === 'function') {
+                  try {
+                    await projectApi.confirmKnowledge(projectId, {
+                      entries: [
+                        {
+                          category: 'context',
+                          content: `AI 顾问健康度 ${healthScore}/100：${summary}（风险 ${risks.length} 项，改进建议 ${suggestions.length} 项）`,
+                          importance: 7,
+                          sourceMessageIds: [],
+                          reasoning: 'M3 项目顾问诊断摘要沉淀至 L3 画像',
+                        },
+                      ],
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover hover:text-text"
+            >
+              {savedL3Report ? '已沉淀 L3' : '沉淀至 L3'}
+            </button>
             <button
               type="button"
               data-testid="advisor-save-l4-btn"
@@ -359,6 +389,28 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                               <span>固化为约束</span>
                             </>
                           )}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`advisor-risk-to-milestone-${idx}`}
+                          onClick={async () => {
+                            if (milestoneRiskIndices.has(idx)) return;
+                            setMilestoneRiskIndices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.createMilestone === 'function') {
+                              try {
+                                await projectApi.createMilestone(projectId, {
+                                  title: `[风险整改] ${risk.description.slice(0, 56)}`,
+                                  description: risk.suggestion || '来源于 AI 顾问高危风险排查',
+                                  status: 'pending',
+                                });
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }
+                          }}
+                          className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
+                        >
+                          <span>{milestoneRiskIndices.has(idx) ? '已建里程碑' : '+里程碑'}</span>
                         </button>
                         {risk.suggestion && (
                           <div className="text-ui-2xs text-muted ml-6 mt-0.5 w-full">
