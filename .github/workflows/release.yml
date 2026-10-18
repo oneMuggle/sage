@@ -67,6 +67,7 @@ jobs:
       - name: Sync version from git tag to package.json
         # electron-builder reads version from package.json, but git tag is the source of truth.
         # Tag format: v0.4.9-alpha.61 → package.json version: 0.4.9-alpha.61
+        shell: bash
         run: |
           TAG_VERSION="${{ github.ref_name }}"
           # Remove 'v' prefix: v0.4.9-alpha.61 → 0.4.9-alpha.61
