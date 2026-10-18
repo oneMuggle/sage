@@ -54,7 +54,9 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
   const [promotedMilestoneIds, setPromotedMilestoneIds] = useState<Set<string>>(new Set());
   const [copiedMilestoneId, setCopiedMilestoneId] = useState<string | null>(null);
   const [batchSavedMilestonesL3, setBatchSavedMilestonesL3] = useState(false);
+  const [batchSavedMilestonesL4, setBatchSavedMilestonesL4] = useState(false);
   const [constraintMilestoneIds, setConstraintMilestoneIds] = useState<Set<string>>(new Set());
+  const [l4MilestoneIds, setL4MilestoneIds] = useState<Set<string>>(new Set());
   const blueprint = getArchetypeBlueprint(projectType);
 
   const stageLabelMap = useMemo(() => {
@@ -409,6 +411,30 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                     {batchSavedMilestonesL3 ? '已批量存 L3' : `批量存 L3 (${filteredMilestones.length})`}
                   </button>
                 )}
+                {filteredMilestones.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="milestone-batch-save-l4-btn"
+                    onClick={async () => {
+                      if (batchSavedMilestonesL4) return;
+                      setBatchSavedMilestonesL4(true);
+                      if (typeof projectApi?.addMaterial === 'function') {
+                        try {
+                          await projectApi.addMaterial(projectId, {
+                            content: `# ${blueprint.label} · 里程碑路线图档案 (${filteredMilestones.length} 项)\n${filteredMilestones
+                              .map((m) => `- [${m.status}] ${m.title} (${m.stage || '默认阶段'})`)
+                              .join('\n')}`,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {batchSavedMilestonesL4 ? '已批量存 L4' : `批量存 L4 (${filteredMilestones.length})`}
+                  </button>
+                )}
                 {inProgressMilestones.length > 0 && (
                   <button
                     type="button"
@@ -552,6 +578,26 @@ export function MilestoneManager({ projectId, projectType = 'business' }: Milest
                       title="将该里程碑转化为 L2 交付约束"
                     >
                       {constraintMilestoneIds.has(milestone.id) ? '已转L2' : '+L2 约束'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`milestone-to-l4-${milestone.id}`}
+                      onClick={async () => {
+                        if (l4MilestoneIds.has(milestone.id)) return;
+                        setL4MilestoneIds((prev) => new Set(prev).add(milestone.id));
+                        if (typeof projectApi?.addMaterial === 'function') {
+                          try {
+                            await projectApi.addMaterial(projectId, {
+                              content: `# 里程碑档案：${milestone.title}\n- 状态: ${milestone.status}\n- 阶段: ${milestone.stage || '默认阶段'}\n\n${milestone.description || '无详细说明'}`,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-1 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {l4MilestoneIds.has(milestone.id) ? '已存L4' : '+L4'}
                     </button>
                     <button
                       type="button"

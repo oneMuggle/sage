@@ -85,6 +85,8 @@ export function WikiGenerationPanel({
   const [copiedSymbols, setCopiedSymbols] = useState(false);
   const [savedSymbolsProfile, setSavedSymbolsProfile] = useState(false);
   const [guardedSymbolIndices, setGuardedSymbolIndices] = useState<Set<number>>(new Set());
+  const [milestoneSymbolIndices, setMilestoneSymbolIndices] = useState<Set<number>>(new Set());
+  const [savedManifestL3, setSavedManifestL3] = useState(false);
 
   /** 重置 */
   const handleReset = useCallback(() => {
@@ -286,6 +288,34 @@ export function WikiGenerationPanel({
                   )}
                 </button>
               )}
+              <button
+                type="button"
+                data-testid="wiki-save-manifest-l3-btn"
+                onClick={async () => {
+                  if (savedManifestL3) return;
+                  setSavedManifestL3(true);
+                  if (typeof projectApi?.confirmKnowledge === 'function') {
+                    try {
+                      await projectApi.confirmKnowledge(projectId, {
+                        entries: [
+                          {
+                            category: 'architecture',
+                            content: `M5 Wiki 生成索引（共 ${result.wikiPaths.length} 页）：${result.wikiPaths.join('、')}`,
+                            importance: 7,
+                            sourceMessageIds: [],
+                            reasoning: 'M5 Wiki 文档清单沉淀至 L3 项目画像',
+                          },
+                        ],
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-green-300 bg-white/80 px-2 py-0.5 text-ui-2xs font-medium text-green-700 hover:bg-white"
+              >
+                {savedManifestL3 ? '已沉淀至 L3' : '沉淀清单至 L3'}
+              </button>
               <button
                 type="button"
                 onClick={() => void handleCopyManifest()}
@@ -564,6 +594,28 @@ export function WikiGenerationPanel({
                           className="rounded border border-border bg-background px-1 py-0 text-ui-2xs text-primary hover:bg-primary/10"
                         >
                           {guardedSymbolIndices.has(idx) ? '已护栏' : '+L2'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`wiki-symbol-to-milestone-${idx}`}
+                          onClick={async () => {
+                            if (milestoneSymbolIndices.has(idx)) return;
+                            setMilestoneSymbolIndices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.createMilestone === 'function') {
+                              try {
+                                await projectApi.createMilestone(projectId, {
+                                  title: `[符号文档审校] ${s.name} (${s.filePath})`,
+                                  description: `补齐 ${s.kind} ${s.name} 的契约说明与单元测试`,
+                                  status: 'pending',
+                                });
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }
+                          }}
+                          className="rounded border border-border bg-background px-1 py-0 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          {milestoneSymbolIndices.has(idx) ? '已建里程碑' : '+里程碑'}
                         </button>
                       </div>
                     </div>
