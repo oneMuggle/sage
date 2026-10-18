@@ -676,6 +676,7 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('studio-profile-save-l4-btn')).toHaveTextContent('已存为 L4 资料');
     fireEvent.click(screen.getByTestId('studio-profile-imp-high'));
     fireEvent.click(screen.getByTestId('studio-profile-imp-all'));
+    fireEvent.click(screen.getByTestId('studio-profile-pillar-preset-0'));
     fireEvent.click(screen.getByTestId('studio-profile-preset-0'));
     fireEvent.change(screen.getByTestId('studio-profile-category'), {
       target: { value: 'convention' },

@@ -667,6 +667,8 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('milestone-batch-promote-l3-btn')).toHaveTextContent('已批量存 L3');
     fireEvent.click(screen.getByTestId('milestone-batch-save-l4-btn'));
     expect(screen.getByTestId('milestone-batch-save-l4-btn')).toHaveTextContent('已批量存 L4');
+    fireEvent.click(screen.getByTestId('milestone-batch-to-constraint-btn'));
+    expect(screen.getByTestId('milestone-batch-to-constraint-btn')).toHaveTextContent('已批量转 L2');
     fireEvent.click(screen.getByTestId('milestone-to-constraint-ms-p33-overdue'));
     expect(screen.getByTestId('milestone-to-constraint-ms-p33-overdue')).toHaveTextContent('已转L2');
     fireEvent.click(screen.getByTestId('milestone-to-l4-ms-p33-overdue'));
