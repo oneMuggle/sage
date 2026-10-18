@@ -37,9 +37,7 @@ vi.mock('../features/project-type', () => ({
   MilestoneManager: () => <div data-testid="milestone-manager-stub" />,
   PolymorphicArchetypeCards: () => <div data-testid="archetype-cards-stub" />,
   ProjectOverviewWidgets: () => <div data-testid="overview-widgets-stub" />,
-  ProjectTypeBadge: ({ type }: { type: string }) => (
-    <span data-testid="type-badge">{type}</span>
-  ),
+  ProjectTypeBadge: ({ type }: { type: string }) => <span data-testid="type-badge">{type}</span>,
   GovernanceRulesPanel: () => <div data-testid="rules-panel-stub" />,
 }));
 
@@ -52,14 +50,26 @@ vi.mock('../features/project-type/StudioMaterialsAndProfilePanels', () => ({
 vi.mock('../features/project-type/archetypeBlueprints', () => ({
   ARCHETYPE_ORDER: ['coding', 'business', 'research', 'personal'],
   ARCHETYPE_BLUEPRINTS: {
-    coding: { label: '全栈工程', stages: [{ id: 'initiation', label: '启动' }, { id: 'execution', label: '执行' }] },
+    coding: {
+      label: '全栈工程',
+      stages: [
+        { id: 'initiation', label: '启动' },
+        { id: 'execution', label: '执行' },
+      ],
+    },
     business: { label: '商务合同', stages: [{ id: 'initiation', label: '立卷归集' }] },
     research: { label: '学术研究', stages: [{ id: 'initiation', label: '选题' }] },
     personal: { label: '个人知识', stages: [{ id: 'initiation', label: '建卡' }] },
   },
   getArchetypeBlueprint: (type: string) => {
     const map: Record<string, { label: string; stages: Array<{ id: string; label: string }> }> = {
-      coding: { label: '全栈工程', stages: [{ id: 'initiation', label: '启动' }, { id: 'execution', label: '执行' }] },
+      coding: {
+        label: '全栈工程',
+        stages: [
+          { id: 'initiation', label: '启动' },
+          { id: 'execution', label: '执行' },
+        ],
+      },
       business: { label: '商务合同', stages: [{ id: 'initiation', label: '立卷归集' }] },
       research: { label: '学术研究', stages: [{ id: 'initiation', label: '选题' }] },
       personal: { label: '个人知识', stages: [{ id: 'initiation', label: '建卡' }] },
@@ -203,9 +213,12 @@ describe('ProjectGovernance', () => {
     fireEvent.change(typeSelect, { target: { value: 'business' } });
 
     await waitFor(() => {
-      expect(mockUpdate).toHaveBeenCalledWith('proj-1', expect.objectContaining({
-        project_type: 'business',
-      }));
+      expect(mockUpdate).toHaveBeenCalledWith(
+        'proj-1',
+        expect.objectContaining({
+          project_type: 'business',
+        }),
+      );
     });
   });
 
