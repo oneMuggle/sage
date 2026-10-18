@@ -695,3 +695,8 @@
 - **`src/features/project-type/MilestoneEditor.tsx`**：里程碑编辑器底部栏新增 **`存为 L4 资料`**（`milestone-editor-save-l4-btn`），支持将里程碑交付规范一键归档至 L4 参考资料。
 - **`src/features/project-type/ConstraintSummaryWidget.tsx`**：约束统计摘要卡头部新增 **`存 L4`**（`constraint-summary-save-l4-btn`），并在高优规则预览行新增 **`+里程碑`** 转化按钮（`constraint-summary-rule-to-milestone-${rule.id}`）。
 - **`src/features/project-type/MilestoneProgressWidget.tsx`**：里程碑进度摘要卡头部新增 **`存 L4`**（`milestone-summary-save-l4-btn`），并在最近里程碑行新增 **`+L2`** 交付准入约束转化按钮（`milestone-summary-to-constraint-${milestone.id}`）。
+### Phase P48（2026-10-18）：AI 顾问诊断沉淀 L3 与风险转里程碑、任务分解批量转 L2 约束与节点沉淀 L3、形态选择器依据/里程碑复制及检测预览管线/目录复制
+- **`src/features/project-type/ProjectAdvisorCard.tsx`**：AI 顾问头部新增 **`沉淀至 L3`**（`advisor-save-l3-btn`）将健康度与风险/建议概览归档至 L3 项目画像，并在每条风险项新增 **`+里程碑`** 整改任务转化按钮（`advisor-risk-to-milestone-${idx}`）。
+- **`src/features/project-type/TaskDecomposeDialog.tsx`**：任务分解预览工具栏新增 **`选中转 L2 约束`** 批量转化按钮（`decompose-batch-to-constraint-btn`），并在单条预览节点旁新增 **`+L3`** 阶段目标沉淀按钮（`decompose-node-to-l3-${idx}`）。
+- **`src/features/project-type/ProjectTypeSelector.tsx`**：自动检测提示栏支持单条检测依据独立复制（`selector-copy-signal-${idx}`），并在治理清单展开面板新增 **`复制推荐里程碑`** 按钮（`selector-copy-milestones-btn`）。
+- **`src/features/project-type/TypeDetectionPreview.tsx`**：形态自动检测预览面板新增 **`复制阶段管线`**（`detection-copy-stages-btn`）与 **`复制目录列表`**（`detection-copy-dirs-btn`）快捷导出按钮。

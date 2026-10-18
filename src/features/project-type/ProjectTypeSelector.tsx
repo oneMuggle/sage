@@ -81,6 +81,8 @@ export function ProjectTypeSelector({
   const [copiedDetection, setCopiedDetection] = useState(false);
   const [showSuiteDetails, setShowSuiteDetails] = useState(false);
   const [copiedBlueprint, setCopiedBlueprint] = useState(false);
+  const [copiedMilestones, setCopiedMilestones] = useState(false);
+  const [copiedSignalIdx, setCopiedSignalIdx] = useState<number | null>(null);
 
   const runDetection = useCallback(async () => {
     if (!projectPath || typeof projectApi?.detectType !== 'function') return;
@@ -211,8 +213,27 @@ export function ProjectTypeSelector({
                 </div>
               </div>
               {detection.signals.length > 0 && (
-                <div className="mt-2 text-xs text-text-secondary">
-                  检测依据：{detection.signals.slice(0, 3).join('、')}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
+                  <span>检测依据：{detection.signals.slice(0, 3).join('、')}</span>
+                  {detection.signals.slice(0, 3).map((sig, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      data-testid={`selector-copy-signal-${idx}`}
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard?.writeText(sig);
+                          setCopiedSignalIdx(idx);
+                          setTimeout(() => setCopiedSignalIdx(null), 1500);
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {copiedSignalIdx === idx ? '已复制' : `复制依据#${idx + 1}`}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -320,8 +341,29 @@ export function ProjectTypeSelector({
                     <div>
                       细分规范包：{activeBp.subTemplates.map((t) => t.label).join(' · ')}
                     </div>
-                    <div>
-                      推荐里程碑：{activeBp.recommendedMilestones.map((m) => m.title).join(' → ')}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        推荐里程碑：{activeBp.recommendedMilestones.map((m) => m.title).join(' → ')}
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="selector-copy-milestones-btn"
+                        onClick={async () => {
+                          const md = activeBp.recommendedMilestones
+                            .map((m, i) => `${i + 1}. [${m.stage}] ${m.title} — ${m.description}`)
+                            .join('\n');
+                          try {
+                            await navigator.clipboard?.writeText(md);
+                            setCopiedMilestones(true);
+                            setTimeout(() => setCopiedMilestones(false), 1500);
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                      >
+                        {copiedMilestones ? '已复制里程碑' : '复制推荐里程碑'}
+                      </button>
                     </div>
                   </div>
                 )}

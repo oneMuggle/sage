@@ -118,6 +118,8 @@ export function TaskDecomposeDialog({
   const [stageFilter, setStageFilter] = useState<string>('all');
   const [savedPlanL4, setSavedPlanL4] = useState(false);
   const [constraintNodeIndices, setConstraintNodeIndices] = useState<Set<number>>(new Set());
+  const [l3NodeIndices, setL3NodeIndices] = useState<Set<number>>(new Set());
+  const [batchConvertedL2, setBatchConvertedL2] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
 
   const effectiveType: ProjectType = projectType ?? 'coding';
@@ -363,6 +365,32 @@ export function TaskDecomposeDialog({
                     </button>
                     <button
                       type="button"
+                      data-testid="decompose-batch-to-constraint-btn"
+                      onClick={async () => {
+                        if (batchConvertedL2) return;
+                        setBatchConvertedL2(true);
+                        const chosen = milestones.filter((_, idx) => selectedRootIndices.has(idx));
+                        const list = chosen.length > 0 ? chosen : milestones;
+                        if (typeof projectApi?.createConstraint === 'function') {
+                          for (const node of list) {
+                            try {
+                              await projectApi.createConstraint(projectId, {
+                                category: 'deliverable_guard',
+                                content: `分解任务准入规范 [${node.title}]：${node.description || '按期完成分解节点交付'}`,
+                                priority: 7,
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+                    >
+                      {batchConvertedL2 ? '已转 L2 约束' : '选中转 L2 约束'}
+                    </button>
+                    <button
+                      type="button"
                       data-testid="decompose-save-plan-l4-btn"
                       onClick={async () => {
                         if (savedPlanL4) return;
@@ -469,6 +497,34 @@ export function TaskDecomposeDialog({
                         className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
                       >
                         {constraintNodeIndices.has(idx) ? '已转 L2' : '+L2 约束'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`decompose-node-to-l3-${idx}`}
+                        onClick={async () => {
+                          if (l3NodeIndices.has(idx)) return;
+                          setL3NodeIndices((prev) => new Set(prev).add(idx));
+                          if (typeof projectApi?.confirmKnowledge === 'function') {
+                            try {
+                              await projectApi.confirmKnowledge(projectId, {
+                                entries: [
+                                  {
+                                    category: 'goal',
+                                    content: `分解里程碑目标 [${ms.title}]：${ms.description || '阶段核心交付项'}`,
+                                    importance: 7,
+                                    sourceMessageIds: [],
+                                    reasoning: 'M1 任务分解节点同步沉淀至 L3 画像',
+                                  },
+                                ],
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        {l3NodeIndices.has(idx) ? '已存L3' : '+L3'}
                       </button>
                     </div>
                   ))}
