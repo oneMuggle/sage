@@ -24,12 +24,12 @@ import { type ProjectType } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
 import { Card } from '../../shared/ui/Card';
 
+import { PolymorphicArchetypeCards } from './PolymorphicArchetypeCards';
 import { ProjectCreationWizard } from './ProjectCreationWizard';
 import { ProjectOverviewWidgets } from './ProjectOverviewWidgets';
 import { ProjectTypeBadge } from './ProjectTypeBadge';
-import { PolymorphicArchetypeCards } from './PolymorphicArchetypeCards';
-import { useStudioState } from './useStudioState';
 import { ARCHETYPE_BLUEPRINTS, ARCHETYPE_ORDER } from './archetypeBlueprints';
+import { useStudioState } from './useStudioState';
 
 const ARCHETYPE_ICONS: Record<ProjectType, ComponentType<{ className?: string }>> = {
   coding: Code2,
