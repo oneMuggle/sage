@@ -325,6 +325,8 @@ describe('ProjectArchetypeStudio', () => {
     // Default tab is coding
     expect(screen.getByTestId('archetype-blueprint-detail-coding')).toBeInTheDocument();
     expect(screen.getByText('src/')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('studio-copy-dirs-btn'));
+    fireEvent.click(screen.getByTestId('studio-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-blueprint-md-btn'));
     expect(screen.getByTestId('studio-copy-blueprint-md-btn')).toHaveTextContent(/已复制蓝图 MD|复制当前蓝图 MD/);
     fireEvent.click(screen.getByTestId('studio-copy-all-blueprints-md-btn'));
@@ -386,6 +388,8 @@ describe('ProjectArchetypeStudio', () => {
     fireEvent.click(screen.getByTestId('studio-copy-active-path-btn'));
     fireEvent.click(screen.getByTestId('studio-save-blueprint-l4-btn'));
     expect(screen.getByTestId('studio-save-blueprint-l4-btn')).toHaveTextContent('已存蓝图 L4');
+    fireEvent.click(screen.getByTestId('studio-save-blueprint-l3-btn'));
+    expect(screen.getByTestId('studio-save-blueprint-l3-btn')).toHaveTextContent('已存蓝图 L3');
     fireEvent.click(screen.getByTestId('wiki-preview-btn'));
     expect(await screen.findByTestId('wiki-copy-preview-btn')).toBeInTheDocument();
     expect(screen.getByTestId('wiki-symbol-preview-list')).toHaveTextContent('bootstrap');

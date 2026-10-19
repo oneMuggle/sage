@@ -184,6 +184,8 @@ describe('MilestoneProgressWidget', () => {
       expect(screen.getByTestId('milestone-summary-risk-to-l3-btn')).toHaveTextContent('已存风险L3');
       fireEvent.click(screen.getByTestId('milestone-summary-completed-to-l3-btn'));
       expect(screen.getByTestId('milestone-summary-completed-to-l3-btn')).toHaveTextContent('已存完成L3');
+      fireEvent.click(screen.getByTestId('milestone-summary-completed-to-l4-btn'));
+      expect(screen.getByTestId('milestone-summary-completed-to-l4-btn')).toHaveTextContent('已存完成L4');
       fireEvent.click(screen.getByTestId('milestone-summary-copy-item-m1'));
     });
   });
@@ -581,6 +583,10 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('overview-scaffold-dirs-btn')).toHaveTextContent('已补齐目录');
     fireEvent.click(screen.getByTestId('overview-seed-constraints-btn'));
     expect(screen.getByTestId('overview-seed-constraints-btn')).toHaveTextContent('已导入默认约束');
+    fireEvent.click(screen.getByTestId('overview-pillars-to-l3-btn'));
+    expect(screen.getByTestId('overview-pillars-to-l3-btn')).toHaveTextContent('已存支柱L3');
+    fireEvent.click(screen.getByTestId('overview-pillars-to-l4-btn'));
+    expect(screen.getByTestId('overview-pillars-to-l4-btn')).toHaveTextContent('已存支柱L4');
     fireEvent.click(screen.getByTestId('overview-refresh-meta-btn'));
 
     // Open TaskDecomposeDialog from overview bar and test total days & invert/select-all

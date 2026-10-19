@@ -50,6 +50,9 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const [copiedAllBlueprints, setCopiedAllBlueprints] = useState(false);
   const [copiedActivePath, setCopiedActivePath] = useState(false);
   const [savedBlueprintL4, setSavedBlueprintL4] = useState(false);
+  const [savedBlueprintL3, setSavedBlueprintL3] = useState(false);
+  const [copiedDirs, setCopiedDirs] = useState(false);
+  const [copiedStages, setCopiedStages] = useState(false);
   const [scaffolded, setScaffolded] = useState(false);
 
   const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
@@ -175,7 +178,27 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           data-testid={`archetype-blueprint-detail-${blueprint.type}`}
         >
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-foreground">1. 标准工作区目录结构 & VCS</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-foreground">1. 标准工作区目录结构 & VCS</div>
+              <button
+                type="button"
+                data-testid="studio-copy-dirs-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard?.writeText(
+                      blueprint.directories.map((d) => `${d}/`).join('\n'),
+                    );
+                    setCopiedDirs(true);
+                    setTimeout(() => setCopiedDirs(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {copiedDirs ? '已复制目录' : '复制目录清单'}
+              </button>
+            </div>
             <p className="text-xs text-muted-foreground">{blueprint.positioning}</p>
             <div className="flex flex-wrap gap-1.5 pt-1">
               {blueprint.directories.map((dir) => (
@@ -208,7 +231,27 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           </div>
 
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-foreground">3. 阶段推进管线与预设规则包</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-foreground">3. 阶段推进管线与预设规则包</div>
+              <button
+                type="button"
+                data-testid="studio-copy-stages-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard?.writeText(
+                      blueprint.stages.map((s, i) => `${i + 1}. ${s.label} (${s.id})`).join('\n'),
+                    );
+                    setCopiedStages(true);
+                    setTimeout(() => setCopiedStages(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {copiedStages ? '已复制阶段' : '复制阶段管线'}
+              </button>
+            </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {blueprint.stages.map((st, idx) => (
                 <span
@@ -298,6 +341,38 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
               >
                 {savedBlueprintL4 ? '已存蓝图 L4' : '当前蓝图存 L4'}
+              </button>
+              <button
+                type="button"
+                data-testid="studio-save-blueprint-l3-btn"
+                onClick={async () => {
+                  if (savedBlueprintL3) return;
+                  setSavedBlueprintL3(true);
+                  if (typeof projectApi?.confirmKnowledge === 'function') {
+                    const bp =
+                      ARCHETYPE_BLUEPRINTS[
+                        (activeProject.projectType ?? activeProject.detectedType ?? 'business') as ProjectType
+                      ];
+                    try {
+                      await projectApi.confirmKnowledge(activeProject.id, {
+                        entries: [
+                          {
+                            category: 'architecture',
+                            content: `${bp.label} 蓝图规范 (${activeProject.name})：目录=${bp.directories.join('/, ')}/；阶段=${bp.stages.map((s) => s.label).join('→')}`,
+                            importance: 8,
+                            sourceMessageIds: [],
+                            reasoning: '多形态蓝图工作台一键沉淀当前蓝图至 L3 画像',
+                          },
+                        ],
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+              >
+                {savedBlueprintL3 ? '已存蓝图 L3' : '当前蓝图存 L3'}
               </button>
               <button
                 type="button"
