@@ -926,3 +926,19 @@
   - 在工作台项目列表每行操作区新增 **`复制路径`**（`data-testid="workbench-row-copy-path-${project.id}"`），支持无需展开详情即可一键复制任意项目的工作区根目录路径。
 - **单元测试与门禁验证**：
   - 扩展 `Projects.test.tsx`、`ProjectSection.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（4 个测试文件全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
+### Phase P68 — 多形态工作台护栏重点/推荐里程碑复制与一键播种推荐里程碑、概览护栏支柱转里程碑与阶段管线复制、约束统计 Glob/类别分布存 L4、里程碑进度风险项存 L4（已完成）
+
+- **Phase 4.2 `ProjectArchetypeStudio` 护栏重点/推荐里程碑复制与活跃项目一键播种推荐里程碑（`src/features/project-type/ProjectArchetypeStudio.tsx`）**：
+  - 在三维组织详情卡片中新增 **`复制护栏重点`**（`data-testid="studio-copy-pillars-btn"`）与 **`复制推荐里程碑`**（`data-testid="studio-copy-milestones-btn"`），支持按当前选中形态一键复制上下文护栏重点或推荐里程碑清单；
+  - 在活跃项目概览工具栏新增 **`一键播种推荐里程碑`**（`data-testid="studio-seed-recommended-milestones-btn"`），支持将当前项目所属形态的推荐里程碑批量创建入库（`projectApi.createMilestone`）。
+- **Phase 4.3 `ProjectOverviewWidgets` 护栏支柱转验收里程碑与阶段推进管线复制（`src/features/project-type/ProjectOverviewWidgets.tsx`）**：
+  - 在阶段治理操作栏新增 **`支柱转里程碑`**（`data-testid="overview-pillars-to-milestone-btn"`），支持将当前形态全部上下文护栏支柱一键转化为护栏验收里程碑（`projectApi.createMilestone`）；
+  - 在 `overview-stage-switcher` 新增 **`复制阶段管线`**（`data-testid="overview-copy-stages-btn"`），支持复制带当前阶段高亮标记的完整生命周期阶段管线。
+- **Phase 4.3 `ConstraintSummaryWidget` Glob 规则与类别分布一键存 L4（`src/features/project-type/ConstraintSummaryWidget.tsx`）**：
+  - 在 Glob 按需触发统计栏新增 **`Glob规则存L4`**（`data-testid="constraint-summary-glob-to-l4-btn"`），支持将全部 Glob 按需触发规则归档为 L4 资料（`projectApi.addMaterial`）；
+  - 在按类别统计栏新增 **`分布存 L4`**（`data-testid="constraint-summary-cats-to-l4-btn"`），支持将 L2 约束类别分布统计归档至 L4 资料库。
+- **Phase 4.3 `MilestoneProgressWidget` 阻塞/逾期风险里程碑一键存 L4（`src/features/project-type/MilestoneProgressWidget.tsx`）**：
+  - 当存在阻塞或逾期里程碑时，在顶部工具栏新增 **`风险项存L4`**（`data-testid="milestone-summary-risk-to-l4-btn"`），支持将全部阻塞/逾期风险节点一键归档为 L4 风险复盘资料（`projectApi.addMaterial`）。
+- **单元测试与门禁验证**：
+  - 扩展 `ProjectArchetypeStudio.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
