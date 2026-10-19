@@ -183,6 +183,8 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
 
     expect(screen.getByTestId('selector-selected-summary')).toHaveTextContent('一般档案与文书');
     fireEvent.click(screen.getByTestId('selector-copy-blueprint-btn'));
+    fireEvent.click(screen.getByTestId('selector-copy-blueprint-json-btn'));
+    expect(screen.getByTestId('selector-copy-blueprint-json-btn')).toHaveTextContent('已复制 JSON');
     fireEvent.click(screen.getByTestId('selector-suite-toggle-btn'));
     expect(screen.getByTestId('selector-suite-details')).toHaveTextContent('细分规范包：');
     fireEvent.click(screen.getByTestId('selector-copy-positioning-btn'));
@@ -192,6 +194,8 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('selector-copy-subtemplates-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-milestones-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-pillars-btn'));
+    fireEvent.click(screen.getByTestId('selector-copy-all-suite-md-btn'));
+    expect(screen.getByTestId('selector-copy-all-suite-md-btn')).toHaveTextContent('已复制全部详情');
     fireEvent.click(screen.getByTestId('selector-copy-signal-0'));
     fireEvent.click(screen.getByTestId('selector-copy-all-signals-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-path-btn'));

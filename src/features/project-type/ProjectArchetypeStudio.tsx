@@ -61,6 +61,8 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const [convertedBlueprintL2, setConvertedBlueprintL2] = useState(false);
   const [copiedVcs, setCopiedVcs] = useState(false);
   const [createdBlueprintMs, setCreatedBlueprintMs] = useState(false);
+  const [copiedBlueprintJson, setCopiedBlueprintJson] = useState(false);
+  const [copiedPositioning, setCopiedPositioning] = useState(false);
 
   const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
 
@@ -131,6 +133,37 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
               className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
             >
               {copiedBlueprint ? '已复制蓝图 MD' : '复制当前蓝图 MD'}
+            </button>
+            <button
+              type="button"
+              data-testid="studio-copy-blueprint-json-btn"
+              onClick={async () => {
+                setCopiedBlueprintJson(true);
+                setTimeout(() => setCopiedBlueprintJson(false), 1500);
+                try {
+                  await navigator.clipboard?.writeText(
+                    JSON.stringify(
+                      {
+                        type: blueprint.type,
+                        label: blueprint.label,
+                        englishLabel: blueprint.englishLabel,
+                        positioning: blueprint.positioning,
+                        vcsLabel: blueprint.vcsLabel,
+                        directories: blueprint.directories,
+                        contextPillars: blueprint.contextPillars,
+                        stages: blueprint.stages,
+                      },
+                      null,
+                      2,
+                    ),
+                  );
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+            >
+              {copiedBlueprintJson ? '已复制蓝图 JSON' : '复制蓝图 JSON'}
             </button>
             <Button
               size="sm"
@@ -221,6 +254,22 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   {copiedVcs ? '已复制VCS' : '复制 VCS 策略'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="studio-copy-positioning-btn"
+                  onClick={async () => {
+                    setCopiedPositioning(true);
+                    setTimeout(() => setCopiedPositioning(false), 1500);
+                    try {
+                      await navigator.clipboard?.writeText(blueprint.positioning);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedPositioning ? '已复制定位' : '复制定位'}
                 </button>
               </div>
             </div>
