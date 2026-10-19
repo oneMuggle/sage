@@ -2,10 +2,12 @@ import { create } from 'zustand';
 
 import { saveCurrentSessionId } from '../../entities/session/storage';
 import { invoke } from '../api/desktopInvoke';
-import { workspaceApi } from '../api/workspaceApi';
 import type { GenerationStats, MessageSource, RagCitation } from '../api/types';
-import { getLastWorkspacePath } from './lastWorkspace';
+import { workspaceApi } from '../api/workspaceApi';
 import { clientLogger } from '../log/client';
+
+import { getLastWorkspacePath } from './lastWorkspace';
+
 
 // Re-export API modules for convenience
 export { sessionApi, messageApi, chatApi, memoryApi } from '../api';
