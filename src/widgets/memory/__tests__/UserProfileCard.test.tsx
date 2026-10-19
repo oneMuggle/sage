@@ -201,7 +201,15 @@ describe('ProjectProfileCard (Phase P28)', () => {
 
     // Copy Markdown & single item + high-importance filter (Phase P35)
     fireEvent.click(screen.getByTestId('project-profile-copy-md-btn'));
+    fireEvent.click(screen.getByTestId('project-profile-copy-json-btn'));
+    expect(screen.getByTestId('project-profile-copy-json-btn')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByTestId('project-profile-copy-item-pp-1'));
+    fireEvent.click(screen.getByTestId('project-profile-copy-item-md-pp-1'));
+    expect(screen.getByTestId('project-profile-copy-item-md-pp-1')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('project-profile-copy-item-json-pp-1'));
+    expect(screen.getByTestId('project-profile-copy-item-json-pp-1')).toHaveTextContent(
+      '已复制JSON',
+    );
     fireEvent.change(screen.getByTestId('project-profile-search-input'), {
       target: { value: '' },
     });
