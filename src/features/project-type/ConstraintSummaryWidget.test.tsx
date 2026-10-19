@@ -5,12 +5,13 @@
  */
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { Projects } from '../../pages/Projects';
 import { projectApi } from '../../shared/api';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { GitStatusSection } from '../../widgets/sidebar/sections/GitStatusSection';
-import { WorkbenchProjectList } from '../../widgets/sidebar/sections/WorkbenchProjectList';
 
 import { BusinessDocumentStyleBar, CodingHooksGovernanceBar, ResearchCitationAndToneBar } from './BuiltinCheckpointAndStyleBar';
 import { ConstraintEditor } from './ConstraintEditor';
@@ -38,6 +39,9 @@ vi.mock('../../shared/api', () => ({
       cachedAt: 1700000000,
     }),
   },
+  memoryApi: {
+    getProjectProfile: vi.fn().mockResolvedValue(null),
+  },
 }));
 
 vi.mock('../../shared/api/desktopInvoke', () => ({
@@ -59,6 +63,8 @@ vi.mock('../../shared/api/projectApi', () => ({
     addMaterial: vi.fn().mockResolvedValue({}),
     addMaterialFromFile: vi.fn().mockResolvedValue({}),
     confirmKnowledge: vi.fn().mockResolvedValue({}),
+    createMilestone: vi.fn().mockResolvedValue({}),
+    createConstraint: vi.fn().mockResolvedValue({}),
   },
 }));
 
@@ -442,6 +448,9 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('git-widget-files-to-l3-btn')).toHaveTextContent('已存变更 L3');
     fireEvent.click(screen.getByTestId('git-widget-copy-branch-btn'));
     fireEvent.click(screen.getByTestId('git-widget-guard-all-btn'));
+    fireEvent.click(screen.getByTestId('git-widget-copy-commits-md-btn'));
+    fireEvent.click(screen.getByTestId('git-widget-commits-to-constraint-btn'));
+    expect(screen.getByTestId('git-widget-commits-to-constraint-btn')).toHaveTextContent('已转提交L2');
     fireEvent.click(screen.getByTestId('git-widget-save-commits-l3-btn'));
     expect(screen.getByTestId('git-widget-save-commits-l3-btn')).toHaveTextContent('已沉淀至 L3');
     fireEvent.click(screen.getByTestId('git-widget-save-l4-btn'));
@@ -551,10 +560,12 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('coding-hooks-copy-status-md-btn'));
 
     render(
-      <I18nProvider>
-        <GitStatusSection collapsed={false} onToggleCollapsed={vi.fn()} />
-        <WorkbenchProjectList onOpenSession={vi.fn()} />
-      </I18nProvider>,
+      <MemoryRouter>
+        <I18nProvider>
+          <GitStatusSection collapsed={false} onToggleCollapsed={vi.fn()} />
+          <Projects />
+        </I18nProvider>
+      </MemoryRouter>,
     );
     const saveL4Btn = await screen.findByTestId('git-sider-save-l4-btn');
     fireEvent.click(saveL4Btn);
@@ -580,5 +591,13 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('workbench-row-to-l3-proj-sider-1')).toHaveTextContent('已存L3');
     fireEvent.click(screen.getByTestId('workbench-row-to-l4-proj-sider-1'));
     expect(screen.getByTestId('workbench-row-to-l4-proj-sider-1')).toHaveTextContent('已存L4');
+    fireEvent.click(screen.getByTestId('workbench-row-to-milestone-proj-sider-1'));
+    expect(screen.getByTestId('workbench-row-to-milestone-proj-sider-1')).toHaveTextContent('已建里程碑');
+    fireEvent.click(screen.getByTestId('workbench-row-to-constraint-proj-sider-1'));
+    expect(screen.getByTestId('workbench-row-to-constraint-proj-sider-1')).toHaveTextContent('已转L2');
+    fireEvent.click(screen.getByTestId('workbench-save-archetype-stats-l4-btn'));
+    expect(screen.getByTestId('workbench-save-archetype-stats-l4-btn')).toHaveTextContent('已存统计L4');
+    fireEvent.click(screen.getByTestId('workbench-registry-to-constraint-btn'));
+    expect(screen.getByTestId('workbench-registry-to-constraint-btn')).toHaveTextContent('已转台账L2');
   });
 });

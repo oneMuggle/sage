@@ -180,6 +180,7 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('selector-copy-blueprint-btn'));
     fireEvent.click(screen.getByTestId('selector-suite-toggle-btn'));
     expect(screen.getByTestId('selector-suite-details')).toHaveTextContent('细分规范包：');
+    fireEvent.click(screen.getByTestId('selector-copy-vcs-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-dirs-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-subtemplates-btn'));
