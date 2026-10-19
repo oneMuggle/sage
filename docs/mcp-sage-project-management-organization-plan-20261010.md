@@ -863,3 +863,19 @@
   - 在 `semantic-indexing-stats` 索引状态栏新增 **`索引统计存 L4`**（`data-testid="semantic-stats-save-l4-btn"`）与 **`复制统计`**（`data-testid="semantic-stats-copy-btn"`），支持将当前向量索引健康度快照归档至 L4 参考资料库或复制到剪贴板。
 - **单元测试与门禁验证**：
   - 扩展 `MilestoneProgressWidget.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
+### Phase P64 — 项目工作台形态分布统计复制与一键刷新、侧边栏 Git 变更一键转里程碑与单文件 +L2 护栏、L3 画像面板全支柱一键组合与批量写入 L3、类型选择器与检测预览完整蓝图/路径/依据复制（已完成）
+
+- **Phase 9.1 `Projects.tsx` 项目工作台形态分布统计复制与台账手动刷新（`src/pages/Projects.tsx`）**：
+  - 在 `workbench-archetype-counts` 统计胶囊栏新增 **`复制形态统计`**（`data-testid="workbench-copy-archetype-stats-btn"`），支持一键复制四形态受控项目分布统计 Markdown；
+  - 在工具栏新增 **`刷新台账`**（`data-testid="workbench-refresh-registry-btn"`），支持手动重新拉取受控项目列表。
+- **Phase 4.3 `GitStatusSection` 侧边栏 Git 变更一键转里程碑与单文件 +L2 护栏（`src/widgets/sidebar/sections/GitStatusSection.tsx`）**：
+  - 在 `git-sider-filter-bar` 新增 **`转里程碑`**（`data-testid="git-sider-to-milestone-btn"`），支持将当前分支变更文件集合一键转化为 `[Git 变更审校]` 里程碑（`projectApi.createMilestone`）；
+  - 在变更文件列表每行新增 **`+L2`**（`data-testid="git-sider-guard-${file.path}"`），支持将单文件变更直接固化为 `file_change_guard`（`P8`）L2 行为约束。
+- **Phase 4.2 `StudioProfileTabPanel` 全支柱一键组合与批量写入 L3 画像（`src/features/project-type/StudioProfileTabPanel.tsx`）**：
+  - 在 `studio-profile-presets-bar` 新增 **`一键组合全部支柱`**（`data-testid="studio-profile-pillar-fill-all-btn"`）与 **`支柱一键写入 L3`**（`data-testid="studio-profile-seed-pillars-btn"`），支持将当前形态全部上下文护栏支柱一键组合填入输入框或直接批量写入 L3 画像（`projectApi.confirmKnowledge`）。
+- **Phase 9.4 `ProjectTypeSelector` & `TypeDetectionPreview` 完整蓝图、工作区路径与全部依据复制（`src/features/project-type/ProjectTypeSelector.tsx`, `src/features/project-type/TypeDetectionPreview.tsx`）**：
+  - 在 `ProjectTypeSelector` 顶部与检测依据栏新增 **`复制工作区路径`**（`data-testid="selector-copy-path-btn"`）与 **`复制全部依据`**（`data-testid="selector-copy-all-signals-btn"`）；
+  - 在 `TypeDetectionPreview` 顶部操作栏新增 **`复制完整蓝图`**（`data-testid="detection-copy-full-blueprint-btn"`），支持一键导出检测形态的完整组织蓝图 Markdown。
+- **单元测试与门禁验证**：
+  - 扩展 `Projects.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `ProjectTypeBadge.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

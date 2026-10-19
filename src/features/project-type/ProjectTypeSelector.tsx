@@ -86,6 +86,8 @@ export function ProjectTypeSelector({
   const [copiedSubtemplates, setCopiedSubtemplates] = useState(false);
   const [copiedDirs, setCopiedDirs] = useState(false);
   const [copiedSignalIdx, setCopiedSignalIdx] = useState<number | null>(null);
+  const [copiedAllSignals, setCopiedAllSignals] = useState(false);
+  const [copiedSelectorPath, setCopiedSelectorPath] = useState(false);
   const [copiedStages, setCopiedStages] = useState(false);
 
   const runDetection = useCallback(async () => {
@@ -126,7 +128,27 @@ export function ProjectTypeSelector({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>选择项目类型</DialogTitle>
+          <div className="flex items-center justify-between gap-2">
+            <DialogTitle>选择项目类型</DialogTitle>
+            {projectPath && (
+              <button
+                type="button"
+                data-testid="selector-copy-path-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard?.writeText(projectPath);
+                    setCopiedSelectorPath(true);
+                    setTimeout(() => setCopiedSelectorPath(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {copiedSelectorPath ? '已复制工作区路径' : '复制工作区路径'}
+              </button>
+            )}
+          </div>
           <DialogDescription>
             选择项目类型以启用相应的约束和工具。系统会自动检测项目特征，您也可以手动选择。
           </DialogDescription>
@@ -238,6 +260,22 @@ export function ProjectTypeSelector({
                       {copiedSignalIdx === idx ? '已复制' : `复制依据#${idx + 1}`}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    data-testid="selector-copy-all-signals-btn"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard?.writeText(detection.signals.join('\n'));
+                        setCopiedAllSignals(true);
+                        setTimeout(() => setCopiedAllSignals(false), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {copiedAllSignals ? '已复制全部依据' : '复制全部依据'}
+                  </button>
                 </div>
               )}
             </div>
