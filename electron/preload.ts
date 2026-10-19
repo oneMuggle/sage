@@ -614,6 +614,14 @@ const electronAPI = {
         path,
       }) as Promise<{ success: true } | { error: string }>,
   } satisfies FileElectronApiBridge,
+
+  /**
+   * P2 (2026-10-19): detected project root from startup cwd.
+   * Used as fallback auto-bind target for new sessions.
+   */
+  getDetectedProjectRoot(): Promise<string | null> {
+    return ipcRenderer.invoke('sage:get-detected-project-root') as Promise<string | null>;
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
