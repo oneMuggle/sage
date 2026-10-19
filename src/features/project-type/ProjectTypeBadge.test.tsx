@@ -138,6 +138,7 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     expect(screen.getByTestId('detection-governance-stats')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('detection-copy-md-btn'));
+    fireEvent.click(screen.getByTestId('detection-copy-full-blueprint-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-signal-0'));
     fireEvent.click(screen.getByTestId('detection-copy-all-signals-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-vcs-btn'));
@@ -185,6 +186,8 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('selector-copy-milestones-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-pillars-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-signal-0'));
+    fireEvent.click(screen.getByTestId('selector-copy-all-signals-btn'));
+    fireEvent.click(screen.getByTestId('selector-copy-path-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-detection-btn'));
 
     fireEvent.click(screen.getByTestId('selector-redetect-btn'));
@@ -257,6 +260,9 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     expect(screen.getByTestId('studio-profile-to-milestone-e-1')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('studio-profile-seed-presets-btn'));
     expect(screen.getByTestId('studio-profile-seed-presets-btn')).toHaveTextContent('已写入推荐画像');
+    fireEvent.click(screen.getByTestId('studio-profile-pillar-fill-all-btn'));
+    fireEvent.click(screen.getByTestId('studio-profile-seed-pillars-btn'));
+    expect(screen.getByTestId('studio-profile-seed-pillars-btn')).toHaveTextContent('已写入支柱 L3');
     fireEvent.click(screen.getByTestId('studio-profile-copy-cats-btn'));
   });
 

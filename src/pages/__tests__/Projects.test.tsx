@@ -57,6 +57,8 @@ describe('project workbench', () => {
       /已复制台账|导出项目台账 MD/,
     );
     fireEvent.click(screen.getByTestId('workbench-copy-paths-btn'));
+    fireEvent.click(screen.getByTestId('workbench-copy-archetype-stats-btn'));
+    fireEvent.click(screen.getByTestId('workbench-refresh-registry-btn'));
     fireEvent.click(screen.getByTestId('workbench-save-registry-l4-btn'));
     expect(screen.getByTestId('workbench-save-registry-l4-btn')).toHaveTextContent('已存台账L4');
     fireEvent.click(screen.getByTestId('workbench-save-registry-l3-btn'));

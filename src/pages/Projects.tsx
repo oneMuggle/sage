@@ -24,6 +24,7 @@ export function Projects() {
   const [copiedPaths, setCopiedPaths] = useState(false);
   const [savedRegistryL3, setSavedRegistryL3] = useState(false);
   const [savedRegistryL4, setSavedRegistryL4] = useState(false);
+  const [copiedArchetypeStats, setCopiedArchetypeStats] = useState(false);
 
   const loadProjects = useCallback(async () => {
     if (typeof projectApi?.list !== 'function') return;
@@ -106,9 +107,37 @@ export function Projects() {
                     </span>
                   );
                 })}
+                <button
+                  type="button"
+                  data-testid="workbench-copy-archetype-stats-btn"
+                  onClick={async () => {
+                    const md = [
+                      `# 项目形态分布统计 (${projects.length} 个项目)`,
+                      ...ARCHETYPE_ORDER.map((t) => `- ${getArchetypeBlueprint(t).label}: ${archetypeCounts[t]} 个`),
+                    ].join('\n');
+                    try {
+                      await navigator.clipboard?.writeText(md);
+                      setCopiedArchetypeStats(true);
+                      setTimeout(() => setCopiedArchetypeStats(false), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  {copiedArchetypeStats ? '已复制统计' : '复制形态统计'}
+                </button>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => void loadProjects()}
+                data-testid="workbench-refresh-registry-btn"
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
+              >
+                刷新台账
+              </button>
               {projects.length > 0 && (
                 <>
                   <button
