@@ -88,6 +88,10 @@ describe('ProjectHooksPanel', () => {
     fireEvent.click(screen.getByTestId('project-hooks-copy-md-btn'));
     fireEvent.click(screen.getByTestId('project-hooks-copy-json-btn'));
     expect(screen.getByTestId('project-hooks-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByTestId('project-hooks-copy-config-path-btn'));
+    expect(screen.getByTestId('project-hooks-copy-config-path-btn')).toHaveTextContent(
+      '已复制配置路径',
+    );
     expect(screen.getByTestId('project-hooks-refresh-btn')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('project-hooks-untrust-btn'));

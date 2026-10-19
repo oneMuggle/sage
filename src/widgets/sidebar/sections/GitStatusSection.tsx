@@ -86,6 +86,8 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const [milestonePaths, setMilestonePaths] = useState<Set<string>>(new Set());
   const [savedAllSiderL3, setSavedAllSiderL3] = useState(false);
   const [createdAllSiderMilestones, setCreatedAllSiderMilestones] = useState(false);
+  const [copiedSiderJson, setCopiedSiderJson] = useState(false);
+  const [copiedFileJsonPath, setCopiedFileJsonPath] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 获取第一个项目的路径
@@ -453,6 +455,37 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                   </button>
                   <button
                     type="button"
+                    data-testid="git-sider-copy-json-btn"
+                    onClick={async () => {
+                      setCopiedSiderJson(true);
+                      setTimeout(() => {
+                        /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedSiderJson(false);
+                      }, 1500);
+                      try {
+                        await navigator.clipboard?.writeText(
+                          JSON.stringify(
+                            {
+                              branch: status.branch || 'HEAD',
+                              isGitRepo: status.is_git_repo,
+                              filterCategory,
+                              totalChanges: status.files.length,
+                              filteredCount: filteredFiles.length,
+                              files: filteredFiles.map((f) => ({ path: f.path, status: f.status })),
+                            },
+                            null,
+                            2,
+                          ),
+                        );
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {copiedSiderJson ? '已复制JSON' : '复制JSON'}
+                  </button>
+                  <button
+                    type="button"
                     data-testid="git-sider-all-to-l3-btn"
                     onClick={async () => {
                       if (savedAllSiderL3) return;
@@ -636,6 +669,34 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                     className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
                   >
                     {copiedFilePath === file.path ? '已复制' : '复制'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`git-sider-copy-json-${file.path}`}
+                    onClick={async () => {
+                      setCopiedFileJsonPath(file.path);
+                      setTimeout(() => {
+                        /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedFileJsonPath(null);
+                      }, 1500);
+                      try {
+                        await navigator.clipboard?.writeText(
+                          JSON.stringify(
+                            {
+                              path: file.path,
+                              status: file.status,
+                              branch: status.branch || 'HEAD',
+                            },
+                            null,
+                            2,
+                          ),
+                        );
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {copiedFileJsonPath === file.path ? '已复制JSON' : '复制JSON'}
                   </button>
                 </li>
               ))}
