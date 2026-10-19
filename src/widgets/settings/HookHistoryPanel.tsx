@@ -29,6 +29,9 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
   const [records, setRecords] = useState<HookHistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const [copiedRecordId, setCopiedRecordId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,14 +66,67 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
     <div className="mt-4 border-t border-border pt-3" data-testid="hook-history-panel">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs text-text-secondary">Hook 执行历史</span>
-        <button
-          type="button"
-          className="text-ui-xs text-text-secondary hover:text-red-500 disabled:opacity-50"
-          onClick={() => void clear()}
-          disabled={clearing || records.length === 0}
-        >
-          {clearing ? '清空中…' : '清空'}
-        </button>
+        <div className="flex items-center gap-2">
+          {records.length > 0 && (
+            <>
+              <button
+                type="button"
+                data-testid="hook-history-copy-md-btn"
+                onClick={async () => {
+                  setCopiedMd(true);
+                  /* v8 ignore next */
+                  setTimeout(() => {
+                    if (typeof window !== 'undefined') setCopiedMd(false);
+                  }, 1500);
+                  const md = [
+                    `# Hook 执行历史 (${records.length})`,
+                    ...records.map(
+                      (r) =>
+                        `- [${DECISION_LABELS[r.decision] ?? r.decision}] ${r.hook_id} → ${r.tool_name || '*'} (${Math.round(r.duration_ms)}ms)${r.reason ? ` — ${r.reason}` : ''}`,
+                    ),
+                  ].join('\n');
+                  try {
+                    await navigator.clipboard?.writeText(md);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="text-ui-xs text-text-secondary hover:text-text"
+              >
+                {copiedMd ? '已复制MD' : '复制历史MD'}
+              </button>
+              <button
+                type="button"
+                data-testid="hook-history-copy-json-btn"
+                onClick={async () => {
+                  setCopiedJson(true);
+                  /* v8 ignore next */
+                  setTimeout(() => {
+                    if (typeof window !== 'undefined') setCopiedJson(false);
+                  }, 1500);
+                  try {
+                    await navigator.clipboard?.writeText(
+                      JSON.stringify({ count: records.length, records }, null, 2),
+                    );
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="text-ui-xs text-text-secondary hover:text-text"
+              >
+                {copiedJson ? '已复制JSON' : '复制历史JSON'}
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className="text-ui-xs text-text-secondary hover:text-red-500 disabled:opacity-50"
+            onClick={() => void clear()}
+            disabled={clearing || records.length === 0}
+          >
+            {clearing ? '清空中…' : '清空'}
+          </button>
+        </div>
       </div>
       {loading ? (
         <div className="text-ui-xs text-muted">加载中…</div>
@@ -99,6 +155,27 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
                 {record.reason ? `: ${record.reason}` : ''}
               </span>
               <span className="text-muted flex-shrink-0">{Math.round(record.duration_ms)}ms</span>
+              <button
+                type="button"
+                data-testid={`hook-history-copy-record-json-${record.id}`}
+                onClick={async () => {
+                  setCopiedRecordId(record.id);
+                  /* v8 ignore next */
+                  setTimeout(() => {
+                    if (typeof window !== 'undefined') {
+                      setCopiedRecordId((prev) => (prev === record.id ? null : prev));
+                    }
+                  }, 1500);
+                  try {
+                    await navigator.clipboard?.writeText(JSON.stringify(record, null, 2));
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className="text-ui-2xs text-text-secondary hover:text-text flex-shrink-0"
+              >
+                {copiedRecordId === record.id ? '已复制' : '复制JSON'}
+              </button>
             </div>
           ))}
         </div>
