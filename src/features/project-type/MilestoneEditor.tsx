@@ -164,6 +164,7 @@ export function MilestoneEditor({
   const [copiedDesc, setCopiedDesc] = useState(false);
   const [copiedTitle, setCopiedTitle] = useState(false);
   const [copiedStage, setCopiedStage] = useState(false);
+  const [copiedMilestoneJson, setCopiedMilestoneJson] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -593,6 +594,50 @@ export function MilestoneEditor({
             className="mr-auto rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
             {copiedMilestoneMd ? '已复制节点 MD' : '复制节点 MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="milestone-editor-copy-json-btn"
+            onClick={async () => {
+              setCopiedMilestoneJson(true);
+              setTimeout(() => setCopiedMilestoneJson(false), 1500);
+              try {
+                await navigator.clipboard?.writeText(
+                  JSON.stringify(
+                    {
+                      title: title || '',
+                      description: description || '',
+                      stage: stage || '',
+                      dueDate: dueDate || null,
+                      status,
+                      sortOrder,
+                    },
+                    null,
+                    2,
+                  ),
+                );
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+          >
+            {copiedMilestoneJson ? '已复制 JSON' : '复制 JSON'}
+          </button>
+          <button
+            type="button"
+            data-testid="milestone-editor-reset-btn"
+            onClick={() => {
+              setTitle('');
+              setDescription('');
+              setStage('');
+              setDueDate('');
+              setStatus('pending');
+              setSortOrder(0);
+            }}
+            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            重置表单
           </button>
           <button
             type="button"

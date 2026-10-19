@@ -63,6 +63,8 @@ export function TypeDetectionPreview({
   const [copiedVcs, setCopiedVcs] = useState(false);
   const [copiedFullBlueprint, setCopiedFullBlueprint] = useState(false);
   const [copiedDetailsMd, setCopiedDetailsMd] = useState(false);
+  const [copiedConfidence, setCopiedConfidence] = useState(false);
+  const [copiedSignalMdIdx, setCopiedSignalMdIdx] = useState<number | null>(null);
 
   if (loading) {
     return (
@@ -127,6 +129,24 @@ export function TypeDetectionPreview({
         </span>
         <span className="text-xs text-muted-foreground">(置信度 {confidencePercent}%)</span>
         <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            data-testid="detection-copy-confidence-btn"
+            onClick={async () => {
+              setCopiedConfidence(true);
+              setTimeout(() => setCopiedConfidence(false), 1500);
+              try {
+                await navigator.clipboard?.writeText(
+                  `${detectedBlueprint.label} (${result.detectedType}) · 置信度 ${confidencePercent}%`,
+                );
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {copiedConfidence ? '已复制置信度' : '复制置信度'}
+          </button>
           <button
             type="button"
             data-testid="detection-copy-md-btn"
@@ -219,6 +239,7 @@ export function TypeDetectionPreview({
                 className="flex items-center justify-between gap-2 text-xs text-muted-foreground"
               >
                 <span>• {signal}</span>
+                <div className="flex items-center gap-1">
                 <button
                   type="button"
                   data-testid={`detection-copy-signal-${idx}`}
@@ -235,6 +256,25 @@ export function TypeDetectionPreview({
                 >
                   {copiedSignalIdx === idx ? '已复制' : '复制依据'}
                 </button>
+                <button
+                  type="button"
+                  data-testid={`detection-copy-signal-md-${idx}`}
+                  onClick={async () => {
+                    setCopiedSignalMdIdx(idx);
+                    setTimeout(() => setCopiedSignalMdIdx(null), 1500);
+                    try {
+                      await navigator.clipboard?.writeText(
+                        `- **[${detectedLabel}检测依据 #${idx + 1}]** ${signal}`,
+                      );
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedSignalMdIdx === idx ? '已复制MD' : '复制MD项'}
+                </button>
+                </div>
               </li>
             ))}
           </ul>

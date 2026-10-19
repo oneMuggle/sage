@@ -165,6 +165,7 @@ export function ConstraintEditor({
   const [copiedContent, setCopiedContent] = useState(false);
   const [copiedCategory, setCopiedCategory] = useState(false);
   const [copiedTestPath, setCopiedTestPath] = useState(false);
+  const [copiedRuleJson, setCopiedRuleJson] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -576,6 +577,49 @@ export function ConstraintEditor({
             className="mr-auto rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
           >
             {copiedRuleMd ? '已复制规则 MD' : '复制规则 MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="constraint-editor-copy-json-btn"
+            onClick={async () => {
+              setCopiedRuleJson(true);
+              setTimeout(() => setCopiedRuleJson(false), 1500);
+              try {
+                await navigator.clipboard?.writeText(
+                  JSON.stringify(
+                    {
+                      category: category || 'convention',
+                      content: content || '',
+                      triggerPattern: triggerPattern.trim() || 'always',
+                      priority,
+                      enabled,
+                    },
+                    null,
+                    2,
+                  ),
+                );
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+          >
+            {copiedRuleJson ? '已复制 JSON' : '复制 JSON'}
+          </button>
+          <button
+            type="button"
+            data-testid="constraint-editor-reset-btn"
+            onClick={() => {
+              setCategory('');
+              setContent('');
+              setTriggerPattern('');
+              setPriority(5);
+              setEnabled(true);
+              setSamplePath('');
+            }}
+            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            重置表单
           </button>
           <button
             type="button"
