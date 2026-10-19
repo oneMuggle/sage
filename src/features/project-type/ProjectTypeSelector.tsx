@@ -91,6 +91,8 @@ export function ProjectTypeSelector({
   const [copiedStages, setCopiedStages] = useState(false);
   const [copiedVcs, setCopiedVcs] = useState(false);
   const [copiedPositioning, setCopiedPositioning] = useState(false);
+  const [copiedBlueprintJson, setCopiedBlueprintJson] = useState(false);
+  const [copiedAllSuiteMd, setCopiedAllSuiteMd] = useState(false);
 
   const runDetection = useCallback(async () => {
     if (!projectPath || typeof projectApi?.detectType !== 'function') return;
@@ -369,6 +371,35 @@ export function ProjectTypeSelector({
                     </button>
                     <button
                       type="button"
+                      data-testid="selector-copy-blueprint-json-btn"
+                      onClick={async () => {
+                        setCopiedBlueprintJson(true);
+                        setTimeout(() => setCopiedBlueprintJson(false), 1500);
+                        try {
+                          await navigator.clipboard?.writeText(
+                            JSON.stringify(
+                              {
+                                type: activeBp.type,
+                                label: activeBp.label,
+                                vcsLabel: activeBp.vcsLabel,
+                                directories: activeBp.directories,
+                                stages: activeBp.stages.map((s) => s.id),
+                                subTemplates: activeBp.subTemplates.map((t) => t.key),
+                              },
+                              null,
+                              2,
+                            ),
+                          );
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }}
+                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                    >
+                      {copiedBlueprintJson ? '已复制 JSON' : '复制蓝图 JSON'}
+                    </button>
+                    <button
+                      type="button"
                       data-testid="selector-suite-toggle-btn"
                       onClick={() => setShowSuiteDetails((v) => !v)}
                       className="rounded border border-primary/30 bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
@@ -535,6 +566,34 @@ export function ProjectTypeSelector({
                         className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                       >
                         {copiedPillars ? '已复制支柱' : '复制护栏支柱'}
+                      </button>
+                    </div>
+                    <div className="flex justify-end pt-0.5">
+                      <button
+                        type="button"
+                        data-testid="selector-copy-all-suite-md-btn"
+                        onClick={async () => {
+                          setCopiedAllSuiteMd(true);
+                          setTimeout(() => setCopiedAllSuiteMd(false), 1500);
+                          const md = [
+                            `# ${activeBp.label} · 治理清单完整详情`,
+                            `- **工作区定位**：${activeBp.positioning}`,
+                            `- **版本保护策略**：${activeBp.vcsLabel}`,
+                            `- **阶段管线**：${activeBp.stages.map((s) => s.label).join(' → ')}`,
+                            `- **标准目录**：${activeBp.directories.map((d) => `${d}/`).join(' · ')}`,
+                            `- **细分规范包**：${activeBp.subTemplates.map((t) => t.label).join(' · ')}`,
+                            `- **推荐里程碑**：${activeBp.recommendedMilestones.map((m) => m.title).join(' → ')}`,
+                            `- **护栏支柱**：${activeBp.contextPillars.join(' · ')}`,
+                          ].join('\n');
+                          try {
+                            await navigator.clipboard?.writeText(md);
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }}
+                        className="rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+                      >
+                        {copiedAllSuiteMd ? '已复制全部详情' : '复制全部治理详情 MD'}
                       </button>
                     </div>
                   </div>

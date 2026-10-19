@@ -591,6 +591,10 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('git-sider-ingest-all-btn'));
     expect(screen.getByTestId('git-sider-ingest-all-btn')).toHaveTextContent('已全入库');
     fireEvent.click(screen.getByTestId('git-sider-copy-paths-btn'));
+    fireEvent.click(screen.getByTestId('git-sider-all-to-l3-btn'));
+    expect(screen.getByTestId('git-sider-all-to-l3-btn')).toHaveTextContent('已全存L3');
+    fireEvent.click(screen.getByTestId('git-sider-all-to-milestone-btn'));
+    expect(screen.getByTestId('git-sider-all-to-milestone-btn')).toHaveTextContent('已全建里程碑');
     fireEvent.click(screen.getByTestId('git-sider-ingest-src/index.ts'));
     expect(screen.getByTestId('git-sider-ingest-src/index.ts')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('git-sider-guard-src/index.ts'));
@@ -611,7 +615,11 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('workbench-row-to-constraint-proj-sider-1')).toHaveTextContent('已转L2');
     fireEvent.click(screen.getByTestId('workbench-row-scaffold-proj-sider-1'));
     expect(screen.getByTestId('workbench-row-scaffold-proj-sider-1')).toHaveTextContent('已脚手架');
+    fireEvent.click(screen.getByTestId('workbench-row-copy-md-proj-sider-1'));
+    expect(screen.getByTestId('workbench-row-copy-md-proj-sider-1')).toHaveTextContent('已复制MD');
     fireEvent.click(screen.getByTestId('workbench-copy-project-list-btn'));
+    fireEvent.click(screen.getByTestId('workbench-copy-project-json-btn'));
+    expect(screen.getByTestId('workbench-copy-project-json-btn')).toHaveTextContent('已复制 JSON');
     fireEvent.click(screen.getByTestId('workbench-save-archetype-stats-l4-btn'));
     expect(screen.getByTestId('workbench-save-archetype-stats-l4-btn')).toHaveTextContent('已存统计L4');
     fireEvent.click(screen.getByTestId('workbench-archetype-stats-to-milestone-btn'));
