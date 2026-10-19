@@ -233,7 +233,8 @@ const electronAPI = {
     tunnelState: () => ipcRenderer.invoke('remote-mcp:tunnel-state') as Promise<RemoteTunnelState>,
     startTunnel: () => ipcRenderer.invoke('remote-mcp:tunnel-start') as Promise<RemoteTunnelState>,
     stopTunnel: () => ipcRenderer.invoke('remote-mcp:tunnel-stop') as Promise<RemoteTunnelState>,
-    emergencyStop: () => ipcRenderer.invoke('remote-mcp:emergency-stop') as Promise<RemoteTunnelState>,
+    emergencyStop: () =>
+      ipcRenderer.invoke('remote-mcp:emergency-stop') as Promise<RemoteTunnelState>,
     copyUrl: (id: string, options?: { public?: boolean }) =>
       ipcRenderer.invoke('remote-mcp:copy-url', id, options) as Promise<boolean>,
   } satisfies RemoteMcpElectronApiBridge,
@@ -611,6 +612,14 @@ const electronAPI = {
         path,
       }) as Promise<{ success: true } | { error: string }>,
   } satisfies FileElectronApiBridge,
+
+  /**
+   * P2 (2026-10-19): detected project root from startup cwd.
+   * Used as fallback auto-bind target for new sessions.
+   */
+  getDetectedProjectRoot(): Promise<string | null> {
+    return ipcRenderer.invoke('sage:get-detected-project-root') as Promise<string | null>;
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

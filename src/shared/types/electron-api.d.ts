@@ -356,10 +356,7 @@ export interface PtyElectronApiBridge {
  */
 export interface FileElectronApiBridge {
   /** 用系统默认编辑器打开指定文件（相对工作区路径） */
-  openInEditor: (
-    sessionId: string,
-    path: string,
-  ) => Promise<{ success: true } | { error: string }>;
+  openInEditor: (sessionId: string, path: string) => Promise<{ success: true } | { error: string }>;
 }
 
 export interface ElectronAPI {
@@ -507,6 +504,11 @@ export interface ElectronAPI {
    * 仅桌面端可用；Web 端 electronAPI 缺失时组件应降级显示提示。
    */
   file?: FileElectronApiBridge;
+  /**
+   * P2 (2026-10-19): detected project root from startup cwd.
+   * Returns the path if a project marker was found within 5 levels, else null.
+   */
+  getDetectedProjectRoot?: () => Promise<string | null>;
 }
 
 declare global {
