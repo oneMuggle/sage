@@ -122,6 +122,7 @@ export function StudioProfileTabPanel({
   const [l4PromotedIds, setL4PromotedIds] = useState<Set<string>>(new Set());
   const [copiedEntryId, setCopiedEntryId] = useState<string | null>(null);
   const [seededPresets, setSeededPresets] = useState(false);
+  const [seededPillars, setSeededPillars] = useState(false);
   const [copiedCatStats, setCopiedCatStats] = useState(false);
   const presets = PROFILE_PRESETS_BY_TYPE[projectType] ?? PROFILE_PRESETS_BY_TYPE.coding;
   const blueprint = getArchetypeBlueprint(projectType);
@@ -343,6 +344,46 @@ export function StudioProfileTabPanel({
             +追加支柱 #{idx + 1}
           </button>
         ))}
+        <button
+          type="button"
+          data-testid="studio-profile-pillar-fill-all-btn"
+          onClick={() => {
+            onCategoryChange('convention');
+            onDraftChange(blueprint.contextPillars.join('；'));
+          }}
+          className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/15"
+        >
+          一键组合全部支柱
+        </button>
+        {projectId && blueprint.contextPillars.length > 0 && (
+          <button
+            type="button"
+            data-testid="studio-profile-seed-pillars-btn"
+            onClick={async () => {
+              if (seededPillars) return;
+              setSeededPillars(true);
+              if (typeof projectApi?.confirmKnowledge === 'function') {
+                try {
+                  await projectApi.confirmKnowledge(projectId, {
+                    entries: blueprint.contextPillars.map((p) => ({
+                      category: 'convention',
+                      content: p,
+                      importance: 8,
+                      sourceMessageIds: [],
+                      reasoning: '上下文护栏支柱一键写入 L3 画像',
+                    })),
+                  });
+                  onRefreshProfile?.();
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+          >
+            {seededPillars ? '已写入支柱 L3' : '支柱一键写入 L3'}
+          </button>
+        )}
         {projectId && presets.length > 0 && (
           <button
             type="button"

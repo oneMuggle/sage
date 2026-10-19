@@ -61,6 +61,7 @@ export function TypeDetectionPreview({
   const [copiedSubtemplates, setCopiedSubtemplates] = useState(false);
   const [copiedAllSignals, setCopiedAllSignals] = useState(false);
   const [copiedVcs, setCopiedVcs] = useState(false);
+  const [copiedFullBlueprint, setCopiedFullBlueprint] = useState(false);
 
   if (loading) {
     return (
@@ -143,6 +144,31 @@ export function TypeDetectionPreview({
                 复制检测依据
               </>
             )}
+          </button>
+          <button
+            type="button"
+            data-testid="detection-copy-full-blueprint-btn"
+            onClick={async () => {
+              const md = [
+                `# ${detectedBlueprint.label} · 完整组织蓝图`,
+                `- **检测置信度**：${confidencePercent}%`,
+                `- **推荐版本策略**：${detectedBlueprint.vcsLabel}`,
+                `- **阶段管线**：${stagesFlow}`,
+                `- **标准目录**：${detectedBlueprint.directories.map((d) => `${d}/`).join(' · ')}`,
+                `- **护栏支柱**：${detectedBlueprint.contextPillars.join(' · ')}`,
+                `- **默认里程碑**：${detectedBlueprint.recommendedMilestones.map((m) => m.title).join(' → ')}`,
+              ].join('\n');
+              try {
+                await navigator.clipboard?.writeText(md);
+                setCopiedFullBlueprint(true);
+                setTimeout(() => setCopiedFullBlueprint(false), 1500);
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+          >
+            {copiedFullBlueprint ? '已复制完整蓝图' : '复制完整蓝图'}
           </button>
           {isMatch ? (
             <CheckCircle2 className="h-4 w-4 text-green-500" />
