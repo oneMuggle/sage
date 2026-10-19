@@ -53,6 +53,8 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [savedPillarsL4, setSavedPillarsL4] = useState(false);
   const [convertedPillarsMilestone, setConvertedPillarsMilestone] = useState(false);
   const [copiedStagePipeline, setCopiedStagePipeline] = useState(false);
+  const [savedStagesL3, setSavedStagesL3] = useState(false);
+  const [savedStagesL4, setSavedStagesL4] = useState(false);
   const [copiedOverviewPath, setCopiedOverviewPath] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [decomposeReq, setDecomposeReq] = useState('');
@@ -621,6 +623,54 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
             className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             {copiedStagePipeline ? '已复制管线' : '复制阶段管线'}
+          </button>
+          <button
+            type="button"
+            data-testid="overview-stages-to-l3-btn"
+            onClick={async () => {
+              if (savedStagesL3) return;
+              setSavedStagesL3(true);
+              if (typeof projectApi?.confirmKnowledge === 'function') {
+                try {
+                  await projectApi.confirmKnowledge(project.id, {
+                    entries: [
+                      {
+                        category: 'architecture',
+                        content: `${blueprint.label} 阶段管线 (${project.name})：${blueprint.stages.map((s) => (s.id === activeStageId ? `[${s.label}*]` : s.label)).join(' → ')}`,
+                        importance: 7,
+                        sourceMessageIds: [],
+                        reasoning: '项目概览阶段推进管线一键沉淀至 L3 画像',
+                      },
+                    ],
+                  });
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {savedStagesL3 ? '已存管线L3' : '阶段管线存L3'}
+          </button>
+          <button
+            type="button"
+            data-testid="overview-stages-to-l4-btn"
+            onClick={async () => {
+              if (savedStagesL4) return;
+              setSavedStagesL4(true);
+              if (typeof projectApi?.addMaterial === 'function') {
+                try {
+                  await projectApi.addMaterial(project.id, {
+                    content: `# ${blueprint.label} · 生命周期阶段管线 (${project.name})\n${blueprint.stages.map((s, i) => `${i + 1}. ${s.label} (${s.id})${s.id === activeStageId ? ' [当前阶段]' : ''} — ${s.hint}`).join('\n')}`,
+                  });
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {savedStagesL4 ? '已存管线L4' : '阶段管线存L4'}
           </button>
           {(() => {
             const idx = blueprint.stages.findIndex((s) => s.id === activeStageId);

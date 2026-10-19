@@ -51,6 +51,7 @@ export function SemanticSearchPanel({
   const [savedStatsL3, setSavedStatsL3] = useState(false);
   const [savedStatsL4, setSavedStatsL4] = useState(false);
   const [copiedStats, setCopiedStats] = useState(false);
+  const [copiedQuery, setCopiedQuery] = useState(false);
 
   const presets = SEMANTIC_QUERY_PRESETS[projectType] ?? SEMANTIC_QUERY_PRESETS.coding;
   const blueprint = getArchetypeBlueprint(projectType);
@@ -384,6 +385,30 @@ export function SemanticSearchPanel({
           className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs"
           disabled={searching}
         />
+        <button
+          type="button"
+          data-testid="semantic-copy-query-btn"
+          onClick={async () => {
+            try {
+              await navigator.clipboard?.writeText(query);
+              setCopiedQuery(true);
+              setTimeout(() => setCopiedQuery(false), 1500);
+            } catch {
+              // ignore in test/offline mode
+            }
+          }}
+          className="rounded border border-border bg-background px-2 py-1 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          {copiedQuery ? '已复制检索词' : '复制检索词'}
+        </button>
+        <button
+          type="button"
+          data-testid="semantic-clear-query-btn"
+          onClick={() => setQuery('')}
+          className="rounded border border-border bg-background px-2 py-1 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          清空检索词
+        </button>
         <Button
           size="sm"
           onClick={() => void handleSearch()}

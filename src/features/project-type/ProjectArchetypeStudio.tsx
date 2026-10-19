@@ -55,8 +55,10 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const [copiedStages, setCopiedStages] = useState(false);
   const [copiedPillars, setCopiedPillars] = useState(false);
   const [copiedMilestones, setCopiedMilestones] = useState(false);
+  const [copiedSubtemplates, setCopiedSubtemplates] = useState(false);
   const [scaffolded, setScaffolded] = useState(false);
   const [seededMilestones, setSeededMilestones] = useState(false);
+  const [convertedBlueprintL2, setConvertedBlueprintL2] = useState(false);
 
   const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
 
@@ -293,6 +295,26 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
               >
                 {copiedMilestones ? '已复制里程碑' : '复制推荐里程碑'}
               </button>
+              <button
+                type="button"
+                data-testid="studio-copy-subtemplates-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard?.writeText(
+                      blueprint.subTemplates
+                        .map((t, i) => `${i + 1}. ${t.label} (${t.key}) — ${t.description}`)
+                        .join('\n'),
+                    );
+                    setCopiedSubtemplates(true);
+                    setTimeout(() => setCopiedSubtemplates(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {copiedSubtemplates ? '已复制预设包' : '复制预设包'}
+              </button>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -470,6 +492,33 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
               >
                 {seededMilestones ? '已播种里程碑' : '一键播种推荐里程碑'}
+              </button>
+              <button
+                type="button"
+                data-testid="studio-blueprint-to-constraint-btn"
+                onClick={async () => {
+                  if (convertedBlueprintL2) return;
+                  setConvertedBlueprintL2(true);
+                  if (typeof projectApi?.createConstraint === 'function') {
+                    const bp =
+                      ARCHETYPE_BLUEPRINTS[
+                        (activeProject.projectType ?? activeProject.detectedType ?? 'business') as ProjectType
+                      ];
+                    try {
+                      await projectApi.createConstraint(activeProject.id, {
+                        category: 'archetype_blueprint',
+                        content: `[${bp.label}蓝图护栏] 标准目录：${bp.directories.join('、')} · 版本控制：${bp.vcsLabel}`,
+                        triggerPattern: 'always',
+                        priority: 8,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+              >
+                {convertedBlueprintL2 ? '已转蓝图L2' : '当前蓝图转L2'}
               </button>
               <Button
                 size="sm"
