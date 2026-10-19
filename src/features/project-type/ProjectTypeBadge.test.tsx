@@ -298,7 +298,9 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     expect(screen.getByText('固定随机种子为 42')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('knowledge-category-filter-convention'));
+    fireEvent.click(screen.getByTestId('knowledge-select-filtered-btn'));
     fireEvent.click(screen.getByTestId('knowledge-category-filter-all'));
+    fireEvent.click(screen.getByTestId('knowledge-copy-selected-md-btn'));
     fireEvent.click(screen.getByTestId('knowledge-batch-to-constraint-btn'));
     expect(screen.getByTestId('knowledge-to-constraint-0')).toHaveTextContent('已转 L2 约束');
     fireEvent.click(screen.getByTestId('knowledge-batch-to-l4-btn'));

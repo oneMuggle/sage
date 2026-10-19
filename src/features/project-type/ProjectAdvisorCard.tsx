@@ -80,6 +80,9 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [l4SuggestionIndices, setL4SuggestionIndices] = useState<Set<number>>(new Set());
   const [batchSuggestionsMilestoned, setBatchSuggestionsMilestoned] = useState(false);
   const [batchSuggestionsConstrained, setBatchSuggestionsConstrained] = useState(false);
+  const [batchRisksMilestoned, setBatchRisksMilestoned] = useState(false);
+  const [batchRisksSavedL3, setBatchRisksSavedL3] = useState(false);
+  const [batchSuggestionsSavedL3, setBatchSuggestionsSavedL3] = useState(false);
 
   const fetchAdvice = useCallback(async () => {
     if (typeof projectApi?.getAdvice !== 'function') {
@@ -362,6 +365,59 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                     >
                       全部风险转约束
                     </button>
+                    <button
+                      type="button"
+                      data-testid="advisor-batch-risks-to-milestone-btn"
+                      onClick={async () => {
+                        if (batchRisksMilestoned) return;
+                        setBatchRisksMilestoned(true);
+                        setMilestoneRiskIndices(new Set(risks.map((_, i) => i)));
+                        if (typeof projectApi?.createMilestone === 'function') {
+                          for (let i = 0; i < risks.length; i += 1) {
+                            const r = risks[i];
+                            try {
+                              await projectApi.createMilestone(projectId, {
+                                title: `[风险整改] ${r.description.slice(0, 56)}`,
+                                description: r.suggestion || '来源于 AI 顾问高危风险批量转化',
+                                status: 'pending',
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }
+                      }}
+                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
+                    >
+                      {batchRisksMilestoned ? '已全部风险转里程碑' : '全部风险转里程碑'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="advisor-batch-risks-to-l3-btn"
+                      onClick={async () => {
+                        if (batchRisksSavedL3) return;
+                        setBatchRisksSavedL3(true);
+                        setL3RiskIndices(new Set(risks.map((_, i) => i)));
+                        if (typeof projectApi?.confirmKnowledge === 'function') {
+                          try {
+                            await projectApi.confirmKnowledge(projectId, {
+                              entries: risks.map((r) => ({
+                                category: 'note',
+                                content: `风险记录 [${r.severity}]：${r.description}${r.suggestion ? `（建议：${r.suggestion}）` : ''}`,
+                                importance: r.severity === 'high' ? 9 : 7,
+                                sourceMessageIds: [],
+                                reasoning: 'M3 AI 顾问全部风险批量沉淀至 L3 画像',
+                              })),
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
+                    >
+                      {batchRisksSavedL3 ? '已全部风险存 L3' : '全部风险存 L3'}
+                    </button>
                   </div>
                 </div>
                 <ul className="space-y-1">
@@ -538,6 +594,33 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
                     >
                       {batchSuggestionsMilestoned ? '已全部转里程碑' : '全部建议转里程碑'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="advisor-batch-suggestions-to-l3-btn"
+                      onClick={async () => {
+                        if (batchSuggestionsSavedL3) return;
+                        setBatchSuggestionsSavedL3(true);
+                        setL3SuggestionIndices(new Set(suggestions.map((_, i) => i)));
+                        if (typeof projectApi?.confirmKnowledge === 'function') {
+                          try {
+                            await projectApi.confirmKnowledge(projectId, {
+                              entries: suggestions.map((s) => ({
+                                category: 'decision',
+                                content: `改进决策 [${s.priority}]：${s.action}${s.reason ? `（原因：${s.reason}）` : ''}`,
+                                importance: s.priority === 'high' ? 8 : 6,
+                                sourceMessageIds: [],
+                                reasoning: 'M3 AI 顾问全部改进建议批量沉淀至 L3 画像',
+                              })),
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="rounded border border-border/60 px-1.5 py-0.5 text-ui-2xs text-muted hover:text-primary"
+                    >
+                      {batchSuggestionsSavedL3 ? '已全部建议存 L3' : '全部建议存 L3'}
                     </button>
                   </div>
                 </div>

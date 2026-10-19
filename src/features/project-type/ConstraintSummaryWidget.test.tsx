@@ -364,6 +364,12 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('advisor-suggestion-to-l3-0')).toHaveTextContent('已存L3');
     fireEvent.click(screen.getByTestId('advisor-risk-filter-high'));
     fireEvent.click(screen.getByTestId('advisor-risk-filter-all'));
+    fireEvent.click(screen.getByTestId('advisor-batch-risks-to-milestone-btn'));
+    expect(screen.getByTestId('advisor-batch-risks-to-milestone-btn')).toHaveTextContent('已全部风险转里程碑');
+    fireEvent.click(screen.getByTestId('advisor-batch-risks-to-l3-btn'));
+    expect(screen.getByTestId('advisor-batch-risks-to-l3-btn')).toHaveTextContent('已全部风险存 L3');
+    fireEvent.click(screen.getByTestId('advisor-batch-suggestions-to-l3-btn'));
+    expect(screen.getByTestId('advisor-batch-suggestions-to-l3-btn')).toHaveTextContent('已全部建议存 L3');
     fireEvent.click(screen.getByTestId('advisor-guard-all-risks-btn'));
     await waitFor(() => {
       expect(projectApi.createConstraint).toHaveBeenCalledWith(
@@ -438,7 +444,9 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('constraint-pillar-preset-0'));
     fireEvent.click(screen.getByTestId('constraint-pillar-append-0'));
+    fireEvent.click(screen.getByTestId('constraint-pillar-fill-all-btn'));
     fireEvent.click(screen.getByTestId('constraint-dir-glob-0'));
+    fireEvent.click(screen.getByTestId('constraint-copy-glob-btn'));
 
     fireEvent.change(screen.getByTestId('constraint-editor-test-path-input'), {
       target: { value: 'src/index.ts' },

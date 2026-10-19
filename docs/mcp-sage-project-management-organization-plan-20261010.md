@@ -832,5 +832,22 @@
   - 在 `ProjectTypeSelector` 治理清单面板新增阶段管线预览行与 **`复制阶段管线`**（`data-testid="selector-copy-stages-btn"`）。
 - **单元测试与门禁验证**：
   - 扩展 `Projects.test.tsx`、`ProjectTypeBadge.test.tsx` 与 `ConstraintSummaryWidget.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P62 — 组织工作台四大蓝图对比矩阵导出与活跃项目蓝图存 L4/路径复制、AI 顾问风险批量转里程碑/存 L3 与建议批量存 L3、M2 知识提取仅选中项复制与筛选类别全选、里程碑与约束编辑器全支柱组合与日期/Glob 快捷操作（已完成）
+
+- **Phase 9.1 `ProjectArchetypeStudio` 四大蓝图对比矩阵导出与活跃项目蓝图存 L4/路径复制（`src/features/project-type/ProjectArchetypeStudio.tsx`）**：
+  - 在蓝图总览卡顶部新增 **`复制四大蓝图对比 MD`**（`data-testid="studio-copy-all-blueprints-md-btn"`），一键导出代码工程、一般档案、科学研究、个人空间四大形态的工作区定位、标准目录、版本策略与阶段数对比矩阵；
+  - 在活跃项目概览卡标题栏新增 **`复制项目路径`**（`data-testid="studio-copy-active-path-btn"`）与 **`当前蓝图存 L4`**（`data-testid="studio-save-blueprint-l4-btn"`），支持复制当前工作区路径或将活跃项目的形态组织规范蓝图直接归档至 L4 参考资料库。
+- **M3 `ProjectAdvisorCard` 风险批量转里程碑/存 L3 与改进建议批量存 L3（`src/features/project-type/ProjectAdvisorCard.tsx`）**：
+  - 在风险列表标题栏新增 **`全部风险转里程碑`**（`data-testid="advisor-batch-risks-to-milestone-btn"`）与 **`全部风险存 L3`**（`data-testid="advisor-batch-risks-to-l3-btn"`），支持一键将全部风险转化为 `[风险整改]` 里程碑或沉淀为 L3 `note` 画像记录；
+  - 在改进建议列表标题栏新增 **`全部建议存 L3`**（`data-testid="advisor-batch-suggestions-to-l3-btn"`），支持将全部改进建议批量沉淀为 L3 `decision` 画像记录。
+- **M2 `KnowledgeExtractionPanel` 仅选中项 Markdown 复制与按筛选类别全选（`src/features/project-type/KnowledgeExtractionPanel.tsx`）**：
+  - 在提取结果工具栏新增 **`复制仅选中项 MD`**（`data-testid="knowledge-copy-selected-md-btn"`），支持仅复制当前勾选的知识提炼条目；
+  - 在 `knowledge-category-filter-bar` 末尾新增 **`按筛选类别全选`**（`data-testid="knowledge-select-filtered-btn"`），支持一键全选当前类别筛选下的全部提炼建议。
+- **Phase 4.1/4.2 `MilestoneEditor` & `ConstraintEditor` 全支柱一键组合与截止日期/触发 Glob 快捷操作（`src/features/project-type/MilestoneEditor.tsx`, `src/features/project-type/ConstraintEditor.tsx`）**：
+  - 在 `MilestoneEditor` 新增 **`一键填入全部支柱`**（`data-testid="milestone-pillar-fill-all-btn"`）、**`今日`**（`data-testid="milestone-due-today-btn"`）与 **`复制截止日期`**（`data-testid="milestone-copy-due-btn"`）；
+  - 在 `ConstraintEditor` 新增 **`一键组合全部支柱`**（`data-testid="constraint-pillar-fill-all-btn"`）与 **`复制触发 Glob`**（`data-testid="constraint-copy-glob-btn"`）。
+- **单元测试与门禁验证**：
+  - 扩展 `ProjectArchetypeStudio.test.tsx`、`ProjectTypeBadge.test.tsx`、`MilestoneProgressWidget.test.tsx` 与 `ConstraintSummaryWidget.test.tsx`（4 个测试文件共 43 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
 
 

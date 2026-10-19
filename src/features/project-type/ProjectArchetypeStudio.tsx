@@ -47,6 +47,9 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const { activeProject, selectedArchetype, setSelectedArchetype, wizardOpen, setWizardOpen } =
     useStudioState();
   const [copiedBlueprint, setCopiedBlueprint] = useState(false);
+  const [copiedAllBlueprints, setCopiedAllBlueprints] = useState(false);
+  const [copiedActivePath, setCopiedActivePath] = useState(false);
+  const [savedBlueprintL4, setSavedBlueprintL4] = useState(false);
   const [scaffolded, setScaffolded] = useState(false);
 
   const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
@@ -69,6 +72,32 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="studio-copy-all-blueprints-md-btn"
+              onClick={async () => {
+                const lines = [
+                  '# 四大项目形态组织规范对比矩阵',
+                  '',
+                  '| 形态 | 工作区定位 | 标准目录 | 版本策略 | 阶段数 |',
+                  '| :--- | :--- | :--- | :--- | :---: |',
+                  ...ARCHETYPE_ORDER.map((t) => {
+                    const b = ARCHETYPE_BLUEPRINTS[t];
+                    return `| ${b.label} (${b.englishLabel}) | ${b.positioning} | ${b.directories.map((d) => `${d}/`).join(' · ')} | ${b.vcsLabel} | ${b.stages.length} |`;
+                  }),
+                ];
+                try {
+                  await navigator.clipboard?.writeText(lines.join('\n'));
+                  setCopiedAllBlueprints(true);
+                  setTimeout(() => setCopiedAllBlueprints(false), 1500);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+            >
+              {copiedAllBlueprints ? '已复制全形态对比' : '复制四大蓝图对比 MD'}
+            </button>
             <button
               type="button"
               data-testid="studio-copy-blueprint-md-btn"
@@ -225,6 +254,51 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
               <span className="text-xs text-muted-foreground font-mono">{activeProject.path}</span>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="studio-copy-active-path-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard?.writeText(activeProject.path);
+                    setCopiedActivePath(true);
+                    setTimeout(() => setCopiedActivePath(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+              >
+                {copiedActivePath ? '已复制路径' : '复制项目路径'}
+              </button>
+              <button
+                type="button"
+                data-testid="studio-save-blueprint-l4-btn"
+                onClick={async () => {
+                  if (savedBlueprintL4) return;
+                  setSavedBlueprintL4(true);
+                  if (typeof projectApi?.addMaterial === 'function') {
+                    const bp =
+                      ARCHETYPE_BLUEPRINTS[
+                        (activeProject.projectType ?? activeProject.detectedType ?? 'business') as ProjectType
+                      ];
+                    const md = [
+                      `# ${bp.label} 组织规范蓝图 (${activeProject.name})`,
+                      `- 工作区定位：${bp.positioning}`,
+                      `- 标准目录：${bp.directories.map((d) => `${d}/`).join(' · ')}`,
+                      `- 版本控制：${bp.vcsLabel}`,
+                      `- 阶段管线：${bp.stages.map((s) => s.label).join(' → ')}`,
+                    ].join('\n');
+                    try {
+                      await projectApi.addMaterial(activeProject.id, { content: md });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+              >
+                {savedBlueprintL4 ? '已存蓝图 L4' : '当前蓝图存 L4'}
+              </button>
               <button
                 type="button"
                 data-testid="studio-quick-scaffold-btn"
