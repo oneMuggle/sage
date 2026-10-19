@@ -1034,3 +1034,16 @@
   - 在编辑器底部操作栏新增 **`复制 JSON`**（`data-testid="milestone-editor-copy-json-btn"`）与 **`重置表单`**（`data-testid="milestone-editor-reset-btn"`），支持导出结构化 JSON 里程碑节点配置与一键重置编辑表单。
 - **单元测试与门禁验证**：
   - 扩展 `ConstraintSummaryWidget.test.tsx`、`ProjectTypeBadge.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（3 个测试文件共 40 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P76 — 工作台项目 JSON 清单与行内档案 MD 复制、类型选择器 JSON 蓝图与全量详情 MD 复制、侧边栏 Git 变更批量存 L3 与批量建里程碑、蓝图工作台定位与 JSON 蓝图复制（已完成）
+
+- **Phase 4.3 `WorkbenchProjectList` 工作台项目 JSON 清单与单项目档案 MD 复制（`src/widgets/sidebar/sections/WorkbenchProjectList.tsx`）**：
+  - 在工作台项目区块头部新增 **`复制项目 JSON`**（`data-testid="workbench-copy-project-json-btn"`），支持导出全部纳管项目的结构化 JSON 清单；
+  - 在项目行操作栏新增 **`复制档案MD`**（`data-testid="workbench-row-copy-md-${project.id}"`），支持一键复制单项目的 Markdown 档案摘要。
+- **Phase 4.1 `ProjectTypeSelector` 治理蓝图 JSON 与全量详情 MD 复制（`src/features/project-type/ProjectTypeSelector.tsx`）**：
+  - 在已选治理形态摘要栏新增 **`复制蓝图 JSON`**（`data-testid="selector-copy-blueprint-json-btn"`），并在展开的治理清单底部新增 **`复制全部治理详情 MD`**（`data-testid="selector-copy-all-suite-md-btn"`）。
+- **Phase 4.3 `GitStatusSection` 侧边栏 Git 筛选文件批量沉淀 L3 与批量建里程碑（`src/widgets/sidebar/sections/GitStatusSection.tsx`）**：
+  - 在 `git-sider-filter-bar` 筛选栏新增 **`全存L3`**（`data-testid="git-sider-all-to-l3-btn"`）与 **`全建里程碑`**（`data-testid="git-sider-all-to-milestone-btn"`），支持将当前筛选的 Git 变更文件批量沉淀至 L3 画像（`projectApi.confirmKnowledge`）或一键创建 `[Git 批量变更复核]` 里程碑（`projectApi.createMilestone`）。
+- **Phase 4.1 `ProjectArchetypeStudio` 多形态蓝图 JSON 与工作区定位一键复制（`src/features/project-type/ProjectArchetypeStudio.tsx`）**：
+  - 在顶部工具栏新增 **`复制蓝图 JSON`**（`data-testid="studio-copy-blueprint-json-btn"`），并在三维组织详情第一栏新增 **`复制定位`**（`data-testid="studio-copy-positioning-btn"`）。
+- **单元测试与门禁验证**：
+  - 扩展 `ConstraintSummaryWidget.test.tsx`、`ProjectTypeBadge.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（3 个测试文件共 30 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

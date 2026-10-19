@@ -45,6 +45,8 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
   const [createdL2Ids, setCreatedL2Ids] = useState<Set<string>>(new Set());
   const [copiedList, setCopiedList] = useState(false);
   const [scaffoldedIds, setScaffoldedIds] = useState<Set<string>>(new Set());
+  const [copiedJsonList, setCopiedJsonList] = useState(false);
+  const [copiedRowMdId, setCopiedRowMdId] = useState<string | null>(null);
   const data = useProjectSectionData({ onOpenSession });
 
   const {
@@ -177,6 +179,36 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
               className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
             >
               {copiedList ? '已复制清单' : '复制项目清单'}
+            </button>
+          )}
+          {projects.length > 0 && (
+            <button
+              type="button"
+              data-testid="workbench-copy-project-json-btn"
+              onClick={async () => {
+                setCopiedJsonList(true);
+                setTimeout(() => setCopiedJsonList(false), 1500);
+                const json = JSON.stringify(
+                  projects.map((p) => ({
+                    id: p.id,
+                    name: p.name,
+                    path: p.path,
+                    type: p.projectType ?? p.detectedType ?? 'coding',
+                    stage: p.projectStage ?? null,
+                    sessionCount: p.sessionCount,
+                  })),
+                  null,
+                  2,
+                );
+                try {
+                  await navigator.clipboard?.writeText(json);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+            >
+              {copiedJsonList ? '已复制 JSON' : '复制项目 JSON'}
             </button>
           )}
           <button
@@ -421,6 +453,29 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                     className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
                   >
                     {copiedPathId === project.id ? '已复制' : '复制路径'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`workbench-row-copy-md-${project.id}`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setCopiedRowMdId(project.id);
+                      setTimeout(() => setCopiedRowMdId(null), 1500);
+                      const md = [
+                        `# 项目档案：${project.name}`,
+                        `- 形态：${project.projectType ?? project.detectedType ?? 'coding'}`,
+                        `- 路径：${project.path}`,
+                        `- 会话数：${project.sessionCount}`,
+                      ].join('\n');
+                      try {
+                        await navigator.clipboard?.writeText(md);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {copiedRowMdId === project.id ? '已复制MD' : '复制档案MD'}
                   </button>
                   <button
                     type="button"

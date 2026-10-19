@@ -84,6 +84,8 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const [ingestedAllSider, setIngestedAllSider] = useState(false);
   const [copiedSiderPaths, setCopiedSiderPaths] = useState(false);
   const [milestonePaths, setMilestonePaths] = useState<Set<string>>(new Set());
+  const [savedAllSiderL3, setSavedAllSiderL3] = useState(false);
+  const [createdAllSiderMilestones, setCreatedAllSiderMilestones] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 获取第一个项目的路径
@@ -448,6 +450,59 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                     className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
                   >
                     {copiedSiderPaths ? '已复制路径' : '复制路径'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="git-sider-all-to-l3-btn"
+                    onClick={async () => {
+                      if (savedAllSiderL3) return;
+                      setSavedAllSiderL3(true);
+                      if (typeof projectApi?.confirmKnowledge === 'function') {
+                        try {
+                          await projectApi.confirmKnowledge(projectId, {
+                            entries: [
+                              {
+                                category: 'note',
+                                content: `侧边栏批量沉淀 Git 变更 (${status.branch || 'HEAD'} · ${filteredFiles.length} 个文件)：${filteredFiles.slice(0, 12).map((f) => `${f.path}[${f.status}]`).join('、')}`,
+                                importance: 6,
+                                sourceMessageIds: [],
+                                reasoning: '侧边栏 Git 筛选文件批量沉淀至 L3 画像',
+                              },
+                            ],
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {savedAllSiderL3 ? '已全存L3' : '全存L3'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="git-sider-all-to-milestone-btn"
+                    onClick={async () => {
+                      if (createdAllSiderMilestones) return;
+                      setCreatedAllSiderMilestones(true);
+                      if (typeof projectApi?.createMilestone === 'function') {
+                        try {
+                          await projectApi.createMilestone(projectId, {
+                            title: `[Git 批量变更复核] ${status.branch || 'HEAD'} (${filteredFiles.length} 个文件)`,
+                            description: filteredFiles
+                              .slice(0, 12)
+                              .map((f) => `${f.path} [${f.status}]`)
+                              .join(' · '),
+                            status: 'pending',
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {createdAllSiderMilestones ? '已全建里程碑' : '全建里程碑'}
                   </button>
                 </>
               )}
