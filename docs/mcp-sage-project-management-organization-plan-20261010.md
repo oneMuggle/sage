@@ -1071,3 +1071,15 @@
   - 在展开的治理清单底部新增 **`复制全部详情 JSON`**（`data-testid="selector-copy-all-suite-json-btn"`）。
 - **单元测试与门禁验证**：
   - 扩展 `UserProfileCard.test.tsx`、`WikiProjectPicker.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `ProjectTypeBadge.test.tsx`，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P79 — 侧边栏 Git 变更 JSON 导出、多形态工作台全形态 JSON 与活动项目 MD/JSON 导出、聊天分支选择器路径/MD/JSON 导出、项目级 Hook 配置路径复制（已完成）
+
+- **Phase 4.3 `GitStatusSection` 侧边栏 Git 筛选状态与单文件 JSON 导出（`src/widgets/sidebar/sections/GitStatusSection.tsx`）**：
+  - 在状态筛选栏新增 **`复制JSON`**（`data-testid="git-sider-copy-json-btn"`），并在每条变更文件行新增 **`复制JSON`**（`data-testid="git-sider-copy-json-${file.path}"`）。
+- **Phase 4.1 `ProjectArchetypeStudio` 四大蓝图对比 JSON 与活动项目 MD/JSON 导出（`src/features/project-type/ProjectArchetypeStudio.tsx`）**：
+  - 在蓝图总览卡头部新增 **`复制四大蓝图对比 JSON`**（`data-testid="studio-copy-all-blueprints-json-btn"`），并在活动项目概览卡新增 **`复制项目 MD`**（`data-testid="studio-copy-active-project-md-btn"`）与 **`复制项目 JSON`**（`data-testid="studio-copy-active-project-json-btn"`）。
+- **Phase 4.3 `WorkspaceBranchPicker` 会话工作区分支与 Worktree 快照路径/MD/JSON 导出（`src/widgets/chat/WorkspaceBranchPicker.tsx`）**：
+  - 在分支选择器弹窗新增治理动作栏（`data-testid="workspace-branch-picker-actions"`），支持 **`复制路径`**（`data-testid="workspace-picker-copy-path-btn"`）、**`复制分支MD`**（`data-testid="workspace-picker-copy-md-btn"`）与 **`复制分支JSON`**（`data-testid="workspace-picker-copy-json-btn"`）。
+- **Phase 4.4 `ProjectHooksPanel` 项目级 Hook 配置文件路径一键复制（`src/widgets/settings/ProjectHooksPanel.tsx`）**：
+  - 在已信任与待信任两种状态下均新增 **`复制配置路径`**（`data-testid="project-hooks-copy-config-path-btn"`），一键复制 `.sage/hooks.json` 标准路径。
+- **单元测试与门禁验证**：
+  - 扩展 `ConstraintSummaryWidget.test.tsx`、`ProjectArchetypeStudio.test.tsx`、`WorkspaceBranchPicker.test.tsx` 与 `ProjectHooksPanel.test.tsx`，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
