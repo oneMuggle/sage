@@ -1008,3 +1008,16 @@
   - 在会话输入栏新增 **`清空会话 ID`**（`data-testid="knowledge-clear-session-id-btn"`），并在审核阶段类别筛选栏新增 **`反选`**（`data-testid="knowledge-invert-selection-btn"`），支持快速反转勾选候选知识条目。
 - **单元测试与门禁验证**：
   - 扩展 `ConstraintSummaryWidget.test.tsx` 与 `ProjectTypeBadge.test.tsx`（2 个测试文件共 27 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P74 — 工作台项目清单复制与行内脚手架初始化、类型选择器工作区定位复制、蓝图工作台 VCS 策略复制与蓝图建里程碑、概览阶段管线一键转 L2 约束（已完成）
+
+- **Phase 4.3 `WorkbenchProjectList` 工作台项目清单复制与行内脚手架初始化（`src/widgets/sidebar/sections/WorkbenchProjectList.tsx`）**：
+  - 在工作台项目区块头部新增 **`复制项目清单`**（`data-testid="workbench-copy-project-list-btn"`），支持一键复制全部纳管项目的名称、形态与工作区路径列表；
+  - 在项目行悬浮操作栏新增 **`+脚手架`**（`data-testid="workbench-row-scaffold-${project.id}"`），支持单项目行内一键触发形态脚手架初始化（`projectApi.scaffold`）。
+- **Phase 4.1 `ProjectTypeSelector` 治理清单工作区定位一键复制（`src/features/project-type/ProjectTypeSelector.tsx`）**：
+  - 在展开的治理清单面板（`selector-suite-details`）顶部新增工作区定位展示行与 **`复制工作区定位`**（`data-testid="selector-copy-positioning-btn"`）。
+- **Phase 4.1 & 4.3 `ProjectArchetypeStudio` 蓝图 VCS 策略复制与蓝图落地里程碑创建（`src/features/project-type/ProjectArchetypeStudio.tsx`）**：
+  - 在蓝图详情第一栏新增 **`复制 VCS 策略`**（`data-testid="studio-copy-vcs-btn"`），并在活跃项目概览栏新增 **`当前蓝图建里程碑`**（`data-testid="studio-blueprint-to-milestone-btn"`），支持将当前形态蓝图规范一键创建为验收里程碑（`projectApi.createMilestone`）。
+- **Phase 4.3 `ProjectOverviewWidgets` 生命周期阶段管线一键转 L2 约束（`src/features/project-type/ProjectOverviewWidgets.tsx`）**：
+  - 在阶段切换工具栏（`overview-stage-switcher`）新增 **`阶段管线转L2`**（`data-testid="overview-stages-to-constraint-btn"`），支持将当前形态完整阶段推进顺序一键固化为 `stage_pipeline` 类别的 L2 结构化约束规则（`projectApi.createConstraint`）。
+- **单元测试与门禁验证**：
+  - 扩展 `ProjectArchetypeStudio.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `ProjectTypeBadge.test.tsx`（3 个测试文件共 35 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

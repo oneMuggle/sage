@@ -326,6 +326,7 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('archetype-blueprint-detail-coding')).toBeInTheDocument();
     expect(screen.getByText('src/')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('studio-copy-dirs-btn'));
+    fireEvent.click(screen.getByTestId('studio-copy-vcs-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-pillars-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-milestones-btn'));
@@ -392,6 +393,8 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('studio-seed-recommended-milestones-btn')).toHaveTextContent('已播种里程碑');
     fireEvent.click(screen.getByTestId('studio-blueprint-to-constraint-btn'));
     expect(screen.getByTestId('studio-blueprint-to-constraint-btn')).toHaveTextContent('已转蓝图L2');
+    fireEvent.click(screen.getByTestId('studio-blueprint-to-milestone-btn'));
+    expect(screen.getByTestId('studio-blueprint-to-milestone-btn')).toHaveTextContent('已建蓝图里程碑');
     fireEvent.click(screen.getByTestId('overview-pillars-to-milestone-btn'));
     expect(screen.getByTestId('overview-pillars-to-milestone-btn')).toHaveTextContent('已转支柱里程碑');
     fireEvent.click(screen.getByTestId('overview-copy-stages-btn'));
@@ -399,6 +402,8 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('overview-stages-to-l3-btn')).toHaveTextContent('已存管线L3');
     fireEvent.click(screen.getByTestId('overview-stages-to-l4-btn'));
     expect(screen.getByTestId('overview-stages-to-l4-btn')).toHaveTextContent('已存管线L4');
+    fireEvent.click(screen.getByTestId('overview-stages-to-constraint-btn'));
+    expect(screen.getByTestId('overview-stages-to-constraint-btn')).toHaveTextContent('已转管线L2');
     fireEvent.click(screen.getByTestId('studio-copy-active-path-btn'));
     fireEvent.click(screen.getByTestId('studio-save-blueprint-l4-btn'));
     expect(screen.getByTestId('studio-save-blueprint-l4-btn')).toHaveTextContent('已存蓝图 L4');
