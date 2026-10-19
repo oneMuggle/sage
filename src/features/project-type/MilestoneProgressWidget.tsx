@@ -34,6 +34,8 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [promotedL3Ids, setPromotedL3Ids] = useState<Set<string>>(new Set());
   const [promotedL4Ids, setPromotedL4Ids] = useState<Set<string>>(new Set());
   const [convertedRiskL2, setConvertedRiskL2] = useState(false);
+  const [convertedRiskL3, setConvertedRiskL3] = useState(false);
+  const [convertedCompletedL3, setConvertedCompletedL3] = useState(false);
   const [copiedMilestoneId, setCopiedMilestoneId] = useState<string | null>(null);
 
   const blueprint = getArchetypeBlueprint(projectType);
@@ -316,6 +318,68 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-ui-2xs font-medium text-amber-600 hover:bg-amber-500/20"
               >
                 {convertedRiskL2 ? '已转风险L2' : `风险项转L2 (${blocked + overdueCount})`}
+              </button>
+            )}
+            {(blocked > 0 || overdueCount > 0) && (
+              <button
+                type="button"
+                data-testid="milestone-summary-risk-to-l3-btn"
+                onClick={async () => {
+                  if (convertedRiskL3) return;
+                  setConvertedRiskL3(true);
+                  const riskList = milestones.filter(
+                    (m) =>
+                      m.status === 'blocked' ||
+                      (m.status !== 'completed' && Boolean(m.dueDate && m.dueDate < todayStr)),
+                  );
+                  if (typeof projectApi?.confirmKnowledge === 'function') {
+                    try {
+                      await projectApi.confirmKnowledge(projectId, {
+                        entries: riskList.map((rm) => ({
+                          category: 'risk' as const,
+                          content: `[里程碑风险预警] ${rm.title}${rm.dueDate ? ` (截止: ${rm.dueDate})` : ''}`,
+                          importance: 9,
+                          sourceMessageIds: [],
+                          reasoning: '阻塞/逾期里程碑一键沉淀至 L3 风险画像',
+                        })),
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-ui-2xs font-medium text-amber-600 hover:bg-amber-500/20"
+              >
+                {convertedRiskL3 ? '已存风险L3' : '风险项存L3'}
+              </button>
+            )}
+            {completed > 0 && (
+              <button
+                type="button"
+                data-testid="milestone-summary-completed-to-l3-btn"
+                onClick={async () => {
+                  if (convertedCompletedL3) return;
+                  setConvertedCompletedL3(true);
+                  const doneList = milestones.filter((m) => m.status === 'completed');
+                  if (typeof projectApi?.confirmKnowledge === 'function') {
+                    try {
+                      await projectApi.confirmKnowledge(projectId, {
+                        entries: doneList.map((dm) => ({
+                          category: 'goal' as const,
+                          content: `[已达成里程碑] ${dm.title}`,
+                          importance: 7,
+                          sourceMessageIds: [],
+                          reasoning: '已完成里程碑成果沉淀至 L3 画像',
+                        })),
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {convertedCompletedL3 ? '已存完成L3' : `已完成存L3 (${completed})`}
               </button>
             )}
             <button
