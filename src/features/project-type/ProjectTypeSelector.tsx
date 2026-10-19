@@ -93,6 +93,7 @@ export function ProjectTypeSelector({
   const [copiedPositioning, setCopiedPositioning] = useState(false);
   const [copiedBlueprintJson, setCopiedBlueprintJson] = useState(false);
   const [copiedAllSuiteMd, setCopiedAllSuiteMd] = useState(false);
+  const [copiedAllSuiteJson, setCopiedAllSuiteJson] = useState(false);
 
   const runDetection = useCallback(async () => {
     if (!projectPath || typeof projectApi?.detectType !== 'function') return;
@@ -374,7 +375,9 @@ export function ProjectTypeSelector({
                       data-testid="selector-copy-blueprint-json-btn"
                       onClick={async () => {
                         setCopiedBlueprintJson(true);
-                        setTimeout(() => setCopiedBlueprintJson(false), 1500);
+                        setTimeout(() => {
+                          if (typeof window !== 'undefined') setCopiedBlueprintJson(false);
+                        }, 1500);
                         try {
                           await navigator.clipboard?.writeText(
                             JSON.stringify(
@@ -568,7 +571,41 @@ export function ProjectTypeSelector({
                         {copiedPillars ? '已复制支柱' : '复制护栏支柱'}
                       </button>
                     </div>
-                    <div className="flex justify-end pt-0.5">
+                    <div className="flex justify-end gap-1.5 pt-0.5">
+                      <button
+                        type="button"
+                        data-testid="selector-copy-all-suite-json-btn"
+                        onClick={async () => {
+                          setCopiedAllSuiteJson(true);
+                          setTimeout(() => {
+                            if (typeof window !== 'undefined') setCopiedAllSuiteJson(false);
+                          }, 1500);
+                          try {
+                            await navigator.clipboard?.writeText(
+                              JSON.stringify(
+                                {
+                                  type: activeBp.type,
+                                  label: activeBp.label,
+                                  positioning: activeBp.positioning,
+                                  vcsMode: activeBp.defaultVcsMode,
+                                  stages: activeBp.stages,
+                                  directories: activeBp.directories,
+                                  subTemplates: activeBp.subTemplates,
+                                  recommendedMilestones: activeBp.recommendedMilestones,
+                                  contextPillars: activeBp.contextPillars,
+                                },
+                                null,
+                                2,
+                              ),
+                            );
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                      >
+                        {copiedAllSuiteJson ? '已复制详情 JSON' : '复制全部详情 JSON'}
+                      </button>
                       <button
                         type="button"
                         data-testid="selector-copy-all-suite-md-btn"

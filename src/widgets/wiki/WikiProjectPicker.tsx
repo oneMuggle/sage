@@ -240,6 +240,10 @@ export function WikiProjectPicker() {
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [checkResult, setCheckResult] = useState<ProjectCheckResponse | null>(null);
   const [useFolderPicker, setUseFolderPicker] = useState(true);
+  const [copiedRecentMd, setCopiedRecentMd] = useState(false);
+  const [copiedRecentJson, setCopiedRecentJson] = useState(false);
+  const [copiedRecentIdx, setCopiedRecentIdx] = useState<number | null>(null);
+  const [copiedCheckJson, setCopiedCheckJson] = useState(false);
 
   const setErrorGlobal = useWikiStore((s) => s.setError);
   const setActivities = useActivityStore((s) => s.setItems);
@@ -428,6 +432,89 @@ export function WikiProjectPicker() {
                 <div className="text-xs text-muted">使用模拟数据浏览所有视图（推荐）</div>
               </div>
             </button>
+
+            {recents.length > 0 && (
+              <div
+                className="rounded-lg border border-border bg-bg-muted/40 p-3 space-y-2"
+                data-testid="wiki-recent-projects-section"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-text">
+                    最近打开的 Wiki 项目 ({recents.length})
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid="wiki-recent-copy-md-btn"
+                      onClick={async () => {
+                        setCopiedRecentMd(true);
+                        setTimeout(() => {
+                          if (typeof window !== 'undefined') setCopiedRecentMd(false);
+                        }, 1500);
+                        const md = [
+                          `# 最近 Wiki 项目 (${recents.length})`,
+                          ...recents.map((r) => `- **${r.name}**: \`${r.path}\``),
+                        ].join('\n');
+                        try {
+                          await navigator.clipboard?.writeText(md);
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }}
+                      className="rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text hover:bg-bg-muted"
+                    >
+                      {copiedRecentMd ? '已复制MD' : '复制最近MD'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="wiki-recent-copy-json-btn"
+                      onClick={async () => {
+                        setCopiedRecentJson(true);
+                        setTimeout(() => {
+                          if (typeof window !== 'undefined') setCopiedRecentJson(false);
+                        }, 1500);
+                        try {
+                          await navigator.clipboard?.writeText(JSON.stringify(recents, null, 2));
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }}
+                      className="rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text hover:bg-bg-muted"
+                    >
+                      {copiedRecentJson ? '已复制JSON' : '复制最近JSON'}
+                    </button>
+                  </div>
+                </div>
+                <ul className="space-y-1">
+                  {recents.slice(0, 3).map((r, idx) => (
+                    <li
+                      key={`${r.path}-${idx}`}
+                      className="flex items-center justify-between gap-2 text-xs text-muted"
+                    >
+                      <span className="truncate font-mono">{r.path}</span>
+                      <button
+                        type="button"
+                        data-testid={`wiki-recent-copy-path-${idx}`}
+                        onClick={async () => {
+                          setCopiedRecentIdx(idx);
+                          setTimeout(() => {
+                            if (typeof window !== 'undefined') setCopiedRecentIdx(null);
+                          }, 1500);
+                          try {
+                            await navigator.clipboard?.writeText(r.path);
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }}
+                        className="shrink-0 rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text hover:bg-bg-muted"
+                      >
+                        {copiedRecentIdx === idx ? '已复制' : '复制路径'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
@@ -471,7 +558,35 @@ export function WikiProjectPicker() {
                   </button>
                 )}
               </div>
-              <StatusBadge status={checkStatus} result={checkResult} />
+              <div className="flex items-center justify-between gap-2">
+                <StatusBadge status={checkStatus} result={checkResult} />
+                {activePath && checkResult && (
+                  <button
+                    type="button"
+                    data-testid="wiki-check-copy-json-btn"
+                    onClick={async () => {
+                      setCopiedCheckJson(true);
+                      setTimeout(() => {
+                        if (typeof window !== 'undefined') setCopiedCheckJson(false);
+                      }, 1500);
+                      try {
+                        await navigator.clipboard?.writeText(
+                          JSON.stringify(
+                            { path: activePath, intent, status: checkStatus, ...checkResult },
+                            null,
+                            2,
+                          ),
+                        );
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="mt-1 rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-muted hover:text-text"
+                  >
+                    {copiedCheckJson ? '已复制检查JSON' : '复制检查JSON'}
+                  </button>
+                )}
+              </div>
             </div>
             <button
               onClick={handleCreate}

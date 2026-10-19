@@ -1059,3 +1059,15 @@
   - 在已信任与待信任两种状态下均新增 **`复制JSON`**（`data-testid="project-hooks-copy-json-btn"`），支持导出结构化 Hook 安全审计状态 JSON。
 - **单元测试与门禁验证**：
   - 扩展 `Projects.test.tsx`、`ProjectTypeBadge.test.tsx`、`ProjectBadge.test.tsx` 与 `ProjectHooksPanel.test.tsx`，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P78 — 项目画像 JSON 与单条 MD/JSON 导出、Wiki 最近项目与路径检查 JSON/MD 导出、工作台行内档案 JSON 导出、类型选择器全量详情 JSON 导出（已完成）
+
+- **Phase 4.2 `ProjectProfileCard` 项目画像 JSON 与行内单条 MD/JSON 导出（`src/widgets/memory/ProjectProfileCard.tsx`）**：
+  - 在卡片头部新增 **`复制 JSON`**（`data-testid="project-profile-copy-json-btn"`），并在每条画像行新增 **`复制MD`**（`data-testid="project-profile-copy-item-md-${e.id}"`）与 **`复制JSON`**（`data-testid="project-profile-copy-item-json-${e.id}"`）。
+- **Phase 4.3 `WikiProjectPicker` 最近打开的 Wiki 项目清单 MD/JSON 导出与路径检查 JSON 导出（`src/widgets/wiki/WikiProjectPicker.tsx`）**：
+  - 在主菜单模式新增最近打开的 Wiki 项目卡片（`data-testid="wiki-recent-projects-section"`），支持 **`复制最近MD`**（`data-testid="wiki-recent-copy-md-btn"`）、**`复制最近JSON`**（`data-testid="wiki-recent-copy-json-btn"`）与单条 **`复制路径`**（`data-testid="wiki-recent-copy-path-${idx}"`），并在创建模式新增 **`复制检查JSON`**（`data-testid="wiki-check-copy-json-btn"`）。
+- **Phase 4.3 `WorkbenchProjectList` 工作台项目行内档案 JSON 导出（`src/widgets/sidebar/sections/WorkbenchProjectList.tsx`）**：
+  - 在项目行操作栏新增 **`复制档案JSON`**（`data-testid="workbench-row-copy-json-${project.id}"`），支持一键复制单项目的结构化 JSON 档案。
+- **Phase 4.1 `ProjectTypeSelector` 治理清单全量详情 JSON 导出（`src/features/project-type/ProjectTypeSelector.tsx`）**：
+  - 在展开的治理清单底部新增 **`复制全部详情 JSON`**（`data-testid="selector-copy-all-suite-json-btn"`）。
+- **单元测试与门禁验证**：
+  - 扩展 `UserProfileCard.test.tsx`、`WikiProjectPicker.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `ProjectTypeBadge.test.tsx`，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
