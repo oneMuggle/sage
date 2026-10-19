@@ -968,3 +968,17 @@
   - 在 `selector-suite-details` 治理清单预览面板新增 **`复制版本保护`**（`data-testid="selector-copy-vcs-btn"`），支持一键复制当前选中形态的版本保护策略说明。
 - **单元测试与门禁验证**：
   - 扩展 `ConstraintSummaryWidget.test.tsx` 与 `ProjectTypeBadge.test.tsx`（2 个测试文件共 27 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P71 — 蓝图工作台预设包复制与当前蓝图转 L2 护栏、项目概览阶段管线沉淀 L3/L4、约束管理器预设包复制与 Glob 测试路径复制、M4 语义检索词复制与清空（已完成）
+
+- **Phase 4.2 `ProjectArchetypeStudio` 细分预设包复制与当前蓝图一键转 L2 护栏（`src/features/project-type/ProjectArchetypeStudio.tsx`）**：
+  - 在 `3. 阶段推进管线与预设规则包` 标题栏新增 **`复制预设包`**（`data-testid="studio-copy-subtemplates-btn"`），支持一键复制当前形态推荐的细分预设规则包清单；
+  - 在当前活动项目操作栏新增 **`当前蓝图转L2`**（`data-testid="studio-blueprint-to-constraint-btn"`），支持将当前项目所属形态的标准目录与版本控制规范固化为 `archetype_blueprint`（`P8`）L2 行为护栏（`projectApi.createConstraint`）。
+- **Phase 4.3 `ProjectOverviewWidgets` 生命周期阶段管线一键沉淀 L3/L4（`src/features/project-type/ProjectOverviewWidgets.tsx`）**：
+  - 在 `overview-stage-switcher` 阶段切换栏新增 **`阶段管线存L3`**（`data-testid="overview-stages-to-l3-btn"`）与 **`阶段管线存L4`**（`data-testid="overview-stages-to-l4-btn"`），支持将当前项目所处阶段与完整生命周期管线直接沉淀至 L3 `architecture` 画像（`projectApi.confirmKnowledge`）或归档至 L4 资料库（`projectApi.addMaterial`）。
+- **Phase 4.4 `ConstraintManager` 细分预设包清单复制与 Glob 测试路径复制（`src/features/project-type/ConstraintManager.tsx`）**：
+  - 在 `constraint-preset-packs` 顶部新增 **`复制预设包清单`**（`data-testid="constraint-copy-subtemplates-btn"`），支持复制当前形态全部细分规则包名称与标识；
+  - 在 `constraint-glob-tester-bar` 当输入非空测试路径时新增 **`复制测试路径`**（`data-testid="constraint-glob-copy-path-btn"`），便于复用验证通过的触发路径样本。
+- **Phase 4.5 `SemanticSearchPanel` M4 语义检索词复制与清空（`src/features/project-type/SemanticSearchPanel.tsx`）**：
+  - 在检索输入栏新增 **`复制检索词`**（`data-testid="semantic-copy-query-btn"`）与 **`清空检索词`**（`data-testid="semantic-clear-query-btn"`），支持一键复制或重置当前语义检索查询词。
+- **单元测试与门禁验证**：
+  - 扩展 `ProjectArchetypeStudio.test.tsx` 与 `ConstraintSummaryWidget.test.tsx`（2 个测试文件共 19 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
