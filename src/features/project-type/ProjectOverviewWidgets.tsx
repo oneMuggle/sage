@@ -49,6 +49,8 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [scaffoldedOverviewDirs, setScaffoldedOverviewDirs] = useState(false);
   const [copiedPillars, setCopiedPillars] = useState(false);
   const [convertedPillarsL2, setConvertedPillarsL2] = useState(false);
+  const [savedPillarsL3, setSavedPillarsL3] = useState(false);
+  const [savedPillarsL4, setSavedPillarsL4] = useState(false);
   const [copiedOverviewPath, setCopiedOverviewPath] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [decomposeReq, setDecomposeReq] = useState('');
@@ -494,6 +496,52 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
             >
               {convertedPillarsL2 ? '已转支柱L2' : '支柱转 L2 约束'}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-pillars-to-l3-btn"
+              onClick={async () => {
+                if (savedPillarsL3) return;
+                setSavedPillarsL3(true);
+                if (typeof projectApi?.confirmKnowledge === 'function') {
+                  try {
+                    await projectApi.confirmKnowledge(project.id, {
+                      entries: blueprint.contextPillars.map((pillar) => ({
+                        category: 'convention',
+                        content: pillar,
+                        importance: 8,
+                        sourceMessageIds: [],
+                        reasoning: '概览组件护栏支柱一键沉淀至 L3 画像',
+                      })),
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {savedPillarsL3 ? '已存支柱L3' : '支柱存 L3 画像'}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-pillars-to-l4-btn"
+              onClick={async () => {
+                if (savedPillarsL4) return;
+                setSavedPillarsL4(true);
+                if (typeof projectApi?.addMaterial === 'function') {
+                  try {
+                    await projectApi.addMaterial(project.id, {
+                      content: `# ${blueprint.label} · 上下文护栏支柱 (${project.name})\n${blueprint.contextPillars.map((p) => `- ${p}`).join('\n')}`,
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {savedPillarsL4 ? '已存支柱L4' : '支柱存 L4 资料'}
             </button>
             <button
               type="button"

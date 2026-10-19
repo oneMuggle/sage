@@ -36,6 +36,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [convertedRiskL2, setConvertedRiskL2] = useState(false);
   const [convertedRiskL3, setConvertedRiskL3] = useState(false);
   const [convertedCompletedL3, setConvertedCompletedL3] = useState(false);
+  const [convertedCompletedL4, setConvertedCompletedL4] = useState(false);
   const [copiedMilestoneId, setCopiedMilestoneId] = useState<string | null>(null);
 
   const blueprint = getArchetypeBlueprint(projectType);
@@ -380,6 +381,31 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 {convertedCompletedL3 ? '已存完成L3' : `已完成存L3 (${completed})`}
+              </button>
+            )}
+            {completed > 0 && (
+              <button
+                type="button"
+                data-testid="milestone-summary-completed-to-l4-btn"
+                onClick={async () => {
+                  if (convertedCompletedL4) return;
+                  setConvertedCompletedL4(true);
+                  const doneList = milestones.filter((m) => m.status === 'completed');
+                  if (typeof projectApi?.addMaterial === 'function') {
+                    try {
+                      await projectApi.addMaterial(projectId, {
+                        content: `# 已完成里程碑成果归档 (${doneList.length} 项)\n${doneList
+                          .map((dm) => `- [x] ${dm.title} (${dm.stage || '默认阶段'})`)
+                          .join('\n')}`,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {convertedCompletedL4 ? '已存完成L4' : `已完成存L4 (${completed})`}
               </button>
             )}
             <button

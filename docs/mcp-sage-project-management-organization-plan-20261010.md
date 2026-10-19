@@ -896,3 +896,17 @@
   - 在 `MilestoneEditor` 交付说明标题栏新增 **`复制交付说明`**（`data-testid="milestone-copy-desc-btn"`）与 **`清空说明`**（`data-testid="milestone-clear-desc-btn"`）。
 - **单元测试与门禁验证**：
   - 扩展 `ConstraintSummaryWidget.test.tsx`、`MilestoneProgressWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
+### Phase P66 — 多形态工作台目录/阶段复制与蓝图存 L3、概览护栏支柱一键存 L3/L4、约束统计类别分布存 L3、里程碑进度卡已完成项一键存 L4（已完成）
+
+- **Phase 4.2 `ProjectArchetypeStudio` 标准目录清单/阶段管线复制与当前蓝图存 L3（`src/features/project-type/ProjectArchetypeStudio.tsx`）**：
+  - 在三维组织详情卡片中新增 **`复制目录清单`**（`data-testid="studio-copy-dirs-btn"`）与 **`复制阶段管线`**（`data-testid="studio-copy-stages-btn"`），支持按当前选中形态一键复制推荐目录结构或生命周期阶段管线；
+  - 在活跃项目概览工具栏新增 **`当前蓝图存 L3`**（`data-testid="studio-save-blueprint-l3-btn"`），支持将当前项目所属形态的蓝图规范一键沉淀为 L3 `architecture` 画像记录（`projectApi.confirmKnowledge`）。
+- **Phase 4.3 `ProjectOverviewWidgets` 护栏支柱一键存 L3 画像与存 L4 资料（`src/features/project-type/ProjectOverviewWidgets.tsx`）**：
+  - 在阶段治理操作栏新增 **`支柱存 L3 画像`**（`data-testid="overview-pillars-to-l3-btn"`）与 **`支柱存 L4 资料`**（`data-testid="overview-pillars-to-l4-btn"`），支持将当前形态全部上下文护栏支柱批量沉淀为 L3 `convention` 画像记录或归档至 L4 参考资料库（`projectApi.addMaterial`）。
+- **Phase 4.3 `ConstraintSummaryWidget` 约束类别分布一键存 L3（`src/features/project-type/ConstraintSummaryWidget.tsx`）**：
+  - 在按类别统计栏新增 **`分布存 L3`**（`data-testid="constraint-summary-cats-to-l3-btn"`），支持将当前 L2 启用约束的类别分布统计沉淀为 L3 `convention` 画像记录。
+- **Phase 4.3 `MilestoneProgressWidget` 已完成里程碑成果一键存 L4（`src/features/project-type/MilestoneProgressWidget.tsx`）**：
+  - 当存在已完成里程碑时，在顶部工具栏新增 **`已完成存L4`**（`data-testid="milestone-summary-completed-to-l4-btn"`），支持将全部已达成里程碑一键归档为 L4 阶段交付成果文档（`projectApi.addMaterial`）。
+- **单元测试与门禁验证**：
+  - 扩展 `ConstraintSummaryWidget.test.tsx`、`MilestoneProgressWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

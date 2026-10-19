@@ -54,6 +54,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [convertedDisabledMilestone, setConvertedDisabledMilestone] = useState(false);
   const [savedGlobL3, setSavedGlobL3] = useState(false);
   const [copiedGlobRules, setCopiedGlobRules] = useState(false);
+  const [savedCatsL3, setSavedCatsL3] = useState(false);
 
   const fetchConstraints = useCallback(async () => {
     if (typeof projectApi?.listConstraints !== 'function') {
@@ -424,6 +425,36 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   {copiedCategories ? '已复制分布' : '复制分布'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="constraint-summary-cats-to-l3-btn"
+                  onClick={async () => {
+                    if (savedCatsL3) return;
+                    setSavedCatsL3(true);
+                    if (typeof projectApi?.confirmKnowledge === 'function') {
+                      try {
+                        await projectApi.confirmKnowledge(projectId, {
+                          entries: [
+                            {
+                              category: 'convention',
+                              content: `L2 约束类别分布：${Array.from(categoryCount.entries())
+                                .map(([cat, cnt]) => `${CONSTRAINT_CATEGORY_LABELS[cat] ?? cat}(${cnt}条)`)
+                                .join('、')}`,
+                              importance: 6,
+                              sourceMessageIds: [],
+                              reasoning: 'L2 约束类别分布快照沉淀至 L3 画像',
+                            },
+                          ],
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {savedCatsL3 ? '已存分布L3' : '分布存 L3'}
                 </button>
               </div>
               {selectedCategory && (
