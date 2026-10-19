@@ -879,3 +879,20 @@
   - 在 `TypeDetectionPreview` 顶部操作栏新增 **`复制完整蓝图`**（`data-testid="detection-copy-full-blueprint-btn"`），支持一键导出检测形态的完整组织蓝图 Markdown。
 - **单元测试与门禁验证**：
   - 扩展 `Projects.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `ProjectTypeBadge.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
+### Phase P65 — Git 状态卡片分支复制与变更存 L3、M1 任务分解全支柱组合与按筛选阶段全选、M2 知识提取会话 ID 复制与提取思路转里程碑、约束/里程碑编辑器正文复制与清空（已完成）
+
+- **Phase 4.3 `GitStatusWidget` 分支名称复制与变更文件清单存 L3（`src/features/project-type/GitStatusWidget.tsx`）**：
+  - 在分支信息栏新增 **`复制分支`**（`data-testid="git-widget-copy-branch-btn"`），支持一键复制当前 Git 分支名称到剪贴板；
+  - 在变更文件明细操作栏新增 **`变更存 L3`**（`data-testid="git-widget-files-to-l3-btn"`），支持将当前筛选出的工作区 Git 变更文件清单直接沉淀为 L3 `note` 画像记录（`projectApi.confirmKnowledge`）。
+- **M1 `TaskDecomposeDialog` 全护栏支柱一键组合与按筛选阶段全选（`src/features/project-type/TaskDecomposeDialog.tsx`）**：
+  - 在输入阶段 `decompose-pillar-presets` 栏新增 **`+全部支柱`**（`data-testid="decompose-pillar-fill-all-btn"`），支持一键将当前项目形态全部上下文护栏支柱组合填入补充上下文；
+  - 在预览阶段 `decompose-stage-filter-bar` 新增 **`按筛选阶段全选`**（`data-testid="decompose-select-stage-btn"`），支持按当前选中的生命周期阶段筛选一键勾选对应主节点。
+- **M2 `KnowledgeExtractionPanel` 会话 ID 复制与提取思路转里程碑（`src/features/project-type/KnowledgeExtractionPanel.tsx`）**：
+  - 在会话输入栏新增 **`复制会话 ID`**（`data-testid="knowledge-copy-session-id-btn"`），支持一键复制当前选定或输入的会话 ID；
+  - 在审核阶段提取思路栏新增 **`思路转里程碑`**（`data-testid="knowledge-reasoning-to-milestone-btn"`），支持将 M2 知识提取思路直接转化为复盘里程碑（`projectApi.createMilestone`）。
+- **Phase 4.3 `ConstraintEditor` & `MilestoneEditor` 规则正文/交付说明一键复制与清空（`src/features/project-type/ConstraintEditor.tsx`, `src/features/project-type/MilestoneEditor.tsx`）**：
+  - 在 `ConstraintEditor` 正文标题栏新增 **`复制规则正文`**（`data-testid="constraint-copy-content-btn"`）与 **`清空正文`**（`data-testid="constraint-clear-content-btn"`）；
+  - 在 `MilestoneEditor` 交付说明标题栏新增 **`复制交付说明`**（`data-testid="milestone-copy-desc-btn"`）与 **`清空说明`**（`data-testid="milestone-clear-desc-btn"`）。
+- **单元测试与门禁验证**：
+  - 扩展 `ConstraintSummaryWidget.test.tsx`、`MilestoneProgressWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

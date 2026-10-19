@@ -48,6 +48,8 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [convertedFilesMilestone, setConvertedFilesMilestone] = useState(false);
   const [copiedAllPaths, setCopiedAllPaths] = useState(false);
   const [copiedFilePath, setCopiedFilePath] = useState<string | null>(null);
+  const [copiedBranch, setCopiedBranch] = useState(false);
+  const [savedFilesL3, setSavedFilesL3] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -214,9 +216,27 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
       </CardHeader>
       <CardContent className="space-y-2">
         {/* 分支信息 */}
-        <div className="text-sm">
-          <span className="text-muted-foreground">分支：</span>
-          <span className="font-medium">{status.current_branch}</span>
+        <div className="flex items-center justify-between gap-2 text-sm">
+          <div>
+            <span className="text-muted-foreground">分支：</span>
+            <span className="font-medium">{status.current_branch}</span>
+          </div>
+          <button
+            type="button"
+            data-testid="git-widget-copy-branch-btn"
+            onClick={async () => {
+              try {
+                await navigator.clipboard?.writeText(status.current_branch || 'HEAD');
+                setCopiedBranch(true);
+                setTimeout(() => setCopiedBranch(false), 1500);
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {copiedBranch ? '已复制分支' : '复制分支'}
+          </button>
         </div>
 
         {/* 变更统计 */}
@@ -315,6 +335,34 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                       className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
                     >
                       {convertedFilesMilestone ? '已转里程碑' : '变更转里程碑'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="git-widget-files-to-l3-btn"
+                      onClick={async () => {
+                        if (savedFilesL3) return;
+                        setSavedFilesL3(true);
+                        if (typeof projectApi?.confirmKnowledge === 'function') {
+                          try {
+                            await projectApi.confirmKnowledge(projectId, {
+                              entries: [
+                                {
+                                  category: 'note',
+                                  content: `工作区 Git 变更文件 (${status.current_branch || 'HEAD'})：${visibleChangedFiles.join(', ')}`,
+                                  importance: 6,
+                                  sourceMessageIds: [],
+                                  reasoning: 'Git 变更文件清单沉淀至 L3 画像',
+                                },
+                              ],
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                    >
+                      {savedFilesL3 ? '已存变更 L3' : '变更存 L3'}
                     </button>
                     <button
                       type="button"
