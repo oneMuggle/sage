@@ -486,6 +486,9 @@ describe('ProjectArchetypeStudio', () => {
 
     fireEvent.click(await screen.findByTestId('semantic-stats-save-l3-btn'));
     expect(screen.getByTestId('semantic-stats-save-l3-btn')).toHaveTextContent('已存统计 L3');
+    fireEvent.click(screen.getByTestId('semantic-stats-save-l4-btn'));
+    expect(screen.getByTestId('semantic-stats-save-l4-btn')).toHaveTextContent('已存统计 L4');
+    fireEvent.click(screen.getByTestId('semantic-stats-copy-btn'));
 
     fireEvent.click(screen.getByTestId('semantic-pillar-query-0'));
     await waitFor(() => {

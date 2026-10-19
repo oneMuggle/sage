@@ -52,6 +52,8 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [copiedRuleId, setCopiedRuleId] = useState<string | null>(null);
   const [copiedCategories, setCopiedCategories] = useState(false);
   const [convertedDisabledMilestone, setConvertedDisabledMilestone] = useState(false);
+  const [savedGlobL3, setSavedGlobL3] = useState(false);
+  const [copiedGlobRules, setCopiedGlobRules] = useState(false);
 
   const fetchConstraints = useCallback(async () => {
     if (typeof projectApi?.listConstraints !== 'function') {
@@ -333,12 +335,65 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
               </span>
             )}
             {globCount > 0 && (
-              <span
-                className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-ui-2xs text-primary"
-                data-testid="constraint-summary-glob-count"
-              >
-                Glob 按需触发：{globCount} 条
-              </span>
+              <>
+                <span
+                  className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-ui-2xs text-primary"
+                  data-testid="constraint-summary-glob-count"
+                >
+                  Glob 按需触发：{globCount} 条
+                </span>
+                <button
+                  type="button"
+                  data-testid="constraint-summary-glob-to-l3-btn"
+                  onClick={async () => {
+                    if (savedGlobL3) return;
+                    setSavedGlobL3(true);
+                    const globRules = enabledConstraints.filter((c) =>
+                      Boolean(c.triggerPattern?.trim()),
+                    );
+                    if (typeof projectApi?.confirmKnowledge === 'function') {
+                      try {
+                        await projectApi.confirmKnowledge(projectId, {
+                          entries: globRules.map((gc) => ({
+                            category: 'convention' as const,
+                            content: `[Glob: ${gc.triggerPattern}] ${gc.content}`,
+                            importance: gc.priority,
+                            sourceMessageIds: [],
+                            reasoning: 'Glob 按需触发约束规则沉淀至 L3 画像',
+                          })),
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {savedGlobL3 ? '已存Glob至L3' : 'Glob规则存L3'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="constraint-summary-copy-glob-btn"
+                  onClick={async () => {
+                    const globRules = enabledConstraints.filter((c) =>
+                      Boolean(c.triggerPattern?.trim()),
+                    );
+                    const md = globRules
+                      .map((gc) => `- \`${gc.triggerPattern}\` (P${gc.priority}): ${gc.content}`)
+                      .join('\n');
+                    try {
+                      await navigator.clipboard?.writeText(md);
+                      setCopiedGlobRules(true);
+                      setTimeout(() => setCopiedGlobRules(false), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedGlobRules ? '已复制Glob' : '复制Glob规则'}
+                </button>
+              </>
             )}
           </div>
         </div>

@@ -47,6 +47,9 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [seededStageMilestones, setSeededStageMilestones] = useState(false);
   const [seededStageConstraints, setSeededStageConstraints] = useState(false);
   const [scaffoldedOverviewDirs, setScaffoldedOverviewDirs] = useState(false);
+  const [copiedPillars, setCopiedPillars] = useState(false);
+  const [convertedPillarsL2, setConvertedPillarsL2] = useState(false);
+  const [copiedOverviewPath, setCopiedOverviewPath] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [decomposeReq, setDecomposeReq] = useState('');
   const [decomposeCtx, setDecomposeCtx] = useState('');
@@ -195,6 +198,24 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-ui-2xs text-muted-foreground">
                 {totalFiles} 个文件
               </span>
+            )}
+            {project.path && (
+              <button
+                type="button"
+                data-testid="overview-copy-path-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard?.writeText(project.path);
+                    setCopiedOverviewPath(true);
+                    setTimeout(() => setCopiedOverviewPath(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {copiedOverviewPath ? '已复制路径' : '复制路径'}
+              </button>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
@@ -429,6 +450,50 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
                   复制概览 MD
                 </>
               )}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-copy-pillars-btn"
+              onClick={async () => {
+                const md = [
+                  `# ${blueprint.label} · 上下文护栏支柱`,
+                  ...blueprint.contextPillars.map((p) => `- [ ] ${p}`),
+                ].join('\n');
+                try {
+                  await navigator.clipboard?.writeText(md);
+                  setCopiedPillars(true);
+                  setTimeout(() => setCopiedPillars(false), 1500);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {copiedPillars ? '已复制支柱' : '复制护栏支柱'}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-pillars-to-l2-btn"
+              onClick={async () => {
+                if (convertedPillarsL2) return;
+                setConvertedPillarsL2(true);
+                if (typeof projectApi?.createConstraint === 'function') {
+                  for (const pillar of blueprint.contextPillars) {
+                    try {
+                      await projectApi.createConstraint(project.id, {
+                        category: 'context_pillar',
+                        content: pillar,
+                        priority: 8,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {convertedPillarsL2 ? '已转支柱L2' : '支柱转 L2 约束'}
             </button>
             <button
               type="button"
