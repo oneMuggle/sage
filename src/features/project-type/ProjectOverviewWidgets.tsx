@@ -45,6 +45,8 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [createdStageMilestone, setCreatedStageMilestone] = useState(false);
   const [createdStageConstraint, setCreatedStageConstraint] = useState(false);
   const [seededStageMilestones, setSeededStageMilestones] = useState(false);
+  const [seededStageConstraints, setSeededStageConstraints] = useState(false);
+  const [scaffoldedOverviewDirs, setScaffoldedOverviewDirs] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [decomposeReq, setDecomposeReq] = useState('');
   const [decomposeCtx, setDecomposeCtx] = useState('');
@@ -363,6 +365,51 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
             >
               {seededStageMilestones ? '已导入阶段里程碑' : '导入阶段推荐里程碑'}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-scaffold-dirs-btn"
+              onClick={async () => {
+                if (scaffoldedOverviewDirs) return;
+                setScaffoldedOverviewDirs(true);
+                if (typeof projectApi?.scaffold === 'function') {
+                  try {
+                    await projectApi.scaffold(project.id, {
+                      projectType: blueprint.type,
+                      createDirectories: true,
+                      createSageMd: false,
+                      importDefaultConstraints: false,
+                      seedDefaultMilestones: false,
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+            >
+              {scaffoldedOverviewDirs ? '已补齐目录' : '补齐标准目录'}
+            </button>
+            <button
+              type="button"
+              data-testid="overview-seed-constraints-btn"
+              onClick={async () => {
+                if (seededStageConstraints) return;
+                setSeededStageConstraints(true);
+                if (typeof projectApi?.importConstraints === 'function') {
+                  try {
+                    await projectApi.importConstraints(
+                      project.id,
+                      blueprint.subTemplates[0]?.key || blueprint.type,
+                    );
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {seededStageConstraints ? '已导入默认约束' : '导入形态默认约束'}
             </button>
             <button
               type="button"

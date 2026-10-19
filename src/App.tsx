@@ -30,7 +30,7 @@ import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
 // (设置/记忆/智能体/技能/Office/知识库/编排/定时任务) 按需加载。
 // Electron file:// 下同样减少首屏解析/执行量。
 const Projects = lazy(() => import('./pages/Projects').then((m) => ({ default: m.Projects })));
-const Settings = lazy(() => import('./pages').then((m) => ({ default: m.Settings })));
+const Settings = lazy(() => import('./pages/settings').then((m) => ({ default: m.Settings })));
 const Agents = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })));
 const Knowledge = lazy(() => import('./pages/Knowledge').then((m) => ({ default: m.Knowledge })));
 const Memory = lazy(() => import('./pages/Memory').then((m) => ({ default: m.Memory })));

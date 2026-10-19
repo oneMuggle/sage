@@ -8,6 +8,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { projectApi } from '../../shared/api';
+import { I18nProvider } from '../../shared/lib/i18n';
+import { GitStatusSection } from '../../widgets/sidebar/sections/GitStatusSection';
 
 import { BusinessDocumentStyleBar, CodingHooksGovernanceBar, ResearchCitationAndToneBar } from './BuiltinCheckpointAndStyleBar';
 import { ConstraintEditor } from './ConstraintEditor';
@@ -19,10 +21,14 @@ import { ProjectAdvisorCard } from './ProjectAdvisorCard';
 // Mock projectApi
 vi.mock('../../shared/api', () => ({
   projectApi: {
+    list: vi.fn().mockResolvedValue([{ id: 'proj-sider-1', path: '/workspace/proj-sider-1', name: 'sider', lastOpenedAt: 100 }]),
     listConstraints: vi.fn(),
     createConstraint: vi.fn().mockResolvedValue({}),
+    createMilestone: vi.fn().mockResolvedValue({}),
     updateConstraint: vi.fn().mockResolvedValue({}),
+    addMaterial: vi.fn().mockResolvedValue({}),
     addMaterialFromFile: vi.fn().mockResolvedValue({}),
+    confirmKnowledge: vi.fn().mockResolvedValue({}),
     getAdvice: vi.fn().mockResolvedValue({
       healthScore: 86,
       summary: '项目约束与阶段运转健康',
@@ -41,6 +47,28 @@ vi.mock('../../shared/api/desktopInvoke', () => ({
     staged_files: ['README.md'],
     untracked_files: [],
     recent_commits: [{ sha: 'abc1234567', author: 'dev', date: '2026-10-13 10:00:00', message: 'feat: init' }],
+  }),
+}));
+
+vi.mock('../../shared/api/projectApi', () => ({
+  projectApi: {
+    list: vi.fn().mockResolvedValue([
+      { id: 'proj-sider-1', path: '/workspace/proj-sider-1', name: 'sider', lastOpenedAt: 100 },
+    ]),
+    addMaterial: vi.fn().mockResolvedValue({}),
+    addMaterialFromFile: vi.fn().mockResolvedValue({}),
+    confirmKnowledge: vi.fn().mockResolvedValue({}),
+  },
+}));
+
+vi.mock('../../shared/api/gitStatusApi', () => ({
+  getGitStatus: vi.fn().mockResolvedValue({
+    is_git_repo: true,
+    branch: 'main',
+    files: [
+      { path: 'src/index.ts', status: 'modified' },
+      { path: 'README.md', status: 'staged' },
+    ],
   }),
 }));
 
@@ -288,6 +316,10 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('constraint-summary-top-to-milestone-btn')).toHaveTextContent('已转里程碑');
 
     expect(screen.getByTestId('constraint-summary-high-priority-count')).toHaveTextContent('高优 ≥P8：1 条');
+    fireEvent.click(screen.getByTestId('constraint-summary-disabled-to-milestone-btn'));
+    expect(screen.getByTestId('constraint-summary-disabled-to-milestone-btn')).toHaveTextContent('已建复核里程碑');
+    fireEvent.click(screen.getByTestId('constraint-summary-copy-cats-btn'));
+    expect(screen.getByTestId('constraint-summary-copy-cats-btn')).toHaveTextContent(/已复制分布|复制分布/);
     fireEvent.click(screen.getByTestId('constraint-summary-enable-all-btn'));
     await waitFor(() => {
       expect(projectApi.updateConstraint).toHaveBeenCalledWith('test-project', 'c-p39-disabled', {
@@ -484,5 +516,19 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('research-copy-style-md-btn'));
     fireEvent.click(screen.getByTestId('business-copy-style-md-btn'));
     fireEvent.click(screen.getByTestId('coding-hooks-copy-status-md-btn'));
+
+    render(
+      <I18nProvider>
+        <GitStatusSection collapsed={false} onToggleCollapsed={vi.fn()} />
+      </I18nProvider>,
+    );
+    const saveL4Btn = await screen.findByTestId('git-sider-save-l4-btn');
+    fireEvent.click(saveL4Btn);
+    expect(screen.getByTestId('git-sider-save-l4-btn')).toHaveTextContent('已存L4');
+    fireEvent.click(screen.getByTestId('git-sider-save-l3-btn'));
+    expect(screen.getByTestId('git-sider-save-l3-btn')).toHaveTextContent('已存L3');
+    fireEvent.click(screen.getByTestId('git-sider-ingest-src/index.ts'));
+    expect(screen.getByTestId('git-sider-ingest-src/index.ts')).toHaveTextContent('已存L4');
+    fireEvent.click(screen.getByTestId('git-sider-copy-path-src/index.ts'));
   });
 });

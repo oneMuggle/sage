@@ -33,6 +33,8 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [promotedConstraintIds, setPromotedConstraintIds] = useState<Set<string>>(new Set());
   const [promotedL3Ids, setPromotedL3Ids] = useState<Set<string>>(new Set());
   const [promotedL4Ids, setPromotedL4Ids] = useState<Set<string>>(new Set());
+  const [convertedRiskL2, setConvertedRiskL2] = useState(false);
+  const [copiedMilestoneId, setCopiedMilestoneId] = useState<string | null>(null);
 
   const blueprint = getArchetypeBlueprint(projectType);
   const stageLabelMap = new Map(blueprint.stages.map((s) => [s.id, s.label]));
@@ -285,6 +287,37 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
             >
               {convertedActiveL2 ? '已转 L2' : '未完转 L2'}
             </button>
+            {(blocked > 0 || overdueCount > 0) && (
+              <button
+                type="button"
+                data-testid="milestone-summary-risk-to-l2-btn"
+                onClick={async () => {
+                  if (convertedRiskL2) return;
+                  setConvertedRiskL2(true);
+                  const riskList = milestones.filter(
+                    (m) =>
+                      m.status === 'blocked' ||
+                      (m.status !== 'completed' && Boolean(m.dueDate && m.dueDate < todayStr)),
+                  );
+                  if (typeof projectApi?.createConstraint === 'function') {
+                    for (const rm of riskList) {
+                      try {
+                        await projectApi.createConstraint(projectId, {
+                          category: 'risk_guard',
+                          content: `[阻塞/逾期里程碑攻坚] ${rm.title}${rm.dueDate ? ` (截止: ${rm.dueDate})` : ''}`,
+                          priority: 9,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-ui-2xs font-medium text-amber-600 hover:bg-amber-500/20"
+              >
+                {convertedRiskL2 ? '已转风险L2' : `风险项转L2 (${blocked + overdueCount})`}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => void handleCopyProgressMarkdown()}
@@ -439,6 +472,24 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                     )}
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    data-testid={`milestone-summary-copy-item-${milestone.id}`}
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard?.writeText(
+                          `[${milestone.status}] ${milestone.title}${milestone.dueDate ? ` (截止: ${milestone.dueDate})` : ''}`,
+                        );
+                        setCopiedMilestoneId(milestone.id);
+                        setTimeout(() => setCopiedMilestoneId(null), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {copiedMilestoneId === milestone.id ? '已复制' : '复制'}
+                  </button>
                   <button
                     type="button"
                     data-testid={`milestone-summary-to-constraint-${milestone.id}`}
