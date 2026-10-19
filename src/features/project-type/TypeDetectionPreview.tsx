@@ -59,6 +59,8 @@ export function TypeDetectionPreview({
   const [copiedPillars, setCopiedPillars] = useState(false);
   const [copiedMilestones, setCopiedMilestones] = useState(false);
   const [copiedSubtemplates, setCopiedSubtemplates] = useState(false);
+  const [copiedAllSignals, setCopiedAllSignals] = useState(false);
+  const [copiedVcs, setCopiedVcs] = useState(false);
 
   if (loading) {
     return (
@@ -161,7 +163,27 @@ export function TypeDetectionPreview({
 
       {result.signals.length > 0 && (
         <div className="mt-2 space-y-1">
-          <div className="text-xs font-medium text-muted-foreground">检测依据：</div>
+          <div className="flex items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+            <span>检测依据：</span>
+            <button
+              type="button"
+              data-testid="detection-copy-all-signals-btn"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard?.writeText(
+                    result.signals.map((s, i) => `${i + 1}. ${s}`).join('\n'),
+                  );
+                  setCopiedAllSignals(true);
+                  setTimeout(() => setCopiedAllSignals(false), 1500);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-normal text-foreground hover:bg-muted"
+            >
+              {copiedAllSignals ? '已复制全部依据' : '复制全部依据'}
+            </button>
+          </div>
           <ul className="space-y-0.5">
             {result.signals.map((signal, idx) => (
               <li
@@ -200,12 +222,30 @@ export function TypeDetectionPreview({
           <div>
             推荐版本策略：<span className="font-medium text-foreground">{detectedBlueprint.vcsLabel}</span>
           </div>
+          <div className="flex items-center gap-1.5">
           <span
             className="rounded bg-primary/10 px-1.5 py-0.5 text-ui-2xs font-medium text-primary"
             data-testid="detection-governance-stats"
           >
             {detectedBlueprint.recommendedMilestones.length} 个推荐里程碑 · {detectedBlueprint.subTemplates.length} 套细分规范包
           </span>
+          <button
+            type="button"
+            data-testid="detection-copy-vcs-btn"
+            onClick={async () => {
+              try {
+                await navigator.clipboard?.writeText(detectedBlueprint.vcsLabel);
+                setCopiedVcs(true);
+                setTimeout(() => setCopiedVcs(false), 1500);
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+          >
+            {copiedVcs ? '已复制策略' : '复制版本策略'}
+          </button>
+          </div>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2" data-testid="detection-stages-preview">
           <div>

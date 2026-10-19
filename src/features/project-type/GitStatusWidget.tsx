@@ -45,6 +45,9 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [commitL4Shas, setCommitL4Shas] = useState<Set<string>>(new Set());
   const [savedCommitsL3, setSavedCommitsL3] = useState(false);
   const [savedCommitsL4, setSavedCommitsL4] = useState(false);
+  const [convertedFilesMilestone, setConvertedFilesMilestone] = useState(false);
+  const [copiedAllPaths, setCopiedAllPaths] = useState(false);
+  const [copiedFilePath, setCopiedFilePath] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -277,6 +280,44 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                     <div className="ml-auto flex items-center gap-1">
                     <button
                       type="button"
+                      data-testid="git-widget-copy-paths-btn"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard?.writeText(visibleChangedFiles.join('\n'));
+                          setCopiedAllPaths(true);
+                          setTimeout(() => setCopiedAllPaths(false), 1500);
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }}
+                      className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                    >
+                      {copiedAllPaths ? '已复制路径' : '复制变更路径'}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="git-widget-files-to-milestone-btn"
+                      onClick={async () => {
+                        if (convertedFilesMilestone) return;
+                        setConvertedFilesMilestone(true);
+                        if (typeof projectApi?.createMilestone === 'function') {
+                          try {
+                            await projectApi.createMilestone(projectId, {
+                              title: `工作区 Git 变更审校 (${visibleChangedFiles.length} 个文件)`,
+                              description: visibleChangedFiles.join(', '),
+                              status: 'in_progress',
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                    >
+                      {convertedFilesMilestone ? '已转里程碑' : '变更转里程碑'}
+                    </button>
+                    <button
+                      type="button"
                       data-testid="git-widget-guard-all-btn"
                       onClick={async () => {
                         for (const filePath of visibleChangedFiles) {
@@ -310,6 +351,22 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                         <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
+                          data-testid={`git-widget-copy-path-${f}`}
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard?.writeText(f);
+                              setCopiedFilePath(f);
+                              setTimeout(() => setCopiedFilePath(null), 1500);
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }}
+                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                        >
+                          {copiedFilePath === f ? '已复制' : '复制'}
+                        </button>
+                        <button
+                          type="button"
                           data-testid={`git-widget-guard-${f}`}
                           onClick={() => void handleGuardChangedFile(f)}
                           className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
@@ -335,6 +392,31 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                         className="flex items-center justify-between gap-2 text-orange-600 dark:text-orange-400"
                       >
                         <span className="truncate">[M] {f}</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          data-testid={`git-widget-copy-path-${f}`}
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard?.writeText(f);
+                              setCopiedFilePath(f);
+                              setTimeout(() => setCopiedFilePath(null), 1500);
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }}
+                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                        >
+                          {copiedFilePath === f ? '已复制' : '复制'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`git-widget-guard-${f}`}
+                          onClick={() => void handleGuardChangedFile(f)}
+                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
+                        >
+                          {guardedFiles.has(f) ? '已护栏' : '+L2'}
+                        </button>
                         <button
                           type="button"
                           data-testid={`git-widget-ingest-${f}`}
@@ -344,6 +426,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                           <BookmarkPlus className="h-2.5 w-2.5" />
                           {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
                         </button>
+                        </div>
                       </div>
                     ))}
                   {(fileFilter === 'all' || fileFilter === 'untracked') &&
@@ -353,6 +436,31 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                         className="flex items-center justify-between gap-2 text-muted-foreground"
                       >
                         <span className="truncate">[U] {f}</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          data-testid={`git-widget-copy-path-${f}`}
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard?.writeText(f);
+                              setCopiedFilePath(f);
+                              setTimeout(() => setCopiedFilePath(null), 1500);
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }}
+                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                        >
+                          {copiedFilePath === f ? '已复制' : '复制'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`git-widget-guard-${f}`}
+                          onClick={() => void handleGuardChangedFile(f)}
+                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
+                        >
+                          {guardedFiles.has(f) ? '已护栏' : '+L2'}
+                        </button>
                         <button
                           type="button"
                           data-testid={`git-widget-ingest-${f}`}
@@ -362,6 +470,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                           <BookmarkPlus className="h-2.5 w-2.5" />
                           {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
                         </button>
+                        </div>
                       </div>
                     ))}
                 </div>
