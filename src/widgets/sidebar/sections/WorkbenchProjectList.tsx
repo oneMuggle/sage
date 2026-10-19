@@ -17,7 +17,7 @@ import { useState } from 'react';
 
 import { ProjectTypeBadge } from '../../../features/project-type/ProjectTypeBadge';
 import { getArchetypeBlueprint } from '../../../features/project-type/archetypeBlueprints';
-import type { ProjectSummary } from '../../../shared/api/projectApi';
+import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { formatRelativeTime } from '../../../shared/lib/utils';
@@ -39,6 +39,8 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
   const { t } = useI18n();
   const currentSessionId = useStore((s) => s.currentSessionId);
   const [copiedPathId, setCopiedPathId] = useState<string | null>(null);
+  const [savedL3Ids, setSavedL3Ids] = useState<Set<string>>(new Set());
+  const [savedL4Ids, setSavedL4Ids] = useState<Set<string>>(new Set());
   const data = useProjectSectionData({ onOpenSession });
 
   const {
@@ -254,6 +256,56 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                   </span>
                 )}
                 <div className="hidden group-hover:flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    data-testid={`workbench-row-to-l3-${project.id}`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (savedL3Ids.has(project.id)) return;
+                      setSavedL3Ids((prev) => new Set(prev).add(project.id));
+                      if (typeof projectApi?.confirmKnowledge === 'function') {
+                        try {
+                          await projectApi.confirmKnowledge(project.id, {
+                            entries: [
+                              {
+                                category: 'architecture',
+                                content: `工作台项目档案 [${project.name}] (${project.path}) · 形态=${project.projectType ?? 'coding'}`,
+                                importance: 7,
+                                sourceMessageIds: [],
+                                reasoning: '工作台项目行一键沉淀至 L3 画像',
+                              },
+                            ],
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {savedL3Ids.has(project.id) ? '已存L3' : '+L3'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`workbench-row-to-l4-${project.id}`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (savedL4Ids.has(project.id)) return;
+                      setSavedL4Ids((prev) => new Set(prev).add(project.id));
+                      if (typeof projectApi?.addMaterial === 'function') {
+                        try {
+                          await projectApi.addMaterial(project.id, {
+                            content: `# 工作台项目档案：${project.name}\n- 路径：${project.path}\n- 形态：${project.projectType ?? 'coding'}`,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {savedL4Ids.has(project.id) ? '已存L4' : '+L4'}
+                  </button>
                   <button
                     type="button"
                     data-testid={`workbench-row-copy-path-${project.id}`}

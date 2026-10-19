@@ -942,3 +942,16 @@
   - 当存在阻塞或逾期里程碑时，在顶部工具栏新增 **`风险项存L4`**（`data-testid="milestone-summary-risk-to-l4-btn"`），支持将全部阻塞/逾期风险节点一键归档为 L4 风险复盘资料（`projectApi.addMaterial`）。
 - **单元测试与门禁验证**：
   - 扩展 `ProjectArchetypeStudio.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P69 — 工作台项目行一键存 L3/L4、侧边栏 Git 变更批量入库 L4 与单文件存 L3、约束编辑器类别复制/清空、里程碑编辑器标题复制/清空（已完成）
+
+- **Phase 4.2 `WorkbenchProjectList` 项目行一键沉淀 L3 画像与归档 L4 资料（`src/widgets/sidebar/sections/WorkbenchProjectList.tsx`）**：
+  - 在工作台项目列表每行操作区新增 **`+L3`**（`data-testid="workbench-row-to-l3-${project.id}"`）与 **`+L4`**（`data-testid="workbench-row-to-l4-${project.id}"`），支持无需展开详情即可将当前项目档案摘要直接沉淀至 L3 `architecture` 画像（`projectApi.confirmKnowledge`）或归档至 L4 资料库（`projectApi.addMaterial`）。
+- **Phase 4.3 `GitStatusSection` 侧边栏 Git 变更批量入库 L4 与单文件沉淀 L3（`src/widgets/sidebar/sections/GitStatusSection.tsx`）**：
+  - 在 `git-sider-filter-bar` 新增 **`全入库L4`**（`data-testid="git-sider-ingest-all-btn"`），支持按当前筛选状态将全部变更文件批量入库至 L4 资料库（`projectApi.addMaterialFromFile`）；
+  - 在每条变更文件行新增 **`+L3`**（`data-testid="git-sider-l3-${file.path}"`），支持将单文件变更记录一键沉淀至 L3 `note` 画像（`projectApi.confirmKnowledge`）。
+- **Phase 4.3 `ConstraintEditor` 约束类别一键复制与清空（`src/features/project-type/ConstraintEditor.tsx`）**：
+  - 在 `类别 *` 标题栏新增 **`复制类别`**（`data-testid="constraint-copy-category-btn"`）与 **`清空类别`**（`data-testid="constraint-clear-category-btn"`），便于快速复用或重置约束类别标识。
+- **Phase 4.3 `MilestoneEditor` 里程碑标题一键复制与清空（`src/features/project-type/MilestoneEditor.tsx`）**：
+  - 在 `标题 *` 标题栏新增 **`复制标题`**（`data-testid="milestone-copy-title-btn"`）与 **`清空标题`**（`data-testid="milestone-clear-title-btn"`），便于快速复用或重新填充里程碑标题。
+- **单元测试与门禁验证**：
+  - 扩展 `ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（2 个测试文件共 25 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

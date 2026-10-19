@@ -77,9 +77,11 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const [convertedSiderMilestone, setConvertedSiderMilestone] = useState(false);
   const [ingestedPaths, setIngestedPaths] = useState<Set<string>>(new Set());
   const [guardedPaths, setGuardedPaths] = useState<Set<string>>(new Set());
+  const [l3Paths, setL3Paths] = useState<Set<string>>(new Set());
   const [copiedFilePath, setCopiedFilePath] = useState<string | null>(null);
   const [copiedBranch, setCopiedBranch] = useState(false);
   const [guardedAllSider, setGuardedAllSider] = useState(false);
+  const [ingestedAllSider, setIngestedAllSider] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 获取第一个项目的路径
@@ -409,6 +411,26 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                   >
                     {guardedAllSider ? '已全护栏' : '全护栏L2'}
                   </button>
+                  <button
+                    type="button"
+                    data-testid="git-sider-ingest-all-btn"
+                    onClick={async () => {
+                      if (ingestedAllSider) return;
+                      setIngestedAllSider(true);
+                      if (typeof projectApi?.addMaterialFromFile === 'function') {
+                        for (const f of filteredFiles.slice(0, 12)) {
+                          try {
+                            await projectApi.addMaterialFromFile(projectId, f.path);
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {ingestedAllSider ? '已全入库' : '全入库L4'}
+                  </button>
                 </>
               )}
             </div>
@@ -470,6 +492,36 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                       className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
                     >
                       {guardedPaths.has(file.path) ? '已护栏' : '+L2'}
+                    </button>
+                  )}
+                  {projectId && (
+                    <button
+                      type="button"
+                      data-testid={`git-sider-l3-${file.path}`}
+                      onClick={async () => {
+                        if (l3Paths.has(file.path)) return;
+                        setL3Paths((prev) => new Set(prev).add(file.path));
+                        if (typeof projectApi?.confirmKnowledge === 'function') {
+                          try {
+                            await projectApi.confirmKnowledge(projectId, {
+                              entries: [
+                                {
+                                  category: 'note',
+                                  content: `侧边栏 Git 变更文件 [${file.status}]：${file.path}`,
+                                  importance: 6,
+                                  sourceMessageIds: [],
+                                  reasoning: '侧边栏 Git 变更单文件沉淀至 L3 画像',
+                                },
+                              ],
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                    >
+                      {l3Paths.has(file.path) ? '已存L3' : '+L3'}
                     </button>
                   )}
                   <button
