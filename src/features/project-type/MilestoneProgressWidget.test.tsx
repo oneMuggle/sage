@@ -180,6 +180,10 @@ describe('MilestoneProgressWidget', () => {
       expect(screen.getByText('阻塞：')).toBeInTheDocument();
       fireEvent.click(screen.getByTestId('milestone-summary-risk-to-l2-btn'));
       expect(screen.getByTestId('milestone-summary-risk-to-l2-btn')).toHaveTextContent('已转风险L2');
+      fireEvent.click(screen.getByTestId('milestone-summary-risk-to-l3-btn'));
+      expect(screen.getByTestId('milestone-summary-risk-to-l3-btn')).toHaveTextContent('已存风险L3');
+      fireEvent.click(screen.getByTestId('milestone-summary-completed-to-l3-btn'));
+      expect(screen.getByTestId('milestone-summary-completed-to-l3-btn')).toHaveTextContent('已存完成L3');
       fireEvent.click(screen.getByTestId('milestone-summary-copy-item-m1'));
     });
   });
@@ -371,6 +375,10 @@ describe('MilestoneProgressWidget', () => {
 
     const copyBtn = await screen.findByTestId('overview-copy-summary-md-btn');
     fireEvent.click(copyBtn);
+    fireEvent.click(screen.getByTestId('overview-copy-path-btn'));
+    fireEvent.click(screen.getByTestId('overview-copy-pillars-btn'));
+    fireEvent.click(screen.getByTestId('overview-pillars-to-l2-btn'));
+    expect(screen.getByTestId('overview-pillars-to-l2-btn')).toHaveTextContent('已转支柱L2');
 
     const decomposeBtn = screen.getByTestId('overview-open-decompose-btn');
     fireEvent.click(decomposeBtn);
