@@ -849,5 +849,17 @@
 - **单元测试与门禁验证**：
   - 扩展 `ProjectArchetypeStudio.test.tsx`、`ProjectTypeBadge.test.tsx`、`MilestoneProgressWidget.test.tsx` 与 `ConstraintSummaryWidget.test.tsx`（4 个测试文件共 43 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
 
+### Phase P63 — 概览组件护栏支柱复制/批量转 L2 约束与路径复制、里程碑进度卡风险项/已完成项一键存 L3、约束摘要卡 Glob 规则存 L3 与清单复制、语义检索索引统计存 L4 与复制（已完成）
 
-
+- **Phase 4.3 `ProjectOverviewWidgets` 护栏支柱复制/批量转 L2 约束与工作区路径复制（`src/features/project-type/ProjectOverviewWidgets.tsx`）**：
+  - 在 `workspace-vcs-summary-widget` 顶部新增 **`复制路径`**（`data-testid="overview-copy-path-btn"`），支持一键复制当前项目工作区路径；
+  - 在阶段治理操作栏新增 **`复制护栏支柱`**（`data-testid="overview-copy-pillars-btn"`）与 **`支柱转 L2 约束`**（`data-testid="overview-pillars-to-l2-btn"`），支持导出当前项目形态的上下文护栏支柱清单，或一键将全部护栏支柱批量创建为 `context_pillar`（`P8`）L2 行为约束。
+- **Phase 4.3 `MilestoneProgressWidget` 风险项与已完成项一键沉淀至 L3（`src/features/project-type/MilestoneProgressWidget.tsx`）**：
+  - 当存在阻塞或逾期里程碑时，在顶部工具栏新增 **`风险项存L3`**（`data-testid="milestone-summary-risk-to-l3-btn"`），支持将全部阻塞/逾期里程碑一键沉淀为 L3 `risk` 画像记录；
+  - 当存在已完成里程碑时，在顶部工具栏新增 **`已完成存L3`**（`data-testid="milestone-summary-completed-to-l3-btn"`），支持将已达成里程碑一键沉淀为 L3 `goal` 画像记录。
+- **Phase 4.3 `ConstraintSummaryWidget` Glob 按需触发规则存 L3 与清单复制（`src/features/project-type/ConstraintSummaryWidget.tsx`）**：
+  - 当存在 Glob 按需触发规则时，在 `constraint-summary-glob-count` 旁新增 **`Glob规则存L3`**（`data-testid="constraint-summary-glob-to-l3-btn"`）与 **`复制Glob规则`**（`data-testid="constraint-summary-copy-glob-btn"`），支持将按需触发规则批量沉淀至 L3 `convention` 画像或导出 Glob 触发清单。
+- **M4 `SemanticSearchPanel` 向量索引统计存 L4 与复制（`src/features/project-type/SemanticSearchPanel.tsx`）**：
+  - 在 `semantic-indexing-stats` 索引状态栏新增 **`索引统计存 L4`**（`data-testid="semantic-stats-save-l4-btn"`）与 **`复制统计`**（`data-testid="semantic-stats-copy-btn"`），支持将当前向量索引健康度快照归档至 L4 参考资料库或复制到剪贴板。
+- **单元测试与门禁验证**：
+  - 扩展 `MilestoneProgressWidget.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

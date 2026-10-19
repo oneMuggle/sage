@@ -316,6 +316,9 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('constraint-summary-top-to-milestone-btn')).toHaveTextContent('已转里程碑');
 
     expect(screen.getByTestId('constraint-summary-high-priority-count')).toHaveTextContent('高优 ≥P8：1 条');
+    fireEvent.click(screen.getByTestId('constraint-summary-glob-to-l3-btn'));
+    expect(screen.getByTestId('constraint-summary-glob-to-l3-btn')).toHaveTextContent('已存Glob至L3');
+    fireEvent.click(screen.getByTestId('constraint-summary-copy-glob-btn'));
     fireEvent.click(screen.getByTestId('constraint-summary-disabled-to-milestone-btn'));
     expect(screen.getByTestId('constraint-summary-disabled-to-milestone-btn')).toHaveTextContent('已建复核里程碑');
     fireEvent.click(screen.getByTestId('constraint-summary-copy-cats-btn'));
