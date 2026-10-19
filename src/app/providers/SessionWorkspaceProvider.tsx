@@ -34,6 +34,7 @@ import {
 
 import type { SessionWorkspaceBinding } from '../../shared/api/types';
 import { workspaceApi } from '../../shared/api/workspaceApi';
+import { clearLastWorkspacePath, setLastWorkspacePath } from '../../shared/lib/lastWorkspace';
 import { useStore } from '../../shared/lib/store';
 import { WorkspaceContext } from '../../shared/lib/workspaceContext';
 
@@ -165,6 +166,9 @@ export function SessionWorkspaceProvider({ children }: SessionWorkspaceProviderP
       try {
         const res = await workspaceApi.bind(sessionId, workspacePath);
         applyReady(myRequestId, res.binding);
+        // P1 (2026-10-19): remember the last bound workspace so new
+        // sessions can auto-bind to it instead of starting unbound.
+        setLastWorkspacePath(workspacePath);
       } catch (err: unknown) {
         applyError(myRequestId, errorMessage(err));
         throw err;
@@ -181,6 +185,9 @@ export function SessionWorkspaceProvider({ children }: SessionWorkspaceProviderP
     try {
       await workspaceApi.revoke(sessionId);
       applyReady(myRequestId, null);
+      // P1 (2026-10-19): clear the remembered workspace when the user
+      // explicitly revokes — next session starts fresh.
+      clearLastWorkspacePath();
     } catch (err: unknown) {
       applyError(myRequestId, errorMessage(err));
       throw err;

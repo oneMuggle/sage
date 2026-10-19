@@ -50,6 +50,7 @@ import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deep
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
 import { readLogTimezone, writeLogTimezone } from './logTimezone';
 import { setLogTimezone } from './logger';
+import { detectProjectRoot } from './projectDetector';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -315,6 +316,9 @@ let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let startedSuccessfully = false;
 let backendAuthToken: string | null = null;
 let updateManager: UpdateManager | null = null;
+// P2 (2026-10-19): detected project root from startup cwd — used as fallback
+// auto-bind target for new sessions when no lastWorkspace is stored.
+let detectedProjectRoot: string | null = null;
 async function reportUpdateStartupFailure(reason: string): Promise<boolean> {
   try {
     return (await updateManager?.onAppStartupFailure(reason)) ?? false;
@@ -2061,6 +2065,13 @@ async function registerIpcHandlers(): Promise<void> {
       };
     }
   });
+
+  // P2 (2026-10-19): expose the detected project root so the renderer can
+  // use it as a fallback auto-bind target for new sessions.
+  ipcMain.handle('sage:get-detected-project-root', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) return null;
+    return detectedProjectRoot;
+  });
 }
 
 const wikiChatOwners = new Map<string, string>();
@@ -2638,6 +2649,12 @@ app.whenReady().then(async () => {
       // 网络层断 — 不是 token 问题
       logger.warn('main: auth probe network error (not a token mismatch)', err);
     }
+  }
+
+  // P2 (2026-10-19): detect project root from cwd for auto-bind fallback.
+  detectedProjectRoot = detectProjectRoot(process.cwd());
+  if (detectedProjectRoot) {
+    logger.info(`main: detected project root at ${detectedProjectRoot}`);
   }
 
   await registerIpcHandlers();
