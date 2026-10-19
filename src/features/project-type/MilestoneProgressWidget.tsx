@@ -39,6 +39,9 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [convertedCompletedL3, setConvertedCompletedL3] = useState(false);
   const [convertedCompletedL4, setConvertedCompletedL4] = useState(false);
   const [copiedMilestoneId, setCopiedMilestoneId] = useState<string | null>(null);
+  const [copiedStagesDist, setCopiedStagesDist] = useState(false);
+  const [savedStagesDistL3, setSavedStagesDistL3] = useState(false);
+  const [savedStagesDistL4, setSavedStagesDistL4] = useState(false);
 
   const blueprint = getArchetypeBlueprint(projectType);
   const stageLabelMap = new Map(blueprint.stages.map((s) => [s.id, s.label]));
@@ -512,6 +515,72 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 {stageLabelMap.get(stageId) ?? stageId}: {count}
               </button>
             ))}
+            <button
+              type="button"
+              data-testid="milestone-summary-copy-stages-btn"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard?.writeText(
+                    milestones.map((m) => stageLabelMap.get(m.stage || 'default') ?? m.stage).join(' · '),
+                  );
+                  setCopiedStagesDist(true);
+                  setTimeout(() => setCopiedStagesDist(false), 1500);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="ml-auto rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {copiedStagesDist ? '已复制阶段分布' : '复制阶段分布'}
+            </button>
+            <button
+              type="button"
+              data-testid="milestone-summary-stages-to-l3-btn"
+              onClick={async () => {
+                if (savedStagesDistL3) return;
+                setSavedStagesDistL3(true);
+                if (typeof projectApi?.confirmKnowledge === 'function') {
+                  try {
+                    await projectApi.confirmKnowledge(projectId, {
+                      entries: [
+                        {
+                          category: 'architecture',
+                          content: `项目里程碑阶段分布 (${milestones.length} 项)`,
+                          importance: 6,
+                          sourceMessageIds: [],
+                          reasoning: '里程碑阶段分布统计沉淀至 L3 画像',
+                        },
+                      ],
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {savedStagesDistL3 ? '已存分布L3' : '阶段分布存L3'}
+            </button>
+            <button
+              type="button"
+              data-testid="milestone-summary-stages-to-l4-btn"
+              onClick={async () => {
+                if (savedStagesDistL4) return;
+                setSavedStagesDistL4(true);
+                if (typeof projectApi?.addMaterial === 'function') {
+                  try {
+                    await projectApi.addMaterial(projectId, {
+                      content: `# 里程碑阶段分布统计 (${milestones.length} 项)`,
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {savedStagesDistL4 ? '已存分布L4' : '阶段分布存L4'}
+            </button>
           </div>
         )}
 
