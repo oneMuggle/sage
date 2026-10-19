@@ -1047,3 +1047,15 @@
   - 在顶部工具栏新增 **`复制蓝图 JSON`**（`data-testid="studio-copy-blueprint-json-btn"`），并在三维组织详情第一栏新增 **`复制定位`**（`data-testid="studio-copy-positioning-btn"`）。
 - **单元测试与门禁验证**：
   - 扩展 `ConstraintSummaryWidget.test.tsx`、`ProjectTypeBadge.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（3 个测试文件共 30 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P77 — 工作台全局台账与四形态分布 JSON 导出、检测预览与规范详情 JSON 导出、Chat 头部项目语境 MD/JSON 导出、Hook 安全审计 JSON 导出（已完成）
+
+- **Phase 4.3 `Projects` 工作台全局台账与四形态统计 JSON 导出（`src/pages/Projects.tsx`）**：
+  - 在 `workbench-archetype-counts` 形态分布栏新增 **`复制统计JSON`**（`data-testid="workbench-copy-archetype-stats-json-btn"`），并在顶部工具栏新增 **`复制台账 JSON`**（`data-testid="workbench-copy-registry-json-btn"`），支持导出结构化全局受控项目台账与四形态分布 JSON。
+- **Phase 4.1 `TypeDetectionPreview` 检测结果与推荐治理详情 JSON 导出（`src/features/project-type/TypeDetectionPreview.tsx`）**：
+  - 在检测报告头部新增 **`复制检测 JSON`**（`data-testid="detection-copy-json-btn"`），并在展开的规范与里程碑详情面板新增 **`复制详情 JSON`**（`data-testid="detection-copy-details-json-btn"`）。
+- **Phase 4.2 `ProjectBadge` Chat 头部当前项目语境 Markdown 与 JSON 导出（`src/widgets/chat/ProjectBadge.tsx`）**：
+  - 在 Chat 头部项目标识右侧新增 **`复制语境MD`**（`data-testid="chat-project-copy-summary-md-btn"`）与 **`复制语境JSON`**（`data-testid="chat-project-copy-summary-json-btn"`），支持一键复制当前会话项目形态、阶段与版本保护语境。
+- **Phase 4.4 `ProjectHooksPanel` 项目级 Hook 安全审计状态 JSON 导出（`src/widgets/settings/ProjectHooksPanel.tsx`）**：
+  - 在已信任与待信任两种状态下均新增 **`复制JSON`**（`data-testid="project-hooks-copy-json-btn"`），支持导出结构化 Hook 安全审计状态 JSON。
+- **单元测试与门禁验证**：
+  - 扩展 `Projects.test.tsx`、`ProjectTypeBadge.test.tsx`、`ProjectBadge.test.tsx` 与 `ProjectHooksPanel.test.tsx`，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

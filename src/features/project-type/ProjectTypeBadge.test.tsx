@@ -138,6 +138,8 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     expect(screen.getByTestId('detection-governance-stats')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('detection-copy-md-btn'));
+    fireEvent.click(screen.getByTestId('detection-copy-json-btn'));
+    expect(screen.getByTestId('detection-copy-json-btn')).toHaveTextContent('已复制检测JSON');
     fireEvent.click(screen.getByTestId('detection-copy-confidence-btn'));
     expect(screen.getByTestId('detection-copy-confidence-btn')).toHaveTextContent('已复制置信度');
     fireEvent.click(screen.getByTestId('detection-copy-full-blueprint-btn'));
@@ -154,6 +156,8 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('detection-copy-pillars-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-milestones-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-subtemplates-btn'));
+    fireEvent.click(screen.getByTestId('detection-copy-details-json-btn'));
+    expect(screen.getByTestId('detection-copy-details-json-btn')).toHaveTextContent('已复制详情JSON');
     fireEvent.click(screen.getByTestId('detection-copy-details-md-btn'));
 
     const applyBtn = screen.getByTestId('apply-detected-type-btn');

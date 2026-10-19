@@ -31,6 +31,8 @@ const VCS_SHORT_LABELS: Record<string, string> = {
 export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgeProps) {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [copiedPath, setCopiedPath] = useState(false);
+  const [copiedSummaryMd, setCopiedSummaryMd] = useState(false);
+  const [copiedSummaryJson, setCopiedSummaryJson] = useState(false);
 
   useEffect(() => {
     if (!workspacePath || typeof projectApi?.list !== 'function') return;
@@ -119,6 +121,63 @@ export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgePro
         ) : (
           <Copy className="w-2.5 h-2.5 shrink-0" aria-hidden="true" />
         )}
+      </button>
+      <button
+        type="button"
+        onClick={async () => {
+          setCopiedSummaryMd(true);
+          setTimeout(() => {
+            if (typeof window !== 'undefined') setCopiedSummaryMd(false);
+          }, 1500);
+          const md = [
+            `# 当前会话项目语境 — ${name}`,
+            `- **工作区路径**：\`${workspacePath}\``,
+            `- **项目形态**：${blueprint?.label ?? '未分类'}`,
+            `- **当前阶段**：${stageLabel ?? '默认阶段'}`,
+            `- **版本保护**：${vcsBadgeLabel ?? '默认'}`,
+          ].join('\n');
+          try {
+            await navigator.clipboard?.writeText(md);
+          } catch {
+            // ignore in test/offline mode
+          }
+        }}
+        data-testid="chat-project-copy-summary-md-btn"
+        title="复制项目语境摘要 Markdown"
+        className="inline-flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
+      >
+        {copiedSummaryMd ? '已复制语境' : '复制语境MD'}
+      </button>
+      <button
+        type="button"
+        onClick={async () => {
+          setCopiedSummaryJson(true);
+          setTimeout(() => {
+            if (typeof window !== 'undefined') setCopiedSummaryJson(false);
+          }, 1500);
+          try {
+            await navigator.clipboard?.writeText(
+              JSON.stringify(
+                {
+                  name,
+                  path: workspacePath,
+                  projectType: effectiveType,
+                  stage: stageLabel,
+                  vcsMode: registered?.vcsMode ?? null,
+                },
+                null,
+                2,
+              ),
+            );
+          } catch {
+            // ignore in test/offline mode
+          }
+        }}
+        data-testid="chat-project-copy-summary-json-btn"
+        title="复制项目语境 JSON"
+        className="inline-flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
+      >
+        {copiedSummaryJson ? '已复制JSON' : '复制语境JSON'}
       </button>
       {onOpenWorkbench && (
         <button
