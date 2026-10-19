@@ -415,6 +415,12 @@ describe('ConstraintSummaryWidget', () => {
     });
     fireEvent.click(screen.getByTestId('git-widget-guard-README.md'));
     expect(screen.getByTestId('git-widget-guard-README.md')).toHaveTextContent('已护栏');
+    fireEvent.click(screen.getByTestId('git-widget-guard-src/App.tsx'));
+    expect(screen.getByTestId('git-widget-guard-src/App.tsx')).toHaveTextContent('已护栏');
+    fireEvent.click(screen.getByTestId('git-widget-copy-path-README.md'));
+    fireEvent.click(screen.getByTestId('git-widget-copy-paths-btn'));
+    fireEvent.click(screen.getByTestId('git-widget-files-to-milestone-btn'));
+    expect(screen.getByTestId('git-widget-files-to-milestone-btn')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('git-widget-guard-all-btn'));
     fireEvent.click(screen.getByTestId('git-widget-save-commits-l3-btn'));
     expect(screen.getByTestId('git-widget-save-commits-l3-btn')).toHaveTextContent('已沉淀至 L3');

@@ -121,6 +121,8 @@ export function StudioProfileTabPanel({
   const [milestonePromotedIds, setMilestonePromotedIds] = useState<Set<string>>(new Set());
   const [l4PromotedIds, setL4PromotedIds] = useState<Set<string>>(new Set());
   const [copiedEntryId, setCopiedEntryId] = useState<string | null>(null);
+  const [seededPresets, setSeededPresets] = useState(false);
+  const [copiedCatStats, setCopiedCatStats] = useState(false);
   const presets = PROFILE_PRESETS_BY_TYPE[projectType] ?? PROFILE_PRESETS_BY_TYPE.coding;
   const blueprint = getArchetypeBlueprint(projectType);
 
@@ -341,6 +343,35 @@ export function StudioProfileTabPanel({
             +追加支柱 #{idx + 1}
           </button>
         ))}
+        {projectId && presets.length > 0 && (
+          <button
+            type="button"
+            data-testid="studio-profile-seed-presets-btn"
+            onClick={async () => {
+              if (seededPresets) return;
+              setSeededPresets(true);
+              if (typeof projectApi?.confirmKnowledge === 'function') {
+                try {
+                  await projectApi.confirmKnowledge(projectId, {
+                    entries: presets.map((p) => ({
+                      category: p.category,
+                      content: p.content,
+                      importance: 8,
+                      sourceMessageIds: [],
+                      reasoning: '形态推荐画像预设一键入库',
+                    })),
+                  });
+                  onRefreshProfile?.();
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/15"
+          >
+            {seededPresets ? '已写入推荐画像' : '一键写入推荐画像'}
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -430,6 +461,29 @@ export function StudioProfileTabPanel({
               }`}
             >
               高优 (≥7)
+            </button>
+            <button
+              type="button"
+              data-testid="studio-profile-copy-cats-btn"
+              onClick={async () => {
+                const lines = [
+                  `# L3 画像类别分布 (${profileEntries.length} 条)`,
+                  ...PROFILE_CATEGORIES.filter((c) => c !== 'all').map(
+                    (c) =>
+                      `- ${CATEGORY_LABELS[c] ?? c} (${c}): ${profileEntries.filter((e) => e.category === c).length} 条`,
+                  ),
+                ];
+                try {
+                  await navigator.clipboard?.writeText(lines.join('\n'));
+                  setCopiedCatStats(true);
+                  setTimeout(() => setCopiedCatStats(false), 1500);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+            >
+              {copiedCatStats ? '已复制统计' : '复制类别分布'}
             </button>
           </div>
         </div>

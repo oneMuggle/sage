@@ -86,6 +86,7 @@ export function ProjectTypeSelector({
   const [copiedSubtemplates, setCopiedSubtemplates] = useState(false);
   const [copiedDirs, setCopiedDirs] = useState(false);
   const [copiedSignalIdx, setCopiedSignalIdx] = useState<number | null>(null);
+  const [copiedStages, setCopiedStages] = useState(false);
 
   const runDetection = useCallback(async () => {
     if (!projectPath || typeof projectApi?.detectType !== 'function') return;
@@ -341,6 +342,28 @@ export function ProjectTypeSelector({
                     className="border-t border-primary/20 pt-1.5 text-ui-2xs text-muted-foreground space-y-1"
                     data-testid="selector-suite-details"
                   >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        阶段管线：{activeBp.stages.map((s) => s.label).join(' → ')}
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="selector-copy-stages-btn"
+                        onClick={async () => {
+                          const md = activeBp.stages.map((s) => s.label).join(' → ');
+                          try {
+                            await navigator.clipboard?.writeText(md);
+                            setCopiedStages(true);
+                            setTimeout(() => setCopiedStages(false), 1500);
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                      >
+                        {copiedStages ? '已复制管线' : '复制阶段管线'}
+                      </button>
+                    </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>
                         标准目录：{activeBp.directories.map((d) => `${d}/`).join(' · ')}

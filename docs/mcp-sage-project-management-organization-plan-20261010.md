@@ -817,4 +817,20 @@
   - 当存在停用约束时，新增 **`停用转里程碑`**（`data-testid="constraint-summary-disabled-to-milestone-btn"`），一键创建 `[待审约束复核]` 待办里程碑。
 - **单元测试与门禁验证**：
   - 扩展 `ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（2 个测试文件共 25 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P61 — 项目工作台全局台账 L3/L4 归档与路径列表复制、L3 画像面板推荐预设一键写入与类别统计复制、Git 状态小组件全文件护栏/路径复制与变更转里程碑、检测与选择器阶段/依据快捷复制（已完成）
+
+- **项目工作台 `Projects` 全局台账沉淀 L3/L4 与工作区路径列表复制（`src/pages/Projects.tsx`）**：
+  - 在 `project-workbench-toolbar` 顶部工具栏新增 **`复制路径列表`**（`data-testid="workbench-copy-paths-btn"`）、**`存台账至L4`**（`data-testid="workbench-save-registry-l4-btn"`）与 **`存台账至L3`**（`data-testid="workbench-save-registry-l3-btn"`），支持一键复制全部受控项目工作区路径、将全局项目台账归档为首项目 L4 资料或沉淀至 L3 项目画像。
+- **L3 `StudioProfileTabPanel` 推荐预设一键写入与类别统计复制（`src/features/project-type/StudioProfileTabPanel.tsx`）**：
+  - 在 `studio-profile-presets-bar` 预设栏新增 **`一键写入推荐画像`**（`data-testid="studio-profile-seed-presets-btn"`），支持将当前形态推荐画像条目一键批量写入 L3 记忆画像（`projectApi.confirmKnowledge`）并刷新列表；
+  - 在类别筛选工具栏新增 **`复制类别分布`**（`data-testid="studio-profile-copy-cats-btn"`），支持导出 L3 画像各分类条目统计 Markdown。
+- **Phase 4.3 `GitStatusWidget` 全文件护栏/路径复制与变更集一键转里程碑（`src/features/project-type/GitStatusWidget.tsx`）**：
+  - 在 `git-status-files-list` 变更文件筛选栏新增 **`复制变更路径`**（`data-testid="git-widget-copy-paths-btn"`）与 **`变更转里程碑`**（`data-testid="git-widget-files-to-milestone-btn"`），支持复制当前筛选的变更路径列表或一键生成 `工作区 Git 变更审校` 里程碑；
+  - 为暂存、已修改及未跟踪的全部变更文件行补齐 **`复制`**（`data-testid="git-widget-copy-path-${f}"`）与 **`+L2`**（`data-testid="git-widget-guard-${f}"`）快捷操作。
+- **Phase 9.4 `TypeDetectionPreview` & `ProjectTypeSelector` 全部检测依据、版本策略与阶段管线快捷复制（`src/features/project-type/TypeDetectionPreview.tsx`, `src/features/project-type/ProjectTypeSelector.tsx`）**：
+  - 在 `TypeDetectionPreview` 检测依据标题栏与蓝图预览栏新增 **`复制全部依据`**（`data-testid="detection-copy-all-signals-btn"`）与 **`复制版本策略`**（`data-testid="detection-copy-vcs-btn"`）；
+  - 在 `ProjectTypeSelector` 治理清单面板新增阶段管线预览行与 **`复制阶段管线`**（`data-testid="selector-copy-stages-btn"`）。
+- **单元测试与门禁验证**：
+  - 扩展 `Projects.test.tsx`、`ProjectTypeBadge.test.tsx` 与 `ConstraintSummaryWidget.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
 
