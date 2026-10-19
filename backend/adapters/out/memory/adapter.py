@@ -254,20 +254,6 @@ class MemoryAdapter:
         # 更新、更可信的语义次优事实。
         fused = rank_by_composite(fused)
 
-        logger.info(
-            "[retrieval] embedder=%s is_semantic=%s variant=%s weights=%s "
-            "keyword_hits=%s vector_hits=%s fused=%s core=%s session_id=%s",
-            type(self.embedder).__name__,
-            getattr(self.embedder, "is_semantic", False),
-            variant,
-            weights,
-            len(keyword_items),
-            len(vector_items),
-            len(fused),
-            len(core_profile) + len(core_project) + _CORE_RETRIEVED_LIMIT,
-            session_id[:8] if session_id else None,
-        )
-
         # 4. 分层：用户画像 + 项目画像（P2，始终注入）+ 高重要性 → core，
         # 其余 → episodic/semantic
         # 优化: 动态 core 槽位预算 —— 检索命中多时放宽
@@ -312,6 +298,20 @@ class MemoryAdapter:
             core_profile[:_CORE_PROFILE_LIMIT]
             + core_project[:_CORE_PROJECT_LIMIT]
             + core_retrieved[:_CORE_RETRIEVED_LIMIT]
+        )
+
+        logger.info(
+            "[retrieval] embedder=%s is_semantic=%s variant=%s weights=%s "
+            "keyword_hits=%s vector_hits=%s fused=%s core=%s session_id=%s",
+            type(self.embedder).__name__,
+            getattr(self.embedder, "is_semantic", False),
+            variant,
+            weights,
+            len(keyword_items),
+            len(vector_items),
+            len(fused),
+            len(core),
+            session_id[:8] if session_id else None,
         )
 
         return MemoryContext(

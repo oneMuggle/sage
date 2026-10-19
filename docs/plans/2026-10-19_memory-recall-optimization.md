@@ -207,23 +207,24 @@ logger.info(
 
 ### 4.1 单元测试
 
-- [x] 软过滤策略测试（同会话加分，跨会话降分）
-- [x] 动态 RRF 权重测试（HashEmbedder 跳向量路）
-- [x] 动态 core 槽位测试
-- [x] Episodic FTS5 搜索测试
-- [x] 标签共现图谱测试（构建、查询、统计）
-- [x] 召回质量评估测试（离线指标、在线指标）
+- [x] 软过滤策略测试（同会话加分 1.5x、跨会话降分 0.7x、`soft_filter=True` 过取 top_k*3、默认 false 向后兼容）— `test_memory_recall_soft_filter.py`
+- [x] 动态 RRF 权重测试（HashEmbedder 跳向量路、语义嵌入器向量路权重 ≥ 关键词路）— `test_retrieval_tuning.py`
+- [x] 动态 core 槽位测试（fused ≥5 → 3、2-4 → 2、<2 → 1）— `test_memory_recall_soft_filter.py`
+- [x] Episodic FTS5 搜索测试（索引同步、回填幂等、中文分词、session/scope/importance/memory_type 过滤、LIKE 回退、invalidate/delete 清理、FTS 注入转义）— `test_memory_episodic_fts5.py`
+- [x] 标签共现图谱测试（构建、查询、min_cooccurrence、top_k、统计、空图）— `test_memory_recall_eval.py`
+- [x] 召回质量评估测试（离线指标、异步 retrieve_fn、去重、在线满意度、报告导出）— `test_memory_recall_eval.py`
 
 ### 4.2 集成测试
 
-- [ ] 跨会话知识召回测试
-- [ ] 多路检索融合测试
-- [ ] 性能测试（Episodic FTS5 vs LIKE）
+- [x] 跨会话知识召回测试（`soft_filter=True` 时跨 session 记忆进入候选）— `test_memory_recall_soft_filter.py`
+- [x] 多路检索融合测试（skip-vector 分支返回关键词路结果本身）— `test_retrieval_tuning.py`
+- [ ] 性能测试（Episodic FTS5 vs LIKE 基准对比）— 未做。FTS5 为辅助路径，
+      需在真实语料（≥ 万条）上跑才有统计意义，当前仅验证功能等价
 
 ### 4.3 回归测试
 
-- [ ] 现有记忆系统测试全部通过
-- [ ] 无新增 lint 错误
+- [x] 现有记忆系统测试全部通过（memory/recall/retrieval 筛选 739 passed）
+- [x] 无新增 lint 错误（`ruff check backend/` → All checks passed）
 
 ---
 
@@ -239,18 +240,26 @@ logger.info(
 
 ## 6. 验收标准
 
-- [x] 跨会话知识可被召回（软过滤生效）
-- [x] HashEmbedder 下向量路被跳过（性能提升）
-- [x] 语义嵌入下向量权重提升到 0.8
-- [x] Episodic 记忆搜索性能提升 5x+
-- [x] core 槽位动态调整生效
-- [x] 向量回填上限提升到 2000
-- [x] 召回质量监控日志完整
-- [x] 标签共现图谱构建并可查询
-- [x] 离线评估指标计算正确
-- [x] 在线评估指标追踪正常
-- [x] 所有测试通过
-- [x] 无新增 lint 错误
+- [x] 跨会话知识可被召回（软过滤生效）— `test_memory_recall_soft_filter.py::TestVectorStoreSoftFilter`
+- [x] HashEmbedder 下向量路被跳过 — `test_retrieval_tuning.py::test_hash_embedder_skips_vector_path`
+- [x] 语义嵌入下向量权重不低于关键词路（变体 A = 0.2/0.8，变体 B = 均权）
+      — `test_retrieval_tuning.py::test_semantic_embedder_uses_vector_heavy_weights`
+- [ ] Episodic 记忆搜索性能提升 5x+ — **未验收**。FTS5 相对 LIKE 的加速比需在
+      真实语料（≥ 万条）上实测，当前仅验证了功能等价性与 LIKE 回退路径
+- [x] core 槽位动态调整生效 — `test_memory_recall_soft_filter.py::TestDynamicCoreBudget`
+- [x] 向量回填上限提升到 2000（`SAGE_VEC_BACKFILL_MAX` 默认值，代码改动）
+- [x] 召回质量监控日志完整 — `test_retrieval_tuning.py::test_retrieval_emits_hit_rate_log`
+- [x] 标签共现图谱构建并可查询 — `test_memory_recall_eval.py::TestTagCooccurrenceGraph`
+- [x] 离线评估指标计算正确 — `test_memory_recall_eval.py::TestRecallEvaluatorOffline`
+- [x] 在线评估指标追踪正常 — `test_memory_recall_eval.py::TestRecallEvaluatorOnline`
+- [x] 新增/修改测试文件全部通过（4 文件 67 用例）
+- [x] 无新增 lint 错误（`ruff check backend/` → All checks passed）
+
+### 6.1 未接入生产链路的模块
+
+`tag_graph.py` 与 `recall_eval.py` 目前**只有单元测试覆盖，尚未被
+`MemoryAdapter.retrieve()` 或任何 API 路由调用**。它们是可复用的构件，
+接入位置需另行设计（标签扩展进 RRF 第三路？评估器挂到检索埋点旁？）。
 
 ---
 

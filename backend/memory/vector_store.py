@@ -254,16 +254,17 @@ class VectorStore:
             params.append(fetch_k)
 
             rows = conn.execute(" ".join(sql_parts), params).fetchall()
-            results: List[Dict[str, Any]] = [
+            # 软过滤模式已过取 top_k*3 条交由调用方评分，不再截断
+            selected = rows if soft_filter else rows[:top_k]
+            return [
                 {
                     "memory_id": row[0],
                     "memory_type": row[1],
                     "session_id": row[2],
                     "distance": row[3],
                 }
-                for row in rows[:top_k] if not soft_filter else rows
+                for row in selected
             ]
-            return results
         except Exception as e:
             logger.warning(f"向量搜索失败: {e}")
             return []
