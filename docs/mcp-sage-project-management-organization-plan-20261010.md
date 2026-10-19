@@ -802,3 +802,19 @@
   - 在 `selector-suite-details` 治理清单面板顶部新增标准目录预览行与 **`复制标准目录`**（`data-testid="selector-copy-dirs-btn"`），支持在类型选择阶段一键复制推荐标准目录结构并切换为 `已复制目录`。
 - **单元测试与门禁验证**：
   - 扩展 `ProjectArchetypeStudio.test.tsx` 与 `ProjectTypeBadge.test.tsx`（2 个测试文件共 18 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P60 — 侧边栏 Git 变更快照存 L3/L4 与单文件 +L4/路径复制、项目概览标准目录补齐与默认约束导入、里程碑风险转 L2 与单条复制、约束统计类别分布复制与停用转里程碑（已完成）
+
+- **侧边栏 `GitStatusSection` 变更快照沉淀 L3/L4 与单文件 +L4/路径复制（`src/widgets/sidebar/sections/GitStatusSection.tsx`）**：
+  - 在 `git-sider-filter-bar` 筛选栏新增 **`存L4`**（`data-testid="git-sider-save-l4-btn"`）与 **`存L3`**（`data-testid="git-sider-save-l3-btn"`），支持将当前分支变更文件列表一键归档至活跃项目 L4 受控参考资料或沉淀至 L3 项目画像；
+  - 在每条变更文件行新增 **`+L4`**（`data-testid="git-sider-ingest-${file.path}"`）与 **`复制`**（`data-testid="git-sider-copy-path-${file.path}"`），支持从侧边栏直接将该变更文件纳入项目 L4 资料库或复制相对路径。
+- **Phase 4.3 `ProjectOverviewWidgets` 概览顶栏标准目录补齐与形态默认约束一键导入（`src/features/project-type/ProjectOverviewWidgets.tsx`）**：
+  - 在 `workspace-vcs-summary-widget` 阶段治理栏新增 **`补齐标准目录`**（`data-testid="overview-scaffold-dirs-btn"`）与 **`导入形态默认约束`**（`data-testid="overview-seed-constraints-btn"`），支持调用 `projectApi.scaffold` 补齐缺失目录结构，以及调用 `projectApi.importConstraints` 一键导入当前形态推荐 L2 约束包。
+- **Phase 4.3 `MilestoneProgressWidget` 阻塞/逾期风险项转 L2 护栏与单条里程碑复制（`src/features/project-type/MilestoneProgressWidget.tsx`）**：
+  - 当存在阻塞或逾期里程碑时，在顶部工具栏显示 **`风险项转L2`**（`data-testid="milestone-summary-risk-to-l2-btn"`），一键将阻塞或逾期节点转化为高优先级（`priority: 9`, `category: 'risk_guard'`）L2 攻坚约束；
+  - 在最近里程碑列表每行新增 **`复制`**（`data-testid="milestone-summary-copy-item-${milestone.id}"`），支持一键复制里程碑状态、标题与截止日期。
+- **Phase 4.3 `ConstraintSummaryWidget` 类别分布 Markdown 复制与停用规则转复核里程碑（`src/features/project-type/ConstraintSummaryWidget.tsx`）**：
+  - 在按类别统计标题旁新增 **`复制分布`**（`data-testid="constraint-summary-copy-cats-btn"`），支持一键导出 L2 约束类别分布 Markdown；
+  - 当存在停用约束时，新增 **`停用转里程碑`**（`data-testid="constraint-summary-disabled-to-milestone-btn"`），一键创建 `[待审约束复核]` 待办里程碑。
+- **单元测试与门禁验证**：
+  - 扩展 `ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（2 个测试文件共 25 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
