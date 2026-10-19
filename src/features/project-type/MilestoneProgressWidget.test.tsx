@@ -250,6 +250,10 @@ describe('MilestoneProgressWidget', () => {
 
     expect(screen.getByTestId('milestone-editor-templates')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('milestone-template-0'));
+    fireEvent.click(screen.getByTestId('milestone-editor-copy-json-btn'));
+    expect(screen.getByTestId('milestone-editor-copy-json-btn')).toHaveTextContent('已复制 JSON');
+    fireEvent.click(screen.getByTestId('milestone-editor-reset-btn'));
+    fireEvent.click(screen.getByTestId('milestone-template-0'));
     fireEvent.click(screen.getByTestId('milestone-due-plus-7'));
     expect(screen.getByTestId('milestone-due-clear')).toBeInTheDocument();
 

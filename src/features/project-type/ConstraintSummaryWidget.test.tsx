@@ -221,6 +221,10 @@ describe('ConstraintSummaryWidget', () => {
 
     expect(screen.getByTestId('constraint-editor-content-presets')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('constraint-content-preset-0'));
+    fireEvent.click(screen.getByTestId('constraint-editor-copy-json-btn'));
+    expect(screen.getByTestId('constraint-editor-copy-json-btn')).toHaveTextContent('已复制 JSON');
+    fireEvent.click(screen.getByTestId('constraint-editor-reset-btn'));
+    fireEvent.click(screen.getByTestId('constraint-content-preset-0'));
     fireEvent.click(screen.getByTestId('constraint-glob-always-btn'));
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
@@ -610,6 +614,10 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('workbench-copy-project-list-btn'));
     fireEvent.click(screen.getByTestId('workbench-save-archetype-stats-l4-btn'));
     expect(screen.getByTestId('workbench-save-archetype-stats-l4-btn')).toHaveTextContent('已存统计L4');
+    fireEvent.click(screen.getByTestId('workbench-archetype-stats-to-milestone-btn'));
+    expect(screen.getByTestId('workbench-archetype-stats-to-milestone-btn')).toHaveTextContent('已转统计里程碑');
+    fireEvent.click(screen.getByTestId('workbench-archetype-stats-to-constraint-btn'));
+    expect(screen.getByTestId('workbench-archetype-stats-to-constraint-btn')).toHaveTextContent('已转统计L2');
     fireEvent.click(screen.getByTestId('workbench-registry-to-constraint-btn'));
     expect(screen.getByTestId('workbench-registry-to-constraint-btn')).toHaveTextContent('已转台账L2');
   });

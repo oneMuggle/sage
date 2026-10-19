@@ -138,8 +138,12 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     expect(screen.getByTestId('detection-governance-stats')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('detection-copy-md-btn'));
+    fireEvent.click(screen.getByTestId('detection-copy-confidence-btn'));
+    expect(screen.getByTestId('detection-copy-confidence-btn')).toHaveTextContent('已复制置信度');
     fireEvent.click(screen.getByTestId('detection-copy-full-blueprint-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-signal-0'));
+    fireEvent.click(screen.getByTestId('detection-copy-signal-md-0'));
+    expect(screen.getByTestId('detection-copy-signal-md-0')).toHaveTextContent('已复制MD');
     fireEvent.click(screen.getByTestId('detection-copy-all-signals-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-vcs-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-stages-btn'));

@@ -27,6 +27,8 @@ export function Projects() {
   const [copiedArchetypeStats, setCopiedArchetypeStats] = useState(false);
   const [savedArchetypeStatsL3, setSavedArchetypeStatsL3] = useState(false);
   const [savedArchetypeStatsL4, setSavedArchetypeStatsL4] = useState(false);
+  const [convertedArchetypeStatsMilestone, setConvertedArchetypeStatsMilestone] = useState(false);
+  const [convertedArchetypeStatsConstraint, setConvertedArchetypeStatsConstraint] = useState(false);
   const [convertedRegistryMilestone, setConvertedRegistryMilestone] = useState(false);
   const [convertedRegistryConstraint, setConvertedRegistryConstraint] = useState(false);
 
@@ -185,6 +187,59 @@ export function Projects() {
                     className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                   >
                     {savedArchetypeStatsL4 ? '已存统计L4' : '统计存L4'}
+                  </button>
+                )}
+                {projects.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="workbench-archetype-stats-to-milestone-btn"
+                    onClick={async () => {
+                      if (convertedArchetypeStatsMilestone || !projects[0]?.id) return;
+                      setConvertedArchetypeStatsMilestone(true);
+                      if (typeof projectApi?.createMilestone === 'function') {
+                        try {
+                          await projectApi.createMilestone(projects[0].id, {
+                            title: `[四形态分布核查] 共 ${projects.length} 个项目`,
+                            description: ARCHETYPE_ORDER.map(
+                              (t) => `${getArchetypeBlueprint(t).label}: ${archetypeCounts[t]} 个`,
+                            ).join(' · '),
+                            status: 'pending',
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {convertedArchetypeStatsMilestone ? '已转统计里程碑' : '统计转里程碑'}
+                  </button>
+                )}
+                {projects.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="workbench-archetype-stats-to-constraint-btn"
+                    onClick={async () => {
+                      if (convertedArchetypeStatsConstraint || !projects[0]?.id) return;
+                      setConvertedArchetypeStatsConstraint(true);
+                      if (typeof projectApi?.createConstraint === 'function') {
+                        try {
+                          await projectApi.createConstraint(projects[0].id, {
+                            category: 'architecture',
+                            content: `[四形态架构分类规范] 按 ${ARCHETYPE_ORDER.map(
+                              (t) => `${getArchetypeBlueprint(t).label}(${archetypeCounts[t]})`,
+                            ).join('、')} 执行分形态上下文治理`,
+                            triggerPattern: 'always',
+                            priority: 8,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {convertedArchetypeStatsConstraint ? '已转统计L2' : '统计转L2'}
                   </button>
                 )}
               </div>
