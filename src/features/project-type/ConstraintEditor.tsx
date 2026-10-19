@@ -163,6 +163,7 @@ export function ConstraintEditor({
   const [convertedMilestone, setConvertedMilestone] = useState(false);
   const [copiedGlob, setCopiedGlob] = useState(false);
   const [copiedContent, setCopiedContent] = useState(false);
+  const [copiedCategory, setCopiedCategory] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -239,7 +240,35 @@ export function ConstraintEditor({
           )}
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">类别 *</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-sm font-medium">类别 *</label>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  data-testid="constraint-copy-category-btn"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard?.writeText(category);
+                      setCopiedCategory(true);
+                      setTimeout(() => setCopiedCategory(false), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedCategory ? '已复制类别' : '复制类别'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="constraint-clear-category-btn"
+                  onClick={() => setCategory('')}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  清空类别
+                </button>
+              </div>
+            </div>
             <Input
               value={category}
               onChange={(e) => setCategory(e.target.value)}

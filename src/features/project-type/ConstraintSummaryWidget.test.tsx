@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { projectApi } from '../../shared/api';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { GitStatusSection } from '../../widgets/sidebar/sections/GitStatusSection';
+import { WorkbenchProjectList } from '../../widgets/sidebar/sections/WorkbenchProjectList';
 
 import { BusinessDocumentStyleBar, CodingHooksGovernanceBar, ResearchCitationAndToneBar } from './BuiltinCheckpointAndStyleBar';
 import { ConstraintEditor } from './ConstraintEditor';
@@ -461,6 +462,8 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('constraint-copy-content-btn'));
     fireEvent.click(screen.getByTestId('constraint-clear-content-btn'));
     fireEvent.click(screen.getByTestId('constraint-pillar-fill-all-btn'));
+    fireEvent.click(screen.getByTestId('constraint-copy-category-btn'));
+    fireEvent.click(screen.getByTestId('constraint-clear-category-btn'));
     fireEvent.click(screen.getByTestId('constraint-dir-glob-0'));
     fireEvent.click(screen.getByTestId('constraint-copy-glob-btn'));
 
@@ -550,6 +553,7 @@ describe('ConstraintSummaryWidget', () => {
     render(
       <I18nProvider>
         <GitStatusSection collapsed={false} onToggleCollapsed={vi.fn()} />
+        <WorkbenchProjectList onOpenSession={vi.fn()} />
       </I18nProvider>,
     );
     const saveL4Btn = await screen.findByTestId('git-sider-save-l4-btn');
@@ -562,10 +566,19 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('git-sider-copy-branch-btn'));
     fireEvent.click(screen.getByTestId('git-sider-guard-all-btn'));
     expect(screen.getByTestId('git-sider-guard-all-btn')).toHaveTextContent('已全护栏');
+    fireEvent.click(screen.getByTestId('git-sider-ingest-all-btn'));
+    expect(screen.getByTestId('git-sider-ingest-all-btn')).toHaveTextContent('已全入库');
     fireEvent.click(screen.getByTestId('git-sider-ingest-src/index.ts'));
     expect(screen.getByTestId('git-sider-ingest-src/index.ts')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('git-sider-guard-src/index.ts'));
     expect(screen.getByTestId('git-sider-guard-src/index.ts')).toHaveTextContent('已护栏');
+    fireEvent.click(screen.getByTestId('git-sider-l3-src/index.ts'));
+    expect(screen.getByTestId('git-sider-l3-src/index.ts')).toHaveTextContent('已存L3');
     fireEvent.click(screen.getByTestId('git-sider-copy-path-src/index.ts'));
+    const rowL3Btn = await screen.findByTestId('workbench-row-to-l3-proj-sider-1');
+    fireEvent.click(rowL3Btn);
+    expect(screen.getByTestId('workbench-row-to-l3-proj-sider-1')).toHaveTextContent('已存L3');
+    fireEvent.click(screen.getByTestId('workbench-row-to-l4-proj-sider-1'));
+    expect(screen.getByTestId('workbench-row-to-l4-proj-sider-1')).toHaveTextContent('已存L4');
   });
 });
