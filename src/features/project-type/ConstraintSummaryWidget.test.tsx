@@ -158,6 +158,8 @@ describe('ConstraintSummaryWidget', () => {
     await waitFor(() => {
       expect(screen.getByText('code-style')).toBeInTheDocument();
       expect(screen.getByText('git-commit')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('constraint-summary-cats-to-l3-btn'));
+      expect(screen.getByTestId('constraint-summary-cats-to-l3-btn')).toHaveTextContent('已存分布L3');
     });
   });
 
