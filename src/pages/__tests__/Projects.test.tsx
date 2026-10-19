@@ -63,6 +63,14 @@ describe('project workbench', () => {
     expect(screen.getByTestId('workbench-save-registry-l4-btn')).toHaveTextContent('已存台账L4');
     fireEvent.click(screen.getByTestId('workbench-save-registry-l3-btn'));
     expect(screen.getByTestId('workbench-save-registry-l3-btn')).toHaveTextContent('已存台账L3');
+    fireEvent.click(screen.getByTestId('workbench-save-archetype-stats-l3-btn'));
+    expect(screen.getByTestId('workbench-save-archetype-stats-l3-btn')).toHaveTextContent(
+      '已存统计L3',
+    );
+    fireEvent.click(screen.getByTestId('workbench-registry-to-milestone-btn'));
+    expect(screen.getByTestId('workbench-registry-to-milestone-btn')).toHaveTextContent(
+      '已转巡检里程碑',
+    );
 
     expect(props).toHaveBeenCalledWith(
       expect.objectContaining({ onOpenSession: expect.any(Function) }),

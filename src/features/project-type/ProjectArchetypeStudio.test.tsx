@@ -476,7 +476,18 @@ describe('ProjectArchetypeStudio', () => {
           projectPath="D:/Archives/Contract2026"
           projectType="research"
           projectId="proj-1"
-          profileEntries={[]}
+          profileEntries={[
+            {
+              id: 'pf-cat-1',
+              category: 'convention',
+              content: '引用必须包含 DOI',
+              importance: 8,
+              project_key: 'D:/Archives/Contract2026',
+              source: 'manual',
+              created_at: 1000,
+              updated_at: 1000,
+            },
+          ]}
           profileCategory="convention"
           onCategoryChange={vi.fn()}
           profileDraft="初始画像规范"
@@ -507,6 +518,10 @@ describe('ProjectArchetypeStudio', () => {
     expect(onDraftChange).toHaveBeenCalledWith(
       '初始画像规范；SAGE.md：核心研究问题 (RQ)、科学假设与数学符号规范表 (Notation)',
     );
+    fireEvent.click(screen.getByTestId('studio-profile-pillars-to-l4-btn'));
+    expect(screen.getByTestId('studio-profile-pillars-to-l4-btn')).toHaveTextContent('已存支柱 L4');
+    fireEvent.click(screen.getByTestId('studio-profile-cats-to-l4-btn'));
+    expect(screen.getByTestId('studio-profile-cats-to-l4-btn')).toHaveTextContent('已存分布L4');
     const copySessionBtn = await screen.findByTestId('knowledge-copy-session-id-btn');
     fireEvent.click(copySessionBtn);
     fireEvent.click(screen.getByTestId('knowledge-extract-btn'));

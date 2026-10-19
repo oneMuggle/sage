@@ -78,6 +78,8 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const [ingestedPaths, setIngestedPaths] = useState<Set<string>>(new Set());
   const [guardedPaths, setGuardedPaths] = useState<Set<string>>(new Set());
   const [copiedFilePath, setCopiedFilePath] = useState<string | null>(null);
+  const [copiedBranch, setCopiedBranch] = useState(false);
+  const [guardedAllSider, setGuardedAllSider] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 获取第一个项目的路径
@@ -220,9 +222,25 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
             </span>
           )}
           {status?.branch && (
-            <span className="text-ui-xs text-text-muted max-w-[60px] truncate">
-              {status.branch}
-            </span>
+            <button
+              type="button"
+              data-testid="git-sider-copy-branch-btn"
+              onClick={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                  await navigator.clipboard?.writeText(status.branch || 'HEAD');
+                  setCopiedBranch(true);
+                  setTimeout(() => setCopiedBranch(false), 1500);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="text-ui-xs text-text-muted max-w-[68px] truncate hover:text-text"
+              title="复制当前分支名称"
+            >
+              {copiedBranch ? '已复制' : status.branch}
+            </button>
           )}
           {fileCount > 0 && (
             <button
@@ -365,6 +383,31 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                     className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
                   >
                     {convertedSiderMilestone ? '已转里程碑' : '转里程碑'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="git-sider-guard-all-btn"
+                    onClick={async () => {
+                      if (guardedAllSider) return;
+                      setGuardedAllSider(true);
+                      if (typeof projectApi?.createConstraint === 'function') {
+                        for (const f of filteredFiles) {
+                          try {
+                            await projectApi.createConstraint(projectId, {
+                              category: 'file_change_guard',
+                              content: `侧边栏 Git 变更护栏：修改 ${f.path} 须通过契约与单测核验`,
+                              triggerPattern: f.path,
+                              priority: 8,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {guardedAllSider ? '已全护栏' : '全护栏L2'}
                   </button>
                 </>
               )}
