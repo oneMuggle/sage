@@ -271,6 +271,15 @@ export function KnowledgeExtractionPanel({
           >
             {copiedSessionId ? '已复制会话 ID' : '复制会话 ID'}
           </button>
+          <button
+            type="button"
+            disabled={phase === 'loading'}
+            data-testid="knowledge-clear-session-id-btn"
+            onClick={() => setSessionId('')}
+            className="rounded-md border border-input bg-background px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            清空会话 ID
+          </button>
           <Button
             variant="secondary"
             size="sm"
@@ -592,6 +601,22 @@ export function KnowledgeExtractionPanel({
                   className="ml-auto rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                 >
                   按筛选类别全选
+                </button>
+                <button
+                  type="button"
+                  data-testid="knowledge-invert-selection-btn"
+                  onClick={() => {
+                    setSelected((prev) => {
+                      const next = new Set<number>();
+                      entries.forEach((_, idx) => {
+                        if (!prev.has(idx)) next.add(idx);
+                      });
+                      return next;
+                    });
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  反选
                 </button>
               </div>
               {entries.map((entry, idx) =>
