@@ -182,6 +182,8 @@ describe('MilestoneProgressWidget', () => {
       expect(screen.getByTestId('milestone-summary-risk-to-l2-btn')).toHaveTextContent('已转风险L2');
       fireEvent.click(screen.getByTestId('milestone-summary-risk-to-l3-btn'));
       expect(screen.getByTestId('milestone-summary-risk-to-l3-btn')).toHaveTextContent('已存风险L3');
+      fireEvent.click(screen.getByTestId('milestone-summary-risk-to-l4-btn'));
+      expect(screen.getByTestId('milestone-summary-risk-to-l4-btn')).toHaveTextContent('已存风险L4');
       fireEvent.click(screen.getByTestId('milestone-summary-completed-to-l3-btn'));
       expect(screen.getByTestId('milestone-summary-completed-to-l3-btn')).toHaveTextContent('已存完成L3');
       fireEvent.click(screen.getByTestId('milestone-summary-completed-to-l4-btn'));

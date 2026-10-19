@@ -327,6 +327,8 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByText('src/')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('studio-copy-dirs-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-stages-btn'));
+    fireEvent.click(screen.getByTestId('studio-copy-pillars-btn'));
+    fireEvent.click(screen.getByTestId('studio-copy-milestones-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-blueprint-md-btn'));
     expect(screen.getByTestId('studio-copy-blueprint-md-btn')).toHaveTextContent(/已复制蓝图 MD|复制当前蓝图 MD/);
     fireEvent.click(screen.getByTestId('studio-copy-all-blueprints-md-btn'));
@@ -385,6 +387,11 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('wiki-generation-panel')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('studio-quick-scaffold-btn'));
     expect(screen.getByTestId('studio-quick-scaffold-btn')).toHaveTextContent('已初始化脚手架');
+    fireEvent.click(screen.getByTestId('studio-seed-recommended-milestones-btn'));
+    expect(screen.getByTestId('studio-seed-recommended-milestones-btn')).toHaveTextContent('已播种里程碑');
+    fireEvent.click(screen.getByTestId('overview-pillars-to-milestone-btn'));
+    expect(screen.getByTestId('overview-pillars-to-milestone-btn')).toHaveTextContent('已转支柱里程碑');
+    fireEvent.click(screen.getByTestId('overview-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-active-path-btn'));
     fireEvent.click(screen.getByTestId('studio-save-blueprint-l4-btn'));
     expect(screen.getByTestId('studio-save-blueprint-l4-btn')).toHaveTextContent('已存蓝图 L4');

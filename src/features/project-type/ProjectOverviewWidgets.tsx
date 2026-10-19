@@ -51,6 +51,8 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [convertedPillarsL2, setConvertedPillarsL2] = useState(false);
   const [savedPillarsL3, setSavedPillarsL3] = useState(false);
   const [savedPillarsL4, setSavedPillarsL4] = useState(false);
+  const [convertedPillarsMilestone, setConvertedPillarsMilestone] = useState(false);
+  const [copiedStagePipeline, setCopiedStagePipeline] = useState(false);
   const [copiedOverviewPath, setCopiedOverviewPath] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [decomposeReq, setDecomposeReq] = useState('');
@@ -545,6 +547,28 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
             </button>
             <button
               type="button"
+              data-testid="overview-pillars-to-milestone-btn"
+              onClick={async () => {
+                if (convertedPillarsMilestone) return;
+                setConvertedPillarsMilestone(true);
+                if (typeof projectApi?.createMilestone === 'function') {
+                  try {
+                    await projectApi.createMilestone(project.id, {
+                      title: `[${blueprint.label}护栏验收] ${blueprint.contextPillars.length} 项上下文支柱核查`,
+                      description: blueprint.contextPillars.join('；'),
+                      status: 'pending',
+                    });
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }
+              }}
+              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+            >
+              {convertedPillarsMilestone ? '已转支柱里程碑' : '支柱转里程碑'}
+            </button>
+            <button
+              type="button"
               onClick={() => void loadOverviewMeta()}
               data-testid="overview-refresh-meta-btn"
               title="刷新项目概览元数据"
@@ -579,6 +603,25 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               </button>
             );
           })}
+          <button
+            type="button"
+            data-testid="overview-copy-stages-btn"
+            onClick={async () => {
+              const md = blueprint.stages
+                .map((s) => (s.id === activeStageId ? `[${s.label}*]` : s.label))
+                .join(' → ');
+              try {
+                await navigator.clipboard?.writeText(md);
+                setCopiedStagePipeline(true);
+                setTimeout(() => setCopiedStagePipeline(false), 1500);
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {copiedStagePipeline ? '已复制管线' : '复制阶段管线'}
+          </button>
           {(() => {
             const idx = blueprint.stages.findIndex((s) => s.id === activeStageId);
             const prevStage = idx > 0 ? blueprint.stages[idx - 1] : null;
