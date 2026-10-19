@@ -21,6 +21,9 @@ export function Projects() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [copiedRegistry, setCopiedRegistry] = useState(false);
+  const [copiedPaths, setCopiedPaths] = useState(false);
+  const [savedRegistryL3, setSavedRegistryL3] = useState(false);
+  const [savedRegistryL4, setSavedRegistryL4] = useState(false);
 
   const loadProjects = useCallback(async () => {
     if (typeof projectApi?.list !== 'function') return;
@@ -91,10 +94,7 @@ export function Projects() {
               <span className="font-medium text-foreground" data-testid="workbench-project-count">
                 已纳管项目：{projects.length} 个
               </span>
-              <div
-                className="flex flex-wrap items-center gap-1"
-                data-testid="workbench-archetype-counts"
-              >
+              <div className="flex flex-wrap items-center gap-1" data-testid="workbench-archetype-counts">
                 {ARCHETYPE_ORDER.map((t) => {
                   const bp = getArchetypeBlueprint(t);
                   return (
@@ -109,6 +109,78 @@ export function Projects() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
+              {projects.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard?.writeText(
+                          projects.map((p) => p.path).join('\n'),
+                        );
+                        setCopiedPaths(true);
+                        setTimeout(() => setCopiedPaths(false), 1800);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    data-testid="workbench-copy-paths-btn"
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {copiedPaths ? '已复制路径' : '复制路径列表'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (savedRegistryL4 || !projects[0]?.id) return;
+                      setSavedRegistryL4(true);
+                      if (typeof projectApi?.addMaterial === 'function') {
+                        const md = [
+                          `# 全局受控项目台账 (${projects.length} 个项目)`,
+                          ...projects.map((p) => `- ${p.name}: \`${p.path}\``),
+                        ].join('\n');
+                        try {
+                          await projectApi.addMaterial(projects[0].id, { content: md });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    data-testid="workbench-save-registry-l4-btn"
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {savedRegistryL4 ? '已存台账L4' : '存台账至L4'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (savedRegistryL3 || !projects[0]?.id) return;
+                      setSavedRegistryL3(true);
+                      if (typeof projectApi?.confirmKnowledge === 'function') {
+                        try {
+                          await projectApi.confirmKnowledge(projects[0].id, {
+                            entries: [
+                              {
+                                category: 'architecture',
+                                content: `全局受控项目台账：共 ${projects.length} 个项目（${projects.map((p) => p.name).join('、')}）`,
+                                importance: 7,
+                                sourceMessageIds: [],
+                                reasoning: '项目工作台全局台账沉淀至 L3 画像',
+                              },
+                            ],
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    data-testid="workbench-save-registry-l3-btn"
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {savedRegistryL3 ? '已存台账L3' : '存台账至L3'}
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 onClick={() => void handleCopyRegistryMarkdown()}

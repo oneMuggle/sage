@@ -56,6 +56,11 @@ describe('project workbench', () => {
     expect(screen.getByTestId('workbench-export-registry-md-btn')).toHaveTextContent(
       /已复制台账|导出项目台账 MD/,
     );
+    fireEvent.click(screen.getByTestId('workbench-copy-paths-btn'));
+    fireEvent.click(screen.getByTestId('workbench-save-registry-l4-btn'));
+    expect(screen.getByTestId('workbench-save-registry-l4-btn')).toHaveTextContent('已存台账L4');
+    fireEvent.click(screen.getByTestId('workbench-save-registry-l3-btn'));
+    expect(screen.getByTestId('workbench-save-registry-l3-btn')).toHaveTextContent('已存台账L3');
 
     expect(props).toHaveBeenCalledWith(
       expect.objectContaining({ onOpenSession: expect.any(Function) }),

@@ -139,6 +139,8 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
 
     fireEvent.click(screen.getByTestId('detection-copy-md-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-signal-0'));
+    fireEvent.click(screen.getByTestId('detection-copy-all-signals-btn'));
+    fireEvent.click(screen.getByTestId('detection-copy-vcs-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-dirs-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-suite-btn'));
@@ -177,6 +179,7 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('selector-copy-blueprint-btn'));
     fireEvent.click(screen.getByTestId('selector-suite-toggle-btn'));
     expect(screen.getByTestId('selector-suite-details')).toHaveTextContent('细分规范包：');
+    fireEvent.click(screen.getByTestId('selector-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-dirs-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-subtemplates-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-milestones-btn'));
@@ -252,6 +255,9 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     expect(screen.getByTestId('studio-profile-to-l4-e-1')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('studio-profile-batch-milestone-btn'));
     expect(screen.getByTestId('studio-profile-to-milestone-e-1')).toHaveTextContent('已转里程碑');
+    fireEvent.click(screen.getByTestId('studio-profile-seed-presets-btn'));
+    expect(screen.getByTestId('studio-profile-seed-presets-btn')).toHaveTextContent('已写入推荐画像');
+    fireEvent.click(screen.getByTestId('studio-profile-copy-cats-btn'));
   });
 
   it('supports KnowledgeExtractionPanel session refresh and extracted proposals markdown copy', async () => {
