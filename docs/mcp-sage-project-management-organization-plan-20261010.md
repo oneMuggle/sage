@@ -1021,3 +1021,16 @@
   - 在阶段切换工具栏（`overview-stage-switcher`）新增 **`阶段管线转L2`**（`data-testid="overview-stages-to-constraint-btn"`），支持将当前形态完整阶段推进顺序一键固化为 `stage_pipeline` 类别的 L2 结构化约束规则（`projectApi.createConstraint`）。
 - **单元测试与门禁验证**：
   - 扩展 `ProjectArchetypeStudio.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `ProjectTypeBadge.test.tsx`（3 个测试文件共 35 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P75 — 工作台形态统计一键转巡检里程碑与 L2 护栏、检测预览置信度与 Markdown 依据复制、L2 约束与里程碑编辑器 JSON 配置导出及表单重置（已完成）
+
+- **Phase 4.3 `Projects` 工作台四形态分布统计一键转巡检里程碑与 L2 形态护栏（`src/pages/Projects.tsx`）**：
+  - 在 `workbench-archetype-counts` 形态分布栏新增 **`统计转里程碑`**（`data-testid="workbench-archetype-stats-to-milestone-btn"`）与 **`统计转L2`**（`data-testid="workbench-archetype-stats-to-constraint-btn"`），支持将当前四形态纳管分布直接创建为项目治理核查里程碑（`projectApi.createMilestone`）或固化为 `architecture` 类别的 L2 形态分类规范（`projectApi.createConstraint`）。
+- **Phase 4.1 `TypeDetectionPreview` 检测置信度摘要复制与单条依据 Markdown 引用复制（`src/features/project-type/TypeDetectionPreview.tsx`）**：
+  - 在检测报告头部新增 **`复制置信度`**（`data-testid="detection-copy-confidence-btn"`），支持一键复制检测形态与置信度摘要；
+  - 在每条检测信号行（`detection-signal-item-${idx}`）新增 **`复制MD项`**（`data-testid="detection-copy-signal-md-${idx}"`），支持一键复制带形态标签的 Markdown 引用条目。
+- **Phase 4.4 `ConstraintEditor` L2 约束规则 JSON 配置导出与表单重置（`src/features/project-type/ConstraintEditor.tsx`）**：
+  - 在编辑器底部操作栏新增 **`复制 JSON`**（`data-testid="constraint-editor-copy-json-btn"`）与 **`重置表单`**（`data-testid="constraint-editor-reset-btn"`），支持导出结构化 JSON 规则配置与一键重置编辑表单。
+- **Phase 4.5 `MilestoneEditor` 里程碑节点 JSON 配置导出与表单重置（`src/features/project-type/MilestoneEditor.tsx`）**：
+  - 在编辑器底部操作栏新增 **`复制 JSON`**（`data-testid="milestone-editor-copy-json-btn"`）与 **`重置表单`**（`data-testid="milestone-editor-reset-btn"`），支持导出结构化 JSON 里程碑节点配置与一键重置编辑表单。
+- **单元测试与门禁验证**：
+  - 扩展 `ConstraintSummaryWidget.test.tsx`、`ProjectTypeBadge.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（3 个测试文件共 40 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
