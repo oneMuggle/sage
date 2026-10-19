@@ -74,7 +74,9 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const [copiedMd, setCopiedMd] = useState(false);
   const [savedSiderL4, setSavedSiderL4] = useState(false);
   const [savedSiderL3, setSavedSiderL3] = useState(false);
+  const [convertedSiderMilestone, setConvertedSiderMilestone] = useState(false);
   const [ingestedPaths, setIngestedPaths] = useState<Set<string>>(new Set());
+  const [guardedPaths, setGuardedPaths] = useState<Set<string>>(new Set());
   const [copiedFilePath, setCopiedFilePath] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -342,6 +344,28 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                   >
                     {savedSiderL3 ? '已存L3' : '存L3'}
                   </button>
+                  <button
+                    type="button"
+                    data-testid="git-sider-to-milestone-btn"
+                    onClick={async () => {
+                      if (convertedSiderMilestone) return;
+                      setConvertedSiderMilestone(true);
+                      if (typeof projectApi?.createMilestone === 'function') {
+                        try {
+                          await projectApi.createMilestone(projectId, {
+                            title: `[Git 变更审校] ${status.branch || 'HEAD'} (${filteredFiles.length} 个文件)`,
+                            description: filteredFiles.map((f) => f.path).join('、'),
+                            status: 'in_progress',
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {convertedSiderMilestone ? '已转里程碑' : '转里程碑'}
+                  </button>
                 </>
               )}
             </div>
@@ -378,6 +402,31 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                       className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
                     >
                       {ingestedPaths.has(file.path) ? '已存L4' : '+L4'}
+                    </button>
+                  )}
+                  {projectId && (
+                    <button
+                      type="button"
+                      data-testid={`git-sider-guard-${file.path}`}
+                      onClick={async () => {
+                        if (guardedPaths.has(file.path)) return;
+                        setGuardedPaths((prev) => new Set(prev).add(file.path));
+                        if (typeof projectApi?.createConstraint === 'function') {
+                          try {
+                            await projectApi.createConstraint(projectId, {
+                              category: 'file_change_guard',
+                              content: `关键变更文件保护规范：${file.path}`,
+                              triggerPattern: file.path,
+                              priority: 8,
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                    >
+                      {guardedPaths.has(file.path) ? '已护栏' : '+L2'}
                     </button>
                   )}
                   <button

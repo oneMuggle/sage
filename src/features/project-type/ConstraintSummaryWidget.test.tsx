@@ -544,8 +544,12 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('git-sider-save-l4-btn')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('git-sider-save-l3-btn'));
     expect(screen.getByTestId('git-sider-save-l3-btn')).toHaveTextContent('已存L3');
+    fireEvent.click(screen.getByTestId('git-sider-to-milestone-btn'));
+    expect(screen.getByTestId('git-sider-to-milestone-btn')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('git-sider-ingest-src/index.ts'));
     expect(screen.getByTestId('git-sider-ingest-src/index.ts')).toHaveTextContent('已存L4');
+    fireEvent.click(screen.getByTestId('git-sider-guard-src/index.ts'));
+    expect(screen.getByTestId('git-sider-guard-src/index.ts')).toHaveTextContent('已护栏');
     fireEvent.click(screen.getByTestId('git-sider-copy-path-src/index.ts'));
   });
 });
