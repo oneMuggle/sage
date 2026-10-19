@@ -329,6 +329,7 @@ describe('ProjectArchetypeStudio', () => {
     fireEvent.click(screen.getByTestId('studio-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-pillars-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-milestones-btn'));
+    fireEvent.click(screen.getByTestId('studio-copy-subtemplates-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-blueprint-md-btn'));
     expect(screen.getByTestId('studio-copy-blueprint-md-btn')).toHaveTextContent(/已复制蓝图 MD|复制当前蓝图 MD/);
     fireEvent.click(screen.getByTestId('studio-copy-all-blueprints-md-btn'));
@@ -389,9 +390,15 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('studio-quick-scaffold-btn')).toHaveTextContent('已初始化脚手架');
     fireEvent.click(screen.getByTestId('studio-seed-recommended-milestones-btn'));
     expect(screen.getByTestId('studio-seed-recommended-milestones-btn')).toHaveTextContent('已播种里程碑');
+    fireEvent.click(screen.getByTestId('studio-blueprint-to-constraint-btn'));
+    expect(screen.getByTestId('studio-blueprint-to-constraint-btn')).toHaveTextContent('已转蓝图L2');
     fireEvent.click(screen.getByTestId('overview-pillars-to-milestone-btn'));
     expect(screen.getByTestId('overview-pillars-to-milestone-btn')).toHaveTextContent('已转支柱里程碑');
     fireEvent.click(screen.getByTestId('overview-copy-stages-btn'));
+    fireEvent.click(screen.getByTestId('overview-stages-to-l3-btn'));
+    expect(screen.getByTestId('overview-stages-to-l3-btn')).toHaveTextContent('已存管线L3');
+    fireEvent.click(screen.getByTestId('overview-stages-to-l4-btn'));
+    expect(screen.getByTestId('overview-stages-to-l4-btn')).toHaveTextContent('已存管线L4');
     fireEvent.click(screen.getByTestId('studio-copy-active-path-btn'));
     fireEvent.click(screen.getByTestId('studio-save-blueprint-l4-btn'));
     expect(screen.getByTestId('studio-save-blueprint-l4-btn')).toHaveTextContent('已存蓝图 L4');
@@ -520,6 +527,9 @@ describe('ProjectArchetypeStudio', () => {
         10,
       );
     });
+    fireEvent.click(screen.getByTestId('semantic-copy-query-btn'));
+    fireEvent.click(screen.getByTestId('semantic-clear-query-btn'));
+    expect(screen.getByTestId('semantic-search-input')).toHaveValue('');
 
     fireEvent.click(screen.getByTestId('studio-profile-pillar-append-0'));
     expect(onDraftChange).toHaveBeenCalledWith(

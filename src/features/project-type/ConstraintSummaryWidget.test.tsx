@@ -273,6 +273,8 @@ describe('ConstraintSummaryWidget', () => {
       expect(screen.getByTestId('constraint-glob-match-count')).toHaveTextContent('命中 1 条生效约束');
     });
 
+    fireEvent.click(screen.getByTestId('constraint-glob-copy-path-btn'));
+    fireEvent.click(screen.getByTestId('constraint-copy-subtemplates-btn'));
     fireEvent.click(screen.getByTestId('constraint-glob-clear-btn'));
     expect(screen.getByTestId('constraint-glob-test-input')).toHaveValue('');
 
