@@ -109,7 +109,7 @@ export function TypeDetectionPreview({
     try {
       await navigator.clipboard?.writeText(lines.join('\n'));
       setCopiedMd(true);
-      setTimeout(() => setCopiedMd(false), 1800);
+      setTimeout(() => { if (typeof window !== 'undefined') setCopiedMd(false); }, 1800);
     } catch {
       // ignore in test/offline mode
     }
@@ -217,7 +217,7 @@ export function TypeDetectionPreview({
               try {
                 await navigator.clipboard?.writeText(md);
                 setCopiedFullBlueprint(true);
-                setTimeout(() => setCopiedFullBlueprint(false), 1500);
+                setTimeout(() => { if (typeof window !== 'undefined') setCopiedFullBlueprint(false); }, 1500);
               } catch {
                 // ignore in test/offline mode
               }
@@ -256,7 +256,7 @@ export function TypeDetectionPreview({
                     result.signals.map((s, i) => `${i + 1}. ${s}`).join('\n'),
                   );
                   setCopiedAllSignals(true);
-                  setTimeout(() => setCopiedAllSignals(false), 1500);
+                  setTimeout(() => { if (typeof window !== 'undefined') setCopiedAllSignals(false); }, 1500);
                 } catch {
                   // ignore in test/offline mode
                 }
@@ -282,7 +282,7 @@ export function TypeDetectionPreview({
                     try {
                       await navigator.clipboard?.writeText(signal);
                       setCopiedSignalIdx(idx);
-                      setTimeout(() => setCopiedSignalIdx(null), 1500);
+                      setTimeout(() => { if (typeof window !== 'undefined') setCopiedSignalIdx(null); }, 1500);
                     } catch {
                       // ignore in test/offline mode
                     }
@@ -340,7 +340,7 @@ export function TypeDetectionPreview({
               try {
                 await navigator.clipboard?.writeText(detectedBlueprint.vcsLabel);
                 setCopiedVcs(true);
-                setTimeout(() => setCopiedVcs(false), 1500);
+                setTimeout(() => { if (typeof window !== 'undefined') setCopiedVcs(false); }, 1500);
               } catch {
                 // ignore in test/offline mode
               }
@@ -362,7 +362,7 @@ export function TypeDetectionPreview({
               try {
                 await navigator.clipboard?.writeText(stagesFlow);
                 setCopiedStages(true);
-                setTimeout(() => setCopiedStages(false), 1500);
+                setTimeout(() => { if (typeof window !== 'undefined') setCopiedStages(false); }, 1500);
               } catch {
                 // ignore in test/offline mode
               }
@@ -390,7 +390,7 @@ export function TypeDetectionPreview({
               try {
                 await navigator.clipboard?.writeText(detectedBlueprint.directories.map((d) => `${d}/`).join('\n'));
                 setCopiedDirs(true);
-                setTimeout(() => setCopiedDirs(false), 1500);
+                setTimeout(() => { if (typeof window !== 'undefined') setCopiedDirs(false); }, 1500);
               } catch {
                 // ignore in test/offline mode
               }
@@ -412,7 +412,7 @@ export function TypeDetectionPreview({
               try {
                 await navigator.clipboard?.writeText(md);
                 setCopiedSuite(true);
-                setTimeout(() => setCopiedSuite(false), 1500);
+                setTimeout(() => { if (typeof window !== 'undefined') setCopiedSuite(false); }, 1500);
               } catch {
                 // ignore in test/offline mode
               }
@@ -453,7 +453,7 @@ export function TypeDetectionPreview({
                   try {
                     await navigator.clipboard?.writeText(md);
                     setCopiedSubtemplates(true);
-                    setTimeout(() => setCopiedSubtemplates(false), 1500);
+                    setTimeout(() => { if (typeof window !== 'undefined') setCopiedSubtemplates(false); }, 1500);
                   } catch {
                     // ignore in test/offline mode
                   }
@@ -480,7 +480,7 @@ export function TypeDetectionPreview({
                   try {
                     await navigator.clipboard?.writeText(md);
                     setCopiedMilestones(true);
-                    setTimeout(() => setCopiedMilestones(false), 1500);
+                    setTimeout(() => { if (typeof window !== 'undefined') setCopiedMilestones(false); }, 1500);
                   } catch {
                     // ignore in test/offline mode
                   }
@@ -504,7 +504,7 @@ export function TypeDetectionPreview({
                   try {
                     await navigator.clipboard?.writeText(detectedBlueprint.contextPillars.join('\n'));
                     setCopiedPillars(true);
-                    setTimeout(() => setCopiedPillars(false), 1500);
+                    setTimeout(() => { if (typeof window !== 'undefined') setCopiedPillars(false); }, 1500);
                   } catch {
                     // ignore in test/offline mode
                   }
@@ -556,7 +556,7 @@ export function TypeDetectionPreview({
                   try {
                     await navigator.clipboard?.writeText(md);
                     setCopiedDetailsMd(true);
-                    setTimeout(() => setCopiedDetailsMd(false), 1500);
+                    setTimeout(() => { if (typeof window !== 'undefined') setCopiedDetailsMd(false); }, 1500);
                   } catch {
                     // ignore in test/offline mode
                   }

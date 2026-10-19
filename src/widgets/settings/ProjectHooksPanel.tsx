@@ -20,6 +20,7 @@ export function ProjectHooksPanel(): JSX.Element | null {
   const [copiedPath, setCopiedPath] = useState(false);
   const [copiedMd, setCopiedMd] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
+  const [copiedConfigPath, setCopiedConfigPath] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     if (!workspace) {
@@ -160,6 +161,20 @@ export function ProjectHooksPanel(): JSX.Element | null {
     }
   };
 
+  const handleCopyConfigPath = async (): Promise<void> => {
+    if (!workspace) return;
+    setCopiedConfigPath(true);
+    setTimeout(() => {
+      if (typeof window !== 'undefined') setCopiedConfigPath(false);
+    }, 1500);
+    const cfgPath = `${workspace.replace(/[/\\]+$/, '')}/.sage/hooks.json`;
+    try {
+      await navigator.clipboard?.writeText(cfgPath);
+    } catch {
+      // ignore in test/offline mode
+    }
+  };
+
   // 没有 workspace 或正在加载
   if (!workspace || loading) {
     return null;
@@ -213,6 +228,15 @@ export function ProjectHooksPanel(): JSX.Element | null {
             >
               {copiedPath ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
               {copiedPath ? '已复制' : '复制路径'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCopyConfigPath()}
+              data-testid="project-hooks-copy-config-path-btn"
+              className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-ui-xs text-text-secondary hover:bg-bg-hover"
+              title="复制 Hook 配置文件路径"
+            >
+              {copiedConfigPath ? '已复制配置路径' : '复制配置路径'}
             </button>
             <button
               type="button"
@@ -291,6 +315,15 @@ export function ProjectHooksPanel(): JSX.Element | null {
             >
               {copiedPath ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
               {copiedPath ? '已复制' : '复制路径'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCopyConfigPath()}
+              data-testid="project-hooks-copy-config-path-btn"
+              className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-text-secondary hover:bg-bg-hover"
+              title="复制 Hook 配置文件路径"
+            >
+              {copiedConfigPath ? '已复制配置路径' : '复制配置路径'}
             </button>
             <button
               type="button"

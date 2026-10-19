@@ -63,6 +63,9 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const [createdBlueprintMs, setCreatedBlueprintMs] = useState(false);
   const [copiedBlueprintJson, setCopiedBlueprintJson] = useState(false);
   const [copiedPositioning, setCopiedPositioning] = useState(false);
+  const [copiedAllBlueprintsJson, setCopiedAllBlueprintsJson] = useState(false);
+  const [copiedActiveProjectMd, setCopiedActiveProjectMd] = useState(false);
+  const [copiedActiveProjectJson, setCopiedActiveProjectJson] = useState(false);
 
   const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
 
@@ -109,6 +112,30 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
               className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
             >
               {copiedAllBlueprints ? '已复制全形态对比' : '复制四大蓝图对比 MD'}
+            </button>
+            <button
+              type="button"
+              data-testid="studio-copy-all-blueprints-json-btn"
+              onClick={async () => {
+                setCopiedAllBlueprintsJson(true);
+                setTimeout(() => {
+                  if (typeof window !== 'undefined') setCopiedAllBlueprintsJson(false);
+                }, 1500);
+                try {
+                  await navigator.clipboard?.writeText(
+                    JSON.stringify(
+                      ARCHETYPE_ORDER.map((t) => ARCHETYPE_BLUEPRINTS[t]),
+                      null,
+                      2,
+                    ),
+                  );
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+            >
+              {copiedAllBlueprintsJson ? '已复制全形态 JSON' : '复制四大蓝图对比 JSON'}
             </button>
             <button
               type="button"
@@ -446,6 +473,66 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
               >
                 {copiedActivePath ? '已复制路径' : '复制项目路径'}
+              </button>
+              <button
+                type="button"
+                data-testid="studio-copy-active-project-md-btn"
+                onClick={async () => {
+                  setCopiedActiveProjectMd(true);
+                  setTimeout(() => {
+                    if (typeof window !== 'undefined') setCopiedActiveProjectMd(false);
+                  }, 1500);
+                  const bp =
+                    ARCHETYPE_BLUEPRINTS[
+                      (activeProject.projectType ?? activeProject.detectedType ?? 'business') as ProjectType
+                    ];
+                  const md = [
+                    `# 当前活动项目概览 (${activeProject.name})`,
+                    `- **项目 ID**: \`${activeProject.id}\``,
+                    `- **工作区路径**: \`${activeProject.path}\``,
+                    `- **项目形态**: ${bp.label} (${bp.type})`,
+                    `- **阶段管线**: ${bp.stages.map((s) => s.label).join(' → ')}`,
+                  ].join('\n');
+                  try {
+                    await navigator.clipboard?.writeText(md);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+              >
+                {copiedActiveProjectMd ? '已复制项目 MD' : '复制项目 MD'}
+              </button>
+              <button
+                type="button"
+                data-testid="studio-copy-active-project-json-btn"
+                onClick={async () => {
+                  setCopiedActiveProjectJson(true);
+                  setTimeout(() => {
+                    if (typeof window !== 'undefined') setCopiedActiveProjectJson(false);
+                  }, 1500);
+                  try {
+                    await navigator.clipboard?.writeText(
+                      JSON.stringify(
+                        {
+                          id: activeProject.id,
+                          name: activeProject.name,
+                          path: activeProject.path,
+                          projectType: activeProject.projectType ?? activeProject.detectedType ?? 'business',
+                          projectStage: activeProject.projectStage ?? null,
+                          vcsMode: activeProject.vcsMode ?? null,
+                        },
+                        null,
+                        2,
+                      ),
+                    );
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+              >
+                {copiedActiveProjectJson ? '已复制项目 JSON' : '复制项目 JSON'}
               </button>
               <button
                 type="button"

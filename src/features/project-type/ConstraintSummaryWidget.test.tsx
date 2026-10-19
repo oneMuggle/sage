@@ -591,6 +591,8 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('git-sider-ingest-all-btn'));
     expect(screen.getByTestId('git-sider-ingest-all-btn')).toHaveTextContent('已全入库');
     fireEvent.click(screen.getByTestId('git-sider-copy-paths-btn'));
+    fireEvent.click(screen.getByTestId('git-sider-copy-json-btn'));
+    expect(screen.getByTestId('git-sider-copy-json-btn')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByTestId('git-sider-all-to-l3-btn'));
     expect(screen.getByTestId('git-sider-all-to-l3-btn')).toHaveTextContent('已全存L3');
     fireEvent.click(screen.getByTestId('git-sider-all-to-milestone-btn'));
@@ -604,6 +606,8 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('git-sider-milestone-src/index.ts'));
     expect(screen.getByTestId('git-sider-milestone-src/index.ts')).toHaveTextContent('已建里程碑');
     fireEvent.click(screen.getByTestId('git-sider-copy-path-src/index.ts'));
+    fireEvent.click(screen.getByTestId('git-sider-copy-json-src/index.ts'));
+    expect(screen.getByTestId('git-sider-copy-json-src/index.ts')).toHaveTextContent('已复制JSON');
     const rowL3Btn = await screen.findByTestId('workbench-row-to-l3-proj-sider-1');
     fireEvent.click(rowL3Btn);
     expect(screen.getByTestId('workbench-row-to-l3-proj-sider-1')).toHaveTextContent('已存L3');
