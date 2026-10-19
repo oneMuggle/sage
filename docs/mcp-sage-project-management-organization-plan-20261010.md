@@ -982,3 +982,16 @@
   - 在检索输入栏新增 **`复制检索词`**（`data-testid="semantic-copy-query-btn"`）与 **`清空检索词`**（`data-testid="semantic-clear-query-btn"`），支持一键复制或重置当前语义检索查询词。
 - **单元测试与门禁验证**：
   - 扩展 `ProjectArchetypeStudio.test.tsx` 与 `ConstraintSummaryWidget.test.tsx`（2 个测试文件共 19 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P72 — 类型检测预览完整详情导出、约束编辑器触发 Glob 清空与测试路径复制/清空、里程碑编辑器阶段复制/清空、里程碑进度阶段分布统计复制与沉淀 L3/L4（已完成）
+
+- **Phase 4.2 `TypeDetectionPreview` 推荐规范与里程碑全部详情 Markdown 复制（`src/features/project-type/TypeDetectionPreview.tsx`）**：
+  - 在 `detection-details-panel` 详情面板底部新增 **`复制全部详情 MD`**（`data-testid="detection-copy-details-md-btn"`），支持将当前检测形态的推荐规范包、默认里程碑与护栏支柱一键复制为完整 Markdown 摘要。
+- **Phase 4.3 `ConstraintEditor` 触发 Glob 清空与测试路径复制/清空（`src/features/project-type/ConstraintEditor.tsx`）**：
+  - 在触发条件快捷栏新增 **`清空触发 Glob`**（`data-testid="constraint-clear-glob-btn"`），支持快速重置为 `always` 全局生效；
+  - 当输入非空相对测试路径时，新增 **`复制测试路径`**（`data-testid="constraint-editor-copy-test-path-btn"`）与 **`清空测试路径`**（`data-testid="constraint-editor-clear-test-path-btn"`），便于复用或重置路径测试样本。
+- **Phase 4.3 `MilestoneEditor` 阶段标识一键复制与清空（`src/features/project-type/MilestoneEditor.tsx`）**：
+  - 在 `阶段` 字段标题栏新增 **`复制阶段`**（`data-testid="milestone-copy-stage-btn"`）与 **`清空阶段`**（`data-testid="milestone-clear-stage-btn"`），并为各形态推荐阶段胶囊提供 `data-testid="milestone-stage-preset-${st.id}"`。
+- **Phase 4.3 `MilestoneProgressWidget` 里程碑阶段分布复制与一键沉淀 L3/L4（`src/features/project-type/MilestoneProgressWidget.tsx`）**：
+  - 在 `milestone-summary-stage-bar` 阶段筛选栏新增 **`复制阶段分布`**（`data-testid="milestone-summary-copy-stages-btn"`）、**`阶段分布存L3`**（`data-testid="milestone-summary-stages-to-l3-btn"`）与 **`阶段分布存L4`**（`data-testid="milestone-summary-stages-to-l4-btn"`），支持将阶段里程碑分布一键复制、沉淀至 L3 `architecture` 画像（`projectApi.confirmKnowledge`）或归档至 L4 资料库（`projectApi.addMaterial`）。
+- **单元测试与门禁验证**：
+  - 扩展 `ProjectTypeBadge.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（3 个测试文件共 38 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

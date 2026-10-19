@@ -62,6 +62,7 @@ export function TypeDetectionPreview({
   const [copiedAllSignals, setCopiedAllSignals] = useState(false);
   const [copiedVcs, setCopiedVcs] = useState(false);
   const [copiedFullBlueprint, setCopiedFullBlueprint] = useState(false);
+  const [copiedDetailsMd, setCopiedDetailsMd] = useState(false);
 
   if (loading) {
     return (
@@ -434,6 +435,30 @@ export function TypeDetectionPreview({
                 className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
               >
                 {copiedPillars ? '已复制支柱' : '复制护栏支柱'}
+              </button>
+            </div>
+            <div className="flex justify-end pt-0.5">
+              <button
+                type="button"
+                data-testid="detection-copy-details-md-btn"
+                onClick={async () => {
+                  const md = [
+                    `# ${detectedBlueprint.label} · 推荐规范与里程碑详情`,
+                    `- **推荐规范包**：${detectedBlueprint.subTemplates.map((t) => `${t.label} (${t.key})`).join(' · ')}`,
+                    `- **默认里程碑**：${detectedBlueprint.recommendedMilestones.map((m) => `[${m.stage}] ${m.title}`).join(' → ')}`,
+                    `- **护栏支柱**：${detectedBlueprint.contextPillars.join(' · ')}`,
+                  ].join('\n');
+                  try {
+                    await navigator.clipboard?.writeText(md);
+                    setCopiedDetailsMd(true);
+                    setTimeout(() => setCopiedDetailsMd(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+              >
+                {copiedDetailsMd ? '已复制全部详情' : '复制全部详情 MD'}
               </button>
             </div>
           </div>

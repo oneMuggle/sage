@@ -164,6 +164,7 @@ export function ConstraintEditor({
   const [copiedGlob, setCopiedGlob] = useState(false);
   const [copiedContent, setCopiedContent] = useState(false);
   const [copiedCategory, setCopiedCategory] = useState(false);
+  const [copiedTestPath, setCopiedTestPath] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -434,6 +435,14 @@ export function ConstraintEditor({
               >
                 {copiedGlob ? '已复制 Glob' : '复制触发 Glob'}
               </button>
+              <button
+                type="button"
+                data-testid="constraint-clear-glob-btn"
+                onClick={() => setTriggerPattern('')}
+                className="rounded border border-border bg-background px-2 py-0.5 font-mono text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                清空触发 Glob
+              </button>
             </div>
             <div className="flex items-center gap-2 pt-1">
               <input
@@ -445,16 +454,42 @@ export function ConstraintEditor({
                 className="flex-1 rounded border border-input bg-background px-2 py-1 font-mono text-xs"
               />
               {samplePath.trim() && (
-                <span
-                  data-testid="constraint-editor-test-path-badge"
-                  className={`rounded px-2 py-0.5 text-ui-2xs font-medium ${
-                    matchTriggerGlob(triggerPattern, samplePath)
-                      ? 'bg-emerald-500/15 text-emerald-600'
-                      : 'bg-amber-500/15 text-amber-600'
-                  }`}
-                >
-                  {matchTriggerGlob(triggerPattern, samplePath) ? '命中触发' : '不触发'}
-                </span>
+                <>
+                  <span
+                    data-testid="constraint-editor-test-path-badge"
+                    className={`rounded px-2 py-0.5 text-ui-2xs font-medium ${
+                      matchTriggerGlob(triggerPattern, samplePath)
+                        ? 'bg-emerald-500/15 text-emerald-600'
+                        : 'bg-amber-500/15 text-amber-600'
+                    }`}
+                  >
+                    {matchTriggerGlob(triggerPattern, samplePath) ? '命中触发' : '不触发'}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="constraint-editor-copy-test-path-btn"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard?.writeText(samplePath);
+                        setCopiedTestPath(true);
+                        setTimeout(() => setCopiedTestPath(false), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {copiedTestPath ? '已复制路径' : '复制测试路径'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="constraint-editor-clear-test-path-btn"
+                    onClick={() => setSamplePath('')}
+                    className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    清空测试路径
+                  </button>
+                </>
               )}
             </div>
             <p className="text-xs text-muted-foreground">留空表示 always（始终生效）</p>

@@ -150,6 +150,7 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('detection-copy-pillars-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-milestones-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-subtemplates-btn'));
+    fireEvent.click(screen.getByTestId('detection-copy-details-md-btn'));
 
     const applyBtn = screen.getByTestId('apply-detected-type-btn');
     fireEvent.click(applyBtn);

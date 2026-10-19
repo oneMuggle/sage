@@ -163,6 +163,7 @@ export function MilestoneEditor({
   const [copiedDueDate, setCopiedDueDate] = useState(false);
   const [copiedDesc, setCopiedDesc] = useState(false);
   const [copiedTitle, setCopiedTitle] = useState(false);
+  const [copiedStage, setCopiedStage] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -382,7 +383,35 @@ export function MilestoneEditor({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">阶段</label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-sm font-medium">阶段</label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    data-testid="milestone-copy-stage-btn"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard?.writeText(stage);
+                        setCopiedStage(true);
+                        setTimeout(() => setCopiedStage(false), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {copiedStage ? '已复制阶段' : '复制阶段'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="milestone-clear-stage-btn"
+                    onClick={() => setStage('')}
+                    className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    清空阶段
+                  </button>
+                </div>
+              </div>
               <Input
                 value={stage}
                 onChange={(e) => setStage(e.target.value)}
@@ -396,6 +425,7 @@ export function MilestoneEditor({
                   <button
                     key={st.id}
                     type="button"
+                    data-testid={`milestone-stage-preset-${st.id}`}
                     onClick={() => setStage(st.id)}
                     className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                   >
