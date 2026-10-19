@@ -59,6 +59,7 @@ import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deep
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
 import { readLogTimezone, writeLogTimezone } from './logTimezone';
 import { setLogTimezone } from './logger';
+import { detectProjectRoot } from './projectDetector';
 logger.info('main: process started', {
   pid: process.pid,
   electronVer: process.versions.electron,
@@ -313,6 +314,9 @@ let currentBackend: BackendGeneration | null = null;
 let backendLifecycle: 'idle' | 'starting' | 'ready' | 'stopping' = 'idle';
 let backendAuthToken: string | null = null;
 let updateManager: UpdateManager | null = null;
+// P2 (2026-10-19): detected project root from startup cwd — used as fallback
+// auto-bind target for new sessions when no lastWorkspace is stored.
+let detectedProjectRoot: string | null = null;
 async function reportUpdateStartupFailure(reason: string): Promise<boolean> {
   try {
     return (await updateManager?.onAppStartupFailure(reason)) ?? false;
@@ -1906,44 +1910,48 @@ async function registerIpcHandlers(): Promise<void> {
   // ─── Phase 4 (2026-09-25): "在编辑器中打开" IPC handler ─────────────────
   // 接受 sessionId + 相对工作区路径，查询后端获取工作区根目录，
   // 拼接绝对路径后调用 shell.openPath 用系统默认编辑器打开。
-  ipcMain.handle(
-    'file:open-in-editor',
-    async (evt, opts: { sessionId: string; path: string }) => {
-      if (!isTrustedRenderer(evt.sender)) return { error: '未授权的窗口请求' };
-      if (!opts?.sessionId || !opts?.path) {
-        return { error: '缺少 sessionId 或 path 参数' };
-      }
-      try {
-        const res = await fetch(
-          `${BACKEND_URL}/api/v1/workspace?session_id=${encodeURIComponent(opts.sessionId)}`,
-          {
-            headers: {
-              ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
-            },
+  ipcMain.handle('file:open-in-editor', async (evt, opts: { sessionId: string; path: string }) => {
+    if (!isTrustedRenderer(evt.sender)) return { error: '未授权的窗口请求' };
+    if (!opts?.sessionId || !opts?.path) {
+      return { error: '缺少 sessionId 或 path 参数' };
+    }
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/api/v1/workspace?session_id=${encodeURIComponent(opts.sessionId)}`,
+        {
+          headers: {
+            ...(backendAuthToken ? { Authorization: `Bearer ${backendAuthToken}` } : {}),
           },
-        );
-        if (!res.ok) {
-          return { error: `查询工作区失败 (HTTP ${res.status})` };
-        }
-        const data = (await res.json()) as {
-          binding: { workspace_path: string } | null;
-        };
-        if (!data.binding?.workspace_path) {
-          return { error: '此会话未绑定工作区' };
-        }
-        const absolutePath = join(data.binding.workspace_path, opts.path);
-        const openResult = await shell.openPath(absolutePath);
-        if (openResult) {
-          return { error: `打开失败：${openResult}` };
-        }
-        return { success: true };
-      } catch (err) {
-        return {
-          error: `打开文件失败：${err instanceof Error ? err.message : String(err)}`,
-        };
+        },
+      );
+      if (!res.ok) {
+        return { error: `查询工作区失败 (HTTP ${res.status})` };
       }
-    },
-  );
+      const data = (await res.json()) as {
+        binding: { workspace_path: string } | null;
+      };
+      if (!data.binding?.workspace_path) {
+        return { error: '此会话未绑定工作区' };
+      }
+      const absolutePath = join(data.binding.workspace_path, opts.path);
+      const openResult = await shell.openPath(absolutePath);
+      if (openResult) {
+        return { error: `打开失败：${openResult}` };
+      }
+      return { success: true };
+    } catch (err) {
+      return {
+        error: `打开文件失败：${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  });
+
+  // P2 (2026-10-19): expose the detected project root so the renderer can
+  // use it as a fallback auto-bind target for new sessions.
+  ipcMain.handle('sage:get-detected-project-root', (evt) => {
+    if (!isTrustedRenderer(evt.sender)) return null;
+    return detectedProjectRoot;
+  });
 }
 
 const wikiChatOwners = new Map<string, string>();
@@ -2482,6 +2490,12 @@ app
         // 网络层断 — 不是 token 问题
         logger.warn('main: auth probe network error (not a token mismatch)', err);
       }
+    }
+
+    // P2 (2026-10-19): detect project root from cwd for auto-bind fallback.
+    detectedProjectRoot = detectProjectRoot(process.cwd());
+    if (detectedProjectRoot) {
+      logger.info(`main: detected project root at ${detectedProjectRoot}`);
     }
 
     await registerIpcHandlers();

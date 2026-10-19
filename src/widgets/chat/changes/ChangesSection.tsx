@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 
 import { useChangesListStore } from '../../../features/changes/changesListStore';
 import { useRightPanelStore } from '../../../features/right-panel/rightPanelStore';
+import { WorkspaceEmptyGuard } from '../../../features/workspace';
 import { workspaceApi } from '../../../shared/api/workspaceApi';
 import type { WorkspaceCheckpoint } from '../../../shared/api/workspaceApi';
 import { langFromPath } from '../../../shared/lib/fileLang';
@@ -653,7 +654,10 @@ export function ChangesSection({ sessionId }: ChangesSectionProps) {
         </div>
       )}
       <div className="flex-1 overflow-y-auto">
-        {error ? (
+        {notBound ? (
+          // P0 (2026-10-19): 未绑定工作区时渲染引导组件而非 403 报错文案
+          <WorkspaceEmptyGuard feature="changes" />
+        ) : error ? (
           <div className="p-3 text-sm text-error">{error}</div>
         ) : loading && !changes ? (
           <div className="p-3 text-sm text-muted">加载变更…</div>

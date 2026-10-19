@@ -2,7 +2,9 @@ import { create } from 'zustand';
 
 import { saveCurrentSessionId } from '../../entities/session/storage';
 import { invoke } from '../api/desktopInvoke';
+import { workspaceApi } from '../api/workspaceApi';
 import type { GenerationStats, MessageSource, RagCitation } from '../api/types';
+import { getLastWorkspacePath } from './lastWorkspace';
 import { clientLogger } from '../log/client';
 
 // Re-export API modules for convenience
@@ -124,9 +126,19 @@ interface StoreState {
 
   // TM2 (DSH 对标 R11): 上下文水位（随 context_pressure 流事件更新；
   // 切换会话时清空——水位是 per-request 的临时量）
-  contextPressure: { session_id: string; pressure: number; total_tokens: number; budget_tokens: number } | null;
+  contextPressure: {
+    session_id: string;
+    pressure: number;
+    total_tokens: number;
+    budget_tokens: number;
+  } | null;
   setContextPressure: (
-    cp: { session_id: string; pressure: number; total_tokens: number; budget_tokens: number } | null,
+    cp: {
+      session_id: string;
+      pressure: number;
+      total_tokens: number;
+      budget_tokens: number;
+    } | null,
   ) => void;
 
   // 操作方法
@@ -234,6 +246,26 @@ export const useStore = create<StoreState>((set, _get) => ({
         sessions: [session, ...state.sessions],
         currentSessionId: session.id,
       }));
+      // P1+P2 (2026-10-19): auto-bind new session using priority fallback:
+      //   1. lastWorkspacePath (localStorage) — user's most recent explicit bind
+      //   2. detectedProjectRoot (IPC) — project root detected at Electron startup
+      //   3. null — session starts unbound
+      // Failure is non-fatal — the session still works without a binding.
+      let autoBindTarget = getLastWorkspacePath();
+      if (!autoBindTarget) {
+        try {
+          autoBindTarget = (await window.electronAPI?.getDetectedProjectRoot?.()) ?? null;
+        } catch (err: unknown) {
+          clientLogger.warn('store.createSession: getDetectedProjectRoot failed', {
+            error: String(err),
+          });
+        }
+      }
+      if (autoBindTarget) {
+        workspaceApi.bind(session.id, autoBindTarget).catch((err: unknown) => {
+          clientLogger.warn('store.createSession: auto-bind failed', { error: String(err) });
+        });
+      }
       return session.id;
     } catch (error) {
       clientLogger.error('store.createSession failed', { error: String(error) });
