@@ -955,3 +955,16 @@
   - 在 `标题 *` 标题栏新增 **`复制标题`**（`data-testid="milestone-copy-title-btn"`）与 **`清空标题`**（`data-testid="milestone-clear-title-btn"`），便于快速复用或重新填充里程碑标题。
 - **单元测试与门禁验证**：
   - 扩展 `ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（2 个测试文件共 25 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P70 — 工作台四形态统计存 L4 与台账转 L2 护栏、工作台项目行一键建里程碑/转 L2 护栏、Git 最近提交复制与转 L2 基线护栏、形态选择器版本保护策略复制（已完成）
+
+- **Phase 4.2 `Projects` 工作台四形态统计存 L4 与全局台账转 L2 护栏（`src/pages/Projects.tsx`）**：
+  - 在 `workbench-archetype-counts` 统计栏新增 **`统计存L4`**（`data-testid="workbench-save-archetype-stats-l4-btn"`），支持将全局受控项目的四形态分布统计归档至 L4 资料库（`projectApi.addMaterial`）；
+  - 在 `project-workbench-toolbar` 新增 **`台账转L2护栏`**（`data-testid="workbench-registry-to-constraint-btn"`），支持将受控项目台账边界固化为 `workspace_boundary`（`P8`）L2 行为约束（`projectApi.createConstraint`）。
+- **Phase 4.2 `WorkbenchProjectList` 项目行一键建里程碑与转 L2 护栏（`src/widgets/sidebar/sections/WorkbenchProjectList.tsx`）**：
+  - 在工作台项目列表每行操作区新增 **`+里程碑`**（`data-testid="workbench-row-to-milestone-${project.id}"`）与 **`+L2`**（`data-testid="workbench-row-to-constraint-${project.id}"`），支持无需展开详情即可将当前项目一键创建为 `[项目治理复核]` 里程碑（`projectApi.createMilestone`）或固化为 `workspace_guard`（`P8`）L2 护栏（`projectApi.createConstraint`）。
+- **Phase 4.3 `GitStatusWidget` 最近提交记录复制与一键转 L2 基线护栏（`src/features/project-type/GitStatusWidget.tsx`）**：
+  - 在最近提交标题栏新增 **`复制提交记录`**（`data-testid="git-widget-copy-commits-md-btn"`）与 **`提交转L2护栏`**（`data-testid="git-widget-commits-to-constraint-btn"`），支持复制最近提交 Markdown 清单或将提交规范固化为 `git_commit_baseline`（`P7`）L2 行为约束。
+- **Phase 4.3 `ProjectTypeSelector` 治理清单版本保护策略一键复制（`src/features/project-type/ProjectTypeSelector.tsx`）**：
+  - 在 `selector-suite-details` 治理清单预览面板新增 **`复制版本保护`**（`data-testid="selector-copy-vcs-btn"`），支持一键复制当前选中形态的版本保护策略说明。
+- **单元测试与门禁验证**：
+  - 扩展 `ConstraintSummaryWidget.test.tsx` 与 `ProjectTypeBadge.test.tsx`（2 个测试文件共 27 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
