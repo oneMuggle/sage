@@ -178,6 +178,9 @@ describe('MilestoneProgressWidget', () => {
       expect(screen.getByText('完成：')).toBeInTheDocument();
       expect(screen.getByText('进行：')).toBeInTheDocument();
       expect(screen.getByText('阻塞：')).toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('milestone-summary-risk-to-l2-btn'));
+      expect(screen.getByTestId('milestone-summary-risk-to-l2-btn')).toHaveTextContent('已转风险L2');
+      fireEvent.click(screen.getByTestId('milestone-summary-copy-item-m1'));
     });
   });
 
@@ -566,6 +569,10 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('overview-stage-to-constraint-btn')).toHaveTextContent('已设阶段约束');
     fireEvent.click(screen.getByTestId('overview-seed-stage-milestones-btn'));
     expect(screen.getByTestId('overview-seed-stage-milestones-btn')).toHaveTextContent('已导入阶段里程碑');
+    fireEvent.click(screen.getByTestId('overview-scaffold-dirs-btn'));
+    expect(screen.getByTestId('overview-scaffold-dirs-btn')).toHaveTextContent('已补齐目录');
+    fireEvent.click(screen.getByTestId('overview-seed-constraints-btn'));
+    expect(screen.getByTestId('overview-seed-constraints-btn')).toHaveTextContent('已导入默认约束');
     fireEvent.click(screen.getByTestId('overview-refresh-meta-btn'));
 
     // Open TaskDecomposeDialog from overview bar and test total days & invert/select-all

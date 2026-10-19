@@ -69,8 +69,13 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [projectPath, setProjectPath] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<GitFilterCategory>('all');
   const [copiedMd, setCopiedMd] = useState(false);
+  const [savedSiderL4, setSavedSiderL4] = useState(false);
+  const [savedSiderL3, setSavedSiderL3] = useState(false);
+  const [ingestedPaths, setIngestedPaths] = useState<Set<string>>(new Set());
+  const [copiedFilePath, setCopiedFilePath] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 获取第一个项目的路径
@@ -83,12 +88,14 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
           (a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0),
         );
         setProjectPath(sorted[0].path);
+        setProjectId(sorted[0].id);
         return sorted[0].path;
       }
     } catch {
       // 静默降级
     }
     setProjectPath(null);
+    setProjectId(null);
     return null;
   }, []);
 
@@ -285,6 +292,58 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                   {item.label}
                 </button>
               ))}
+              {projectId && (
+                <>
+                  <button
+                    type="button"
+                    data-testid="git-sider-save-l4-btn"
+                    onClick={async () => {
+                      if (savedSiderL4) return;
+                      setSavedSiderL4(true);
+                      if (typeof projectApi?.addMaterial === 'function') {
+                        try {
+                          await projectApi.addMaterial(projectId, {
+                            content: `# 侧边栏 Git 变更快照 (${status.branch || 'HEAD'})\n${status.files.map((f) => `- [${statusBadge(f.status)}] \`${f.path}\``).join('\n')}`,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {savedSiderL4 ? '已存L4' : '存L4'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="git-sider-save-l3-btn"
+                    onClick={async () => {
+                      if (savedSiderL3) return;
+                      setSavedSiderL3(true);
+                      if (typeof projectApi?.confirmKnowledge === 'function') {
+                        try {
+                          await projectApi.confirmKnowledge(projectId, {
+                            entries: [
+                              {
+                                category: 'note',
+                                content: `侧边栏 Git 变更快照 (${status.branch || 'HEAD'})：共 ${status.files.length} 个变更文件`,
+                                importance: 6,
+                                sourceMessageIds: [],
+                                reasoning: '侧边栏 Git 变更状态沉淀至 L3 画像',
+                              },
+                            ],
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {savedSiderL3 ? '已存L3' : '存L3'}
+                  </button>
+                </>
+              )}
             </div>
             <ul className="flex flex-col" data-testid="git-status-list">
               {filteredFiles.slice(0, 12).map((file) => (
@@ -301,6 +360,42 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                   <span className="text-ui-xs text-text truncate flex-1">
                     {file.path}
                   </span>
+                  {projectId && (
+                    <button
+                      type="button"
+                      data-testid={`git-sider-ingest-${file.path}`}
+                      onClick={async () => {
+                        if (ingestedPaths.has(file.path)) return;
+                        setIngestedPaths((prev) => new Set(prev).add(file.path));
+                        if (typeof projectApi?.addMaterialFromFile === 'function') {
+                          try {
+                            await projectApi.addMaterialFromFile(projectId, file.path);
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                    >
+                      {ingestedPaths.has(file.path) ? '已存L4' : '+L4'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    data-testid={`git-sider-copy-path-${file.path}`}
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard?.writeText(file.path);
+                        setCopiedFilePath(file.path);
+                        setTimeout(() => setCopiedFilePath(null), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {copiedFilePath === file.path ? '已复制' : '复制'}
+                  </button>
                 </li>
               ))}
               {filteredFiles.length > 12 && (

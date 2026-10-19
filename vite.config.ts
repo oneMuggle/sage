@@ -129,6 +129,7 @@ export default defineConfig({
           'vendor-markdown': ['react-markdown', 'remark-gfm'],
           'vendor-state': ['zustand'],
           'vendor-motion': ['framer-motion'],
+          'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-web-links'],
         },
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',
