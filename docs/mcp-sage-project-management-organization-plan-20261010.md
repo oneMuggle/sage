@@ -1083,3 +1083,15 @@
   - 在已信任与待信任两种状态下均新增 **`复制配置路径`**（`data-testid="project-hooks-copy-config-path-btn"`），一键复制 `.sage/hooks.json` 标准路径。
 - **单元测试与门禁验证**：
   - 扩展 `ConstraintSummaryWidget.test.tsx`、`ProjectArchetypeStudio.test.tsx`、`WorkspaceBranchPicker.test.tsx` 与 `ProjectHooksPanel.test.tsx`，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P80 — 对话头项目蓝图指引导出、工作区绑定弹窗路径/MD/JSON 导出、Hook 执行历史与全局 Hook 配置 MD/JSON 导出（已完成）
+
+- **Phase 4.3 `ProjectBadge` 对话头项目形态蓝图指引一键导出（`src/widgets/chat/ProjectBadge.tsx`）**：
+  - 当已登记项目解析出形态蓝图（`blueprint`）时，在对话头部项目徽章栏新增 **`复制蓝图MD`**（`data-testid="chat-project-copy-blueprint-md-btn"`），支持一键复制当前项目形态的定位、版本治理、标准目录与全阶段提示 Markdown。
+- **Phase 4.3 `WorkspaceBindModal` 工作区绑定弹窗路径/MD/JSON 快捷导出（`src/features/workspace/WorkspaceBindModal.tsx`）**：
+  - 在已绑定工作区状态下新增导出动作栏（`data-testid="workspace-bind-export-actions"`），支持 **`复制路径`**（`data-testid="workspace-bind-copy-path-btn"`）、**`复制绑定MD`**（`data-testid="workspace-bind-copy-md-btn"`）与 **`复制绑定JSON`**（`data-testid="workspace-bind-copy-json-btn"`）。
+- **Phase 4.4 `HookHistoryPanel` Hook 执行历史 MD/JSON 与单条记录 JSON 导出（`src/widgets/settings/HookHistoryPanel.tsx`）**：
+  - 在执行历史面板头部新增 **`复制历史MD`**（`data-testid="hook-history-copy-md-btn"`）与 **`复制历史JSON`**（`data-testid="hook-history-copy-json-btn"`），并在每条记录行新增 **`复制JSON`**（`data-testid="hook-history-copy-record-json-${record.id}"`）。
+- **Phase 4.4 `HooksCard` 全局与内置 Hook 配置清单 MD/JSON 与单条 JSON 导出（`src/widgets/settings/HooksCard.tsx`）**：
+  - 在全局 Hook 工具栏新增 **`复制钩子MD`**（`data-testid="hooks-copy-all-md-btn"`）与 **`复制钩子JSON`**（`data-testid="hooks-copy-all-json-btn"`），并在内置钩子行与自定义钩子行分别新增 **`复制JSON`**（`data-testid="builtin-copy-json-${builtin.id}"` / `data-testid="hook-copy-json-${originalIdx}"`）。
+- **单元测试与门禁验证**：
+  - 扩展 `ProjectBadge.test.tsx`、`WorkspaceBindModal.test.tsx`、`HookHistoryPanel.test.tsx` 与 `HooksCard.test.tsx`，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
