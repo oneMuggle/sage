@@ -605,6 +605,9 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('workbench-row-to-milestone-proj-sider-1')).toHaveTextContent('已建里程碑');
     fireEvent.click(screen.getByTestId('workbench-row-to-constraint-proj-sider-1'));
     expect(screen.getByTestId('workbench-row-to-constraint-proj-sider-1')).toHaveTextContent('已转L2');
+    fireEvent.click(screen.getByTestId('workbench-row-scaffold-proj-sider-1'));
+    expect(screen.getByTestId('workbench-row-scaffold-proj-sider-1')).toHaveTextContent('已脚手架');
+    fireEvent.click(screen.getByTestId('workbench-copy-project-list-btn'));
     fireEvent.click(screen.getByTestId('workbench-save-archetype-stats-l4-btn'));
     expect(screen.getByTestId('workbench-save-archetype-stats-l4-btn')).toHaveTextContent('已存统计L4');
     fireEvent.click(screen.getByTestId('workbench-registry-to-constraint-btn'));
