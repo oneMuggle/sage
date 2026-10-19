@@ -160,6 +160,7 @@ export function MilestoneEditor({
   const [convertedConstraint, setConvertedConstraint] = useState(false);
   const [savedMilestoneL4, setSavedMilestoneL4] = useState(false);
   const [savedMilestoneL3, setSavedMilestoneL3] = useState(false);
+  const [copiedDueDate, setCopiedDueDate] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -310,6 +311,14 @@ export function MilestoneEditor({
                   +支柱 #{idx + 1}
                 </button>
               ))}
+              <button
+                type="button"
+                data-testid="milestone-pillar-fill-all-btn"
+                onClick={() => setDescription(blueprint.contextPillars.join('；'))}
+                className="rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+              >
+                一键填入全部支柱
+              </button>
             </div>
           </div>
 
@@ -345,6 +354,14 @@ export function MilestoneEditor({
                 className="flex flex-wrap items-center gap-1"
                 data-testid="milestone-due-presets"
               >
+                <button
+                  type="button"
+                  data-testid="milestone-due-today-btn"
+                  onClick={() => setDueDate(formatRelativeDate(0))}
+                  className="rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+                >
+                  今日
+                </button>
                 {[3, 7, 14, 30].map((days) => (
                   <button
                     key={days}
@@ -364,6 +381,24 @@ export function MilestoneEditor({
                     className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted"
                   >
                     清空
+                  </button>
+                )}
+                {dueDate && (
+                  <button
+                    type="button"
+                    data-testid="milestone-copy-due-btn"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard?.writeText(dueDate);
+                        setCopiedDueDate(true);
+                        setTimeout(() => setCopiedDueDate(false), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {copiedDueDate ? '已复制日期' : '复制截止日期'}
                   </button>
                 )}
               </div>
