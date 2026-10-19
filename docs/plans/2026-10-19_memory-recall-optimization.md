@@ -188,10 +188,18 @@ logger.info(
   - 添加单元测试
   - 性能测试
 
-### Phase 3: 长期优化（可选）🚀
+### Phase 3: 长期优化 ✅ 已完成
 
-- [ ] **Task 7**: 引入混合检索策略（关键词 + 向量 + 知识图谱）
-- [ ] **Task 8**: 添加召回质量评估（离线评估 + 在线评估）
+- [x] **Task 7**: 引入混合检索策略（轻量级标签共现图谱）
+  - 创建 `backend/memory/tag_graph.py` — 标签共现图谱
+  - 基于标签共现关系构建轻量级知识图谱
+  - 查询时通过标签关联召回相关记忆
+  
+- [x] **Task 8**: 添加召回质量评估（离线 + 在线）
+  - 创建 `backend/memory/recall_eval.py` — 评估框架
+  - 离线评估：Precision@K, Recall@K, MRR, NDCG@K
+  - 在线评估：满意度追踪、平均结果数统计
+  - 支持评估报告 JSON 导出
 
 ---
 
@@ -199,10 +207,12 @@ logger.info(
 
 ### 4.1 单元测试
 
-- [ ] 软过滤策略测试（同会话加分，跨会话降分）
-- [ ] 动态 RRF 权重测试（HashEmbedder 跳向量路）
-- [ ] 动态 core 槽位测试
-- [ ] Episodic FTS5 搜索测试
+- [x] 软过滤策略测试（同会话加分，跨会话降分）
+- [x] 动态 RRF 权重测试（HashEmbedder 跳向量路）
+- [x] 动态 core 槽位测试
+- [x] Episodic FTS5 搜索测试
+- [x] 标签共现图谱测试（构建、查询、统计）
+- [x] 召回质量评估测试（离线指标、在线指标）
 
 ### 4.2 集成测试
 
@@ -229,15 +239,18 @@ logger.info(
 
 ## 6. 验收标准
 
-- [ ] 跨会话知识可被召回（软过滤生效）
-- [ ] HashEmbedder 下向量路被跳过（性能提升）
-- [ ] 语义嵌入下向量权重提升到 0.8
-- [ ] Episodic 记忆搜索性能提升 5x+
-- [ ] core 槽位动态调整生效
-- [ ] 向量回填上限提升到 2000
-- [ ] 召回质量监控日志完整
-- [ ] 所有测试通过
-- [ ] 无新增 lint 错误
+- [x] 跨会话知识可被召回（软过滤生效）
+- [x] HashEmbedder 下向量路被跳过（性能提升）
+- [x] 语义嵌入下向量权重提升到 0.8
+- [x] Episodic 记忆搜索性能提升 5x+
+- [x] core 槽位动态调整生效
+- [x] 向量回填上限提升到 2000
+- [x] 召回质量监控日志完整
+- [x] 标签共现图谱构建并可查询
+- [x] 离线评估指标计算正确
+- [x] 在线评估指标追踪正常
+- [x] 所有测试通过
+- [x] 无新增 lint 错误
 
 ---
 
@@ -248,3 +261,5 @@ logger.info(
 - 代码分析：`backend/memory/episodic.py`
 - 代码分析：`backend/memory/semantic.py`
 - 代码分析：`backend/memory/vector_store.py`
+- 代码分析：`backend/memory/tag_graph.py`（新建）
+- 代码分析：`backend/memory/recall_eval.py`（新建）
