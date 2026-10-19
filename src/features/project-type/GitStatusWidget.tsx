@@ -50,6 +50,8 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [copiedFilePath, setCopiedFilePath] = useState<string | null>(null);
   const [copiedBranch, setCopiedBranch] = useState(false);
   const [savedFilesL3, setSavedFilesL3] = useState(false);
+  const [copiedCommitsMd, setCopiedCommitsMd] = useState(false);
+  const [convertedCommitsL2, setConvertedCommitsL2] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -535,8 +537,52 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
         {/* 最近提交 */}
         {status.recent_commits.length > 0 && (
           <div className="pt-2 border-t">
-            <div className="mb-1 flex items-center justify-between gap-2">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-1.5">
               <div className="text-xs text-muted-foreground">最近提交</div>
+              <div className="flex flex-wrap items-center gap-1">
+              <button
+                type="button"
+                data-testid="git-widget-copy-commits-md-btn"
+                onClick={async () => {
+                  const md = status.recent_commits
+                    .slice(0, 5)
+                    .map((c) => `- \`${c.sha.slice(0, 7)}\` ${c.message} (${c.author})`)
+                    .join('\n');
+                  try {
+                    await navigator.clipboard?.writeText(md);
+                    setCopiedCommitsMd(true);
+                    setTimeout(() => setCopiedCommitsMd(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+              >
+                {copiedCommitsMd ? '已复制提交' : '复制提交记录'}
+              </button>
+              <button
+                type="button"
+                data-testid="git-widget-commits-to-constraint-btn"
+                onClick={async () => {
+                  if (convertedCommitsL2) return;
+                  setConvertedCommitsL2(true);
+                  if (typeof projectApi?.createConstraint === 'function') {
+                    try {
+                      await projectApi.createConstraint(projectId, {
+                        category: 'git_commit_baseline',
+                        content: `[提交基线护栏] 保持最近提交规范 (${status.current_branch ?? 'main'})：${status.recent_commits[0]?.message ?? ''}`,
+                        triggerPattern: 'always',
+                        priority: 7,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+              >
+                {convertedCommitsL2 ? '已转提交L2' : '提交转L2护栏'}
+              </button>
               <button
                 type="button"
                 data-testid="git-widget-save-commits-l3-btn"
@@ -588,6 +634,7 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
               >
                 {savedCommitsL4 ? '已存提交至 L4' : '存提交至 L4'}
               </button>
+              </div>
             </div>
             <div className="space-y-1">
               {status.recent_commits.slice(0, 3).map((commit) => (
