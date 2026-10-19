@@ -88,6 +88,8 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
   const [batchConvertedMilestones, setBatchConvertedMilestones] = useState(false);
   const [milestoneRuleIds, setMilestoneRuleIds] = useState<Set<string>>(new Set());
   const [l4RuleIds, setL4RuleIds] = useState<Set<string>>(new Set());
+  const [copiedGlobTestPath, setCopiedGlobTestPath] = useState(false);
+  const [copiedSubtemplates, setCopiedSubtemplates] = useState(false);
 
   const blueprint: ArchetypeBlueprintMeta = getArchetypeBlueprint(projectType);
 
@@ -434,14 +436,32 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
             </button>
           ))}
           {globTestPath.trim() && (
-            <button
-              type="button"
-              data-testid="constraint-glob-clear-btn"
-              onClick={() => setGlobTestPath('')}
-              className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted"
-            >
-              清空
-            </button>
+            <>
+              <button
+                type="button"
+                data-testid="constraint-glob-copy-path-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard?.writeText(globTestPath);
+                    setCopiedGlobTestPath(true);
+                    setTimeout(() => setCopiedGlobTestPath(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted"
+              >
+                {copiedGlobTestPath ? '已复制测试路径' : '复制测试路径'}
+              </button>
+              <button
+                type="button"
+                data-testid="constraint-glob-clear-btn"
+                onClick={() => setGlobTestPath('')}
+                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted"
+              >
+                清空
+              </button>
+            </>
           )}
         </div>
         {globTestPath.trim() && (
@@ -508,9 +528,29 @@ export function ConstraintManager({ projectId, projectType, className }: Constra
           className="rounded-lg border border-border/70 bg-muted/20 p-3"
           data-testid="constraint-preset-packs"
         >
-          <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            <span>{blueprint.label} · 细分规范预设包（点击一键追加）：</span>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs font-medium text-muted-foreground">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span>{blueprint.label} · 细分规范预设包（点击一键追加）：</span>
+            </div>
+            <button
+              type="button"
+              data-testid="constraint-copy-subtemplates-btn"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard?.writeText(
+                    blueprint.subTemplates.map((t, i) => `${i + 1}. ${t.label} (${t.key})`).join('\n'),
+                  );
+                  setCopiedSubtemplates(true);
+                  setTimeout(() => setCopiedSubtemplates(false), 1500);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              {copiedSubtemplates ? '已复制预设包' : '复制预设包清单'}
+            </button>
           </div>
           <div className="flex flex-wrap gap-2">
             {blueprint.subTemplates.map((tpl) => (
