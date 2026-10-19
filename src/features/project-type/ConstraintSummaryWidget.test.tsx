@@ -477,11 +477,15 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('constraint-clear-category-btn'));
     fireEvent.click(screen.getByTestId('constraint-dir-glob-0'));
     fireEvent.click(screen.getByTestId('constraint-copy-glob-btn'));
+    fireEvent.click(screen.getByTestId('constraint-clear-glob-btn'));
 
     fireEvent.change(screen.getByTestId('constraint-editor-test-path-input'), {
       target: { value: 'src/index.ts' },
     });
     expect(screen.getByTestId('constraint-editor-test-path-badge')).toHaveTextContent('命中触发');
+    fireEvent.click(screen.getByTestId('constraint-editor-copy-test-path-btn'));
+    fireEvent.click(screen.getByTestId('constraint-editor-clear-test-path-btn'));
+    expect(screen.getByTestId('constraint-editor-test-path-input')).toHaveValue('');
     fireEvent.click(screen.getByTestId('constraint-editor-copy-md-btn'));
     fireEvent.click(screen.getByTestId('constraint-editor-save-l3-btn'));
     expect(screen.getByTestId('constraint-editor-save-l3-btn')).toHaveTextContent('已沉淀至 L3');
