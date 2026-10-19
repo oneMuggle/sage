@@ -65,6 +65,8 @@ export function TypeDetectionPreview({
   const [copiedDetailsMd, setCopiedDetailsMd] = useState(false);
   const [copiedConfidence, setCopiedConfidence] = useState(false);
   const [copiedSignalMdIdx, setCopiedSignalMdIdx] = useState<number | null>(null);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const [copiedDetailsJson, setCopiedDetailsJson] = useState(false);
 
   if (loading) {
     return (
@@ -165,6 +167,37 @@ export function TypeDetectionPreview({
                 复制检测依据
               </>
             )}
+          </button>
+          <button
+            type="button"
+            data-testid="detection-copy-json-btn"
+            onClick={async () => {
+              setCopiedJson(true);
+              setTimeout(() => {
+                if (typeof window !== 'undefined') setCopiedJson(false);
+              }, 1500);
+              try {
+                await navigator.clipboard?.writeText(
+                  JSON.stringify(
+                    {
+                      detectedType: result.detectedType,
+                      label: detectedBlueprint.label,
+                      confidence: confidencePercent,
+                      signals: result.signals,
+                      vcsMode: detectedBlueprint.defaultVcsMode,
+                      stages: detectedBlueprint.stages.map((s) => s.id),
+                    },
+                    null,
+                    2,
+                  ),
+                );
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+          >
+            {copiedJson ? '已复制检测JSON' : '复制检测 JSON'}
           </button>
           <button
             type="button"
@@ -477,7 +510,35 @@ export function TypeDetectionPreview({
                 {copiedPillars ? '已复制支柱' : '复制护栏支柱'}
               </button>
             </div>
-            <div className="flex justify-end pt-0.5">
+            <div className="flex justify-end gap-1.5 pt-0.5">
+              <button
+                type="button"
+                data-testid="detection-copy-details-json-btn"
+                onClick={async () => {
+                  setCopiedDetailsJson(true);
+                  setTimeout(() => {
+                    if (typeof window !== 'undefined') setCopiedDetailsJson(false);
+                  }, 1500);
+                  try {
+                    await navigator.clipboard?.writeText(
+                      JSON.stringify(
+                        {
+                          subTemplates: detectedBlueprint.subTemplates,
+                          recommendedMilestones: detectedBlueprint.recommendedMilestones,
+                          contextPillars: detectedBlueprint.contextPillars,
+                        },
+                        null,
+                        2,
+                      ),
+                    );
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+              >
+                {copiedDetailsJson ? '已复制详情JSON' : '复制详情 JSON'}
+              </button>
               <button
                 type="button"
                 data-testid="detection-copy-details-md-btn"
