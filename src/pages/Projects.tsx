@@ -31,6 +31,8 @@ export function Projects() {
   const [convertedArchetypeStatsConstraint, setConvertedArchetypeStatsConstraint] = useState(false);
   const [convertedRegistryMilestone, setConvertedRegistryMilestone] = useState(false);
   const [convertedRegistryConstraint, setConvertedRegistryConstraint] = useState(false);
+  const [copiedRegistryJson, setCopiedRegistryJson] = useState(false);
+  const [copiedArchetypeStatsJson, setCopiedArchetypeStatsJson] = useState(false);
 
   const loadProjects = useCallback(async () => {
     if (typeof projectApi?.list !== 'function') return;
@@ -132,6 +134,30 @@ export function Projects() {
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
                 >
                   {copiedArchetypeStats ? '已复制统计' : '复制形态统计'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="workbench-copy-archetype-stats-json-btn"
+                  onClick={async () => {
+                    setCopiedArchetypeStatsJson(true);
+                    setTimeout(() => {
+                      if (typeof window !== 'undefined') setCopiedArchetypeStatsJson(false);
+                    }, 1500);
+                    try {
+                      await navigator.clipboard?.writeText(
+                        JSON.stringify(
+                          { total: projects.length, counts: archetypeCounts },
+                          null,
+                          2,
+                        ),
+                      );
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  {copiedArchetypeStatsJson ? '已复制统计JSON' : '复制统计JSON'}
                 </button>
                 {projects.length > 0 && (
                   <button
@@ -387,6 +413,42 @@ export function Projects() {
                     导出项目台账 MD
                   </>
                 )}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setCopiedRegistryJson(true);
+                  setTimeout(() => {
+                    if (typeof window !== 'undefined') setCopiedRegistryJson(false);
+                  }, 1800);
+                  try {
+                    await navigator.clipboard?.writeText(
+                      JSON.stringify(
+                        {
+                          total: projects.length,
+                          archetypeCounts,
+                          projects: projects.map((p) => ({
+                            id: p.id,
+                            name: p.name,
+                            path: p.path,
+                            projectType: p.projectType ?? p.detectedType ?? 'coding',
+                            projectStage: p.projectStage ?? null,
+                            vcsMode: p.vcsMode ?? null,
+                            sessionCount: p.sessionCount,
+                          })),
+                        },
+                        null,
+                        2,
+                      ),
+                    );
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                data-testid="workbench-copy-registry-json-btn"
+                className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
+              >
+                {copiedRegistryJson ? '已复制台账JSON' : '复制台账 JSON'}
               </button>
               <button
                 type="button"
