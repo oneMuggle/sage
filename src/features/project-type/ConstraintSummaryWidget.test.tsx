@@ -148,6 +148,7 @@ describe('ConstraintSummaryWidget', () => {
         content: 'Rule 3',
         priority: 4,
         enabled: true,
+        triggerPattern: 'src/**/*.ts',
         createdAt: 1000,
         updatedAt: 1000,
       },
@@ -160,6 +161,10 @@ describe('ConstraintSummaryWidget', () => {
       expect(screen.getByText('git-commit')).toBeInTheDocument();
       fireEvent.click(screen.getByTestId('constraint-summary-cats-to-l3-btn'));
       expect(screen.getByTestId('constraint-summary-cats-to-l3-btn')).toHaveTextContent('已存分布L3');
+      fireEvent.click(screen.getByTestId('constraint-summary-cats-to-l4-btn'));
+      expect(screen.getByTestId('constraint-summary-cats-to-l4-btn')).toHaveTextContent('已存分布L4');
+      fireEvent.click(screen.getByTestId('constraint-summary-glob-to-l4-btn'));
+      expect(screen.getByTestId('constraint-summary-glob-to-l4-btn')).toHaveTextContent('已存Glob至L4');
     });
   });
 

@@ -35,6 +35,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [promotedL4Ids, setPromotedL4Ids] = useState<Set<string>>(new Set());
   const [convertedRiskL2, setConvertedRiskL2] = useState(false);
   const [convertedRiskL3, setConvertedRiskL3] = useState(false);
+  const [convertedRiskL4, setConvertedRiskL4] = useState(false);
   const [convertedCompletedL3, setConvertedCompletedL3] = useState(false);
   const [convertedCompletedL4, setConvertedCompletedL4] = useState(false);
   const [copiedMilestoneId, setCopiedMilestoneId] = useState<string | null>(null);
@@ -352,6 +353,35 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-ui-2xs font-medium text-amber-600 hover:bg-amber-500/20"
               >
                 {convertedRiskL3 ? '已存风险L3' : '风险项存L3'}
+              </button>
+            )}
+            {(blocked > 0 || overdueCount > 0) && (
+              <button
+                type="button"
+                data-testid="milestone-summary-risk-to-l4-btn"
+                onClick={async () => {
+                  if (convertedRiskL4) return;
+                  setConvertedRiskL4(true);
+                  const riskList = milestones.filter(
+                    (m) =>
+                      m.status === 'blocked' ||
+                      (m.status !== 'completed' && Boolean(m.dueDate && m.dueDate < todayStr)),
+                  );
+                  if (typeof projectApi?.addMaterial === 'function') {
+                    try {
+                      await projectApi.addMaterial(projectId, {
+                        content: `# 阻塞与逾期风险里程碑清单 (${riskList.length} 项)\n${riskList
+                          .map((rm) => `- [${rm.status}] ${rm.title}${rm.dueDate ? ` (截止: ${rm.dueDate})` : ''}`)
+                          .join('\n')}`,
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-ui-2xs font-medium text-amber-600 hover:bg-amber-500/20"
+              >
+                {convertedRiskL4 ? '已存风险L4' : '风险项存L4'}
               </button>
             )}
             {completed > 0 && (
