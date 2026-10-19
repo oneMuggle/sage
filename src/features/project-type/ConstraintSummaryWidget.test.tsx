@@ -350,6 +350,7 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('constraint-summary-preview-list')).toHaveTextContent(
       '严禁将明文密钥提交至版本库',
     );
+    fireEvent.click(screen.getByTestId('constraint-summary-copy-preview-btn'));
     fireEvent.click(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1'));
     expect(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1')).toHaveTextContent('已存 L3');
     fireEvent.click(screen.getByTestId('constraint-summary-rule-to-milestone-c-p30-1'));
@@ -585,12 +586,15 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('git-sider-guard-all-btn')).toHaveTextContent('已全护栏');
     fireEvent.click(screen.getByTestId('git-sider-ingest-all-btn'));
     expect(screen.getByTestId('git-sider-ingest-all-btn')).toHaveTextContent('已全入库');
+    fireEvent.click(screen.getByTestId('git-sider-copy-paths-btn'));
     fireEvent.click(screen.getByTestId('git-sider-ingest-src/index.ts'));
     expect(screen.getByTestId('git-sider-ingest-src/index.ts')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('git-sider-guard-src/index.ts'));
     expect(screen.getByTestId('git-sider-guard-src/index.ts')).toHaveTextContent('已护栏');
     fireEvent.click(screen.getByTestId('git-sider-l3-src/index.ts'));
     expect(screen.getByTestId('git-sider-l3-src/index.ts')).toHaveTextContent('已存L3');
+    fireEvent.click(screen.getByTestId('git-sider-milestone-src/index.ts'));
+    expect(screen.getByTestId('git-sider-milestone-src/index.ts')).toHaveTextContent('已建里程碑');
     fireEvent.click(screen.getByTestId('git-sider-copy-path-src/index.ts'));
     const rowL3Btn = await screen.findByTestId('workbench-row-to-l3-proj-sider-1');
     fireEvent.click(rowL3Btn);

@@ -76,7 +76,7 @@ pandas==2.2.3         # DataFrame Excel ops, ~15MB wheel + numpy transitively
 # Office template + PDF features (Phase 2, 2026-09-05)
 # See docs/superpowers/specs/2026-09-05-word-template-pdf-operations-design.md
 docxtpl>=0.20.0       # Word template fill with {{variable}} placeholders, ~0.5MB wheel
-PyMuPDF>=1.25.0       # PDF read + form fill (C extension, wheels available for py38+), ~15MB wheel
+PyMuPDF>=1.25.0,<2.0.0  # PDF read + form fill (C extension, wheels available for py38+, <2.0 avoids pymupdf-layout==2.0 breaking find_tables/flatten), ~15MB wheel
 reportlab>=4.0.0      # PDF generation from structured data, ~3MB wheel
 
 # matplotlib — 图表渲染（批次2）— main 通道 only；requirements-bundled/py38（Win7）不加。

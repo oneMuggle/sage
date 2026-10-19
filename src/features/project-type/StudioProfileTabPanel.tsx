@@ -126,6 +126,7 @@ export function StudioProfileTabPanel({
   const [copiedCatStats, setCopiedCatStats] = useState(false);
   const [savedCatStatsL4, setSavedCatStatsL4] = useState(false);
   const [savedPillarsL4, setSavedPillarsL4] = useState(false);
+  const [copiedDraft, setCopiedDraft] = useState(false);
   const presets = PROFILE_PRESETS_BY_TYPE[projectType] ?? PROFILE_PRESETS_BY_TYPE.coding;
   const blueprint = getArchetypeBlueprint(projectType);
 
@@ -461,6 +462,30 @@ export function StudioProfileTabPanel({
           data-testid="studio-profile-input"
           className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-xs"
         />
+        <button
+          type="button"
+          data-testid="studio-profile-copy-draft-btn"
+          onClick={async () => {
+            try {
+              await navigator.clipboard?.writeText(profileDraft);
+              setCopiedDraft(true);
+              setTimeout(() => setCopiedDraft(false), 1500);
+            } catch {
+              // ignore in test/offline mode
+            }
+          }}
+          className="rounded-md border border-border bg-background px-2 py-1 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          {copiedDraft ? '已复制草稿' : '复制草稿'}
+        </button>
+        <button
+          type="button"
+          data-testid="studio-profile-clear-draft-btn"
+          onClick={() => onDraftChange('')}
+          className="rounded-md border border-border bg-background px-2 py-1 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          清空草稿
+        </button>
         <Button
           size="sm"
           onClick={() => void onAddEntry()}

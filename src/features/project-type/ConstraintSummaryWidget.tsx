@@ -57,6 +57,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [copiedGlobRules, setCopiedGlobRules] = useState(false);
   const [savedCatsL3, setSavedCatsL3] = useState(false);
   const [savedCatsL4, setSavedCatsL4] = useState(false);
+  const [copiedPreviewRules, setCopiedPreviewRules] = useState(false);
 
   const fetchConstraints = useCallback(async () => {
     if (typeof projectApi?.listConstraints !== 'function') {
@@ -549,16 +550,38 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
 
         {topRules.length > 0 && (
           <div className="pt-1">
-            <button
-              type="button"
-              onClick={() => setPreviewExpanded((v) => !v)}
-              data-testid="constraint-summary-preview-toggle"
-              className="text-xs font-medium text-primary hover:underline"
-            >
-              {previewExpanded
-                ? '收起高优规则预览'
-                : `查看高优规则预览 (${topRules.length})`}
-            </button>
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewExpanded((v) => !v)}
+                data-testid="constraint-summary-preview-toggle"
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                {previewExpanded
+                  ? '收起高优规则预览'
+                  : `查看高优规则预览 (${topRules.length})`}
+              </button>
+              {previewExpanded && (
+                <button
+                  type="button"
+                  data-testid="constraint-summary-copy-preview-btn"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard?.writeText(
+                        topRules.map((r) => `- [P${r.priority}] ${r.content}`).join('\n'),
+                      );
+                      setCopiedPreviewRules(true);
+                      setTimeout(() => setCopiedPreviewRules(false), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedPreviewRules ? '已复制预览' : '复制高优预览'}
+                </button>
+              )}
+            </div>
             {previewExpanded && (
               <div
                 className="mt-1.5 space-y-1 rounded border border-border bg-muted/30 p-2 text-xs"
