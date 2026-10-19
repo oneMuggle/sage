@@ -198,6 +198,12 @@ describe('WorkspaceBindModal — revoke flow', () => {
     renderModal({ currentPath: '/tmp/ws-a' });
     const btn = screen.getByTestId('workspace-revoke-button') as HTMLButtonElement;
     expect(btn.disabled).toBe(false);
+    fireEvent.click(screen.getByTestId('workspace-bind-copy-path-btn'));
+    expect(screen.getByTestId('workspace-bind-copy-path-btn')).toHaveTextContent('已复制路径');
+    fireEvent.click(screen.getByTestId('workspace-bind-copy-md-btn'));
+    expect(screen.getByTestId('workspace-bind-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('workspace-bind-copy-json-btn'));
+    expect(screen.getByTestId('workspace-bind-copy-json-btn')).toHaveTextContent('已复制JSON');
   });
 
   it('disables the revoke button when currentPath is null', () => {
