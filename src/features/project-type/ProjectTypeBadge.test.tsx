@@ -198,6 +198,10 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('selector-copy-subtemplates-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-milestones-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-pillars-btn'));
+    fireEvent.click(screen.getByTestId('selector-copy-all-suite-json-btn'));
+    expect(screen.getByTestId('selector-copy-all-suite-json-btn')).toHaveTextContent(
+      '已复制详情 JSON',
+    );
     fireEvent.click(screen.getByTestId('selector-copy-all-suite-md-btn'));
     expect(screen.getByTestId('selector-copy-all-suite-md-btn')).toHaveTextContent('已复制全部详情');
     fireEvent.click(screen.getByTestId('selector-copy-signal-0'));

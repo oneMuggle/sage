@@ -47,6 +47,7 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
   const [scaffoldedIds, setScaffoldedIds] = useState<Set<string>>(new Set());
   const [copiedJsonList, setCopiedJsonList] = useState(false);
   const [copiedRowMdId, setCopiedRowMdId] = useState<string | null>(null);
+  const [copiedRowJsonId, setCopiedRowJsonId] = useState<string | null>(null);
   const data = useProjectSectionData({ onOpenSession });
 
   const {
@@ -476,6 +477,39 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                     className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
                   >
                     {copiedRowMdId === project.id ? '已复制MD' : '复制档案MD'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`workbench-row-copy-json-${project.id}`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setCopiedRowJsonId(project.id);
+                      setTimeout(() => {
+                        if (typeof window !== 'undefined') setCopiedRowJsonId(null);
+                      }, 1500);
+                      try {
+                        await navigator.clipboard?.writeText(
+                          JSON.stringify(
+                            {
+                              id: project.id,
+                              name: project.name,
+                              path: project.path,
+                              projectType: project.projectType ?? project.detectedType ?? 'coding',
+                              projectStage: project.projectStage ?? null,
+                              vcsMode: project.vcsMode ?? null,
+                              sessionCount: project.sessionCount,
+                            },
+                            null,
+                            2,
+                          ),
+                        );
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {copiedRowJsonId === project.id ? '已复制JSON' : '复制档案JSON'}
                   </button>
                   <button
                     type="button"

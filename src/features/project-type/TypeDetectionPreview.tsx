@@ -136,7 +136,9 @@ export function TypeDetectionPreview({
             data-testid="detection-copy-confidence-btn"
             onClick={async () => {
               setCopiedConfidence(true);
-              setTimeout(() => setCopiedConfidence(false), 1500);
+              setTimeout(() => {
+                if (typeof window !== 'undefined') setCopiedConfidence(false);
+              }, 1500);
               try {
                 await navigator.clipboard?.writeText(
                   `${detectedBlueprint.label} (${result.detectedType}) · 置信度 ${confidencePercent}%`,
@@ -294,7 +296,9 @@ export function TypeDetectionPreview({
                   data-testid={`detection-copy-signal-md-${idx}`}
                   onClick={async () => {
                     setCopiedSignalMdIdx(idx);
-                    setTimeout(() => setCopiedSignalMdIdx(null), 1500);
+                    setTimeout(() => {
+                      if (typeof window !== 'undefined') setCopiedSignalMdIdx(null);
+                    }, 1500);
                     try {
                       await navigator.clipboard?.writeText(
                         `- **[${detectedLabel}检测依据 #${idx + 1}]** ${signal}`,

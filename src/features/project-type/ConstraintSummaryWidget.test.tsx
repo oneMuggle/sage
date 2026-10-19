@@ -617,6 +617,10 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('workbench-row-scaffold-proj-sider-1')).toHaveTextContent('已脚手架');
     fireEvent.click(screen.getByTestId('workbench-row-copy-md-proj-sider-1'));
     expect(screen.getByTestId('workbench-row-copy-md-proj-sider-1')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('workbench-row-copy-json-proj-sider-1'));
+    expect(screen.getByTestId('workbench-row-copy-json-proj-sider-1')).toHaveTextContent(
+      '已复制JSON',
+    );
     fireEvent.click(screen.getByTestId('workbench-copy-project-list-btn'));
     fireEvent.click(screen.getByTestId('workbench-copy-project-json-btn'));
     expect(screen.getByTestId('workbench-copy-project-json-btn')).toHaveTextContent('已复制 JSON');

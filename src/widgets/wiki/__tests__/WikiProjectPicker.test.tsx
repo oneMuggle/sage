@@ -45,6 +45,14 @@ describe('WikiProjectPicker — recent projects default', () => {
       { path: '/tmp/projects/foo/wiki', name: 'foo', opened_at: 1, intent: 'open' },
     ]);
     render(<WikiProjectPicker />);
+    const recentSection = await screen.findByTestId('wiki-recent-projects-section');
+    expect(recentSection).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('wiki-recent-copy-md-btn'));
+    expect(screen.getByTestId('wiki-recent-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('wiki-recent-copy-json-btn'));
+    expect(screen.getByTestId('wiki-recent-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByTestId('wiki-recent-copy-path-0'));
+    expect(screen.getByTestId('wiki-recent-copy-path-0')).toHaveTextContent('已复制');
     await enterCreateMode();
     mockSelectDirectory.mockResolvedValue('/tmp/projects/foo/wiki');
     mockCheckWikiProject.mockResolvedValue({
@@ -255,6 +263,8 @@ describe('WikiProjectPicker — status badge states', () => {
 
     fireEvent.change(pathInput, { target: { value: '/tmp/ok' } });
     await waitFor(() => expect(screen.queryByText(/可创建|有效的|valid/i)).toBeTruthy());
+    fireEvent.click(screen.getByTestId('wiki-check-copy-json-btn'));
+    expect(screen.getByTestId('wiki-check-copy-json-btn')).toHaveTextContent('已复制检查JSON');
 
     fireEvent.change(pathInput, { target: { value: '/tmp/bad' } });
     await waitFor(() => expect(screen.queryByText(/父目录不可写/i)).toBeTruthy());
