@@ -124,6 +124,8 @@ export function StudioProfileTabPanel({
   const [seededPresets, setSeededPresets] = useState(false);
   const [seededPillars, setSeededPillars] = useState(false);
   const [copiedCatStats, setCopiedCatStats] = useState(false);
+  const [savedCatStatsL4, setSavedCatStatsL4] = useState(false);
+  const [savedPillarsL4, setSavedPillarsL4] = useState(false);
   const presets = PROFILE_PRESETS_BY_TYPE[projectType] ?? PROFILE_PRESETS_BY_TYPE.coding;
   const blueprint = getArchetypeBlueprint(projectType);
 
@@ -384,6 +386,28 @@ export function StudioProfileTabPanel({
             {seededPillars ? '已写入支柱 L3' : '支柱一键写入 L3'}
           </button>
         )}
+        {projectId && blueprint.contextPillars.length > 0 && (
+          <button
+            type="button"
+            data-testid="studio-profile-pillars-to-l4-btn"
+            onClick={async () => {
+              if (savedPillarsL4) return;
+              setSavedPillarsL4(true);
+              if (typeof projectApi?.addMaterial === 'function') {
+                try {
+                  await projectApi.addMaterial(projectId, {
+                    content: `# ${blueprint.label} · 上下文护栏支柱 (${projectPath})\n${blueprint.contextPillars.map((p) => `- ${p}`).join('\n')}`,
+                  });
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+          >
+            {savedPillarsL4 ? '已存支柱 L4' : '支柱存 L4'}
+          </button>
+        )}
         {projectId && presets.length > 0 && (
           <button
             type="button"
@@ -526,6 +550,33 @@ export function StudioProfileTabPanel({
             >
               {copiedCatStats ? '已复制统计' : '复制类别分布'}
             </button>
+            {projectId && (
+              <button
+                type="button"
+                data-testid="studio-profile-cats-to-l4-btn"
+                onClick={async () => {
+                  if (savedCatStatsL4) return;
+                  setSavedCatStatsL4(true);
+                  if (typeof projectApi?.addMaterial === 'function') {
+                    const lines = [
+                      `# L3 画像类别分布 (${profileEntries.length} 条)`,
+                      ...PROFILE_CATEGORIES.filter((c) => c !== 'all').map(
+                        (c) =>
+                          `- ${CATEGORY_LABELS[c] ?? c} (${c}): ${profileEntries.filter((e) => e.category === c).length} 条`,
+                      ),
+                    ];
+                    try {
+                      await projectApi.addMaterial(projectId, { content: lines.join('\n') });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+              >
+                {savedCatStatsL4 ? '已存分布L4' : '分布存 L4'}
+              </button>
+            )}
           </div>
         </div>
       )}
