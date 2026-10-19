@@ -13,6 +13,7 @@
  */
 
 import { AlertTriangle, ChevronDown, ChevronRight, Folder, Plus } from 'lucide-react';
+import { useState } from 'react';
 
 import { ProjectTypeBadge } from '../../../features/project-type/ProjectTypeBadge';
 import { getArchetypeBlueprint } from '../../../features/project-type/archetypeBlueprints';
@@ -37,6 +38,7 @@ interface WorkbenchProjectListProps {
 export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProps) {
   const { t } = useI18n();
   const currentSessionId = useStore((s) => s.currentSessionId);
+  const [copiedPathId, setCopiedPathId] = useState<string | null>(null);
   const data = useProjectSectionData({ onOpenSession });
 
   const {
@@ -252,6 +254,23 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                   </span>
                 )}
                 <div className="hidden group-hover:flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    data-testid={`workbench-row-copy-path-${project.id}`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await navigator.clipboard?.writeText(project.path);
+                        setCopiedPathId(project.id);
+                        setTimeout(() => setCopiedPathId(null), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {copiedPathId === project.id ? '已复制' : '复制路径'}
+                  </button>
                   <button
                     type="button"
                     data-testid="project-new-chat"

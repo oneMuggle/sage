@@ -910,3 +910,19 @@
   - 当存在已完成里程碑时，在顶部工具栏新增 **`已完成存L4`**（`data-testid="milestone-summary-completed-to-l4-btn"`），支持将全部已达成里程碑一键归档为 L4 阶段交付成果文档（`projectApi.addMaterial`）。
 - **单元测试与门禁验证**：
   - 扩展 `ConstraintSummaryWidget.test.tsx`、`MilestoneProgressWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（3 个测试文件共 28 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+
+### Phase P67 — 项目工作台形态统计存 L3 与台账转里程碑、侧边栏 Git 分支复制与一键全护栏 L2、L3 画像面板支柱/类别分布存 L4、工作台项目行一键复制路径（已完成）
+
+- **Phase 4.2 `Projects` 工作台四形态统计存 L3 与全局台账转巡检里程碑（`src/pages/Projects.tsx`）**：
+  - 在 `workbench-archetype-counts` 统计栏新增 **`统计存L3`**（`data-testid="workbench-save-archetype-stats-l3-btn"`），支持将全局受控项目的四形态分布统计沉淀至 L3 `architecture` 画像（`projectApi.confirmKnowledge`）；
+  - 在 `project-workbench-toolbar` 新增 **`台账转里程碑`**（`data-testid="workbench-registry-to-milestone-btn"`），支持将当前受控项目台账一键转化为 `[全局项目治理巡检]` 里程碑（`projectApi.createMilestone`）。
+- **Phase 4.3 `GitStatusSection` 侧边栏 Git 分支名称复制与变更文件一键全护栏 L2（`src/widgets/sidebar/sections/GitStatusSection.tsx`）**：
+  - 将侧边栏 Git 标题栏分支标识升级为可点击按钮（`data-testid="git-sider-copy-branch-btn"`），支持一键复制当前分支名称；
+  - 在 `git-sider-filter-bar` 新增 **`全护栏L2`**（`data-testid="git-sider-guard-all-btn"`），支持按当前筛选状态将全部变更文件批量固化为 `file_change_guard`（`P8`）L2 行为约束（`projectApi.createConstraint`）。
+- **Phase 4.3 `StudioProfileTabPanel` 护栏支柱与类别分布一键存 L4（`src/features/project-type/StudioProfileTabPanel.tsx`）**：
+  - 在 `studio-profile-presets-bar` 新增 **`支柱存 L4`**（`data-testid="studio-profile-pillars-to-l4-btn"`），支持将当前形态上下文护栏支柱一键归档为 L4 资料（`projectApi.addMaterial`）；
+  - 在按类别统计栏新增 **`分布存 L4`**（`data-testid="studio-profile-cats-to-l4-btn"`），支持将 L3 画像类别分布统计归档至 L4 资料库。
+- **Phase 4.2 `WorkbenchProjectList` 项目行工作区路径一键复制（`src/widgets/sidebar/sections/WorkbenchProjectList.tsx`）**：
+  - 在工作台项目列表每行操作区新增 **`复制路径`**（`data-testid="workbench-row-copy-path-${project.id}"`），支持无需展开详情即可一键复制任意项目的工作区根目录路径。
+- **单元测试与门禁验证**：
+  - 扩展 `Projects.test.tsx`、`ProjectSection.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `ProjectArchetypeStudio.test.tsx`（4 个测试文件全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

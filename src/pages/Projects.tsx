@@ -25,6 +25,8 @@ export function Projects() {
   const [savedRegistryL3, setSavedRegistryL3] = useState(false);
   const [savedRegistryL4, setSavedRegistryL4] = useState(false);
   const [copiedArchetypeStats, setCopiedArchetypeStats] = useState(false);
+  const [savedArchetypeStatsL3, setSavedArchetypeStatsL3] = useState(false);
+  const [convertedRegistryMilestone, setConvertedRegistryMilestone] = useState(false);
 
   const loadProjects = useCallback(async () => {
     if (typeof projectApi?.list !== 'function') return;
@@ -127,6 +129,38 @@ export function Projects() {
                 >
                   {copiedArchetypeStats ? '已复制统计' : '复制形态统计'}
                 </button>
+                {projects.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="workbench-save-archetype-stats-l3-btn"
+                    onClick={async () => {
+                      if (savedArchetypeStatsL3 || !projects[0]?.id) return;
+                      setSavedArchetypeStatsL3(true);
+                      if (typeof projectApi?.confirmKnowledge === 'function') {
+                        try {
+                          await projectApi.confirmKnowledge(projects[0].id, {
+                            entries: [
+                              {
+                                category: 'architecture',
+                                content: `项目形态分布统计 (${projects.length}个项目)：${ARCHETYPE_ORDER.map(
+                                  (t) => `${getArchetypeBlueprint(t).label}=${archetypeCounts[t]}`,
+                                ).join('、')}`,
+                                importance: 6,
+                                sourceMessageIds: [],
+                                reasoning: '工作台四形态分布统计沉淀至 L3 画像',
+                              },
+                            ],
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {savedArchetypeStatsL3 ? '已存统计L3' : '统计存L3'}
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -207,6 +241,28 @@ export function Projects() {
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
                     {savedRegistryL3 ? '已存台账L3' : '存台账至L3'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="workbench-registry-to-milestone-btn"
+                    onClick={async () => {
+                      if (convertedRegistryMilestone || !projects[0]?.id) return;
+                      setConvertedRegistryMilestone(true);
+                      if (typeof projectApi?.createMilestone === 'function') {
+                        try {
+                          await projectApi.createMilestone(projects[0].id, {
+                            title: `[全局项目治理巡检] 已纳管 ${projects.length} 个项目`,
+                            description: projects.map((p) => p.name).join('、'),
+                            status: 'pending',
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {convertedRegistryMilestone ? '已转巡检里程碑' : '台账转里程碑'}
                   </button>
                 </>
               )}
