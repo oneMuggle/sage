@@ -503,5 +503,11 @@ describe('ProjectArchetypeStudio', () => {
     expect(onDraftChange).toHaveBeenCalledWith(
       '初始画像规范；SAGE.md：核心研究问题 (RQ)、科学假设与数学符号规范表 (Notation)',
     );
+    const copySessionBtn = await screen.findByTestId('knowledge-copy-session-id-btn');
+    fireEvent.click(copySessionBtn);
+    fireEvent.click(screen.getByTestId('knowledge-extract-btn'));
+    const reasoningMilestoneBtn = await screen.findByTestId('knowledge-reasoning-to-milestone-btn');
+    fireEvent.click(reasoningMilestoneBtn);
+    expect(screen.getByTestId('knowledge-reasoning-to-milestone-btn')).toHaveTextContent('已转里程碑');
   });
 });

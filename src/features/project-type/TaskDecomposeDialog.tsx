@@ -297,6 +297,15 @@ export function TaskDecomposeDialog({
                       +支柱 #{idx + 1}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    disabled={phase === 'loading'}
+                    data-testid="decompose-pillar-fill-all-btn"
+                    onClick={() => setContext(blueprint.contextPillars.join('；'))}
+                    className="rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10 disabled:opacity-50"
+                  >
+                    +全部支柱
+                  </button>
                 </div>
               </div>
             </>
@@ -497,6 +506,19 @@ export function TaskDecomposeDialog({
                         {stageLabelMap.get(st!) ?? st}
                       </button>
                     ))}
+                    <button
+                      type="button"
+                      data-testid="decompose-select-stage-btn"
+                      onClick={() => {
+                        const matched = milestones
+                          .map((m, i) => (stageFilter === 'all' || m.stage === stageFilter ? i : -1))
+                          .filter((i) => i >= 0);
+                        setSelectedRootIndices(new Set(matched));
+                      }}
+                      className="ml-auto rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                    >
+                      按筛选阶段全选
+                    </button>
                   </div>
                 )}
                 <div className="rounded-lg border p-3 space-y-1">

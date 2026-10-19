@@ -162,6 +162,7 @@ export function ConstraintEditor({
   const [savedRuleL4, setSavedRuleL4] = useState(false);
   const [convertedMilestone, setConvertedMilestone] = useState(false);
   const [copiedGlob, setCopiedGlob] = useState(false);
+  const [copiedContent, setCopiedContent] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -263,7 +264,35 @@ export function ConstraintEditor({
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">内容 *</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-sm font-medium">内容 *</label>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  data-testid="constraint-copy-content-btn"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard?.writeText(content);
+                      setCopiedContent(true);
+                      setTimeout(() => setCopiedContent(false), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedContent ? '已复制正文' : '复制规则正文'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="constraint-clear-content-btn"
+                  onClick={() => setContent('')}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  清空正文
+                </button>
+              </div>
+            </div>
             <Textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}

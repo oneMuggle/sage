@@ -161,6 +161,7 @@ export function MilestoneEditor({
   const [savedMilestoneL4, setSavedMilestoneL4] = useState(false);
   const [savedMilestoneL3, setSavedMilestoneL3] = useState(false);
   const [copiedDueDate, setCopiedDueDate] = useState(false);
+  const [copiedDesc, setCopiedDesc] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -288,7 +289,35 @@ export function MilestoneEditor({
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">描述</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-sm font-medium">描述</label>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  data-testid="milestone-copy-desc-btn"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard?.writeText(description);
+                      setCopiedDesc(true);
+                      setTimeout(() => setCopiedDesc(false), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedDesc ? '已复制说明' : '复制交付说明'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="milestone-clear-desc-btn"
+                  onClick={() => setDescription('')}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  清空说明
+                </button>
+              </div>
+            </div>
             <Textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}

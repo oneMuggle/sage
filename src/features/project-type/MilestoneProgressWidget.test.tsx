@@ -590,6 +590,7 @@ describe('MilestoneProgressWidget', () => {
     );
     fireEvent.click(await screen.findByTestId('decompose-preset-0'));
     fireEvent.click(screen.getByTestId('decompose-pillar-append-0'));
+    fireEvent.click(screen.getByTestId('decompose-pillar-fill-all-btn'));
     fireEvent.click(screen.getByTestId('decompose-preview-btn'));
 
     const daysBadge = await screen.findByTestId('decompose-total-days-badge');
@@ -598,7 +599,7 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('decompose-select-invert-btn'));
     expect(screen.getByTestId('decompose-total-days-badge')).toHaveTextContent('预计总工期 0 天');
 
-    fireEvent.click(screen.getByTestId('decompose-select-all-btn'));
+    fireEvent.click(screen.getByTestId('decompose-select-stage-btn'));
     expect(screen.getByTestId('decompose-total-days-badge')).toHaveTextContent('预计总工期 5 天');
     fireEvent.click(screen.getByTestId('decompose-save-reasoning-profile-btn'));
     expect(screen.getByTestId('decompose-save-reasoning-profile-btn')).toHaveTextContent('已沉淀至 L3');
@@ -634,6 +635,9 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('milestone-blueprint-tpl-0'));
     fireEvent.click(screen.getByTestId('milestone-pillar-append-0'));
+    fireEvent.click(screen.getByTestId('milestone-pillar-fill-all-btn'));
+    fireEvent.click(screen.getByTestId('milestone-copy-desc-btn'));
+    fireEvent.click(screen.getByTestId('milestone-clear-desc-btn'));
     fireEvent.click(screen.getByTestId('milestone-pillar-fill-all-btn'));
     fireEvent.click(screen.getByTestId('milestone-due-today-btn'));
     fireEvent.click(screen.getByTestId('milestone-copy-due-btn'));

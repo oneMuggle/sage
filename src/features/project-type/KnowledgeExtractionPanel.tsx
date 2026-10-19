@@ -48,6 +48,8 @@ export function KnowledgeExtractionPanel({
   const [copiedEntryIdx, setCopiedEntryIdx] = useState<number | null>(null);
   const [copiedSelectedMd, setCopiedSelectedMd] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [copiedSessionId, setCopiedSessionId] = useState(false);
+  const [convertedReasoningMilestone, setConvertedReasoningMilestone] = useState(false);
 
   const resetPanel = useCallback(() => {
     setPhase('idle');
@@ -251,6 +253,24 @@ export function KnowledgeExtractionPanel({
             data-testid="knowledge-session-id-input"
             className="flex-1 min-w-[200px] rounded-md border border-input bg-background px-2.5 py-1.5 text-xs"
           />
+          <button
+            type="button"
+            disabled={!sessionId.trim() || phase === 'loading'}
+            data-testid="knowledge-copy-session-id-btn"
+            onClick={async () => {
+              if (!sessionId.trim()) return;
+              try {
+                await navigator.clipboard?.writeText(sessionId.trim());
+                setCopiedSessionId(true);
+                setTimeout(() => setCopiedSessionId(false), 1500);
+              } catch {
+                // ignore in test/offline mode
+              }
+            }}
+            className="rounded-md border border-input bg-background px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            {copiedSessionId ? '已复制会话 ID' : '复制会话 ID'}
+          </button>
           <Button
             variant="secondary"
             size="sm"
@@ -282,6 +302,28 @@ export function KnowledgeExtractionPanel({
                 <span className="font-medium text-foreground">提取思路：</span> {reasoning}
               </div>
               <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  data-testid="knowledge-reasoning-to-milestone-btn"
+                  onClick={async () => {
+                    if (convertedReasoningMilestone) return;
+                    setConvertedReasoningMilestone(true);
+                    if (typeof projectApi?.createMilestone === 'function') {
+                      try {
+                        await projectApi.createMilestone(projectId, {
+                          title: `[M2 知识提取复盘] 会话 ${sessionId}`,
+                          description: reasoning,
+                          status: 'pending',
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  {convertedReasoningMilestone ? '已转里程碑' : '思路转里程碑'}
+                </button>
                 <button
                   type="button"
                   data-testid="knowledge-save-reasoning-l3-btn"
