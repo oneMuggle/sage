@@ -55,6 +55,7 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [copiedStagePipeline, setCopiedStagePipeline] = useState(false);
   const [savedStagesL3, setSavedStagesL3] = useState(false);
   const [savedStagesL4, setSavedStagesL4] = useState(false);
+  const [convertedStagesL2, setConvertedStagesL2] = useState(false);
   const [copiedOverviewPath, setCopiedOverviewPath] = useState(false);
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [decomposeReq, setDecomposeReq] = useState('');
@@ -671,6 +672,29 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
             className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             {savedStagesL4 ? '已存管线L4' : '阶段管线存L4'}
+          </button>
+          <button
+            type="button"
+            data-testid="overview-stages-to-constraint-btn"
+            onClick={async () => {
+              if (convertedStagesL2) return;
+              setConvertedStagesL2(true);
+              if (typeof projectApi?.createConstraint === 'function') {
+                try {
+                  await projectApi.createConstraint(project.id, {
+                    category: 'stage_pipeline',
+                    content: `[${blueprint.label}阶段管线护栏] 严格按 ${blueprint.stages.map((s) => s.label).join(' → ')} 顺序推进项目交付`,
+                    triggerPattern: 'always',
+                    priority: 8,
+                  });
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }
+            }}
+            className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            {convertedStagesL2 ? '已转管线L2' : '阶段管线转L2'}
           </button>
           {(() => {
             const idx = blueprint.stages.findIndex((s) => s.id === activeStageId);

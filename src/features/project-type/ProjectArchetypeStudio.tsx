@@ -59,6 +59,8 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const [scaffolded, setScaffolded] = useState(false);
   const [seededMilestones, setSeededMilestones] = useState(false);
   const [convertedBlueprintL2, setConvertedBlueprintL2] = useState(false);
+  const [copiedVcs, setCopiedVcs] = useState(false);
+  const [createdBlueprintMs, setCreatedBlueprintMs] = useState(false);
 
   const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
 
@@ -185,24 +187,42 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div className="text-xs font-semibold text-foreground">1. 标准工作区目录结构 & VCS</div>
-              <button
-                type="button"
-                data-testid="studio-copy-dirs-btn"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard?.writeText(
-                      blueprint.directories.map((d) => `${d}/`).join('\n'),
-                    );
-                    setCopiedDirs(true);
-                    setTimeout(() => setCopiedDirs(false), 1500);
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }}
-                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                {copiedDirs ? '已复制目录' : '复制目录清单'}
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  data-testid="studio-copy-dirs-btn"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard?.writeText(
+                        blueprint.directories.map((d) => `${d}/`).join('\n'),
+                      );
+                      setCopiedDirs(true);
+                      setTimeout(() => setCopiedDirs(false), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedDirs ? '已复制目录' : '复制目录清单'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="studio-copy-vcs-btn"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard?.writeText(blueprint.vcsLabel);
+                      setCopiedVcs(true);
+                      setTimeout(() => setCopiedVcs(false), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedVcs ? '已复制VCS' : '复制 VCS 策略'}
+                </button>
+              </div>
             </div>
             <p className="text-xs text-muted-foreground">{blueprint.positioning}</p>
             <div className="flex flex-wrap gap-1.5 pt-1">
@@ -519,6 +539,32 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
               >
                 {convertedBlueprintL2 ? '已转蓝图L2' : '当前蓝图转L2'}
+              </button>
+              <button
+                type="button"
+                data-testid="studio-blueprint-to-milestone-btn"
+                onClick={async () => {
+                  if (createdBlueprintMs) return;
+                  setCreatedBlueprintMs(true);
+                  if (typeof projectApi?.createMilestone === 'function') {
+                    const bp =
+                      ARCHETYPE_BLUEPRINTS[
+                        (activeProject.projectType ?? activeProject.detectedType ?? 'business') as ProjectType
+                      ];
+                    try {
+                      await projectApi.createMilestone(activeProject.id, {
+                        title: `[${bp.label}蓝图验收] ${activeProject.name} 规范落地核查`,
+                        description: `目录：${bp.directories.join('、')} · 阶段：${bp.stages.map((s) => s.label).join('→')}`,
+                        status: 'pending',
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+              >
+                {createdBlueprintMs ? '已建蓝图里程碑' : '当前蓝图建里程碑'}
               </button>
               <Button
                 size="sm"

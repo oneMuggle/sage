@@ -17,7 +17,7 @@ import { useState } from 'react';
 
 import { ProjectTypeBadge } from '../../../features/project-type/ProjectTypeBadge';
 import { getArchetypeBlueprint } from '../../../features/project-type/archetypeBlueprints';
-import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
+import { projectApi, type ProjectSummary, type ProjectType } from '../../../shared/api/projectApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { formatRelativeTime } from '../../../shared/lib/utils';
@@ -43,6 +43,8 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
   const [savedL4Ids, setSavedL4Ids] = useState<Set<string>>(new Set());
   const [createdMsIds, setCreatedMsIds] = useState<Set<string>>(new Set());
   const [createdL2Ids, setCreatedL2Ids] = useState<Set<string>>(new Set());
+  const [copiedList, setCopiedList] = useState(false);
+  const [scaffoldedIds, setScaffoldedIds] = useState<Set<string>>(new Set());
   const data = useProjectSectionData({ onOpenSession });
 
   const {
@@ -155,16 +157,39 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
             {t('sider.section.project')}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={handleAddProject}
-          aria-label={t('sider.project.add')}
-          title={t('sider.project.add')}
-          data-testid="project-add-button"
-          className="inline-flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text hover:bg-bg-hover"
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          {projects.length > 0 && (
+            <button
+              type="button"
+              data-testid="workbench-copy-project-list-btn"
+              onClick={async () => {
+                const md = projects
+                  .map((p) => `- ${p.name} [${p.projectType ?? p.detectedType ?? 'coding'}]: ${p.path}`)
+                  .join('\n');
+                try {
+                  await navigator.clipboard?.writeText(md);
+                  setCopiedList(true);
+                  setTimeout(() => setCopiedList(false), 1500);
+                } catch {
+                  // ignore in test/offline mode
+                }
+              }}
+              className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+            >
+              {copiedList ? '已复制清单' : '复制项目清单'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleAddProject}
+            aria-label={t('sider.project.add')}
+            title={t('sider.project.add')}
+            data-testid="project-add-button"
+            className="inline-flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text hover:bg-bg-hover"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       {dropActive && (
@@ -304,6 +329,31 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                     className="rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
                   >
                     {createdL2Ids.has(project.id) ? '已转L2' : '+L2'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`workbench-row-scaffold-${project.id}`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (scaffoldedIds.has(project.id)) return;
+                      setScaffoldedIds((prev) => new Set(prev).add(project.id));
+                      if (typeof projectApi?.scaffold === 'function') {
+                        try {
+                          await projectApi.scaffold(project.id, {
+                            projectType: (project.projectType ?? project.detectedType ?? 'coding') as ProjectType,
+                            createDirectories: true,
+                            createSageMd: true,
+                            importDefaultConstraints: true,
+                            seedDefaultMilestones: true,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {scaffoldedIds.has(project.id) ? '已脚手架' : '+脚手架'}
                   </button>
                   <button
                     type="button"

@@ -90,6 +90,7 @@ export function ProjectTypeSelector({
   const [copiedSelectorPath, setCopiedSelectorPath] = useState(false);
   const [copiedStages, setCopiedStages] = useState(false);
   const [copiedVcs, setCopiedVcs] = useState(false);
+  const [copiedPositioning, setCopiedPositioning] = useState(false);
 
   const runDetection = useCallback(async () => {
     if (!projectPath || typeof projectApi?.detectType !== 'function') return;
@@ -381,6 +382,27 @@ export function ProjectTypeSelector({
                     className="border-t border-primary/20 pt-1.5 text-ui-2xs text-muted-foreground space-y-1"
                     data-testid="selector-suite-details"
                   >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        工作区定位：{activeBp.positioning}
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="selector-copy-positioning-btn"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard?.writeText(activeBp.positioning);
+                            setCopiedPositioning(true);
+                            setTimeout(() => setCopiedPositioning(false), 1500);
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                      >
+                        {copiedPositioning ? '已复制定位' : '复制工作区定位'}
+                      </button>
+                    </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>
                         版本保护策略：{activeBp.vcsLabel}
