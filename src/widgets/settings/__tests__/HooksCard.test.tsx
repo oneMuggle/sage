@@ -84,6 +84,12 @@ describe('HooksCard', () => {
       expect(screen.getByDisplayValue('echo done')).toBeInTheDocument();
     });
     expect(screen.getByText(/回复结束时/)).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('hooks-copy-all-md-btn'));
+    expect(screen.getByTestId('hooks-copy-all-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('hooks-copy-all-json-btn'));
+    expect(screen.getByTestId('hooks-copy-all-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByTestId('hook-copy-json-0'));
+    expect(screen.getByTestId('hook-copy-json-0')).toHaveTextContent('已复制');
   });
 
   it('edits command and saves', async () => {
@@ -144,6 +150,8 @@ describe('HooksCard', () => {
     expect(screen.getByText(/操作审计日志/)).toBeInTheDocument();
     expect(screen.getByTestId('builtin-toggle-security_guard').textContent).toBe('启用');
     expect(screen.getByTestId('builtin-toggle-audit_log').textContent).toBe('启用');
+    fireEvent.click(screen.getByTestId('builtin-copy-json-security_guard'));
+    expect(screen.getByTestId('builtin-copy-json-security_guard')).toHaveTextContent('已复制');
   });
 
   it('enabling a builtin adds entry with builtin_id to preferences', async () => {

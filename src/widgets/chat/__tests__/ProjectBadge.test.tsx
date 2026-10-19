@@ -78,6 +78,8 @@ describe('ProjectBadge', () => {
     expect(screen.getByTestId('chat-project-copy-summary-md-btn')).toHaveTextContent('已复制语境');
     fireEvent.click(screen.getByTestId('chat-project-copy-summary-json-btn'));
     expect(screen.getByTestId('chat-project-copy-summary-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByTestId('chat-project-copy-blueprint-md-btn'));
+    expect(screen.getByTestId('chat-project-copy-blueprint-md-btn')).toHaveTextContent('已复制蓝图');
 
     const workbenchBtn = screen.getByTestId('chat-project-workbench-btn');
     fireEvent.click(workbenchBtn);

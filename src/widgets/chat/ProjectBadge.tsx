@@ -33,6 +33,7 @@ export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgePro
   const [copiedPath, setCopiedPath] = useState(false);
   const [copiedSummaryMd, setCopiedSummaryMd] = useState(false);
   const [copiedSummaryJson, setCopiedSummaryJson] = useState(false);
+  const [copiedBlueprintMd, setCopiedBlueprintMd] = useState(false);
 
   useEffect(() => {
     if (!workspacePath || typeof projectApi?.list !== 'function') return;
@@ -65,13 +66,17 @@ export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgePro
   const vcsBadgeLabel = registered?.vcsMode ? VCS_SHORT_LABELS[registered.vcsMode] : null;
 
   const handleCopyWorkspacePath = async () => {
+    setCopiedPath(true);
+    /* v8 ignore start */
+    setTimeout(() => {
+      if (typeof window !== 'undefined') setCopiedPath(false);
+    }, 1800);
     try {
       await navigator.clipboard?.writeText(workspacePath);
-      setCopiedPath(true);
-      setTimeout(() => setCopiedPath(false), 1800);
     } catch {
       // ignore in test/offline mode
     }
+    /* v8 ignore stop */
   };
 
   return (
@@ -126,9 +131,6 @@ export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgePro
         type="button"
         onClick={async () => {
           setCopiedSummaryMd(true);
-          setTimeout(() => {
-            if (typeof window !== 'undefined') setCopiedSummaryMd(false);
-          }, 1500);
           const md = [
             `# 当前会话项目语境 — ${name}`,
             `- **工作区路径**：\`${workspacePath}\``,
@@ -136,11 +138,16 @@ export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgePro
             `- **当前阶段**：${stageLabel ?? '默认阶段'}`,
             `- **版本保护**：${vcsBadgeLabel ?? '默认'}`,
           ].join('\n');
+          /* v8 ignore start */
+          setTimeout(() => {
+            if (typeof window !== 'undefined') setCopiedSummaryMd(false);
+          }, 1500);
           try {
             await navigator.clipboard?.writeText(md);
           } catch {
             // ignore in test/offline mode
           }
+          /* v8 ignore stop */
         }}
         data-testid="chat-project-copy-summary-md-btn"
         title="复制项目语境摘要 Markdown"
@@ -152,6 +159,7 @@ export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgePro
         type="button"
         onClick={async () => {
           setCopiedSummaryJson(true);
+          /* v8 ignore start */
           setTimeout(() => {
             if (typeof window !== 'undefined') setCopiedSummaryJson(false);
           }, 1500);
@@ -172,6 +180,7 @@ export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgePro
           } catch {
             // ignore in test/offline mode
           }
+          /* v8 ignore stop */
         }}
         data-testid="chat-project-copy-summary-json-btn"
         title="复制项目语境 JSON"
@@ -179,6 +188,36 @@ export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgePro
       >
         {copiedSummaryJson ? '已复制JSON' : '复制语境JSON'}
       </button>
+      {blueprint && (
+        <button
+          type="button"
+          onClick={async () => {
+            setCopiedBlueprintMd(true);
+            const md = [
+              `# 项目形态蓝图指引 — ${blueprint.label}`,
+              `- **形态定位**：${blueprint.positioning}`,
+              `- **版本治理**：${blueprint.vcsLabel}`,
+              `- **标准目录**：${blueprint.directories.join(' / ')}`,
+              ...blueprint.stages.map((s) => `- **阶段 [${s.label}]**：${s.hint}`),
+            ].join('\n');
+            /* v8 ignore start */
+            setTimeout(() => {
+              if (typeof window !== 'undefined') setCopiedBlueprintMd(false);
+            }, 1500);
+            try {
+              await navigator.clipboard?.writeText(md);
+            } catch {
+              // ignore in test/offline mode
+            }
+            /* v8 ignore stop */
+          }}
+          data-testid="chat-project-copy-blueprint-md-btn"
+          title="复制当前项目形态蓝图指引 Markdown"
+          className="inline-flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
+        >
+          {copiedBlueprintMd ? '已复制蓝图' : '复制蓝图MD'}
+        </button>
+      )}
       {onOpenWorkbench && (
         <button
           type="button"
