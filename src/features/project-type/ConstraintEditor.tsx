@@ -161,6 +161,7 @@ export function ConstraintEditor({
   const [savedRuleL3, setSavedRuleL3] = useState(false);
   const [savedRuleL4, setSavedRuleL4] = useState(false);
   const [convertedMilestone, setConvertedMilestone] = useState(false);
+  const [copiedGlob, setCopiedGlob] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -314,6 +315,17 @@ export function ConstraintEditor({
                   +追加支柱 #{idx + 1}
                 </button>
               ))}
+              <button
+                type="button"
+                data-testid="constraint-pillar-fill-all-btn"
+                onClick={() => {
+                  setContent(blueprint.contextPillars.join('；'));
+                  setPriority(8);
+                }}
+                className="rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs text-primary hover:bg-primary/10"
+              >
+                一键组合全部支柱
+              </button>
             </div>
           </div>
 
@@ -348,6 +360,22 @@ export function ConstraintEditor({
                   {dir}/**
                 </button>
               ))}
+              <button
+                type="button"
+                data-testid="constraint-copy-glob-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard?.writeText(triggerPattern.trim() || 'always');
+                    setCopiedGlob(true);
+                    setTimeout(() => setCopiedGlob(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-background px-2 py-0.5 font-mono text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {copiedGlob ? '已复制 Glob' : '复制触发 Glob'}
+              </button>
             </div>
             <div className="flex items-center gap-2 pt-1">
               <input

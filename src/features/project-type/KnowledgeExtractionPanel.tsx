@@ -46,6 +46,7 @@ export function KnowledgeExtractionPanel({
   const [savedReasoningL4, setSavedReasoningL4] = useState(false);
   const [savedReasoningL3, setSavedReasoningL3] = useState(false);
   const [copiedEntryIdx, setCopiedEntryIdx] = useState<number | null>(null);
+  const [copiedSelectedMd, setCopiedSelectedMd] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
 
   const resetPanel = useCallback(() => {
@@ -361,6 +362,32 @@ export function KnowledgeExtractionPanel({
                   </button>
                   <button
                     type="button"
+                    data-testid="knowledge-copy-selected-md-btn"
+                    onClick={async () => {
+                      const picked = Array.from(selected)
+                        .map((idx) => entries[idx])
+                        .filter(Boolean);
+                      const md = [
+                        `# 已选中 M2 提炼知识建议 (${picked.length} 条)`,
+                        ...picked.map(
+                          (e) =>
+                            `- **[${CATEGORY_LABELS[e.category] ?? e.category}]** (重要度 ${e.importance}/10) ${e.content}`,
+                        ),
+                      ].join('\n');
+                      try {
+                        await navigator.clipboard?.writeText(md);
+                        setCopiedSelectedMd(true);
+                        setTimeout(() => setCopiedSelectedMd(false), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {copiedSelectedMd ? '已复制选中项' : '复制仅选中项 MD'}
+                  </button>
+                  <button
+                    type="button"
                     onClick={async () => {
                       const targetIndices = Array.from(selected).filter(
                         (idx) => !convertedConstraintIndices.has(idx) && entries[idx],
@@ -511,6 +538,19 @@ export function KnowledgeExtractionPanel({
                     {CATEGORY_LABELS[cat] ?? cat}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  data-testid="knowledge-select-filtered-btn"
+                  onClick={() => {
+                    const matched = entries
+                      .map((e, i) => (categoryFilter === 'all' || e.category === categoryFilter ? i : -1))
+                      .filter((i) => i >= 0);
+                    setSelected(new Set(matched));
+                  }}
+                  className="ml-auto rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  按筛选类别全选
+                </button>
               </div>
               {entries.map((entry, idx) =>
                 categoryFilter !== 'all' && entry.category !== categoryFilter ? null : (
