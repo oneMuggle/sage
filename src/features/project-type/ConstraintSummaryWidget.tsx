@@ -50,6 +50,8 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [promotedRuleMilestoneIds, setPromotedRuleMilestoneIds] = useState<Set<string>>(new Set());
   const [promotedRuleL4Ids, setPromotedRuleL4Ids] = useState<Set<string>>(new Set());
   const [copiedRuleId, setCopiedRuleId] = useState<string | null>(null);
+  const [copiedCategories, setCopiedCategories] = useState(false);
+  const [convertedDisabledMilestone, setConvertedDisabledMilestone] = useState(false);
 
   const fetchConstraints = useCallback(async () => {
     if (typeof projectApi?.listConstraints !== 'function') {
@@ -296,6 +298,30 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                 启用全部 ({disabledConstraints.length})
               </button>
             )}
+            {disabledConstraints.length > 0 && (
+              <button
+                type="button"
+                data-testid="constraint-summary-disabled-to-milestone-btn"
+                onClick={async () => {
+                  if (convertedDisabledMilestone) return;
+                  setConvertedDisabledMilestone(true);
+                  if (typeof projectApi?.createMilestone === 'function') {
+                    try {
+                      await projectApi.createMilestone(projectId, {
+                        title: `[待审约束复核] 复核 ${disabledConstraints.length} 条停用规则`,
+                        description: disabledConstraints.map((c) => c.content).join('；'),
+                        status: 'pending',
+                      });
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }
+                }}
+                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {convertedDisabledMilestone ? '已建复核里程碑' : '停用转里程碑'}
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-1.5">
             {highPriorityCount > 0 && (
@@ -320,7 +346,31 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
         {categoryCount.size > 0 && (
           <div className="pt-2 border-t">
             <div className="flex items-center justify-between mb-1">
-              <div className="text-xs text-muted-foreground">按类别</div>
+              <div className="flex items-center gap-1.5">
+                <div className="text-xs text-muted-foreground">按类别</div>
+                <button
+                  type="button"
+                  data-testid="constraint-summary-copy-cats-btn"
+                  onClick={async () => {
+                    const md = [
+                      '# L2 约束类别分布',
+                      ...Array.from(categoryCount.entries()).map(
+                        ([cat, cnt]) => `- **${CONSTRAINT_CATEGORY_LABELS[cat] ?? cat} (${cat})**: ${cnt} 条`,
+                      ),
+                    ].join('\n');
+                    try {
+                      await navigator.clipboard?.writeText(md);
+                      setCopiedCategories(true);
+                      setTimeout(() => setCopiedCategories(false), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedCategories ? '已复制分布' : '复制分布'}
+                </button>
+              </div>
               {selectedCategory && (
                 <button
                   type="button"
