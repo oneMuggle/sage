@@ -341,6 +341,10 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('studio-copy-all-blueprints-md-btn')).toHaveTextContent(
       /已复制全形态对比|复制四大蓝图对比 MD/,
     );
+    fireEvent.click(screen.getByTestId('studio-copy-all-blueprints-json-btn'));
+    expect(screen.getByTestId('studio-copy-all-blueprints-json-btn')).toHaveTextContent(
+      '已复制全形态 JSON',
+    );
 
     // Switch to business (general archive)
     fireEvent.click(screen.getByTestId('archetype-tab-business'));
@@ -409,6 +413,14 @@ describe('ProjectArchetypeStudio', () => {
     fireEvent.click(screen.getByTestId('overview-stages-to-constraint-btn'));
     expect(screen.getByTestId('overview-stages-to-constraint-btn')).toHaveTextContent('已转管线L2');
     fireEvent.click(screen.getByTestId('studio-copy-active-path-btn'));
+    fireEvent.click(screen.getByTestId('studio-copy-active-project-md-btn'));
+    expect(screen.getByTestId('studio-copy-active-project-md-btn')).toHaveTextContent(
+      '已复制项目 MD',
+    );
+    fireEvent.click(screen.getByTestId('studio-copy-active-project-json-btn'));
+    expect(screen.getByTestId('studio-copy-active-project-json-btn')).toHaveTextContent(
+      '已复制项目 JSON',
+    );
     fireEvent.click(screen.getByTestId('studio-save-blueprint-l4-btn'));
     expect(screen.getByTestId('studio-save-blueprint-l4-btn')).toHaveTextContent('已存蓝图 L4');
     fireEvent.click(screen.getByTestId('studio-save-blueprint-l3-btn'));
