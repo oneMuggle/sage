@@ -480,6 +480,11 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('milestone-summary-stage-bar')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('milestone-summary-stage-pill-experiment'));
     fireEvent.click(screen.getByTestId('milestone-summary-stage-pill-experiment'));
+    fireEvent.click(screen.getByTestId('milestone-summary-copy-stages-btn'));
+    fireEvent.click(screen.getByTestId('milestone-summary-stages-to-l3-btn'));
+    expect(screen.getByTestId('milestone-summary-stages-to-l3-btn')).toHaveTextContent('已存分布L3');
+    fireEvent.click(screen.getByTestId('milestone-summary-stages-to-l4-btn'));
+    expect(screen.getByTestId('milestone-summary-stages-to-l4-btn')).toHaveTextContent('已存分布L4');
     fireEvent.click(screen.getByTestId('milestone-summary-save-l3-btn'));
     expect(screen.getByTestId('milestone-summary-save-l3-btn')).toHaveTextContent('已存进度 L3');
     fireEvent.click(screen.getByTestId('milestone-summary-save-l4-btn'));
@@ -648,6 +653,9 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('milestone-clear-desc-btn'));
     fireEvent.click(screen.getByTestId('milestone-copy-title-btn'));
     fireEvent.click(screen.getByTestId('milestone-clear-title-btn'));
+    fireEvent.click(screen.getByTestId('milestone-stage-preset-analysis'));
+    fireEvent.click(screen.getByTestId('milestone-copy-stage-btn'));
+    fireEvent.click(screen.getByTestId('milestone-clear-stage-btn'));
     fireEvent.click(screen.getByTestId('milestone-pillar-fill-all-btn'));
     fireEvent.click(screen.getByTestId('milestone-due-today-btn'));
     fireEvent.click(screen.getByTestId('milestone-copy-due-btn'));
