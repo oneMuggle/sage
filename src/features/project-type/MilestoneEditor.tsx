@@ -162,6 +162,7 @@ export function MilestoneEditor({
   const [savedMilestoneL3, setSavedMilestoneL3] = useState(false);
   const [copiedDueDate, setCopiedDueDate] = useState(false);
   const [copiedDesc, setCopiedDesc] = useState(false);
+  const [copiedTitle, setCopiedTitle] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -280,7 +281,35 @@ export function MilestoneEditor({
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">标题 *</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="text-sm font-medium">标题 *</label>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  data-testid="milestone-copy-title-btn"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard?.writeText(title);
+                      setCopiedTitle(true);
+                      setTimeout(() => setCopiedTitle(false), 1500);
+                    } catch {
+                      // ignore in test/offline mode
+                    }
+                  }}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {copiedTitle ? '已复制标题' : '复制标题'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="milestone-clear-title-btn"
+                  onClick={() => setTitle('')}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  清空标题
+                </button>
+              </div>
+            </div>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}

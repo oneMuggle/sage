@@ -646,6 +646,8 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('milestone-pillar-fill-all-btn'));
     fireEvent.click(screen.getByTestId('milestone-copy-desc-btn'));
     fireEvent.click(screen.getByTestId('milestone-clear-desc-btn'));
+    fireEvent.click(screen.getByTestId('milestone-copy-title-btn'));
+    fireEvent.click(screen.getByTestId('milestone-clear-title-btn'));
     fireEvent.click(screen.getByTestId('milestone-pillar-fill-all-btn'));
     fireEvent.click(screen.getByTestId('milestone-due-today-btn'));
     fireEvent.click(screen.getByTestId('milestone-copy-due-btn'));
