@@ -26,7 +26,9 @@ export function Projects() {
   const [savedRegistryL4, setSavedRegistryL4] = useState(false);
   const [copiedArchetypeStats, setCopiedArchetypeStats] = useState(false);
   const [savedArchetypeStatsL3, setSavedArchetypeStatsL3] = useState(false);
+  const [savedArchetypeStatsL4, setSavedArchetypeStatsL4] = useState(false);
   const [convertedRegistryMilestone, setConvertedRegistryMilestone] = useState(false);
+  const [convertedRegistryConstraint, setConvertedRegistryConstraint] = useState(false);
 
   const loadProjects = useCallback(async () => {
     if (typeof projectApi?.list !== 'function') return;
@@ -161,6 +163,30 @@ export function Projects() {
                     {savedArchetypeStatsL3 ? '已存统计L3' : '统计存L3'}
                   </button>
                 )}
+                {projects.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="workbench-save-archetype-stats-l4-btn"
+                    onClick={async () => {
+                      if (savedArchetypeStatsL4 || !projects[0]?.id) return;
+                      setSavedArchetypeStatsL4(true);
+                      if (typeof projectApi?.addMaterial === 'function') {
+                        try {
+                          await projectApi.addMaterial(projects[0].id, {
+                            content: `# 项目形态分布统计 (${projects.length} 个项目)\n${ARCHETYPE_ORDER.map(
+                              (t) => `- ${getArchetypeBlueprint(t).label} (${t}): ${archetypeCounts[t]} 个`,
+                            ).join('\n')}`,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                  >
+                    {savedArchetypeStatsL4 ? '已存统计L4' : '统计存L4'}
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -263,6 +289,29 @@ export function Projects() {
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
                   >
                     {convertedRegistryMilestone ? '已转巡检里程碑' : '台账转里程碑'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="workbench-registry-to-constraint-btn"
+                    onClick={async () => {
+                      if (convertedRegistryConstraint || !projects[0]?.id) return;
+                      setConvertedRegistryConstraint(true);
+                      if (typeof projectApi?.createConstraint === 'function') {
+                        try {
+                          await projectApi.createConstraint(projects[0].id, {
+                            category: 'workspace_boundary',
+                            content: `[受控项目台账边界] 严格遵守已纳管 ${projects.length} 个项目的目录与分支隔离规范`,
+                            triggerPattern: 'always',
+                            priority: 8,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                  >
+                    {convertedRegistryConstraint ? '已转台账L2' : '台账转L2护栏'}
                   </button>
                 </>
               )}

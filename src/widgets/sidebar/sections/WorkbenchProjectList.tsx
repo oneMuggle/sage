@@ -41,6 +41,8 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
   const [copiedPathId, setCopiedPathId] = useState<string | null>(null);
   const [savedL3Ids, setSavedL3Ids] = useState<Set<string>>(new Set());
   const [savedL4Ids, setSavedL4Ids] = useState<Set<string>>(new Set());
+  const [createdMsIds, setCreatedMsIds] = useState<Set<string>>(new Set());
+  const [createdL2Ids, setCreatedL2Ids] = useState<Set<string>>(new Set());
   const data = useProjectSectionData({ onOpenSession });
 
   const {
@@ -256,6 +258,53 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                   </span>
                 )}
                 <div className="hidden group-hover:flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    data-testid={`workbench-row-to-milestone-${project.id}`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (createdMsIds.has(project.id)) return;
+                      setCreatedMsIds((prev) => new Set(prev).add(project.id));
+                      if (typeof projectApi?.createMilestone === 'function') {
+                        try {
+                          await projectApi.createMilestone(project.id, {
+                            title: `[项目治理复核] ${project.name}`,
+                            description: `工作区路径：${project.path}`,
+                            status: 'pending',
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {createdMsIds.has(project.id) ? '已建里程碑' : '+里程碑'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`workbench-row-to-constraint-${project.id}`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (createdL2Ids.has(project.id)) return;
+                      setCreatedL2Ids((prev) => new Set(prev).add(project.id));
+                      if (typeof projectApi?.createConstraint === 'function') {
+                        try {
+                          await projectApi.createConstraint(project.id, {
+                            category: 'workspace_guard',
+                            content: `[项目边界核查] 变更 [${project.name}] (${project.path}) 时严格遵守形态护栏`,
+                            triggerPattern: 'always',
+                            priority: 8,
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {createdL2Ids.has(project.id) ? '已转L2' : '+L2'}
+                  </button>
                   <button
                     type="button"
                     data-testid={`workbench-row-to-l3-${project.id}`}
