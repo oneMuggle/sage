@@ -430,6 +430,9 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('git-widget-copy-paths-btn'));
     fireEvent.click(screen.getByTestId('git-widget-files-to-milestone-btn'));
     expect(screen.getByTestId('git-widget-files-to-milestone-btn')).toHaveTextContent('已转里程碑');
+    fireEvent.click(screen.getByTestId('git-widget-files-to-l3-btn'));
+    expect(screen.getByTestId('git-widget-files-to-l3-btn')).toHaveTextContent('已存变更 L3');
+    fireEvent.click(screen.getByTestId('git-widget-copy-branch-btn'));
     fireEvent.click(screen.getByTestId('git-widget-guard-all-btn'));
     fireEvent.click(screen.getByTestId('git-widget-save-commits-l3-btn'));
     expect(screen.getByTestId('git-widget-save-commits-l3-btn')).toHaveTextContent('已沉淀至 L3');
@@ -447,6 +450,9 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByDisplayValue('10')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('constraint-pillar-preset-0'));
     fireEvent.click(screen.getByTestId('constraint-pillar-append-0'));
+    fireEvent.click(screen.getByTestId('constraint-pillar-fill-all-btn'));
+    fireEvent.click(screen.getByTestId('constraint-copy-content-btn'));
+    fireEvent.click(screen.getByTestId('constraint-clear-content-btn'));
     fireEvent.click(screen.getByTestId('constraint-pillar-fill-all-btn'));
     fireEvent.click(screen.getByTestId('constraint-dir-glob-0'));
     fireEvent.click(screen.getByTestId('constraint-copy-glob-btn'));
