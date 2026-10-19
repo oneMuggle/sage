@@ -327,12 +327,16 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByText('src/')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('studio-copy-dirs-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-vcs-btn'));
+    fireEvent.click(screen.getByTestId('studio-copy-positioning-btn'));
+    expect(screen.getByTestId('studio-copy-positioning-btn')).toHaveTextContent('已复制定位');
     fireEvent.click(screen.getByTestId('studio-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-pillars-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-milestones-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-subtemplates-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-blueprint-md-btn'));
     expect(screen.getByTestId('studio-copy-blueprint-md-btn')).toHaveTextContent(/已复制蓝图 MD|复制当前蓝图 MD/);
+    fireEvent.click(screen.getByTestId('studio-copy-blueprint-json-btn'));
+    expect(screen.getByTestId('studio-copy-blueprint-json-btn')).toHaveTextContent('已复制蓝图 JSON');
     fireEvent.click(screen.getByTestId('studio-copy-all-blueprints-md-btn'));
     expect(screen.getByTestId('studio-copy-all-blueprints-md-btn')).toHaveTextContent(
       /已复制全形态对比|复制四大蓝图对比 MD/,
