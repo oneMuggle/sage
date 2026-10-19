@@ -2,8 +2,10 @@
 Episodic Memory - 情景记忆模块
 基于 SQLite 存储对话历史和事件序列
 
-中文支持：搜索时使用 jieba 分词，将查询拆分为多个词，
-用多个 LIKE 条件 OR 连接，提升中文检索质量。
+中文支持：使用 jieba 分词，将分词结果存入独立 FTS5 表 memories_episodic_fts
+（非 external-content，存分词文本而非原文）。写入/更新/删除由本类在 Python 侧
+显式同步索引（单一事实来源，不使用触发器）。search() 优先走 FTS5 MATCH，
+命中为空或查询异常时回退 LIKE+jieba（_search_like），保证可用性。
 """
 
 from __future__ import annotations
@@ -15,8 +17,9 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+from backend.data.database import fts_row_texts
 from backend.memory import scope as memory_scope
-from backend.memory.chinese_tokenizer import tokenize
+from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
 from backend.memory.summary_text import truncate_summary
 
 logger = logging.getLogger(__name__)
@@ -28,6 +31,7 @@ class EpisodicMemory:
 
     特性:
     - SQLite 持久化存储
+    - FTS5 全文搜索（基于 jieba 分词）
     - 支持重要性评分 (1-10)
     - 支持标签系统
     - 访问计数和 TTL 支持
@@ -41,6 +45,89 @@ class EpisodicMemory:
             db: Database 实例
         """
         self.db = db
+        self._init_fts()
+
+    def _init_fts(self) -> None:
+        """初始化 FTS5 全文索引表（memories_episodic_fts）。
+
+        FTS 索引为辅助路径：同步失败只记 warning，不中断主表写入；
+        搜索可回退 LIKE 路径，且下次启动会幂等回填补齐。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        # 创建 FTS5 虚拟表（如果不存在）
+        try:
+            cursor.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS memories_episodic_fts
+                USING fts5(content, summary, tags)
+            """)
+            conn.commit()
+        except sqlite3.DatabaseError as exc:
+            logger.warning(f"FTS5 索引表创建失败: {exc}")
+            return
+
+        # 回填存量数据（幂等）
+        self._backfill_fts()
+
+    def _backfill_fts(self) -> None:
+        """回填 FTS 索引（幂等：已存在 rowid 的行跳过）。
+
+        用于初始化时或存量数据缺 FTS 索引时批量补齐。
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+
+        try:
+            # 取主表中尚未入 FTS 索引的行
+            cursor.execute("""
+                SELECT rowid, content, summary, tags FROM memories_episodic
+                WHERE is_valid = 1 AND invalid_at IS NULL
+                  AND rowid NOT IN (SELECT rowid FROM memories_episodic_fts)
+                LIMIT 500
+            """)
+            rows = cursor.fetchall()
+            if not rows:
+                return
+
+            for row in rows:
+                cursor.execute(
+                    "INSERT INTO memories_episodic_fts (rowid, content, summary, tags) "
+                    "VALUES (?, ?, ?, ?)",
+                    (row["rowid"],) + fts_row_texts(
+                        row["content"], row["summary"], row["tags"]
+                    ),
+                )
+            conn.commit()
+            logger.info(f"FTS 索引回填完成: {len(rows)} 条")
+        except sqlite3.DatabaseError as exc:
+            logger.warning(f"FTS 索引回填失败: {exc}")
+
+    def _sync_fts_row(self, cursor: sqlite3.Cursor, memory_id: str) -> None:
+        """重建指定记忆的 FTS 索引行（按 rowid 先删后插，与主表行对齐）。
+
+        FTS 索引为辅助路径：同步失败只记 warning，不中断主表写入；
+        搜索可回退 LIKE 路径，且下次启动会幂等回填补齐。
+        """
+        try:
+            row = cursor.execute(
+                "SELECT rowid, content, summary, tags FROM memories_episodic WHERE id = ?",
+                (memory_id,),
+            ).fetchone()
+            if row is None:
+                return
+            cursor.execute(
+                "DELETE FROM memories_episodic_fts WHERE rowid = ?", (row["rowid"],)
+            )
+            cursor.execute(
+                "INSERT INTO memories_episodic_fts (rowid, content, summary, tags) "
+                "VALUES (?, ?, ?, ?)",
+                (row["rowid"],) + fts_row_texts(
+                    row["content"], row["summary"], row["tags"]
+                ),
+            )
+        except sqlite3.DatabaseError as exc:
+            logger.warning("FTS 索引同步失败 (memory_id=%s): %s", memory_id, exc)
 
     def save(
         self,
@@ -112,6 +199,9 @@ class EpisodicMemory:
             ),
         )
 
+        # 显式同步 FTS 索引（单一事实来源：Python 侧维护，不使用触发器）
+        self._sync_fts_row(cursor, memory_id)
+
         conn.commit()
         return memory_id
 
@@ -132,8 +222,10 @@ class EpisodicMemory:
         """
         搜索情景记忆
 
-        使用 jieba 分词，将查询拆分为多个词，用多个 LIKE 条件 OR 连接，
-        支持中文检索（如搜索 "用户 火锅" 可匹配 "用户喜欢火锅"）。
+        优先走 FTS5 全文索引（jieba 分词后 MATCH）；命中为空或 FTS 查询异常时
+        回退 LIKE+jieba 路径（_search_like），保证任何情况下搜索可用。
+        importance/标签过滤、排序（importance DESC, access_count DESC, created_at DESC）、
+        limit 语义与原实现一致。
 
         Args:
             query: 搜索关键词
@@ -143,6 +235,141 @@ class EpisodicMemory:
             scope: P1 作用域过滤（'user'|'project'|'global'）。给定时
                 不做 session 隔离 —— 用于同项目跨会话 / 用户级跨会话检索
             project_key: scope='project' 时必填，限定项目目录
+
+        Returns:
+            匹配的记忆列表
+        """
+        if not query or query.strip() == "":
+            return self.get_recent(limit, session_id=session_id)
+
+        # 优先走 FTS5
+        fts_results = self._search_fts(
+            query, limit, min_importance, memory_type, session_id=session_id,
+            scope=scope, project_key=project_key,
+        )
+        if fts_results:
+            return fts_results
+
+        # FTS 无命中（如索引尚未回填）或异常 → 回退 LIKE+jieba
+        return self._search_like(
+            query, limit, min_importance, memory_type, session_id=session_id,
+            scope=scope, project_key=project_key,
+        )
+
+    def _search_fts(
+        self,
+        query: str,
+        limit: int = 10,
+        min_importance: int = 1,
+        memory_type: Optional[str] = None,
+        session_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """走 FTS5 全文索引搜索（jieba 分词 + OR MATCH）。
+
+        查询串由 _prepare_fts_query 生成：每个词双引号包裹（内部引号翻倍转义，
+        防 FTS 语法注入）后 OR 连接。FTS 索引行通过 rowid 与主表对齐。
+
+        Args:
+            query: 原始查询
+            limit: 返回数量限制
+            min_importance: 最小重要性
+            memory_type: 可选，按记忆类型筛选
+
+        Returns:
+            匹配的记忆列表；查询异常或无命中时返回 []，由调用方回退 LIKE 路径
+        """
+        match_expr = self._prepare_fts_query(query)
+        if not match_expr or match_expr == '""':
+            return []
+
+        sql_parts = [
+            "SELECT me.* FROM memories_episodic me",
+            "JOIN memories_episodic_fts ON memories_episodic_fts.rowid = me.rowid",
+            "WHERE memories_episodic_fts MATCH ? AND me.is_valid = 1 AND me.invalid_at IS NULL",
+        ]
+        params: List[Any] = [match_expr]
+
+        # 重要性条件
+        sql_parts.append("AND me.importance >= ?")
+        params.append(min_importance)
+
+        # 记忆类型筛选
+        if memory_type:
+            sql_parts.append("AND me.memory_type = ?")
+            params.append(memory_type)
+
+        # P1 作用域检索
+        if scope:
+            if scope == memory_scope.SCOPE_PROJECT:
+                if not project_key:
+                    return []
+                sql_parts.append("AND me.scope = ? AND me.project_key = ?")
+                params.extend([scope, project_key])
+            elif scope == memory_scope.SCOPE_USER:
+                sql_parts.append("AND (me.scope IS NULL OR me.scope = ?)")
+                params.append(scope)
+            else:
+                sql_parts.append("AND me.scope = ?")
+                params.append(scope)
+        elif session_id is not None:
+            sql_parts.append("AND me.session_id = ?")
+            params.append(session_id)
+
+        sql_parts.append("ORDER BY me.importance DESC, me.access_count DESC, me.created_at DESC LIMIT ?")
+        params.append(limit)
+
+        try:
+            conn = self.db.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(" ".join(sql_parts), params)
+            results = []
+            for row in cursor.fetchall():
+                memory = dict(row)
+                if memory.get("tags"):
+                    try:
+                        memory["tags"] = json.loads(memory["tags"])
+                    except json.JSONDecodeError:
+                        memory["tags"] = []
+                results.append(memory)
+                # 更新访问统计
+                self._update_access(memory["id"])
+            return results
+        except sqlite3.DatabaseError as exc:
+            logger.warning("FTS5 搜索失败，回退 LIKE 路径: %s", exc)
+            return []
+
+    def _prepare_fts_query(self, query: str) -> str:
+        """准备 FTS5 查询字符串（使用 jieba 分词）。
+
+        Args:
+            query: 原始查询
+
+        Returns:
+            处理后的 FTS5 查询（jieba 分词 + 双引号包裹 + OR 连接）
+        """
+        return tokenize_for_search(query)
+
+    def _search_like(
+        self,
+        query: str,
+        limit: int = 10,
+        min_importance: int = 1,
+        memory_type: Optional[str] = None,
+        session_id: Optional[str] = None,
+        scope: Optional[str] = None,
+        project_key: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """LIKE + jieba 回退搜索（FTS 索引不可用或无命中时使用）。
+
+        Args:
+            query: 搜索关键词
+            limit: 返回数量限制
+            min_importance: 最小重要性
+            memory_type: 可选，按记忆类型筛选
+            scope: 可选，P1 作用域过滤（跨会话）
+            project_key: scope='project' 时限定项目目录
 
         Returns:
             匹配的记忆列表

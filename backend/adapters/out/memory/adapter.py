@@ -122,7 +122,7 @@ class MemoryAdapter:
 
         触发条件：向量表条目数 < 主表（episodic+semantic）行数 —— 维度
         重建后或语义 Embedder 首次启用后必然成立。上限
-        SAGE_VEC_BACKFILL_MAX（默认 500 条/次），剩余留给下次启动。
+        SAGE_VEC_BACKFILL_MAX（默认 2000 条/次），剩余留给下次启动。
         """
         if self._backfill_started or self.vector_store is None:
             return
@@ -134,9 +134,9 @@ class MemoryAdapter:
             return
         self._backfill_started = True
         try:
-            max_backfill = int(os.getenv("SAGE_VEC_BACKFILL_MAX", "500"))
+            max_backfill = int(os.getenv("SAGE_VEC_BACKFILL_MAX", "2000"))
         except ValueError:
-            max_backfill = 500
+            max_backfill = 2000
 
         def _run_backfill() -> None:
             try:
@@ -183,16 +183,17 @@ class MemoryAdapter:
         keyword_results = self.memory_manager.recall(query, limit=limit, session_id=session_id)
         keyword_items = keyword_results.get("episodic", []) + keyword_results.get("semantic", [])
 
-        # 2. 向量检索（VectorStore,批次三 step 5 起按 session 隔离）
+        # 2. 向量检索（VectorStore, 软过滤策略：跨会话知识可召回）
         # Round 1: 语义 Embedder 的 encode 含 HTTP/ONNX 推理 —— 挪线程执行器,
         # 避免阻塞事件循环（test_event_loop_blocking 500ms 延迟门禁）。
+        # 优化: 使用 soft_filter=True，不按 session 严格过滤，允许跨会话知识召回
         vector_items: List[dict] = []
         if self.vector_store is not None:
             loop = asyncio.get_running_loop()
             vec_results = await loop.run_in_executor(
                 None,
                 lambda: self.vector_store.search(
-                    query, top_k=limit, session_id=session_id
+                    query, top_k=limit, session_id=session_id, soft_filter=True
                 ),
             )
             for vr in vec_results:
@@ -201,36 +202,46 @@ class MemoryAdapter:
                 if mem is None:
                     mem = self.memory_manager.semantic.get_by_id(mem_id)
                 if mem is not None:
-                    mem["rrf_score"] = 1.0 / (60 + vr.get("distance", 0) * 100)
+                    # 基础 RRF 分数
+                    base_score = 1.0 / (60 + vr.get("distance", 0) * 100)
+                    # 软过滤评分：同会话 +50%，跨会话 -30%
+                    session_boost = (
+                        1.5 if vr.get("session_id") == session_id else 0.7
+                    )
+                    mem["rrf_score"] = base_score * session_boost
                     vector_items.append(mem)
 
         # 3. RRF 融合两路结果 (T1, P10): 权重按嵌入器能力重配 ——
         #    语义嵌入 (Onnx, 512 维) 向量路是真语义相似度, 权重压过关键词;
-        #    字面哈希 (Hash, 256 维) 与关键词路高度重叠, 关键词路更可靠。
-        base_weights = (
-            [0.3, 0.7]
-            if getattr(self.embedder, "is_semantic", False)
-            else [0.6, 0.4]
-        )
-        # B4 (P11): A/B 权重变体 —— 按 query 稳定 hash 二分。
-        # A = 嵌入器类型基线权重; B = 均权对照, 离线对比两组召回质量。
-        import hashlib as _hl
-
-        variant = (
-            "A"
-            if int(_hl.md5(query.encode("utf-8")).hexdigest()[:8], 16) % 2 == 0
-            else "B"
-        )
-        if variant == "A":
-            weights = list(base_weights)
+        #    字面哈希 (Hash, 256 维) 与关键词路高度重叠, 跳向量路只用关键词。
+        # 优化: HashEmbedder 下跳向量路，避免重复计算
+        if not getattr(self.embedder, "is_semantic", False):
+            # HashEmbedder：跳向量路，只用关键词
+            fused = keyword_items
+            variant = "skip-vector"
+            weights = [1.0, 0.0]
         else:
-            mid = (base_weights[0] + base_weights[1]) / 2
-            weights = [mid, mid]
-        fused = reciprocal_rank_fusion(
-            [keyword_items, vector_items],
-            weights=weights,
-            k=60,
-        )
+            # 语义嵌入：向量权重 0.8
+            base_weights = [0.2, 0.8]
+            # B4 (P11): A/B 权重变体 —— 按 query 稳定 hash 二分。
+            # A = 嵌入器类型基线权重; B = 均权对照, 离线对比两组召回质量。
+            import hashlib as _hl
+
+            variant = (
+                "A"
+                if int(_hl.md5(query.encode("utf-8")).hexdigest()[:8], 16) % 2 == 0
+                else "B"
+            )
+            if variant == "A":
+                weights = list(base_weights)
+            else:
+                mid = (base_weights[0] + base_weights[1]) / 2
+                weights = [mid, mid]
+            fused = reciprocal_rank_fusion(
+                [keyword_items, vector_items],
+                weights=weights,
+                k=60,
+            )
         # P1 作用域轴：其他项目的 project 记忆对当前会话不可见
         # （keyword 路径在存储层已按 session 过滤，这里是统一防线）
         fused = [
@@ -243,23 +254,18 @@ class MemoryAdapter:
         # 更新、更可信的语义次优事实。
         fused = rank_by_composite(fused)
 
-        logger.info(
-            "[retrieval] variant=%s weights=%s keyword_hits=%s vector_hits=%s fused=%s",
-            variant,
-            weights,
-            len(keyword_items),
-            len(vector_items),
-            len(fused),
-        )
-
         # 4. 分层：用户画像 + 项目画像（P2，始终注入）+ 高重要性 → core，
         # 其余 → episodic/semantic
-        # core 槽位按画像 / 检索命中**独立预算**（画像 3 + 检索 2 = 5），
-        # 避免画像条目挤掉本轮检索到的高重要性事实（review MEDIUM）。
+        # 优化: 动态 core 槽位预算 —— 检索命中多时放宽
         _CORE_PROFILE_LIMIT = 3
-        _CORE_RETRIEVED_LIMIT = 2
-        # P2: 项目画像独立小额度（2），不与服务端用户画像/检索命中抢槽位
         _CORE_PROJECT_LIMIT = 2
+        # 动态调整：检索命中多时放宽
+        if len(fused) >= 5:
+            _CORE_RETRIEVED_LIMIT = 3
+        elif len(fused) >= 2:
+            _CORE_RETRIEVED_LIMIT = 2
+        else:
+            _CORE_RETRIEVED_LIMIT = 1
         core_profile: List[dict] = []
         core_project: List[dict] = []
         core_retrieved: List[dict] = []
@@ -292,6 +298,20 @@ class MemoryAdapter:
             core_profile[:_CORE_PROFILE_LIMIT]
             + core_project[:_CORE_PROJECT_LIMIT]
             + core_retrieved[:_CORE_RETRIEVED_LIMIT]
+        )
+
+        logger.info(
+            "[retrieval] embedder=%s is_semantic=%s variant=%s weights=%s "
+            "keyword_hits=%s vector_hits=%s fused=%s core=%s session_id=%s",
+            type(self.embedder).__name__,
+            getattr(self.embedder, "is_semantic", False),
+            variant,
+            weights,
+            len(keyword_items),
+            len(vector_items),
+            len(fused),
+            len(core),
+            session_id[:8] if session_id else None,
         )
 
         return MemoryContext(

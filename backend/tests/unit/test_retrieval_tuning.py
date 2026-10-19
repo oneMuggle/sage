@@ -32,8 +32,8 @@ def _make_adapter(embedder):
 
 
 @pytest.mark.asyncio()
-async def test_hash_embedder_uses_keyword_heavy_weights():
-    """字面哈希嵌入器: 关键词路权重 > 向量路 (哈希向量与关键词路重叠)。"""
+async def test_hash_embedder_skips_vector_path():
+    """字面哈希嵌入器: 跳向量路, 只用关键词 (哈希向量与关键词路高度重叠)。"""
     adapter = _make_adapter(HashEmbedder(dimensions=256))
     captured = {}
 
@@ -50,12 +50,37 @@ async def test_hash_embedder_uses_keyword_heavy_weights():
     finally:
         fusion_mod.reciprocal_rank_fusion = original
 
-    assert captured["weights"] == [0.6, 0.4]
+    # 融合函数根本不应被调用 —— 走了 skip-vector 分支
+    assert captured == {}
+
+
+@pytest.mark.asyncio()
+async def test_hash_embedder_result_is_keyword_only():
+    """skip-vector 分支下返回的是关键词路结果本身。"""
+    adapter = _make_adapter(HashEmbedder(dimensions=256))
+
+    from backend.memory import fusion as fusion_mod
+
+    original = fusion_mod.reciprocal_rank_fusion
+    fusion_mod.reciprocal_rank_fusion = lambda lists, weights=None, k=60: []
+    try:
+        context = await adapter.retrieve("query", "s1")
+    finally:
+        fusion_mod.reciprocal_rank_fusion = original
+
+    # 关键词路唯一的 k1 未达 core 门槛 (importance 5 < 8) 且非 semantic/fact
+    assert [item["id"] for item in context.episodic] == ["k1"]
+    assert context.semantic == []
+    assert context.core == []
 
 
 @pytest.mark.asyncio()
 async def test_semantic_embedder_uses_vector_heavy_weights():
-    """语义嵌入器: 向量路权重 > 关键词路 (真语义相似度)。"""
+    """语义嵌入器: 向量路权重 >= 关键词路 (真语义相似度)。
+
+    A/B 变体按 query 稳定 hash 二分 (A=[0.2,0.8] / B=均权),
+    两者都保证向量路不弱于关键词路, 故断言此不变式而非具体数值。
+    """
     embedder = OnnxEmbedder(model_dir="/tmp/unused")
     adapter = _make_adapter(embedder)
     captured = {}
@@ -73,7 +98,9 @@ async def test_semantic_embedder_uses_vector_heavy_weights():
     finally:
         fusion_mod.reciprocal_rank_fusion = original
 
-    assert captured["weights"] == [0.3, 0.7]
+    assert "weights" in captured
+    keyword_w, vector_w = captured["weights"]
+    assert vector_w >= keyword_w
 
 
 @pytest.mark.asyncio()

@@ -335,20 +335,24 @@ class MemoryManager:
             else:
                 results["working"] = working_context[-limit:]
 
-        # 情景记忆 - SQLite LIKE 搜索
+        # 情景记忆 - SQLite LIKE 搜索（软过滤：跨会话召回）
         if "episodic" in memory_types:
+            # 不传递 session_id，允许跨会话知识召回
+            # 软过滤评分在 MemoryAdapter.retrieve() 中进行
             results["episodic"] = self.episodic.search(
                 query=query,
-                limit=limit,
-                session_id=session_id,
+                limit=limit * 2,  # 放宽候选数量
+                session_id=None,  # 不按 session 严格过滤
             )
 
-        # 语义记忆 - FTS5 全文搜索
+        # 语义记忆 - FTS5 全文搜索（软过滤：跨会话召回）
         if "semantic" in memory_types:
+            # 不传递 session_id，允许跨会话知识召回
+            # 软过滤评分在 MemoryAdapter.retrieve() 中进行
             results["semantic"] = self.semantic.search(
                 query=query,
-                limit=limit,
-                session_id=session_id,
+                limit=limit * 2,  # 放宽候选数量
+                session_id=None,  # 不按 session 严格过滤
             )
 
         return results
