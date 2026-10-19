@@ -82,6 +82,8 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const [copiedBranch, setCopiedBranch] = useState(false);
   const [guardedAllSider, setGuardedAllSider] = useState(false);
   const [ingestedAllSider, setIngestedAllSider] = useState(false);
+  const [copiedSiderPaths, setCopiedSiderPaths] = useState(false);
+  const [milestonePaths, setMilestonePaths] = useState<Set<string>>(new Set());
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 获取第一个项目的路径
@@ -431,6 +433,22 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                   >
                     {ingestedAllSider ? '已全入库' : '全入库L4'}
                   </button>
+                  <button
+                    type="button"
+                    data-testid="git-sider-copy-paths-btn"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard?.writeText(filteredFiles.map((f) => f.path).join('\n'));
+                        setCopiedSiderPaths(true);
+                        setTimeout(() => setCopiedSiderPaths(false), 1500);
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }}
+                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                  >
+                    {copiedSiderPaths ? '已复制路径' : '复制路径'}
+                  </button>
                 </>
               )}
             </div>
@@ -522,6 +540,30 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                       className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
                     >
                       {l3Paths.has(file.path) ? '已存L3' : '+L3'}
+                    </button>
+                  )}
+                  {projectId && (
+                    <button
+                      type="button"
+                      data-testid={`git-sider-milestone-${file.path}`}
+                      onClick={async () => {
+                        if (milestonePaths.has(file.path)) return;
+                        setMilestonePaths((prev) => new Set(prev).add(file.path));
+                        if (typeof projectApi?.createMilestone === 'function') {
+                          try {
+                            await projectApi.createMilestone(projectId, {
+                              title: `[Git 变更跟进] ${file.path}`,
+                              description: `侧边栏状态 [${file.status}] (${status.branch || 'HEAD'})`,
+                              status: 'pending',
+                            });
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }
+                      }}
+                      className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
+                    >
+                      {milestonePaths.has(file.path) ? '已建里程碑' : '+里程碑'}
                     </button>
                   )}
                   <button

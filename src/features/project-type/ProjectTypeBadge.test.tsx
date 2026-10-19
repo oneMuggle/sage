@@ -266,6 +266,8 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('studio-profile-seed-pillars-btn'));
     expect(screen.getByTestId('studio-profile-seed-pillars-btn')).toHaveTextContent('已写入支柱 L3');
     fireEvent.click(screen.getByTestId('studio-profile-copy-cats-btn'));
+    fireEvent.click(screen.getByTestId('studio-profile-copy-draft-btn'));
+    fireEvent.click(screen.getByTestId('studio-profile-clear-draft-btn'));
   });
 
   it('supports KnowledgeExtractionPanel session refresh and extracted proposals markdown copy', async () => {
@@ -299,6 +301,10 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
 
     fireEvent.click(screen.getByTestId('knowledge-refresh-sessions-btn'));
     await waitFor(() => expect(projectApi.listSessions).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByTestId('knowledge-clear-session-id-btn'));
+    fireEvent.change(screen.getByTestId('knowledge-session-id-input'), {
+      target: { value: 'sess-p29' },
+    });
 
     fireEvent.click(screen.getByTestId('knowledge-extract-btn'));
     const copyMdBtn = await screen.findByTestId('knowledge-copy-md-btn');
@@ -307,6 +313,8 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
 
     fireEvent.click(screen.getByTestId('knowledge-category-filter-convention'));
     fireEvent.click(screen.getByTestId('knowledge-select-filtered-btn'));
+    fireEvent.click(screen.getByTestId('knowledge-invert-selection-btn'));
+    fireEvent.click(screen.getByTestId('knowledge-invert-selection-btn'));
     fireEvent.click(screen.getByTestId('knowledge-category-filter-all'));
     fireEvent.click(screen.getByTestId('knowledge-copy-selected-md-btn'));
     fireEvent.click(screen.getByTestId('knowledge-batch-to-constraint-btn'));

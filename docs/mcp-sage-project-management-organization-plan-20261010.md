@@ -995,3 +995,16 @@
   - 在 `milestone-summary-stage-bar` 阶段筛选栏新增 **`复制阶段分布`**（`data-testid="milestone-summary-copy-stages-btn"`）、**`阶段分布存L3`**（`data-testid="milestone-summary-stages-to-l3-btn"`）与 **`阶段分布存L4`**（`data-testid="milestone-summary-stages-to-l4-btn"`），支持将阶段里程碑分布一键复制、沉淀至 L3 `architecture` 画像（`projectApi.confirmKnowledge`）或归档至 L4 资料库（`projectApi.addMaterial`）。
 - **单元测试与门禁验证**：
   - 扩展 `ProjectTypeBadge.test.tsx`、`ConstraintSummaryWidget.test.tsx` 与 `MilestoneProgressWidget.test.tsx`（3 个测试文件共 38 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P73 — 侧边栏 Git 变更路径批量复制与单文件建里程碑、约束统计高优预览复制、L3 画像草稿复制与清空、M2 知识提取会话清空与结果反选（已完成）
+
+- **Phase 4.3 `GitStatusSection` 侧边栏 Git 变更路径批量复制与单文件一键建里程碑（`src/widgets/sidebar/sections/GitStatusSection.tsx`）**：
+  - 在 `git-sider-filter-bar` 筛选栏新增 **`复制路径`**（`data-testid="git-sider-copy-paths-btn"`），支持按当前筛选状态复制全部变更文件的相对路径清单；
+  - 在每条变更文件行新增 **`+里程碑`**（`data-testid="git-sider-milestone-${file.path}"`），支持将单文件变更直接创建为 `[Git 变更跟进]` 项目里程碑（`projectApi.createMilestone`）。
+- **Phase 4.3 `ConstraintSummaryWidget` 高优规则预览一键复制（`src/features/project-type/ConstraintSummaryWidget.tsx`）**：
+  - 当展开高优规则预览面板时，新增 **`复制高优预览`**（`data-testid="constraint-summary-copy-preview-btn"`），支持一键复制当前展示的高优先级约束规则 Markdown 清单。
+- **Phase 4.4 `StudioProfileTabPanel` L3 画像输入草稿复制与清空（`src/features/project-type/StudioProfileTabPanel.tsx`）**：
+  - 在画像录入栏新增 **`复制草稿`**（`data-testid="studio-profile-copy-draft-btn"`）与 **`清空草稿`**（`data-testid="studio-profile-clear-draft-btn"`），便于快速复用或重置待写入的 L3 画像内容。
+- **Phase 4.5 `KnowledgeExtractionPanel` M2 知识提取会话 ID 清空与勾选反选（`src/features/project-type/KnowledgeExtractionPanel.tsx`）**：
+  - 在会话输入栏新增 **`清空会话 ID`**（`data-testid="knowledge-clear-session-id-btn"`），并在审核阶段类别筛选栏新增 **`反选`**（`data-testid="knowledge-invert-selection-btn"`），支持快速反转勾选候选知识条目。
+- **单元测试与门禁验证**：
+  - 扩展 `ConstraintSummaryWidget.test.tsx` 与 `ProjectTypeBadge.test.tsx`（2 个测试文件共 27 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

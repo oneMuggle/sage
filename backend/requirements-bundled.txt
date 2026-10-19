@@ -108,7 +108,7 @@ pandas==2.2.3  # DataFrame-based Excel generation (backend.office.excel.generate
 # fast. Matches the LTS strategy used in release/win7 (which has had these
 # three since 2026-09-05 and bundles them into the Win7 installer).
 docxtpl>=0.20.0       # Word template fill with {{variable}} placeholders, ~0.5MB wheel
-PyMuPDF>=1.25.0       # PDF read + form fill (C extension, cp311 win_amd64 wheel), ~15MB wheel
+PyMuPDF>=1.25.0,<2.0.0  # PDF read + form fill (C extension, cp311 win_amd64 wheel, <2.0 avoids pymupdf-layout==2.0 breaking find_tables/flatten), ~15MB wheel
 reportlab>=4.0.0      # PDF generation from structured data, ~3MB wheel
 
 # certifi: provides Mozilla CA bundle for httpx / requests / curl SSL verification
