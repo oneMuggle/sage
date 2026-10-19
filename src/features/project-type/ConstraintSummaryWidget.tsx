@@ -53,8 +53,10 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [copiedCategories, setCopiedCategories] = useState(false);
   const [convertedDisabledMilestone, setConvertedDisabledMilestone] = useState(false);
   const [savedGlobL3, setSavedGlobL3] = useState(false);
+  const [savedGlobL4, setSavedGlobL4] = useState(false);
   const [copiedGlobRules, setCopiedGlobRules] = useState(false);
   const [savedCatsL3, setSavedCatsL3] = useState(false);
+  const [savedCatsL4, setSavedCatsL4] = useState(false);
 
   const fetchConstraints = useCallback(async () => {
     if (typeof projectApi?.listConstraints !== 'function') {
@@ -374,6 +376,31 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                 </button>
                 <button
                   type="button"
+                  data-testid="constraint-summary-glob-to-l4-btn"
+                  onClick={async () => {
+                    if (savedGlobL4) return;
+                    setSavedGlobL4(true);
+                    const globRules = enabledConstraints.filter((c) =>
+                      Boolean(c.triggerPattern?.trim()),
+                    );
+                    if (typeof projectApi?.addMaterial === 'function') {
+                      try {
+                        await projectApi.addMaterial(projectId, {
+                          content: `# Glob 按需触发约束清单 (${globRules.length} 条)\n${globRules
+                            .map((gc) => `- \`${gc.triggerPattern}\` (P${gc.priority}): ${gc.content}`)
+                            .join('\n')}`,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {savedGlobL4 ? '已存Glob至L4' : 'Glob规则存L4'}
+                </button>
+                <button
+                  type="button"
                   data-testid="constraint-summary-copy-glob-btn"
                   onClick={async () => {
                     const globRules = enabledConstraints.filter((c) =>
@@ -455,6 +482,31 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                   className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   {savedCatsL3 ? '已存分布L3' : '分布存 L3'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="constraint-summary-cats-to-l4-btn"
+                  onClick={async () => {
+                    if (savedCatsL4) return;
+                    setSavedCatsL4(true);
+                    if (typeof projectApi?.addMaterial === 'function') {
+                      try {
+                        await projectApi.addMaterial(projectId, {
+                          content: [
+                            '# L2 约束类别分布统计',
+                            ...Array.from(categoryCount.entries()).map(
+                              ([cat, cnt]) => `- **${CONSTRAINT_CATEGORY_LABELS[cat] ?? cat} (${cat})**: ${cnt} 条`,
+                            ),
+                          ].join('\n'),
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {savedCatsL4 ? '已存分布L4' : '分布存 L4'}
                 </button>
               </div>
               {selectedCategory && (

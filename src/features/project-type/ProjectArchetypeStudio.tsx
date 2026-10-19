@@ -53,7 +53,10 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const [savedBlueprintL3, setSavedBlueprintL3] = useState(false);
   const [copiedDirs, setCopiedDirs] = useState(false);
   const [copiedStages, setCopiedStages] = useState(false);
+  const [copiedPillars, setCopiedPillars] = useState(false);
+  const [copiedMilestones, setCopiedMilestones] = useState(false);
   const [scaffolded, setScaffolded] = useState(false);
+  const [seededMilestones, setSeededMilestones] = useState(false);
 
   const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
 
@@ -219,7 +222,25 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           </div>
 
           <div className="space-y-2">
-            <div className="text-xs font-semibold text-foreground">2. 五层上下文注入与护栏重点</div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-foreground">2. 五层上下文注入与护栏重点</div>
+              <button
+                type="button"
+                data-testid="studio-copy-pillars-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard?.writeText(blueprint.contextPillars.join('\n'));
+                    setCopiedPillars(true);
+                    setTimeout(() => setCopiedPillars(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {copiedPillars ? '已复制支柱' : '复制护栏重点'}
+              </button>
+            </div>
             <ul className="space-y-1 text-xs text-muted-foreground">
               {blueprint.contextPillars.map((pillar, idx) => (
                 <li key={idx} className="flex items-start gap-1.5">
@@ -233,6 +254,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div className="text-xs font-semibold text-foreground">3. 阶段推进管线与预设规则包</div>
+              <div className="flex items-center gap-1">
               <button
                 type="button"
                 data-testid="studio-copy-stages-btn"
@@ -251,6 +273,27 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
               >
                 {copiedStages ? '已复制阶段' : '复制阶段管线'}
               </button>
+              <button
+                type="button"
+                data-testid="studio-copy-milestones-btn"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard?.writeText(
+                      blueprint.recommendedMilestones
+                        .map((m, i) => `${i + 1}. [${m.stage}] ${m.title} — ${m.description}`)
+                        .join('\n'),
+                    );
+                    setCopiedMilestones(true);
+                    setTimeout(() => setCopiedMilestones(false), 1500);
+                  } catch {
+                    // ignore in test/offline mode
+                  }
+                }}
+                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {copiedMilestones ? '已复制里程碑' : '复制推荐里程碑'}
+              </button>
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {blueprint.stages.map((st, idx) => (
@@ -397,6 +440,36 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
               >
                 {scaffolded ? '已初始化脚手架' : '一键脚手架初始化'}
+              </button>
+              <button
+                type="button"
+                data-testid="studio-seed-recommended-milestones-btn"
+                onClick={async () => {
+                  if (seededMilestones) return;
+                  setSeededMilestones(true);
+                  if (typeof projectApi?.createMilestone === 'function') {
+                    const bp =
+                      ARCHETYPE_BLUEPRINTS[
+                        (activeProject.projectType ?? activeProject.detectedType ?? 'business') as ProjectType
+                      ];
+                    let order = 0;
+                    for (const m of bp.recommendedMilestones) {
+                      try {
+                        await projectApi.createMilestone(activeProject.id, {
+                          title: m.title,
+                          description: m.description,
+                          stage: m.stage,
+                          sortOrder: order++,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }
+                }}
+                className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
+              >
+                {seededMilestones ? '已播种里程碑' : '一键播种推荐里程碑'}
               </button>
               <Button
                 size="sm"
