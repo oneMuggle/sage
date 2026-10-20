@@ -4,7 +4,17 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../entities/scheduled/taskStore', () => {
   const state = {
-    tasks: [],
+    tasks: [
+      {
+        id: 't1',
+        name: '每日构建巡检',
+        schedule: '0 9 * * *',
+        session_id: 'real-session',
+        content: 'check build',
+        enabled: true,
+        last_status: 'succeeded',
+      },
+    ],
     loading: false,
     error: null,
     load: vi.fn(),
@@ -42,6 +52,12 @@ describe('ScheduledTasks page', () => {
     );
     expect(screen.getAllByText(/定时任务|Scheduled/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/scheduled\.create|新建任务|New Task/i).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByTestId('scheduled-tasks-copy-md-btn'));
+    expect(screen.getByTestId('scheduled-tasks-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('scheduled-tasks-copy-json-btn'));
+    expect(screen.getByTestId('scheduled-tasks-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByTestId('scheduled-task-copy-json-t1'));
+    expect(screen.getByTestId('scheduled-task-copy-json-t1')).toHaveTextContent('已复制JSON');
   });
 
   it('clicking Create opens the modal', () => {

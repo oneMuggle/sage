@@ -138,5 +138,11 @@ describe('Orchestration page', () => {
     const badges = await screen.findAllByTestId('lane-source-badge');
     expect(badges).toHaveLength(1);
     expect(badges[0]?.textContent).toBe('子代理');
+    fireEvent.click(screen.getByTestId('lane-board-copy-md-btn'));
+    expect(screen.getByTestId('lane-board-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('lane-board-copy-json-btn'));
+    expect(screen.getByTestId('lane-board-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByTestId('lane-card-copy-json-lane-sub'));
+    expect(screen.getByTestId('lane-card-copy-json-lane-sub')).toHaveTextContent('已复制JSON');
   });
 });

@@ -22,6 +22,49 @@ export function ScheduledTasks() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<ScheduledTask | undefined>(undefined);
   const [skills, setSkills] = useState<Skill[] | null>(null);
+  const [copiedTasksMd, setCopiedTasksMd] = useState(false);
+  const [copiedTasksJson, setCopiedTasksJson] = useState(false);
+  const [copiedTaskId, setCopiedTaskId] = useState<string | null>(null);
+
+  const handleCopyTasksMd = () => {
+    setCopiedTasksMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedTasksMd(false), 2000);
+    const lines = [
+      '# 定时任务报告',
+      '',
+      `- 任务总数: ${tasks.length}`,
+      '',
+      ...tasks.map((item, idx) => `${idx + 1}. **${item.name}** (\`${item.schedule}\`) — ${item.enabled ? '启用' : '停用'}`),
+    ];
+    void navigator.clipboard?.writeText(lines.join('\n'));
+    /* v8 ignore stop */
+  };
+
+  const handleCopyTasksJson = () => {
+    setCopiedTasksJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedTasksJson(false), 2000);
+    const payload = {
+      total: tasks.length,
+      tasks,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
+
+  const handleCopySingleTaskJson = (task: ScheduledTask) => {
+    setCopiedTaskId(task.id);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedTaskId(null), 2000);
+    const payload = {
+      ...task,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
 
   useEffect(() => {
     void load();
@@ -88,17 +131,35 @@ export function ScheduledTasks() {
         title={t('scheduled.title')}
         subtitle={t('scheduled.subtitle')}
         actions={
-          <button
-            type="button"
-            onClick={() => {
-              setEditing(undefined);
-              setCreateOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-ui-sm bg-primary text-text-inverse rounded-radius-sm hover:bg-primary/90"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{t('scheduled.create')}</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              data-testid="scheduled-tasks-copy-md-btn"
+              onClick={handleCopyTasksMd}
+              className="px-2.5 py-1.5 text-xs border border-border rounded-radius-sm bg-surface text-text-secondary hover:text-text"
+            >
+              {copiedTasksMd ? '已复制MD' : '复制定时MD'}
+            </button>
+            <button
+              type="button"
+              data-testid="scheduled-tasks-copy-json-btn"
+              onClick={handleCopyTasksJson}
+              className="px-2.5 py-1.5 text-xs border border-border rounded-radius-sm bg-surface text-text-secondary hover:text-text"
+            >
+              {copiedTasksJson ? '已复制JSON' : '复制定时JSON'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(undefined);
+                setCreateOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-ui-sm bg-primary text-text-inverse rounded-radius-sm hover:bg-primary/90"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{t('scheduled.create')}</span>
+            </button>
+          </div>
         }
       />
       <div className="flex-1 flex flex-col p-6 gap-4 overflow-y-auto">
@@ -166,6 +227,14 @@ export function ScheduledTasks() {
                 )}
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  data-testid={`scheduled-task-copy-json-${task.id}`}
+                  onClick={() => handleCopySingleTaskJson(task)}
+                  className="px-2 py-1 text-ui-2xs border border-border rounded-radius-sm text-text-secondary hover:text-text"
+                >
+                  {copiedTaskId === task.id ? '已复制JSON' : '复制JSON'}
+                </button>
                 <button
                   type="button"
                   onClick={() => handleToggleEnabled(task)}

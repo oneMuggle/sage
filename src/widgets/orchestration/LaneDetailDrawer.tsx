@@ -105,6 +105,8 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
   const [checks, setChecks] = useState<AcceptanceCheckView[] | null>(null);
   // null = 加载中；'' = 无产物摘要。
   const [diffSummary, setDiffSummary] = useState<string | null>(null);
+  const [copiedDrawerMd, setCopiedDrawerMd] = useState(false);
+  const [copiedDrawerJson, setCopiedDrawerJson] = useState(false);
 
   const laneId = lane?.lane_id;
 
@@ -162,6 +164,42 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
     }
   };
 
+  const handleCopyDrawerMd = () => {
+    setCopiedDrawerMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedDrawerMd(false), 2000);
+    const lines = [
+      `# 泳道验收报告 — ${lane.lane_id}`,
+      '',
+      `- 任务: ${lane.task_id}`,
+      `- 状态: ${lane.status}`,
+      `- 工作树: ${lane.worktree ?? '无'}`,
+      `- 复核结论: ${reviewVerdict ?? '无'}`,
+      '',
+      '## 验收检查',
+      ...(checks ?? []).map((c, idx) => `${idx + 1}. [${c.passed ? 'PASS' : c.skipped ? 'SKIP' : 'FAIL'}] **${c.name}** — ${c.summary}`),
+    ];
+    void navigator.clipboard?.writeText(lines.join('\n'));
+    /* v8 ignore stop */
+  };
+
+  const handleCopyDrawerJson = () => {
+    setCopiedDrawerJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedDrawerJson(false), 2000);
+    const payload = {
+      lane,
+      checks,
+      diffSummary,
+      merge,
+      reviewVerdict,
+      reviewCount,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
+
   return (
     <div
       className="fixed inset-y-0 right-0 w-96 bg-bg-primary border-l border-border-primary shadow-lg z-50 flex flex-col"
@@ -175,15 +213,33 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
             {lane.status}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-text-tertiary hover:text-text-primary"
-          data-testid="drawer-close"
-          aria-label={t('orchestration.drawer.close')}
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            data-testid="lane-drawer-copy-md-btn"
+            onClick={handleCopyDrawerMd}
+            className="px-2 py-0.5 text-ui-2xs border border-border-primary rounded text-text-secondary hover:text-text-primary"
+          >
+            {copiedDrawerMd ? '已复制MD' : '复制验收MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="lane-drawer-copy-json-btn"
+            onClick={handleCopyDrawerJson}
+            className="px-2 py-0.5 text-ui-2xs border border-border-primary rounded text-text-secondary hover:text-text-primary"
+          >
+            {copiedDrawerJson ? '已复制JSON' : '复制验收JSON'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-text-tertiary hover:text-text-primary"
+            data-testid="drawer-close"
+            aria-label={t('orchestration.drawer.close')}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
