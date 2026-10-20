@@ -8,7 +8,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Skill } from '../../../shared/api';
-import SkillList from '../SkillList';
+import SkillList, {
+  formatSkillListJson,
+  formatSkillListMarkdown,
+} from '../SkillList';
 
 const SAMPLE_SKILLS: Skill[] = [
   {
@@ -76,5 +79,23 @@ describe('SkillList (PR-7)', () => {
     // search.enabled=true → checked; writer.enabled=false → unchecked
     expect(searchCb).toBeChecked();
     expect(writerCb).not.toBeChecked();
+  });
+
+  it('exports skill list as Markdown and JSON', () => {
+    expect(formatSkillListMarkdown([])).toContain('_暂无技能_');
+    const md = formatSkillListMarkdown(SAMPLE_SKILLS);
+    expect(md).toContain('# 技能列表摘要 (Skill List)');
+    expect(md).toContain('- **search** (已启用, 使用 12 次)');
+    expect(md).toContain('- **writer** (已禁用, 使用 0 次)');
+    const parsed = JSON.parse(formatSkillListJson(SAMPLE_SKILLS));
+    expect(parsed.total).toBe(2);
+
+    render(<SkillList skills={SAMPLE_SKILLS} onToggle={() => undefined} />);
+    const mdBtn = screen.getByTestId('skill-list-copy-md');
+    const jsonBtn = screen.getByTestId('skill-list-copy-json');
+    fireEvent.click(mdBtn);
+    expect(mdBtn.textContent).toContain('已复制 MD');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toContain('已复制 JSON');
   });
 });

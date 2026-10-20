@@ -11,25 +11,63 @@ interface NewMemoryModalProps {
   onSaved?: () => void;
 }
 
+export interface NewMemoryDraftSnapshot {
+  content: string;
+  memoryType: 'episodic' | 'semantic';
+  importance: number;
+}
+
+export function formatNewMemoryDraftMarkdown(params: NewMemoryDraftSnapshot): string {
+  return [
+    '# 新建记忆草稿 (New Memory Draft)',
+    '',
+    `- **记忆类型**: ${params.memoryType === 'semantic' ? '语义记忆 (semantic)' : '情景记忆 (episodic)'}`,
+    `- **重要性**: ${params.importance}/10`,
+    '',
+    '## 内容',
+    params.content.trim() || '_空_',
+  ].join('\n');
+}
+
+export function formatNewMemoryDraftJson(params: NewMemoryDraftSnapshot): string {
+  return JSON.stringify(
+    {
+      content: params.content.trim(),
+      memoryType: params.memoryType,
+      importance: params.importance,
+      exportedAt: new Date().toISOString(),
+    },
+    null,
+    2,
+  );
+}
+
 export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps) {
   const [content, setContent] = useState('');
   const [memoryType, setMemoryType] = useState<'episodic' | 'semantic'>('episodic');
   const [importance, setImportance] = useState(5);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedDraftMd, setCopiedDraftMd] = useState(false);
   const [copiedDraftJson, setCopiedDraftJson] = useState(false);
+
+  const handleCopyDraftMd = () => {
+    setCopiedDraftMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedDraftMd(false), 2000);
+    void navigator.clipboard?.writeText(
+      formatNewMemoryDraftMarkdown({ content, memoryType, importance }),
+    );
+    /* v8 ignore stop */
+  };
 
   const handleCopyDraftJson = () => {
     setCopiedDraftJson(true);
     /* v8 ignore start */
     setTimeout(() => setCopiedDraftJson(false), 2000);
-    const payload = {
-      content: content.trim(),
-      memoryType,
-      importance,
-      exportedAt: new Date().toISOString(),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    void navigator.clipboard?.writeText(
+      formatNewMemoryDraftJson({ content, memoryType, importance }),
+    );
     /* v8 ignore stop */
   };
 
@@ -137,6 +175,14 @@ export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps
       </div>
 
       <div className="flex justify-end gap-2 pt-4 mt-3 border-t border-border">
+        <button
+          type="button"
+          data-testid="new-memory-copy-draft-md-btn"
+          onClick={handleCopyDraftMd}
+          className="px-3 py-1.5 text-xs border border-border rounded text-text-secondary hover:text-text"
+        >
+          {copiedDraftMd ? '已复制MD' : '复制草稿MD'}
+        </button>
         <button
           type="button"
           data-testid="new-memory-copy-draft-json-btn"
