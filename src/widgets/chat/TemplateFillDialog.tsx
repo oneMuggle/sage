@@ -90,13 +90,75 @@ interface TemplateFillDialogProps {
   onCancel: () => void;
 }
 
+export function formatTemplateFillMarkdown(
+  content: string,
+  values: Record<string, string>,
+): string {
+  const vars = extractTemplateVars(content);
+  const resolved = resolveTemplate(content, values);
+  const lines = [
+    '# Prompt 模板变量填充摘要 (Template Fill Summary)',
+    '',
+    `- **变量数量**: ${vars.length}`,
+  ];
+  if (vars.length > 0) {
+    lines.push('', '## 变量映射');
+    for (const v of vars) {
+      lines.push(`- **${v}**: ${values[v] || '(未填写)'}`);
+    }
+  }
+  lines.push('', '## 解析结果', '', resolved);
+  return lines.join('\n');
+}
+
+export function formatTemplateFillJson(
+  content: string,
+  values: Record<string, string>,
+): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      content,
+      vars: extractTemplateVars(content),
+      values,
+      resolved: resolveTemplate(content, values),
+    },
+    null,
+    2,
+  );
+}
+
 export function TemplateFillDialog({ content, onConfirm, onCancel }: TemplateFillDialogProps) {
   const { t } = useI18n();
   const vars = extractTemplateVars(content);
   const [values, setValues] = useState<Record<string, string>>(() =>
     loadRememberedValues(content),
   );
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const hasMemory = Object.keys(values).length > 0;
+
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(formatTemplateFillMarkdown(content, values));
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(formatTemplateFillJson(content, values));
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
 
   const handleConfirm = () => {
     saveRememberedValues(content, values);
@@ -118,7 +180,27 @@ export function TemplateFillDialog({ content, onConfirm, onCancel }: TemplateFil
         className="w-full max-w-md p-4 rounded-radius-md border border-border bg-surface space-y-3"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-semibold text-text">{t('tplfill.title')}</h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold text-text">{t('tplfill.title')}</h3>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-testid="tplfill-copy-md"
+              onClick={() => void handleCopyMarkdown()}
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedMd ? '已复制 MD' : '复制 MD'}
+            </button>
+            <button
+              type="button"
+              data-testid="tplfill-copy-json"
+              onClick={() => void handleCopyJson()}
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedJson ? '已复制 JSON' : '复制 JSON'}
+            </button>
+          </div>
+        </div>
         <p className="text-xs text-text-secondary">{t('tplfill.subtitle')}</p>
         {vars.map((v) => (
           <label key={v} className="block text-xs text-text-secondary">

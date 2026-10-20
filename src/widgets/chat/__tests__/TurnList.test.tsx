@@ -6,7 +6,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { TurnItem } from '../../../features/chat/useConversationTurns';
-import { TurnList } from '../TurnList';
+import {
+  formatTurnListJson,
+  formatTurnListMarkdown,
+  TurnList,
+} from '../TurnList';
 
 const items: TurnItem[] = [
   { index: 1, messageId: 'u1', preview: '第一问' },
@@ -38,5 +42,22 @@ describe('TurnList', () => {
     render(<TurnList items={items} />);
     fireEvent.click(screen.getByText('第一问'));
     // 不抛错即可（无 onSelect 时行为由组件内部兜底）
+  });
+
+  it('exports turn list as Markdown and JSON', () => {
+    expect(formatTurnListMarkdown([])).toContain('_暂无轮次_');
+    const md = formatTurnListMarkdown(items);
+    expect(md).toContain('# 会话轮次导航列表 (Conversation Turns)');
+    expect(md).toContain('- **[#1]** (u1): 第一问');
+    const parsed = JSON.parse(formatTurnListJson(items));
+    expect(parsed.total).toBe(2);
+
+    render(<TurnList items={items} />);
+    const mdBtn = screen.getByTestId('turn-list-copy-md');
+    const jsonBtn = screen.getByTestId('turn-list-copy-json');
+    fireEvent.click(mdBtn);
+    expect(mdBtn.textContent).toContain('已复制 MD');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toContain('已复制 JSON');
   });
 });
