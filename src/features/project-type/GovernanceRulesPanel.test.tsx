@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectType } from '../../shared/api';
 
-import { GovernanceRulesPanel } from './GovernanceRulesPanel';
+import {
+  GovernanceRulesPanel,
+  formatGovernanceRulesJson,
+  formatGovernanceRulesMarkdown,
+} from './GovernanceRulesPanel';
 
 /* ── Mock child components ───────────────────────────────────────── */
 
@@ -99,5 +103,40 @@ describe('GovernanceRulesPanel', () => {
     const panel = screen.getByTestId('allowed-paths-panel');
     expect(panel).toHaveAttribute('data-draft', '/new/path');
     expect(panel).toHaveAttribute('data-saving', 'true');
+  });
+
+  it('formats and copies governance rules summary as Markdown and JSON', () => {
+    const md = formatGovernanceRulesMarkdown({
+      projectId: 'proj-1',
+      projectPath: '/ws/proj-1',
+      projectType: 'research',
+      allowedPaths: ['/data/ref'],
+    });
+    expect(md).toContain('# 项目治理规则摘要 (Governance Rules Summary)');
+    expect(md).toContain('/data/ref');
+    expect(
+      formatGovernanceRulesMarkdown({
+        projectId: 'proj-1',
+        projectPath: '/ws/proj-1',
+        projectType: 'coding',
+        allowedPaths: [],
+      }),
+    ).toContain('_暂无跨目录只读白名单_');
+
+    const parsed = JSON.parse(
+      formatGovernanceRulesJson({
+        projectId: 'proj-1',
+        projectPath: '/ws/proj-1',
+        projectType: 'research',
+        allowedPaths: ['/data/ref'],
+      }),
+    );
+    expect(parsed.projectId).toBe('proj-1');
+
+    renderPanel();
+    fireEvent.click(screen.getByTestId('governance-rules-copy-md'));
+    expect(screen.getByTestId('governance-rules-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('governance-rules-copy-json'));
+    expect(screen.getByTestId('governance-rules-copy-json').textContent).toContain('已复制 JSON');
   });
 });

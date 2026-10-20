@@ -21,7 +21,11 @@ import type {
 } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { useTaskCenterStore } from '../../task-center/taskCenterStore';
-import { OfficeDeliveryDrawer } from '../OfficeDeliveryDrawer';
+import {
+  OfficeDeliveryDrawer,
+  formatOfficeDeliveryJson,
+  formatOfficeDeliveryMarkdown,
+} from '../OfficeDeliveryDrawer';
 
 const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>;
 
@@ -261,5 +265,48 @@ describe('OfficeDeliveryDrawer (A4b)', () => {
       </MemoryRouter>,
     );
     expect(screen.queryByTestId('office-delivery-drawer')).toBeNull();
+  });
+
+  it('formats and copies delivery summary as Markdown and JSON', async () => {
+    const lint = makeLint({
+      ok: false,
+      error_count: 1,
+      warning_count: 0,
+      issues: [{ rule_id: 'r1', severity: 'error', message: 'msg1', fix_hint: 'fix1' }],
+    });
+    const md = formatOfficeDeliveryMarkdown({
+      entryId: 'office:generate',
+      workspacePath: '/ws',
+      filePath: '/ws/report.docx',
+      lintState: 'ready',
+      lint,
+      decided: false,
+    });
+    expect(md).toContain('# Office 交付验收摘要 (Office Delivery Summary)');
+    expect(md).toContain('[r1]');
+
+    const parsed = JSON.parse(
+      formatOfficeDeliveryJson({
+        entryId: 'office:generate',
+        workspacePath: '/ws',
+        filePath: '/ws/report.docx',
+        lintState: 'skipped',
+        lint: null,
+        decided: true,
+      }),
+    );
+    expect(parsed.decided).toBe(true);
+
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === 'office_word_read') return makeReadResult();
+      if (cmd === 'office_word_lint') return makeLint();
+      return null;
+    });
+    renderDrawer();
+    await waitFor(() => expect(screen.getByTestId('delivery-drawer-copy-md')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('delivery-drawer-copy-md'));
+    expect(screen.getByTestId('delivery-drawer-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('delivery-drawer-copy-json'));
+    expect(screen.getByTestId('delivery-drawer-copy-json').textContent).toContain('已复制 JSON');
   });
 });
