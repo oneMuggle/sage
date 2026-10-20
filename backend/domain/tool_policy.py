@@ -21,7 +21,12 @@ _DEFAULT_TIMEOUT_SECONDS = 30.0
 _DEFAULT_MAX_OUTPUT_BYTES = 256_000
 _DEFAULT_MAX_RESULT_ITEMS = 200
 _DEFAULT_MAX_READ_BYTES = 2_000_000
-_DEFAULT_MAX_TOOL_CALLS_PER_RUN = 25
+
+#: 单 run 工具调用总数默认上限。
+#: 公开常量：orch_settings / agent_tool / chat_service / agent 用它判断
+#: "策略仍是默认值" 以便在 env 或 UI 显式配置时实时重解析 —— 避免各处
+#: 硬编码同一个数字导致默认值一改就集体失效。
+DEFAULT_MAX_TOOL_CALLS_PER_RUN = 100
 
 
 @dataclass(frozen=True)
@@ -42,7 +47,7 @@ class ToolPolicy:
     max_output_bytes: int = _DEFAULT_MAX_OUTPUT_BYTES
     max_result_items: int = _DEFAULT_MAX_RESULT_ITEMS
     max_read_bytes: int = _DEFAULT_MAX_READ_BYTES
-    max_tool_calls_per_run: int = _DEFAULT_MAX_TOOL_CALLS_PER_RUN
+    max_tool_calls_per_run: int = DEFAULT_MAX_TOOL_CALLS_PER_RUN
     workspace_root: Optional[str] = None
     # Sub-agent-only restrictions; direct tool callers keep legacy behavior.
     subagent_only: bool = False

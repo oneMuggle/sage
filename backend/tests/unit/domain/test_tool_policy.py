@@ -9,7 +9,7 @@ import dataclasses
 
 import pytest
 
-from backend.domain.tool_policy import ToolPolicy
+from backend.domain.tool_policy import DEFAULT_MAX_TOOL_CALLS_PER_RUN, ToolPolicy
 
 pytestmark = pytest.mark.unit
 
@@ -20,7 +20,7 @@ def test_defaults_match_design():
     assert policy.max_output_bytes == 256_000
     assert policy.max_result_items == 200
     assert policy.max_read_bytes == 2_000_000
-    assert policy.max_tool_calls_per_run == 25
+    assert policy.max_tool_calls_per_run == DEFAULT_MAX_TOOL_CALLS_PER_RUN
     assert policy.workspace_root is None
     assert policy.subagent_only is False
 
@@ -50,7 +50,7 @@ def test_from_config_missing_fields_fall_back():
     policy = ToolPolicy.from_config({"timeout_seconds": 5})
     assert policy.timeout_seconds == 5
     assert policy.max_output_bytes == 256_000  # 其余回退默认
-    assert policy.max_tool_calls_per_run == 25
+    assert policy.max_tool_calls_per_run == DEFAULT_MAX_TOOL_CALLS_PER_RUN
 
 
 def test_from_config_empty_dict_is_defaults():

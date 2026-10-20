@@ -70,4 +70,4 @@ tools:
   max_output_bytes: 256000     # 单次工具输出 byte 上限
   max_result_items: 200        # list/search 类条数上限
   max_read_bytes: 2000000      # read_file 字节上限
-  max_tool_calls_per_run: 25   # 单次 run 工具调用总数守卫
+  max_tool_calls_per_run: 100  # 单次 run 工具调用总数守卫（与 ToolPolicy.DEFAULT_MAX_TOOL_CALLS_PER_RUN 同源）

@@ -344,20 +344,93 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     constraints: { type: 'boolean' },
   },
   'orch.maxConcurrentSubagents': {
-    ...orchNumber('orch.maxConcurrentSubagents', '最大并发子任务数', '同时运行的子任务数量，必须大于 0', 4, 1, 100),
+    ...orchNumber(
+      'orch.maxConcurrentSubagents',
+      '最大并发子任务数',
+      '同时运行的子任务数量，必须大于 0',
+      4,
+      1,
+      100,
+    ),
     validate: (value) => (typeof value === 'number' && value >= 1 ? null : '并发数必须大于 0'),
     visibility: 'basic',
   },
-  'orch.maxRetries': orchNumber('orch.maxRetries', '子任务重试次数', '子任务失败后的最大重试次数', 2, 0, 10),
-  'orch.maxLaneIterations': orchNumber('orch.maxLaneIterations', 'Lane 迭代上限', '每个 Lane 的最大迭代次数', 8, 1, 50),
-  'orch.maxSubagentIterations': orchNumber('orch.maxSubagentIterations', '子代理迭代上限', '每个子代理的 ReAct 迭代预算', 6, 1, 50),
-  'orch.maxAggregateChars': orchNumber('orch.maxAggregateChars', '聚合结果上限', '编排聚合结果字符上限', 122880, 1024, 1048576),
-  'orch.maxSubagentResultChars': orchNumber('orch.maxSubagentResultChars', '单结果截断上限', '每个子代理结果字符上限', 51200, 1024, 524288),
-  'orch.runTokenBudget': orchNumber('orch.runTokenBudget', 'Run token 预算', '单个 Run token 上限，0 表示不限', 0, 0),
-  'orch.runWallClockLimitMinutes': orchNumber('orch.runWallClockLimitMinutes', 'Run 墙钟上限', '单个 Run 时间上限，0 表示不限', 0, 0),
-  'orch.subagentTaskTimeoutS': orchNumber('orch.subagentTaskTimeoutS', '单子任务超时', '子任务超时秒数，0 表示不限', 900, 0),
-  'orch.maxRetryOfChains': orchNumber('orch.maxRetryOfChains', '重派链上限', 'retry_of 链式重派上限', 10, 1, 100),
-  'orch.maxToolCallsPerRun': orchNumber('orch.maxToolCallsPerRun', '工具调用预算', '单 run 工具调用总数上限，0 表示不限', 25, 0),
+  'orch.maxRetries': orchNumber(
+    'orch.maxRetries',
+    '子任务重试次数',
+    '子任务失败后的最大重试次数',
+    2,
+    0,
+    10,
+  ),
+  'orch.maxLaneIterations': orchNumber(
+    'orch.maxLaneIterations',
+    'Lane 迭代上限',
+    '每个 Lane 的最大迭代次数',
+    8,
+    1,
+    50,
+  ),
+  'orch.maxSubagentIterations': orchNumber(
+    'orch.maxSubagentIterations',
+    '子代理迭代上限',
+    '每个子代理的 ReAct 迭代预算',
+    6,
+    1,
+    50,
+  ),
+  'orch.maxAggregateChars': orchNumber(
+    'orch.maxAggregateChars',
+    '聚合结果上限',
+    '编排聚合结果字符上限',
+    122880,
+    1024,
+    1048576,
+  ),
+  'orch.maxSubagentResultChars': orchNumber(
+    'orch.maxSubagentResultChars',
+    '单结果截断上限',
+    '每个子代理结果字符上限',
+    51200,
+    1024,
+    524288,
+  ),
+  'orch.runTokenBudget': orchNumber(
+    'orch.runTokenBudget',
+    'Run token 预算',
+    '单个 Run token 上限，0 表示不限',
+    0,
+    0,
+  ),
+  'orch.runWallClockLimitMinutes': orchNumber(
+    'orch.runWallClockLimitMinutes',
+    'Run 墙钟上限',
+    '单个 Run 时间上限，0 表示不限',
+    0,
+    0,
+  ),
+  'orch.subagentTaskTimeoutS': orchNumber(
+    'orch.subagentTaskTimeoutS',
+    '单子任务超时',
+    '子任务超时秒数，0 表示不限',
+    900,
+    0,
+  ),
+  'orch.maxRetryOfChains': orchNumber(
+    'orch.maxRetryOfChains',
+    '重派链上限',
+    'retry_of 链式重派上限',
+    10,
+    1,
+    100,
+  ),
+  'orch.maxToolCallsPerRun': orchNumber(
+    'orch.maxToolCallsPerRun',
+    '工具调用预算',
+    '单 run 工具调用总数上限，0 回落默认值（当前为 100）',
+    100,
+    0,
+  ),
   'orch.subagentApprovalMode': enumSetting(
     'orch.subagentApprovalMode',
     '子代理自动批准',
@@ -417,9 +490,33 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
       { value: 'alpha', label: '预览版' },
     ],
   ),
-  'updates.rollbackWindowDays': numberSetting('updates.rollbackWindowDays', '回滚窗口天数', '安装后允许回滚的天数', 'electron', 7, 1, 30),
-  'updates.autoRollbackThreshold': numberSetting('updates.autoRollbackThreshold', '自动回滚触发次数', '启动失败多少次后自动回滚', 'electron', 3, 1, 10),
-  'updates.checkIntervalHours': numberSetting('updates.checkIntervalHours', '自动检查周期', '自动检查更新的间隔小时数', 'electron', 24, 1, 168),
+  'updates.rollbackWindowDays': numberSetting(
+    'updates.rollbackWindowDays',
+    '回滚窗口天数',
+    '安装后允许回滚的天数',
+    'electron',
+    7,
+    1,
+    30,
+  ),
+  'updates.autoRollbackThreshold': numberSetting(
+    'updates.autoRollbackThreshold',
+    '自动回滚触发次数',
+    '启动失败多少次后自动回滚',
+    'electron',
+    3,
+    1,
+    10,
+  ),
+  'updates.checkIntervalHours': numberSetting(
+    'updates.checkIntervalHours',
+    '自动检查周期',
+    '自动检查更新的间隔小时数',
+    'electron',
+    24,
+    1,
+    168,
+  ),
   'updates.updateServerUrl': {
     key: 'updates.updateServerUrl',
     label: '更新服务器地址',
@@ -441,7 +538,15 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     'immediate',
     'advanced',
   ),
-  'updates.cacheRetentionDays': numberSetting('updates.cacheRetentionDays', '缓存保留天数', '更新包缓存保留天数', 'electron', 30, 1, 365),
+  'updates.cacheRetentionDays': numberSetting(
+    'updates.cacheRetentionDays',
+    '缓存保留天数',
+    '更新包缓存保留天数',
+    'electron',
+    30,
+    1,
+    365,
+  ),
   closeToTray: booleanSetting(
     'closeToTray',
     '关闭时隐藏到托盘',
@@ -467,7 +572,11 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     description: '文档超过 10 万字符时按相关度检索注入',
     scope: 'global',
     storage: 'local',
-    defaultValue: { enabled: false, embed: { base_url: '', api_key: '', model: '', dim: 1536 }, top_k: 6 },
+    defaultValue: {
+      enabled: false,
+      embed: { base_url: '', api_key: '', model: '', dim: 1536 },
+      top_k: 6,
+    },
     applyMode: 'save-only',
     visibility: 'advanced',
     riskLevel: 'low',
@@ -489,14 +598,10 @@ export function getSettingsByVisibility(
   return Object.values(settingsRegistry).filter((metadata) => metadata.visibility === visibility);
 }
 
-export function getSettingsByStorage(
-  storage: SettingMetadata['storage'],
-): SettingMetadata[] {
+export function getSettingsByStorage(storage: SettingMetadata['storage']): SettingMetadata[] {
   return Object.values(settingsRegistry).filter((metadata) => metadata.storage === storage);
 }
 
-export function getSettingsByApplyMode(
-  applyMode: SettingMetadata['applyMode'],
-): SettingMetadata[] {
+export function getSettingsByApplyMode(applyMode: SettingMetadata['applyMode']): SettingMetadata[] {
   return Object.values(settingsRegistry).filter((metadata) => metadata.applyMode === applyMode);
 }

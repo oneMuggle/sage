@@ -3,7 +3,8 @@
 覆盖三条路径：
   1. env ``SAGE_MAX_TOOL_CALLS_PER_RUN``（最高优先级）
   2. UI 可调 ``OrchSettings.max_tool_calls_per_run``（持久化到 app_settings）
-  3. fallback 参数（默认 25）
+  3. fallback 参数（默认 100 —— 与 ``ToolPolicy.DEFAULT_MAX_TOOL_CALLS_PER_RUN``
+     同源；调用方可传入自己的 ``tool_policy.max_tool_calls_per_run``）
 
 任何非法值（< 1 / 非整数）回落下一层，永不抛错。
 
@@ -19,6 +20,7 @@ from unittest.mock import patch
 
 import pytest
 
+from backend.domain.tool_policy import DEFAULT_MAX_TOOL_CALLS_PER_RUN
 from backend.orchestration.orch_settings import (
     _DEFAULT_FALLBACK_BUDGET,
     resolve_tool_call_budget,
@@ -46,11 +48,11 @@ def _clean_env() -> Iterator[None]:
 # ---------- env 路径 ----------
 
 
-def test_default_is_25():
+def test_default_is_100():
     with patch(_PATCH_TARGET) as repo_cls:
         repo_cls.return_value.get_json.return_value = None
         assert resolve_tool_call_budget() == _DEFAULT_FALLBACK_BUDGET
-    assert _DEFAULT_FALLBACK_BUDGET == 25
+    assert _DEFAULT_FALLBACK_BUDGET == DEFAULT_MAX_TOOL_CALLS_PER_RUN
 
 
 def test_env_overrides_default():
@@ -134,11 +136,12 @@ def test_orch_settings_beats_fallback():
 
 
 def test_corrupt_settings_file_returns_default():
-    # load_orch_settings 内部已捕获异常并返回默认 OrchSettings（max_tool_calls_per_run=25）
-    # 所以 resolve_tool_call_budget 拿到的是默认值 25，而不是 fallback 参数
+    # load_orch_settings 内部已捕获异常并返回默认 OrchSettings
+    # （max_tool_calls_per_run=100，与 DEFAULT_MAX_TOOL_CALLS_PER_RUN 同源）
+    # 所以 resolve_tool_call_budget 拿到的是默认值 100，而不是 fallback 参数
     with patch(_PATCH_TARGET) as repo_cls:
         repo_cls.return_value.get_json.side_effect = RuntimeError("boom")
-        # 永不抛错，返回默认 25（load_orch_settings 内部已吞异常并返回默认值）
+        # 永不抛错，返回默认 100（load_orch_settings 内部已吞异常并返回默认值）
         assert resolve_tool_call_budget() == _DEFAULT_FALLBACK_BUDGET
-        # fallback 参数被忽略 —— 因为 load_orch_settings 返回了默认值 25（≥1）
+        # fallback 参数被忽略 —— 因为 load_orch_settings 返回了默认值 100（≥1）
         assert resolve_tool_call_budget(fallback=77) == _DEFAULT_FALLBACK_BUDGET
