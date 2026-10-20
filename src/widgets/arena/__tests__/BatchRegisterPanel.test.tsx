@@ -17,7 +17,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../entities/arena', () => mocks);
 
-import { BatchRegisterPanel } from '../BatchRegisterPanel';
+import {
+  BatchRegisterPanel,
+  formatBatchRegisterJson,
+  formatBatchRegisterMarkdown,
+} from '../BatchRegisterPanel';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -52,5 +56,29 @@ describe('BatchRegisterPanel', () => {
     fireEvent.click(screen.getByTestId('batch-start'));
     expect(await screen.findByTestId('batch-error')).toHaveTextContent('1-20');
     expect(mocks.startRegistrationJob).not.toHaveBeenCalled();
+  });
+
+  it('导出批量注册配置为 Markdown 和 JSON 并支持一键复制', () => {
+    const md = formatBatchRegisterMarkdown({
+      count: 5,
+      concurrency: '2',
+      proxyMode: 'pool',
+      jobId: 'job-9',
+    });
+    expect(md).toContain('# Arena 批量注册配置');
+    expect(md).toContain('代理池 (pool)');
+    const parsed = JSON.parse(
+      formatBatchRegisterJson({ count: 3, concurrency: '', proxyMode: 'off', jobId: '' }),
+    );
+    expect(parsed.count).toBe(3);
+    expect(parsed.concurrency).toBeNull();
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<BatchRegisterPanel />);
+    fireEvent.click(screen.getByTestId('batch-register-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Arena 批量注册配置'));
+    fireEvent.click(screen.getByTestId('batch-register-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"proxyMode": "off"'));
   });
 });

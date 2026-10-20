@@ -3,17 +3,114 @@ import { useState } from 'react';
 import { ExportButton } from './ExportButton';
 import { useDiagnosticPreview } from './useDiagnosticPreview';
 
+export interface DiagnosticPreviewSnapshot {
+  count: number;
+  oldestTs?: string | null;
+  newestTs?: string | null;
+  sampleUrls: string[];
+}
+
+export function formatDiagnosticPreviewMarkdown(
+  data: DiagnosticPreviewSnapshot | null | undefined,
+  includePrompts = false,
+  includeHostname = false,
+): string {
+  const lines = [
+    '# LLM 诊断预览摘要 (Diagnostic Preview)',
+    '',
+    `- **包含原始 Prompt**: ${includePrompts ? '是' : '否'}`,
+    `- **包含本机主机名**: ${includeHostname ? '是' : '否'}`,
+  ];
+  if (!data) {
+    lines.push('', '_暂无诊断预览数据_');
+  } else {
+    lines.push(`- **采集调用条数**: ${data.count}`);
+    if (data.oldestTs && data.newestTs) {
+      lines.push(`- **时间范围**: ${data.oldestTs} – ${data.newestTs}`);
+    }
+    if (data.sampleUrls.length > 0) {
+      lines.push(`- **上游端点样本**: ${data.sampleUrls.join(', ')}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatDiagnosticPreviewJson(
+  data: DiagnosticPreviewSnapshot | null | undefined,
+  includePrompts = false,
+  includeHostname = false,
+): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      includePrompts,
+      includeHostname,
+      preview: data,
+    },
+    null,
+    2,
+  );
+}
+
 export function DiagnosticCard() {
   const { data, loading, error, refresh } = useDiagnosticPreview();
   const [includePrompts, setIncludePrompts] = useState(false);
   const [includeHostname, setIncludeHostname] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatDiagnosticPreviewMarkdown(data, includePrompts, includeHostname),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatDiagnosticPreviewJson(data, includePrompts, includeHostname),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <section
       className="rounded-lg border border-border bg-card p-4"
       data-testid="diagnostic-card"
     >
-      <h2 className="text-lg font-semibold mb-3">LLM 诊断导出</h2>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold">LLM 诊断导出</h2>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            data-testid="diagnostic-card-copy-md"
+            onClick={() => void handleCopyMarkdown()}
+            className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
+          >
+            {copiedMd ? '已复制 MD' : '复制 MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="diagnostic-card-copy-json"
+            onClick={() => void handleCopyJson()}
+            className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
+          >
+            {copiedJson ? '已复制 JSON' : '复制 JSON'}
+          </button>
+        </div>
+      </div>
 
       {loading && <div className="text-sm text-muted-foreground">加载中…</div>}
 

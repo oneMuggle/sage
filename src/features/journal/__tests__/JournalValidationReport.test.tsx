@@ -1,8 +1,12 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { JournalViolation } from '../../../shared/api/types';
-import { JournalValidationReport } from '../components/JournalValidationReport';
+import {
+  formatJournalValidationJson,
+  formatJournalValidationMarkdown,
+  JournalValidationReport,
+} from '../components/JournalValidationReport';
 
 const errors: JournalViolation[] = [
   {
@@ -68,5 +72,28 @@ describe('JournalValidationReport', () => {
   it('renders info-severity violations with their label', () => {
     render(<JournalValidationReport violations={info} errorCount={0} warningCount={0} />);
     expect(screen.getByText(/\[提示\] CITATION_STYLE_OK · doc/)).toBeTruthy();
+  });
+
+  it('exports validation violations as Markdown and JSON and copies via buttons', () => {
+    expect(formatJournalValidationMarkdown([], 0, 0)).toContain('_无违规项_');
+    const md = formatJournalValidationMarkdown([...errors, ...warnings], 1, 1);
+    expect(md).toContain('BODY_PT_OUT_OF_RANGE');
+    expect(md).toContain('建议: 调整为 10.5pt');
+    const parsed = JSON.parse(formatJournalValidationJson([...errors, ...warnings], 1, 1));
+    expect(parsed.total).toBe(2);
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(
+      <JournalValidationReport
+        violations={[...errors, ...warnings]}
+        errorCount={1}
+        warningCount={1}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('journal-validation-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('BODY_PT_OUT_OF_RANGE'));
+    fireEvent.click(screen.getByTestId('journal-validation-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"errorCount": 1'));
   });
 });
