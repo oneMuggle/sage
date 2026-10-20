@@ -69,6 +69,8 @@ describe('NewMemoryModal (fix/security-perf-quickwins §1.3b g)', () => {
     fireEvent.change(screen.getByLabelText('内容'), {
       target: { value: 'remember this' },
     });
+    fireEvent.click(screen.getByTestId('new-memory-copy-draft-json-btn'));
+    expect(screen.getByTestId('new-memory-copy-draft-json-btn')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
     await waitFor(() => {
