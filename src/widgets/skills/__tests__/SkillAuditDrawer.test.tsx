@@ -116,4 +116,22 @@ describe('SkillAuditDrawer (P2-2)', () => {
     // 失败时抽屉保持打开，用户还能看到台账并重试
     await waitFor(() => expect(rollbackMock).toHaveBeenCalled());
   });
+
+  it('copies audit entries as Markdown and JSON (Phase P87)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(<SkillAuditDrawer skillName="office_create" open onOpenChange={vi.fn()} />);
+    await screen.findByTestId('skill-audit-timeline');
+
+    fireEvent.click(screen.getByTestId('skill-audit-copy-md-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('skill-audit-copy-md-btn')).toHaveTextContent('✓ 已复制MD');
+    });
+
+    fireEvent.click(screen.getByTestId('skill-audit-copy-json-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('skill-audit-copy-json-btn')).toHaveTextContent('✓ 已复制JSON');
+    });
+  });
 });

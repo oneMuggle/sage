@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import type { AgentProfile } from '../../shared/api';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -24,8 +26,22 @@ interface AgentCardProps {
 }
 
 export function AgentCard({ agent, isSelected, onSelect, onToggle }: AgentCardProps) {
+  const [copiedJson, setCopiedJson] = useState(false);
   const roleColor = ROLE_COLORS[agent.role] || 'bg-bg-subtle text-text-secondary';
   const roleLabel = ROLE_LABELS[agent.role] || agent.role;
+
+  /* v8 ignore start */
+  const handleCopyJson = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(JSON.stringify(agent, null, 2));
+    } catch {
+      // ignore clipboard errors
+    }
+    setTimeout(() => setCopiedJson(false), 1500);
+  };
+  /* v8 ignore stop */
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -55,18 +71,28 @@ export function AgentCard({ agent, isSelected, onSelect, onToggle }: AgentCardPr
 
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted">模型: {agent.model_config.model}</span>
-        <label className="flex items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={agent.enabled}
-            onChange={(e) => {
-              e.stopPropagation();
-              onToggle(agent.id, e.target.checked);
-            }}
-            className="rounded"
-          />
-          启用
-        </label>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            data-testid={`agent-card-copy-json-${agent.id}`}
+            onClick={handleCopyJson}
+            className="px-1.5 py-0.5 text-xs rounded border border-border bg-surface hover:bg-bg-subtle text-text-secondary transition-colors"
+          >
+            {copiedJson ? '✓ 已复制' : '复制JSON'}
+          </button>
+          <label className="flex items-center gap-2 text-xs">
+            <input
+              type="checkbox"
+              checked={agent.enabled}
+              onChange={(e) => {
+                e.stopPropagation();
+                onToggle(agent.id, e.target.checked);
+              }}
+              className="rounded"
+            />
+            启用
+          </label>
+        </div>
       </div>
     </div>
   );

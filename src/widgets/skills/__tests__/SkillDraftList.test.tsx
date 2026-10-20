@@ -174,4 +174,33 @@ describe('SkillDraftList component', () => {
     await waitFor(() => expect(screen.getByText(/加载失败/i)).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /重试/i })).toBeInTheDocument();
   });
+
+  it('copies draft list Markdown, JSON, and per-item JSON (Phase P87)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    listMock.mockResolvedValue({
+      drafts: [makeDraft('d1', 'alpha-skill')],
+    });
+    renderDraftList();
+
+    await waitFor(() => expect(screen.getByText('alpha-skill')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('skill-draft-list-copy-md-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('skill-draft-list-copy-md-btn')).toHaveTextContent('✓ 已复制MD');
+    });
+
+    fireEvent.click(screen.getByTestId('skill-draft-list-copy-json-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('skill-draft-list-copy-json-btn')).toHaveTextContent(
+        '✓ 已复制JSON',
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('skill-draft-item-copy-json-d1'));
+    await waitFor(() => {
+      expect(screen.getByTestId('skill-draft-item-copy-json-d1')).toHaveTextContent('✓ 已复制');
+    });
+  });
 });
