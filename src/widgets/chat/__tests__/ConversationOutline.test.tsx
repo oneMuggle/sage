@@ -1,7 +1,7 @@
 // src/widgets/chat/__tests__/ConversationOutline.test.tsx
 //
 // P2-3.10: 验证对话目录组件的渲染逻辑。
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { OutlineItem } from '../../../features/chat/useConversationOutline';
@@ -82,5 +82,25 @@ describe('ConversationOutline', () => {
     const items: OutlineItem[] = [{ text: '简介', messageId: 'm1', level: 2 }];
     render(<ConversationOutline items={items} isLoading={false} />);
     expect(() => fireEvent.click(screen.getByTestId('outline-item-0'))).not.toThrow();
+  });
+
+  it('copies conversation outline as Markdown and JSON to clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const items: OutlineItem[] = [
+      { text: '简介', messageId: 'm1', level: 2 },
+      { text: '细节', messageId: 'm1', level: 3 },
+    ];
+    render(<ConversationOutline items={items} isLoading={false} />);
+
+    fireEvent.click(screen.getByTestId('conversation-outline-copy-md-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 对话大纲目录'));
+    });
+
+    fireEvent.click(screen.getByTestId('conversation-outline-copy-json-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"简介"'));
+    });
   });
 });

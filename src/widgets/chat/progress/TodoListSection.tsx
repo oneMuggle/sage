@@ -3,6 +3,8 @@
 // 数据源 = todo_snapshot SSE 全量快照（store.todos）。
 // PR-C (2026-08-22): 编排计划单向镜像 —— 纯前端派生自 taskBoard，
 // 与 agent 自建 todos 共存；todo_write 天然无法篡改镜像项（不同数据源）。
+import { useState } from 'react';
+
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { TaskStatusValue, TodoItem } from '../../../shared/api';
 
@@ -40,16 +42,68 @@ interface TodoListSectionProps {
 }
 
 export function TodoListSection({ todos, taskBoard }: TodoListSectionProps) {
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
   if (todos.length === 0 && !(taskBoard && taskBoard.plan.length > 0)) return null;
   const done = todos.filter((t) => t.status === 'completed').length;
+
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    const lines = [
+      `# 会话任务清单 (${done}/${todos.length})`,
+      '',
+      ...todos.map((t) => `- [${t.status === 'completed' ? 'x' : ' '}] ${t.content} (${t.status})`),
+      ...(taskBoard && taskBoard.plan.length > 0
+        ? [
+            '',
+            '## 编排计划',
+            ...taskBoard.plan.map((item) => {
+              const st = taskBoard.statuses[item.task_id]?.status ?? 'queued';
+              return `- [${st === 'done' ? 'x' : ' '}] [${item.agent_id}] ${item.goal} (${st})`;
+            }),
+          ]
+        : []),
+    ];
+    setCopiedMd(true);
+    await navigator.clipboard?.writeText(lines.join('\n'));
+    setTimeout(() => setCopiedMd(false), 1800);
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(
+      JSON.stringify({ todos, plan: taskBoard?.plan ?? [], statuses: taskBoard?.statuses ?? {} }, null, 2),
+    );
+    setTimeout(() => setCopiedJson(false), 1800);
+  };
+  /* v8 ignore stop */
 
   return (
     <div className="space-y-1" data-testid="todo-list">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-text-secondary">任务清单</span>
-        <span className="text-xs text-text-secondary" data-testid="todo-progress">
-          {done}/{todos.length}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            data-testid="todo-list-section-copy-md-btn"
+            onClick={() => void handleCopyMd()}
+            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedMd ? '✓ 已复制MD' : '复制任务MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="todo-list-section-copy-json-btn"
+            onClick={() => void handleCopyJson()}
+            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedJson ? '✓ 已复制JSON' : '复制任务JSON'}
+          </button>
+          <span className="text-xs text-text-secondary" data-testid="todo-progress">
+            {done}/{todos.length}
+          </span>
+        </div>
       </div>
       {todos.map((item, i) => (
         <div

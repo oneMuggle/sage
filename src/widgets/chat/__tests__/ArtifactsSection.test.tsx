@@ -1,5 +1,5 @@
 // src/widgets/chat/__tests__/ArtifactsSection.test.tsx
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import type { Artifact } from '../../../features/artifacts/artifactApi';
@@ -66,5 +66,21 @@ describe('ArtifactsSection — right-panel R4 批次 C: 类型过滤', () => {
     render(<ArtifactsSection artifacts={imgOnly} {...base} />);
     fireEvent.click(screen.getByTestId('artifact-filter-code'));
     expect(screen.getByTestId('artifacts-filter-empty')).toBeInTheDocument();
+  });
+
+  it('支持复制会话产物列表 MD 与 JSON 到剪贴板', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<ArtifactsSection artifacts={arts} {...base} />);
+
+    fireEvent.click(screen.getByTestId('artifacts-section-copy-md-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 会话产物列表'));
+    });
+
+    fireEvent.click(screen.getByTestId('artifacts-section-copy-json-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"a.md"'));
+    });
   });
 });
