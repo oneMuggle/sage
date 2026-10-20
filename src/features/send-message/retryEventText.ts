@@ -9,7 +9,7 @@ import type { RetryInfo } from '../../shared/api/types/chatAndEventTypes';
 /**
  * 将错误类型编码为中文标签。未知类型直接透传（不掩盖后端新增类型）。
  */
-const ERROR_LABELS: Record<string, string> = {
+export const ERROR_LABELS: Record<string, string> = {
   timeout: '请求超时',
   network_error: '网络错误',
   server_error: '服务端错误',
@@ -19,6 +19,14 @@ const ERROR_LABELS: Record<string, string> = {
   context_overflow: '上下文溢出',
   unknown: '未知错误',
 };
+
+/**
+ * 取错误类型的中文标签。未知类型直接透传原始 error_type。
+ * 2026-10-20: RetryBanner 复用此映射，保证横幅与纯文本提示口径一致。
+ */
+export function retryErrorLabel(errorType: string): string {
+  return ERROR_LABELS[errorType] ?? errorType;
+}
 
 /**
  * 将 RetryInfo 渲染为用户可读的重试状态文本。

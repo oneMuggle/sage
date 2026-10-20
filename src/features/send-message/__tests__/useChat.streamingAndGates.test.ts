@@ -29,7 +29,6 @@ vi.mock('../../../shared/api/desktopEvent', () => ({
   listen: (...args: unknown[]) => listenMock(...args),
 }));
 
-
 const VALID_SESSION_ID = '11111111-2222-3333-4444-555555555555';
 
 /**
@@ -618,6 +617,89 @@ describe('useChat M2 ask_user_question wiring', () => {
     });
 
     expect(useQuestionState.getState().currentQuestion).toBeNull();
+  });
+});
+
+// ============================================================================
+// LLM 重试事件 → store.retryInfo（2026-10-20）
+// ============================================================================
+
+describe('useChat LLM 重试事件', () => {
+  it('retry 事件写入 store.retryInfo，且不再污染气泡纯文本', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-retry' });
+
+    const retryPayload = {
+      attempt: 1,
+      max_attempts: 3,
+      error_type: 'timeout',
+      error_message: '请求 LLM 超时',
+      delay: 2,
+    };
+    let capturedCb:
+      | ((e: {
+          payload: {
+            state: string;
+            iteration: number;
+            content?: string;
+            retry_info?: typeof retryPayload;
+          };
+        }) => void)
+      | null = null;
+    listenMock.mockImplementationOnce(
+      async (
+        _name: string,
+        cb: (e: {
+          payload: {
+            state: string;
+            iteration: number;
+            content?: string;
+            retry_info?: typeof retryPayload;
+          };
+        }) => void,
+      ) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('hi') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(capturedCb).not.toBeNull();
+
+    act(() => {
+      capturedCb!({ payload: { state: 'thinking', iteration: 0 } });
+    });
+    act(() => {
+      capturedCb!({ payload: { state: 'retry', iteration: 0, retry_info: retryPayload } });
+    });
+
+    // 重试信息落到流式槽位，供 Message.tsx 渲染 RetryBanner
+    const slot = useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming;
+    expect(slot?.retryInfo).toEqual(retryPayload);
+
+    // 旧实现会把 "🔄 重试中 ..." 纯文本塞进气泡内容 —— 新实现不应再污染正文
+    const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
+    expect(assistantMsg?.content ?? '').not.toContain('🔄');
+
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 1, content: 'ok' } });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+
+    // done 到达 → 非 retry 状态 → retryInfo 自动清空
+    expect(
+      useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming?.retryInfo,
+    ).toBeFalsy();
   });
 });
 
