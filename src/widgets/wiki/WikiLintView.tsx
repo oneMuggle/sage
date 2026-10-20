@@ -33,6 +33,8 @@ export function WikiLintView({ projectPath }: WikiLintViewProps) {
   const runLint = useLintStore((s) => s.runLint);
 
   const [severity, setSeverity] = useState<SeverityFilter>('all');
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // 首次挂载 + projectPath 变化时自动跑一次
   useEffect(() => {
@@ -82,6 +84,62 @@ export function WikiLintView({ projectPath }: WikiLintViewProps) {
         </button>
 
         <div className="ml-auto flex items-center gap-3 text-xs text-muted">
+          {items.length > 0 && (
+            <>
+              <button
+                type="button"
+                data-testid="wiki-lint-copy-md-btn"
+                onClick={async () => {
+                  setCopiedMd(true);
+                  const md = [
+                    `# Wiki 质量检查报告 (${filtered.length}/${items.length})`,
+                    `- **项目路径**：\`${projectPath}\``,
+                    `- **严重度统计**：错误 ${counts.error} · 警告 ${counts.warning} · 提示 ${counts.info}`,
+                    ...filtered.map((i) => `- [${i.severity}] ${i.type} (\`${i.page}\`): ${i.message}`),
+                  ].join('\n');
+                  /* v8 ignore start */
+                  setTimeout(() => {
+                    if (typeof window !== 'undefined') setCopiedMd(false);
+                  }, 1500);
+                  try {
+                    await navigator.clipboard?.writeText(md);
+                  } catch {
+                    // ignore
+                  }
+                  /* v8 ignore stop */
+                }}
+                className="rounded border border-border bg-surface px-2 py-0.5 text-xs text-text-secondary hover:text-text"
+              >
+                {copiedMd ? '已复制MD' : '复制检查MD'}
+              </button>
+              <button
+                type="button"
+                data-testid="wiki-lint-copy-json-btn"
+                onClick={async () => {
+                  setCopiedJson(true);
+                  /* v8 ignore start */
+                  setTimeout(() => {
+                    if (typeof window !== 'undefined') setCopiedJson(false);
+                  }, 1500);
+                  try {
+                    await navigator.clipboard?.writeText(
+                      JSON.stringify(
+                        { projectPath, severityFilter: severity, counts, items: filtered },
+                        null,
+                        2,
+                      ),
+                    );
+                  } catch {
+                    // ignore
+                  }
+                  /* v8 ignore stop */
+                }}
+                className="rounded border border-border bg-surface px-2 py-0.5 text-xs text-text-secondary hover:text-text"
+              >
+                {copiedJson ? '已复制JSON' : '复制检查JSON'}
+              </button>
+            </>
+          )}
           <span>
             共 {items.length} 项:
             <span className="ml-1 text-red-500">{counts.error}</span> /

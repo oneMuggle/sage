@@ -1095,3 +1095,15 @@
   - 在全局 Hook 工具栏新增 **`复制钩子MD`**（`data-testid="hooks-copy-all-md-btn"`）与 **`复制钩子JSON`**（`data-testid="hooks-copy-all-json-btn"`），并在内置钩子行与自定义钩子行分别新增 **`复制JSON`**（`data-testid="builtin-copy-json-${builtin.id}"` / `data-testid="hook-copy-json-${originalIdx}"`）。
 - **单元测试与门禁验证**：
   - 扩展 `ProjectBadge.test.tsx`、`WorkspaceBindModal.test.tsx`、`HookHistoryPanel.test.tsx` 与 `HooksCard.test.tsx`，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P81 — Wiki 项目质量检查、内容审核、图谱洞察与摄入队列报告 MD/JSON 导出（已完成）
+
+- **Phase 4.3 `WikiLintView` Wiki 质量检查报告 MD/JSON 导出（`src/widgets/wiki/WikiLintView.tsx`）**：
+  - 在质量检查工具栏新增 **`复制检查MD`**（`data-testid="wiki-lint-copy-md-btn"`）与 **`复制检查JSON`**（`data-testid="wiki-lint-copy-json-btn"`），支持按当前严重度筛选导出质量检查报告与统计数据。
+- **Phase 4.3 `WikiReviewView` Wiki 内容审核报告 MD/JSON 导出（`src/widgets/wiki/WikiReviewView.tsx`）**：
+  - 在内容审核工具栏新增 **`复制审核MD`**（`data-testid="wiki-review-copy-md-btn"`）与 **`复制审核JSON`**（`data-testid="wiki-review-copy-json-btn"`），支持一键复制当前审核项清单与分类统计。
+- **Phase 4.3 `WikiInsightsPanel` Wiki 知识图谱洞察报告 MD/JSON 导出（`src/widgets/wiki/WikiInsightsPanel.tsx`）**：
+  - 在图谱洞察面板顶部新增导出栏（`data-testid="wiki-insights-export-bar"`），支持 **`复制洞察MD`**（`data-testid="wiki-insights-copy-md-btn"`）与 **`复制洞察JSON`**（`data-testid="wiki-insights-copy-json-btn"`），一键导出图谱规模、惊人联系与知识缺口。
+- **Phase 4.3 `WikiQueuePanel` Wiki 摄入队列报告 MD/JSON 导出（`src/widgets/wiki/WikiQueuePanel.tsx`）**：
+  - 在摄入队列状态摘要栏新增 **`复制队列MD`**（`data-testid="wiki-queue-copy-md-btn"`）与 **`复制队列JSON`**（`data-testid="wiki-queue-copy-json-btn"`），支持一键导出队列汇总与任务明细。
+- **单元测试与门禁验证**：
+  - 扩展 `WikiProjectPicker.test.tsx` 覆盖四大 Wiki 治理面板渲染、筛选与 MD/JSON 导出，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

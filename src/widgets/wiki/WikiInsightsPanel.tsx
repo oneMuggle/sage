@@ -17,6 +17,8 @@ export function WikiInsightsPanel({ projectPath, onNodeClick }: WikiInsightsPane
   const [insights, setInsights] = useState<InsightsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     if (!projectPath) return;
@@ -52,6 +54,67 @@ export function WikiInsightsPanel({ projectPath, onNodeClick }: WikiInsightsPane
 
   return (
     <div className="h-full overflow-y-auto p-4 space-y-6">
+      <div
+        className="flex items-center justify-between gap-2"
+        data-testid="wiki-insights-export-bar"
+      >
+        <span className="text-xs font-medium text-muted">知识图谱洞察</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            data-testid="wiki-insights-copy-md-btn"
+            onClick={async () => {
+              setCopiedMd(true);
+              const md = [
+                `# Wiki 图谱洞察报告`,
+                `- **项目路径**：\`${projectPath}\``,
+                `- **图谱规模**：节点 ${insights.stats.total_nodes} · 边 ${insights.stats.total_edges} · 社区 ${insights.stats.total_communities} · 惊人联系 ${insights.stats.surprising_connections}`,
+                ...insights.surprising_connections.map(
+                  (c) => `- [惊人联系] ${c.source_label} ↔ ${c.target_label} (${Math.round(c.strength * 100)}%): ${c.reason}`,
+                ),
+                ...insights.knowledge_gaps.map(
+                  (g) => `- [知识缺口/${g.severity}] ${g.node_label}: ${g.description}`,
+                ),
+              ].join('\n');
+              /* v8 ignore start */
+              setTimeout(() => {
+                if (typeof window !== 'undefined') setCopiedMd(false);
+              }, 1500);
+              try {
+                await navigator.clipboard?.writeText(md);
+              } catch {
+                // ignore
+              }
+              /* v8 ignore stop */
+            }}
+            className="rounded border border-border bg-surface px-2 py-0.5 text-xs text-text-secondary hover:text-text"
+          >
+            {copiedMd ? '已复制MD' : '复制洞察MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="wiki-insights-copy-json-btn"
+            onClick={async () => {
+              setCopiedJson(true);
+              /* v8 ignore start */
+              setTimeout(() => {
+                if (typeof window !== 'undefined') setCopiedJson(false);
+              }, 1500);
+              try {
+                await navigator.clipboard?.writeText(
+                  JSON.stringify({ projectPath, ...insights }, null, 2),
+                );
+              } catch {
+                // ignore
+              }
+              /* v8 ignore stop */
+            }}
+            className="rounded border border-border bg-surface px-2 py-0.5 text-xs text-text-secondary hover:text-text"
+          >
+            {copiedJson ? '已复制JSON' : '复制洞察JSON'}
+          </button>
+        </div>
+      </div>
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
         <StatCard label="节点" value={insights.stats.total_nodes} />
