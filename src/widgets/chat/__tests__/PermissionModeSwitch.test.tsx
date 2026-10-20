@@ -5,7 +5,11 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { PermissionModeSwitch } from '../PermissionModeSwitch';
+import {
+  PermissionModeSwitch,
+  formatPermissionModeJson,
+  formatPermissionModeMarkdown,
+} from '../PermissionModeSwitch';
 
 const getPreset = vi.fn();
 const setPreset = vi.fn();
@@ -86,5 +90,55 @@ describe('PermissionModeSwitch', () => {
     await waitFor(() => expect(getPreset).toHaveBeenCalled());
     expect(screen.queryByTestId('auto-approval-badge')).not.toBeInTheDocument();
     expect(getSessionAutoApprovals).not.toHaveBeenCalled();
+  });
+
+  it('formats and copies permission mode summary as Markdown and JSON', async () => {
+    const md = formatPermissionModeMarkdown({
+      sessionId: 's1',
+      preset: 'standard',
+      custom: false,
+      count: 1,
+      items: [
+        {
+          seq: 1,
+          session_id: 's1',
+          tool_name: 'write_file',
+          capability: 'write',
+          mode: 'workspace_write',
+          reason: 'inside_workspace',
+          summary: 'path=a.txt',
+          created_at: 1_700_000_000,
+        },
+      ],
+    });
+    expect(md).toContain('# 会话权限模式与自动放行审计 (Permission Mode Summary)');
+    expect(md).toContain('write_file');
+    expect(
+      formatPermissionModeMarkdown({
+        sessionId: null,
+        preset: 'careful',
+        custom: true,
+        count: 0,
+        items: [],
+      }),
+    ).toContain('_暂无自动放行审计记录_');
+
+    const parsed = JSON.parse(
+      formatPermissionModeJson({
+        sessionId: 's1',
+        preset: 'auto',
+        custom: false,
+        count: 0,
+        items: [],
+      }),
+    );
+    expect(parsed.preset).toBe('auto');
+
+    renderSwitch('s1');
+    await waitFor(() => expect(getPreset).toHaveBeenCalled());
+    fireEvent.click(screen.getByTestId('permission-mode-copy-md'));
+    expect(screen.getByTestId('permission-mode-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('permission-mode-copy-json'));
+    expect(screen.getByTestId('permission-mode-copy-json').textContent).toContain('已复制 JSON');
   });
 });

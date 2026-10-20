@@ -2,7 +2,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { CronExpressionPicker } from '../CronExpressionPicker';
+import {
+  CronExpressionPicker,
+  formatCronPickerJson,
+  formatCronPickerMarkdown,
+} from '../CronExpressionPicker';
 
 function renderPicker(props: React.ComponentProps<typeof CronExpressionPicker>) {
   return render(
@@ -42,5 +46,22 @@ describe('CronExpressionPicker', () => {
   it('does not show error when value is a valid cron', () => {
     renderPicker({ value: '0 8 * * *', onChange: () => {} });
     expect(screen.queryByTestId('cron-error')).toBeNull();
+  });
+
+  it('formats and copies cron picker state as Markdown and JSON', () => {
+    const md = formatCronPickerMarkdown('0 * * * *', true, null);
+    expect(md).toContain('# Cron 表达式配置摘要 (Cron Expression Summary)');
+    expect(md).toContain('hourly');
+    expect(formatCronPickerMarkdown('bad', false, 'invalid cron')).toContain('invalid cron');
+
+    const parsed = JSON.parse(formatCronPickerJson('0 * * * *', true, null));
+    expect(parsed.presetId).toBe('hourly');
+    expect(parsed.valid).toBe(true);
+
+    renderPicker({ value: '0 * * * *', onChange: () => {} });
+    fireEvent.click(screen.getByTestId('cron-picker-copy-md'));
+    expect(screen.getByTestId('cron-picker-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('cron-picker-copy-json'));
+    expect(screen.getByTestId('cron-picker-copy-json').textContent).toContain('已复制 JSON');
   });
 });
