@@ -817,6 +817,19 @@ async def lifespan(app: FastAPI):
     # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
     # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
     app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
+    # Phase 2: 后台构建标签共现图谱（daemon thread，不阻塞启动）
+    # build-then-swap 模式：图谱未完成前 retrieve() 走 2 路（keyword+vector），
+    # 完成后自动升级为 3 路（keyword+vector+tag_graph）。
+    if app.state.memory_adapter is not None:
+        try:
+            from backend.memory.tag_graph import build_tag_graph_async
+
+            build_tag_graph_async(
+                app.state.memory_adapter.memory_manager.episodic,
+                app.state.memory_adapter.memory_manager.semantic,
+            )
+        except Exception as exc:  # noqa: BLE001 — 图谱构建失败不阻塞启动
+            logger.warning("[tag_graph] 异步构建触发失败: %s", exc)
     logger.info(
         "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
         API_MODE,

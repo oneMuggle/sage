@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import threading
 import time
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Set
@@ -348,3 +349,26 @@ def generate_synthetic_queries(
 
     logger.info(f"[recall_eval] 生成合成查询: {len(queries)} 条")
     return queries
+
+
+# ============================================================================
+# 模块级单例（Phase 2 接入生产链路）
+# ============================================================================
+
+_evaluator: Optional[RecallEvaluator] = None
+_evaluator_lock = threading.Lock()
+
+
+def get_recall_evaluator() -> RecallEvaluator:
+    """懒加载单例。双检锁确保只初始化一次。
+
+    与 ``get_tag_graph()`` 同模式：首次调用创建空评估器，
+    后续调用复用同一实例。所有 ``log_retrieval()`` 调用共享
+    同一份 ``retrieval_logs`` / ``online_metrics``。
+    """
+    global _evaluator
+    if _evaluator is None:
+        with _evaluator_lock:
+            if _evaluator is None:
+                _evaluator = RecallEvaluator()
+    return _evaluator

@@ -120,6 +120,7 @@ class TestMemoryAdapterStore:
             content="用户喜欢吃火锅",
             memory_type="episodic",
             importance=7,
+            tags=["preference", "food"],
             metadata={"session_id": "session-123", "tags": ["preference", "food"]},
             session_id="session-123",
         )

@@ -35,6 +35,9 @@ os.environ.setdefault("SAGE_ORCH_CONFIRM_TIMEOUT", "1")
 # tests/unit/test_plan_preflight.py 内用 monkeypatch.setenv 显式开启。
 os.environ.setdefault("SAGE_ORCH_PLAN_PREFLIGHT", "0")
 
+# Phase 2: 排除 bench/ 目录（性能基准测试，手动跑，不进 CI）
+collect_ignore_glob = ["**/bench/*"]
+
 # 确保项目根目录在 sys.path 中
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if PROJECT_ROOT not in sys.path:
