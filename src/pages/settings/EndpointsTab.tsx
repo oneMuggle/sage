@@ -216,9 +216,18 @@ export function EndpointsTab({ settings, updateSettings }: EndpointsTabProps) {
                     type="password"
                     value={apiKey}
                     onChange={(e) => setEditForm({ ...form, apiKey: e.target.value })}
-                    placeholder="sk-... (LM Studio 可留空)"
+                    placeholder={
+                      protocol === 'ollama' || protocol === 'openai-compatible'
+                        ? '本地/内网代理可留空'
+                        : 'sk-...'
+                    }
                     className="w-full px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
                   />
+                  {(protocol === 'ollama' || protocol === 'openai-compatible') && (
+                    <p className="text-ui-xs text-muted/70 mt-0.5">
+                      OpenAI-compatible 和 Ollama 协议允许留空（适用于本地服务或无需密钥的内网代理）
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-muted block mb-1">协议</label>
