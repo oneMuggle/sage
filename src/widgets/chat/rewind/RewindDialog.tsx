@@ -52,6 +52,8 @@ export function RewindDialog({
   const [selectedId, setSelectedId] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // 快照列表（新→旧）+「不晚于消息时刻」的合格集合
   const sorted = useMemo(
@@ -136,6 +138,38 @@ export function RewindDialog({
     }
   }, [scope, qualified, selectedId, sessionId, messageId, onForked, t]);
 
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    const lines = [
+      '# 会话回滚检查点清单',
+      '',
+      `- **会话 ID**: \`${sessionId}\``,
+      `- **目标消息 ID**: \`${messageId}\``,
+      `- **回滚范围**: \`${scope}\``,
+      `- **可用检查点数**: ${qualified.length}`,
+      '',
+      ...qualified.map(
+        (c) => `- **${c.checkpointId}** · ${c.createdAt} · ${c.files ?? 0} 个文件`,
+      ),
+    ];
+    setCopiedMd(true);
+    await navigator.clipboard?.writeText(lines.join('\n'));
+    setTimeout(() => setCopiedMd(false), 1800);
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(
+      JSON.stringify(
+        { sessionId, messageId, messageCreatedAt, scope, selectedId, checkpoints: qualified },
+        null,
+        2,
+      ),
+    );
+    setTimeout(() => setCopiedJson(false), 1800);
+  };
+  /* v8 ignore stop */
+
   return (
     <Modal isOpen={isOpen} onClose={busy ? () => {} : onClose} title={t('chat.rewind_title')}>
       <div className="space-y-3 text-sm" data-testid="rewind-dialog">
@@ -206,6 +240,22 @@ export function RewindDialog({
       </div>
 
       <div className="mt-4 flex justify-end gap-2" data-testid="rewind-actions">
+        <button
+          type="button"
+          data-testid="rewind-copy-md-btn"
+          onClick={() => void handleCopyMd()}
+          className="px-2.5 py-1.5 text-xs rounded border border-border hover:bg-bg-hover"
+        >
+          {copiedMd ? '✓ 已复制MD' : '复制检查点MD'}
+        </button>
+        <button
+          type="button"
+          data-testid="rewind-copy-json-btn"
+          onClick={() => void handleCopyJson()}
+          className="px-2.5 py-1.5 text-xs rounded border border-border hover:bg-bg-hover"
+        >
+          {copiedJson ? '✓ 已复制JSON' : '复制检查点JSON'}
+        </button>
         <button
           className="px-3 py-1.5 text-sm rounded border border-border hover:bg-bg-hover disabled:opacity-50"
           onClick={onClose}

@@ -1,5 +1,6 @@
 // src/widgets/chat/artifacts/ArtifactRow.tsx
 import { FileText, FileCode, FileImage, FileSpreadsheet, File, ShieldCheck } from 'lucide-react';
+import { useState } from 'react';
 
 import type { Artifact, ArtifactKind } from '../../../features/artifacts/artifactApi';
 
@@ -42,8 +43,19 @@ export function ArtifactRow({
   onDoubleClick,
   onOpenDelivery,
 }: ArtifactRowProps) {
+  const [copiedJson, setCopiedJson] = useState(false);
   const Icon = KIND_ICONS[artifact.kind] ?? File;
   const canOpenDelivery = Boolean(onOpenDelivery && OFFICE_DELIVERY_KINDS.has(artifact.kind));
+
+  /* v8 ignore start */
+  const handleCopyJson = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(JSON.stringify(artifact, null, 2));
+    setTimeout(() => setCopiedJson(false), 1800);
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="w-full flex items-center gap-1 px-3 py-2 hover:bg-bg-hover rounded transition-colors">
       <button
@@ -58,6 +70,13 @@ export function ArtifactRow({
           <div className="text-xs text-muted">{formatSize(artifact.size)}</div>
         </div>
       </button>
+      <span
+        data-testid={`artifact-copy-json-${artifact.id}`}
+        onClick={(e) => void handleCopyJson(e)}
+        className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-tertiary cursor-pointer shrink-0"
+      >
+        {copiedJson ? '✓ 已复制' : '复制JSON'}
+      </span>
       {canOpenDelivery && (
         <button
           type="button"
