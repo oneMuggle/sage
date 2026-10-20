@@ -3,7 +3,12 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
-import { INTERRUPTED_RUN_ERROR, InterruptedRunBanner } from '../InterruptedRunBanner';
+import {
+  formatInterruptedRunJson,
+  formatInterruptedRunMarkdown,
+  INTERRUPTED_RUN_ERROR,
+  InterruptedRunBanner,
+} from '../InterruptedRunBanner';
 
 describe('InterruptedRunBanner', () => {
   it('渲染中断文案与操作按钮', () => {
@@ -27,5 +32,22 @@ describe('InterruptedRunBanner', () => {
   it('恢复文案常量与后端 session_repo 恢复文案一致', () => {
     // backend/data/session_repo.py recover_stale_run_states 的 last_error 文案
     expect(INTERRUPTED_RUN_ERROR).toBe('应用重启，运行中断');
+  });
+
+  it('导出运行中断提示为 Markdown 和 JSON 并支持一键复制', () => {
+    const md = formatInterruptedRunMarkdown();
+    expect(md).toContain('# 运行中断恢复提示');
+    expect(md).toContain(INTERRUPTED_RUN_ERROR);
+    const parsed = JSON.parse(formatInterruptedRunJson());
+    expect(parsed.error).toBe(INTERRUPTED_RUN_ERROR);
+    expect(parsed.recoverable).toBe(true);
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<InterruptedRunBanner onRetry={() => undefined} onDismiss={() => undefined} />);
+    fireEvent.click(screen.getByTestId('interrupted-run-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('运行中断恢复提示'));
+    fireEvent.click(screen.getByTestId('interrupted-run-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"recoverable": true'));
   });
 });

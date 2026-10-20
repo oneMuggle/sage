@@ -1,11 +1,15 @@
 // src/widgets/chat/__tests__/SessionUsageBadge.test.tsx
 // U14 会话用量徽章测试 — usageApi 全 mock。
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { SessionUsage } from '../../../shared/api/usageApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { SessionUsageBadge } from '../SessionUsageBadge';
+import {
+  formatSessionUsageJson,
+  formatSessionUsageMarkdown,
+  SessionUsageBadge,
+} from '../SessionUsageBadge';
 
 const mockFetch = vi.fn<(sessionId: string) => Promise<SessionUsage>>();
 
@@ -80,5 +84,36 @@ describe('SessionUsageBadge', () => {
       expect(mockFetch).toHaveBeenCalledWith('s1');
     });
     expect(container.querySelector('[data-testid="session-usage-badge"]')).toBeNull();
+  });
+
+  it('exports session usage as Markdown and JSON and copies via buttons', async () => {
+    expect(formatSessionUsageMarkdown(null)).toContain('_暂无会话用量_');
+    const sample = usageFixture({
+      requests: 3,
+      prompt_tokens: 1200,
+      completion_tokens: 300,
+      total_tokens: 1500,
+      estimated_cost_usd: 0.025,
+      cache_read_tokens: 600,
+      cache_creation_tokens: 200,
+      cache_hit_rate: 0.5,
+    });
+    const md = formatSessionUsageMarkdown(sample);
+    expect(md).toContain('# 会话累计用量 — s1');
+    expect(md).toContain('1.5k');
+    const parsed = JSON.parse(formatSessionUsageJson(sample));
+    expect(parsed.usage.total_tokens).toBe(1500);
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    mockFetch.mockResolvedValue(sample);
+    renderBadge({ sessionId: 's1' });
+    await waitFor(() => {
+      expect(screen.getByTestId('session-usage-badge')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('session-usage-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('会话累计用量 — s1'));
+    fireEvent.click(screen.getByTestId('session-usage-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"total_tokens": 1500'));
   });
 });
