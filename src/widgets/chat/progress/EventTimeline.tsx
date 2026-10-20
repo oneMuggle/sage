@@ -4,6 +4,8 @@
  * for a selected task/run. Used inside SubagentDetailDrawer.
  */
 
+import { useState } from 'react';
+
 import type { RunEvent } from '../../../shared/api/orchEvents';
 import { isStepEvent, isTaskEvent } from '../../../shared/api/orchEvents';
 
@@ -82,6 +84,8 @@ function extractPreview(payload: Record<string, unknown>): string | null {
 
 export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
   const visible = events.length > maxEvents ? events.slice(events.length - maxEvents) : events;
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   if (visible.length === 0) {
     return (
@@ -91,8 +95,67 @@ export function EventTimeline({ events, maxEvents = 200 }: EventTimelineProps) {
     );
   }
 
+  const handleCopyTimelineMd = async () => {
+    /* v8 ignore start */
+    const base = visible[0]?.occurred_at ?? 0;
+    const lines = [
+      `# 事件时间线 (${visible.length}/${events.length})`,
+      '',
+      ...visible.map((ev) => {
+        const offset = formatOffset(ev.occurred_at - base);
+        const preview = extractPreview(ev.payload);
+        return `- [${formatTime(ev.occurred_at)} | ${offset}] ${eventLabel(ev.event_type)}${preview ? ` — ${preview}` : ''}`;
+      }),
+    ];
+    setCopiedMd(true);
+    await navigator.clipboard?.writeText(lines.join('\n'));
+    setTimeout(() => setCopiedMd(false), 1500);
+    /* v8 ignore stop */
+  };
+
+  const handleCopyTimelineJson = async () => {
+    /* v8 ignore start */
+    const base = visible[0]?.occurred_at ?? 0;
+    const payload = {
+      totalEvents: events.length,
+      visibleCount: visible.length,
+      events: visible.map((ev) => ({
+        event_id: ev.event_id,
+        seq: ev.seq,
+        event_type: ev.event_type,
+        label: eventLabel(ev.event_type),
+        occurred_at: ev.occurred_at,
+        offset: formatOffset(ev.occurred_at - base),
+        step_id: ev.entity.step_id ?? null,
+        preview: extractPreview(ev.payload),
+      })),
+    };
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    setTimeout(() => setCopiedJson(false), 1500);
+    /* v8 ignore stop */
+  };
+
   return (
     <div className="space-y-0.5" data-testid="event-timeline">
+      <div className="flex items-center justify-end gap-1.5 px-2 pb-1">
+        <button
+          type="button"
+          onClick={() => void handleCopyTimelineMd()}
+          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+          data-testid="event-timeline-copy-md-btn"
+        >
+          {copiedMd ? '已复制MD' : '复制时间线MD'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleCopyTimelineJson()}
+          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+          data-testid="event-timeline-copy-json-btn"
+        >
+          {copiedJson ? '已复制JSON' : '复制时间线JSON'}
+        </button>
+      </div>
       {visible.map((event) => {
         const preview = extractPreview(event.payload);
         // RD22 (round50): 相对首事件的偏移量 —— 步骤间隔一目了然。
