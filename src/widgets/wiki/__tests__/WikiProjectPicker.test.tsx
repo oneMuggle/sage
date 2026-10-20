@@ -1,7 +1,11 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { WikiInsightsPanel } from '../WikiInsightsPanel';
+import { WikiLintView } from '../WikiLintView';
 import { WikiProjectPicker } from '../WikiProjectPicker';
+import { WikiQueuePanel } from '../WikiQueuePanel';
+import { WikiReviewView } from '../WikiReviewView';
 
 const mockSelectDirectory = vi.fn();
 const mockCheckWikiProject = vi.fn();
@@ -10,6 +14,14 @@ const mockRecordRecent = vi.fn();
 const mockCreate = vi.fn();
 const mockOpen = vi.fn();
 const mockListDir = vi.fn();
+const mockWikiLintRun = vi.fn();
+const mockWikiReviewRun = vi.fn();
+const mockGetWikiInsights = vi.fn();
+const mockQueueGetStatus = vi.fn();
+const mockQueueListTasks = vi.fn();
+const mockQueueClearTasks = vi.fn();
+const mockQueueCancelTask = vi.fn();
+const mockQueueRetryTask = vi.fn();
 
 vi.mock('../../../shared/api-client/wiki', () => ({
   checkWikiProject: (...a: unknown[]) => mockCheckWikiProject(...a),
@@ -18,6 +30,14 @@ vi.mock('../../../shared/api-client/wiki', () => ({
   createWikiProject: (...a: unknown[]) => mockCreate(...a),
   openWikiProject: (...a: unknown[]) => mockOpen(...a),
   wikiListDirectory: (...a: unknown[]) => mockListDir(...a),
+  wikiLintRun: (...a: unknown[]) => mockWikiLintRun(...a),
+  wikiReviewRun: (...a: unknown[]) => mockWikiReviewRun(...a),
+  getWikiInsights: (...a: unknown[]) => mockGetWikiInsights(...a),
+  queueGetStatus: (...a: unknown[]) => mockQueueGetStatus(...a),
+  queueListTasks: (...a: unknown[]) => mockQueueListTasks(...a),
+  queueClearTasks: (...a: unknown[]) => mockQueueClearTasks(...a),
+  queueCancelTask: (...a: unknown[]) => mockQueueCancelTask(...a),
+  queueRetryTask: (...a: unknown[]) => mockQueueRetryTask(...a),
 }));
 
 beforeEach(() => {
@@ -268,5 +288,145 @@ describe('WikiProjectPicker — status badge states', () => {
 
     fireEvent.change(pathInput, { target: { value: '/tmp/bad' } });
     await waitFor(() => expect(screen.queryByText(/父目录不可写/i)).toBeTruthy());
+  });
+});
+
+describe('Phase P81 Wiki governance panels — Lint, Review, Insights & Queue exports', () => {
+  it('renders WikiLintView, filters severities, and exports MD & JSON', async () => {
+    mockWikiLintRun.mockResolvedValue({
+      issues: [
+        {
+          code: 'broken-link',
+          severity: 'error',
+          file: 'docs/intro.md',
+          message: 'Broken link to setup.md',
+          suggestion: 'Create setup.md',
+        },
+        {
+          code: 'orphan',
+          severity: 'warning',
+          file: 'docs/orphan.md',
+          message: 'Orphan page',
+        },
+      ],
+    });
+    render(<WikiLintView projectPath="/tmp/wiki-proj" />);
+    await waitFor(() => expect(screen.getByTestId('wiki-lint-copy-md-btn')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('wiki-lint-copy-md-btn'));
+    expect(screen.getByTestId('wiki-lint-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('wiki-lint-copy-json-btn'));
+    expect(screen.getByTestId('wiki-lint-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByText('错误'));
+    fireEvent.click(screen.getByText('提示'));
+    fireEvent.click(screen.getByText('全部'));
+    fireEvent.click(screen.getByText('运行检查'));
+  });
+
+  it('renders WikiReviewView, resolves items, and exports MD & JSON', async () => {
+    mockWikiReviewRun.mockResolvedValue({
+      items: [
+        {
+          id: 'rev-1',
+          type: 'contradiction',
+          title: 'Conflicting dates',
+          description: 'Page A and Page B disagree on release date',
+          affected_pages: ['docs/a.md', 'docs/b.md'],
+        },
+      ],
+    });
+    render(<WikiReviewView projectPath="/tmp/wiki-proj" />);
+    await waitFor(() => expect(screen.getByTestId('wiki-review-copy-md-btn')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('wiki-review-copy-md-btn'));
+    expect(screen.getByTestId('wiki-review-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('wiki-review-copy-json-btn'));
+    expect(screen.getByTestId('wiki-review-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getAllByText('矛盾')[0]);
+    fireEvent.click(screen.getByText('缺页'));
+    fireEvent.click(screen.getByText('全部'));
+    fireEvent.click(screen.getByTitle('忽略此项'));
+    fireEvent.click(screen.getByText('运行审核'));
+  });
+
+  it('renders WikiInsightsPanel and exports MD & JSON', async () => {
+    const onNodeClick = vi.fn();
+    mockGetWikiInsights.mockResolvedValue({
+      stats: {
+        total_nodes: 12,
+        total_edges: 24,
+        total_communities: 3,
+        surprising_connections: 1,
+      },
+      surprising_connections: [
+        {
+          source_id: 'a.md',
+          source_label: 'Architecture',
+          target_id: 'b.md',
+          target_label: 'Billing',
+          strength: 0.85,
+          reason: 'Shared domain model',
+        },
+      ],
+      knowledge_gaps: [
+        {
+          node_id: 'c.md',
+          node_label: 'Legacy Module',
+          gap_type: 'isolated_node',
+          severity: 'high',
+          description: 'No incoming links',
+          suggestion: 'Link from index.md',
+        },
+        {
+          node_id: 'community_1',
+          node_label: 'Sparse Cluster',
+          gap_type: 'sparse_community',
+          severity: 'medium',
+          description: 'Sparse cluster',
+          suggestion: 'Add cross-links',
+        },
+      ],
+    });
+    render(<WikiInsightsPanel projectPath="/tmp/wiki-proj" onNodeClick={onNodeClick} />);
+    await waitFor(() => expect(screen.getByTestId('wiki-insights-copy-md-btn')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('wiki-insights-copy-md-btn'));
+    expect(screen.getByTestId('wiki-insights-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('wiki-insights-copy-json-btn'));
+    expect(screen.getByTestId('wiki-insights-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByText('Architecture'));
+    fireEvent.click(screen.getByText('Billing'));
+    fireEvent.click(screen.getByText('Legacy Module'));
+    expect(onNodeClick).toHaveBeenCalledTimes(3);
+  });
+
+  it('renders WikiQueuePanel and exports MD & JSON', async () => {
+    mockQueueGetStatus.mockResolvedValue({
+      pending: 1,
+      processing: 0,
+      completed: 1,
+      failed: 1,
+      cancelled: 0,
+    });
+    mockQueueListTasks.mockResolvedValue({
+      tasks: [
+        {
+          task_id: 't1',
+          source_path: '/tmp/doc1.pdf',
+          status: 'failed',
+          created_at: new Date().toISOString(),
+          retry_count: 1,
+          max_retries: 3,
+          error_message: 'Parse error',
+        },
+      ],
+    });
+    render(<WikiQueuePanel projectPath="/tmp/wiki-proj" />);
+    await waitFor(() => expect(screen.getByTestId('wiki-queue-copy-md-btn')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('wiki-queue-copy-md-btn'));
+    expect(screen.getByTestId('wiki-queue-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('wiki-queue-copy-json-btn'));
+    expect(screen.getByTestId('wiki-queue-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByText('重试'));
+    fireEvent.click(screen.getByText('取消'));
+    fireEvent.click(screen.getByText('等待'));
+    fireEvent.click(screen.getByText('全部'));
   });
 });
