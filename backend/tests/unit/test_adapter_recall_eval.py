@@ -26,8 +26,8 @@ class TestGetRecallEvaluator:
 
     def test_returns_recall_evaluator(self):
         """返回 RecallEvaluator 实例"""
-        from backend.memory.recall_eval import RecallEvaluator, get_recall_evaluator
         import backend.memory.recall_eval as re_module
+        from backend.memory.recall_eval import RecallEvaluator, get_recall_evaluator
 
         original = re_module._evaluator
         re_module._evaluator = None
@@ -40,8 +40,8 @@ class TestGetRecallEvaluator:
 
     def test_returns_same_instance(self):
         """多次调用返回同一实例"""
-        from backend.memory.recall_eval import get_recall_evaluator
         import backend.memory.recall_eval as re_module
+        from backend.memory.recall_eval import get_recall_evaluator
 
         original = re_module._evaluator
         re_module._evaluator = None
@@ -95,7 +95,7 @@ class TestRetrieveRecallEvalIntegration:
             "backend.memory.recall_eval.get_recall_evaluator",
             return_value=mock_evaluator,
         ):
-            context = await adapter.retrieve("test query", "session-abc", limit=5)
+            await adapter.retrieve("test query", "session-abc", limit=5)
 
         mock_evaluator.log_retrieval.assert_called_once()
         call_kwargs = mock_evaluator.log_retrieval.call_args

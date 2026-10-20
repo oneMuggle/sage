@@ -19,7 +19,7 @@ pytestmark = pytest.mark.unit
 
 
 # ============================================================================
-# _extract_query_tags()
+# Query tag extraction helper
 # ============================================================================
 
 
@@ -65,8 +65,8 @@ class TestGetTagGraph:
 
     def test_returns_tag_cooccurrence_graph(self):
         """返回 TagCooccurrenceGraph 实例"""
-        from backend.memory.tag_graph import TagCooccurrenceGraph, get_tag_graph
         import backend.memory.tag_graph as tg_module
+        from backend.memory.tag_graph import TagCooccurrenceGraph, get_tag_graph
 
         original = tg_module._graph
         tg_module._graph = None
@@ -81,8 +81,8 @@ class TestGetTagGraph:
 
     def test_returns_same_instance(self):
         """多次调用返回同一实例"""
-        from backend.memory.tag_graph import get_tag_graph
         import backend.memory.tag_graph as tg_module
+        from backend.memory.tag_graph import get_tag_graph
 
         original = tg_module._graph
         tg_module._graph = None
@@ -96,7 +96,7 @@ class TestGetTagGraph:
 
 
 # ============================================================================
-# build_tag_graph_async()
+# Async background graph construction
 # ============================================================================
 
 
@@ -107,8 +107,8 @@ class TestBuildTagGraphAsync:
         """后台线程构建图谱"""
         import time
 
-        from backend.memory.tag_graph import build_tag_graph_async, get_tag_graph
         import backend.memory.tag_graph as tg_module
+        from backend.memory.tag_graph import build_tag_graph_async, get_tag_graph
 
         original_graph = tg_module._graph
         original_built = tg_module._graph_built
@@ -138,8 +138,8 @@ class TestBuildTagGraphAsync:
 
     def test_idempotent(self):
         """重复调用不重复构建"""
-        from backend.memory.tag_graph import build_tag_graph_async
         import backend.memory.tag_graph as tg_module
+        from backend.memory.tag_graph import build_tag_graph_async
 
         original_built = tg_module._graph_built
         tg_module._graph_built = False
@@ -206,15 +206,17 @@ class TestRetrieveTagGraphIntegration:
         mock_memory_manager.semantic = Mock()
         mock_memory_manager.semantic.get_by_id.return_value = None
 
-        with patch(
-            "backend.memory.tag_graph.get_tag_graph",
-            return_value=mock_graph,
-        ):
-            with patch(
+        with (
+            patch(
+                "backend.memory.tag_graph.get_tag_graph",
+                return_value=mock_graph,
+            ),
+            patch(
                 "backend.adapters.out.memory.adapter._extract_query_tags",
                 return_value=["python"],
-            ):
-                context = await adapter.retrieve("Python", "session-1", limit=5)
+            ),
+        ):
+            context = await adapter.retrieve("Python", "session-1", limit=5)
 
         all_ids = (
             [m.get("id") for m in context.episodic]
@@ -237,14 +239,16 @@ class TestRetrieveTagGraphIntegration:
         mock_graph = Mock()
         mock_graph.total_memories = 0
 
-        with patch(
-            "backend.memory.tag_graph.get_tag_graph",
-            return_value=mock_graph,
-        ):
-            with patch(
+        with (
+            patch(
+                "backend.memory.tag_graph.get_tag_graph",
+                return_value=mock_graph,
+            ),
+            patch(
                 "backend.adapters.out.memory.adapter._extract_query_tags",
                 return_value=["python"],
-            ):
-                context = await adapter.retrieve("test", "session-1", limit=5)
+            ),
+        ):
+            context = await adapter.retrieve("test", "session-1", limit=5)
 
         assert isinstance(context, MemoryContext)
