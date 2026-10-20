@@ -20,6 +20,37 @@ from backend.memory.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
+# Phase 2: 停用词表（用于 _extract_query_tags 过滤无意义 token）
+_TAG_STOPWORDS = frozenset({
+    "的", "了", "是", "在", "和", "与", "或", "也", "都", "就",
+    "不", "有", "这", "那", "我", "你", "他", "她", "它", "们",
+    "到", "从", "把", "被", "让", "给", "向", "对", "关于",
+    "一个", "这个", "那个", "什么", "怎么", "如何", "为什么",
+})
+
+
+def _extract_query_tags(query: str, max_tags: int = 5) -> List[str]:
+    """从自由文本 query 中提取标签（用于 tag_graph 查询）。
+
+    策略：jieba 分词 → 过滤 len≥2 → 去停用词 → 取 top N。
+    纯英文 token 保留（如 ``python``、``fastapi``）。
+
+    Args:
+        query: 用户查询文本
+        max_tags: 最多返回的标签数
+
+    Returns:
+        标签列表（可能为空）
+    """
+    from backend.memory.chinese_tokenizer import tokenize
+
+    tokens = tokenize(query).split()
+    filtered = [
+        t for t in tokens
+        if len(t) >= 2 and t not in _TAG_STOPWORDS
+    ]
+    return filtered[:max_tags]
+
 
 class MemoryAdapter:
     """记忆端口适配器 - 将 MemoryPort 适配到现有的 MemoryManager
@@ -254,6 +285,38 @@ class MemoryAdapter:
         # 更新、更可信的语义次优事实。
         fused = rank_by_composite(fused)
 
+        # Phase 2: tag_graph 第三路召回（扩展已融合的候选集）
+        # 策略：post-process —— 从 query 提取标签，查图谱关联记忆，
+        # 合并到 fused 末尾（不破坏 RRF 排序），boost 分数弱于 RRF。
+        tag_graph_items: List[dict] = []
+        query_tags = _extract_query_tags(query)
+        if query_tags:
+            try:
+                from backend.memory.tag_graph import get_tag_graph
+
+                graph = get_tag_graph()
+                if graph.total_memories > 0:  # 图谱已构建
+                    graph_hits = graph.query(query_tags, top_k=5, min_cooccurrence=2)
+                    existing_ids = {item.get("id") for item in fused}
+                    for hit in graph_hits:
+                        mem_id = hit["memory_id"]
+                        if mem_id in existing_ids:
+                            continue  # 已在 fused 中，不重复
+                        mem = self.memory_manager.episodic.get_by_id(mem_id)
+                        if mem is None:
+                            mem = self.memory_manager.semantic.get_by_id(mem_id)
+                        if mem is not None and memory_scope.is_row_visible(
+                            mem, current_project_key
+                        ):
+                            # boost 分数 * 0.1（弱于 RRF 分数，避免压过主路）
+                            mem["rrf_score"] = hit["score"] * 0.1
+                            mem["_tag_graph_boosted"] = True
+                            tag_graph_items.append(mem)
+                    if tag_graph_items:
+                        fused.extend(tag_graph_items)
+            except Exception as exc:  # noqa: BLE001 — 图谱扩展失败不阻塞主路
+                logger.debug("[tag_graph] 扩展召回失败: %s", exc)
+
         # 4. 分层：用户画像 + 项目画像（P2，始终注入）+ 高重要性 → core，
         # 其余 → episodic/semantic
         # 优化: 动态 core 槽位预算 —— 检索命中多时放宽
@@ -302,17 +365,36 @@ class MemoryAdapter:
 
         logger.info(
             "[retrieval] embedder=%s is_semantic=%s variant=%s weights=%s "
-            "keyword_hits=%s vector_hits=%s fused=%s core=%s session_id=%s",
+            "keyword_hits=%s vector_hits=%s tag_graph_hits=%s fused=%s core=%s session_id=%s",
             type(self.embedder).__name__,
             getattr(self.embedder, "is_semantic", False),
             variant,
             weights,
             len(keyword_items),
             len(vector_items),
+            len(tag_graph_items),
             len(fused),
             len(core),
             session_id[:8] if session_id else None,
         )
+
+        # Phase 2: recall_eval 在线日志（无 feedback 信号时仅记录检索事件）
+        try:
+            from backend.memory.recall_eval import get_recall_evaluator
+
+            evaluator = get_recall_evaluator()
+            all_results = (
+                list(core[: _CORE_PROFILE_LIMIT + _CORE_PROJECT_LIMIT + _CORE_RETRIEVED_LIMIT])
+                + list(episodic[:limit])
+                + list(semantic[:limit])
+            )
+            evaluator.log_retrieval(
+                query=query,
+                results=all_results,
+                session_id=session_id,
+            )
+        except Exception as exc:  # noqa: BLE001 — 日志失败不阻塞返回
+            logger.debug("[recall_eval] 日志记录失败: %s", exc)
 
         return MemoryContext(
             working=keyword_results.get("working", []),
@@ -369,10 +451,13 @@ class MemoryAdapter:
             return conflict_id
 
         # 调用 MemoryManager.memorize() 存储记忆（透传分类结果与会话 ID）
+        # Phase 2 fix: 同时传 tags= 顶层参数 —— episodic 从 metadata["tags"] 读，
+        # semantic 从 tags= 读。此前只走 metadata 导致 semantic 记忆丢失 tags。
         memory_id = self.memory_manager.memorize(
             content=content,
             memory_type=memory_type,
             importance=importance,
+            tags=tags,
             metadata=metadata,
             session_id=session_id,
         )

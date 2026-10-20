@@ -76,6 +76,7 @@
 | 95   | [append_paragraphs 支持 {{fn:}}/{{en:}}](./95-append-fn-en.md) | R61：part 追加语义（blob 增补 + 编号续接）+ 统一四类占位符解析 + update 通路全支持 |
 | 92   | [LLM 定时任务工具](./92-llm-scheduled-task-tool.md) | schedule_task / list_scheduled_tasks / cancel_scheduled_task 三件套：复用 SchedulerService 单一事实源 + 会话自动绑定 + once(ISO-8601)/recurring(cron) + coordinator-only 白名单 |
 | 83   | [Python 后端代码保护方案](./83-python-code-protection.md) | Cython 二进制编译核心包 (sage_core) + Python 字节码混淆与源码剥离 (backend) + 开发与发布模式分离 (SAGE_PROTECT_CODE) |
+| 98   | [FTS5 vs LIKE 性能基准](./98-memory-fts5-benchmark.md) | 10k 语料实测：FTS5 空命中 85×/中文 32×/低频词 29× 加速，高频英文 token 1.5-2×；recall 差异与 fallback 策略 |
 
 ---
 
