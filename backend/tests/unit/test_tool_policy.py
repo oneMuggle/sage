@@ -12,7 +12,7 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from backend.domain.tool_policy import ToolPolicy
+from backend.domain.tool_policy import DEFAULT_MAX_TOOL_CALLS_PER_RUN, ToolPolicy
 
 pytestmark = pytest.mark.unit
 
@@ -23,7 +23,7 @@ def test_default_values_match_design():
     assert p.max_output_bytes == 256_000
     assert p.max_result_items == 200
     assert p.max_read_bytes == 2_000_000
-    assert p.max_tool_calls_per_run == 25
+    assert p.max_tool_calls_per_run == DEFAULT_MAX_TOOL_CALLS_PER_RUN
 
 
 def test_from_config_overrides_each_field():
@@ -51,7 +51,7 @@ def test_from_config_missing_fields_fall_back_to_default():
     assert p.max_output_bytes == 256_000
     assert p.max_result_items == 200
     assert p.max_read_bytes == 2_000_000
-    assert p.max_tool_calls_per_run == 25
+    assert p.max_tool_calls_per_run == DEFAULT_MAX_TOOL_CALLS_PER_RUN
 
 
 def test_from_config_empty_dict_returns_defaults():

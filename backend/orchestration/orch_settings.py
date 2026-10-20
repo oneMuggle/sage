@@ -12,6 +12,7 @@ from pathlib import PurePath
 from typing import Optional
 
 from backend.data.settings_repo import SettingsRepository
+from backend.domain.tool_policy import DEFAULT_MAX_TOOL_CALLS_PER_RUN
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +74,8 @@ class OrchSettings:
     max_retry_of_chains: int = 10
     #: 单 run 工具调用总数守卫（串行路径 + 并行批次累计）。
     #: 与 ``ToolPolicy.max_tool_calls_per_run`` 同源语义，此处开放 UI 可调。
-    #: 默认 25（与 ToolPolicy dataclass 默认一致）。0 = 不限制。
-    max_tool_calls_per_run: int = 25
+    #: 默认 100（与 ToolPolicy dataclass 默认一致）。0 = 不限制。
+    max_tool_calls_per_run: int = 100
     #: 计划前置 (2026-09-19): multi 拆解前的澄清+侦察总开关。关闭后拆解
     #: 行为与 2026-09-19 之前完全一致（decompose_request(context=None)）。
     #: env 总闸 ``SAGE_ORCH_PLAN_PREFLIGHT``（tests conftest 置 0）优先于本值。
@@ -137,7 +138,7 @@ def _sanitize_scratch_root(value: str, fallback: str) -> str:
 
 #: ``resolve_tool_call_budget`` 最末兜底值 —— 与 ToolPolicy 默认对齐。
 #: orch_settings 为工具调用预算单一事实源（env > UI > 默认）。
-_DEFAULT_FALLBACK_BUDGET = 25
+_DEFAULT_FALLBACK_BUDGET = DEFAULT_MAX_TOOL_CALLS_PER_RUN
 
 
 def resolve_tool_call_budget(fallback: Optional[int] = None) -> int:
@@ -146,7 +147,7 @@ def resolve_tool_call_budget(fallback: Optional[int] = None) -> int:
     优先级（高→低）：
       1. env ``SAGE_MAX_TOOL_CALLS_PER_RUN``（CI/测试覆盖用）
       2. ``OrchSettings.max_tool_calls_per_run``（UI 可调，持久化到 app_settings）
-      3. ``fallback`` 参数（默认 25，与 ``ToolPolicy._DEFAULT_MAX_TOOL_CALLS_PER_RUN``
+      3. ``fallback`` 参数（默认 100，与 ``ToolPolicy.DEFAULT_MAX_TOOL_CALLS_PER_RUN``
          保持一致；调用方可传入自己的 ``tool_policy.max_tool_calls_per_run``）
 
     ``OrchSettings`` 与 env 值必须 ≥ 1 才采纳，否则回落下一层（与
@@ -178,5 +179,5 @@ def resolve_tool_call_budget(fallback: Optional[int] = None) -> int:
             return orch_val
     except Exception as exc:  # noqa: BLE001 — 读设置失败回落 fallback
         logger.debug("OrchSettings 读取失败，回落 fallback: %s", exc)
-    # 3) fallback（默认 25）
+    # 3) fallback（默认 100）
     return default_fallback

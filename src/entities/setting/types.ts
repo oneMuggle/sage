@@ -114,8 +114,8 @@ export interface OrchSettings {
   maxRetryOfChains: number; // 10
   // 单 run 工具调用总数守卫（串行路径 + 并行批次累计）。
   // 与后端 ``OrchSettings.max_tool_calls_per_run`` camelCase 对齐。
-  // 默认 25；0 = 不限制。
-  maxToolCallsPerRun: number; // 25
+  // 默认 100；0 回落默认值（当前为 100，不视为"不限"）。
+  maxToolCallsPerRun: number; // 100
   // Round 1 (2026-09-19) 计划前置: multi 拆解前的澄清+侦察总开关（默认开）。
   // 与后端 OrchSettings.plan_preflight_enabled camelCase 对齐。
   planPreflightEnabled: boolean; // true
@@ -212,7 +212,7 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   runWallClockLimitMinutes: 0,
   subagentTaskTimeoutS: 900,
   maxRetryOfChains: 10,
-  maxToolCallsPerRun: 25,
+  maxToolCallsPerRun: 100,
   planPreflightEnabled: true,
   planScoutEnabled: true,
 };
