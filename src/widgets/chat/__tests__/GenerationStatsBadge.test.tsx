@@ -1,10 +1,14 @@
 // 对话阅读体验第二轮 C1：生成速度统计展示。
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { GenerationStats } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { GenerationStatsBadge } from '../GenerationStatsBadge';
+import {
+  formatGenerationStatsJson,
+  formatGenerationStatsMarkdown,
+  GenerationStatsBadge,
+} from '../GenerationStatsBadge';
 
 const renderBadge = (stats: GenerationStats | null | undefined) =>
   render(
@@ -42,5 +46,28 @@ describe('GenerationStatsBadge', () => {
     expect(container).toBeEmptyDOMElement();
     renderBadge({});
     expect(screen.queryByTestId('generation-stats')).toBeNull();
+  });
+
+  it('exports generation stats as Markdown and JSON and copies via buttons', () => {
+    expect(formatGenerationStatsMarkdown(null)).toContain('_暂无生成统计_');
+    const stats: GenerationStats = {
+      input_tokens: 800,
+      output_tokens: 1234,
+      first_token_ms: 820,
+      latency_ms: 30_000,
+    };
+    const md = formatGenerationStatsMarkdown(stats);
+    expect(md).toContain('# 生成性能统计');
+    expect(md).toContain('42.3 tok/s');
+    const parsed = JSON.parse(formatGenerationStatsJson(stats));
+    expect(parsed.stats.output_tokens).toBe(1234);
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    renderBadge(stats);
+    fireEvent.click(screen.getByTestId('generation-stats-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('生成性能统计'));
+    fireEvent.click(screen.getByTestId('generation-stats-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"output_tokens": 1234'));
   });
 });

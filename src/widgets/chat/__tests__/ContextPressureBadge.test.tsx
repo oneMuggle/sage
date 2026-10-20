@@ -3,11 +3,15 @@
  *
  * 阈值语义：< 0.6 不渲染；0.6-0.8 琥珀；≥ 0.8 红。仅渲染当前会话的水位。
  */
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { useStore } from '../../../shared/lib/store';
-import { ContextPressureBadge } from '../ContextPressureBadge';
+import {
+  ContextPressureBadge,
+  formatContextPressureJson,
+  formatContextPressureMarkdown,
+} from '../ContextPressureBadge';
 
 const SESSION = 'sess-1';
 
@@ -55,5 +59,24 @@ describe('ContextPressureBadge', () => {
     useStore.setState({ contextPressure: null });
     render(<ContextPressureBadge sessionId={SESSION} />);
     expect(screen.queryByTestId('context-pressure-badge')).toBeNull();
+  });
+
+  it('导出上下文水位为 Markdown 和 JSON 并支持一键复制', () => {
+    expect(formatContextPressureMarkdown(null)).toContain('_暂无水位数据_');
+    setPressure(0.85);
+    const info = useStore.getState().contextPressure;
+    const md = formatContextPressureMarkdown(info);
+    expect(md).toContain('# 上下文水位状态');
+    expect(md).toContain('红色警示 (critical)');
+    const parsed = JSON.parse(formatContextPressureJson(info));
+    expect(parsed.contextPressure.session_id).toBe(SESSION);
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<ContextPressureBadge sessionId={SESSION} />);
+    fireEvent.click(screen.getByTestId('context-pressure-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('上下文水位状态'));
+    fireEvent.click(screen.getByTestId('context-pressure-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"session_id": "sess-1"'));
   });
 });

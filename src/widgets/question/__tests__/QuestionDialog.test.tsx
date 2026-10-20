@@ -12,7 +12,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useQuestionState } from '../../../entities/question/questionState';
 import type { UserQuestion } from '../../../shared/api';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { QuestionDialog } from '../QuestionDialog';
+import {
+  formatQuestionDialogJson,
+  formatQuestionDialogMarkdown,
+  QuestionDialog,
+} from '../QuestionDialog';
 
 const invokeMock = vi.fn();
 vi.mock('../../../shared/api/desktopInvoke', () => ({
@@ -307,5 +311,25 @@ describe('QuestionDialog', () => {
       expect(invokeMock).toHaveBeenCalled();
     });
     expect(useQuestionState.getState().currentQuestion?.request_id).toBe('q-2');
+  });
+
+  it('exports question dialog state as Markdown and JSON and copies via buttons', () => {
+    expect(formatQuestionDialogMarkdown(null)).toContain('_当前无待应答提问_');
+    const q = makeQuestion({ request_id: 'q-export', multi_select: true });
+    const md = formatQuestionDialogMarkdown(q, ['Markdown'], '补充说明');
+    expect(md).toContain('# 交互提问 — 输出格式');
+    expect(md).toContain('补充说明');
+    const parsed = JSON.parse(formatQuestionDialogJson(q, ['Markdown'], ''));
+    expect(parsed.question.request_id).toBe('q-export');
+    expect(parsed.custom).toBeNull();
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    seedQuestion({ request_id: 'q-export' });
+    renderDialog();
+    fireEvent.click(screen.getByTestId('question-dialog-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('交互提问 — 输出格式'));
+    fireEvent.click(screen.getByTestId('question-dialog-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"request_id": "q-export"'));
   });
 });

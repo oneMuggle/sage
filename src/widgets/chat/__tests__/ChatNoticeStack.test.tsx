@@ -5,7 +5,12 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ChatInlineError } from '../ChatInlineError';
-import { CHAT_NOTICE_PRIORITY, ChatNoticeStack } from '../ChatNoticeStack';
+import {
+  CHAT_NOTICE_PRIORITY,
+  ChatNoticeStack,
+  formatChatNoticeStackJson,
+  formatChatNoticeStackMarkdown,
+} from '../ChatNoticeStack';
 
 const n = (key: string, priority: number) => ({
   key,
@@ -61,6 +66,28 @@ describe('ChatNoticeStack', () => {
     expect(screen.getByTestId('chat-notice-toggle')).toHaveTextContent('收起其他提示');
     fireEvent.click(screen.getByTestId('chat-notice-toggle'));
     expect(screen.queryByTestId('notice-topic-shift')).toBeNull();
+  });
+
+  it('exports notice stack as Markdown and JSON and copies via buttons', () => {
+    expect(formatChatNoticeStackMarkdown([false, null])).toContain('_当前无活动提示_');
+    const sample = [
+      n('topic-shift', CHAT_NOTICE_PRIORITY.topicShift),
+      n('error', CHAT_NOTICE_PRIORITY.error),
+    ];
+    const md = formatChatNoticeStackMarkdown(sample, true);
+    expect(md).toContain('# 聊天提示栈摘要');
+    expect(md).toContain('**[1] error** (priority=30)');
+    const parsed = JSON.parse(formatChatNoticeStackJson(sample, false));
+    expect(parsed.total).toBe(2);
+    expect(parsed.notices[0].key).toBe('error');
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<ChatNoticeStack notices={sample} />);
+    fireEvent.click(screen.getByTestId('chat-notice-stack-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('聊天提示栈摘要'));
+    fireEvent.click(screen.getByTestId('chat-notice-stack-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"key": "error"'));
   });
 });
 
