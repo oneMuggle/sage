@@ -11,6 +11,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import {
   extractTemplateVars,
+  formatTemplateFillJson,
+  formatTemplateFillMarkdown,
   resolveTemplate,
   TemplateFillDialog,
 } from '../TemplateFillDialog';
@@ -80,5 +82,27 @@ describe('TemplateFillDialog — 组件', () => {
   it('无变量模板显示提示', () => {
     renderDialog('直接可用的提示词');
     expect(screen.getByText(/无需填写变量/)).toBeInTheDocument();
+  });
+
+  it('exports template fill summary as Markdown and JSON', () => {
+    expect(formatTemplateFillMarkdown('无变量文本', {})).toContain('- **变量数量**: 0');
+    const md = formatTemplateFillMarkdown('你好 {{name}}，关于 {{topic}}', {
+      name: '小李',
+    });
+    expect(md).toContain('# Prompt 模板变量填充摘要 (Template Fill Summary)');
+    expect(md).toContain('- **name**: 小李');
+    expect(md).toContain('- **topic**: (未填写)');
+    const parsed = JSON.parse(
+      formatTemplateFillJson('你好 {{name}}', { name: '小李' }),
+    );
+    expect(parsed.resolved).toBe('你好 小李');
+
+    renderDialog('请审查 {{module}}', vi.fn(), vi.fn());
+    const mdBtn = screen.getByTestId('tplfill-copy-md');
+    const jsonBtn = screen.getByTestId('tplfill-copy-json');
+    fireEvent.click(mdBtn);
+    expect(mdBtn.textContent).toContain('已复制 MD');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toContain('已复制 JSON');
   });
 });

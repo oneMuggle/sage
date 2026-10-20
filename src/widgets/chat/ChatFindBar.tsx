@@ -27,6 +27,43 @@ interface ChatFindBarProps {
   messages: ReadonlyArray<FindableMessage>;
 }
 
+export function formatChatFindResultsMarkdown(
+  query: string,
+  matches: ReadonlyArray<{ messageId: string; occurrence: number }>,
+): string {
+  const lines = [
+    '# 会话内查找结果 (Chat Find Results)',
+    '',
+    `- **查找词**: ${query || '-'}`,
+    `- **命中总数**: ${matches.length}`,
+  ];
+  if (matches.length === 0) {
+    lines.push('', '_无匹配结果_');
+  } else {
+    lines.push('', '## 命中列表');
+    matches.forEach((m, idx) => {
+      lines.push(`- **[${idx + 1}]** message \`${m.messageId}\` (occurrence #${m.occurrence + 1})`);
+    });
+  }
+  return lines.join('\n');
+}
+
+export function formatChatFindResultsJson(
+  query: string,
+  matches: ReadonlyArray<{ messageId: string; occurrence: number }>,
+): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      query,
+      total: matches.length,
+      matches,
+    },
+    null,
+    2,
+  );
+}
+
 /** 常驻外壳：只监听打开事件；关闭时不渲染任何内容 */
 export function ChatFindBar({ messages }: ChatFindBarProps) {
   // 0 = 关闭；每次 Ctrl+F 递增，已打开时用于重新聚焦输入框
@@ -57,6 +94,8 @@ function ChatFindPanel({ messages, focusNonce, onClose }: ChatFindPanelProps) {
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
   const [current, setCurrent] = useState(-1);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 打开或再次 Ctrl+F：聚焦并全选，方便直接输入新的查找词
@@ -130,6 +169,28 @@ function ChatFindPanel({ messages, focusNonce, onClose }: ChatFindPanelProps) {
       ? t('chat.find_no_results')
       : '';
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(formatChatFindResultsMarkdown(query, matches));
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(formatChatFindResultsJson(query, matches));
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="sticky top-0 z-20 h-0">
       <div
@@ -178,6 +239,22 @@ function ChatFindPanel({ messages, focusNonce, onClose }: ChatFindPanelProps) {
           data-testid="chat-find-next"
         >
           <ChevronDown className="w-3.5 h-3.5" />
+        </button>
+        <button
+          type="button"
+          data-testid="chat-find-copy-md"
+          onClick={() => void handleCopyMarkdown()}
+          className="px-1 py-0.5 rounded border border-border text-ui-2xs text-text-secondary hover:bg-bg-hover"
+        >
+          {copiedMd ? '已复制 MD' : '复制 MD'}
+        </button>
+        <button
+          type="button"
+          data-testid="chat-find-copy-json"
+          onClick={() => void handleCopyJson()}
+          className="px-1 py-0.5 rounded border border-border text-ui-2xs text-text-secondary hover:bg-bg-hover"
+        >
+          {copiedJson ? '已复制 JSON' : '复制 JSON'}
         </button>
         <button
           type="button"

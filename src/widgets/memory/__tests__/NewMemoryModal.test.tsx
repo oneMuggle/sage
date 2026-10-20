@@ -27,7 +27,11 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 }
 
 import { memoryApi } from '../../../shared/api';
-import { NewMemoryModal } from '../NewMemoryModal';
+import {
+  formatNewMemoryDraftJson,
+  formatNewMemoryDraftMarkdown,
+  NewMemoryModal,
+} from '../NewMemoryModal';
 
 vi.mock('../../../shared/api', () => ({
   memoryApi: {
@@ -71,6 +75,30 @@ describe('NewMemoryModal (fix/security-perf-quickwins §1.3b g)', () => {
     });
     fireEvent.click(screen.getByTestId('new-memory-copy-draft-json-btn'));
     expect(screen.getByTestId('new-memory-copy-draft-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByTestId('new-memory-copy-draft-md-btn'));
+    expect(screen.getByTestId('new-memory-copy-draft-md-btn')).toHaveTextContent('已复制MD');
+    expect(
+      formatNewMemoryDraftMarkdown({
+        content: '',
+        memoryType: 'episodic',
+        importance: 5,
+      }),
+    ).toContain('_空_');
+    expect(
+      formatNewMemoryDraftMarkdown({
+        content: '偏好使用 pnpm',
+        memoryType: 'semantic',
+        importance: 8,
+      }),
+    ).toContain('语义记忆 (semantic)');
+    const parsed = JSON.parse(
+      formatNewMemoryDraftJson({
+        content: '偏好使用 pnpm',
+        memoryType: 'semantic',
+        importance: 8,
+      }),
+    );
+    expect(parsed.importance).toBe(8);
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
 
     await waitFor(() => {
