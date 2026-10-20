@@ -175,4 +175,40 @@ describe('ArenaAccounts page', () => {
     expect(await screen.findByTestId('observation-feed')).toBeInTheDocument();
     expect(screen.getByTestId('observation-empty')).toHaveTextContent('未启动');
   });
+
+  it('exports ArenaAccounts audit snapshot and JSON helpers and renders copy controls', async () => {
+    mocks.listAccounts.mockResolvedValue([SAMPLE_ACCOUNT]);
+    const m = await import('../ArenaAccounts');
+    const snapshot = m.formatArenaAccountsAuditSnapshot({
+      accountCount: 3,
+      availableCount: 2,
+      disabled: false,
+      loading: false,
+      hasError: false,
+    });
+    expect(snapshot).toContain('# Arena 账号审计快照');
+    expect(snapshot).toContain('账号总数: 3');
+    expect(snapshot).toContain('可用账号: 2');
+
+    const json = JSON.parse(
+      m.formatArenaAccountsAuditJson({
+        accountCount: 0,
+        availableCount: 0,
+        disabled: true,
+        loading: false,
+        hasError: true,
+      }),
+    );
+    expect(json).toEqual({
+      accountCount: 0,
+      availableCount: 0,
+      disabled: true,
+      loading: false,
+      hasError: true,
+    });
+
+    await renderPage();
+    expect(await screen.findByTestId('arena-accounts-copy-audit')).toBeInTheDocument();
+    expect(screen.getByTestId('arena-accounts-copy-json')).toBeInTheDocument();
+  });
 });

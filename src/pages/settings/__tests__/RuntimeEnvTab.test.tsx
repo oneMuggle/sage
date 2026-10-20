@@ -23,7 +23,11 @@ vi.mock('../../../shared/api/runtimeApi', () => ({
   },
 }));
 
-import { RuntimeEnvTab } from '../RuntimeEnvTab';
+import {
+  formatRuntimeEnvTabAuditJson,
+  formatRuntimeEnvTabAuditSnapshot,
+  RuntimeEnvTab,
+} from '../RuntimeEnvTab';
 
 const RUNTIME = {
   language: 'python',
@@ -178,5 +182,39 @@ describe('RuntimeEnvTab 试跑', () => {
     expect(execMock).toHaveBeenCalledWith(
       expect.objectContaining({ language: 'python', runtime_path: 'C:/py/python.exe' }),
     );
+  });
+
+  it('exports RuntimeEnvTab audit snapshot and JSON helpers and renders copy controls', async () => {
+    render(<RuntimeEnvTab />);
+    expect(screen.getByTestId('runtime-env-tab-copy-audit')).toBeInTheDocument();
+    expect(screen.getByTestId('runtime-env-tab-copy-json')).toBeInTheDocument();
+
+    const snapshot = formatRuntimeEnvTabAuditSnapshot({
+      probeKind: 'ok',
+      runtimeCount: 1,
+      selectedRuntime: 'C:/py/python.exe',
+      diagnoseKind: 'ok',
+      execKind: 'idle',
+    });
+    expect(snapshot).toContain('# 开发环境审计快照');
+    expect(snapshot).toContain('可用运行时数: 1');
+    expect(snapshot).toContain('当前选中运行时: C:/py/python.exe');
+
+    const json = JSON.parse(
+      formatRuntimeEnvTabAuditJson({
+        probeKind: 'loading',
+        runtimeCount: 0,
+        selectedRuntime: null,
+        diagnoseKind: 'idle',
+        execKind: 'idle',
+      }),
+    );
+    expect(json).toEqual({
+      probeKind: 'loading',
+      runtimeCount: 0,
+      selectedRuntime: null,
+      diagnoseKind: 'idle',
+      execKind: 'idle',
+    });
   });
 });

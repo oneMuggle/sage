@@ -14,7 +14,7 @@ import { DensityProvider } from '../../../entities/density/useDensity';
 import { FontProvider } from '../../../entities/font/useFontSettings';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { BasicTab } from '../BasicTab';
+import { BasicTab, formatBasicTabAuditJson, formatBasicTabAuditSnapshot } from '../BasicTab';
 
 // ==================== Mocks ====================
 
@@ -197,6 +197,46 @@ describe('BasicTab — LLM 重试 section', () => {
 
     await waitFor(() => {
       expect(mocks.updateSettings).toHaveBeenCalledWith({ llmRetryMaxDelayS: 60 });
+    });
+  });
+
+  it('exports BasicTab audit snapshot and JSON helpers and renders copy controls', () => {
+    renderTab();
+    expect(screen.getByTestId('basic-tab-copy-audit')).toBeTruthy();
+    expect(screen.getByTestId('basic-tab-copy-json')).toBeTruthy();
+
+    const snapshot = formatBasicTabAuditSnapshot({
+      streaming: true,
+      llmRetryMaxAttempts: 3,
+      llmRetryBaseDelayS: 1,
+      llmRetryMaxDelayS: 30,
+      timezone: 'Asia/Shanghai',
+      logTimezone: 'UTC',
+      demoMode: false,
+    });
+    expect(snapshot).toContain('# 基础设置审计快照');
+    expect(snapshot).toContain('流式输出: 开启');
+    expect(snapshot).toContain('IANA 时区: Asia/Shanghai');
+
+    const json = JSON.parse(
+      formatBasicTabAuditJson({
+        streaming: false,
+        llmRetryMaxAttempts: 0,
+        llmRetryBaseDelayS: 2,
+        llmRetryMaxDelayS: 60,
+        timezone: '',
+        logTimezone: '',
+        demoMode: true,
+      }),
+    );
+    expect(json).toEqual({
+      streaming: false,
+      llmRetryMaxAttempts: 0,
+      llmRetryBaseDelayS: 2,
+      llmRetryMaxDelayS: 60,
+      timezone: 'Asia/Shanghai',
+      logTimezone: 'UTC',
+      demoMode: true,
     });
   });
 });

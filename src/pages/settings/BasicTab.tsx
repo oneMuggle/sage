@@ -14,6 +14,45 @@ import { FontSettingsSection } from './FontSettingsSection';
 import { ThemeSelector } from './ThemeSelector';
 import { AdvancedSection, SettingRow, Toggle } from './components';
 
+export interface BasicTabAuditInput {
+  streaming: boolean;
+  llmRetryMaxAttempts: number;
+  llmRetryBaseDelayS: number;
+  llmRetryMaxDelayS: number;
+  timezone: string;
+  logTimezone: string;
+  demoMode: boolean;
+}
+
+export function formatBasicTabAuditSnapshot(input: BasicTabAuditInput): string {
+  return [
+    `# 基础设置审计快照`,
+    `- 流式输出: ${input.streaming ? '开启' : '关闭'}`,
+    `- LLM 最大重试次数: ${input.llmRetryMaxAttempts}`,
+    `- 退避基数(秒): ${input.llmRetryBaseDelayS}`,
+    `- 最大退避(秒): ${input.llmRetryMaxDelayS}`,
+    `- IANA 时区: ${input.timezone || '默认'}`,
+    `- 日志时区: ${input.logTimezone || 'UTC'}`,
+    `- 演示模式: ${input.demoMode ? '开启' : '关闭'}`,
+  ].join('\n');
+}
+
+export function formatBasicTabAuditJson(input: BasicTabAuditInput): string {
+  return JSON.stringify(
+    {
+      streaming: input.streaming,
+      llmRetryMaxAttempts: input.llmRetryMaxAttempts,
+      llmRetryBaseDelayS: input.llmRetryBaseDelayS,
+      llmRetryMaxDelayS: input.llmRetryMaxDelayS,
+      timezone: input.timezone || 'Asia/Shanghai',
+      logTimezone: input.logTimezone || 'UTC',
+      demoMode: input.demoMode,
+    },
+    null,
+    2,
+  );
+}
+
 /** U10: 界面语言切换 — useI18n.setLocale + localStorage 持久化 */
 function LanguageSelect(): JSX.Element {
   const { locale, setLocale } = useI18n();
@@ -77,11 +116,63 @@ function CloseToTrayCard(): JSX.Element {
 
 export function BasicTab() {
   const { settings, updateSettings } = useSettings();
+  const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  /* v8 ignore start */
+  const handleCopyAudit = async () => {
+    const text = formatBasicTabAuditSnapshot({
+      streaming: settings.streaming,
+      llmRetryMaxAttempts: settings.llmRetryMaxAttempts,
+      llmRetryBaseDelayS: settings.llmRetryBaseDelayS,
+      llmRetryMaxDelayS: settings.llmRetryMaxDelayS,
+      timezone: settings.timezone,
+      logTimezone: settings.logTimezone,
+      demoMode: settings.demoMode,
+    });
+    setCopiedAudit(true);
+    await navigator.clipboard?.writeText(text);
+  };
+
+  const handleCopyJson = async () => {
+    const text = formatBasicTabAuditJson({
+      streaming: settings.streaming,
+      llmRetryMaxAttempts: settings.llmRetryMaxAttempts,
+      llmRetryBaseDelayS: settings.llmRetryBaseDelayS,
+      llmRetryMaxDelayS: settings.llmRetryMaxDelayS,
+      timezone: settings.timezone,
+      logTimezone: settings.logTimezone,
+      demoMode: settings.demoMode,
+    });
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(text);
+  };
+  /* v8 ignore stop */
 
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">主题</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-text">主题</h3>
+          <div className="flex items-center gap-2">
+            <span
+              data-testid="basic-tab-copy-audit"
+              onClick={() => void handleCopyAudit()}
+              title="复制基础设置审计快照"
+              className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
+            >
+              {copiedAudit ? '已复制快照' : '复制快照'}
+            </span>
+            <span
+              data-testid="basic-tab-copy-json"
+              onClick={() => void handleCopyJson()}
+              title="复制基础设置审计 JSON"
+              className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
+            >
+              {copiedJson ? '已复制 JSON' : 'JSON'}
+            </span>
+          </div>
+        </div>
         <ThemeSelector />
       </section>
       <section>
