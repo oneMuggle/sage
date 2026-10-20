@@ -40,6 +40,12 @@ describe('TaskCenterWidget', () => {
     fireEvent.click(screen.getByTestId('task-center-toggle'));
     expect(screen.getByTestId('task-center-list')).toBeInTheDocument();
     expect(screen.getByText('生成 PPT')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('task-center-copy-md-btn'));
+    expect(screen.getByTestId('task-center-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('task-center-copy-json-btn'));
+    expect(screen.getByTestId('task-center-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByTestId('task-center-item-copy-json-office:generate'));
+    expect(screen.getByTestId('task-center-item-copy-json-office:generate')).toHaveTextContent('已复制JSON');
 
     fireEvent.click(screen.getByTestId('task-center-toggle'));
     expect(screen.queryByTestId('task-center-list')).not.toBeInTheDocument();

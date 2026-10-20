@@ -1153,3 +1153,15 @@
   - 在每条待办事项右侧新增 **`复制MD`**（`data-testid="todo-item-copy-md-${todo.id}"`）与 **`复制JSON`**（`data-testid="todo-item-copy-json-${todo.id}"`）。
 - **单元测试与门禁验证**：
   - 扩展 `MemoryBrowser.test.tsx`、`UserProfileCard.test.tsx`、`MemoryItem.test.tsx`、`NewMemoryModal.test.tsx` 与 `TodoItem.test.tsx`（37 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P86 — 待办管理页、定时任务页、全局任务中心与编排泳道看板/验收抽屉 MD/JSON 导出（已完成）
+
+- **Phase 4.1 `TodoPage` 待办管理页与单行待办 MD/JSON 导出（`src/pages/TodoPage.tsx`）**：
+  - 在待办管理页顶部操作区新增 **`复制待办MD`**（`data-testid="todo-page-copy-md-btn"`）与 **`复制待办JSON`**（`data-testid="todo-page-copy-json-btn"`），并在每行 `TodoRow` 新增 **`复制JSON`**（`data-testid="todo-row-copy-json-${todo.id}"`）。
+- **Phase 4.1 `ScheduledTasks` 定时任务管理页与单任务 MD/JSON 导出（`src/pages/ScheduledTasks.tsx`）**：
+  - 在定时任务页顶部操作栏新增 **`复制定时MD`**（`data-testid="scheduled-tasks-copy-md-btn"`）与 **`复制定时JSON`**（`data-testid="scheduled-tasks-copy-json-btn"`），并在每条定时任务行新增 **`复制JSON`**（`data-testid="scheduled-task-copy-json-${task.id}"`）。
+- **Phase 4.1 `TaskCenterWidget` 全局任务中心胶囊与单条任务 MD/JSON 导出（`src/widgets/task-center/TaskCenterWidget.tsx`）**：
+  - 在展开的任务中心浮层顶部新增 **`复制任务MD`**（`data-testid="task-center-copy-md-btn"`）与 **`复制任务JSON`**（`data-testid="task-center-copy-json-btn"`），并在每条任务条目新增 **`复制JSON`**（`data-testid="task-center-item-copy-json-${entry.id}"`）。
+- **Phase 4.4 `LaneBoard` 与 `LaneDetailDrawer` 编排泳道看板及验收详情抽屉 MD/JSON 导出（`src/widgets/orchestration/LaneBoard.tsx`, `src/widgets/orchestration/LaneDetailDrawer.tsx`）**：
+  - 在 `LaneBoard` 顶部新增 **`复制泳道MD`**（`data-testid="lane-board-copy-md-btn"`）、**`复制泳道JSON`**（`data-testid="lane-board-copy-json-btn"`）及单泳道卡片 **`复制JSON`**（`data-testid="lane-card-copy-json-${lane.lane_id}"`）；在 `LaneDetailDrawer` 头部新增 **`复制验收MD`**（`data-testid="lane-drawer-copy-md-btn"`）与 **`复制验收JSON`**（`data-testid="lane-drawer-copy-json-btn"`）。
+- **单元测试与门禁验证**：
+  - 扩展 `TodoPage.test.tsx`、`ScheduledTasks.test.tsx`、`TaskCenterWidget.test.tsx`、`Orchestration.test.tsx` 与 `LaneDetailDrawer.test.tsx`（29 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
