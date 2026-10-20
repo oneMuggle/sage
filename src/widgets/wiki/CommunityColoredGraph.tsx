@@ -40,6 +40,9 @@ export function CommunityColoredGraph({
   const [communities, setCommunities] = useState<CommunityInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCommunity, setSelectedCommunity] = useState<number | null>(null);
+  const [copiedCommMd, setCopiedCommMd] = useState(false);
+  const [copiedCommJson, setCopiedCommJson] = useState(false);
+  const [copiedItemId, setCopiedItemId] = useState<number | null>(null);
 
   // 加载社区数据
   useEffect(() => {
@@ -91,6 +94,56 @@ export function CommunityColoredGraph({
     };
   }, [data, communities, selectedCommunity]);
 
+  const handleCopyCommMd = () => {
+    setCopiedCommMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedCommMd(false), 2000);
+    const lines = [
+      '# Wiki 社区图谱报告',
+      '',
+      `- 项目路径: ${projectPath ?? ''}`,
+      `- 社区数量: ${communities.length}`,
+      `- 选中社区: ${selectedCommunity ?? '全部'}`,
+      '',
+      '## 社区列表',
+      ...communities.map(
+        (c) =>
+          `- **社区 ${c.community_id}**: ${c.size} 节点 · 内聚度 ${(c.cohesion * 100).toFixed(0)}% · 成员: ${c.members.join(', ')}`,
+      ),
+    ];
+    void navigator.clipboard?.writeText(lines.join('\n'));
+    /* v8 ignore stop */
+  };
+
+  const handleCopyCommJson = () => {
+    setCopiedCommJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedCommJson(false), 2000);
+    const payload = {
+      projectPath: projectPath ?? null,
+      selectedCommunity,
+      totalCommunities: communities.length,
+      communities,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
+
+  const handleCopyCommunityItem = (e: React.MouseEvent, c: CommunityInfo) => {
+    e.stopPropagation();
+    setCopiedItemId(c.community_id);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedItemId(null), 2000);
+    const payload = {
+      projectPath: projectPath ?? null,
+      ...c,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
+
   // 加载中显示
   if (loading) {
     return (
@@ -121,38 +174,69 @@ export function CommunityColoredGraph({
           className="absolute top-2 right-2 rounded-md border border-border bg-surface/95 p-3 text-xs shadow-sm max-h-96 overflow-y-auto"
           style={{ minWidth: 200 }}
         >
-          <div className="mb-2 font-semibold flex items-center justify-between">
+          <div className="mb-2 font-semibold flex items-center justify-between gap-2">
             <span>社区 ({communities.length})</span>
-            {selectedCommunity !== null && (
+            <div className="flex items-center gap-1">
               <button
-                className="text-accent hover:underline"
-                onClick={() => setSelectedCommunity(null)}
+                type="button"
+                data-testid="wiki-community-copy-md-btn"
+                onClick={handleCopyCommMd}
+                className="px-1.5 py-0.5 text-ui-2xs font-normal rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
               >
-                清除
+                {copiedCommMd ? '已复制MD' : '复制社区MD'}
               </button>
-            )}
+              <button
+                type="button"
+                data-testid="wiki-community-copy-json-btn"
+                onClick={handleCopyCommJson}
+                className="px-1.5 py-0.5 text-ui-2xs font-normal rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+              >
+                {copiedCommJson ? '已复制JSON' : '复制社区JSON'}
+              </button>
+              {selectedCommunity !== null && (
+                <button
+                  className="text-accent hover:underline ml-1"
+                  onClick={() => setSelectedCommunity(null)}
+                >
+                  清除
+                </button>
+              )}
+            </div>
           </div>
           <div className="space-y-1">
             {communities.map((c) => {
               const color = communityColors.get(c.community_id) || '#94a3b8';
               const isSelected = selectedCommunity === c.community_id;
               return (
-                <button
+                <div
                   key={c.community_id}
                   className={`w-full flex items-center gap-2 px-2 py-1 rounded ${
                     isSelected ? 'bg-accent/10' : 'hover:bg-muted'
                   }`}
-                  onClick={() => setSelectedCommunity(isSelected ? null : c.community_id)}
                 >
-                  <span
-                    className="inline-block h-3 w-3 rounded-full flex-shrink-0"
-                    style={{ background: color }}
-                  />
-                  <span className="flex-1 text-left">
-                    社区 {c.community_id} ({c.size})
-                  </span>
-                  <span className="text-muted text-ui-xs">{(c.cohesion * 100).toFixed(0)}%</span>
-                </button>
+                  <button
+                    type="button"
+                    className="flex-1 flex items-center gap-2 text-left"
+                    onClick={() => setSelectedCommunity(isSelected ? null : c.community_id)}
+                  >
+                    <span
+                      className="inline-block h-3 w-3 rounded-full flex-shrink-0"
+                      style={{ background: color }}
+                    />
+                    <span className="flex-1 text-left">
+                      社区 {c.community_id} ({c.size})
+                    </span>
+                    <span className="text-muted text-ui-xs">{(c.cohesion * 100).toFixed(0)}%</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid={`wiki-community-item-copy-json-${c.community_id}`}
+                    onClick={(e) => handleCopyCommunityItem(e, c)}
+                    className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+                  >
+                    {copiedItemId === c.community_id ? '已复制' : '复制JSON'}
+                  </button>
+                </div>
               );
             })}
           </div>

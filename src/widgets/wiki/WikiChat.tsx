@@ -29,6 +29,7 @@ function Citation({ citation, projectPath }: { citation: WikiCitation; projectPa
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [copiedCitationJson, setCopiedCitationJson] = useState(false);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -50,17 +51,40 @@ function Citation({ citation, projectPath }: { citation: WikiCitation; projectPa
       if (alive.current) setLoading(false);
     }
   };
+  const handleCopyCitationJson = () => {
+    setCopiedCitationJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedCitationJson(false), 2000);
+    const payload = {
+      projectPath,
+      citation,
+      location,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
   return (
     <div className="text-xs border-t border-border/30 pt-2">
-      <button
-        className="text-primary hover:underline text-left"
-        title={citation.excerpt}
-        aria-expanded={expanded}
-        disabled={loading}
-        onClick={() => void locate()}
-      >
-        [{citation.id}] {citation.title} · 第 {citation.line_start}–{citation.line_end} 行
-      </button>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          className="text-primary hover:underline text-left"
+          title={citation.excerpt}
+          aria-expanded={expanded}
+          disabled={loading}
+          onClick={() => void locate()}
+        >
+          [{citation.id}] {citation.title} · 第 {citation.line_start}–{citation.line_end} 行
+        </button>
+        <button
+          type="button"
+          data-testid={`wiki-chat-citation-copy-json-${citation.id}`}
+          onClick={handleCopyCitationJson}
+          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+        >
+          {copiedCitationJson ? '已复制JSON' : '复制引用JSON'}
+        </button>
+      </div>
       {expanded && (
         <div className="mt-2 space-y-2">
           <p className="text-muted">生成回答时的证据</p>
@@ -113,6 +137,9 @@ function ProjectChat({ projectPath }: { projectPath: string }) {
   const [sourceError, setSourceError] = useState('');
   const [sourceLoading, setSourceLoading] = useState(true);
   const [reload, setReload] = useState(0);
+  const [copiedSourcesJson, setCopiedSourcesJson] = useState(false);
+  const [copiedChatMd, setCopiedChatMd] = useState(false);
+  const [copiedChatJson, setCopiedChatJson] = useState(false);
   const [request, setRequest] = useState<WikiChatStreamRequest>();
   const pending = useRef(false);
   const stream = useWikiChatStream(streamId, request);
@@ -194,6 +221,49 @@ function ProjectChat({ projectPath }: { projectPath: string }) {
     });
     setStreamId(`wiki-chat-${crypto.randomUUID()}`);
   };
+  const handleCopySourcesJson = () => {
+    setCopiedSourcesJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedSourcesJson(false), 2000);
+    const payload = {
+      projectPath,
+      selectedCount: selected.length,
+      totalCount: paths.length,
+      selectedPaths: selected,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
+  const handleCopyChatMd = () => {
+    setCopiedChatMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedChatMd(false), 2000);
+    const lines = [
+      '# Wiki 问答对话导出',
+      '',
+      `- 项目路径: ${projectPath}`,
+      `- 消息数量: ${messages.length}`,
+      '',
+      ...messages.map((m, idx) => `### [${idx + 1}] ${m.role === 'user' ? '提问' : '回答'}\n\n${m.content}`),
+    ];
+    void navigator.clipboard?.writeText(lines.join('\n'));
+    /* v8 ignore stop */
+  };
+  const handleCopyChatJson = () => {
+    setCopiedChatJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedChatJson(false), 2000);
+    const payload = {
+      projectPath,
+      selectedSources: selected,
+      messageCount: messages.length,
+      messages,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <details className="border-b border-border p-3" open>
@@ -224,6 +294,34 @@ function ProjectChat({ projectPath }: { projectPath: string }) {
               <button disabled={loading} onClick={() => setSelected([])}>
                 清空选择
               </button>
+              <button
+                type="button"
+                data-testid="wiki-chat-sources-copy-json-btn"
+                onClick={handleCopySourcesJson}
+                className="px-2 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+              >
+                {copiedSourcesJson ? '已复制来源JSON' : '复制来源JSON'}
+              </button>
+              {messages.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    data-testid="wiki-chat-copy-md-btn"
+                    onClick={handleCopyChatMd}
+                    className="px-2 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+                  >
+                    {copiedChatMd ? '已复制对话MD' : '复制对话MD'}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="wiki-chat-copy-json-btn"
+                    onClick={handleCopyChatJson}
+                    className="px-2 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+                  >
+                    {copiedChatJson ? '已复制对话JSON' : '复制对话JSON'}
+                  </button>
+                </>
+              )}
             </div>
             <div className="max-h-32 overflow-auto">
               {paths.map((path) => (
