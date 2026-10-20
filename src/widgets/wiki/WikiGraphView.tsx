@@ -259,7 +259,13 @@ export function WikiGraphView({ data, query, onNodeClick, nodeColorFn }: WikiGra
         />
       </ReactFlow>
       <Legend matchedCount={matchedIds.size} totalCount={data.nodes.length} />
-      <Stats nodeCount={data.nodes.length} edgeCount={data.edges.length} />
+      <Stats
+        nodeCount={data.nodes.length}
+        edgeCount={data.edges.length}
+        data={data}
+        query={query}
+        matchedCount={matchedIds.size}
+      />
     </div>
   );
 }
@@ -380,12 +386,81 @@ function Legend({ matchedCount, totalCount }: { matchedCount: number; totalCount
   );
 }
 
-function Stats({ nodeCount, edgeCount }: { nodeCount: number; edgeCount: number }) {
+function Stats({
+  nodeCount,
+  edgeCount,
+  data,
+  query,
+  matchedCount,
+}: {
+  nodeCount: number;
+  edgeCount: number;
+  data: GraphData;
+  query?: string;
+  matchedCount: number;
+}) {
+  const [copiedGraphMd, setCopiedGraphMd] = useState(false);
+  const [copiedGraphJson, setCopiedGraphJson] = useState(false);
+
+  const handleCopyGraphMd = () => {
+    setCopiedGraphMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedGraphMd(false), 2000);
+    const lines = [
+      '# Wiki 知识图谱报告',
+      '',
+      `- 节点数: ${nodeCount}`,
+      `- 边数: ${edgeCount}`,
+      `- 匹配节点: ${matchedCount}`,
+      `- 搜索词: ${query ?? ''}`,
+      '',
+      '## 节点列表',
+      ...data.nodes.map((n) => `- **${n.label}** (\`${n.id}\`) · 类型: ${n.page_type ?? 'default'}`),
+    ];
+    void navigator.clipboard?.writeText(lines.join('\n'));
+    /* v8 ignore stop */
+  };
+
+  const handleCopyGraphJson = () => {
+    setCopiedGraphJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedGraphJson(false), 2000);
+    const payload = {
+      nodeCount,
+      edgeCount,
+      matchedCount,
+      query: query ?? null,
+      nodes: data.nodes,
+      edges: data.edges,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
+
   return (
-    <div className="absolute bottom-2 left-2 rounded-md border border-border bg-surface/95 px-3 py-2 text-xs shadow-sm">
-      <span className="font-semibold">统计：</span>
-      <span className="ml-2">{nodeCount} 节点</span>
-      <span className="ml-2">{edgeCount} 边</span>
+    <div className="absolute bottom-2 left-2 flex items-center gap-2 rounded-md border border-border bg-surface/95 px-3 py-2 text-xs shadow-sm">
+      <div>
+        <span className="font-semibold">统计：</span>
+        <span className="ml-2">{nodeCount} 节点</span>
+        <span className="ml-2">{edgeCount} 边</span>
+      </div>
+      <button
+        type="button"
+        data-testid="wiki-graph-copy-md-btn"
+        onClick={handleCopyGraphMd}
+        className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+      >
+        {copiedGraphMd ? '已复制MD' : '复制图谱MD'}
+      </button>
+      <button
+        type="button"
+        data-testid="wiki-graph-copy-json-btn"
+        onClick={handleCopyGraphJson}
+        className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+      >
+        {copiedGraphJson ? '已复制JSON' : '复制图谱JSON'}
+      </button>
     </div>
   );
 }

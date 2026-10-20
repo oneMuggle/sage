@@ -1131,3 +1131,13 @@
   - 在顶部工具栏右侧新增 **`复制项目JSON`**（`data-testid="wiki-toolbar-copy-json-btn"`），支持一键复制当前 Wiki 项目上下文快照。
 - **单元测试与门禁验证**：
   - 扩展 `WikiEditor.test.tsx` 覆盖四大组件渲染、交互与 MD/JSON 导出，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P84 — Wiki 问答对话/引用、知识图谱与社区聚类、左右侧栏及导入进度 MD/JSON 导出（已完成）
+
+- **Phase 4.3 `WikiChat` Wiki 问答对话、已选来源与单条引用证据 MD/JSON 导出（`src/widgets/wiki/WikiChat.tsx`）**：
+  - 在来源选择控制栏新增 **`复制来源JSON`**（`data-testid="wiki-chat-sources-copy-json-btn"`）、**`复制对话MD`**（`data-testid="wiki-chat-copy-md-btn"`）与 **`复制对话JSON`**（`data-testid="wiki-chat-copy-json-btn"`），并在每条 `Citation` 卡片头部新增 **`复制引用JSON`**（`data-testid="wiki-chat-citation-copy-json-${citation.id}"`）。
+- **Phase 4.3 `WikiGraphView` 与 `CommunityColoredGraph` 知识图谱及社区聚类 MD/JSON 导出（`src/widgets/wiki/WikiGraphView.tsx`, `src/widgets/wiki/CommunityColoredGraph.tsx`）**：
+  - 在图谱统计浮层新增 **`复制图谱MD`**（`data-testid="wiki-graph-copy-md-btn"`）与 **`复制图谱JSON`**（`data-testid="wiki-graph-copy-json-btn"`）；在社区聚类图例浮层新增 **`复制社区MD`**（`data-testid="wiki-community-copy-md-btn"`）、**`复制社区JSON`**（`data-testid="wiki-community-copy-json-btn"`）与单社区 **`复制JSON`**（`data-testid="wiki-community-item-copy-json-${c.community_id}"`）。
+- **Phase 4.3 `LeftPanel`、`RightPanel` 与 `WikiIngestProgress` 侧栏文件树/预览及导入进度 MD/JSON 导出（`src/widgets/wiki/LeftPanel.tsx`, `src/widgets/wiki/RightPanel.tsx`, `src/widgets/wiki/WikiIngestProgress.tsx`）**：
+  - 在左侧栏文件树头部新增 **`复制树MD`**（`data-testid="wiki-file-tree-copy-md-btn"`）与 **`复制树JSON`**（`data-testid="wiki-file-tree-copy-json-btn"`），在右侧栏文档预览头部新增 **`复制预览MD`**（`data-testid="wiki-right-preview-copy-md-btn"`）与 **`复制预览JSON`**（`data-testid="wiki-right-preview-copy-json-btn"`），并在导入进度横幅新增 **`复制进度JSON`**（`data-testid="wiki-ingest-copy-json-btn"`）。
+- **单元测试与门禁验证**：
+  - 扩展 `WikiEditor.test.tsx` 与 `WikiChat.sources.test.tsx`（全部单测通过，变更文件分支覆盖率 `> 82%`），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
