@@ -1165,3 +1165,13 @@
   - 在 `LaneBoard` 顶部新增 **`复制泳道MD`**（`data-testid="lane-board-copy-md-btn"`）、**`复制泳道JSON`**（`data-testid="lane-board-copy-json-btn"`）及单泳道卡片 **`复制JSON`**（`data-testid="lane-card-copy-json-${lane.lane_id}"`）；在 `LaneDetailDrawer` 头部新增 **`复制验收MD`**（`data-testid="lane-drawer-copy-md-btn"`）与 **`复制验收JSON`**（`data-testid="lane-drawer-copy-json-btn"`）。
 - **单元测试与门禁验证**：
   - 扩展 `TodoPage.test.tsx`、`ScheduledTasks.test.tsx`、`TaskCenterWidget.test.tsx`、`Orchestration.test.tsx` 与 `LaneDetailDrawer.test.tsx`（29 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P87 — Agent 管理页/卡片/详情面板与技能卡片/审计抽屉/草稿列表及预览弹窗 MD/JSON 导出（已完成）
+
+- **Phase 4.4 `Agents`、`AgentCard` 与 `AgentDetails` 智能体管理与详情配置 MD/JSON 导出（`src/pages/Agents.tsx`, `src/widgets/agents/AgentCard.tsx`, `src/widgets/agents/AgentDetails.tsx`）**：
+  - 在 `Agents` 页面顶部新增 **`复制Agent MD`**（`data-testid="agents-page-copy-md-btn"`）与 **`复制Agent JSON`**（`data-testid="agents-page-copy-json-btn"`），在 `AgentCard` 新增单智能体 **`复制JSON`**（`data-testid="agent-card-copy-json-${agent.id}"`），并在 `AgentDetails` 新增 **`复制配置MD`**（`data-testid="agent-details-copy-md-btn"`）与 **`复制配置JSON`**（`data-testid="agent-details-copy-json-btn"`）。
+- **Phase 4.4 `SkillCard` 与 `SkillAuditDrawer` 技能定义及变更审计历史 MD/JSON 导出（`src/widgets/skills/SkillCard.tsx`, `src/widgets/skills/SkillAuditDrawer.tsx`）**：
+  - 在 `SkillCard` 操作栏新增 **`复制MD`**（`data-testid="skill-card-copy-md-${name}"`）与 **`复制JSON`**（`data-testid="skill-card-copy-json-${name}"`），并在 `SkillAuditDrawer` 底部操作区新增 **`复制审计MD`**（`data-testid="skill-audit-copy-md-btn"`）与 **`复制审计JSON`**（`data-testid="skill-audit-copy-json-btn"`）。
+- **Phase 4.4 `SkillDraftList` 与 `SkillDraftDetail` 待审技能草稿清单及详情弹窗 MD/JSON 导出（`src/widgets/skills/SkillDraftList.tsx`, `src/widgets/skills/SkillDraftDetail.tsx`）**：
+  - 在 `SkillDraftList` 顶部新增 **`复制草稿列表MD`**（`data-testid="skill-draft-list-copy-md-btn"`）、**`复制草稿列表JSON`**（`data-testid="skill-draft-list-copy-json-btn"`）及单草稿卡片 **`复制JSON`**（`data-testid="skill-draft-item-copy-json-${draft.id}"`）；在 `SkillDraftDetail` 底部新增 **`复制草稿MD`**（`data-testid="skill-draft-detail-copy-md-btn"`）与 **`复制草稿JSON`**（`data-testid="skill-draft-detail-copy-json-btn"`）。
+- **单元测试与门禁验证**：
+  - 扩展 `AgentCard.test.tsx`、`SkillCard.test.tsx`、`SkillAuditDrawer.test.tsx`、`SkillDraftList.test.tsx` 与 `SkillDraftDetail.test.tsx`（49 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

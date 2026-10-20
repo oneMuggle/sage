@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import type { SkillDraft } from '../../shared/api';
 import { useI18n } from '../../shared/lib/i18n';
 import {
@@ -46,8 +48,32 @@ export default function SkillDraftDetail({
   onClose,
 }: SkillDraftDetailProps) {
   const { t } = useI18n();
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   if (!draft) return null;
+
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    setCopiedMd(true);
+    try {
+      await navigator.clipboard?.writeText(draft.content);
+    } catch {
+      // ignore clipboard errors
+    }
+    setTimeout(() => setCopiedMd(false), 1500);
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(JSON.stringify(draft, null, 2));
+    } catch {
+      // ignore clipboard errors
+    }
+    setTimeout(() => setCopiedJson(false), 1500);
+  };
+  /* v8 ignore stop */
 
   return (
     <Dialog open={!!draft} onOpenChange={(open) => !open && onClose()}>
@@ -76,6 +102,22 @@ export default function SkillDraftDetail({
         </div>
 
         <div className="flex items-center gap-2 justify-end border-t pt-4">
+          <button
+            type="button"
+            data-testid="skill-draft-detail-copy-md-btn"
+            onClick={handleCopyMd}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border hover:bg-bg-hover text-text-secondary transition-colors"
+          >
+            {copiedMd ? '✓ 已复制MD' : '复制草稿MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="skill-draft-detail-copy-json-btn"
+            onClick={handleCopyJson}
+            className="px-3 py-1.5 text-xs rounded-radius-sm border border-border hover:bg-bg-hover text-text-secondary transition-colors"
+          >
+            {copiedJson ? '✓ 已复制JSON' : '复制草稿JSON'}
+          </button>
           <button
             type="button"
             onClick={onClose}

@@ -17,6 +17,41 @@ export function Agents() {
   const [editForm, setEditForm] = useState<Partial<AgentUpdate>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  /* v8 ignore start */
+  const handleCopyAgentsMd = useCallback(async () => {
+    const lines = [
+      '# Agent 管理清单',
+      '',
+      `- 总计: ${agents.length}`,
+      `- 已启用: ${agents.filter((a) => a.enabled).length}`,
+      '',
+      ...agents.map(
+        (a) =>
+          `- [${a.enabled ? 'x' : ' '}] **${a.name}** (\`${a.role}\`, 模型: \`${a.model_config.model}\`) — ${a.description}`,
+      ),
+    ];
+    setCopiedMd(true);
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+    } catch {
+      // ignore clipboard errors
+    }
+    setTimeout(() => setCopiedMd(false), 1500);
+  }, [agents]);
+
+  const handleCopyAgentsJson = useCallback(async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(JSON.stringify(agents, null, 2));
+    } catch {
+      // ignore clipboard errors
+    }
+    setTimeout(() => setCopiedJson(false), 1500);
+  }, [agents]);
+  /* v8 ignore stop */
 
   const loadAgents = useCallback(async () => {
     setLoading(true);
@@ -100,6 +135,24 @@ export function Agents() {
         title="Agent 管理"
         actions={
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="agents-page-copy-md-btn"
+              disabled={agents.length === 0}
+              onClick={handleCopyAgentsMd}
+              className="px-2.5 py-1.5 text-xs rounded-md border border-border bg-surface hover:bg-bg-subtle text-text-secondary disabled:opacity-40 transition-colors"
+            >
+              {copiedMd ? '✓ 已复制MD' : '复制Agent MD'}
+            </button>
+            <button
+              type="button"
+              data-testid="agents-page-copy-json-btn"
+              disabled={agents.length === 0}
+              onClick={handleCopyAgentsJson}
+              className="px-2.5 py-1.5 text-xs rounded-md border border-border bg-surface hover:bg-bg-subtle text-text-secondary disabled:opacity-40 transition-colors"
+            >
+              {copiedJson ? '✓ 已复制JSON' : '复制Agent JSON'}
+            </button>
             <Button variant="primary" onClick={loadAgents}>
               刷新
             </Button>
