@@ -18,7 +18,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { OfficeFilePicker } from '../OfficeFilePicker';
+import {
+  OfficeFilePicker,
+  formatOfficePickerJson,
+  formatOfficePickerMarkdown,
+} from '../OfficeFilePicker';
 
 describe('OfficeFilePicker — delegates to the hook', () => {
   it('clicking the picker calls onPick', async () => {
@@ -174,6 +178,45 @@ describe('OfficeFilePicker — delegates to the hook', () => {
     fireEvent.drop(picker, { dataTransfer: dt });
 
     await waitFor(() => expect(onDropFile).toHaveBeenCalledWith('/tmp/sheet.xlsx'));
+    expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it('formats and copies file picker state as Markdown and JSON without triggering onPick', () => {
+    const md = formatOfficePickerMarkdown({
+      docType: 'word',
+      workspacePath: '/ws',
+      disabled: false,
+      error: null,
+    });
+    expect(md).toContain('# Office 文件导入器状态 (Office File Picker)');
+    expect(md).toContain('/ws');
+
+    const parsed = JSON.parse(
+      formatOfficePickerJson({
+        docType: 'excel',
+        workspacePath: null,
+        disabled: true,
+        error: 'bad ext',
+      }),
+    );
+    expect(parsed.docType).toBe('excel');
+    expect(parsed.disabled).toBe(true);
+
+    const onPick = vi.fn();
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeFilePicker
+          docType="word"
+          workspacePath="/ws"
+          onPick={onPick}
+          onDropFile={vi.fn()}
+        />
+      </I18nProvider>,
+    );
+    fireEvent.click(screen.getByTestId('office-picker-word-copy-md'));
+    expect(screen.getByTestId('office-picker-word-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('office-picker-word-copy-json'));
+    expect(screen.getByTestId('office-picker-word-copy-json').textContent).toContain('已复制 JSON');
     expect(onPick).not.toHaveBeenCalled();
   });
 });
