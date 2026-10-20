@@ -36,7 +36,7 @@ from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.domain.scheduler import SchedulerServicePort
-from backend.domain.tool_policy import ToolPolicy
+from backend.domain.tool_policy import DEFAULT_MAX_TOOL_CALLS_PER_RUN, ToolPolicy
 
 # ===== M6 HOOKS BEGIN: user-defined hooks around tool execution =====
 from backend.hooks.config import HookConfig, load_hooks
@@ -1259,29 +1259,21 @@ class SageAgent:
         优先级（高→低）：
         1. env ``SAGE_MAX_TOOL_CALLS_PER_RUN``（CI/测试覆盖用）
         2. ``OrchSettings.max_tool_calls_per_run``（UI 可调，持久化到 app_settings）
-        3. ``self.tool_policy.max_tool_calls_per_run``（ToolPolicy 默认 25）
+        3. ``self.tool_policy.max_tool_calls_per_run``（ToolPolicy 默认 100）
 
         env/UI 均非法或为 0 时回退 policy 默认；本方法永不抛错。
-        """
-        raw = os.environ.get("SAGE_MAX_TOOL_CALLS_PER_RUN", "").strip()
-        if raw:
-            try:
-                value = int(raw)
-                if value >= 1:
-                    return value
-            except ValueError:
-                logger.warning("env SAGE_MAX_TOOL_CALLS_PER_RUN=%r 非法,回退 orch/policy 默认", raw)
-        # UI 可调路径：从 app_settings 读 OrchSettings（SQLite，轻量）
-        try:
-            from backend.orchestration.orch_settings import load_orch_settings
 
-            orch = load_orch_settings()
-            orch_val = getattr(orch, "max_tool_calls_per_run", 0)
-            if isinstance(orch_val, int) and orch_val >= 1:
-                return orch_val
-        except Exception as exc:  # noqa: BLE001 — 读设置失败回落 tool_policy 默认
-            logger.debug("OrchSettings 读取失败，回落 tool_policy 默认: %s", exc)
-        return int(getattr(self.tool_policy, "max_tool_calls_per_run", 25) or 25)
+        优先级链委托 ``orch_settings.resolve_tool_call_budget``，避免此处再抄
+        一份 env/UI 解析逻辑 —— 两份实现漂移过一次（默认值 25→100 时哨兵
+        失配），统一到单一事实源。
+        """
+        policy_value = int(
+            getattr(self.tool_policy, "max_tool_calls_per_run", DEFAULT_MAX_TOOL_CALLS_PER_RUN)
+            or DEFAULT_MAX_TOOL_CALLS_PER_RUN
+        )
+        from backend.orchestration.orch_settings import resolve_tool_call_budget
+
+        return resolve_tool_call_budget(policy_value)
 
     def _compact_if_over_budget(
         self,
