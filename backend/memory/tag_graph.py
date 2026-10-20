@@ -26,8 +26,9 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections import defaultdict
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from backend.memory.auto_tag import derive_tags, normalize_tags
 
@@ -265,3 +266,69 @@ class TagCooccurrenceGraph:
                 reverse=True,
             )[:20],
         }
+
+
+# ============================================================================
+# 模块级单例 + 异步构建（Phase 2 接入生产链路）
+# ============================================================================
+
+_graph: Optional[TagCooccurrenceGraph] = None
+_graph_lock = threading.Lock()
+_graph_built = False
+
+
+def get_tag_graph() -> TagCooccurrenceGraph:
+    """懒加载单例。首次调用返回空图（build 在后台进行）。
+
+    线程安全：双检锁（double-checked locking）确保只初始化一次。
+    图谱未完成构建前返回空图（``total_memories == 0``），调用方应检查
+    ``total_memories > 0`` 再查询，否则 ``query()`` 返回空列表。
+    """
+    global _graph
+    if _graph is None:
+        with _graph_lock:
+            if _graph is None:
+                _graph = TagCooccurrenceGraph()
+    return _graph
+
+
+def build_tag_graph_async(episodic_memory: Any, semantic_memory: Any) -> None:
+    """后台构建图谱（daemon thread，仿 ``MemoryAdapter._maybe_start_backfill`` 模式）。
+
+    build-then-swap：构建完成前 ``get_tag_graph()`` 返回空图（``query`` 返回 ``[]``）；
+    构建完成后原子替换内部数据，不阻塞查询线程。
+
+    一次性调用：重复调用立即返回（``_graph_built`` 标志位防重入）。
+
+    Args:
+        episodic_memory: ``EpisodicMemory`` 实例
+        semantic_memory: ``SemanticMemory`` 实例
+    """
+    global _graph_built
+    if _graph_built:
+        return
+    _graph_built = True
+
+    def _build() -> None:
+        try:
+            new_graph = TagCooccurrenceGraph()
+            new_graph.build_from_memories(episodic_memory, semantic_memory)
+            # build-then-swap：原子替换内部状态
+            with _graph_lock:
+                global _graph
+                if _graph is None:
+                    _graph = TagCooccurrenceGraph()
+                _graph.tag_cooccurrence = new_graph.tag_cooccurrence
+                _graph.tag_memory_index = new_graph.tag_memory_index
+                _graph.total_memories = new_graph.total_memories
+            logger.info(
+                "[tag_graph] 后台构建完成: %d 条记忆, %d 个标签",
+                new_graph.total_memories,
+                len(new_graph.tag_cooccurrence),
+            )
+        except Exception as exc:  # noqa: BLE001 — 构建失败不阻塞启动
+            logger.warning("[tag_graph] 后台构建失败: %s", exc)
+
+    threading.Thread(
+        target=_build, name="memory-tag-graph-build", daemon=True
+    ).start()
