@@ -36,6 +36,55 @@ export interface OfficeDeliveryDrawerProps {
   onClose: () => void;
 }
 
+export function formatOfficeDeliveryMarkdown(params: {
+  entryId: string;
+  workspacePath: string;
+  filePath: string;
+  lintState: string;
+  lint: OfficeWordLintResult | null;
+  decided: boolean;
+}): string {
+  const lines = [
+    '# Office 交付验收摘要 (Office Delivery Summary)',
+    '',
+    `- **任务条目 ID**: \`${params.entryId}\``,
+    `- **工作区**: \`${params.workspacePath}\``,
+    `- **文件路径**: \`${params.filePath}\``,
+    `- **决议状态**: ${params.decided ? '已决议' : '待验收'}`,
+    `- **规范检查状态**: ${params.lintState}`,
+  ];
+  if (params.lint) {
+    lines.push(
+      `- **检查结果**: ${params.lint.ok ? '通过' : '未通过'}（错误 ${params.lint.error_count} / 警告 ${params.lint.warning_count}）`,
+    );
+    if (params.lint.issues.length > 0) {
+      lines.push('', '## 问题明细');
+      for (const issue of params.lint.issues) {
+        lines.push(`- **[${issue.rule_id}]** (${issue.severity}): ${issue.message}`);
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatOfficeDeliveryJson(params: {
+  entryId: string;
+  workspacePath: string;
+  filePath: string;
+  lintState: string;
+  lint: OfficeWordLintResult | null;
+  decided: boolean;
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      ...params,
+    },
+    null,
+    2,
+  );
+}
+
 export function OfficeDeliveryDrawer({
   entryId,
   workspacePath,
@@ -53,6 +102,8 @@ export function OfficeDeliveryDrawer({
   const [lintSeq, setLintSeq] = useState(0);
   const [preview, setPreview] = useState<OfficePreviewData | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -116,6 +167,46 @@ export function OfficeDeliveryDrawer({
     navigate('/office');
   };
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatOfficeDeliveryMarkdown({
+          entryId,
+          workspacePath,
+          filePath,
+          lintState,
+          lint,
+          decided,
+        }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatOfficeDeliveryJson({
+          entryId,
+          workspacePath,
+          filePath,
+          lintState,
+          lint,
+          decided,
+        }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div
       className="fixed inset-y-0 right-0 w-96 bg-bg-primary border-l border-border-primary shadow-lg z-50 flex flex-col"
@@ -135,15 +226,33 @@ export function OfficeDeliveryDrawer({
             </span>
           )}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-text-tertiary hover:text-text-primary"
-          data-testid="drawer-close"
-          aria-label={t('office.delivery.close')}
-        >
-          ✕
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            data-testid="delivery-drawer-copy-md"
+            onClick={() => void handleCopyMarkdown()}
+            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border-primary text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedMd ? '已复制 MD' : '复制 MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="delivery-drawer-copy-json"
+            onClick={() => void handleCopyJson()}
+            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border-primary text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedJson ? '已复制 JSON' : '复制 JSON'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-text-tertiary hover:text-text-primary ml-1"
+            data-testid="drawer-close"
+            aria-label={t('office.delivery.close')}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">

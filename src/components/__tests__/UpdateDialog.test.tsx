@@ -5,7 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
-import { UpdateDialog } from '../UpdateDialog';
+import {
+  UpdateDialog,
+  formatUpdateDialogJson,
+  formatUpdateDialogMarkdown,
+} from '../UpdateDialog';
 
 vi.mock('../../shared/ui/ConfirmDialog/confirmService', () => ({
   confirmDialog: mocks.confirmDialog,
@@ -298,5 +302,31 @@ describe('UpdateDialog', () => {
     expect(mocks.onStateChanged).toHaveBeenCalledOnce();
     unmount();
     expect(stateHandler).toBeUndefined();
+  });
+
+  it('formats and copies update dialog state as Markdown and JSON', async () => {
+    const state = updateState({
+      availableUpdate: {
+        version: '1.1.0',
+        releaseNotes: 'Fix bugs',
+      },
+    });
+    const md = formatUpdateDialogMarkdown(state, 50);
+    expect(md).toContain('# 应用更新状态摘要 (Update Dialog Summary)');
+    expect(md).toContain('1.1.0');
+    expect(md).toContain('Fix bugs');
+    expect(formatUpdateDialogMarkdown(null, null)).toContain('- **当前版本**: -');
+
+    const parsed = JSON.parse(formatUpdateDialogJson(state, null));
+    expect(parsed.state.currentVersion).toBe('1.0.0');
+    expect(parsed.progress).toBeNull();
+
+    renderDialog();
+    await emitState({ type: 'state', state });
+    await screen.findByTestId('update-dialog');
+    fireEvent.click(screen.getByTestId('update-dialog-copy-md'));
+    expect(screen.getByTestId('update-dialog-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('update-dialog-copy-json'));
+    expect(screen.getByTestId('update-dialog-copy-json').textContent).toContain('已复制 JSON');
   });
 });

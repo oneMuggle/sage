@@ -85,6 +85,46 @@ export interface OfficeDocumentListProps {
   onBatchRestore?: (docIds: string[]) => OfficeBatchResult | Promise<OfficeBatchResult>;
 }
 
+export function formatOfficeDocumentListMarkdown(
+  documents: ReadonlyArray<OfficeDocumentSummary>,
+  variant: 'live' | 'archived' = 'live',
+): string {
+  const lines = [
+    '# Office 文档历史列表 (Office Document List)',
+    '',
+    `- **视图类型**: ${variant === 'archived' ? '已归档 (archived)' : '当前活跃 (live)'}`,
+    `- **文档总数**: ${documents.length}`,
+  ];
+  if (documents.length === 0) {
+    lines.push('', '_暂无历史文档_');
+  } else {
+    lines.push('', '## 文档明细');
+    for (const doc of documents) {
+      const name = doc.original_filename ?? doc.generated_filename ?? doc.id;
+      lines.push(
+        `- **${name}** (\`${doc.id}\`, ${DOC_TYPE_LABELS[doc.doc_type]}, ${doc.status}, ${(doc.metadata.file_size_bytes / 1024).toFixed(1)} KB)`,
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatOfficeDocumentListJson(
+  documents: ReadonlyArray<OfficeDocumentSummary>,
+  variant: 'live' | 'archived' = 'live',
+): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      variant,
+      total: documents.length,
+      documents,
+    },
+    null,
+    2,
+  );
+}
+
 export function OfficeDocumentList({
   documents,
   loading,
@@ -103,6 +143,8 @@ export function OfficeDocumentList({
   // above the loading/empty early returns (rules-of-hooks).
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [batchBusy, setBatchBusy] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // Prune ids that left the current slice — the parent refetches after
   // every action, and the live↔archived toggle reuses this component
@@ -236,8 +278,46 @@ export function OfficeDocumentList({
   const batchLabel = variant === 'archived' ? t('office.batch.restore') : t('office.batch.archive');
   const batchTestId = variant === 'archived' ? 'office-batch-restore' : 'office-batch-archive';
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(formatOfficeDocumentListMarkdown(documents, variant));
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(formatOfficeDocumentListJson(documents, variant));
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div>
+      <div className="mb-2 flex items-center justify-end gap-1.5 text-ui-2xs">
+        <span
+          data-testid="office-doc-list-copy-md"
+          onClick={() => void handleCopyMarkdown()}
+          className="cursor-pointer rounded border border-border px-2 py-0.5 text-text-secondary hover:bg-bg-hover"
+        >
+          {copiedMd ? '已复制 MD' : '复制 MD'}
+        </span>
+        <span
+          data-testid="office-doc-list-copy-json"
+          onClick={() => void handleCopyJson()}
+          className="cursor-pointer rounded border border-border px-2 py-0.5 text-text-secondary hover:bg-bg-hover"
+        >
+          {copiedJson ? '已复制 JSON' : '复制 JSON'}
+        </span>
+      </div>
       {batchAction && (
         <div className="flex items-center gap-3 mb-2" data-testid="office-batch-bar">
           <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer">

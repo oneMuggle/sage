@@ -45,6 +45,43 @@ export interface DocxNativePreviewProps {
   revision?: string | null;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatDocxPreviewMetaMarkdown(params: {
+  workspacePath: string;
+  managedPath: string;
+  revision?: string | null;
+  state: 'loading' | 'ok' | 'error';
+}): string {
+  return [
+    '# Word 原生预览状态 (Docx Native Preview)',
+    '',
+    `- **工作区路径**: \`${params.workspacePath}\``,
+    `- **受管文件路径**: \`${params.managedPath}\``,
+    `- **修订标识**: ${params.revision || '无'}`,
+    `- **渲染状态**: ${params.state}`,
+  ].join('\n');
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatDocxPreviewMetaJson(params: {
+  workspacePath: string;
+  managedPath: string;
+  revision?: string | null;
+  state: 'loading' | 'ok' | 'error';
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      workspacePath: params.workspacePath,
+      managedPath: params.managedPath,
+      revision: params.revision ?? null,
+      state: params.state,
+    },
+    null,
+    2,
+  );
+}
+
 export function DocxNativePreview({
   workspacePath,
   managedPath,
@@ -53,6 +90,8 @@ export function DocxNativePreview({
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,8 +147,52 @@ export function DocxNativePreview({
     );
   }
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatDocxPreviewMetaMarkdown({ workspacePath, managedPath, revision, state }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatDocxPreviewMetaJson({ workspacePath, managedPath, revision, state }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="relative bg-white" data-testid="docx-native-preview" data-state={state}>
+      <div className="flex items-center justify-end gap-1 px-3 pt-2 text-ui-2xs">
+        <button
+          type="button"
+          data-testid="docx-preview-copy-md"
+          onClick={() => void handleCopyMarkdown()}
+          className="px-1.5 py-0.5 rounded border border-border text-text-secondary hover:bg-bg-hover"
+        >
+          {copiedMd ? '已复制 MD' : '复制 MD'}
+        </button>
+        <button
+          type="button"
+          data-testid="docx-preview-copy-json"
+          onClick={() => void handleCopyJson()}
+          className="px-1.5 py-0.5 rounded border border-border text-text-secondary hover:bg-bg-hover"
+        >
+          {copiedJson ? '已复制 JSON' : '复制 JSON'}
+        </button>
+      </div>
       {state === 'loading' && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/80">
           <span
