@@ -22,9 +22,38 @@ interface SessionUsageBadgeProps {
   refreshKey?: number;
 }
 
+export function formatSessionUsageMarkdown(usage: SessionUsage | null): string {
+  if (!usage || usage.requests === 0) {
+    return '# 会话累计用量 (Session Usage)\n\n_暂无会话用量_';
+  }
+  const lines = [
+    `# 会话累计用量 — ${usage.session_id}`,
+    '',
+    `- **请求次数**: ${usage.requests}`,
+    `- **总 Token**: ${usage.total_tokens} (${formatTokens(usage.total_tokens)})`,
+    `- **输入 / 输出 Token**: ${usage.prompt_tokens} / ${usage.completion_tokens}`,
+    `- **估算成本 (USD)**: $${usage.estimated_cost_usd.toFixed(4)}`,
+    `- **缓存命中率**: ${(usage.cache_hit_rate * 100).toFixed(0)}% (读取 ${usage.cache_read_tokens} / 创建 ${usage.cache_creation_tokens})`,
+  ];
+  return lines.join('\n');
+}
+
+export function formatSessionUsageJson(usage: SessionUsage | null): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      usage,
+    },
+    null,
+    2,
+  );
+}
+
 export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBadgeProps) {
   const { t } = useI18n();
   const [usage, setUsage] = useState<SessionUsage | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     if (!sessionId) {
@@ -65,6 +94,28 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
         ? 'text-text-secondary'
         : 'text-text-muted';
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(formatSessionUsageMarkdown(usage));
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(formatSessionUsageJson(usage));
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <span
       className="flex items-center gap-1 text-ui-2xs text-text-secondary shrink-0"
@@ -82,6 +133,22 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
           · 🎯 {hitRatePct}%
         </span>
       )}
+      <button
+        type="button"
+        data-testid="session-usage-copy-md"
+        onClick={() => void handleCopyMarkdown()}
+        className="ml-1 rounded border border-border px-1 py-0.5 text-ui-2xs hover:bg-bg-hover"
+      >
+        {copiedMd ? '已复制 MD' : '复制 MD'}
+      </button>
+      <button
+        type="button"
+        data-testid="session-usage-copy-json"
+        onClick={() => void handleCopyJson()}
+        className="rounded border border-border px-1 py-0.5 text-ui-2xs hover:bg-bg-hover"
+      >
+        {copiedJson ? '已复制 JSON' : '复制 JSON'}
+      </button>
     </span>
   );
 }

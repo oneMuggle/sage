@@ -28,8 +28,54 @@ interface ChatNoticeStackProps {
   notices: ReadonlyArray<ChatNotice | false | null | undefined>;
 }
 
+export function formatChatNoticeStackMarkdown(
+  notices: ReadonlyArray<ChatNotice | false | null | undefined>,
+  expanded = false,
+): string {
+  const active = notices
+    .filter((n): n is ChatNotice => Boolean(n))
+    .sort((a, b) => b.priority - a.priority);
+  const lines = [
+    '# 聊天提示栈摘要 (Chat Notice Stack)',
+    '',
+    `- **活动提示数**: ${active.length}`,
+    `- **展开状态**: ${expanded ? '已展开全部' : '仅展示最高优先级'}`,
+  ];
+  if (active.length === 0) {
+    lines.push('', '_当前无活动提示_');
+  } else {
+    lines.push('', '## 提示优先级队列');
+    active.forEach((n, idx) => {
+      lines.push(`- **[${idx + 1}] ${n.key}** (priority=${n.priority})`);
+    });
+  }
+  return lines.join('\n');
+}
+
+export function formatChatNoticeStackJson(
+  notices: ReadonlyArray<ChatNotice | false | null | undefined>,
+  expanded = false,
+): string {
+  const active = notices
+    .filter((n): n is ChatNotice => Boolean(n))
+    .sort((a, b) => b.priority - a.priority)
+    .map((n) => ({ key: n.key, priority: n.priority }));
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      expanded,
+      total: active.length,
+      notices: active,
+    },
+    null,
+    2,
+  );
+}
+
 export function ChatNoticeStack({ notices }: ChatNoticeStackProps) {
   const [expanded, setExpanded] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const active = notices
     .filter((n): n is ChatNotice => Boolean(n))
     .sort((a, b) => b.priority - a.priority);
@@ -39,6 +85,28 @@ export function ChatNoticeStack({ notices }: ChatNoticeStackProps) {
   const [primary, ...rest] = active;
   const visible = expanded ? active : [primary];
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(formatChatNoticeStackMarkdown(notices, expanded));
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(formatChatNoticeStackJson(notices, expanded));
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div data-testid="chat-notice-stack" className="shrink-0">
       {visible.map((n) => (
@@ -46,6 +114,24 @@ export function ChatNoticeStack({ notices }: ChatNoticeStackProps) {
           {n.node}
         </div>
       ))}
+      <div className="flex items-center justify-end gap-1 px-5 py-0.5 border-b border-border text-ui-2xs text-text-muted">
+        <button
+          type="button"
+          data-testid="chat-notice-stack-copy-md"
+          onClick={() => void handleCopyMarkdown()}
+          className="rounded border border-border px-1.5 py-0.5 hover:bg-bg-hover"
+        >
+          {copiedMd ? '已复制 MD' : '复制 MD'}
+        </button>
+        <button
+          type="button"
+          data-testid="chat-notice-stack-copy-json"
+          onClick={() => void handleCopyJson()}
+          className="rounded border border-border px-1.5 py-0.5 hover:bg-bg-hover"
+        >
+          {copiedJson ? '已复制 JSON' : '复制 JSON'}
+        </button>
+      </div>
       {rest.length > 0 && (
         <button
           type="button"

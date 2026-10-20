@@ -10,6 +10,52 @@ import { useI18n } from '../../shared/lib/i18n';
 
 import { useBtwCommand } from './useBtwCommand';
 
+export interface BtwOverlaySnapshot {
+  question: string;
+  answer: string;
+  isLoading?: boolean;
+  sources?: ReadonlyArray<{
+    kind?: string;
+    title?: string;
+    url?: string;
+    path?: string;
+    snippet?: string;
+  }>;
+}
+
+export function formatBtwOverlayMarkdown(params: BtwOverlaySnapshot): string {
+  const lines = [
+    '# /btw 补充问答 (Btw Overlay)',
+    '',
+    '## 问题',
+    params.question || '_空_',
+    '',
+    '## 回答',
+    params.answer || (params.isLoading ? '_思考中…_' : '_暂无回答_'),
+  ];
+  if (params.sources && params.sources.length > 0) {
+    lines.push('', `## 参考来源 (${params.sources.length})`);
+    for (const s of params.sources) {
+      lines.push(`- [${s.kind || 'web'}] ${s.title || s.url || s.path || '-'}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatBtwOverlayJson(params: BtwOverlaySnapshot): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      question: params.question,
+      answer: params.answer,
+      isLoading: Boolean(params.isLoading),
+      sources: params.sources ?? [],
+    },
+    null,
+    2,
+  );
+}
+
 /**
  * /btw 补充消息浮动面板
  *
@@ -22,6 +68,8 @@ export function BtwOverlay() {
   const { close } = useBtwCommand();
   const { isOpen, question, answer, isLoading, sources } = useBtwState();
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // Escape 键关闭
   useEffect(() => {
@@ -45,6 +93,32 @@ export function BtwOverlay() {
     return null;
   }
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatBtwOverlayMarkdown({ question, answer, isLoading, sources }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatBtwOverlayJson({ question, answer, isLoading, sources }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   const kindLabel = (kind: string | undefined) =>
     kind === 'wiki'
       ? t('chat.sources_group_wiki')
@@ -63,14 +137,32 @@ export function BtwOverlay() {
       {/* 头部 */}
       <div className="flex items-center justify-between p-3 border-b border-border">
         <span className="text-sm font-medium text-text">{t('chat.btw.title')}</span>
-        <button
-          data-testid="btw-close"
-          onClick={close}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-hover text-muted hover:text-text transition-colors"
-          aria-label={t('chat.btw.close')}
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            data-testid="btw-overlay-copy-md"
+            onClick={() => void handleCopyMarkdown()}
+            className="rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedMd ? '已复制 MD' : '复制 MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="btw-overlay-copy-json"
+            onClick={() => void handleCopyJson()}
+            className="rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedJson ? '已复制 JSON' : '复制 JSON'}
+          </button>
+          <button
+            data-testid="btw-close"
+            onClick={close}
+            className="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-hover text-muted hover:text-text transition-colors"
+            aria-label={t('chat.btw.close')}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* 问题区域 */}
