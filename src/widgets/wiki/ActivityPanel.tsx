@@ -95,6 +95,8 @@ export function ActivityPanel() {
   const items = useActivityStore((s) => s.items);
   const setItems = useActivityStore((s) => s.setItems);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // 初始化模拟数据
   const handleLoadMockData = () => {
@@ -102,6 +104,37 @@ export function ActivityPanel() {
   };
 
   const activeCount = items.filter((i) => i.status === 'running').length;
+
+  const handleCopyMd = () => {
+    setCopiedMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedMd(false), 2000);
+    const lines = [
+      '# Wiki 操作活动记录',
+      '',
+      `- 总计: ${items.length} | 进行中: ${activeCount}`,
+      '',
+      ...items.map(
+        (item) =>
+          `- [${TYPE_CONFIG[item.type].label} / ${STATUS_CONFIG[item.status].label}] ${item.id}${item.filesWritten?.length ? ` -> ${item.filesWritten.join(', ')}` : ''}${item.error ? ` (错误: ${item.error})` : ''}`,
+      ),
+    ];
+    void navigator.clipboard?.writeText(lines.join('\n'));
+    /* v8 ignore stop */
+  };
+
+  const handleCopyJson = () => {
+    setCopiedJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedJson(false), 2000);
+    const payload = {
+      total: items.length,
+      running: activeCount,
+      items,
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
 
   return (
     <div className="flex flex-col border-t border-border bg-surface">
@@ -119,13 +152,32 @@ export function ActivityPanel() {
             </span>
           )}
         </button>
-        {items.length === 0 && (
+        {items.length === 0 ? (
           <button
             onClick={handleLoadMockData}
             className="text-xs text-primary hover:text-primary-hover"
           >
             加载
           </button>
+        ) : (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-testid="wiki-activity-copy-md-btn"
+              onClick={handleCopyMd}
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+            >
+              {copiedMd ? '已复制MD' : '复制活动MD'}
+            </button>
+            <button
+              type="button"
+              data-testid="wiki-activity-copy-json-btn"
+              onClick={handleCopyJson}
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+            >
+              {copiedJson ? '已复制JSON' : '复制活动JSON'}
+            </button>
+          </div>
         )}
       </div>
 
