@@ -1248,7 +1248,7 @@
 - **单元测试与门禁验证**：
   - 扩展 `UpdateDialog.test.tsx`、`DocxNativePreview.test.tsx`、`OfficeDeliveryDrawer.test.tsx`、`OfficeDocumentList.test.tsx`、`OfficeFilePicker.test.tsx`、`OnboardingWizard.test.tsx`、`GovernanceRulesPanel.test.tsx` 与 `TaskBriefDialog.test.tsx`（8 个套件共 66 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零错误门禁。
 
-### Phase P96（2026-10-20）：@文件菜单、定时任务配置与 Cron 选择器、CSS 主题弹窗与主题画廊、空工作区引导、权限模式切换与会话模型选择器审计快照导出（PR #2180 / #2181）
+### Phase P96（2026-10-20）：@文件菜单、定时任务配置与 Cron 选择器、CSS 主题弹窗与主题画廊、空工作区引导、权限模式切换与会话模型选择器审计快照导出（PR #2181 / #2182）
 
 1. **@文件引用候选列表 (`src/features/chat/AtFileMenu.tsx`)**：
    - 新增并导出 `formatAtFileMenuMarkdown` 与 `formatAtFileMenuJson` 纯函数及头部一键复制按钮（`data-testid="at-file-menu-copy-md"` / `data-testid="at-file-menu-copy-json"`），支持导出检索关键词、工作区名与候选文件清单。
@@ -1266,3 +1266,22 @@
    - 新增并导出 `formatPermissionModeMarkdown` 与 `formatPermissionModeJson` 纯函数及一键复制按钮（`data-testid="permission-mode-copy-md"` / `data-testid="permission-mode-copy-json"`），支持导出当前权限预设、自动放行计数及审计明细。
 8. **会话模型选择器 (`src/widgets/chat/SessionModelPicker.tsx`)**：
    - 新增并导出 `formatSessionModelPickerMarkdown` 与 `formatSessionModelPickerJson` 纯函数及一键复制按钮（`data-testid="session-model-copy-md"` / `data-testid="session-model-copy-json"`），支持导出会话覆盖模型、全局默认模型与候选数量。
+
+### Phase P97（2026-10-21）：模型目录页、编排中心页、欢迎页与输入卡片、更新源管理、主题选择器、更新配置页与输入框工具菜单审计快照导出（PR #2183 / #2184）
+
+1. **模型目录页面 (`src/pages/ModelCatalog.tsx`)**：
+   - 新增并导出 `formatModelCatalogPageMarkdown` 与 `formatModelCatalogPageJson` 纯函数及顶栏一键复制控件（`data-testid="model-catalog-page-copy-md"` / `data-testid="model-catalog-page-copy-json"`），支持导出筛选端点、检索词、模型总数/筛选数、快照数与当前选中模型。
+2. **编排中心页面 (`src/pages/Orchestration.tsx`)**：
+   - 新增并导出 `formatOrchestrationPageMarkdown` 与 `formatOrchestrationPageJson` 纯函数及顶栏一键复制控件（`data-testid="orch-page-copy-md"` / `data-testid="orch-page-copy-json"`），支持导出目标草稿、创建状态与当前泳道总数。
+3. **欢迎页 (`src/pages/Welcome.tsx`)**：
+   - 新增并导出 `formatWelcomePageMarkdown` 与 `formatWelcomePageJson` 纯函数及入口栏一键复制控件（`data-testid="welcome-page-copy-md"` / `data-testid="welcome-page-copy-json"`），支持导出界面语言、首启向导状态、推荐模板数与当前打开任务简报。
+4. **更新源管理面板 (`src/pages/settings/ProvidersManager.tsx`)**：
+   - 新增并导出 `formatProvidersListMarkdown` 与 `formatProvidersListJson` 纯函数及顶栏一键复制控件（`data-testid="providers-copy-md"` / `data-testid="providers-copy-json"`），支持导出更新源总数、默认更新源及各源类型与启用状态。
+5. **主题选择器 (`src/pages/settings/ThemeSelector.tsx`)**：
+   - 新增并导出 `formatThemeSelectorMarkdown` 与 `formatThemeSelectorJson` 纯函数及一键复制控件（`data-testid="theme-selector-copy-md"` / `data-testid="theme-selector-copy-json"`），支持导出当前激活主题来源与自定义 CSS 主题清单。
+6. **更新配置页 (`src/pages/settings/UpdatesTab.tsx`)**：
+   - 新增并导出 `formatUpdatesConfigMarkdown` 与 `formatUpdatesConfigJson` 纯函数及顶栏一键复制控件（`data-testid="updates-tab-copy-md"` / `data-testid="updates-tab-copy-json"`），支持导出更新策略、通道、回滚窗口、检查周期、服务器地址与遥测开关。
+7. **输入框「+」工具菜单 (`src/widgets/chat/ComposerPlusMenu.tsx`)**：
+   - 新增并导出 `formatComposerPlusMenuMarkdown` 与 `formatComposerPlusMenuJson` 纯函数及菜单顶栏一键复制控件（`data-testid="composer-plus-copy-md"` / `data-testid="composer-plus-copy-json"`），支持导出工具菜单项清单、快捷键提示与禁用状态。
+8. **欢迎页输入卡片 (`src/widgets/welcome/WelcomeInputCard.tsx`)**：
+   - 新增并导出 `formatWelcomeInputMarkdown` 与 `formatWelcomeInputJson` 纯函数及卡片底部一键复制控件（`data-testid="welcome-input-copy-md"` / `data-testid="welcome-input-copy-json"`），支持导出当前占位文案、禁用状态与草稿正文。

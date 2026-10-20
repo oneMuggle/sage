@@ -4,6 +4,10 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import {
+  formatComposerPlusMenuJson,
+  formatComposerPlusMenuMarkdown,
+} from '../ComposerPlusMenu';
 import { InputCard } from '../InputCard';
 
 vi.mock('../../../shared/lib/i18n', () => ({
@@ -93,5 +97,27 @@ describe('ComposerPlusMenu (via InputCard)', () => {
   it('is disabled together with the input', () => {
     renderCard({ disabled: true });
     expect(screen.getByTestId('composer-plus')).toBeDisabled();
+  });
+
+  it('formats and copies composer plus menu items as Markdown and JSON', () => {
+    const md = formatComposerPlusMenuMarkdown([
+      { key: 'mention', label: '提及文件', hint: '@' },
+      { key: 'command', label: '斜杠命令', hint: '/', disabled: true },
+    ]);
+    expect(md).toContain('# 输入框 + 工具菜单清单 (Composer Plus Menu Summary)');
+    expect(md).toContain('提及文件');
+    expect(formatComposerPlusMenuMarkdown([])).toContain('_暂无可用工具项_');
+
+    const parsed = JSON.parse(
+      formatComposerPlusMenuJson([{ key: 'mention', label: '提及文件', hint: '@' }]),
+    );
+    expect(parsed.count).toBe(1);
+
+    renderCard();
+    fireEvent.click(screen.getByTestId('composer-plus'));
+    fireEvent.click(screen.getByTestId('composer-plus-copy-md'));
+    expect(screen.getByTestId('composer-plus-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('composer-plus-copy-json'));
+    expect(screen.getByTestId('composer-plus-copy-json').textContent).toContain('已复制 JSON');
   });
 });

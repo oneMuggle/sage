@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
-import { Welcome } from '../Welcome';
+import {
+  Welcome,
+  formatWelcomePageJson,
+  formatWelcomePageMarkdown,
+} from '../Welcome';
 
 const toastError = vi.fn();
 vi.mock('sonner', () => ({
@@ -110,5 +114,32 @@ describe('Welcome page', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(toastError).toHaveBeenCalled();
+  });
+
+  it('formats and copies Welcome page summary as Markdown and JSON', () => {
+    const md = formatWelcomePageMarkdown({
+      locale: 'zh',
+      needsOnboarding: true,
+      recommendationCount: 5,
+      activeRecommendationId: 'report',
+    });
+    expect(md).toContain('# 欢迎页状态摘要 (Welcome Page Summary)');
+    expect(md).toContain('report');
+
+    const parsed = JSON.parse(
+      formatWelcomePageJson({
+        locale: 'en',
+        needsOnboarding: false,
+        recommendationCount: 5,
+        activeRecommendationId: null,
+      }),
+    );
+    expect(parsed.locale).toBe('en');
+
+    renderWelcome();
+    fireEvent.click(screen.getByTestId('welcome-page-copy-md'));
+    expect(screen.getByTestId('welcome-page-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('welcome-page-copy-json'));
+    expect(screen.getByTestId('welcome-page-copy-json').textContent).toContain('已复制 JSON');
   });
 });

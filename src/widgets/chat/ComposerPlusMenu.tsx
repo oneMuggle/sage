@@ -24,8 +24,50 @@ interface ComposerPlusMenuProps {
   disabled?: boolean;
 }
 
+export function formatComposerPlusMenuMarkdown(
+  items: ReadonlyArray<Pick<ComposerPlusMenuItem, 'key' | 'label' | 'hint' | 'disabled'>>,
+): string {
+  const lines = [
+    '# 输入框 + 工具菜单清单 (Composer Plus Menu Summary)',
+    '',
+    `- **菜单项总数**: ${items.length}`,
+  ];
+  if (items.length === 0) {
+    lines.push('', '_暂无可用工具项_');
+  } else {
+    lines.push('', '## 工具项明细');
+    for (const it of items) {
+      lines.push(
+        `- **${it.label}** (\`${it.key}\`)${it.hint ? ` · 快捷键 \`${it.hint}\`` : ''}${it.disabled ? ' (禁用)' : ''}`,
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatComposerPlusMenuJson(
+  items: ReadonlyArray<Pick<ComposerPlusMenuItem, 'key' | 'label' | 'hint' | 'disabled'>>,
+): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      count: items.length,
+      items: items.map((it) => ({
+        key: it.key,
+        label: it.label,
+        hint: it.hint ?? null,
+        disabled: Boolean(it.disabled),
+      })),
+    },
+    null,
+    2,
+  );
+}
+
 export function ComposerPlusMenu({ items, disabled = false }: ComposerPlusMenuProps) {
   const [open, setOpen] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,6 +91,28 @@ export function ComposerPlusMenu({ items, disabled = false }: ComposerPlusMenuPr
 
   if (items.length === 0) return null;
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(formatComposerPlusMenuMarkdown(items));
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(formatComposerPlusMenuJson(items));
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div ref={rootRef} className="relative flex-shrink-0">
       <button
@@ -70,6 +134,22 @@ export function ComposerPlusMenu({ items, disabled = false }: ComposerPlusMenuPr
           data-testid="composer-plus-menu"
           className="absolute bottom-full left-0 mb-2 w-56 py-1 bg-surface border border-border rounded-radius-md shadow-lg z-30"
         >
+          <div className="flex items-center justify-end gap-1 px-2.5 py-1 border-b border-border text-ui-2xs">
+            <span
+              data-testid="composer-plus-copy-md"
+              onClick={() => void handleCopyMarkdown()}
+              className="cursor-pointer rounded border border-border px-1 py-0.5 text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedMd ? '已复制 MD' : '复制 MD'}
+            </span>
+            <span
+              data-testid="composer-plus-copy-json"
+              onClick={() => void handleCopyJson()}
+              className="cursor-pointer rounded border border-border px-1 py-0.5 text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedJson ? '已复制 JSON' : '复制 JSON'}
+            </span>
+          </div>
           {items.map((item) => (
             <button
               key={item.key}

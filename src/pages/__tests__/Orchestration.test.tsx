@@ -21,7 +21,11 @@ import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import { invoke } from '../../shared/api/desktopInvoke';
 import type { Lane } from '../../shared/api/types';
 import { I18nProvider } from '../../shared/lib/i18n';
-import { Orchestration } from '../Orchestration';
+import {
+  Orchestration,
+  formatOrchestrationPageJson,
+  formatOrchestrationPageMarkdown,
+} from '../Orchestration';
 
 const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>;
 const toastMock = toast as unknown as {
@@ -144,5 +148,30 @@ describe('Orchestration page', () => {
     expect(screen.getByTestId('lane-board-copy-json-btn')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByTestId('lane-card-copy-json-lane-sub'));
     expect(screen.getByTestId('lane-card-copy-json-lane-sub')).toHaveTextContent('已复制JSON');
+  });
+
+  it('formats and copies Orchestration page summary as Markdown and JSON', () => {
+    const md = formatOrchestrationPageMarkdown({
+      goalDraft: 'build X',
+      creating: false,
+      laneCount: 3,
+    });
+    expect(md).toContain('# 编排中心页面状态 (Orchestration Page Summary)');
+    expect(md).toContain('build X');
+
+    const parsed = JSON.parse(
+      formatOrchestrationPageJson({
+        goalDraft: '',
+        creating: true,
+        laneCount: 0,
+      }),
+    );
+    expect(parsed.creating).toBe(true);
+
+    renderPage();
+    fireEvent.click(screen.getByTestId('orch-page-copy-md'));
+    expect(screen.getByTestId('orch-page-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('orch-page-copy-json'));
+    expect(screen.getByTestId('orch-page-copy-json').textContent).toContain('已复制 JSON');
   });
 });

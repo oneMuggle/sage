@@ -286,4 +286,47 @@ describe('ModelCatalog page', () => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-4o-mini'));
     });
   });
+
+  it('formats and copies ModelCatalog page summary as Markdown and JSON', async () => {
+    const mod = await import('../ModelCatalog');
+    const md = mod.formatModelCatalogPageMarkdown({
+      endpointId: 'ep-1',
+      searchTerm: 'gpt',
+      totalModels: 10,
+      filteredCount: 2,
+      snapshotCount: 1,
+      activeSnapshot: 'snap-1',
+      selectedKey: 'openrouter/openai/gpt-4o',
+    });
+    expect(md).toContain('# 模型目录页面视图摘要 (Model Catalog Page Summary)');
+    expect(md).toContain('ep-1');
+
+    const parsed = JSON.parse(
+      mod.formatModelCatalogPageJson({
+        endpointId: '',
+        searchTerm: '',
+        totalModels: 0,
+        filteredCount: 0,
+        snapshotCount: 0,
+        activeSnapshot: null,
+        selectedKey: null,
+      }),
+    );
+    expect(parsed.totalModels).toBe(0);
+
+    mocks.listModels.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+    mocks.listSnapshots.mockResolvedValue([]);
+    const Page = mod.default;
+    render(
+      <MemoryRouter initialEntries={['/model-catalog']}>
+        <I18nProvider defaultLocale="zh">
+          <Page />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByTestId('model-catalog-page-copy-md'));
+    expect(screen.getByTestId('model-catalog-page-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('model-catalog-page-copy-json'));
+    expect(screen.getByTestId('model-catalog-page-copy-json').textContent).toContain('已复制 JSON');
+  });
 });
