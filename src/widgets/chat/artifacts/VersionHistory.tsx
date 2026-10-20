@@ -36,6 +36,9 @@ export function VersionHistory({ sessionId, artifactId, onRestoreComplete }: Ver
   const [diffAgainst, setDiffAgainst] = useState<'current' | number>('current');
   const [diffText, setDiffText] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const [copiedVerNum, setCopiedVerNum] = useState<number | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -123,6 +126,40 @@ export function VersionHistory({ sessionId, artifactId, onRestoreComplete }: Ver
     await buildDiff(diffFor, against);
   };
 
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    const lines = [
+      `# 产物版本历史 (${artifactId})`,
+      '',
+      `- **版本总数**: ${versions.length}`,
+      '',
+      '| 版本 | 时间 | 哈希 | 备注 |',
+      '| --- | --- | --- | --- |',
+      ...versions.map(
+        (v) =>
+          `| v${v.version_num} | ${formatTimestamp(v.created_at)} | \`${v.content_hash}\` | ${v.note ?? '-'} |`,
+      ),
+    ];
+    setCopiedMd(true);
+    await navigator.clipboard?.writeText(lines.join('\n'));
+    setTimeout(() => setCopiedMd(false), 1800);
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(
+      JSON.stringify({ sessionId, artifactId, versions }, null, 2),
+    );
+    setTimeout(() => setCopiedJson(false), 1800);
+  };
+
+  const handleCopyVerJson = async (v: ArtifactVersion) => {
+    setCopiedVerNum(v.version_num);
+    await navigator.clipboard?.writeText(JSON.stringify(v, null, 2));
+    setTimeout(() => setCopiedVerNum((prev) => (prev === v.version_num ? null : prev)), 1800);
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="border-t border-border">
       <button
@@ -147,7 +184,26 @@ export function VersionHistory({ sessionId, artifactId, onRestoreComplete }: Ver
           ) : versions.length === 0 ? (
             <div className="text-xs text-muted py-2">尚无版本记录</div>
           ) : (
-            <ul className="space-y-1 max-h-40 overflow-auto">
+            <>
+              <div className="flex items-center justify-end gap-1 pb-1">
+                <button
+                  type="button"
+                  data-testid="version-history-copy-md-btn"
+                  onClick={() => void handleCopyMd()}
+                  className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+                >
+                  {copiedMd ? '✓ 已复制MD' : '复制版本MD'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="version-history-copy-json-btn"
+                  onClick={() => void handleCopyJson()}
+                  className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+                >
+                  {copiedJson ? '✓ 已复制JSON' : '复制版本JSON'}
+                </button>
+              </div>
+              <ul className="space-y-1 max-h-40 overflow-auto">
               {versions.map((v) => (
                 <li
                   key={v.version_num}
@@ -162,6 +218,14 @@ export function VersionHistory({ sessionId, artifactId, onRestoreComplete }: Ver
                       </span>
                     )}
                     <span className="ml-auto flex items-center gap-0.5 opacity-0 group-hover:opacity-100">
+                      <button
+                        type="button"
+                        data-testid={`version-item-copy-json-${v.version_num}`}
+                        onClick={() => void handleCopyVerJson(v)}
+                        className="px-1 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-border"
+                      >
+                        {copiedVerNum === v.version_num ? '✓ 已复制' : '复制JSON'}
+                      </button>
                       <button
                         type="button"
                         className={
@@ -236,6 +300,7 @@ export function VersionHistory({ sessionId, artifactId, onRestoreComplete }: Ver
                 </li>
               ))}
             </ul>
+            </>
           )}
         </div>
       )}

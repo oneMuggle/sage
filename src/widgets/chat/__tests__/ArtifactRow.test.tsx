@@ -1,5 +1,5 @@
 // src/widgets/chat/__tests__/ArtifactRow.test.tsx
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import type { Artifact } from '../../../features/artifacts/artifactApi';
@@ -22,5 +22,18 @@ describe('ArtifactRow', () => {
     render(<ArtifactRow artifact={sample} onSelect={onSelect} />);
     fireEvent.click(screen.getByRole('button'));
     expect(onSelect).toHaveBeenCalledWith(sample);
+  });
+
+  it('copies artifact item JSON to clipboard without triggering row select', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const onSelect = vi.fn();
+    render(<ArtifactRow artifact={sample} onSelect={onSelect} />);
+
+    fireEvent.click(screen.getByTestId('artifact-copy-json-a1'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"/tmp/test.md"'));
+    });
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });
