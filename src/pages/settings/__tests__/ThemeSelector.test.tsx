@@ -2,7 +2,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ThemeSelector } from '../ThemeSelector';
+import {
+  ThemeSelector,
+  formatThemeSelectorJson,
+  formatThemeSelectorMarkdown,
+} from '../ThemeSelector';
 
 // Mock useTheme
 const mockUseTheme = vi.fn();
@@ -226,5 +230,39 @@ describe('ThemeSelector', () => {
     // which has its own tests for this behavior
     render(<ThemeSelector />);
     expect(screen.getByTestId('theme-gallery')).toBeInTheDocument();
+  });
+
+  it('formats and copies theme selector summary as Markdown and JSON', () => {
+    const sample = [
+      {
+        id: 't-1',
+        name: 'Solarized',
+        css: ':root {}',
+        appearance: 'dark' as const,
+        created_at: 1,
+        updated_at: 1,
+      },
+    ];
+    const md = formatThemeSelectorMarkdown({
+      activeKind: 'css',
+      activeId: 't-1',
+      cssThemes: sample,
+    });
+    expect(md).toContain('# 主题选择器与自定义 CSS 清单 (Theme Selector Summary)');
+    expect(md).toContain('Solarized');
+    expect(
+      formatThemeSelectorMarkdown({ activeKind: 'preset', activeId: 'indigo', cssThemes: [] }),
+    ).toContain('_尚未创建自定义主题_');
+
+    const parsed = JSON.parse(
+      formatThemeSelectorJson({ activeKind: 'css', activeId: 't-1', cssThemes: sample }),
+    );
+    expect(parsed.cssCount).toBe(1);
+
+    render(<ThemeSelector />);
+    fireEvent.click(screen.getByTestId('theme-selector-copy-md'));
+    expect(screen.getByTestId('theme-selector-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('theme-selector-copy-json'));
+    expect(screen.getByTestId('theme-selector-copy-json').textContent).toContain('已复制 JSON');
   });
 });

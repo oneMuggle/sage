@@ -16,11 +16,43 @@ import { LaneBoard } from '../widgets/orchestration/LaneBoard';
 /** 同时订阅的活动 run 数上限（防订阅风暴）。 */
 const MAX_ACTIVE_RUN_SUBSCRIPTIONS = 5;
 
+export function formatOrchestrationPageMarkdown(params: {
+  goalDraft: string;
+  creating: boolean;
+  laneCount: number;
+}): string {
+  return [
+    '# 编排中心页面状态 (Orchestration Page Summary)',
+    '',
+    `- **当前目标草稿**: ${params.goalDraft ? `\`${params.goalDraft}\`` : '空'}`,
+    `- **创建状态**: ${params.creating ? '创建中' : '就绪'}`,
+    `- **当前泳道总数**: ${params.laneCount}`,
+  ].join('\n');
+}
+
+export function formatOrchestrationPageJson(params: {
+  goalDraft: string;
+  creating: boolean;
+  laneCount: number;
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      ...params,
+    },
+    null,
+    2,
+  );
+}
+
 export function Orchestration() {
   const { t } = useI18n();
   const createLane = useLaneBoardStore((s) => s.createLane);
+  const laneCount = useLaneBoardStore((s) => s.lanes.length);
   const [goal, setGoal] = useState('');
   const [creating, setCreating] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // live-events P2 (2026-09-07): LaneBoard 事件化 —— 订阅活动 run 的
   // canonical 事件流（task.* → lane 卡片投影,applyCanonicalEvent）,
@@ -90,9 +122,56 @@ export function Orchestration() {
     }
   };
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatOrchestrationPageMarkdown({ goalDraft: goal.trim(), creating, laneCount }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatOrchestrationPageJson({ goalDraft: goal.trim(), creating, laneCount }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <PageHeader title={t('orchestration.title')} subtitle={t('orchestration.subtitle')} />
+      <PageHeader
+        title={t('orchestration.title')}
+        subtitle={t('orchestration.subtitle')}
+        actions={
+          <div className="flex items-center gap-1.5 text-ui-2xs">
+            <span
+              data-testid="orch-page-copy-md"
+              onClick={() => void handleCopyMarkdown()}
+              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedMd ? '已复制 MD' : '复制 MD'}
+            </span>
+            <span
+              data-testid="orch-page-copy-json"
+              onClick={() => void handleCopyJson()}
+              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedJson ? '已复制 JSON' : '复制 JSON'}
+            </span>
+          </div>
+        }
+      />
       <div className="flex-1 overflow-auto">
         <div className="max-w-7xl mx-auto px-6 py-6">
 
