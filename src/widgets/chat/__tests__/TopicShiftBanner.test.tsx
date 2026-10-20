@@ -10,7 +10,11 @@ vi.mock('../../../shared/api/sessionApi', () => ({
 }));
 
 import { sessionApi } from '../../../shared/api/sessionApi';
-import { TopicShiftBanner } from '../TopicShiftBanner';
+import {
+  formatTopicShiftJson,
+  formatTopicShiftMarkdown,
+  TopicShiftBanner,
+} from '../TopicShiftBanner';
 
 describe('TopicShiftBanner', () => {
   beforeEach(() => {
@@ -72,5 +76,22 @@ describe('TopicShiftBanner', () => {
     expect(sessionApi.retreatSegment).toHaveBeenCalledWith('s-1');
     expect(onRetreat).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('topic-shift-banner')).toBeNull();
+  });
+
+  it('导出话题切换提示为 Markdown 和 JSON 并支持一键复制', () => {
+    const md = formatTopicShiftMarkdown('s-1', 'explicit_signal');
+    expect(md).toContain('# 话题切换上下文隔离提示');
+    expect(md).toContain('explicit_signal');
+    const parsed = JSON.parse(formatTopicShiftJson('s-1', ''));
+    expect(parsed.sessionId).toBe('s-1');
+    expect(parsed.reason).toBeNull();
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<TopicShiftBanner sessionId="s-1" reason="explicit_signal" onRetreat={() => undefined} />);
+    fireEvent.click(screen.getByTestId('topic-shift-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('话题切换上下文隔离提示'));
+    fireEvent.click(screen.getByTestId('topic-shift-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"state": "topic_shifted"'));
   });
 });

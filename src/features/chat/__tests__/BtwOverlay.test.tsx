@@ -2,7 +2,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useBtwState } from '../../../entities/chat/btwState';
-import { BtwOverlay } from '../BtwOverlay';
+import {
+  BtwOverlay,
+  formatBtwOverlayJson,
+  formatBtwOverlayMarkdown,
+} from '../BtwOverlay';
 
 // Mock i18n hook
 vi.mock('../../../shared/lib/i18n', () => ({
@@ -98,5 +102,30 @@ describe('BtwOverlay', () => {
     render(<BtwOverlay />);
 
     expect(screen.getByText('补充问题')).toBeInTheDocument();
+  });
+
+  it('should export /btw question and answer as Markdown and JSON and copy via buttons', () => {
+    const md = formatBtwOverlayMarkdown({
+      question: 'What is React?',
+      answer: 'A UI library.',
+      sources: [{ kind: 'web', title: 'React Docs', url: 'https://react.dev' }],
+    });
+    expect(md).toContain('# /btw 补充问答');
+    expect(md).toContain('[web] React Docs');
+    const parsed = JSON.parse(
+      formatBtwOverlayJson({ question: 'Q', answer: '', isLoading: true }),
+    );
+    expect(parsed.question).toBe('Q');
+    expect(parsed.isLoading).toBe(true);
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    useBtwState.getState().open('What is React?');
+    useBtwState.getState().appendDelta('A UI library.');
+    render(<BtwOverlay />);
+    fireEvent.click(screen.getByTestId('btw-overlay-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/btw 补充问答'));
+    fireEvent.click(screen.getByTestId('btw-overlay-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"question": "What is React?"'));
   });
 });

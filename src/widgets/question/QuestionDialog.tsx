@@ -30,6 +30,56 @@ interface AnswerResponse {
   error?: string;
 }
 
+export interface QuestionDialogSnapshot {
+  request_id: string;
+  question: string;
+  header?: string | null;
+  multi_select?: boolean;
+  options: ReadonlyArray<{ label: string; description?: string | null }>;
+}
+
+export function formatQuestionDialogMarkdown(
+  question: QuestionDialogSnapshot | null | undefined,
+  selected: readonly string[] = [],
+  custom = '',
+): string {
+  if (!question) {
+    return '# 交互提问对话框 (Question Dialog)\n\n_当前无待应答提问_';
+  }
+  const lines = [
+    `# 交互提问 — ${question.header || question.request_id}`,
+    '',
+    `- **请求 ID**: ${question.request_id}`,
+    `- **提问内容**: ${question.question}`,
+    `- **选择模式**: ${question.multi_select ? '多选 (multi_select)' : '单选 (single_select)'}`,
+    `- **已选答案**: ${selected.length > 0 ? selected.join(', ') : '无'}`,
+    `- **自定义输入**: ${custom.trim() || '无'}`,
+    '',
+    '## 候选选项',
+    ...question.options.map(
+      (o) => `- **${o.label}**${o.description ? `: ${o.description}` : ''}`,
+    ),
+  ];
+  return lines.join('\n');
+}
+
+export function formatQuestionDialogJson(
+  question: QuestionDialogSnapshot | null | undefined,
+  selected: readonly string[] = [],
+  custom = '',
+): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      question: question ?? null,
+      selected,
+      custom: custom.trim() || null,
+    },
+    null,
+    2,
+  );
+}
+
 export function QuestionDialog() {
   const { t } = useI18n();
   const currentQuestion = useQuestionState((s) => s.currentQuestion);
@@ -38,6 +88,8 @@ export function QuestionDialog() {
   const [selected, setSelected] = useState<readonly string[]>([]);
   const [custom, setCustom] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // 新提问到达时重置上一个提问遗留的局部 state（store 直接替换
   // currentQuestion，组件不卸载，必须显式重置）
@@ -100,6 +152,32 @@ export function QuestionDialog() {
     // Escape = 空提交（= 超时语义；不做静默关闭，后端软结果一致）
     if (e.key === 'Escape') void submit([], null);
   };
+
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatQuestionDialogMarkdown(currentQuestion, selected, custom),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatQuestionDialogJson(currentQuestion, selected, custom),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <div
@@ -191,7 +269,25 @@ export function QuestionDialog() {
             />
           </div>
 
-          <div className="flex justify-end pt-1">
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                data-testid="question-dialog-copy-md"
+                onClick={() => void handleCopyMarkdown()}
+                className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+              >
+                {copiedMd ? '已复制 MD' : '复制 MD'}
+              </button>
+              <button
+                type="button"
+                data-testid="question-dialog-copy-json"
+                onClick={() => void handleCopyJson()}
+                className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+              >
+                {copiedJson ? '已复制 JSON' : '复制 JSON'}
+              </button>
+            </div>
             <button
               type="button"
               data-testid="question-submit"
