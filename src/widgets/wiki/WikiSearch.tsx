@@ -14,6 +14,8 @@ export function WikiSearch() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   const doSearch = async () => {
     if (!project || !query.trim()) return;
@@ -33,6 +35,36 @@ export function WikiSearch() {
   const handleOpen = (path: string) => {
     openFile(path);
     setActiveView('browser');
+  };
+
+  const handleCopyMd = () => {
+    setCopiedMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedMd(false), 2000);
+    const lines = [
+      `# Wiki 搜索结果 — ${query}`,
+      '',
+      `- 项目路径: ${project?.path ?? ''}`,
+      `- 结果数量: ${results.length}`,
+      '',
+      ...results.map((r) => `- **${r.title}** (\`${r.path}\`): ${r.snippet}`),
+    ];
+    void navigator.clipboard?.writeText(lines.join('\n'));
+    /* v8 ignore stop */
+  };
+
+  const handleCopyJson = () => {
+    setCopiedJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedJson(false), 2000);
+    const payload = {
+      project: project?.path ?? '',
+      query,
+      count: results.length,
+      results,
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
   };
 
   if (!project) {
@@ -83,7 +115,27 @@ export function WikiSearch() {
 
       {!searching && results.length > 0 && (
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          <div className="text-xs text-muted px-1">找到 {results.length} 个结果</div>
+          <div className="flex items-center justify-between px-1">
+            <div className="text-xs text-muted">找到 {results.length} 个结果</div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                data-testid="wiki-search-copy-md-btn"
+                onClick={handleCopyMd}
+                className="px-2 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+              >
+                {copiedMd ? '已复制MD' : '复制搜索MD'}
+              </button>
+              <button
+                type="button"
+                data-testid="wiki-search-copy-json-btn"
+                onClick={handleCopyJson}
+                className="px-2 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+              >
+                {copiedJson ? '已复制JSON' : '复制搜索JSON'}
+              </button>
+            </div>
+          </div>
           {results.map((result) => (
             <button
               key={result.path}

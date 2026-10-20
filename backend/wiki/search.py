@@ -185,7 +185,7 @@ def search_wiki(
             )
 
     # 按得分排序
-    results.sort(key=lambda r: r.score, reverse=True)
+    results.sort(key=lambda r: (-r.score, r.path))
     results = results[:limit]
 
     return SearchResponse(results=results, total=len(results))
