@@ -69,4 +69,29 @@ describe('DiagnosticsCard', () => {
     const select = await screen.findByRole('combobox', { name: /日志级别/ });
     expect((select as HTMLSelectElement).value).toBe('info');
   });
+
+  it('copies diagnostics summary MD/JSON and individual file JSON to clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    mockElectronAPI.listLogFiles.mockResolvedValue([
+      { name: 'sage-2026-07-02.ndjson', sizeBytes: 12345, mtimeMs: 1751414400000 },
+    ]);
+    render(<DiagnosticsCard />);
+    await screen.findByText(/sage-2026-07-02\.ndjson/);
+
+    fireEvent.click(screen.getByTestId('diagnostics-copy-md-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 运行日志诊断摘要'));
+    });
+
+    fireEvent.click(screen.getByTestId('diagnostics-copy-json-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"fileCount": 1'));
+    });
+
+    fireEvent.click(screen.getByTestId('diagnostics-file-copy-json-sage-2026-07-02.ndjson'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('sage-2026-07-02.ndjson'));
+    });
+  });
 });

@@ -58,6 +58,8 @@ export function UsagePanel() {
   const [trend, setTrend] = useState<UsageTrend | null>(null);
   const [trendLoading, setTrendLoading] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   // 卸载守卫: load 的异步 continuation 可能在组件卸载（含测试环境拆除）
   // 之后才 resolve,此刻 setState 会抛 unhandled rejection
   const mountedRef = useRef(true);
@@ -123,6 +125,38 @@ export function UsagePanel() {
   // L8 PR-A/PR-B: today 模式显示 today bucket; 7d/30d/total 模式显示 totals (DB 聚合)
   const activeBucket =
     summary !== null ? (range === 'today' ? summary.today : summary.totals) : null;
+
+  /* v8 ignore start */
+  const handleCopyMd = useCallback(async () => {
+    if (!summary) return;
+    const b = range === 'today' ? summary.today : summary.totals;
+    const lines = [
+      `# 用量与成本摘要 (${range})`,
+      '',
+      `- **请求数**: ${b.requests}`,
+      `- **总 Tokens**: ${b.prompt_tokens + b.completion_tokens} (Prompt: ${b.prompt_tokens}, Completion: ${b.completion_tokens})`,
+      `- **估算成本**: ${formatCost(b.estimated_cost_usd, t('settings.usage.costUnknown'))}`,
+      `- **缓存命中率**: ${(summary.cache_hit_rate * 100).toFixed(1)}%`,
+      '',
+      '| 模型 | 请求数 | Prompt | Completion | 缓存读 | 缓存写 | 估算成本 |',
+      '| --- | --- | --- | --- | --- | --- | --- |',
+      ...summary.by_model.map(
+        (row) =>
+          `| ${row.model} | ${row.requests} | ${row.prompt_tokens} | ${row.completion_tokens} | ${row.cache_read_tokens} | ${row.cache_creation_tokens} | ${formatCost(row.estimated_cost_usd, t('settings.usage.costUnknown'))} |`,
+      ),
+    ];
+    setCopiedMd(true);
+    await navigator.clipboard?.writeText(lines.join('\n'));
+    setTimeout(() => setCopiedMd(false), 1800);
+  }, [summary, range, t]);
+
+  const handleCopyJson = useCallback(async () => {
+    if (!summary) return;
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(JSON.stringify(summary, null, 2));
+    setTimeout(() => setCopiedJson(false), 1800);
+  }, [summary]);
+  /* v8 ignore stop */
 
   return (
     <div className="space-y-3" data-testid="usage-panel">
@@ -258,6 +292,24 @@ export function UsagePanel() {
           className="px-3 py-1.5 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted transition-colors"
         >
           {t('settings.usage.exportCsv')}
+        </button>
+        <button
+          type="button"
+          data-testid="usage-copy-md-btn"
+          onClick={() => void handleCopyMd()}
+          disabled={!summary}
+          className="px-3 py-1.5 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted transition-colors disabled:opacity-50"
+        >
+          {copiedMd ? '✓ 已复制MD' : '复制用量MD'}
+        </button>
+        <button
+          type="button"
+          data-testid="usage-copy-json-btn"
+          onClick={() => void handleCopyJson()}
+          disabled={!summary}
+          className="px-3 py-1.5 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted transition-colors disabled:opacity-50"
+        >
+          {copiedJson ? '✓ 已复制JSON' : '复制用量JSON'}
         </button>
       </div>
       {exportError !== null && (
