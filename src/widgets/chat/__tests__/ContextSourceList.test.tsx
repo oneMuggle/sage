@@ -1,8 +1,8 @@
 /**
  * UX-IA Round 2：ContextMeter 弹层中的「本轮注入的上下文」列表。
  */
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { ContextSourceList } from '../ContextMeter';
 
@@ -55,5 +55,22 @@ describe('ContextSourceList', () => {
     );
     expect(screen.getByTestId('context-source-trimmed-memory')).toHaveTextContent('已截断 300');
     expect(screen.queryByTestId('context-source-trimmed-sage_md')).toBeNull();
+  });
+
+  it('copies context sources as Markdown and JSON (Phase P90)', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(
+      <ContextSourceList
+        sources={[
+          { key: 'sage_md', tokens: 900, count: 1 },
+          { key: 'memory', tokens: 200, count: 1, trimmed: 300 },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('context-meter-sources-copy-md-btn'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 上下文注入来源分类 (2)'));
+    fireEvent.click(screen.getByTestId('context-meter-sources-copy-json-btn'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"trimmedTotal": 300'));
   });
 });

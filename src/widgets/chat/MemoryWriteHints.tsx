@@ -34,6 +34,8 @@ export function MemoryWriteHints({ sessionId }: MemoryWriteHintsProps) {
   const { t } = useI18n();
   const [items, setItems] = useState<MemoryWriteRecord[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const cursorRef = useRef<number>(0);
   const timersRef = useRef<number[]>([]);
   const sessionRef = useRef<string | null>(sessionId);
@@ -110,8 +112,61 @@ export function MemoryWriteHints({ sessionId }: MemoryWriteHintsProps) {
 
   if (!sessionId || items.length === 0) return null;
 
+  const handleCopyHintsMd = async () => {
+    /* v8 ignore start */
+    const lines = [
+      `# 会话新增记忆提示 (${items.length})`,
+      `- 会话 ID: ${sessionId}`,
+      '',
+      ...items.map((rec) => `- [${rec.kind}] (${rec.category}): ${rec.content}`),
+    ];
+    setCopiedMd(true);
+    await navigator.clipboard?.writeText(lines.join('\n'));
+    setTimeout(() => setCopiedMd(false), 1500);
+    /* v8 ignore stop */
+  };
+
+  const handleCopyHintsJson = async () => {
+    /* v8 ignore start */
+    const payload = {
+      sessionId,
+      count: items.length,
+      items: items.map((rec) => ({
+        id: rec.id,
+        seq: rec.seq,
+        kind: rec.kind,
+        category: rec.category,
+        memory_type: rec.memory_type,
+        content: rec.content,
+        created_at: rec.created_at,
+      })),
+    };
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    setTimeout(() => setCopiedJson(false), 1500);
+    /* v8 ignore stop */
+  };
+
   return (
     <div className="px-4 pb-2 flex flex-col gap-1" data-testid="memory-write-hints">
+      <div className="flex items-center justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={() => void handleCopyHintsMd()}
+          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+          data-testid="memory-hints-copy-md-btn"
+        >
+          {copiedMd ? '已复制MD' : '复制记忆提示MD'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleCopyHintsJson()}
+          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+          data-testid="memory-hints-copy-json-btn"
+        >
+          {copiedJson ? '已复制JSON' : '复制记忆提示JSON'}
+        </button>
+      </div>
       {items.map((rec) => (
         <div
           key={rec.id}

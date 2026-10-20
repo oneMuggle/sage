@@ -131,4 +131,28 @@ describe('ContextMeter', () => {
       '暂无分类明细',
     );
   });
+
+  it('copies context meter report as Markdown and JSON (Phase P90)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    mockFetch.mockResolvedValue(
+      usageFixture({
+        last_context_breakdown: {
+          categories: { tools: 20_000 },
+          estimated_total: 20_000,
+          prompt_tokens: 100_000,
+          calibrated: true,
+        },
+      }),
+    );
+    render(<ContextMeter sessionId="s1" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('context-meter')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('context-meter'));
+    fireEvent.click(screen.getByTestId('context-meter-copy-md-btn'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 上下文水位报告 — s1'));
+    fireEvent.click(screen.getByTestId('context-meter-copy-json-btn'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"usedTokens": 100000'));
+  });
 });
