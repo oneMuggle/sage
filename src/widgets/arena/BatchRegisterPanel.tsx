@@ -11,6 +11,39 @@ import { startRegistrationJob } from '../../entities/arena';
 
 import { JobConsole } from './JobConsole';
 
+export interface BatchRegisterSnapshot {
+  count: number;
+  concurrency: string;
+  proxyMode: 'off' | 'pool';
+  jobId?: string;
+}
+
+export function formatBatchRegisterMarkdown(params: BatchRegisterSnapshot): string {
+  const lines = [
+    '# Arena 批量注册配置 (Batch Register Config)',
+    '',
+    `- **注册数量**: ${params.count}`,
+    `- **并发配置**: ${params.concurrency.trim() || '默认'}`,
+    `- **代理模式**: ${params.proxyMode === 'pool' ? '代理池 (pool)' : '直连 (off)'}`,
+    `- **当前任务 ID**: ${params.jobId || '未启动'}`,
+  ];
+  return lines.join('\n');
+}
+
+export function formatBatchRegisterJson(params: BatchRegisterSnapshot): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      count: params.count,
+      concurrency: params.concurrency.trim() === '' ? null : Number(params.concurrency),
+      proxyMode: params.proxyMode,
+      jobId: params.jobId || null,
+    },
+    null,
+    2,
+  );
+}
+
 export function BatchRegisterPanel() {
   const [count, setCount] = useState(3);
   const [concurrency, setConcurrency] = useState('');
@@ -18,6 +51,34 @@ export function BatchRegisterPanel() {
   const [jobId, setJobId] = useState('');
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatBatchRegisterMarkdown({ count, concurrency, proxyMode, jobId }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatBatchRegisterJson({ count, concurrency, proxyMode, jobId }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
 
   async function handleStart(): Promise<void> {
     setError('');
@@ -44,7 +105,27 @@ export function BatchRegisterPanel() {
   return (
     <section className="space-y-3" data-testid="batch-register-panel">
       <div className="rounded border border-border p-3 space-y-2">
-        <h2 className="text-sm font-medium">批量注册</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-medium">批量注册</h2>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              data-testid="batch-register-copy-md"
+              onClick={() => void handleCopyMarkdown()}
+              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
+            >
+              {copiedMd ? '已复制 MD' : '复制 MD'}
+            </button>
+            <button
+              type="button"
+              data-testid="batch-register-copy-json"
+              onClick={() => void handleCopyJson()}
+              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
+            >
+              {copiedJson ? '已复制 JSON' : '复制 JSON'}
+            </button>
+          </div>
+        </div>
         <p className="text-xs text-text-muted">
           临时邮箱 + 自动注册；代理模式 pool 需先配置代理池（arena_automation.yaml）。
         </p>
