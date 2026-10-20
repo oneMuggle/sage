@@ -90,4 +90,22 @@ describe('ForkTreeModal', () => {
     renderModal({ sessionId: 'me' });
     await waitFor(() => expect(screen.getByTestId('fork-tree-error')).toHaveTextContent('boom'));
   });
+
+  it('支持复制分叉谱系树 MD 与 JSON 到剪贴板', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    mockList.mockResolvedValue([sess('root', null), sess('me', 'root')]);
+    renderModal({ sessionId: 'me' });
+    await waitFor(() => expect(screen.getByTestId('fork-tree-node-root')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('fork-tree-copy-md-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 会话分叉谱系树'));
+    });
+
+    fireEvent.click(screen.getByTestId('fork-tree-copy-json-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"root"'));
+    });
+  });
 });
