@@ -55,6 +55,57 @@ const SkillCard: React.FC<SkillCardProps> = ({
 }) => {
   // P2-2: 审计抽屉只在用户点开时才加载，不随卡片列表批量拉取。
   const [auditOpen, setAuditOpen] = React.useState(false);
+  const [copiedMd, setCopiedMd] = React.useState(false);
+  const [copiedJson, setCopiedJson] = React.useState(false);
+
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    const lines = [
+      `# Skill · ${name}`,
+      '',
+      `- 来源: \`${source}\``,
+      `- 状态: ${enabled ? '已启用' : '未启用'}`,
+      `- 已使用次数: ${usage_count}`,
+      `- 触发词: ${triggers.join(', ') || '无'}`,
+      `- 描述: ${description}`,
+    ];
+    if (body) {
+      lines.push('', '## 提示词模板', '```markdown', body, '```');
+    }
+    setCopiedMd(true);
+    try {
+      await navigator.clipboard?.writeText(lines.join('\n'));
+    } catch {
+      // ignore clipboard errors
+    }
+    setTimeout(() => setCopiedMd(false), 1500);
+  };
+
+  const handleCopyJson = async () => {
+    const payload = {
+      name,
+      description,
+      triggers,
+      enabled,
+      usage_count,
+      source,
+      version,
+      base_dir,
+      dispatch,
+      lifecycle,
+      pinned,
+      body,
+    };
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    } catch {
+      // ignore clipboard errors
+    }
+    setTimeout(() => setCopiedJson(false), 1500);
+  };
+  /* v8 ignore stop */
+
   // M9: 用户可调用的 slash command — 仅在显式声明 user_invocable_name 时渲染,
   // name 回退策略在 chat 层处理 (避免前端做映射)
   const slashCommand =
@@ -194,6 +245,24 @@ const SkillCard: React.FC<SkillCardProps> = ({
           )}
           {/* P2-2: 变更历史 + 回滚。技能会被后台自动改动，此前用户既看不到
               改了什么、也无法退回 —— 只能被动接受。 */}
+          <button
+            type="button"
+            onClick={handleCopyMd}
+            data-testid={`skill-card-copy-md-${name}`}
+            className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:text-text transition-colors"
+            aria-label={`复制 ${name} 的 Markdown`}
+          >
+            {copiedMd ? '✓ 已复制MD' : '复制MD'}
+          </button>
+          <button
+            type="button"
+            onClick={handleCopyJson}
+            data-testid={`skill-card-copy-json-${name}`}
+            className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:text-text transition-colors"
+            aria-label={`复制 ${name} 的 JSON`}
+          >
+            {copiedJson ? '✓ 已复制JSON' : '复制JSON'}
+          </button>
           <button
             type="button"
             onClick={() => setAuditOpen(true)}

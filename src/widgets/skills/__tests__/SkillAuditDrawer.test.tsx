@@ -16,30 +16,9 @@ vi.mock('../../../shared/api/skillsApi', () => ({
 }));
 
 const ENTRIES = [
-  {
-    id: 3,
-    skill_name: 'office_create',
-    action: 'update',
-    actor: 'user',
-    source: 'editor',
-    created_at: 1_757_000_000_000,
-  },
-  {
-    id: 2,
-    skill_name: 'office_create',
-    action: 'consolidation_note',
-    actor: 'system',
-    source: 'consolidation_scan',
-    created_at: 1_756_000_000_000,
-  },
-  {
-    id: 1,
-    skill_name: 'office_create',
-    action: 'create',
-    actor: 'system',
-    source: 'builtin',
-    created_at: 1_755_000_000_000,
-  },
+  { id: 3, skill_name: 'office_create', action: 'update', actor: 'user', source: 'editor', created_at: 1_757_000_000_000 },
+  { id: 2, skill_name: 'office_create', action: 'consolidation_note', actor: 'system', source: 'consolidation_scan', created_at: 1_756_000_000_000 },
+  { id: 1, skill_name: 'office_create', action: 'create', actor: 'system', source: 'builtin', created_at: 1_755_000_000_000 },
 ];
 
 beforeEach(() => {
@@ -136,5 +115,23 @@ describe('SkillAuditDrawer (P2-2)', () => {
     resolveConfirm(true);
     // 失败时抽屉保持打开，用户还能看到台账并重试
     await waitFor(() => expect(rollbackMock).toHaveBeenCalled());
+  });
+
+  it('copies audit entries as Markdown and JSON (Phase P87)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(<SkillAuditDrawer skillName="office_create" open onOpenChange={vi.fn()} />);
+    await screen.findByTestId('skill-audit-timeline');
+
+    fireEvent.click(screen.getByTestId('skill-audit-copy-md-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('skill-audit-copy-md-btn')).toHaveTextContent('✓ 已复制MD');
+    });
+
+    fireEvent.click(screen.getByTestId('skill-audit-copy-json-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('skill-audit-copy-json-btn')).toHaveTextContent('✓ 已复制JSON');
+    });
   });
 });

@@ -185,7 +185,7 @@ def search_wiki(
             )
 
     # 按得分排序
-    results.sort(key=lambda r: r.score, reverse=True)
+    results.sort(key=lambda r: (-r.score, r.path))
     results = results[:limit]
 
     return SearchResponse(results=results, total=len(results))
@@ -200,7 +200,7 @@ def _tokenize_query(query: str) -> List[str]:
         query: 查询字符串
 
     Returns:
-        list[str]: token 列表（已过滤停止词）
+        List[str]: token 列表（已过滤停止词）
     """
     tokens = []
     current_word = []
