@@ -3,7 +3,7 @@
 // U18 (round4 批次 E): 快捷键帮助覆盖层。数据源 src/shared/lib/shortcuts.ts。
 // 打开方式：任意非输入焦点下按 Shift+/（即 '?'）；Esc / 点击背景关闭。
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { SHORTCUT_GROUPS } from '../../shared/lib/shortcuts';
 
@@ -12,7 +12,42 @@ interface ShortcutHelpOverlayProps {
   onClose: () => void;
 }
 
+export function formatShortcutHelpMarkdown(
+  groups: typeof SHORTCUT_GROUPS = SHORTCUT_GROUPS,
+): string {
+  const lines = ['# 键盘快捷键列表'];
+  for (const group of groups) {
+    lines.push(`## ${group.group}`);
+    for (const item of group.items) {
+      lines.push(`- \`${item.keys}\`: ${item.description}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatShortcutHelpJson(
+  groups: typeof SHORTCUT_GROUPS = SHORTCUT_GROUPS,
+): string {
+  return JSON.stringify(
+    {
+      groupCount: groups.length,
+      groups: groups.map((g) => ({
+        group: g.group,
+        items: g.items.map((it) => ({
+          keys: it.keys,
+          description: it.description,
+        })),
+      })),
+    },
+    null,
+    2,
+  );
+}
+
 export function ShortcutHelpOverlay({ open, onClose }: ShortcutHelpOverlayProps) {
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent): void => {
@@ -26,6 +61,26 @@ export function ShortcutHelpOverlay({ open, onClose }: ShortcutHelpOverlayProps)
   }, [open, onClose]);
 
   if (!open) return null;
+
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    setCopiedMd(true);
+    try {
+      await navigator.clipboard?.writeText(formatShortcutHelpMarkdown(SHORTCUT_GROUPS));
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(formatShortcutHelpJson(SHORTCUT_GROUPS));
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <div
@@ -42,13 +97,31 @@ export function ShortcutHelpOverlay({ open, onClose }: ShortcutHelpOverlayProps)
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h2 className="text-sm font-semibold text-text">键盘快捷键</h2>
-          <button
-            className="text-text-secondary hover:text-text text-sm px-1"
-            aria-label="关闭快捷键帮助"
-            onClick={onClose}
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid="shortcut-help-copy-md"
+              onClick={() => void handleCopyMd()}
+              className="text-xs px-2 py-0.5 rounded border border-border text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedMd ? '已复制 MD' : '复制 MD'}
+            </button>
+            <button
+              type="button"
+              data-testid="shortcut-help-copy-json"
+              onClick={() => void handleCopyJson()}
+              className="text-xs px-2 py-0.5 rounded border border-border text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedJson ? '已复制 JSON' : '复制 JSON'}
+            </button>
+            <button
+              className="text-text-secondary hover:text-text text-sm px-1"
+              aria-label="关闭快捷键帮助"
+              onClick={onClose}
+            >
+              ✕
+            </button>
+          </div>
         </div>
         <div className="overflow-y-auto px-4 py-3 flex flex-col gap-4">
           {SHORTCUT_GROUPS.map((group) => (

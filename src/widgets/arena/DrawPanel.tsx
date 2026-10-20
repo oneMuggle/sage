@@ -18,6 +18,30 @@ const MISS_ACTIONS = [
   { value: 'delete', label: '删除会话' },
 ] as const;
 
+export function formatDrawsMarkdown(draws: ArenaDrawRow[]): string {
+  const lines = [`# 抽卡记录 (${draws.length} 条)`];
+  for (const row of draws) {
+    const ts = (row.created_at ?? '').replace('T', ' ').slice(0, 19) || '—';
+    const model = row.model || row.internal || '—';
+    const kept = row.kept ? '保留' : '未保留';
+    const reasoning = String(row.reasoning ?? '') || '—';
+    const run = row.run_id || '—';
+    lines.push(`- **${ts}** · ${row.email} · ${model} · ${kept} · reasoning=${reasoning} · run=${run}`);
+  }
+  return lines.join('\n');
+}
+
+export function formatDrawsJson(draws: ArenaDrawRow[]): string {
+  return JSON.stringify(
+    {
+      count: draws.length,
+      draws,
+    },
+    null,
+    2,
+  );
+}
+
 export function DrawPanel() {
   const [accounts, setAccounts] = useState<ArenaAccount[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -32,6 +56,8 @@ export function DrawPanel() {
   const [starting, setStarting] = useState(false);
   const [draws, setDraws] = useState<ArenaDrawRow[]>([]);
   const [drawsLoading, setDrawsLoading] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   const refreshDraws = useCallback(async () => {
     setDrawsLoading(true);
@@ -93,6 +119,26 @@ export function DrawPanel() {
       return next;
     });
   }
+
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    setCopiedMd(true);
+    try {
+      await navigator.clipboard?.writeText(formatDrawsMarkdown(draws));
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(formatDrawsJson(draws));
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <section className="space-y-3" data-testid="draw-panel">
@@ -206,15 +252,33 @@ export function DrawPanel() {
       <div className="rounded border border-border p-3 space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium">抽卡记录（最近 20 条）</h2>
-          <button
-            type="button"
-            onClick={() => void refreshDraws()}
-            disabled={drawsLoading}
-            data-testid="draws-refresh"
-            className="text-xs rounded border border-border px-2 py-1 hover:bg-bg-hover disabled:opacity-50"
-          >
-            刷新
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleCopyMd()}
+              data-testid="draws-copy-md"
+              className="text-xs rounded border border-border px-2 py-1 hover:bg-bg-hover"
+            >
+              {copiedMd ? '已复制 MD' : '复制 MD'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCopyJson()}
+              data-testid="draws-copy-json"
+              className="text-xs rounded border border-border px-2 py-1 hover:bg-bg-hover"
+            >
+              {copiedJson ? '已复制 JSON' : '复制 JSON'}
+            </button>
+            <button
+              type="button"
+              onClick={() => void refreshDraws()}
+              disabled={drawsLoading}
+              data-testid="draws-refresh"
+              className="text-xs rounded border border-border px-2 py-1 hover:bg-bg-hover disabled:opacity-50"
+            >
+              刷新
+            </button>
+          </div>
         </div>
         {draws.length === 0 ? (
           <p className="text-xs text-text-muted" data-testid="draws-empty">

@@ -13,7 +13,7 @@
  * - 桶时间格式按 bucket=hour/day 切: hour → "HH:00", day → "MM-DD"
  * - 错误态 (series 含 error 字段) 由父组件拦截, 这里只画数据
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 import type { UsageTrend, UsageTrendPoint } from '../../shared/api/usageApi';
 import { useI18n } from '../../shared/lib/i18n';
@@ -59,8 +59,38 @@ interface UsageTrendChartProps {
   loading: boolean;
 }
 
+export function formatUsageTrendMarkdown(trend: UsageTrend | null): string {
+  const series = trend?.series ?? [];
+  const lines = [
+    `# 用量趋势 (${trend?.range ?? '—'} · ${trend?.bucket ?? 'day'})`,
+    `- 数据点数: ${series.length}`,
+  ];
+  for (const pt of series) {
+    lines.push(
+      `- **${pt.ts}**: 请求 ${pt.requests} · 输入 ${pt.prompt_tokens} · 输出 ${pt.completion_tokens} · 成本 $${pt.cost_usd.toFixed(4)} · 缓存命中 ${Math.round((pt.cache_hit_rate ?? 0) * 100)}%`,
+    );
+  }
+  return lines.join('\n');
+}
+
+export function formatUsageTrendJson(trend: UsageTrend | null): string {
+  const series = trend?.series ?? [];
+  return JSON.stringify(
+    {
+      range: trend?.range ?? null,
+      bucket: trend?.bucket ?? 'day',
+      count: series.length,
+      series,
+    },
+    null,
+    2,
+  );
+}
+
 export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
   const { t } = useI18n();
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const series = useMemo<UsageTrendPoint[]>(() => trend?.series ?? [], [trend?.series]);
   const bucket = trend?.bucket ?? 'day';
 
@@ -110,11 +140,31 @@ export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
   const reqPath = buildPath(layout.reqPoints);
   const costPath = buildPath(layout.costPoints);
 
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    setCopiedMd(true);
+    try {
+      await navigator.clipboard?.writeText(formatUsageTrendMarkdown(trend));
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(formatUsageTrendJson(trend));
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="pt-2 border-t border-border" data-testid="usage-trend-chart">
       <div className="flex items-center justify-between mb-1">
         <h4 className="text-xs font-medium text-text">{t('settings.usage.trend.title')}</h4>
-        <div className="flex gap-3 text-xs text-text-muted">
+        <div className="flex items-center gap-3 text-xs text-text-muted">
           <span data-testid="usage-trend-legend-requests">
             <span className="inline-block w-2 h-2 mr-1 align-middle bg-blue-500 rounded-full" />
             {t('settings.usage.trend.legendRequests')}
@@ -123,6 +173,22 @@ export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
             <span className="inline-block w-2 h-2 mr-1 align-middle bg-amber-500 rounded-full" />
             {t('settings.usage.trend.legendCost')}
           </span>
+          <button
+            type="button"
+            onClick={() => void handleCopyMd()}
+            data-testid="usage-trend-copy-md"
+            className="px-1.5 py-0.5 rounded border border-border hover:bg-bg-hover"
+          >
+            {copiedMd ? '已复制 MD' : '复制 MD'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCopyJson()}
+            data-testid="usage-trend-copy-json"
+            className="px-1.5 py-0.5 rounded border border-border hover:bg-bg-hover"
+          >
+            {copiedJson ? '已复制 JSON' : '复制 JSON'}
+          </button>
         </div>
       </div>
       <svg

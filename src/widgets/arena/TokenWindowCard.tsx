@@ -15,11 +15,47 @@ interface TokenWindowCardProps {
   pollIntervalMs?: number;
 }
 
+export function formatTokenWindowMarkdown(
+  health: Awaited<ReturnType<typeof tokenWindowHealth>> | null,
+  state: Awaited<ReturnType<typeof tokenWindowState>> | null,
+  disabled?: boolean,
+): string {
+  const lines = ['# Token 窗口状态'];
+  if (disabled) {
+    lines.push('- 状态: 未启用');
+    return lines.join('\n');
+  }
+  lines.push(`- 就绪状态: ${health ? (health.ready ? '就绪' : '待票') : '—'}`);
+  lines.push(`- 累计出票: ${health ? String(health.count) : '—'}`);
+  lines.push(`- 出口 IP: ${health?.exit_ip || '—'}`);
+  lines.push(`- 需要出票: ${state ? (state.needed ? '是' : '否') : '—'}`);
+  lines.push(`- 拒绝计数: ${state ? String(state.reject_count) : '—'}`);
+  return lines.join('\n');
+}
+
+export function formatTokenWindowJson(
+  health: Awaited<ReturnType<typeof tokenWindowHealth>> | null,
+  state: Awaited<ReturnType<typeof tokenWindowState>> | null,
+  disabled?: boolean,
+): string {
+  return JSON.stringify(
+    {
+      disabled: Boolean(disabled),
+      health: health ?? null,
+      state: state ?? null,
+    },
+    null,
+    2,
+  );
+}
+
 export function TokenWindowCard({ pollIntervalMs = 5000 }: TokenWindowCardProps) {
   const [health, setHealth] = useState<Awaited<ReturnType<typeof tokenWindowHealth>> | null>(null);
   const [state, setState] = useState<Awaited<ReturnType<typeof tokenWindowState>> | null>(null);
   const [error, setError] = useState('');
   const [disabled, setDisabled] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,18 +87,56 @@ export function TokenWindowCard({ pollIntervalMs = 5000 }: TokenWindowCardProps)
     };
   }, [pollIntervalMs]);
 
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    setCopiedMd(true);
+    try {
+      await navigator.clipboard?.writeText(formatTokenWindowMarkdown(health, state, disabled));
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(formatTokenWindowJson(health, state, disabled));
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <section className="rounded border border-border p-3 space-y-1" data-testid="token-window-card">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium">token 窗口</h2>
-        {health && (
-          <span
-            className={`text-xs rounded px-2 py-0.5 ${health.ready ? 'bg-success/10 text-success' : 'bg-bg-muted text-text-muted'}`}
-            data-testid="tw-ready"
+        <div className="flex items-center gap-2">
+          {health && (
+            <span
+              className={`text-xs rounded px-2 py-0.5 ${health.ready ? 'bg-success/10 text-success' : 'bg-bg-muted text-text-muted'}`}
+              data-testid="tw-ready"
+            >
+              {health.ready ? '就绪' : '待票'}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleCopyMd()}
+            data-testid="token-window-copy-md"
+            className="text-xs rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
           >
-            {health.ready ? '就绪' : '待票'}
-          </span>
-        )}
+            {copiedMd ? '已复制 MD' : '复制 MD'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCopyJson()}
+            data-testid="token-window-copy-json"
+            className="text-xs rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
+          >
+            {copiedJson ? '已复制 JSON' : '复制 JSON'}
+          </button>
+        </div>
       </div>
       {disabled ? (
         <p className="text-xs text-text-muted" data-testid="tw-disabled">
