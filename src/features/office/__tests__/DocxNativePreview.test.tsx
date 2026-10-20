@@ -5,7 +5,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { sanitizeRenderedDocx } from '../DocxNativePreview';
+import {
+  formatDocxPreviewMetaJson,
+  formatDocxPreviewMetaMarkdown,
+  sanitizeRenderedDocx,
+} from '../DocxNativePreview';
 
 function makeContainer(html: string): HTMLElement {
   const div = document.createElement('div');
@@ -41,5 +45,35 @@ describe('sanitizeRenderedDocx', () => {
     expect(p.getAttribute('onclick')).toBeNull();
     expect(p.getAttribute('onmouseover')).toBeNull();
     expect(p.textContent).toBe('t');
+  });
+
+  it('formats docx native preview state as Markdown and JSON', () => {
+    const md = formatDocxPreviewMetaMarkdown({
+      workspacePath: '/ws/proj',
+      managedPath: 'report.docx',
+      revision: 'rev1',
+      state: 'ok',
+    });
+    expect(md).toContain('# Word 原生预览状态 (Docx Native Preview)');
+    expect(md).toContain('report.docx');
+    expect(
+      formatDocxPreviewMetaMarkdown({
+        workspacePath: '/ws/proj',
+        managedPath: 'bad.docx',
+        revision: null,
+        state: 'error',
+      }),
+    ).toContain('error');
+
+    const parsed = JSON.parse(
+      formatDocxPreviewMetaJson({
+        workspacePath: '/ws/proj',
+        managedPath: 'report.docx',
+        revision: 'rev1',
+        state: 'ok',
+      }),
+    );
+    expect(parsed.managedPath).toBe('report.docx');
+    expect(parsed.revision).toBe('rev1');
   });
 });

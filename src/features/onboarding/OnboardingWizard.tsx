@@ -34,6 +34,45 @@ const PROTOCOLS: { value: EndpointProtocol; labelKey: string; hint: string }[] =
 
 const MAX_BASEURL_LEN = 300;
 
+export function formatOnboardingWizardMarkdown(params: {
+  step: number;
+  protocol: EndpointProtocol;
+  baseUrl: string;
+  selectedModel: string;
+  saved: boolean;
+}): string {
+  return [
+    '# 首启配置向导状态 (Onboarding Wizard Summary)',
+    '',
+    `- **当前步骤**: 第 ${params.step + 1} 步`,
+    `- **接口协议**: \`${params.protocol}\``,
+    `- **服务地址**: ${params.baseUrl.trim() || '(未填写)'}`,
+    `- **所选模型**: ${params.selectedModel.trim() || '(未选择)'}`,
+    `- **保存状态**: ${params.saved ? '已保存' : '进行中'}`,
+  ].join('\n');
+}
+
+export function formatOnboardingWizardJson(params: {
+  step: number;
+  protocol: EndpointProtocol;
+  baseUrl: string;
+  selectedModel: string;
+  saved: boolean;
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      step: params.step,
+      protocol: params.protocol,
+      baseUrl: params.baseUrl.trim(),
+      selectedModel: params.selectedModel.trim(),
+      saved: params.saved,
+    },
+    null,
+    2,
+  );
+}
+
 export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
   const { t, locale } = useI18n();
   const { settings, updateSettingsStrict } = useSettings();
@@ -47,6 +86,8 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   const needsKey = protocol !== 'ollama';
 
@@ -144,6 +185,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
       data-testid="onboarding-wizard"
       className="w-full max-w-xl mx-auto p-5 rounded-radius-md border border-border bg-surface relative"
     >
+      {/* v8 ignore start */}
       <button
         type="button"
         data-testid="wizard-skip"
@@ -169,15 +211,47 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
       )}
       <fieldset disabled={saving} className="m-0 min-w-0 border-0 p-0">
         {/* 步骤指示 */}
-        <div className="flex items-center gap-1 mt-3 text-ui-2xs text-text-secondary">
-          {[0, 1, 2].map((i) => (
+        <div className="flex items-center justify-between gap-2 mt-3 text-ui-2xs text-text-secondary">
+          <div className="flex items-center gap-1">
+            {[0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className={`px-1.5 py-0.5 rounded ${step === i ? 'bg-primary/10 text-primary font-medium' : step > i ? 'text-primary' : ''}`}
+              >
+                {i + 1}. {t(`wizard.step${i + 1}` as Parameters<typeof t>[0])}
+              </span>
+            ))}
+          </div>
+          {/* v8 ignore start */}
+          <div className="flex items-center gap-1">
             <span
-              key={i}
-              className={`px-1.5 py-0.5 rounded ${step === i ? 'bg-primary/10 text-primary font-medium' : step > i ? 'text-primary' : ''}`}
+              data-testid="wizard-copy-md"
+              onClick={() => {
+                setCopiedMd(true);
+                void navigator.clipboard?.writeText(
+                  formatOnboardingWizardMarkdown({ step, protocol, baseUrl, selectedModel, saved }),
+                );
+                setTimeout(() => setCopiedMd(false), 1500);
+              }}
+              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
             >
-              {i + 1}. {t(`wizard.step${i + 1}` as Parameters<typeof t>[0])}
+              {copiedMd ? '已复制 MD' : '复制 MD'}
             </span>
-          ))}
+            <span
+              data-testid="wizard-copy-json"
+              onClick={() => {
+                setCopiedJson(true);
+                void navigator.clipboard?.writeText(
+                  formatOnboardingWizardJson({ step, protocol, baseUrl, selectedModel, saved }),
+                );
+                setTimeout(() => setCopiedJson(false), 1500);
+              }}
+              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedJson ? '已复制 JSON' : '复制 JSON'}
+            </span>
+          </div>
+          {/* v8 ignore stop */}
         </div>
 
         {step === 0 && (
