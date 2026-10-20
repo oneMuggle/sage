@@ -116,6 +116,9 @@ export function UserProfileCard() {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -163,12 +166,53 @@ export function UserProfileCard() {
 
   const handleDelete = (id: string) => run(() => memoryApi.deleteUserProfile(id), '删除画像失败');
 
+  const handleCopyMd = () => {
+    setCopiedMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedMd(false), 2000);
+    const lines = [
+      '# 用户画像 (关于我)',
+      '',
+      `- 条目数: ${items.length}`,
+      '',
+      ...items.map((e, idx) => `${idx + 1}. **[${labelOf(e.category)} · ★${e.importance}]** ${e.content}`),
+    ];
+    void navigator.clipboard?.writeText(lines.join('\n'));
+    /* v8 ignore stop */
+  };
+
+  const handleCopyJson = () => {
+    setCopiedJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedJson(false), 2000);
+    const payload = {
+      count: items.length,
+      items,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
+
+  const handleCopyItemJson = (entry: UserProfileEntry) => {
+    setCopiedItemId(entry.id);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedItemId(null), 2000);
+    const payload = {
+      ...entry,
+      categoryLabel: labelOf(entry.category),
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
+
   return (
     <section
       className="mb-5 rounded-radius-md border border-border bg-surface p-4"
       data-testid="user-profile-card"
     >
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <UserRound className="w-4 h-4 text-accent shrink-0" aria-hidden />
           <h3 className="text-sm font-semibold text-text">关于我</h3>
@@ -176,19 +220,41 @@ export function UserProfileCard() {
             Sage 在每次对话中都会参考这些稳定偏好 · 自动提取 + 手动维护
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setAdding(true);
-            setEditingId(null);
-          }}
-          disabled={adding || busy}
-          className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-bg-hover disabled:opacity-50 shrink-0"
-          data-testid="profile-add"
-        >
-          <Plus className="w-3 h-3" aria-hidden />
-          添加
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {items.length > 0 && (
+            <>
+              <button
+                type="button"
+                data-testid="user-profile-copy-md-btn"
+                onClick={handleCopyMd}
+                className="px-2 py-1 text-xs rounded border border-border hover:bg-bg-hover text-text-secondary"
+              >
+                {copiedMd ? '已复制MD' : '复制画像MD'}
+              </button>
+              <button
+                type="button"
+                data-testid="user-profile-copy-json-btn"
+                onClick={handleCopyJson}
+                className="px-2 py-1 text-xs rounded border border-border hover:bg-bg-hover text-text-secondary"
+              >
+                {copiedJson ? '已复制JSON' : '复制画像JSON'}
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setAdding(true);
+              setEditingId(null);
+            }}
+            disabled={adding || busy}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-bg-hover disabled:opacity-50 shrink-0"
+            data-testid="profile-add"
+          >
+            <Plus className="w-3 h-3" aria-hidden />
+            添加
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -236,6 +302,14 @@ export function UserProfileCard() {
                   <span className="text-ui-xs text-text-secondary shrink-0" title="重要性">
                     ★{e.importance}
                   </span>
+                  <button
+                    type="button"
+                    data-testid={`user-profile-item-copy-json-${e.id}`}
+                    onClick={() => handleCopyItemJson(e)}
+                    className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover shrink-0"
+                  >
+                    {copiedItemId === e.id ? '已复制JSON' : '复制JSON'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => {

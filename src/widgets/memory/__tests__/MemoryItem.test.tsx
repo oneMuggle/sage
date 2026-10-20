@@ -32,6 +32,8 @@ describe('MemoryItem', () => {
     expect(screen.getByText('情景')).toBeInTheDocument();
     expect(screen.getByText('工作')).toBeInTheDocument();
     expect(screen.getByText('重要')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('memory-card-copy-json-mem-1'));
+    expect(screen.getByTestId('memory-card-copy-json-mem-1')).toHaveTextContent('已复制JSON');
   });
 
   it('calls onDelete after two-step confirm (click twice, U12)', () => {

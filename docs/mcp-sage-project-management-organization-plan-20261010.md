@@ -1141,3 +1141,15 @@
   - 在左侧栏文件树头部新增 **`复制树MD`**（`data-testid="wiki-file-tree-copy-md-btn"`）与 **`复制树JSON`**（`data-testid="wiki-file-tree-copy-json-btn"`），在右侧栏文档预览头部新增 **`复制预览MD`**（`data-testid="wiki-right-preview-copy-md-btn"`）与 **`复制预览JSON`**（`data-testid="wiki-right-preview-copy-json-btn"`），并在导入进度横幅新增 **`复制进度JSON`**（`data-testid="wiki-ingest-copy-json-btn"`）。
 - **单元测试与门禁验证**：
   - 扩展 `WikiEditor.test.tsx` 与 `WikiChat.sources.test.tsx`（全部单测通过，变更文件分支覆盖率 `> 82%`），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P85 — 记忆库浏览器、用户画像卡片、记忆条目、新建记忆草稿与待办事项 MD/JSON 导出（已完成）
+
+- **Phase 4.2 `MemoryBrowser` 记忆库报告与单条记忆 MD/JSON 导出（`src/widgets/memory/MemoryBrowser.tsx`）**：
+  - 在视图模式切换栏新增 **`复制记忆MD`**（`data-testid="memory-browser-copy-md-btn"`）与 **`复制记忆JSON`**（`data-testid="memory-browser-copy-json-btn"`），并在每条 `MemoryItemCard` 新增 **`复制MD`**（`data-testid="memory-item-copy-md-${memory.id}"`）与 **`复制JSON`**（`data-testid="memory-item-copy-json-${memory.id}"`）。
+- **Phase 4.2 `UserProfileCard` 用户画像卡片与单条目 MD/JSON 导出（`src/widgets/memory/UserProfileCard.tsx`）**：
+  - 在用户画像顶部操作栏新增 **`复制画像MD`**（`data-testid="user-profile-copy-md-btn"`）与 **`复制画像JSON`**（`data-testid="user-profile-copy-json-btn"`），并在每条画像条目操作区新增 **`复制JSON`**（`data-testid="user-profile-item-copy-json-${e.id}"`）。
+- **Phase 4.2 `MemoryItem` 与 `NewMemoryModal` 记忆卡片及新建草稿 JSON 导出（`src/widgets/memory/MemoryItem.tsx`, `src/widgets/memory/NewMemoryModal.tsx`）**：
+  - 在 `MemoryItem` 底部新增 **`复制记忆JSON`**（`data-testid="memory-card-copy-json-${memory.id}"`），并在 `NewMemoryModal` 底部操作区新增 **`复制草稿JSON`**（`data-testid="new-memory-copy-draft-json-btn"`）。
+- **Phase 4.1 `TodoItem` 待办事项单条 MD/JSON 导出（`src/widgets/todo/TodoItem.tsx`）**：
+  - 在每条待办事项右侧新增 **`复制MD`**（`data-testid="todo-item-copy-md-${todo.id}"`）与 **`复制JSON`**（`data-testid="todo-item-copy-json-${todo.id}"`）。
+- **单元测试与门禁验证**：
+  - 扩展 `MemoryBrowser.test.tsx`、`UserProfileCard.test.tsx`、`MemoryItem.test.tsx`、`NewMemoryModal.test.tsx` 与 `TodoItem.test.tsx`（37 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。

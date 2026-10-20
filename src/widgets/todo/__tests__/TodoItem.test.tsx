@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useTodoStore } from '../../../entities/todo/todoStore';
@@ -32,6 +32,10 @@ describe('TodoItem', () => {
   it('renders the title', () => {
     render(<TodoItem todo={fixture({ title: 'Buy milk' })} />);
     expect(screen.getByText('Buy milk')).toBeDefined();
+    fireEvent.click(screen.getByTestId('todo-item-copy-md-1'));
+    expect(screen.getByTestId('todo-item-copy-md-1')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('todo-item-copy-json-1'));
+    expect(screen.getByTestId('todo-item-copy-json-1')).toHaveTextContent('已复制JSON');
   });
 
   it('shows the recurring icon only when is_recurring is true', () => {

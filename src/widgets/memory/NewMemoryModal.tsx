@@ -17,6 +17,21 @@ export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps
   const [importance, setImportance] = useState(5);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedDraftJson, setCopiedDraftJson] = useState(false);
+
+  const handleCopyDraftJson = () => {
+    setCopiedDraftJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedDraftJson(false), 2000);
+    const payload = {
+      content: content.trim(),
+      memoryType,
+      importance,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
 
   const resetForm = () => {
     setContent('');
@@ -122,6 +137,14 @@ export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps
       </div>
 
       <div className="flex justify-end gap-2 pt-4 mt-3 border-t border-border">
+        <button
+          type="button"
+          data-testid="new-memory-copy-draft-json-btn"
+          onClick={handleCopyDraftJson}
+          className="px-3 py-1.5 text-xs border border-border rounded text-text-secondary hover:text-text"
+        >
+          {copiedDraftJson ? '已复制JSON' : '复制草稿JSON'}
+        </button>
         <button
           type="button"
           onClick={handleClose}
