@@ -1,7 +1,11 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
-import { JournalSpecCard } from '../components/JournalSpecCard';
+import {
+  formatJournalSpecJson,
+  formatJournalSpecMarkdown,
+  JournalSpecCard,
+} from '../components/JournalSpecCard';
 
 const stubSpec = {
   spec_id: 'spec_001',
@@ -54,5 +58,22 @@ describe('JournalSpecCard', () => {
   it('omits the headings section when headings array is empty', () => {
     render(<JournalSpecCard spec={{ ...stubSpec, headings: [] }} />);
     expect(screen.queryByText(/章节 \(0\)/)).toBeNull();
+  });
+
+  it('exports JournalSpec as Markdown and JSON and copies via buttons', () => {
+    expect(formatJournalSpecMarkdown(null)).toContain('_尚未选择模板_');
+    const md = formatJournalSpecMarkdown(stubSpec);
+    expect(md).toContain('# 期刊模板规范 — cell-press.docx');
+    expect(md).toContain('Introduction (L1 · 13pt)');
+    const parsed = JSON.parse(formatJournalSpecJson(stubSpec));
+    expect(parsed.spec.template_filename).toBe('cell-press.docx');
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<JournalSpecCard spec={stubSpec} />);
+    fireEvent.click(screen.getByTestId('journal-spec-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('cell-press.docx'));
+    fireEvent.click(screen.getByTestId('journal-spec-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"spec_id": "spec_001"'));
   });
 });

@@ -27,6 +27,58 @@ const IDS_PLACEHOLDER: Record<GatewayPlatform, string> = {
   slack: 'C0123456789, C9876543210',
 };
 
+export function formatGatewayCardMarkdown(
+  platform: GatewayPlatform,
+  label: string,
+  enabled: boolean,
+  status: GatewayStatus | null,
+  ids: string,
+  binds: GatewayBind[],
+): string {
+  const lines = [
+    `# 消息网关（${label}）配置摘要`,
+    '',
+    `- **平台**: ${platform} (${label})`,
+    `- **启用状态**: ${enabled ? '已启用' : '已禁用'}`,
+    `- **运行状态**: ${status ? (status.running ? '运行中' : '未运行') : '未知'}`,
+    `- **允许 ID 白名单**: ${ids.trim() || '无'}`,
+    `- **已绑定会话数**: ${binds.length}`,
+  ];
+  if (binds.length > 0) {
+    lines.push('', '## 已绑定会话');
+    for (const b of binds) {
+      lines.push(`- chat \`${b.chat_id}\` → session \`${b.session_id}\``);
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatGatewayCardJson(
+  platform: GatewayPlatform,
+  label: string,
+  enabled: boolean,
+  status: GatewayStatus | null,
+  ids: string,
+  binds: GatewayBind[],
+): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      platform,
+      label,
+      enabled,
+      running: status?.running ?? null,
+      allowedIds: ids
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean),
+      binds,
+    },
+    null,
+    2,
+  );
+}
+
 export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.Element | null {
   const api = gatewayApiFor(platform);
   const label = gatewayPlatformLabel[platform];
@@ -39,6 +91,8 @@ export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.El
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string>('');
   const [loadError, setLoadError] = useState<string>('');
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   const reload = useCallback(async () => {
     setLoadError('');
@@ -106,6 +160,32 @@ export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.El
     return null; // 后端不可达时静默隐藏（与其他设置卡一致）
   }
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatGatewayCardMarkdown(platform, label, enabled, status, ids, binds),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatGatewayCardJson(platform, label, enabled, status, ids, binds),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div
       data-testid={`gateway-card-${platform}`}
@@ -113,14 +193,32 @@ export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.El
     >
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold">消息网关（{label}）</h3>
-        <button
-          type="button"
-          className="p-1 rounded hover:bg-bg-hover text-text-secondary"
-          title="刷新"
-          onClick={() => void reload()}
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            data-testid={`gateway-card-${platform}-copy-md`}
+            onClick={() => void handleCopyMarkdown()}
+            className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-hover text-text-secondary"
+          >
+            {copiedMd ? '已复制 MD' : '复制 MD'}
+          </button>
+          <button
+            type="button"
+            data-testid={`gateway-card-${platform}-copy-json`}
+            onClick={() => void handleCopyJson()}
+            className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-hover text-text-secondary"
+          >
+            {copiedJson ? '已复制 JSON' : '复制 JSON'}
+          </button>
+          <button
+            type="button"
+            className="p-1 rounded hover:bg-bg-hover text-text-secondary"
+            title="刷新"
+            onClick={() => void reload()}
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       <p className="text-xs text-muted mb-2">
