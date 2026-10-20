@@ -1,11 +1,16 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { useWikiStore } from '../../../entities/wiki/store';
+import { ActivityPanel } from '../ActivityPanel';
+import { LintItemCard } from '../LintItemCard';
+import { ReviewItemCard } from '../ReviewItemCard';
 import { WikiInsightsPanel } from '../WikiInsightsPanel';
 import { WikiLintView } from '../WikiLintView';
 import { WikiProjectPicker } from '../WikiProjectPicker';
 import { WikiQueuePanel } from '../WikiQueuePanel';
 import { WikiReviewView } from '../WikiReviewView';
+import { WikiSearch } from '../WikiSearch';
 
 const mockSelectDirectory = vi.fn();
 const mockCheckWikiProject = vi.fn();
@@ -22,6 +27,8 @@ const mockQueueListTasks = vi.fn();
 const mockQueueClearTasks = vi.fn();
 const mockQueueCancelTask = vi.fn();
 const mockQueueRetryTask = vi.fn();
+const mockWikiSearch = vi.fn();
+const mockWikiReadFile = vi.fn();
 
 vi.mock('../../../shared/api-client/wiki', () => ({
   checkWikiProject: (...a: unknown[]) => mockCheckWikiProject(...a),
@@ -38,6 +45,8 @@ vi.mock('../../../shared/api-client/wiki', () => ({
   queueClearTasks: (...a: unknown[]) => mockQueueClearTasks(...a),
   queueCancelTask: (...a: unknown[]) => mockQueueCancelTask(...a),
   queueRetryTask: (...a: unknown[]) => mockQueueRetryTask(...a),
+  wikiSearch: (...a: unknown[]) => mockWikiSearch(...a),
+  wikiReadFile: (...a: unknown[]) => mockWikiReadFile(...a),
 }));
 
 beforeEach(() => {
@@ -428,5 +437,96 @@ describe('Phase P81 Wiki governance panels — Lint, Review, Insights & Queue ex
     fireEvent.click(screen.getByText('取消'));
     fireEvent.click(screen.getByText('等待'));
     fireEvent.click(screen.getByText('全部'));
+  });
+
+  it('renders ActivityPanel, LintItemCard, ReviewItemCard, and WikiSearch with MD & JSON exports', async () => {
+    render(<ActivityPanel />);
+    fireEvent.click(screen.getByText('加载'));
+    expect(screen.getByTestId('wiki-activity-copy-md-btn')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('wiki-activity-copy-md-btn'));
+    expect(screen.getByTestId('wiki-activity-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('wiki-activity-copy-json-btn'));
+    expect(screen.getByTestId('wiki-activity-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByText('活动'));
+
+    const onFix = vi.fn();
+    const onDismiss = vi.fn();
+    render(
+      <LintItemCard
+        item={{
+          id: 'lint-card-1',
+          type: 'broken-link',
+          severity: 'error',
+          page: 'docs/intro.md',
+          message: 'Broken link to setup.md',
+          suggestion: 'Create setup.md',
+        }}
+        onFix={onFix}
+        onDismiss={onDismiss}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('wiki-lint-item-copy-json-lint-card-1'));
+    expect(screen.getByTestId('wiki-lint-item-copy-json-lint-card-1')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByText('修复'));
+    fireEvent.click(screen.getByText('忽略'));
+    expect(onFix).toHaveBeenCalledWith('lint-card-1');
+    expect(onDismiss).toHaveBeenCalledWith('lint-card-1');
+
+    const onAction = vi.fn();
+    render(
+      <ReviewItemCard
+        item={{
+          id: 'rev-card-1',
+          type: 'contradiction',
+          title: 'Conflicting dates',
+          description: 'Page A and Page B disagree',
+          affectedPages: ['docs/a.md'],
+          resolved: false,
+          actions: [{ id: 'ignore', label: '忽略', type: 'dismiss' }],
+        }}
+        onAction={onAction}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('wiki-review-item-copy-json-rev-card-1'));
+    expect(screen.getByTestId('wiki-review-item-copy-json-rev-card-1')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getAllByText('忽略').slice(-1)[0]);
+    expect(onAction).toHaveBeenCalledWith('rev-card-1', 'ignore');
+
+    useWikiStore.getState().setProject(null);
+    const { unmount: unmountNoProj } = render(<WikiSearch />);
+    expect(screen.getByText('请先打开一个 wiki 项目')).toBeInTheDocument();
+    unmountNoProj();
+
+    useWikiStore.getState().setProject({
+      id: 'wp-1',
+      name: 'Wiki Project',
+      path: '/tmp/wiki-proj',
+    });
+    mockWikiSearch.mockResolvedValueOnce({ results: [] });
+    render(<WikiSearch />);
+    const searchInput = screen.getByPlaceholderText(/搜索 wiki 页面/);
+    fireEvent.change(searchInput, { target: { value: 'none' } });
+    fireEvent.keyDown(searchInput, { key: 'Enter' });
+    await waitFor(() => expect(screen.getByText(/未找到匹配/)).toBeInTheDocument());
+
+    mockWikiSearch.mockResolvedValue({
+      results: [
+        {
+          title: 'Architecture Guide',
+          path: 'docs/arch.md',
+          snippet: 'System architecture overview',
+          score: 0.95,
+        },
+      ],
+    });
+    mockWikiReadFile.mockResolvedValue('# Architecture');
+    fireEvent.change(searchInput, { target: { value: 'architecture' } });
+    fireEvent.keyDown(searchInput, { key: 'Enter' });
+    await waitFor(() => expect(screen.getByTestId('wiki-search-copy-md-btn')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('wiki-search-copy-md-btn'));
+    expect(screen.getByTestId('wiki-search-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('wiki-search-copy-json-btn'));
+    expect(screen.getByTestId('wiki-search-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByText('Architecture Guide'));
   });
 });
