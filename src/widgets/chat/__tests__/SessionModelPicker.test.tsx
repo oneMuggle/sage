@@ -3,7 +3,11 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { SessionModelPicker } from '../SessionModelPicker';
+import {
+  SessionModelPicker,
+  formatSessionModelPickerJson,
+  formatSessionModelPickerMarkdown,
+} from '../SessionModelPicker';
 
 const mockGetModelOverride = vi.fn<() => Promise<string | null>>();
 const mockSetModelOverride = vi.fn<(sessionId: string, model: string) => Promise<string | null>>();
@@ -99,6 +103,33 @@ describe('SessionModelPicker', () => {
   it('is disabled without a session', () => {
     render(<SessionModelPicker sessionId={null} />);
     expect(screen.getByTestId('session-model-picker')).toBeDisabled();
+  });
+
+  it('formats and copies session model picker summary as Markdown and JSON', () => {
+    const md = formatSessionModelPickerMarkdown({
+      sessionId: 's1',
+      override: 'llama3:8b',
+      globalModelId: 'qwen2.5:7b',
+      optionCount: 2,
+    });
+    expect(md).toContain('# 会话模型选择状态 (Session Model Picker Summary)');
+    expect(md).toContain('llama3:8b');
+
+    const parsed = JSON.parse(
+      formatSessionModelPickerJson({
+        sessionId: null,
+        override: null,
+        globalModelId: null,
+        optionCount: 0,
+      }),
+    );
+    expect(parsed.optionCount).toBe(0);
+
+    render(<SessionModelPicker sessionId="s1" />);
+    fireEvent.click(screen.getByTestId('session-model-copy-md'));
+    expect(screen.getByTestId('session-model-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('session-model-copy-json'));
+    expect(screen.getByTestId('session-model-copy-json').textContent).toContain('已复制 JSON');
   });
 });
 

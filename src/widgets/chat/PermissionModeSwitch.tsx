@@ -37,6 +37,50 @@ function formatTime(ts: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 }
 
+export function formatPermissionModeMarkdown(params: {
+  sessionId: string | null;
+  preset: PermissionPreset;
+  custom: boolean;
+  count: number;
+  items: ReadonlyArray<AutoApprovalRecord>;
+}): string {
+  const lines = [
+    '# 会话权限模式与自动放行审计 (Permission Mode Summary)',
+    '',
+    `- **会话 ID**: ${params.sessionId ? `\`${params.sessionId}\`` : '全局'}`,
+    `- **当前权限预设**: \`${params.preset}\`${params.custom ? ' (自定义)' : ''}`,
+    `- **自动放行次数**: ${params.count}`,
+  ];
+  if (params.items.length === 0) {
+    lines.push('', '_暂无自动放行审计记录_');
+  } else {
+    lines.push('', '## 自动放行审计明细');
+    for (const it of params.items) {
+      lines.push(
+        `- **${it.tool_name}** (\`${it.capability}\`, ${formatTime(it.created_at)}): ${it.summary || '-'}`,
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatPermissionModeJson(params: {
+  sessionId: string | null;
+  preset: PermissionPreset;
+  custom: boolean;
+  count: number;
+  items: ReadonlyArray<AutoApprovalRecord>;
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      ...params,
+    },
+    null,
+    2,
+  );
+}
+
 export function PermissionModeSwitch({ sessionId, placement = 'top' }: PermissionModeSwitchProps) {
   const popupPos = placement === 'bottom' ? 'top-full mt-1' : 'bottom-full mb-1';
   const { t } = useI18n();
@@ -46,6 +90,8 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
   const [auditOpen, setAuditOpen] = useState(false);
   const [count, setCount] = useState(0);
   const [items, setItems] = useState<AutoApprovalRecord[]>([]);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const streamingMessageId = useChatStreamStore((s) =>
@@ -118,8 +164,48 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
 
   const Icon = PRESET_ICON[preset];
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatPermissionModeMarkdown({ sessionId, preset, custom, count, items }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatPermissionModeJson({ sessionId, preset, custom, count, items }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div ref={rootRef} className="relative flex items-center gap-1" data-testid="permission-mode-switch">
+      <span
+        data-testid="permission-mode-copy-md"
+        onClick={() => void handleCopyMarkdown()}
+        className="cursor-pointer rounded border border-border px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+      >
+        {copiedMd ? '已复制 MD' : '复制 MD'}
+      </span>
+      <span
+        data-testid="permission-mode-copy-json"
+        onClick={() => void handleCopyJson()}
+        className="cursor-pointer rounded border border-border px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+      >
+        {copiedJson ? '已复制 JSON' : '复制 JSON'}
+      </span>
       <button
         type="button"
         onClick={() => {

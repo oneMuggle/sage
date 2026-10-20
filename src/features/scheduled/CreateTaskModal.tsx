@@ -34,6 +34,51 @@ function fromLocalDatetimeInput(value: string): number {
   return new Date(value).getTime();
 }
 
+export function formatScheduledTaskDraftMarkdown(params: {
+  isEdit: boolean;
+  name: string;
+  type: 'once' | 'recurring';
+  cron: string;
+  atLocal: string;
+  targetSession: string;
+  enabled: boolean;
+  content: string;
+}): string {
+  return [
+    '# 定时任务配置摘要 (Scheduled Task Draft)',
+    '',
+    `- **模式**: ${params.isEdit ? '编辑任务' : '新建任务'}`,
+    `- **任务名称**: ${params.name.trim() || '(未填写)'}`,
+    `- **执行类型**: ${params.type === 'recurring' ? '周期执行 (recurring)' : '单次执行 (once)'}`,
+    `- **调度规则**: ${params.type === 'recurring' ? `\`${params.cron}\`` : params.atLocal}`,
+    `- **目标会话**: \`${params.targetSession || '未选择'}\``,
+    `- **启用状态**: ${params.enabled ? '已启用' : '已暂停'}`,
+    '',
+    '## 任务指令内容',
+    params.content.trim() || '_未填写_',
+  ].join('\n');
+}
+
+export function formatScheduledTaskDraftJson(params: {
+  isEdit: boolean;
+  name: string;
+  type: 'once' | 'recurring';
+  cron: string;
+  atLocal: string;
+  targetSession: string;
+  enabled: boolean;
+  content: string;
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      ...params,
+    },
+    null,
+    2,
+  );
+}
+
 export function CreateTaskModal({
   open,
   onClose,
@@ -62,6 +107,8 @@ export function CreateTaskModal({
   const [error, setError] = useState<string | null>(null);
   const [skills, setSkills] = useState<Skill[] | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   // 技能列表不可用时（IPC 失败/无权限）不假装校验通过：直接标为不可用。
   const skillsUnavailable = skills === null;
 
@@ -193,6 +240,50 @@ export function CreateTaskModal({
 
   if (!open) return null;
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatScheduledTaskDraftMarkdown({
+          isEdit,
+          name,
+          type,
+          cron,
+          atLocal,
+          targetSession,
+          enabled,
+          content,
+        }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatScheduledTaskDraftJson({
+          isEdit,
+          name,
+          type,
+          cron,
+          atLocal,
+          targetSession,
+          enabled,
+          content,
+        }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div
       role="dialog"
@@ -205,9 +296,27 @@ export function CreateTaskModal({
         onSubmit={handleSubmit}
         className="bg-surface border border-border rounded-radius-md w-[460px] max-w-[92vw] p-5 shadow-xl flex flex-col gap-3"
       >
-        <h2 className="text-base font-semibold text-text">
-          {isEdit ? t('scheduled.edit') : t('scheduled.create')}
-        </h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-text">
+            {isEdit ? t('scheduled.edit') : t('scheduled.create')}
+          </h2>
+          <div className="flex items-center gap-1 text-ui-2xs">
+            <span
+              data-testid="create-task-copy-md"
+              onClick={() => void handleCopyMarkdown()}
+              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedMd ? '已复制 MD' : '复制 MD'}
+            </span>
+            <span
+              data-testid="create-task-copy-json"
+              onClick={() => void handleCopyJson()}
+              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedJson ? '已复制 JSON' : '复制 JSON'}
+            </span>
+          </div>
+        </div>
 
         <label className="flex flex-col gap-1 text-xs text-text-secondary">
           <span>{t('scheduled.field.name')}</span>

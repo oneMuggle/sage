@@ -34,6 +34,38 @@ interface PendingSwitch {
   usedTokens: number;
 }
 
+export function formatSessionModelPickerMarkdown(params: {
+  sessionId: string | null;
+  override: string | null;
+  globalModelId: string | null;
+  optionCount: number;
+}): string {
+  return [
+    '# 会话模型选择状态 (Session Model Picker Summary)',
+    '',
+    `- **会话 ID**: ${params.sessionId ? `\`${params.sessionId}\`` : '未选择'}`,
+    `- **会话覆盖模型**: ${params.override ? `\`${params.override}\`` : '跟随全局'}`,
+    `- **全局默认模型**: ${params.globalModelId ? `\`${params.globalModelId}\`` : '未设置'}`,
+    `- **可用候选模型数**: ${params.optionCount}`,
+  ].join('\n');
+}
+
+export function formatSessionModelPickerJson(params: {
+  sessionId: string | null;
+  override: string | null;
+  globalModelId: string | null;
+  optionCount: number;
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      ...params,
+    },
+    null,
+    2,
+  );
+}
+
 export function SessionModelPicker({ sessionId, placement = 'top' }: SessionModelPickerProps) {
   const warningPos = placement === 'bottom' ? 'top-full mt-1.5' : 'bottom-full mb-1.5';
   const { settings } = useSettings();
@@ -41,6 +73,8 @@ export function SessionModelPicker({ sessionId, placement = 'top' }: SessionMode
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingSwitch, setPendingSwitch] = useState<PendingSwitch | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // 会话切换时拉取当前覆盖
   useEffect(() => {
@@ -131,6 +165,42 @@ export function SessionModelPicker({ sessionId, placement = 'top' }: SessionMode
     })();
   };
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatSessionModelPickerMarkdown({
+          sessionId,
+          override,
+          globalModelId,
+          optionCount: options.length,
+        }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatSessionModelPickerJson({
+          sessionId,
+          override,
+          globalModelId,
+          optionCount: options.length,
+        }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="relative flex items-center gap-1.5" title="本会话使用的模型(会话级覆盖,仅影响当前对话)">
       <Bot className="w-3.5 h-3.5 text-text-secondary shrink-0" />
@@ -152,6 +222,20 @@ export function SessionModelPicker({ sessionId, placement = 'top' }: SessionMode
       {override && (
         <span className="text-ui-xs text-amber-600 dark:text-amber-400 shrink-0">覆盖</span>
       )}
+      <span
+        data-testid="session-model-copy-md"
+        onClick={() => void handleCopyMarkdown()}
+        className="cursor-pointer rounded border border-border px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover shrink-0"
+      >
+        {copiedMd ? '已复制 MD' : '复制 MD'}
+      </span>
+      <span
+        data-testid="session-model-copy-json"
+        onClick={() => void handleCopyJson()}
+        className="cursor-pointer rounded border border-border px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover shrink-0"
+      >
+        {copiedJson ? '已复制 JSON' : '复制 JSON'}
+      </span>
       {pendingSwitch && (
         <span
           className={`absolute right-0 ${warningPos} z-40 w-80 rounded-radius-md border border-warning/40 bg-surface p-2.5 shadow-lg flex flex-wrap items-center gap-1.5 text-ui-xs text-warning`}

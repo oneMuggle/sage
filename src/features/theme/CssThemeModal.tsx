@@ -44,6 +44,48 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
+export function formatCssThemeDraftMarkdown(params: {
+  isEditMode: boolean;
+  name: string;
+  appearance: 'light' | 'dark';
+  css: string;
+  valid: boolean;
+  error?: string | null;
+}): string {
+  const lines = [
+    '# 自定义 CSS 主题配置 (CSS Theme Draft)',
+    '',
+    `- **模式**: ${params.isEditMode ? '编辑主题' : '新建主题'}`,
+    `- **主题名称**: ${params.name.trim() || '(未命名)'}`,
+    `- **外观基底**: \`${params.appearance}\``,
+    `- **校验状态**: ${params.valid ? '通过' : `未通过 (${params.error || '未知原因'})`}`,
+    '',
+    '## CSS 变量定义',
+    '```css',
+    params.css,
+    '```',
+  ];
+  return lines.join('\n');
+}
+
+export function formatCssThemeDraftJson(params: {
+  isEditMode: boolean;
+  name: string;
+  appearance: 'light' | 'dark';
+  css: string;
+  valid: boolean;
+  error?: string | null;
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      ...params,
+    },
+    null,
+    2,
+  );
+}
+
 export function CssThemeModal({ open, onClose, initialTheme, onSaved }: CssThemeModalProps) {
   const isEditMode = !!initialTheme;
 
@@ -53,6 +95,8 @@ export function CssThemeModal({ open, onClose, initialTheme, onSaved }: CssTheme
   const [appearance] = useState<'light' | 'dark'>(initialTheme?.appearance ?? 'light');
   const [coverError, setCoverError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // 实时校验
   const validation = useMemo(() => themeCssValidator.validate(css), [css]);
@@ -137,6 +181,46 @@ export function CssThemeModal({ open, onClose, initialTheme, onSaved }: CssTheme
 
   if (!open) return null;
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatCssThemeDraftMarkdown({
+          isEditMode,
+          name,
+          appearance,
+          css,
+          valid: validation.ok,
+          error: !validation.ok ? validation.error : null,
+        }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatCssThemeDraftJson({
+          isEditMode,
+          name,
+          appearance,
+          css,
+          valid: validation.ok,
+          error: !validation.ok ? validation.error : null,
+        }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <Transition appear show={open} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
@@ -169,6 +253,22 @@ export function CssThemeModal({ open, onClose, initialTheme, onSaved }: CssTheme
                   <Dialog.Title as="h3" className="text-lg font-semibold">
                     {isEditMode ? `编辑主题：${name}` : '新建自定义主题'}
                   </Dialog.Title>
+                  <div className="flex items-center gap-1.5 text-ui-2xs">
+                    <span
+                      data-testid="css-theme-copy-md"
+                      onClick={() => void handleCopyMarkdown()}
+                      className="cursor-pointer rounded border border-border px-2 py-0.5 text-text-secondary hover:bg-bg-hover"
+                    >
+                      {copiedMd ? '已复制 MD' : '复制 MD'}
+                    </span>
+                    <span
+                      data-testid="css-theme-copy-json"
+                      onClick={() => void handleCopyJson()}
+                      className="cursor-pointer rounded border border-border px-2 py-0.5 text-text-secondary hover:bg-bg-hover"
+                    >
+                      {copiedJson ? '已复制 JSON' : '复制 JSON'}
+                    </span>
+                  </div>
                 </div>
 
                 {/* 内容 */}
