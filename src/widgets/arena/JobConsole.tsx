@@ -33,10 +33,48 @@ interface JobConsoleProps {
   onFinished?: (snapshot: ArenaJobSnapshot) => void;
 }
 
+export function formatJobConsoleMarkdown(
+  jobId: string,
+  kind: 'register' | 'draw',
+  snapshot: Pick<ArenaJobSnapshot, 'ok' | 'failed' | 'total'> & { status: string } | null,
+  events: Array<Pick<ArenaJobEvent, 'seq' | 'message'> & { level: string }>,
+): string {
+  const lines = [
+    `# 任务控制台 (${kind} · ${jobId})`,
+    `- 状态: ${snapshot ? `${snapshot.status} (成功 ${snapshot.ok} / 失败 ${snapshot.failed} / 共 ${snapshot.total})` : '加载中'}`,
+    `- 事件条数: ${events.length}`,
+  ];
+  for (const ev of events) {
+    lines.push(`- [#${ev.seq}] [${ev.level}] ${ev.message}`);
+  }
+  return lines.join('\n');
+}
+
+export function formatJobConsoleJson(
+  jobId: string,
+  kind: 'register' | 'draw',
+  snapshot: Pick<ArenaJobSnapshot, 'ok' | 'failed' | 'total'> & { status: string } | null,
+  events: Array<Pick<ArenaJobEvent, 'seq' | 'message'> & { level: string }>,
+): string {
+  return JSON.stringify(
+    {
+      jobId,
+      kind,
+      snapshot: snapshot ?? null,
+      eventCount: events.length,
+      events,
+    },
+    null,
+    2,
+  );
+}
+
 export function JobConsole({ kind, jobId, pollIntervalMs = 2000, onFinished }: JobConsoleProps) {
   const [snapshot, setSnapshot] = useState<ArenaJobSnapshot | null>(null);
   const [events, setEvents] = useState<ArenaJobEvent[]>([]);
   const [error, setError] = useState('');
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const logRef = useRef<HTMLDivElement | null>(null);
   const finishedRef = useRef(false);
   const onFinishedRef = useRef(onFinished);
@@ -125,6 +163,30 @@ export function JobConsole({ kind, jobId, pollIntervalMs = 2000, onFinished }: J
 
   const running = snapshot !== null && !TERMINAL.has(snapshot.status);
 
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    setCopiedMd(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatJobConsoleMarkdown(jobId, kind, snapshot, events),
+      );
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatJobConsoleJson(jobId, kind, snapshot, events),
+      );
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="rounded border border-border p-3 space-y-2" data-testid={`job-console-${jobId}`}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -134,6 +196,22 @@ export function JobConsole({ kind, jobId, pollIntervalMs = 2000, onFinished }: J
             : `任务 ${jobId} · 加载中…`}
         </p>
         <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void handleCopyMd()}
+            data-testid="job-console-copy-md"
+            className="text-xs rounded border border-border px-2 py-1 hover:bg-bg-hover"
+          >
+            {copiedMd ? '已复制 MD' : '复制 MD'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCopyJson()}
+            data-testid="job-console-copy-json"
+            className="text-xs rounded border border-border px-2 py-1 hover:bg-bg-hover"
+          >
+            {copiedJson ? '已复制 JSON' : '复制 JSON'}
+          </button>
           {running && (
             <button
               type="button"
