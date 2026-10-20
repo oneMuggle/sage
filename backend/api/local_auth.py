@@ -69,7 +69,10 @@ def is_local_auth_valid(request: Request) -> bool:
     # LLM proxy requests legitimately carry the provider's Authorization API key.
     # Electron's capability header remains the local authentication authority for
     # this route, without exposing the provider key to the local-auth parser.
-    if (request.url.path.startswith("/api/v1/llm/") and compatibility) or authorization is None:
+    # Accept both the canonical /api/v1/llm/ prefix and the legacy /api/v1/llm-proxy/
+    # prefix (some renderer code historically used the latter).
+    _LLM_PROXY_PREFIXES = ("/api/v1/llm/", "/api/v1/llm-proxy/")
+    if (any(request.url.path.startswith(p) for p in _LLM_PROXY_PREFIXES) and compatibility) or authorization is None:
         authorization = compatibility
 
     scheme, separator, supplied = authorization.partition(" ")
