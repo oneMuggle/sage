@@ -45,6 +45,61 @@ const STATE_LABELS: Record<string, string> = {
   idle: '空闲',
 };
 
+export interface ProgressSectionExportParams {
+  iteration: number;
+  streamingState: string | null;
+  isLoading: boolean;
+  taskBoard?: TaskBoard | null;
+  todosCount?: number;
+}
+
+export function formatProgressSectionMarkdown(params: ProgressSectionExportParams): string {
+  const stateLabel = params.streamingState
+    ? (STATE_LABELS[params.streamingState] ?? params.streamingState)
+    : '空闲';
+  const lines = [
+    '# 进度面板摘要',
+    `- 状态: ${stateLabel}`,
+    `- 加载中: ${params.isLoading ? '是' : '否'}`,
+    `- 轮次: ${params.iteration}`,
+    `- 待办数: ${params.todosCount ?? 0}`,
+  ];
+  if (params.taskBoard) {
+    lines.push(
+      `- 编排运行: ${params.taskBoard.runId} (${params.taskBoard.dispatchedAt ? '已派发' : '计划待执行'})`,
+    );
+    const p = params.taskBoard.progress;
+    if (p) {
+      const inFlight = (p.queued ?? 0) + (p.running ?? 0);
+      lines.push(
+        `- 编排进度: ${p.done}/${p.total} 完成 · 进行中 ${inFlight} · 失败 ${p.failed} · 取消 ${p.cancelled}`,
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatProgressSectionJson(params: ProgressSectionExportParams): string {
+  return JSON.stringify(
+    {
+      iteration: params.iteration,
+      streamingState: params.streamingState,
+      isLoading: params.isLoading,
+      todosCount: params.todosCount ?? 0,
+      taskBoard: params.taskBoard
+        ? {
+            runId: params.taskBoard.runId,
+            dispatched: params.taskBoard.dispatchedAt != null,
+            planCount: params.taskBoard.plan.length,
+            progress: params.taskBoard.progress ?? null,
+          }
+        : null,
+    },
+    null,
+    2,
+  );
+}
+
 export function ProgressSection({
   iteration,
   streamingState,
@@ -59,7 +114,8 @@ export function ProgressSection({
   // UI 优化 2026-10-14: sub-tab 切换「实时进度 / 完整轨迹」。
   // 默认激活「实时进度」；轨迹 Tab 从独立 RightPanel Tab 降级而来。
   const [subTab, setSubTab] = useState<ProgressSubTab>('live');
-
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）。
   // S2: 按会话键控 —— 显示的是当前打开会话的清单。
   const todos = useChatStreamStore((s) => selectSessionSlots(s, sessionId).todos);
@@ -75,6 +131,42 @@ export function ProgressSection({
   // 进度可视化 M2 修正 (2026-08-12): "进行中"口径与 TaskTreeSection 一致
   // （queued + running 都算未完成），避免同一面板两行文案数字矛盾。
   const inFlight = (progress?.queued ?? 0) + (progress?.running ?? 0);
+
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    setCopiedMd(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatProgressSectionMarkdown({
+          iteration,
+          streamingState,
+          isLoading,
+          taskBoard,
+          todosCount: todos.length,
+        }),
+      );
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatProgressSectionJson({
+          iteration,
+          streamingState,
+          isLoading,
+          taskBoard,
+          todosCount: todos.length,
+        }),
+      );
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <div className="flex flex-col h-full">
@@ -112,29 +204,51 @@ export function ProgressSection({
         </div>
       ) : (
         <div className="p-3 space-y-2 text-sm overflow-y-auto flex-1 min-h-0">
-          <div className="flex items-center gap-2">
-            {isLoading && stateLabel && <span className="text-primary font-medium">{stateLabel}</span>}
-            {iteration > 0 && <span className="text-text-secondary">第 {iteration} 轮</span>}
-            {showProgress && progress && (
-              <span className="text-primary" data-testid="task-progress-summary">
-                编排任务 {progress.done}/{progress.total} 完成
-                {inFlight > 0 && <span className="text-text-secondary"> · {inFlight} 个进行中</span>}
-                {progress.failed > 0 && (
-                  <span className="text-error ml-1">({progress.failed} 失败)</span>
-                )}
-                {progress.cancelled > 0 && (
-                  <span className="text-text-secondary ml-1">({progress.cancelled} 已取消)</span>
-                )}
-              </span>
-            )}
-            {hasTaskBoard && !isDispatched && (
-              <span className="text-primary" data-testid="plan-pending-label">
-                计划待执行
-              </span>
-            )}
-            {!hasTaskBoard && !showProgress && !isLoading && !stateLabel && (
-              <span className="text-muted">等待输入...</span>
-            )}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              {isLoading && stateLabel && (
+                <span className="text-primary font-medium">{stateLabel}</span>
+              )}
+              {iteration > 0 && <span className="text-text-secondary">第 {iteration} 轮</span>}
+              {showProgress && progress && (
+                <span className="text-primary" data-testid="task-progress-summary">
+                  编排任务 {progress.done}/{progress.total} 完成
+                  {inFlight > 0 && <span className="text-text-secondary"> · {inFlight} 个进行中</span>}
+                  {progress.failed > 0 && (
+                    <span className="text-error ml-1">({progress.failed} 失败)</span>
+                  )}
+                  {progress.cancelled > 0 && (
+                    <span className="text-text-secondary ml-1">({progress.cancelled} 已取消)</span>
+                  )}
+                </span>
+              )}
+              {hasTaskBoard && !isDispatched && (
+                <span className="text-primary" data-testid="plan-pending-label">
+                  计划待执行
+                </span>
+              )}
+              {!hasTaskBoard && !showProgress && !isLoading && !stateLabel && (
+                <span className="text-muted">等待输入...</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => void handleCopyMd()}
+                data-testid="progress-section-copy-md"
+                className="px-1.5 py-0.5 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+              >
+                {copiedMd ? '已复制 MD' : '复制 MD'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCopyJson()}
+                data-testid="progress-section-copy-json"
+                className="px-1.5 py-0.5 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+              >
+                {copiedJson ? '已复制 JSON' : '复制 JSON'}
+              </button>
+            </div>
           </div>
 
           {/* P1 todo 接线: agent 自维护任务清单 + PR-C 编排计划镜像 */}

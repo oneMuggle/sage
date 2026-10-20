@@ -22,8 +22,12 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../entities/arena', () => mocks);
 
-import { DrawPanel } from '../DrawPanel';
-import { TokenWindowCard } from '../TokenWindowCard';
+import { DrawPanel, formatDrawsJson, formatDrawsMarkdown } from '../DrawPanel';
+import {
+  formatTokenWindowJson,
+  formatTokenWindowMarkdown,
+  TokenWindowCard,
+} from '../TokenWindowCard';
 
 const ACCOUNT = { id: 'acc-1', email: 'user1@example.com', state: 'available', failure_count: 0, last_used_at: null, isolated_at: null, created_at: '2026-09-19T00:00:00', notes: null };
 const DRAW_ROW = {
@@ -89,6 +93,30 @@ describe('DrawPanel', () => {
     expect(row).toHaveTextContent('GPT-6 Astra');
     expect(row).toHaveTextContent('user1@example.com');
   });
+
+  it('支持导出并复制抽卡记录 MD / JSON (Phase P91)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    mocks.listAccounts.mockResolvedValue([]);
+    mocks.listDraws.mockResolvedValue([DRAW_ROW]);
+
+    render(<DrawPanel />);
+    await screen.findByTestId('draws-row-0');
+
+    const md = formatDrawsMarkdown([DRAW_ROW]);
+    expect(md).toContain('# 抽卡记录 (1 条)');
+    expect(md).toContain('GPT-6 Astra');
+    const json = JSON.parse(formatDrawsJson([DRAW_ROW]));
+    expect(json.count).toBe(1);
+
+    fireEvent.click(screen.getByTestId('draws-copy-md'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(md));
+    expect(screen.getByTestId('draws-copy-md')).toHaveTextContent('已复制 MD');
+
+    fireEvent.click(screen.getByTestId('draws-copy-json'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('draws-copy-json')).toHaveTextContent('已复制 JSON');
+  });
 });
 
 describe('TokenWindowCard', () => {
@@ -117,5 +145,46 @@ describe('TokenWindowCard', () => {
 
     render(<TokenWindowCard pollIntervalMs={10} />);
     expect(await screen.findByTestId('tw-disabled')).toHaveTextContent('token_window.enabled');
+  });
+
+  it('支持导出并复制 Token 窗口状态 MD / JSON (Phase P91)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const h = {
+      ready: true,
+      count: 6,
+      error: '',
+      exit_ip: '203.0.113.7',
+      ua: 'Mozilla/5.0 Chrome/106',
+      uptime: 120,
+      last_push_age: 1,
+    };
+    const s = {
+      enabled: true,
+      needed: true,
+      reject_count: 1,
+      want_proxy: false,
+      proxy_url: '',
+      poll_interval_sec: 2,
+    };
+    mocks.tokenWindowHealth.mockResolvedValue(h);
+    mocks.tokenWindowState.mockResolvedValue(s);
+
+    render(<TokenWindowCard pollIntervalMs={10} />);
+    await screen.findByTestId('tw-ready');
+
+    const md = formatTokenWindowMarkdown(h, s, false);
+    expect(md).toContain('# Token 窗口状态');
+    expect(md).toContain('- 就绪状态: 就绪');
+    const json = JSON.parse(formatTokenWindowJson(h, s, false));
+    expect(json.health.count).toBe(6);
+
+    fireEvent.click(screen.getByTestId('token-window-copy-md'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(md));
+    expect(screen.getByTestId('token-window-copy-md')).toHaveTextContent('已复制 MD');
+
+    fireEvent.click(screen.getByTestId('token-window-copy-json'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('token-window-copy-json')).toHaveTextContent('已复制 JSON');
   });
 });

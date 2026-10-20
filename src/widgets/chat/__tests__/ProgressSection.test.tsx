@@ -3,7 +3,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import type { TaskBoard } from '../../../features/send-message/useChat';
-import { ProgressSection } from '../progress/ProgressSection';
+import {
+  formatProgressSectionJson,
+  formatProgressSectionMarkdown,
+  ProgressSection,
+} from '../progress/ProgressSection';
 
 describe('ProgressSection', () => {
   it('shows iteration when > 0', () => {
@@ -165,5 +169,53 @@ describe('ProgressSection', () => {
     );
     fireEvent.click(screen.getByTestId('task-tree-cancel'));
     expect(onCancelExecution).toHaveBeenCalledWith('r1');
+  });
+
+  it('exports Markdown and JSON and copies via buttons (Phase P91)', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const board: TaskBoard = {
+      runId: 'orch-p91',
+      plan: [{ task_id: 't1', agent_id: 'researcher', goal: 'G' }],
+      statuses: {},
+      progress: { total: 2, done: 1, running: 1, queued: 0, failed: 0, cancelled: 0 },
+      dispatchedAt: Date.now(),
+    };
+    render(
+      <ProgressSection
+        iteration={2}
+        streamingState="thinking"
+        toolCalls={[]}
+        isLoading
+        taskBoard={board}
+      />,
+    );
+    const md = formatProgressSectionMarkdown({
+      iteration: 2,
+      streamingState: 'thinking',
+      isLoading: true,
+      taskBoard: board,
+      todosCount: 0,
+    });
+    expect(md).toContain('# 进度面板摘要');
+    expect(md).toContain('- 状态: 思考中');
+    expect(md).toContain('- 编排运行: orch-p91 (已派发)');
+    const json = JSON.parse(
+      formatProgressSectionJson({
+        iteration: 2,
+        streamingState: 'thinking',
+        isLoading: true,
+        taskBoard: board,
+        todosCount: 0,
+      }),
+    );
+    expect(json.iteration).toBe(2);
+    expect(json.taskBoard.runId).toBe('orch-p91');
+
+    fireEvent.click(screen.getByTestId('progress-section-copy-md'));
+    expect(screen.getByTestId('progress-section-copy-md')).toHaveTextContent('已复制 MD');
+    fireEvent.click(screen.getByTestId('progress-section-copy-json'));
+    expect(screen.getByTestId('progress-section-copy-json')).toHaveTextContent('已复制 JSON');
+    expect(writeText).toHaveBeenCalledTimes(2);
   });
 });
