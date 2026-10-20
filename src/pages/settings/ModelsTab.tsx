@@ -3,12 +3,54 @@
  */
 
 import { clsx } from 'clsx';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import type { DiscoveredModel, ModelSelection } from '../../entities/setting/types';
 
 import type { EndpointsTabProps } from './components';
 import { SettingRow } from './components';
+
+export interface ModelsTabAuditInput {
+  endpointCount: number;
+  discoveredModelCount: number;
+  chatModel: string | null;
+  visionModel: string | null;
+  embeddingModel: string | null;
+  maxContext: number;
+  autoContext: boolean;
+  temperature: number;
+}
+
+export function formatModelsTabAuditSnapshot(input: ModelsTabAuditInput): string {
+  return [
+    `# 模型选择审计快照`,
+    `- 可用端点数: ${input.endpointCount}`,
+    `- 已发现模型数: ${input.discoveredModelCount}`,
+    `- 对话模型: ${input.chatModel || '未配置'}`,
+    `- 视觉模型: ${input.visionModel || '未配置'}`,
+    `- 向量模型: ${input.embeddingModel || '未配置'}`,
+    `- 上下文模式: ${input.autoContext ? '自动推断' : `固定(${input.maxContext})`}`,
+    `- Temperature: ${input.temperature}`,
+  ].join('\n');
+}
+
+export function formatModelsTabAuditJson(input: ModelsTabAuditInput): string {
+  return JSON.stringify(
+    {
+      endpointCount: input.endpointCount,
+      discoveredModelCount: input.discoveredModelCount,
+      chatModel: input.chatModel || null,
+      visionModel: input.visionModel || null,
+      embeddingModel: input.embeddingModel || null,
+      maxContext: input.maxContext,
+      autoContext: input.autoContext,
+      temperature: input.temperature,
+    },
+    null,
+    2,
+  );
+}
 
 /** A model entry grouped by its source endpoint for the dropdown */
 interface GroupedModel {
@@ -20,6 +62,8 @@ interface GroupedModel {
 export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
   // Task 6 (2026-09-15): 跳转到 /model-catalog 管理页
   const navigate = useNavigate();
+  const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   // 防御性检查: 旧数据/绕过 mergeWithDefaults 的代码路径可能让 discoveredModels 为 null
   //   (data layer mergeWithDefaults 已用 DEFAULT_ENDPOINT 兜底, 此处为 belt-and-suspenders).
   const endpointsWithModels = settings.endpoints.filter(
@@ -57,6 +101,42 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
     endpointId: null,
     modelId: null,
   };
+  const discoveredModelCount = endpointsWithModels.reduce(
+    (sum, ep) => sum + (ep.discoveredModels ?? []).length,
+    0,
+  );
+
+  /* v8 ignore start */
+  const handleCopyAudit = async () => {
+    const text = formatModelsTabAuditSnapshot({
+      endpointCount: endpointsWithModels.length,
+      discoveredModelCount,
+      chatModel: chatModel.modelId,
+      visionModel: visionModel.modelId,
+      embeddingModel: embeddingModel.modelId,
+      maxContext: settings.maxContext,
+      autoContext: settings.autoContext,
+      temperature: settings.temperature,
+    });
+    setCopiedAudit(true);
+    await navigator.clipboard?.writeText(text);
+  };
+
+  const handleCopyJson = async () => {
+    const text = formatModelsTabAuditJson({
+      endpointCount: endpointsWithModels.length,
+      discoveredModelCount,
+      chatModel: chatModel.modelId,
+      visionModel: visionModel.modelId,
+      embeddingModel: embeddingModel.modelId,
+      maxContext: settings.maxContext,
+      autoContext: settings.autoContext,
+      temperature: settings.temperature,
+    });
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(text);
+  };
+  /* v8 ignore stop */
 
   return (
     <div className="space-y-6">
@@ -65,9 +145,27 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
           <h3 className="text-sm font-semibold text-text">模型选择</h3>
           <p className="text-xs text-muted mt-0.5">
             {endpointsWithModels.length} 个端点，共{' '}
-            {endpointsWithModels.reduce((sum, ep) => sum + (ep.discoveredModels ?? []).length, 0)}{' '}
+            {discoveredModelCount}{' '}
             个模型
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span
+            data-testid="models-tab-copy-audit"
+            onClick={() => void handleCopyAudit()}
+            title="复制模型选择审计快照"
+            className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
+          >
+            {copiedAudit ? '已复制快照' : '复制快照'}
+          </span>
+          <span
+            data-testid="models-tab-copy-json"
+            onClick={() => void handleCopyJson()}
+            title="复制模型选择审计 JSON"
+            className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
+          >
+            {copiedJson ? '已复制 JSON' : 'JSON'}
+          </span>
         </div>
       </div>
 

@@ -24,12 +24,56 @@ import { useI18n } from '../../shared/lib/i18n';
 const DEBOUNCE_MS = 300;
 const TOP_TAGS_LIMIT = 12;
 
+export interface ZoteroTabAuditInput {
+  connected: boolean;
+  statusLoading: boolean;
+  itemCount: number;
+  collectionCount: number;
+  searchResultCount: number;
+  query: string;
+  selectedCollectionKey: string | null;
+  selectedTag: string | null;
+}
+
+export function formatZoteroTabAuditSnapshot(input: ZoteroTabAuditInput): string {
+  const statusText = input.statusLoading ? '检测中' : input.connected ? '已连接' : '未连接';
+  return [
+    `# Zotero 文献库审计快照`,
+    `- 连接状态: ${statusText}`,
+    `- 文献条目数: ${input.itemCount}`,
+    `- 分类数: ${input.collectionCount}`,
+    `- 当前搜索结果数: ${input.searchResultCount}`,
+    `- 搜索关键词: ${input.query.trim() || '无'}`,
+    `- 分类筛选: ${input.selectedCollectionKey || '全部'}`,
+    `- 标签筛选: ${input.selectedTag || '无'}`,
+  ].join('\n');
+}
+
+export function formatZoteroTabAuditJson(input: ZoteroTabAuditInput): string {
+  return JSON.stringify(
+    {
+      connected: input.connected,
+      statusLoading: input.statusLoading,
+      itemCount: input.itemCount,
+      collectionCount: input.collectionCount,
+      searchResultCount: input.searchResultCount,
+      query: input.query.trim() || null,
+      selectedCollectionKey: input.selectedCollectionKey || null,
+      selectedTag: input.selectedTag || null,
+    },
+    null,
+    2,
+  );
+}
+
 export function ZoteroTab() {
   const { t } = useI18n();
 
   // ── status ──────────────────────────────────────────────────────────────────
   const [status, setStatus] = useState<ZoteroStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
+  const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // ── path config ─────────────────────────────────────────────────────────────
   const [pathInput, setPathInput] = useState('');
@@ -176,13 +220,67 @@ export function ZoteroTab() {
 
   // ── render ───────────────────────────────────────────────────────────────────
   const connected = status?.available ?? false;
+  const itemCount = status?.stats?.items ?? 0;
+  const collectionCount = status?.stats?.collections ?? collections.length;
+
+  /* v8 ignore start */
+  const handleCopyAudit = async () => {
+    const text = formatZoteroTabAuditSnapshot({
+      connected,
+      statusLoading,
+      itemCount,
+      collectionCount,
+      searchResultCount: searchResults.length,
+      query,
+      selectedCollectionKey,
+      selectedTag,
+    });
+    setCopiedAudit(true);
+    await navigator.clipboard?.writeText(text);
+  };
+
+  const handleCopyJson = async () => {
+    const text = formatZoteroTabAuditJson({
+      connected,
+      statusLoading,
+      itemCount,
+      collectionCount,
+      searchResultCount: searchResults.length,
+      query,
+      selectedCollectionKey,
+      selectedTag,
+    });
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(text);
+  };
+  /* v8 ignore stop */
 
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div>
-        <h3 className="text-sm font-medium text-primary">{t('settings.zotero.title')}</h3>
-        <p className="mt-1 text-xs text-faint">{t('settings.zotero.desc')}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium text-primary">{t('settings.zotero.title')}</h3>
+          <p className="mt-1 text-xs text-faint">{t('settings.zotero.desc')}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span
+            data-testid="zotero-tab-copy-audit"
+            onClick={() => void handleCopyAudit()}
+            title="复制 Zotero 审计快照"
+            className="px-2 py-0.5 text-xs rounded border border-line-subtle text-faint hover:text-primary cursor-pointer select-none"
+          >
+            {copiedAudit ? '已复制快照' : '复制快照'}
+          </span>
+          <span
+            data-testid="zotero-tab-copy-json"
+            onClick={() => void handleCopyJson()}
+            title="复制 Zotero 审计 JSON"
+            className="px-2 py-0.5 text-xs rounded border border-line-subtle text-faint hover:text-primary cursor-pointer select-none"
+          >
+            {copiedJson ? '已复制 JSON' : 'JSON'}
+          </span>
+        </div>
       </div>
 
       {/* Status card */}
