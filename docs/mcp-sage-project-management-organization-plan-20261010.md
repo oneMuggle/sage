@@ -1107,3 +1107,15 @@
   - 在摄入队列状态摘要栏新增 **`复制队列MD`**（`data-testid="wiki-queue-copy-md-btn"`）与 **`复制队列JSON`**（`data-testid="wiki-queue-copy-json-btn"`），支持一键导出队列汇总与任务明细。
 - **单元测试与门禁验证**：
   - 扩展 `WikiProjectPicker.test.tsx` 覆盖四大 Wiki 治理面板渲染、筛选与 MD/JSON 导出，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P82 — Wiki 活动历史、搜索结果与单条检查/审核卡片 MD/JSON 导出（已完成）
+
+- **Phase 4.3 `ActivityPanel` Wiki 操作活动历史 MD/JSON 导出（`src/widgets/wiki/ActivityPanel.tsx`）**：
+  - 在活动历史面板标题栏新增 **`复制活动MD`**（`data-testid="wiki-activity-copy-md-btn"`）与 **`复制活动JSON`**（`data-testid="wiki-activity-copy-json-btn"`），支持一键复制操作活动记录与统计。
+- **Phase 4.3 `LintItemCard` 单条质量检查项 JSON 导出（`src/widgets/wiki/LintItemCard.tsx`）**：
+  - 在每个 Lint 卡片操作区新增 **`复制JSON`**（`data-testid="wiki-lint-item-copy-json-${item.id}"`），支持一键复制单条检查诊断详情。
+- **Phase 4.3 `ReviewItemCard` 单条内容审核项 JSON 导出（`src/widgets/wiki/ReviewItemCard.tsx`）**：
+  - 在每个 Review 卡片头部新增 **`复制JSON`**（`data-testid="wiki-review-item-copy-json-${item.id}"`），支持一键复制单条审核项元数据与关联页面列表。
+- **Phase 4.3 `WikiSearch` Wiki 搜索结果 MD/JSON 导出（`src/widgets/wiki/WikiSearch.tsx`）**：
+  - 在搜索结果摘要栏新增 **`复制搜索MD`**（`data-testid="wiki-search-copy-md-btn"`）与 **`复制搜索JSON`**（`data-testid="wiki-search-copy-json-btn"`），支持一键复制搜索命中清单。
+- **单元测试与门禁验证**：
+  - 扩展 `WikiProjectPicker.test.tsx`（14 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
