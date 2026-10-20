@@ -108,4 +108,28 @@ describe('ArchivesModal (R17-A2)', () => {
 
     expect(getLineageMock).not.toHaveBeenCalled();
   });
+
+  it('copies archive list and individual archive item as MD/JSON to clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    getLineageMock.mockResolvedValue({ session_id: 'sess-1', archives: ARCHIVES });
+
+    render(<ArchivesModal isOpen onClose={() => undefined} sessionId="sess-1" />);
+    await screen.findByText('归档 2026-09-01');
+
+    fireEvent.click(screen.getByTestId('archives-modal-copy-md-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 会话压缩归档列表'));
+    });
+
+    fireEvent.click(screen.getByTestId('archives-modal-copy-json-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"arch-1"'));
+    });
+
+    fireEvent.click(screen.getByTestId('archive-item-copy-json-arch-1'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('归档 2026-09-01'));
+    });
+  });
 });

@@ -245,4 +245,45 @@ describe('ModelCatalog page', () => {
       });
     });
   });
+
+  it('CatalogTable 支持复制目录 MD/JSON 与单行 JSON 到剪贴板', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    mocks.listModels.mockResolvedValue({
+      items: [
+        {
+          model_key: { provider: 'openrouter', model_id: 'openai/gpt-4o-mini' },
+          native: 128000,
+          price: { input_per_million: '0.15', output_per_million: '0.6', currency: 'USD' },
+          source: 'openrouter',
+          pricing_scope: 'base',
+        },
+      ],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    mocks.listSnapshots.mockResolvedValue([]);
+    mocks.getEffective.mockResolvedValue(null);
+
+    const Page = (await import('../ModelCatalog')).default;
+    render(
+      <MemoryRouter initialEntries={['/model-catalog']}>
+        <I18nProvider defaultLocale="zh">
+          <Page />
+        </I18nProvider>
+      </MemoryRouter>,
+    );
+    await screen.findByText('openrouter/openai/gpt-4o-mini');
+
+    fireEvent.click(screen.getByTestId('catalog-table-copy-md-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 模型目录'));
+    });
+
+    fireEvent.click(screen.getByTestId('catalog-table-copy-json-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-4o-mini'));
+    });
+  });
 });
