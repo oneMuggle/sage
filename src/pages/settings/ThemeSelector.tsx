@@ -14,10 +14,56 @@ import { themeCssClient } from '../../shared/api/themeCssClient';
 import { useI18n } from '../../shared/lib/i18n';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
+export function formatThemeSelectorMarkdown(params: {
+  activeKind: string;
+  activeId: string;
+  cssThemes: ReadonlyArray<ThemeCssPayload>;
+}): string {
+  const lines = [
+    '# 主题选择器与自定义 CSS 清单 (Theme Selector Summary)',
+    '',
+    `- **当前激活来源**: \`${params.activeKind}\` (\`${params.activeId}\`)`,
+    `- **自定义 CSS 主题数**: ${params.cssThemes.length}`,
+  ];
+  if (params.cssThemes.length === 0) {
+    lines.push('', '_尚未创建自定义主题_');
+  } else {
+    lines.push('', '## 自定义 CSS 主题明细');
+    for (const t of params.cssThemes) {
+      lines.push(`- **${t.name}** (\`${t.id}\`, \`${t.appearance}\`)`);
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatThemeSelectorJson(params: {
+  activeKind: string;
+  activeId: string;
+  cssThemes: ReadonlyArray<ThemeCssPayload>;
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      activeKind: params.activeKind,
+      activeId: params.activeId,
+      cssCount: params.cssThemes.length,
+      cssThemes: params.cssThemes.map((t) => ({
+        id: t.id,
+        name: t.name,
+        appearance: t.appearance,
+      })),
+    },
+    null,
+    2,
+  );
+}
+
 export function ThemeSelector() {
   const { t } = useI18n();
   const { cssThemes, activeSource, setActiveCssTheme, refreshCssThemes } = useTheme();
   const [modalOpen, setModalOpen] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   function handleNewTheme() {
     setModalOpen(true);
@@ -39,6 +85,40 @@ export function ThemeSelector() {
     await refreshCssThemes();
   }
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatThemeSelectorMarkdown({
+          activeKind: activeSource.kind,
+          activeId: activeSource.id,
+          cssThemes,
+        }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatThemeSelectorJson({
+          activeKind: activeSource.kind,
+          activeId: activeSource.id,
+          cssThemes,
+        }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="space-y-6">
       {/* 画廊视图（基础 + 装饰主题） */}
@@ -53,14 +133,30 @@ export function ThemeSelector() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-text-secondary">自定义 CSS 主题</h3>
-          <button
-            type="button"
-            onClick={handleNewTheme}
-            className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 rounded-radius-md transition-colors"
-          >
-            <Plus size={14} />
-            新建自定义
-          </button>
+          <div className="flex items-center gap-1.5">
+            <span
+              data-testid="theme-selector-copy-md"
+              onClick={() => void handleCopyMarkdown()}
+              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedMd ? '已复制 MD' : '复制 MD'}
+            </span>
+            <span
+              data-testid="theme-selector-copy-json"
+              onClick={() => void handleCopyJson()}
+              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedJson ? '已复制 JSON' : '复制 JSON'}
+            </span>
+            <button
+              type="button"
+              onClick={handleNewTheme}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 rounded-radius-md transition-colors"
+            >
+              <Plus size={14} />
+              新建自定义
+            </button>
+          </div>
         </div>
 
         {cssThemes.length === 0 ? (

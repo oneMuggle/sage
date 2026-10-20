@@ -29,6 +29,46 @@ import {
   catalogItemKey,
 } from '../widgets/model-catalog';
 
+export function formatModelCatalogPageMarkdown(params: {
+  endpointId: string;
+  searchTerm: string;
+  totalModels: number;
+  filteredCount: number;
+  snapshotCount: number;
+  activeSnapshot: string | null;
+  selectedKey: string | null;
+}): string {
+  return [
+    '# 模型目录页面视图摘要 (Model Catalog Page Summary)',
+    '',
+    `- **筛选端点**: ${params.endpointId ? `\`${params.endpointId}\`` : '全部'}`,
+    `- **检索关键词**: ${params.searchTerm ? `\`${params.searchTerm}\`` : '无'}`,
+    `- **模型总数 / 筛选后**: ${params.totalModels} / ${params.filteredCount}`,
+    `- **快照数量**: ${params.snapshotCount}`,
+    `- **当前审核快照**: ${params.activeSnapshot ? `\`${params.activeSnapshot}\`` : '无'}`,
+    `- **当前选中模型**: ${params.selectedKey ? `\`${params.selectedKey}\`` : '未选择'}`,
+  ].join('\n');
+}
+
+export function formatModelCatalogPageJson(params: {
+  endpointId: string;
+  searchTerm: string;
+  totalModels: number;
+  filteredCount: number;
+  snapshotCount: number;
+  activeSnapshot: string | null;
+  selectedKey: string | null;
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      ...params,
+    },
+    null,
+    2,
+  );
+}
+
 export default function ModelCatalog() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSnapshot = searchParams.get('snapshot');
@@ -44,6 +84,8 @@ export default function ModelCatalog() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [pageStatus, setPageStatus] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const reloadGeneration = useRef(0);
   const endpointIdRef = useRef(endpointId);
   endpointIdRef.current = endpointId;
@@ -181,6 +223,48 @@ export default function ModelCatalog() {
     void reload();
   }
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatModelCatalogPageMarkdown({
+          endpointId,
+          searchTerm,
+          totalModels: allItems.length,
+          filteredCount: filteredItems.length,
+          snapshotCount: snapshots.length,
+          activeSnapshot,
+          selectedKey,
+        }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatModelCatalogPageJson({
+          endpointId,
+          searchTerm,
+          totalModels: allItems.length,
+          filteredCount: filteredItems.length,
+          snapshotCount: snapshots.length,
+          activeSnapshot,
+          selectedKey,
+        }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="flex flex-1 overflow-hidden">
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -243,6 +327,20 @@ export default function ModelCatalog() {
           >
             {busyAction === 'export' ? '导出中…' : '导出当前快照'}
           </button>
+          <span
+            data-testid="model-catalog-page-copy-md"
+            onClick={() => void handleCopyMarkdown()}
+            className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedMd ? '已复制 MD' : '复制 MD'}
+          </span>
+          <span
+            data-testid="model-catalog-page-copy-json"
+            onClick={() => void handleCopyJson()}
+            className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedJson ? '已复制 JSON' : '复制 JSON'}
+          </span>
           {pageStatus && (
             <span
               className="text-xs text-text-muted"
