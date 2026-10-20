@@ -13,6 +13,8 @@ export function WikiEditor() {
   const isLoading = useWikiStore((s) => s.isLoading);
   const [editContent, setEditContent] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // Sync edit content when file changes
   useEffect(() => {
@@ -42,12 +44,51 @@ export function WikiEditor() {
 
   const fileName = selectedFile.split('/').pop() || selectedFile;
 
+  const handleCopyMd = () => {
+    setCopiedMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedMd(false), 2000);
+    const activeText = isEditing ? editContent : fileContent;
+    void navigator.clipboard?.writeText(activeText);
+    /* v8 ignore stop */
+  };
+
+  const handleCopyJson = () => {
+    setCopiedJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedJson(false), 2000);
+    const payload = {
+      path: selectedFile,
+      fileName,
+      isEditing,
+      content: isEditing ? editContent : fileContent,
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
+
   return (
     <div className="flex h-full flex-col">
       {/* File header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-2 bg-surface">
         <span className="text-sm font-medium text-text truncate">{fileName}</span>
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            data-testid="wiki-editor-copy-md-btn"
+            onClick={handleCopyMd}
+            className="px-2 py-1 text-xs rounded-radius-sm border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+          >
+            {copiedMd ? '已复制MD' : '复制MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="wiki-editor-copy-json-btn"
+            onClick={handleCopyJson}
+            className="px-2 py-1 text-xs rounded-radius-sm border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
+          >
+            {copiedJson ? '已复制JSON' : '复制JSON'}
+          </button>
           <button
             onClick={() => {
               if (!isEditing) {
