@@ -1,7 +1,7 @@
 /**
  * SnapshotReview 测试 (Task 6, 2026-09-15)
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as api from '../../../entities/model-catalog/api';
@@ -76,5 +76,61 @@ describe('SnapshotReview', () => {
       expect(screen.getByText(/加载失败/i)).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: '应用所选字段' })).toBeDisabled();
+  });
+
+  it('copies snapshot diff summary MD/JSON and individual item JSON to clipboard', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    vi.mocked(api.getDiff).mockResolvedValue([
+      {
+        id: 'item-1',
+        base_revision: 0,
+        before: null,
+        after: {
+          model_key: { provider: 'openrouter', model_id: 'anthropic/claude-3.5-sonnet' },
+          native: 200000,
+          price: { input_per_million: '3.0', output_per_million: '15.0', currency: 'USD' },
+          source: 'openrouter',
+          pricing_scope: 'base',
+        },
+        candidate: {
+          model_key: { provider: 'openrouter', model_id: 'anthropic/claude-3.5-sonnet' },
+          native: 200000,
+          price: { input_per_million: '3.0', output_per_million: '15.0', currency: 'USD' },
+          source: 'openrouter',
+          pricing_scope: 'base',
+        },
+        clear_fields: [],
+        classification: 'new',
+        status: 'pending',
+      },
+    ]);
+
+    const { SnapshotReview } = await import('../SnapshotReview');
+    render(
+      <I18nProvider defaultLocale="zh">
+        <SnapshotReview snapshotId="synthetic-snapshot" />
+      </I18nProvider>,
+    );
+    expect(await screen.findByText('待审核')).toBeVisible();
+
+    fireEvent.click(screen.getByTestId('snapshot-review-copy-md-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        expect.stringContaining('# 快照审核差异: synthetic-snapshot'),
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('snapshot-review-copy-json-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"itemCount": 1'));
+    });
+
+    fireEvent.click(screen.getByTestId('snapshot-item-copy-json-item-1'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        expect.stringContaining('anthropic/claude-3.5-sonnet'),
+      );
+    });
   });
 });
