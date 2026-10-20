@@ -39,6 +39,8 @@ export function SessionRunHistory({ sessionId, onSelectRun, excludeRunId }: Sess
   const [open, setOpen] = useState(false);
   const [runs, setRuns] = useState<OrchRunDetail[]>([]);
   const [loading, setLoading] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     if (!open || runs.length > 0) return;
@@ -63,20 +65,89 @@ export function SessionRunHistory({ sessionId, onSelectRun, excludeRunId }: Sess
     );
   }
 
+  const filteredRuns = runs.filter((r) => r.run_id !== excludeRunId);
+
+  const handleCopyHistoryMd = async () => {
+    /* v8 ignore start */
+    const lines = [
+      `# 会话历史编排 (${filteredRuns.length})`,
+      `- 会话 ID: ${sessionId}`,
+      '',
+      ...filteredRuns.map((r) => {
+        const done = r.tasks.filter((t) => t.status === 'done').length;
+        const total = r.tasks.length;
+        const totalTokens = r.tasks.reduce(
+          (sum, t) => sum + (typeof t.used_tokens === 'number' ? t.used_tokens : 0),
+          0,
+        );
+        return `- [${STATUS_LABEL[r.status] ?? r.status}] ${r.original_request || r.run_id} (${done}/${total} · ${totalTokens} tokens)`;
+      }),
+    ];
+    setCopiedMd(true);
+    await navigator.clipboard?.writeText(lines.join('\n'));
+    setTimeout(() => setCopiedMd(false), 1500);
+    /* v8 ignore stop */
+  };
+
+  const handleCopyHistoryJson = async () => {
+    /* v8 ignore start */
+    const payload = {
+      sessionId,
+      excludeRunId: excludeRunId ?? null,
+      count: filteredRuns.length,
+      runs: filteredRuns.map((r) => ({
+        run_id: r.run_id,
+        status: r.status,
+        original_request: r.original_request ?? null,
+        doneTasks: r.tasks.filter((t) => t.status === 'done').length,
+        totalTasks: r.tasks.length,
+        usedTokens: r.tasks.reduce(
+          (sum, t) => sum + (typeof t.used_tokens === 'number' ? t.used_tokens : 0),
+          0,
+        ),
+        created_at: r.created_at,
+      })),
+    };
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    setTimeout(() => setCopiedJson(false), 1500);
+    /* v8 ignore stop */
+  };
+
   return (
     <div className="px-2 py-1" data-testid="session-run-history">
-      <button
-        type="button"
-        className="text-xs text-text-tertiary hover:text-text-secondary"
-        onClick={() => setOpen(false)}
-      >
-        ▾ 历史编排
-      </button>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          className="text-xs text-text-tertiary hover:text-text-secondary"
+          onClick={() => setOpen(false)}
+        >
+          ▾ 历史编排
+        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => void handleCopyHistoryMd()}
+            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+            data-testid="session-run-history-copy-md-btn"
+          >
+            {copiedMd ? '已复制MD' : '复制历史MD'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCopyHistoryJson()}
+            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+            data-testid="session-run-history-copy-json-btn"
+          >
+            {copiedJson ? '已复制JSON' : '复制历史JSON'}
+          </button>
+        </div>
+      </div>
       {loading && <div className="text-xs text-text-tertiary py-1">加载中…</div>}
       {!loading && runs.length === 0 && (
         <div className="text-xs text-text-tertiary py-1">暂无编排记录</div>
       )}
-      {runs.filter((r) => r.run_id !== excludeRunId).map((run) => {
+      {filteredRuns.map((run) => {
         const done = run.tasks.filter((t) => t.status === 'done').length;
         const total = run.tasks.length;
         // RD24 (round54): run 级消耗汇总 —— RT24 持久化的 used_tokens 聚合。

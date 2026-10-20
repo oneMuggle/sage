@@ -302,4 +302,14 @@ describe('TaskTreeSection', () => {
     // 未被调整的任务不显示徽章。
     expect(screen.queryByTestId('task-tree-adjusted-t2')).not.toBeInTheDocument();
   });
+
+  it('copies task tree as Markdown and JSON (Phase P90)', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<TaskTreeSection board={makeBoard()} />);
+    fireEvent.click(screen.getByTestId('task-tree-copy-md-btn'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 编排任务树 — orch-1 (0/2)'));
+    fireEvent.click(screen.getByTestId('task-tree-copy-json-btn'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"runId": "orch-1"'));
+  });
 });
