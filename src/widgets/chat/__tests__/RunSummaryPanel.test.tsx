@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useChangesListStore } from '../../../features/changes/changesListStore';
@@ -204,5 +204,22 @@ describe('RunSummaryPanel (P2-6)', () => {
       iteration: 2,
     });
     await waitFor(() => expect(fetch).toHaveBeenCalledWith(SESSION));
+  });
+
+  it('支持复制本次编排运行摘要 MD 与 JSON 到剪贴板', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    seedBoard({ progress: { total: 2, done: 2, running: 0, queued: 0, failed: 0, cancelled: 0 } });
+    render(<RunSummaryPanel sessionId={SESSION} />);
+
+    fireEvent.click(screen.getByTestId('run-summary-copy-md-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 本次编排运行摘要'));
+    });
+
+    fireEvent.click(screen.getByTestId('run-summary-copy-json-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"runId": "run-1"'));
+    });
   });
 });

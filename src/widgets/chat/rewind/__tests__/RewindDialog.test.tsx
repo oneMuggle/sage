@@ -134,4 +134,22 @@ describe('RewindDialog', () => {
     await waitFor(() => expect(onForked).toHaveBeenCalledWith('fork-2'));
     expect(mockRestore).not.toHaveBeenCalled();
   });
+
+  it('支持复制回滚检查点清单 MD 与 JSON 到剪贴板', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    mockList.mockResolvedValue([ckpt('ck-new', new Date(2026, 8, 27, 10, 0, 0))]);
+    renderDialog();
+    await waitFor(() => expect(screen.getByTestId('rewind-checkpoint-ck-new')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('rewind-copy-md-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 会话回滚检查点清单'));
+    });
+
+    fireEvent.click(screen.getByTestId('rewind-copy-json-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"ck-new"'));
+    });
+  });
 });

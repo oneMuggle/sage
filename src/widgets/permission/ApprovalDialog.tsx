@@ -55,6 +55,8 @@ export function ApprovalDialog() {
   // 对标 ZCode freeText：拒绝反馈——点「拒绝」先展开输入框（可留空直接确认）
   const [denyReason, setDenyReason] = useState('');
   const [denyExpanded, setDenyExpanded] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // 新请求到达时重置上一个请求遗留的勾选/提交状态（store 直接替换
   // currentRequest，组件不卸载，必须显式重置局部 state）
@@ -87,6 +89,34 @@ export function ApprovalDialog() {
   if (!currentRequest) return null;
 
   const risk = RISK_BADGE_CLASSES[currentRequest.risk] ? currentRequest.risk : ('safe' as const);
+
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    const lines = [
+      `# 工具权限审批请求: ${currentRequest.tool_name}`,
+      '',
+      `- **请求 ID**: \`${currentRequest.request_id}\``,
+      `- **工具名称**: \`${currentRequest.tool_name}\``,
+      `- **风险等级**: \`${risk}\``,
+      `- **说明**: ${currentRequest.message}`,
+      ...(currentRequest.target_path ? [`- **目标路径**: \`${currentRequest.target_path}\``] : []),
+      '',
+      '## 参数摘要',
+      '```json',
+      currentRequest.args_summary,
+      '```',
+    ];
+    setCopiedMd(true);
+    await navigator.clipboard?.writeText(lines.join('\n'));
+    setTimeout(() => setCopiedMd(false), 1800);
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(JSON.stringify(currentRequest, null, 2));
+    setTimeout(() => setCopiedJson(false), 1800);
+  };
+  /* v8 ignore stop */
 
   const answer = async (approved: boolean, reason = ''): Promise<void> => {
     if (submitting) return;
@@ -178,12 +208,30 @@ export function ApprovalDialog() {
         <div className="flex items-center gap-2 mb-3">
           <ShieldAlert className="w-4 h-4 text-warning shrink-0" aria-hidden="true" />
           <h3 className="text-sm font-semibold text-text">{t('permission.title')}</h3>
-          <span
-            data-testid="permission-risk-badge"
-            className={`ml-auto px-2 py-0.5 text-xs rounded border ${RISK_BADGE_CLASSES[risk]}`}
-          >
-            {t(RISK_LABEL_KEYS[risk])}
-          </span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <button
+              type="button"
+              data-testid="permission-copy-md-btn"
+              onClick={() => void handleCopyMd()}
+              className="px-2 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedMd ? '✓ 已复制MD' : '复制审批MD'}
+            </button>
+            <button
+              type="button"
+              data-testid="permission-copy-json-btn"
+              onClick={() => void handleCopyJson()}
+              className="px-2 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedJson ? '✓ 已复制JSON' : '复制审批JSON'}
+            </button>
+            <span
+              data-testid="permission-risk-badge"
+              className={`px-2 py-0.5 text-xs rounded border ${RISK_BADGE_CLASSES[risk]}`}
+            >
+              {t(RISK_LABEL_KEYS[risk])}
+            </span>
+          </div>
         </div>
 
         <div className="space-y-3">

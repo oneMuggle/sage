@@ -100,4 +100,28 @@ describe('VersionHistory 版本 diff（right-panel R3 批次 A）', () => {
       expect(screen.getByTestId('version-diff-view-2')).toBeInTheDocument(),
     );
   });
+
+  it('支持复制版本历史 MD/JSON 与单版本 JSON 到剪贴板', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    mockedList.mockResolvedValue(versions);
+    render(<VersionHistory sessionId="s1" artifactId="a1" />);
+    fireEvent.click(screen.getByRole('button', { name: /版本历史/ }));
+    await waitFor(() => expect(screen.getByText('v1')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId('version-history-copy-md-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 产物版本历史 (a1)'));
+    });
+
+    fireEvent.click(screen.getByTestId('version-history-copy-json-btn'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"artifactId": "a1"'));
+    });
+
+    fireEvent.click(screen.getByTestId('version-item-copy-json-1'));
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"content_hash": "h1"'));
+    });
+  });
 });
