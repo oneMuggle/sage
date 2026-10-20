@@ -3,7 +3,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { gatewayApiFor } from '../../../shared/api/gatewayApi';
-import { GatewayCard } from '../GatewayCard';
+import {
+  formatGatewayCardJson,
+  formatGatewayCardMarkdown,
+  GatewayCard,
+} from '../GatewayCard';
 
 vi.mock('../../../shared/api/gatewayApi', () => ({
   gatewayApiFor: vi.fn(),
@@ -167,5 +171,39 @@ describe('GatewayCard', () => {
       expect(mockedApi.unbind).toHaveBeenCalledWith('42');
     });
     expect(screen.queryByText(/chat 42 → session/)).not.toBeInTheDocument();
+  });
+
+  it('exports gateway card config as Markdown and JSON and copies via buttons', async () => {
+    const md = formatGatewayCardMarkdown(
+      'telegram',
+      'Telegram',
+      true,
+      {
+        configured: true,
+        running: true,
+        bound_chats: 1,
+        stats: { updates_seen: 1, messages_replied: 1, rejected: 0, errors: 0 },
+      },
+      '42, 99',
+      [{ chat_id: '42', session_id: 'sess-abc', created_at: 1 }],
+    );
+    expect(md).toContain('# 消息网关（Telegram）配置摘要');
+    expect(md).toContain('chat `42` → session `sess-abc`');
+    const parsed = JSON.parse(
+      formatGatewayCardJson('discord', 'Discord', false, null, '', []),
+    );
+    expect(parsed.platform).toBe('discord');
+    expect(parsed.allowedIds).toEqual([]);
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<GatewayCard platform="telegram" />);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('****ABCD')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('gateway-card-telegram-copy-md'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('消息网关（Telegram）'));
+    fireEvent.click(screen.getByTestId('gateway-card-telegram-copy-json'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"platform": "telegram"'));
   });
 });
