@@ -60,7 +60,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from backend.domain.network_policy import NetworkPolicy
-from backend.domain.tool_policy import ToolPolicy
+from backend.domain.tool_policy import DEFAULT_MAX_TOOL_CALLS_PER_RUN, ToolPolicy
 from backend.orchestration.depth import (
     current_subagent_depth,
     is_nesting_allowed,
@@ -117,9 +117,6 @@ SUBAGENT_TOOL_WHITELIST: Tuple[str, ...] = (
 # ``OrchSettings.max_subagent_iterations`` (same default).
 SUBAGENT_MAX_ITERATIONS = 10  # 与 OrchSettings.max_subagent_iterations 默认对齐 (PR#898)
 SUBAGENT_ANSWER_CAP = 20_000
-# 与 ToolPolicy 默认 ``max_tool_calls_per_run`` 对齐 —— 用于识别"上游未显式
-# 注入预算，走了默认 25"的情况并实时重解析（env > UI > 默认）。
-_TOOL_POLICY_DEFAULT_BUDGET = 25
 
 
 def _resolve_subagent_iterations() -> int:
@@ -197,10 +194,10 @@ def _subagent_policy(policy: Optional[ToolPolicy]) -> Tuple[ToolPolicy, Optional
     parent = policy or ToolPolicy()
     owned_root = None if parent.workspace_root else _new_subagent_workspace()
     root = parent.workspace_root or str(owned_root)
-    # 修复：当 parent 是默认 ToolPolicy（未由上游显式注入预算），
-    # ``max_tool_calls_per_run`` 恒为 25 —— 即使 UI 设到 100 子 agent 仍卡 25 次。
+    # 当 parent 是默认 ToolPolicy（未由上游显式注入预算），
+    # ``max_tool_calls_per_run`` 恒为默认值 —— 即使 UI 设到 200 子 agent 仍卡默认值次。
     # 经 ``resolve_tool_call_budget`` 实时解析 env > UI 设置 > 默认。
-    if policy is None or parent.max_tool_calls_per_run == _TOOL_POLICY_DEFAULT_BUDGET:
+    if policy is None or parent.max_tool_calls_per_run == DEFAULT_MAX_TOOL_CALLS_PER_RUN:
         resolved_budget = resolve_tool_call_budget(parent.max_tool_calls_per_run)
     else:
         resolved_budget = parent.max_tool_calls_per_run

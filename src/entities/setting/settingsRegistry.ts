@@ -458,7 +458,13 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     1,
     100,
   ),
-  'orch.maxToolCallsPerRun': orchNumber('orch.maxToolCallsPerRun', '工具调用预算', '单 run 工具调用总数上限，0 表示不限', 25, 0),
+  'orch.maxToolCallsPerRun': orchNumber(
+    'orch.maxToolCallsPerRun',
+    '工具调用预算',
+    '单 run 工具调用总数上限，0 回落默认值（当前为 100）',
+    100,
+    0,
+  ),
   'orch.subagentApprovalMode': enumSetting(
     'orch.subagentApprovalMode',
     '子代理自动批准',
