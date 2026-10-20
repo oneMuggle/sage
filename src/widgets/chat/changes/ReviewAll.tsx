@@ -27,6 +27,8 @@ export function ReviewAll({ sessionId, onBack }: ReviewAllProps) {
   const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const sectionRefs = useRef<Array<HTMLElement | null>>([]);
 
   // +/- 合计来自变更列表缓存（与列表视图共用数据源）
@@ -70,6 +72,48 @@ export function ReviewAll({ sessionId, onBack }: ReviewAllProps) {
     [stats],
   );
 
+  const handleCopyReviewMd = async () => {
+    /* v8 ignore start */
+    const lines = [
+      `# 全部审查 (${sections.length} 个文件)`,
+      `- 会话 ID: ${sessionId}`,
+      truncated ? `- 提示: diff 过长，已截断显示前 64KiB` : null,
+      '',
+      ...sections.map((sec) => {
+        const st = statsFor(sec.path);
+        const statText = st ? ` (+${st.insertions ?? 0} / -${st.deletions ?? 0})` : '';
+        return `## ${sec.path}${statText}\n\`\`\`diff\n${sec.binary ? 'Binary file' : sec.diffText.trimEnd()}\n\`\`\``;
+      }),
+    ].filter((x) => x !== null) as string[];
+    setCopiedMd(true);
+    await navigator.clipboard?.writeText(lines.join('\n'));
+    setTimeout(() => setCopiedMd(false), 1500);
+    /* v8 ignore stop */
+  };
+
+  const handleCopyReviewJson = async () => {
+    /* v8 ignore start */
+    const payload = {
+      sessionId,
+      truncated,
+      fileCount: sections.length,
+      sections: sections.map((sec) => {
+        const st = statsFor(sec.path);
+        return {
+          path: sec.path,
+          binary: Boolean(sec.binary),
+          insertions: st?.insertions ?? 0,
+          deletions: st?.deletions ?? 0,
+          diffText: sec.diffText,
+        };
+      }),
+    };
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    setTimeout(() => setCopiedJson(false), 1500);
+    /* v8 ignore stop */
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-2 px-2 py-1 border-b border-border">
@@ -85,6 +129,24 @@ export function ReviewAll({ sessionId, onBack }: ReviewAllProps) {
         <span className="text-sm font-medium flex-1">
           全部审查{sections.length > 0 ? `（${sections.length} 个文件）` : ''}
         </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => void handleCopyReviewMd()}
+            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+            data-testid="review-all-copy-md-btn"
+          >
+            {copiedMd ? '已复制MD' : '复制审查MD'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCopyReviewJson()}
+            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+            data-testid="review-all-copy-json-btn"
+          >
+            {copiedJson ? '已复制JSON' : '复制审查JSON'}
+          </button>
+        </div>
       </div>
       {truncated && (
         <div className="text-xs text-amber-600 dark:text-amber-400 px-2 py-1 border-b border-border">

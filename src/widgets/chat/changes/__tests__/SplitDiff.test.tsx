@@ -3,7 +3,7 @@
 // right-panel R6: 分栏 diff 词级行内高亮测试 —— modify 行应把行内真正
 // 变化的片段染深色（strong span），相同上下文与 remove/add 行不受影响。
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { SplitDiff } from '../SplitDiff';
 
@@ -79,5 +79,15 @@ describe('SplitDiff — 词级行内高亮 (right-panel R6)', () => {
     const { container } = render(<SplitDiff diff={DIFF} />);
     expect(screen.queryByTestId('split-diff-more')).not.toBeInTheDocument();
     expect(container.querySelectorAll('tbody tr')).toHaveLength(7);
+  });
+
+  it('copies split diff rows as Markdown and JSON (Phase P90)', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<SplitDiff diff={DIFF} />);
+    fireEvent.click(screen.getByTestId('split-diff-copy-md-btn'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 分栏 Diff (7 行)'));
+    fireEvent.click(screen.getByTestId('split-diff-copy-json-btn'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"totalRows": 7'));
   });
 });
