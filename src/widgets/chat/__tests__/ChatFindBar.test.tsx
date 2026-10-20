@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchFindShortcut } from '../../../features/chat/chatFind';
 import { useMessageJumpStore } from '../../../features/chat/messageJumpStore';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { ChatFindBar } from '../ChatFindBar';
+import {
+  ChatFindBar,
+  formatChatFindResultsJson,
+  formatChatFindResultsMarkdown,
+} from '../ChatFindBar';
 
 const messages = [
   { id: 'm1', role: 'user', content: '部署 sage 的步骤' },
@@ -125,5 +129,30 @@ describe('ChatFindBar (B4)', () => {
 
     openBar();
     expect(screen.getByTestId('chat-find-input')).toHaveValue('');
+  });
+
+  it('exports find results as Markdown and JSON', () => {
+    expect(formatChatFindResultsMarkdown('', [])).toContain('_无匹配结果_');
+    const md = formatChatFindResultsMarkdown('sage', [
+      { messageId: 'm1', occurrence: 0 },
+      { messageId: 'm2', occurrence: 1 },
+    ]);
+    expect(md).toContain('# 会话内查找结果 (Chat Find Results)');
+    expect(md).toContain('message `m1` (occurrence #1)');
+    const parsed = JSON.parse(
+      formatChatFindResultsJson('sage', [{ messageId: 'm1', occurrence: 0 }]),
+    );
+    expect(parsed.total).toBe(1);
+    expect(parsed.query).toBe('sage');
+
+    renderBar();
+    openBar();
+    typeQuery('sage');
+    const mdBtn = screen.getByTestId('chat-find-copy-md');
+    const jsonBtn = screen.getByTestId('chat-find-copy-json');
+    fireEvent.click(mdBtn);
+    expect(mdBtn.textContent).toContain('已复制 MD');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toContain('已复制 JSON');
   });
 });
