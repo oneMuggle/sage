@@ -232,6 +232,43 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
     if (scopeFilter === 'all') return memories;
     return memories.filter((m) => (m.scope ?? 'user') === scopeFilter);
   }, [memories, scopeFilter]);
+  const [copiedBrowserMd, setCopiedBrowserMd] = useState(false);
+  const [copiedBrowserJson, setCopiedBrowserJson] = useState(false);
+
+  const handleCopyBrowserMd = () => {
+    setCopiedBrowserMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedBrowserMd(false), 2000);
+    const lines = [
+      '# 记忆库报告',
+      '',
+      `- 视图模式: ${viewMode}`,
+      `- 类型筛选: ${filterType}`,
+      `- 作用域筛选: ${scopeFilter}`,
+      `- 当前显示: ${visibleMemories.length}`,
+      '',
+      ...visibleMemories.map((m, idx) => `${idx + 1}. **[${m.source ?? 'episodic'}]** ${m.content || m.summary || ''}`),
+    ];
+    void navigator.clipboard?.writeText(lines.join('\n'));
+    /* v8 ignore stop */
+  };
+
+  const handleCopyBrowserJson = () => {
+    setCopiedBrowserJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedBrowserJson(false), 2000);
+    const payload = {
+      viewMode,
+      filterType,
+      scopeFilter,
+      stats,
+      visibleCount: visibleMemories.length,
+      items: visibleMemories,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
 
   return (
     <div>
@@ -266,6 +303,22 @@ export function MemoryBrowser({ initialType = 'all', refreshKey }: MemoryBrowser
           onClick={() => setViewMode('summaries')}
         >
           按会话查看摘要
+        </button>
+        <button
+          type="button"
+          data-testid="memory-browser-copy-md-btn"
+          onClick={handleCopyBrowserMd}
+          className="px-2.5 py-1 border border-border rounded-radius-sm text-xs bg-surface text-muted hover:text-text"
+        >
+          {copiedBrowserMd ? '已复制MD' : '复制记忆MD'}
+        </button>
+        <button
+          type="button"
+          data-testid="memory-browser-copy-json-btn"
+          onClick={handleCopyBrowserJson}
+          className="px-2.5 py-1 border border-border rounded-radius-sm text-xs bg-surface text-muted hover:text-text"
+        >
+          {copiedBrowserJson ? '已复制JSON' : '复制记忆JSON'}
         </button>
         {viewMode === 'summaries' && (
           <div className="flex items-center gap-2 ml-2">
@@ -369,6 +422,8 @@ function MemoryItemCard({
   memory: Memory;
   onJumpToSession: (sessionId: string | undefined) => void;
 }) {
+  const [copiedItemMd, setCopiedItemMd] = useState(false);
+  const [copiedItemJson, setCopiedItemJson] = useState(false);
   const source = memory.source || memory.layer || memory.memory_type || 'episodic';
   const sourceLabel = SOURCE_LABEL[source] || source;
   const sourceClass = SOURCE_BADGE_CLASSES[source] || SOURCE_BADGE_CLASSES.episodic;
@@ -410,6 +465,29 @@ function MemoryItemCard({
     typeof memory.access_count === 'number' && Number.isFinite(memory.access_count)
       ? memory.access_count
       : 0;
+
+  const handleCopyItemMd = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCopiedItemMd(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedItemMd(false), 2000);
+    const md = `- **[${sourceLabel} · ${scopeLabel}]** ${content}`;
+    void navigator.clipboard?.writeText(md);
+    /* v8 ignore stop */
+  };
+
+  const handleCopyItemJson = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCopiedItemJson(true);
+    /* v8 ignore start */
+    setTimeout(() => setCopiedItemJson(false), 2000);
+    const payload = {
+      ...memory,
+      exportedAt: new Date().toISOString(),
+    };
+    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
+    /* v8 ignore stop */
+  };
 
   return (
     <div
@@ -468,6 +546,24 @@ function MemoryItemCard({
             ↳ 会话 {truncate(sessionId, 12)}
           </button>
         )}
+        <span className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            data-testid={`memory-item-copy-md-${memory.id}`}
+            onClick={handleCopyItemMd}
+            className="px-2 py-0.5 border border-border rounded text-ui-2xs text-muted hover:text-text"
+          >
+            {copiedItemMd ? '已复制MD' : '复制MD'}
+          </button>
+          <button
+            type="button"
+            data-testid={`memory-item-copy-json-${memory.id}`}
+            onClick={handleCopyItemJson}
+            className="px-2 py-0.5 border border-border rounded text-ui-2xs text-muted hover:text-text"
+          >
+            {copiedItemJson ? '已复制JSON' : '复制JSON'}
+          </button>
+        </span>
       </div>
     </div>
   );

@@ -124,6 +124,12 @@ describe('UserProfileCard', () => {
     updateUserProfile.mockResolvedValue(entry({ content: '偏好详细回答' }));
     render(<UserProfileCard />);
     await waitFor(() => expect(screen.getByTestId('profile-item')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('user-profile-copy-md-btn'));
+    expect(screen.getByTestId('user-profile-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('user-profile-copy-json-btn'));
+    expect(screen.getByTestId('user-profile-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByTestId('user-profile-item-copy-json-p1'));
+    expect(screen.getByTestId('user-profile-item-copy-json-p1')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByTestId('profile-edit'));
     const ta = screen.getByTestId('profile-editor-content') as HTMLTextAreaElement;
     expect(ta.value).toBe('用户偏好简洁回答');
