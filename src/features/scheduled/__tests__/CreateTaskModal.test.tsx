@@ -20,7 +20,11 @@ vi.mock('../../../entities/scheduled/taskStore', () => {
 
 import { useScheduledTaskStore } from '../../../entities/scheduled/taskStore';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { CreateTaskModal } from '../CreateTaskModal';
+import {
+  CreateTaskModal,
+  formatScheduledTaskDraftJson,
+  formatScheduledTaskDraftMarkdown,
+} from '../CreateTaskModal';
 
 function renderModal(props: Partial<React.ComponentProps<typeof CreateTaskModal>> = {}) {
   return render(
@@ -236,5 +240,40 @@ describe('scheduled audit form contracts', () => {
         expect.objectContaining({ schedule: { kind: 'once', at: 1234567 }, enabled: false }),
       ),
     );
+  });
+
+  it('formats and copies scheduled task draft as Markdown and JSON', () => {
+    const md = formatScheduledTaskDraftMarkdown({
+      isEdit: true,
+      name: '晨报',
+      type: 'recurring',
+      cron: '0 8 * * *',
+      atLocal: '2026-10-20T08:00',
+      targetSession: 's-1',
+      enabled: true,
+      content: '生成今日晨报',
+    });
+    expect(md).toContain('# 定时任务配置摘要 (Scheduled Task Draft)');
+    expect(md).toContain('晨报');
+
+    const parsed = JSON.parse(
+      formatScheduledTaskDraftJson({
+        isEdit: false,
+        name: '',
+        type: 'once',
+        cron: '0 8 * * *',
+        atLocal: '2026-10-20T08:00',
+        targetSession: 's-1',
+        enabled: false,
+        content: '',
+      }),
+    );
+    expect(parsed.type).toBe('once');
+
+    renderModal();
+    fireEvent.click(screen.getByTestId('create-task-copy-md'));
+    expect(screen.getByTestId('create-task-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('create-task-copy-json'));
+    expect(screen.getByTestId('create-task-copy-json').textContent).toContain('已复制 JSON');
   });
 });

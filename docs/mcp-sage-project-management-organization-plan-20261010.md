@@ -1247,3 +1247,22 @@
   - 在 `OfficeFilePicker` 顶部工具栏新增 **`复制 MD`**（`data-testid="office-picker-${docType}-copy-md"`）与 **`复制 JSON`**（`data-testid="office-picker-${docType}-copy-json"`），并导出纯函数 `formatOfficePickerMarkdown` / `formatOfficePickerJson`；在 `OnboardingWizard` 步骤指示栏新增 **`复制 MD`**（`data-testid="wizard-copy-md"`）与 **`复制 JSON`**（`data-testid="wizard-copy-json"`），并导出纯函数 `formatOnboardingWizardMarkdown` / `formatOnboardingWizardJson`；在 `GovernanceRulesPanel` 第一节标题栏新增 **`复制 MD`**（`data-testid="governance-rules-copy-md"`）与 **`复制 JSON`**（`data-testid="governance-rules-copy-json"`），并导出纯函数 `formatGovernanceRulesMarkdown` / `formatGovernanceRulesJson`；在 `TaskBriefDialog` 底部操作区新增 **`复制 MD`**（`data-testid="task-brief-copy-md"`）与 **`复制 JSON`**（`data-testid="task-brief-copy-json"`），并导出纯函数 `formatTaskBriefMarkdown` / `formatTaskBriefJson`。
 - **单元测试与门禁验证**：
   - 扩展 `UpdateDialog.test.tsx`、`DocxNativePreview.test.tsx`、`OfficeDeliveryDrawer.test.tsx`、`OfficeDocumentList.test.tsx`、`OfficeFilePicker.test.tsx`、`OnboardingWizard.test.tsx`、`GovernanceRulesPanel.test.tsx` 与 `TaskBriefDialog.test.tsx`（8 个套件共 66 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零错误门禁。
+
+### Phase P96（2026-10-20）：@文件菜单、定时任务配置与 Cron 选择器、CSS 主题弹窗与主题画廊、空工作区引导、权限模式切换与会话模型选择器审计快照导出（PR #2180 / #2181）
+
+1. **@文件引用候选列表 (`src/features/chat/AtFileMenu.tsx`)**：
+   - 新增并导出 `formatAtFileMenuMarkdown` 与 `formatAtFileMenuJson` 纯函数及头部一键复制按钮（`data-testid="at-file-menu-copy-md"` / `data-testid="at-file-menu-copy-json"`），支持导出检索关键词、工作区名与候选文件清单。
+2. **定时任务配置弹窗 (`src/features/scheduled/CreateTaskModal.tsx`)**：
+   - 新增并导出 `formatScheduledTaskDraftMarkdown` 与 `formatScheduledTaskDraftJson` 纯函数及顶栏一键复制按钮（`data-testid="create-task-copy-md"` / `data-testid="create-task-copy-json"`），支持导出任务名称、调度类型、Cron/时间、目标会话与提示词草稿。
+3. **Cron 表达式配置器 (`src/features/scheduled/CronExpressionPicker.tsx`)**：
+   - 新增并导出 `formatCronPickerMarkdown` 与 `formatCronPickerJson` 纯函数及预设栏一键复制按钮（`data-testid="cron-picker-copy-md"` / `data-testid="cron-picker-copy-json"`），支持导出预设档位、表达式及校验状态。
+4. **自定义 CSS 主题弹窗 (`src/features/theme/CssThemeModal.tsx`)**：
+   - 新增并导出 `formatCssThemeDraftMarkdown` 与 `formatCssThemeDraftJson` 纯函数及标题栏一键复制按钮（`data-testid="css-theme-copy-md"` / `data-testid="css-theme-copy-json"`），支持导出主题名称、外观基准、校验状态与 CSS 源码。
+5. **主题画廊 (`src/features/theme/ThemeGallery.tsx`)**：
+   - 新增并导出 `formatThemeGalleryMarkdown` 与 `formatThemeGalleryJson` 纯函数及标题栏一键复制按钮（`data-testid="theme-gallery-copy-md"` / `data-testid="theme-gallery-copy-json"`），支持导出当前激活预设及基础/装饰主题清单。
+6. **空工作区引导状态 (`src/features/workspace/WorkspaceEmptyGuard.tsx`)**：
+   - 新增并导出 `formatWorkspaceGuardMarkdown` 与 `formatWorkspaceGuardJson` 纯函数及一键复制按钮（`data-testid="workspace-guard-copy-md"` / `data-testid="workspace-guard-copy-json"`），支持导出触发功能、引导文案与最近错误。
+7. **会话权限模式与自动放行切换器 (`src/widgets/chat/PermissionModeSwitch.tsx`)**：
+   - 新增并导出 `formatPermissionModeMarkdown` 与 `formatPermissionModeJson` 纯函数及一键复制按钮（`data-testid="permission-mode-copy-md"` / `data-testid="permission-mode-copy-json"`），支持导出当前权限预设、自动放行计数及审计明细。
+8. **会话模型选择器 (`src/widgets/chat/SessionModelPicker.tsx`)**：
+   - 新增并导出 `formatSessionModelPickerMarkdown` 与 `formatSessionModelPickerJson` 纯函数及一键复制按钮（`data-testid="session-model-copy-md"` / `data-testid="session-model-copy-json"`），支持导出会话覆盖模型、全局默认模型与候选数量。
