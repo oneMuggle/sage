@@ -1,9 +1,15 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { useResearchStore } from '../../../entities/wiki/research-store';
 import { useWikiStore } from '../../../entities/wiki/store';
+import { CommunityColoredGraph } from '../CommunityColoredGraph';
+import { LeftPanel } from '../LeftPanel';
+import { RightPanel } from '../RightPanel';
 import { SourcesView } from '../SourcesView';
 import { WikiEditor } from '../WikiEditor';
+import { WikiGraphView } from '../WikiGraphView';
+import { WikiIngestProgress } from '../WikiIngestProgress';
 import { WikiResearchPanel } from '../WikiResearchPanel';
 import { WikiToolbar } from '../WikiToolbar';
 
@@ -11,12 +17,27 @@ const mockStartWikiResearch = vi.fn();
 const mockWikiIngestStream = vi.fn();
 const mockWikiWriteFile = vi.fn();
 const mockWikiListDirectory = vi.fn();
+const mockGetWikiCommunities = vi.fn();
+
+vi.mock('@xyflow/react', () => ({
+  ReactFlow: ({ children }: { children?: React.ReactNode }) => (
+    <div data-testid="mock-react-flow">{children}</div>
+  ),
+  Background: () => null,
+  Controls: () => null,
+  MiniMap: () => null,
+  Handle: () => null,
+  Position: { Top: 'top', Bottom: 'bottom' },
+  useNodesState: (initial: unknown[]) => [initial, vi.fn(), vi.fn()],
+  useEdgesState: (initial: unknown[]) => [initial, vi.fn(), vi.fn()],
+}));
 
 vi.mock('../../../shared/api-client/wiki', () => ({
   startWikiResearch: (...a: unknown[]) => mockStartWikiResearch(...a),
   wikiIngestStream: (...a: unknown[]) => mockWikiIngestStream(...a),
   wikiWriteFile: (...a: unknown[]) => mockWikiWriteFile(...a),
   wikiListDirectory: (...a: unknown[]) => mockWikiListDirectory(...a),
+  getWikiCommunities: (...a: unknown[]) => mockGetWikiCommunities(...a),
   wikiReadFile: vi.fn(),
   wikiDeleteFile: vi.fn(),
   getWikiGraph: vi.fn(),
@@ -172,5 +193,107 @@ describe('WikiEditor', () => {
     expect(screen.getByTestId('wiki-sources-file-copy-json-btn')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('wiki-sources-file-copy-json-btn'));
     expect(screen.getByTestId('wiki-sources-file-copy-json-btn')).toHaveTextContent('已复制JSON');
+  });
+
+  it('renders LeftPanel, RightPanel, and WikiIngestProgress and exports MD & JSON snapshots', () => {
+    useWikiStore.setState({
+      fileTree: [
+        {
+          name: 'wiki',
+          path: 'wiki',
+          is_dir: true,
+          children: [{ name: 'intro.md', path: 'wiki/intro.md', is_dir: false }],
+        },
+      ],
+      selectedFile: 'wiki/intro.md',
+      fileContent: '# Intro',
+    });
+    mockWikiListDirectory.mockResolvedValue([
+      {
+        name: 'wiki',
+        path: 'wiki',
+        is_dir: true,
+        children: [{ name: 'intro.md', path: 'wiki/intro.md', is_dir: false }],
+      },
+    ]);
+    render(<LeftPanel />);
+    fireEvent.click(screen.getByTestId('wiki-file-tree-copy-md-btn'));
+    expect(screen.getByTestId('wiki-file-tree-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('wiki-file-tree-copy-json-btn'));
+    expect(screen.getByTestId('wiki-file-tree-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByText('活动'));
+    expect(screen.getByText(/活动面板内容/)).toBeInTheDocument();
+
+    useResearchStore.setState({ panelOpen: true });
+    render(<RightPanel />);
+    fireEvent.click(screen.getByTestId('wiki-right-preview-copy-md-btn'));
+    expect(screen.getByTestId('wiki-right-preview-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('wiki-right-preview-copy-json-btn'));
+    expect(screen.getByTestId('wiki-right-preview-copy-json-btn')).toHaveTextContent('已复制JSON');
+    const closeResearchBtn = screen.getByText('深度研究').parentElement?.querySelector('button');
+    if (closeResearchBtn) fireEvent.click(closeResearchBtn);
+    useWikiStore.setState({ selectedFile: null });
+    useResearchStore.setState({ panelOpen: false });
+    render(<RightPanel />);
+
+    const { rerender } = render(
+      <WikiIngestProgress
+        progress={{ stage: 'step1_analyze', percent: 45, message: 'Analyzing docs' }}
+        done={false}
+        error={null}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('wiki-ingest-copy-json-btn'));
+    expect(screen.getByTestId('wiki-ingest-copy-json-btn')).toHaveTextContent('已复制JSON');
+
+    rerender(
+      <WikiIngestProgress
+        progress={{ stage: 'custom_stage' as never, percent: 80 }}
+        done={false}
+        error={null}
+      />,
+    );
+    rerender(<WikiIngestProgress progress={null} done={false} error={null} />);
+
+    rerender(<WikiIngestProgress progress={null} done={true} error={null} />);
+    fireEvent.click(screen.getByTestId('wiki-ingest-copy-json-btn'));
+    expect(screen.getByTestId('wiki-ingest-copy-json-btn')).toHaveTextContent('已复制JSON');
+
+    rerender(<WikiIngestProgress progress={null} done={false} error="Disk full" />);
+    fireEvent.click(screen.getByTestId('wiki-ingest-copy-json-btn'));
+    expect(screen.getByTestId('wiki-ingest-copy-json-btn')).toHaveTextContent('已复制JSON');
+  });
+
+  it('renders CommunityColoredGraph and WikiGraphView and exports graph & community MD/JSON', async () => {
+    mockGetWikiCommunities.mockResolvedValue({
+      communities: [
+        { community_id: 1, size: 2, cohesion: 0.85, members: ['a', 'b'] },
+      ],
+    });
+    const graphData = {
+      nodes: [
+        { id: 'a', label: 'Node A', page_type: 'entity', sources: ['s1.pdf'], wikilinks: ['b'] },
+        { id: 'b', label: 'Node B', page_type: 'concept', sources: [], wikilinks: ['a'] },
+      ],
+      edges: [{ source: 'a', target: 'b', signal: 'DirectLink' as const, weight: 1.0 }],
+    };
+    render(<CommunityColoredGraph data={graphData} projectPath="/tmp/wiki" query="Node" />);
+    await waitFor(() => expect(screen.getByTestId('wiki-community-copy-md-btn')).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId('wiki-community-copy-md-btn'));
+    expect(screen.getByTestId('wiki-community-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('wiki-community-copy-json-btn'));
+    expect(screen.getByTestId('wiki-community-copy-json-btn')).toHaveTextContent('已复制JSON');
+    fireEvent.click(screen.getByTestId('wiki-community-item-copy-json-1'));
+    expect(screen.getByTestId('wiki-community-item-copy-json-1')).toHaveTextContent('已复制');
+    fireEvent.click(screen.getByText(/社区 1/));
+    fireEvent.click(screen.getByText('清除'));
+    fireEvent.click(screen.getByTestId('wiki-graph-copy-md-btn'));
+    expect(screen.getByTestId('wiki-graph-copy-md-btn')).toHaveTextContent('已复制MD');
+    fireEvent.click(screen.getByTestId('wiki-graph-copy-json-btn'));
+    expect(screen.getByTestId('wiki-graph-copy-json-btn')).toHaveTextContent('已复制JSON');
+
+    render(<WikiGraphView data={{ nodes: [], edges: [] }} />);
+    expect(screen.getByText(/暂无 wiki 页面/)).toBeInTheDocument();
+    render(<CommunityColoredGraph data={graphData} />);
   });
 });

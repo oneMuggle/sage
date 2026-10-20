@@ -153,6 +153,14 @@ it('shows a changed citation without highlighting stale coordinates', async () =
   expect(screen.queryByLabelText('定位原文')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '打开原文件' }));
   expect(mocks.state.openFile).toHaveBeenCalledWith('wiki/a.md');
+  fireEvent.click(screen.getByTestId('wiki-chat-sources-copy-json-btn'));
+  expect(screen.getByTestId('wiki-chat-sources-copy-json-btn')).toHaveTextContent('已复制来源JSON');
+  fireEvent.click(screen.getByTestId('wiki-chat-copy-md-btn'));
+  expect(screen.getByTestId('wiki-chat-copy-md-btn')).toHaveTextContent('已复制对话MD');
+  fireEvent.click(screen.getByTestId('wiki-chat-copy-json-btn'));
+  expect(screen.getByTestId('wiki-chat-copy-json-btn')).toHaveTextContent('已复制对话JSON');
+  fireEvent.click(screen.getByTestId('wiki-chat-citation-copy-json-S1'));
+  expect(screen.getByTestId('wiki-chat-citation-copy-json-S1')).toHaveTextContent('已复制JSON');
 });
 
 it('shows request failures and allows retry', async () => {
