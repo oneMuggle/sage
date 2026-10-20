@@ -41,6 +41,38 @@ const PLACEHOLDER_PHRASES_EN = [
 
 const GITHUB_URL = 'https://github.com/oneMuggle/sage';
 
+export function formatWelcomePageMarkdown(params: {
+  locale: string;
+  needsOnboarding: boolean;
+  recommendationCount: number;
+  activeRecommendationId: string | null;
+}): string {
+  return [
+    '# 欢迎页状态摘要 (Welcome Page Summary)',
+    '',
+    `- **界面语言**: \`${params.locale}\``,
+    `- **需要首启向导**: ${params.needsOnboarding ? '是' : '否'}`,
+    `- **推荐任务模板数**: ${params.recommendationCount}`,
+    `- **当前打开任务简报**: ${params.activeRecommendationId ? `\`${params.activeRecommendationId}\`` : '无'}`,
+  ].join('\n');
+}
+
+export function formatWelcomePageJson(params: {
+  locale: string;
+  needsOnboarding: boolean;
+  recommendationCount: number;
+  activeRecommendationId: string | null;
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      ...params,
+    },
+    null,
+    2,
+  );
+}
+
 export function Welcome() {
   const { locale } = useI18n();
   const navigate = useNavigate();
@@ -55,6 +87,8 @@ export function Welcome() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [reusedBrief, setReusedBrief] = useState<TaskBrief | undefined>();
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // R26: 首启向导 —— 尚无可用端点（缺 baseUrl 或必填 apiKey）时展示三步引导
   const { settings: wizardSettings, isLoading: settingsLoading } = useSettings();
@@ -102,6 +136,42 @@ export function Welcome() {
     },
   ];
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatWelcomePageMarkdown({
+          locale,
+          needsOnboarding,
+          recommendationCount: defaultRecommendations.length,
+          activeRecommendationId: briefRecommendation?.id ?? null,
+        }),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatWelcomePageJson({
+          locale,
+          needsOnboarding,
+          recommendationCount: defaultRecommendations.length,
+          activeRecommendationId: briefRecommendation?.id ?? null,
+        }),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
       <div className="flex-1 flex flex-col items-center justify-start pt-[10vh] px-4 pb-8 gap-6">
@@ -138,6 +208,20 @@ export function Welcome() {
           >
             {locale === 'en' ? 'Documents and review' : '文档与验收'}
           </button>
+          <span
+            data-testid="welcome-page-copy-md"
+            onClick={() => void handleCopyMarkdown()}
+            className="inline-flex items-center cursor-pointer rounded border border-ui-border px-2 py-1 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedMd ? '已复制 MD' : '复制 MD'}
+          </span>
+          <span
+            data-testid="welcome-page-copy-json"
+            onClick={() => void handleCopyJson()}
+            className="inline-flex items-center cursor-pointer rounded border border-ui-border px-2 py-1 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedJson ? '已复制 JSON' : '复制 JSON'}
+          </span>
         </div>
         <AssistantRecommendations
           recommendations={defaultRecommendations}

@@ -3,7 +3,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { UpdatesTab } from '../UpdatesTab';
+import {
+  UpdatesTab,
+  formatUpdatesConfigJson,
+  formatUpdatesConfigMarkdown,
+} from '../UpdatesTab';
 
 const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
@@ -207,6 +211,32 @@ describe('UpdatesTab', () => {
 
       await waitFor(() => expect(mocks.getConfig).toHaveBeenCalledOnce());
       expect(screen.getByText('保存后：立即生效')).toBeInTheDocument();
+    });
+
+    it('formats and copies updates config as Markdown and JSON', async () => {
+      expect(formatUpdatesConfigMarkdown(null)).toContain('_配置加载中_');
+      const md = formatUpdatesConfigMarkdown({
+        updateStrategy: 'manual',
+        channel: 'stable',
+        rollbackWindowDays: 7,
+        autoRollbackThreshold: 3,
+        checkIntervalHours: 24,
+        updateServerUrl: 'https://updates.sage.app',
+        enableTelemetry: false,
+        cacheRetentionDays: 30,
+      });
+      expect(md).toContain('# 更新配置摘要 (Updates Config Summary)');
+      expect(md).toContain('https://updates.sage.app');
+
+      const parsed = JSON.parse(formatUpdatesConfigJson(null));
+      expect(parsed.config).toBeNull();
+
+      renderTab();
+      await waitFor(() => expect(mocks.getConfig).toHaveBeenCalledOnce());
+      fireEvent.click(screen.getByTestId('updates-tab-copy-md'));
+      expect(screen.getByTestId('updates-tab-copy-md').textContent).toContain('已复制 MD');
+      fireEvent.click(screen.getByTestId('updates-tab-copy-json'));
+      expect(screen.getByTestId('updates-tab-copy-json').textContent).toContain('已复制 JSON');
     });
   });
 });
