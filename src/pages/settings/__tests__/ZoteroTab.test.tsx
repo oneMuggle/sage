@@ -26,7 +26,11 @@ vi.mock('../../../shared/api/zoteroClient', () => ({
 }));
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { ZoteroTab } from '../ZoteroTab';
+import {
+  formatZoteroTabAuditJson,
+  formatZoteroTabAuditSnapshot,
+  ZoteroTab,
+} from '../ZoteroTab';
 
 function availableStatus() {
   return {
@@ -161,5 +165,49 @@ describe('ZoteroTab 搜索', () => {
     // 展开区显示摘要与批注标题
     expect(screen.getByText('摘要内容')).toBeInTheDocument();
     expect(screen.getByText(/批注 \(\d\)/)).toBeInTheDocument();
+  });
+
+  it('exports ZoteroTab audit snapshot and JSON helpers and renders copy controls', async () => {
+    renderTab();
+    await waitFor(() => expect(screen.getByText('已连接')).toBeInTheDocument());
+    expect(screen.getByTestId('zotero-tab-copy-audit')).toBeInTheDocument();
+    expect(screen.getByTestId('zotero-tab-copy-json')).toBeInTheDocument();
+
+    const snapshot = formatZoteroTabAuditSnapshot({
+      connected: true,
+      statusLoading: false,
+      itemCount: 10,
+      collectionCount: 2,
+      searchResultCount: 1,
+      query: '论文',
+      selectedCollectionKey: 'CK1',
+      selectedTag: 'ml',
+    });
+    expect(snapshot).toContain('# Zotero 文献库审计快照');
+    expect(snapshot).toContain('连接状态: 已连接');
+    expect(snapshot).toContain('搜索关键词: 论文');
+
+    const json = JSON.parse(
+      formatZoteroTabAuditJson({
+        connected: false,
+        statusLoading: false,
+        itemCount: 0,
+        collectionCount: 0,
+        searchResultCount: 0,
+        query: '',
+        selectedCollectionKey: null,
+        selectedTag: null,
+      }),
+    );
+    expect(json).toEqual({
+      connected: false,
+      statusLoading: false,
+      itemCount: 0,
+      collectionCount: 0,
+      searchResultCount: 0,
+      query: null,
+      selectedCollectionKey: null,
+      selectedTag: null,
+    });
   });
 });

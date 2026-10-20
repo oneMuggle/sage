@@ -1285,3 +1285,41 @@
    - 新增并导出 `formatComposerPlusMenuMarkdown` 与 `formatComposerPlusMenuJson` 纯函数及菜单顶栏一键复制控件（`data-testid="composer-plus-copy-md"` / `data-testid="composer-plus-copy-json"`），支持导出工具菜单项清单、快捷键提示与禁用状态。
 8. **欢迎页输入卡片 (`src/widgets/welcome/WelcomeInputCard.tsx`)**：
    - 新增并导出 `formatWelcomeInputMarkdown` 与 `formatWelcomeInputJson` 纯函数及卡片底部一键复制控件（`data-testid="welcome-input-copy-md"` / `data-testid="welcome-input-copy-json"`），支持导出当前占位文案、禁用状态与草稿正文。
+
+---
+
+## 105. Phase P98（2026-10-21）：Arena 控制台、Arena 账号页、技能管理页与设置分栏（基础、模型、编排、开发环境、Zotero）治理审计快照与一键复制
+
+### 105.1 背景与目标
+- 延续 Phase P0–P97 的全量可观测性与无侵入式复制体验，覆盖主页面与设置子面板中剩余的 8 个核心模块：
+  1. `src/pages/Arena.tsx`（Arena 控制台：当前页签、账号池数量、可用账号数与启用/异常状态审计快照与 JSON 导出）
+  2. `src/pages/ArenaAccounts.tsx`（Arena 账号页：账号池总数、可用账号数与自动化启用状态审计快照与 JSON 导出）
+  3. `src/pages/Skills.tsx`（技能管理页：当前页签、技能总数、已启用数、筛选数、总使用次数、自动刷新开关与巡检建议数审计快照与 JSON 导出）
+  4. `src/pages/settings/BasicTab.tsx`（基础设置分栏：流式输出、LLM 重试上限/退避参数、IANA 时区、日志时区与演示模式审计快照与 JSON 导出）
+  5. `src/pages/settings/ModelsTab.tsx`（模型选择分栏：可用端点数、已发现模型数、对话/视觉/向量模型绑定、上下文窗口模式与 Temperature 审计快照与 JSON 导出）
+  6. `src/pages/settings/OrchestrationTab.tsx`（编排设置分栏：计划前置澄清/侦察开关、最大并发/重试/迭代上限、审批模式、Worktree 隔离与 Scratch 根目录审计快照与 JSON 导出）
+  7. `src/pages/settings/RuntimeEnvTab.tsx`（开发环境分栏：运行时探测状态、可用运行时数、当前选中运行时、项目诊断状态与试跑状态审计快照与 JSON 导出）
+  8. `src/pages/settings/ZoteroTab.tsx`（Zotero 文献库分栏：连接状态、文献条目数、分类数、当前搜索结果数及搜索/分类/标签过滤条件审计快照与 JSON 导出）
+
+### 105.2 交付清单（Dual-Track：`main` & `release/win7`）
+- **纯函数导出**：
+  - `formatArenaAuditSnapshot` / `formatArenaAuditJson` (`src/pages/Arena.tsx`)
+  - `formatArenaAccountsAuditSnapshot` / `formatArenaAccountsAuditJson` (`src/pages/ArenaAccounts.tsx`)
+  - `formatSkillsAuditSnapshot` / `formatSkillsAuditJson` (`src/pages/Skills.tsx`)
+  - `formatBasicTabAuditSnapshot` / `formatBasicTabAuditJson` (`src/pages/settings/BasicTab.tsx`)
+  - `formatModelsTabAuditSnapshot` / `formatModelsTabAuditJson` (`src/pages/settings/ModelsTab.tsx`)
+  - `formatOrchestrationTabAuditSnapshot` / `formatOrchestrationTabAuditJson` (`src/pages/settings/OrchestrationTab.tsx`)
+  - `formatRuntimeEnvTabAuditSnapshot` / `formatRuntimeEnvTabAuditJson` (`src/pages/settings/RuntimeEnvTab.tsx`)
+  - `formatZoteroTabAuditSnapshot` / `formatZoteroTabAuditJson` (`src/pages/settings/ZoteroTab.tsx`)
+- **非按钮 `<span>` 审计复制控件**：
+  - `arena-copy-audit` / `arena-copy-json`
+  - `arena-accounts-copy-audit` / `arena-accounts-copy-json`
+  - `skills-page-copy-audit` / `skills-page-copy-json`
+  - `basic-tab-copy-audit` / `basic-tab-copy-json`
+  - `models-tab-copy-audit` / `models-tab-copy-json`
+  - `orchestration-tab-copy-audit` / `orchestration-tab-copy-json`
+  - `runtime-env-tab-copy-audit` / `runtime-env-tab-copy-json`
+  - `zotero-tab-copy-audit` / `zotero-tab-copy-json`
+- **单元测试与门禁**：
+  - 8 个测试套件（`Arena.test.tsx`, `ArenaAccounts.test.tsx`, `Skills.test.tsx`, `BasicTab.test.tsx`, `ModelsTab.test.tsx`, `OrchestrationTab.test.tsx`, `RuntimeEnvTab.test.tsx`, `ZoteroTab.test.tsx`）在 `main`（68 项测试）与 `release/win7`（78 项测试）全绿通过。
+  - `ESLint`、`tsc --noEmit`、`check-font-scale.mjs`、`architecture-check.mjs` 全部零告警通过。
