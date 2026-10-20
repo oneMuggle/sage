@@ -4,7 +4,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AtFileMenu } from '../AtFileMenu';
+import {
+  AtFileMenu,
+  formatAtFileMenuJson,
+  formatAtFileMenuMarkdown,
+} from '../AtFileMenu';
 
 vi.mock('../../../shared/api/fileSearchClient', () => ({
   fileSearchClient: {
@@ -209,5 +213,32 @@ describe('AtFileMenu — workspace-context plumbing', () => {
     render(<AtFileMenu query="o" onSelect={vi.fn()} onClose={vi.fn()} />);
     const btn = await screen.findByRole('button');
     expect(btn).toBeDisabled();
+  });
+
+  it('formats and copies @file menu results as Markdown and JSON', async () => {
+    const sample = [
+      {
+        path: '/w/a.txt',
+        name: 'a.txt',
+        size: 10,
+        kind: 'file' as const,
+        docId: null,
+        docType: null,
+        sourcePath: null,
+      },
+    ];
+    const md = formatAtFileMenuMarkdown('a', sample, '/w/my-ws');
+    expect(md).toContain('# @文件引用候选列表 (AtFile Menu Summary)');
+    expect(md).toContain('a.txt');
+    expect(formatAtFileMenuMarkdown(null, [], null)).toContain('_暂无匹配文件_');
+
+    const parsed = JSON.parse(formatAtFileMenuJson('a', sample, '/w/my-ws'));
+    expect(parsed.count).toBe(1);
+
+    render(<AtFileMenu query="a" onSelect={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByTestId('at-file-menu-copy-md'));
+    expect(screen.getByTestId('at-file-menu-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('at-file-menu-copy-json'));
+    expect(screen.getByTestId('at-file-menu-copy-json').textContent).toContain('已复制 JSON');
   });
 });

@@ -41,10 +41,45 @@ const FEATURE_COPY: Record<WorkspaceGuardFeature, { title: string; description: 
   },
 };
 
+export function formatWorkspaceGuardMarkdown(
+  feature: WorkspaceGuardFeature,
+  error: string | null,
+): string {
+  const copy = FEATURE_COPY[feature];
+  return [
+    '# 空工作区引导状态 (Workspace Empty Guard)',
+    '',
+    `- **触发功能**: \`${feature}\``,
+    `- **引导标题**: ${copy.title}`,
+    `- **引导说明**: ${copy.description}`,
+    `- **最近错误**: ${error || '无'}`,
+  ].join('\n');
+}
+
+export function formatWorkspaceGuardJson(
+  feature: WorkspaceGuardFeature,
+  error: string | null,
+): string {
+  const copy = FEATURE_COPY[feature];
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      feature,
+      title: copy.title,
+      description: copy.description,
+      error,
+    },
+    null,
+    2,
+  );
+}
+
 export function WorkspaceEmptyGuard({ feature, className }: WorkspaceEmptyGuardProps) {
   const ctx = useOptionalWorkspaceContext();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const copy = FEATURE_COPY[feature];
 
   const handleBind = useCallback(async () => {
@@ -69,6 +104,28 @@ export function WorkspaceEmptyGuard({ feature, className }: WorkspaceEmptyGuardP
       setBusy(false);
     }
   }, [ctx]);
+
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(formatWorkspaceGuardMarkdown(feature, error));
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(formatWorkspaceGuardJson(feature, error));
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <div
@@ -101,6 +158,22 @@ export function WorkspaceEmptyGuard({ feature, className }: WorkspaceEmptyGuardP
         <FolderOpen className="w-4 h-4" />
         {busy ? '绑定中...' : '选择目录'}
       </button>
+      <div className="flex items-center gap-1.5 text-ui-2xs">
+        <span
+          data-testid="workspace-guard-copy-md"
+          onClick={() => void handleCopyMarkdown()}
+          className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
+        >
+          {copiedMd ? '已复制 MD' : '复制 MD'}
+        </span>
+        <span
+          data-testid="workspace-guard-copy-json"
+          onClick={() => void handleCopyJson()}
+          className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
+        >
+          {copiedJson ? '已复制 JSON' : '复制 JSON'}
+        </span>
+      </div>
     </div>
   );
 }
