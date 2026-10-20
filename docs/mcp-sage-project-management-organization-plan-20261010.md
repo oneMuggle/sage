@@ -1119,3 +1119,15 @@
   - 在搜索结果摘要栏新增 **`复制搜索MD`**（`data-testid="wiki-search-copy-md-btn"`）与 **`复制搜索JSON`**（`data-testid="wiki-search-copy-json-btn"`），支持一键复制搜索命中清单。
 - **单元测试与门禁验证**：
   - 扩展 `WikiProjectPicker.test.tsx`（14 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
+### Phase P83 — Wiki 深度研究报告、文档编辑器、来源文件清单与顶部工具栏 MD/JSON 导出（已完成）
+
+- **Phase 4.3 `WikiResearchPanel` 深度研究报告与单条来源 MD/JSON 导出（`src/widgets/wiki/WikiResearchPanel.tsx`）**：
+  - 在研究结果顶部操作栏新增 **`复制研究MD`**（`data-testid="wiki-research-copy-md-btn"`）与 **`复制研究JSON`**（`data-testid="wiki-research-copy-json-btn"`），并在每张 `SourceCard` 新增 **`复制JSON`**（`data-testid="wiki-research-source-copy-json-${index}"`）。
+- **Phase 4.3 `WikiEditor` Wiki 文档编辑器 MD/JSON 导出（`src/widgets/wiki/WikiEditor.tsx`）**：
+  - 在编辑器头部操作栏新增 **`复制MD`**（`data-testid="wiki-editor-copy-md-btn"`）与 **`复制JSON`**（`data-testid="wiki-editor-copy-json-btn"`），支持一键复制当前文档源码或完整文件元数据。
+- **Phase 4.3 `SourcesView` Wiki 来源文件清单与单文件信息 MD/JSON 导出（`src/widgets/wiki/SourcesView.tsx`）**：
+  - 在来源视图顶部新增 **`复制来源MD`**（`data-testid="wiki-sources-copy-md-btn"`）与 **`复制来源JSON`**（`data-testid="wiki-sources-copy-json-btn"`），并在选中文件详情卡片新增 **`复制文件JSON`**（`data-testid="wiki-sources-file-copy-json-btn"`）。
+- **Phase 4.3 `WikiToolbar` Wiki 顶部工具栏项目状态 JSON 导出（`src/widgets/wiki/WikiToolbar.tsx`）**：
+  - 在顶部工具栏右侧新增 **`复制项目JSON`**（`data-testid="wiki-toolbar-copy-json-btn"`），支持一键复制当前 Wiki 项目上下文快照。
+- **单元测试与门禁验证**：
+  - 扩展 `WikiEditor.test.tsx` 覆盖四大组件渲染、交互与 MD/JSON 导出，并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零警告门禁。
