@@ -11,6 +11,48 @@ import { RetryButton } from '../shared/ui/RetryButton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../shared/ui/Tabs';
 import { SkillDraftList, SkillList } from '../widgets/skills';
 
+export interface SkillsAuditInput {
+  activeTab: string;
+  totalSkills: number;
+  enabledCount: number;
+  filteredCount: number;
+  totalUsage: number;
+  autoRefresh: boolean;
+  suggestionCount: number;
+  searchTerm: string;
+}
+
+export function formatSkillsAuditSnapshot(input: SkillsAuditInput): string {
+  return [
+    `# 技能页审计快照`,
+    `- 当前页签: ${input.activeTab}`,
+    `- 技能总数: ${input.totalSkills}`,
+    `- 已启用数: ${input.enabledCount}`,
+    `- 筛选可见数: ${input.filteredCount}`,
+    `- 总使用次数: ${input.totalUsage}`,
+    `- 自动刷新: ${input.autoRefresh ? '开启' : '关闭'}`,
+    `- 巡检建议数: ${input.suggestionCount}`,
+    `- 搜索词: ${input.searchTerm.trim() || '无'}`,
+  ].join('\n');
+}
+
+export function formatSkillsAuditJson(input: SkillsAuditInput): string {
+  return JSON.stringify(
+    {
+      activeTab: input.activeTab,
+      totalSkills: input.totalSkills,
+      enabledCount: input.enabledCount,
+      filteredCount: input.filteredCount,
+      totalUsage: input.totalUsage,
+      autoRefresh: input.autoRefresh,
+      suggestionCount: input.suggestionCount,
+      searchTerm: input.searchTerm.trim() || null,
+    },
+    null,
+    2,
+  );
+}
+
 const Skills: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -25,6 +67,8 @@ const Skills: React.FC = () => {
   const [suggestions, setSuggestions] = useState<ConsolidationSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [acceptingNames, setAcceptingNames] = useState<string | null>(null);
+  const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // Task 12 (2026-08-03): Read initial tab from URL search params.
   // Supports cross-page navigation (e.g. /learn in Chat → /skills?tab=drafts).
@@ -255,6 +299,38 @@ const Skills: React.FC = () => {
   const enabledCount = skills.filter((s) => s.enabled).length;
   const totalUsage = skills.reduce((sum, s) => sum + s.usage_count, 0);
 
+  /* v8 ignore start */
+  const handleCopyAudit = async () => {
+    const text = formatSkillsAuditSnapshot({
+      activeTab,
+      totalSkills: skills.length,
+      enabledCount,
+      filteredCount: filteredSkills.length,
+      totalUsage,
+      autoRefresh,
+      suggestionCount: suggestions.length,
+      searchTerm,
+    });
+    setCopiedAudit(true);
+    await navigator.clipboard?.writeText(text);
+  };
+
+  const handleCopyJson = async () => {
+    const text = formatSkillsAuditJson({
+      activeTab,
+      totalSkills: skills.length,
+      enabledCount,
+      filteredCount: filteredSkills.length,
+      totalUsage,
+      autoRefresh,
+      suggestionCount: suggestions.length,
+      searchTerm,
+    });
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(text);
+  };
+  /* v8 ignore stop */
+
   // 首次加载且失败：整页错误态 + 重试
   if (loading && skills.length === 0 && error) {
     return (
@@ -290,6 +366,22 @@ const Skills: React.FC = () => {
         title="技能"
         actions={
           <div className="flex items-center gap-3">
+          <span
+            data-testid="skills-page-copy-audit"
+            onClick={() => void handleCopyAudit()}
+            title="复制技能页审计快照"
+            className="px-2 py-1 rounded text-xs border border-border text-muted hover:text-text hover:bg-bg-subtle cursor-pointer select-none"
+          >
+            {copiedAudit ? '已复制快照' : '复制快照'}
+          </span>
+          <span
+            data-testid="skills-page-copy-json"
+            onClick={() => void handleCopyJson()}
+            title="复制技能页审计 JSON"
+            className="px-2 py-1 rounded text-xs border border-border text-muted hover:text-text hover:bg-bg-subtle cursor-pointer select-none"
+          >
+            {copiedJson ? '已复制 JSON' : 'JSON'}
+          </span>
           <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
             <input
               type="checkbox"

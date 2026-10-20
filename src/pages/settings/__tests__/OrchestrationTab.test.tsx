@@ -11,7 +11,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { useSettings } from '../../../features/manage-settings/useSettings';
-import { OrchestrationTab } from '../OrchestrationTab';
+import {
+  formatOrchestrationTabAuditJson,
+  formatOrchestrationTabAuditSnapshot,
+  OrchestrationTab,
+} from '../OrchestrationTab';
 
 const mocks = vi.hoisted(() => ({
   updateSettings: vi.fn(),
@@ -276,5 +280,51 @@ describe('OrchestrationTab profile 迭代上限（主对话循环实际预算）
 
     fireEvent.change(screen.getByTestId('orch-max-primary-iterations'), { target: { value: '' } });
     expect(mocks.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('exports OrchestrationTab audit snapshot and JSON helpers and renders copy controls', () => {
+    renderTab();
+    expect(screen.getByTestId('orchestration-tab-copy-audit')).toBeInTheDocument();
+    expect(screen.getByTestId('orchestration-tab-copy-json')).toBeInTheDocument();
+
+    const snapshot = formatOrchestrationTabAuditSnapshot({
+      planPreflightEnabled: true,
+      planScoutEnabled: true,
+      maxConcurrentSubagents: 4,
+      maxRetries: 2,
+      maxLaneIterations: 8,
+      maxSubagentIterations: 6,
+      subagentApprovalMode: 'ask',
+      worktreeIsolation: false,
+      scratchRoot: 'orch_scratch',
+    });
+    expect(snapshot).toContain('# 编排设置审计快照');
+    expect(snapshot).toContain('最大并发子任务: 4');
+    expect(snapshot).toContain('子代理审批模式: ask');
+
+    const json = JSON.parse(
+      formatOrchestrationTabAuditJson({
+        planPreflightEnabled: false,
+        planScoutEnabled: true,
+        maxConcurrentSubagents: 2,
+        maxRetries: 1,
+        maxLaneIterations: 5,
+        maxSubagentIterations: 4,
+        subagentApprovalMode: 'auto',
+        worktreeIsolation: true,
+        scratchRoot: '',
+      }),
+    );
+    expect(json).toEqual({
+      planPreflightEnabled: false,
+      planScoutEnabled: true,
+      maxConcurrentSubagents: 2,
+      maxRetries: 1,
+      maxLaneIterations: 5,
+      maxSubagentIterations: 4,
+      subagentApprovalMode: 'auto',
+      worktreeIsolation: true,
+      scratchRoot: 'orch_scratch',
+    });
   });
 });

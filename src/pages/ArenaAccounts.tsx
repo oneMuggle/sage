@@ -24,12 +24,52 @@ import { BackendRequestError } from '../shared/api/backendRequest';
 import { PageHeader } from '../shared/ui/PageHeader';
 import { AccountTable, ObservationFeed, RegisterAssist } from '../widgets/arena';
 
+export interface ArenaAccountsAuditInput {
+  accountCount: number;
+  availableCount: number;
+  disabled: boolean;
+  loading: boolean;
+  hasError: boolean;
+}
+
+export function formatArenaAccountsAuditSnapshot(input: ArenaAccountsAuditInput): string {
+  const statusLabel = input.disabled
+    ? '未启用'
+    : input.loading
+      ? '加载中'
+      : input.hasError
+        ? '异常'
+        : '正常';
+  return [
+    `# Arena 账号审计快照`,
+    `- 账号总数: ${input.accountCount}`,
+    `- 可用账号: ${input.availableCount}`,
+    `- 状态: ${statusLabel}`,
+  ].join('\n');
+}
+
+export function formatArenaAccountsAuditJson(input: ArenaAccountsAuditInput): string {
+  return JSON.stringify(
+    {
+      accountCount: input.accountCount,
+      availableCount: input.availableCount,
+      disabled: input.disabled,
+      loading: input.loading,
+      hasError: input.hasError,
+    },
+    null,
+    2,
+  );
+}
+
 export default function ArenaAccounts() {
   const [accounts, setAccounts] = useState<ArenaAccount[]>([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [status, setStatus] = useState<string | null>(null);
+  const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -68,6 +108,33 @@ export default function ArenaAccounts() {
   }
 
   const disabled = error.includes('未启用');
+  const availableCount = accounts.filter((a) => a.state === 'available').length;
+
+  /* v8 ignore start */
+  const handleCopyAudit = async () => {
+    const text = formatArenaAccountsAuditSnapshot({
+      accountCount: accounts.length,
+      availableCount,
+      disabled,
+      loading,
+      hasError: Boolean(error),
+    });
+    setCopiedAudit(true);
+    await navigator.clipboard?.writeText(text);
+  };
+
+  const handleCopyJson = async () => {
+    const text = formatArenaAccountsAuditJson({
+      accountCount: accounts.length,
+      availableCount,
+      disabled,
+      loading,
+      hasError: Boolean(error),
+    });
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(text);
+  };
+  /* v8 ignore stop */
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" data-testid="arena-accounts-page">
@@ -75,15 +142,33 @@ export default function ArenaAccounts() {
         title="Arena 账号"
         subtitle="账号池管理（密码加密存储）· 单账号注册辅助 · 被动模型观测"
         actions={
-          <button
-            type="button"
-            onClick={() => void reload()}
-            disabled={loading}
-            data-testid="arena-reload"
-            className="text-xs rounded border border-border px-3 py-1.5 hover:bg-bg-hover disabled:opacity-50"
-          >
-            刷新
-          </button>
+          <div className="flex items-center gap-2">
+            <span
+              data-testid="arena-accounts-copy-audit"
+              onClick={() => void handleCopyAudit()}
+              title="复制 Arena 账号审计快照"
+              className="text-xs rounded border border-border px-2.5 py-1 hover:bg-bg-hover cursor-pointer select-none"
+            >
+              {copiedAudit ? '已复制快照' : '复制快照'}
+            </span>
+            <span
+              data-testid="arena-accounts-copy-json"
+              onClick={() => void handleCopyJson()}
+              title="复制 Arena 账号审计 JSON"
+              className="text-xs rounded border border-border px-2.5 py-1 hover:bg-bg-hover cursor-pointer select-none"
+            >
+              {copiedJson ? '已复制 JSON' : 'JSON'}
+            </span>
+            <button
+              type="button"
+              onClick={() => void reload()}
+              disabled={loading}
+              data-testid="arena-reload"
+              className="text-xs rounded border border-border px-3 py-1.5 hover:bg-bg-hover disabled:opacity-50"
+            >
+              刷新
+            </button>
+          </div>
         }
       />
       <div className="flex-1 overflow-y-auto">

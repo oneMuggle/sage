@@ -129,4 +129,43 @@ describe('Arena page', () => {
     expect(note.textContent).toContain('未启用');
     expect(screen.queryByTestId('register-assist')).not.toBeInTheDocument();
   });
+
+  it('exports Arena audit snapshot and JSON helpers and renders copy controls', async () => {
+    mocks.listAccounts.mockResolvedValue([SAMPLE_ACCOUNT]);
+    const m = await import('../Arena');
+    const snapshot = m.formatArenaAuditSnapshot({
+      tab: 'accounts',
+      accountCount: 2,
+      availableCount: 1,
+      disabled: false,
+      loading: false,
+      hasError: false,
+    });
+    expect(snapshot).toContain('# Arena 控制台审计快照');
+    expect(snapshot).toContain('当前页签: accounts');
+    expect(snapshot).toContain('可用账号: 1');
+
+    const json = JSON.parse(
+      m.formatArenaAuditJson({
+        tab: 'draw',
+        accountCount: 0,
+        availableCount: 0,
+        disabled: true,
+        loading: false,
+        hasError: true,
+      }),
+    );
+    expect(json).toEqual({
+      tab: 'draw',
+      accountCount: 0,
+      availableCount: 0,
+      disabled: true,
+      loading: false,
+      hasError: true,
+    });
+
+    await renderPage();
+    expect(await screen.findByTestId('arena-copy-audit')).toBeInTheDocument();
+    expect(screen.getByTestId('arena-copy-json')).toBeInTheDocument();
+  });
 });

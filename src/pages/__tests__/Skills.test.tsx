@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Skill } from '../../shared/api/types';
 import { I18nProvider } from '../../shared/lib/i18n';
-import Skills from '../Skills';
+import Skills, { formatSkillsAuditJson, formatSkillsAuditSnapshot } from '../Skills';
 
 const listMock = vi.fn();
 const toggleMock = vi.fn();
@@ -194,5 +194,51 @@ describe('Skills page — auto-refresh toggle', () => {
     // toggle 应仍为 ON (失败不关) — listMock 至少被调用两次
     expect(listMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(toggle).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('exports Skills audit snapshot and JSON helpers and renders copy controls', async () => {
+    listMock.mockResolvedValue(sampleSkills);
+    renderSkills();
+    await waitFor(() => expect(listMock).toHaveBeenCalledTimes(1));
+
+    expect(screen.getByTestId('skills-page-copy-audit')).toBeInTheDocument();
+    expect(screen.getByTestId('skills-page-copy-json')).toBeInTheDocument();
+
+    const snapshot = formatSkillsAuditSnapshot({
+      activeTab: 'skills',
+      totalSkills: 2,
+      enabledCount: 1,
+      filteredCount: 2,
+      totalUsage: 7,
+      autoRefresh: true,
+      suggestionCount: 0,
+      searchTerm: 'web',
+    });
+    expect(snapshot).toContain('# 技能页审计快照');
+    expect(snapshot).toContain('已启用数: 1');
+    expect(snapshot).toContain('自动刷新: 开启');
+
+    const json = JSON.parse(
+      formatSkillsAuditJson({
+        activeTab: 'drafts',
+        totalSkills: 2,
+        enabledCount: 1,
+        filteredCount: 1,
+        totalUsage: 7,
+        autoRefresh: false,
+        suggestionCount: 2,
+        searchTerm: '',
+      }),
+    );
+    expect(json).toEqual({
+      activeTab: 'drafts',
+      totalSkills: 2,
+      enabledCount: 1,
+      filteredCount: 1,
+      totalUsage: 7,
+      autoRefresh: false,
+      suggestionCount: 2,
+      searchTerm: null,
+    });
   });
 });
