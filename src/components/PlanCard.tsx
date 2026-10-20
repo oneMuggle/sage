@@ -33,6 +33,47 @@ interface PlanCardProps {
   needConfirm?: boolean;
 }
 
+export function formatPlanCardMarkdown(
+  runId: string,
+  plan: TaskPlanItem[],
+  locked: boolean,
+  needConfirm?: boolean,
+): string {
+  const lines = [
+    `# 编排计划 (${runId || '—'})`,
+    `- 状态: ${locked ? '已锁定' : '待编辑'}`,
+    `- 需确认: ${needConfirm ? '是' : '否'}`,
+    `- 计划项数: ${plan.length}`,
+  ];
+  for (const item of plan) {
+    lines.push(`- **${item.task_id}** [${item.agent_id}]: ${item.goal}`);
+  }
+  return lines.join('\n');
+}
+
+export function formatPlanCardJson(
+  runId: string,
+  plan: TaskPlanItem[],
+  locked: boolean,
+  needConfirm?: boolean,
+): string {
+  return JSON.stringify(
+    {
+      runId,
+      locked,
+      needConfirm: Boolean(needConfirm),
+      count: plan.length,
+      items: plan.map((it) => ({
+        task_id: it.task_id,
+        agent_id: it.agent_id,
+        goal: it.goal,
+      })),
+    },
+    null,
+    2,
+  );
+}
+
 export function PlanCard({
   runId,
   plan: initialPlan,
@@ -43,6 +84,8 @@ export function PlanCard({
   const [items, setItems] = useState(initialPlan);
   // C4：开始执行落库成功后的本地锁定（后端首 status 事件到达前防重复点击）。
   const [locallyLocked, setLocallyLocked] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const effectiveLocked = locked || locallyLocked;
 
   const updateGoal = (idx: number, goal: string) => {
@@ -83,11 +126,51 @@ export function PlanCard({
     onCancel();
   };
 
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    setCopiedMd(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatPlanCardMarkdown(runId, items, effectiveLocked, needConfirm),
+      );
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatPlanCardJson(runId, items, effectiveLocked, needConfirm),
+      );
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="border rounded p-3 bg-bg-hover" data-testid="plan-card">
       <div className="flex justify-between mb-2">
         <h3 className="text-sm font-semibold">编排计划（{items.length} 项）</h3>
         <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => void handleCopyMd()}
+            data-testid="plan-card-copy-md"
+            className="px-2 py-1 text-xs border rounded"
+          >
+            {copiedMd ? '已复制 MD' : '复制 MD'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCopyJson()}
+            data-testid="plan-card-copy-json"
+            className="px-2 py-1 text-xs border rounded"
+          >
+            {copiedJson ? '已复制 JSON' : '复制 JSON'}
+          </button>
           <button
             disabled={effectiveLocked}
             onClick={() => void handleStart()}

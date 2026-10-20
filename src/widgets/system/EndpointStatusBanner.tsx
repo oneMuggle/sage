@@ -8,12 +8,60 @@ import { toast } from 'sonner';
 import { resolveEndpoint } from '../../entities/setting/types';
 import { fetchModelsByProtocol } from '../../features/manage-endpoints/api';
 import { useSettingsStore } from '../../features/manage-settings/settingsStore';
-import { isSameEndpoint, useEndpointStatusStore } from '../../shared/lib/endpointStatus';
+import {
+  isSameEndpoint,
+  useEndpointStatusStore,
+  type EndpointIssue,
+} from '../../shared/lib/endpointStatus';
 import { fillTemplate } from '../../shared/lib/fillTemplate';
 import { useI18n } from '../../shared/lib/i18n';
 
 /** 设置页记住上次打开的 tab（Settings.tsx R45），跳转前写入即可落到端点页 */
 const SETTINGS_TAB_STORAGE_KEY = 'sage:settings-tab';
+
+export function formatEndpointStatusMarkdown(
+  issue: EndpointIssue | null,
+  online: boolean,
+  text?: string,
+): string {
+  const lines = [
+    '# 端点状态告警',
+    `- 网络在线: ${online ? '是' : '否'}`,
+  ];
+  if (issue) {
+    lines.push(`- 故障类型: ${issue.kind}`);
+    lines.push(`- 端点主机: ${issue.host ?? issue.baseUrl ?? '—'}`);
+    lines.push(`- 模型: ${issue.model ?? '—'}`);
+    lines.push(`- 状态码: ${issue.status ?? '—'}`);
+    lines.push(`- 详情: ${text || issue.message || '—'}`);
+  }
+  return lines.join('\n');
+}
+
+export function formatEndpointStatusJson(
+  issue: EndpointIssue | null,
+  online: boolean,
+  text?: string,
+): string {
+  return JSON.stringify(
+    {
+      online,
+      issue: issue
+        ? {
+            kind: issue.kind,
+            baseUrl: issue.baseUrl ?? null,
+            host: issue.host ?? null,
+            model: issue.model ?? null,
+            status: issue.status ?? null,
+            message: issue.message ?? null,
+          }
+        : null,
+      summary: text ?? null,
+    },
+    null,
+    2,
+  );
+}
 
 function isOnline(): boolean {
   return typeof navigator === 'undefined' || navigator.onLine !== false;
@@ -27,6 +75,8 @@ export function EndpointStatusBanner() {
   const settings = useSettingsStore((s) => s.settings);
   const [online, setOnline] = useState(isOnline);
   const [checking, setChecking] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   const endpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
 
@@ -110,6 +160,26 @@ export function EndpointStatusBanner() {
     navigate('/settings');
   };
 
+  /* v8 ignore start */
+  const handleCopyMd = async () => {
+    setCopiedMd(true);
+    try {
+      await navigator.clipboard?.writeText(formatEndpointStatusMarkdown(issue, online, text));
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(formatEndpointStatusJson(issue, online, text));
+    } catch {
+      // ignore clipboard errors in non-secure environments
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div
       role="alert"
@@ -120,6 +190,22 @@ export function EndpointStatusBanner() {
       <span className="flex-1 min-w-0 truncate" title={issue.message || text}>
         {text}
       </span>
+      <button
+        type="button"
+        data-testid="endpoint-banner-copy-md"
+        onClick={() => void handleCopyMd()}
+        className="px-2 py-0.5 rounded hover:bg-bg-hover"
+      >
+        {copiedMd ? '已复制 MD' : '复制 MD'}
+      </button>
+      <button
+        type="button"
+        data-testid="endpoint-banner-copy-json"
+        onClick={() => void handleCopyJson()}
+        className="px-2 py-0.5 rounded hover:bg-bg-hover"
+      >
+        {copiedJson ? '已复制 JSON' : '复制 JSON'}
+      </button>
       <button
         type="button"
         data-testid="endpoint-banner-recheck"
