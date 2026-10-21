@@ -6,6 +6,7 @@
 
 from typing import Callable, Optional
 
+from backend.application.kernel.tool_install import tool_bundles_enabled
 from backend.domain.network_policy import NetworkPolicy
 from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
@@ -142,6 +143,63 @@ def __dir__():
 
 
 def register_all_tools(
+    registry: ToolRegistry,
+    policy: Optional[ToolPolicy] = None,
+    network_policy: Optional[NetworkPolicy] = None,
+    scheduler_service_getter: Optional[Callable[[], Optional[SchedulerServicePort]]] = None,
+    todo_service_getter: Optional[Callable[[], Optional[TodoService]]] = None,
+) -> None:
+    """注册所有内置工具到注册表。
+
+    R80 起有两套等价装配路径，由 ``SAGE_KERNEL_TOOL_BUNDLES`` 选择（默认旧路径）：
+
+    * **旧路径**（默认）—— :func:`_register_all_tools_legacy`，即 R80 之前的平铺实现；
+    * **bundle 路径** —— ``backend.tools.tool_bundles`` 的具名声明 + 内核机制
+      ``backend.application.kernel.tool_install``。
+
+    两条路径的注册顺序、工具集合与风险声明由
+    ``tests/unit/test_tool_bundles_parity.py`` 逐项比对；开关默认关闭，
+    生产路径零变更。
+
+    Args:
+        registry:   工具注册表
+        policy:     M2 工具策略（缺省 ``ToolPolicy()``）；透传给每个内置工具。
+        network_policy: 网络策略；``None`` 时从 settings 读。决定三个出网工具
+            是否注册 —— 内网/气隙模式下不注册比返回错误更省 token。
+        scheduler_service_getter: 定时任务服务延迟获取器。
+        todo_service_getter: 待办服务延迟获取器。
+    """
+    policy = policy or ToolPolicy()
+    network_policy = network_policy if network_policy is not None else load_network_policy()
+    if tool_bundles_enabled():
+        import logging
+
+        from .tool_bundles import install_default_bundles
+
+        report = install_default_bundles(
+            registry,
+            policy,
+            network_policy,
+            scheduler_service_getter,
+            todo_service_getter,
+        )
+        logging.getLogger(__name__).info(
+            "bundle 装配完成：已注册 %d 个工具，跳过 %d 个 bundle，失败 %d 个",
+            len(report.installed),
+            len(report.skipped),
+            len(report.failed),
+        )
+        return
+    _register_all_tools_legacy(
+        registry,
+        policy,
+        network_policy,
+        scheduler_service_getter,
+        todo_service_getter,
+    )
+
+
+def _register_all_tools_legacy(
     registry: ToolRegistry,
     policy: Optional[ToolPolicy] = None,
     network_policy: Optional[NetworkPolicy] = None,

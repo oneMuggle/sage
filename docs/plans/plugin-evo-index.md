@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | R78 | 契约 + 内核骨架（EffectScope / EventBus / ServiceRegistry / Fiber） | ✅ #2206 |
 | R79 | hook 生命周期收编：`KernelHookProvider` + `fire_hooks` 开关 + 双跑对照 | ✅ #2206 |
-| R80 | tool 收编：硬编码装配改为 bundle 注册 + 权限 → RiskClass | 待启动 |
+| R80 | tool 收编：硬编码装配改为 bundle 注册 + 权限 → RiskClass | ✅ #2206 |
 | R81 | 三层配置 + 四预设 + `--dump-config` | 待启动 |
 | R82 | 插件 UI / REST（安装、启停、权限确认、日志） | 待启动 |
 | R83 | 进程外宿主（含 DSH 边车，仅在触发条件满足时） | 待启动 |
@@ -28,6 +28,7 @@
 | --- | --- | --- | --- | --- |
 | R78 | `domain/plugin.py`、`ports/plugin.py`、`application/kernel/{effects,events,services,fiber,cordis_names}.py` + 5 个单测文件 | #2206 | 待对齐 | ✅ 已交付 |
 | R79 | `hooks/kernel_provider.py`（provider + `fire_hooks` 开关）+ 30 例单测（含 11 组双跑对照） | #2206 | 待对齐 | ✅ 已交付 |
+| R80 | `application/kernel/tool_install.py`（127 行机制）+ `tools/tool_bundles.py`（31 个 bundle / 94 个工具）+ 39 例单测 | #2206 | 待对齐 | ✅ 已交付 |
 
 ## 3. R78 交付边界
 
@@ -47,5 +48,19 @@
 - **依赖单向**：provider 放在 `backend/hooks/`，由 hooks 侧依赖内核，内核不认识 hooks。
 - **卸载可验证**：服务注册走 `EffectScope`，`test_stop_clears_hooks_and_service`
   直接断言卸载后 `host.services.get("hooks") is None`。
+
+## 5. R80 交付边界
+
+- **装配结构变了，装出来的东西没变**：94 个工具的名字、顺序、`declared_risks`、
+  `get_schemas_for_llm` 产物由 `test_tool_bundles_parity.py` 在 3 档网络策略 × 2 条路径上
+  逐项比对；实测 legacy 0.26s / bundle 0.02s，三者全等。
+- **开关默认关**：`SAGE_KERNEL_TOOL_BUNDLES` 未设置时 `register_all_tools` 走
+  `_register_all_tools_legacy`，逐字节等价。旧实现整体保留为私有函数，R81 删。
+- **权限模型零改动**：`RiskClass` 与 `PermissionEnforcer` 早已数据驱动，本轮只动装配，
+  避免把「结构重构」与「权限语义」两件事混在一个 PR 里。
+- **依赖单向**：`backend.tools` → `backend.application.kernel`，内核不认识任何具体工具；
+  机制（顺序/门控/失败策略/报告）与声明（31 个 bundle 清单）分文件承载。
+- **一个实测陷阱已固化**：Windows 上 `ssl.create_default_context()` 每次约 2s，9 个出网
+  工具让一次装配要 18.5s；测试用共享 SSLContext 降到 0.26s —— 只去掉与等价性无关的 IO。
 
 —— 本账本由插件化循环维护，随轮次追加。
