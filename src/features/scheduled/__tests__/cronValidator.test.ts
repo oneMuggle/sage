@@ -5,6 +5,8 @@ import {
   validateOneShotTimestamp,
   describeSchedule,
   CRON_PRESETS,
+  formatCronValidationSummary,
+  formatCronValidationJson,
 } from '../cronValidator';
 
 describe('validateCronExpression', () => {
@@ -83,5 +85,18 @@ describe('describeSchedule', () => {
   it('returns Invalid cron placeholder for malformed expressions', () => {
     const text = describeSchedule({ kind: 'recurring', cron: 'garbage' }, 'en');
     expect(text.toLowerCase()).toMatch(/invalid|无效/);
+  });
+
+  it('formats cron validation summary and JSON (Phase P108)', () => {
+    expect(formatCronValidationSummary('0 8 * * *')).toBe('valid · 0 8 * * * · daily-08');
+    expect(formatCronValidationSummary('*/5 * * * *')).toBe('valid · */5 * * * * · custom');
+    expect(formatCronValidationSummary('')).toContain('invalid · empty ·');
+    const parsed = JSON.parse(formatCronValidationJson('0 8 * * *'));
+    expect(parsed).toEqual({
+      expression: '0 8 * * *',
+      ok: true,
+      reason: null,
+      presetId: 'daily-08',
+    });
   });
 });

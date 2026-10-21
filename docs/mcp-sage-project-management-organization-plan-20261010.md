@@ -1438,3 +1438,17 @@
   7. `src/features/chat/speech.ts`：新增 `buildSpeechAuditSnapshot` 与 `buildSpeechAuditJson` 纯函数导出及单测。
   8. `src/features/chat/textHighlight.ts`：新增 `buildTextHighlightAuditSnapshot` 与 `buildTextHighlightAuditJson` 纯函数导出及单测。
 - **验证**：8 个单元测试套件（59 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部零错误零警告通过。
+
+### Phase P108（已完成）：模型目录 API、会话持久化、设置适配器与存储、主题装饰预设与存储、产物 API 及定时任务 Cron 校验治理
+- **改造模块（8 项）**：
+  1. `src/entities/model-catalog/api.ts`：新增 `formatCatalogSnapshotMetaSummary` 与 `formatCatalogSnapshotMetaJson`，支持模型目录快照元数据（`id · source · digest · created_at`）摘要与可复制 JSON 序列化。
+  2. `src/entities/session/storage.ts`：新增 `formatCurrentSessionStorageSummary` 与 `formatCurrentSessionStorageJson`，支持当前活跃会话与本地缓存状态摘要及 JSON 导出。
+  3. `src/entities/setting/settingsAdapter.ts`：新增 `formatSettingAdapterRouteSummary` 与 `formatSettingAdapterRouteJson`，支持设置键存储后端路由（`preference / app_settings / electron / local`）与可见性审计摘要及 JSON 导出。
+  4. `src/entities/setting/storage.ts`：新增 `formatAppSettingsStorageSummary` 与 `formatAppSettingsStorageJson`，支持应用全局设置（端点数量、主对话模型、流式开关与重试配置）摘要及 JSON 导出。
+  5. `src/entities/theme/decorative-presets.ts`：新增 `formatDecorativePresetSummary` 与 `formatDecorativePresetsJson`，支持装饰主题预设（渐变起止色与封面路径）摘要与列表 JSON 导出。
+  6. `src/entities/theme/storage.ts`：新增 `formatThemeStorageSummary` 与 `formatThemeStorageJson`，支持主题模式与预设 ID 持久化状态摘要及 JSON 导出。
+  7. `src/features/artifacts/artifactApi.ts`：新增 `formatArtifactRecordSummary` 与 `formatArtifactRecordJson`，支持会话产物记录（`id · name · kind · size`）摘要与 JSON 导出。
+  8. `src/features/scheduled/cronValidator.ts`：新增 `formatCronValidationSummary` 与 `formatCronValidationJson`，支持定时任务 5 字段 Cron 表达式合法性校验、预设匹配与错误原因摘要及 JSON 导出。
+- **单元测试（8 项）**：
+  - `src/entities/model-catalog/api.test.ts`、`src/entities/session/__tests__/storage.test.ts`、`src/entities/setting/__tests__/settingsAdapter.test.ts`、`src/entities/setting/__tests__/storage.test.ts`、`src/entities/theme/__tests__/decorative-presets.test.ts`、`src/entities/theme/__tests__/storage.test.ts`、`src/features/artifacts/__tests__/artifactApi.test.ts`、`src/features/scheduled/__tests__/cronValidator.test.ts` 全部通过（85 tests passed）。
+

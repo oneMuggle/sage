@@ -417,6 +417,26 @@ export function loadSettingsSync(): AppSettings {
   return mergeWithDefaults(readLocalCacheSync() ?? {});
 }
 
+export function formatAppSettingsStorageSummary(settings: AppSettings): string {
+  const endpointCount = settings.endpoints?.length ?? 0;
+  const chatModelId = settings.modelSelections?.chatModel?.modelId || 'none';
+  return `endpoints=${endpointCount} · chat=${chatModelId} · streaming=${Boolean(settings.streaming)}`;
+}
+
+export function formatAppSettingsStorageJson(settings: AppSettings): string {
+  return JSON.stringify(
+    {
+      endpointCount: settings.endpoints?.length ?? 0,
+      endpointIds: (settings.endpoints ?? []).map((ep) => ep.id),
+      chatModel: settings.modelSelections?.chatModel ?? null,
+      streaming: Boolean(settings.streaming),
+      maxRetries: settings.orch?.maxRetries ?? null,
+    },
+    null,
+    2,
+  );
+}
+
 // 注：原 migrateFromV1 / migrateFromV2 函数在新架构下不再需要：
 // 后端只存 v3 格式；前端 localStorage 中的 v1/v2 数据由后端首次读 + 旧
 // 客户端链路完成迁移后，本地不再有旧格式。YAGNI — 删。

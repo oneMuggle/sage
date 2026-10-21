@@ -119,3 +119,24 @@ export async function resetSetting(key: string): Promise<void> {
   const metadata = getSettingMetadata(key);
   await writeSetting(key, metadata?.defaultValue, 'settings-reset');
 }
+
+export function formatSettingAdapterRouteSummary(key: string): string {
+  const metadata = getSettingMetadata(key);
+  if (!metadata) return `${key} · unknown`;
+  return `${key} · ${metadata.storage} · ${metadata.visibility ?? 'public'}`;
+}
+
+export function formatSettingAdapterRouteJson(key: string): string {
+  const metadata = getSettingMetadata(key);
+  return JSON.stringify(
+    {
+      key,
+      registered: Boolean(metadata),
+      storage: metadata?.storage ?? null,
+      storageKey: metadata?.storageKey ?? key,
+      visibility: metadata?.visibility ?? 'public',
+    },
+    null,
+    2,
+  );
+}

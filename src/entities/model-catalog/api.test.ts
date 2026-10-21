@@ -7,6 +7,7 @@ vi.mock('../../shared/api/backendRequest', () => ({
 }));
 
 import { deleteOverride, getDiff, listModels } from './api';
+import { formatCatalogSnapshotMetaJson, formatCatalogSnapshotMetaSummary } from './api';
 
 describe('model catalog API client', () => {
   beforeEach(() => {
@@ -36,6 +37,25 @@ describe('model catalog API client', () => {
     expect(backendRequest).toHaveBeenCalledWith({
       path: '/api/v1/model-catalog/overrides?endpoint_id=endpoint%2Fa&model_id=model%2Fa%3Fb&expected_revision=7',
       method: 'DELETE',
+    });
+  });
+
+  it('formats catalog snapshot metadata summary and JSON (Phase P108)', () => {
+    const meta = {
+      id: 'snap-01',
+      source: 'openrouter',
+      digest: 'sha256:abc',
+      created_at: '2026-10-10T00:00:00Z',
+    };
+    expect(formatCatalogSnapshotMetaSummary(meta)).toBe(
+      'snap-01 · openrouter · sha256:abc · 2026-10-10T00:00:00Z',
+    );
+    const parsed = JSON.parse(formatCatalogSnapshotMetaJson(meta));
+    expect(parsed).toEqual({
+      id: 'snap-01',
+      source: 'openrouter',
+      digest: 'sha256:abc',
+      createdAt: '2026-10-10T00:00:00Z',
     });
   });
 });
