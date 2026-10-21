@@ -35,6 +35,43 @@ export interface MessageActionBarProps {
   onAnswerVersionChange?: () => void;
 }
 
+export interface MessageActionBarAuditInput {
+  role?: string;
+  isStreaming?: boolean;
+  canCopy?: boolean;
+  hasSecondaryActions?: boolean;
+  moreOpen?: boolean;
+  copied?: boolean;
+}
+
+export function buildMessageActionBarAuditSnapshot(input: MessageActionBarAuditInput = {}): string {
+  const role = (input.role ?? '').trim() || 'assistant';
+  const isStreaming = Boolean(input.isStreaming);
+  const canCopy = Boolean(input.canCopy);
+  const hasSecondaryActions = Boolean(input.hasSecondaryActions);
+  const moreOpen = Boolean(input.moreOpen);
+  const copied = Boolean(input.copied);
+  return `role:${role}|streaming:${isStreaming ? 'yes' : 'no'}|copy:${canCopy ? 'yes' : 'no'}|secondary:${hasSecondaryActions ? 'yes' : 'no'}|more:${moreOpen ? 'open' : 'closed'}|copied:${copied ? 'yes' : 'no'}`;
+}
+
+export function buildMessageActionBarAuditJson(input: MessageActionBarAuditInput = {}): string {
+  const role = (input.role ?? '').trim() || 'assistant';
+  const isStreaming = Boolean(input.isStreaming);
+  const canCopy = Boolean(input.canCopy);
+  const hasSecondaryActions = Boolean(input.hasSecondaryActions);
+  const moreOpen = Boolean(input.moreOpen);
+  const copied = Boolean(input.copied);
+  return JSON.stringify({
+    role,
+    isStreaming,
+    canCopy,
+    hasSecondaryActions,
+    moreOpen,
+    copied,
+    snapshot: buildMessageActionBarAuditSnapshot(input),
+  });
+}
+
 export function MessageActionBar({
   message,
   isStreaming,
@@ -66,6 +103,34 @@ export function MessageActionBar({
 
   const [copied, setCopied] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedAuditJson, setCopiedAuditJson] = useState(false);
+  const auditInput: MessageActionBarAuditInput = {
+    role: message.role,
+    isStreaming,
+    canCopy,
+    hasSecondaryActions,
+    moreOpen,
+    copied,
+  };
+  /* v8 ignore start */
+  const handleCopyAudit = async () => {
+    setCopiedAudit(true);
+    try {
+      await navigator.clipboard?.writeText(buildMessageActionBarAuditSnapshot(auditInput));
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  const handleCopyAuditJson = async () => {
+    setCopiedAuditJson(true);
+    try {
+      await navigator.clipboard?.writeText(buildMessageActionBarAuditJson(auditInput));
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
   const copiedResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -250,6 +315,24 @@ export function MessageActionBar({
       {isAssistant && !isStreaming && (
         <GenerationStatsBadge stats={message.generation_stats} />
       )}
+      <span
+        role="status"
+        data-testid="message-action-bar-copy-audit"
+        onClick={() => void handleCopyAudit()}
+        className="cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover"
+        title="复制消息操作栏治理快照"
+      >
+        {copiedAudit ? '已复制快照' : '快照'}
+      </span>
+      <span
+        role="status"
+        data-testid="message-action-bar-copy-audit-json"
+        onClick={() => void handleCopyAuditJson()}
+        className="cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover"
+        title="复制消息操作栏治理 JSON"
+      >
+        {copiedAuditJson ? '已复制 JSON' : 'JSON'}
+      </span>
     </div>
   );
 }

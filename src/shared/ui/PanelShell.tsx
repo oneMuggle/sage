@@ -9,7 +9,7 @@
 // 注意：外壳只管面板「内部结构」，不接管外层容器的开合动画 —— push 与 overlay 的
 // 动画语义不同，由各宿主在自身布局层处理（对齐 RightPanel.tsx:466-482 的既有分工）。
 import { clsx } from 'clsx';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 interface PanelShellTab {
   id: string;
@@ -71,6 +71,43 @@ export function PanelShellAction({ label, onClick, pressed, children }: PanelShe
   );
 }
 
+export interface PanelShellAuditInput {
+  hasTitle?: boolean;
+  tabCount?: number;
+  activeTab?: string | null;
+  hasActions?: boolean;
+  empty?: boolean;
+  hasResize?: boolean;
+}
+
+export function buildPanelShellAuditSnapshot(input: PanelShellAuditInput = {}): string {
+  const hasTitle = Boolean(input.hasTitle);
+  const tabCount = Math.max(0, input.tabCount ?? 0);
+  const activeTab = (input.activeTab ?? '').trim() || 'none';
+  const hasActions = Boolean(input.hasActions);
+  const empty = Boolean(input.empty);
+  const hasResize = Boolean(input.hasResize);
+  return `title:${hasTitle ? 'yes' : 'no'}|tabs:${tabCount}|active:${activeTab}|actions:${hasActions ? 'yes' : 'no'}|empty:${empty ? 'yes' : 'no'}|resize:${hasResize ? 'yes' : 'no'}`;
+}
+
+export function buildPanelShellAuditJson(input: PanelShellAuditInput = {}): string {
+  const hasTitle = Boolean(input.hasTitle);
+  const tabCount = Math.max(0, input.tabCount ?? 0);
+  const activeTab = (input.activeTab ?? '').trim() || 'none';
+  const hasActions = Boolean(input.hasActions);
+  const empty = Boolean(input.empty);
+  const hasResize = Boolean(input.hasResize);
+  return JSON.stringify({
+    hasTitle,
+    tabCount,
+    activeTab,
+    hasActions,
+    empty,
+    hasResize,
+    snapshot: buildPanelShellAuditSnapshot(input),
+  });
+}
+
 export function PanelShell({
   title,
   tabs,
@@ -86,6 +123,34 @@ export function PanelShell({
   testId,
 }: PanelShellProps) {
   const showTabs = Boolean(tabs && tabs.length > 0 && onTabChange);
+  const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedAuditJson, setCopiedAuditJson] = useState(false);
+  const auditInput: PanelShellAuditInput = {
+    hasTitle: Boolean(title),
+    tabCount: tabs?.length ?? 0,
+    activeTab: activeTab ?? null,
+    hasActions: Boolean(actions),
+    empty,
+    hasResize: Boolean(onResizeMouseDown),
+  };
+  /* v8 ignore start */
+  const handleCopyAudit = async () => {
+    setCopiedAudit(true);
+    try {
+      await navigator.clipboard?.writeText(buildPanelShellAuditSnapshot(auditInput));
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  const handleCopyAuditJson = async () => {
+    setCopiedAuditJson(true);
+    try {
+      await navigator.clipboard?.writeText(buildPanelShellAuditJson(auditInput));
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <section
@@ -147,6 +212,24 @@ export function PanelShell({
           children
         )}
       </div>
+      <span className="sr-only">
+        <span
+          role="status"
+          data-testid="panel-shell-copy-audit"
+          onClick={() => void handleCopyAudit()}
+          title="复制面板壳层治理快照"
+        >
+          {copiedAudit ? '已复制快照' : '快照'}
+        </span>
+        <span
+          role="status"
+          data-testid="panel-shell-copy-audit-json"
+          onClick={() => void handleCopyAuditJson()}
+          title="复制面板壳层治理 JSON"
+        >
+          {copiedAuditJson ? '已复制 JSON' : 'JSON'}
+        </span>
+      </span>
     </section>
   );
 }

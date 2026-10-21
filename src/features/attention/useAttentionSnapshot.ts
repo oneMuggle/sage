@@ -60,3 +60,40 @@ export function useAttentionSnapshot(options: UseAttentionOptions = {}): Attenti
     [approvals, dirty, questions, todos, unseenArtifacts],
   );
 }
+
+export interface UseAttentionSnapshotAuditInput {
+  sessionId?: string | null;
+  unseenArtifacts?: number;
+  total?: number;
+  entryCount?: number;
+  topKind?: string | null;
+}
+
+export function buildUseAttentionSnapshotAuditSnapshot(
+  input: UseAttentionSnapshotAuditInput = {},
+): string {
+  const sessionId = (input.sessionId ?? '').trim() || 'none';
+  const unseenArtifacts = Math.max(0, input.unseenArtifacts ?? 0);
+  const total = Math.max(0, input.total ?? 0);
+  const entryCount = Math.max(0, input.entryCount ?? 0);
+  const topKind = (input.topKind ?? '').trim() || 'none';
+  return `session:${sessionId}|unseen:${unseenArtifacts}|total:${total}|entries:${entryCount}|top:${topKind}`;
+}
+
+export function buildUseAttentionSnapshotAuditJson(
+  input: UseAttentionSnapshotAuditInput = {},
+): string {
+  const sessionId = (input.sessionId ?? '').trim() || 'none';
+  const unseenArtifacts = Math.max(0, input.unseenArtifacts ?? 0);
+  const total = Math.max(0, input.total ?? 0);
+  const entryCount = Math.max(0, input.entryCount ?? 0);
+  const topKind = (input.topKind ?? '').trim() || 'none';
+  return JSON.stringify({
+    sessionId,
+    unseenArtifacts,
+    total,
+    entryCount,
+    topKind,
+    snapshot: buildUseAttentionSnapshotAuditSnapshot(input),
+  });
+}

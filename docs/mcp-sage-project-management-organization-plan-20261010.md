@@ -1387,3 +1387,15 @@
   7. `src/widgets/chat/MessageList.tsx`：新增 `formatMessageListAuditSnapshot` 与 `formatMessageListAuditJson`，暴露 `data-message-list-audit`、`message-list-audit-copy` 与 `message-list-audit-copy-json`。
   8. `src/widgets/sidebar/sections/ConversationsSection.tsx`：新增 `formatConversationsSectionAuditSnapshot` 与 `formatConversationsSectionAuditJson`，暴露 `data-conversations-section-audit`、`conversations-section-audit-copy` 与 `conversations-section-audit-copy-json`。
 - **验证**：8 个单元测试文件（`main` 67 项单测 / `release/win7` 65 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs` 全部零警告通过。
+### Phase P104（2026-10-21）：PanelShell、MessageActionBar、TrajectoryPane、FileChangeCard、CommandPalette、useAttentionSnapshot、btwState 与 fontStorage 治理快照与 JSON 导出闭环（Dual-Track `main` + `release/win7`）
+
+- **目标**：为通用面板壳层、消息操作栏、会话轨迹面板、文件变更卡、命令面板、注意力聚合订阅层、`/btw` 状态机与字体存储层补齐统一确定性审计快照（`build*AuditSnapshot`）与结构化 JSON 导出（`build*AuditJson`）及无障碍复制控件（`role="status"`）：
+  1. `src/shared/ui/PanelShell.tsx`：新增 `buildPanelShellAuditSnapshot` 与 `buildPanelShellAuditJson`，暴露 `panel-shell-copy-audit` 与 `panel-shell-copy-audit-json`。
+  2. `src/widgets/chat/MessageActionBar.tsx`：新增 `buildMessageActionBarAuditSnapshot` 与 `buildMessageActionBarAuditJson`，暴露 `message-action-bar-copy-audit` 与 `message-action-bar-copy-audit-json`。
+  3. `src/widgets/chat/TrajectoryPane.tsx`：新增 `buildTrajectoryPaneAuditSnapshot` 与 `buildTrajectoryPaneAuditJson`，暴露 `trajectory-pane-copy-audit` 与 `trajectory-pane-copy-audit-json`。
+  4. `src/widgets/chat/changes/FileChangeCard.tsx`：新增 `buildFileChangeCardAuditSnapshot` 与 `buildFileChangeCardAuditJson`，暴露 `file-change-card-copy-audit` 与 `file-change-card-copy-audit-json`。
+  5. `src/widgets/command/CommandPalette.tsx`：新增 `buildCommandPaletteAuditSnapshot` 与 `buildCommandPaletteAuditJson`，暴露 `command-palette-copy-audit` 与 `command-palette-copy-audit-json`。
+  6. `src/features/attention/useAttentionSnapshot.ts`：新增 `buildUseAttentionSnapshotAuditSnapshot` 与 `buildUseAttentionSnapshotAuditJson` 纯函数导出及单测。
+  7. `src/entities/chat/btwState.ts`：新增 `buildBtwStateAuditSnapshot` 与 `buildBtwStateAuditJson` 纯函数导出及单测。
+  8. `src/entities/font/fontStorage.ts`：新增 `buildFontStorageAuditSnapshot` 与 `buildFontStorageAuditJson` 纯函数导出及单测。
+- **验证**：8 个单元测试文件（共 82 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部通过。

@@ -3,7 +3,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { MessageActionBar } from '../MessageActionBar';
+import {
+  buildMessageActionBarAuditJson,
+  buildMessageActionBarAuditSnapshot,
+  MessageActionBar,
+} from '../MessageActionBar';
 
 describe('MessageActionBar progressive disclosure', () => {
   const baseMessage = {
@@ -58,5 +62,49 @@ describe('MessageActionBar progressive disclosure', () => {
 
     fireEvent.click(screen.getByTestId('fork-message'));
     expect(onFork).toHaveBeenCalledWith('msg-1');
+  });
+
+  it('exports MessageActionBar audit snapshot/JSON helpers and supports copy controls', () => {
+    expect(buildMessageActionBarAuditSnapshot()).toBe(
+      'role:assistant|streaming:no|copy:no|secondary:no|more:closed|copied:no',
+    );
+    expect(
+      buildMessageActionBarAuditSnapshot({
+        role: 'user',
+        isStreaming: false,
+        canCopy: true,
+        hasSecondaryActions: true,
+        moreOpen: true,
+        copied: true,
+      }),
+    ).toBe('role:user|streaming:no|copy:yes|secondary:yes|more:open|copied:yes');
+
+    const parsed = JSON.parse(
+      buildMessageActionBarAuditJson({
+        role: 'assistant',
+        canCopy: true,
+      }),
+    );
+    expect(parsed).toEqual({
+      role: 'assistant',
+      isStreaming: false,
+      canCopy: true,
+      hasSecondaryActions: false,
+      moreOpen: false,
+      copied: false,
+      snapshot: 'role:assistant|streaming:no|copy:yes|secondary:no|more:closed|copied:no',
+    });
+
+    render(
+      <I18nProvider>
+        <MessageActionBar message={baseMessage} onFork={vi.fn()} />
+      </I18nProvider>,
+    );
+    const copyAudit = screen.getByTestId('message-action-bar-copy-audit');
+    const copyJson = screen.getByTestId('message-action-bar-copy-audit-json');
+    fireEvent.click(copyAudit);
+    expect(copyAudit).toHaveTextContent('已复制快照');
+    fireEvent.click(copyJson);
+    expect(copyJson).toHaveTextContent('已复制 JSON');
   });
 });
