@@ -356,3 +356,24 @@ export const workspaceApi = {
     }
   },
 };
+
+export function formatWorkspaceBindingSummary(binding: SessionWorkspaceBinding | null): string {
+  if (!binding) return 'unbound';
+  const state = binding.revokedAt === null ? 'active' : 'revoked';
+  return `${binding.sessionId} · ${binding.workspacePath} · gen ${binding.generation} · ${state}`;
+}
+
+export function formatWorkspaceBindingJson(binding: SessionWorkspaceBinding | null): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.workspace_binding.v1',
+      bound: binding !== null,
+      sessionId: binding?.sessionId ?? null,
+      workspacePath: binding?.workspacePath ?? null,
+      generation: binding?.generation ?? null,
+      active: binding !== null && binding.revokedAt === null,
+    },
+    null,
+    2,
+  );
+}

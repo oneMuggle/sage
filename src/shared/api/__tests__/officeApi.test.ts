@@ -79,3 +79,27 @@ describe('officeApi.lintWord (A4b)', () => {
     ).rejects.toBeInstanceOf(ApiException);
   });
 });
+
+describe('officeApi diagnostic formatters (Phase P113)', () => {
+  it('formats Word lint summary and JSON payload', async () => {
+    const { formatOfficeWordLintSummary, formatOfficeWordLintJson } = await import('../officeApi');
+    const res: OfficeWordLintResult = {
+      ok: false,
+      issue_count: 3,
+      error_count: 1,
+      warning_count: 2,
+      checked_rules: ['numbering', 'margins'],
+      issues: [],
+    };
+    expect(formatOfficeWordLintSummary(res)).toBe('ISSUES · 1 errors · 2 warnings · 2 rules');
+    const parsed = JSON.parse(formatOfficeWordLintJson(res));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.office_word_lint.v1',
+      ok: false,
+      issueCount: 3,
+      errorCount: 1,
+      warningCount: 2,
+      checkedRules: ['numbering', 'margins'],
+    });
+  });
+});

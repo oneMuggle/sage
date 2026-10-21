@@ -1503,3 +1503,13 @@
   8. `src/shared/api/orchestrationClient.ts`：新增 `formatLaneDecisionSummary` 与 `formatLaneDecisionJson`，支持多智能体 Lane 交付包验收决议（`lane_id · decision · merged · already` 及告警信息）摘要与 JSON 导出。
 - **单元测试（8 项）**：
   - `src/pages/settings/__tests__/settingsSearchIndex.test.ts`、`src/shared/__tests__/logger.test.ts`、`src/shared/api/__tests__/backendRequest.test.ts`、`src/shared/api/__tests__/demoInterceptors.test.ts`、`src/shared/api/__tests__/fileSearchClient.test.ts`、`src/shared/api/__tests__/llmStream.test.ts`、`src/shared/api/__tests__/orchRunClient.test.ts`、`src/shared/api/__tests__/orchestrationClient.test.ts` 全部通过（68 tests on `main`, 60 tests on `release/win7`）。
+
+### Phase P113 — Shared Memory, Office, Scheduled, Settings, Theme CSS, Todo, Window Controls & Workspace API Diagnostic Formatters (Completed)
+- `src/shared/api/memoryApi.ts` (`formatMemoryListSummary` / `formatMemoryListJson`) + `src/shared/api/__tests__/memoryApi.test.ts`
+- `src/shared/api/officeApi.ts` (`formatOfficeWordLintSummary` / `formatOfficeWordLintJson`) + `src/shared/api/__tests__/officeApi.test.ts`
+- `src/shared/api/scheduledClient.ts` (`formatScheduledTaskSummary` / `formatScheduledTaskJson`) + `src/shared/api/__tests__/scheduledClient.test.ts`
+- `src/shared/api/settingsClient.ts` (`formatPreferenceSnapshotSummary` / `formatPreferenceSnapshotJson`) + `src/shared/api/__tests__/settingsClient.test.ts`
+- `src/shared/api/themeCssClient.ts` (`formatThemeCssSummary` / `formatThemeCssJson`) + `src/shared/api/__tests__/themeCssClient.test.ts`
+- `src/shared/api/todoClient.ts` (`formatTodoListSummary` / `formatTodoListJson`) + `src/shared/api/__tests__/todoClient.test.ts`
+- `src/shared/api/windowControlsClient.ts` (`formatWindowPlatformSummary` / `formatWindowPlatformJson`) + `src/shared/api/__tests__/windowControlsClient.test.ts`
+- `src/shared/api/workspaceApi.ts` (`formatWorkspaceBindingSummary` / `formatWorkspaceBindingJson`) + `src/shared/api/__tests__/workspaceApi.test.ts`
