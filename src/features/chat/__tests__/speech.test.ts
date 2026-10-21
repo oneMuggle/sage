@@ -7,6 +7,8 @@ import {
   pickVoice,
   SPEECH_CHUNK_MAX,
   splitSpeechChunks,
+  buildSpeechAuditJson,
+  buildSpeechAuditSnapshot,
   toSpeechText,
 } from '../speech';
 
@@ -70,5 +72,27 @@ describe('speech helpers (B1)', () => {
     expect(pickVoice([remoteZh], 'zh-CN')).toBe(remoteZh);
     expect(pickVoice([voice('en_GB', false)], 'en-US')?.lang).toBe('en_GB');
     expect(pickVoice([localEn], 'zh-CN')).toBeNull();
+  });
+});
+
+describe('speech governance audit helpers (Phase P107)', () => {
+  it('builds deterministic audit snapshot and JSON for Chinese and English markdown', () => {
+    const emptySnap = buildSpeechAuditSnapshot('');
+    expect(emptySnap).toEqual({
+      supported: false,
+      lang: 'en-US',
+      speechTextLength: 0,
+      chunkCount: 0,
+      maxChunkLength: 0,
+      chunkLimit: SPEECH_CHUNK_MAX,
+      signature: `0|en-US|0|0|0|${SPEECH_CHUNK_MAX}`,
+    });
+
+    const zhSnap = buildSpeechAuditSnapshot('## 你好世界\n```js\nx()\n```', '代码已略过。');
+    expect(zhSnap.lang).toBe('zh-CN');
+    expect(zhSnap.chunkCount).toBe(1);
+    expect(JSON.parse(buildSpeechAuditJson('## 你好世界\n```js\nx()\n```', '代码已略过。'))).toEqual(
+      zhSnap,
+    );
   });
 });

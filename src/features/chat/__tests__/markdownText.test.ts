@@ -1,7 +1,11 @@
 // 对话阅读体验第二轮：Markdown → 可读纯文本（B1 朗读与 B4 会话内查找共用）。
 import { describe, expect, it } from 'vitest';
 
-import { markdownToPlainText } from '../markdownText';
+import {
+  buildMarkdownTextAuditJson,
+  buildMarkdownTextAuditSnapshot,
+  markdownToPlainText,
+} from '../markdownText';
 
 describe('markdownToPlainText', () => {
   it('strips inline and block markup but keeps the visible text', () => {
@@ -50,5 +54,33 @@ describe('markdownToPlainText', () => {
   it('flattens tables into space-separated cells', () => {
     const md = '| 名称 | 说明 |\n| --- | :---: |\n| `a|b` | **粗** |';
     expect(markdownToPlainText(md)).toBe('名称 说明\n\na|b 粗');
+  });
+});
+
+describe('markdownText governance audit helpers (Phase P107)', () => {
+  it('builds deterministic audit snapshot and JSON for empty and formatted markdown', () => {
+    const emptySnap = buildMarkdownTextAuditSnapshot('');
+    expect(emptySnap).toEqual({
+      rawLength: 0,
+      plainLength: 0,
+      lineCount: 0,
+      hasCodeBlockReplacement: false,
+      isEmpty: true,
+      signature: '0|0|0|0|1',
+    });
+
+    const md = '## 标题\n```js\nconsole.log(1)\n```';
+    const snap = buildMarkdownTextAuditSnapshot(md, { codeBlockReplacement: '[code]' });
+    expect(snap).toEqual({
+      rawLength: md.length,
+      plainLength: 10,
+      lineCount: 3,
+      hasCodeBlockReplacement: true,
+      isEmpty: false,
+      signature: `${md.length}|10|3|1|0`,
+    });
+    expect(JSON.parse(buildMarkdownTextAuditJson(md, { codeBlockReplacement: '[code]' }))).toEqual(
+      snap,
+    );
   });
 });

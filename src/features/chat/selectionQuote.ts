@@ -84,3 +84,38 @@ export function computeQuoteButtonPosition(
   );
   return { top, left };
 }
+
+export interface SelectionQuoteAuditSnapshot {
+  rawLength: number;
+  normalizedLength: number;
+  lineCount: number;
+  quoteBlockLength: number;
+  isQuotable: boolean;
+  scopeAttr: string;
+  signature: string;
+}
+
+export function buildSelectionQuoteAuditSnapshot(rawText = ''): SelectionQuoteAuditSnapshot {
+  const safeRaw = typeof rawText === 'string' ? rawText : '';
+  const normalized = normalizeSelectedText(safeRaw);
+  const rawLength = safeRaw.length;
+  const normalizedLength = normalized.length;
+  const isQuotable = normalizedLength > 0;
+  const lineCount = isQuotable ? normalized.split('\n').length : 0;
+  const quoteBlockLength = isQuotable ? formatQuoteBlock(normalized).length : 0;
+  const scopeAttr = QUOTE_SCOPE_ATTR;
+  const signature = `${rawLength}|${normalizedLength}|${lineCount}|${quoteBlockLength}|${isQuotable ? 1 : 0}|${scopeAttr}`;
+  return {
+    rawLength,
+    normalizedLength,
+    lineCount,
+    quoteBlockLength,
+    isQuotable,
+    scopeAttr,
+    signature,
+  };
+}
+
+export function buildSelectionQuoteAuditJson(rawText = ''): string {
+  return JSON.stringify(buildSelectionQuoteAuditSnapshot(rawText), null, 2);
+}

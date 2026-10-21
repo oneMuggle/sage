@@ -86,3 +86,48 @@ export function regenerateInPlace(
   });
   return true;
 }
+
+export interface AnswerVersionsAuditSnapshot {
+  anchorId: string | null;
+  total: number;
+  currentIndex: number;
+  versionCount: number;
+  currentVersionId: string | null;
+  hasMultipleVersions: boolean;
+  demoMode: boolean;
+  signature: string;
+}
+
+export function buildAnswerVersionsAuditSnapshot(
+  list?: Partial<AnswerVersionList> | null,
+): AnswerVersionsAuditSnapshot {
+  const anchorId =
+    typeof list?.anchor_id === 'string' && list.anchor_id.trim().length > 0
+      ? list.anchor_id.trim()
+      : null;
+  const versions = Array.isArray(list?.versions) ? list.versions : [];
+  const versionCount = versions.length;
+  const total = typeof list?.total === 'number' && list.total >= 0 ? list.total : versionCount;
+  const currentIndex =
+    typeof list?.current_index === 'number' && list.current_index >= 0 ? list.current_index : 0;
+  const currentVersionId = versions.find((v) => v.current)?.id ?? null;
+  const hasMultipleVersions = total > 1 || versionCount > 1;
+  const demoMode = isDemoMode();
+  const signature = `${anchorId ?? '-'}|${total}|${currentIndex}|${versionCount}|${currentVersionId ?? '-'}|${hasMultipleVersions ? 1 : 0}|${demoMode ? 1 : 0}`;
+  return {
+    anchorId,
+    total,
+    currentIndex,
+    versionCount,
+    currentVersionId,
+    hasMultipleVersions,
+    demoMode,
+    signature,
+  };
+}
+
+export function buildAnswerVersionsAuditJson(
+  list?: Partial<AnswerVersionList> | null,
+): string {
+  return JSON.stringify(buildAnswerVersionsAuditSnapshot(list), null, 2);
+}

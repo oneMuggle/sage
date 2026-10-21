@@ -12,6 +12,8 @@ import {
   isHighlightSupported,
   scrollRangeIntoView,
   SEARCH_HIT_HIGHLIGHT,
+  buildTextHighlightAuditJson,
+  buildTextHighlightAuditSnapshot,
   SEARCH_HIT_HIGHLIGHT_MS,
 } from '../textHighlight';
 
@@ -133,5 +135,34 @@ describe('textHighlight (B3 / B4)', () => {
     expect(scrollRangeIntoView(rangeAt({ top: 0, height: 0, width: 0 }), scroller)).toBe(false);
     expect(scrollRangeIntoView(rangeAt({ top: 700, height: 20, width: 40 }), null)).toBe(false);
     expect(scrollRangeIntoView(document.createRange(), scroller)).toBe(false);
+  });
+});
+
+describe('textHighlight governance audit helpers (Phase P107)', () => {
+  it('builds deterministic audit snapshot and JSON across empty and matched DOM roots', () => {
+    const emptySnap = buildTextHighlightAuditSnapshot(null, '');
+    expect(emptySnap).toEqual({
+      supported: false,
+      query: '',
+      termCount: 0,
+      rangeCount: 0,
+      searchHitTtlMs: SEARCH_HIT_HIGHLIGHT_MS,
+      highlightNames: [SEARCH_HIT_HIGHLIGHT, FIND_HIGHLIGHT, FIND_CURRENT_HIGHLIGHT],
+      signature: `0|-|0|0|${SEARCH_HIT_HIGHLIGHT_MS}`,
+    });
+
+    installHighlights();
+    const root = mount('<div data-quote-scope="message-body"><p>Sage and sage</p></div>');
+    const hitSnap = buildTextHighlightAuditSnapshot(root, ' sage ');
+    expect(hitSnap).toEqual({
+      supported: true,
+      query: 'sage',
+      termCount: 1,
+      rangeCount: 2,
+      searchHitTtlMs: SEARCH_HIT_HIGHLIGHT_MS,
+      highlightNames: [SEARCH_HIT_HIGHLIGHT, FIND_HIGHLIGHT, FIND_CURRENT_HIGHLIGHT],
+      signature: `1|sage|1|2|${SEARCH_HIT_HIGHLIGHT_MS}`,
+    });
+    expect(JSON.parse(buildTextHighlightAuditJson(root, ' sage '))).toEqual(hitSnap);
   });
 });

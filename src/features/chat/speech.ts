@@ -96,3 +96,41 @@ export function pickVoice(
     null
   );
 }
+
+export interface SpeechAuditSnapshot {
+  supported: boolean;
+  lang: SpeechLang;
+  speechTextLength: number;
+  chunkCount: number;
+  maxChunkLength: number;
+  chunkLimit: number;
+  signature: string;
+}
+
+export function buildSpeechAuditSnapshot(
+  markdown = '',
+  codeOmitted = '[code]',
+): SpeechAuditSnapshot {
+  const supported = isSpeechSupported();
+  const speechText = toSpeechText(markdown, codeOmitted);
+  const lang = detectSpeechLang(speechText);
+  const chunks = splitSpeechChunks(speechText);
+  const speechTextLength = speechText.length;
+  const chunkCount = chunks.length;
+  const maxChunkLength = chunks.reduce((max, c) => Math.max(max, c.length), 0);
+  const chunkLimit = SPEECH_CHUNK_MAX;
+  const signature = `${supported ? 1 : 0}|${lang}|${speechTextLength}|${chunkCount}|${maxChunkLength}|${chunkLimit}`;
+  return {
+    supported,
+    lang,
+    speechTextLength,
+    chunkCount,
+    maxChunkLength,
+    chunkLimit,
+    signature,
+  };
+}
+
+export function buildSpeechAuditJson(markdown = '', codeOmitted = '[code]'): string {
+  return JSON.stringify(buildSpeechAuditSnapshot(markdown, codeOmitted), null, 2);
+}
