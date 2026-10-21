@@ -1622,3 +1622,16 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P121：设置深度合并/设置元数据/设置契约/Wiki 活动队列/Wiki 质量检查/Wiki 演示数据/Wiki 摄入队列/编排事件订阅审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/entities/setting/deepMerge.ts`：新增 `formatDeepMergeSummary` 与 `formatDeepMergeJson` 及单测 `deepMerge.test.ts`，支持一键导出设置深度合并策略与冲突处理器审计摘要（`policy=<policy> · conflicts=<count> · customHandler=<bool>`）与 JSON 快照。
+  2. `src/entities/setting/metadata.ts`：新增 `formatSettingMetadataSummary` 与 `formatSettingMetadataJson` 及单测 `metadata.test.ts`，支持一键导出设置项元数据作用域与生效时机审计摘要（`<key> · <scope> · <applyMode> · risk=<riskLevel>`）与 JSON 快照。
+  3. `src/entities/setting/types.ts`：新增 `formatSettingsAuditSummary` 与 `formatSettingsAuditJson` 及单测 `types.test.ts`，支持一键导出全局设置版本、端点数量与演示模式审计摘要（`v<version> · endpoints=<count> · demo=<demoMode>`）与 JSON 快照。
+  4. `src/entities/wiki/activity-store.ts`：新增 `formatActivityStoreSummary` 与 `formatActivityStoreJson` 及单测 `activity-store.test.ts`，支持一键导出 Wiki 操作历史队列水位审计摘要（`activities=<total>/<maxItems> · running=<running> · errors=<errors>`）与 JSON 快照。
+  5. `src/entities/wiki/lint-store.ts`：新增 `formatLintStoreSummary` 与 `formatLintStoreJson` 及单测 `lint-store.test.ts`，支持一键导出 Wiki 文档质量检查状态审计摘要（`status=<status> · issues=<count> · warnings=<warnings>`）与 JSON 快照。
+  6. `src/entities/wiki/mock-data.ts`：新增 `formatWikiMockDataSummary` 与 `formatWikiMockDataJson` 及单测 `mock-data.test.ts`，支持一键导出 Wiki 演示数据集规模审计摘要（`lint=<count> · reviews=<count> · activities=<count> · research=<count>`）与 JSON 快照。
+  7. `src/entities/wiki/queue-store.ts`：新增 `formatQueueStoreSummary` 与 `formatQueueStoreJson` 及单测 `queue-store.test.ts`，支持一键导出 Wiki 持久化摄入队列状态审计摘要（`tasks=<count> · pending=<n> · processing=<n> · completed=<n> · failed=<n> · loading=<bool>`）与 JSON 快照。
+  8. `src/entities/orchestration/useOrchEventSubscription.ts`：新增 `formatOrchSubscriptionSummary` 与 `formatOrchSubscriptionJson` 及单测 `useOrchEventSubscription.test.ts`，支持一键导出编排运行事件流订阅水位审计摘要（`run=<runId> · enabled=<enabled> · lastSeq=<lastSeq>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
