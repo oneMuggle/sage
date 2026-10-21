@@ -107,3 +107,28 @@ export async function generateCheckpoints(goalId: string): Promise<GenerateCheck
     path: `${BASE}/${goalId}/generate-checkpoints`,
   });
 }
+
+export function formatGoalListQuerySummary(
+  status?: GoalStatus,
+  limit = 50,
+  offset = 0,
+): string {
+  return `path=${BASE} · status=${status ?? 'all'} · limit=${limit} · offset=${offset}`;
+}
+
+export function formatGoalListQueryJson(
+  status?: GoalStatus,
+  limit = 50,
+  offset = 0,
+): string {
+  return JSON.stringify(
+    {
+      basePath: BASE,
+      status: status ?? null,
+      limit,
+      offset,
+    },
+    null,
+    2,
+  );
+}
