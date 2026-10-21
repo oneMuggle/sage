@@ -87,14 +87,10 @@ export interface OrchSettings {
   maxAggregateChars: number; // 120 * 1024
   maxSubagentResultChars: number; // 50 * 1024
   maxRetries: number; // 2
-  maxLaneIterations: number; // 12 (alpha.36: 8 → 12, 减少"复杂度超上限"误报)
-  // 子代理（agent tool）单次委派的 ReAct 迭代预算。默认 10 与后端
+  maxLaneIterations: number; // 8
+  // 子代理（agent tool）单次委派的 ReAct 迭代预算。默认 6 与后端
   // ``OrchSettings.max_subagent_iterations`` 默认对齐；用户可在此调整。
-  maxSubagentIterations: number; // 10 (alpha.36: 6 → 10, 减少"复杂度超上限"误报)
-  maxPrimaryIterations: number; // 25 (与 profiles.py primary 对齐)
-  maxCoderIterations: number; // 15 (与 profiles.py coder 对齐)
-  maxReviewerIterations: number; // 8 (与 profiles.py reviewer 对齐)
-  maxWriterIterations: number; // 5 (与 profiles.py writer 对齐)
+  maxSubagentIterations: number; // 6
   worktreeIsolation: boolean; // false
   // RD16 (round26): scratch 根目录名（相对 data 目录），dispatcher 与
   // orchestration_router 的子任务 scratch 目录均落在其下。
@@ -120,10 +116,10 @@ export interface OrchSettings {
   // 与后端 ``OrchSettings.max_tool_calls_per_run`` camelCase 对齐。
   // 默认 100；0 回落默认值（当前为 100，不视为"不限"）。
   maxToolCallsPerRun: number; // 100
-  // 全局迭代上限（2026-10-20 新增, Win7 适配语义: 0 = 按下方各 agent 分别设置生效；
-  // >0 = 全局统一上限覆盖 per-agent 细分值）。与后端 ``OrchSettings.max_iterations``
-  // camelCase 对齐。
-  maxIterations: number; // 0
+  // Primary agent 迭代次数上限（2026-10-20 新增）。
+  // 与后端 ``OrchSettings.max_iterations`` camelCase 对齐。
+  // 默认 25；0 回落 profile 默认值。
+  maxIterations: number; // 25
   // Round 1 (2026-09-19) 计划前置: multi 拆解前的澄清+侦察总开关（默认开）。
   // 与后端 OrchSettings.plan_preflight_enabled camelCase 对齐。
   planPreflightEnabled: boolean; // true
@@ -211,12 +207,8 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   maxAggregateChars: 120 * 1024,
   maxSubagentResultChars: 50 * 1024,
   maxRetries: 2,
-  maxLaneIterations: 12,
-  maxSubagentIterations: 10,
-  maxPrimaryIterations: 25,
-  maxCoderIterations: 15,
-  maxReviewerIterations: 8,
-  maxWriterIterations: 5,
+  maxLaneIterations: 8,
+  maxSubagentIterations: 6,
   worktreeIsolation: false,
   scratchRoot: 'orch_scratch',
   subagentApprovalMode: 'ask',
@@ -225,7 +217,7 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   subagentTaskTimeoutS: 900,
   maxRetryOfChains: 10,
   maxToolCallsPerRun: 100,
-  maxIterations: 0, // 2026-10-20: 全局迭代上限 (0=按各 agent 分别设置)
+  maxIterations: 25, // 2026-10-20: primary agent 迭代次数上限
   planPreflightEnabled: true,
   planScoutEnabled: true,
 };

@@ -101,6 +101,7 @@ function CloseToTrayCard(): JSX.Element {
     <section data-testid="close-to-tray-section">
       <h3 className="text-sm font-semibold text-text mb-3">托盘</h3>
       <SettingRow
+        anchor="close_to_tray"
         label="关闭时隐藏到托盘"
         desc="点关闭按钮时隐藏到系统托盘而非退出；从托盘图标或 Alt+Shift+S 恢复"
       >
@@ -177,7 +178,7 @@ export function BasicTab() {
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">语言 / Language</h3>
-        <SettingRow label="界面语言" desc="界面显示语言 (U10, 本地持久化)">
+        <SettingRow anchor="locale" label="界面语言" desc="界面显示语言 (U10, 本地持久化)">
           <LanguageSelect />
         </SettingRow>
       </section>
@@ -254,6 +255,7 @@ export function BasicTab() {
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">时区</h3>
         <SettingRow
+          anchor="timezone"
           label="IANA 时区"
           desc="后端 zoneinfo 校验；非法值会被拒绝 (422)。默认取系统时区（探测失败回退 Asia/Shanghai）"
         >
@@ -267,6 +269,7 @@ export function BasicTab() {
           />
         </SettingRow>
         <SettingRow
+          anchor="logTimezone"
           label="日志时区"
           desc="日志时间戳时区. UTC (历史默认) | 本地系统时区 | IANA 时区 (如 Asia/Shanghai). 切换立即生效."
         >
@@ -294,6 +297,7 @@ export function BasicTab() {
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">演示</h3>
         <SettingRow
+          anchor="demoMode"
           label="演示模式"
           desc="开启后下次启动跳过后端，各功能页面展示内置示例数据。注意：下次启动生效。"
         >

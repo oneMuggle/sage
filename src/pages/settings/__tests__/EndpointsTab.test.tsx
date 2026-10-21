@@ -123,15 +123,15 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     );
   });
 
-  it('API Key input keeps the LM Studio 留空 placeholder', () => {
-    // Plan §2: empty API key is meaningful for local OpenAI-compatible
-    // endpoints — the request layer skips Authorization when the key is
-    // empty. The placeholder text is the cue for that.
+  it('API Key placeholder indicates local/intranet proxy can leave empty for openai-compatible', () => {
+    // 2026-10-20: placeholder is now dynamic based on protocol.
+    // openai-compatible and ollama show "本地/内网代理可留空",
+    // other protocols show "sk-...".
     const props = makeProps();
     render(<EndpointsTab {...props} />);
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
 
-    const apiKeyInput = screen.getByPlaceholderText(/LM Studio 可留空/);
+    const apiKeyInput = screen.getByPlaceholderText(/本地\/内网代理可留空/);
     expect(apiKeyInput).toBeInTheDocument();
     expect((apiKeyInput as HTMLInputElement).type).toBe('password');
   });

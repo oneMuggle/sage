@@ -12,44 +12,59 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../shared/lib/i18n';
 
 /** 全局 highlighter 单例 */
-let highlighterPromise: Promise<import('shiki').Highlighter> | null = null;
+let highlighterPromise: Promise<import('shiki/core').HighlighterCore> | null = null;
 
 // R24-D6: shiki 静态 import 会把整包(~1MB)拖进主 chunk —— 即便聊天首屏
 // 一个代码块都没有。改动态 import(): 包体独立成 chunk, 首个代码块渲染
 // 时才加载；类型仍走 import('shiki') 静态类型引用。
-function getHighlighter(): Promise<import('shiki').Highlighter> {
+//
+// 2026-09-23 细粒度改造: `import('shiki')` 拉的是 bundle-full——vite 会把
+// 全部 ~690 个语法包切成独立 chunk 写进 dist（约 18MB，Electron 安装包
+// 全量背走，哪怕运行时永远只用到主流语言）。改用 `shiki/core` +
+// @shikijs/langs/* / @shikijs/themes/* 细粒度动态 import，dist 只含下列
+// 显式语言；JS 引擎（forgiving）免 wasm 资产，file:// 加载更稳。
+// 注：语法包自带别名表（js/ts/py/c++/sh/md...），getLoadedLanguages 守卫
+// 无需改动即兼容。
+function getHighlighter(): Promise<import('shiki/core').HighlighterCore> {
   if (!highlighterPromise) {
-    highlighterPromise = import('shiki').then(({ createHighlighter }) =>
-      createHighlighter({
-        themes: ['github-dark', 'github-light'],
+    highlighterPromise = Promise.all([
+      import('shiki/core'),
+      import('shiki/engine/javascript'),
+    ]).then(([{ createHighlighterCore }, { createJavaScriptRegexEngine }]) =>
+      createHighlighterCore({
+        engine: createJavaScriptRegexEngine({ forgiving: true }),
+        themes: [
+          import('@shikijs/themes/github-dark'),
+          import('@shikijs/themes/github-light'),
+        ],
         langs: [
-          'javascript',
-          'typescript',
-          'python',
-          'rust',
-          'go',
-          'java',
-          'cpp',
-          'c',
-          'html',
-          'css',
-          'json',
-          'yaml',
-          'toml',
-          'markdown',
-          'bash',
-          'sql',
-          'dockerfile',
-          'diff',
+          import('@shikijs/langs/javascript'),
+          import('@shikijs/langs/typescript'),
+          import('@shikijs/langs/python'),
+          import('@shikijs/langs/rust'),
+          import('@shikijs/langs/go'),
+          import('@shikijs/langs/java'),
+          import('@shikijs/langs/cpp'),
+          import('@shikijs/langs/c'),
+          import('@shikijs/langs/html'),
+          import('@shikijs/langs/css'),
+          import('@shikijs/langs/json'),
+          import('@shikijs/langs/yaml'),
+          import('@shikijs/langs/toml'),
+          import('@shikijs/langs/markdown'),
+          import('@shikijs/langs/bash'),
+          import('@shikijs/langs/sql'),
+          import('@shikijs/langs/dockerfile'),
+          import('@shikijs/langs/diff'),
           // P22: 扩展语言覆盖
-          'kotlin',
-          'swift',
-          'ruby',
-          'php',
-          'csharp',
-          'xml',
-          'graphql',
-          'make',
+          import('@shikijs/langs/kotlin'),
+          import('@shikijs/langs/swift'),
+          import('@shikijs/langs/ruby'),
+          import('@shikijs/langs/php'),
+          import('@shikijs/langs/csharp'),
+          import('@shikijs/langs/xml'),
+          import('@shikijs/langs/graphql'),
+          import('@shikijs/langs/make'),
         ],
       }),
     );

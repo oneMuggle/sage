@@ -74,6 +74,10 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
                 data-testid="hook-history-copy-md-btn"
                 onClick={async () => {
                   setCopiedMd(true);
+                  /* v8 ignore next */
+                  setTimeout(() => {
+                    if (typeof window !== 'undefined') setCopiedMd(false);
+                  }, 1500);
                   const md = [
                     `# Hook 执行历史 (${records.length})`,
                     ...records.map(
@@ -81,16 +85,11 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
                         `- [${DECISION_LABELS[r.decision] ?? r.decision}] ${r.hook_id} → ${r.tool_name || '*'} (${Math.round(r.duration_ms)}ms)${r.reason ? ` — ${r.reason}` : ''}`,
                     ),
                   ].join('\n');
-                  /* v8 ignore start */
-                  setTimeout(() => {
-                    if (typeof window !== 'undefined') setCopiedMd(false);
-                  }, 1500);
                   try {
                     await navigator.clipboard?.writeText(md);
                   } catch {
                     // ignore
                   }
-                  /* v8 ignore stop */
                 }}
                 className="text-ui-xs text-text-secondary hover:text-text"
               >
@@ -101,7 +100,7 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
                 data-testid="hook-history-copy-json-btn"
                 onClick={async () => {
                   setCopiedJson(true);
-                  /* v8 ignore start */
+                  /* v8 ignore next */
                   setTimeout(() => {
                     if (typeof window !== 'undefined') setCopiedJson(false);
                   }, 1500);
@@ -112,7 +111,6 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
                   } catch {
                     // ignore
                   }
-                  /* v8 ignore stop */
                 }}
                 className="text-ui-xs text-text-secondary hover:text-text"
               >
@@ -162,7 +160,7 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
                 data-testid={`hook-history-copy-record-json-${record.id}`}
                 onClick={async () => {
                   setCopiedRecordId(record.id);
-                  /* v8 ignore start */
+                  /* v8 ignore next */
                   setTimeout(() => {
                     if (typeof window !== 'undefined') {
                       setCopiedRecordId((prev) => (prev === record.id ? null : prev));
@@ -173,7 +171,6 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
                   } catch {
                     // ignore
                   }
-                  /* v8 ignore stop */
                 }}
                 className="text-ui-2xs text-text-secondary hover:text-text flex-shrink-0"
               >

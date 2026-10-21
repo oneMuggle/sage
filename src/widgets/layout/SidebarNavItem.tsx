@@ -32,16 +32,55 @@ interface SidebarNavItemProps {
   trailing?: ReactNode;
   /** 无障碍标签覆盖（默认取 item.label） */
   ariaLabel?: string;
+  /**
+   * 锁定态（P1-7）：入口可见但不可直达。
+   *
+   * 未解锁时渲染成 <button> 而不是 <Link> —— 灰态链接点下去却进不去，
+   * 比隐藏更糟，是另一种形式的欺骗。onRequestUnlock 负责弹用途说明与确认。
+   */
+  locked?: { hint: string; badge: string; onRequestUnlock: () => void };
 }
 
 const ACTIVE_CLASS = 'bg-primary/10 text-primary';
 const INACTIVE_CLASS = 'text-text-secondary hover:bg-bg-hover';
+/** 锁定态：明显弱于常规入口，但不隐藏 —— 「看不见」会被读成「不存在」 */
+const LOCKED_CLASS = 'text-text-secondary/50 hover:bg-bg-hover';
 
-export function SidebarNavItem({ item, active, variant, trailing, ariaLabel }: SidebarNavItemProps) {
+export function SidebarNavItem({
+  item,
+  active,
+  variant,
+  trailing,
+  ariaLabel,
+  locked,
+}: SidebarNavItemProps) {
   const Icon = item.icon;
   const label = ariaLabel ?? item.label;
 
   if (variant === 'rail') {
+    // P1-7：锁定入口与常规入口同形同位，只是弱化 + 点击给说明。
+    // Tooltip 直接带上用途，鼠标悬停即可判断要不要开，不必先点开被拦住。
+    if (locked) {
+      return (
+        <Tooltip content={`${item.label} · ${locked.hint}`} side="right">
+          <button
+            type="button"
+            onClick={locked.onRequestUnlock}
+            aria-label={`${label}（${locked.badge}）`}
+            data-testid={`sidebar-locked-${item.path.replace(/^\//, '')}`}
+            data-locked="true"
+            className={clsx(
+              'relative flex items-center justify-center w-10 h-10 rounded-radius-sm transition-colors',
+              LOCKED_CLASS,
+            )}
+          >
+            <Icon className="w-5 h-5" />
+            <span className="sr-only">{item.label}</span>
+          </button>
+        </Tooltip>
+      );
+    }
+
     return (
       <Tooltip content={item.label} side="right">
         <Link

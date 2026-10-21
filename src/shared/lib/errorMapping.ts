@@ -48,7 +48,7 @@ export function mapLLMErrorToText(err: LLMErrorResponse): string {
  * 加入非 LLM 码会破坏 ``mapLLMErrorToText`` 的类型契约。
  */
 export const AGENT_RUNTIME_MESSAGES: Record<string, string> = {
-  max_iterations_exceeded: '任务复杂度超出当前迭代上限，可在「设置 → 通用 → 编排」调高「Lane 迭代上限」或「子代理迭代上限」后重试',
+  max_iterations_exceeded: '任务复杂度超出当前迭代上限，可在 Agent 管理页调高"最大迭代次数"后重试',
   tool_budget_exceeded: '工具调用次数超出单轮预算，请拆分任务后重试',
   prompt_blocked_by_hook: '消息被用户自定义钩子拦截（可在 设置 → 通用 → 钩子 管理）',
   spend_limit_exceeded:
@@ -63,4 +63,21 @@ export function mapAgentErrorToText(code: string): string | null {
   return Object.prototype.hasOwnProperty.call(AGENT_RUNTIME_MESSAGES, code)
     ? AGENT_RUNTIME_MESSAGES[code]
     : null;
+}
+
+export function formatLLMErrorSummary(err: LLMErrorResponse): string {
+  return `${err.type} · status=${err.status_code ?? 'none'} · retry=${err.retry_after ?? 'none'} · ${mapLLMErrorToText(err)}`;
+}
+
+export function formatLLMErrorJson(err: LLMErrorResponse): string {
+  return JSON.stringify(
+    {
+      type: err.type,
+      statusCode: err.status_code,
+      retryAfter: err.retry_after,
+      mappedText: mapLLMErrorToText(err),
+    },
+    null,
+    2,
+  );
 }

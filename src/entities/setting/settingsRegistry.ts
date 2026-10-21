@@ -363,13 +363,11 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     0,
     10,
   ),
-  // 默认值必须与 backend/orchestration/orch_settings.py 的 OrchSettings 一致 ——
-  // 此前此处声明 8 / 6，而后端实际是 12 / 10（alpha.36 上调），读注册表会推断错。
   'orch.maxLaneIterations': orchNumber(
     'orch.maxLaneIterations',
     'Lane 迭代上限',
-    'Lane 的最大重试次数（非 ReAct 预算）',
-    12,
+    '每个 Lane 的最大迭代次数',
+    8,
     1,
     50,
   ),
@@ -377,41 +375,9 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     'orch.maxSubagentIterations',
     '子代理迭代上限',
     '每个子代理的 ReAct 迭代预算',
-    10,
+    6,
     1,
     50,
-  ),
-  // 以下四项是主对话循环实际生效的 ReAct 预算 —— backend/api/legacy_routes.py
-  // 按 profile 名取它们作为显式实参传给 agent.run_loop，覆盖 agent profile 自带的
-  // max_iterations（后者另受 PATCH 1..50 硬校验，且对普通聊天不生效）。
-  // 后端无上限，故不设 max，仅拒 0（range(0) 会直接判定超限）。
-  'orch.maxPrimaryIterations': orchNumber(
-    'orch.maxPrimaryIterations',
-    'primary 迭代上限',
-    '默认助手（普通对话）的 ReAct 迭代预算，撞顶返回 max_iterations_exceeded',
-    15,
-    1,
-  ),
-  'orch.maxCoderIterations': orchNumber(
-    'orch.maxCoderIterations',
-    'coder 迭代上限',
-    'coder profile 的 ReAct 迭代预算',
-    15,
-    1,
-  ),
-  'orch.maxReviewerIterations': orchNumber(
-    'orch.maxReviewerIterations',
-    'reviewer 迭代上限',
-    'reviewer profile 的 ReAct 迭代预算',
-    8,
-    1,
-  ),
-  'orch.maxWriterIterations': orchNumber(
-    'orch.maxWriterIterations',
-    'writer 迭代上限',
-    'writer profile 的 ReAct 迭代预算',
-    5,
-    1,
   ),
   'orch.maxAggregateChars': orchNumber(
     'orch.maxAggregateChars',
@@ -467,9 +433,9 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
   ),
   'orch.maxIterations': orchNumber(
     'orch.maxIterations',
-    '全局迭代上限（0=按下方各 agent 分别设置）',
-    'Win7 适配：0 = 回落下方 primary/coder/reviewer/writer 各项独立设置；>0 = 全局统一上限覆盖各 agent 细分值',
-    0,
+    'Agent 迭代次数上限',
+    'Primary agent 最大迭代次数，0 回落 profile 默认值（当前为 25）',
+    25,
     0,
   ),
   'orch.subagentApprovalMode': enumSetting(

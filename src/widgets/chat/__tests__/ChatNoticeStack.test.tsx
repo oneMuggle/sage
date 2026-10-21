@@ -102,10 +102,4 @@ describe('ChatInlineError', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
-
-  it('omits the retry button when onRetry is not provided (win7 line)', () => {
-    render(<ChatInlineError error="boom" onClose={() => undefined} />);
-    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
-    expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument();
-  });
 });

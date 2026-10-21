@@ -10,7 +10,6 @@ export { chatApi } from './chatApi';
 export { knowledgeApi } from './knowledgeApi';
 export { learnApi } from './learnApi';
 export { memoryApi } from './memoryApi';
-export { permissionApi } from './permissionApi';
 export { messageApi } from './messageApi';
 export { promptApi } from './promptApi';
 export type { PromptTemplate } from './promptApi';
@@ -64,9 +63,7 @@ export type {
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
 export { skillDraftsApi } from './skillDraftsApi';
-export { workspaceApi } from './workspaceApi';
 export { skillsApi } from './skillsApi';
-export { themeCssClient } from './themeCssClient';
 import * as windowControlsClient from './windowControlsClient';
 export const windowControls = windowControlsClient.windowControls;
 export const getWindowControlsBridge = windowControlsClient.getWindowControlsBridge;

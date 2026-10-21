@@ -459,7 +459,7 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                     onClick={async () => {
                       setCopiedSiderJson(true);
                       setTimeout(() => {
-                        /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedSiderJson(false);
+                        if (typeof window !== 'undefined') setCopiedSiderJson(false);
                       }, 1500);
                       try {
                         await navigator.clipboard?.writeText(
@@ -676,7 +676,7 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                     onClick={async () => {
                       setCopiedFileJsonPath(file.path);
                       setTimeout(() => {
-                        /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedFileJsonPath(null);
+                        if (typeof window !== 'undefined') setCopiedFileJsonPath(null);
                       }, 1500);
                       try {
                         await navigator.clipboard?.writeText(

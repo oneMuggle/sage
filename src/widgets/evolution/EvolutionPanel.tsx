@@ -62,9 +62,17 @@ export const EvolutionPanel: React.FC = () => {
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold text-text">进化系统</h2>
+        {/* P2-7: 原文案「已由后台自动调度,无需手动操作」只覆盖了维护任务,
+            却挂在「进化系统」标题下 —— 用户会推断「凡属自演化都不需要我管」,
+            这与技能演化实际需要人审批（草稿 approve/reject）直接矛盾,
+            也与 PHILOSOPHY 的「透明可控」相悖。改为如实分两层陈述。 */}
         <p className="text-sm text-muted mt-1">
-          已由后台自动调度(SchedulerService cron 触发),无需手动操作。
-          5 个任务:每日摘要 / 记忆修剪 / 偏好学习 / 重要性重评估 / 记忆合并。
+          5 个维护任务由后台自动调度(SchedulerService cron 触发),无需手动干预:
+          每日摘要 / 记忆修剪 / 偏好学习 / 重要性重评估 / 记忆合并。
+        </p>
+        <p className="text-sm text-muted mt-1">
+          但技能演化不一样 —— 它只产出草稿,不会自行改动你的技能。
+          草稿需在「技能」页逐条预览后批准或拒绝,批准前不影响现有行为。
         </p>
       </div>
 

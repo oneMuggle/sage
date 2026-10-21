@@ -157,14 +157,7 @@
   --sidebar-width: 240px;
   --header-height: 48px;
 
-  /* Density (comfortable defaults) */
-  --density-msg-gap: 16px;
-  --density-msg-py: 10px;
-  --density-msg-px: 14px;
-  --density-setting-row-py: 12px;
-  --density-sidebar-item-py: 8px;
-
-  /* ZCode-inspired semantic UI tokens */
+  /* ZCode-inspired surface hierarchy (DESIGN.md §2) */
   --ui-font-size: var(--font-size-ui, 14px);
   --color-ui-page: #ffffff;
   --color-ui-page-rgb: 255 255 255;
@@ -327,14 +320,6 @@
   --color-ui-fg-rgb: 241 245 249;
   --color-ui-subtle: #94a3b8;
   --color-ui-subtle-rgb: 148 163 184;
-}
-
-[data-density='compact'] {
-  --density-msg-gap: 8px;
-  --density-msg-py: 6px;
-  --density-msg-px: 10px;
-  --density-setting-row-py: 8px;
-  --density-sidebar-item-py: 4px;
 }
 
 body {
@@ -539,4 +524,31 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-border-hover);
+}
+
+/* P1-4: 设置搜索锚点高亮。
+   点击设置搜索结果后跳转到具体设置项，用一次性高亮告诉用户「你到了这里」。
+   动画而非常驻样式 —— 高亮是导航反馈，不是状态，不该一直挂在那里。 */
+@keyframes settings-anchor-flash {
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  20%,
+  60% {
+    background-color: rgba(var(--color-primary-rgb), 0.14);
+  }
+}
+
+.settings-anchor-flash {
+  animation: settings-anchor-flash 1.6s ease-out 1;
+  border-radius: var(--radius-sm, 4px);
+}
+
+/* 尊重「减少动态效果」的系统偏好：高亮退化为静态底色，不做动画。 */
+@media (prefers-reduced-motion: reduce) {
+  .settings-anchor-flash {
+    animation: none;
+    background-color: rgba(var(--color-primary-rgb), 0.14);
+  }
 }

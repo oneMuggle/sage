@@ -1,16 +1,21 @@
 // src/widgets/chat/progress/ProgressSection.tsx
 // Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域,此处仅保留状态摘要 + 任务树。
+// UI 优化 2026-10-14: 顶部增加 sub-tab 切换「实时进度 / 完整轨迹」。
+// 轨迹原为独立 RightPanel Tab，合并入此组件作为第二个 sub-tab 视图。
 import { useState } from 'react';
 
 import { useChatStreamStore, selectSessionSlots } from '../../../features/send-message/chatStreamStore';
 import type { TaskBoard } from '../../../features/send-message/useChat';
 import type { ToolCall } from '../../../shared/lib/store';
+import { TrajectoryPane } from '../TrajectoryPane';
 
 // Multi-Agent Orchestration: 编排任务板聚合状态
 import { SessionRunHistory } from './SessionRunHistory';
 import { TaskTreeSection } from './TaskTreeSection';
 // P1 todo 接线 (2026-08-21): agent 自维护任务清单
 import { TodoListSection } from './TodoListSection';
+
+type ProgressSubTab = 'live' | 'trajectory';
 
 interface ProgressSectionProps {
   iteration: number;
@@ -106,6 +111,9 @@ export function ProgressSection({
   onRetryTask,
   onSelectRun,
 }: ProgressSectionProps) {
+  // UI 优化 2026-10-14: sub-tab 切换「实时进度 / 完整轨迹」。
+  // 默认激活「实时进度」；轨迹 Tab 从独立 RightPanel Tab 降级而来。
+  const [subTab, setSubTab] = useState<ProgressSubTab>('live');
   const [copiedMd, setCopiedMd] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）。
@@ -161,71 +169,109 @@ export function ProgressSection({
   /* v8 ignore stop */
 
   return (
-    <div className="p-3 space-y-2 text-sm">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          {isLoading && stateLabel && <span className="text-primary font-medium">{stateLabel}</span>}
-          {iteration > 0 && <span className="text-text-secondary">第 {iteration} 轮</span>}
-          {showProgress && progress && (
-            <span className="text-primary" data-testid="task-progress-summary">
-              编排任务 {progress.done}/{progress.total} 完成
-              {inFlight > 0 && <span className="text-text-secondary"> · {inFlight} 个进行中</span>}
-              {progress.failed > 0 && (
-                <span className="text-error ml-1">({progress.failed} 失败)</span>
-              )}
-              {progress.cancelled > 0 && (
-                <span className="text-text-secondary ml-1">({progress.cancelled} 已取消)</span>
-              )}
-            </span>
-          )}
-          {hasTaskBoard && !isDispatched && (
-            <span className="text-primary" data-testid="plan-pending-label">
-              计划待执行
-            </span>
-          )}
-          {!hasTaskBoard && !showProgress && !isLoading && !stateLabel && (
-            <span className="text-muted">等待输入...</span>
-          )}
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => void handleCopyMd()}
-            data-testid="progress-section-copy-md"
-            className="px-1.5 py-0.5 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCopyJson()}
-            data-testid="progress-section-copy-json"
-            className="px-1.5 py-0.5 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
-        </div>
+    <div className="flex flex-col h-full">
+      {/* UI 优化 2026-10-14: sub-tab 切换行 */}
+      <div className="flex border-b border-border shrink-0">
+        <button
+          type="button"
+          className={`flex-1 py-2 text-xs font-medium transition-colors ${
+            subTab === 'live'
+              ? 'text-primary border-b-2 border-primary'
+              : 'text-text-secondary hover:text-text'
+          }`}
+          onClick={() => setSubTab('live')}
+          data-testid="progress-subtab-live"
+        >
+          实时进度
+        </button>
+        <button
+          type="button"
+          className={`flex-1 py-2 text-xs font-medium transition-colors ${
+            subTab === 'trajectory'
+              ? 'text-primary border-b-2 border-primary'
+              : 'text-text-secondary hover:text-text'
+          }`}
+          onClick={() => setSubTab('trajectory')}
+          data-testid="progress-subtab-trajectory"
+        >
+          完整轨迹
+        </button>
       </div>
 
-      {/* P1 todo 接线: agent 自维护任务清单 + PR-C 编排计划镜像 */}
-      <TodoListSection todos={todos} taskBoard={taskBoard} />
+      {subTab === 'trajectory' ? (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <TrajectoryPane sessionId={sessionId ?? null} />
+        </div>
+      ) : (
+        <div className="p-3 space-y-2 text-sm overflow-y-auto flex-1 min-h-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              {isLoading && stateLabel && (
+                <span className="text-primary font-medium">{stateLabel}</span>
+              )}
+              {iteration > 0 && <span className="text-text-secondary">第 {iteration} 轮</span>}
+              {showProgress && progress && (
+                <span className="text-primary" data-testid="task-progress-summary">
+                  编排任务 {progress.done}/{progress.total} 完成
+                  {inFlight > 0 && <span className="text-text-secondary"> · {inFlight} 个进行中</span>}
+                  {progress.failed > 0 && (
+                    <span className="text-error ml-1">({progress.failed} 失败)</span>
+                  )}
+                  {progress.cancelled > 0 && (
+                    <span className="text-text-secondary ml-1">({progress.cancelled} 已取消)</span>
+                  )}
+                </span>
+              )}
+              {hasTaskBoard && !isDispatched && (
+                <span className="text-primary" data-testid="plan-pending-label">
+                  计划待执行
+                </span>
+              )}
+              {!hasTaskBoard && !showProgress && !isLoading && !stateLabel && (
+                <span className="text-muted">等待输入...</span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => void handleCopyMd()}
+                data-testid="progress-section-copy-md"
+                className="px-1.5 py-0.5 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+              >
+                {copiedMd ? '已复制 MD' : '复制 MD'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCopyJson()}
+                data-testid="progress-section-copy-json"
+                className="px-1.5 py-0.5 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
+              >
+                {copiedJson ? '已复制 JSON' : '复制 JSON'}
+              </button>
+            </div>
+          </div>
 
-      {/* Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域。
-         侧边栏仅展示已派发的任务树。 */}
-      {taskBoard?.dispatchedAt && (
-        <TaskTreeSection
-          board={taskBoard}
-          onCancel={() => onCancelExecution?.(taskBoard.runId)}
-          onRerunFailed={() => onRerunFailed?.(taskBoard.runId)}
-          onRetryTask={onRetryTask}
-        />
-      )}
-      {sessionId && onSelectRun && (
-        <SessionRunHistory
-          sessionId={sessionId}
-          onSelectRun={onSelectRun}
-          excludeRunId={taskBoard?.runId}
-        />
+          {/* P1 todo 接线: agent 自维护任务清单 + PR-C 编排计划镜像 */}
+          <TodoListSection todos={todos} taskBoard={taskBoard} />
+
+          {/* Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域。
+             侧边栏仅展示已派发的任务树。 */}
+          {taskBoard?.dispatchedAt && (
+            <TaskTreeSection
+              board={taskBoard}
+              onCancel={() => onCancelExecution?.(taskBoard.runId)}
+              onRerunFailed={() => onRerunFailed?.(taskBoard.runId)}
+              onRetryTask={onRetryTask}
+            />
+          )}
+          {sessionId && onSelectRun && (
+            <SessionRunHistory
+              sessionId={sessionId}
+              onSelectRun={onSelectRun}
+              excludeRunId={taskBoard?.runId}
+            />
+          )}
+        </div>
       )}
     </div>
   );

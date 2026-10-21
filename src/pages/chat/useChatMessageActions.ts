@@ -7,7 +7,7 @@ import { useQuoteDraft } from '../../features/chat/useQuoteDraft';
 import { sessionApi, learnApi, messageApi, memoryApi } from '../../shared/api';
 import { orchRunClient } from '../../shared/api/orchRunClient';
 import { useI18n } from '../../shared/lib/i18n';
-import type { Message as MessageType } from '../../shared/lib/store';
+import type { BlockedAction, Message as MessageType } from '../../shared/lib/store';
 
 /** t() 结果是静态模板，这里做最小占位符替换（i18n 无内置插值）。 */
 export function fill(template: string, vars: Record<string, string | number>): string {
@@ -273,6 +273,45 @@ export function useChatMessageActions({
     [t],
   );
 
+  const handleOpenMemory = useCallback(
+    (memoryId: string) => {
+      navigate(`/memory?focus=${encodeURIComponent(memoryId)}`);
+    },
+    [navigate],
+  );
+
+  const handleBlockedAction = useCallback(
+    (action: BlockedAction) => {
+      const url = typeof action.params?.url === 'string' ? action.params.url : undefined;
+      switch (action.action) {
+        case 'login_to_site':
+          if (url)
+            void sendMessage(
+              `请用 browser_login 工具登录 ${url}，完成登录态保存后重新访问该页面。`,
+            );
+          break;
+        case 'open_browser':
+          if (url) void sendMessage(`请用 browser_navigate 工具打开 ${url} 并提取正文。`);
+          break;
+        case 'configure_credentials':
+        case 'configure_proxy':
+          try {
+            localStorage.setItem('sage:settings-tab', 'network');
+          } catch {
+            /* ignore */
+          }
+          navigate('/settings');
+          break;
+        case 'view_docs':
+          if (url) window.open(url, '_blank');
+          break;
+        default:
+          break;
+      }
+    },
+    [sendMessage, navigate],
+  );
+
   const handleCancelRun = useCallback(
     async (runId: string) => {
       try {
@@ -321,6 +360,8 @@ export function useChatMessageActions({
     handleDeleteMessage,
     handleQuote,
     handleSaveToMemory,
+    handleOpenMemory,
+    handleBlockedAction,
     handleCancelRun,
     handleRerunFailed,
   };

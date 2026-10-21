@@ -119,7 +119,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
               onClick={async () => {
                 setCopiedAllBlueprintsJson(true);
                 setTimeout(() => {
-                  /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedAllBlueprintsJson(false);
+                  if (typeof window !== 'undefined') setCopiedAllBlueprintsJson(false);
                 }, 1500);
                 try {
                   await navigator.clipboard?.writeText(
@@ -480,7 +480,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 onClick={async () => {
                   setCopiedActiveProjectMd(true);
                   setTimeout(() => {
-                    /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedActiveProjectMd(false);
+                    if (typeof window !== 'undefined') setCopiedActiveProjectMd(false);
                   }, 1500);
                   const bp =
                     ARCHETYPE_BLUEPRINTS[
@@ -509,7 +509,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 onClick={async () => {
                   setCopiedActiveProjectJson(true);
                   setTimeout(() => {
-                    /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedActiveProjectJson(false);
+                    if (typeof window !== 'undefined') setCopiedActiveProjectJson(false);
                   }, 1500);
                   try {
                     await navigator.clipboard?.writeText(

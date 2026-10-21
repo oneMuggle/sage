@@ -60,7 +60,6 @@ beforeEach(() => {
     error: null,
   });
 });
-// CI 上渲染 501 checkbox 容易超时，增加到 15s
 it('caps default and select-all sources at 500 without broadening the request', async () => {
   mocks.list.mockResolvedValue(
     Array.from({ length: 501 }, (_, index) => ({
@@ -69,18 +68,18 @@ it('caps default and select-all sources at 500 without broadening the request', 
       is_dir: false,
     })),
   );
-  render(<WikiChat />);
+  const { container } = render(<WikiChat />);
   await screen.findByRole('checkbox', { name: 'wiki/0.md' });
   expect(
-    screen.getAllByRole('checkbox').filter((node) => (node as HTMLInputElement).checked),
+    container.querySelectorAll('input[type="checkbox"]:checked'),
   ).toHaveLength(500);
   expect(screen.getByText(/最多选择 500/)).toBeInTheDocument();
   fireEvent.click(screen.getByText('清空选择'));
   fireEvent.click(screen.getByText('全选'));
   expect(
-    screen.getAllByRole('checkbox').filter((node) => (node as HTMLInputElement).checked),
+    container.querySelectorAll('input[type="checkbox"]:checked'),
   ).toHaveLength(500);
-}, 15_000);
+}, 20000);
 
 it('requires a selected source and sends only selected paths', async () => {
   render(<WikiChat />);

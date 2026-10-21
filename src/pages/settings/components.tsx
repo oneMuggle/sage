@@ -91,7 +91,7 @@ export function SettingRow({ label, desc, children, anchor }: SettingRowProps) {
       data-settings-anchor={anchor}
       data-setting-row-audit={auditSnapshot}
       tabIndex={-1}
-      className="flex items-center justify-between py-[var(--density-setting-row-py)] border-b border-border focus:outline-none focus:ring-2 focus:ring-primary/40 focus:rounded"
+      className="flex items-center justify-between py-3 border-b border-border focus:outline-none focus:ring-2 focus:ring-primary/40 focus:rounded"
     >
       <div>
         <div className="text-sm text-text">{label}</div>

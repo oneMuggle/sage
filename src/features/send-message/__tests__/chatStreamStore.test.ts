@@ -112,12 +112,12 @@ describe('chatStreamStore', () => {
       useChatStreamStore.getState().startStream('sess-B', 'msg-B1', { initialContent: '' });
       useChatStreamStore.getState().appendContent('sess-A', 'msg-A1', 'A 的回答');
       useChatStreamStore.getState().appendContent('sess-B', 'msg-B1', 'B 的回答');
-      expect(
-        selectSessionSlots(useChatStreamStore.getState(), 'sess-A').streaming?.content,
-      ).toBe('A 的回答');
-      expect(
-        selectSessionSlots(useChatStreamStore.getState(), 'sess-B').streaming?.content,
-      ).toBe('B 的回答');
+      expect(selectSessionSlots(useChatStreamStore.getState(), 'sess-A').streaming?.content).toBe(
+        'A 的回答',
+      );
+      expect(selectSessionSlots(useChatStreamStore.getState(), 'sess-B').streaming?.content).toBe(
+        'B 的回答',
+      );
     });
 
     it('taskBoard / todos 按会话独立', () => {
@@ -126,9 +126,9 @@ describe('chatStreamStore', () => {
         plan: [],
         statuses: {},
       });
-      useChatStreamStore.getState().setTodos('sess-B', [
-        { content: 'B 的任务', status: 'pending' },
-      ]);
+      useChatStreamStore
+        .getState()
+        .setTodos('sess-B', [{ content: 'B 的任务', status: 'pending' }]);
       expect(selectSessionSlots(useChatStreamStore.getState(), 'sess-A').taskBoard?.runId).toBe(
         'orch-A',
       );

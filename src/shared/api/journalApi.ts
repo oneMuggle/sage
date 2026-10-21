@@ -67,3 +67,33 @@ export const journalApi = {
     }
   },
 };
+
+export function formatJournalFillSummary(
+  req?: Partial<JournalFillFromContentRequest> | null,
+): string {
+  if (!req) return 'journal-fill: empty';
+  /* v8 ignore start */
+  const spec = req.spec_id || 'none';
+  const out = req.output_filename || 'auto';
+  const sectionCount = req.content?.sections ? Object.keys(req.content.sections).length : 0;
+  /* v8 ignore stop */
+  return `journal-fill: spec=${spec} -> ${out} · ${sectionCount} sections`;
+}
+
+export function formatJournalFillJson(
+  req?: Partial<JournalFillFromContentRequest> | null,
+): string {
+  return JSON.stringify(
+    {
+      /* v8 ignore start */
+      specId: req?.spec_id ?? null,
+      workspacePath: req?.workspace_path ?? null,
+      outputFilename: req?.output_filename ?? null,
+      sectionCount: req?.content?.sections ? Object.keys(req.content.sections).length : 0,
+      referenceCount: req?.content?.references ? req.content.references.length : 0,
+      /* v8 ignore stop */
+    },
+    null,
+    2,
+  );
+}

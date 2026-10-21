@@ -16,9 +16,11 @@ export type SettingsTabKey =
   | 'memory'
   | 'network'
   | 'mcp'
+  | 'remote-workspaces'
   | 'zotero'
   | 'runtime'
   | 'evolution'
+  | 'harness'
   | 'updates'
   | 'usage-stats'
   | 'providers';
@@ -325,34 +327,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'orch 编排 子代理 迭代 maxsubagentiterations',
   },
   {
-    key: 'orch.maxPrimaryIterations',
-    tab: 'orchestration',
-    label: 'primary 迭代上限',
-    labelEn: 'Primary iterations',
-    keywords: 'orch 编排 primary 默认助手 主对话 迭代 maxprimaryiterations max_iterations',
-  },
-  {
-    key: 'orch.maxCoderIterations',
-    tab: 'orchestration',
-    label: 'coder 迭代上限',
-    labelEn: 'Coder iterations',
-    keywords: 'orch 编排 coder 编码 迭代 maxcoderiterations',
-  },
-  {
-    key: 'orch.maxReviewerIterations',
-    tab: 'orchestration',
-    label: 'reviewer 迭代上限',
-    labelEn: 'Reviewer iterations',
-    keywords: 'orch 编排 reviewer 审查 迭代 maxrevieweriterations',
-  },
-  {
-    key: 'orch.maxWriterIterations',
-    tab: 'orchestration',
-    label: 'writer 迭代上限',
-    labelEn: 'Writer iterations',
-    keywords: 'orch 编排 writer 写作 迭代 maxwriteriterations',
-  },
-  {
     key: 'orch.maxAggregateChars',
     tab: 'orchestration',
     label: '聚合结果上限',
@@ -447,6 +421,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   },
 
   // ── 网络 ──
+  {
+    key: 'remote_workspaces',
+    tab: 'remote-workspaces',
+    label: '远程工作区（MCP）',
+    labelEn: 'Remote workspaces (MCP)',
+    keywords: 'remote workspace mcp 远程 工作区 隧道 tunnel cloudflare 急停 emergency 共享 share',
+  },
   {
     key: 'network_policy',
     tab: 'network',
@@ -570,6 +551,16 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '导出 CSV',
     labelEn: 'Export CSV',
     keywords: 'export csv 导出 下载',
+  },
+  // P0-5: 「通用」tab 此前无任何索引条目 → 搜「重置」无结果，而
+  // 「重置全部设置」是破坏性操作，检索不到尤其危险。其余通用 tab 项
+  // （权限/降级/消费上限/自动快照/托盘）索引中已存在，无需重复登记。
+  {
+    key: 'reset_settings',
+    tab: 'general',
+    label: '重置全部设置',
+    labelEn: 'Reset all settings',
+    keywords: 'reset 重置 恢复默认 清除配置 clear defaults',
   },
 ];
 

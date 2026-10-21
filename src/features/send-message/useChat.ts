@@ -10,6 +10,7 @@ import {
   type ChatOfficeRef,
   type TaskPlanItem,
 } from '../../shared/api';
+import type { AttachmentEmbedConfig } from '../../shared/api/attachmentRagConfig';
 import type { GenerationStats } from '../../shared/api/types';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import {
@@ -30,6 +31,7 @@ import {
   cancelSessionStream,
   deleteSessionCascade,
   inferProviderFromBaseUrl,
+  type PendingChatMessage,
   type TaskBoard,
   useChatReattachAndBtw,
 } from './chatStreamRuntime';
@@ -63,13 +65,33 @@ export function useChat() {
   // 结束(onDone)后自动发送。错误/中断路径不自动 flush——连续失败场景
   // 自动重发只会重复报错。S3: 队列按会话隔离,A 队列的消息不会在 B 的
   // 流结束后被误发。
-  const pendingMessagesRef = useRef<
-    Array<{
-      content: string;
-      sid?: string;
-      orchestrationMode?: ChatConfig['orchestrationMode'];
-    }>
-  >([]);
+  //
+  // P1-6: 补 `id` + state 镜像 —— 队列原本只活在 ref 里,唯一的用户可见
+  // 信号是一条 4 秒即逝的 toast。连续发 3 条时用户既看不到队列、也撤不掉,
+  // 更严重的是错误/中断路径不 flush → 这些消息变成"僵尸队列"静默滞留,
+  // 可能在很久之后被下一条正常流意外带发。透明可控原则要求队列常驻可见。
+  const pendingMessagesRef = useRef<PendingChatMessage[]>([]);
+  // ref 仍是 sendMessage / onDone 读写的真相来源（异步回调里读 state 会拿到
+  // 陈旧快照）；state 只服务渲染。两侧必须经 setPending 同步，禁止直改 ref。
+  const [pendingMessages, setPendingMessages] = useState<PendingChatMessage[]>([]);
+  const setPending = useCallback((next: PendingChatMessage[]): void => {
+    pendingMessagesRef.current = next;
+    setPendingMessages(next);
+  }, []);
+  /** 撤回单条已排队消息（不发送、不留痕）。 */
+  const cancelPending = useCallback(
+    (id: string): void => {
+      setPending(pendingMessagesRef.current.filter((p) => p.id !== id));
+    },
+    [setPending],
+  );
+  /** 清空某会话的排队消息（不发送、不留痕）。 */
+  const clearPendingForSession = useCallback(
+    (sid: string): void => {
+      setPending(pendingMessagesRef.current.filter((p) => p.sid !== sid));
+    },
+    [setPending],
+  );
   const sendMessageRef = useRef<typeof sendMessage | null>(null);
 
   // 流式当前 assistant 消息的内容覆盖 (派生 messages 的最后一条) —— 2026-08-19
@@ -77,9 +99,8 @@ export function useChat() {
   // widget 看到 '🤔 思考中…' 占位符看不到真实 LLM 进度。
   // S2: 读当前会话的槽位 —— 切到会话 B 就看 B 的实时进度(A 的流在后台
   // 继续累积,切回 A 时内容完整可见)。
-  const { streaming, streamingToolCalls, taskBoard, preflightPhase } = useChatStreamStore((s) =>
-    selectSessionSlots(s, currentSessionId),
-  );
+  const { streaming, streamingToolCalls, taskBoard, completedSteps, preflightPhase } =
+    useChatStreamStore((s) => selectSessionSlots(s, currentSessionId));
 
   // Phase 6: /btw 补充消息状态(component-local,与流式 chat 无关)
   const [isBtwStreaming, setIsBtwStreaming] = useState(false);
@@ -118,20 +139,53 @@ export function useChat() {
   const streamingReasoning = streaming?.reasoning ?? '';
 
   const derivedMessages = useMemo<Message[]>(() => {
-    if (!streamingMessageId) return messages;
-    return messages.map((m) =>
-      m.id === streamingMessageId
-        ? {
-            ...m,
-            content: streamingContent,
-            reasoning_content: streamingReasoning || undefined,
-            tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
-          }
-        : m,
-    );
+    // 2026-09 step-by-step: 多步 run 时把已完成的步骤消息拼接在 store.messages 之后。
+    // 拼接顺序:store.messages(持久化/加载) → completedSteps(本 run 已完成步骤快照)
+    // → 流式覆盖层(若 streaming.messageId 不在 store.messages / completedSteps 中,
+    //   说明当前正在流的是新一步,需要追加一个虚拟消息承载流式内容)
+    if (!streamingMessageId) {
+      return completedSteps.length > 0 ? [...messages, ...completedSteps] : messages;
+    }
+    const overlay: Partial<Message> = {
+      content: streamingContent,
+      reasoning_content: streamingReasoning || null,
+      tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
+    };
+    const overlayInStore = messages.some((m) => m.id === streamingMessageId);
+    const overlayInCompleted = completedSteps.some((m) => m.id === streamingMessageId);
+    let next = messages.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m));
+    if (completedSteps.length > 0) {
+      next = [
+        ...next,
+        ...completedSteps.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m)),
+      ];
+    }
+    if (!overlayInStore && !overlayInCompleted && streaming) {
+      // 当前流式 messageId 不在 store.messages 也不在 completedSteps(说明是
+      // 刚切到下一步,还没序列化到 store),追加一个虚拟消息承载流式内容
+      next.push({
+        id: streamingMessageId,
+        session_id: currentSessionId ?? '',
+        role: 'assistant',
+        content: streamingContent,
+        reasoning_content: streamingReasoning || null,
+        tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
+        created_at: Date.now(),
+      });
+    }
+    return next;
     // MEDIUM-6: 拆细 deps — 仅依赖 streaming 中实际用到的字段,
     // 避免 currentAgentId/iteration/state 等无关变化触发 messages 数组重建
-  }, [messages, streamingMessageId, streamingContent, streamingReasoning, streamingToolCalls]);
+  }, [
+    messages,
+    streamingMessageId,
+    streamingContent,
+    streamingReasoning,
+    streamingToolCalls,
+    completedSteps,
+    streaming,
+    currentSessionId,
+  ]);
 
   const sendMessage = useCallback(
     async (
@@ -148,6 +202,8 @@ export function useChat() {
         /** R23-D2: 聊天图片输入（base64 data URL，≤4 张/单张 5MiB） */
         images?: string[];
         attachmentMediaIds?: string[];
+        /** r67: 附件检索注入配置（opt-in） */
+        attachmentRag?: { embed: AttachmentEmbedConfig; top_k: number } | null;
         /**
          * Task 5 (2026-09-17): 上下文重置 —— 后端在本轮消息前插入
          * topic_separator 并清空 LLM 历史窗口。
@@ -174,7 +230,10 @@ export function useChat() {
           }
         }
         // U5: 忙时不再丢弃消息——入队,当前回复自然结束后自动发送
-        pendingMessagesRef.current.push({ content, sid, orchestrationMode });
+        setPending([
+          ...pendingMessagesRef.current,
+          { id: crypto.randomUUID(), content, sid, orchestrationMode },
+        ]);
         toast.info('已加入队列,当前回复完成后自动发送');
         return;
       }
@@ -215,7 +274,7 @@ export function useChat() {
       setError(null);
       setErrorSessionId(null);
 
-      // client_message_id 协议 (同步 #1155): 乐观 user 消息直接使用与服务端
+      // client_message_id 协议 (2026-09): 乐观 user 消息直接使用与服务端
       // 相同的确定性 id (u-<cmid>) —— 流结束对账按 id 精确命中, 根治重复。
       const clientMessageId = crypto.randomUUID();
       const userMessage: Message = {
@@ -246,7 +305,11 @@ export function useChat() {
       // PR-6: 先占位 assistant message, 流式过程中累积 content
       // 2026-09-13 P0: 哨兵值抽为 THINKING_PLACEHOLDER，Message 据此渲染
       // shimmer 占位而非把占位文案当 markdown 静态文本。
-      const assistantId = crypto.randomUUID();
+      // 2026-09 step-by-step: `let` 而非常量 —— step_done 时会切换到新的
+      // uuid,后续 deltas 路由到新的 messageId(与 chatStreamStore.streaming
+      // 槽位协同)。所有 closure(appendContent / replaceContent / finishStream
+      // / clearStream)按引用捕获,reassign 后 closure 看到最新值。
+      let assistantId = crypto.randomUUID();
       const assistantMessage: Message = {
         id: assistantId,
         session_id: sid,
@@ -358,9 +421,9 @@ export function useChat() {
       // 因为 ref 里混了 '🤔 思考中…' 占位符)。finishStream 用这个写 store。
       let finished = false;
       let lastDoneContent: string | null = null;
-      // client_message_id 协议 (同步 #1155): DONE 携带 assistant 消息服务端 id
+      // client_message_id 协议: DONE 携带 assistant 消息的服务端 id
       let lastDoneMessageId: string | null = null;
-      // 同步 #1196: 首轮标题将在后台生成 —— 延迟补刷侧栏
+      // 标题后台生成提示 (2026-09): 首轮 DONE 后侧栏需延迟补刷
       let lastDoneTitlePending = false;
       // 第二轮 B2: DONE 携带的 finish_reason（length = 截断），对账前先写入本地消息
       let lastDoneFinishReason: string | null = null;
@@ -404,8 +467,8 @@ export function useChat() {
             ...(lastDoneGenerationStats ? { generation_stats: lastDoneGenerationStats } : {}),
           });
         }
-        // client_message_id 协议 (同步 #1155): DONE 带回服务端 id 时, 把
-        // 乐观占位 id 原地替换 —— 此后 loadMessages 对账按 id 精确命中。
+        // client_message_id 协议: DONE 带回服务端 id 时, 把乐观占位 id
+        // 原地替换 —— 此后 loadMessages 对账按 id 精确命中。
         if (lastDoneMessageId && lastDoneMessageId !== assistantId) {
           replaceMessageId(assistantId, lastDoneMessageId);
         }
@@ -429,8 +492,8 @@ export function useChat() {
         // 流结束后刷新侧栏会话列表（获取自动生成的标题 + S1 落库的运行态徽章）
         // hex 路径无 NDJSON session_updated 事件，此处兜底刷新
         void useStore.getState().loadSessions();
-        // 同步 #1196: 首轮标题在后台生成 (DONE 先行) —— 延迟补刷两次,
-        // 覆盖后台标题 LLM 生成/重试的常见耗时区间。
+        // 2026-09: 标题转为后台生成 (DONE 先行) —— 首轮标题尚未就绪时
+        // 延迟补刷两次, 覆盖 LLM 生成/重试的常见耗时区间。
         if (lastDoneTitlePending) {
           window.setTimeout(() => void useStore.getState().loadSessions(), 8000);
           window.setTimeout(() => void useStore.getState().loadSessions(), 16000);
@@ -445,7 +508,8 @@ export function useChat() {
           const pending = pendingMessagesRef.current;
           const idx = pending.findIndex((p) => p.sid === sid);
           if (idx >= 0) {
-            const [next] = pending.splice(idx, 1);
+            const next = pending[idx];
+            setPending([...pending.slice(0, idx), ...pending.slice(idx + 1)]);
             window.setTimeout(() => {
               void sendMessageRef.current?.(
                 next.content,
@@ -487,6 +551,39 @@ export function useChat() {
                   currentAgentId: evt.agent_id ?? null,
                   iteration: evt.iteration ?? 0,
                 });
+              }
+
+              // 2026-09 step-by-step: 收到 step_done → 把当前 streaming 快照成
+              // 一条 Message 推入 completedSteps,然后重置 streaming 并切换
+              // messageId,后续 deltas 路由到新消息。`return` 跳过本事件其余
+              // handler(step_done 无 uiText / content, 不应触发占位或累积)。
+              if (evt.state === 'step_done') {
+                const slots = selectSessionSlots(useChatStreamStore.getState(), sid);
+                const streamSnapshot = slots.streaming;
+                const toolCallsSnapshot = slots.streamingToolCalls;
+                // 优先用 lastDoneContent(本步 done.content 全量),否则退回 streaming 累积
+                // 2026-09 step-by-step: 过滤 THINKING_PLACEHOLDER — 若该步无 content_delta,
+                // streaming.content 仍是初始占位 '🤔 思考中…',不应作为静态内容渲染到气泡
+                const rawContent = lastDoneContent ?? streamSnapshot?.content ?? '';
+                const stepContent = rawContent === THINKING_PLACEHOLDER ? '' : rawContent;
+                const stepReasoning = streamSnapshot?.reasoning ?? '';
+                const completedMessage: Message = {
+                  id: assistantId,
+                  session_id: sid,
+                  role: 'assistant',
+                  content: stepContent,
+                  reasoning_content: stepReasoning || null,
+                  tool_calls: toolCallsSnapshot.length > 0 ? toolCallsSnapshot : undefined,
+                  created_at: Date.now(),
+                  step_index: typeof evt.step_index === 'number' ? evt.step_index : null,
+                };
+                useChatStreamStore.getState().addCompletedStep(sid, assistantId, completedMessage);
+                const nextAssistantId = crypto.randomUUID();
+                useChatStreamStore.getState().finalizeStep(sid, assistantId, nextAssistantId);
+                assistantId = nextAssistantId;
+                // 下一步有独立的 done.content;重置避免上一步的值污染
+                lastDoneContent = null;
+                return;
               }
 
               // M1 工具审批: permission_request 事件 → 写入 permission store,
@@ -598,6 +695,7 @@ export function useChat() {
           officeRefs,
           opts?.images,
           opts?.attachmentMediaIds,
+          opts?.attachmentRag,
           clientMessageId,
         );
         // Never let a late subscription overwrite a newer run's handle.
@@ -697,6 +795,15 @@ export function useChat() {
     preflightPhase,
     /** PM2: 清除计划批准状态（批准执行或忽略时调用） */
     clearPlanApproval: useCallback(() => setPlanApprovalFor(null), []),
+    /**
+     * P1-6: 已排队待发的消息（跨会话混合）—— 供 UI 常驻展示与撤回。
+     * 队列会在当前回复结束后自动连发，用户必须能在真正发出去之前反悔。
+     */
+    pendingMessages,
+    /** P1-6: 撤回单条排队消息（不发送、不留痕） */
+    cancelPending,
+    /** P1-6: 清空某会话的排队消息（不发送、不留痕） */
+    clearPendingForSession,
     reattachActiveStream,
   };
 }

@@ -152,8 +152,9 @@ describe('Chat — top-bar "新对话" must go to /welcome', () => {
     expect(screen.getByText('对话')).toBeInTheDocument();
     expect(screen.getByTestId('current-path').textContent).toBe('/chat');
 
-    // 点击顶部 "+ 新对话"
-    fireEvent.click(screen.getByRole('button', { name: /新对话/ }));
+    // 点击顶部 SessionSessionMenu → 新对话
+    fireEvent.click(screen.getByTestId('session-session-menu-toggle'));
+    fireEvent.click(screen.getByTestId('session-menu-new-session'));
 
     // 跳到 /welcome
     expect(screen.getByTestId('current-path').textContent).toBe('/welcome');
@@ -172,7 +173,7 @@ describe('Chat — top-bar "新对话" must go to /welcome', () => {
     const headerControls = await screen.findByTestId('chat-header-controls');
     expect(headerControls).toBeInTheDocument();
     expect(screen.getAllByTestId('orch-mode-select')).toHaveLength(1);
-    expect(screen.getAllByTestId('chat-new-topic')).toHaveLength(1);
+    expect(screen.getAllByTestId('session-session-menu-toggle')).toHaveLength(1);
     expect(screen.queryByTestId('composer-controls')).not.toBeInTheDocument();
   });
 });

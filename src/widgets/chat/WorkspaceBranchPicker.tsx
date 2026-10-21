@@ -241,7 +241,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                       onClick={async () => {
                         setCopiedPath(true);
                         setTimeout(() => {
-                          /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedPath(false);
+                          if (typeof window !== 'undefined') setCopiedPath(false);
                         }, 1500);
                         try {
                           await navigator.clipboard?.writeText(workspacePath);
@@ -259,7 +259,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                       onClick={async () => {
                         setCopiedMd(true);
                         setTimeout(() => {
-                          /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedMd(false);
+                          if (typeof window !== 'undefined') setCopiedMd(false);
                         }, 1500);
                         const md = [
                           `# 工作区分支与 Worktree 快照 (${baseName(data.repoRoot)})`,
@@ -285,7 +285,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                       onClick={async () => {
                         setCopiedJson(true);
                         setTimeout(() => {
-                          /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedJson(false);
+                          if (typeof window !== 'undefined') setCopiedJson(false);
                         }, 1500);
                         try {
                           await navigator.clipboard?.writeText(

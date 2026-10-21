@@ -20,7 +20,7 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -36,10 +36,15 @@ import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { deleteSessionCascade } from '../../features/send-message/useChat';
 import { sessionApi } from '../../shared/api/sessionApi';
 import { requestOpenCommandPalette } from '../../shared/lib/commandPaletteEvents';
-import { unlockFeature, useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
+import {
+  unlockFeature,
+  useFeatureExplicitlyDisabled,
+  useFeatureUnlock,
+} from '../../shared/lib/hooks/useFeatureUnlock';
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import { AttnBadge, BrandLogo, LiveDot, Tooltip, type LiveState } from '../../shared/ui';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 import {
   ConversationsSection,
   GitStatusSection,
@@ -134,6 +139,22 @@ const navGroups: NavGroupDef[] = [
 const settingsNavItem: NavItem = { path: '/settings', label: '设置', icon: Settings };
 
 /**
+ * P1-7: 未解锁高级入口的一句话说明。
+ *
+ * 渐进式披露原本把 office / orchestration / arena 直接藏掉 —— 结果是
+ * 「功能不存在」的错觉：`/office` 是本项目核心差异化能力（能按格式规范
+ * 直接交稿），却只能靠输 URL 或命令面板发现。
+ *
+ * 改为**可见但灰态**：入口常驻 → 悬停/点击给出用途说明 → 确认后解锁进入。
+ * 把「不可发现」换成「可发现 + 有引导」，而不是取消渐进式披露本身。
+ */
+const LOCKED_FEATURE_HINTS: Record<string, string> = {
+  office: '按格式规范直接生成 / 校验 / 修复 Word、Excel、PPT、PDF 交付稿',
+  orchestration: '多代理任务编排：并行子代理、进度时间线、人工干预',
+  'arena-accounts': '多账号自动化调度与观察',
+};
+
+/**
  * 渐进式功能披露 (U10)：高级入口路径 → feature key 映射。
  * 这些入口在首次使用前从 sidebar 隐藏，首次使用（访问对应路由）后永久解锁。
  * 隐藏期间仍可经命令面板发现，避免成为无法触达的死功能。
@@ -149,9 +170,10 @@ const ADVANCED_FEATURE_BY_PATH: Record<string, string> = {
   '/orchestration': 'orchestration',
   '/arena': 'arena-accounts',
   '/arena-accounts': 'arena-accounts',
-  // 注意：/office 刻意不在此登记。Win7 轨没有主线 P1-7 的「灰态可见」门控 ——
-  // 这里的门控是“未解锁就不渲染”，把 /office 放进来会重新把核心交付入口藏起来
-  // （正是批次 B 要解决的“功能不存在”错觉）。/office 作为一级导航常驻。
+  // 合并取舍（#1867 rebase）：/office 已按产品路线提升进一级导航（解决「功能
+  // 不存在」的错觉），但仍保留上游 P1-7 的一次性解锁门控 —— 灰态可见 → 点击
+  // 给出用途说明 → 确认后进入并常驻。位置提升了，黑盒自动放行仍然没有。
+  '/office': 'office',
 };
 
 interface SidebarProps {
@@ -201,8 +223,8 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
   const artifactCount = useArtifactEventsStore((s) =>
     currentSessionId ? (s.counts[currentSessionId] ?? 0) : 0,
   );
-  const seenArtifactCount = useRightPanelStore(
-    (s) => (currentSessionId ? (s.seenArtifactCount[currentSessionId] ?? 0) : 0),
+  const seenArtifactCount = useRightPanelStore((s) =>
+    currentSessionId ? (s.seenArtifactCount[currentSessionId] ?? 0) : 0,
   );
   const attention = useAttentionSnapshot({
     sessionId: currentSessionId,
@@ -228,6 +250,36 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
     office: officeUnlocked,
     'arena-accounts': arenaAccountsUnlocked,
   };
+
+  // P1-7: 「用户显式关闭」与「从未使用」是两种不同的不可见 —— 前者尊重用户
+  // 意图完全隐藏（设置里点了 OFF），后者灰态可见 + 用途引导（解决「功能不存在」
+  // 的错觉）。混为一谈会让用户关掉 Arena 后仍被灰态入口反复提示。
+  const orchestrationDisabled = useFeatureExplicitlyDisabled('orchestration');
+  const officeDisabled = useFeatureExplicitlyDisabled('office');
+  const arenaDisabled = useFeatureExplicitlyDisabled('arena-accounts');
+  const disabledByFeature: Record<string, boolean> = {
+    orchestration: orchestrationDisabled,
+    office: officeDisabled,
+    'arena-accounts': arenaDisabled,
+  };
+
+  // P1-7：灰态入口点击 → 说明这个高级能力能干什么 → 确认后解锁并进入。
+  // 走项目统一的 confirmDialog（与 P1-8 危险操作确认同一套），不再自造行内卡片：
+  // rail 只有 56px，塞不下一张说明卡，而弹窗在窄栏里才是可读的。
+  const requestUnlock = useCallback(
+    async (item: NavItem, featureKey: string) => {
+      const confirmed = await confirmDialog({
+        title: `${item.label} — ${t('sidebar.lockedHintTitle')}`,
+        message: `${LOCKED_FEATURE_HINTS[featureKey] ?? ''}\n\n${t('sidebar.lockedHintGeneric')}`,
+        confirmLabel: t('sidebar.lockedHintOpen'),
+        cancelLabel: t('sidebar.lockedHintDismiss'),
+      });
+      if (!confirmed) return;
+      unlockFeature(featureKey);
+      navigate(item.path);
+    },
+    [navigate, t],
+  );
 
   useEffect(() => {
     loadSessions();
@@ -297,10 +349,15 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
     }
   };
 
-  /** 渐进披露门控：未解锁的高级入口不渲染。 */
-  const isRevealed = (item: NavItem): boolean => {
+  /**
+   * 渐进披露门控（P1-7）。
+   * @returns 'hidden' 用户显式关掉了；'locked' 从未用过（灰态可见）；'open' 正常。
+   */
+  const disclosureState = (item: NavItem): 'hidden' | 'locked' | 'open' => {
     const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
-    return !featureKey || unlockedByFeature[featureKey];
+    if (!featureKey) return 'open';
+    if (disabledByFeature[featureKey]) return 'hidden';
+    return unlockedByFeature[featureKey] ? 'open' : 'locked';
   };
 
   /** NavItem → SidebarNavItemData（解析 i18n labelKey）。 */
@@ -384,9 +441,15 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
                 collapsible={group.collapsible}
                 defaultCollapsed={group.defaultCollapsed}
               >
-                {group.items
-                  .filter((item) => isRevealed(item))
-                  .map((item) => (
+                {group.items.map((item) => {
+                  const state = disclosureState(item);
+                  if (state === 'hidden') {
+                    return null;
+                  }
+
+                  const featureKey = ADVANCED_FEATURE_BY_PATH[item.path];
+
+                  return (
                     <SidebarNavItem
                       key={item.path}
                       item={toNavData(item)}
@@ -395,8 +458,19 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
                       trailing={
                         item.path === '/chat' ? <AttnBadge count={attentionCount} /> : undefined
                       }
+                      locked={
+                        state === 'locked'
+                          ? {
+                              hint:
+                                LOCKED_FEATURE_HINTS[featureKey] ?? t('sidebar.lockedHintGeneric'),
+                              badge: t('sidebar.lockedBadge'),
+                              onRequestUnlock: () => void requestUnlock(item, featureKey),
+                            }
+                          : undefined
+                      }
                     />
-                  ))}
+                  );
+                })}
               </NavGroup>
             </div>
           ))}
@@ -461,7 +535,11 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
               data-testid={collapsed ? 'sidebar-expand-button' : 'sidebar-collapse-button'}
               className="flex items-center justify-center w-10 h-10 rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text-primary transition-colors"
             >
-              {collapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+              {collapsed ? (
+                <PanelLeftOpen className="w-5 h-5" />
+              ) : (
+                <PanelLeftClose className="w-5 h-5" />
+              )}
             </button>
           )}
         </div>
@@ -475,10 +553,7 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
           </div>
 
           {/* UX-IA R1 A1：顶部主操作条（对标 ChatGPT「新聊天 / 搜索聊天」） */}
-          <div
-            className="px-2 pt-2 flex items-center gap-1"
-            data-testid="sidebar-primary-actions"
-          >
+          <div className="px-2 pt-2 flex items-center gap-1" data-testid="sidebar-primary-actions">
             <button
               type="button"
               onClick={handleNewSession}

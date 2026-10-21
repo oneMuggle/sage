@@ -12,6 +12,9 @@ import { restoreRunToBoard } from '../features/send-message/orchestrationEvents'
 import { useChat } from '../features/send-message/useChat';
 import { useTerminalPanelStore } from '../features/terminal-panel/terminalPanelStore';
 import { type ChatOfficeRef } from '../shared/api';
+import { maybeIndexAttachment } from '../shared/api/attachmentAutoIndex';
+import { loadAttachmentRagConfig } from '../shared/api/attachmentRagConfig';
+// RD20 (round43): 历史 run → 任务板恢复映射。
 import { CHAT_DOCUMENT_EXTENSIONS } from '../shared/lib/hooks/useFileUpload';
 import { useStore } from '../shared/lib/store';
 import { useIsMobile } from '../shared/lib/useIsMobile';
@@ -21,6 +24,7 @@ import {
   ActiveAgentIndicator,
   ChatInput,
   MessageList,
+  PendingQueueStrip,
   RunSummaryPanel,
   SubagentLivePanel,
 } from '../widgets/chat';
@@ -64,6 +68,9 @@ export function Chat() {
     planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
     preflightPhase, // Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示）
     clearPlanApproval, // PM2: 清除批准状态
+    pendingMessages, // P1-6: 排队待发消息（会自动连发，需可见可撤）
+    cancelPending, // P1-6: 撤回单条排队消息
+    clearPendingForSession, // P1-6: 清空本会话排队消息
   } = useChat();
   // right-panel R1 批次 A: 开合上抬 rightPanelStore（自动唤起/内联卡片需要
   // 跨组件写面板状态）；localStorage 迁移进 store，此处只读订阅。
@@ -141,6 +148,7 @@ export function Chat() {
   const { settings, isLoading: settingsLoading } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
+  // Office M1-M2 chat-read: inject the active workspace path so the
   // ChatInput → AtFileMenu chain can surface office docs in @ autocomplete.
   // Default provider value is `undefined` (no workspace selected yet in M1-M2),
   // which keeps file-search behavior unchanged in production. Office.tsx will
@@ -179,6 +187,7 @@ export function Chat() {
       pendingSentRef.current = true;
       sendMessage(pendingMessage, currentSessionId);
       // Clear location state so refresh doesn't re-send.
+      // 2026-09 修复: 裸 replaceState({}, '') 会把 react-router 存在
       // history.state 里的 {idx, key} 一并抹掉, 破坏后退导航 —— 改走
       // router API 只清业务 state。
       navigate(location.pathname + location.search, { replace: true, state: null });
@@ -259,12 +268,19 @@ export function Chat() {
             att.name,
             att.type || CHAT_DOC_MIME[ext] || 'text/plain',
           )) as { media_ref?: { id?: string } } | undefined;
-          if (res?.media_ref?.id) attachmentMediaIds.push(res.media_ref.id);
-          else toast.warning(`附件上传失败: ${att.name}`);
+          if (res?.media_ref?.id) {
+            attachmentMediaIds.push(res.media_ref.id);
+            // r74: 检索配置启用时自动建索引（fire-and-forget，不阻断发送）
+            maybeIndexAttachment(res.media_ref.id);
+          } else toast.warning(`附件上传失败: ${att.name}`);
         } catch {
           toast.warning(`附件上传失败: ${att.name}`);
         }
       }
+
+      // r67: 超长文档检索注入（opt-in，localStorage 配置）
+      const r67Rag = loadAttachmentRagConfig();
+      const attachmentRag = r67Rag.enabled ? { embed: r67Rag.embed, top_k: r67Rag.top_k } : null;
 
       if (!currentSessionId) {
         const sessionId = await createSession();
@@ -273,6 +289,7 @@ export function Chat() {
           memoryDisabled: tempChatSessions.has(sessionId),
           images,
           attachmentMediaIds,
+          attachmentRag,
           contextReset: options?.contextReset,
         });
       } else {
@@ -281,6 +298,7 @@ export function Chat() {
           memoryDisabled: tempChatSessions.has(currentSessionId),
           images,
           attachmentMediaIds,
+          attachmentRag,
           contextReset: options?.contextReset,
         });
       }
@@ -308,6 +326,8 @@ export function Chat() {
     handleDeleteMessage,
     handleQuote,
     handleSaveToMemory,
+    handleOpenMemory,
+    handleBlockedAction,
     handleCancelRun,
     handleRerunFailed,
   } = useChatMessageActions({
@@ -393,8 +413,7 @@ export function Chat() {
         <div className="flex-1 flex flex-col min-h-0 min-w-0">
           {/* UX-IA R1 批次 B: 会话级提示按优先级合并（错误 > 中断 > 话题切换），
               同一时刻只展示最重要的一条，其余折叠为「另有 N 条提示」。
-              R17-D 语义不变：只渲染归属当前会话的错误。
-              win7 线：错误条无「重试」按钮（沿用 release/win7 既有行为），不传 onRetry。 */}
+              R17-D 语义不变：只渲染归属当前会话的错误，"重试"作用于出错会话本身。 */}
           <ChatNoticeStack
             notices={[
               error != null &&
@@ -402,7 +421,17 @@ export function Chat() {
                 errorSessionId === currentSessionId && {
                   key: 'error',
                   priority: CHAT_NOTICE_PRIORITY.error,
-                  node: <ChatInlineError error={error} onClose={clearError} />,
+                  node: (
+                    <ChatInlineError
+                      error={error}
+                      onRetry={() => {
+                        clearError();
+                        const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+                        if (lastUser) void sendMessage(lastUser.content);
+                      }}
+                      onClose={clearError}
+                    />
+                  ),
                 },
               showInterruptBanner && {
                 key: 'interrupted',
@@ -450,6 +479,8 @@ export function Chat() {
                 onQuote={handleQuote}
                 onQuoteSelection={quoteText}
                 onSaveToMemory={handleSaveToMemory}
+                onOpenMemory={handleOpenMemory}
+                onBlockedAction={handleBlockedAction}
               />
             )}
             {/* 对标 S2: 内联记忆提示（"已记住"可撤销）；临时聊天不显示 */}
@@ -520,6 +551,18 @@ export function Chat() {
 
           {/* TM2 (DSH 对标 R11): 上下文水位徽章（≥0.6 才渲染） */}
           <KeyboardShortcutsHelp />
+          {/* P1-6: 排队队列常驻可见。放在输入框正上方 —— 队列会在当前回复
+              结束后自动连发，用户必须能在真正发出去之前看见并撤回。
+              只展示当前会话的条目（队列按会话隔离，见 useChat S3）。 */}
+          <PendingQueueStrip
+            items={pendingMessages
+              .filter((p) => p.sid === currentSessionId)
+              .map((p) => ({ id: p.id, content: p.content }))}
+            onCancel={cancelPending}
+            onClearAll={() => {
+              if (currentSessionId) clearPendingForSession(currentSessionId);
+            }}
+          />
           <ChatInput
             onSend={handleSendMessageWithEditResend}
             onInterrupt={interrupt}

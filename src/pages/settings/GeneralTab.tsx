@@ -6,6 +6,11 @@ import { useEffect, useState } from 'react';
 
 import { DiagnosticCard } from '../../features/diagnostic';
 import { useSettings } from '../../features/manage-settings/useSettings';
+import {
+  loadAttachmentRagConfig,
+  saveAttachmentRagConfig,
+  type AttachmentRagConfig,
+} from '../../shared/api/attachmentRagConfig';
 import { getDemoModeOverride, setDemoModeOverride } from '../../shared/api/demoRuntime';
 import { invoke } from '../../shared/api/desktopInvoke';
 import { settingsClient } from '../../shared/api/settingsClient';
@@ -62,6 +67,7 @@ function PermissionModeSelector() {
   return (
     <>
       <SettingRow
+        anchor="permission_mode"
         label={t('settings.permission.mode')}
         desc={t(`settings.permission.mode.${mode}.desc` as TranslationKey)}
       >
@@ -188,6 +194,7 @@ function FallbackModelInput(): JSX.Element {
 
   return (
     <SettingRow
+      anchor="fallback_model"
       label="降级模型 (fallback)"
       desc="主模型重试耗尽（限流/服务端错误/超时）后自动切换到此模型；留空 = 不降级"
     >
@@ -243,6 +250,7 @@ function SpendLimitInput(): JSX.Element {
 
   return (
     <SettingRow
+      anchor="spend_limit"
       label="每日花费限额 (USD)"
       desc="按估算成本拦截当日请求；0 或留空 = 不限。保存即生效"
     >
@@ -291,6 +299,7 @@ function AutoCheckpointCard() {
     <section data-testid="auto-checkpoint-section">
       <h3 className="text-sm font-semibold text-text mb-3">安全网</h3>
       <SettingRow
+        anchor="auto_checkpoint"
         label="发送前自动快照"
         desc="每轮对话开始前为绑定的工作区创建检查点，可在变更面板一键回滚（默认开）"
       >
@@ -377,6 +386,7 @@ function ResetDefaultsSection({ resetSettings }: { resetSettings: () => Promise<
     return (
       <>
         <SettingRow
+          anchor="reset_settings"
           label="恢复默认设置"
           desc="将外观 / 模型上下文 / 编排 / 权限模式 / 网络 / 钩子 / 花费限额等全部设置项恢复默认"
         >
@@ -592,10 +602,18 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => Promise<voi
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">对话</h3>
-        <SettingRow label="自动记忆提取" desc="对话中自动识别并保存关键信息到记忆库">
+        <SettingRow
+          anchor="autoMemory"
+          label="自动记忆提取"
+          desc="对话中自动识别并保存关键信息到记忆库"
+        >
           <Toggle value={settings.autoMemory} onChange={(v) => updateSettings({ autoMemory: v })} />
         </SettingRow>
-        <SettingRow label="确认后再删除记忆" desc="删除记忆前弹出确认对话框">
+        <SettingRow
+          anchor="confirmDelete"
+          label="确认后再删除记忆"
+          desc="删除记忆前弹出确认对话框"
+        >
           <Toggle
             value={settings.confirmDelete}
             onChange={(v) => updateSettings({ confirmDelete: v })}
@@ -603,6 +621,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => Promise<voi
         </SettingRow>
         <ContextTurnLimitSelect />
       </section>
+      <AttachmentRagCard />
       <AutoCheckpointCard />
       <CloseToTrayCard />
       <section data-testid="demo-mode-section">
@@ -643,5 +662,110 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => Promise<voi
         <ArenaAccountsToggle />
       </section>
     </div>
+  );
+}
+
+/**
+ * r67: 超长文档检索注入（实验）——附件 >100k 字符时按相关度检索注入。
+ * 配置存 localStorage（聊天行为级），发送时由 Chat.tsx 读取并随请求携带。
+ */
+export function AttachmentRagCard() {
+  const [config, setConfig] = useState<AttachmentRagConfig>(() => loadAttachmentRagConfig());
+  const [saved, setSaved] = useState(false);
+
+  const update = (patch: Partial<AttachmentRagConfig>) => {
+    setSaved(false);
+    setConfig({ ...config, ...patch });
+  };
+
+  const handleSave = () => {
+    saveAttachmentRagConfig(config);
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 2000);
+  };
+
+  const inputClass =
+    'px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text w-full';
+
+  return (
+    <section data-testid="attachment-rag-section">
+      <h3 className="text-sm font-semibold text-text mb-3">超长文档检索注入（实验）</h3>
+      <SettingRow
+        anchor="attachment_rag"
+        label="启用附件检索"
+        desc="文档超过 10 万字符时不再整段截断，改为嵌入问题并注入最相关的片段（需在下方填写嵌入端点）"
+      >
+        <Toggle value={config.enabled} onChange={(v) => update({ enabled: v })} />
+      </SettingRow>
+      {config.enabled && (
+        <div className="mt-2 space-y-2 grid grid-cols-2 gap-2">
+          <label className="text-xs text-muted space-y-1 col-span-2">
+            <span>Embedding Base URL</span>
+            <input
+              data-testid="attachment-rag-base-url"
+              value={config.embed.base_url}
+              onChange={(e) => update({ embed: { ...config.embed, base_url: e.target.value } })}
+              placeholder="https://api.example.com/v1"
+              className={inputClass}
+            />
+          </label>
+          <label className="text-xs text-muted space-y-1">
+            <span>API Key</span>
+            <input
+              data-testid="attachment-rag-api-key"
+              type="password"
+              value={config.embed.api_key}
+              onChange={(e) => update({ embed: { ...config.embed, api_key: e.target.value } })}
+              className={inputClass}
+            />
+          </label>
+          <label className="text-xs text-muted space-y-1">
+            <span>模型</span>
+            <input
+              data-testid="attachment-rag-model"
+              value={config.embed.model}
+              onChange={(e) => update({ embed: { ...config.embed, model: e.target.value } })}
+              placeholder="text-embedding-3-small"
+              className={inputClass}
+            />
+          </label>
+          <label className="text-xs text-muted space-y-1">
+            <span>维度</span>
+            <input
+              data-testid="attachment-rag-dim"
+              type="number"
+              value={config.embed.dim}
+              onChange={(e) => update({ embed: { ...config.embed, dim: Number(e.target.value) } })}
+              className={inputClass}
+            />
+          </label>
+          <label className="text-xs text-muted space-y-1">
+            <span>注入片段数 top_k</span>
+            <input
+              data-testid="attachment-rag-top-k"
+              type="number"
+              value={config.top_k}
+              onChange={(e) => update({ top_k: Number(e.target.value) })}
+              className={inputClass}
+            />
+          </label>
+        </div>
+      )}
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="button"
+          data-testid="attachment-rag-save"
+          onClick={handleSave}
+          className="px-3 py-1 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary-hover"
+        >
+          保存
+        </button>
+        {saved && (
+          <span data-testid="attachment-rag-saved" className="text-xs text-green-500">
+            已保存
+          </span>
+        )}
+      </div>
+    </section>
   );
 }

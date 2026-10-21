@@ -49,6 +49,10 @@ export interface StreamingState {
   currentAgentId: string | null;
   /** P2: 当前 ReAct 迭代轮次 */
   iteration: number;
+  /** R17-E 收尾（r71）: memory_used 载荷写入（气泡内可展开） */
+  memory_refs?: { id: string; memory_type: string; preview: string }[];
+  /** r71: attachment_rag_used 载荷写入 */
+  rag_citations?: { media_id: string; mode: string }[];
   /**
    * 2026-10-20: LLM 重试可视化。state === 'retry' 时由 setRetryInfo 写入,
    * Message.tsx 读此字段渲染 RetryBanner（带倒计时）。非 retry 状态到达时
@@ -103,9 +107,7 @@ export function mergeLiveEvent(
   event: SubagentLiveEvent,
 ): SubagentLiveState {
   const base = prev ?? emptyLiveState();
-  const events: SubagentLiveEvent[] = [...base.events, event].slice(
-    -LIVE_EVENT_BUFFER_SIZE,
-  );
+  const events: SubagentLiveEvent[] = [...base.events, event].slice(-LIVE_EVENT_BUFFER_SIZE);
   const next: SubagentLiveState = {
     liveStep: event.live_step ?? base.liveStep,
     waitingApproval: base.waitingApproval,
@@ -127,6 +129,15 @@ export interface SessionStreamSlots {
   // P1 todo 接线 (2026-08-21): todo_snapshot 全量快照（agent 自维护清单）。
   todos: TodoItem[];
   /**
+   * 2026-09 step-by-step: 已完成 ReAct 步骤的快照数组（每条对应独立消息气泡）。
+   * - 收到 step_done 事件时,把当前 streaming state 打包成 Message 推入此数组
+   * - 同时重置 streaming.content=THINKING_PLACEHOLDER / streaming.reasoning=''
+   *   / streamingToolCalls=[],以便下一步的 deltas 路由到新的 messageId
+   * - DONE 事件不追加(最后一步走 finishStream 路径)
+   * - startStream / resetAll 时清空
+   */
+  completedSteps: Message[];
+  /**
    * Task 11 (2026-09-17): topic_shifted 事件 — 收到自动话题切换通知时
    * 写入,前端 TopicShiftBanner 展示"恢复完整上下文"入口;用户点恢复
    * 或点关闭时调用 clearShiftInfo 清掉;切会话 / startStream 也会清。
@@ -141,15 +152,6 @@ export interface SessionStreamSlots {
    * task_plan 初始化 / finishStream 兜底时清空。
    */
   preflightPhase: 'clarify' | 'scout' | null;
-  /**
-   * 2026-09 step-by-step: 已完成 ReAct 步骤的快照数组（每条对应独立消息气泡）。
-   * - 收到 step_done 事件时,把当前 streaming state 打包成 Message 推入此数组
-   * - 同时重置 streaming.content=THINKING_PLACEHOLDER / streaming.reasoning=''
-   *   / streamingToolCalls=[],以便下一步的 deltas 路由到新的 messageId
-   * - DONE 事件不追加(最后一步走 finishStream 路径)
-   * - startStream / resetAll 时清空
-   */
-  completedSteps: Message[];
 }
 
 const EMPTY_SLOTS: SessionStreamSlots = {
@@ -198,7 +200,12 @@ interface ChatStreamStoreState {
   setStreamingMeta: (
     sessionId: string,
     messageId: string,
-    patch: Partial<Pick<StreamingState, 'state' | 'currentAgentId' | 'iteration'>>,
+    patch: Partial<
+      Pick<
+        StreamingState,
+        'state' | 'currentAgentId' | 'iteration' | 'memory_refs' | 'rag_citations'
+      >
+    >,
   ) => void;
   /**
    * 2026-10-20: 写入 LLM 重试信息。Message.tsx 从 streaming.retryInfo 读
@@ -206,16 +213,6 @@ interface ChatStreamStoreState {
    * setStreamingMeta 自动清 null。
    */
   setRetryInfo: (sessionId: string, messageId: string, info: RetryInfo | null) => void;
-  /**
-   * 2026-09 step-by-step: 把当前 streaming 状态快照为一条已完成的 Message,
-   * 推入 completedSteps。
-   */
-  addCompletedStep: (sessionId: string, messageId: string, message: Message) => void;
-  /**
-   * 2026-09 step-by-step: 完成一步后重置 streaming 为占位态,
-   * 并切换 streaming.messageId 到 newMessageId,让后续 deltas 路由到新消息。
-   */
-  finalizeStep: (sessionId: string, oldMessageId: string, newMessageId: string) => void;
   clearStream: (sessionId: string, messageId: string) => void;
 
   // —— 工具调用 ——
@@ -234,6 +231,20 @@ interface ChatStreamStoreState {
 
   // —— todo 清单（P1 接线） ——
   setTodos: (sessionId: string, todos: TodoItem[]) => void;
+
+  // —— 2026-09 step-by-step ——
+  /**
+   * 把当前 streaming 状态快照为一条已完成的 Message,推入 completedSteps。
+   * 不重置 streaming —— 由 finalizeStep 配套重置并切换 messageId。
+   * 调用方应保证此时 streaming.messageId === messageId（否则 action 静默 noop）。
+   */
+  addCompletedStep: (sessionId: string, messageId: string, message: Message) => void;
+  /**
+   * 完成一步:push 完成后重置 streaming.content/reasoning/streamingToolCalls 为占位态,
+   * 并切换 streaming.messageId 到 newMessageId,让后续 deltas 路由到新消息。
+   * 配套 addCompletedStep 使用:先 addCompletedStep,再 finalizeStep。
+   */
+  finalizeStep: (sessionId: string, oldMessageId: string, newMessageId: string) => void;
 
   // —— Task 11 (2026-09-17): topic_shifted 横幅态 ——
   /** 收到 topic_shifted 事件时写入;前端 TopicShiftBanner 立刻可见。 */

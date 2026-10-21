@@ -25,7 +25,6 @@ export const COMMAND_ROUTES: Record<string, CommandRoute> = {
   ...DOMAIN_ROUTES, // electron/commandRoutes/*: add new commands there, not in this file
 };
 
-
 export class UnknownIpcCommandError extends Error {
   constructor(cmd: string) {
     super(
@@ -46,3 +45,4 @@ export class UnknownIpcCommandError extends Error {
  * error, or abort. Read by main.ts on `sage:unlisten`.
  */
 export const streamControllers = new Map<string, AbortController>();
+

@@ -189,6 +189,7 @@ const markdownComponents = {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
+        title={href}
         className="text-primary hover:underline"
       >
         {children}

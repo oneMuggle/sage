@@ -105,7 +105,7 @@ export function WorkspaceBindModal({
                 data-testid="workspace-bind-copy-path-btn"
                 onClick={async () => {
                   setCopiedPath(true);
-                  /* v8 ignore start */
+                  /* v8 ignore next */
                   setTimeout(() => {
                     if (typeof window !== 'undefined') setCopiedPath(false);
                   }, 1500);
@@ -114,7 +114,6 @@ export function WorkspaceBindModal({
                   } catch {
                     // ignore
                   }
-                  /* v8 ignore stop */
                 }}
                 className="px-2 py-0.5 rounded border border-border bg-bg-subtle text-xs text-text-secondary hover:text-text"
               >
@@ -125,17 +124,16 @@ export function WorkspaceBindModal({
                 data-testid="workspace-bind-copy-md-btn"
                 onClick={async () => {
                   setCopiedMd(true);
-                  const md = `# 当前绑定工作区\n- **目录路径**：\`${currentPath}\`\n- **绑定状态**：已绑定`;
-                  /* v8 ignore start */
+                  /* v8 ignore next */
                   setTimeout(() => {
                     if (typeof window !== 'undefined') setCopiedMd(false);
                   }, 1500);
+                  const md = `# 当前绑定工作区\n- **目录路径**：\`${currentPath}\`\n- **绑定状态**：已绑定`;
                   try {
                     await navigator.clipboard?.writeText(md);
                   } catch {
                     // ignore
                   }
-                  /* v8 ignore stop */
                 }}
                 className="px-2 py-0.5 rounded border border-border bg-bg-subtle text-xs text-text-secondary hover:text-text"
               >
@@ -146,7 +144,7 @@ export function WorkspaceBindModal({
                 data-testid="workspace-bind-copy-json-btn"
                 onClick={async () => {
                   setCopiedJson(true);
-                  /* v8 ignore start */
+                  /* v8 ignore next */
                   setTimeout(() => {
                     if (typeof window !== 'undefined') setCopiedJson(false);
                   }, 1500);
@@ -157,7 +155,6 @@ export function WorkspaceBindModal({
                   } catch {
                     // ignore
                   }
-                  /* v8 ignore stop */
                 }}
                 className="px-2 py-0.5 rounded border border-border bg-bg-subtle text-xs text-text-secondary hover:text-text"
               >

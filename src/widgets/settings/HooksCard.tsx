@@ -216,7 +216,7 @@ export function HooksCard(): JSX.Element | null {
                     data-testid={`builtin-copy-json-${builtin.id}`}
                     onClick={async () => {
                       setCopiedBuiltinId(builtin.id);
-                      /* v8 ignore start */
+                      /* v8 ignore next */
                       setTimeout(() => {
                         if (typeof window !== 'undefined') {
                           setCopiedBuiltinId((prev) => (prev === builtin.id ? null : prev));
@@ -229,7 +229,6 @@ export function HooksCard(): JSX.Element | null {
                       } catch {
                         // ignore
                       }
-                      /* v8 ignore stop */
                     }}
                     className="px-2 py-1 text-xs rounded-radius-sm border border-border text-text-secondary hover:bg-bg-hover"
                   >
@@ -305,7 +304,7 @@ export function HooksCard(): JSX.Element | null {
                 data-testid={`hook-copy-json-${originalIdx}`}
                 onClick={async () => {
                   setCopiedHookIdx(originalIdx);
-                  /* v8 ignore start */
+                  /* v8 ignore next */
                   setTimeout(() => {
                     if (typeof window !== 'undefined') {
                       setCopiedHookIdx((prev) => (prev === originalIdx ? null : prev));
@@ -316,7 +315,6 @@ export function HooksCard(): JSX.Element | null {
                   } catch {
                     // ignore
                   }
-                  /* v8 ignore stop */
                 }}
                 className="px-1.5 py-1 text-ui-xs rounded border border-border text-text-secondary hover:text-text"
               >
@@ -346,6 +344,10 @@ export function HooksCard(): JSX.Element | null {
           data-testid="hooks-copy-all-md-btn"
           onClick={async () => {
             setCopiedAllMd(true);
+            /* v8 ignore next */
+            setTimeout(() => {
+              if (typeof window !== 'undefined') setCopiedAllMd(false);
+            }, 1500);
             const md = [
               `# 全局 Hook 配置清单 (${hooks.length})`,
               ...hooks.map(
@@ -353,16 +355,11 @@ export function HooksCard(): JSX.Element | null {
                   `- #${idx + 1} [${h.event}] matcher=\`${h.matcher}\` ${h.builtin_id ? `(内置: ${h.builtin_id})` : `cmd=\`${h.command}\``}`,
               ),
             ].join('\n');
-            /* v8 ignore start */
-            setTimeout(() => {
-              if (typeof window !== 'undefined') setCopiedAllMd(false);
-            }, 1500);
             try {
               await navigator.clipboard?.writeText(md);
             } catch {
               // ignore
             }
-            /* v8 ignore stop */
           }}
           className="px-2 py-1 text-xs border border-border rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
         >
@@ -373,7 +370,7 @@ export function HooksCard(): JSX.Element | null {
           data-testid="hooks-copy-all-json-btn"
           onClick={async () => {
             setCopiedAllJson(true);
-            /* v8 ignore start */
+            /* v8 ignore next */
             setTimeout(() => {
               if (typeof window !== 'undefined') setCopiedAllJson(false);
             }, 1500);
@@ -384,7 +381,6 @@ export function HooksCard(): JSX.Element | null {
             } catch {
               // ignore
             }
-            /* v8 ignore stop */
           }}
           className="px-2 py-1 text-xs border border-border rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
         >

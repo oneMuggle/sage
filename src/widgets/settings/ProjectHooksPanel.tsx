@@ -130,7 +130,7 @@ export function ProjectHooksPanel(): JSX.Element | null {
     if (!workspace || !status) return;
     setCopiedJson(true);
     setTimeout(() => {
-      /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedJson(false);
+      if (typeof window !== 'undefined') setCopiedJson(false);
     }, 1500);
     try {
       await navigator.clipboard?.writeText(
@@ -165,7 +165,7 @@ export function ProjectHooksPanel(): JSX.Element | null {
     if (!workspace) return;
     setCopiedConfigPath(true);
     setTimeout(() => {
-      /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedConfigPath(false);
+      if (typeof window !== 'undefined') setCopiedConfigPath(false);
     }, 1500);
     const cfgPath = `${workspace.replace(/[/\\]+$/, '')}/.sage/hooks.json`;
     try {

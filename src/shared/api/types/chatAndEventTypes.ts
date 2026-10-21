@@ -1,6 +1,5 @@
 import type { LLMErrorResponse } from '../../lib/errorMapping';
-
-import type { OfficeDocType } from './officeDocTypes';
+import type { OfficeDocType } from '../types';
 
 /**
  * Sage API - 类型定义
@@ -88,7 +87,14 @@ export type WorkspaceSearchKind =
   | 'office-ppt'
   | 'office-word'
   | 'office-excel'
-  | 'office-pdf';
+  | 'office-pdf'
+  // Phase 3.4 (2026-09-17): allowed_paths 搜索结果 —— 与上述 kind 同构但
+  // 带 `allowed-` 前缀，前端据此区分"workspace 内"与"allowed_paths 只读"。
+  | 'allowed-file'
+  | 'allowed-ppt'
+  | 'allowed-word'
+  | 'allowed-excel'
+  | 'allowed-pdf';
 
 export interface WorkspaceSearchResult {
   name: string;
@@ -210,7 +216,6 @@ export type AgentState =
   | 'failed'
   // 2026-09 step-by-step: 每次 ReAct 迭代结束（OBSERVING 之后）由后端产出,
   // 前端据此把当前 streaming 气泡快照为已完成 step + 准备下一步占位。
-  // win7: 后端枚举暂未产出 step_done,类型先行对齐 main（r112 全态锁定测试需要）。
   | 'step_done'
   // Multi-Agent Orchestration (2026-08-11)
   | 'task_plan'
@@ -245,12 +250,12 @@ export type AgentState =
   | 'context_pressure'
   // Task 10 (2026-09-17): 自动话题检测 — 切换 segment 时由 producer 推送。
   | 'topic_shifted'
-  // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）,
-  // 载荷见 AgentEvent.preflight_phase。先于 task_plan 到达。
-  | 'orch_preflight'
   // r71: 附件检索注入溯源（引用块在气泡内可展开）,
   // 载荷见 AgentEvent.citations。
   | 'attachment_rag_used'
+  // Round 3 (2026-09-19): 编排拆解前置进度（需求澄清/事实侦察）,
+  // 载荷见 AgentEvent.preflight_phase。先于 task_plan 到达。
+  | 'orch_preflight'
   // right-panel R5 (2026-09-19): 写文件工具落盘后经活跃流推送的变更信号,
   // 前端据此防抖刷新右侧变更列表,载荷见 AgentEvent.change。
   | 'workspace_changed'
@@ -527,15 +532,17 @@ export interface RetryInfo {
 export interface AgentEvent {
   state: AgentState;
   iteration: number;
+  /** 2026-09 step-by-step: 当前事件所属 step 序号（与 iteration 对齐; STEP_DONE 时明确设置）。 */
+  step_index?: number;
   content?: string;
   reasoning?: string; // LLM 思考/推理过程内容
   tool_call?: AgentToolCall;
   tool_result?: AgentToolResult;
   /** producer 失败信封: LLMError.to_dict() 为 dict; 旧路径/限额拦截为 str */
   error?: string | { type?: string; message?: string; status_code?: number };
-  /** client_message_id 协议 (同步 #1155): DONE 附带 assistant 消息的服务端 id */
+  /** client_message_id 协议: DONE 附带 assistant 消息的服务端 id, 供前端替换占位 id */
   message_id?: string;
-  /** 首轮对话标记: 标题将在后台生成, 前端稍后补刷侧栏 (同步 #1196) */
+  /** 首轮对话标记: 标题将在后台生成, 前端稍后补刷侧栏 (2026-09) */
   title_pending?: boolean;
   /** 第二轮 B2: DONE 携带的 LLM 终止原因（length = 触达输出上限被截断） */
   finish_reason?: string;

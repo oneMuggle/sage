@@ -26,6 +26,10 @@ export interface McpServerStatusEntry {
   last_error: string | null;
   since: number;
   required: boolean;
+  /** R53: 已禁用的工具 id 列表 */
+  disabled_tools?: string[];
+  /** r65: 是否已 OAuth 授权（不透出 token 本体） */
+  has_oauth_token?: boolean;
 }
 
 export interface McpStatusReport {
@@ -46,6 +50,8 @@ export interface McpServerConfig {
   enabled: boolean;
   required: boolean;
   timeout_seconds: number;
+  // R20-B per-tool 禁用清单（全量替换语义；勾选 UI 的数据源）
+  disabled_tools?: string[];
   builtin: boolean;
 }
 
@@ -61,6 +67,21 @@ export interface AddMcpServerInput {
 export interface UpdateMcpServerChanges {
   enabled?: boolean;
   timeoutSeconds?: number;
+  /** R53: 工具禁用列表（全量替换语义） */
+  disabledTools?: string[];
+}
+
+// r53-B: per-tool 开关面板的读取载荷（GET /mcp/servers/{name}/tools）
+export interface McpToolSpec {
+  name: string;
+  description: string;
+}
+
+export interface McpServerToolsReport {
+  server: string;
+  state: McpServerState;
+  tools: McpToolSpec[];
+  disabled_tools: string[];
 }
 
 export const MCP_NAME_REGEX = /^[a-z0-9_-]{1,64}$/;
@@ -100,7 +121,22 @@ export const mcpClient = {
       name,
       enabled: changes.enabled,
       timeout_seconds: changes.timeoutSeconds,
+      disabled_tools: changes.disabledTools,
     });
+  },
+
+  async serverTools(name: string): Promise<McpServerToolsReport> {
+    return invoke<McpServerToolsReport>('mcp_server_tools', { name });
+  },
+
+  /**
+   * r64: OAuth 授权（长请求——后端阻塞等待浏览器回调，上限 300s）。
+   * 仅 HTTP 传输服务器可用；成功后 token 入库，Authorization 注入自动生效。
+   */
+  async authorizeServer(
+    name: string,
+  ): Promise<{ ok: boolean; server: string; token_type: string; expires_at: number }> {
+    return invoke('mcp_server_authorize', { name });
   },
 
   async deleteServer(name: string): Promise<{ ok: boolean; name: string }> {

@@ -41,6 +41,18 @@ export interface Session {
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）
+/** R19-W1: 网页访问被拦截时后端给出的建议操作（拦截卡片按钮）。 */
+export interface BlockedAction {
+  /** 动作标识: open_browser | configure_credentials | configure_proxy | view_docs */
+  action: string;
+  /** 按钮文案（后端已本地化） */
+  label: string;
+  /** 可选图标（emoji） */
+  icon?: string;
+  /** 动作参数（如 url / domain / topic） */
+  params?: Record<string, unknown>;
+}
+
 export interface ToolCall {
   /** 后端 tool_call.id, 用于 observing 事件精确匹配 (HIGH-3 修复) */
   id?: string;
@@ -59,8 +71,14 @@ export interface ToolCall {
       source?: string;
     }>;
     apiUrls?: string[];
-    /** 工具调用被拦截时的原因（拦截式 hook 触发时填充） */
+    /** R19-W1: 网页访问拦截原因枚举（antibot_cf | antibot_other | login_wall |
+     *  http_4xx | http_5xx | timeout | dns | render | generic）。
+     *  存在时 chat 流渲染拦截卡片而非原始结果文本。 */
     blockReason?: string;
+    /** R19-W1: 被拦截的目标 URL */
+    blockedUrl?: string;
+    /** R19-W1: 建议操作按钮 */
+    suggestedActions?: BlockedAction[];
   };
 }
 
@@ -137,7 +155,7 @@ interface StoreState {
   addMessage: (message: Message) => void;
   /** PR-6: 用同一 id 的新对象替换某条消息 (流式 chat 结束时写回最终 content) */
   updateMessage: (id: string, patch: Partial<Message>) => void;
-  /** client_message_id 协议 (同步 #1155): DONE 携带服务端 id 后原地替换占位 id */
+  /** client_message_id 协议: DONE 携带服务端 id 后, 把乐观占位 id 原地替换 */
   replaceMessageId: (oldId: string, newId: string) => void;
   /** R17-B: 本地移除一条消息（配合 messageApi.delete 的删除入口） */
   removeMessage: (id: string) => void;
@@ -286,7 +304,8 @@ export const useStore = create<StoreState>((set, _get) => ({
 
     try {
       set({ isLoading: true });
-      // 2026-09 修复 (同步 #1100): 缺省 limit=100 会把长会话截断在前 100 条
+      // 2026-09 修复: 缺省 limit=100 会把长会话截断在前 100 条且无翻页
+      // 补偿 —— 与 fork/export/compact 的全量读取同口径 (仓库内既有实践)。
       const loadedMessages = await invoke<Message[]>('get_messages', {
         sessionId,
         limit: 100000,
@@ -310,9 +329,9 @@ export const useStore = create<StoreState>((set, _get) => ({
 
   // 添加消息。
   // 会话守卫 (2026-09 修复): 只把属于当前会话的消息追加进可见列表。
-  // messages 是单数组而非按会话分桶, 后台会话 (忙时队列 flush / 并行流 /
-  // reattach) 的乐观消息若无条件 append, 会实时"长"进用户正在看的会话;
-  // 这些消息由后端持久化, 切回时经 loadMessages 正常装载。
+  // messages 是单数组而非按会话分桶, 后台会话 (U5 忙时队列 flush /
+  // 并行流 / reattach) 的乐观消息若无条件 append, 会实时"长"进用户
+  // 正在看的会话; 这些消息由后端持久化, 切回时经 loadMessages 正常装载。
   addMessage: (message) => {
     set((state) =>
       state.currentSessionId != null && message.session_id !== state.currentSessionId
@@ -328,8 +347,8 @@ export const useStore = create<StoreState>((set, _get) => ({
     }));
   },
 
-  // client_message_id 协议 (同步 #1155): DONE 携带服务端 id 后原地替换
-  // 乐观占位 id —— 此后 loadMessages 对账按 id 精确命中。
+  // client_message_id 协议: DONE 携带服务端 id 后原地替换乐观占位 id ——
+  // 此后 loadMessages 对账按 id 精确命中, 不再依赖 (role, content) 计数兜底。
   replaceMessageId: (oldId, newId) => {
     set((state) => ({
       messages: state.messages.map((m) => (m.id === oldId ? { ...m, id: newId } : m)),
