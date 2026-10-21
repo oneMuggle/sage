@@ -94,3 +94,26 @@ export function reportStreamFailure(
 export function reportStreamSuccess(): void {
   if (useEndpointStatusStore.getState().issue) useEndpointStatusStore.getState().clear();
 }
+
+export function formatEndpointIssueSummary(issue: EndpointIssue | null, dismissed = false): string {
+  if (!issue) return 'healthy';
+  const target = issue.host ?? issue.baseUrl ?? 'unknown-host';
+  return `${issue.kind} · ${target} · status ${issue.status ?? 'n/a'} · ${dismissed ? 'dismissed' : 'active'}`;
+}
+
+export function formatEndpointIssueJson(issue: EndpointIssue | null, dismissed = false): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.endpoint_status.v1',
+      healthy: issue === null,
+      dismissed,
+      kind: issue?.kind ?? null,
+      host: issue?.host ?? null,
+      model: issue?.model ?? null,
+      status: issue?.status ?? null,
+      message: issue?.message ?? null,
+    },
+    null,
+    2,
+  );
+}

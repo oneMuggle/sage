@@ -192,3 +192,31 @@ describe('loadMessages merge behavior', () => {
     spy.mockRestore();
   });
 });
+
+describe('store diagnostic formatters (Phase P114)', () => {
+  it('formats store session summary and JSON payload', async () => {
+    const { formatStoreSessionSummary, formatStoreSessionJson } = await import('../store');
+    const sessions = [
+      {
+        id: 's1',
+        title: 'First',
+        created_at: 1,
+        updated_at: 2,
+        last_message_at: 2,
+        message_count: 3,
+        is_pinned: true,
+      },
+    ];
+    expect(formatStoreSessionSummary(sessions, 's1', 3)).toBe(
+      '1 sessions · current s1 · 3 messages',
+    );
+    const parsed = JSON.parse(formatStoreSessionJson(sessions, 's1', 3));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.store_snapshot.v1',
+      sessionCount: 1,
+      currentSessionId: 's1',
+      messageCount: 3,
+      pinnedCount: 1,
+    });
+  });
+});
