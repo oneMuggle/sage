@@ -138,6 +138,11 @@ class ReviewService:
         self._model = model or _resolve_injected_provider_model()
         self._prompt_template = self._load_prompt_template()
 
+    @property
+    def model(self) -> str:
+        """已装配的 review 模型名，供同域离线生成服务复用。"""
+        return self._model
+
     # ------------------------------------------------------------------ #
     # Prompt template
     # ------------------------------------------------------------------ #

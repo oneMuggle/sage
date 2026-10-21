@@ -28,6 +28,7 @@ import { MemorySettingsTab } from './MemorySettingsTab';
 import { ModelsTab } from './ModelsTab';
 import { NetworkTab } from './NetworkTab';
 import { OrchestrationTab } from './OrchestrationTab';
+import { PluginsTab } from './PluginsTab';
 import { ProvidersManager } from './ProvidersManager';
 import { RemoteWorkspacesTab } from './RemoteWorkspacesTab';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
@@ -112,6 +113,7 @@ export function Settings() {
     { key: 'memory', label: t('settings.tab.memory') },
     { key: 'network', label: t('settings.tab.network') },
     { key: 'mcp', label: t('settings.tab.mcp') },
+    { key: 'plugins', label: t('settings.tab.plugins') },
     { key: 'remote-workspaces', label: t('settings.tab.remote-workspaces') },
     { key: 'zotero', label: t('settings.tab.zotero') },
     { key: 'runtime', label: t('settings.tab.runtime') },
@@ -315,6 +317,7 @@ export function Settings() {
             {activeTab === 'network' && <NetworkTab />}
             {activeTab === 'remote-workspaces' && <RemoteWorkspacesTab />}
             {activeTab === 'mcp' && <McpTab />}
+            {activeTab === 'plugins' && <PluginsTab />}
             {activeTab === 'zotero' && <ZoteroTab />}
             {activeTab === 'runtime' && <RuntimeEnvTab />}
             {activeTab === 'evolution' && (

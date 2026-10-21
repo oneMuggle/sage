@@ -107,6 +107,7 @@ from backend.api.office_routes import (
 )
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.permission_routes import router as permission_router
+from backend.api.plugin_routes import router as plugin_router
 from backend.api.project_ai_routes import router as project_ai_router
 from backend.api.project_routes import router as project_router
 from backend.api.prompt_routes import router as prompt_router
@@ -325,6 +326,11 @@ async def lifespan(app: FastAPI):
     # Local desktop capability: resolve the token before serving any sensitive route.
     # The value is intentionally never logged or returned by the health endpoint.
     initialize_local_auth_token()
+
+    # R84: 已采用的 fileized harness lock 必须在任何 DB/恢复副作用前通过。
+    from backend.application.kernel.harness_files import assert_adopted_harness_files_valid
+
+    assert_adopted_harness_files_valid()
 
     # R21-A: 应用待恢复备份（必须在 init_db 之前 —— 原子替换主库文件后
     # 再建连接，避免旧 WAL 污染恢复出的库）。fail-safe，不阻塞启动。
@@ -980,6 +986,14 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001 — shutdown must not raise
         logger.warning("MCP client shutdown failed: %s", exc)
 
+    # R83: stop out-of-process plugin workers held by the global host.
+    try:
+        from backend.plugins.host import shutdown_plugin_hosts
+
+        shutdown_plugin_hosts()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("Plugin host shutdown failed: %s", exc)
+
 
 async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
     """每 60s 清理一次孤儿流(创建后 5 分钟仍未 done/failed 的)。"""
@@ -1114,6 +1128,8 @@ app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")
 # M6 生态扩展 Phase 1: /api/v1/hooks/builtins 内置钩子元数据 (设置页"推荐 Hook")
 app.include_router(hooks_router, prefix="/api/v1")
+# R82: /api/v1/plugins 插件生命周期记录 REST（代码托管留待 R83）
+app.include_router(plugin_router, prefix="/api/v1")
 # M2 part B: /api/v1/questions/{pending, <id>/answer}（AskUserQuestion）
 app.include_router(question_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")

@@ -22,7 +22,13 @@ from typing import Any, List, Optional, Set
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from backend.application.kernel.harness_files import HarnessFilesError
 from backend.skills.draft_store import get_skill_draft_store
+from backend.skills.harness_proposal_bridge import (
+    approve_harness_proposal_draft,
+    is_harness_proposal_draft,
+    reject_harness_proposal_draft,
+)
 from backend.skills.loader import get_skill_loader
 from backend.skills.skill_md.frontmatter import (
     SkillMdParseError,
@@ -118,6 +124,33 @@ def approve_skill_draft(draft_id: str):
             status_code=404,
             detail={"code": "draft_not_found", "message": "Draft not found"},
         )
+
+    if is_harness_proposal_draft(draft):
+        try:
+            result = approve_harness_proposal_draft(draft, draft_store)
+        except HarnessFilesError as exc:
+            logger.warning(
+                "Harness proposal draft cannot be adopted: draft=%s error_type=%s",
+                _safe_log_field(draft_id),
+                type(exc).__name__,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "harness_proposal_not_adoptable",
+                    "message": "Harness proposal cannot be adopted",
+                },
+            ) from exc
+        proposal = result.get("proposal") or {}
+        adoption = proposal.get("adoption") or {}
+        return {
+            "status": "approved",
+            "kind": "harness_proposal",
+            "draft_id": draft_id,
+            "proposal_id": proposal.get("id"),
+            "changed_files": result.get("changed_files")
+            or adoption.get("changed_files", []),
+        }
 
     # I-1 fix: validate name *before* touching the filesystem so that
     # drafts with un-writable names (LLM hallucinations like "../foo")
@@ -256,6 +289,30 @@ def reject_skill_draft(draft_id: str):
             status_code=404,
             detail={"code": "draft_not_found", "message": "Draft not found"},
         )
+
+    if is_harness_proposal_draft(draft):
+        try:
+            result = reject_harness_proposal_draft(draft, draft_store)
+        except HarnessFilesError as exc:
+            logger.warning(
+                "Harness proposal draft cannot be rejected: draft=%s error_type=%s",
+                _safe_log_field(draft_id),
+                type(exc).__name__,
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "harness_proposal_not_rejectable",
+                    "message": "Harness proposal cannot be rejected",
+                },
+            ) from exc
+        proposal = result.get("proposal") or {}
+        return {
+            "status": "rejected",
+            "kind": "harness_proposal",
+            "draft_id": draft_id,
+            "proposal_id": proposal.get("id"),
+        }
 
     draft_store.update_status(draft_id, "rejected")
     return {"status": "rejected", "draft_id": draft_id}
