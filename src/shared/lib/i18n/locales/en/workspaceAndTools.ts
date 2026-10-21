@@ -425,3 +425,17 @@ export const enWorkspaceAndTools = {
   'git.loading': 'Loading…',
   'git.clean': 'Working tree clean',
 };
+
+export function formatEnWorkspaceAndToolsSummary(): string {
+  const keys = Object.keys(enWorkspaceAndTools);
+  return `domain=en.workspaceAndTools · keys=${keys.length}`;
+}
+
+export function formatEnWorkspaceAndToolsJson(): string {
+  const keys = Object.keys(enWorkspaceAndTools);
+  return JSON.stringify({
+    domain: 'en.workspaceAndTools',
+    keyCount: keys.length,
+  });
+}
+

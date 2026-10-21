@@ -15,3 +15,18 @@ export const en: Record<TranslationKey, string> = {
   ...pausedMemoryEn,
   ...retryBannerEn,
 };
+
+export function formatEnglishTranslationsSummary(): string {
+  const keys = Object.keys(en);
+  return `locale=en · keys=${keys.length}`;
+}
+
+export function formatEnglishTranslationsJson(): string {
+  const keys = Object.keys(en);
+  return JSON.stringify({
+    locale: 'en',
+    keyCount: keys.length,
+    hasChatTitle: 'chat.title' in en,
+  });
+}
+

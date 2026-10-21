@@ -425,3 +425,17 @@ export const enSettingsAndModels = {
   'office.generate.filenameRequired': 'Please enter a filename',
   'office.generate.outputPath': 'Generated:',
 };
+
+export function formatEnSettingsAndModelsSummary(): string {
+  const keys = Object.keys(enSettingsAndModels);
+  return `domain=en.settingsAndModels · keys=${keys.length}`;
+}
+
+export function formatEnSettingsAndModelsJson(): string {
+  const keys = Object.keys(enSettingsAndModels);
+  return JSON.stringify({
+    domain: 'en.settingsAndModels',
+    keyCount: keys.length,
+  });
+}
+

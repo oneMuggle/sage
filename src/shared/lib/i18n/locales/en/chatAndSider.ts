@@ -430,3 +430,17 @@ export const enChatAndSider = {
   'updates.strategy.autoInstall.desc':
     'Most aggressive: install automatically after download, restart to apply',
 };
+
+export function formatEnChatAndSiderSummary(): string {
+  const keys = Object.keys(enChatAndSider);
+  return `domain=en.chatAndSider · keys=${keys.length}`;
+}
+
+export function formatEnChatAndSiderJson(): string {
+  const keys = Object.keys(enChatAndSider);
+  return JSON.stringify({
+    domain: 'en.chatAndSider',
+    keyCount: keys.length,
+  });
+}
+

@@ -1700,4 +1700,17 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P127：国际化聚合词典（en/zh）与分域翻译词典（chatAndSider/settingsAndModels/workspaceAndTools）审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/i18n/en.ts`：新增 `formatEnglishTranslationsSummary` 与 `formatEnglishTranslationsJson` 及单测 `en.test.ts`，支持一键导出英文聚合词典总键数审计摘要（`locale=en · keys=<count>`）与 JSON 快照。
+  2. `src/shared/lib/i18n/zh.ts`：新增 `formatChineseTranslationsSummary` 与 `formatChineseTranslationsJson` 及单测 `zh.test.ts`，支持一键导出中文聚合词典总键数审计摘要（`locale=zh · keys=<count>`）与 JSON 快照。
+  3. `src/shared/lib/i18n/locales/en/chatAndSider.ts`：新增 `formatEnChatAndSiderSummary` 与 `formatEnChatAndSiderJson` 及单测 `chatAndSider.test.ts`，支持一键导出英文对话与侧边栏分域词典键数审计摘要（`domain=en.chatAndSider · keys=<count>`）与 JSON 快照。
+  4. `src/shared/lib/i18n/locales/en/settingsAndModels.ts`：新增 `formatEnSettingsAndModelsSummary` 与 `formatEnSettingsAndModelsJson` 及单测 `settingsAndModels.test.ts`，支持一键导出英文设置与模型分域词典键数审计摘要（`domain=en.settingsAndModels · keys=<count>`）与 JSON 快照。
+  5. `src/shared/lib/i18n/locales/en/workspaceAndTools.ts`：新增 `formatEnWorkspaceAndToolsSummary` 与 `formatEnWorkspaceAndToolsJson` 及单测 `workspaceAndTools.test.ts`，支持一键导出英文工作区与工具分域词典键数审计摘要（`domain=en.workspaceAndTools · keys=<count>`）与 JSON 快照。
+  6. `src/shared/lib/i18n/locales/zh/chatAndSider.ts`：新增 `formatZhChatAndSiderSummary` 与 `formatZhChatAndSiderJson` 及单测 `chatAndSider.test.ts`，支持一键导出中文对话与侧边栏分域词典键数审计摘要（`domain=zh.chatAndSider · keys=<count>`）与 JSON 快照。
+  7. `src/shared/lib/i18n/locales/zh/settingsAndModels.ts`：新增 `formatZhSettingsAndModelsSummary` 与 `formatZhSettingsAndModelsJson` 及单测 `settingsAndModels.test.ts`，支持一键导出中文设置与模型分域词典键数审计摘要（`domain=zh.settingsAndModels · keys=<count>`）与 JSON 快照。
+  8. `src/shared/lib/i18n/locales/zh/workspaceAndTools.ts`：新增 `formatZhWorkspaceAndToolsSummary` 与 `formatZhWorkspaceAndToolsJson` 及单测 `workspaceAndTools.test.ts`，支持一键导出中文工作区与工具分域词典键数审计摘要（`domain=zh.workspaceAndTools · keys=<count>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 9 个测试文件（含 `welcome-translations.test.ts`）全部通过；`release/win7` 9 个测试文件全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
 

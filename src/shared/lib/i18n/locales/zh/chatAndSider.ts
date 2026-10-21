@@ -418,3 +418,17 @@ export const zhChatAndSider = {
   'updates.channel.alpha': '预览版（最新功能，不稳定）',
   'updates.checkNow': '立即检查更新',
 } as const;
+
+export function formatZhChatAndSiderSummary(): string {
+  const keys = Object.keys(zhChatAndSider);
+  return `domain=zh.chatAndSider · keys=${keys.length}`;
+}
+
+export function formatZhChatAndSiderJson(): string {
+  const keys = Object.keys(zhChatAndSider);
+  return JSON.stringify({
+    domain: 'zh.chatAndSider',
+    keyCount: keys.length,
+  });
+}
+
