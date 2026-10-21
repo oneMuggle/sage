@@ -61,3 +61,24 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     items: [{ keys: 'Esc', description: '拒绝当前审批请求（等同点击拒绝）' }],
   },
 ];
+
+export function formatShortcutRegistrySummary(
+  groups: readonly ShortcutGroup[] = SHORTCUT_GROUPS,
+): string {
+  const list = Array.isArray(groups) ? groups : [];
+  const totalShortcuts = list.reduce((sum, g) => sum + (g.items?.length ?? 0), 0);
+  return `groups=${list.length} · shortcuts=${totalShortcuts}`;
+}
+
+export function formatShortcutRegistryJson(
+  groups: readonly ShortcutGroup[] = SHORTCUT_GROUPS,
+): string {
+  const list = Array.isArray(groups) ? groups : [];
+  const totalShortcuts = list.reduce((sum, g) => sum + (g.items?.length ?? 0), 0);
+  return JSON.stringify({
+    groupCount: list.length,
+    totalShortcuts,
+    groupNames: list.map((g) => g.group),
+  });
+}
+
