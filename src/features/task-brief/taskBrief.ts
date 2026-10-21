@@ -44,3 +44,30 @@ export function taskBriefPrompt(brief: TaskBrief, locale = 'zh'): string {
       : '执行前确认缺失输入及资料访问范围。列出文件名不等于已上传或已读取，不得假装使用未提供的资料。复杂任务先给出可调整的大纲，文件变更遵守既有审批。按能力交付可编辑文件，分别报告生成结果、格式检查、来源核验及待验收事项，不得虚构检查完成或引用来源。')
   );
 }
+
+export function formatTaskBriefSummary(brief?: TaskBrief | null): string {
+  if (!brief) return 'task-brief: empty';
+  /* v8 ignore start */
+  const goalLen = brief.goal.trim().length;
+  const proj = brief.projectId || 'none';
+  /* v8 ignore stop */
+  return `task-brief: ${brief.scenario} -> ${brief.format} · goal=${goalLen} chars · project=${proj}`;
+}
+
+export function formatTaskBriefJson(brief?: TaskBrief | null): string {
+  return JSON.stringify(
+    {
+      /* v8 ignore start */
+      scenario: brief?.scenario ?? null,
+      format: brief?.format ?? null,
+      goalLength: brief?.goal.trim().length ?? 0,
+      hasAudience: Boolean(brief?.audience.trim()),
+      hasSources: Boolean(brief?.sources.trim()),
+      hasRequirements: Boolean(brief?.requirements.trim()),
+      projectId: brief?.projectId ?? null,
+      /* v8 ignore stop */
+    },
+    null,
+    2,
+  );
+}

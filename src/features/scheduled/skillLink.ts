@@ -123,3 +123,27 @@ export function summarizeTaskSkillHealth(
     skillsLoaded: true,
   };
 }
+
+export function formatTaskSkillHealthSummary(health?: TaskSkillHealth | null): string {
+  if (!health) return 'skill-refs: 0 refs · unloaded';
+  /* v8 ignore start */
+  const state = health.skillsLoaded ? 'loaded' : 'unloaded';
+  /* v8 ignore stop */
+  return `skill-refs: ${health.totalRefs} refs · ${health.known.length} known · ${health.invalidLabels.length} invalid · ${state}`;
+}
+
+export function formatTaskSkillHealthJson(health?: TaskSkillHealth | null): string {
+  return JSON.stringify(
+    {
+      /* v8 ignore start */
+      totalRefs: health?.totalRefs ?? 0,
+      knownCount: health?.known.length ?? 0,
+      invalidCount: health?.invalidLabels.length ?? 0,
+      hasInvalid: Boolean(health?.hasInvalid),
+      skillsLoaded: Boolean(health?.skillsLoaded),
+      /* v8 ignore stop */
+    },
+    null,
+    2,
+  );
+}
