@@ -360,3 +360,20 @@ describe('humanizeToolCall — browser tools (Round 12)', () => {
     ).toEqual({ verb: 'Download', object: 'cdn.example.com', scope: 'external' });
   });
 });
+
+describe('humanize diagnostic formatters (Phase P114)', () => {
+  it('formats humanized tool summary and JSON payload', async () => {
+    const { formatHumanizedToolSummary, formatHumanizedToolJson } = await import('../humanize');
+    expect(formatHumanizedToolSummary('write_file', { path: 'src/App.tsx' })).toBe(
+      'Write src/App.tsx · internal',
+    );
+    const parsed = JSON.parse(formatHumanizedToolJson('run_shell', { command: 'pytest -q' }));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.humanized_tool.v1',
+      tool: 'run_shell',
+      verb: 'Run',
+      object: 'pytest -q',
+      scope: 'local',
+    });
+  });
+});

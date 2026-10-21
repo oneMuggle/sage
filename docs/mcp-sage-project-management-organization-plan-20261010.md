@@ -1513,3 +1513,13 @@
 - `src/shared/api/todoClient.ts` (`formatTodoListSummary` / `formatTodoListJson`) + `src/shared/api/__tests__/todoClient.test.ts`
 - `src/shared/api/windowControlsClient.ts` (`formatWindowPlatformSummary` / `formatWindowPlatformJson`) + `src/shared/api/__tests__/windowControlsClient.test.ts`
 - `src/shared/api/workspaceApi.ts` (`formatWorkspaceBindingSummary` / `formatWorkspaceBindingJson`) + `src/shared/api/__tests__/workspaceApi.test.ts`
+
+### Phase P114 — Shared Lib Agent State, Endpoint Status, Humanize, Last Workspace, Local Image, Markdown Chunks, Action Failure & Store Diagnostic Formatters (Completed)
+- `src/shared/lib/agentStateMapping.ts` (`formatAgentPhaseSummary` / `formatAgentPhaseJson`) + `src/shared/lib/__tests__/agentStateMapping.test.ts`
+- `src/shared/lib/endpointStatus.ts` (`formatEndpointIssueSummary` / `formatEndpointIssueJson`) + `src/shared/lib/__tests__/endpointStatus.test.ts`
+- `src/shared/lib/humanize.ts` (`formatHumanizedToolSummary` / `formatHumanizedToolJson`) + `src/shared/lib/__tests__/humanize.test.ts`
+- `src/shared/lib/lastWorkspace.ts` (`formatLastWorkspaceSummary` / `formatLastWorkspaceJson`) + `src/shared/lib/__tests__/lastWorkspace.test.ts`
+- `src/shared/lib/localImageSrc.ts` (`formatLocalImageSrcSummary` / `formatLocalImageSrcJson`) + `src/shared/lib/__tests__/localImageSrc.test.ts`
+- `src/shared/lib/markdownChunks.ts` (`formatChunkSplitSummary` / `formatChunkSplitJson`) + `src/shared/lib/__tests__/markdownChunks.test.ts`
+- `src/shared/lib/reportActionFailure.ts` (`formatActionFailureSummary` / `formatActionFailureJson`) + `src/shared/lib/__tests__/reportActionFailure.test.ts`
+- `src/shared/lib/store.ts` (`formatStoreSessionSummary` / `formatStoreSessionJson`) + `src/shared/lib/__tests__/store.test.ts`

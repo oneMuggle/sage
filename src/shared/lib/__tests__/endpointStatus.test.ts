@@ -78,3 +78,35 @@ describe('stream reporting', () => {
     expect(useEndpointStatusStore.getState().dismissed).toBe(false);
   });
 });
+
+describe('endpointStatus diagnostic formatters (Phase P114)', () => {
+  it('formats endpoint issue summary and JSON payload', async () => {
+    const { formatEndpointIssueSummary, formatEndpointIssueJson } = await import(
+      '../endpointStatus'
+    );
+    expect(formatEndpointIssueSummary(null)).toBe('healthy');
+    const issue = {
+      kind: 'server' as const,
+      baseUrl: 'https://api.example.com/v1',
+      host: 'api.example.com',
+      model: 'gpt-4o',
+      status: 503,
+      message: 'Service Unavailable',
+      at: 1000,
+    };
+    expect(formatEndpointIssueSummary(issue, false)).toBe(
+      'server · api.example.com · status 503 · active',
+    );
+    const parsed = JSON.parse(formatEndpointIssueJson(issue, true));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.endpoint_status.v1',
+      healthy: false,
+      dismissed: true,
+      kind: 'server',
+      host: 'api.example.com',
+      model: 'gpt-4o',
+      status: 503,
+      message: 'Service Unavailable',
+    });
+  });
+});
