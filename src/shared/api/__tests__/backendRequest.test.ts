@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { BackendNotAvailableError, backendRequest } from '../backendRequest';
+import { formatBackendRequestJson, formatBackendRequestSummary } from '../backendRequest';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -38,5 +39,14 @@ describe('backendRequest', () => {
     await expect(backendRequest(request)).resolves.toEqual({ ok: true });
     expect(bridge).toHaveBeenCalledWith(request);
     expect(bridge).toHaveBeenCalledTimes(1);
+  });
+
+  it('formats backend request summary and JSON (Phase P112)', () => {
+    const req = { path: '/api/v1/private', method: 'POST' as const, body: { a: 1 } };
+    expect(formatBackendRequestSummary(req)).toBe('POST /api/v1/private · body=true');
+    const parsed = JSON.parse(formatBackendRequestJson(req));
+    expect(parsed.method).toBe('POST');
+    expect(parsed.path).toBe('/api/v1/private');
+    expect(parsed.hasBody).toBe(true);
   });
 });
