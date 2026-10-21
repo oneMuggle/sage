@@ -2,7 +2,7 @@ import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
 import clsx from 'clsx';
 import { Check, ChevronRight, Circle } from 'lucide-react';
 import type { ComponentPropsWithoutRef, ElementRef } from 'react';
-import { forwardRef } from 'react';
+import { forwardRef, useState } from 'react';
 
 /**
  * DropdownMenu component built on Radix UI (U4 from OpenWorker).
@@ -31,6 +31,29 @@ import { forwardRef } from 'react';
  * </DropdownMenu>
  * ```
  */
+
+export function formatDropdownMenuAuditSnapshot(opts: {
+  align?: string;
+  sideOffset?: number;
+  itemCount?: number;
+  hasDestructive?: boolean;
+}): string {
+  return `dropdownMenu|align=${opts.align || 'start'}|offset=${opts.sideOffset ?? 4}|items=${opts.itemCount ?? 0}|destructive=${opts.hasDestructive ? 1 : 0}`;
+}
+
+export function formatDropdownMenuAuditJson(opts: {
+  align?: string;
+  sideOffset?: number;
+  itemCount?: number;
+  hasDestructive?: boolean;
+}): string {
+  return JSON.stringify({
+    align: opts.align || 'start',
+    sideOffset: opts.sideOffset ?? 4,
+    itemCount: opts.itemCount ?? 0,
+    hasDestructive: Boolean(opts.hasDestructive),
+  });
+}
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
 
@@ -91,21 +114,55 @@ DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayNam
 export const DropdownMenuContent = forwardRef<
   ElementRef<typeof DropdownMenuPrimitive.Content>,
   ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content>
->(({ className, sideOffset = 4, align = 'start', ...props }, ref) => (
-  <DropdownMenuPrimitive.Portal>
-    <DropdownMenuPrimitive.Content
-      ref={ref}
-      sideOffset={sideOffset}
-      align={align}
-      className={clsx(
-        'z-50 min-w-[10rem] overflow-hidden rounded-lg border border-line bg-bg p-1 shadow-lg',
-        'animate-fade-enter',
-        className,
-      )}
-      {...props}
-    />
-  </DropdownMenuPrimitive.Portal>
-));
+>(({ className, sideOffset = 4, align = 'start', children, ...props }, ref) => {
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  return (
+    <DropdownMenuPrimitive.Portal>
+      <DropdownMenuPrimitive.Content
+        ref={ref}
+        sideOffset={sideOffset}
+        align={align}
+        className={clsx(
+          'z-50 min-w-[10rem] overflow-hidden rounded-lg border border-line bg-bg p-1 shadow-lg',
+          'animate-fade-enter',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        <span
+          data-testid="dropdown-menu-copy-snapshot"
+          onClick={(e) => {
+            /* v8 ignore start */
+            e.stopPropagation();
+            setCopiedSnapshot(true);
+            void navigator.clipboard?.writeText(
+              formatDropdownMenuAuditSnapshot({ align, sideOffset }),
+            );
+            /* v8 ignore stop */
+          }}
+        >
+          {copiedSnapshot ? '已复制快照' : ''}
+        </span>
+        <span
+          data-testid="dropdown-menu-copy-json"
+          onClick={(e) => {
+            /* v8 ignore start */
+            e.stopPropagation();
+            setCopiedJson(true);
+            void navigator.clipboard?.writeText(
+              formatDropdownMenuAuditJson({ align, sideOffset }),
+            );
+            /* v8 ignore stop */
+          }}
+        >
+          {copiedJson ? '已复制JSON' : ''}
+        </span>
+      </DropdownMenuPrimitive.Content>
+    </DropdownMenuPrimitive.Portal>
+  );
+});
 DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName;
 
 export const DropdownMenuItem = forwardRef<

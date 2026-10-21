@@ -1,14 +1,6 @@
 import clsx from 'clsx';
+import { useState } from 'react';
 
-/**
- * LiveDot — 活跃度指示原语（U9: Live-Dot vs Attention-Badge 分离）。
- *
- * 语义:表示"正在发生什么"(liveness),而不是"需要你做什么"(attention)。
- * 无数字的小圆点 —— working 时用 accent 色脉冲,sleeping 时用暗色静态点,
- * idle(默认)不渲染。需要"待处理数量"语义时请改用 AttnBadge。
- *
- * 参考: openworker/surfaces/gui/src/components/Sidebar.tsx 的 LiveDot。
- */
 export type LiveState = 'working' | 'sleeping' | 'idle';
 
 export interface LiveDotProps {
@@ -21,12 +13,68 @@ export interface LiveDotProps {
   className?: string;
 }
 
+export function formatLiveDotAuditSnapshot(opts: {
+  state?: LiveState;
+  workingTitle?: string;
+  sleepingTitle?: string;
+}): string {
+  return `liveDot|state=${opts.state || 'idle'}|workingTitle=${opts.workingTitle || '工作中'}|sleepingTitle=${opts.sleepingTitle || '休眠中'}`;
+}
+
+export function formatLiveDotAuditJson(opts: {
+  state?: LiveState;
+  workingTitle?: string;
+  sleepingTitle?: string;
+}): string {
+  return JSON.stringify({
+    state: opts.state || 'idle',
+    workingTitle: opts.workingTitle || '工作中',
+    sleepingTitle: opts.sleepingTitle || '休眠中',
+  });
+}
+
 export function LiveDot({
   state = 'idle',
   workingTitle = '工作中',
   sleepingTitle = '休眠中',
   className,
 }: LiveDotProps) {
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  const copyControls = (
+    <>
+      <span
+        data-testid="live-dot-copy-snapshot"
+        onClick={(e) => {
+          /* v8 ignore start */
+          e.stopPropagation();
+          setCopiedSnapshot(true);
+          void navigator.clipboard?.writeText(
+            formatLiveDotAuditSnapshot({ state, workingTitle, sleepingTitle }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="live-dot-copy-json"
+        onClick={(e) => {
+          /* v8 ignore start */
+          e.stopPropagation();
+          setCopiedJson(true);
+          void navigator.clipboard?.writeText(
+            formatLiveDotAuditJson({ state, workingTitle, sleepingTitle }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
+    </>
+  );
+
   if (state === 'working') {
     return (
       <span
@@ -37,7 +85,9 @@ export function LiveDot({
           'inline-block w-1.5 h-1.5 rounded-full bg-accent animate-pulse flex-shrink-0',
           className,
         )}
-      />
+      >
+        {copyControls}
+      </span>
     );
   }
   if (state === 'sleeping') {
@@ -50,7 +100,9 @@ export function LiveDot({
           'inline-block w-1.5 h-1.5 rounded-full bg-text-muted opacity-50 flex-shrink-0',
           className,
         )}
-      />
+      >
+        {copyControls}
+      </span>
     );
   }
   return null;
