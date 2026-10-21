@@ -66,3 +66,26 @@ export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) 
     </Transition>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatModalDialogSummary(
+  isOpen: boolean,
+  hasTitle = true,
+  hasFooter = false,
+): string {
+  return `open=${Boolean(isOpen)} · title=${Boolean(hasTitle)} · footer=${Boolean(hasFooter)}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatModalDialogJson(
+  isOpen: boolean,
+  hasTitle = true,
+  hasFooter = false,
+): string {
+  return JSON.stringify({
+    isOpen: Boolean(isOpen),
+    hasTitle: Boolean(hasTitle),
+    hasFooter: Boolean(hasFooter),
+  });
+}
+

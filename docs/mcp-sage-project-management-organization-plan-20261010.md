@@ -1713,4 +1713,17 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 9 个测试文件（含 `welcome-translations.test.ts`）全部通过；`release/win7` 9 个测试文件全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P128：I18n 上下文提供器/Wiki 领域类型/Badge/Button/Card/Input/Modal/PageHeader 基础组件审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/i18n/index.tsx`：新增 `formatI18nProviderSummary` 与 `formatI18nProviderJson` 及单测 `index.test.tsx`，支持一键导出 I18nProvider 激活语种、聚合词条数与持久化存储键审计摘要（`locale=<zh|en> · keys=<count> · storageKey=sage.locale`）与 JSON 快照。
+  2. `src/shared/types/wiki.ts`：新增 `formatWikiProjectSummary` 与 `formatWikiProjectJson` 及单测 `wiki.test.ts`，支持一键导出 Wiki 项目绑定状态与最近项目计数审计摘要（`project=<id|none> · bound=<bool> · recent=<n>`）与 JSON 快照。
+  3. `src/shared/ui/Badge.tsx`：新增 `formatBadgeVariantSummary` 与 `formatBadgeVariantJson` 及单测 `Badge.test.tsx`，支持一键导出徽章视觉变体与胶囊圆角形态审计摘要（`variant=<default|secondary|outline|destructive> · pill=true`）与 JSON 快照。
+  4. `src/shared/ui/Button.tsx`：新增 `formatButtonVariantSummary` 与 `formatButtonVariantJson` 及单测 `Button.test.tsx`，支持一键导出按钮视觉变体、尺寸规格与禁用态审计摘要（`variant=<v> · size=<s> · disabled=<bool>`）与 JSON 快照。
+  5. `src/shared/ui/Card.tsx`：新增 `formatCardLayoutSummary` 与 `formatCardLayoutJson` 及单测 `Card.test.tsx`，支持一键导出卡片容器头部、标题与正文区块装配态审计摘要（`header=<bool> · title=<bool> · content=<bool>`）与 JSON 快照。
+  6. `src/shared/ui/Input.tsx`：新增 `formatInputFieldSummary` 与 `formatInputFieldJson` 及单测 `Input.test.tsx`，支持一键导出输入框校验错误态与禁用态审计摘要（`error=<bool> · disabled=<bool>`）与 JSON 快照。
+  7. `src/shared/ui/Modal.tsx`：新增 `formatModalDialogSummary` 与 `formatModalDialogJson` 及单测 `Modal.test.tsx`，支持一键导出模态框打开态、标题栏与底部操作区配置审计摘要（`open=<bool> · title=<bool> · footer=<bool>`）与 JSON 快照。
+  8. `src/shared/ui/PageHeader.tsx`：新增 `formatPageHeaderSummary` 与 `formatPageHeaderJson` 及单测 `PageHeader.test.tsx`，支持一键导出二级页面统一 48px 顶栏标题、副标题与操作区装配态审计摘要（`title=<title> · subtitle=<bool> · actions=<bool>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
 

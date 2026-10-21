@@ -33,3 +33,28 @@ export function PageHeader({
     </header>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatPageHeaderSummary(
+  title: string,
+  hasSubtitle = false,
+  hasActions = false,
+): string {
+  const safeTitle = title?.trim() ? title.trim() : 'untitled';
+  return `title=${safeTitle} · subtitle=${Boolean(hasSubtitle)} · actions=${Boolean(hasActions)}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatPageHeaderJson(
+  title: string,
+  hasSubtitle = false,
+  hasActions = false,
+): string {
+  const safeTitle = title?.trim() ? title.trim() : 'untitled';
+  return JSON.stringify({
+    title: safeTitle,
+    hasSubtitle: Boolean(hasSubtitle),
+    hasActions: Boolean(hasActions),
+  });
+}
+
