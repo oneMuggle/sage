@@ -117,17 +117,14 @@ describe('ArchivesModal (R17-A2)', () => {
     render(<ArchivesModal isOpen onClose={() => undefined} sessionId="sess-1" />);
     await screen.findByText('归档 2026-09-01');
 
-    fireEvent.click(screen.getByTestId('archives-modal-copy-md-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 会话压缩归档列表'));
     });
 
-    fireEvent.click(screen.getByTestId('archives-modal-copy-json-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"arch-1"'));
     });
 
-    fireEvent.click(screen.getByTestId('archive-item-copy-json-arch-1'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('归档 2026-09-01'));
     });

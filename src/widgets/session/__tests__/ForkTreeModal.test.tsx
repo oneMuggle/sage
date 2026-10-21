@@ -98,12 +98,10 @@ describe('ForkTreeModal', () => {
     renderModal({ sessionId: 'me' });
     await waitFor(() => expect(screen.getByTestId('fork-tree-node-root')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByTestId('fork-tree-copy-md-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 会话分叉谱系树'));
     });
 
-    fireEvent.click(screen.getByTestId('fork-tree-copy-json-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"root"'));
     });

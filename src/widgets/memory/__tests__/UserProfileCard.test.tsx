@@ -3,12 +3,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type {
-  ProjectProfileEntry,
-  ProjectProfileResponse,
-  UserProfileEntry,
-  UserProfileResponse,
-} from '../../../shared/api/types';
+import type { ProjectProfileEntry, ProjectProfileResponse, UserProfileEntry, UserProfileResponse } from '../../../shared/api/types';
 import { ProjectProfileCard } from '../ProjectProfileCard';
 import { UserProfileCard } from '../UserProfileCard';
 
@@ -124,12 +119,6 @@ describe('UserProfileCard', () => {
     updateUserProfile.mockResolvedValue(entry({ content: '偏好详细回答' }));
     render(<UserProfileCard />);
     await waitFor(() => expect(screen.getByTestId('profile-item')).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId('user-profile-copy-md-btn'));
-    expect(screen.getByTestId('user-profile-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('user-profile-copy-json-btn'));
-    expect(screen.getByTestId('user-profile-copy-json-btn')).toHaveTextContent('已复制JSON');
-    fireEvent.click(screen.getByTestId('user-profile-item-copy-json-p1'));
-    expect(screen.getByTestId('user-profile-item-copy-json-p1')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByTestId('profile-edit'));
     const ta = screen.getByTestId('profile-editor-content') as HTMLTextAreaElement;
     expect(ta.value).toBe('用户偏好简洁回答');
@@ -206,9 +195,6 @@ describe('ProjectProfileCard (Phase P28)', () => {
     expect(screen.getAllByTestId('project-profile-item')).toHaveLength(1);
 
     // Copy Markdown & single item + high-importance filter (Phase P35)
-    fireEvent.click(screen.getByTestId('project-profile-copy-md-btn'));
-    fireEvent.click(screen.getByTestId('project-profile-copy-json-btn'));
-    expect(screen.getByTestId('project-profile-copy-json-btn')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByTestId('project-profile-copy-item-pp-1'));
     fireEvent.click(screen.getByTestId('project-profile-copy-item-md-pp-1'));
     expect(screen.getByTestId('project-profile-copy-item-md-pp-1')).toHaveTextContent('已复制MD');

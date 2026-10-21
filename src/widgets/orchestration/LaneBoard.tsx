@@ -36,7 +36,6 @@ interface LaneCardProps {
 
 function LaneCard({ lane, onCancel, onSelect }: LaneCardProps) {
   const { t } = useI18n();
-  const [copiedCardJson, setCopiedCardJson] = useState(false);
   // Status labels are built inside the component so the translated
   // strings track the active locale (module-level maps can't call t()).
   const statusLabels: Record<LaneStatus, string> = {
@@ -66,19 +65,6 @@ function LaneCard({ lane, onCancel, onSelect }: LaneCardProps) {
 
   const isTerminal = ['succeeded', 'failed', 'stopped', 'cancelled'].includes(lane.status);
 
-  const handleCopyCardJson = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCopiedCardJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedCardJson(false), 2000);
-    const payload = {
-      ...lane,
-      exportedAt: new Date().toISOString(),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
-
   return (
     <div
       data-testid={`lane-${lane.lane_id}`}
@@ -107,14 +93,6 @@ function LaneCard({ lane, onCancel, onSelect }: LaneCardProps) {
           <span className={`px-2 py-0.5 text-xs rounded-full whitespace-nowrap ${statusColor}`}>
             {statusLabel}
           </span>
-          <button
-            type="button"
-            data-testid={`lane-card-copy-json-${lane.lane_id}`}
-            onClick={handleCopyCardJson}
-            className="px-1.5 py-0.5 text-ui-2xs border border-border rounded text-text-tertiary hover:text-text"
-          >
-            {copiedCardJson ? '已复制JSON' : '复制JSON'}
-          </button>
         </span>
       </div>
       <div className="text-sm text-text-secondary mb-1 truncate">
@@ -228,8 +206,6 @@ export function LaneBoard() {
   const load = useLaneBoardStore((s) => s.load);
   const cancel = useLaneBoardStore((s) => s.cancel);
   const [teamId] = useState<string | undefined>(undefined);
-  const [copiedBoardMd, setCopiedBoardMd] = useState(false);
-  const [copiedBoardJson, setCopiedBoardJson] = useState(false);
   // A4: 点击卡片经全局交付抽屉打开验收（DeliveryDrawerHost 渲染）。
   const openDelivery = useTaskCenterStore((s) => s.openDelivery);
 
@@ -263,39 +239,6 @@ export function LaneBoard() {
     openDelivery({ kind: 'lane', laneId });
   };
 
-  const handleCopyBoardMd = () => {
-    setCopiedBoardMd(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedBoardMd(false), 2000);
-    const lines = [
-      '# 编排泳道看板报告',
-      '',
-      `- 活动泳道: ${board.active.length} · 阻塞泳道: ${board.blocked.length} · 完成泳道: ${board.finished.length}`,
-      '',
-      ...lanes.map((l, idx) => `${idx + 1}. **${l.lane_id}** (任务: \`${l.task_id}\`, 状态: \`${l.status}\`, Agent: \`${l.agent_id ?? '-'}\`)`),
-    ];
-    void navigator.clipboard?.writeText(lines.join('\n'));
-    /* v8 ignore stop */
-  };
-
-  const handleCopyBoardJson = () => {
-    setCopiedBoardJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedBoardJson(false), 2000);
-    const payload = {
-      summary: boardSummary,
-      counts: {
-        active: board.active.length,
-        blocked: board.blocked.length,
-        finished: board.finished.length,
-      },
-      lanes,
-      exportedAt: new Date().toISOString(),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
-
   if (loading && lanes.length === 0) {
     return <div className="p-4 text-center text-text-secondary">{t('orchestration.loading')}</div>;
   }
@@ -313,22 +256,6 @@ export function LaneBoard() {
       <div className="flex items-center justify-between gap-2 mb-3">
         <div>{boardSummary && <FreshnessBadge summary={boardSummary} />}</div>
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            data-testid="lane-board-copy-md-btn"
-            onClick={handleCopyBoardMd}
-            className="px-2 py-0.5 text-xs border border-border rounded bg-bg-surface text-text-secondary hover:text-text"
-          >
-            {copiedBoardMd ? '已复制MD' : '复制泳道MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="lane-board-copy-json-btn"
-            onClick={handleCopyBoardJson}
-            className="px-2 py-0.5 text-xs border border-border rounded bg-bg-surface text-text-secondary hover:text-text"
-          >
-            {copiedBoardJson ? '已复制JSON' : '复制泳道JSON'}
-          </button>
         </div>
       </div>
       <div className="flex gap-4">
