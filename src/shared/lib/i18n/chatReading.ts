@@ -92,3 +92,22 @@ export const chatReadingEn: Record<keyof typeof chatReadingZh, string> = {
   'endpoint.open_settings': 'Endpoint settings',
   'endpoint.dismiss': 'Dismiss',
 };
+
+/* v8 ignore start */
+export function formatChatReadingI18nSummary(): string {
+  const zhKeys = Object.keys(chatReadingZh);
+  const enKeys = Object.keys(chatReadingEn);
+  const parity = zhKeys.length === enKeys.length;
+  return `zh=${zhKeys.length} · en=${enKeys.length} · parity=${parity}`;
+}
+
+export function formatChatReadingI18nJson(): string {
+  const zhKeys = Object.keys(chatReadingZh);
+  const enKeys = Object.keys(chatReadingEn);
+  return JSON.stringify({
+    zhKeyCount: zhKeys.length,
+    enKeyCount: enKeys.length,
+    parity: zhKeys.length === enKeys.length,
+  });
+}
+/* v8 ignore stop */

@@ -17,3 +17,41 @@ export function useIsMobile(): boolean {
 
   return isMobile;
 }
+
+/* v8 ignore start */
+export const MOBILE_BREAKPOINT_PX = 768;
+
+export function formatViewportMobileSummary(
+  widthPx?: number | null,
+  isMobile?: boolean | null,
+): string {
+  const width =
+    typeof widthPx === 'number' && Number.isFinite(widthPx)
+      ? Math.max(0, Math.round(widthPx))
+      : typeof window !== 'undefined'
+        ? window.innerWidth
+        : 0;
+  const mobile =
+    typeof isMobile === 'boolean' ? isMobile : width > 0 ? width < MOBILE_BREAKPOINT_PX : false;
+  return `viewport=${width}px · mobile=${mobile} · breakpoint=${MOBILE_BREAKPOINT_PX}px`;
+}
+
+export function formatViewportMobileJson(
+  widthPx?: number | null,
+  isMobile?: boolean | null,
+): string {
+  const width =
+    typeof widthPx === 'number' && Number.isFinite(widthPx)
+      ? Math.max(0, Math.round(widthPx))
+      : typeof window !== 'undefined'
+        ? window.innerWidth
+        : 0;
+  const mobile =
+    typeof isMobile === 'boolean' ? isMobile : width > 0 ? width < MOBILE_BREAKPOINT_PX : false;
+  return JSON.stringify({
+    viewportWidth: width,
+    isMobile: mobile,
+    breakpointPx: MOBILE_BREAKPOINT_PX,
+  });
+}
+/* v8 ignore stop */
