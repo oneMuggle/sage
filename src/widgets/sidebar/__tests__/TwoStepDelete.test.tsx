@@ -7,7 +7,11 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TwoStepDelete } from '../TwoStepDelete';
+import {
+  TwoStepDelete,
+  formatTwoStepDeleteAuditJson,
+  formatTwoStepDeleteAuditSnapshot,
+} from '../TwoStepDelete';
 
 describe('TwoStepDelete', () => {
   beforeEach(() => {
@@ -113,5 +117,42 @@ describe('TwoStepDelete', () => {
 
     expect(button).toHaveAttribute('aria-label', '确定?');
     expect(screen.getByText('确定?')).toBeInTheDocument();
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P101)', () => {
+    expect(
+      formatTwoStepDeleteAuditSnapshot({
+        armed: true,
+        disabled: false,
+        label: '删除会话',
+        armedLabel: '确认?',
+        disarmTimeoutMs: 2500,
+      }),
+    ).toBe('twoStepDelete|armed=1|disabled=0|label=删除会话|armedLabel=确认?|timeout=2500');
+    expect(formatTwoStepDeleteAuditSnapshot({})).toBe(
+      'twoStepDelete|armed=0|disabled=0|label=删除|armedLabel=确认删除?|timeout=3000',
+    );
+    expect(
+      JSON.parse(
+        formatTwoStepDeleteAuditJson({
+          armed: false,
+          disabled: true,
+        }),
+      ),
+    ).toEqual({
+      armed: false,
+      disabled: true,
+      label: '删除',
+      armedLabel: '确认删除?',
+      disarmTimeoutMs: 3000,
+    });
+
+    render(<TwoStepDelete onConfirm={() => undefined} />);
+    const snapBtn = screen.getByTestId('two-step-delete-copy-snapshot');
+    const jsonBtn = screen.getByTestId('two-step-delete-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

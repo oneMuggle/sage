@@ -4,7 +4,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { MarkdownImage } from '../MarkdownImage';
+import {
+  MarkdownImage,
+  formatMarkdownImageAuditJson,
+  formatMarkdownImageAuditSnapshot,
+} from '../MarkdownImage';
 
 describe('MarkdownImage', () => {
   it('加载中显示骨架，onLoad 后渐入', async () => {
@@ -34,5 +38,47 @@ describe('MarkdownImage', () => {
   it('src 缺失时不渲染', () => {
     const { container } = render(<MarkdownImage />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P101)', () => {
+    expect(
+      formatMarkdownImageAuditSnapshot({
+        src: 'https://example.com/a.png',
+        alt: 'demo',
+        status: 'loaded',
+        isLocalMedia: false,
+        lightboxOpen: true,
+      }),
+    ).toBe(
+      'markdownImage|src=https://example.com/a.png|alt=demo|status=loaded|local=0|lightbox=1',
+    );
+    expect(formatMarkdownImageAuditSnapshot({})).toBe(
+      'markdownImage|src=none|alt=none|status=loading|local=0|lightbox=0',
+    );
+    expect(
+      JSON.parse(
+        formatMarkdownImageAuditJson({
+          src: '/api/v1/media/123',
+          alt: 'local',
+          status: 'loading',
+          isLocalMedia: true,
+          lightboxOpen: false,
+        }),
+      ),
+    ).toEqual({
+      src: '/api/v1/media/123',
+      alt: 'local',
+      status: 'loading',
+      isLocalMedia: true,
+      lightboxOpen: false,
+    });
+
+    render(<MarkdownImage src="https://example.com/a.png" alt="示例" />);
+    const snapBtn = screen.getByTestId('markdown-image-copy-snapshot');
+    const jsonBtn = screen.getByTestId('markdown-image-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

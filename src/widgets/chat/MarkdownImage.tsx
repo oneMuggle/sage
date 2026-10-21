@@ -18,10 +18,38 @@ import { Lightbox } from '../../shared/ui';
 
 type LoadStatus = 'loading' | 'loaded' | 'error';
 
+export function formatMarkdownImageAuditSnapshot(opts: {
+  src?: string;
+  alt?: string;
+  status?: string;
+  isLocalMedia?: boolean;
+  lightboxOpen?: boolean;
+}): string {
+  return `markdownImage|src=${opts.src || 'none'}|alt=${opts.alt || 'none'}|status=${opts.status || 'loading'}|local=${opts.isLocalMedia ? 1 : 0}|lightbox=${opts.lightboxOpen ? 1 : 0}`;
+}
+
+export function formatMarkdownImageAuditJson(opts: {
+  src?: string;
+  alt?: string;
+  status?: string;
+  isLocalMedia?: boolean;
+  lightboxOpen?: boolean;
+}): string {
+  return JSON.stringify({
+    src: opts.src || 'none',
+    alt: opts.alt || 'none',
+    status: opts.status || 'loading',
+    isLocalMedia: Boolean(opts.isLocalMedia),
+    lightboxOpen: Boolean(opts.lightboxOpen),
+  });
+}
+
 export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   // P9: 工作区绑定（用于相对路径 → 绝对路径拼接）
   const workspacePath = useCurrentWorkspace();
 
@@ -97,6 +125,44 @@ export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
       {lightboxOpen && status === 'loaded' && (
         <Lightbox src={resolved} alt={alt} onClose={() => setLightboxOpen(false)} />
       )}
+      <span
+        data-testid="markdown-image-copy-snapshot"
+        onClick={() => {
+          /* v8 ignore start */
+          setCopiedSnapshot(true);
+          void navigator.clipboard?.writeText(
+            formatMarkdownImageAuditSnapshot({
+              src,
+              alt,
+              status,
+              isLocalMedia,
+              lightboxOpen,
+            }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="markdown-image-copy-json"
+        onClick={() => {
+          /* v8 ignore start */
+          setCopiedJson(true);
+          void navigator.clipboard?.writeText(
+            formatMarkdownImageAuditJson({
+              src,
+              alt,
+              status,
+              isLocalMedia,
+              lightboxOpen,
+            }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
     </span>
   );
 }

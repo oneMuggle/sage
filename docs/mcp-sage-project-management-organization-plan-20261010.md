@@ -1350,3 +1350,15 @@
   - `src/widgets/welcome/WelcomeHero.tsx`：`formatWelcomeHeroAuditSnapshot` / `formatWelcomeHeroAuditJson` + `welcome-hero-copy-snapshot` / `welcome-hero-copy-json`
   - `src/widgets/sidebar/SiderSection.tsx`：`formatSiderSectionAuditSnapshot` / `formatSiderSectionAuditJson` + `sider-section-copy-snapshot` / `sider-section-copy-json`
   - 单元测试：`ExportButton.test.tsx`、`ProjectTypeBadge.test.tsx`、`CodeMirrorThemeEditor.test.tsx`、`ThemeCover.test.tsx`、`ProjectGovernance.test.tsx`、`ArenaAccountsToggle.test.tsx`、`WelcomeHero.test.tsx`、`SiderSection.test.tsx`
+
+### Phase P101（2026-10-21）：侧栏项目清单、两步删除、导航分组、标题栏与对话选择引用审计快照与 JSON 导出（Dual-Track `main` + `release/win7`）
+- **定位与目标**：将确定性单行审计快照（`format*AuditSnapshot`）与结构化 JSON 审计载荷（`format*AuditJson`）扩展至侧栏两步删除按钮、侧栏项目清单、导航分组、桌面端标题栏、标题栏前进/后退动作栏、窗口控制栏、Markdown 图片预览与对话划词引用按钮 8 个高频基础交互组件：
+  1. **侧栏两步删除按钮审计快照与 JSON 导出（`TwoStepDelete.tsx`）**：新增 `formatTwoStepDeleteAuditSnapshot` / `formatTwoStepDeleteAuditJson` 纯函数及 `two-step-delete-copy-snapshot` / `two-step-delete-copy-json` 审计控件，输出二次确认挂起状态、禁用态、标签文案与自动复位超时毫秒数。
+  2. **侧栏项目清单审计快照与 JSON 导出（`SidebarProjectList.tsx`）**：新增 `formatSidebarProjectListAuditSnapshot` / `formatSidebarProjectListAuditJson` 纯函数及 `sidebar-project-list-copy-snapshot` / `sidebar-project-list-copy-json` 审计控件，输出项目总数、已展开项目数、缺失目录项目数、分组折叠态与拖拽悬停态。
+  3. **侧栏导航分组审计快照与 JSON 导出（`NavGroup.tsx`）**：新增 `formatNavGroupAuditSnapshot` / `formatNavGroupAuditJson` 纯函数及 `nav-group-copy-snapshot` / `nav-group-copy-json` 审计控件，输出分组标识、分组标题、可折叠配置与当前折叠状态。
+  4. **桌面标题栏审计快照与 JSON 导出（`Titlebar.tsx`）**：新增 `formatTitlebarAuditSnapshot` / `formatTitlebarAuditJson` 纯函数及 `titlebar-copy-snapshot` / `titlebar-copy-json` 审计控件，输出平台类型、Electron 桌面环境标志、品牌 Logo 隐藏态与移动端侧栏展开态。
+  5. **标题栏前进/后退动作栏审计快照与 JSON 导出（`TitlebarActions.tsx`）**：新增 `formatTitlebarActionsAuditSnapshot` / `formatTitlebarActionsAuditJson` 纯函数及 `titlebar-actions-copy-snapshot` / `titlebar-actions-copy-json` 审计控件，输出历史栈可后退与可前进状态。
+  6. **窗口控制栏审计快照与 JSON 导出（`WindowControls.tsx`）**：新增 `formatWindowControlsAuditSnapshot` / `formatWindowControlsAuditJson` 纯函数及 `window-controls-copy-snapshot` / `window-controls-copy-json` 审计控件，输出自定义控制桥接注入状态与窗口控制动作计数。
+  7. **Markdown 图片渲染与灯箱审计快照与 JSON 导出（`MarkdownImage.tsx`）**：新增 `formatMarkdownImageAuditSnapshot` / `formatMarkdownImageAuditJson` 纯函数及 `markdown-image-copy-snapshot` / `markdown-image-copy-json` 审计控件，输出图片地址、替代文本、加载状态、本地媒体标识与灯箱预览开启状态。
+  8. **对话划词引用按钮审计快照与 JSON 导出（`SelectionQuoteButton.tsx`）**：新增 `formatSelectionQuoteButtonAuditSnapshot` / `formatSelectionQuoteButtonAuditJson` 纯函数及 `selection-quote-copy-snapshot` / `selection-quote-copy-json` 审计控件，输出选区激活态、选中文本长度与浮动坐标。
+- **验证结果**：8 个目标单测套件（共 71 条单测）、`eslint`、`tsc --noEmit`、`check-font-scale.mjs` 与 `architecture-check.mjs` 在 `main` 与 `release/win7` 双轨全部通过。
