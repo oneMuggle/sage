@@ -9,9 +9,9 @@
 
 ## 0. 一句话现状
 
-P0/P1/P3/P4 已完成并在 4 个 PR 里等合并；P2 已做完前 3 批（B1/B2/B3，59 个文件）
-在 4 个本地分支里等推送。**所有闸门（py38 / ruff / pytest / parity）均已验证通过。**
-剩下的 P2 批次（B4 tests / B5 src / B6 electron / B7 其余）和 P3 残差决策未开始。
+P0/P1/P3/P4 已完成并在 5 个 PR 里等合并；P2 已做完前 4 批（B1/B2/B3/B5，共 274 个文件）
+在 5 个本地分支里等推送。**所有闸门（py38 / ruff / pytest / tsc / vitest / eslint / parity）
+均已验证通过。**剩下的 P2 批次（B4 tests / B6 electron 剩余 / B7 其余）和 P3 残差决策未开始。
 
 ---
 
@@ -37,8 +37,10 @@ P0/P1/P3/P4 已完成并在 4 个 PR 里等合并；P2 已做完前 3 批（B1/B
 | 2 | `chore/win7-align-b1-20261021` | `3f00c8411` | 13 文件 | B1: core+adapters |
 | 3 | `chore/win7-align-b2-20261021` | `a8c6c59f2` | 22 文件 | B2: api（含 2 个切片） |
 | 4 | `chore/win7-align-b3-20261021` | `443f5868e` | 26 文件 | B3: office+skills+wiki |
+| 5 | `chore/win7-align-b5-20261021` | 见 `git log` | 215 文件 | B5: src/* + electron 命令路由 |
 
-**依赖关系（重要）**：分支 4（B3）**依赖分支 1（闸门）先合并**。
+**依赖关系（重要）**：分支 4（B3）**依赖分支 1（闸门）先合并**；
+分支 5（B5）依赖 branch 4 之前的全部后端批次无直接关系，但**它自己包含了 B6 的一部分**（见 §5.4）。
 B3 的代码里 `backend/office/path_safety.py` 的 docstring 会被旧检查器误报，
 闸门 PR 修的是检查器本身，两者是堆叠关系，不是漏改。B1/B2 无此依赖。
 
@@ -122,6 +124,7 @@ GitHub App token 结构上无法推 `.github/workflows/**`（`permissions: workf
 | B1 core+adapters | `3f00c8411` | 13 | `agent.py` 必须移出（会反转一条 intentional 决策） |
 | B2 api | `a8c6c59f2` | 22 | 需要 2 个跨域切片；main 删掉了 win7 的 3 个 memory 能力 |
 | B3 office+skills+wiki | `443f5868e` | 26 | 挖出 2 个闸门缺陷（见 §5） |
+| B5 src/*（含 electron 命令路由） | 本地已提交 | 215 | 前端不可子批；B5 依赖 B6；main 丢了 KaTeX（见 §5.4–5.6） |
 
 ### docs 口径变更（PR #2237，`003a2053b`）
 
@@ -157,8 +160,8 @@ win7 的需动作数就 +1**，导致 M1/M2 在代码零退步时也不可能达
 | B2 `backend/api` | 23 | 0 | 0 | 23 | ✅ 已做（21 文件 + 2 切片） |
 | B3 `backend/office+wiki+skills` | 23 | 3 | 0 | 26 | ✅ 已做（26 文件） |
 | B4 `backend/tests` | 89 | 136 | 8 | **233** | ⬜ 待做 |
-| B5 `src/*` | 154 | 51 | 18 | **223** | ⬜ 待做 |
-| B6 `electron/* + e2e` | 35 | 10 | 5 | 50 | ⬜ 待做 |
+| B5 `src/*` | 154 | 51 | 18 | **223** | ✅ 已做（215 文件） |
+| B6 `electron/* + e2e` | 35 | 10 | 5 | 50 | 🟡 命令路由已随 B5 带入，其余待做 |
 | B7 `.github + 其他` | 133 | 245 | 19 | **397** | ⬜ 待做（含 docs 217，已由 #2237 豁免） |
 
 ---
@@ -186,6 +189,44 @@ win7 的需动作数就 +1**，导致 M1/M2 在代码零退步时也不可能达
   令牌解析失败时退回旧行为
 - 回归：新增 `test_py38_gate_docstring.py` 两条契约（docstring 提及不报 / 真实调用必须报）
 - 验证：全仓 1607 文件扫描 0 violations（放宽后没有漏掉真问题）
+
+### 5.4 前端不能按子目录分批，`src/*` 是原子单元
+
+原计划拆 `shared(74) → widgets+pages(103) → features(19)`。实测第一个子批就失败：
+只换 `src/shared`，`src/features` + `src/pages` 立刻 10 个类型错误
+（`types.ts` 新增 `FileSearchKind` 的 5 个成员、i18n 新增 key，消费者必须同时改）。
+
+**结论**：前端批次的最小单元是「类型定义 + 全部消费者」= 整个 `src/`。
+
+### 5.5 B5 依赖 B6：16 个 IPC 命令
+
+覆盖 `src/**` 后 `electron/__tests__/ipc-contract.test.ts` 报 16 个渲染进程调用、
+主进程无法分派的命令（`attachment_rag_*`、`remote_mcp_*`、`mcp_server_*`、
+`office_word_repair`、`orchestration_get_run`、`prompts_reorder`）。
+`ipc-known-gaps.json` 两分支完全相同 → 这些在 main 是**已实现**，不是登记缺口。
+实现位于 `electron/commandRoutes/*`，已随 B5 一并带入（11 文件 +30/−152）。
+
+### 5.6 main 丢了 KaTeX（win7 应保留）
+
+main 重构后 `MarkdownPreview.tsx` 只剩 `remarkGfm`，丢了 `remark-math` + `rehype-katex`；
+`BtwOverlay.tsx` 保留了 `rehypeKatex` 却漏了 `remark-math`。
+没有 math AST 时 KaTeX 收不到公式，`$E=mc^2$` 整段降级为纯文本。
+
+这是 win7 在 alpha.36 (Bug #6) 修过的问题，win7 还有两个 latex 测试锁着它。
+处理：`MarkdownPreview` 保留 win7 版本；`BtwOverlay` 取 main 版本 + 嫁接回 `remarkMath`。
+
+### 5.7 parity 清单是 merge-base 口径，有盲区
+
+`HarnessDashboard` / `harnessApi` 是 main 在 merge-base **之后**新增的文件，
+parity 的差异清单里根本看不到它们；覆盖 `Settings.tsx` 时才以
+`TS2307: Cannot find module` 暴露。
+
+**这直接导致一个必须人工确认的后续任务**：main 版 Settings 依赖 harness 仪表盘
+（含后端接口），本批保留 win7 版 Settings，并删掉 main 带来的
+`Settings.anchor.test.tsx`。详见 §7 新增问题。
+
+**方法**：跨批次覆盖前先跑一次 `tsc`／`--collect-only`，编译/收集期的报错能把
+parity 清单看不到的隐性依赖全暴露出来。
 
 ### 5.3 附带发现：标记口径不一致
 
@@ -252,7 +293,18 @@ win7 的检查器只认 `py38: guarded` 标记，而 main 上书写习惯是 `py
 3. **P1 的版本号手工改动是否接受？**
    已在 PR #2233 里明确披露。若要求必须走 release 脚本，需先给脚本加 align/pin 模式。
 
-4. **M1/M2 验收指标需按新口径重新表述**
+4. **harness 仪表盘要不要移植到 win7？**
+   main 版 `Settings.tsx` 依赖 `widgets/harness/HarnessDashboard` → `shared/api/harnessApi`
+   → 后端 harness 接口。三者都是 main 在 merge-base 后新增的。win7 目前保留旧版 Settings。
+   - 要 → 需连后端接口一起移植（跨 main/win7 的前后端批次）
+   - 不要 → 在 `parity-allow.txt` 登记 `Settings.tsx`，并把该文件列为 intentional
+
+5. **KaTeX 渲染能力是否回灌 main？**
+   main 丢了 `remark-math`（`MarkdownPreview` 全丢、`BtwOverlay` 丢一半），
+   在 main 上 `$math$` 会降级为纯文本。这更像 main 的 bug 而不是 win7 的差异。
+   建议单独给 main 开修复 PR（win7 这边已保留能力）。
+
+6. **M1/M2 验收指标需按新口径重新表述**
    docs 豁免后：起点 668；M1 对应 ≤271；M2 对应 ≤193（原 500/226 的分母含 docs）。
 
 ---
