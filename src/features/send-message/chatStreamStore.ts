@@ -27,6 +27,7 @@ import { create } from 'zustand';
 
 import type {
   AgentEvent,
+  RetryInfo,
   SubagentLiveEvent,
   SubagentLiveState,
   TaskPlanItem,
@@ -52,6 +53,12 @@ export interface StreamingState {
   memory_refs?: { id: string; memory_type: string; preview: string }[];
   /** r71: attachment_rag_used 载荷写入 */
   rag_citations?: { media_id: string; mode: string }[];
+  /**
+   * 2026-10-20: LLM 重试可视化。state === 'retry' 时由 setRetryInfo 写入,
+   * Message.tsx 读此字段渲染 RetryBanner（带倒计时）。非 retry 状态到达时
+   * setStreamingMeta 自动清 null。
+   */
+  retryInfo?: RetryInfo | null;
 }
 
 /** 进度可视化 5 元组（与 useChat 内 TaskBoard 同字段，提取独立文件便于 store 引用） */
@@ -200,6 +207,12 @@ interface ChatStreamStoreState {
       >
     >,
   ) => void;
+  /**
+   * 2026-10-20: 写入 LLM 重试信息。Message.tsx 从 streaming.retryInfo 读
+   * 取并渲染 RetryBanner。retry 事件到达时覆盖，其他状态到达时由
+   * setStreamingMeta 自动清 null。
+   */
+  setRetryInfo: (sessionId: string, messageId: string, info: RetryInfo | null) => void;
   clearStream: (sessionId: string, messageId: string) => void;
 
   // —— 工具调用 ——
@@ -271,6 +284,7 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
           state: 'thinking',
           currentAgentId: opts?.agentId ?? null,
           iteration: 0,
+          retryInfo: null,
         },
         streamingToolCalls: [],
         taskBoard: null,
@@ -334,10 +348,26 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
   setStreamingMeta: (sessionId, messageId, patch) =>
     set((prev) => {
       const slots = selectSessionSlots(prev, sessionId);
+      if (!slots.streaming || slots.streaming.messageId !== messageId) return prev;
+      // 2026-10-20: 非 retry 状态到达时自动清 retryInfo —— Banner 随之消失
+      const autoClearRetry =
+        patch.state !== undefined && patch.state !== 'retry' && slots.streaming.retryInfo != null;
+      const nextStreaming = autoClearRetry
+        ? { ...slots.streaming, ...patch, retryInfo: null }
+        : { ...slots.streaming, ...patch };
+      return {
+        sessions: writeSlots(prev.sessions, sessionId, { streaming: nextStreaming }),
+      };
+    }),
+
+  // 2026-10-20: LLM 重试可视化 —— 写入 retryInfo 供 Message.tsx 渲染 RetryBanner
+  setRetryInfo: (sessionId, messageId, info) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
       return slots.streaming && slots.streaming.messageId === messageId
         ? {
             sessions: writeSlots(prev.sessions, sessionId, {
-              streaming: { ...slots.streaming, ...patch },
+              streaming: { ...slots.streaming, retryInfo: info },
             }),
           }
         : prev;
@@ -398,6 +428,7 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
             state: 'thinking',
             currentAgentId: slots.streaming.currentAgentId,
             iteration: slots.streaming.iteration,
+            retryInfo: null,
           },
           streamingToolCalls: [],
         }),

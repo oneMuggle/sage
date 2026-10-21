@@ -8,7 +8,7 @@
 import type { AgentState } from '../api/types';
 
 /** lucide-react 图标名(用字符串而非组件本身,避免循环依赖) */
-export type PhaseIconName = 'Brain' | 'Loader2' | 'Wrench' | 'Eye' | 'Pencil';
+export type PhaseIconName = 'Brain' | 'Loader2' | 'Wrench' | 'Eye' | 'Pencil' | 'RefreshCw';
 
 export interface PhaseDisplay {
   /** lucide-react 图标名,UI 层渲染时 import 对应组件 */
@@ -74,7 +74,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'step_done': // 2026-09 step-by-step: 每步完成信号,前端 store 据此快照气泡,不进消息气泡占位
     case 'topic_shifted': // Task 10 (2026-09-17): 自动话题切换事件,segment 边界进 store,不进消息气泡占位
     case 'orch_preflight': // Round 3 (2026-09-19): 前置阶段由任务板区域指示条展示,不进消息气泡占位
-    case 'retry': // 2026-10-13: LLM 重试事件 — 占位文本由 useChat.ts 事件处理器直接生成(动态内容),不进 agentStateToText
+    case 'retry': // 2026-10-20: LLM 重试事件 — 提示由 Message.tsx 的 RetryBanner 承载,不进气泡占位文本
       return null;
     default:
       return assertNever(state);
@@ -132,8 +132,8 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'topic_shifted': // Task 10 (2026-09-17): 自动话题切换事件,segment 边界进 store,无独立 UI 阶段
     case 'context_pressure': // TM2 (DSH 对标 R11): 水位徽章自渲染,无独立 UI 阶段
     case 'orch_preflight': // Round 3 (2026-09-19): 前置阶段由任务板区域指示条展示
-    case 'retry': // 2026-10-13: LLM 重试事件 — 由 useChat.ts 直接处理,不进 phase 指示器
-      return null;
+    case 'retry': // 2026-10-20: LLM 重试 — 指示器显示"重试中"+ 旋转图标
+      return { iconName: 'RefreshCw', label: '重试中' };
     default:
       return assertNever(state);
   }

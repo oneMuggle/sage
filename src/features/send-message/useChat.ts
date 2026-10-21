@@ -37,7 +37,6 @@ import {
 } from './chatStreamRuntime';
 import { selectSessionSlots, useChatStreamStore } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
-import { formatRetryEventText } from './retryEventText';
 import { notifySession, shouldNotify } from './sessionNotify';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
@@ -615,11 +614,12 @@ export function useChat() {
                 return;
               }
 
-              // 2026-10-13: LLM 重试事件 — 在消息气泡内显示动态重试提示
-              // （次数/原因/等待秒数），随后 return 跳过正常 uiText 流程。
-              // 文本格式化抽到 retryEventText.ts（主路径/重接路径共用）。
+              // 2026-10-20: LLM 重试事件 — 结构化写入 store，由 Message.tsx 渲染
+              // RetryBanner（带倒计时、颜色编码、进度点），随后 return 跳过正常
+              // uiText 流程。错误类型标签 + 严重程度配色在 RetryBanner.tsx 的
+              // RETRY_ERROR_META 单源维护；标签文本走 i18n/retryBanner.ts。
               if (evt.state === 'retry' && evt.retry_info) {
-                replaceContent(formatRetryEventText(evt.retry_info));
+                useChatStreamStore.getState().setRetryInfo(sid, assistantId, evt.retry_info);
                 useChatStreamStore
                   .getState()
                   .setStreamingMeta(sid, assistantId, { state: evt.state });
