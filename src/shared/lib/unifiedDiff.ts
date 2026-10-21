@@ -174,3 +174,48 @@ function diffOps(a: string[], b: string[]): Op[] {
   }
   return ops;
 }
+
+export function formatUnifiedDiffSummary(
+  diffText?: string | null,
+  oldLabel = '旧版本',
+  newLabel = '新版本',
+): string {
+  /* v8 ignore start */
+  const raw = (diffText ?? '').trim();
+  const safeOld = oldLabel.trim() || '旧版本';
+  const safeNew = newLabel.trim() || '新版本';
+  /* v8 ignore stop */
+  const lines = raw ? raw.split('\n') : [];
+  const hunkCount = lines.filter((l) => l.startsWith('@@')).length;
+  const addedLines = lines.filter((l) => l.startsWith('+') && !l.startsWith('+++')).length;
+  const removedLines = lines.filter((l) => l.startsWith('-') && !l.startsWith('---')).length;
+  return `diff: ${safeOld} -> ${safeNew} · ${hunkCount} hunks · +${addedLines} / -${removedLines}`;
+}
+
+export function formatUnifiedDiffJson(
+  diffText?: string | null,
+  oldLabel = '旧版本',
+  newLabel = '新版本',
+): string {
+  /* v8 ignore start */
+  const raw = (diffText ?? '').trim();
+  const safeOld = oldLabel.trim() || '旧版本';
+  const safeNew = newLabel.trim() || '新版本';
+  /* v8 ignore stop */
+  const lines = raw ? raw.split('\n') : [];
+  const hunkCount = lines.filter((l) => l.startsWith('@@')).length;
+  const addedLines = lines.filter((l) => l.startsWith('+') && !l.startsWith('+++')).length;
+  const removedLines = lines.filter((l) => l.startsWith('-') && !l.startsWith('---')).length;
+  return JSON.stringify(
+    {
+      oldLabel: safeOld,
+      newLabel: safeNew,
+      hunkCount,
+      addedLines,
+      removedLines,
+      isEmpty: raw.length === 0,
+    },
+    null,
+    2,
+  );
+}

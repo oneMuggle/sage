@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_DIFF_INPUT_CHARS, diffSpans } from '../textDiff';
+import { MAX_DIFF_INPUT_CHARS, diffSpans, formatTextDiffJson, formatTextDiffSummary } from '../textDiff';
 
 describe('diffSpans', () => {
   it('returns a single same-span for identical input', () => {
@@ -59,5 +59,22 @@ describe('diffSpans', () => {
     for (let i = 1; i < kinds.length; i++) {
       expect(kinds[i]).not.toBe(kinds[i - 1]);
     }
+  });
+});
+
+describe('formatTextDiffSummary / formatTextDiffJson', () => {
+  it('formats character diff span summary and JSON payload', () => {
+    expect(formatTextDiffSummary(null)).toBe('spans: 0 before · 0 after · 0 add · 0 del');
+    const side = diffSpans('上下文 大模型 医学', '上下文 LLM 医学');
+    expect(formatTextDiffSummary(side)).toBe('spans: 3 before · 3 after · 1 add · 1 del');
+    const payload = JSON.parse(formatTextDiffJson(side));
+    expect(payload).toEqual({
+      beforeCount: 3,
+      afterCount: 3,
+      addCount: 1,
+      delCount: 1,
+      sameCount: 2,
+      maxInputChars: MAX_DIFF_INPUT_CHARS,
+    });
   });
 });

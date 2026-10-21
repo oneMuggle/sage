@@ -1523,3 +1523,22 @@
 - `src/shared/lib/markdownChunks.ts` (`formatChunkSplitSummary` / `formatChunkSplitJson`) + `src/shared/lib/__tests__/markdownChunks.test.ts`
 - `src/shared/lib/reportActionFailure.ts` (`formatActionFailureSummary` / `formatActionFailureJson`) + `src/shared/lib/__tests__/reportActionFailure.test.ts`
 - `src/shared/lib/store.ts` (`formatStoreSessionSummary` / `formatStoreSessionJson`) + `src/shared/lib/__tests__/store.test.ts`
+
+### Phase P115（已完成 — Shared Diff, Navigation History, Emacs Keybindings, File Upload, Client Log, Diff Hunks & Session Fork Tree Diagnostic Summary/JSON Helpers）
+
+1. **`src/shared/lib/textDiff.ts` (`src/shared/lib/__tests__/textDiff.test.ts`)**：
+   - 新增 `formatTextDiffSummary(side)` 与 `formatTextDiffJson(side)`，提供字符级 diff 分段统计摘要与结构化 JSON 快照。
+2. **`src/shared/lib/unifiedDiff.ts` (`src/shared/lib/__tests__/unifiedDiff.test.ts`)**：
+   - 新增 `formatUnifiedDiffSummary(diffText, oldLabel, newLabel)` 与 `formatUnifiedDiffJson(diffText, oldLabel, newLabel)`，提供行级 unified diff hunk 与增删行统计摘要与 JSON 快照。
+3. **`src/shared/lib/useNavigationHistory.ts` (`src/shared/lib/__tests__/useNavigationHistory.test.tsx`)**：
+   - 新增 `formatNavHistorySummary(ctx)` 与 `formatNavHistoryJson(ctx)`，提供导航历史上下文前进/后退能力诊断摘要与 JSON 快照。
+4. **`src/shared/lib/hooks/useEmacsKeybindings.ts` (`src/shared/lib/hooks/__tests__/useEmacsKeybindings.test.ts`)**：
+   - 新增 `formatEmacsKeybindingsSummary(text, cursor, enabled)` 与 `formatEmacsKeybindingsJson(text, cursor, enabled)`，提供 Emacs 快捷键缓冲区行边界与分词游标诊断摘要与 JSON 快照。
+5. **`src/shared/lib/hooks/useFileUpload.ts` (`src/shared/lib/hooks/__tests__/useFileUpload.test.ts`)**：
+   - 新增 `formatFileUploadSummary(files, images, isDragOver)` 与 `formatFileUploadJson(files, images, isDragOver)`，提供聊天文件/图片上传队列诊断摘要与 JSON 快照。
+6. **`src/shared/log/client.ts` (`src/shared/log/__tests__/client.test.ts`)**：
+   - 新增 `formatClientLogSummary(level, msg, meta)` 与 `formatClientLogJson(level, msg, meta)`，提供前端渲染进程日志桥接状态诊断摘要与 JSON 快照。
+7. **`src/widgets/chat/changes/diffHunks.ts` (`src/widgets/chat/changes/__tests__/diffHunks.test.ts`)**：
+   - 新增 `formatDiffHunksSummary(hunks)` 与 `formatDiffHunksJson(hunks)`，提供前端 unified diff hunk 切分诊断摘要与 JSON 快照。
+8. **`src/widgets/session/forkTree.ts` (`src/widgets/session/__tests__/forkTree.test.ts`)**：
+   - 新增 `formatForkTreeSummary(nodes)` 与 `formatForkTreeJson(nodes)`，提供会话分叉家族树深度与节点拓扑诊断摘要与 JSON 快照。

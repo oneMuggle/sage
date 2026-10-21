@@ -32,3 +32,37 @@ export const clientLogger = {
     send('error', msg, meta);
   },
 };
+
+export function formatClientLogSummary(
+  level: LogLevel = 'info',
+  msg = '',
+  meta?: Record<string, unknown> | null,
+): string {
+  /* v8 ignore start */
+  const trimmed = msg.trim() || 'empty';
+  const keyCount = meta ? Object.keys(meta).length : 0;
+  /* v8 ignore stop */
+  return `client-log: [${level}] ${trimmed} · ${keyCount} keys`;
+}
+
+export function formatClientLogJson(
+  level: LogLevel = 'info',
+  msg = '',
+  meta?: Record<string, unknown> | null,
+): string {
+  /* v8 ignore start */
+  const trimmed = msg.trim();
+  const metaKeys = meta ? Object.keys(meta).sort() : [];
+  const hasBridge = typeof window !== 'undefined' && Boolean(window.electronAPI?.log);
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      level,
+      message: trimmed,
+      metaKeys,
+      hasBridge,
+    },
+    null,
+    2,
+  );
+}
