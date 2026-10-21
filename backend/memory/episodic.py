@@ -25,6 +25,41 @@ from backend.memory.summary_text import truncate_summary
 logger = logging.getLogger(__name__)
 
 
+# 单批回填行数。_backfill_fts() 循环执行直到补齐全部缺失行。
+# 早期实现单批 LIMIT 500 后直接返回，而回填只在 _init_fts() 跑一次——
+# 存量超过 500 条时绝大多数记忆永远进不了索引，FTS 检索静默漏召回。
+_FTS_BACKFILL_BATCH = 500
+
+
+def sync_fts_row_for_id(conn: sqlite3.Connection, memory_id: str) -> None:
+    """把指定 id 的情景记忆同步进 FTS 索引（幂等：先删后插）。
+
+    供绕过 EpisodicMemory.save() 的直写路径使用（如 scheduler/evolution.py
+    的每日摘要），避免新增记忆必须等到下次重启才能被 FTS 检索到。
+
+    失败只记 warning：FTS 是辅助路径，search() 命中为空即回退 LIKE；
+    下次 _backfill_fts() 循环也会幂等补齐。
+    """
+    try:
+        cursor = conn.cursor()
+        row = cursor.execute(
+            "SELECT rowid, content, summary, tags FROM memories_episodic WHERE id = ?",
+            (memory_id,),
+        ).fetchone()
+        if row is None:
+            return
+        cursor.execute(
+            "DELETE FROM memories_episodic_fts WHERE rowid = ?", (row["rowid"],)
+        )
+        cursor.execute(
+            "INSERT INTO memories_episodic_fts (rowid, content, summary, tags) "
+            "VALUES (?, ?, ?, ?)",
+            (row["rowid"],) + fts_row_texts(row["content"], row["summary"], row["tags"]),
+        )
+    except sqlite3.DatabaseError as exc:
+        logger.warning("FTS 索引同步失败 (memory_id=%s): %s", memory_id, exc)
+
+
 class EpisodicMemory:
     """
     情景记忆 - 管理事件序列和经历
@@ -73,61 +108,58 @@ class EpisodicMemory:
     def _backfill_fts(self) -> None:
         """回填 FTS 索引（幂等：已存在 rowid 的行跳过）。
 
+        分批循环执行直到补齐**全部**缺失行，每批 commit 一次。
         用于初始化时或存量数据缺 FTS 索引时批量补齐。
+
+        历史缺陷（2026-10-19 修）：早期实现是单批 LIMIT 500 后立即返回，
+        而 _backfill_fts() 仅在 _init_fts() 中调用一次。结果：当 memories_episodic
+        存量超过 500 条时，绝大多数记忆永远进不了 FTS 索引，FTS 检索静默漏召回
+        ——search() 命中非空即直接返回，不会回退 LIKE，用户完全无感知。
+        实测 10k 合成语料下只有 500 行被索引，DevOps / 数据库等 topic 查询
+        命中为 0，与 tokenizer 差异无关（误诊）。
         """
         conn = self.db.get_connection()
         cursor = conn.cursor()
+        total = 0
 
         try:
-            # 取主表中尚未入 FTS 索引的行
-            cursor.execute("""
-                SELECT rowid, content, summary, tags FROM memories_episodic
-                WHERE is_valid = 1 AND invalid_at IS NULL
-                  AND rowid NOT IN (SELECT rowid FROM memories_episodic_fts)
-                LIMIT 500
-            """)
-            rows = cursor.fetchall()
-            if not rows:
-                return
-
-            for row in rows:
+            while True:
                 cursor.execute(
-                    "INSERT INTO memories_episodic_fts (rowid, content, summary, tags) "
-                    "VALUES (?, ?, ?, ?)",
-                    (row["rowid"],) + fts_row_texts(
-                        row["content"], row["summary"], row["tags"]
-                    ),
+                    """
+                    SELECT rowid, content, summary, tags FROM memories_episodic
+                    WHERE is_valid = 1 AND invalid_at IS NULL
+                      AND rowid NOT IN (SELECT rowid FROM memories_episodic_fts)
+                    LIMIT ?
+                    """,
+                    (_FTS_BACKFILL_BATCH,),
                 )
-            conn.commit()
-            logger.info(f"FTS 索引回填完成: {len(rows)} 条")
+                rows = cursor.fetchall()
+                if not rows:
+                    break
+                for row in rows:
+                    cursor.execute(
+                        "INSERT INTO memories_episodic_fts (rowid, content, summary, tags) "
+                        "VALUES (?, ?, ?, ?)",
+                        (row["rowid"],) + fts_row_texts(
+                            row["content"], row["summary"], row["tags"]
+                        ),
+                    )
+                conn.commit()
+                total += len(rows)
+            if total:
+                logger.info("FTS 索引回填完成: %d 条", total)
         except sqlite3.DatabaseError as exc:
-            logger.warning(f"FTS 索引回填失败: {exc}")
+            logger.warning("FTS 索引回填失败 (已补 %d 条): %s", total, exc)
 
     def _sync_fts_row(self, cursor: sqlite3.Cursor, memory_id: str) -> None:
         """重建指定记忆的 FTS 索引行（按 rowid 先删后插，与主表行对齐）。
 
         FTS 索引为辅助路径：同步失败只记 warning，不中断主表写入；
         搜索可回退 LIKE 路径，且下次启动会幂等回填补齐。
+
+        实现委托给模块级 sync_fts_row_for_id()，保持单一事实源。
         """
-        try:
-            row = cursor.execute(
-                "SELECT rowid, content, summary, tags FROM memories_episodic WHERE id = ?",
-                (memory_id,),
-            ).fetchone()
-            if row is None:
-                return
-            cursor.execute(
-                "DELETE FROM memories_episodic_fts WHERE rowid = ?", (row["rowid"],)
-            )
-            cursor.execute(
-                "INSERT INTO memories_episodic_fts (rowid, content, summary, tags) "
-                "VALUES (?, ?, ?, ?)",
-                (row["rowid"],) + fts_row_texts(
-                    row["content"], row["summary"], row["tags"]
-                ),
-            )
-        except sqlite3.DatabaseError as exc:
-            logger.warning("FTS 索引同步失败 (memory_id=%s): %s", memory_id, exc)
+        sync_fts_row_for_id(cursor.connection, memory_id)
 
     def save(
         self,
