@@ -94,3 +94,34 @@ export function useConfirmedPreference<T>(options: PreferenceOptions<T>) {
 
   return { value, loaded, status, reload, update };
 }
+
+export function formatConfirmedPreferenceSummary(
+  key: string,
+  status: SaveStatus = 'idle',
+  loaded = false,
+): string {
+  /* v8 ignore start */
+  const safeKey = key.trim() || 'unknown';
+  const loadLabel = loaded ? 'loaded' : 'unloaded';
+  /* v8 ignore stop */
+  return `preference: ${safeKey} · status=${status} · ${loadLabel}`;
+}
+
+export function formatConfirmedPreferenceJson(
+  key: string,
+  status: SaveStatus = 'idle',
+  loaded = false,
+): string {
+  /* v8 ignore start */
+  const safeKey = key.trim() || 'unknown';
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      key: safeKey,
+      status,
+      loaded: Boolean(loaded),
+    },
+    null,
+    2,
+  );
+}

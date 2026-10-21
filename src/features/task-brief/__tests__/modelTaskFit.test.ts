@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { CandidateModel } from '../../../entities/model-catalog/types';
-import { modelTaskFit } from '../modelTaskFit';
+import { formatModelTaskFitJson, formatModelTaskFitSummary, modelTaskFit } from '../modelTaskFit';
 const model: CandidateModel = {
   model_key: { provider: 'test', model_id: 'test-model' },
   native: null,
@@ -31,5 +31,24 @@ describe('capability metadata, not name heuristics', () => {
         false,
       ).knownPrice,
     ).toBe(true);
+  });
+});
+
+describe('formatModelTaskFitSummary / formatModelTaskFitJson', () => {
+  it('formats model task fit summary and JSON payload', () => {
+    expect(formatModelTaskFitSummary(model, true)).toBe(
+      'model-fit: test/test-model · ineligible · tools=unknown · price=unknown',
+    );
+    const payload = JSON.parse(
+      formatModelTaskFitJson({ ...model, capabilities: { tools: true } }, true),
+    );
+    expect(payload).toEqual({
+      provider: 'test',
+      modelId: 'test-model',
+      needsTools: true,
+      eligible: true,
+      tools: 'supported',
+      knownPrice: false,
+    });
   });
 });
