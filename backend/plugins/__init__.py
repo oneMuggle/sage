@@ -14,6 +14,7 @@ Date: 2026-09-26
 """
 
 from backend.plugins.lifecycle import (
+    PluginEvent,
     PluginLifecycleError,
     PluginLifecycleManager,
     PluginNotFoundError,
@@ -44,6 +45,7 @@ __all__ = [
     # Lifecycle
     "PluginLifecycleManager",
     "PluginRecord",
+    "PluginEvent",
     "PluginStatus",
     "PluginLifecycleError",
     "PluginNotFoundError",

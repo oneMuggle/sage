@@ -106,6 +106,7 @@ from backend.api.office_routes import (
 )
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.permission_routes import router as permission_router
+from backend.api.plugin_routes import router as plugin_router
 from backend.api.project_ai_routes import router as project_ai_router
 from backend.api.project_routes import router as project_router
 from backend.api.prompt_routes import router as prompt_router
@@ -1096,6 +1097,8 @@ app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")
 # M6 生态扩展 Phase 1: /api/v1/hooks/builtins 内置钩子元数据 (设置页"推荐 Hook")
 app.include_router(hooks_router, prefix="/api/v1")
+# R82: /api/v1/plugins 插件生命周期记录 REST（代码托管留待 R83）
+app.include_router(plugin_router, prefix="/api/v1")
 # M2 part B: /api/v1/questions/{pending, <id>/answer}（AskUserQuestion）
 app.include_router(question_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")

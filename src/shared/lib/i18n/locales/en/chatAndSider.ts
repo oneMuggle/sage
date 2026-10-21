@@ -253,6 +253,7 @@ export const enChatAndSider = {
   'settings.tab.network': 'Network',
   'settings.tab.remote-workspaces': 'Remote workspaces',
   'settings.tab.mcp': 'MCP',
+  'settings.tab.plugins': 'Plugins',
   'settings.tab.zotero': 'Library',
   'settings.tab.runtime': 'Dev Environment',
   'settings.tab.providers': 'Update Sources',

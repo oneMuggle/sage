@@ -16,6 +16,7 @@ export type SettingsTabKey =
   | 'memory'
   | 'network'
   | 'mcp'
+  | 'plugins'
   | 'remote-workspaces'
   | 'zotero'
   | 'runtime'
@@ -477,6 +478,15 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: 'MCP 服务器',
     labelEn: 'MCP servers',
     keywords: 'mcp server stdio sse oauth 工具 服务器',
+  },
+
+  // ── 插件 ──
+  {
+    key: 'plugins',
+    tab: 'plugins',
+    label: '插件生命周期',
+    labelEn: 'Plugin lifecycle',
+    keywords: 'plugin plugins manifest 插件 安装 权限 生命周期 日志',
   },
 
   // ── Zotero ──
