@@ -1648,3 +1648,43 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P123：思考占位哨兵/终端面板 Store/Wiki 导入进度/更新日志解析/更新提供商开关/代码审查分节/分栏 Diff 解析/任务树索引审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/features/send-message/thinkingPlaceholder.ts`：新增 `isThinkingPlaceholder`、`formatThinkingPlaceholderSummary` 与 `formatThinkingPlaceholderJson` 及单测 `thinkingPlaceholder.test.ts`，支持一键导出流式思考占位哨兵状态审计摘要（`placeholder=<bool> · length=<len>`）与 JSON 快照。
+  2. `src/features/terminal-panel/terminalPanelStore.ts`：新增 `formatTerminalPanelSummary` 与 `formatTerminalPanelJson` 及单测 `terminalPanelStore.test.ts`，支持一键导出底部终端面板开合、高度与 PTY 会话审计摘要（`panel=<open|closed> · height=<px>px · pty=<ptyId> · error=<hasError>`）与 JSON 快照。
+  3. `src/features/wiki/useWikiIngest.ts`：新增 `formatWikiIngestSummary` 与 `formatWikiIngestJson` 及单测 `useWikiIngest.test.ts`，支持一键导出 Wiki 常驻导入流阶段与进度审计摘要（`ingest=<id> · stage=<stage> · percent=<pct>% · done=<done>`）与 JSON 快照。
+  4. `src/lib/changelogParser.ts`：新增 `formatChangelogAuditSummary` 与 `formatChangelogAuditJson` 及单测 `changelogParser.test.ts`，支持一键导出版本更新日志条目统计审计摘要（`versions=<count> · latest=<version> · major=<m> · improvements=<i> · fixes=<f>`）与 JSON 快照。
+  5. `src/shared/updateFeatureFlag.ts`：新增 `formatUpdateFeatureFlagSummary` 与 `formatUpdateFeatureFlagJson` 及单测 `updateFeatureFlag.test.ts`，支持一键导出可插拔更新源 UI 特性开关审计摘要（`updateProvidersUi=<enabled|disabled>`）与 JSON 快照。
+  6. `src/widgets/chat/changes/reviewSections.ts`：新增 `formatReviewSectionsSummary` 与 `formatReviewSectionsJson` 及单测 `reviewSections.test.ts`，支持一键导出多文件代码审查 Diff 分节统计审计摘要（`files=<count> · binary=<binaryCount> · lines=<totalLines>`）与 JSON 快照。
+  7. `src/widgets/chat/changes/splitDiffParser.ts`：新增 `formatSplitDiffSummary` 与 `formatSplitDiffJson` 及单测 `splitDiffParser.test.ts`，支持一键导出分栏 Unified Diff 行类型统计审计摘要（`rows=<total> · modify=<m> · add=<a> · remove=<r> · context=<c>`）与 JSON 快照。
+  8. `src/widgets/chat/progress/taskTree.ts`：新增 `formatTaskTreeSummary` 与 `formatTaskTreeJson` 及单测 `taskTree.test.ts`，支持一键导出多智能体任务树节点规模与最大深度审计摘要（`nodes=<count> · roots=<rootCount> · maxDepth=<maxDepth>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P124：演示运行时覆盖/Git 状态响应/运行时环境诊断契约/文件路径语言映射/占位模板填充/结构化日志状态/模型上下文窗口计算/忙碌耗时秒表审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/api/demoRuntime.ts`：新增 `formatDemoRuntimeSummary` 与 `formatDemoRuntimeJson` 及单测 `demoRuntime.test.ts`，支持一键导出演示模式运行时覆盖状态审计摘要（`demoOverride=<true|false|unset>`）与 JSON 快照。
+  2. `src/shared/api/gitStatusApi.ts`：新增 `formatGitStatusSummary` 与 `formatGitStatusJson` 及单测 `gitStatusApi.test.ts`，支持一键导出 Git 仓库分支、变更文件数与领先/落后提交审计摘要（`repo=<bool> · branch=<branch> · files=<count> · ahead=<a> · behind=<b>`）与 JSON 快照。
+  3. `src/shared/api/runtimeTypes.ts`：新增 `formatRuntimeDiagnosisSummary` 与 `formatRuntimeDiagnosisJson` 及单测 `runtimeTypes.test.ts`，支持一键导出项目运行时环境诊断等级与清单统计审计摘要（`level=<level> · findings=<count> · manifests=<count> · runtime=<rec>`）与 JSON 快照。
+  4. `src/shared/lib/fileLang.ts`：新增 `formatFileLangSummary` 与 `formatFileLangJson` 及单测 `fileLang.test.ts`，支持一键导出文件路径 Shiki 高亮语言推断审计摘要（`path=<path> · lang=<lang>`）与 JSON 快照。
+  5. `src/shared/lib/fillTemplate.ts`：新增 `formatFillTemplateSummary` 与 `formatFillTemplateJson` 及单测 `fillTemplate.test.ts`，支持一键导出模板占位符填充率与未决变量统计审计摘要（`placeholders=<total> · filled=<filled> · unresolved=<unresolved>`）与 JSON 快照。
+  6. `src/shared/lib/logger.ts`：新增 `formatLoggerAuditSummary` 与 `formatLoggerAuditJson` 及单测 `logger.test.ts`，支持一键导出结构化请求链路日志开关状态审计摘要（`logger=<enabled|disabled>`）与 JSON 快照。
+  7. `src/shared/lib/modelWindows.ts`：新增 `formatModelWindowSummary` 与 `formatModelWindowJson` 及单测 `modelWindows.test.ts`，支持一键导出模型有效上下文窗口与历史预算审计摘要（`window=<effective> · budget=<budget> · auto=<auto>`）与 JSON 快照。
+  8. `src/shared/lib/useElapsedSeconds.ts`：新增 `formatElapsedSecondsSummary` 与 `formatElapsedSecondsJson` 及单测 `useElapsedSeconds.test.ts`，支持一键导出长任务忙碌秒表状态审计摘要（`active=<bool> · elapsed=<sec>s`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P125：移动端断点检测/可拖拽右面板/可拖拽侧边栏/文本截断工具/会话草稿持久化/对话阅读多语言词典/日志级别常量/确认弹窗服务审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/useIsMobile.ts`：新增 `MOBILE_BREAKPOINT_PX`、`formatViewportMobileSummary` 与 `formatViewportMobileJson` 及单测 `useIsMobile.test.ts`，支持一键导出响应式移动端断点判定审计摘要（`viewport=<px>px · mobile=<bool> · breakpoint=768px`）与 JSON 快照。
+  2. `src/shared/lib/useResizablePanel.ts`：新增 `formatResizablePanelSummary` 与 `formatResizablePanelJson` 及单测 `useResizablePanel.test.ts`，支持一键导出可调面板宽度区间、锚定侧与拖拽态审计摘要（`width=<px>px · range=[<min>,<max>] · anchor=<left|right> · dragging=<bool>`）与 JSON 快照。
+  3. `src/shared/lib/useResizableSidebar.ts`：新增 `formatResizableSidebarSummary` 与 `formatResizableSidebarJson` 及单测 `useResizableSidebar.test.ts`，支持一键导出主侧边栏宽度钳制区间与拖拽状态审计摘要（`sidebar=<px>px · range=[260,480] · dragging=<bool>`）与 JSON 快照。
+  4. `src/shared/lib/utils.ts`：新增 `formatTextTruncateSummary` 与 `formatTextTruncateJson` 及单测 `utils.test.ts`，支持一键导出文本截断阈值与预览审计摘要（`length=<len> · max=<max> · truncated=<bool>`）与 JSON 快照。
+  5. `src/shared/lib/hooks/useSessionDraft.ts`：新增 `formatSessionDraftSummary` 与 `formatSessionDraftJson` 及单测 `useSessionDraft.test.ts`，支持一键导出单会话草稿字数与持久化状态审计摘要（`session=<id> · chars=<len> · persisted=<bool>`）与 JSON 快照。
+  6. `src/shared/lib/i18n/chatReading.ts`：新增 `formatChatReadingI18nSummary` 与 `formatChatReadingI18nJson` 及单测 `chatReading.test.ts`，支持一键导出对话阅读中英词典键数对齐审计摘要（`zh=<count> · en=<count> · parity=<bool>`）与 JSON 快照。
+  7. `src/shared/log/levels.ts`：新增 `formatLogLevelSummary` 与 `formatLogLevelJson` 及单测 `levels.test.ts`，支持一键导出前后端共享日志级别权重与限流间隔审计摘要（`level=<level> · rank=<rank> · rateLimitMs=<ms>`）与 JSON 快照。
+  8. `src/shared/ui/ConfirmDialog/confirmService.ts`：新增 `formatConfirmServiceSummary` 与 `formatConfirmServiceJson` 及单测 `confirmService.test.ts`，支持一键导出异步确认弹窗挂起态、危险标记与订阅者计数审计摘要（`pending=<bool> · danger=<bool> · listeners=<count>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+

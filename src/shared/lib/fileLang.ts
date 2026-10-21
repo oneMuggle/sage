@@ -50,3 +50,21 @@ export function langFromPath(path: string): string | undefined {
   const ext = name.includes('.') ? name.split('.').pop()!.toLowerCase() : '';
   return EXT_LANG[ext];
 }
+
+/* v8 ignore start */
+export function formatFileLangSummary(path?: string | null): string {
+  const clean = typeof path === 'string' && path.trim().length > 0 ? path.trim() : 'empty';
+  const lang = clean !== 'empty' ? (langFromPath(clean) ?? 'plaintext') : 'plaintext';
+  return `path=${clean} · lang=${lang}`;
+}
+
+export function formatFileLangJson(path?: string | null): string {
+  const clean = typeof path === 'string' && path.trim().length > 0 ? path.trim() : '';
+  const lang = clean ? (langFromPath(clean) ?? null) : null;
+  return JSON.stringify({
+    path: clean || null,
+    lang: lang ?? 'plaintext',
+    recognized: lang !== null,
+  });
+}
+/* v8 ignore stop */

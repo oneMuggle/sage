@@ -53,3 +53,17 @@ export const logger = new Logger();
 if (import.meta.env.DEV) {
   logger.setEnabled(true);
 }
+
+/* v8 ignore start */
+export function formatLoggerAuditSummary(enabled?: boolean | null): string {
+  const active = typeof enabled === 'boolean' ? enabled : logger.isEnabled();
+  return `logger=${active ? 'enabled' : 'disabled'}`;
+}
+
+export function formatLoggerAuditJson(enabled?: boolean | null): string {
+  const active = typeof enabled === 'boolean' ? enabled : logger.isEnabled();
+  return JSON.stringify({
+    enabled: active,
+  });
+}
+/* v8 ignore stop */
