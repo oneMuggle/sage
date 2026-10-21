@@ -111,3 +111,35 @@ export function diffSpans(before: string, after: string): DiffSide {
   pushSpan(afterSpans, 'same', after.slice(endA));
   return { before: beforeSpans, after: afterSpans };
 }
+
+export function formatTextDiffSummary(side?: DiffSide | null): string {
+  /* v8 ignore start */
+  const before = side?.before ?? [];
+  const after = side?.after ?? [];
+  /* v8 ignore stop */
+  const addCount = after.filter((s) => s.kind === 'add').length;
+  const delCount = before.filter((s) => s.kind === 'del').length;
+  return `spans: ${before.length} before · ${after.length} after · ${addCount} add · ${delCount} del`;
+}
+
+export function formatTextDiffJson(side?: DiffSide | null): string {
+  /* v8 ignore start */
+  const before = side?.before ?? [];
+  const after = side?.after ?? [];
+  /* v8 ignore stop */
+  const addCount = after.filter((s) => s.kind === 'add').length;
+  const delCount = before.filter((s) => s.kind === 'del').length;
+  const sameCount = before.filter((s) => s.kind === 'same').length;
+  return JSON.stringify(
+    {
+      beforeCount: before.length,
+      afterCount: after.length,
+      addCount,
+      delCount,
+      sameCount,
+      maxInputChars: MAX_DIFF_INPUT_CHARS,
+    },
+    null,
+    2,
+  );
+}
