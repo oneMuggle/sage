@@ -45,3 +45,25 @@ export const themeCssClient = {
     }
   },
 };
+
+export function formatThemeCssSummary(
+  payload: Pick<ThemeCssPayload, 'id' | 'name' | 'appearance' | 'css'>,
+): string {
+  return `${payload.name} (${payload.id}) · ${payload.appearance ?? 'auto'} · ${payload.css.length} chars`;
+}
+
+export function formatThemeCssJson(
+  payload: Pick<ThemeCssPayload, 'id' | 'name' | 'appearance' | 'css'>,
+): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.theme_css.v1',
+      id: payload.id,
+      name: payload.name,
+      appearance: payload.appearance ?? null,
+      cssLength: payload.css.length,
+    },
+    null,
+    2,
+  );
+}

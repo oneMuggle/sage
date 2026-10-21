@@ -147,3 +147,30 @@ export const settingsClient = {
     await settingsClient.setPreference('context_turn_limit', stored);
   },
 };
+
+export function formatPreferenceSnapshotSummary(
+  key: PreferenceKey,
+  value: string | null,
+  category = 'ui',
+): string {
+  const display = value === null ? 'unset' : value || '(empty)';
+  return `${category}:${key} · ${display}`;
+}
+
+export function formatPreferenceSnapshotJson(
+  key: PreferenceKey,
+  value: string | null,
+  category = 'ui',
+): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.preference_snapshot.v1',
+      key,
+      category,
+      value,
+      hasValue: value !== null && value.length > 0,
+    },
+    null,
+    2,
+  );
+}

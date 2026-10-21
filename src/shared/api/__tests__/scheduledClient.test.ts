@@ -69,3 +69,28 @@ describe('scheduledClient', () => {
     await expect(scheduledClient.list()).rejects.toThrow('boom');
   });
 });
+
+describe('scheduledClient diagnostic formatters (Phase P113)', () => {
+  it('formats scheduled task summary and JSON payload', async () => {
+    const { formatScheduledTaskSummary, formatScheduledTaskJson } = await import(
+      '../scheduledClient'
+    );
+    const task = {
+      id: 'task-9',
+      name: 'Daily Digest',
+      type: 'once' as const,
+      enabled: true,
+      session_id: 'sess-9',
+    };
+    expect(formatScheduledTaskSummary(task)).toBe('task-9 · Daily Digest · once · enabled');
+    const parsed = JSON.parse(formatScheduledTaskJson(task));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.scheduled_task.v1',
+      id: 'task-9',
+      name: 'Daily Digest',
+      type: 'once',
+      enabled: true,
+      sessionId: 'sess-9',
+    });
+  });
+});

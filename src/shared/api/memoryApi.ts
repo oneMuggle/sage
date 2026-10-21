@@ -693,3 +693,24 @@ function coerceProfileEntry(r: Record<string, unknown>): UserProfileEntry {
     updated_at: asNumber(r.updated_at, 0),
   };
 }
+
+export function formatMemoryListSummary(res: MemoryListResponse): string {
+  const layer = res.layer || 'all';
+  return `${layer} · ${res.items.length}/${res.total} items · page ${res.page}`;
+}
+
+export function formatMemoryListJson(res: MemoryListResponse): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.memory_list.v1',
+      layer: res.layer || 'all',
+      page: res.page,
+      pageSize: res.page_size,
+      total: res.total,
+      itemCount: res.items.length,
+      sourceBreakdown: res.source_breakdown,
+    },
+    null,
+    2,
+  );
+}
