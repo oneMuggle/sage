@@ -1,7 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { BrandLogo } from '../BrandLogo';
+import {
+  BrandLogo,
+  formatBrandLogoAuditJson,
+  formatBrandLogoAuditSnapshot,
+} from '../BrandLogo';
 
 // Mock i18n: 把 sidebar.brand 与 brand.alt 直接当 fallback 行为。
 // BrandLogo 内部调用 useI18n()；用 stub 提供确定的 t。
@@ -63,5 +67,42 @@ describe('BrandLogo', () => {
     render(<BrandLogo className="ml-2" />);
     const img = screen.getByRole('img');
     expect(img).toHaveClass('ml-2');
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P102)', () => {
+    expect(
+      formatBrandLogoAuditSnapshot({
+        size: 'lg',
+        withWordmark: true,
+        alt: 'Sage 标志',
+        testId: 'welcome-avatar',
+      }),
+    ).toBe('brandLogo|size=lg|wordmark=1|alt=Sage 标志|testId=welcome-avatar');
+    expect(formatBrandLogoAuditSnapshot({})).toBe(
+      'brandLogo|size=md|wordmark=0|alt=none|testId=brand-logo',
+    );
+    expect(
+      JSON.parse(
+        formatBrandLogoAuditJson({
+          size: 'sm',
+          withWordmark: false,
+          alt: 'Sage',
+          testId: 'brand-logo',
+        }),
+      ),
+    ).toEqual({
+      size: 'sm',
+      withWordmark: false,
+      alt: 'Sage',
+      testId: 'brand-logo',
+    });
+
+    render(<BrandLogo />);
+    const snapBtn = screen.getByTestId('brand-logo-copy-snapshot');
+    const jsonBtn = screen.getByTestId('brand-logo-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });
