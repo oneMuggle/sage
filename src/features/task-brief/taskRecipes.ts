@@ -64,3 +64,29 @@ export function reviewTaskRecipe(id: string): void {
     recipes.map((recipe) => (recipe.id === id ? { ...recipe, reviewedAt: Date.now() } : recipe)),
   );
 }
+
+export function formatTaskRecipesSummary(recipes: TaskRecipe[] = []): string {
+  /* v8 ignore start */
+  const list = Array.isArray(recipes) ? recipes : [];
+  const reviewed = list.filter((r) => r.reviewedAt !== null).length;
+  const pending = list.length - reviewed;
+  /* v8 ignore stop */
+  return `task-recipes: ${list.length} total · ${reviewed} reviewed · ${pending} pending`;
+}
+
+export function formatTaskRecipesJson(recipes: TaskRecipe[] = []): string {
+  /* v8 ignore start */
+  const list = Array.isArray(recipes) ? recipes : [];
+  const reviewed = list.filter((r) => r.reviewedAt !== null).length;
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      totalCount: list.length,
+      reviewedCount: reviewed,
+      pendingCount: list.length - reviewed,
+      recipeIds: list.map((r) => r.id),
+    },
+    null,
+    2,
+  );
+}

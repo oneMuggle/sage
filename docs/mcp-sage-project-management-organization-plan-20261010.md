@@ -1542,3 +1542,22 @@
    - 新增 `formatDiffHunksSummary(hunks)` 与 `formatDiffHunksJson(hunks)`，提供前端 unified diff hunk 切分诊断摘要与 JSON 快照。
 8. **`src/widgets/session/forkTree.ts` (`src/widgets/session/__tests__/forkTree.test.ts`)**：
    - 新增 `formatForkTreeSummary(nodes)` 与 `formatForkTreeJson(nodes)`，提供会话分叉家族树深度与节点拓扑诊断摘要与 JSON 快照。
+
+### Phase P116（已完成 — Chat Memory Pause, Confirmed Preferences, Office Preview Revision, Scheduled Skill Links, Task Brief & Settings Presentation Diagnostic Summary/JSON Helpers）
+
+1. **`src/features/chat/useSessionMemoryPause.ts` (`src/features/chat/__tests__/useSessionMemoryPause.test.ts`)**：
+   - 新增 `formatSessionMemoryPauseSummary(ids, sessionId, unconfirmed)` 与 `formatSessionMemoryPauseJson(ids, sessionId, unconfirmed)`，提供设备本地会话记忆暂停状态诊断摘要与结构化 JSON 快照。
+2. **`src/features/manage-settings/useConfirmedPreference.ts` (`src/features/manage-settings/__tests__/useConfirmedPreference.test.ts`)**：
+   - 新增 `formatConfirmedPreferenceSummary(key, status, loaded)` 与 `formatConfirmedPreferenceJson(key, status, loaded)`，提供受控偏好确认写入状态诊断摘要与 JSON 快照。
+3. **`src/features/office/previewRevision.ts` (`src/features/office/__tests__/previewRevision.test.ts`)**：
+   - 新增 `formatPreviewRevisionSummary(cacheKey)` 与 `formatPreviewRevisionJson(cacheKey)`，提供 Office 预览内容修订缓存键健康度诊断摘要与 JSON 快照。
+4. **`src/features/scheduled/skillLink.ts` (`src/features/scheduled/__tests__/skillLink.test.ts`)**：
+   - 新增 `formatTaskSkillHealthSummary(health)` 与 `formatTaskSkillHealthJson(health)`，提供定时任务技能引用健康度诊断摘要与 JSON 快照。
+5. **`src/features/task-brief/modelTaskFit.ts` (`src/features/task-brief/__tests__/modelTaskFit.test.ts`)**：
+   - 新增 `formatModelTaskFitSummary(model, needsTools)` 与 `formatModelTaskFitJson(model, needsTools)`，提供候选模型任务适配度与工具能力诊断摘要与 JSON 快照。
+6. **`src/features/task-brief/taskBrief.ts` (`src/features/task-brief/__tests__/taskBrief.test.ts`)**：
+   - 新增 `formatTaskBriefSummary(brief)` 与 `formatTaskBriefJson(brief)`，提供交付任务简报场景与输出格式诊断摘要与 JSON 快照。
+7. **`src/features/task-brief/taskRecipes.ts` (`src/features/task-brief/__tests__/taskRecipes.test.ts`)**：
+   - 新增 `formatTaskRecipesSummary(recipes)` 与 `formatTaskRecipesJson(recipes)`，提供持久化任务配方列表复核状态诊断摘要与 JSON 快照。
+8. **`src/pages/settings/settingsPresentation.ts` (`src/pages/settings/__tests__/settingsPresentation.test.ts`)**：
+   - 新增 `formatSettingsGroupsSummary(available, locale)` 与 `formatSettingsGroupsJson(available, locale)`，提供设置页分组导航与多语言标签诊断摘要与 JSON 快照。
