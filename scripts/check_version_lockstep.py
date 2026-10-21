@@ -6,6 +6,7 @@
   - **MAJOR.MINOR.PATCH 强同步**：win7 的 `X.Y.Z` 必须等于 main 的 `X.Y.Z`；
   - **tier 编号强同步**：win7 的 `alpha.N` / `beta.N` / `rc.N` 必须与 main 一致；
   - win7 tag 在 main tag 基础上加 `-win7` 后缀。
+  - package-lock.json 的根 version 与 packages[''].version 必须等于 package.json。
 
 本脚本只做**检查**，不自动打 tag —— §30.3 明确「CI 里不自动打 tag（始终人工确认）」。
 
@@ -65,6 +66,22 @@ def read_package_version(ref: str) -> str:
     if not isinstance(version, str) or not version:
         raise RuntimeError("{}: package.json 缺少 version 字段".format(ref))
     return version
+
+
+def read_lock_versions(ref: str):
+    """读 package-lock.json 的根 version 与 packages[''].version（缺失则返回 None）。"""
+    try:
+        raw = _read_ref(ref, "package-lock.json")
+    except Exception:
+        return None, None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return None, None
+    root = data.get("version")
+    pkgs = data.get("packages") or {}
+    inner = (pkgs.get("") or {}).get("version")
+    return root, inner
 
 
 def read_top_changelog_version(ref: str):
@@ -159,6 +176,33 @@ def main() -> int:
             )
         report["base"] = main_parsed[0]
         report["tier"] = main_parsed[1]
+
+    # 规则 3b：package-lock.json 必须与 package.json 同步
+    # 背景：tests/packaging/package-version-contract.spec.ts 断言两者根版本相等，
+    # 只改 package.json 会让 `npm run test:coverage` 直接失败（PR #2233 实际踩过）。
+    main_lock_root, main_lock_inner = read_lock_versions(args.main_ref)
+    win7_lock_root, win7_lock_inner = read_lock_versions(args.win7_ref)
+    report["lock"] = {
+        "main": {"root": main_lock_root, "packages_root": main_lock_inner},
+        "win7": {"root": win7_lock_root, "packages_root": win7_lock_inner},
+    }
+    for label, root_ver, inner_ver, pkg_ver in (
+        ("main", main_lock_root, main_lock_inner, main_ver),
+        ("win7", win7_lock_root, win7_lock_inner, win7_ver),
+    ):
+        if root_ver is None:
+            continue
+        if root_ver != pkg_ver:
+            problems.append(
+                "{}: package-lock.json 根 version `{}` != package.json `{}`"
+                "（tests/packaging/package-version-contract.spec.ts 会失败）".format(label, root_ver, pkg_ver)
+            )
+        if inner_ver is not None and inner_ver != pkg_ver:
+            problems.append(
+                "{}: package-lock.json packages[''].version `{}` != package.json `{}`".format(
+                    label, inner_ver, pkg_ver
+                )
+            )
 
     # 规则 4（可选）：CHANGELOG 顶端版本
     try:
