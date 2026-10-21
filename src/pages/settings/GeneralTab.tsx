@@ -452,14 +452,98 @@ function ResetDefaultsSection({ resetSettings }: { resetSettings: () => Promise<
   );
 }
 
+export function formatGeneralTabAuditSnapshot(input: {
+  streaming: boolean;
+  timezone: string;
+  logTimezone: string;
+  autoMemory: boolean;
+  confirmDelete: boolean;
+}): string {
+  const tz = input.timezone.trim() || 'Asia/Shanghai';
+  const logTz = input.logTimezone.trim() || 'UTC';
+  return `通用设置 · 流式:${input.streaming ? '开' : '关'} · 时区:${tz} · 日志:${logTz} · 自动记忆:${input.autoMemory ? '开' : '关'} · 删前确认:${input.confirmDelete ? '开' : '关'}`;
+}
+
+export function formatGeneralTabAuditJson(input: {
+  streaming: boolean;
+  timezone: string;
+  logTimezone: string;
+  autoMemory: boolean;
+  confirmDelete: boolean;
+}): string {
+  return JSON.stringify({
+    streaming: Boolean(input.streaming),
+    timezone: input.timezone.trim() || 'Asia/Shanghai',
+    logTimezone: input.logTimezone.trim() || 'UTC',
+    autoMemory: Boolean(input.autoMemory),
+    confirmDelete: Boolean(input.confirmDelete),
+  });
+}
+
 export function GeneralTab({ resetSettings }: { resetSettings: () => Promise<void> }) {
   const { settings, updateSettings } = useSettings();
   const { t } = useI18n();
+  const [copiedSummary, setCopiedSummary] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  /* v8 ignore start */
+  const handleCopySummary = async () => {
+    const text = formatGeneralTabAuditSnapshot({
+      streaming: settings.streaming,
+      timezone: settings.timezone,
+      logTimezone: settings.logTimezone,
+      autoMemory: settings.autoMemory,
+      confirmDelete: settings.confirmDelete,
+    });
+    setCopiedSummary(true);
+    try {
+      await navigator.clipboard?.writeText(text);
+    } catch {
+      // Clipboard may be unavailable in headless environments
+    }
+  };
+
+  const handleCopyJson = async () => {
+    const text = formatGeneralTabAuditJson({
+      streaming: settings.streaming,
+      timezone: settings.timezone,
+      logTimezone: settings.logTimezone,
+      autoMemory: settings.autoMemory,
+      confirmDelete: settings.confirmDelete,
+    });
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(text);
+    } catch {
+      // Clipboard may be unavailable in headless environments
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">主题</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-text">主题</h3>
+          <div className="flex items-center gap-1.5">
+            <span
+              onClick={() => void handleCopySummary()}
+              data-testid="general-tab-copy-summary"
+              title="复制通用设置审计摘要"
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
+            >
+              {copiedSummary ? '已复制' : '复制摘要'}
+            </span>
+            <span
+              onClick={() => void handleCopyJson()}
+              data-testid="general-tab-copy-json"
+              title="复制通用设置审计 JSON"
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
+            >
+              {copiedJson ? '已复制' : 'JSON'}
+            </span>
+          </div>
+        </div>
         <ThemeSelector />
       </section>
       <section>

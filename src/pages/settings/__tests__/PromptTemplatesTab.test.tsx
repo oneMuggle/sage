@@ -9,7 +9,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PromptTemplatesTab } from '../PromptTemplatesTab';
+import {
+  PromptTemplatesTab,
+  formatPromptTemplatesTabAuditJson,
+  formatPromptTemplatesTabAuditSnapshot,
+} from '../PromptTemplatesTab';
 
 const listMock = vi.fn();
 const createMock = vi.fn();
@@ -241,5 +245,40 @@ describe('PromptTemplatesTab — R27-B', () => {
       expect(screen.queryByTestId('prompts-conflict-panel')).not.toBeInTheDocument(),
     );
     expect(importTemplatesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('格式化并复制提示词模板审计摘要与 JSON', async () => {
+    expect(
+      formatPromptTemplatesTabAuditSnapshot({
+        templateCount: 5,
+        loading: false,
+        editing: false,
+        hasConflict: false,
+      }),
+    ).toBe('提示词模板 · 5项 · 就绪');
+    expect(
+      JSON.parse(
+        formatPromptTemplatesTabAuditJson({
+          templateCount: 2,
+          loading: false,
+          editing: true,
+          hasConflict: true,
+        }),
+      ),
+    ).toEqual({
+      templateCount: 2,
+      loading: false,
+      editing: true,
+      hasConflict: true,
+    });
+
+    renderTab();
+    await waitFor(() => expect(screen.getByTestId('prompts-empty')).toBeInTheDocument());
+    const summaryBtn = screen.getByTestId('prompt-templates-tab-copy-summary');
+    const jsonBtn = screen.getByTestId('prompt-templates-tab-copy-json');
+    fireEvent.click(summaryBtn);
+    expect(summaryBtn.textContent).toBe('已复制');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toBe('已复制');
   });
 });

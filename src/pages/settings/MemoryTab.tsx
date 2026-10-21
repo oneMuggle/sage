@@ -16,6 +16,33 @@ import { invoke } from '../../shared/api/desktopInvoke';
 
 import { SettingRow } from './components';
 
+export function formatMemoryTabAuditSnapshot(input: {
+  embedderType?: string | null;
+  semantic?: boolean;
+  modelReady?: boolean;
+  backupCount: number;
+}): string {
+  const emb = input.embedderType?.trim() || '未知';
+  const modeLabel = input.semantic ? '语义匹配' : '字面匹配';
+  const readyLabel = input.modelReady ? '模型就绪' : '模型未就绪';
+  const backups = Math.max(0, Math.trunc(input.backupCount));
+  return `记忆管理 · ${emb} · ${modeLabel} · ${readyLabel} · 备份${backups}份`;
+}
+
+export function formatMemoryTabAuditJson(input: {
+  embedderType?: string | null;
+  semantic?: boolean;
+  modelReady?: boolean;
+  backupCount: number;
+}): string {
+  return JSON.stringify({
+    embedderType: input.embedderType?.trim() || null,
+    semantic: Boolean(input.semantic),
+    modelReady: Boolean(input.modelReady),
+    backupCount: Math.max(0, Math.trunc(input.backupCount)),
+  });
+}
+
 export function MemoryTab() {
   const [embedderStatus, setEmbedderStatus] = useState<{
     type: string;
@@ -26,6 +53,8 @@ export function MemoryTab() {
     semantic: boolean;
   } | null>(null);
   const [selecting, setSelecting] = useState(false);
+  const [copiedSummary, setCopiedSummary] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   // R17-B: 记忆固化手动触发
   const [consolidating, setConsolidating] = useState(false);
   const [consolidationResult, setConsolidationResult] = useState<{
@@ -236,7 +265,49 @@ export function MemoryTab() {
   return (
     <div className="space-y-6">
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">语义嵌入 (检索增强)</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-text">语义嵌入 (检索增强)</h3>
+          <div className="flex items-center gap-1.5">
+            <span
+              onClick={() => {
+                /* v8 ignore start */
+                const text = formatMemoryTabAuditSnapshot({
+                  embedderType: embedderStatus?.type,
+                  semantic: embedderStatus?.semantic,
+                  modelReady: embedderStatus?.model_ready,
+                  backupCount: backups.length,
+                });
+                setCopiedSummary(true);
+                void navigator.clipboard?.writeText(text).catch(() => {});
+                /* v8 ignore stop */
+              }}
+              data-testid="memory-tab-copy-summary"
+              title="复制记忆管理审计摘要"
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
+            >
+              {copiedSummary ? '已复制' : '复制摘要'}
+            </span>
+            <span
+              onClick={() => {
+                /* v8 ignore start */
+                const text = formatMemoryTabAuditJson({
+                  embedderType: embedderStatus?.type,
+                  semantic: embedderStatus?.semantic,
+                  modelReady: embedderStatus?.model_ready,
+                  backupCount: backups.length,
+                });
+                setCopiedJson(true);
+                void navigator.clipboard?.writeText(text).catch(() => {});
+                /* v8 ignore stop */
+              }}
+              data-testid="memory-tab-copy-json"
+              title="复制记忆管理审计 JSON"
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
+            >
+              {copiedJson ? '已复制' : 'JSON'}
+            </span>
+          </div>
+        </div>
         {embedderStatus ? (
           <div className="space-y-2 text-xs text-text-secondary">
             <p>
