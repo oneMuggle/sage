@@ -178,3 +178,27 @@ export function CreateGoalModal({ isOpen, onClose }: CreateGoalModalProps) {
     </Modal>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatCreateGoalModalSummary(
+  isOpen: boolean,
+  maxHours = 4,
+  maxTokens = 500_000,
+): string {
+  const safeHours = Math.max(0, Number(maxHours) || 0);
+  const safeTokens = Math.max(0, Math.trunc(maxTokens));
+  return `open=${Boolean(isOpen)} · maxHours=${safeHours} · maxTokens=${safeTokens}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatCreateGoalModalJson(
+  isOpen: boolean,
+  maxHours = 4,
+  maxTokens = 500_000,
+): string {
+  return JSON.stringify({
+    isOpen: Boolean(isOpen),
+    maxHours: Math.max(0, Number(maxHours) || 0),
+    maxTokens: Math.max(0, Math.trunc(maxTokens)),
+  });
+}
+
