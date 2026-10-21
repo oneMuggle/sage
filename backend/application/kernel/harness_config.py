@@ -7,8 +7,12 @@
 
 分层顺序由低到高为::
 
-    builtin < ~/.sage/harness.yaml < <workspace>/.sage/harness.yaml
+    builtin < ~/.sage/harness.yaml < ~/.sage/harness/plugins.yaml
+    < <workspace>/.sage/harness.yaml < <workspace>/harness/plugins.yaml
     < SAGE_HARNESS_PRESET < patch
+
+其中 fileized ``plugins.yaml`` 只在同根 ``harness.lock.json`` 校验通过时
+才应用其 ``harness_config`` 段（R84）；无 lock 时忽略，维持 R81 行为。
 
 生产路径默认 ``strict=False`` —— 任何坏配置只产生 warning 并被忽略；
 ``CLI check`` 使用 ``strict=True``，把同一套校验变成明确的失败。
@@ -27,6 +31,9 @@ logger = logging.getLogger(__name__)
 
 HARNESS_DIR_NAME = ".sage"
 HARNESS_FILE_NAME = "harness.yaml"
+HARNESS_FILES_DIR_NAME = "harness"
+HARNESS_LOCK_FILE_NAME = "harness.lock.json"
+HARNESS_PLUGINS_FILE_NAME = "plugins.yaml"
 HARNESS_HOME_ENV = "SAGE_HARNESS_HOME"
 HARNESS_PRESET_ENV = "SAGE_HARNESS_PRESET"
 HARNESS_WORKSPACE_ENV = "SAGE_WORKSPACE"
@@ -38,6 +45,9 @@ __all__ = [
     "DEFAULT_PRESET",
     "HARNESS_DIR_NAME",
     "HARNESS_FILE_NAME",
+    "HARNESS_FILES_DIR_NAME",
+    "HARNESS_LOCK_FILE_NAME",
+    "HARNESS_PLUGINS_FILE_NAME",
     "HARNESS_HOME_ENV",
     "HARNESS_PRESET_ENV",
     "HARNESS_WORKSPACE_ENV",
@@ -48,12 +58,15 @@ __all__ = [
     "Preset",
     "clear_harness_cache",
     "default_harness_config",
+    "harness_files_dirs",
     "load_harness_config",
     "preset_view",
     "presets_view",
+    "project_harness_files_dir",
     "project_harness_path",
     "resolved_view",
     "select_bundles",
+    "user_harness_files_dir",
     "user_harness_path",
 ]
 
@@ -157,7 +170,7 @@ class _MergeState:
     flag_overrides: Dict[str, Any] = field(default_factory=dict)
 
 
-_CacheKey = Tuple[str, int, str, int, str, Tuple[str, ...]]
+_CacheKey = Tuple[Any, ...]
 _CACHE: Dict[_CacheKey, HarnessConfig] = {}
 
 
@@ -218,6 +231,43 @@ def project_harness_path(
     return _workspace_root(workspace, env) / HARNESS_DIR_NAME / HARNESS_FILE_NAME
 
 
+def user_harness_files_dir(
+    user_home: Optional[Any] = None,
+    *,
+    environ: Optional[Mapping[str, str]] = None,
+) -> Path:
+    """用户层 fileized harness 目录：``<home>/.sage/harness``。"""
+    env = _environment(environ)
+    return _user_root(user_home, env) / HARNESS_DIR_NAME / HARNESS_FILES_DIR_NAME
+
+
+def project_harness_files_dir(
+    workspace: Optional[Any] = None,
+    *,
+    environ: Optional[Mapping[str, str]] = None,
+) -> Path:
+    """项目层 fileized harness 目录：``<workspace>/harness``。"""
+    env = _environment(environ)
+    return _workspace_root(workspace, env) / HARNESS_FILES_DIR_NAME
+
+
+def harness_files_dirs(
+    *,
+    workspace: Optional[Any] = None,
+    user_home: Optional[Any] = None,
+    environ: Optional[Mapping[str, str]] = None,
+) -> Tuple[Path, ...]:
+    """按 user → project 顺序返回去重后的 fileized harness 根目录。"""
+    env = _environment(environ)
+    roots = (
+        user_harness_files_dir(user_home, environ=env),
+        project_harness_files_dir(workspace, environ=env),
+    )
+    if _same_path(roots[0], roots[1]):
+        return roots[:1]
+    return roots
+
+
 def _same_path(first: Path, second: Path) -> bool:
     return os.path.normcase(str(first.absolute())) == os.path.normcase(str(second.absolute()))
 
@@ -270,6 +320,75 @@ def _read_yaml_layer(
         return {}
 
     return {} if loaded is None else loaded
+
+
+def _read_plugins_layer(  # noqa: PLR0911 — lock/YAML 守卫逐项早返回
+    root: Path,
+    warnings: List[str],
+    *,
+    strict: bool,
+) -> Optional[Any]:
+    """读取已 lock 校验的 ``plugins.yaml`` 中的 ``harness_config`` 段。"""
+    path = root / HARNESS_PLUGINS_FILE_NAME
+    if not path.exists():
+        return None
+    if not path.is_file():
+        _issue(f"harness plugins.yaml 不是普通文件，已忽略：{path}", warnings, strict=strict)
+        return None
+
+    try:
+        # 延迟 import：harness_files 反向复用本模块的路径助手，避免顶层循环。
+        from backend.application.kernel.harness_files import verify_harness_files
+
+        verification = verify_harness_files(root)
+    except Exception as exc:  # noqa: BLE001 —— 非 strict 时只忽略该层
+        _issue(
+            f"harness lock 校验失败，已忽略 plugins.yaml：{root}"
+            f"（{type(exc).__name__}: {exc}）",
+            warnings,
+            strict=strict,
+        )
+        return None
+
+    if not verification.adopted:
+        _issue(
+            f"harness plugins.yaml 缺少 harness.lock.json，已忽略：{path}",
+            warnings,
+            strict=strict,
+        )
+        return None
+    if not verification.valid:
+        details = "; ".join(
+            f"{issue.code}:{issue.path}" if issue.path else issue.code
+            for issue in verification.issues[:3]
+        )
+        _issue(
+            f"harness lock 校验失败，已忽略 plugins.yaml：{root}（{details}）",
+            warnings,
+            strict=strict,
+        )
+        return None
+
+    raw = _read_yaml_layer(path, warnings, strict=strict)
+    if not isinstance(raw, Mapping):
+        _issue(f"harness plugins.yaml 顶层必须是映射，已忽略：{path}", warnings, strict=strict)
+        return None
+    section = raw.get("harness_config")
+    if section is None:
+        _issue(
+            f"harness plugins.yaml 缺少 harness_config 段，已忽略：{path}",
+            warnings,
+            strict=strict,
+        )
+        return None
+    if not isinstance(section, Mapping):
+        _issue(
+            f"harness plugins.yaml 的 harness_config 必须是映射，已忽略：{path}",
+            warnings,
+            strict=strict,
+        )
+        return None
+    return section
 
 
 def _apply_layer(
@@ -405,6 +524,12 @@ def load_harness_config(
     env = _environment(environ)
     user_path = user_harness_path(user_home, environ=env)
     project_path = project_harness_path(workspace, environ=env)
+    user_files_dir = user_harness_files_dir(user_home, environ=env)
+    project_files_dir = project_harness_files_dir(workspace, environ=env)
+    user_plugins_path = user_files_dir / HARNESS_PLUGINS_FILE_NAME
+    project_plugins_path = project_files_dir / HARNESS_PLUGINS_FILE_NAME
+    user_lock_path = user_files_dir / HARNESS_LOCK_FILE_NAME
+    project_lock_path = project_files_dir / HARNESS_LOCK_FILE_NAME
     env_preset = env.get(HARNESS_PRESET_ENV, "").strip()
     known_marker = () if known_bundles is None else tuple(known_bundles)
 
@@ -415,6 +540,12 @@ def load_harness_config(
             _mtime_ns(user_path),
             str(project_path),
             _mtime_ns(project_path),
+            str(user_plugins_path),
+            _mtime_ns(user_plugins_path),
+            _mtime_ns(user_lock_path),
+            str(project_plugins_path),
+            _mtime_ns(project_plugins_path),
+            _mtime_ns(project_lock_path),
             env_preset,
             known_marker,
         )
@@ -439,6 +570,20 @@ def load_harness_config(
             strict=strict,
         )
 
+    if user_plugins_path.exists():
+        source = str(user_plugins_path)
+        sources.append(source)
+        user_plugins_raw = _read_plugins_layer(user_files_dir, warnings, strict=strict)
+        if user_plugins_raw is not None:
+            _apply_layer(
+                user_plugins_raw,
+                source,
+                state,
+                warnings,
+                known_bundles=known_bundles,
+                strict=strict,
+            )
+
     if not _same_path(user_path, project_path):
         project_raw = _read_yaml_layer(project_path, warnings, strict=strict)
         if project_raw is not None:
@@ -446,6 +591,22 @@ def load_harness_config(
             sources.append(source)
             _apply_layer(
                 project_raw,
+                source,
+                state,
+                warnings,
+                known_bundles=known_bundles,
+                strict=strict,
+            )
+
+    if not _same_path(user_files_dir, project_files_dir) and project_plugins_path.exists():
+        source = str(project_plugins_path)
+        sources.append(source)
+        project_plugins_raw = _read_plugins_layer(
+            project_files_dir, warnings, strict=strict
+        )
+        if project_plugins_raw is not None:
+            _apply_layer(
+                project_plugins_raw,
                 source,
                 state,
                 warnings,

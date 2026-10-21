@@ -18,7 +18,7 @@
 | R81 | 三层配置 + 四预设 + `--dump-config` | ✅ #2206 |
 | R82 | 插件 UI / REST（安装、启停、权限确认、日志） | ✅ #2206 |
 | R83 | 进程外宿主（含 DSH 边车，仅在触发条件满足时） | ✅ #2206 |
-| R84 | harness 文件化 + lock + 差异视图 | 待启动 |
+| R84 | harness 文件化 + lock + 差异视图 | ✅ #2206 |
 | R85 | 提案引擎（Propose–Probe–Compose + 证据锚定） | 待启动 |
 | R86 | 生态（脚手架 / 索引 / 贡献指南） | 待启动 |
 
@@ -32,6 +32,7 @@
 | R81 | `application/kernel/harness_config.py`（546 行）+ `backend/cli/harness.py`（215 行）+ 删除 legacy/旧开关 + 55 例单测 | #2206 | 待对齐 | ✅ 已交付 |
 | R82 | `api/plugin_routes.py` + lifecycle manifest/events 补强 + `pluginClient.ts` / `PluginsTab.tsx` + 后端 59 例相关测试、前端 16 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
 | R83 | `plugins/{host,host_process,host_worker}.py` + runtime REST/审计 + `PluginRuntimePanel.tsx` + 后端 111 例相关测试、前端 19 例定向测试 | #2206 | 待对齐 | ✅ 已交付 |
+| R84 | `application/kernel/{harness_files,harness_snapshots}.py` + `cli/harness_export.py` + `files` CLI + 启动 lock gate + 14 例新增单测 | #2206 | 待对齐 | ✅ 已交付 |
 
 ## 3. R78 交付边界
 
@@ -125,5 +126,30 @@
 - **本地证据**：后端相关 111 例、前端定向 19 例通过；ruff、py38 兼容、静默异常
   ratchet、tsc、eslint、vite build、architecture-check 全绿。`backend/main.py`
   仅 +8 行 lifespan shutdown 接线，基线按 ratchet 从 1275 调整到 1283。
+
+## 9. R84 交付边界
+
+- **无 lock 即旧行为**：没有 `harness/harness.lock.json` 时，工具装配与后端启动
+  与 R83 相同；显式 `files export` 后才算采用。采用根的 lock 在 FastAPI DB
+  初始化前校验，漂移时拒绝启动；`SAGE_HARNESS_LOCK_ENFORCE=0` 只作紧急恢复。
+- **八面先物化，只接一个新运行时输入**：system、guardrails、memory、
+  tool guidance、subagents、skills、scripts、plugins 共 23 份基线文件可
+  diff / snapshot / rollback；只有 `plugins.yaml` 的 `harness_config` 段
+  进入 R81 合并链，其余是只读投影，不冒充已替换原生加载器。subagents/skills
+  继续使用原有文件根，harness 副本不新增第二个加载优先级。
+- **差异视图首期是 CLI 契约**：`status` 给 lock 计数，`diff --patch` 给相对
+  snapshot 的 unified diff，JSON 形态稳定供 R85 提案审批复用；本轮不新增可
+  读取任意本地路径的 REST/UI。snapshot 放在根内 `.snapshots/` 并由生成的
+  `.gitignore` 排除，rollback 默认先保存回滚前状态。
+- **lock 是漂移可见性，不是签名**：每文件 SHA-256 + 清单内容摘要能发现未
+  审查改动、缺失与未跟踪托管文件；能同时改文件和 lock 的本地写者不在本轮
+  信任模型内。`proposals/**`、`evidence/**` 仅 README 受管，其余为 R85 预留。
+- **导出不触发外部发现、不复制秘密**：tool guidance 排除会发现外部服务器的
+  `mcp` bundle，只枚举内置 schema/risk；不导出记忆正文、settings 密钥、
+  skill 附带脚本或二进制。完整设计见
+  `2026-10-21_harness-files-lock-diff-r84.md`。
+- **本地证据**：新增 14 例单测中 13 passed、1 skipped（Windows 无 symlink
+  权限）；harness 相关全集 42 passed/1 skipped，tool parity/risk/lifespan
+  64 passed；ruff、py38 兼容、静默异常 ratchet、architecture-check 全绿。
 
 —— 本账本由插件化循环维护，随轮次追加。
