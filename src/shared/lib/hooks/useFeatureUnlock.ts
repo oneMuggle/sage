@@ -146,3 +146,19 @@ export function useFeatureUnlock(featureKey: string): [boolean, (next: boolean) 
 
   return [unlocked, setUnlocked];
 }
+
+export function formatFeatureUnlockSummary(featureKey: string): string {
+  const unlocked = isFeatureUnlocked(featureKey);
+  return `${featureKey} · ${unlocked ? 'unlocked' : 'locked'}`;
+}
+
+export function formatFeatureUnlockJson(featureKey: string): string {
+  return JSON.stringify(
+    {
+      featureKey,
+      unlocked: isFeatureUnlocked(featureKey),
+    },
+    null,
+    2,
+  );
+}

@@ -64,3 +64,20 @@ export function mapAgentErrorToText(code: string): string | null {
     ? AGENT_RUNTIME_MESSAGES[code]
     : null;
 }
+
+export function formatLLMErrorSummary(err: LLMErrorResponse): string {
+  return `${err.type} · status=${err.status_code ?? 'none'} · retry=${err.retry_after ?? 'none'} · ${mapLLMErrorToText(err)}`;
+}
+
+export function formatLLMErrorJson(err: LLMErrorResponse): string {
+  return JSON.stringify(
+    {
+      type: err.type,
+      statusCode: err.status_code,
+      retryAfter: err.retry_after,
+      mappedText: mapLLMErrorToText(err),
+    },
+    null,
+    2,
+  );
+}

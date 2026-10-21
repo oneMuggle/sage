@@ -115,3 +115,18 @@ export function reorderSiderIds(order: SiderOrder, from: number, to: number): Si
   next.splice(to, 0, moved);
   return next;
 }
+
+export function formatSiderOrderSummary(order: SiderOrder): string {
+  return `count=${order.length} · ids=[${order.join(',')}]`;
+}
+
+export function formatSiderOrderJson(order: SiderOrder): string {
+  return JSON.stringify(
+    {
+      count: order.length,
+      order,
+    },
+    null,
+    2,
+  );
+}

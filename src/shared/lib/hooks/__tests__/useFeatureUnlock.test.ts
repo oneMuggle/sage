@@ -297,4 +297,16 @@ describe('useFeatureUnlock — lock', () => {
     lockFeature('arena-accounts');
     expect(isFeatureUnlocked('arena-accounts')).toBe(false);
   });
+
+  it('formats feature unlock summary and JSON (Phase P118)', async () => {
+    const { formatFeatureUnlockSummary, formatFeatureUnlockJson } = await import(
+      '../useFeatureUnlock'
+    );
+    unlockFeature('arena-accounts');
+    expect(formatFeatureUnlockSummary('arena-accounts')).toBe('arena-accounts · unlocked');
+    expect(JSON.parse(formatFeatureUnlockJson('arena-accounts'))).toEqual({
+      featureKey: 'arena-accounts',
+      unlocked: true,
+    });
+  });
 });

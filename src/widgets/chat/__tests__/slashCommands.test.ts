@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { commandToPrompt, mergeSlashCommands, slashCommands } from '../slashCommands';
+import { formatSlashCommandsJson, formatSlashCommandsSummary } from '../slashCommands';
 
 describe('mergeSlashCommands', () => {
   it('returns the 6 static commands unchanged when dynamic list is empty', () => {
@@ -104,5 +105,16 @@ describe('orchestration slash commands', () => {
     expect(cmd).toBeDefined();
     expect(cmd!.mode).toBe('prompt');
     expect(cmd!.description).toMatch(/单 agent|单任务|关闭/i);
+  });
+
+  it('formats slash commands summary and JSON (Phase P118)', () => {
+    const merged = mergeSlashCommands([{ commandName: '/aihot', description: 'AI HOT' }]);
+    expect(formatSlashCommandsSummary(merged)).toContain(
+      `total=${merged.length} · skills=1 · names=[aihot,`,
+    );
+    const parsed = JSON.parse(formatSlashCommandsJson(merged));
+    expect(parsed.totalCount).toBe(merged.length);
+    expect(parsed.skillCount).toBe(1);
+    expect(parsed.names[0]).toBe('aihot');
   });
 });
