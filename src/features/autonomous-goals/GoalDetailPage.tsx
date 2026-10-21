@@ -352,3 +352,26 @@ function CheckpointItem({ checkpoint }: { checkpoint: Checkpoint }) {
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('zh-CN');
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatGoalDetailSummary(
+  status: GoalStatus | null,
+  checkpointCount = 0,
+): string {
+  const statusKey = status ?? 'none';
+  const label = status ? STATUS_LABEL[status] : 'none';
+  const safeCount = Math.max(0, Math.trunc(checkpointCount));
+  return `status=${statusKey} · label=${label} · checkpoints=${safeCount}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatGoalDetailJson(
+  status: GoalStatus | null,
+  checkpointCount = 0,
+): string {
+  return JSON.stringify({
+    status: status ?? null,
+    label: status ? STATUS_LABEL[status] : null,
+    checkpointCount: Math.max(0, Math.trunc(checkpointCount)),
+  });
+}
+
