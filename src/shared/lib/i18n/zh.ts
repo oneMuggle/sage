@@ -16,3 +16,18 @@ export const zh = {
 } as const;
 
 export type TranslationKey = keyof typeof zh;
+
+export function formatChineseTranslationsSummary(): string {
+  const keys = Object.keys(zh);
+  return `locale=zh · keys=${keys.length}`;
+}
+
+export function formatChineseTranslationsJson(): string {
+  const keys = Object.keys(zh);
+  return JSON.stringify({
+    locale: 'zh',
+    keyCount: keys.length,
+    hasChatTitle: 'chat.title' in zh,
+  });
+}
+
