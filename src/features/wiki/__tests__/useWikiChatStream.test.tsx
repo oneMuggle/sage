@@ -306,4 +306,24 @@ describe('useWikiChatStream', () => {
     await act(async () => {});
     expect(cancelWikiChatStream).toHaveBeenNthCalledWith(2, 's1', secondToken);
   });
+
+  it('formats wiki chat stream state summary and JSON (Phase P111)', async () => {
+    const { formatWikiChatStreamStateSummary, formatWikiChatStreamStateJson } = await import(
+      '../useWikiChatStream'
+    );
+    const state = {
+      answer: 'wiki answer',
+      citations: [],
+      sources: [],
+      streaming: false,
+      completed: true,
+      error: null,
+    };
+    expect(formatWikiChatStreamStateSummary(state)).toBe(
+      'completed · chars=11 · citations=0 · sources=0',
+    );
+    const parsed = JSON.parse(formatWikiChatStreamStateJson(state));
+    expect(parsed.completed).toBe(true);
+    expect(parsed.answerLength).toBe(11);
+  });
 });

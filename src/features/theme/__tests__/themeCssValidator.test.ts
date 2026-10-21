@@ -188,4 +188,22 @@ describe('themeCssValidator', () => {
       expect(vars.get('--bg-base')).toBe('#000');
     });
   });
+
+  describe('formatThemeCssValidationSummary & formatThemeCssValidationJson (Phase P111)', () => {
+    it('formats valid and invalid CSS validation results', async () => {
+      const { formatThemeCssValidationSummary, formatThemeCssValidationJson } = await import(
+        '../themeCssValidator'
+      );
+      const validCss = ':root { --bg-base: #fff; --primary: #000; }';
+      expect(formatThemeCssValidationSummary(validCss)).toBe('valid · vars=2');
+      expect(formatThemeCssValidationSummary('')).toBe('invalid · CSS must not be empty');
+      const parsed = JSON.parse(formatThemeCssValidationJson(validCss));
+      expect(parsed).toEqual({
+        ok: true,
+        error: null,
+        varCount: 2,
+        varNames: ['--bg-base', '--primary'],
+      });
+    });
+  });
 });

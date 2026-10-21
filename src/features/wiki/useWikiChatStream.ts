@@ -119,3 +119,29 @@ export function useWikiChatStream(streamId: string | null, request?: WikiChatStr
   const reset = useCallback(() => setState(emptyState), []);
   return { ...state, reset };
 }
+
+export function formatWikiChatStreamStateSummary(state: ChatStreamState): string {
+  const phase = state.error
+    ? 'error'
+    : state.streaming
+      ? 'streaming'
+      : state.completed
+        ? 'completed'
+        : 'idle';
+  return `${phase} · chars=${state.answer.length} · citations=${state.citations.length} · sources=${state.sources.length}`;
+}
+
+export function formatWikiChatStreamStateJson(state: ChatStreamState): string {
+  return JSON.stringify(
+    {
+      streaming: state.streaming,
+      completed: state.completed,
+      answerLength: state.answer.length,
+      citationCount: state.citations.length,
+      sourceCount: state.sources.length,
+      error: state.error,
+    },
+    null,
+    2,
+  );
+}
