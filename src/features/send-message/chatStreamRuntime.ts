@@ -451,7 +451,8 @@ export function useChatReattachAndBtw(params: {
             // 显示动态重试提示（与主路径 useChat.ts 同格式）。
             // 2026-10-20: 改为结构化写入 store，由 Message.tsx 渲染 RetryBanner
             // （带倒计时、颜色编码、进度点），替代纯文本 replaceContent。
-            // 错误类型的中文标签映射抽到 retryEventText.ts（RetryBanner 复用）。
+            // 错误类型标签 + 严重程度配色在 RetryBanner.tsx 的 RETRY_ERROR_META
+            // 单源维护；标签文本走 i18n/retryBanner.ts。
             if (evt.state === 'retry' && evt.retry_info) {
               useChatStreamStore.getState().setRetryInfo(sid, messageId, evt.retry_info);
               useChatStreamStore.getState().setStreamingMeta(sid, messageId, { state: evt.state });

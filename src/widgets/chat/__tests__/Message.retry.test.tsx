@@ -2,8 +2,7 @@
 // 2026-10-20: LLM 重试可视化 —— store → Message.tsx → RetryBanner 的集成链路。
 // 覆盖「retry 事件到达时显示横幅」「非 retry 状态到达时自动消失」
 // 「只挂在正在流式的那条消息上」「重试期间抑制 shimmer 占位」。
-import { render, screen } from '@testing-library/react';
-import { act } from 'react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { useChatStreamStore } from '../../../features/send-message/chatStreamStore';
@@ -20,7 +19,7 @@ const retryInfo: RetryInfo = {
   max_attempts: 3,
   error_type: 'timeout',
   error_message: '请求 LLM 超时',
-  delay: 2,
+  delay: 0,
 };
 
 const base: MessageType = {
@@ -45,15 +44,20 @@ describe('Message — LLM 重试横幅集成', () => {
   });
 
   afterEach(() => {
+    cleanup();
     useChatStreamStore.setState({ sessions: {} } as never);
   });
 
   it('renders the retry banner when the stream slot carries retryInfo', () => {
-    const store = useChatStreamStore.getState();
-    store.startStream(SESSION, 'm1');
-    store.setRetryInfo(SESSION, 'm1', retryInfo);
+    act(() => {
+      const store = useChatStreamStore.getState();
+      store.startStream(SESSION, 'm1');
+      store.setRetryInfo(SESSION, 'm1', retryInfo);
+    });
 
-    renderAssistant(THINKING_PLACEHOLDER);
+    act(() => {
+      renderAssistant(THINKING_PLACEHOLDER);
+    });
 
     const banner = screen.getByTestId('retry-banner');
     expect(banner).toBeInTheDocument();
@@ -61,19 +65,25 @@ describe('Message — LLM 重试横幅集成', () => {
   });
 
   it('suppresses the thinking shimmer while retrying', () => {
-    const store = useChatStreamStore.getState();
-    store.startStream(SESSION, 'm1');
-    store.setRetryInfo(SESSION, 'm1', retryInfo);
+    act(() => {
+      const store = useChatStreamStore.getState();
+      store.startStream(SESSION, 'm1');
+      store.setRetryInfo(SESSION, 'm1', retryInfo);
+    });
 
-    renderAssistant(THINKING_PLACEHOLDER);
+    act(() => {
+      renderAssistant(THINKING_PLACEHOLDER);
+    });
 
     expect(screen.queryByTestId('thinking-shimmer')).toBeNull();
   });
 
   it('does not render the banner on a different message of the same session', () => {
-    const store = useChatStreamStore.getState();
-    store.startStream(SESSION, 'm1');
-    store.setRetryInfo(SESSION, 'm1', retryInfo);
+    act(() => {
+      const store = useChatStreamStore.getState();
+      store.startStream(SESSION, 'm1');
+      store.setRetryInfo(SESSION, 'm1', retryInfo);
+    });
 
     renderAssistant(THINKING_PLACEHOLDER, 'm-other');
 
@@ -81,10 +91,12 @@ describe('Message — LLM 重试横幅集成', () => {
   });
 
   it('drops the banner once a non-retry state arrives', () => {
-    const store = useChatStreamStore.getState();
-    store.startStream(SESSION, 'm1');
-    store.setRetryInfo(SESSION, 'm1', retryInfo);
-    store.setStreamingMeta(SESSION, 'm1', { state: 'retry' });
+    act(() => {
+      const store = useChatStreamStore.getState();
+      store.startStream(SESSION, 'm1');
+      store.setRetryInfo(SESSION, 'm1', retryInfo);
+      store.setStreamingMeta(SESSION, 'm1', { state: 'retry' });
+    });
 
     const { rerender } = renderAssistant(THINKING_PLACEHOLDER);
     expect(screen.getByTestId('retry-banner')).toBeInTheDocument();
@@ -103,9 +115,11 @@ describe('Message — LLM 重试横幅集成', () => {
   });
 
   it('renders no banner for a non-streaming assistant message', () => {
-    const store = useChatStreamStore.getState();
-    store.startStream(SESSION, 'm1');
-    store.setRetryInfo(SESSION, 'm1', retryInfo);
+    act(() => {
+      const store = useChatStreamStore.getState();
+      store.startStream(SESSION, 'm1');
+      store.setRetryInfo(SESSION, 'm1', retryInfo);
+    });
 
     render(
       <I18nProvider defaultLocale="zh">

@@ -85,4 +85,12 @@ describe('useCountdown', () => {
     const { result } = renderHook(() => useCountdown(2.4));
     expect(result.current).toBe(3);
   });
+
+  it('treats non-finite delays as zero instead of NaN', () => {
+    const { result } = renderHook(() => useCountdown(Number.NaN));
+    expect(result.current).toBe(0);
+
+    const { result: inf } = renderHook(() => useCountdown(Number.POSITIVE_INFINITY));
+    expect(inf.current).toBe(0);
+  });
 });

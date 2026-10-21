@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AgentState } from '../../api/types';
-import { agentStateToText } from '../agentStateMapping';
+import { agentStateToPhase, agentStateToText } from '../agentStateMapping';
 
 const cases: Array<[AgentState, string | null, string?]> = [
   ['thinking', '🤔 思考中…'],
@@ -47,5 +47,16 @@ const cases: Array<[AgentState, string | null, string?]> = [
 describe('agentStateToText', () => {
   it.each(cases)('%s → %s', (state, expected, toolName) => {
     expect(agentStateToText(state, toolName)).toBe(expected);
+  });
+});
+
+describe('agentStateToPhase', () => {
+  it('retry → RefreshCw + 重试中', () => {
+    expect(agentStateToPhase('retry')).toEqual({ iconName: 'RefreshCw', label: '重试中' });
+  });
+
+  it('null / undefined → null', () => {
+    expect(agentStateToPhase(null)).toBeNull();
+    expect(agentStateToPhase(undefined)).toBeNull();
   });
 });

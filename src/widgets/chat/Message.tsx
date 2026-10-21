@@ -91,21 +91,21 @@ function MessageComponent({
   const isError = message.content?.startsWith('[错误') ?? false;
   // 2026-10-20: LLM 重试可视化 —— 从流式 store 读当前消息的重试信息。
   // 只有「正在流式的这条消息」才显示横幅，故需 messageId 匹配。
-  const streamingSlot = useChatStreamStore((s) =>
-    isAssistant && isStreaming && message.session_id
-      ? s.sessions[message.session_id]?.streaming
-      : undefined,
-  );
-  const retryInfo =
-    streamingSlot && streamingSlot.messageId === message.id
-      ? (streamingSlot.retryInfo ?? null)
-      : null;
+  // 2026-10-21: 选择器只取 retryInfo，避免每次 setStreamingMeta({state}) 都
+  // 把整个 streaming 对象换引用导致 Message 重渲染（ReactMarkdown 很重）。
+  const retryInfo = useChatStreamStore((s) => {
+    if (!isAssistant || !isStreaming || !message.session_id) return null;
+    const slot = s.sessions[message.session_id]?.streaming;
+    return slot && slot.messageId === message.id ? (slot.retryInfo ?? null) : null;
+  });
   // 2026-09-13 P0: 首个 token 到达前 content 是哨兵占位值 — 渲染 shimmer
   // 骨架而非把 "🤔 思考中…" 当 markdown 静态文本展示。agent 中间态文案
   // (思考/调用工具) 会覆盖占位值，覆盖后自动回退 markdown 渲染。
-  // 2026-10-20: 重试期间抑制 shimmer —— 横幅已表达"正在恢复"，避免两个提示打架。
   const isThinkingPlaceholder =
-    isAssistant && isStreaming === true && message.content === THINKING_PLACEHOLDER && !retryInfo;
+    isAssistant && isStreaming === true && message.content === THINKING_PLACEHOLDER;
+  // 2026-10-20: 重试期间内容仍是哨兵占位 — 只显示横幅，跳过气泡本体；
+  // 否则哨兵会被当 markdown 静态文本渲染（与 2026-09-13 P0 修复意图冲突）。
+  const showRetryBannerOnly = isAssistant && retryInfo !== null && isThinkingPlaceholder;
   // 2026-09 step-by-step: 多步 run 中,中间步骤可能 content="" 但有
   // tool_calls / reasoning_content。气泡只在有内容时渲染;其他部件
   // (ThinkingPanel / tool_calls) 始终渲染,确保中间步骤不会"空泡"。
@@ -398,8 +398,10 @@ function MessageComponent({
           </div>
         )}
 
-        {/* 消息气泡 — 2026-09 step-by-step: 空内容时不渲染,避免空白气泡 */}
-        {showBubble && (
+        {/* 消息气泡 — 2026-09 step-by-step: 空内容时不渲染,避免空白气泡。
+            2026-10-21: 重试期间内容仍是哨兵占位时跳过气泡,
+            否则哨兵会被当 markdown 静态文本渲染(与 P0 修复冲突)。 */}
+        {showBubble && !showRetryBannerOnly && (
           <div
             data-error={isError ? 'true' : undefined}
             data-quote-scope="message-body"

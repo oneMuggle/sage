@@ -689,6 +689,16 @@ describe('useChat LLM 重试事件', () => {
     const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
     expect(assistantMsg?.content ?? '').not.toContain('🔄');
 
+    // 非 retry 状态到达 → retryInfo 自动清空。
+    // 必须在流仍然存活时断言：done 之后 clearStream 会把整个 streaming 槽位置空，
+    // 此时 `streaming?.retryInfo` 恒为 undefined，是空断言。
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 0, content: 'partial' } });
+    });
+    const liveSlot = useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming;
+    expect(liveSlot?.messageId).toBeTruthy();
+    expect(liveSlot?.retryInfo).toBeNull();
+
     act(() => {
       capturedCb!({ payload: { state: 'done', iteration: 1, content: 'ok' } });
     });
@@ -696,10 +706,8 @@ describe('useChat LLM 重试事件', () => {
       await sendPromise!;
     });
 
-    // done 到达 → 非 retry 状态 → retryInfo 自动清空
-    expect(
-      useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming?.retryInfo,
-    ).toBeFalsy();
+    // done 到达 → 整个流式槽位被 clearStream 清空
+    expect(useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming ?? null).toBeNull();
   });
 });
 

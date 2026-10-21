@@ -414,5 +414,18 @@ describe('chatStreamStore', () => {
       store.setRetryInfo(SESS, 'msg-B', info);
       expect(slots().streaming?.retryInfo).toBeNull();
     });
+
+    it('重试信息按会话隔离,不串到并行会话的槽位', () => {
+      const store = useChatStreamStore.getState();
+      store.startStream('sess-A', 'msg-A1', { initialContent: '' });
+      store.startStream('sess-B', 'msg-B1', { initialContent: '' });
+      store.setRetryInfo('sess-A', 'msg-A1', info);
+      expect(
+        selectSessionSlots(useChatStreamStore.getState(), 'sess-A').streaming?.retryInfo,
+      ).toEqual(info);
+      expect(
+        selectSessionSlots(useChatStreamStore.getState(), 'sess-B').streaming?.retryInfo,
+      ).toBeNull();
+    });
   });
 });
