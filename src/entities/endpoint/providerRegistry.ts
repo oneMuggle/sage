@@ -346,3 +346,18 @@ registerProvider({
     }
   },
 });
+export function formatProviderRegistrySummary(): string {
+  const providers = listProviders();
+  const ids = providers.map((p) => p.id).join(',') || 'none';
+  return `providers=${providers.length} · ids=${ids} · proxyBase=${LLM_PROXY_BASE}`;
+}
+
+export function formatProviderRegistryJson(): string {
+  const providers = listProviders();
+  return JSON.stringify({
+    providerCount: providers.length,
+    ids: providers.map((p) => p.id),
+    proxyBase: LLM_PROXY_BASE,
+  });
+}
+
