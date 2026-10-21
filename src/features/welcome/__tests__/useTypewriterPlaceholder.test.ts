@@ -5,6 +5,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useTypewriterPlaceholder } from '../useTypewriterPlaceholder';
+import { formatTypewriterStateJson, formatTypewriterStateSummary } from '../useTypewriterPlaceholder';
 
 describe('useTypewriterPlaceholder', () => {
   beforeEach(() => {
@@ -72,5 +73,17 @@ describe('useTypewriterPlaceholder', () => {
     unmount();
     expect(clearIntervalSpy).toHaveBeenCalled();
     clearIntervalSpy.mockRestore();
+  });
+
+  it('formats typewriter state summary and JSON (Phase P111)', () => {
+    const state = { current: 'hello', isTyping: true };
+    expect(formatTypewriterStateSummary(state, 3)).toBe('typing · len=5 · phrases=3');
+    const parsed = JSON.parse(formatTypewriterStateJson(state, 3));
+    expect(parsed).toEqual({
+      current: 'hello',
+      length: 5,
+      isTyping: true,
+      totalPhrases: 3,
+    });
   });
 });
