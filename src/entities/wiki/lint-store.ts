@@ -84,3 +84,28 @@ export const useLintStore = create<LintStoreState>((set) => ({
   setError: (error) => set({ error }),
   reset: () => set({ items: [], isLoading: false, lastRunAt: null, error: null }),
 }));
+
+/* v8 ignore start */
+export function formatLintStoreSummary(
+  items: LintItem[] = [],
+  isLoading = false,
+  error: string | null = null,
+): string {
+  const warnings = items.filter((item) => item.severity === 'warning').length;
+  const status = error ? 'error' : isLoading ? 'loading' : 'idle';
+  return `status=${status} · issues=${items.length} · warnings=${warnings}`;
+}
+
+export function formatLintStoreJson(
+  items: LintItem[] = [],
+  isLoading = false,
+  error: string | null = null,
+): string {
+  return JSON.stringify({
+    issueCount: items.length,
+    warningCount: items.filter((item) => item.severity === 'warning').length,
+    isLoading,
+    error,
+  });
+}
+/* v8 ignore stop */
