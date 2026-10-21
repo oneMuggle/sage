@@ -157,3 +157,32 @@ export function useJournalTemplates(): UseJournalTemplatesReturn {
     reset,
   };
 }
+
+export function formatJournalTemplateDraftSummary(
+  spec: JournalSpec | null,
+  content: JournalContentDraft,
+  violations: readonly JournalViolation[] = [],
+): string {
+  const specLabel = spec ? `${spec.spec_id} (${spec.template_filename})` : 'no-spec';
+  const sectionCount = Object.keys(content.sections ?? {}).length;
+  return `${specLabel} · title=${content.title || 'untitled'} · sections=${sectionCount} · violations=${violations.length}`;
+}
+
+export function formatJournalTemplateDraftJson(
+  spec: JournalSpec | null,
+  content: JournalContentDraft,
+  violations: readonly JournalViolation[] = [],
+): string {
+  return JSON.stringify(
+    {
+      specId: spec?.spec_id ?? null,
+      templateFilename: spec?.template_filename ?? null,
+      title: content.title,
+      sectionKeys: Object.keys(content.sections ?? {}),
+      referenceCount: content.references.length,
+      violationCount: violations.length,
+    },
+    null,
+    2,
+  );
+}
