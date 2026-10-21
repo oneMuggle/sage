@@ -1661,4 +1661,17 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P124：演示运行时覆盖/Git 状态响应/运行时环境诊断契约/文件路径语言映射/占位模板填充/结构化日志状态/模型上下文窗口计算/忙碌耗时秒表审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/api/demoRuntime.ts`：新增 `formatDemoRuntimeSummary` 与 `formatDemoRuntimeJson` 及单测 `demoRuntime.test.ts`，支持一键导出演示模式运行时覆盖状态审计摘要（`demoOverride=<true|false|unset>`）与 JSON 快照。
+  2. `src/shared/api/gitStatusApi.ts`：新增 `formatGitStatusSummary` 与 `formatGitStatusJson` 及单测 `gitStatusApi.test.ts`，支持一键导出 Git 仓库分支、变更文件数与领先/落后提交审计摘要（`repo=<bool> · branch=<branch> · files=<count> · ahead=<a> · behind=<b>`）与 JSON 快照。
+  3. `src/shared/api/runtimeTypes.ts`：新增 `formatRuntimeDiagnosisSummary` 与 `formatRuntimeDiagnosisJson` 及单测 `runtimeTypes.test.ts`，支持一键导出项目运行时环境诊断等级与清单统计审计摘要（`level=<level> · findings=<count> · manifests=<count> · runtime=<rec>`）与 JSON 快照。
+  4. `src/shared/lib/fileLang.ts`：新增 `formatFileLangSummary` 与 `formatFileLangJson` 及单测 `fileLang.test.ts`，支持一键导出文件路径 Shiki 高亮语言推断审计摘要（`path=<path> · lang=<lang>`）与 JSON 快照。
+  5. `src/shared/lib/fillTemplate.ts`：新增 `formatFillTemplateSummary` 与 `formatFillTemplateJson` 及单测 `fillTemplate.test.ts`，支持一键导出模板占位符填充率与未决变量统计审计摘要（`placeholders=<total> · filled=<filled> · unresolved=<unresolved>`）与 JSON 快照。
+  6. `src/shared/lib/logger.ts`：新增 `formatLoggerAuditSummary` 与 `formatLoggerAuditJson` 及单测 `logger.test.ts`，支持一键导出结构化请求链路日志开关状态审计摘要（`logger=<enabled|disabled>`）与 JSON 快照。
+  7. `src/shared/lib/modelWindows.ts`：新增 `formatModelWindowSummary` 与 `formatModelWindowJson` 及单测 `modelWindows.test.ts`，支持一键导出模型有效上下文窗口与历史预算审计摘要（`window=<effective> · budget=<budget> · auto=<auto>`）与 JSON 快照。
+  8. `src/shared/lib/useElapsedSeconds.ts`：新增 `formatElapsedSecondsSummary` 与 `formatElapsedSecondsJson` 及单测 `useElapsedSeconds.test.ts`，支持一键导出长任务忙碌秒表状态审计摘要（`active=<bool> · elapsed=<sec>s`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
 
