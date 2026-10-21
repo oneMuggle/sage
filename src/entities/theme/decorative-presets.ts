@@ -336,3 +336,23 @@ export const decorativePresets: DecorativeTheme[] = [
 export function findDecorativeThemeById(id: string): DecorativeTheme | undefined {
   return decorativePresets.find((t) => t.id === id);
 }
+
+export function formatDecorativePresetSummary(theme: DecorativeTheme): string {
+  return `${theme.id} · ${theme.name} · ${theme.gradientFrom}->${theme.gradientTo}`;
+}
+
+export function formatDecorativePresetsJson(
+  themes: readonly DecorativeTheme[] = decorativePresets,
+): string {
+  return JSON.stringify(
+    themes.map((t) => ({
+      id: t.id,
+      name: t.name,
+      gradientFrom: t.gradientFrom,
+      gradientTo: t.gradientTo,
+      cover: t.cover,
+    })),
+    null,
+    2,
+  );
+}
