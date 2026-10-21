@@ -12,12 +12,14 @@ docs/win7-sync/parity.md，本脚本**不再覆盖**它。
   win7-only   : main 无此文件（win7 独有）→ 需确认仍有 importer，否则删
   main-only   : win7 无此文件 → 漏合入，需处理
   real        : 有实质业务差异 → 需人工审阅
+  docs-drift  : docs/** 文档差异 → 只观测，不计入「需要动作」（--docs-mode exempt，默认）
 
 用法：
     python scripts/win7/parity_report.py                      # 对比 origin/main vs HEAD
     python scripts/win7/parity_report.py --base origin/main --head origin/release/win7
     python scripts/win7/parity_report.py --fail-on main-only,real,win7-only   # CI 守门
     python scripts/win7/parity_report.py --write-allow                # 审计收口后登记
+    python scripts/win7/parity_report.py --docs-mode count            # 复现 docs 计入口径（历史对照）
 """
 from __future__ import annotations
 
@@ -29,6 +31,8 @@ import subprocess
 import sys
 from collections import Counter
 from typing import Dict, List
+
+DOCS_PREFIX = "docs/"
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "scripts" / "win7"))
@@ -158,6 +162,8 @@ def main() -> int:
     ap.add_argument("--max-list", type=int, default=60)
     ap.add_argument("--allow", default=str(REPO / "docs/win7-sync/parity-allow.txt"),
                     help="已审计的 win7 必要差异清单（glob/行）；命中 → intentional")
+    ap.add_argument("--docs-mode", choices=["exempt", "count"], default="exempt",
+                    help="docs/** 差异是否计入「需要动作」：exempt=只观测（默认），count=旧口径")
     ap.add_argument("--write-allow", action="store_true",
                     help="把当前 real + win7-only 全部写入 --allow（审计收口时用一次）")
     args = ap.parse_args()
@@ -184,11 +190,17 @@ def main() -> int:
         raw_grade = grade
         if grade in ("real", "win7-only") and is_allowed(path, allow):
             grade = "intentional"
+        if args.docs_mode == "exempt" and path.startswith(DOCS_PREFIX):
+            # 文档不是代码契约：main 每写一篇 docs/plans 就会让「需要动作」涨 1，
+            # 若计入，验收指标在代码零退步时也不可能达成。只观测，不进 actionable。
+            grade = "docs-drift"
         rows.append({"path": path, "status": status, "cls": classify(path),
                      "grade": grade, "raw_grade": raw_grade})
 
     if args.write_allow:
-        pats = sorted({r["path"] for r in rows if r["raw_grade"] in ("real", "win7-only")})
+        pats = sorted({r["path"] for r in rows
+                       if r["raw_grade"] in ("real", "win7-only")
+                       and not (args.docs_mode == "exempt" and r["path"].startswith(DOCS_PREFIX))})
         header = ["# win7 必要差异允许清单（parity_report.py --allow）",
                   "# 每行一个路径或 glob；命中的 real / win7-only 文件记为 intentional，不触发 --fail-on。",
                   "# 新增条目须在 PR 中说明理由（对应 docs/win7-sync/parity.md 的批次经验）。", ""]
@@ -226,11 +238,15 @@ def main() -> int:
         "win7-only": "win7 独有文件（需有 importer，否则应删）",
         "main-only": "main 有 win7 无 → **漏合入**",
         "real": "实质业务差异 → **需审阅**",
+        "docs-drift": "docs/** 文档差异 → 只观测，不计入需动作",
     }
-    for g in ["typing-only", "frozen", "intentional", "win7-only", "main-only", "real"]:
+    for g in ["typing-only", "frozen", "intentional", "docs-drift",
+              "win7-only", "main-only", "real"]:
         lines.append("| {} | {} | {} |".format(g, cnt[g], meaning[g]))
     lines.append("")
-    lines.append("- **需要动作的文件：{}**（main-only + real + 未登记的 win7-only）".format(actionable))
+    lines.append("- **需要动作的文件：{}**（main-only + real + 未登记的 win7-only；docs 已排除）".format(actionable))
+    if cnt["docs-drift"]:
+        lines.append("- docs 差异（不计入需动作）：{}".format(cnt["docs-drift"]))
     lines.append("- 按区域：" + "、".join("{} {}".format(k, v) for k, v in by_area.most_common()))
     lines.append("")
     for g in ["main-only", "real", "win7-only"]:
