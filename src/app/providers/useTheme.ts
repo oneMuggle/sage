@@ -33,3 +33,33 @@ export function useTheme(): ThemeContextValue {
   }
   return ctx;
 }
+
+export function formatThemeAuditSummary(state: {
+  mode: ThemeMode;
+  resolved: 'light' | 'dark';
+  presetId: string;
+  activeSource: ActiveThemeSource;
+  cssThemeCount?: number;
+}): string {
+  return `mode=${state.mode}(${state.resolved}) · preset=${state.presetId} · source=${state.activeSource.kind}:${state.activeSource.id} · css=${state.cssThemeCount ?? 0}`;
+}
+
+export function formatThemeAuditJson(state: {
+  mode: ThemeMode;
+  resolved: 'light' | 'dark';
+  presetId: string;
+  activeSource: ActiveThemeSource;
+  cssThemeCount?: number;
+}): string {
+  return JSON.stringify(
+    {
+      mode: state.mode,
+      resolved: state.resolved,
+      presetId: state.presetId,
+      activeSource: state.activeSource,
+      cssThemeCount: state.cssThemeCount ?? 0,
+    },
+    null,
+    2,
+  );
+}

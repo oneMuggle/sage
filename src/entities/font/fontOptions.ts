@@ -83,3 +83,12 @@ export function normalizeFontSettings(value: unknown): FontSettings {
     fontSizeCode: normalizeFontSize(settings.fontSizeCode, FONT_DEFAULTS.fontSizeCode),
   };
 }
+
+export function formatFontSettingsSummary(settings: FontSettings): string {
+  const normalized = normalizeFontSettings(settings);
+  return `ui=${normalized.fontUi}@${normalized.fontSizeUi}px · code=${normalized.fontCode}@${normalized.fontSizeCode}px`;
+}
+
+export function formatFontSettingsJson(settings: FontSettings): string {
+  return JSON.stringify(normalizeFontSettings(settings), null, 2);
+}
