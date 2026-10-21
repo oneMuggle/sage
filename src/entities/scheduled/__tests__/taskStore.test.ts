@@ -11,7 +11,11 @@ vi.mock('../../../shared/api/scheduledClient', () => ({
 }));
 
 import { scheduledClient } from '../../../shared/api/scheduledClient';
-import { useScheduledTaskStore } from '../taskStore';
+import {
+  buildScheduledTaskStoreAuditJson,
+  buildScheduledTaskStoreAuditSnapshot,
+  useScheduledTaskStore,
+} from '../taskStore';
 
 const client = scheduledClient as unknown as {
   list: ReturnType<typeof vi.fn>;
@@ -103,5 +107,33 @@ describe('useScheduledTaskStore', () => {
     await expect(useScheduledTaskStore.getState().delete('task-1')).rejects.toThrow('nope');
     expect(useScheduledTaskStore.getState().error).toBe('nope');
     expect(useScheduledTaskStore.getState().tasks).toHaveLength(1);
+  });
+
+  it('exports taskStore audit snapshot and JSON helpers', () => {
+    expect(buildScheduledTaskStoreAuditSnapshot()).toBe(
+      'tasks:0|enabled:0|loading:no|err:no',
+    );
+    expect(
+      buildScheduledTaskStoreAuditSnapshot({
+        taskCount: 3,
+        enabledCount: 2,
+        loading: true,
+        hasError: true,
+      }),
+    ).toBe('tasks:3|enabled:2|loading:yes|err:yes');
+
+    const parsed = JSON.parse(
+      buildScheduledTaskStoreAuditJson({
+        taskCount: 1,
+        enabledCount: 1,
+      }),
+    );
+    expect(parsed).toEqual({
+      taskCount: 1,
+      enabledCount: 1,
+      loading: false,
+      hasError: false,
+      snapshot: 'tasks:1|enabled:1|loading:no|err:no',
+    });
   });
 });

@@ -136,3 +136,44 @@ if (import.meta.hot) {
   }
   globalThis.__sageWikiStore = useWikiStore;
 }
+
+export interface WikiStoreAuditInput {
+  hasProject?: boolean;
+  fileTreeCount?: number;
+  selectedFile?: string | null;
+  activeView?: WikiView;
+  isLoading?: boolean;
+  hasError?: boolean;
+}
+
+export function buildWikiStoreAuditSnapshot(
+  input: WikiStoreAuditInput = {},
+): string {
+  const hasProject = Boolean(input.hasProject);
+  const fileTreeCount = Math.max(0, input.fileTreeCount ?? 0);
+  const selectedFile = (input.selectedFile ?? '').trim() || 'none';
+  const activeView = input.activeView ?? 'browser';
+  const isLoading = Boolean(input.isLoading);
+  const hasError = Boolean(input.hasError);
+  return `project:${hasProject ? 'yes' : 'no'}|tree:${fileTreeCount}|file:${selectedFile}|view:${activeView}|loading:${isLoading ? 'yes' : 'no'}|err:${hasError ? 'yes' : 'no'}`;
+}
+
+export function buildWikiStoreAuditJson(
+  input: WikiStoreAuditInput = {},
+): string {
+  const hasProject = Boolean(input.hasProject);
+  const fileTreeCount = Math.max(0, input.fileTreeCount ?? 0);
+  const selectedFile = (input.selectedFile ?? '').trim() || 'none';
+  const activeView = input.activeView ?? 'browser';
+  const isLoading = Boolean(input.isLoading);
+  const hasError = Boolean(input.hasError);
+  return JSON.stringify({
+    hasProject,
+    fileTreeCount,
+    selectedFile,
+    activeView,
+    isLoading,
+    hasError,
+    snapshot: buildWikiStoreAuditSnapshot(input),
+  });
+}

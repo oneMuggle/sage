@@ -15,7 +15,11 @@ vi.mock('../../../shared/api/todoClient', () => ({
 }));
 
 import { todoClient } from '../../../shared/api/todoClient';
-import { useTodoStore } from '../todoStore';
+import {
+  buildTodoStoreAuditJson,
+  buildTodoStoreAuditSnapshot,
+  useTodoStore,
+} from '../todoStore';
 
 const client = todoClient as unknown as {
   list: ReturnType<typeof vi.fn>;
@@ -150,5 +154,36 @@ describe('useTodoStore', () => {
     client.summary.mockResolvedValueOnce(fixture);
     await useTodoStore.getState().loadSummary();
     expect(useTodoStore.getState().summary).toBe(fixture);
+  });
+
+  it('exports todoStore audit snapshot and JSON helpers', () => {
+    expect(buildTodoStoreAuditSnapshot()).toBe(
+      'todos:0|pending:0|loading:no|err:no|summary:no',
+    );
+    expect(
+      buildTodoStoreAuditSnapshot({
+        todoCount: 5,
+        pendingCount: 2,
+        loading: true,
+        hasError: true,
+        hasSummary: true,
+      }),
+    ).toBe('todos:5|pending:2|loading:yes|err:yes|summary:yes');
+
+    const parsed = JSON.parse(
+      buildTodoStoreAuditJson({
+        todoCount: 2,
+        pendingCount: 1,
+        hasSummary: true,
+      }),
+    );
+    expect(parsed).toEqual({
+      todoCount: 2,
+      pendingCount: 1,
+      loading: false,
+      hasError: false,
+      hasSummary: true,
+      snapshot: 'todos:2|pending:1|loading:no|err:no|summary:yes',
+    });
   });
 });
