@@ -25,10 +25,11 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from collections import defaultdict
 from typing import Any, Dict, List, Set
+
+from backend.memory.auto_tag import derive_tags, normalize_tags
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,25 @@ class TagCooccurrenceGraph:
         self.tag_cooccurrence: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
         self.tag_memory_index: Dict[str, Set[str]] = defaultdict(set)
         self.total_memories = 0
+
+    @staticmethod
+    def _extract_tags(mem: Dict[str, Any]) -> List[str]:
+        """提取单条记忆的标签列表。
+
+        优先使用显式标签；缺省时从内容自动派生（``auto_tag.derive_tags``）。
+        存量记忆大多 ``tags=[]``（实测 84%），若直接跳过，这些记忆对图谱
+        完全不可见，共现矩阵几乎没有边。
+
+        Args:
+            mem: 记忆字典（需含 ``tags`` / ``content`` 键）
+
+        Returns:
+            标签列表（可能为空）
+        """
+        tags = normalize_tags(mem.get("tags"))
+        if tags:
+            return tags
+        return derive_tags(mem.get("content") or "")
 
     def build_from_memories(
         self,
@@ -70,12 +90,7 @@ class TagCooccurrenceGraph:
         # 从 episodic 记忆抽取
         episodic_recent = episodic_memory.get_recent(limit=limit)
         for mem in episodic_recent:
-            tags = mem.get("tags") or []
-            if isinstance(tags, str):
-                try:
-                    tags = json.loads(tags)
-                except json.JSONDecodeError:
-                    tags = []
+            tags = self._extract_tags(mem)
             if tags:
                 all_tags.append(tags)
                 memory_ids.append(mem["id"])
@@ -83,12 +98,7 @@ class TagCooccurrenceGraph:
         # 从 semantic 记忆抽取
         semantic_recent = semantic_memory.get_recent(limit=limit)
         for mem in semantic_recent:
-            tags = mem.get("tags") or []
-            if isinstance(tags, str):
-                try:
-                    tags = json.loads(tags)
-                except json.JSONDecodeError:
-                    tags = []
+            tags = self._extract_tags(mem)
             if tags:
                 all_tags.append(tags)
                 memory_ids.append(mem["id"])
