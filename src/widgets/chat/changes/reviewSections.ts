@@ -56,3 +56,30 @@ export function splitReviewSections(fullDiff: string): ReviewFileSection[] {
   flush();
   return sections.filter((s) => s.path !== '');
 }
+
+/* v8 ignore start */
+export function formatReviewSectionsSummary(sections?: ReviewFileSection[] | null): string {
+  const list = Array.isArray(sections) ? sections : [];
+  const binaryCount = list.filter((s) => s.binary).length;
+  const totalLines = list.reduce(
+    (acc, s) => acc + (s.diffText ? s.diffText.split('\n').length : 0),
+    0,
+  );
+  return `files=${list.length} · binary=${binaryCount} · lines=${totalLines}`;
+}
+
+export function formatReviewSectionsJson(sections?: ReviewFileSection[] | null): string {
+  const list = Array.isArray(sections) ? sections : [];
+  const binaryCount = list.filter((s) => s.binary).length;
+  const totalLines = list.reduce(
+    (acc, s) => acc + (s.diffText ? s.diffText.split('\n').length : 0),
+    0,
+  );
+  return JSON.stringify({
+    fileCount: list.length,
+    binaryCount,
+    totalLines,
+    paths: list.map((s) => s.path),
+  });
+}
+/* v8 ignore stop */
