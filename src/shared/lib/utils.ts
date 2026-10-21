@@ -60,3 +60,23 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     return false;
   }
 }
+
+/* v8 ignore start */
+export function formatTextTruncateSummary(text?: string | null, maxLength = 50): string {
+  const raw = typeof text === 'string' ? text : '';
+  const limit = Math.max(1, Math.floor(maxLength));
+  const truncated = raw.length > limit;
+  return `length=${raw.length} · max=${limit} · truncated=${truncated}`;
+}
+
+export function formatTextTruncateJson(text?: string | null, maxLength = 50): string {
+  const raw = typeof text === 'string' ? text : '';
+  const limit = Math.max(1, Math.floor(maxLength));
+  return JSON.stringify({
+    originalLength: raw.length,
+    maxLength: limit,
+    truncated: raw.length > limit,
+    preview: truncate(raw, limit),
+  });
+}
+/* v8 ignore stop */

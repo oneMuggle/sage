@@ -1674,4 +1674,17 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P125：移动端断点检测/可拖拽右面板/可拖拽侧边栏/文本截断工具/会话草稿持久化/对话阅读多语言词典/日志级别常量/确认弹窗服务审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/useIsMobile.ts`：新增 `MOBILE_BREAKPOINT_PX`、`formatViewportMobileSummary` 与 `formatViewportMobileJson` 及单测 `useIsMobile.test.ts`，支持一键导出响应式移动端断点判定审计摘要（`viewport=<px>px · mobile=<bool> · breakpoint=768px`）与 JSON 快照。
+  2. `src/shared/lib/useResizablePanel.ts`：新增 `formatResizablePanelSummary` 与 `formatResizablePanelJson` 及单测 `useResizablePanel.test.ts`，支持一键导出可调面板宽度区间、锚定侧与拖拽态审计摘要（`width=<px>px · range=[<min>,<max>] · anchor=<left|right> · dragging=<bool>`）与 JSON 快照。
+  3. `src/shared/lib/useResizableSidebar.ts`：新增 `formatResizableSidebarSummary` 与 `formatResizableSidebarJson` 及单测 `useResizableSidebar.test.ts`，支持一键导出主侧边栏宽度钳制区间与拖拽状态审计摘要（`sidebar=<px>px · range=[260,480] · dragging=<bool>`）与 JSON 快照。
+  4. `src/shared/lib/utils.ts`：新增 `formatTextTruncateSummary` 与 `formatTextTruncateJson` 及单测 `utils.test.ts`，支持一键导出文本截断阈值与预览审计摘要（`length=<len> · max=<max> · truncated=<bool>`）与 JSON 快照。
+  5. `src/shared/lib/hooks/useSessionDraft.ts`：新增 `formatSessionDraftSummary` 与 `formatSessionDraftJson` 及单测 `useSessionDraft.test.ts`，支持一键导出单会话草稿字数与持久化状态审计摘要（`session=<id> · chars=<len> · persisted=<bool>`）与 JSON 快照。
+  6. `src/shared/lib/i18n/chatReading.ts`：新增 `formatChatReadingI18nSummary` 与 `formatChatReadingI18nJson` 及单测 `chatReading.test.ts`，支持一键导出对话阅读中英词典键数对齐审计摘要（`zh=<count> · en=<count> · parity=<bool>`）与 JSON 快照。
+  7. `src/shared/log/levels.ts`：新增 `formatLogLevelSummary` 与 `formatLogLevelJson` 及单测 `levels.test.ts`，支持一键导出前后端共享日志级别权重与限流间隔审计摘要（`level=<level> · rank=<rank> · rateLimitMs=<ms>`）与 JSON 快照。
+  8. `src/shared/ui/ConfirmDialog/confirmService.ts`：新增 `formatConfirmServiceSummary` 与 `formatConfirmServiceJson` 及单测 `confirmService.test.ts`，支持一键导出异步确认弹窗挂起态、危险标记与订阅者计数审计摘要（`pending=<bool> · danger=<bool> · listeners=<count>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
 
