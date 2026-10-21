@@ -776,3 +776,20 @@ export function DiffChangeRow({ change }: { change: OfficeDiffPreviewChange }) {
     </li>
   );
 }
+export function formatOfficeDiffChangeSummary(change: OfficeDiffPreviewChange): string {
+  return `${change.op} · target=${change.target ?? 'none'} · hasBefore=${change.before != null} · hasAfter=${change.after != null}`;
+}
+
+export function formatOfficeDiffChangeJson(change: OfficeDiffPreviewChange): string {
+  return JSON.stringify(
+    {
+      op: change.op,
+      target: change.target ?? null,
+      summary: change.summary ?? null,
+      hasBefore: change.before != null,
+      hasAfter: change.after != null,
+    },
+    null,
+    2,
+  );
+}

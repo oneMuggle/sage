@@ -65,4 +65,18 @@ describe('Switch', () => {
     // Assert
     expect(switchEl).toHaveAttribute('aria-checked', 'false');
   });
+
+  it('formats switch state summary and JSON (Phase P119)', async () => {
+    const { formatSwitchStateSummary, formatSwitchStateJson } = await import('../Switch');
+    expect(formatSwitchStateSummary({ label: 'Auto refresh', checked: true, disabled: false })).toBe(
+      'Auto refresh · checked · disabled=false',
+    );
+    expect(
+      JSON.parse(formatSwitchStateJson({ label: 'Auto refresh', checked: true, disabled: false })),
+    ).toEqual({
+      label: 'Auto refresh',
+      checked: true,
+      disabled: false,
+    });
+  });
 });

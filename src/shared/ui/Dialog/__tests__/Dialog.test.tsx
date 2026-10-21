@@ -114,4 +114,18 @@ describe('Dialog', () => {
     // Assert
     expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
   });
+
+  it('formats dialog config summary and JSON (Phase P119)', async () => {
+    const { formatDialogConfigSummary, formatDialogConfigJson } = await import('../Dialog');
+    expect(formatDialogConfigSummary({ open: true, showCloseButton: false, title: 'Confirm' })).toBe(
+      'open · closeBtn=false · title=Confirm',
+    );
+    expect(
+      JSON.parse(formatDialogConfigJson({ open: true, showCloseButton: false, title: 'Confirm' })),
+    ).toEqual({
+      open: true,
+      showCloseButton: false,
+      title: 'Confirm',
+    });
+  });
 });

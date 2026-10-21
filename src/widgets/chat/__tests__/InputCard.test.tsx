@@ -212,4 +212,18 @@ describe('InputCard — Esc interrupts while streaming (RT8)', () => {
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
+
+  it('formats InputCard audit summary and JSON (Phase P119)', async () => {
+    const { formatInputCardAuditSummary, formatInputCardAuditJson } = await import('../InputCard');
+    expect(formatInputCardAuditSummary('hello', true, false)).toBe(
+      'chars=5/4000 · loading=true · attachments=false · overLimit=false',
+    );
+    expect(JSON.parse(formatInputCardAuditJson('hello', true, false))).toEqual({
+      charCount: 5,
+      hardLimit: 4000,
+      overLimit: false,
+      isLoading: true,
+      hasAttachments: false,
+    });
+  });
 });

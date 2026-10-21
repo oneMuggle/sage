@@ -685,3 +685,22 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.artifactsByToolCall === next.artifactsByToolCall
   );
 });
+export function formatMessageAuditSummary(message: MessageType, isStreaming = false): string {
+  const toolCount = Array.isArray(message.tool_calls) ? message.tool_calls.length : 0;
+  return `${message.id} · role=${message.role} · streaming=${isStreaming} · tools=${toolCount} · chars=${(message.content ?? '').length}`;
+}
+
+export function formatMessageAuditJson(message: MessageType, isStreaming = false): string {
+  const toolCount = Array.isArray(message.tool_calls) ? message.tool_calls.length : 0;
+  return JSON.stringify(
+    {
+      id: message.id,
+      role: message.role,
+      isStreaming,
+      toolCallCount: toolCount,
+      contentLength: (message.content ?? '').length,
+    },
+    null,
+    2,
+  );
+}

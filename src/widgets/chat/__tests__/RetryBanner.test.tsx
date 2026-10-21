@@ -99,4 +99,19 @@ describe('RetryBanner', () => {
     expect(getByTestId('retry-banner').textContent).toContain('Retrying (1/3)');
     expect(getByTestId('retry-banner-reason').textContent).toContain('Request timed out');
   });
+
+  it('formats RetryBanner audit summary and JSON (Phase P119)', async () => {
+    const { formatRetryBannerSummary, formatRetryBannerJson } = await import('../RetryBanner');
+    const info = makeInfo({ attempt: 2, max_attempts: 3, error_type: 'timeout', delay: 4 });
+    expect(formatRetryBannerSummary(info)).toBe(
+      'attempt=2/3 · type=timeout · severity=warning · delay=4s',
+    );
+    expect(JSON.parse(formatRetryBannerJson(info))).toEqual({
+      attempt: 2,
+      maxAttempts: 3,
+      errorType: 'timeout',
+      severity: 'warning',
+      delay: 4,
+    });
+  });
 });
