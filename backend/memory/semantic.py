@@ -26,6 +26,7 @@ from backend.data.database import (
     fts_row_texts,
 )
 from backend.memory import scope as memory_scope
+from backend.memory.auto_tag import derive_tags, normalize_tags
 from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
 from backend.memory.summary_text import truncate_summary
 
@@ -157,8 +158,12 @@ class SemanticMemory:
         if summary is None:
             summary = self._generate_summary(content)
 
-        # 处理标签
-        tags_json = json.dumps(tags or [], ensure_ascii=False)
+        # 处理标签：显式标签优先；缺省时从内容自动派生（缓解标签稀疏，
+        # 否则 TagCooccurrenceGraph 的共现矩阵几乎没有边）
+        tag_list = normalize_tags(tags)
+        if not tag_list:
+            tag_list = derive_tags(content)
+        tags_json = json.dumps(tag_list, ensure_ascii=False)
 
         # 插入主表
         cursor.execute(
