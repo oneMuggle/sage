@@ -20,6 +20,7 @@ export type SettingsTabKey =
   | 'zotero'
   | 'runtime'
   | 'evolution'
+  | 'harness'
   | 'updates'
   | 'usage-stats'
   | 'providers';

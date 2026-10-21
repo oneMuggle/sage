@@ -37,6 +37,7 @@ from typing import Any, Callable, Dict, List, Optional
 from sage_core import ToolResult, ToolSpec
 from sage_core.repositories import ToolPort  # noqa: F401  (structural typing target)
 
+from backend.application.services.harness_recorder import HarnessProbe
 from backend.domain.scheduler import SchedulerServicePort
 from backend.domain.tool_policy import ToolPolicy
 from backend.services.todo_service import get_todo_service
@@ -138,28 +139,32 @@ class InprocToolAdapter:
                 metadata=None,
             )
 
-        try:
-            raw = await asyncio.wait_for(
-                to_thread(tool.execute, **args),
-                timeout=self._policy.timeout_seconds,
-            )
-        except TIMEOUT_EXCEPTIONS:
-            return ToolResult(
-                success=False,
-                output="",
-                error=tool_timeout_message(self._policy.timeout_seconds),
-                metadata={
-                    "timeout_seconds": self._policy.timeout_seconds,
-                    "truncated": False,
-                },
-            )
-        except Exception as exc:  # noqa: BLE001  (按契约收敛所有错误)
-            return ToolResult(
-                success=False,
-                output="",
-                error=f"{type(exc).__name__}: {exc}",
-                metadata=None,
-            )
+        with HarnessProbe("tool", name) as probe:
+            try:
+                raw = await asyncio.wait_for(
+                    to_thread(tool.execute, **args),
+                    timeout=self._policy.timeout_seconds,
+                )
+                probe.result = raw  # 成功路径：让 probe 在 __exit__ 时读到 raw.success
+            except TIMEOUT_EXCEPTIONS:
+                # probe.result 保持 None → __exit__ 视为失败；
+                # 延迟在 __exit__ 中已记录，return 前不再重复埋点。
+                return ToolResult(
+                    success=False,
+                    output="",
+                    error=tool_timeout_message(self._policy.timeout_seconds),
+                    metadata={
+                        "timeout_seconds": self._policy.timeout_seconds,
+                        "truncated": False,
+                    },
+                )
+            except Exception as exc:  # noqa: BLE001  (按契约收敛所有错误)
+                return ToolResult(
+                    success=False,
+                    output="",
+                    error=f"{type(exc).__name__}: {exc}",
+                    metadata=None,
+                )
 
         output_value = getattr(raw, "output", None)
         if output_value is None:

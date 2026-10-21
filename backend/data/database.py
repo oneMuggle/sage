@@ -1971,6 +1971,67 @@ class Database:
         """)
         conn.commit()
 
+        # ── Harness 组件注册表 (2026-10-21, plan §3.2.2 M2) ─────────────
+        # Harness = 围绕 LLM 的运行时脚手架（Agent = Model + Harness）。
+        # 本表登记 8 类可替换 harness 组件，并累积 effectiveness 指标，
+        # 为后续的 Propose–Probe–Compose 自动优化闭环提供数据基础。
+        #
+        # 组件 id 采用 "<type>:<name>" 命名（如 "skill:academic-search"），
+        # 与 type 列冗余但便于 prefix 查询。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS harness_components (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL CHECK(type IN (
+                    'system_prompt', 'guardrails', 'memory', 'tool_guidance',
+                    'subagents', 'skills', 'scripts', 'plugins'
+                )),
+                name TEXT NOT NULL,
+                version TEXT NOT NULL DEFAULT '1.0.0',
+                config_json TEXT NOT NULL DEFAULT '{}',
+                usage_count INTEGER NOT NULL DEFAULT 0,
+                success_count INTEGER NOT NULL DEFAULT 0,
+                total_latency_ms REAL NOT NULL DEFAULT 0.0,
+                user_satisfaction_sum REAL NOT NULL DEFAULT 0.0,
+                user_satisfaction_count INTEGER NOT NULL DEFAULT 0,
+                last_used_at INTEGER,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_harness_components_type "
+            "ON harness_components(type)"
+        )
+
+        # Harness 改进提案表（阶段 3 自动优化闭环的持久化载体）。
+        # proposal_json 存 Propose 阶段的候选改进；probe_result_json 存
+        # Probe 阶段的对比式测试结果；evidence_json 存 Compose 阶段汇总的
+        # 证据链。status 流转：pending → approved/rejected，approved 后可
+        # 转 rolled_back（保留原配置快照以便回滚）。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS harness_improvements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                component_id TEXT NOT NULL,
+                proposal_json TEXT NOT NULL,
+                probe_result_json TEXT,
+                status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN (
+                    'pending', 'approved', 'rejected', 'rolled_back'
+                )),
+                evidence_json TEXT,
+                previous_config_json TEXT,
+                created_at INTEGER NOT NULL,
+                applied_at INTEGER,
+                rolled_back_at INTEGER,
+                FOREIGN KEY (component_id) REFERENCES harness_components(id)
+                    ON DELETE CASCADE
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_harness_improvements_component "
+            "ON harness_improvements(component_id, status)"
+        )
+        conn.commit()
+
         # C3 (DSH 对标 R9): schema 版本化迁移 —— 幂等应用所有未执行迁移。
         # 既有 DDL（CREATE IF NOT EXISTS / ALTER 防御块）保持原位，本框架
         # 服务于未来需要数据改写的迁移（纪律：只新增版本代，绝不覆写）。

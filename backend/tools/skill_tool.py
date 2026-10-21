@@ -28,6 +28,7 @@ import logging
 import shlex
 from typing import Any, List, Optional
 
+from backend.application.services.harness_recorder import HarnessProbe
 from backend.domain.tool_policy import ToolPolicy
 
 from .base import BaseTool, ToolResult, ToolSchema
@@ -149,16 +150,18 @@ class SkillTool(BaseTool):
         # 而技能执行路径是 async —— 临时事件循环跑完即关。
         import asyncio
 
-        loop = asyncio.new_event_loop()
-        try:
-            result = loop.run_until_complete(
-                self._invoke(adapter, skill, args_raw, args_list, script=script)
-            )
-        except Exception as exc:  # noqa: BLE001 — 工具约定：错误走 ToolResult 不抛
-            logger.error("skill 执行失败: skill=%s error=%s", skill, exc)
-            return ToolResult(success=False, error=f"skill 执行失败: {exc}")
-        finally:
-            loop.close()
+        with HarnessProbe("skill", skill) as probe:
+            loop = asyncio.new_event_loop()
+            try:
+                result = loop.run_until_complete(
+                    self._invoke(adapter, skill, args_raw, args_list, script=script)
+                )
+                probe.result = result  # SkillResult.success 供 probe 读取
+            except Exception as exc:  # noqa: BLE001 — 工具约定：错误走 ToolResult 不抛
+                logger.error("skill 执行失败: skill=%s error=%s", skill, exc)
+                return ToolResult(success=False, error=f"skill 执行失败: {exc}")
+            finally:
+                loop.close()
 
         if not result.success:
             return ToolResult(success=False, error=result.error or "skill 执行失败")
