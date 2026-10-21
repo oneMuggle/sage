@@ -1,0 +1,55 @@
+# 版本 lockstep 闸门
+#
+# 背景：main 与 release/win7 走两条并行的 4 档发布线，规则见
+# docs/technical/30-release-tiers.md §30.4：
+#   - MAJOR.MINOR.PATCH 强同步；
+#   - tier 编号（alpha.N / beta.N / rc.N）强同步；
+#   - win7 tag = main tag + `-win7` 后缀。
+#
+# 现状（2026-10-21）：win7 已发布 v0.4.9-alpha.64-win7，而 main 的 package.json 停在
+# 0.4.9-alpha.63，脱钩整整一个 tier。本 workflow 把该规则变成可执行检查，避免再次静默漂移。
+#
+# 注意：按 §30.3「不在 CI 里自动打 tag（始终人工确认）」，这里**只校验，不打 tag、不改版本**。
+
+name: Version Lockstep
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'CHANGELOG.md'
+      - 'scripts/check_version_lockstep.py'
+      - '.github/workflows/version-lockstep.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'CHANGELOG.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: version-lockstep-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lockstep:
+    name: main ↔ release/win7 版本一致
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # 需要 origin/release/win7 与全部 tag
+
+      - name: Fetch release/win7
+        run: git fetch --no-tags origin release/win7:refs/remotes/origin/release/win7
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 只依赖标准库，无需 pip install
+      - name: Check version lockstep
+        run: python scripts/check_version_lockstep.py --tags
