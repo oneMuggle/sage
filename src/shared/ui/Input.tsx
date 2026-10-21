@@ -27,3 +27,17 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 );
 
 Input.displayName = 'Input';
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatInputFieldSummary(error = false, disabled = false): string {
+  return `error=${Boolean(error)} · disabled=${Boolean(disabled)}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatInputFieldJson(error = false, disabled = false): string {
+  return JSON.stringify({
+    error: Boolean(error),
+    disabled: Boolean(disabled),
+  });
+}
+

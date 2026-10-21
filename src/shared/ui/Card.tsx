@@ -51,3 +51,26 @@ export function CardContent({ className, children, ...props }: CardContentProps)
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatCardLayoutSummary(
+  hasHeader = true,
+  hasTitle = true,
+  hasContent = true,
+): string {
+  return `header=${Boolean(hasHeader)} · title=${Boolean(hasTitle)} · content=${Boolean(hasContent)}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatCardLayoutJson(
+  hasHeader = true,
+  hasTitle = true,
+  hasContent = true,
+): string {
+  return JSON.stringify({
+    hasHeader: Boolean(hasHeader),
+    hasTitle: Boolean(hasTitle),
+    hasContent: Boolean(hasContent),
+  });
+}
+

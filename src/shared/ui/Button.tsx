@@ -46,3 +46,26 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 
 Button.displayName = 'Button';
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatButtonVariantSummary(
+  variant: ButtonProps['variant'] = 'primary',
+  size: ButtonProps['size'] = 'md',
+  disabled = false,
+): string {
+  return `variant=${variant ?? 'primary'} · size=${size ?? 'md'} · disabled=${Boolean(disabled)}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatButtonVariantJson(
+  variant: ButtonProps['variant'] = 'primary',
+  size: ButtonProps['size'] = 'md',
+  disabled = false,
+): string {
+  return JSON.stringify({
+    variant: variant ?? 'primary',
+    size: size ?? 'md',
+    disabled: Boolean(disabled),
+  });
+}
+
