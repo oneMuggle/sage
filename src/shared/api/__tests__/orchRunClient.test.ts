@@ -14,6 +14,7 @@ vi.mock('../desktopInvoke', () => ({
 }));
 
 import { orchRunClient } from '../orchRunClient';
+import { formatOrchRunDetailJson, formatOrchRunDetailSummary } from '../orchRunClient';
 
 beforeEach(() => {
   mockInvoke.mockReset();
@@ -27,5 +28,21 @@ describe('orchRunClient.cancelRun (PR C C1)', () => {
       run_id: 'orch-abc',
     });
     expect(result).toEqual({ ok: true, run_id: 'orch-abc', status: 'cancelled' });
+  });
+
+  it('formats orch run detail summary and JSON (Phase P112)', () => {
+    const detail = {
+      run_id: 'orch-1',
+      session_id: 'sess-1',
+      status: 'completed',
+      created_at: 1000,
+      plan: [{ task_id: 't1' }],
+      tasks: [{ task_id: 't1', status: 'done' }],
+    };
+    expect(formatOrchRunDetailSummary(detail)).toBe('orch-1 · completed · plan=1 · tasks=1');
+    const parsed = JSON.parse(formatOrchRunDetailJson(detail));
+    expect(parsed.runId).toBe('orch-1');
+    expect(parsed.planCount).toBe(1);
+    expect(parsed.taskCount).toBe(1);
   });
 });

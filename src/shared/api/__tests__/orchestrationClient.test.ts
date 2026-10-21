@@ -117,4 +117,29 @@ describe('orchestrationClient', () => {
       await expect(orchestrationClient.getBoard()).rejects.toThrow('ipc down');
     });
   });
+
+  it('formats lane decision summary and JSON (Phase P112)', async () => {
+    const { formatLaneDecisionSummary, formatLaneDecisionJson } = await import(
+      '../orchestrationClient'
+    );
+    const res = {
+      ok: true,
+      lane: { lane_id: 'lane-99' } as never,
+      decision: 'accept' as const,
+      merged: true,
+      already: false,
+      warning: null,
+      merge: null,
+    };
+    expect(formatLaneDecisionSummary(res)).toBe('lane-99 · accept · merged=true · already=false');
+    const parsed = JSON.parse(formatLaneDecisionJson(res));
+    expect(parsed).toEqual({
+      ok: true,
+      laneId: 'lane-99',
+      decision: 'accept',
+      merged: true,
+      already: false,
+      warning: null,
+    });
+  });
 });

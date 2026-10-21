@@ -1490,3 +1490,16 @@
   8. `src/pages/settings/credentialCookieParser.ts`：新增 `formatCookieHeaderSummary` 与 `formatCookieHeaderJson`，支持脱敏（不暴露 Cookie secret 值）的 Cookie 条目计数与键名列表摘要及 JSON 导出。
 - **单元测试（8 项）**：
   - `src/features/send-message/__tests__/sessionNotify.test.ts`、`src/features/task-center/__tests__/taskCenterStore.test.ts`、`src/features/theme/__tests__/backgroundInjector.test.ts`、`src/features/theme/__tests__/themeCssTypes.test.ts`、`src/features/theme/__tests__/themeCssValidator.test.ts`、`src/features/welcome/__tests__/useTypewriterPlaceholder.test.ts`、`src/features/wiki/__tests__/useWikiChatStream.test.tsx`、`src/pages/settings/__tests__/credentialCookieParser.test.ts` 全部通过（88 tests passed）。
+
+### Phase P112（已完成）：设置检索索引、通用日志器、桌面后端请求桥、Demo 拦截器、文件检索客户端、NDJSON 事件流解析、编排运行客户端及多智能体 Lane 客户端治理
+- **改造模块（8 项）**：
+  1. `src/pages/settings/settingsSearchIndex.ts`：新增 `formatSettingsSearchSummary` 与 `formatSettingsSearchJson`，支持设置页全文搜索查询词、命中数、命中键列表及目标 Tab 集合摘要与可复制 JSON 序列化。
+  2. `src/shared/logger.ts`：新增 `formatLoggerEntrySummary` 与 `formatLoggerEntryJson`，支持带作用域（scope）与日志级别的标准化日志摘要及 JSON 导出。
+  3. `src/shared/api/backendRequest.ts`：新增 `formatBackendRequestSummary` 与 `formatBackendRequestJson`，支持桌面端后端中继请求方法、路径、请求体存在性及桥接可用性摘要与 JSON 导出。
+  4. `src/shared/api/demoInterceptors.ts`：新增 `formatDemoInvokeSummary` 与 `formatDemoInvokeJson`，支持 Demo 模式 IPC 拦截命中状态、返回值存在性及已注册处理器计数摘要与 JSON 导出。
+  5. `src/shared/api/fileSearchClient.ts`：新增 `formatFileSearchResultSummary` 与 `formatFileSearchResultJson`，支持工作区 `@` 文件检索结果（文件名、路径、类型、Office/普通文件分类及文档 ID）摘要与 JSON 导出。
+  6. `src/shared/api/llmStream.ts`：新增 `formatAgentEventSummary` 与 `formatAgentEventJson`，支持 NDJSON 流式 Agent 事件（`state · run · task`、状态及计划项数）摘要与 JSON 导出。
+  7. `src/shared/api/orchRunClient.ts`：新增 `formatOrchRunDetailSummary` 与 `formatOrchRunDetailJson`，支持编排 Run 生命周期详情（运行 ID、会话 ID、状态、计划项数与任务数）摘要与 JSON 导出。
+  8. `src/shared/api/orchestrationClient.ts`：新增 `formatLaneDecisionSummary` 与 `formatLaneDecisionJson`，支持多智能体 Lane 交付包验收决议（`lane_id · decision · merged · already` 及告警信息）摘要与 JSON 导出。
+- **单元测试（8 项）**：
+  - `src/pages/settings/__tests__/settingsSearchIndex.test.ts`、`src/shared/__tests__/logger.test.ts`、`src/shared/api/__tests__/backendRequest.test.ts`、`src/shared/api/__tests__/demoInterceptors.test.ts`、`src/shared/api/__tests__/fileSearchClient.test.ts`、`src/shared/api/__tests__/llmStream.test.ts`、`src/shared/api/__tests__/orchRunClient.test.ts`、`src/shared/api/__tests__/orchestrationClient.test.ts` 全部通过（68 tests on `main`, 60 tests on `release/win7`）。
