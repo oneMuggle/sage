@@ -1648,3 +1648,17 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P123：思考占位哨兵/终端面板 Store/Wiki 导入进度/更新日志解析/更新提供商开关/代码审查分节/分栏 Diff 解析/任务树索引审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/features/send-message/thinkingPlaceholder.ts`：新增 `isThinkingPlaceholder`、`formatThinkingPlaceholderSummary` 与 `formatThinkingPlaceholderJson` 及单测 `thinkingPlaceholder.test.ts`，支持一键导出流式思考占位哨兵状态审计摘要（`placeholder=<bool> · length=<len>`）与 JSON 快照。
+  2. `src/features/terminal-panel/terminalPanelStore.ts`：新增 `formatTerminalPanelSummary` 与 `formatTerminalPanelJson` 及单测 `terminalPanelStore.test.ts`，支持一键导出底部终端面板开合、高度与 PTY 会话审计摘要（`panel=<open|closed> · height=<px>px · pty=<ptyId> · error=<hasError>`）与 JSON 快照。
+  3. `src/features/wiki/useWikiIngest.ts`：新增 `formatWikiIngestSummary` 与 `formatWikiIngestJson` 及单测 `useWikiIngest.test.ts`，支持一键导出 Wiki 常驻导入流阶段与进度审计摘要（`ingest=<id> · stage=<stage> · percent=<pct>% · done=<done>`）与 JSON 快照。
+  4. `src/lib/changelogParser.ts`：新增 `formatChangelogAuditSummary` 与 `formatChangelogAuditJson` 及单测 `changelogParser.test.ts`，支持一键导出版本更新日志条目统计审计摘要（`versions=<count> · latest=<version> · major=<m> · improvements=<i> · fixes=<f>`）与 JSON 快照。
+  5. `src/shared/updateFeatureFlag.ts`：新增 `formatUpdateFeatureFlagSummary` 与 `formatUpdateFeatureFlagJson` 及单测 `updateFeatureFlag.test.ts`，支持一键导出可插拔更新源 UI 特性开关审计摘要（`updateProvidersUi=<enabled|disabled>`）与 JSON 快照。
+  6. `src/widgets/chat/changes/reviewSections.ts`：新增 `formatReviewSectionsSummary` 与 `formatReviewSectionsJson` 及单测 `reviewSections.test.ts`，支持一键导出多文件代码审查 Diff 分节统计审计摘要（`files=<count> · binary=<binaryCount> · lines=<totalLines>`）与 JSON 快照。
+  7. `src/widgets/chat/changes/splitDiffParser.ts`：新增 `formatSplitDiffSummary` 与 `formatSplitDiffJson` 及单测 `splitDiffParser.test.ts`，支持一键导出分栏 Unified Diff 行类型统计审计摘要（`rows=<total> · modify=<m> · add=<a> · remove=<r> · context=<c>`）与 JSON 快照。
+  8. `src/widgets/chat/progress/taskTree.ts`：新增 `formatTaskTreeSummary` 与 `formatTaskTreeJson` 及单测 `taskTree.test.ts`，支持一键导出多智能体任务树节点规模与最大深度审计摘要（`nodes=<count> · roots=<rootCount> · maxDepth=<maxDepth>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+

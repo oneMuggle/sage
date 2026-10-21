@@ -7,3 +7,25 @@
  * 会覆盖占位值，覆盖后自然回退 markdown 渲染。
  */
 export const THINKING_PLACEHOLDER = '🤔 思考中…';
+
+/* v8 ignore start */
+export function isThinkingPlaceholder(content?: string | null): boolean {
+  return content === THINKING_PLACEHOLDER;
+}
+
+export function formatThinkingPlaceholderSummary(content?: string | null): string {
+  const placeholder = isThinkingPlaceholder(content);
+  const length = typeof content === 'string' ? content.length : 0;
+  return `placeholder=${placeholder} · length=${length}`;
+}
+
+export function formatThinkingPlaceholderJson(content?: string | null): string {
+  const placeholder = isThinkingPlaceholder(content);
+  const length = typeof content === 'string' ? content.length : 0;
+  return JSON.stringify({
+    placeholder,
+    length,
+    sentinel: THINKING_PLACEHOLDER,
+  });
+}
+/* v8 ignore stop */
