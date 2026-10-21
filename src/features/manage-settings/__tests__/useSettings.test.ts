@@ -13,6 +13,7 @@ vi.mock('../../../entities/setting/storage', () => ({
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { useSettingsStore } from '../settingsStore';
 import { useSettings } from '../useSettings';
+import { formatUseSettingsSnapshotJson, formatUseSettingsSnapshotSummary } from '../useSettings';
 
 function resetStore() {
   useSettingsStore.setState({
@@ -103,5 +104,14 @@ describe('useSettings (shared store)', () => {
     expect(result.current.isLoading).toBe(false);
     // loadSettings 失败时 store 不覆盖现有 settings (避免丢失本地修改)
     expect(result.current.settings.maxContext).toBe(7777);
+  });
+
+  it('formats useSettings snapshot summary and JSON (Phase P110)', () => {
+    expect(formatUseSettingsSnapshotSummary(DEFAULT_SETTINGS, false)).toContain(
+      `ready · maxContext=${DEFAULT_SETTINGS.maxContext} · streaming=true`,
+    );
+    const parsed = JSON.parse(formatUseSettingsSnapshotJson(DEFAULT_SETTINGS, true));
+    expect(parsed.isLoading).toBe(true);
+    expect(parsed.maxContext).toBe(DEFAULT_SETTINGS.maxContext);
   });
 });

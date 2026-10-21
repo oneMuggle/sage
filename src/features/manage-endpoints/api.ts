@@ -544,3 +544,26 @@ export async function probeModel(endpointId: string, modelId: string): Promise<P
     body: { endpoint_id: endpointId, model_id: modelId },
   });
 }
+
+export function formatProbeResultSummary(result: ProbeResult): string {
+  if (result.status !== 'success' || !result.data) {
+    return `${result.status} · ${result.adapter} · ${result.error ?? 'no-data'}`;
+  }
+  return `success · ${result.adapter} · native=${result.data.native ?? 'unknown'} · arch=${result.data.architecture ?? 'unknown'}`;
+}
+
+export function formatProbeResultJson(result: ProbeResult): string {
+  return JSON.stringify(
+    {
+      status: result.status,
+      adapter: result.adapter,
+      native: result.data?.native ?? null,
+      service: result.data?.service ?? null,
+      architecture: result.data?.architecture ?? null,
+      quantization: result.data?.quantization ?? null,
+      error: result.error,
+    },
+    null,
+    2,
+  );
+}
