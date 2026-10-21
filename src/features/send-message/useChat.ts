@@ -143,8 +143,24 @@ export function useChat() {
     // 拼接顺序:store.messages(持久化/加载) → completedSteps(本 run 已完成步骤快照)
     // → 流式覆盖层(若 streaming.messageId 不在 store.messages / completedSteps 中,
     //   说明当前正在流的是新一步,需要追加一个虚拟消息承载流式内容)
+    //
+    // 2026-10-21 dedup: loadMessages 落库服务端行后, completedSteps 里的本地
+    // 快照会与服务端行 (step_index 相同) 叠加导致重复渲染. 以 step_index 去重:
+    // 服务端行优先, completedSteps 中同 step_index 的条目丢弃.
+    const persistedStepIndexes = new Set<number>(
+      messages
+        .filter((m) => m.step_index != null)
+        .map((m) => m.step_index as number),
+    );
+    const visibleSteps =
+      persistedStepIndexes.size > 0
+        ? completedSteps.filter(
+            (m) => m.step_index == null || !persistedStepIndexes.has(m.step_index),
+          )
+        : completedSteps;
+
     if (!streamingMessageId) {
-      return completedSteps.length > 0 ? [...messages, ...completedSteps] : messages;
+      return visibleSteps.length > 0 ? [...messages, ...visibleSteps] : messages;
     }
     const overlay: Partial<Message> = {
       content: streamingContent,
@@ -152,12 +168,12 @@ export function useChat() {
       tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
     };
     const overlayInStore = messages.some((m) => m.id === streamingMessageId);
-    const overlayInCompleted = completedSteps.some((m) => m.id === streamingMessageId);
+    const overlayInCompleted = visibleSteps.some((m) => m.id === streamingMessageId);
     let next = messages.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m));
-    if (completedSteps.length > 0) {
+    if (visibleSteps.length > 0) {
       next = [
         ...next,
-        ...completedSteps.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m)),
+        ...visibleSteps.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m)),
       ];
     }
     if (!overlayInStore && !overlayInCompleted && streaming) {
