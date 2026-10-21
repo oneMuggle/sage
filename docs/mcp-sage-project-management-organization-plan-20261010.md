@@ -1452,3 +1452,16 @@
 - **单元测试（8 项）**：
   - `src/entities/model-catalog/api.test.ts`、`src/entities/session/__tests__/storage.test.ts`、`src/entities/setting/__tests__/settingsAdapter.test.ts`、`src/entities/setting/__tests__/storage.test.ts`、`src/entities/theme/__tests__/decorative-presets.test.ts`、`src/entities/theme/__tests__/storage.test.ts`、`src/features/artifacts/__tests__/artifactApi.test.ts`、`src/features/scheduled/__tests__/cronValidator.test.ts` 全部通过（85 tests passed）。
 
+### Phase P109（已完成）：产物内容与列表 Hook、@文件引用查询、/btw 旁路问答、对话大纲与轮次导航、草稿引用注入及期刊模板 Hook 治理
+- **改造模块（8 项）**：
+  1. `src/features/artifacts/useArtifactContent.ts`：新增 `formatArtifactContentStateSummary` 与 `formatArtifactContentStateJson`，支持产物内容加载态、类型、字符数与错误原因摘要及可复制 JSON 序列化。
+  2. `src/features/artifacts/useArtifacts.ts`：新增 `formatArtifactsHookStateSummary` 与 `formatArtifactsHookStateJson`，支持会话产物列表数量、ID 集合与加载状态摘要及 JSON 导出。
+  3. `src/features/chat/useAtFileQuery.ts`：新增 `formatAtFileQuerySummary` 与 `formatAtFileQueryJson`，支持光标前 `@` 文件引用触发状态、查询串与起止索引摘要及 JSON 导出。
+  4. `src/features/chat/useBtwCommand.ts`：新增 `formatBtwCommandStateSummary` 与 `formatBtwCommandStateJson`，支持 `/btw` 旁路问答浮层开关态、加载态及问答长度摘要与 JSON 导出。
+  5. `src/features/chat/useConversationOutline.ts`：新增 `formatConversationOutlineSummary` 与 `formatConversationOutlineJson`，支持会话大纲 `h2/h3` 标题计数与条目列表摘要及 JSON 导出。
+  6. `src/features/chat/useConversationTurns.ts`：新增 `formatConversationTurnsSummary` 与 `formatConversationTurnsJson`，支持对话轮次计数、最新轮次索引及预览摘要与 JSON 导出。
+  7. `src/features/chat/useQuoteDraft.ts`：新增 `formatQuoteDraftInjectionSummary` 与 `formatQuoteDraftInjectionJson`，支持草稿引用追加注入状态、字符长度与随机戳摘要及 JSON 导出。
+  8. `src/features/journal/useJournalTemplates.ts`：新增 `formatJournalTemplateDraftSummary` 与 `formatJournalTemplateDraftJson`，支持期刊模板规格 ID、论文标题、章节键列表、参考文献计数与违规计数摘要及 JSON 导出。
+- **单元测试（8 项）**：
+  - `src/features/artifacts/__tests__/useArtifactContent.test.ts`、`src/features/artifacts/__tests__/useArtifacts.test.ts`、`src/features/chat/__tests__/useAtFileQuery.test.tsx`、`src/features/chat/__tests__/useBtwCommand.test.ts`、`src/features/chat/__tests__/useConversationOutline.test.ts`、`src/features/chat/__tests__/useConversationTurns.test.ts`、`src/features/chat/__tests__/useQuoteDraft.test.ts`、`src/features/journal/__tests__/useJournalTemplates.test.ts` 全部通过（42 tests passed）。
+

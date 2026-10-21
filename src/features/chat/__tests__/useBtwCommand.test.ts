@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useBtwState } from '../../../entities/chat/btwState';
 import { useBtwCommand } from '../useBtwCommand';
+import { formatBtwCommandStateJson, formatBtwCommandStateSummary } from '../useBtwCommand';
 
 // Mock useChat hook
 const mockAskBtw = vi.fn();
@@ -74,5 +75,20 @@ describe('useBtwCommand', () => {
     });
 
     expect(result.current.answer).toBe('Response');
+  });
+
+  it('formats btw command state summary and JSON (Phase P109)', () => {
+    expect(
+      formatBtwCommandStateSummary({ isOpen: false, question: '', answer: '', isLoading: false }),
+    ).toBe('closed');
+    const active = { isOpen: true, question: 'Why?', answer: 'Because.', isLoading: false };
+    expect(formatBtwCommandStateSummary(active)).toBe('open · idle · q=4c · a=8c');
+    const parsed = JSON.parse(formatBtwCommandStateJson(active));
+    expect(parsed).toEqual({
+      isOpen: true,
+      isLoading: false,
+      question: 'Why?',
+      answerLength: 8,
+    });
   });
 });

@@ -6,6 +6,7 @@ vi.mock('../artifactApi', () => ({ listArtifacts: vi.fn() }));
 
 import { listArtifacts } from '../artifactApi';
 import { useArtifacts } from '../useArtifacts';
+import { formatArtifactsHookStateJson, formatArtifactsHookStateSummary } from '../useArtifacts';
 
 const mkArt = (id: string) => ({
   id, session_id: 's', tool_call_id: null, path: `/${id}.md`, name: `${id}.md`,
@@ -38,5 +39,20 @@ describe('useArtifacts', () => {
     expect(listArtifacts).toHaveBeenCalledTimes(1);
     result.current.refresh();
     await waitFor(() => expect(listArtifacts).toHaveBeenCalledTimes(2));
+  });
+
+  it('formats artifacts hook state summary and JSON (Phase P109)', () => {
+    const items = [mkArt('a1'), mkArt('a2')];
+    expect(formatArtifactsHookStateSummary('sess_001', items, false)).toBe(
+      'sess_001 · 2 artifacts · ready',
+    );
+    expect(formatArtifactsHookStateSummary(null, [], true)).toBe('none · 0 artifacts · loading');
+    const parsed = JSON.parse(formatArtifactsHookStateJson('sess_001', items, false));
+    expect(parsed).toEqual({
+      sessionId: 'sess_001',
+      loading: false,
+      count: 2,
+      artifactIds: ['a1', 'a2'],
+    });
   });
 });

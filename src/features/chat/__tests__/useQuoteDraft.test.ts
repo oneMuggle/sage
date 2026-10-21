@@ -3,6 +3,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useQuoteDraft } from '../useQuoteDraft';
+import { formatQuoteDraftInjectionJson, formatQuoteDraftInjectionSummary } from '../useQuoteDraft';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -39,5 +40,19 @@ describe('useQuoteDraft', () => {
     const first = result.current.quoteText;
     rerender();
     expect(result.current.quoteText).toBe(first);
+  });
+
+  it('formats quote draft injection summary and JSON (Phase P109)', () => {
+    expect(formatQuoteDraftInjectionSummary(null)).toBe('idle');
+    const draft = { text: '> quote', nonce: 12345, mode: 'append' as const };
+    expect(formatQuoteDraftInjectionSummary(draft)).toBe('append · 7 chars · nonce=12345');
+    const parsed = JSON.parse(formatQuoteDraftInjectionJson(draft));
+    expect(parsed).toEqual({
+      active: true,
+      mode: 'append',
+      textLength: 7,
+      nonce: 12345,
+      text: '> quote',
+    });
   });
 });
