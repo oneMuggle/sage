@@ -1594,3 +1594,17 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 115 项单测全部通过；`release/win7` 8 个测试文件 115 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+
+### Phase P119：Office 编辑差异预览/任务计划契约/通用弹窗/开关控件/输入卡片/对话消息/重试横幅/侧栏分组状态审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/features/office/OfficeEditPreviewDialog.tsx`：新增 `formatOfficeDiffChangeSummary` 与 `formatOfficeDiffChangeJson`，支持一键导出 Office 文档编辑差异条目审计摘要（`<op> · target=<target> · hasBefore=<bool> · hasAfter=<bool>`）与 JSON 快照。
+  2. `src/shared/api/types.ts`：新增 `formatTaskPlanItemSummary` 与 `formatTaskPlanItemJson`，支持一键导出多智能体任务计划节点审计摘要（`<task_id> · agent=<agent_id> · parent=<parent_task_id> · depth=<depth>`）与 JSON 快照。
+  3. `src/shared/ui/Dialog/Dialog.tsx`：新增 `formatDialogConfigSummary` 与 `formatDialogConfigJson`，支持一键导出通用模态弹窗配置审计摘要（`<open|closed> · closeBtn=<showCloseButton> · title=<title>`）与 JSON 快照。
+  4. `src/shared/ui/Switch/Switch.tsx`：新增 `formatSwitchStateSummary` 与 `formatSwitchStateJson`，支持一键导出无障碍开关控件状态审计摘要（`<label> · <checked|unchecked> · disabled=<disabled>`）与 JSON 快照。
+  5. `src/widgets/chat/InputCard.tsx`：新增 `formatInputCardAuditSummary` 与 `formatInputCardAuditJson`，支持一键导出对话输入卡片水位审计摘要（`chars=<len>/4000 · loading=<isLoading> · attachments=<hasAttachments> · overLimit=<overLimit>`）与 JSON 快照。
+  6. `src/widgets/chat/Message.tsx`：新增 `formatMessageAuditSummary` 与 `formatMessageAuditJson`，支持一键导出对话消息气泡渲染状态审计摘要（`<id> · role=<role> · streaming=<isStreaming> · tools=<toolCount> · chars=<len>`）与 JSON 快照。
+  7. `src/widgets/chat/RetryBanner.tsx`：新增 `formatRetryBannerSummary` 与 `formatRetryBannerJson`，支持一键导出 LLM 自动重试横幅状态审计摘要（`attempt=<attempt>/<max_attempts> · type=<error_type> · severity=<severity> · delay=<delay>s`）与 JSON 快照。
+  8. `src/widgets/sidebar/useSiderSections.ts`：新增 `formatSiderSectionsSummary` 与 `formatSiderSectionsJson`，支持一键导出侧栏分区折叠与排序状态审计摘要（`sections=<len> · collapsed=<size> · order=[...]`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 97 项单测全部通过；`release/win7` 8 个测试文件 97 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。

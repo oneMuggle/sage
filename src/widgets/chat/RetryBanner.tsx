@@ -124,3 +124,22 @@ export function RetryBanner({ info }: RetryBannerProps) {
     </div>
   );
 }
+export function formatRetryBannerSummary(info: RetryInfo): string {
+  const severity: Severity = RETRY_ERROR_META[info.error_type]?.severity ?? 'muted';
+  return `attempt=${info.attempt}/${info.max_attempts} · type=${info.error_type} · severity=${severity} · delay=${info.delay}s`;
+}
+
+export function formatRetryBannerJson(info: RetryInfo): string {
+  const severity: Severity = RETRY_ERROR_META[info.error_type]?.severity ?? 'muted';
+  return JSON.stringify(
+    {
+      attempt: info.attempt,
+      maxAttempts: info.max_attempts,
+      errorType: info.error_type,
+      severity,
+      delay: info.delay,
+    },
+    null,
+    2,
+  );
+}
