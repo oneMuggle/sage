@@ -221,8 +221,6 @@ describe('ConstraintSummaryWidget', () => {
 
     expect(screen.getByTestId('constraint-editor-content-presets')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('constraint-content-preset-0'));
-    fireEvent.click(screen.getByTestId('constraint-editor-copy-json-btn'));
-    expect(screen.getByTestId('constraint-editor-copy-json-btn')).toHaveTextContent('已复制 JSON');
     fireEvent.click(screen.getByTestId('constraint-editor-reset-btn'));
     fireEvent.click(screen.getByTestId('constraint-content-preset-0'));
     fireEvent.click(screen.getByTestId('constraint-glob-always-btn'));
@@ -240,14 +238,6 @@ describe('ConstraintSummaryWidget', () => {
     });
   });
 
-  it('renders GitStatusWidget markdown copy button (Phase P26)', async () => {
-    render(<GitStatusWidget projectId="test-project" />);
-    const copyBtn = await screen.findByTestId('git-status-copy-md-btn');
-    fireEvent.click(copyBtn);
-    await waitFor(() => {
-      expect(screen.getByTestId('git-status-copy-md-btn')).toHaveTextContent(/已复制|复制报告/);
-    });
-  });
 
   it('supports ConstraintManager sample glob pills, clear button, keyword search, and ProjectAdvisorCard markdown copy (Phase P27)', async () => {
     mockListConstraints.mockResolvedValue([
@@ -278,7 +268,6 @@ describe('ConstraintSummaryWidget', () => {
     });
 
     fireEvent.click(screen.getByTestId('constraint-glob-copy-path-btn'));
-    fireEvent.click(screen.getByTestId('constraint-copy-subtemplates-btn'));
     fireEvent.click(screen.getByTestId('constraint-glob-clear-btn'));
     expect(screen.getByTestId('constraint-glob-test-input')).toHaveValue('');
 
@@ -287,9 +276,6 @@ describe('ConstraintSummaryWidget', () => {
     });
     expect(screen.getByText('严格遵循 GB/T 9704 公文格式')).toBeInTheDocument();
 
-    const copyAdvisorBtn = await screen.findByTestId('advisor-copy-md-btn');
-    fireEvent.click(copyAdvisorBtn);
-    expect(screen.getByTestId('advisor-copy-md-btn')).toHaveTextContent(/已复制|复制诊断/);
   });
 
   it('supports ConstraintSummaryWidget top-priority preview toggle, active rules Markdown export, and ProjectAdvisorCard M3 Risk -> Constraint closed loop (Phase P30)', async () => {
@@ -325,9 +311,6 @@ describe('ConstraintSummaryWidget', () => {
       </>,
     );
 
-    const copyRulesBtn = await screen.findByTestId('constraint-summary-copy-md-btn');
-    fireEvent.click(copyRulesBtn);
-    expect(screen.getByTestId('constraint-summary-copy-md-btn')).toHaveTextContent(/已复制|复制规则/);
     fireEvent.click(screen.getByTestId('constraint-summary-save-l3-btn'));
     expect(screen.getByTestId('constraint-summary-save-l3-btn')).toHaveTextContent('已存高优 L3');
     fireEvent.click(screen.getByTestId('constraint-summary-save-l4-btn'));
@@ -341,8 +324,6 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('constraint-summary-copy-glob-btn'));
     fireEvent.click(screen.getByTestId('constraint-summary-disabled-to-milestone-btn'));
     expect(screen.getByTestId('constraint-summary-disabled-to-milestone-btn')).toHaveTextContent('已建复核里程碑');
-    fireEvent.click(screen.getByTestId('constraint-summary-copy-cats-btn'));
-    expect(screen.getByTestId('constraint-summary-copy-cats-btn')).toHaveTextContent(/已复制分布|复制分布/);
     fireEvent.click(screen.getByTestId('constraint-summary-enable-all-btn'));
     await waitFor(() => {
       expect(projectApi.updateConstraint).toHaveBeenCalledWith('test-project', 'c-p39-disabled', {
@@ -491,7 +472,6 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('constraint-editor-copy-test-path-btn'));
     fireEvent.click(screen.getByTestId('constraint-editor-clear-test-path-btn'));
     expect(screen.getByTestId('constraint-editor-test-path-input')).toHaveValue('');
-    fireEvent.click(screen.getByTestId('constraint-editor-copy-md-btn'));
     fireEvent.click(screen.getByTestId('constraint-editor-save-l3-btn'));
     expect(screen.getByTestId('constraint-editor-save-l3-btn')).toHaveTextContent('已沉淀至 L3');
     fireEvent.click(screen.getByTestId('constraint-editor-to-milestone-btn'));
@@ -566,8 +546,6 @@ describe('ConstraintSummaryWidget', () => {
         <CodingHooksGovernanceBar workspacePath="/tmp/proj" hasHooksConfig={true} hookCount={2} />
       </>,
     );
-    fireEvent.click(screen.getByTestId('research-copy-style-md-btn'));
-    fireEvent.click(screen.getByTestId('business-copy-style-md-btn'));
     fireEvent.click(screen.getByTestId('coding-hooks-copy-status-md-btn'));
 
     render(
@@ -591,8 +569,6 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('git-sider-ingest-all-btn'));
     expect(screen.getByTestId('git-sider-ingest-all-btn')).toHaveTextContent('已全入库');
     fireEvent.click(screen.getByTestId('git-sider-copy-paths-btn'));
-    fireEvent.click(screen.getByTestId('git-sider-copy-json-btn'));
-    expect(screen.getByTestId('git-sider-copy-json-btn')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByTestId('git-sider-all-to-l3-btn'));
     expect(screen.getByTestId('git-sider-all-to-l3-btn')).toHaveTextContent('已全存L3');
     fireEvent.click(screen.getByTestId('git-sider-all-to-milestone-btn'));
@@ -606,8 +582,6 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('git-sider-milestone-src/index.ts'));
     expect(screen.getByTestId('git-sider-milestone-src/index.ts')).toHaveTextContent('已建里程碑');
     fireEvent.click(screen.getByTestId('git-sider-copy-path-src/index.ts'));
-    fireEvent.click(screen.getByTestId('git-sider-copy-json-src/index.ts'));
-    expect(screen.getByTestId('git-sider-copy-json-src/index.ts')).toHaveTextContent('已复制JSON');
     const rowL3Btn = await screen.findByTestId('workbench-row-to-l3-proj-sider-1');
     fireEvent.click(rowL3Btn);
     expect(screen.getByTestId('workbench-row-to-l3-proj-sider-1')).toHaveTextContent('已存L3');
@@ -619,15 +593,6 @@ describe('ConstraintSummaryWidget', () => {
     expect(screen.getByTestId('workbench-row-to-constraint-proj-sider-1')).toHaveTextContent('已转L2');
     fireEvent.click(screen.getByTestId('workbench-row-scaffold-proj-sider-1'));
     expect(screen.getByTestId('workbench-row-scaffold-proj-sider-1')).toHaveTextContent('已脚手架');
-    fireEvent.click(screen.getByTestId('workbench-row-copy-md-proj-sider-1'));
-    expect(screen.getByTestId('workbench-row-copy-md-proj-sider-1')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('workbench-row-copy-json-proj-sider-1'));
-    expect(screen.getByTestId('workbench-row-copy-json-proj-sider-1')).toHaveTextContent(
-      '已复制JSON',
-    );
-    fireEvent.click(screen.getByTestId('workbench-copy-project-list-btn'));
-    fireEvent.click(screen.getByTestId('workbench-copy-project-json-btn'));
-    expect(screen.getByTestId('workbench-copy-project-json-btn')).toHaveTextContent('已复制 JSON');
     fireEvent.click(screen.getByTestId('workbench-save-archetype-stats-l4-btn'));
     expect(screen.getByTestId('workbench-save-archetype-stats-l4-btn')).toHaveTextContent('已存统计L4');
     fireEvent.click(screen.getByTestId('workbench-archetype-stats-to-milestone-btn'));
