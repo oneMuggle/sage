@@ -195,3 +195,28 @@ export const useTaskCenterStore = create<TaskCenterState>((set) => ({
       return { tasks: next };
     }),
 }));
+
+export function formatTaskCenterStateSummary(
+  state: ReturnType<typeof useTaskCenterStore.getState> = useTaskCenterStore.getState(),
+): string {
+  const entries = Object.values(state.tasks);
+  const running = entries.filter((t) => t.status === 'running').length;
+  return `total=${entries.length} · running=${running} · delivery=${state.delivery ? 'open' : 'closed'}`;
+}
+
+export function formatTaskCenterStateJson(
+  state: ReturnType<typeof useTaskCenterStore.getState> = useTaskCenterStore.getState(),
+): string {
+  const entries = Object.values(state.tasks);
+  return JSON.stringify(
+    {
+      totalCount: entries.length,
+      runningCount: entries.filter((t) => t.status === 'running').length,
+      taskIds: entries.map((t) => t.id),
+      hasDelivery: state.delivery !== null,
+      hasHighlight: state.pendingHighlight !== null,
+    },
+    null,
+    2,
+  );
+}

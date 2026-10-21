@@ -18,3 +18,22 @@ export const themeCssPayloadSchema = z.object({
 });
 
 export type ThemeCssPayload = z.infer<typeof themeCssPayloadSchema>;
+
+export function formatThemeCssPayloadSummary(payload: ThemeCssPayload): string {
+  return `${payload.id} · ${payload.name} · ${payload.appearance} · ${payload.css.length}chars`;
+}
+
+export function formatThemeCssPayloadJson(payload: ThemeCssPayload): string {
+  return JSON.stringify(
+    {
+      id: payload.id,
+      name: payload.name,
+      appearance: payload.appearance,
+      hasCover: Boolean(payload.cover),
+      cssLength: payload.css.length,
+      updatedAt: payload.updated_at,
+    },
+    null,
+    2,
+  );
+}

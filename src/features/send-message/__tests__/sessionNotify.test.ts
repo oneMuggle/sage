@@ -3,6 +3,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { notifySession, shouldNotify } from '../sessionNotify';
+import { formatSessionNotifyDecisionJson, formatSessionNotifyDecisionSummary } from '../sessionNotify';
 
 describe('shouldNotify', () => {
   it('非当前查看的会话 → 通知', () => {
@@ -53,6 +54,19 @@ describe('notifySession', () => {
         get: () => original,
       });
     }
+  });
+
+  it('formats session notify decision summary and JSON (Phase P111)', () => {
+    const payload = { sessionId: 'sess-a', title: 'Done', body: 'Completed task' };
+    expect(formatSessionNotifyDecisionSummary(payload, 'sess-b')).toBe(
+      'sess-a · notify · title=Done',
+    );
+    expect(formatSessionNotifyDecisionSummary(payload, 'sess-a')).toBe(
+      'sess-a · suppress · title=Done',
+    );
+    const parsed = JSON.parse(formatSessionNotifyDecisionJson(payload, 'sess-b'));
+    expect(parsed.shouldNotify).toBe(true);
+    expect(parsed.bodyLength).toBe(14);
   });
 
   it('有桥时透传 payload;桥拒绝也不抛错', async () => {

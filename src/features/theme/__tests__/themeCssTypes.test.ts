@@ -153,4 +153,18 @@ describe('themeCssPayloadSchema', () => {
       }
     });
   });
+
+  describe('formatThemeCssPayloadSummary & formatThemeCssPayloadJson (Phase P111)', () => {
+    it('formats theme CSS payload summary and JSON', async () => {
+      const { formatThemeCssPayloadSummary, formatThemeCssPayloadJson } = await import(
+        '../themeCssTypes'
+      );
+      expect(formatThemeCssPayloadSummary(validPayload)).toBe(
+        `${validPayload.id} · ${validPayload.name} · ${validPayload.appearance} · ${validPayload.css.length}chars`,
+      );
+      const parsed = JSON.parse(formatThemeCssPayloadJson(validPayload));
+      expect(parsed.id).toBe(validPayload.id);
+      expect(parsed.cssLength).toBe(validPayload.css.length);
+    });
+  });
 });

@@ -1477,3 +1477,16 @@
   8. `src/features/send-message/orchestrationEvents.ts`：新增 `formatRestoredBoardSummary` 与 `formatRestoredBoardJson`，支持历史编排运行恢复任务板（计划项数、总任务数、已完成/失败数及时间戳）摘要与 JSON 导出。
 - **单元测试（8 项）**：
   - `src/features/manage-endpoints/__tests__/api.test.ts`、`src/features/manage-settings/__tests__/useSettings.test.ts`、`src/features/office/__tests__/importOfficeReference.test.ts`、`src/features/office/__tests__/officeCapabilities.test.ts`、`src/features/office/__tests__/useOfficeDocuments.test.ts`、`src/features/right-panel/__tests__/rightPanelStore.test.ts`、`src/features/send-message/__tests__/chatStreamStore.test.ts`、`src/features/send-message/__tests__/orchestrationEvents.test.ts` 全部通过（147 tests on `main`, 132 tests on `release/win7`）。
+
+### Phase P111（已完成）：分会话通知判定、任务中心 Store、主题样式注入与校验、打字机占位 Hook、Wiki 对话流 Hook 及 Cookie 导入解析器治理
+- **改造模块（8 项）**：
+  1. `src/features/send-message/sessionNotify.ts`：新增 `formatSessionNotifyDecisionSummary` 与 `formatSessionNotifyDecisionJson`，支持分会话 OS 通知打扰判定（目标会话、当前会话、是否触发与正文长度）摘要及可复制 JSON 序列化。
+  2. `src/features/task-center/taskCenterStore.ts`：新增 `formatTaskCenterStateSummary` 与 `formatTaskCenterStateJson`，支持后台任务中心总任务数、运行中任务数、任务 ID 列表及交付抽屉开关态摘要与 JSON 导出。
+  3. `src/features/theme/backgroundInjector.ts`：新增 `formatBackgroundInjectionSummary` 与 `formatBackgroundInjectionJson`，支持实时预览样式、持久化主题样式及封面图 CSS 变量注入状态摘要与 JSON 导出。
+  4. `src/features/theme/themeCssTypes.ts`：新增 `formatThemeCssPayloadSummary` 与 `formatThemeCssPayloadJson`，支持自定义 CSS 主题载荷（ID、名称、外观模式、CSS 字符数与更新时间戳）摘要与 JSON 导出。
+  5. `src/features/theme/themeCssValidator.ts`：新增 `formatThemeCssValidationSummary` 与 `formatThemeCssValidationJson`，支持自定义 CSS 16 变量白名单与危险模式校验结果、变量计数及变量名列表摘要与 JSON 导出。
+  6. `src/features/welcome/useTypewriterPlaceholder.ts`：新增 `formatTypewriterStateSummary` 与 `formatTypewriterStateJson`，支持欢迎页打字机占位文本当前阶段、字符长度与短语总数摘要及 JSON 导出。
+  7. `src/features/wiki/useWikiChatStream.ts`：新增 `formatWikiChatStreamStateSummary` 与 `formatWikiChatStreamStateJson`，支持 Wiki 流式问答阶段、回答长度、引用数、来源数及错误原因摘要与 JSON 导出。
+  8. `src/pages/settings/credentialCookieParser.ts`：新增 `formatCookieHeaderSummary` 与 `formatCookieHeaderJson`，支持脱敏（不暴露 Cookie secret 值）的 Cookie 条目计数与键名列表摘要及 JSON 导出。
+- **单元测试（8 项）**：
+  - `src/features/send-message/__tests__/sessionNotify.test.ts`、`src/features/task-center/__tests__/taskCenterStore.test.ts`、`src/features/theme/__tests__/backgroundInjector.test.ts`、`src/features/theme/__tests__/themeCssTypes.test.ts`、`src/features/theme/__tests__/themeCssValidator.test.ts`、`src/features/welcome/__tests__/useTypewriterPlaceholder.test.ts`、`src/features/wiki/__tests__/useWikiChatStream.test.tsx`、`src/pages/settings/__tests__/credentialCookieParser.test.ts` 全部通过（88 tests passed）。
