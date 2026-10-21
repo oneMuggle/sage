@@ -19,7 +19,6 @@ from backend.adapters.out.harness import SqliteHarnessAdapter
 from backend.application.services.harness_recorder import (
     HarnessProbe,
     HarnessRecorder,
-    get_recorder,
     install_recorder,
 )
 from backend.application.services.harness_service import (
