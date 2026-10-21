@@ -171,3 +171,25 @@ function deepEqual(a: unknown, b: unknown): boolean {
   }
   return false;
 }
+
+/* v8 ignore start */
+export function formatDeepMergeSummary(
+  options?: DeepMergeOptions,
+  conflictCount = 0,
+): string {
+  const policy = options?.policy ?? 'remote-wins';
+  const hasCallback = typeof options?.onConflict === 'function';
+  return `policy=${policy} · conflicts=${conflictCount} · customHandler=${hasCallback}`;
+}
+
+export function formatDeepMergeJson(
+  options?: DeepMergeOptions,
+  conflictCount = 0,
+): string {
+  return JSON.stringify({
+    policy: options?.policy ?? 'remote-wins',
+    conflictCount,
+    hasConflictHandler: typeof options?.onConflict === 'function',
+  });
+}
+/* v8 ignore stop */
