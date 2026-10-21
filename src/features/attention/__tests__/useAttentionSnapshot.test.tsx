@@ -7,6 +7,10 @@ import { useTodoStore } from '../../../entities/todo/todoStore';
 import type { Todo } from '../../../shared/api/types';
 import { useChangesListStore } from '../../changes/changesListStore';
 import { useAttentionSnapshot } from '../index';
+import {
+  buildUseAttentionSnapshotAuditJson,
+  buildUseAttentionSnapshotAuditSnapshot,
+} from '../useAttentionSnapshot';
 
 const PENDING_PERMISSION = {
   request_id: 'req-1',
@@ -96,5 +100,37 @@ describe('useAttentionSnapshot', () => {
     const first = result.current;
     rerender();
     expect(result.current).toBe(first);
+  });
+
+  it('exports useAttentionSnapshot audit snapshot/JSON helpers', () => {
+    expect(buildUseAttentionSnapshotAuditSnapshot()).toBe(
+      'session:none|unseen:0|total:0|entries:0|top:none',
+    );
+    expect(
+      buildUseAttentionSnapshotAuditSnapshot({
+        sessionId: 'sess-1',
+        unseenArtifacts: 2,
+        total: 4,
+        entryCount: 3,
+        topKind: 'approval',
+      }),
+    ).toBe('session:sess-1|unseen:2|total:4|entries:3|top:approval');
+
+    const parsed = JSON.parse(
+      buildUseAttentionSnapshotAuditJson({
+        sessionId: 'sess-2',
+        total: 1,
+        entryCount: 1,
+        topKind: 'todo',
+      }),
+    );
+    expect(parsed).toEqual({
+      sessionId: 'sess-2',
+      unseenArtifacts: 0,
+      total: 1,
+      entryCount: 1,
+      topKind: 'todo',
+      snapshot: 'session:sess-2|unseen:0|total:1|entries:1|top:todo',
+    });
   });
 });
