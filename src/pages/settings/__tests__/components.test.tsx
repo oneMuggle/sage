@@ -2,7 +2,14 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AdvancedSection, ApplyModeBadge, SettingRow, Toggle } from '../components';
+import {
+  AdvancedSection,
+  ApplyModeBadge,
+  SettingRow,
+  Toggle,
+  formatSettingRowAuditJson,
+  formatSettingRowAuditSnapshot,
+} from '../components';
 
 describe('settings shared components', () => {
   it('renders the Chinese apply-mode label', () => {
@@ -74,5 +81,40 @@ describe('SettingRow 搜索锚点 (P1-4)', () => {
       </SettingRow>,
     );
     expect(container.querySelector('[data-settings-anchor]')).toBeNull();
+  });
+
+  it('formats SettingRow audit snapshot/JSON and supports copy controls (P103)', () => {
+    expect(
+      formatSettingRowAuditSnapshot({
+        label: '流式输出',
+        hasDesc: true,
+        anchor: 'streaming',
+      }),
+    ).toBe('label=流式输出|desc=1|anchor=streaming');
+    expect(
+      JSON.parse(
+        formatSettingRowAuditJson({
+          label: '未登记项',
+          hasDesc: false,
+          anchor: null,
+        }),
+      ),
+    ).toEqual({
+      label: '未登记项',
+      hasDesc: false,
+      anchor: null,
+    });
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(
+      <SettingRow label="流式输出" desc="开启流式" anchor="streaming">
+        <Toggle value onChange={() => {}} />
+      </SettingRow>,
+    );
+    fireEvent.click(screen.getByTestId('setting-row-audit-copy'));
+    expect(writeText).toHaveBeenCalledWith('label=流式输出|desc=1|anchor=streaming');
+    fireEvent.click(screen.getByTestId('setting-row-audit-copy-json'));
+    expect(writeText).toHaveBeenCalledTimes(2);
   });
 });

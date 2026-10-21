@@ -1,7 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ThemeProvider } from '../ThemeProvider';
+import {
+  ThemeProvider,
+  formatThemeAuditJson,
+  formatThemeAuditSnapshot,
+} from '../ThemeProvider';
 import { useTheme } from '../useTheme';
 
 const { mockLoad, mockSave, mockLoadPreset, mockSavePreset } = vi.hoisted(() => ({
@@ -70,5 +74,54 @@ describe('ThemeProvider async init', () => {
     await waitFor(() => expect(mockLoad).toHaveBeenCalled());
     screen.getByText('change').click();
     await waitFor(() => expect(mockSave).toHaveBeenCalledWith('dark'));
+  });
+
+  it('formats ThemeProvider audit snapshot/JSON and supports copy controls (P103)', async () => {
+    expect(
+      formatThemeAuditSnapshot({
+        mode: 'dark',
+        resolved: 'dark',
+        presetId: 'claude',
+        sourceKind: 'preset',
+        cssCount: 0,
+      }),
+    ).toBe('mode=dark|resolved=dark|preset=claude|source=preset|css=0');
+
+    expect(
+      JSON.parse(
+        formatThemeAuditJson({
+          mode: 'system',
+          resolved: 'light',
+          presetId: 'default',
+          sourceKind: 'css',
+          cssCount: 2,
+        }),
+      ),
+    ).toEqual({
+      mode: 'system',
+      resolved: 'light',
+      presetId: 'default',
+      sourceKind: 'css',
+      cssCount: 2,
+    });
+
+    mockLoad.mockResolvedValue('dark');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(
+      <ThemeProvider>
+        <div>child</div>
+      </ThemeProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('theme-audit-status')).toHaveAttribute(
+        'data-theme-audit',
+        expect.stringContaining('mode=dark|resolved=dark'),
+      ),
+    );
+    fireEvent.click(screen.getByTestId('theme-audit-copy'));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('theme-audit-copy-json'));
+    expect(writeText).toHaveBeenCalledTimes(2);
   });
 });
