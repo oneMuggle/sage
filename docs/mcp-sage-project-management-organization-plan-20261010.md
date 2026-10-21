@@ -1580,3 +1580,17 @@
    - 新增 `formatLearnTriggerSummary(sessionId, prompt, response)` 与 `formatLearnTriggerJson(sessionId, prompt, response)`，提供显式后台复盘触发状态诊断摘要与 JSON 快照。
 8. **`src/shared/api/mediaApi.ts` (`src/shared/api/__tests__/mediaApi.test.ts`)**：
    - 新增 `formatMediaUrlSummary(apiUrl, mimeType)` 与 `formatMediaUrlJson(apiUrl, mimeType)`，提供多模态媒体资源 URL 解析与 MIME 类型诊断摘要与 JSON 快照。
+
+### Phase P118：对话轨迹/设置导航/错误映射/倒计时/侧栏排序/特性解锁/斜杠命令/对话轮次分组审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/features/chat/useConversationTrajectory.ts`：新增 `formatTrajectorySummaryText` 与 `formatTrajectorySummaryJson`，支持一键导出对话轨迹聚合统计摘要（`entries=<totalEntries> · tools=<totalToolCalls> · in=<totalInputTokens> · out=<totalOutputTokens> · latency=<totalLatencyMs>ms`）与 JSON 快照。
+  2. `src/pages/settings/settingsNavigation.ts`：新增 `formatSettingsNavigationSummary` 与 `formatSettingsNavigationJson`，支持一键导出设置标签页书签解析审计摘要（`<requested> -> <resolved> · providers=<providersEnabled>`）与 JSON 快照。
+  3. `src/shared/lib/errorMapping.ts`：新增 `formatLLMErrorSummary` 与 `formatLLMErrorJson`，支持一键导出结构化 LLM 错误映射审计摘要（`<type> · status=<status_code> · retry=<retry_after> · <mappedText>`）与 JSON 快照。
+  4. `src/shared/lib/useCountdown.ts`：新增 `formatCountdownSummary` 与 `formatCountdownJson`，支持一键导出倒计时状态审计摘要（`<ticking|done> · <remaining>/<initialSeconds>s · key=<resetKey>`）与 JSON 快照。
+  5. `src/shared/lib/dnd/siderOrder.ts`：新增 `formatSiderOrderSummary` 与 `formatSiderOrderJson`，支持一键导出侧栏拖拽顺序审计摘要（`count=<length> · ids=[...]`）与 JSON 快照。
+  6. `src/shared/lib/hooks/useFeatureUnlock.ts`：新增 `formatFeatureUnlockSummary` 与 `formatFeatureUnlockJson`，支持一键导出隐藏特性解锁状态审计摘要（`<featureKey> · <unlocked|locked>`）与 JSON 快照。
+  7. `src/widgets/chat/slashCommands.ts`：新增 `formatSlashCommandsSummary` 与 `formatSlashCommandsJson`，支持一键导出斜杠命令与动态 SKILL.md 合并审计摘要（`total=<totalCount> · skills=<skillCount> · names=[...]`）与 JSON 快照。
+  8. `src/widgets/chat/turnGrouping.ts`：新增 `formatTurnItemsSummary` 与 `formatTurnItemsJson`，支持一键导出对话轮次分组审计摘要（`total=<totalItems> · turns=<turnCount> · standalones=<standaloneCount>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 115 项单测全部通过；`release/win7` 8 个测试文件 115 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。

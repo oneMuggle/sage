@@ -62,4 +62,14 @@ describe('mapLLMErrorToText (regression — agent codes must not leak in)', () =
     const text = mapLLMErrorToText(err({ type: 'rate_limited', retry_after: 30 }));
     expect(text).toMatch(/30/);
   });
+
+  it('formats LLM error summary and JSON (Phase P118)', async () => {
+    const { formatLLMErrorSummary, formatLLMErrorJson } = await import('./errorMapping');
+    const sample = err({ type: 'rate_limited', status_code: 429, retry_after: 15 });
+    expect(formatLLMErrorSummary(sample)).toContain('rate_limited · status=429 · retry=15');
+    const parsed = JSON.parse(formatLLMErrorJson(sample));
+    expect(parsed.type).toBe('rate_limited');
+    expect(parsed.statusCode).toBe(429);
+    expect(parsed.retryAfter).toBe(15);
+  });
 });
