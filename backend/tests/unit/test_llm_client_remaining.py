@@ -666,8 +666,8 @@ async def test_use_proxy_false_bypasses_proxy(monkeypatch):
         with pytest.raises(RuntimeError, match="STOP_AT_INIT"):
             await client.chat([{"role": "user", "content": "hi"}])
 
-    # 直连上游,base_url 应该是用户填的真实 URL
-    assert captured["base_url"] == "https://api.example.com/"
+    # 直连上游,base_url 应该是用户填的真实 URL（r69: 规范化去尾斜杠）
+    assert captured["base_url"] == "https://api.example.com"
     # 不应发 X-LLM-Provider-Url(因为没走 proxy)
     assert "X-LLM-Provider-Url" not in captured["init_headers"]
     # 直连上游也不得携带本地 proxy capability
