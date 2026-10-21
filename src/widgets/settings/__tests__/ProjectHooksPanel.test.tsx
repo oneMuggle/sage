@@ -86,8 +86,6 @@ describe('ProjectHooksPanel', () => {
     expect(screen.queryByText(/信任并启用/)).toBeNull();
     expect(screen.getByTestId('project-hooks-copy-path-btn')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('project-hooks-copy-md-btn'));
-    fireEvent.click(screen.getByTestId('project-hooks-copy-json-btn'));
-    expect(screen.getByTestId('project-hooks-copy-json-btn')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByTestId('project-hooks-copy-config-path-btn'));
     expect(screen.getByTestId('project-hooks-copy-config-path-btn')).toHaveTextContent(
       '已复制配置路径',

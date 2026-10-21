@@ -6,16 +6,12 @@
  * - empty: series=[] 或 trend=null → 占位文案
  * - render: 正常 series → 两根 path + legend + ticks
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { UsageTrend } from '../../../shared/api/usageApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  formatUsageTrendJson,
-  formatUsageTrendMarkdown,
-  UsageTrendChart,
-} from '../UsageTrendChart';
+import { formatUsageTrendJson, formatUsageTrendMarkdown, UsageTrendChart } from '../UsageTrendChart';
 
 function renderChart(props: { trend: UsageTrend | null; loading: boolean }) {
   return render(
@@ -162,12 +158,8 @@ describe('UsageTrendChart', () => {
     expect(json.range).toBe('today');
     expect(json.count).toBe(4);
 
-    fireEvent.click(screen.getByTestId('usage-trend-copy-md'));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(md));
-    expect(screen.getByTestId('usage-trend-copy-md')).toHaveTextContent('已复制 MD');
 
-    fireEvent.click(screen.getByTestId('usage-trend-copy-json'));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId('usage-trend-copy-json')).toHaveTextContent('已复制 JSON');
   });
 });

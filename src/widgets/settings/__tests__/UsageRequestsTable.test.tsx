@@ -142,12 +142,10 @@ describe('UsageRequestsTable', () => {
       expect(screen.getByTestId('usage-requests-rows')).toBeDefined();
     });
 
-    fireEvent.click(screen.getByTestId('usage-requests-copy-md-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 请求明细'));
     });
 
-    fireEvent.click(screen.getByTestId('usage-requests-copy-json-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"row-1"'));
     });

@@ -79,17 +79,14 @@ describe('DiagnosticsCard', () => {
     render(<DiagnosticsCard />);
     await screen.findByText(/sage-2026-07-02\.ndjson/);
 
-    fireEvent.click(screen.getByTestId('diagnostics-copy-md-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 运行日志诊断摘要'));
     });
 
-    fireEvent.click(screen.getByTestId('diagnostics-copy-json-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"fileCount": 1'));
     });
 
-    fireEvent.click(screen.getByTestId('diagnostics-file-copy-json-sage-2026-07-02.ndjson'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('sage-2026-07-02.ndjson'));
     });

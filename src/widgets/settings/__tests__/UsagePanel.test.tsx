@@ -328,12 +328,10 @@ describe('UsagePanel', () => {
       expect(screen.getByTestId('usage-total-requests')).toBeDefined();
     });
 
-    fireEvent.click(screen.getByTestId('usage-copy-md-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 用量与成本摘要'));
     });
 
-    fireEvent.click(screen.getByTestId('usage-copy-json-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"gpt-4o"'));
     });

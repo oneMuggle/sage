@@ -3,11 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { gatewayApiFor } from '../../../shared/api/gatewayApi';
-import {
-  formatGatewayCardJson,
-  formatGatewayCardMarkdown,
-  GatewayCard,
-} from '../GatewayCard';
+import { formatGatewayCardJson, formatGatewayCardMarkdown, GatewayCard } from '../GatewayCard';
 
 vi.mock('../../../shared/api/gatewayApi', () => ({
   gatewayApiFor: vi.fn(),
