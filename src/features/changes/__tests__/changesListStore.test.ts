@@ -10,7 +10,11 @@ vi.mock('../../../shared/api/workspaceApi', () => ({
 }));
 
 import { workspaceApi } from '../../../shared/api/workspaceApi';
-import { useChangesListStore } from '../changesListStore';
+import {
+  buildChangesListStoreAuditJson,
+  buildChangesListStoreAuditSnapshot,
+  useChangesListStore,
+} from '../changesListStore';
 
 const mockGetChanges = vi.mocked(workspaceApi.getChanges);
 
@@ -57,5 +61,37 @@ describe('changesListStore', () => {
     await useChangesListStore.getState().fetch('s1');
     useChangesListStore.getState().clear('s1');
     expect(useChangesListStore.getState().bySession['s1']).toBeUndefined();
+  });
+});
+
+describe('changesListStore governance audit helpers (Phase P106)', () => {
+  it('builds deterministic audit snapshot and JSON across empty and populated store states', async () => {
+    const emptySnap = buildChangesListStoreAuditSnapshot();
+    expect(emptySnap).toEqual({
+      sessionCount: 0,
+      dirtySessionCount: 0,
+      totalChangedFilesCount: 0,
+      loadingSessionCount: 0,
+      errorSessionCount: 0,
+      signature: '0|0|0|0|0',
+    });
+
+    mockGetChanges.mockResolvedValue(sample);
+    await useChangesListStore.getState().fetch('s1');
+    useChangesListStore.setState((prev) => ({
+      errors: { ...prev.errors, s2: '当前会话尚未绑定工作区，无法查看变更' },
+      loadingBy: { ...prev.loadingBy, s3: true },
+    }));
+
+    const snap = buildChangesListStoreAuditSnapshot();
+    expect(snap).toEqual({
+      sessionCount: 1,
+      dirtySessionCount: 1,
+      totalChangedFilesCount: 1,
+      loadingSessionCount: 1,
+      errorSessionCount: 1,
+      signature: '1|1|1|1|1',
+    });
+    expect(JSON.parse(buildChangesListStoreAuditJson())).toEqual(snap);
   });
 });
