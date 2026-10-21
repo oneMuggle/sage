@@ -68,3 +68,32 @@ export const useReadAloudStore = create<ReadAloudState>((set) => ({
     set({ speakingId: null });
   },
 }));
+
+export interface ReadAloudStoreAuditSnapshot {
+  isSpeaking: boolean;
+  speakingId: string | null;
+  speechSupported: boolean;
+  signature: string;
+}
+
+export function buildReadAloudStoreAuditSnapshot(
+  speakingId: string | null = useReadAloudStore.getState().speakingId,
+): ReadAloudStoreAuditSnapshot {
+  const normalizedId =
+    typeof speakingId === 'string' && speakingId.trim().length > 0 ? speakingId.trim() : null;
+  const isSpeaking = normalizedId !== null;
+  const speechSupported = isSpeechSupported();
+  const signature = `${isSpeaking ? 1 : 0}|${normalizedId ?? '-'}|${speechSupported ? 1 : 0}`;
+  return {
+    isSpeaking,
+    speakingId: normalizedId,
+    speechSupported,
+    signature,
+  };
+}
+
+export function buildReadAloudStoreAuditJson(
+  speakingId: string | null = useReadAloudStore.getState().speakingId,
+): string {
+  return JSON.stringify(buildReadAloudStoreAuditSnapshot(speakingId), null, 2);
+}

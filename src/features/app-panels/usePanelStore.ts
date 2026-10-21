@@ -237,3 +237,52 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       return { slots: next };
     }),
 }));
+
+export interface PanelStoreAuditSnapshot {
+  slotCount: number;
+  openSlotCount: number;
+  maximizedSlot: PanelSlot | null;
+  rightOpen: boolean;
+  rightActive: string | null;
+  rightSize: number;
+  bottomOpen: boolean;
+  bottomSize: number;
+  signature: string;
+}
+
+export function buildPanelStoreAuditSnapshot(
+  slots: PanelSlotsState = usePanelStore.getState().slots,
+): PanelStoreAuditSnapshot {
+  const safeSlots = slots ?? defaultPanelState();
+  const slotCount = PANEL_SLOT_IDS.length;
+  let openSlotCount = 0;
+  let maximizedSlot: PanelSlot | null = null;
+  for (const slot of PANEL_SLOT_IDS) {
+    const st = safeSlots[slot];
+    if (st?.open) openSlotCount += 1;
+    if (st?.maximized && maximizedSlot === null) maximizedSlot = slot;
+  }
+  const rightOpen = Boolean(safeSlots.right?.open);
+  const rightActive = safeSlots.right?.active ?? null;
+  const rightSize = safeSlots.right?.size ?? 320;
+  const bottomOpen = Boolean(safeSlots.bottom?.open);
+  const bottomSize = safeSlots.bottom?.size ?? 240;
+  const signature = `${slotCount}|${openSlotCount}|${maximizedSlot ?? '-'}|${rightOpen ? 1 : 0}|${rightActive ?? '-'}|${rightSize}|${bottomOpen ? 1 : 0}|${bottomSize}`;
+  return {
+    slotCount,
+    openSlotCount,
+    maximizedSlot,
+    rightOpen,
+    rightActive,
+    rightSize,
+    bottomOpen,
+    bottomSize,
+    signature,
+  };
+}
+
+export function buildPanelStoreAuditJson(
+  slots: PanelSlotsState = usePanelStore.getState().slots,
+): string {
+  return JSON.stringify(buildPanelStoreAuditSnapshot(slots), null, 2);
+}

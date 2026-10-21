@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PANEL_STATE_KEY } from '../usePanelStore';
+import {
+  buildPanelStoreAuditJson,
+  buildPanelStoreAuditSnapshot,
+  PANEL_STATE_KEY,
+} from '../usePanelStore';
 
 /**
  * usePanelStore 在模块加载时就读 localStorage 决定初态，因此每个用例必须
@@ -164,5 +168,26 @@ describe('usePanelStore — 槽位互斥', () => {
     expect(parsed.slots.right.active).toBe('chat-inspector');
     expect(parsed.slots.right.open).toBe(true);
     expect(parsed.slots.right.size).toBe(500);
+  });
+});
+
+describe('usePanelStore governance audit helpers (Phase P106)', () => {
+  it('builds deterministic audit snapshot and JSON for default and active panel slots', async () => {
+    const store = await loadStore();
+    const emptySnap = buildPanelStoreAuditSnapshot(store.getState().slots);
+    expect(emptySnap.slotCount).toBe(5);
+    expect(emptySnap.openSlotCount).toBe(2);
+    expect(emptySnap.maximizedSlot).toBeNull();
+    expect(emptySnap.rightOpen).toBe(false);
+    expect(emptySnap.rightActive).toBeNull();
+    expect(emptySnap.signature).toBe('5|2|-|0|-|320|0|240');
+
+    store.getState().activate('chat-inspector');
+    store.getState().setMaximized('right', true);
+    const activeSnap = buildPanelStoreAuditSnapshot(store.getState().slots);
+    expect(activeSnap.rightOpen).toBe(true);
+    expect(activeSnap.rightActive).toBe('chat-inspector');
+    expect(activeSnap.maximizedSlot).toBe('right');
+    expect(JSON.parse(buildPanelStoreAuditJson(store.getState().slots))).toEqual(activeSnap);
   });
 });
