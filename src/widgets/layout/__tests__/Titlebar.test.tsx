@@ -1,9 +1,13 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
 import * as windowControlsClient from '../../../shared/api/windowControlsClient';
-import { Titlebar } from '../Titlebar';
+import {
+  Titlebar,
+  formatTitlebarAuditJson,
+  formatTitlebarAuditSnapshot,
+} from '../Titlebar';
 
 // Mock dependencies
 vi.mock('../../../shared/api/windowControlsClient', () => ({
@@ -157,5 +161,44 @@ describe('Titlebar', () => {
     expect(toggleBtn).toBeInTheDocument();
     toggleBtn.click();
     expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P101)', () => {
+    expect(
+      formatTitlebarAuditSnapshot({
+        platform: 'windows',
+        isDesktop: true,
+        hideBrandLogo: true,
+        mobileSidebarOpen: false,
+      }),
+    ).toBe('titlebar|platform=windows|desktop=1|hideLogo=1|mobileOpen=0');
+    expect(formatTitlebarAuditSnapshot({})).toBe(
+      'titlebar|platform=web|desktop=0|hideLogo=0|mobileOpen=0',
+    );
+    expect(
+      JSON.parse(
+        formatTitlebarAuditJson({
+          platform: 'linux',
+          isDesktop: true,
+          hideBrandLogo: false,
+          mobileSidebarOpen: true,
+        }),
+      ),
+    ).toEqual({
+      platform: 'linux',
+      isDesktop: true,
+      hideBrandLogo: false,
+      mobileSidebarOpen: true,
+    });
+
+    mockDetectPlatform.mockReturnValue('windows');
+    mockIsElectronDesktop.mockReturnValue(true);
+    render(<Titlebar />);
+    const snapBtn = screen.getByTestId('titlebar-copy-snapshot');
+    const jsonBtn = screen.getByTestId('titlebar-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

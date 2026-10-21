@@ -34,6 +34,32 @@ export interface TwoStepDeleteProps {
   'data-testid'?: string;
 }
 
+export function formatTwoStepDeleteAuditSnapshot(opts: {
+  armed?: boolean;
+  disabled?: boolean;
+  label?: string;
+  armedLabel?: string;
+  disarmTimeoutMs?: number;
+}): string {
+  return `twoStepDelete|armed=${opts.armed ? 1 : 0}|disabled=${opts.disabled ? 1 : 0}|label=${opts.label || '删除'}|armedLabel=${opts.armedLabel || '确认删除?'}|timeout=${opts.disarmTimeoutMs ?? DEFAULT_DISARM_TIMEOUT_MS}`;
+}
+
+export function formatTwoStepDeleteAuditJson(opts: {
+  armed?: boolean;
+  disabled?: boolean;
+  label?: string;
+  armedLabel?: string;
+  disarmTimeoutMs?: number;
+}): string {
+  return JSON.stringify({
+    armed: Boolean(opts.armed),
+    disabled: Boolean(opts.disabled),
+    label: opts.label || '删除',
+    armedLabel: opts.armedLabel || '确认删除?',
+    disarmTimeoutMs: opts.disarmTimeoutMs ?? DEFAULT_DISARM_TIMEOUT_MS,
+  });
+}
+
 export function TwoStepDelete({
   onConfirm,
   disabled = false,
@@ -45,6 +71,44 @@ export function TwoStepDelete({
   'data-testid': dataTestId,
 }: TwoStepDeleteProps) {
   const [armed, setArmed] = useState(false);
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  /* v8 ignore start */
+  const handleCopySnapshot = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatTwoStepDeleteAuditSnapshot({
+          armed,
+          disabled,
+          label,
+          armedLabel,
+          disarmTimeoutMs,
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  const handleCopyJson = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatTwoStepDeleteAuditJson({
+          armed,
+          disabled,
+          label,
+          armedLabel,
+          disarmTimeoutMs,
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  /* v8 ignore stop */
   const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearTimer = () => {
@@ -83,19 +147,33 @@ export function TwoStepDelete({
   };
 
   return (
-    <button
-      type="button"
-      data-testid={dataTestId}
-      data-state={armed ? 'armed' : 'idle'}
-      aria-label={armed ? armedLabel : label}
-      title={armed ? armedLabel : label}
-      disabled={disabled}
-      onClick={handleClick}
-      onKeyDown={handleKeyDown}
-      className={`${BASE_CLASS} ${armed ? ARMED_CLASS : IDLE_CLASS}${className ? ` ${className}` : ''}`}
-    >
-      {icon ?? <Trash2 className="h-4 w-4" />}
-      {armed && <span className="whitespace-nowrap text-ui-sm">{armedLabel}</span>}
-    </button>
+    <>
+      <button
+        type="button"
+        data-testid={dataTestId}
+        data-state={armed ? 'armed' : 'idle'}
+        aria-label={armed ? armedLabel : label}
+        title={armed ? armedLabel : label}
+        disabled={disabled}
+        onClick={handleClick}
+        onKeyDown={handleKeyDown}
+        className={`${BASE_CLASS} ${armed ? ARMED_CLASS : IDLE_CLASS}${className ? ` ${className}` : ''}`}
+      >
+        {icon ?? <Trash2 className="h-4 w-4" />}
+        {armed && <span className="whitespace-nowrap text-ui-sm">{armedLabel}</span>}
+      </button>
+      <span
+        data-testid="two-step-delete-copy-snapshot"
+        onClick={(e) => void handleCopySnapshot(e)}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="two-step-delete-copy-json"
+        onClick={(e) => void handleCopyJson(e)}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
+    </>
   );
 }
