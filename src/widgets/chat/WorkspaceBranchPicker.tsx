@@ -49,8 +49,6 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState('');
   const [copiedPath, setCopiedPath] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   const reload = useCallback(async (): Promise<BranchesResponse | null> => {
     if (!sessionId) return null;
@@ -252,62 +250,6 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                       className="rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
                     >
                       {copiedPath ? '已复制路径' : '复制路径'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="workspace-picker-copy-md-btn"
-                      onClick={async () => {
-                        setCopiedMd(true);
-                        setTimeout(() => {
-                          if (typeof window !== 'undefined') setCopiedMd(false);
-                        }, 1500);
-                        const md = [
-                          `# 工作区分支与 Worktree 快照 (${baseName(data.repoRoot)})`,
-                          `- **当前工作区**: \`${workspacePath}\``,
-                          `- **主仓库根目录**: \`${data.repoRoot}\``,
-                          `- **当前分支**: \`${data.currentBranch || 'HEAD'}\``,
-                          `- **活跃 Worktree 数**: ${registered.length}`,
-                          ...localBranches.map((b) => `- \`${b.name}\` (${b.head}) — ${b.subject}`),
-                        ].join('\n');
-                        try {
-                          await navigator.clipboard?.writeText(md);
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }}
-                      className="rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-                    >
-                      {copiedMd ? '已复制MD' : '复制分支MD'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="workspace-picker-copy-json-btn"
-                      onClick={async () => {
-                        setCopiedJson(true);
-                        setTimeout(() => {
-                          if (typeof window !== 'undefined') setCopiedJson(false);
-                        }, 1500);
-                        try {
-                          await navigator.clipboard?.writeText(
-                            JSON.stringify(
-                              {
-                                workspacePath,
-                                repoRoot: data.repoRoot,
-                                currentBranch: data.currentBranch,
-                                worktrees: registered,
-                                localBranches,
-                              },
-                              null,
-                              2,
-                            ),
-                          );
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }}
-                      className="rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-                    >
-                      {copiedJson ? '已复制JSON' : '复制分支JSON'}
                     </button>
                   </div>
                 </div>

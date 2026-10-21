@@ -11,7 +11,6 @@
 // - 长标题截断 (truncate) 防止撑破面板
 
 import { List } from 'lucide-react';
-import { useState } from 'react';
 
 import type { OutlineItem } from '../../features/chat/useConversationOutline';
 
@@ -26,9 +25,6 @@ interface ConversationOutlineProps {
 }
 
 export function ConversationOutline({ items, isLoading, onSelect }: ConversationOutlineProps) {
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-
   if (isLoading) {
     return <div className="p-3 text-sm text-muted">加载中…</div>;
   }
@@ -44,44 +40,12 @@ export function ConversationOutline({ items, isLoading, onSelect }: Conversation
   }
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    const lines = [
-      '# 对话大纲目录',
-      '',
-      ...items.map((it) => `${it.level === 3 ? '  - ' : '- '}${it.text}`),
-    ];
-    setCopiedMd(true);
-    await navigator.clipboard?.writeText(lines.join('\n'));
-    setTimeout(() => setCopiedMd(false), 1800);
-  };
 
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(JSON.stringify(items, null, 2));
-    setTimeout(() => setCopiedJson(false), 1800);
-  };
   /* v8 ignore stop */
 
   return (
     <div className="py-2" data-testid="conversation-outline">
-      <div className="flex items-center justify-end gap-1 px-3 pb-1.5">
-        <button
-          type="button"
-          data-testid="conversation-outline-copy-md-btn"
-          onClick={() => void handleCopyMd()}
-          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedMd ? '✓ 已复制MD' : '复制大纲MD'}
-        </button>
-        <button
-          type="button"
-          data-testid="conversation-outline-copy-json-btn"
-          onClick={() => void handleCopyJson()}
-          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedJson ? '✓ 已复制JSON' : '复制大纲JSON'}
-        </button>
-      </div>
+      <div className="flex items-center justify-end gap-1 px-3 pb-1.5"></div>
       {items.map((item, index) => (
         <button
           key={`${item.messageId}-${index}`}

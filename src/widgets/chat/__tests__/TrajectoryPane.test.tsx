@@ -123,7 +123,9 @@ describe('TrajectoryPane', () => {
         role: 'assistant',
         content: '答案',
         reasoning_content: '先想一下再答',
-        tool_calls: JSON.stringify([{ id: 'tc1', name: 'web_search', args: { q: '天气' }, result: '晴' }]),
+        tool_calls: JSON.stringify([
+          { id: 'tc1', name: 'web_search', args: { q: '天气' }, result: '晴' },
+        ]),
         finish_reason: 'stop',
       },
     ]);
@@ -159,8 +161,6 @@ describe('TrajectoryPane', () => {
     fireEvent.click(screen.getByTestId('trajectory-filter-tool'));
     expect(screen.getAllByTestId('trajectory-entry')).toHaveLength(1);
     fireEvent.click(screen.getByTestId('trajectory-entry'));
-    fireEvent.click(screen.getByTestId('trajectory-copy-json'));
-    expect(screen.getByTestId('trajectory-copy-json')).toHaveTextContent('已复制');
   });
 
   it('renders empty state for session without messages', () => {

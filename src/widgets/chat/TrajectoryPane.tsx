@@ -51,7 +51,6 @@ export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<FilterKind>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -71,26 +70,6 @@ export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
   const handleSelect = (entry: TrajectoryEntry) => {
     setExpandedId((cur) => (cur === entry.messageId ? null : entry.messageId));
     requestMessageJump({ messageId: entry.messageId });
-  };
-
-  const handleCopyJson = (entry: TrajectoryEntry) => {
-    const payload = JSON.stringify(
-      {
-        messageId: entry.messageId,
-        role: entry.role,
-        model: entry.model,
-        stepIndex: entry.stepIndex,
-        inputTokens: entry.inputTokens,
-        outputTokens: entry.totalTokens,
-        latencyMs: entry.latencyMs,
-        finishReason: entry.finishReason,
-        toolCalls: entry.toolCalls,
-      },
-      null,
-      2,
-    );
-    void navigator.clipboard?.writeText?.(payload);
-    setCopiedId(entry.messageId);
   };
 
   return (
@@ -203,14 +182,6 @@ export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-ui-2xs text-muted font-mono">{entry.messageId}</span>
-                    <button
-                      type="button"
-                      data-testid="trajectory-copy-json"
-                      onClick={() => handleCopyJson(entry)}
-                      className="px-1.5 py-0.5 rounded text-ui-2xs bg-bg hover:bg-bg-hover text-text-secondary"
-                    >
-                      {copiedId === entry.messageId ? '已复制' : '复制 JSON'}
-                    </button>
                   </div>
                   {entry.reasoningContent && (
                     <div>

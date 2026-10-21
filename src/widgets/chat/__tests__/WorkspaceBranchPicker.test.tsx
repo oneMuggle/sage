@@ -104,10 +104,6 @@ describe('WorkspaceBranchPicker', () => {
     expect(screen.getByTestId('workspace-branch-picker-actions')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('workspace-picker-copy-path-btn'));
     expect(screen.getByTestId('workspace-picker-copy-path-btn')).toHaveTextContent('已复制路径');
-    fireEvent.click(screen.getByTestId('workspace-picker-copy-md-btn'));
-    expect(screen.getByTestId('workspace-picker-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('workspace-picker-copy-json-btn'));
-    expect(screen.getByTestId('workspace-picker-copy-json-btn')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByText('feat/x'));
     await waitFor(() => {
       expect(mockCreate).toHaveBeenCalledWith('s1', 'open', 'feat/x', 'HEAD');

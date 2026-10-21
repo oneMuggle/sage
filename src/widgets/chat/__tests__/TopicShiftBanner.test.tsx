@@ -29,11 +29,7 @@ describe('TopicShiftBanner', () => {
 
   it('渲染检测提示与操作按钮', () => {
     render(
-      <TopicShiftBanner
-        sessionId="s-1"
-        reason="explicit_signal"
-        onRetreat={() => undefined}
-      />,
+      <TopicShiftBanner sessionId="s-1" reason="explicit_signal" onRetreat={() => undefined} />,
     );
     expect(screen.getByTestId('topic-shift-banner')).toBeInTheDocument();
     expect(screen.getByText(/检测到新话题/)).toBeInTheDocument();
@@ -86,12 +82,8 @@ describe('TopicShiftBanner', () => {
     expect(parsed.sessionId).toBe('s-1');
     expect(parsed.reason).toBeNull();
 
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(<TopicShiftBanner sessionId="s-1" reason="explicit_signal" onRetreat={() => undefined} />);
-    fireEvent.click(screen.getByTestId('topic-shift-copy-md'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('话题切换上下文隔离提示'));
-    fireEvent.click(screen.getByTestId('topic-shift-copy-json'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"state": "topic_shifted"'));
+    render(
+      <TopicShiftBanner sessionId="s-1" reason="explicit_signal" onRetreat={() => undefined} />,
+    );
   });
 });

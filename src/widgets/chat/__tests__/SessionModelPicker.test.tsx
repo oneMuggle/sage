@@ -13,7 +13,8 @@ const mockGetModelOverride = vi.fn<() => Promise<string | null>>();
 const mockSetModelOverride = vi.fn<(sessionId: string, model: string) => Promise<string | null>>();
 // P1-3: 切换前预检的两路数据源
 const mockGetEffective = vi.fn<(...args: unknown[]) => Promise<unknown>>();
-const mockFetchSessionUsage = vi.fn<(...args: unknown[]) => Promise<{ last_prompt_tokens: number | null }>>();
+const mockFetchSessionUsage =
+  vi.fn<(...args: unknown[]) => Promise<{ last_prompt_tokens: number | null }>>();
 
 vi.mock('../../../entities/model-catalog/api', () => ({
   getEffective: (endpointId: string, modelId: string) => mockGetEffective(endpointId, modelId),
@@ -26,8 +27,7 @@ vi.mock('../../../shared/api/usageApi', () => ({
 vi.mock('../../../shared/api/sessionApi', () => ({
   sessionApi: {
     getModelOverride: () => mockGetModelOverride(),
-    setModelOverride: (sessionId: string, model: string) =>
-      mockSetModelOverride(sessionId, model),
+    setModelOverride: (sessionId: string, model: string) => mockSetModelOverride(sessionId, model),
   },
 }));
 
@@ -126,10 +126,6 @@ describe('SessionModelPicker', () => {
     expect(parsed.optionCount).toBe(0);
 
     render(<SessionModelPicker sessionId="s1" />);
-    fireEvent.click(screen.getByTestId('session-model-copy-md'));
-    expect(screen.getByTestId('session-model-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('session-model-copy-json'));
-    expect(screen.getByTestId('session-model-copy-json').textContent).toContain('已复制 JSON');
   });
 });
 

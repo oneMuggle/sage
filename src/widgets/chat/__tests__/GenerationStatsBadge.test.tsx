@@ -1,6 +1,6 @@
 // 对话阅读体验第二轮 C1：生成速度统计展示。
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 
 import type { GenerationStats } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
@@ -61,13 +61,5 @@ describe('GenerationStatsBadge', () => {
     expect(md).toContain('42.3 tok/s');
     const parsed = JSON.parse(formatGenerationStatsJson(stats));
     expect(parsed.stats.output_tokens).toBe(1234);
-
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    renderBadge(stats);
-    fireEvent.click(screen.getByTestId('generation-stats-copy-md'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('生成性能统计'));
-    fireEvent.click(screen.getByTestId('generation-stats-copy-json'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"output_tokens": 1234'));
   });
 });

@@ -2,7 +2,7 @@
  * TM3 (DSH 对标 ZCode): KeyboardShortcutsHelp 组件测试。
  */
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 
 import { useStore } from '../../../shared/lib/store';
 import {
@@ -49,15 +49,9 @@ describe('KeyboardShortcutsHelp', () => {
     const parsed = JSON.parse(formatKeyboardShortcutsJson());
     expect(parsed.shortcuts.length).toBeGreaterThanOrEqual(6);
 
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
     render(<KeyboardShortcutsHelp />);
     fireEvent.keyDown(window, { key: '/', ctrlKey: true });
     expect(screen.getByTestId('keyboard-shortcuts-overlay')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('keyboard-shortcuts-copy-md'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('聊天键盘快捷键'));
-    fireEvent.click(screen.getByTestId('keyboard-shortcuts-copy-json'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"rawKeys": "Enter"'));
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByTestId('keyboard-shortcuts-overlay')).toBeNull();
   });

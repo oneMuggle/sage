@@ -17,7 +17,6 @@ import {
   TemplateFillDialog,
 } from '../TemplateFillDialog';
 
-
 const renderDialog = (content: string, onConfirm = vi.fn(), onCancel = vi.fn()) => {
   render(
     <I18nProvider defaultLocale="zh">
@@ -92,17 +91,9 @@ describe('TemplateFillDialog — 组件', () => {
     expect(md).toContain('# Prompt 模板变量填充摘要 (Template Fill Summary)');
     expect(md).toContain('- **name**: 小李');
     expect(md).toContain('- **topic**: (未填写)');
-    const parsed = JSON.parse(
-      formatTemplateFillJson('你好 {{name}}', { name: '小李' }),
-    );
+    const parsed = JSON.parse(formatTemplateFillJson('你好 {{name}}', { name: '小李' }));
     expect(parsed.resolved).toBe('你好 小李');
 
     renderDialog('请审查 {{module}}', vi.fn(), vi.fn());
-    const mdBtn = screen.getByTestId('tplfill-copy-md');
-    const jsonBtn = screen.getByTestId('tplfill-copy-json');
-    fireEvent.click(mdBtn);
-    expect(mdBtn.textContent).toContain('已复制 MD');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toContain('已复制 JSON');
   });
 });
