@@ -9,12 +9,13 @@
     python -m backend.cli.harness check [--workspace PATH]
         [--user-home PATH] [--preset NAME] [--patch FILE] [--json]
     python -m backend.cli.harness files export|status|verify|update-lock|diff|snapshot|snapshots|rollback ...
+    python -m backend.cli.harness proposals evidence-add|create|generate|probe|compose|submit|approve|adopt|rollback ...
 
 ``dump-config`` 导出三层文件、环境变量与临时 patch 合并后的实际结果，
 包括每个 bundle 被选/被跳过的原因；``check`` 使用严格模式，坏配置或
 已采用 harness lock 校验失败以退出码 1 失败。``files`` 子命令管理
-R84 的 fileized harness、lock、snapshot 与 rollback。CLI 参数/文件
-错误使用退出码 2。
+R84 的 fileized harness、lock、snapshot 与 rollback；``proposals``
+子命令管理 R85 的证据锚定提案。CLI 参数/文件错误使用退出码 2。
 """
 
 from __future__ import annotations
@@ -48,6 +49,7 @@ from backend.application.kernel.harness_snapshots import (
     rollback_harness_files,
     write_harness_files,
 )
+from backend.cli.harness_proposals import add_proposals_parser, run_proposals
 
 
 def _known_bundle_names() -> Tuple[str, ...]:
@@ -417,6 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_config_arguments(check)
 
     _add_files_parser(subparsers)
+    add_proposals_parser(subparsers)
 
     return parser
 
@@ -436,6 +439,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: PLR0911 — CLI 
         if args.command == "files":
             return _run_files(args)
 
+        if args.command == "proposals":
+            return run_proposals(args)
+
         config, names = _load_for_cli(args, strict=args.command == "check")
         file_checks = []
         if args.command == "check":
@@ -448,7 +454,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: PLR0911 — CLI 
         return 1 if args.command == "check" else 2
     except HarnessFilesError as exc:
         _emit(f"错误：{exc}", stderr=True)
-        return 1 if args.command == "check" else 2
+        return 1 if args.command in ("check", "proposals") else 2
     except (OSError, ValueError) as exc:
         _emit(f"错误：{type(exc).__name__}: {exc}", stderr=True)
         return 2

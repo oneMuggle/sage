@@ -19,7 +19,7 @@
 | R82 | 插件 UI / REST（安装、启停、权限确认、日志） | ✅ #2206 |
 | R83 | 进程外宿主（含 DSH 边车，仅在触发条件满足时） | ✅ #2206 |
 | R84 | harness 文件化 + lock + 差异视图 | ✅ #2206 |
-| R85 | 提案引擎（Propose–Probe–Compose + 证据锚定） | 待启动 |
+| R85 | 提案引擎（Propose–Probe–Compose + 证据锚定） | ✅ #2206 |
 | R86 | 生态（脚手架 / 索引 / 贡献指南） | 待启动 |
 
 ## 2. 交付总账
@@ -33,6 +33,7 @@
 | R82 | `api/plugin_routes.py` + lifecycle manifest/events 补强 + `pluginClient.ts` / `PluginsTab.tsx` + 后端 59 例相关测试、前端 16 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
 | R83 | `plugins/{host,host_process,host_worker}.py` + runtime REST/审计 + `PluginRuntimePanel.tsx` + 后端 111 例相关测试、前端 19 例定向测试 | #2206 | 待对齐 | ✅ 已交付 |
 | R84 | `application/kernel/{harness_files,harness_snapshots}.py` + `cli/harness_export.py` + `files` CLI + 启动 lock gate + 14 例新增单测 | #2206 | 待对齐 | ✅ 已交付 |
+| R85 | `application/kernel/{harness_evidence,harness_proposals,harness_proposal_engine}.py` + SkillDraft 审批桥 + `proposals` CLI + 17 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
 
 ## 3. R78 交付边界
 
@@ -151,5 +152,32 @@
 - **本地证据**：新增 14 例单测中 13 passed、1 skipped（Windows 无 symlink
   权限）；harness 相关全集 42 passed/1 skipped，tool parity/risk/lifespan
   64 passed；ruff、py38 兼容、静默异常 ratchet、architecture-check 全绿。
+
+## 10. R85 交付边界
+
+- **只离线提案，不改 chat 热路径**：候选由 JSON 导入或 CLI 显式调用既有
+  ReviewService provider 生成 invariant/domain 两 lane；生成、Probe、
+  Compose、submit 都不改托管 harness，在线自动采纳仍默认关闭。
+- **无轨迹证据与指标退化双硬门**：每条 edit 必须引用 session/message/
+  tool trajectory/LLM replay 中至少一份内容哈希锚定的摘录；离线 Probe
+  必须逐 edit 标记 supported，且任一共享行为指标退化即淘汰整个 candidate。
+  Compose 对同结果合并、对冲突按分数选一、平分冲突丢弃，无入选即
+  `compose_failed`。
+- **仍用既有人工审批面**：pending 提案镜像为 `SkillDraft` 的
+  `harness_proposal` 待审项，详情直接带 evidence、Probe 摘要与 unified
+  diff。UI 批准的语义是最终“批准并采纳”，CLI 则拆为 `approve` 后
+  `adopt` 两步；普通技能草稿批准写 `SKILL.md` 的路径不变。
+- **Probe 诚实分层**：内置 `--static` 只把 candidate 物化到隔离根并做
+  lock/YAML/JSON/plugins strict/SKILL.md 静态校验，不执行候选脚本；
+  行为指标来自外部离线 replay/shadow 报告契约。仓库内尚无通用同任务
+  shadow runner，本轮不冒充已实现在线影子执行。
+- **采纳可回滚、漂移不猜合并**：提案锚定 base lock 与逐文件 hash；批准/
+  采纳时漂移进入 stale/拒绝。采纳前创建 R84 `pre-proposal-*` snapshot，
+  应用后刷新 lock；提案 rollback 默认要求当前仍是采纳后 lock，后续漂移
+  必须显式 `--force`。完整设计见
+  `2026-10-21_harness-proposal-engine-r85.md`。
+- **本地证据**：新增 17 例测试；R85 定向（含既有审批 API）34 passed，
+  R84/draft/review/harness CLI 回归 77 passed/1 skipped；ruff 与
+  architecture-check 全绿。
 
 —— 本账本由插件化循环维护，随轮次追加。

@@ -767,16 +767,19 @@ def collect_harness_file_specs(
         (
             "proposals/README.md",
             "proposals",
-            "# Proposals\n\nReserved for R85. In R84 only this README is managed "
-            "by `harness.lock.json`; other files in this directory are ignored "
-            "by lock verification.",
+            "# Proposals\n\nR85 stores one directory per harness proposal. Each "
+            "manifest is anchored to a harness lock and must cite trajectory "
+            "evidence. Only this README is lock-managed; proposal artifacts are "
+            "validated by the proposal engine and change managed files only "
+            "after human approval.",
         ),
         (
             "evidence/README.md",
             "evidence",
-            "# Evidence\n\nReserved for R85. In R84 only this README is managed "
-            "by `harness.lock.json`; other files in this directory are ignored "
-            "by lock verification.",
+            "# Evidence\n\nR85 evidence records are content-hashed JSON excerpts "
+            "from sessions, messages, tool trajectories, or LLM replays. Only "
+            "this README is lock-managed; evidence files are validated when "
+            "referenced by a proposal.",
         ),
     )
     for path, component, body in static_docs:
