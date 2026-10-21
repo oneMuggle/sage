@@ -37,3 +37,35 @@ export async function saveCurrentSessionId(id: string | null): Promise<void> {
   }
   // 注：id=null 时不删后端（避免误清；后续可加 delete 端点）
 }
+
+export function formatCurrentSessionStorageSummary(id: string | null): string {
+  const cached = (() => {
+    try {
+      return localStorage.getItem(CACHE_KEY);
+    } catch {
+      /* v8 ignore next */
+      return null;
+    }
+  })();
+  return `${CACHE_KEY} · current=${id ?? 'none'} · cached=${cached ?? 'none'}`;
+}
+
+export function formatCurrentSessionStorageJson(id: string | null): string {
+  const cached = (() => {
+    try {
+      return localStorage.getItem(CACHE_KEY);
+    } catch {
+      /* v8 ignore next */
+      return null;
+    }
+  })();
+  return JSON.stringify(
+    {
+      cacheKey: CACHE_KEY,
+      currentSessionId: id,
+      cachedSessionId: cached,
+    },
+    null,
+    2,
+  );
+}
