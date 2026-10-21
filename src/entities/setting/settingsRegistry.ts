@@ -431,6 +431,13 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     100,
     0,
   ),
+  'orch.maxIterations': orchNumber(
+    'orch.maxIterations',
+    'Agent 迭代次数上限',
+    'Primary agent 最大迭代次数，0 回落 profile 默认值（当前为 25）',
+    25,
+    0,
+  ),
   'orch.subagentApprovalMode': enumSetting(
     'orch.subagentApprovalMode',
     '子代理自动批准',
