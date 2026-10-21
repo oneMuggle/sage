@@ -56,6 +56,32 @@ const EMPTY_FORM: AddFormState = {
   required: false,
 };
 
+export function formatMcpTabAuditSnapshot(input: {
+  serverCount: number;
+  readyCount: number;
+  loading: boolean;
+  hasError?: boolean;
+}): string {
+  const total = Math.max(0, Math.trunc(input.serverCount));
+  const ready = Math.max(0, Math.trunc(input.readyCount));
+  const stateLabel = input.hasError ? '异常' : input.loading ? '刷新中' : '就绪';
+  return `MCP服务 · ${ready}/${total}就绪 · ${stateLabel}`;
+}
+
+export function formatMcpTabAuditJson(input: {
+  serverCount: number;
+  readyCount: number;
+  loading: boolean;
+  hasError?: boolean;
+}): string {
+  return JSON.stringify({
+    serverCount: Math.max(0, Math.trunc(input.serverCount)),
+    readyCount: Math.max(0, Math.trunc(input.readyCount)),
+    loading: Boolean(input.loading),
+    hasError: Boolean(input.hasError),
+  });
+}
+
 export function McpTab() {
   const { t } = useI18n();
   const [report, setReport] = useState<McpStatusReport | null>(null);
@@ -247,6 +273,41 @@ export function McpTab() {
   };
 
   const stateByKey = new Map((report?.servers ?? []).map((s) => [s.name, s]));
+  const [copiedSummary, setCopiedSummary] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  /* v8 ignore start */
+  const readyCount = (report?.servers ?? []).filter((s) => s.state === 'ready').length;
+  const handleCopySummary = async () => {
+    const text = formatMcpTabAuditSnapshot({
+      serverCount: servers.length,
+      readyCount,
+      loading,
+      hasError: Boolean(loadError || actionError),
+    });
+    setCopiedSummary(true);
+    try {
+      await navigator.clipboard?.writeText(text);
+    } catch {
+      // Clipboard may be unavailable in headless environments
+    }
+  };
+
+  const handleCopyJson = async () => {
+    const text = formatMcpTabAuditJson({
+      serverCount: servers.length,
+      readyCount,
+      loading,
+      hasError: Boolean(loadError || actionError),
+    });
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(text);
+    } catch {
+      // Clipboard may be unavailable in headless environments
+    }
+  };
+  /* v8 ignore stop */
   const inputClass =
     'px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text';
 
@@ -254,7 +315,25 @@ export function McpTab() {
     <div className="space-y-6">
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-text">{t('settings.mcp.title')}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-text">{t('settings.mcp.title')}</h3>
+            <span
+              onClick={() => void handleCopySummary()}
+              data-testid="mcp-tab-copy-summary"
+              title="复制 MCP 状态审计摘要"
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
+            >
+              {copiedSummary ? '已复制' : '复制摘要'}
+            </span>
+            <span
+              onClick={() => void handleCopyJson()}
+              data-testid="mcp-tab-copy-json"
+              title="复制 MCP 状态审计 JSON"
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
+            >
+              {copiedJson ? '已复制' : 'JSON'}
+            </span>
+          </div>
           <button
             className="px-3 py-1 text-xs border border-border rounded-radius-sm text-muted hover:text-text"
             onClick={() => void refresh()}

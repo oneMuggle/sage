@@ -105,6 +105,36 @@ function isEditableDocType(docType: OfficeDocType): boolean {
   return docType === 'word' || docType === 'excel' || docType === 'ppt';
 }
 
+export function formatOfficePreviewPanelAuditSnapshot(input: {
+  docType: OfficeDocType;
+  filename: string;
+  sizeBytes: number;
+  fidelityOn: boolean;
+  exporting: boolean;
+}): string {
+  const name = input.filename.trim() || '未命名';
+  const sizeKb = (Math.max(0, input.sizeBytes) / 1024).toFixed(1);
+  const viewLabel = input.fidelityOn ? '高保真视图' : '结构化视图';
+  const exportLabel = input.exporting ? '导出中' : '就绪';
+  return `文档预览 · ${input.docType.toUpperCase()} · ${name} · ${sizeKb}KB · ${viewLabel} · ${exportLabel}`;
+}
+
+export function formatOfficePreviewPanelAuditJson(input: {
+  docType: OfficeDocType;
+  filename: string;
+  sizeBytes: number;
+  fidelityOn: boolean;
+  exporting: boolean;
+}): string {
+  return JSON.stringify({
+    docType: input.docType,
+    filename: input.filename.trim() || '未命名',
+    sizeBytes: Math.max(0, Math.trunc(input.sizeBytes)),
+    fidelityOn: Boolean(input.fidelityOn),
+    exporting: Boolean(input.exporting),
+  });
+}
+
 export function OfficePreviewPanel({
   preview,
   workspacePath,
@@ -198,6 +228,8 @@ export function OfficePreviewPanel({
   const [fidelityLoading, setFidelityLoading] = useState(false);
   const [fidelityUrl, setFidelityUrl] = useState<string | null>(null);
   const [fidelityKey, setFidelityKey] = useState<string | null>(null);
+  const [copiedSummary, setCopiedSummary] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const fidelityElapsed = useElapsedSeconds(fidelityLoading);
 
   if (!preview) {
@@ -413,6 +445,46 @@ export function OfficePreviewPanel({
         <span className="font-medium text-sm truncate">{summary.generated_filename}</span>
         <span className="ml-auto text-xs text-muted shrink-0">
           {(summary.metadata.file_size_bytes / 1024).toFixed(1)} KB
+        </span>
+        <span
+          onClick={() => {
+            /* v8 ignore start */
+            const text = formatOfficePreviewPanelAuditSnapshot({
+              docType: preview.docType,
+              filename: summary.generated_filename,
+              sizeBytes: summary.metadata.file_size_bytes,
+              fidelityOn,
+              exporting,
+            });
+            setCopiedSummary(true);
+            void navigator.clipboard?.writeText(text).catch(() => {});
+            /* v8 ignore stop */
+          }}
+          data-testid="office-preview-panel-copy-summary"
+          title="复制文档预览审计摘要"
+          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none shrink-0"
+        >
+          {copiedSummary ? '已复制' : '复制摘要'}
+        </span>
+        <span
+          onClick={() => {
+            /* v8 ignore start */
+            const text = formatOfficePreviewPanelAuditJson({
+              docType: preview.docType,
+              filename: summary.generated_filename,
+              sizeBytes: summary.metadata.file_size_bytes,
+              fidelityOn,
+              exporting,
+            });
+            setCopiedJson(true);
+            void navigator.clipboard?.writeText(text).catch(() => {});
+            /* v8 ignore stop */
+          }}
+          data-testid="office-preview-panel-copy-json"
+          title="复制文档预览审计 JSON"
+          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none shrink-0"
+        >
+          {copiedJson ? '已复制' : 'JSON'}
         </span>
         {preview.docType === 'pdf' && (
           <button
