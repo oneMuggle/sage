@@ -1687,4 +1687,17 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P126：Word 内联粗斜体标记渲染/命令面板打开信号/产品状态提示多语言/快捷键注册表/会话工作区上下文访问器/暂停记忆词典/重试横幅词典/Wiki API 客户端审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/InlineMarks.tsx`：新增 `formatInlineMarksSummary` 与 `formatInlineMarksJson` 及单测 `InlineMarks.test.tsx`，支持一键导出 Word 内联粗斜体标记计数与节点分段数审计摘要（`bold=<count> · italic=<count> · segments=<count>`）与 JSON 快照。
+  2. `src/shared/lib/commandPaletteEvents.ts`：新增 `formatCommandPaletteEventSummary` 与 `formatCommandPaletteEventJson` 及单测 `commandPaletteEvents.test.ts`，支持一键导出命令面板跨组件打开信号事件名与派发目标就绪态审计摘要（`event=sage:command-palette:open · targetReady=<bool>`）与 JSON 快照。
+  3. `src/shared/lib/productMessages.ts`：新增 `formatProductMessagesSummary` 与 `formatProductMessagesJson` 及单测 `productMessages.test.ts`，支持一键导出产品状态提示词典语种、键数与中英对齐审计摘要（`locale=<zh|en> · keys=<count> · parity=<bool>`）与 JSON 快照。
+  4. `src/shared/lib/shortcuts.ts`：新增 `formatShortcutRegistrySummary` 与 `formatShortcutRegistryJson` 及单测 `shortcuts.test.ts`，支持一键导出快捷键帮助分组数与条目总数审计摘要（`groups=<count> · shortcuts=<count>`）与 JSON 快照。
+  5. `src/shared/lib/workspaceContext.tsx`：新增 `WorkspaceBindingAuditInput`、`formatWorkspaceBindingSummary` 与 `formatWorkspaceBindingJson` 及单测 `workspaceContext.test.ts`，支持一键导出工作区上下文挂载态、加载状态与路径绑定态审计摘要（`provider=<mounted|unmounted> · status=<status> · bound=<bool>`）与 JSON 快照。
+  6. `src/shared/lib/i18n/pausedMemory.ts`：新增 `formatPausedMemoryI18nSummary` 与 `formatPausedMemoryI18nJson` 及单测 `pausedMemory.test.ts`，支持一键导出暂停长期记忆中英词典键数对齐审计摘要（`zh=<count> · en=<count> · parity=<bool>`）与 JSON 快照。
+  7. `src/shared/lib/i18n/retryBanner.ts`：新增 `formatRetryBannerI18nSummary` 与 `formatRetryBannerI18nJson` 及单测 `retryBanner.test.ts`，支持一键导出 LLM 重试横幅中英词典键数对齐审计摘要（`zh=<count> · en=<count> · parity=<bool>`）与 JSON 快照。
+  8. `src/shared/api-client/wiki.ts`：新增 `WIKI_API_BASE`、`formatWikiApiClientSummary` 与 `formatWikiApiClientJson` 及单测 `wiki.test.ts`，支持一键导出 Wiki 后端 API 基础地址、演示模式拦截态与默认检索上限审计摘要（`baseUrl=http://127.0.0.1:8765/api/v1 · demoBlocked=<bool> · defaultLimit=<n>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
 
