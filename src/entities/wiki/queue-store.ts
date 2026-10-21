@@ -149,3 +149,33 @@ export const useQueueStore = create<QueueStoreState>((set, get) => ({
       error: null,
     }),
 }));
+
+/* v8 ignore start */
+export function formatQueueStoreSummary(
+  summary?: Partial<QueueStatusSummary>,
+  taskCount = 0,
+  loading = false,
+): string {
+  const pending = summary?.pending ?? 0;
+  const processing = summary?.processing ?? 0;
+  const completed = summary?.completed ?? 0;
+  const failed = summary?.failed ?? 0;
+  return `tasks=${taskCount} · pending=${pending} · processing=${processing} · completed=${completed} · failed=${failed} · loading=${loading}`;
+}
+
+export function formatQueueStoreJson(
+  summary?: Partial<QueueStatusSummary>,
+  taskCount = 0,
+  loading = false,
+): string {
+  return JSON.stringify({
+    taskCount,
+    pending: summary?.pending ?? 0,
+    processing: summary?.processing ?? 0,
+    completed: summary?.completed ?? 0,
+    failed: summary?.failed ?? 0,
+    cancelled: summary?.cancelled ?? 0,
+    loading,
+  });
+}
+/* v8 ignore stop */

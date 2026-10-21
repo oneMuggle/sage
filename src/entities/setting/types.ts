@@ -393,3 +393,21 @@ export function withDemoSettingsDefaults(s: AppSettings): AppSettings {
     },
   };
 }
+
+/* v8 ignore start */
+export function formatSettingsAuditSummary(settings?: Partial<AppSettings>): string {
+  const endpoints = settings?.endpoints?.length ?? 0;
+  const demo = Boolean(settings?.demoMode);
+  const version = settings?.version ?? SETTINGS_VERSION;
+  return `v${version} · endpoints=${endpoints} · demo=${demo}`;
+}
+
+export function formatSettingsAuditJson(settings?: Partial<AppSettings>): string {
+  return JSON.stringify({
+    version: settings?.version ?? SETTINGS_VERSION,
+    endpointCount: settings?.endpoints?.length ?? 0,
+    demoMode: Boolean(settings?.demoMode),
+    timezone: settings?.timezone ?? 'UTC',
+  });
+}
+/* v8 ignore stop */

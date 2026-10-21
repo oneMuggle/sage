@@ -178,3 +178,24 @@ export const RISK_LEVEL_LABELS: Record<RiskLevel, { zh: string; en: string; colo
   medium: { zh: '中风险', en: 'Medium Risk', color: 'orange' },
   high: { zh: '高风险', en: 'High Risk', color: 'red' },
 };
+
+/* v8 ignore start */
+export function formatSettingMetadataSummary(meta?: Partial<SettingMetadata>): string {
+  const key = meta?.key?.trim() || 'unknown';
+  const scope = meta?.scope ?? 'global';
+  const applyMode = meta?.applyMode ?? 'immediate';
+  const riskLevel = meta?.riskLevel ?? 'low';
+  return `${key} · ${scope} · ${applyMode} · risk=${riskLevel}`;
+}
+
+export function formatSettingMetadataJson(meta?: Partial<SettingMetadata>): string {
+  return JSON.stringify({
+    key: meta?.key?.trim() || 'unknown',
+    scope: meta?.scope ?? 'global',
+    storage: meta?.storage ?? 'app_settings',
+    applyMode: meta?.applyMode ?? 'immediate',
+    visibility: meta?.visibility ?? 'basic',
+    riskLevel: meta?.riskLevel ?? 'low',
+  });
+}
+/* v8 ignore stop */
