@@ -29,18 +29,9 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-import type {
-  OfficeExcelReadResult,
-  OfficePdfReadResult,
-  OfficePptReadResult,
-} from '../../../shared/api/types';
+import type { OfficeExcelReadResult, OfficePdfReadResult, OfficePptReadResult } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  OfficePreviewPanel,
-  PARAGRAPH_RENDER_CAP,
-  ROW_RENDER_CAP,
-  type OfficePreviewData,
-} from '../OfficePreviewPanel';
+import { OfficePreviewPanel, PARAGRAPH_RENDER_CAP, ROW_RENDER_CAP, type OfficePreviewData } from '../OfficePreviewPanel';
 
 const toastMock = toast as unknown as {
   success: ReturnType<typeof vi.fn>;

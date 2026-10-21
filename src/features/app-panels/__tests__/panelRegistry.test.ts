@@ -1,17 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  clampSize,
-  getPanelDefinition,
-  isExclusiveConflict,
-  isRegisteredPanel,
-  panelsForSlot,
-  PANEL_DEFINITIONS,
-  PANEL_SLOT_IDS,
-  PANEL_SLOTS,
-  slotGeometry,
-  type PanelMigrationBatch,
-} from '../panelRegistry';
+import { clampSize, getPanelDefinition, isExclusiveConflict, isRegisteredPanel, panelsForSlot, PANEL_DEFINITIONS, PANEL_SLOT_IDS, PANEL_SLOTS, slotGeometry, type PanelMigrationBatch } from '../panelRegistry';
 
 describe('panelRegistry', () => {
   it('登记了本次审计发现的全部侧边面', () => {

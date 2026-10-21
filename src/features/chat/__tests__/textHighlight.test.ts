@@ -2,18 +2,7 @@
 // 搜索命中自动清除、查找的当前命中、无 API 时静默降级、Range 居中滚动。
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  clearFindHighlights,
-  FIND_CURRENT_HIGHLIGHT,
-  FIND_HIGHLIGHT,
-  findTextRanges,
-  highlightFindMatches,
-  highlightSearchHits,
-  isHighlightSupported,
-  scrollRangeIntoView,
-  SEARCH_HIT_HIGHLIGHT,
-  SEARCH_HIT_HIGHLIGHT_MS,
-} from '../textHighlight';
+import { clearFindHighlights, FIND_CURRENT_HIGHLIGHT, FIND_HIGHLIGHT, findTextRanges, highlightFindMatches, highlightSearchHits, isHighlightSupported, scrollRangeIntoView, SEARCH_HIT_HIGHLIGHT, SEARCH_HIT_HIGHLIGHT_MS } from '../textHighlight';
 
 class FakeHighlight {
   ranges: Range[];

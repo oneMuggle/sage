@@ -75,8 +75,6 @@ export function EndpointStatusBanner() {
   const settings = useSettingsStore((s) => s.settings);
   const [online, setOnline] = useState(isOnline);
   const [checking, setChecking] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   const endpoint = resolveEndpoint(settings.modelSelections.chatModel, settings.endpoints);
 
@@ -161,23 +159,7 @@ export function EndpointStatusBanner() {
   };
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    setCopiedMd(true);
-    try {
-      await navigator.clipboard?.writeText(formatEndpointStatusMarkdown(issue, online, text));
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
 
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    try {
-      await navigator.clipboard?.writeText(formatEndpointStatusJson(issue, online, text));
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -190,22 +172,6 @@ export function EndpointStatusBanner() {
       <span className="flex-1 min-w-0 truncate" title={issue.message || text}>
         {text}
       </span>
-      <button
-        type="button"
-        data-testid="endpoint-banner-copy-md"
-        onClick={() => void handleCopyMd()}
-        className="px-2 py-0.5 rounded hover:bg-bg-hover"
-      >
-        {copiedMd ? '已复制 MD' : '复制 MD'}
-      </button>
-      <button
-        type="button"
-        data-testid="endpoint-banner-copy-json"
-        onClick={() => void handleCopyJson()}
-        className="px-2 py-0.5 rounded hover:bg-bg-hover"
-      >
-        {copiedJson ? '已复制 JSON' : '复制 JSON'}
-      </button>
       <button
         type="button"
         data-testid="endpoint-banner-recheck"

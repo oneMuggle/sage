@@ -1,14 +1,7 @@
 // 对话阅读体验 B1：朗读的纯逻辑 —— 支持检测、朗读文本、语言判断、切片、选语音。
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  detectSpeechLang,
-  isSpeechSupported,
-  pickVoice,
-  SPEECH_CHUNK_MAX,
-  splitSpeechChunks,
-  toSpeechText,
-} from '../speech';
+import { detectSpeechLang, isSpeechSupported, pickVoice, SPEECH_CHUNK_MAX, splitSpeechChunks, toSpeechText } from '../speech';
 
 function voice(lang: string, localService: boolean): SpeechSynthesisVoice {
   const name = `${lang}-${localService ? 'local' : 'remote'}`;

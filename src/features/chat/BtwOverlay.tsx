@@ -67,8 +67,6 @@ export function BtwOverlay() {
   const { close } = useBtwCommand();
   const { isOpen, question, answer, isLoading, sources } = useBtwState();
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   // Escape 键关闭
   useEffect(() => {
@@ -93,29 +91,7 @@ export function BtwOverlay() {
   }
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatBtwOverlayMarkdown({ question, answer, isLoading, sources }),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatBtwOverlayJson({ question, answer, isLoading, sources }),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   const kindLabel = (kind: string | undefined) =>
@@ -137,22 +113,6 @@ export function BtwOverlay() {
       <div className="flex items-center justify-between p-3 border-b border-border">
         <span className="text-sm font-medium text-text">{t('chat.btw.title')}</span>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            data-testid="btw-overlay-copy-md"
-            onClick={() => void handleCopyMarkdown()}
-            className="rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="btw-overlay-copy-json"
-            onClick={() => void handleCopyJson()}
-            className="rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
           <button
             data-testid="btw-close"
             onClick={close}

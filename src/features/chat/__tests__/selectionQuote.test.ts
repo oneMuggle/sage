@@ -1,13 +1,7 @@
 // 对话阅读导航 A4/A5: 划词引用与引用追加的纯函数。
 import { afterEach, describe, expect, it } from 'vitest';
 
-import {
-  appendQuoteToDraft,
-  computeQuoteButtonPosition,
-  formatQuoteBlock,
-  getQuotableSelection,
-  normalizeSelectedText,
-} from '../selectionQuote';
+import { appendQuoteToDraft, computeQuoteButtonPosition, formatQuoteBlock, getQuotableSelection, normalizeSelectedText } from '../selectionQuote';
 
 describe('normalizeSelectedText', () => {
   it('normalizes line endings, trailing blanks and long blank runs', () => {

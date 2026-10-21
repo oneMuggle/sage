@@ -2,11 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useBtwState } from '../../../entities/chat/btwState';
-import {
-  BtwOverlay,
-  formatBtwOverlayJson,
-  formatBtwOverlayMarkdown,
-} from '../BtwOverlay';
+import { BtwOverlay, formatBtwOverlayJson, formatBtwOverlayMarkdown } from '../BtwOverlay';
 
 // Mock i18n hook
 vi.mock('../../../shared/lib/i18n', () => ({
@@ -123,9 +119,7 @@ describe('BtwOverlay', () => {
     useBtwState.getState().open('What is React?');
     useBtwState.getState().appendDelta('A UI library.');
     render(<BtwOverlay />);
-    fireEvent.click(screen.getByTestId('btw-overlay-copy-md'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/btw 补充问答'));
-    fireEvent.click(screen.getByTestId('btw-overlay-copy-json'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"question": "What is React?"'));
   });
 });

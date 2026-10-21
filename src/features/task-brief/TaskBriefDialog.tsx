@@ -80,8 +80,6 @@ export function TaskBriefDialog({
   const [error, setError] = useState(false);
   const [recipeStatus, setRecipeStatus] = useState<'saved' | 'error' | null>(null);
   const [modelId, setModelId] = useState('');
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const chooseModel = useCallback((id: string) => setModelId(id), []);
   useEffect(() => {
     let active = true;
@@ -117,25 +115,7 @@ export function TaskBriefDialog({
     'w-full mt-1 px-3 py-2 text-ui-base rounded border border-ui-border bg-ui-surface text-ui-foreground';
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatTaskBriefMarkdown(brief, modelId));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatTaskBriefJson(brief, modelId));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -273,22 +253,6 @@ export function TaskBriefDialog({
             </p>
           )}
           <div className="flex flex-wrap justify-end gap-2 mt-4">
-            <button
-              type="button"
-              data-testid="task-brief-copy-md"
-              onClick={() => void handleCopyMarkdown()}
-              className="px-3 py-2 rounded border border-ui-border text-ui-sm"
-            >
-              {copiedMd ? '已复制 MD' : '复制 MD'}
-            </button>
-            <button
-              type="button"
-              data-testid="task-brief-copy-json"
-              onClick={() => void handleCopyJson()}
-              className="px-3 py-2 rounded border border-ui-border text-ui-sm"
-            >
-              {copiedJson ? '已复制 JSON' : '复制 JSON'}
-            </button>
             <button
               type="button"
               onClick={() => {

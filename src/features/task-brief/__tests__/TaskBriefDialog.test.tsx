@@ -5,11 +5,7 @@ vi.mock('../../../shared/lib/i18n', () => ({ useI18n: () => ({ locale: 'en' }) }
 vi.mock('../../../shared/api/projectApi', () => ({
   projectApi: { list: vi.fn().mockResolvedValue([{ id: 'project-a', name: 'Project A' }]) },
 }));
-import {
-  TaskBriefDialog,
-  formatTaskBriefJson,
-  formatTaskBriefMarkdown,
-} from '../TaskBriefDialog';
+import { TaskBriefDialog, formatTaskBriefJson, formatTaskBriefMarkdown } from '../TaskBriefDialog';
 const recommendation = {
   id: 'report',
   title: 'report',
@@ -91,9 +87,5 @@ describe('task brief submission', () => {
         onClose={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByTestId('task-brief-copy-md'));
-    expect(screen.getByTestId('task-brief-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('task-brief-copy-json'));
-    expect(screen.getByTestId('task-brief-copy-json').textContent).toContain('已复制 JSON');
   });
 });

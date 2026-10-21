@@ -1,6 +1,4 @@
 import { FileText } from 'lucide-react';
-import { useState } from 'react';
-
 import type { JournalSpec } from '../../../shared/api/types';
 
 export interface JournalSpecCardProps {
@@ -42,9 +40,6 @@ export function formatJournalSpecJson(spec: JournalSpec | null): string {
 }
 
 export function JournalSpecCard({ spec }: JournalSpecCardProps) {
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-
   if (!spec) {
     return (
       <div className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500">
@@ -54,25 +49,7 @@ export function JournalSpecCard({ spec }: JournalSpecCardProps) {
   }
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatJournalSpecMarkdown(spec));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatJournalSpecJson(spec));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -85,24 +62,7 @@ export function JournalSpecCard({ spec }: JournalSpecCardProps) {
           <FileText className="h-4 w-4" />
           <span>{spec.template_filename}</span>
         </div>
-        <div className="flex items-center gap-1 font-normal">
-          <button
-            type="button"
-            data-testid="journal-spec-copy-md"
-            onClick={() => void handleCopyMarkdown()}
-            className="rounded border border-slate-200 px-1.5 py-0.5 text-ui-2xs text-slate-600 hover:bg-slate-50"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="journal-spec-copy-json"
-            onClick={() => void handleCopyJson()}
-            className="rounded border border-slate-200 px-1.5 py-0.5 text-ui-2xs text-slate-600 hover:bg-slate-50"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
-        </div>
+        <div className="flex items-center gap-1 font-normal"></div>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600">
         <dt>正文字号</dt>

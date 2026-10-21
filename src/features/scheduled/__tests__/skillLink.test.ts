@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Skill } from '../../../shared/api/types';
-import {
-  insertSkillRef,
-  invalidRefLabels,
-  parseSkillRefs,
-  removeSkillRef,
-  summarizeTaskSkillHealth,
-  validateSkillRefs,
-} from '../skillLink';
+import { insertSkillRef, invalidRefLabels, parseSkillRefs, removeSkillRef, summarizeTaskSkillHealth, validateSkillRefs } from '../skillLink';
 
 function skill(name: string, enabled = true): Skill {
   return {

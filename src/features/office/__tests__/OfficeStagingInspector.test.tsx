@@ -1,11 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  formatOfficeStagingJson,
-  formatOfficeStagingMarkdown,
-  OfficeStagingInspector,
-} from '../OfficeStagingInspector';
+import { formatOfficeStagingJson, formatOfficeStagingMarkdown, OfficeStagingInspector } from '../OfficeStagingInspector';
 
 vi.mock('../../../shared/lib/i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }));
 afterEach(() => {

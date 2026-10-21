@@ -1,11 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  formatJournalSpecJson,
-  formatJournalSpecMarkdown,
-  JournalSpecCard,
-} from '../components/JournalSpecCard';
+import { formatJournalSpecJson, formatJournalSpecMarkdown, JournalSpecCard } from '../components/JournalSpecCard';
 
 const stubSpec = {
   spec_id: 'spec_001',
@@ -71,9 +67,7 @@ describe('JournalSpecCard', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     render(<JournalSpecCard spec={stubSpec} />);
-    fireEvent.click(screen.getByTestId('journal-spec-copy-md'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('cell-press.docx'));
-    fireEvent.click(screen.getByTestId('journal-spec-copy-json'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"spec_id": "spec_001"'));
   });
 });

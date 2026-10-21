@@ -2,12 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Message } from '../../../shared/lib/store';
-import {
-  activateAnswerVersion,
-  fetchAnswerVersions,
-  lastTurnAnchorIndex,
-  regenerateInPlace,
-} from '../answerVersions';
+import { activateAnswerVersion, fetchAnswerVersions, lastTurnAnchorIndex, regenerateInPlace } from '../answerVersions';
 
 const backendRequest = vi.fn();
 vi.mock('../../../shared/api/backendRequest', () => ({

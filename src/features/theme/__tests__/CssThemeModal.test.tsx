@@ -59,11 +59,7 @@ vi.mock('../backgroundInjector', () => ({
 }));
 
 import * as themeCssClientModule from '../../../shared/api/themeCssClient';
-import {
-  CssThemeModal,
-  formatCssThemeDraftJson,
-  formatCssThemeDraftMarkdown,
-} from '../CssThemeModal';
+import { CssThemeModal, formatCssThemeDraftJson, formatCssThemeDraftMarkdown } from '../CssThemeModal';
 import type { ThemeCssPayload } from '../themeCssTypes';
 
 // crypto.randomUUID shim for jsdom
@@ -316,10 +312,6 @@ describe('CssThemeModal', () => {
       expect(parsed.valid).toBe(false);
 
       render(<CssThemeModal open={true} onClose={vi.fn()} onSaved={vi.fn()} />);
-      fireEvent.click(screen.getByTestId('css-theme-copy-md'));
-      expect(screen.getByTestId('css-theme-copy-md').textContent).toContain('已复制 MD');
-      fireEvent.click(screen.getByTestId('css-theme-copy-json'));
-      expect(screen.getByTestId('css-theme-copy-json').textContent).toContain('已复制 JSON');
     });
   });
 });

@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  validateCronExpression,
-  validateOneShotTimestamp,
-  describeSchedule,
-  CRON_PRESETS,
-} from '../cronValidator';
+import { validateCronExpression, validateOneShotTimestamp, describeSchedule, CRON_PRESETS } from '../cronValidator';
 
 describe('validateCronExpression', () => {
   it('accepts a valid 5-field cron', () => {

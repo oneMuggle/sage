@@ -9,10 +9,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useStore } from '../../../shared/lib/store';
 import type { Session } from '../../../shared/lib/store';
-import {
-  TURN_PREVIEW_MAX_CHARS,
-  useConversationTurns,
-} from '../useConversationTurns';
+import { TURN_PREVIEW_MAX_CHARS, useConversationTurns } from '../useConversationTurns';
 
 
 const sid = 's-turns';

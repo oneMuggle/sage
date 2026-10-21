@@ -10,11 +10,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  DiagnosticCard,
-  formatDiagnosticPreviewJson,
-  formatDiagnosticPreviewMarkdown,
-} from '../DiagnosticCard';
+import { DiagnosticCard, formatDiagnosticPreviewJson, formatDiagnosticPreviewMarkdown } from '../DiagnosticCard';
 
 const defaultPreview = {
   count: 12,
@@ -135,9 +131,7 @@ describe('DiagnosticCard', () => {
     await waitFor(() => {
       expect(card.textContent).toContain('12');
     });
-    fireEvent.click(screen.getByTestId('diagnostic-card-copy-md'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('LLM 诊断预览摘要'));
-    fireEvent.click(screen.getByTestId('diagnostic-card-copy-json'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"count": 12'));
   });
 });

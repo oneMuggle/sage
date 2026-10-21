@@ -7,11 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { usePermissionState } from '../../../entities/permission/permissionState';
 import { useQuestionState } from '../../../entities/question/questionState';
-import {
-  DEFAULT_SETTINGS,
-  SETTINGS_STORAGE_KEY,
-  SETTINGS_VERSION,
-} from '../../../entities/setting/types';
+import { DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY, SETTINGS_VERSION } from '../../../entities/setting/types';
 import { useSettingsStore } from '../../../features/manage-settings/settingsStore';
 import { useStore } from '../../../shared/lib/store';
 import { useChatStreamStore } from '../chatStreamStore';

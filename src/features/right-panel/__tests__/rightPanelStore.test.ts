@@ -7,12 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useStore } from '../../../shared/lib/store';
 import { useArtifactEventsStore } from '../../artifacts/artifactEventsStore';
-import {
-  isArtifactAutoOpenEnabled,
-  maybeAutoOpenArtifactPanel,
-  setArtifactAutoOpenEnabled,
-  useRightPanelStore,
-} from '../rightPanelStore';
+import { isArtifactAutoOpenEnabled, maybeAutoOpenArtifactPanel, setArtifactAutoOpenEnabled, useRightPanelStore } from '../rightPanelStore';
 
 const SID = 'sess-rp1';
 

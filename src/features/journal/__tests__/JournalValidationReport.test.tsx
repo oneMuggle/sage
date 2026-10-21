@@ -1,12 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { JournalViolation } from '../../../shared/api/types';
-import {
-  formatJournalValidationJson,
-  formatJournalValidationMarkdown,
-  JournalValidationReport,
-} from '../components/JournalValidationReport';
+import { formatJournalValidationJson, formatJournalValidationMarkdown, JournalValidationReport } from '../components/JournalValidationReport';
 
 const errors: JournalViolation[] = [
   {
@@ -91,9 +87,7 @@ describe('JournalValidationReport', () => {
         warningCount={1}
       />,
     );
-    fireEvent.click(screen.getByTestId('journal-validation-copy-md'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('BODY_PT_OUT_OF_RANGE'));
-    fireEvent.click(screen.getByTestId('journal-validation-copy-json'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"errorCount": 1'));
   });
 });

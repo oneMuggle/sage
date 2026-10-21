@@ -26,11 +26,7 @@ vi.mock('sonner', () => ({
 
 import type { OfficeDocumentSummary } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  OfficeDocumentList,
-  formatOfficeDocumentListJson,
-  formatOfficeDocumentListMarkdown,
-} from '../OfficeDocumentList';
+import { OfficeDocumentList, formatOfficeDocumentListJson, formatOfficeDocumentListMarkdown } from '../OfficeDocumentList';
 
 const sampleDocs: OfficeDocumentSummary[] = [
   {

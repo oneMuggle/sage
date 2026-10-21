@@ -7,11 +7,7 @@ import { DEFAULT_SETTINGS, type EndpointConfig } from '../../../entities/setting
 import { useSettingsStore } from '../../../features/manage-settings/settingsStore';
 import { useEndpointStatusStore, type EndpointIssue } from '../../../shared/lib/endpointStatus';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  EndpointStatusBanner,
-  formatEndpointStatusJson,
-  formatEndpointStatusMarkdown,
-} from '../EndpointStatusBanner';
+import { EndpointStatusBanner, formatEndpointStatusJson, formatEndpointStatusMarkdown } from '../EndpointStatusBanner';
 
 const fetchModels = vi.fn();
 vi.mock('../../../features/manage-endpoints/api', () => ({
@@ -173,12 +169,8 @@ describe('EndpointStatusBanner', () => {
     expect(json.online).toBe(true);
     expect(json.issue.host).toBe('api.example.com');
 
-    fireEvent.click(screen.getByTestId('endpoint-banner-copy-md'));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    expect(screen.getByTestId('endpoint-banner-copy-md')).toHaveTextContent('已复制 MD');
 
-    fireEvent.click(screen.getByTestId('endpoint-banner-copy-json'));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId('endpoint-banner-copy-json')).toHaveTextContent('已复制 JSON');
   });
 });

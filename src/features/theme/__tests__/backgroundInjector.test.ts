@@ -4,13 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import {
-  clearPreviewCss,
-  injectPersistedStyle,
-  injectPreviewCss,
-  removePersistedStyle,
-  setCoverImage,
-} from '../backgroundInjector';
+import { clearPreviewCss, injectPersistedStyle, injectPreviewCss, removePersistedStyle, setCoverImage } from '../backgroundInjector';
 
 describe('backgroundInjector', () => {
   beforeEach(() => {

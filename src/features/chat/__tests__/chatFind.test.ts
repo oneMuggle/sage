@@ -1,13 +1,7 @@
 // 对话阅读体验 B4：会话内查找的纯逻辑 —— 命中列表、计数口径、快捷键分发。
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  buildFindMatches,
-  CHAT_FIND_EVENT,
-  countOccurrences,
-  dispatchFindShortcut,
-  FOCUS_SEARCH_EVENT,
-} from '../chatFind';
+import { buildFindMatches, CHAT_FIND_EVENT, countOccurrences, dispatchFindShortcut, FOCUS_SEARCH_EVENT } from '../chatFind';
 
 const messages = [
   { id: 'u1', role: 'user', content: '怎么配置 **Sage** 的代理？' },

@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Todo } from '../../../shared/api/types';
-import {
-  aggregateAttention,
-  attentionSummary,
-  attentionTitle,
-  emptyAttentionSnapshot,
-  ATTENTION_KINDS,
-} from '../index';
+import { aggregateAttention, attentionSummary, attentionTitle, emptyAttentionSnapshot, ATTENTION_KINDS } from '../index';
 import { countDirtyFiles, countPendingTodos } from '../index';
 
 function todo(status: Todo['status']): Todo {

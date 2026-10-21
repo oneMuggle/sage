@@ -18,11 +18,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  OfficeFilePicker,
-  formatOfficePickerJson,
-  formatOfficePickerMarkdown,
-} from '../OfficeFilePicker';
+import { OfficeFilePicker, formatOfficePickerJson, formatOfficePickerMarkdown } from '../OfficeFilePicker';
 
 describe('OfficeFilePicker — delegates to the hook', () => {
   it('clicking the picker calls onPick', async () => {
