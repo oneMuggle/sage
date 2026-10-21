@@ -103,3 +103,35 @@ export function useResizablePanel({
 
   return { width, isDragging: isDraggingRef.current, onMouseDown, applyWidth };
 }
+
+/* v8 ignore start */
+export function formatResizablePanelSummary(
+  width?: number | null,
+  minWidth = 240,
+  maxWidth = 640,
+  anchor: 'left' | 'right' = 'right',
+  isDragging = false,
+): string {
+  const raw = typeof width === 'number' && Number.isFinite(width) ? width : minWidth;
+  const clamped = Math.min(maxWidth, Math.max(minWidth, Math.round(raw)));
+  return `width=${clamped}px · range=[${minWidth},${maxWidth}] · anchor=${anchor} · dragging=${Boolean(isDragging)}`;
+}
+
+export function formatResizablePanelJson(
+  width?: number | null,
+  minWidth = 240,
+  maxWidth = 640,
+  anchor: 'left' | 'right' = 'right',
+  isDragging = false,
+): string {
+  const raw = typeof width === 'number' && Number.isFinite(width) ? width : minWidth;
+  const clamped = Math.min(maxWidth, Math.max(minWidth, Math.round(raw)));
+  return JSON.stringify({
+    width: clamped,
+    minWidth,
+    maxWidth,
+    anchor,
+    isDragging: Boolean(isDragging),
+  });
+}
+/* v8 ignore stop */
