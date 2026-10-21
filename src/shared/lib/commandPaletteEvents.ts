@@ -9,3 +9,19 @@ export const OPEN_COMMAND_PALETTE_EVENT = 'sage:command-palette:open';
 export function requestOpenCommandPalette(): void {
   window.dispatchEvent(new Event(OPEN_COMMAND_PALETTE_EVENT));
 }
+
+export function formatCommandPaletteEventSummary(
+  hasTarget = typeof window !== 'undefined',
+): string {
+  return `event=${OPEN_COMMAND_PALETTE_EVENT} · targetReady=${Boolean(hasTarget)}`;
+}
+
+export function formatCommandPaletteEventJson(
+  hasTarget = typeof window !== 'undefined',
+): string {
+  return JSON.stringify({
+    eventName: OPEN_COMMAND_PALETTE_EVENT,
+    targetReady: Boolean(hasTarget),
+  });
+}
+
