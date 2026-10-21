@@ -338,6 +338,7 @@ export const enChatAndSider = {
   'settings.network.browser_env.status.na': 'N/A',
   'settings.network.browser_env.fix': 'Fix',
   'settings.tab.evolution': 'Evolution',
+  'settings.tab.harness': 'Harness',
   'settings.tab.updates': 'Updates',
   'settings.tab.usage-stats': 'Usage Stats',
   'settings.section.theme': 'Theme',

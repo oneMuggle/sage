@@ -17,6 +17,7 @@ import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { ENABLE_UPDATE_PROVIDERS_UI } from '../../shared/updateFeatureFlag';
 import { EvolutionLog } from '../../widgets/evolution/EvolutionLog';
 import { EvolutionPanel } from '../../widgets/evolution/EvolutionPanel';
+import { HarnessDashboard } from '../../widgets/harness/HarnessDashboard';
 
 import { BasicTab } from './BasicTab';
 import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
@@ -102,6 +103,7 @@ export function Settings() {
     { key: 'zotero', label: t('settings.tab.zotero') },
     { key: 'runtime', label: t('settings.tab.runtime') },
     { key: 'evolution', label: t('settings.tab.evolution') },
+    { key: 'harness', label: t('settings.tab.harness') },
     { key: 'updates', label: t('settings.tab.updates') },
     { key: 'usage-stats', label: t('settings.tab.usage-stats' as TranslationKey) },
   ];
@@ -278,6 +280,7 @@ export function Settings() {
                 <EvolutionLog />
               </div>
             )}
+            {activeTab === 'harness' && <HarnessDashboard />}
             {activeTab === 'updates' && <UpdatesTab />}
             {activeTab === 'usage-stats' && <UsageStatsTab />}
             {activeTab === 'providers' && ENABLE_UPDATE_PROVIDERS_UI() && <ProvidersManager />}
