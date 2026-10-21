@@ -5,7 +5,11 @@ import { useMessageJumpStore } from '../../../features/chat/messageJumpStore';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Session } from '../../../shared/lib/store';
 
-import { ConversationsSection } from './ConversationsSection';
+import {
+  ConversationsSection,
+  formatConversationsSectionAuditJson,
+  formatConversationsSectionAuditSnapshot,
+} from './ConversationsSection';
 
 const searchMessagesMock = vi.fn();
 const archiveStaleMock = vi.fn(async (..._args: unknown[]) => ({ archived: 0 }));
@@ -237,5 +241,51 @@ describe('ConversationsSection', () => {
     fireEvent.click(screen.getByText('first'));
     expect(onSelect).toHaveBeenCalledWith('s1');
     expect(useMessageJumpStore.getState().pending).toBeNull();
+  });
+
+  it('formats ConversationsSection audit snapshot/JSON and supports copy controls (P103)', () => {
+    expect(
+      formatConversationsSectionAuditSnapshot({
+        totalCount: 2,
+        displayCount: 2,
+        archivedCount: 0,
+        showArchived: false,
+        hasQuery: false,
+        virtualized: false,
+      }),
+    ).toBe('total=2|display=2|archived=0|showArchived=0|query=0|virt=0');
+    expect(
+      JSON.parse(
+        formatConversationsSectionAuditJson({
+          totalCount: 150,
+          displayCount: 140,
+          archivedCount: 10,
+          showArchived: true,
+          hasQuery: true,
+          virtualized: true,
+        }),
+      ),
+    ).toEqual({
+      totalCount: 150,
+      displayCount: 140,
+      archivedCount: 10,
+      showArchived: true,
+      hasQuery: true,
+      virtualized: true,
+    });
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    renderWithI18n(<ConversationsSection {...baseProps} />);
+    expect(screen.getByTestId('conversations-section-body')).toHaveAttribute(
+      'data-conversations-section-audit',
+      'total=2|display=2|archived=0|showArchived=0|query=0|virt=0',
+    );
+    fireEvent.click(screen.getByTestId('conversations-section-audit-copy'));
+    expect(writeText).toHaveBeenCalledWith(
+      'total=2|display=2|archived=0|showArchived=0|query=0|virt=0',
+    );
+    fireEvent.click(screen.getByTestId('conversations-section-audit-copy-json'));
+    expect(writeText).toHaveBeenCalledTimes(2);
   });
 });
