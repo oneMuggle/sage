@@ -1,7 +1,14 @@
 // 对话阅读体验第二轮 C1：生成速度计算与格式化。
 import { describe, expect, it } from 'vitest';
 
-import { formatCount, formatDuration, formatRate, tokensPerSecond } from '../generationStats';
+import {
+  buildGenerationStatsAuditJson,
+  buildGenerationStatsAuditSnapshot,
+  formatCount,
+  formatDuration,
+  formatRate,
+  tokensPerSecond,
+} from '../generationStats';
 
 describe('tokensPerSecond', () => {
   it('excludes the time to first token from the generation window', () => {
@@ -36,5 +43,50 @@ describe('formatting', () => {
     expect(formatRate(123.6)).toBe('124');
     expect(formatCount(1234, 'zh')).toBe('1,234');
     expect(formatCount(1234, 'en')).toBe('1,234');
+  });
+});
+
+describe('generationStats governance audit helpers (Phase P107)', () => {
+  it('builds deterministic audit snapshot and JSON for null and populated generation stats', () => {
+    const emptySnap = buildGenerationStatsAuditSnapshot(null);
+    expect(emptySnap).toEqual({
+      hasStats: false,
+      outputTokens: 0,
+      inputTokens: 0,
+      latencyMs: 0,
+      firstTokenMs: null,
+      rateTokensPerSec: null,
+      formattedRate: null,
+      formattedDuration: null,
+      signature: '0|0|0|0|-1|-|-',
+    });
+
+    const populated = buildGenerationStatsAuditSnapshot({
+      input_tokens: 120,
+      output_tokens: 30,
+      first_token_ms: 250,
+      latency_ms: 1500,
+    });
+    expect(populated).toEqual({
+      hasStats: true,
+      outputTokens: 30,
+      inputTokens: 120,
+      latencyMs: 1500,
+      firstTokenMs: 250,
+      rateTokensPerSec: 24,
+      formattedRate: '24.0',
+      formattedDuration: '1.50s',
+      signature: '1|30|120|1500|250|24.0|1.50s',
+    });
+    expect(
+      JSON.parse(
+        buildGenerationStatsAuditJson({
+          input_tokens: 120,
+          output_tokens: 30,
+          first_token_ms: 250,
+          latency_ms: 1500,
+        }),
+      ),
+    ).toEqual(populated);
   });
 });

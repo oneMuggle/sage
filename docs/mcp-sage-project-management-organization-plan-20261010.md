@@ -1425,3 +1425,16 @@
   7. `src/entities/setting/endpointReadiness.ts`：新增 `buildEndpointReadinessAuditSnapshot` 与 `buildEndpointReadinessAuditJson` 纯函数导出及单测。
   8. `src/entities/welcome/recommendations.ts`：新增 `buildRecommendationsAuditSnapshot` 与 `buildRecommendationsAuditJson` 纯函数导出及单测。
 - **验证**：8 个单元测试套件（64 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部零错误零警告通过。
+
+### Phase P107（2026-10-21）：回答版本切换、会话内全文查找、实体引用补全、生成速度统计、Markdown 纯文本剥离、划词引用、语音朗读分片与 CSS 检索词高亮治理快照与 JSON 导出闭环（Dual-Track `main` + `release/win7`）
+
+- **目标**：为回答版本切换、会话内全文查找、输入栏 `@` 实体引用补全、生成速度统计格式化、Markdown 可见文本剥离、划词引用块生成、Web Speech 朗读分片与 CSS Custom Highlight 检索词高亮 8 个对话阅读与交互核心模块补齐确定性审计快照（`build*AuditSnapshot`）与结构化 JSON 导出（`build*AuditJson`）纯函数及单测：
+  1. `src/features/chat/answerVersions.ts`：新增 `buildAnswerVersionsAuditSnapshot` 与 `buildAnswerVersionsAuditJson` 纯函数导出及单测。
+  2. `src/features/chat/chatFind.ts`：新增 `buildChatFindAuditSnapshot` 与 `buildChatFindAuditJson` 纯函数导出及单测。
+  3. `src/features/chat/entityRefs.ts`：新增 `buildEntityRefsAuditSnapshot` 与 `buildEntityRefsAuditJson` 纯函数导出及单测。
+  4. `src/features/chat/generationStats.ts`：新增 `buildGenerationStatsAuditSnapshot` 与 `buildGenerationStatsAuditJson` 纯函数导出及单测。
+  5. `src/features/chat/markdownText.ts`：新增 `buildMarkdownTextAuditSnapshot` 与 `buildMarkdownTextAuditJson` 纯函数导出及单测。
+  6. `src/features/chat/selectionQuote.ts`：新增 `buildSelectionQuoteAuditSnapshot` 与 `buildSelectionQuoteAuditJson` 纯函数导出及单测。
+  7. `src/features/chat/speech.ts`：新增 `buildSpeechAuditSnapshot` 与 `buildSpeechAuditJson` 纯函数导出及单测。
+  8. `src/features/chat/textHighlight.ts`：新增 `buildTextHighlightAuditSnapshot` 与 `buildTextHighlightAuditJson` 纯函数导出及单测。
+- **验证**：8 个单元测试套件（59 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部零错误零警告通过。

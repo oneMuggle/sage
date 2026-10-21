@@ -6,6 +6,8 @@ import {
   CHAT_FIND_EVENT,
   countOccurrences,
   dispatchFindShortcut,
+  buildChatFindAuditJson,
+  buildChatFindAuditSnapshot,
   FOCUS_SEARCH_EVENT,
 } from '../chatFind';
 
@@ -72,5 +74,32 @@ describe('dispatchFindShortcut', () => {
     window.removeEventListener(CHAT_FIND_EVENT, claim);
     expect(dispatchFindShortcut(false)).toBe(false);
     expect(focusSearch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('chatFind governance audit helpers (Phase P107)', () => {
+  it('builds deterministic audit snapshot and JSON across empty and matched searches', () => {
+    const emptySnap = buildChatFindAuditSnapshot();
+    expect(emptySnap).toEqual({
+      query: '',
+      messageCount: 0,
+      searchableMessageCount: 0,
+      matchCount: 0,
+      matchedMessageCount: 0,
+      firstMatchMessageId: null,
+      signature: '-|0|0|0|0|-',
+    });
+
+    const hitSnap = buildChatFindAuditSnapshot(messages, ' SAGE ');
+    expect(hitSnap).toEqual({
+      query: 'sage',
+      messageCount: 4,
+      searchableMessageCount: 2,
+      matchCount: 4,
+      matchedMessageCount: 2,
+      firstMatchMessageId: 'u1',
+      signature: 'sage|4|2|4|2|u1',
+    });
+    expect(JSON.parse(buildChatFindAuditJson(messages, ' SAGE '))).toEqual(hitSnap);
   });
 });

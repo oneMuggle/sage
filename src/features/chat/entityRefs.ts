@@ -43,3 +43,42 @@ export function getEntityKindSuggestions(query: string | null): EntityKindSugges
     token: `@${kind}:`,
   }));
 }
+
+export interface EntityRefsAuditSnapshot {
+  rawQuery: string | null;
+  isEntityMode: boolean;
+  parsedKind: EntityRefKind | null;
+  parsedQuery: string | null;
+  suggestionCount: number;
+  suggestedKinds: EntityRefKind[];
+  supportedKindCount: number;
+  signature: string;
+}
+
+export function buildEntityRefsAuditSnapshot(
+  query: string | null = null,
+): EntityRefsAuditSnapshot {
+  const parsed = parseEntityRefQuery(query);
+  const suggestions = getEntityKindSuggestions(query);
+  const isEntityMode = parsed !== null;
+  const parsedKind = parsed?.kind ?? null;
+  const parsedQuery = parsed?.query ?? null;
+  const suggestedKinds = suggestions.map((s) => s.kind);
+  const suggestionCount = suggestedKinds.length;
+  const supportedKindCount = ENTITY_REF_KINDS.length;
+  const signature = `${query ?? '-'}|${isEntityMode ? 1 : 0}|${parsedKind ?? '-'}|${parsedQuery ?? '-'}|${suggestionCount}|${suggestedKinds.join(',')}|${supportedKindCount}`;
+  return {
+    rawQuery: query,
+    isEntityMode,
+    parsedKind,
+    parsedQuery,
+    suggestionCount,
+    suggestedKinds,
+    supportedKindCount,
+    signature,
+  };
+}
+
+export function buildEntityRefsAuditJson(query: string | null = null): string {
+  return JSON.stringify(buildEntityRefsAuditSnapshot(query), null, 2);
+}
