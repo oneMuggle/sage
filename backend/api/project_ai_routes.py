@@ -72,11 +72,8 @@ class PreviewMilestoneNode(BaseModel):
     children: List[PreviewMilestoneNode] = Field(default_factory=list)
 
 
-# 解决自引用 (pydantic v1/v2 兼容)
-if hasattr(PreviewMilestoneNode, "model_rebuild"):
-    PreviewMilestoneNode.model_rebuild()
-else:
-    PreviewMilestoneNode.update_forward_refs()
+# 解决自引用
+PreviewMilestoneNode.model_rebuild()
 
 
 class DecomposePreviewResponse(BaseModel):
@@ -400,7 +397,7 @@ def confirm_knowledge(
         return ConfirmKnowledgeResponse(created=0, skipped=0, ids=[])
 
     extractor = ProjectKnowledgeExtractor()
-    entry_dicts = [e.dict() for e in request.entries]
+    entry_dicts = [e.model_dump() for e in request.entries]
     result = extractor.confirm(project_key=project_key, entries=entry_dicts)
 
     return ConfirmKnowledgeResponse(

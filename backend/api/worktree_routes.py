@@ -23,9 +23,8 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
-from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.session_workspace import (
     bind_session_workspace,
@@ -72,6 +71,15 @@ class BranchModel(BaseModel):
     worktree_path: Optional[str]  # 非空 = 该分支已在某 worktree 检出
 
 
+class BranchesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repo_root: str
+    current_branch: str
+    is_git: bool
+    branches: List[BranchModel]
+    worktrees: List[WorktreeModel]
+
+
 class WorktreeModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
@@ -84,15 +92,6 @@ class WorktreeModel(BaseModel):
     created_at: int
     updated_at: int
     is_current: bool  # 会话当前绑定就工作在这个目录
-
-
-class BranchesResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    repo_root: str
-    current_branch: str
-    is_git: bool
-    branches: List[BranchModel]
-    worktrees: List[WorktreeModel]
 
 
 class WorktreeListResponse(BaseModel):
@@ -132,6 +131,9 @@ class WorktreeDeleteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     worktree_id: str = Field(min_length=1, max_length=64)
     delete_branch: bool = False
+
+
+BranchesResponse.model_rebuild()
 
 
 def _connection() -> sqlite3.Connection:
