@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { searchSettings, SETTINGS_SEARCH_INDEX } from '../settingsSearchIndex';
+import { formatSettingsSearchJson, formatSettingsSearchSummary } from '../settingsSearchIndex';
 
 describe('SETTINGS_SEARCH_INDEX 不变量', () => {
   it('key 全局唯一', () => {
@@ -106,5 +107,13 @@ describe('searchSettings', () => {
 
   it('无命中返回空数组且不抛错', () => {
     expect(searchSettings('完全不存在的设置项xyz')).toEqual([]);
+  });
+
+  it('formats settings search summary and JSON (Phase P112)', () => {
+    expect(formatSettingsSearchSummary('ZOTERO')).toBe('query="ZOTERO" · hits=1 · tabs=[zotero]');
+    const parsed = JSON.parse(formatSettingsSearchJson('ZOTERO'));
+    expect(parsed.hitCount).toBe(1);
+    expect(parsed.keys).toEqual(['zotero']);
+    expect(parsed.tabs).toEqual(['zotero']);
   });
 });

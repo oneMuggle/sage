@@ -372,4 +372,16 @@ describe('useOfficeDocuments — batch archive/restore (round-3 N5)', () => {
     expect(out).toEqual({ succeeded: ['doc-a', 'doc-b'], failed: [] });
     expect(mockListDocuments).toHaveBeenCalledTimes(2);
   });
+
+  it('formats office documents batch summary and JSON (Phase P110)', async () => {
+    const { formatOfficeDocumentsBatchSummary, formatOfficeDocumentsBatchJson } = await import(
+      '../useOfficeDocuments'
+    );
+    const res = { succeeded: ['doc-a', 'doc-c'], failed: ['doc-b'] };
+    expect(formatOfficeDocumentsBatchSummary(res)).toBe('succeeded=2 · failed=1');
+    const parsed = JSON.parse(formatOfficeDocumentsBatchJson(res));
+    expect(parsed.total).toBe(3);
+    expect(parsed.succeededCount).toBe(2);
+    expect(parsed.failedCount).toBe(1);
+  });
 });

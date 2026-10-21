@@ -15,12 +15,29 @@ from typing import Any, Dict, List, Optional
 
 from backend.domain.memory import MemoryContext
 from backend.memory import ConsolidationPipeline, MemoryManager
+from backend.memory.auto_tag import extract_tags
 from backend.memory.embedder_factory import create_embedder
 from backend.memory.manager import classify_memory_type
 from backend.memory.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
+
+def _extract_query_tags(query: str, max_tags: int = 5) -> List[str]:
+    """从自由文本 query 中提取标签（用于 tag_graph 查询）。
+
+    与存储侧 ``auto_tag.derive_tags`` 共用 ``auto_tag.extract_tags``——同一段
+    文本在两侧得到同一个标签集合（查询侧上限更大，故查询标签 ⊇ 存储标签），
+    图谱的「标签 → 记忆」和「查询 → 标签」两端才对得上，共现边才建得起来。
+
+    Args:
+        query: 用户查询文本
+        max_tags: 最多返回的标签数
+
+    Returns:
+        标签列表（可能为空）
+    """
+    return extract_tags(query, max_tags)
 
 class MemoryAdapter:
     """记忆端口适配器 - 将 MemoryPort 适配到现有的 MemoryManager

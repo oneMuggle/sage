@@ -45,3 +45,28 @@ export function onSessionNotifyClick(
     handler(payload.sessionId),
   ).catch(() => undefined);
 }
+
+export function formatSessionNotifyDecisionSummary(
+  payload: SessionNotifyPayload,
+  currentSessionId: string | null | undefined,
+): string {
+  const notify = shouldNotify(payload.sessionId, currentSessionId);
+  return `${payload.sessionId} · ${notify ? 'notify' : 'suppress'} · title=${payload.title}`;
+}
+
+export function formatSessionNotifyDecisionJson(
+  payload: SessionNotifyPayload,
+  currentSessionId: string | null | undefined,
+): string {
+  return JSON.stringify(
+    {
+      sessionId: payload.sessionId,
+      currentSessionId: currentSessionId ?? null,
+      shouldNotify: shouldNotify(payload.sessionId, currentSessionId),
+      title: payload.title,
+      bodyLength: payload.body.length,
+    },
+    null,
+    2,
+  );
+}

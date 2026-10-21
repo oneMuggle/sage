@@ -97,3 +97,25 @@ export const themeCssValidator = {
     return vars;
   },
 };
+
+export function formatThemeCssValidationSummary(css: string): string {
+  const res = themeCssValidator.validate(css);
+  if (!res.ok) return `invalid · ${res.error ?? 'unknown'}`;
+  const vars = themeCssValidator.extractVars(css);
+  return `valid · vars=${vars.size}`;
+}
+
+export function formatThemeCssValidationJson(css: string): string {
+  const res = themeCssValidator.validate(css);
+  const vars = themeCssValidator.extractVars(css);
+  return JSON.stringify(
+    {
+      ok: res.ok,
+      error: res.error ?? null,
+      varCount: vars.size,
+      varNames: Array.from(vars.keys()),
+    },
+    null,
+    2,
+  );
+}

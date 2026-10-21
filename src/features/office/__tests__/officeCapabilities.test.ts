@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { OfficeCapabilities } from '../../../shared/api/types';
 import { pdfAvailableForDocument, pdfFormats } from '../officeCapabilities';
+import { formatOfficeCapabilitiesJson, formatOfficeCapabilitiesSummary } from '../officeCapabilities';
 
 const wordOnly: OfficeCapabilities = {
   platform: 'win32',
@@ -39,5 +40,18 @@ describe('format-specific PDF converter discovery', () => {
     expect(pdfAvailableForDocument(wordOnly)).toBe(false);
     expect(pdfAvailableForDocument(wordOnly, 'pdf')).toBe(false);
     expect(pdfFormats({ ...wordOnly, word_com_available: false })).toEqual([]);
+  });
+
+  it('formats office capabilities summary and JSON (Phase P110)', () => {
+    expect(formatOfficeCapabilitiesSummary(null)).toBe('unavailable');
+    expect(formatOfficeCapabilitiesSummary(wordOnly)).toBe('win32 · pdf=[docx] · soffice=false');
+    const parsed = JSON.parse(formatOfficeCapabilitiesJson(wordOnly));
+    expect(parsed).toEqual({
+      available: true,
+      platform: 'win32',
+      pdfFormats: ['docx'],
+      sofficeAvailable: false,
+      wordComAvailable: true,
+    });
   });
 });

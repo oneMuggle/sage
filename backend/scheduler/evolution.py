@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from backend.data.database import get_database
+from backend.memory.episodic import sync_fts_row_for_id
 from backend.memory.vector_store import prune_orphan_vectors
 
 logger = logging.getLogger(__name__)
@@ -254,6 +255,10 @@ class DailySummaryTask(BaseEvolutionTask):
                     now_ts,
                 ),
             )
+
+            # 4b. 同步 FTS 索引（绕开 EpisodicMemory.save() 直写时必须显式同步，
+            # 否则新记忆必须等下次 _backfill_fts() 才能被 FTS 检索到）
+            sync_fts_row_for_id(conn, memory_id)
 
             # 5. 标记会话已摘要
             cursor.execute(

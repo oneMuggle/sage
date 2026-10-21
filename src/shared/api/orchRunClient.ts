@@ -75,3 +75,22 @@ export const orchRunClient = {
     return invoke('orchestration_plan_items', { text });
   },
 };
+
+export function formatOrchRunDetailSummary(detail: OrchRunDetail): string {
+  return `${detail.run_id} · ${detail.status} · plan=${detail.plan.length} · tasks=${detail.tasks.length}`;
+}
+
+export function formatOrchRunDetailJson(detail: OrchRunDetail): string {
+  return JSON.stringify(
+    {
+      runId: detail.run_id,
+      sessionId: detail.session_id,
+      status: detail.status,
+      planCount: detail.plan.length,
+      taskCount: detail.tasks.length,
+      createdAt: detail.created_at,
+    },
+    null,
+    2,
+  );
+}

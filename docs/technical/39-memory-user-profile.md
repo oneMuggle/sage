@@ -21,6 +21,73 @@
 `store()` 自动生成 embedding 入 VectorStore（sqlite-vec），`retrieve()` 用 **RRF 融合**
 （关键词 0.4 + 向量 0.6）多路检索。
 
+## 1A. 检索召回调优（2026-10 PR #2125 / #2149）
+
+Phase 1（PR #2125）与 Phase 2（PR #2149）在三层架构之上叠加了 6 项检索调优 + 3 个
+新模块，把检索链路由 2 路（keyword + vector）扩展为 3 路（keyword + vector + tag-graph），
+并添加在线质量监控。
+
+### 1A.1 Phase 1：检索链路调优（PR #2125）
+
+| 改动 | 文件 | 效果 |
+|------|------|------|
+| 软过滤 session_id | `adapter.py` / `manager.py` | 同会话 +50%、跨会话 -30%；`soft_filter=True` 时过取 top_k×3 |
+| 动态 RRF 权重 | `adapter.py` | HashEmbedder 跳向量路；语义嵌入器向量权重 0.7-0.8 |
+| 动态 core 槽位 | `adapter.py` | fused≥5 → 3、2-4 → 2、<2 → 1 |
+| 向量回填上限 500→2000 | `adapter.py` | `SAGE_VEC_BACKFILL_MAX` 默认值 |
+| 检索日志埋点 | `adapter.py` | `embedder/variant/weights/keyword_hits/vector_hits/fused/core/session_id` |
+
+### 1A.2 Phase 2：死模块接入（PR #2149）
+
+`tag_graph.py` / `recall_eval.py` 在 Phase 3 写好但无任何生产代码 import。PR #2149
+把它们接入 `MemoryAdapter.retrieve()`：
+
+- **tag_graph 第三路召回**：后台 daemon thread 调用 `build_tag_graph_async()` 构建
+  共现图谱（build-then-swap 原子替换，构建完成前 `query()` 返回 `[]`）。`retrieve()`
+  在 RRF 融合 + composite rank + scope filter 之后、分层（core/episodic/semantic）之前，
+  用 `_extract_query_tags(query)` 抽标签 → `graph.query(query_tags, top_k=5)` 扩展
+  关联记忆，boost 分数 `× 0.1` 弱于 RRF 分数，合并到 fused 末尾。
+- **recall_eval 在线日志**：`retrieve()` 末尾 fire-and-forget 调用
+  `get_recall_evaluator().log_retrieval(query, results, session_id)` 追踪在线指标。
+- **main.py lifespan**：`app.state.memory_adapter` 赋值后触发 `build_tag_graph_async()`。
+
+### 1A.3 Task #9：FTS5 回填 bug 修复 + 基准
+
+- **bug**：`_backfill_fts` 单批 `LIMIT 500` 后未循环 → 多数记忆对 FTS 不可见。
+  修复为 while 循环直到 `affected < limit`。commit `34c696bd`。
+- **基准**：`docs/technical/98-memory-fts5-benchmark.md`（10k 合成语料）— FTS5 的
+  真实价值不在绝对速度而在**召回完整性**（tags 列 + BM25 排序 + 中文分词统一）+
+  空查询 102x 短路；v2 修正 v1 对 tokenizer 不一致的误诊。
+
+### 1A.4 Task #10：自动标签派生（auto_tag）
+
+实测 `memories_episodic` 84% 行 `tags=[]`，`TagCooccurrenceGraph` 的共现矩阵几乎
+没有边，Phase 2 接入的第三路召回形同虚设。
+
+**`backend/memory/auto_tag.py`** 提供 6 个 public 函数：
+
+| 函数 | 职责 |
+|------|------|
+| `is_valid_tag(token)` | 标签合法性判定（长度 ≥2 / 非停用词 / 非纯数字 / 非纯标点） |
+| `filter_valid_tags(tokens)` | 批量过滤（保留原顺序，不去重） |
+| `normalize_tags(raw)` | 把 list / JSON 字符串 / None / 其他规整为干净的字符串列表 |
+| `score_tags(tokens)` | 频次 × 长度权重排序核心（同分按首次出现位置，保证确定性） |
+| `extract_tags(text, max_tags=5)` | **存储派生与查询抽取的唯一实现** — jieba 分词 → 过滤 → 按 `freq × (1 + 0.3 × (len - 2))` 排序 → top N |
+| `derive_tags(content, max_tags=3)` | 存储侧入口（委托 `extract_tags`，默认上限收紧为 3） |
+
+**词表一致性性质**：存储侧派生（`derive_tags` max 3）与查询侧抽取
+（`adapter._extract_query_tags` max 5）共用 `extract_tags()`，同一段文本在两侧
+得到同一个标签集合；查询侧 max 更大，故 `query_tags ⊇ storage_tags`。图谱的
+「标签 → 记忆」与「查询 → 标签」两端落在同一词表，共现边才建得起来。
+
+**接入位置**：
+
+- `episodic.py` / `semantic.py` 的 `save()` — `normalize_tags()` 后若空，调 `derive_tags(content)` 兜底
+- `tag_graph.py` 的 `TagCooccurrenceGraph._extract_tags()` — `normalize_tags()` 后若空，调 `derive_tags(content)` 让存量 tags=[] 的遗留记忆入图
+- `adapter.py` 的 `_extract_query_tags()` — 委托 `extract_tags(query, max_tags=5)`
+
+测试覆盖：`backend/tests/unit/test_auto_tag.py`（29 用例，含 `TestVocabularyConsistency` 4 用例锁词表一致性）。
+
 ## 2. 用户画像（USER.md 概念, 2026-08-02 PR #269）
 
 借鉴 hermes-agent 的 `USER.md` frozen snapshot 模式：把"关于用户的知识"

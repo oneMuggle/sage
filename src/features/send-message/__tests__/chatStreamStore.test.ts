@@ -428,4 +428,18 @@ describe('chatStreamStore', () => {
       ).toBeNull();
     });
   });
+
+  describe('formatChatStreamSessionSummary & formatChatStreamSessionJson (Phase P110)', () => {
+    it('formats idle and streaming session state', async () => {
+      const { formatChatStreamSessionSummary, formatChatStreamSessionJson } = await import(
+        '../chatStreamStore'
+      );
+      expect(formatChatStreamSessionSummary('sess-idle')).toBe('sess-idle · idle · tools=0 · todos=0');
+      useChatStreamStore.getState().startStream(SESS, 'msg-99', { initialContent: '' });
+      expect(formatChatStreamSessionSummary(SESS)).toBe(`${SESS} · thinking · msg=msg-99 · tools=0`);
+      const parsed = JSON.parse(formatChatStreamSessionJson(SESS));
+      expect(parsed.streaming).toBe(true);
+      expect(parsed.messageId).toBe('msg-99');
+    });
+  });
 });
