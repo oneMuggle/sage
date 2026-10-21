@@ -44,7 +44,11 @@ vi.mock('../../manage-settings/useSettings', () => ({
 }));
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { OnboardingWizard } from '../OnboardingWizard';
+import {
+  OnboardingWizard,
+  formatOnboardingWizardJson,
+  formatOnboardingWizardMarkdown,
+} from '../OnboardingWizard';
 
 let currentEndpoints: { baseUrl: string; apiKey: string; protocol: string }[] = [];
 
@@ -220,5 +224,35 @@ describe('OnboardingWizard — R26', () => {
     renderWizard();
     fireEvent.click(screen.getByTestId('wizard-skip'));
     expect(updateSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it('formats and copies onboarding wizard state as Markdown and JSON', () => {
+    const md = formatOnboardingWizardMarkdown({
+      step: 1,
+      protocol: 'openai-compatible',
+      baseUrl: 'http://localhost:11434/v1',
+      selectedModel: 'qwen2.5:7b',
+      saved: false,
+    });
+    expect(md).toContain('# 首启配置向导状态 (Onboarding Wizard Summary)');
+    expect(md).toContain('qwen2.5:7b');
+
+    const parsed = JSON.parse(
+      formatOnboardingWizardJson({
+        step: 2,
+        protocol: 'anthropic',
+        baseUrl: '',
+        selectedModel: '',
+        saved: true,
+      }),
+    );
+    expect(parsed.step).toBe(2);
+    expect(parsed.saved).toBe(true);
+
+    renderWizard();
+    fireEvent.click(screen.getByTestId('wizard-copy-md'));
+    expect(screen.getByTestId('wizard-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('wizard-copy-json'));
+    expect(screen.getByTestId('wizard-copy-json').textContent).toContain('已复制 JSON');
   });
 });

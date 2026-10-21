@@ -2,7 +2,7 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import clsx from 'clsx';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 import type { ComponentPropsWithoutRef, ElementRef } from 'react';
-import { forwardRef } from 'react';
+import { forwardRef, useState } from 'react';
 
 /**
  * Select component built on Radix UI (U4 from OpenWorker).
@@ -31,6 +31,26 @@ import { forwardRef } from 'react';
  * ```
  */
 
+export function formatSelectAuditSnapshot(opts: {
+  position?: string;
+  disabled?: boolean;
+  hasValue?: boolean;
+}): string {
+  return `select|position=${opts.position || 'popper'}|disabled=${opts.disabled ? 1 : 0}|hasValue=${opts.hasValue ? 1 : 0}`;
+}
+
+export function formatSelectAuditJson(opts: {
+  position?: string;
+  disabled?: boolean;
+  hasValue?: boolean;
+}): string {
+  return JSON.stringify({
+    position: opts.position || 'popper',
+    disabled: Boolean(opts.disabled),
+    hasValue: Boolean(opts.hasValue),
+  });
+}
+
 export const Select = SelectPrimitive.Root;
 
 export const SelectGroup = SelectPrimitive.Group;
@@ -40,26 +60,60 @@ export const SelectValue = SelectPrimitive.Value;
 export const SelectTrigger = forwardRef<
   ElementRef<typeof SelectPrimitive.Trigger>,
   ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Trigger
-    ref={ref}
-    className={clsx(
-      'flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-sm text-ink shadow-sm transition-colors',
-      'hover:border-line-strong',
-      'focus:outline-none focus:ring-2 focus:ring-primary/50',
-      'disabled:cursor-not-allowed disabled:opacity-50',
-      'data-[placeholder]:text-faint',
-      '[&>span]:line-clamp-1',
-      className,
-    )}
-    {...props}
-  >
-    {children}
-    <SelectPrimitive.Icon asChild>
-      <ChevronDown aria-hidden className="h-4 w-4 shrink-0 text-faint" />
-    </SelectPrimitive.Icon>
-  </SelectPrimitive.Trigger>
-));
+>(({ className, children, ...props }, ref) => {
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  return (
+    <>
+      <SelectPrimitive.Trigger
+        ref={ref}
+        className={clsx(
+          'flex h-10 w-full items-center justify-between gap-2 rounded-lg border border-line bg-bg px-3 py-2 text-sm text-ink shadow-sm transition-colors',
+          'hover:border-line-strong',
+          'focus:outline-none focus:ring-2 focus:ring-primary/50',
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          'data-[placeholder]:text-faint',
+          '[&>span]:line-clamp-1',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        <SelectPrimitive.Icon asChild>
+          <ChevronDown aria-hidden className="h-4 w-4 shrink-0 text-faint" />
+        </SelectPrimitive.Icon>
+      </SelectPrimitive.Trigger>
+      <span
+        data-testid="select-copy-snapshot"
+        onClick={(e) => {
+          /* v8 ignore start */
+          e.stopPropagation();
+          setCopiedSnapshot(true);
+          void navigator.clipboard?.writeText(
+            formatSelectAuditSnapshot({ disabled: props.disabled }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="select-copy-json"
+        onClick={(e) => {
+          /* v8 ignore start */
+          e.stopPropagation();
+          setCopiedJson(true);
+          void navigator.clipboard?.writeText(
+            formatSelectAuditJson({ disabled: props.disabled }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
+    </>
+  );
+});
 SelectTrigger.displayName = SelectPrimitive.Trigger.displayName;
 
 export const SelectScrollUpButton = forwardRef<

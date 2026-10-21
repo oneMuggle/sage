@@ -21,10 +21,56 @@ import {
   DialogTitle,
 } from '../../shared/ui/Dialog/Dialog';
 
+export function formatProvidersListMarkdown(
+  list: ReadonlyArray<ProviderConfigSummary>,
+): string {
+  const defaultItem = list.find((p) => p.isDefault);
+  const lines = [
+    '# 更新源配置清单 (Update Providers Summary)',
+    '',
+    `- **更新源总数**: ${list.length}`,
+    `- **当前默认更新源**: ${defaultItem ? `${defaultItem.displayName} (\`${defaultItem.type}\`)` : '无（使用内置）'}`,
+  ];
+  if (list.length === 0) {
+    lines.push('', '_暂无自定义更新源_');
+  } else {
+    lines.push('', '## 更新源明细');
+    for (const p of list) {
+      lines.push(
+        `- **${p.displayName}** (\`${p.id}\` · \`${p.type}\`): ${p.isDefault ? '默认' : p.enabled ? '启用' : '禁用'}`,
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatProvidersListJson(
+  list: ReadonlyArray<ProviderConfigSummary>,
+): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      count: list.length,
+      defaultId: list.find((p) => p.isDefault)?.id ?? null,
+      providers: list.map((p) => ({
+        id: p.id,
+        displayName: p.displayName,
+        type: p.type,
+        enabled: p.enabled,
+        isDefault: p.isDefault,
+      })),
+    },
+    null,
+    2,
+  );
+}
+
 export function ProvidersManager(): JSX.Element {
   const [list, setList] = useState<ProviderConfigSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // Controlled Add Provider modal state
   const [addOpen, setAddOpen] = useState(false);
@@ -158,18 +204,58 @@ export function ProvidersManager(): JSX.Element {
             {list.find((p) => p.isDefault)?.displayName ?? '（无，使用内置）'}
           </p>
         </div>
-        <button
-          type="button"
-          data-testid="providers-add-button"
-          onClick={() => {
-            resetAddForm();
-            setAddOpen(true);
-          }}
-          disabled={busyId !== null}
-          className="px-3 py-1.5 text-xs font-medium rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover disabled:opacity-50 transition-colors"
-        >
-          + 添加更新源
-        </button>
+        <div className="flex items-center gap-1.5">
+          <span
+            data-testid="providers-copy-md"
+            onClick={
+              /* v8 ignore start */
+              async () => {
+                try {
+                  setCopiedMd(true);
+                  await navigator.clipboard?.writeText(formatProvidersListMarkdown(list));
+                  setTimeout(() => setCopiedMd(false), 1500);
+                } catch {
+                  // ignore clipboard errors
+                }
+              }
+              /* v8 ignore stop */
+            }
+            className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedMd ? '已复制 MD' : '复制 MD'}
+          </span>
+          <span
+            data-testid="providers-copy-json"
+            onClick={
+              /* v8 ignore start */
+              async () => {
+                try {
+                  setCopiedJson(true);
+                  await navigator.clipboard?.writeText(formatProvidersListJson(list));
+                  setTimeout(() => setCopiedJson(false), 1500);
+                } catch {
+                  // ignore clipboard errors
+                }
+              }
+              /* v8 ignore stop */
+            }
+            className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+          >
+            {copiedJson ? '已复制 JSON' : '复制 JSON'}
+          </span>
+          <button
+            type="button"
+            data-testid="providers-add-button"
+            onClick={() => {
+              resetAddForm();
+              setAddOpen(true);
+            }}
+            disabled={busyId !== null}
+            className="px-3 py-1.5 text-xs font-medium rounded-radius-sm bg-primary text-text-inverse hover:bg-primary-hover disabled:opacity-50 transition-colors"
+          >
+            + 添加更新源
+          </button>
+        </div>
       </div>
 
       <div className="border border-border rounded-radius-md overflow-hidden bg-surface">

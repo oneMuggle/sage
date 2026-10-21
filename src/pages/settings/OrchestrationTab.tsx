@@ -9,9 +9,56 @@
  * 部分更新，必须保留其余 orch 键。
  */
 
+import { useState } from 'react';
+
 import { useSettings } from '../../features/manage-settings/useSettings';
 
 import { SettingRow, Toggle } from './components';
+
+export interface OrchestrationTabAuditInput {
+  planPreflightEnabled: boolean;
+  planScoutEnabled: boolean;
+  maxConcurrentSubagents: number;
+  maxRetries: number;
+  maxLaneIterations: number;
+  maxSubagentIterations: number;
+  subagentApprovalMode: string;
+  worktreeIsolation: boolean;
+  scratchRoot: string;
+}
+
+export function formatOrchestrationTabAuditSnapshot(input: OrchestrationTabAuditInput): string {
+  return [
+    `# 编排设置审计快照`,
+    `- 拆解前澄清: ${input.planPreflightEnabled ? '开启' : '关闭'}`,
+    `- 拆解前侦察: ${input.planScoutEnabled ? '开启' : '关闭'}`,
+    `- 最大并发子任务: ${input.maxConcurrentSubagents}`,
+    `- 子任务重试次数: ${input.maxRetries}`,
+    `- Lane 迭代上限: ${input.maxLaneIterations}`,
+    `- 子代理迭代上限: ${input.maxSubagentIterations}`,
+    `- 子代理审批模式: ${input.subagentApprovalMode}`,
+    `- Worktree 隔离: ${input.worktreeIsolation ? '开启' : '关闭'}`,
+    `- Scratch 根目录: ${input.scratchRoot || 'orch_scratch'}`,
+  ].join('\n');
+}
+
+export function formatOrchestrationTabAuditJson(input: OrchestrationTabAuditInput): string {
+  return JSON.stringify(
+    {
+      planPreflightEnabled: input.planPreflightEnabled,
+      planScoutEnabled: input.planScoutEnabled,
+      maxConcurrentSubagents: input.maxConcurrentSubagents,
+      maxRetries: input.maxRetries,
+      maxLaneIterations: input.maxLaneIterations,
+      maxSubagentIterations: input.maxSubagentIterations,
+      subagentApprovalMode: input.subagentApprovalMode,
+      worktreeIsolation: input.worktreeIsolation,
+      scratchRoot: input.scratchRoot || 'orch_scratch',
+    },
+    null,
+    2,
+  );
+}
 
 /**
  * 编排数字输入。部分更新契约：onChange 收到的 v 已通过非负有限数校验；
@@ -98,15 +145,71 @@ function TextField({
 
 export function OrchestrationTab() {
   const { settings, updateSettings } = useSettings();
+  const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const setOrch = (patch: Partial<typeof settings.orch>) =>
     updateSettings({ orch: { ...settings.orch, ...patch } });
 
+  /* v8 ignore start */
+  const handleCopyAudit = async () => {
+    const text = formatOrchestrationTabAuditSnapshot({
+      planPreflightEnabled: settings.orch.planPreflightEnabled,
+      planScoutEnabled: settings.orch.planScoutEnabled,
+      maxConcurrentSubagents: settings.orch.maxConcurrentSubagents,
+      maxRetries: settings.orch.maxRetries,
+      maxLaneIterations: settings.orch.maxLaneIterations,
+      maxSubagentIterations: settings.orch.maxSubagentIterations,
+      subagentApprovalMode: settings.orch.subagentApprovalMode,
+      worktreeIsolation: settings.orch.worktreeIsolation,
+      scratchRoot: settings.orch.scratchRoot,
+    });
+    setCopiedAudit(true);
+    await navigator.clipboard?.writeText(text);
+  };
+
+  const handleCopyJson = async () => {
+    const text = formatOrchestrationTabAuditJson({
+      planPreflightEnabled: settings.orch.planPreflightEnabled,
+      planScoutEnabled: settings.orch.planScoutEnabled,
+      maxConcurrentSubagents: settings.orch.maxConcurrentSubagents,
+      maxRetries: settings.orch.maxRetries,
+      maxLaneIterations: settings.orch.maxLaneIterations,
+      maxSubagentIterations: settings.orch.maxSubagentIterations,
+      subagentApprovalMode: settings.orch.subagentApprovalMode,
+      worktreeIsolation: settings.orch.worktreeIsolation,
+      scratchRoot: settings.orch.scratchRoot,
+    });
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(text);
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="space-y-6" data-testid="orch-settings-section">
-      <p className="text-xs text-muted leading-relaxed">
-        编排器派发子代理的执行参数（orch 段）。修改即保存并生效于新发起的 run；预算与守门项设 0
-        表示不限制，请谨慎放开。
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs text-muted leading-relaxed">
+          编排器派发子代理的执行参数（orch 段）。修改即保存并生效于新发起的 run；预算与守门项设 0
+          表示不限制，请谨慎放开。
+        </p>
+        <div className="flex items-center gap-2 shrink-0">
+          <span
+            data-testid="orchestration-tab-copy-audit"
+            onClick={() => void handleCopyAudit()}
+            title="复制编排设置审计快照"
+            className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
+          >
+            {copiedAudit ? '已复制快照' : '复制快照'}
+          </span>
+          <span
+            data-testid="orchestration-tab-copy-json"
+            onClick={() => void handleCopyJson()}
+            title="复制编排设置审计 JSON"
+            className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
+          >
+            {copiedJson ? '已复制 JSON' : 'JSON'}
+          </span>
+        </div>
+      </div>
       <section>
         {/* Round 1/3 (2026-09-19) 计划前置旋钮 —— 管线级开关排最前。
             关闭后 multi 拆解行为与 2026-09-19 之前完全一致。 */}

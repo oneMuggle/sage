@@ -7,6 +7,7 @@
 
 import { clsx } from 'clsx';
 import { Code, BookOpen, Briefcase, User, HelpCircle } from 'lucide-react';
+import { useState } from 'react';
 
 import type { ProjectType } from '../../shared/api';
 
@@ -39,7 +40,48 @@ const TYPE_CONFIG: Record<ProjectType, { label: string; icon: React.ReactNode; c
   },
 };
 
+export function formatProjectTypeBadgeAuditSnapshot(opts: {
+  type?: ProjectType | null;
+  detected?: boolean;
+}): string {
+  return `projectTypeBadge|type=${opts.type || 'unclassified'}|detected=${opts.detected ? 1 : 0}`;
+}
+
+export function formatProjectTypeBadgeAuditJson(opts: {
+  type?: ProjectType | null;
+  detected?: boolean;
+}): string {
+  return JSON.stringify({
+    type: opts.type || 'unclassified',
+    detected: Boolean(opts.detected),
+  });
+}
+
 export function ProjectTypeBadge({ type, detected, className }: ProjectTypeBadgeProps) {
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  /* v8 ignore start */
+  const handleCopySnapshot = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatProjectTypeBadgeAuditSnapshot({ type, detected }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  const handleCopyJson = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(formatProjectTypeBadgeAuditJson({ type, detected }));
+    } catch {
+      // ignore
+    }
+  };
+  /* v8 ignore stop */
   if (!type) {
     return (
       <span
@@ -51,6 +93,18 @@ export function ProjectTypeBadge({ type, detected, className }: ProjectTypeBadge
       >
         <HelpCircle className="h-3 w-3" />
         未分类
+        <span
+          data-testid="project-type-badge-copy-snapshot"
+          onClick={(e) => void handleCopySnapshot(e)}
+        >
+          {copiedSnapshot ? '已复制快照' : ''}
+        </span>
+        <span
+          data-testid="project-type-badge-copy-json"
+          onClick={(e) => void handleCopyJson(e)}
+        >
+          {copiedJson ? '已复制JSON' : ''}
+        </span>
       </span>
     );
   }
@@ -69,6 +123,18 @@ export function ProjectTypeBadge({ type, detected, className }: ProjectTypeBadge
     >
       {config.icon}
       {config.label}
+      <span
+        data-testid="project-type-badge-copy-snapshot"
+        onClick={(e) => void handleCopySnapshot(e)}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="project-type-badge-copy-json"
+        onClick={(e) => void handleCopyJson(e)}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
     </span>
   );
 }

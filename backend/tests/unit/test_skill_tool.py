@@ -316,3 +316,93 @@ async def test_chat_service_skill_port_unknown_skill_returns_failure():
     # Assert
     assert result.success is False
     assert "not found" in (result.error or "")
+
+
+# ---------------------------------------------------------------------------
+# T-2 脚本调度可达：script 参数
+# ---------------------------------------------------------------------------
+
+
+def test_schema_declares_script_param_optional():
+    """LLM schema: script 可选，不在 required 列表中。"""
+    # Arrange
+    tool = SkillTool(adapter=_StubSkillAdapter(names=[]))
+
+    # Act
+    schema = tool.schema
+
+    # Assert
+    assert "script" in schema.parameters["properties"]
+    assert schema.parameters["properties"]["script"]["type"] == "string"
+    assert "script" not in schema.parameters["required"]
+
+
+def test_skill_tool_with_script_routes_through_adapter_execute():
+    """提供 script 参数时，走 adapter.execute（权限闸口自动生效），不走 execute_command。"""
+    # Arrange
+    adapter = _StubSkillAdapter(
+        names=["storage-analyzer"], slash_commands=["storage-analyzer"]
+    )
+    tool = SkillTool(adapter=adapter)
+
+    # Act
+    result = tool.execute(
+        skill="storage-analyzer",
+        args="--fast",
+        script="scripts/scan.py",
+    )
+
+    # Assert — execute 被调用（带 script 字段），execute_command 未被调用
+    assert result.success is True
+    assert len(adapter.execute_calls) == 1
+    assert len(adapter.command_calls) == 0
+    name, action, args_dict = adapter.execute_calls[0]
+    assert name == "storage-analyzer"
+    assert action == ""
+    assert args_dict["script"] == "scripts/scan.py"
+    assert args_dict["args"] == ["--fast"]
+
+
+def test_skill_tool_with_script_no_args_passes_empty_list():
+    """script 参数无 args 时，args_list 为空列表。"""
+    # Arrange
+    adapter = _StubSkillAdapter(names=["scan"], slash_commands=["scan"])
+    tool = SkillTool(adapter=adapter)
+
+    # Act
+    result = tool.execute(skill="scan", script="scripts/check.py")
+
+    # Assert
+    assert result.success is True
+    _name, _action, args_dict = adapter.execute_calls[0]
+    assert args_dict["script"] == "scripts/check.py"
+    assert args_dict["args"] == []
+
+
+def test_skill_tool_without_script_still_uses_execute_command():
+    """不提供 script 时，行为不变：走 execute_command（slash 优先）。"""
+    # Arrange
+    adapter = _StubSkillAdapter(names=["review"], slash_commands=["review"])
+    tool = SkillTool(adapter=adapter)
+
+    # Act
+    result = tool.execute(skill="review", args="--fast")
+
+    # Assert — execute_command 被调用，execute 未被调用
+    assert result.success is True
+    assert len(adapter.command_calls) == 1
+    assert len(adapter.execute_calls) == 0
+
+
+def test_skill_tool_with_invalid_script_type_returns_error():
+    """script 非字符串时返回错误 ToolResult。"""
+    # Arrange
+    adapter = _StubSkillAdapter(names=["scan"])
+    tool = SkillTool(adapter=adapter)
+
+    # Act
+    result = tool.execute(skill="scan", script=123)
+
+    # Assert
+    assert result.success is False
+    assert "script" in (result.error or "").lower()

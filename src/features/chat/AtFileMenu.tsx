@@ -42,6 +42,47 @@ interface AtFileMenuProps {
   onClose: () => void;
 }
 
+export function formatAtFileMenuMarkdown(
+  query: string | null,
+  results: ReadonlyArray<FileSearchResult>,
+  workspacePath?: string | null,
+): string {
+  const lines = [
+    '# @文件引用候选列表 (AtFile Menu Summary)',
+    '',
+    `- **检索关键词**: ${query ? `\`${query}\`` : '(空)'}`,
+    `- **工作区路径**: ${workspacePath || '未绑定'}`,
+    `- **候选数量**: ${results.length}`,
+  ];
+  if (results.length === 0) {
+    lines.push('', '_暂无匹配文件_');
+  } else {
+    lines.push('', '## 候选文件明细');
+    for (const r of results) {
+      lines.push(`- **${r.name}** (\`${r.path}\`, 类型: \`${r.kind}\`)`);
+    }
+  }
+  return lines.join('\n');
+}
+
+export function formatAtFileMenuJson(
+  query: string | null,
+  results: ReadonlyArray<FileSearchResult>,
+  workspacePath?: string | null,
+): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      query,
+      workspacePath: workspacePath ?? null,
+      count: results.length,
+      results,
+    },
+    null,
+    2,
+  );
+}
+
 export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
   const { t } = useI18n();
   // Task 7 (2026-07-26): read both sessionId and workspacePath from the
@@ -59,6 +100,8 @@ export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Search files when query changes
@@ -202,6 +245,32 @@ export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
   // require a backend route, and import-on-pick needs the workspace path.
   const officeSearchDisabled = !workspacePath;
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(
+        formatAtFileMenuMarkdown(query, results, workspacePath),
+      );
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(
+        formatAtFileMenuJson(query, results, workspacePath),
+      );
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div
       className="at-file-menu"
@@ -220,6 +289,22 @@ export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
         zIndex: 1000,
       }}
     >
+      <div className="flex items-center justify-end gap-1.5 px-2.5 py-1 border-b border-border text-ui-2xs">
+        <span
+          data-testid="at-file-menu-copy-md"
+          onClick={() => void handleCopyMarkdown()}
+          className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
+        >
+          {copiedMd ? '已复制 MD' : '复制 MD'}
+        </span>
+        <span
+          data-testid="at-file-menu-copy-json"
+          onClick={() => void handleCopyJson()}
+          className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
+        >
+          {copiedJson ? '已复制 JSON' : '复制 JSON'}
+        </span>
+      </div>
       {isLoading && <div className="at-file-menu__loading">{t('chat.atFile.searching')}</div>}
 
       {error === 'timeout' && (

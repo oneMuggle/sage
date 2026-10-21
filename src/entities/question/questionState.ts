@@ -84,3 +84,40 @@ export const useQuestionState = create<QuestionState>((set) => ({
       return { pendingBySession: pending, currentQuestion: pickDisplayedQuestion(pending) };
     }),
 }));
+
+export interface QuestionStateAuditInput {
+  pendingCount?: number;
+  currentRequestId?: string | null;
+  optionCount?: number;
+  multiSelect?: boolean;
+  currentSessionId?: string | null;
+}
+
+export function buildQuestionStateAuditSnapshot(
+  input: QuestionStateAuditInput = {},
+): string {
+  const pendingCount = Math.max(0, input.pendingCount ?? 0);
+  const currentRequestId = (input.currentRequestId ?? '').trim() || 'none';
+  const optionCount = Math.max(0, input.optionCount ?? 0);
+  const multiSelect = Boolean(input.multiSelect);
+  const currentSessionId = (input.currentSessionId ?? '').trim() || 'none';
+  return `pending:${pendingCount}|req:${currentRequestId}|options:${optionCount}|multi:${multiSelect ? 'yes' : 'no'}|session:${currentSessionId}`;
+}
+
+export function buildQuestionStateAuditJson(
+  input: QuestionStateAuditInput = {},
+): string {
+  const pendingCount = Math.max(0, input.pendingCount ?? 0);
+  const currentRequestId = (input.currentRequestId ?? '').trim() || 'none';
+  const optionCount = Math.max(0, input.optionCount ?? 0);
+  const multiSelect = Boolean(input.multiSelect);
+  const currentSessionId = (input.currentSessionId ?? '').trim() || 'none';
+  return JSON.stringify({
+    pendingCount,
+    currentRequestId,
+    optionCount,
+    multiSelect,
+    currentSessionId,
+    snapshot: buildQuestionStateAuditSnapshot(input),
+  });
+}

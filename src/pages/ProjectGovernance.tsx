@@ -44,6 +44,38 @@ import { Card } from '../shared/ui/Card';
 
 type GovernanceTab = 'overview' | 'charter' | 'materials' | 'rules' | 'milestones' | 'profile';
 
+export function formatProjectGovernanceAuditSnapshot(opts: {
+  projectId?: string | null;
+  projectType?: string | null;
+  activeTab?: string;
+  milestonesCount?: number;
+  profileCount?: number;
+  allowedPathsCount?: number;
+  scaffolding?: boolean;
+}): string {
+  return `projectGovernance|id=${opts.projectId || 'none'}|type=${opts.projectType || 'business'}|tab=${opts.activeTab || 'overview'}|milestones=${opts.milestonesCount ?? 0}|profile=${opts.profileCount ?? 0}|paths=${opts.allowedPathsCount ?? 0}|scaffolding=${opts.scaffolding ? 1 : 0}`;
+}
+
+export function formatProjectGovernanceAuditJson(opts: {
+  projectId?: string | null;
+  projectType?: string | null;
+  activeTab?: string;
+  milestonesCount?: number;
+  profileCount?: number;
+  allowedPathsCount?: number;
+  scaffolding?: boolean;
+}): string {
+  return JSON.stringify({
+    projectId: opts.projectId || 'none',
+    projectType: opts.projectType || 'business',
+    activeTab: opts.activeTab || 'overview',
+    milestonesCount: opts.milestonesCount ?? 0,
+    profileCount: opts.profileCount ?? 0,
+    allowedPathsCount: opts.allowedPathsCount ?? 0,
+    scaffolding: Boolean(opts.scaffolding),
+  });
+}
+
 export function ProjectGovernance() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
@@ -61,6 +93,8 @@ export function ProjectGovernance() {
 
   const [newAllowedPath, setNewAllowedPath] = useState('');
   const [savingPaths, setSavingPaths] = useState(false);
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // Load the target project
   useEffect(() => {
@@ -398,6 +432,50 @@ export function ProjectGovernance() {
             <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" />
             {scaffolding ? '初始化中...' : '一键初始化目录与规范'}
           </Button>
+          <span
+            data-testid="project-governance-copy-snapshot"
+            onClick={() => {
+              /* v8 ignore start */
+              setCopiedSnapshot(true);
+              void navigator.clipboard?.writeText(
+                formatProjectGovernanceAuditSnapshot({
+                  projectId: project.id,
+                  projectType: activeProjectType,
+                  activeTab,
+                  milestonesCount: milestones.length,
+                  profileCount: profileEntries.length,
+                  allowedPathsCount: project.allowedPaths?.length ?? 0,
+                  scaffolding,
+                }),
+              );
+              /* v8 ignore stop */
+            }}
+            className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground"
+          >
+            {copiedSnapshot ? '已复制快照' : '复制治理快照'}
+          </span>
+          <span
+            data-testid="project-governance-copy-json"
+            onClick={() => {
+              /* v8 ignore start */
+              setCopiedJson(true);
+              void navigator.clipboard?.writeText(
+                formatProjectGovernanceAuditJson({
+                  projectId: project.id,
+                  projectType: activeProjectType,
+                  activeTab,
+                  milestonesCount: milestones.length,
+                  profileCount: profileEntries.length,
+                  allowedPathsCount: project.allowedPaths?.length ?? 0,
+                  scaffolding,
+                }),
+              );
+              /* v8 ignore stop */
+            }}
+            className="cursor-pointer rounded border border-border px-2 py-1 text-xs text-muted-foreground"
+          >
+            {copiedJson ? '已复制JSON' : '导出治理JSON'}
+          </span>
         </div>
       </div>
 

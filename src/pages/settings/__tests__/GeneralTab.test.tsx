@@ -15,7 +15,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FontProvider } from '../../../entities/font/useFontSettings';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { GeneralTab } from '../GeneralTab';
+import {
+  GeneralTab,
+  formatGeneralTabAuditJson,
+  formatGeneralTabAuditSnapshot,
+} from '../GeneralTab';
 
 const mocks = vi.hoisted(() => ({
   getPreference: vi.fn(),
@@ -281,5 +285,42 @@ describe('GeneralTab auto checkpoint (B-2, 默认开)', () => {
     await waitFor(() => {
       expect(toggle().className).toContain('bg-line-strong');
     });
+  });
+
+  it('formats and copies general tab audit snapshot and JSON', () => {
+    expect(
+      formatGeneralTabAuditSnapshot({
+        streaming: true,
+        timezone: 'Asia/Shanghai',
+        logTimezone: 'UTC',
+        autoMemory: true,
+        confirmDelete: false,
+      }),
+    ).toBe('通用设置 · 流式:开 · 时区:Asia/Shanghai · 日志:UTC · 自动记忆:开 · 删前确认:关');
+    expect(
+      JSON.parse(
+        formatGeneralTabAuditJson({
+          streaming: false,
+          timezone: ' ',
+          logTimezone: ' ',
+          autoMemory: false,
+          confirmDelete: true,
+        }),
+      ),
+    ).toEqual({
+      streaming: false,
+      timezone: 'Asia/Shanghai',
+      logTimezone: 'UTC',
+      autoMemory: false,
+      confirmDelete: true,
+    });
+
+    renderTab();
+    const summaryBtn = screen.getByTestId('general-tab-copy-summary');
+    const jsonBtn = screen.getByTestId('general-tab-copy-json');
+    fireEvent.click(summaryBtn);
+    expect(summaryBtn.textContent).toBe('已复制');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toBe('已复制');
   });
 });

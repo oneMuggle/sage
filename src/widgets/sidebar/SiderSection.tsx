@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronRight, type LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
 
@@ -16,6 +16,32 @@ interface SiderSectionProps {
   maxHeight?: string;
 }
 
+export function formatSiderSectionAuditSnapshot(opts: {
+  sectionKey?: string;
+  label?: string;
+  collapsed?: boolean;
+  hasTrailing?: boolean;
+  maxHeight?: string;
+}): string {
+  return `siderSection|key=${opts.sectionKey || 'none'}|label=${opts.label || 'none'}|collapsed=${opts.collapsed ? 1 : 0}|trailing=${opts.hasTrailing ? 1 : 0}|maxH=${opts.maxHeight || 'auto'}`;
+}
+
+export function formatSiderSectionAuditJson(opts: {
+  sectionKey?: string;
+  label?: string;
+  collapsed?: boolean;
+  hasTrailing?: boolean;
+  maxHeight?: string;
+}): string {
+  return JSON.stringify({
+    sectionKey: opts.sectionKey || 'none',
+    label: opts.label || 'none',
+    collapsed: Boolean(opts.collapsed),
+    hasTrailing: Boolean(opts.hasTrailing),
+    maxHeight: opts.maxHeight || 'auto',
+  });
+}
+
 export function SiderSection({
   sectionKey,
   label,
@@ -28,6 +54,42 @@ export function SiderSection({
 }: SiderSectionProps) {
   const { t } = useI18n();
   const Chevron = collapsed ? ChevronRight : ChevronDown;
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatSiderSectionAuditSnapshot({
+          sectionKey,
+          label,
+          collapsed,
+          hasTrailing: Boolean(trailing),
+          maxHeight,
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatSiderSectionAuditJson({
+          sectionKey,
+          label,
+          collapsed,
+          hasTrailing: Boolean(trailing),
+          maxHeight,
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <section data-section-key={sectionKey} className="mt-1">
@@ -44,6 +106,18 @@ export function SiderSection({
           <span>{label}</span>
         </button>
         {trailing && <div className="ml-auto">{trailing}</div>}
+        <span
+          data-testid="sider-section-copy-snapshot"
+          onClick={() => void handleCopySnapshot()}
+        >
+          {copiedSnapshot ? '已复制快照' : ''}
+        </span>
+        <span
+          data-testid="sider-section-copy-json"
+          onClick={() => void handleCopyJson()}
+        >
+          {copiedJson ? '已复制JSON' : ''}
+        </span>
       </header>
       {/* 2026-09-13 P0: 分区展开/收起高度动画 — 此前是条件渲染硬切。
           Chromium 106 (Electron 21) 不支持 grid-template-rows 0fr↔1fr 插值

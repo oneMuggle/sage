@@ -59,7 +59,11 @@ vi.mock('../backgroundInjector', () => ({
 }));
 
 import * as themeCssClientModule from '../../../shared/api/themeCssClient';
-import { CssThemeModal } from '../CssThemeModal';
+import {
+  CssThemeModal,
+  formatCssThemeDraftJson,
+  formatCssThemeDraftMarkdown,
+} from '../CssThemeModal';
 import type { ThemeCssPayload } from '../themeCssTypes';
 
 // crypto.randomUUID shim for jsdom
@@ -285,6 +289,37 @@ describe('CssThemeModal', () => {
     it('shows cover upload input', () => {
       render(<CssThemeModal open={true} onClose={vi.fn()} onSaved={vi.fn()} />);
       expect(screen.getByLabelText(/封面图/)).toBeInTheDocument();
+    });
+
+    it('formats and copies CSS theme draft as Markdown and JSON', () => {
+      const md = formatCssThemeDraftMarkdown({
+        isEditMode: true,
+        name: 'Custom',
+        appearance: 'dark',
+        css: VALID_CSS,
+        valid: true,
+        error: null,
+      });
+      expect(md).toContain('# 自定义 CSS 主题配置 (CSS Theme Draft)');
+      expect(md).toContain('Custom');
+
+      const parsed = JSON.parse(
+        formatCssThemeDraftJson({
+          isEditMode: false,
+          name: '',
+          appearance: 'light',
+          css: '.bad {}',
+          valid: false,
+          error: 'bad selector',
+        }),
+      );
+      expect(parsed.valid).toBe(false);
+
+      render(<CssThemeModal open={true} onClose={vi.fn()} onSaved={vi.fn()} />);
+      fireEvent.click(screen.getByTestId('css-theme-copy-md'));
+      expect(screen.getByTestId('css-theme-copy-md').textContent).toContain('已复制 MD');
+      fireEvent.click(screen.getByTestId('css-theme-copy-json'));
+      expect(screen.getByTestId('css-theme-copy-json').textContent).toContain('已复制 JSON');
     });
   });
 });

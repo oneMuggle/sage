@@ -3,7 +3,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { ProvidersManager } from '../ProvidersManager';
+import {
+  ProvidersManager,
+  formatProvidersListJson,
+  formatProvidersListMarkdown,
+} from '../ProvidersManager';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -115,5 +119,23 @@ describe('ProvidersManager', () => {
         }),
       ),
     );
+  });
+
+  it('formats and copies providers list as Markdown and JSON', async () => {
+    const md = formatProvidersListMarkdown(defaultList);
+    expect(md).toContain('# 更新源配置清单 (Update Providers Summary)');
+    expect(md).toContain('G1');
+    expect(formatProvidersListMarkdown([])).toContain('_暂无自定义更新源_');
+
+    const parsed = JSON.parse(formatProvidersListJson(defaultList));
+    expect(parsed.count).toBe(2);
+    expect(parsed.defaultId).toBe('a');
+
+    renderManager();
+    await screen.findByTestId('provider-row-a');
+    fireEvent.click(screen.getByTestId('providers-copy-md'));
+    expect(screen.getByTestId('providers-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('providers-copy-json'));
+    expect(screen.getByTestId('providers-copy-json').textContent).toContain('已复制 JSON');
   });
 });

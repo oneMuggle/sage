@@ -1,7 +1,11 @@
 // src/entities/chat/__tests__/btwState.test.ts
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { useBtwState } from '../btwState';
+import {
+  buildBtwStateAuditJson,
+  buildBtwStateAuditSnapshot,
+  useBtwState,
+} from '../btwState';
 
 describe('useBtwState', () => {
   beforeEach(() => {
@@ -64,5 +68,38 @@ describe('useBtwState', () => {
     expect(s.question).toBe('second');
     expect(s.answer).toBe('');
     expect(s.isOpen).toBe(true);
+  });
+
+  it('exports btwState audit snapshot and JSON helpers', () => {
+    expect(buildBtwStateAuditSnapshot()).toBe(
+      'open:no|question:no|answerLen:0|loading:no|parentRunning:no|sources:0',
+    );
+    expect(
+      buildBtwStateAuditSnapshot({
+        isOpen: true,
+        hasQuestion: true,
+        answerLength: 18,
+        isLoading: false,
+        parentTaskRunning: true,
+        sourceCount: 2,
+      }),
+    ).toBe('open:yes|question:yes|answerLen:18|loading:no|parentRunning:yes|sources:2');
+
+    const parsed = JSON.parse(
+      buildBtwStateAuditJson({
+        isOpen: true,
+        hasQuestion: true,
+        isLoading: true,
+      }),
+    );
+    expect(parsed).toEqual({
+      isOpen: true,
+      hasQuestion: true,
+      answerLength: 0,
+      isLoading: true,
+      parentTaskRunning: false,
+      sourceCount: 0,
+      snapshot: 'open:yes|question:yes|answerLen:0|loading:yes|parentRunning:no|sources:0',
+    });
   });
 });

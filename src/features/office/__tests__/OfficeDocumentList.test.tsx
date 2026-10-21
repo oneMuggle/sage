@@ -26,7 +26,11 @@ vi.mock('sonner', () => ({
 
 import type { OfficeDocumentSummary } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { OfficeDocumentList } from '../OfficeDocumentList';
+import {
+  OfficeDocumentList,
+  formatOfficeDocumentListJson,
+  formatOfficeDocumentListMarkdown,
+} from '../OfficeDocumentList';
 
 const sampleDocs: OfficeDocumentSummary[] = [
   {
@@ -229,5 +233,26 @@ describe('OfficeDocumentList — batch archive/restore (round-3 N5)', () => {
     await waitFor(() => {
       expect(mockToastSuccess).toHaveBeenCalledWith('批量操作完成：2 项', { id: 'toast-1' });
     });
+  });
+
+  it('formats and copies document list as Markdown and JSON', () => {
+    const md = formatOfficeDocumentListMarkdown(sampleDocs, 'live');
+    expect(md).toContain('# Office 文档历史列表 (Office Document List)');
+    expect(md).toContain('deck.pptx');
+    expect(formatOfficeDocumentListMarkdown([], 'archived')).toContain('_暂无历史文档_');
+
+    const parsed = JSON.parse(formatOfficeDocumentListJson(sampleDocs, 'live'));
+    expect(parsed.total).toBe(2);
+    expect(parsed.variant).toBe('live');
+
+    render(
+      <I18nProvider defaultLocale="zh">
+        <OfficeDocumentList documents={sampleDocs} loading={false} />
+      </I18nProvider>,
+    );
+    fireEvent.click(screen.getByTestId('office-doc-list-copy-md'));
+    expect(screen.getByTestId('office-doc-list-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('office-doc-list-copy-json'));
+    expect(screen.getByTestId('office-doc-list-copy-json').textContent).toContain('已复制 JSON');
   });
 });

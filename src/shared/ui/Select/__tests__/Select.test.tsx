@@ -9,6 +9,8 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue,
+  formatSelectAuditJson,
+  formatSelectAuditSnapshot,
 } from '../Select';
 
 // Radix Select relies on pointer-capture and scroll APIs that jsdom does not implement.
@@ -121,5 +123,37 @@ describe('Select', () => {
 
     // Assert
     expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P102)', () => {
+    expect(
+      formatSelectAuditSnapshot({
+        position: 'item-aligned',
+        disabled: true,
+        hasValue: false,
+      }),
+    ).toBe('select|position=item-aligned|disabled=1|hasValue=0');
+    expect(formatSelectAuditSnapshot({})).toBe('select|position=popper|disabled=0|hasValue=0');
+    expect(
+      JSON.parse(
+        formatSelectAuditJson({
+          position: 'popper',
+          disabled: false,
+          hasValue: true,
+        }),
+      ),
+    ).toEqual({
+      position: 'popper',
+      disabled: false,
+      hasValue: true,
+    });
+
+    renderSelect();
+    const snapBtn = screen.getByTestId('select-copy-snapshot');
+    const jsonBtn = screen.getByTestId('select-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

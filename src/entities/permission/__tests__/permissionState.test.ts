@@ -2,7 +2,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { PermissionRequest } from '../../../shared/api';
-import { usePermissionState } from '../permissionState';
+import {
+  buildPermissionStateAuditJson,
+  buildPermissionStateAuditSnapshot,
+  usePermissionState,
+} from '../permissionState';
 
 function makeRequest(overrides: Partial<PermissionRequest> = {}): PermissionRequest {
   return {
@@ -74,5 +78,36 @@ describe('usePermissionState', () => {
     usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'c' }), 'sess-B');
     expect(usePermissionState.getState().currentRequest).toBe(replaced);
     expect(usePermissionState.getState().pendingBySession['sess-B'].request_id).toBe('c');
+  });
+
+  it('exports permissionState audit snapshot and JSON helpers', () => {
+    expect(buildPermissionStateAuditSnapshot()).toBe(
+      'pending:0|req:none|tool:none|risk:none|session:none',
+    );
+    expect(
+      buildPermissionStateAuditSnapshot({
+        pendingCount: 2,
+        currentRequestId: 'req-1',
+        currentToolName: 'terminal',
+        currentRisk: 'suspicious',
+        currentSessionId: 'sess-A',
+      }),
+    ).toBe('pending:2|req:req-1|tool:terminal|risk:suspicious|session:sess-A');
+
+    const parsed = JSON.parse(
+      buildPermissionStateAuditJson({
+        pendingCount: 1,
+        currentRequestId: 'req-2',
+        currentToolName: 'write_file',
+      }),
+    );
+    expect(parsed).toEqual({
+      pendingCount: 1,
+      currentRequestId: 'req-2',
+      currentToolName: 'write_file',
+      currentRisk: 'none',
+      currentSessionId: 'none',
+      snapshot: 'pending:1|req:req-2|tool:write_file|risk:none|session:none',
+    });
   });
 });

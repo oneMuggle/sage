@@ -9,7 +9,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChangesListStore } from '../../../../features/changes/changesListStore';
 import { useRightPanelStore } from '../../../../features/right-panel/rightPanelStore';
 import type { WorkspaceChanges, WorkspaceDiff } from '../../../../shared/api/workspaceApi';
-import { FileChangeCard, FileChangeCards } from '../FileChangeCard';
+import {
+  buildFileChangeCardAuditJson,
+  buildFileChangeCardAuditSnapshot,
+  FileChangeCard,
+  FileChangeCards,
+} from '../FileChangeCard';
 
 const mockGetChangeDiff = vi.fn<(sessionId: string, path: string) => Promise<WorkspaceDiff>>();
 const mockGetChanges = vi.fn<(sessionId: string) => Promise<WorkspaceChanges>>();
@@ -159,5 +164,46 @@ describe('FileChangeCards — ≥3 文件折叠汇总条 (right-panel R6)', () =
   it('空 paths 不渲染任何内容', () => {
     const { container } = render(<FileChangeCards sessionId="s1" paths={[]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('exports FileChangeCard audit snapshot/JSON helpers and supports copy controls', () => {
+    expect(buildFileChangeCardAuditSnapshot()).toBe(
+      'path:none|expanded:no|mode:inline|accepted:no|reverting:no|untracked:no',
+    );
+    expect(
+      buildFileChangeCardAuditSnapshot({
+        path: 'src/a.ts',
+        expanded: true,
+        diffMode: 'split',
+        accepted: true,
+        reverting: false,
+        isUntracked: true,
+      }),
+    ).toBe('path:src/a.ts|expanded:yes|mode:split|accepted:yes|reverting:no|untracked:yes');
+
+    const parsed = JSON.parse(
+      buildFileChangeCardAuditJson({
+        path: 'src/b.ts',
+        expanded: true,
+      }),
+    );
+    expect(parsed).toEqual({
+      path: 'src/b.ts',
+      expanded: true,
+      diffMode: 'inline',
+      accepted: false,
+      reverting: false,
+      isUntracked: false,
+      snapshot: 'path:src/b.ts|expanded:yes|mode:inline|accepted:no|reverting:no|untracked:no',
+    });
+
+    useChangesListStore.setState({ bySession: { s1: SAMPLE_CHANGES } });
+    render(<FileChangeCard sessionId="s1" path="src/app.ts" />);
+    const copyAudit = screen.getByTestId('file-change-card-copy-audit');
+    const copyJson = screen.getByTestId('file-change-card-copy-audit-json');
+    fireEvent.click(copyAudit);
+    expect(copyAudit).toHaveTextContent('已复制快照');
+    fireEvent.click(copyJson);
+    expect(copyJson).toHaveTextContent('已复制 JSON');
   });
 });

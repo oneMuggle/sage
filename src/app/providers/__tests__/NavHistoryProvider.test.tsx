@@ -1,12 +1,14 @@
 // src/app/providers/__tests__/NavHistoryProvider.test.tsx
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { useContext, useEffect } from 'react';
 import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import {
   NavHistoryProvider,
   NavHistoryContext,
+  formatNavHistoryAuditJson,
+  formatNavHistoryAuditSnapshot,
   type NavHistoryContextValue,
 } from '../NavHistoryProvider';
 
@@ -142,5 +144,47 @@ describe('NavHistoryProvider', () => {
     expect(captured).not.toBeNull();
     expect(captured!.canForward).toBe(false);
     expect(() => captured!.forward()).not.toThrow();
+  });
+
+  it('formats NavHistory audit snapshot/JSON and supports copy controls (P103)', () => {
+    const snap = formatNavHistoryAuditSnapshot({
+      cursor: 1,
+      stackLength: 3,
+      canBack: true,
+      canForward: true,
+    });
+    expect(snap).toBe('cursor=1|len=3|back=1|fwd=1');
+    const json = JSON.parse(
+      formatNavHistoryAuditJson({
+        cursor: 0,
+        stackLength: 1,
+        canBack: false,
+        canForward: false,
+      }),
+    );
+    expect(json).toEqual({
+      cursor: 0,
+      stackLength: 1,
+      canBack: false,
+      canForward: false,
+    });
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <NavHistoryProvider>
+          <div />
+        </NavHistoryProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('nav-history-audit-status')).toHaveAttribute(
+      'data-nav-history-audit',
+      'cursor=0|len=1|back=0|fwd=0',
+    );
+    fireEvent.click(screen.getByTestId('nav-history-audit-copy'));
+    expect(writeText).toHaveBeenCalledWith('cursor=0|len=1|back=0|fwd=0');
+    fireEvent.click(screen.getByTestId('nav-history-audit-copy-json'));
+    expect(writeText).toHaveBeenCalledTimes(2);
   });
 });

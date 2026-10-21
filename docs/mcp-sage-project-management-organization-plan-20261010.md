@@ -1239,3 +1239,189 @@
   - 在 `SessionList` 顶部栏新增 **`复制 MD`**（`data-testid="session-list-copy-md"`）与 **`复制 JSON`**（`data-testid="session-list-copy-json"`），并导出纯函数 `formatSessionListMarkdown` / `formatSessionListJson`；在 `SkillList` 顶部工具栏新增 **`复制 MD`**（`data-testid="skill-list-copy-md"`）与 **`复制 JSON`**（`data-testid="skill-list-copy-json"`），并导出纯函数 `formatSkillListMarkdown` / `formatSkillListJson`；在 `AssistantRecommendations` 标题栏新增 **`复制 MD`**（`data-testid="recommendations-copy-md"`）与 **`复制 JSON`**（`data-testid="recommendations-copy-json"`），并导出纯函数 `formatRecommendationsMarkdown` / `formatRecommendationsJson`；在 `QuickActionBar` 工具栏新增 **`复制 MD`**（`data-testid="quick-actions-copy-md"`）与 **`复制 JSON`**（`data-testid="quick-actions-copy-json"`），并导出纯函数 `formatQuickActionsMarkdown` / `formatQuickActionsJson`。
 - **单元测试与门禁验证**：
   - 扩展 `ChatFindBar.test.tsx`、`TemplateFillDialog.test.tsx`、`TurnList.test.tsx`、`NewMemoryModal.test.tsx`、`SessionList.test.tsx`、`SkillList.test.tsx`、`AssistantRecommendations.test.tsx` 与 `QuickActionBar.test.tsx`（含 `Welcome.test.tsx` 与 `ConversationsSection.test.tsx` 联调共 10 个套件 64 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零错误门禁。
+### Phase P95 — 全局更新通知弹窗、Word 原生预览器、Office 交付验收抽屉、Office 文档历史列表、Office 文件导入器、首启配置向导、项目治理规则面板与任务交付简报对话框 MD/JSON 导出（已完成）
+
+- **Phase 4.1 `UpdateDialog`、`DocxNativePreview`、`OfficeDeliveryDrawer` 与 `OfficeDocumentList` 全局更新通知、Word 原生预览、Office 交付验收抽屉及文档历史列表 MD/JSON 导出（`src/components/UpdateDialog.tsx`, `src/features/office/DocxNativePreview.tsx`, `src/features/office/OfficeDeliveryDrawer.tsx`, `src/features/office/OfficeDocumentList.tsx`）**：
+  - 在 `UpdateDialog` 标题栏新增 **`复制 MD`**（`data-testid="update-dialog-copy-md"`）与 **`复制 JSON`**（`data-testid="update-dialog-copy-json"`），并导出纯函数 `formatUpdateDialogMarkdown` / `formatUpdateDialogJson`；在 `DocxNativePreview` 顶部状态栏新增 **`复制 MD`**（`data-testid="docx-preview-copy-md"`）与 **`复制 JSON`**（`data-testid="docx-preview-copy-json"`），并导出纯函数 `formatDocxPreviewMetaMarkdown` / `formatDocxPreviewMetaJson`；在 `OfficeDeliveryDrawer` 抽屉头部新增 **`复制 MD`**（`data-testid="delivery-drawer-copy-md"`）与 **`复制 JSON`**（`data-testid="delivery-drawer-copy-json"`），并导出纯函数 `formatOfficeDeliveryMarkdown` / `formatOfficeDeliveryJson`；在 `OfficeDocumentList` 顶部栏新增 **`复制 MD`**（`data-testid="office-doc-list-copy-md"`）与 **`复制 JSON`**（`data-testid="office-doc-list-copy-json"`），并导出纯函数 `formatOfficeDocumentListMarkdown` / `formatOfficeDocumentListJson`。
+- **Phase 4.2 `OfficeFilePicker`、`OnboardingWizard`、`GovernanceRulesPanel` 与 `TaskBriefDialog` Office 文件导入器、首启配置向导、项目治理规则面板及任务交付简报弹窗 MD/JSON 导出（`src/features/office/OfficeFilePicker.tsx`, `src/features/onboarding/OnboardingWizard.tsx`, `src/features/project-type/GovernanceRulesPanel.tsx`, `src/features/task-brief/TaskBriefDialog.tsx`）**：
+  - 在 `OfficeFilePicker` 顶部工具栏新增 **`复制 MD`**（`data-testid="office-picker-${docType}-copy-md"`）与 **`复制 JSON`**（`data-testid="office-picker-${docType}-copy-json"`），并导出纯函数 `formatOfficePickerMarkdown` / `formatOfficePickerJson`；在 `OnboardingWizard` 步骤指示栏新增 **`复制 MD`**（`data-testid="wizard-copy-md"`）与 **`复制 JSON`**（`data-testid="wizard-copy-json"`），并导出纯函数 `formatOnboardingWizardMarkdown` / `formatOnboardingWizardJson`；在 `GovernanceRulesPanel` 第一节标题栏新增 **`复制 MD`**（`data-testid="governance-rules-copy-md"`）与 **`复制 JSON`**（`data-testid="governance-rules-copy-json"`），并导出纯函数 `formatGovernanceRulesMarkdown` / `formatGovernanceRulesJson`；在 `TaskBriefDialog` 底部操作区新增 **`复制 MD`**（`data-testid="task-brief-copy-md"`）与 **`复制 JSON`**（`data-testid="task-brief-copy-json"`），并导出纯函数 `formatTaskBriefMarkdown` / `formatTaskBriefJson`。
+- **单元测试与门禁验证**：
+  - 扩展 `UpdateDialog.test.tsx`、`DocxNativePreview.test.tsx`、`OfficeDeliveryDrawer.test.tsx`、`OfficeDocumentList.test.tsx`、`OfficeFilePicker.test.tsx`、`OnboardingWizard.test.tsx`、`GovernanceRulesPanel.test.tsx` 与 `TaskBriefDialog.test.tsx`（8 个套件共 66 项单测全部通过），并通过 `check-font-scale.mjs`、`architecture-check.mjs`、`tsc --noEmit` 与 `eslint` 零错误门禁。
+
+### Phase P96（2026-10-20）：@文件菜单、定时任务配置与 Cron 选择器、CSS 主题弹窗与主题画廊、空工作区引导、权限模式切换与会话模型选择器审计快照导出（PR #2181 / #2182）
+
+1. **@文件引用候选列表 (`src/features/chat/AtFileMenu.tsx`)**：
+   - 新增并导出 `formatAtFileMenuMarkdown` 与 `formatAtFileMenuJson` 纯函数及头部一键复制按钮（`data-testid="at-file-menu-copy-md"` / `data-testid="at-file-menu-copy-json"`），支持导出检索关键词、工作区名与候选文件清单。
+2. **定时任务配置弹窗 (`src/features/scheduled/CreateTaskModal.tsx`)**：
+   - 新增并导出 `formatScheduledTaskDraftMarkdown` 与 `formatScheduledTaskDraftJson` 纯函数及顶栏一键复制按钮（`data-testid="create-task-copy-md"` / `data-testid="create-task-copy-json"`），支持导出任务名称、调度类型、Cron/时间、目标会话与提示词草稿。
+3. **Cron 表达式配置器 (`src/features/scheduled/CronExpressionPicker.tsx`)**：
+   - 新增并导出 `formatCronPickerMarkdown` 与 `formatCronPickerJson` 纯函数及预设栏一键复制按钮（`data-testid="cron-picker-copy-md"` / `data-testid="cron-picker-copy-json"`），支持导出预设档位、表达式及校验状态。
+4. **自定义 CSS 主题弹窗 (`src/features/theme/CssThemeModal.tsx`)**：
+   - 新增并导出 `formatCssThemeDraftMarkdown` 与 `formatCssThemeDraftJson` 纯函数及标题栏一键复制按钮（`data-testid="css-theme-copy-md"` / `data-testid="css-theme-copy-json"`），支持导出主题名称、外观基准、校验状态与 CSS 源码。
+5. **主题画廊 (`src/features/theme/ThemeGallery.tsx`)**：
+   - 新增并导出 `formatThemeGalleryMarkdown` 与 `formatThemeGalleryJson` 纯函数及标题栏一键复制按钮（`data-testid="theme-gallery-copy-md"` / `data-testid="theme-gallery-copy-json"`），支持导出当前激活预设及基础/装饰主题清单。
+6. **空工作区引导状态 (`src/features/workspace/WorkspaceEmptyGuard.tsx`)**：
+   - 新增并导出 `formatWorkspaceGuardMarkdown` 与 `formatWorkspaceGuardJson` 纯函数及一键复制按钮（`data-testid="workspace-guard-copy-md"` / `data-testid="workspace-guard-copy-json"`），支持导出触发功能、引导文案与最近错误。
+7. **会话权限模式与自动放行切换器 (`src/widgets/chat/PermissionModeSwitch.tsx`)**：
+   - 新增并导出 `formatPermissionModeMarkdown` 与 `formatPermissionModeJson` 纯函数及一键复制按钮（`data-testid="permission-mode-copy-md"` / `data-testid="permission-mode-copy-json"`），支持导出当前权限预设、自动放行计数及审计明细。
+8. **会话模型选择器 (`src/widgets/chat/SessionModelPicker.tsx`)**：
+   - 新增并导出 `formatSessionModelPickerMarkdown` 与 `formatSessionModelPickerJson` 纯函数及一键复制按钮（`data-testid="session-model-copy-md"` / `data-testid="session-model-copy-json"`），支持导出会话覆盖模型、全局默认模型与候选数量。
+
+### Phase P97（2026-10-21）：模型目录页、编排中心页、欢迎页与输入卡片、更新源管理、主题选择器、更新配置页与输入框工具菜单审计快照导出（PR #2183 / #2184）
+
+1. **模型目录页面 (`src/pages/ModelCatalog.tsx`)**：
+   - 新增并导出 `formatModelCatalogPageMarkdown` 与 `formatModelCatalogPageJson` 纯函数及顶栏一键复制控件（`data-testid="model-catalog-page-copy-md"` / `data-testid="model-catalog-page-copy-json"`），支持导出筛选端点、检索词、模型总数/筛选数、快照数与当前选中模型。
+2. **编排中心页面 (`src/pages/Orchestration.tsx`)**：
+   - 新增并导出 `formatOrchestrationPageMarkdown` 与 `formatOrchestrationPageJson` 纯函数及顶栏一键复制控件（`data-testid="orch-page-copy-md"` / `data-testid="orch-page-copy-json"`），支持导出目标草稿、创建状态与当前泳道总数。
+3. **欢迎页 (`src/pages/Welcome.tsx`)**：
+   - 新增并导出 `formatWelcomePageMarkdown` 与 `formatWelcomePageJson` 纯函数及入口栏一键复制控件（`data-testid="welcome-page-copy-md"` / `data-testid="welcome-page-copy-json"`），支持导出界面语言、首启向导状态、推荐模板数与当前打开任务简报。
+4. **更新源管理面板 (`src/pages/settings/ProvidersManager.tsx`)**：
+   - 新增并导出 `formatProvidersListMarkdown` 与 `formatProvidersListJson` 纯函数及顶栏一键复制控件（`data-testid="providers-copy-md"` / `data-testid="providers-copy-json"`），支持导出更新源总数、默认更新源及各源类型与启用状态。
+5. **主题选择器 (`src/pages/settings/ThemeSelector.tsx`)**：
+   - 新增并导出 `formatThemeSelectorMarkdown` 与 `formatThemeSelectorJson` 纯函数及一键复制控件（`data-testid="theme-selector-copy-md"` / `data-testid="theme-selector-copy-json"`），支持导出当前激活主题来源与自定义 CSS 主题清单。
+6. **更新配置页 (`src/pages/settings/UpdatesTab.tsx`)**：
+   - 新增并导出 `formatUpdatesConfigMarkdown` 与 `formatUpdatesConfigJson` 纯函数及顶栏一键复制控件（`data-testid="updates-tab-copy-md"` / `data-testid="updates-tab-copy-json"`），支持导出更新策略、通道、回滚窗口、检查周期、服务器地址与遥测开关。
+7. **输入框「+」工具菜单 (`src/widgets/chat/ComposerPlusMenu.tsx`)**：
+   - 新增并导出 `formatComposerPlusMenuMarkdown` 与 `formatComposerPlusMenuJson` 纯函数及菜单顶栏一键复制控件（`data-testid="composer-plus-copy-md"` / `data-testid="composer-plus-copy-json"`），支持导出工具菜单项清单、快捷键提示与禁用状态。
+8. **欢迎页输入卡片 (`src/widgets/welcome/WelcomeInputCard.tsx`)**：
+   - 新增并导出 `formatWelcomeInputMarkdown` 与 `formatWelcomeInputJson` 纯函数及卡片底部一键复制控件（`data-testid="welcome-input-copy-md"` / `data-testid="welcome-input-copy-json"`），支持导出当前占位文案、禁用状态与草稿正文。
+
+---
+
+## 105. Phase P98（2026-10-21）：Arena 控制台、Arena 账号页、技能管理页与设置分栏（基础、模型、编排、开发环境、Zotero）治理审计快照与一键复制
+
+### 105.1 背景与目标
+- 延续 Phase P0–P97 的全量可观测性与无侵入式复制体验，覆盖主页面与设置子面板中剩余的 8 个核心模块：
+  1. `src/pages/Arena.tsx`（Arena 控制台：当前页签、账号池数量、可用账号数与启用/异常状态审计快照与 JSON 导出）
+  2. `src/pages/ArenaAccounts.tsx`（Arena 账号页：账号池总数、可用账号数与自动化启用状态审计快照与 JSON 导出）
+  3. `src/pages/Skills.tsx`（技能管理页：当前页签、技能总数、已启用数、筛选数、总使用次数、自动刷新开关与巡检建议数审计快照与 JSON 导出）
+  4. `src/pages/settings/BasicTab.tsx`（基础设置分栏：流式输出、LLM 重试上限/退避参数、IANA 时区、日志时区与演示模式审计快照与 JSON 导出）
+  5. `src/pages/settings/ModelsTab.tsx`（模型选择分栏：可用端点数、已发现模型数、对话/视觉/向量模型绑定、上下文窗口模式与 Temperature 审计快照与 JSON 导出）
+  6. `src/pages/settings/OrchestrationTab.tsx`（编排设置分栏：计划前置澄清/侦察开关、最大并发/重试/迭代上限、审批模式、Worktree 隔离与 Scratch 根目录审计快照与 JSON 导出）
+  7. `src/pages/settings/RuntimeEnvTab.tsx`（开发环境分栏：运行时探测状态、可用运行时数、当前选中运行时、项目诊断状态与试跑状态审计快照与 JSON 导出）
+  8. `src/pages/settings/ZoteroTab.tsx`（Zotero 文献库分栏：连接状态、文献条目数、分类数、当前搜索结果数及搜索/分类/标签过滤条件审计快照与 JSON 导出）
+
+### 105.2 交付清单（Dual-Track：`main` & `release/win7`）
+- **纯函数导出**：
+  - `formatArenaAuditSnapshot` / `formatArenaAuditJson` (`src/pages/Arena.tsx`)
+  - `formatArenaAccountsAuditSnapshot` / `formatArenaAccountsAuditJson` (`src/pages/ArenaAccounts.tsx`)
+  - `formatSkillsAuditSnapshot` / `formatSkillsAuditJson` (`src/pages/Skills.tsx`)
+  - `formatBasicTabAuditSnapshot` / `formatBasicTabAuditJson` (`src/pages/settings/BasicTab.tsx`)
+  - `formatModelsTabAuditSnapshot` / `formatModelsTabAuditJson` (`src/pages/settings/ModelsTab.tsx`)
+  - `formatOrchestrationTabAuditSnapshot` / `formatOrchestrationTabAuditJson` (`src/pages/settings/OrchestrationTab.tsx`)
+  - `formatRuntimeEnvTabAuditSnapshot` / `formatRuntimeEnvTabAuditJson` (`src/pages/settings/RuntimeEnvTab.tsx`)
+  - `formatZoteroTabAuditSnapshot` / `formatZoteroTabAuditJson` (`src/pages/settings/ZoteroTab.tsx`)
+- **非按钮 `<span>` 审计复制控件**：
+  - `arena-copy-audit` / `arena-copy-json`
+  - `arena-accounts-copy-audit` / `arena-accounts-copy-json`
+  - `skills-page-copy-audit` / `skills-page-copy-json`
+  - `basic-tab-copy-audit` / `basic-tab-copy-json`
+  - `models-tab-copy-audit` / `models-tab-copy-json`
+  - `orchestration-tab-copy-audit` / `orchestration-tab-copy-json`
+  - `runtime-env-tab-copy-audit` / `runtime-env-tab-copy-json`
+  - `zotero-tab-copy-audit` / `zotero-tab-copy-json`
+- **单元测试与门禁**：
+  - 8 个测试套件（`Arena.test.tsx`, `ArenaAccounts.test.tsx`, `Skills.test.tsx`, `BasicTab.test.tsx`, `ModelsTab.test.tsx`, `OrchestrationTab.test.tsx`, `RuntimeEnvTab.test.tsx`, `ZoteroTab.test.tsx`）在 `main`（68 项测试）与 `release/win7`（78 项测试）全绿通过。
+  - `ESLint`、`tsc --noEmit`、`check-font-scale.mjs`、`architecture-check.mjs` 全部零告警通过。
+
+### Phase P99：设置页标签与办公生成/预览面板（Endpoints / General / MCP / Memory / Network / PromptTemplates / OfficeGenerateForm / OfficePreviewPanel）治理审计快照与一键导出（已完成）
+- **端到端交付**：
+  1. **端点配置标签（`src/pages/settings/EndpointsTab.tsx`）**：新增 `formatEndpointsTabAuditSnapshot` 与 `formatEndpointsTabAuditJson` 纯函数及头部一键复制控件（`data-testid="endpoints-tab-copy-summary"` / `data-testid="endpoints-tab-copy-json"`），支持导出端点总数、编辑态 ID 与连接测试状态。
+  2. **通用设置标签（`src/pages/settings/GeneralTab.tsx`）**：新增 `formatGeneralTabAuditSnapshot` 与 `formatGeneralTabAuditJson` 纯函数及头部一键复制控件（`data-testid="general-tab-copy-summary"` / `data-testid="general-tab-copy-json"`），支持导出流式输出开关、IANA 时区、日志时区、自动记忆提取与删除确认状态。
+  3. **MCP 服务管理标签（`src/pages/settings/McpTab.tsx`）**：新增 `formatMcpTabAuditSnapshot` 与 `formatMcpTabAuditJson` 纯函数及头部一键复制控件（`data-testid="mcp-tab-copy-summary"` / `data-testid="mcp-tab-copy-json"`），支持导出服务总数、就绪数、刷新态与错误状态。
+  4. **记忆管理标签（`src/pages/settings/MemoryTab.tsx`）**：新增 `formatMemoryTabAuditSnapshot` 与 `formatMemoryTabAuditJson` 纯函数及头部一键复制控件（`data-testid="memory-tab-copy-summary"` / `data-testid="memory-tab-copy-json"`），支持导出嵌入器类型、语义匹配状态、模型就绪态与自动备份份数。
+  5. **网络策略标签（`src/pages/settings/NetworkTab.tsx`）**：新增 `formatNetworkTabAuditSnapshot` 与 `formatNetworkTabAuditJson` 纯函数及头部一键复制控件（`data-testid="network-tab-copy-summary"` / `data-testid="network-tab-copy-json"`），支持导出网络访问模式、白名单主机数、TLS 豁免主机数、代理配置态与首选搜索引擎。
+  6. **提示词模板标签（`src/pages/settings/PromptTemplatesTab.tsx`）**：新增 `formatPromptTemplatesTabAuditSnapshot` 与 `formatPromptTemplatesTabAuditJson` 纯函数及头部一键复制控件（`data-testid="prompt-templates-tab-copy-summary"` / `data-testid="prompt-templates-tab-copy-json"`），支持导出模板总数、加载态、编辑态与导入冲突状态。
+  7. **办公文档生成表单（`src/features/office/OfficeGenerateForm.tsx`）**：新增 `formatOfficeGenerateFormAuditSnapshot` 与 `formatOfficeGenerateFormAuditJson` 纯函数及头部一键复制控件（`data-testid="office-generate-form-copy-summary"` / `data-testid="office-generate-form-copy-json"`），支持导出文档类型、创建模式（自由/模板）、目标文件名、生成繁忙态与结果状态。
+  8. **办公文档预览面板（`src/features/office/OfficePreviewPanel.tsx`）**：新增 `formatOfficePreviewPanelAuditSnapshot` 与 `formatOfficePreviewPanelAuditJson` 纯函数及头部一键复制控件（`data-testid="office-preview-panel-copy-summary"` / `data-testid="office-preview-panel-copy-json"`），支持导出文档类型、文件名、字节大小、高保真/结构化视图模式与 PDF 导出状态。
+- **验证结果**：
+  - 单元测试：`EndpointsTab.test.tsx`、`GeneralTab.test.tsx`、`McpTab.test.tsx`、`MemoryTab.test.tsx`、`NetworkTab.test.tsx`、`PromptTemplatesTab.test.tsx`、`OfficeGenerateForm.test.tsx`、`OfficePreviewPanel.test.tsx`（`main` 8 个测试套件 109 项单测全部通过；`release/win7` 8 个测试套件 99 项单测全部通过）。
+  - 门禁检查：`npx eslint` 0 error、`npx tsc --noEmit` 0 error、`check-font-scale.mjs` 通过、`architecture-check.mjs` 通过。
+
+### Phase P100 — 治理页面、主题/诊断组件与欢迎/侧栏分区审计快照与 JSON 导出（已完成）
+- **目标**：为 `ExportButton.tsx`、`ProjectTypeBadge.tsx`、`CodeMirrorThemeEditor.tsx`、`ThemeCover.tsx`、`ProjectGovernance.tsx`、`ArenaAccountsToggle.tsx`、`WelcomeHero.tsx` 与 `SiderSection.tsx` 补齐纯函数审计快照与 JSON 导出（`format*AuditSnapshot` / `format*AuditJson`）及无障碍复制控件。
+- **交付范围**：
+  - `src/features/diagnostic/ExportButton.tsx`：`formatExportButtonAuditSnapshot` / `formatExportButtonAuditJson` + `export-button-copy-snapshot` / `export-button-copy-json`
+  - `src/features/project-type/ProjectTypeBadge.tsx`：`formatProjectTypeBadgeAuditSnapshot` / `formatProjectTypeBadgeAuditJson` + `project-type-badge-copy-snapshot` / `project-type-badge-copy-json`
+  - `src/features/theme/CodeMirrorThemeEditor.tsx`：`formatCodeMirrorThemeEditorAuditSnapshot` / `formatCodeMirrorThemeEditorAuditJson` + `cm-theme-editor-copy-snapshot` / `cm-theme-editor-copy-json`
+  - `src/features/theme/ThemeCover.tsx`：`formatThemeCoverAuditSnapshot` / `formatThemeCoverAuditJson` + `theme-cover-copy-snapshot` / `theme-cover-copy-json`
+  - `src/pages/ProjectGovernance.tsx`：`formatProjectGovernanceAuditSnapshot` / `formatProjectGovernanceAuditJson` + `project-governance-copy-snapshot` / `project-governance-copy-json`
+  - `src/pages/settings/ArenaAccountsToggle.tsx`：`formatArenaAccountsToggleAuditSnapshot` / `formatArenaAccountsToggleAuditJson` + `arena-accounts-toggle-copy-snapshot` / `arena-accounts-toggle-copy-json`
+  - `src/widgets/welcome/WelcomeHero.tsx`：`formatWelcomeHeroAuditSnapshot` / `formatWelcomeHeroAuditJson` + `welcome-hero-copy-snapshot` / `welcome-hero-copy-json`
+  - `src/widgets/sidebar/SiderSection.tsx`：`formatSiderSectionAuditSnapshot` / `formatSiderSectionAuditJson` + `sider-section-copy-snapshot` / `sider-section-copy-json`
+  - 单元测试：`ExportButton.test.tsx`、`ProjectTypeBadge.test.tsx`、`CodeMirrorThemeEditor.test.tsx`、`ThemeCover.test.tsx`、`ProjectGovernance.test.tsx`、`ArenaAccountsToggle.test.tsx`、`WelcomeHero.test.tsx`、`SiderSection.test.tsx`
+
+### Phase P101（2026-10-21）：侧栏项目清单、两步删除、导航分组、标题栏与对话选择引用审计快照与 JSON 导出（Dual-Track `main` + `release/win7`）
+- **定位与目标**：将确定性单行审计快照（`format*AuditSnapshot`）与结构化 JSON 审计载荷（`format*AuditJson`）扩展至侧栏两步删除按钮、侧栏项目清单、导航分组、桌面端标题栏、标题栏前进/后退动作栏、窗口控制栏、Markdown 图片预览与对话划词引用按钮 8 个高频基础交互组件：
+  1. **侧栏两步删除按钮审计快照与 JSON 导出（`TwoStepDelete.tsx`）**：新增 `formatTwoStepDeleteAuditSnapshot` / `formatTwoStepDeleteAuditJson` 纯函数及 `two-step-delete-copy-snapshot` / `two-step-delete-copy-json` 审计控件，输出二次确认挂起状态、禁用态、标签文案与自动复位超时毫秒数。
+  2. **侧栏项目清单审计快照与 JSON 导出（`SidebarProjectList.tsx`）**：新增 `formatSidebarProjectListAuditSnapshot` / `formatSidebarProjectListAuditJson` 纯函数及 `sidebar-project-list-copy-snapshot` / `sidebar-project-list-copy-json` 审计控件，输出项目总数、已展开项目数、缺失目录项目数、分组折叠态与拖拽悬停态。
+  3. **侧栏导航分组审计快照与 JSON 导出（`NavGroup.tsx`）**：新增 `formatNavGroupAuditSnapshot` / `formatNavGroupAuditJson` 纯函数及 `nav-group-copy-snapshot` / `nav-group-copy-json` 审计控件，输出分组标识、分组标题、可折叠配置与当前折叠状态。
+  4. **桌面标题栏审计快照与 JSON 导出（`Titlebar.tsx`）**：新增 `formatTitlebarAuditSnapshot` / `formatTitlebarAuditJson` 纯函数及 `titlebar-copy-snapshot` / `titlebar-copy-json` 审计控件，输出平台类型、Electron 桌面环境标志、品牌 Logo 隐藏态与移动端侧栏展开态。
+  5. **标题栏前进/后退动作栏审计快照与 JSON 导出（`TitlebarActions.tsx`）**：新增 `formatTitlebarActionsAuditSnapshot` / `formatTitlebarActionsAuditJson` 纯函数及 `titlebar-actions-copy-snapshot` / `titlebar-actions-copy-json` 审计控件，输出历史栈可后退与可前进状态。
+  6. **窗口控制栏审计快照与 JSON 导出（`WindowControls.tsx`）**：新增 `formatWindowControlsAuditSnapshot` / `formatWindowControlsAuditJson` 纯函数及 `window-controls-copy-snapshot` / `window-controls-copy-json` 审计控件，输出自定义控制桥接注入状态与窗口控制动作计数。
+  7. **Markdown 图片渲染与灯箱审计快照与 JSON 导出（`MarkdownImage.tsx`）**：新增 `formatMarkdownImageAuditSnapshot` / `formatMarkdownImageAuditJson` 纯函数及 `markdown-image-copy-snapshot` / `markdown-image-copy-json` 审计控件，输出图片地址、替代文本、加载状态、本地媒体标识与灯箱预览开启状态。
+  8. **对话划词引用按钮审计快照与 JSON 导出（`SelectionQuoteButton.tsx`）**：新增 `formatSelectionQuoteButtonAuditSnapshot` / `formatSelectionQuoteButtonAuditJson` 纯函数及 `selection-quote-copy-snapshot` / `selection-quote-copy-json` 审计控件，输出选区激活态、选中文本长度与浮动坐标。
+- **验证结果**：8 个目标单测套件（共 71 条单测）、`eslint`、`tsc --noEmit`、`check-font-scale.mjs` 与 `architecture-check.mjs` 在 `main` 与 `release/win7` 双轨全部通过。
+
+### Phase P102（2026-10-21）：共享 UI 原语（待办徽标、品牌标志、活跃状态点、下拉菜单、错误态、加载态、重试按钮与选择器）审计快照与 JSON 导出（Dual-Track `main` + `release/win7`）
+- **定位与目标**：将确定性单行审计快照（`format*AuditSnapshot`）与结构化 JSON 审计载荷（`format*AuditJson`）扩展至 `src/shared/ui/` 8 个核心设计系统原语组件：
+  1. **待处理数量徽标审计快照与 JSON 导出（`AttnBadge.tsx`）**：新增 `formatAttnBadgeAuditSnapshot` / `formatAttnBadgeAuditJson` 纯函数及 `attn-badge-copy-snapshot` / `attn-badge-copy-json` 审计控件，输出待处理计数、99+ 截断标记与解析后标题。
+  2. **品牌标志组件审计快照与 JSON 导出（`BrandLogo.tsx`）**：新增 `formatBrandLogoAuditSnapshot` / `formatBrandLogoAuditJson` 纯函数及 `brand-logo-copy-snapshot` / `brand-logo-copy-json` 审计控件，输出尺寸档位、Wordmark 启用态、替代文本与测试标识。
+  3. **活跃度指示点审计快照与 JSON 导出（`LiveDot.tsx`）**：新增 `formatLiveDotAuditSnapshot` / `formatLiveDotAuditJson` 纯函数及 `live-dot-copy-snapshot` / `live-dot-copy-json` 审计控件，输出活跃状态档位（`working` / `sleeping` / `idle`）与提示标签。
+  4. **Radix 下拉菜单审计快照与 JSON 导出（`DropdownMenu.tsx`）**：新增 `formatDropdownMenuAuditSnapshot` / `formatDropdownMenuAuditJson` 纯函数及 `dropdown-menu-copy-snapshot` / `dropdown-menu-copy-json` 审计控件，输出对齐方式、偏移像素、菜单项计数与危险操作标记。
+  5. **统一错误态面板审计快照与 JSON 导出（`ErrorState.tsx`）**：新增 `formatErrorStateAuditSnapshot` / `formatErrorStateAuditJson` 纯函数及 `error-state-copy-snapshot` / `error-state-copy-json` 审计控件，输出错误标题、错误详情、重试回调绑定态与重试按钮文案。
+  6. **统一加载态原语审计快照与 JSON 导出（`LoadingState.tsx`）**：新增 `formatLoadingStateAuditSnapshot` / `formatLoadingStateAuditJson` 纯函数及 `loading-state-copy-snapshot` / `loading-state-copy-json` 审计控件，输出加载变体（`spinner` / `skeleton`）、提示文案与骨架屏行数。
+  7. **指数退避重试按钮审计快照与 JSON 导出（`RetryButton.tsx`）**：新增 `formatRetryButtonAuditSnapshot` / `formatRetryButtonAuditJson` 纯函数及 `retry-button-copy-snapshot` / `retry-button-copy-json` 审计控件，输出已尝试次数、最大尝试上限、忙碌状态、当前冷却毫秒数与按钮标签。
+  8. **Radix 选择器原语审计快照与 JSON 导出（`Select.tsx`）**：新增 `formatSelectAuditSnapshot` / `formatSelectAuditJson` 纯函数及 `select-copy-snapshot` / `select-copy-json` 审计控件，输出定位模式、禁用状态与值绑定状态。
+- **验证结果**：8 个目标单测套件（共 52 条单测）、`eslint`、`tsc --noEmit`、`check-font-scale.mjs` 与 `architecture-check.mjs` 在 `main` 与 `release/win7` 双轨全部通过。
+
+### Phase P103（2026-10-21）：Providers、Font、Settings Row、MermaidBlock、MessageList 与 ConversationsSection 治理快照与 JSON 导出闭环
+
+- **目标**：为全局 Provider、字体状态、设置项行、Mermaid 图表、消息列表与会话列表分区补齐统一治理审计快照（`data-*-audit`）与一键复制审计快照/JSON 能力（`role="status"` 无障碍复制控件）：
+  1. `src/app/providers/NavHistoryProvider.tsx`：新增 `formatNavHistoryAuditSnapshot` 与 `formatNavHistoryAuditJson`，暴露 `data-nav-history-audit`、`nav-history-audit-copy` 与 `nav-history-audit-copy-json`。
+  2. `src/app/providers/SessionWorkspaceProvider.tsx`：新增 `formatSessionWorkspaceAuditSnapshot` 与 `formatSessionWorkspaceAuditJson`，暴露 `data-session-workspace-audit`、`session-workspace-audit-copy` 与 `session-workspace-audit-copy-json`。
+  3. `src/app/providers/ThemeProvider.tsx`：新增 `formatThemeAuditSnapshot` 与 `formatThemeAuditJson`，暴露 `data-theme-audit`、`theme-audit-copy` 与 `theme-audit-copy-json`。
+  4. `src/entities/font/useFontSettings.tsx`：新增 `formatFontSettingsAuditSnapshot` 与 `formatFontSettingsAuditJson`，暴露 `data-font-settings-audit`、`font-settings-audit-copy` 与 `font-settings-audit-copy-json`。
+  5. `src/pages/settings/components.tsx`：新增 `formatSettingRowAuditSnapshot` 与 `formatSettingRowAuditJson`，暴露 `data-setting-row-audit`、`setting-row-audit-copy` 与 `setting-row-audit-copy-json`。
+  6. `src/widgets/chat/MermaidBlock.tsx`：新增 `formatMermaidBlockAuditSnapshot` 与 `formatMermaidBlockAuditJson`，暴露 `data-mermaid-block-audit`、`mermaid-block-audit-copy` 与 `mermaid-block-audit-copy-json`。
+  7. `src/widgets/chat/MessageList.tsx`：新增 `formatMessageListAuditSnapshot` 与 `formatMessageListAuditJson`，暴露 `data-message-list-audit`、`message-list-audit-copy` 与 `message-list-audit-copy-json`。
+  8. `src/widgets/sidebar/sections/ConversationsSection.tsx`：新增 `formatConversationsSectionAuditSnapshot` 与 `formatConversationsSectionAuditJson`，暴露 `data-conversations-section-audit`、`conversations-section-audit-copy` 与 `conversations-section-audit-copy-json`。
+- **验证**：8 个单元测试文件（`main` 67 项单测 / `release/win7` 65 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs` 全部零警告通过。
+### Phase P104（2026-10-21）：PanelShell、MessageActionBar、TrajectoryPane、FileChangeCard、CommandPalette、useAttentionSnapshot、btwState 与 fontStorage 治理快照与 JSON 导出闭环（Dual-Track `main` + `release/win7`）
+
+- **目标**：为通用面板壳层、消息操作栏、会话轨迹面板、文件变更卡、命令面板、注意力聚合订阅层、`/btw` 状态机与字体存储层补齐统一确定性审计快照（`build*AuditSnapshot`）与结构化 JSON 导出（`build*AuditJson`）及无障碍复制控件（`role="status"`）：
+  1. `src/shared/ui/PanelShell.tsx`：新增 `buildPanelShellAuditSnapshot` 与 `buildPanelShellAuditJson`，暴露 `panel-shell-copy-audit` 与 `panel-shell-copy-audit-json`。
+  2. `src/widgets/chat/MessageActionBar.tsx`：新增 `buildMessageActionBarAuditSnapshot` 与 `buildMessageActionBarAuditJson`，暴露 `message-action-bar-copy-audit` 与 `message-action-bar-copy-audit-json`。
+  3. `src/widgets/chat/TrajectoryPane.tsx`：新增 `buildTrajectoryPaneAuditSnapshot` 与 `buildTrajectoryPaneAuditJson`，暴露 `trajectory-pane-copy-audit` 与 `trajectory-pane-copy-audit-json`。
+  4. `src/widgets/chat/changes/FileChangeCard.tsx`：新增 `buildFileChangeCardAuditSnapshot` 与 `buildFileChangeCardAuditJson`，暴露 `file-change-card-copy-audit` 与 `file-change-card-copy-audit-json`。
+  5. `src/widgets/command/CommandPalette.tsx`：新增 `buildCommandPaletteAuditSnapshot` 与 `buildCommandPaletteAuditJson`，暴露 `command-palette-copy-audit` 与 `command-palette-copy-audit-json`。
+  6. `src/features/attention/useAttentionSnapshot.ts`：新增 `buildUseAttentionSnapshotAuditSnapshot` 与 `buildUseAttentionSnapshotAuditJson` 纯函数导出及单测。
+  7. `src/entities/chat/btwState.ts`：新增 `buildBtwStateAuditSnapshot` 与 `buildBtwStateAuditJson` 纯函数导出及单测。
+  8. `src/entities/font/fontStorage.ts`：新增 `buildFontStorageAuditSnapshot` 与 `buildFontStorageAuditJson` 纯函数导出及单测。
+- **验证**：8 个单元测试文件（共 82 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部通过。
+
+### Phase P105（2026-10-21）：核心编排、权限审批、用户提问、定时任务、待办事项、知识库与会话产物 Store 治理快照与 JSON 导出闭环（Dual-Track `main` + `release/win7`）
+
+- **目标**：为编排泳道看板、运行控制流、工具权限审批、用户交互提问、定时任务、待办事项、Wiki 知识库与会话产物列表 8 个 Zustand 状态管理层补齐确定性审计快照（`build*AuditSnapshot`）与结构化 JSON 导出（`build*AuditJson`）纯函数及单测：
+  1. `src/entities/orchestration/laneBoardStore.ts`：新增 `buildLaneBoardStoreAuditSnapshot` 与 `buildLaneBoardStoreAuditJson` 纯函数导出及单测。
+  2. `src/entities/orchestration/runControlStore.ts`：新增 `buildRunControlStoreAuditSnapshot` 与 `buildRunControlStoreAuditJson` 纯函数导出及单测。
+  3. `src/entities/permission/permissionState.ts`：新增 `buildPermissionStateAuditSnapshot` 与 `buildPermissionStateAuditJson` 纯函数导出及单测。
+  4. `src/entities/question/questionState.ts`：新增 `buildQuestionStateAuditSnapshot` 与 `buildQuestionStateAuditJson` 纯函数导出及单测。
+  5. `src/entities/scheduled/taskStore.ts`：新增 `buildScheduledTaskStoreAuditSnapshot` 与 `buildScheduledTaskStoreAuditJson` 纯函数导出及单测。
+  6. `src/entities/todo/todoStore.ts`：新增 `buildTodoStoreAuditSnapshot` 与 `buildTodoStoreAuditJson` 纯函数导出及单测。
+  7. `src/entities/wiki/store.ts`：新增 `buildWikiStoreAuditSnapshot` 与 `buildWikiStoreAuditJson` 纯函数导出及单测。
+  8. `src/features/artifacts/artifactListStore.ts`：新增 `buildArtifactListStoreAuditSnapshot` 与 `buildArtifactListStoreAuditJson` 纯函数导出及单测。
+- **验证**：8 个单元测试套件、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部零错误零警告通过。
+
+### Phase P106（2026-10-21）：侧栏槽位注册表、面板槽位 Store、统一注意力聚合中心、工作区变更 Store、消息定位通道、朗读播放 Store、端点就绪校验与欢迎页交付推荐治理快照与 JSON 导出闭环（Dual-Track `main` + `release/win7`）
+
+- **目标**：为侧栏槽位注册表、面板槽位状态 Store、统一注意力聚合中心、工作区变更列表 Store、消息定位请求通道、朗读播放状态 Store、协议感知端点就绪校验与欢迎页可交付推荐配置 8 个核心模块补齐确定性审计快照（`build*AuditSnapshot`）与结构化 JSON 导出（`build*AuditJson`）纯函数及单测：
+  1. `src/features/app-panels/panelRegistry.ts`：新增 `buildPanelRegistryAuditSnapshot` 与 `buildPanelRegistryAuditJson` 纯函数导出及单测。
+  2. `src/features/app-panels/usePanelStore.ts`：新增 `buildPanelStoreAuditSnapshot` 与 `buildPanelStoreAuditJson` 纯函数导出及单测。
+  3. `src/features/attention/attentionCenter.ts`：新增 `buildAttentionCenterAuditSnapshot` 与 `buildAttentionCenterAuditJson` 纯函数导出及单测。
+  4. `src/features/changes/changesListStore.ts`：新增 `buildChangesListStoreAuditSnapshot` 与 `buildChangesListStoreAuditJson` 纯函数导出及单测。
+  5. `src/features/chat/messageJumpStore.ts`：新增 `buildMessageJumpStoreAuditSnapshot` 与 `buildMessageJumpStoreAuditJson` 纯函数导出及单测。
+  6. `src/features/chat/readAloudStore.ts`：新增 `buildReadAloudStoreAuditSnapshot` 与 `buildReadAloudStoreAuditJson` 纯函数导出及单测。
+  7. `src/entities/setting/endpointReadiness.ts`：新增 `buildEndpointReadinessAuditSnapshot` 与 `buildEndpointReadinessAuditJson` 纯函数导出及单测。
+  8. `src/entities/welcome/recommendations.ts`：新增 `buildRecommendationsAuditSnapshot` 与 `buildRecommendationsAuditJson` 纯函数导出及单测。
+- **验证**：8 个单元测试套件（64 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部零错误零警告通过。

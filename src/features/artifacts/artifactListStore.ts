@@ -50,3 +50,36 @@ export const useArtifactListStore = create<ArtifactListState>((set) => ({
       return { bySession: next };
     }),
 }));
+
+export interface ArtifactListStoreAuditInput {
+  sessionCount?: number;
+  totalArtifacts?: number;
+  activeSessionId?: string | null;
+  activeSessionCount?: number;
+}
+
+export function buildArtifactListStoreAuditSnapshot(
+  input: ArtifactListStoreAuditInput = {},
+): string {
+  const sessionCount = Math.max(0, input.sessionCount ?? 0);
+  const totalArtifacts = Math.max(0, input.totalArtifacts ?? 0);
+  const activeSessionId = (input.activeSessionId ?? '').trim() || 'none';
+  const activeSessionCount = Math.max(0, input.activeSessionCount ?? 0);
+  return `sessions:${sessionCount}|total:${totalArtifacts}|active:${activeSessionId}|activeCount:${activeSessionCount}`;
+}
+
+export function buildArtifactListStoreAuditJson(
+  input: ArtifactListStoreAuditInput = {},
+): string {
+  const sessionCount = Math.max(0, input.sessionCount ?? 0);
+  const totalArtifacts = Math.max(0, input.totalArtifacts ?? 0);
+  const activeSessionId = (input.activeSessionId ?? '').trim() || 'none';
+  const activeSessionCount = Math.max(0, input.activeSessionCount ?? 0);
+  return JSON.stringify({
+    sessionCount,
+    totalArtifacts,
+    activeSessionId,
+    activeSessionCount,
+    snapshot: buildArtifactListStoreAuditSnapshot(input),
+  });
+}

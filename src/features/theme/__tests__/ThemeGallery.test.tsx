@@ -1,7 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ThemeGallery } from '../ThemeGallery';
+import {
+  ThemeGallery,
+  formatThemeGalleryJson,
+  formatThemeGalleryMarkdown,
+} from '../ThemeGallery';
 
 const mockSetPresetId = vi.fn();
 
@@ -83,5 +87,21 @@ describe('ThemeGallery', () => {
     render(<ThemeGallery />);
     const sageBtn = screen.getByText('Sage Green').closest('button');
     expect(sageBtn?.className).not.toContain('border-primary');
+  });
+
+  it('formats and copies theme gallery summary as Markdown and JSON', () => {
+    const md = formatThemeGalleryMarkdown('indigo');
+    expect(md).toContain('# 主题画廊预设清单 (Theme Gallery Summary)');
+    expect(md).toContain('Indigo');
+
+    const parsed = JSON.parse(formatThemeGalleryJson('indigo'));
+    expect(parsed.activePresetId).toBe('indigo');
+    expect(parsed.basicCount).toBe(6);
+
+    render(<ThemeGallery />);
+    fireEvent.click(screen.getByTestId('theme-gallery-copy-md'));
+    expect(screen.getByTestId('theme-gallery-copy-md').textContent).toContain('已复制 MD');
+    fireEvent.click(screen.getByTestId('theme-gallery-copy-json'));
+    expect(screen.getByTestId('theme-gallery-copy-json').textContent).toContain('已复制 JSON');
   });
 });

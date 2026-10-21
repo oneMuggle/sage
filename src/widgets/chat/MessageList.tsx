@@ -20,6 +20,28 @@ const WINDOW_STEP = 60;
 /** 对话阅读导航 A1: 定位命中后的短暂高亮（JUMP_FLASH_MS 后移除） */
 const JUMP_FLASH_CLASS = 'rounded-radius-sm ring-2 ring-primary/50 bg-primary/5 transition-shadow';
 
+export interface MessageListAuditInput {
+  totalCount: number;
+  visibleCount: number;
+  hiddenCount: number;
+  turnCount: number;
+  streaming: boolean;
+}
+
+export function formatMessageListAuditSnapshot(input: MessageListAuditInput): string {
+  return `total=${input.totalCount}|visible=${input.visibleCount}|hidden=${input.hiddenCount}|turns=${input.turnCount}|streaming=${input.streaming ? 1 : 0}`;
+}
+
+export function formatMessageListAuditJson(input: MessageListAuditInput): string {
+  return JSON.stringify({
+    totalCount: input.totalCount,
+    visibleCount: input.visibleCount,
+    hiddenCount: input.hiddenCount,
+    turnCount: input.turnCount,
+    streaming: input.streaming,
+  });
+}
+
 interface MessageListProps {
   messages: MessageType[];
   /** right-panel R1 批次 B: 当前会话 ID —— 拉取产物列表建立
@@ -115,10 +137,79 @@ export function MessageList({
 
   // ZCode 启发: 将连续 assistant/tool 消息分组为 Turn，支持折叠
   const turnItems = useMemo(() => groupMessagesIntoTurns(visible), [visible]);
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const auditInput: MessageListAuditInput = {
+    totalCount: messages.length,
+    visibleCount: visible.length,
+    hiddenCount,
+    turnCount: turnItems.length,
+    streaming: Boolean(streamingMessageId),
+  };
+  const auditSnapshot = formatMessageListAuditSnapshot(auditInput);
+  const auditJson = formatMessageListAuditJson(auditInput);
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(auditSnapshot);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(auditJson);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+  const auditControls = (
+    <span className="sr-only">
+      <span
+        role="status"
+        tabIndex={0}
+        data-testid="message-list-audit-copy"
+        data-message-list-audit={auditSnapshot}
+        aria-label="复制消息列表审计快照"
+        onClick={() => void handleCopySnapshot()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            void handleCopySnapshot();
+          }
+        }}
+      >
+        {copiedSnapshot ? '已复制' : '快照'}
+      </span>
+      <span
+        role="status"
+        tabIndex={0}
+        data-testid="message-list-audit-copy-json"
+        data-message-list-audit-json={auditJson}
+        aria-label="复制消息列表审计 JSON"
+        onClick={() => void handleCopyJson()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            void handleCopyJson();
+          }
+        }}
+      >
+        {copiedJson ? '已复制 JSON' : 'JSON'}
+      </span>
+    </span>
+  );
 
   if (messages.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-muted">
+      <div
+        data-message-list-audit={auditSnapshot}
+        className="flex flex-col items-center justify-center h-full text-muted"
+      >
+        {auditControls}
         <Sparkles className="w-8 h-8 mb-3 text-primary/40" />
         <p className="text-lg mb-1">欢迎使用 Sage</p>
         <p className="text-sm mb-4">开始一段新对话吧</p>
@@ -150,7 +241,8 @@ export function MessageList({
     <>
       {/* 第二轮 B4: 会话内查找栏（Ctrl/Cmd+F），在列表根节点之外，自身文字不参与匹配 */}
       <ChatFindBar messages={messages} />
-      <div ref={rootRef} className="p-4 space-y-4">
+      <div ref={rootRef} data-message-list-audit={auditSnapshot} className="p-4 space-y-4">
+        {auditControls}
         {hiddenCount > 0 && (
           <button
             data-testid="load-earlier"

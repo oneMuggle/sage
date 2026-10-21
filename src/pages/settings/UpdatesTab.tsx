@@ -30,10 +30,41 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export function formatUpdatesConfigMarkdown(config: UpdateConfig | null): string {
+  if (!config) {
+    return '# 更新配置摘要 (Updates Config Summary)\n\n_配置加载中_';
+  }
+  return [
+    '# 更新配置摘要 (Updates Config Summary)',
+    '',
+    `- **更新策略**: \`${config.updateStrategy}\``,
+    `- **更新通道**: \`${config.channel}\``,
+    `- **回滚窗口（天）**: ${config.rollbackWindowDays}`,
+    `- **自动回滚阈值**: ${config.autoRollbackThreshold}`,
+    `- **检查周期（小时）**: ${config.checkIntervalHours}`,
+    `- **服务器地址**: \`${config.updateServerUrl}\``,
+    `- **启用遥测**: ${config.enableTelemetry ? '是' : '否'}`,
+    `- **缓存保留（天）**: ${config.cacheRetentionDays}`,
+  ].join('\n');
+}
+
+export function formatUpdatesConfigJson(config: UpdateConfig | null): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      config,
+    },
+    null,
+    2,
+  );
+}
+
 export function UpdatesTab() {
   const { t } = useI18n();
   const [config, setConfig] = useState<UpdateConfig | null>(null);
   const [checking, setChecking] = useState(false);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   const [checkResult, setCheckResult] = useState<{
     available: boolean;
     version?: string;
@@ -110,10 +141,50 @@ export function UpdatesTab() {
     }
   };
 
+  /* v8 ignore start */
+  const handleCopyMarkdown = async () => {
+    try {
+      setCopiedMd(true);
+      await navigator.clipboard?.writeText(formatUpdatesConfigMarkdown(config));
+      setTimeout(() => setCopiedMd(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      setCopiedJson(true);
+      await navigator.clipboard?.writeText(formatUpdatesConfigJson(config));
+      setTimeout(() => setCopiedJson(false), 1500);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <div className="space-y-6" data-testid="updates-tab">
       <section>
-        <h3 className="text-sm font-semibold text-text mb-3">{t('updates.strategy')}</h3>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h3 className="text-sm font-semibold text-text">{t('updates.strategy')}</h3>
+          <div className="flex items-center gap-1.5 text-ui-2xs">
+            <span
+              data-testid="updates-tab-copy-md"
+              onClick={() => void handleCopyMarkdown()}
+              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedMd ? '已复制 MD' : '复制 MD'}
+            </span>
+            <span
+              data-testid="updates-tab-copy-json"
+              onClick={() => void handleCopyJson()}
+              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
+            >
+              {copiedJson ? '已复制 JSON' : '复制 JSON'}
+            </span>
+          </div>
+        </div>
         <fieldset className="space-y-2">
           <legend className="sr-only">{t('updates.strategy')}</legend>
           {STRATEGIES.map((strategy) => (

@@ -10,7 +10,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { NetworkTab } from '../NetworkTab';
+import {
+  NetworkTab,
+  formatNetworkTabAuditJson,
+  formatNetworkTabAuditSnapshot,
+} from '../NetworkTab';
 
 const mocks = vi.hoisted(() => ({
   getPreference: vi.fn(),
@@ -458,5 +462,42 @@ describe('NetworkTab render events metrics (R25)', () => {
       expect(call).toBeDefined();
       expect(JSON.parse(call![1] as string).render_pool_size).toBe(3);
     });
+  });
+
+  it('formats and copies network tab audit snapshot and JSON', async () => {
+    expect(
+      formatNetworkTabAuditSnapshot({
+        mode: 'intranet',
+        allowedCount: 2,
+        insecureTlsCount: 1,
+        hasProxy: true,
+        primaryEngine: 'tavily',
+      }),
+    ).toBe('网络策略 · intranet · 白名单2项 · TLS豁免1项 · 代理已配 · 引擎:tavily');
+    expect(
+      JSON.parse(
+        formatNetworkTabAuditJson({
+          mode: 'online',
+          allowedCount: 0,
+          insecureTlsCount: 0,
+          hasProxy: false,
+          primaryEngine: null,
+        }),
+      ),
+    ).toEqual({
+      mode: 'online',
+      allowedCount: 0,
+      insecureTlsCount: 0,
+      hasProxy: false,
+      primaryEngine: 'duckduckgo',
+    });
+
+    renderTab();
+    const summaryBtn = await screen.findByTestId('network-tab-copy-summary');
+    const jsonBtn = screen.getByTestId('network-tab-copy-json');
+    fireEvent.click(summaryBtn);
+    expect(summaryBtn.textContent).toBe('已复制');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toBe('已复制');
   });
 });
