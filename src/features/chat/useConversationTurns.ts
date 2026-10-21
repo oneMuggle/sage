@@ -61,3 +61,21 @@ export function useConversationTurns(sessionId: string | null): {
 
   return { items };
 }
+
+export function formatConversationTurnsSummary(items: readonly TurnItem[]): string {
+  if (items.length === 0) return '0 turns';
+  const last = items[items.length - 1];
+  return `${items.length} turns · latest=#${last.index} (${last.messageId})`;
+}
+
+export function formatConversationTurnsJson(items: readonly TurnItem[]): string {
+  return JSON.stringify(
+    {
+      turnCount: items.length,
+      maxPreviewChars: TURN_PREVIEW_MAX_CHARS,
+      items,
+    },
+    null,
+    2,
+  );
+}

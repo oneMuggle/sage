@@ -35,3 +35,22 @@ export function useQuoteDraft(): {
 
   return { quotedDraft, quoteText };
 }
+
+export function formatQuoteDraftInjectionSummary(draft: QuoteDraftInjection | null): string {
+  if (!draft) return 'idle';
+  return `${draft.mode} · ${draft.text.length} chars · nonce=${draft.nonce}`;
+}
+
+export function formatQuoteDraftInjectionJson(draft: QuoteDraftInjection | null): string {
+  return JSON.stringify(
+    {
+      active: draft !== null,
+      mode: draft?.mode ?? null,
+      textLength: draft?.text.length ?? 0,
+      nonce: draft?.nonce ?? null,
+      text: draft?.text ?? null,
+    },
+    null,
+    2,
+  );
+}
