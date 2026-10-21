@@ -4,6 +4,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import { useTaskCenterStore } from '../taskCenterStore';
+import { formatTaskCenterStateJson, formatTaskCenterStateSummary } from '../taskCenterStore';
 
 describe('taskCenterStore', () => {
   beforeEach(() => {
@@ -37,5 +38,15 @@ describe('taskCenterStore', () => {
     s.registerTask('b', 'wiki', 'B');
     useTaskCenterStore.getState().finishTask('a');
     expect(Object.keys(useTaskCenterStore.getState().tasks)).toEqual(['b']);
+  });
+
+  it('formats task center state summary and JSON (Phase P111)', () => {
+    const s = useTaskCenterStore.getState();
+    s.registerTask('t1', 'office', 'PPT');
+    expect(formatTaskCenterStateSummary()).toBe('total=1 · running=1 · delivery=closed');
+    const parsed = JSON.parse(formatTaskCenterStateJson());
+    expect(parsed.totalCount).toBe(1);
+    expect(parsed.runningCount).toBe(1);
+    expect(parsed.taskIds).toEqual(['t1']);
   });
 });

@@ -21,3 +21,18 @@ export function parseCookieHeader(raw: string): CookieImportItem[] {
   }
   return items;
 }
+
+export function formatCookieHeaderSummary(items: CookieImportItem[]): string {
+  return `count=${items.length} · names=[${items.map((i) => i.name).join(',')}]`;
+}
+
+export function formatCookieHeaderJson(items: CookieImportItem[]): string {
+  return JSON.stringify(
+    {
+      count: items.length,
+      names: items.map((i) => i.name),
+    },
+    null,
+    2,
+  );
+}
