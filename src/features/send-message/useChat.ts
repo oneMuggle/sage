@@ -120,21 +120,37 @@ export function useChat() {
     // 2026-10-21 Bug #1: 会话切换回流式内容不可见 — 根因是 streamingMessageId 不在
     // store.messages 时 (后端尚未持久化), 旧 .map() 找不到匹配消息, 流式内容无处渲染.
     // 移植 main 的 3-pass overlay: store 映射 + completedSteps 拼接 + 虚拟消息兜底.
+    //
+    // 2026-10-21 Bug #4 (duplicate-step): loadMessages 落库服务端行后,
+    // completedSteps 里的本地快照会与服务端行 (step_index 相同) 叠加导致重复渲染.
+    // 以 step_index 去重: 服务端行优先, completedSteps 中同 step_index 的条目丢弃.
+    const persistedStepIndexes = new Set<number>(
+      messages
+        .filter((m) => m.step_index != null)
+        .map((m) => m.step_index as number),
+    );
+    const visibleSteps =
+      persistedStepIndexes.size > 0
+        ? completedSteps.filter(
+            (m) => m.step_index == null || !persistedStepIndexes.has(m.step_index),
+          )
+        : completedSteps;
+
     if (!streamingMessageId) {
-      return completedSteps.length > 0 ? [...messages, ...completedSteps] : messages;
+      return visibleSteps.length > 0 ? [...messages, ...visibleSteps] : messages;
     }
     const overlay: Partial<Message> = {
       content: streamingContent,
-      reasoning_content: streamingReasoning || undefined,
+      reasoning_content: streamingReasoning || null,
       tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
     };
     const overlayInStore = messages.some((m) => m.id === streamingMessageId);
-    const overlayInCompleted = completedSteps.some((m) => m.id === streamingMessageId);
+    const overlayInCompleted = visibleSteps.some((m) => m.id === streamingMessageId);
     let next = messages.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m));
-    if (completedSteps.length > 0) {
+    if (visibleSteps.length > 0) {
       next = [
         ...next,
-        ...completedSteps.map((m) =>
+        ...visibleSteps.map((m) =>
           m.id === streamingMessageId ? { ...m, ...overlay } : m,
         ),
       ];
@@ -147,7 +163,7 @@ export function useChat() {
         session_id: currentSessionId ?? '',
         role: 'assistant',
         content: streamingContent,
-        reasoning_content: streamingReasoning || undefined,
+        reasoning_content: streamingReasoning || null,
         tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
         created_at: Date.now(),
       });
@@ -542,7 +558,7 @@ export function useChat() {
                   session_id: sid,
                   role: 'assistant',
                   content: stepContent,
-                  reasoning_content: stepReasoning || undefined,
+                  reasoning_content: stepReasoning || null,
                   tool_calls:
                     toolCallsSnapshot.length > 0 ? toolCallsSnapshot : undefined,
                   created_at: Date.now(),
