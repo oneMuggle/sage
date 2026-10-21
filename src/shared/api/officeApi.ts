@@ -695,3 +695,23 @@ export const officeApi = {
     }
   },
 };
+
+export function formatOfficeWordLintSummary(res: OfficeWordLintResult): string {
+  const status = res.ok ? 'OK' : 'ISSUES';
+  return `${status} · ${res.error_count} errors · ${res.warning_count} warnings · ${res.checked_rules.length} rules`;
+}
+
+export function formatOfficeWordLintJson(res: OfficeWordLintResult): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.office_word_lint.v1',
+      ok: res.ok,
+      issueCount: res.issue_count,
+      errorCount: res.error_count,
+      warningCount: res.warning_count,
+      checkedRules: res.checked_rules,
+    },
+    null,
+    2,
+  );
+}
