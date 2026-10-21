@@ -11,7 +11,13 @@ import {
   normalizeFontSize,
   UI_FONT_OPTIONS,
 } from '../fontOptions';
-import { FONT_STORAGE_KEY, loadFontSettings, saveFontSettings } from '../fontStorage';
+import {
+  buildFontStorageAuditJson,
+  buildFontStorageAuditSnapshot,
+  FONT_STORAGE_KEY,
+  loadFontSettings,
+  saveFontSettings,
+} from '../fontStorage';
 
 const defaults = { fontUi: 'inter', fontCode: 'jetbrains-mono', fontSizeUi: 14, fontSizeCode: 13 };
 const local = { fontUi: 'inter', fontCode: 'consolas', fontSizeUi: 18, fontSizeCode: 16 };
@@ -255,5 +261,34 @@ describe('font storage', () => {
     expect(settingsClient.setPreferenceStrict).toHaveBeenCalledWith('font_code', 'consolas', 'ui');
     expect(settingsClient.setPreferenceStrict).toHaveBeenCalledWith('font_size_ui', '10', 'ui');
     expect(settingsClient.setPreferenceStrict).toHaveBeenCalledWith('font_size_code', '21', 'ui');
+  });
+  it('exports fontStorage audit snapshot and JSON helpers', () => {
+    expect(buildFontStorageAuditSnapshot()).toBe(
+      'ui:inter|code:jetbrains-mono|sizeUi:14|sizeCode:13|pending:no',
+    );
+    expect(
+      buildFontStorageAuditSnapshot({
+        fontUi: 'noto-sans-sc',
+        fontCode: 'consolas',
+        fontSizeUi: 18,
+        fontSizeCode: 16,
+        pending: true,
+      }),
+    ).toBe('ui:noto-sans-sc|code:consolas|sizeUi:18|sizeCode:16|pending:yes');
+
+    const parsed = JSON.parse(
+      buildFontStorageAuditJson({
+        fontUi: 'system',
+        pending: true,
+      }),
+    );
+    expect(parsed).toEqual({
+      fontUi: 'system',
+      fontCode: 'jetbrains-mono',
+      fontSizeUi: 14,
+      fontSizeCode: 13,
+      pending: true,
+      snapshot: 'ui:system|code:jetbrains-mono|sizeUi:14|sizeCode:13|pending:yes',
+    });
   });
 });

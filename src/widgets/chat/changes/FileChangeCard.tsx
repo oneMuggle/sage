@@ -45,6 +45,43 @@ function isPreviewable(filePath: string): boolean {
   return PREVIEWABLE_EXTS.has(filePath.slice(dot + 1).toLowerCase());
 }
 
+export interface FileChangeCardAuditInput {
+  path?: string;
+  expanded?: boolean;
+  diffMode?: 'inline' | 'split';
+  accepted?: boolean;
+  reverting?: boolean;
+  isUntracked?: boolean;
+}
+
+export function buildFileChangeCardAuditSnapshot(input: FileChangeCardAuditInput = {}): string {
+  const path = (input.path ?? '').trim() || 'none';
+  const expanded = Boolean(input.expanded);
+  const diffMode = input.diffMode ?? 'inline';
+  const accepted = Boolean(input.accepted);
+  const reverting = Boolean(input.reverting);
+  const isUntracked = Boolean(input.isUntracked);
+  return `path:${path}|expanded:${expanded ? 'yes' : 'no'}|mode:${diffMode}|accepted:${accepted ? 'yes' : 'no'}|reverting:${reverting ? 'yes' : 'no'}|untracked:${isUntracked ? 'yes' : 'no'}`;
+}
+
+export function buildFileChangeCardAuditJson(input: FileChangeCardAuditInput = {}): string {
+  const path = (input.path ?? '').trim() || 'none';
+  const expanded = Boolean(input.expanded);
+  const diffMode = input.diffMode ?? 'inline';
+  const accepted = Boolean(input.accepted);
+  const reverting = Boolean(input.reverting);
+  const isUntracked = Boolean(input.isUntracked);
+  return JSON.stringify({
+    path,
+    expanded,
+    diffMode,
+    accepted,
+    reverting,
+    isUntracked,
+    snapshot: buildFileChangeCardAuditSnapshot(input),
+  });
+}
+
 export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [diff, setDiff] = useState<string | null>(null);
@@ -57,6 +94,8 @@ export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
   const [reverting, setReverting] = useState(false);
   // Phase 4: 用户已接受此变更（本地标记，卡片折叠并降低视觉权重）
   const [accepted, setAccepted] = useState(false);
+  const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedAuditJson, setCopiedAuditJson] = useState(false);
 
   // +/- 行数来自变更列表缓存（P0-1 numstat 字段）；缓存未热时拉一次
   //（fetch 有 inflight 去重，多张卡片同帧挂载只发一个请求）。
@@ -69,6 +108,32 @@ export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
   // 聊天流里 write_file 新建的文件全是这种 —— 不带这个标记回滚必然失败，
   // 用户只会看到一句内部 flag 报错。口径与 ChangesSection.revertFile 一致。
   const isUntracked = stats?.worktreeStatus === '?';
+  const auditInput: FileChangeCardAuditInput = {
+    path,
+    expanded,
+    diffMode,
+    accepted,
+    reverting,
+    isUntracked,
+  };
+  /* v8 ignore start */
+  const handleCopyAudit = async () => {
+    setCopiedAudit(true);
+    try {
+      await navigator.clipboard?.writeText(buildFileChangeCardAuditSnapshot(auditInput));
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  const handleCopyAuditJson = async () => {
+    setCopiedAuditJson(true);
+    try {
+      await navigator.clipboard?.writeText(buildFileChangeCardAuditJson(auditInput));
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
   useEffect(() => {
     if (!useChangesListStore.getState().bySession[sessionId]) {
       void fetchChanges(sessionId);
@@ -247,6 +312,24 @@ export function FileChangeCard({ sessionId, path }: FileChangeCardProps) {
         >
           <PanelRightOpen className="w-3.5 h-3.5" />
         </button>
+        <span
+          role="status"
+          data-testid="file-change-card-copy-audit"
+          onClick={() => void handleCopyAudit()}
+          className="shrink-0 cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+          title="复制文件变更卡治理快照"
+        >
+          {copiedAudit ? '已复制快照' : '快照'}
+        </span>
+        <span
+          role="status"
+          data-testid="file-change-card-copy-audit-json"
+          onClick={() => void handleCopyAuditJson()}
+          className="shrink-0 cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
+          title="复制文件变更卡治理 JSON"
+        >
+          {copiedAuditJson ? '已复制 JSON' : 'JSON'}
+        </span>
         {isPreviewable(path) && (
           <button
             className="shrink-0 rounded p-1 text-text-secondary hover:bg-bg-hover"

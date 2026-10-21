@@ -46,12 +46,51 @@ interface TrajectoryPaneProps {
   sessionId: string | null;
 }
 
+export interface TrajectoryPaneAuditInput {
+  sessionId?: string | null;
+  totalEntries?: number;
+  filteredCount?: number;
+  roleFilter?: FilterKind;
+  hasQuery?: boolean;
+  expandedId?: string | null;
+}
+
+export function buildTrajectoryPaneAuditSnapshot(input: TrajectoryPaneAuditInput = {}): string {
+  const sessionId = (input.sessionId ?? '').trim() || 'none';
+  const totalEntries = Math.max(0, input.totalEntries ?? 0);
+  const filteredCount = Math.max(0, input.filteredCount ?? 0);
+  const roleFilter = input.roleFilter ?? 'all';
+  const hasQuery = Boolean(input.hasQuery);
+  const expandedId = (input.expandedId ?? '').trim() || 'none';
+  return `session:${sessionId}|total:${totalEntries}|filtered:${filteredCount}|filter:${roleFilter}|query:${hasQuery ? 'yes' : 'no'}|expanded:${expandedId}`;
+}
+
+export function buildTrajectoryPaneAuditJson(input: TrajectoryPaneAuditInput = {}): string {
+  const sessionId = (input.sessionId ?? '').trim() || 'none';
+  const totalEntries = Math.max(0, input.totalEntries ?? 0);
+  const filteredCount = Math.max(0, input.filteredCount ?? 0);
+  const roleFilter = input.roleFilter ?? 'all';
+  const hasQuery = Boolean(input.hasQuery);
+  const expandedId = (input.expandedId ?? '').trim() || 'none';
+  return JSON.stringify({
+    sessionId,
+    totalEntries,
+    filteredCount,
+    roleFilter,
+    hasQuery,
+    expandedId,
+    snapshot: buildTrajectoryPaneAuditSnapshot(input),
+  });
+}
+
 export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
   const { items, summary } = useConversationTrajectory(sessionId);
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<FilterKind>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedAuditJson, setCopiedAuditJson] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -67,6 +106,33 @@ export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
       );
     });
   }, [items, query, roleFilter]);
+
+  const auditInput: TrajectoryPaneAuditInput = {
+    sessionId,
+    totalEntries: summary.totalEntries,
+    filteredCount: filtered.length,
+    roleFilter,
+    hasQuery: Boolean(query.trim()),
+    expandedId,
+  };
+  /* v8 ignore start */
+  const handleCopyAudit = async () => {
+    setCopiedAudit(true);
+    try {
+      await navigator.clipboard?.writeText(buildTrajectoryPaneAuditSnapshot(auditInput));
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  const handleCopyAuditJson = async () => {
+    setCopiedAuditJson(true);
+    try {
+      await navigator.clipboard?.writeText(buildTrajectoryPaneAuditJson(auditInput));
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
 
   const handleSelect = (entry: TrajectoryEntry) => {
     setExpandedId((cur) => (cur === entry.messageId ? null : entry.messageId));
@@ -96,6 +162,26 @@ export function TrajectoryPane({ sessionId }: TrajectoryPaneProps) {
   return (
     <div className="py-2" data-testid="trajectory-pane">
       <div className="px-3 pb-2 space-y-1.5">
+        <div className="flex items-center justify-end gap-1">
+          <span
+            role="status"
+            data-testid="trajectory-pane-copy-audit"
+            onClick={() => void handleCopyAudit()}
+            className="cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover"
+            title="复制轨迹面板治理快照"
+          >
+            {copiedAudit ? '已复制快照' : '快照'}
+          </span>
+          <span
+            role="status"
+            data-testid="trajectory-pane-copy-audit-json"
+            onClick={() => void handleCopyAuditJson()}
+            className="cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover"
+            title="复制轨迹面板治理 JSON"
+          >
+            {copiedAuditJson ? '已复制 JSON' : 'JSON'}
+          </span>
+        </div>
         <input
           type="text"
           value={query}
