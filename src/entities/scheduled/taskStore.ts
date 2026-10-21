@@ -66,3 +66,36 @@ export const useScheduledTaskStore = create<ScheduledTaskState>((set, get) => ({
     return updated;
   },
 }));
+
+export interface ScheduledTaskStoreAuditInput {
+  taskCount?: number;
+  enabledCount?: number;
+  loading?: boolean;
+  hasError?: boolean;
+}
+
+export function buildScheduledTaskStoreAuditSnapshot(
+  input: ScheduledTaskStoreAuditInput = {},
+): string {
+  const taskCount = Math.max(0, input.taskCount ?? 0);
+  const enabledCount = Math.max(0, input.enabledCount ?? 0);
+  const loading = Boolean(input.loading);
+  const hasError = Boolean(input.hasError);
+  return `tasks:${taskCount}|enabled:${enabledCount}|loading:${loading ? 'yes' : 'no'}|err:${hasError ? 'yes' : 'no'}`;
+}
+
+export function buildScheduledTaskStoreAuditJson(
+  input: ScheduledTaskStoreAuditInput = {},
+): string {
+  const taskCount = Math.max(0, input.taskCount ?? 0);
+  const enabledCount = Math.max(0, input.enabledCount ?? 0);
+  const loading = Boolean(input.loading);
+  const hasError = Boolean(input.hasError);
+  return JSON.stringify({
+    taskCount,
+    enabledCount,
+    loading,
+    hasError,
+    snapshot: buildScheduledTaskStoreAuditSnapshot(input),
+  });
+}
