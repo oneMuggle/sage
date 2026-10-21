@@ -1179,7 +1179,12 @@ function createMainWindow(): void {
       logger.error('main: failed to read index.html', { error: (e as Error).message });
     }
     win.loadFile(indexHtml).catch(async (e) => {
-      logger.error('main: loadFile failed', { path: indexHtml, err: e.message });
+      // 错误消息必须内联到 message 字符串里 —— electron-log 的 text formatter
+      // 在 CI 默认丢弃 object payload, 之前只能看到 "main: loadFile failed" 而丢失
+      // 真正的 err.message / err.name. 这里拼接到 message 里确保可见.
+      const errName = (e && (e as Error).name) || 'UnknownError';
+      const errMsg = (e && (e as Error).message) || String(e);
+      logger.error(`main: loadFile failed [${errName}] ${errMsg}`, { path: indexHtml });
       closeSplashWindow();
       await showStartupFailureDialog({
         reason: '加载前端资源失败',
