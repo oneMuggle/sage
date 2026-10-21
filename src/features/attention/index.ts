@@ -9,3 +9,17 @@ export {
   ATTENTION_KINDS,
 } from './attentionCenter';
 export { countDirtyFiles, countPendingTodos, useAttentionSnapshot } from './useAttentionSnapshot';
+import { ATTENTION_KINDS as _ATTENTION_KINDS } from './attentionCenter';
+
+export function formatAttentionBarrelSummary(): string {
+  return `module=features/attention · kinds=${_ATTENTION_KINDS.length} · exports=8`;
+}
+
+export function formatAttentionBarrelJson(): string {
+  return JSON.stringify({
+    module: 'features/attention',
+    kinds: [..._ATTENTION_KINDS],
+    exportCount: 8,
+  });
+}
+

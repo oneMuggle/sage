@@ -612,3 +612,18 @@ export function getSettingsByStorage(storage: SettingMetadata['storage']): Setti
 export function getSettingsByApplyMode(applyMode: SettingMetadata['applyMode']): SettingMetadata[] {
   return Object.values(settingsRegistry).filter((metadata) => metadata.applyMode === applyMode);
 }
+export function formatSettingsRegistrySummary(): string {
+  const total = Object.keys(settingsRegistry).length;
+  const basic = getSettingsByVisibility('basic').length;
+  const advanced = getSettingsByVisibility('advanced').length;
+  return `total=${total} · basic=${basic} · advanced=${advanced}`;
+}
+
+export function formatSettingsRegistryJson(): string {
+  return JSON.stringify({
+    total: Object.keys(settingsRegistry).length,
+    basic: getSettingsByVisibility('basic').length,
+    advanced: getSettingsByVisibility('advanced').length,
+  });
+}
+

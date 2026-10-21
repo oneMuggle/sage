@@ -1739,4 +1739,17 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P130：设置注册表 (`settingsRegistry`)、主题预设 (`theme/presets`)、Attention Barrel (`attention/index`)、自主目标视图 (`CreateGoalModal`/`GoalDetailPage`/`GoalListPage`) 与对话附件/实体菜单 (`AtEntityMenu`/`MediaAttachment`) 审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/entities/setting/settingsRegistry.ts`：新增 `formatSettingsRegistrySummary` 与 `formatSettingsRegistryJson` 及单测 `settingsRegistry.test.ts`，支持一键导出设置元数据注册表总项数、基础可见项与高级可见项审计摘要（`total=<count> · basic=<count> · advanced=<count>`）与 JSON 快照。
+  2. `src/entities/theme/presets.ts`：新增 `formatThemePresetsSummary` 与 `formatThemePresetsJson` 及单测 `presets.audit.test.ts`，支持一键导出内置主题预设数量、默认主题 ID 与预设 ID 清单审计摘要（`count=<n> · defaultId=indigo · ids=<csv>`）与 JSON 快照。
+  3. `src/features/attention/index.ts`：新增 `formatAttentionBarrelSummary` 与 `formatAttentionBarrelJson` 及单测 `index.test.ts`，支持一键导出 Attention 特性 Barrel 注意力分类数与导出符号计数审计摘要（`module=features/attention · kinds=<n> · exports=8`）与 JSON 快照。
+  4. `src/features/autonomous-goals/CreateGoalModal.tsx`：新增 `formatCreateGoalModalSummary` 与 `formatCreateGoalModalJson` 及单测 `CreateGoalModal.test.tsx`，支持一键导出创建自主目标弹窗打开态、最大执行时长与 Token 预算审计摘要（`open=<bool> · maxHours=<n> · maxTokens=<n>`）与 JSON 快照。
+  5. `src/features/autonomous-goals/GoalDetailPage.tsx`：新增 `formatGoalDetailSummary` 与 `formatGoalDetailJson` 及单测 `GoalDetailPage.test.tsx`，支持一键导出自主目标详情页运行状态、本地化标签与检查点计数审计摘要（`status=<status|none> · label=<label|none> · checkpoints=<n>`）与 JSON 快照。
+  6. `src/features/autonomous-goals/GoalListPage.tsx`：新增 `formatGoalListFilterSummary` 与 `formatGoalListFilterJson` 及单测 `GoalListPage.test.tsx`，支持一键导出自主目标列表筛选器状态、当前目标计数与筛选项数量审计摘要（`filter=<status|all> · goals=<n> · options=7`）与 JSON 快照。
+  7. `src/features/chat/AtEntityMenu.tsx`：新增 `formatAtEntityMenuSummary` 与 `formatAtEntityMenuJson` 及单测 `AtEntityMenu.test.tsx`，支持一键导出 `@` 实体菜单查询词、匹配项计数与支持实体类型审计摘要（`query=<query|empty> · matches=<n> · kinds=memory,wiki,skill,agent`）与 JSON 快照。
+  8. `src/features/chat/MediaAttachment.tsx`：新增 `formatMediaAttachmentSummary` 与 `formatMediaAttachmentJson` 及单测 `MediaAttachment.test.tsx`，支持一键导出对话媒体附件 MIME 类型、渲染类别与说明文字配置审计摘要（`mimeType=<mime> · category=<image|audio|file> · caption=<bool>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
 
