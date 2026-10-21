@@ -199,3 +199,49 @@ export function isExclusiveConflict(aId: string, bId: string): boolean {
   if (!a || !b) return false;
   return a.slot === b.slot && PANEL_SLOTS[a.slot].exclusive;
 }
+
+export interface PanelRegistryAuditSnapshot {
+  slotCount: number;
+  exclusiveSlotCount: number;
+  maximizableSlotCount: number;
+  panelCount: number;
+  batchCountMap: Record<PanelMigrationBatch, number>;
+  slotIds: PanelSlot[];
+  panelIds: string[];
+  signature: string;
+}
+
+export function buildPanelRegistryAuditSnapshot(
+  definitions: readonly PanelDefinition[] = PANEL_DEFINITIONS,
+): PanelRegistryAuditSnapshot {
+  const safeDefs: readonly PanelDefinition[] = Array.isArray(definitions) ? definitions : PANEL_DEFINITIONS;
+  const slotIds = [...PANEL_SLOT_IDS];
+  const slotCount = slotIds.length;
+  const exclusiveSlotCount = slotIds.filter((s) => PANEL_SLOTS[s].exclusive).length;
+  const maximizableSlotCount = slotIds.filter((s) => PANEL_SLOTS[s].maximizable).length;
+  const batchCountMap: Record<PanelMigrationBatch, number> = { A: 0, B: 0, C: 0, D: 0 };
+  for (const def of safeDefs) {
+    if (def.migrationBatch in batchCountMap) {
+      batchCountMap[def.migrationBatch] += 1;
+    }
+  }
+  const panelIds = safeDefs.map((d) => d.id);
+  const panelCount = panelIds.length;
+  const signature = `${slotCount}|${exclusiveSlotCount}|${maximizableSlotCount}|${panelCount}|${batchCountMap.A},${batchCountMap.B},${batchCountMap.C},${batchCountMap.D}`;
+  return {
+    slotCount,
+    exclusiveSlotCount,
+    maximizableSlotCount,
+    panelCount,
+    batchCountMap,
+    slotIds,
+    panelIds,
+    signature,
+  };
+}
+
+export function buildPanelRegistryAuditJson(
+  definitions: readonly PanelDefinition[] = PANEL_DEFINITIONS,
+): string {
+  return JSON.stringify(buildPanelRegistryAuditSnapshot(definitions), null, 2);
+}

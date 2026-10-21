@@ -1412,3 +1412,16 @@
   7. `src/entities/wiki/store.ts`：新增 `buildWikiStoreAuditSnapshot` 与 `buildWikiStoreAuditJson` 纯函数导出及单测。
   8. `src/features/artifacts/artifactListStore.ts`：新增 `buildArtifactListStoreAuditSnapshot` 与 `buildArtifactListStoreAuditJson` 纯函数导出及单测。
 - **验证**：8 个单元测试套件、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部零错误零警告通过。
+
+### Phase P106（2026-10-21）：侧栏槽位注册表、面板槽位 Store、统一注意力聚合中心、工作区变更 Store、消息定位通道、朗读播放 Store、端点就绪校验与欢迎页交付推荐治理快照与 JSON 导出闭环（Dual-Track `main` + `release/win7`）
+
+- **目标**：为侧栏槽位注册表、面板槽位状态 Store、统一注意力聚合中心、工作区变更列表 Store、消息定位请求通道、朗读播放状态 Store、协议感知端点就绪校验与欢迎页可交付推荐配置 8 个核心模块补齐确定性审计快照（`build*AuditSnapshot`）与结构化 JSON 导出（`build*AuditJson`）纯函数及单测：
+  1. `src/features/app-panels/panelRegistry.ts`：新增 `buildPanelRegistryAuditSnapshot` 与 `buildPanelRegistryAuditJson` 纯函数导出及单测。
+  2. `src/features/app-panels/usePanelStore.ts`：新增 `buildPanelStoreAuditSnapshot` 与 `buildPanelStoreAuditJson` 纯函数导出及单测。
+  3. `src/features/attention/attentionCenter.ts`：新增 `buildAttentionCenterAuditSnapshot` 与 `buildAttentionCenterAuditJson` 纯函数导出及单测。
+  4. `src/features/changes/changesListStore.ts`：新增 `buildChangesListStoreAuditSnapshot` 与 `buildChangesListStoreAuditJson` 纯函数导出及单测。
+  5. `src/features/chat/messageJumpStore.ts`：新增 `buildMessageJumpStoreAuditSnapshot` 与 `buildMessageJumpStoreAuditJson` 纯函数导出及单测。
+  6. `src/features/chat/readAloudStore.ts`：新增 `buildReadAloudStoreAuditSnapshot` 与 `buildReadAloudStoreAuditJson` 纯函数导出及单测。
+  7. `src/entities/setting/endpointReadiness.ts`：新增 `buildEndpointReadinessAuditSnapshot` 与 `buildEndpointReadinessAuditJson` 纯函数导出及单测。
+  8. `src/entities/welcome/recommendations.ts`：新增 `buildRecommendationsAuditSnapshot` 与 `buildRecommendationsAuditJson` 纯函数导出及单测。
+- **验证**：8 个单元测试套件（64 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部零错误零警告通过。
