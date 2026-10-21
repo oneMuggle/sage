@@ -1337,3 +1337,16 @@
 - **验证结果**：
   - 单元测试：`EndpointsTab.test.tsx`、`GeneralTab.test.tsx`、`McpTab.test.tsx`、`MemoryTab.test.tsx`、`NetworkTab.test.tsx`、`PromptTemplatesTab.test.tsx`、`OfficeGenerateForm.test.tsx`、`OfficePreviewPanel.test.tsx`（`main` 8 个测试套件 109 项单测全部通过；`release/win7` 8 个测试套件 99 项单测全部通过）。
   - 门禁检查：`npx eslint` 0 error、`npx tsc --noEmit` 0 error、`check-font-scale.mjs` 通过、`architecture-check.mjs` 通过。
+
+### Phase P100 — 治理页面、主题/诊断组件与欢迎/侧栏分区审计快照与 JSON 导出（已完成）
+- **目标**：为 `ExportButton.tsx`、`ProjectTypeBadge.tsx`、`CodeMirrorThemeEditor.tsx`、`ThemeCover.tsx`、`ProjectGovernance.tsx`、`ArenaAccountsToggle.tsx`、`WelcomeHero.tsx` 与 `SiderSection.tsx` 补齐纯函数审计快照与 JSON 导出（`format*AuditSnapshot` / `format*AuditJson`）及无障碍复制控件。
+- **交付范围**：
+  - `src/features/diagnostic/ExportButton.tsx`：`formatExportButtonAuditSnapshot` / `formatExportButtonAuditJson` + `export-button-copy-snapshot` / `export-button-copy-json`
+  - `src/features/project-type/ProjectTypeBadge.tsx`：`formatProjectTypeBadgeAuditSnapshot` / `formatProjectTypeBadgeAuditJson` + `project-type-badge-copy-snapshot` / `project-type-badge-copy-json`
+  - `src/features/theme/CodeMirrorThemeEditor.tsx`：`formatCodeMirrorThemeEditorAuditSnapshot` / `formatCodeMirrorThemeEditorAuditJson` + `cm-theme-editor-copy-snapshot` / `cm-theme-editor-copy-json`
+  - `src/features/theme/ThemeCover.tsx`：`formatThemeCoverAuditSnapshot` / `formatThemeCoverAuditJson` + `theme-cover-copy-snapshot` / `theme-cover-copy-json`
+  - `src/pages/ProjectGovernance.tsx`：`formatProjectGovernanceAuditSnapshot` / `formatProjectGovernanceAuditJson` + `project-governance-copy-snapshot` / `project-governance-copy-json`
+  - `src/pages/settings/ArenaAccountsToggle.tsx`：`formatArenaAccountsToggleAuditSnapshot` / `formatArenaAccountsToggleAuditJson` + `arena-accounts-toggle-copy-snapshot` / `arena-accounts-toggle-copy-json`
+  - `src/widgets/welcome/WelcomeHero.tsx`：`formatWelcomeHeroAuditSnapshot` / `formatWelcomeHeroAuditJson` + `welcome-hero-copy-snapshot` / `welcome-hero-copy-json`
+  - `src/widgets/sidebar/SiderSection.tsx`：`formatSiderSectionAuditSnapshot` / `formatSiderSectionAuditJson` + `sider-section-copy-snapshot` / `sider-section-copy-json`
+  - 单元测试：`ExportButton.test.tsx`、`ProjectTypeBadge.test.tsx`、`CodeMirrorThemeEditor.test.tsx`、`ThemeCover.test.tsx`、`ProjectGovernance.test.tsx`、`ArenaAccountsToggle.test.tsx`、`WelcomeHero.test.tsx`、`SiderSection.test.tsx`

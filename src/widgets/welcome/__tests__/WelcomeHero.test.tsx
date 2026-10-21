@@ -1,7 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { WelcomeHero } from '../WelcomeHero';
+import {
+  WelcomeHero,
+  formatWelcomeHeroAuditJson,
+  formatWelcomeHeroAuditSnapshot,
+} from '../WelcomeHero';
 
 // Mock useI18n
 vi.mock('../../../shared/lib/i18n', () => ({
@@ -54,5 +58,26 @@ describe('WelcomeHero', () => {
     const backButton = screen.getByRole('button', { name: /back/i });
     backButton.click();
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P100)', () => {
+    expect(
+      formatWelcomeHeroAuditSnapshot({ hasBack: true, greeting: 'Hello Sage' }),
+    ).toBe('welcomeHero|back=1|greeting=Hello Sage');
+    expect(formatWelcomeHeroAuditSnapshot({})).toBe('welcomeHero|back=0|greeting=none');
+    expect(
+      JSON.parse(formatWelcomeHeroAuditJson({ hasBack: false, greeting: 'Hi' })),
+    ).toEqual({
+      hasBack: false,
+      greeting: 'Hi',
+    });
+
+    render(<WelcomeHero />);
+    const snapBtn = screen.getByTestId('welcome-hero-copy-snapshot');
+    const jsonBtn = screen.getByTestId('welcome-hero-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

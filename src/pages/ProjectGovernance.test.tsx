@@ -80,7 +80,11 @@ vi.mock('../features/project-type/archetypeBlueprints', () => ({
 
 /* ── Import SUT after mocks ──────────────────────────────────────── */
 
-import { ProjectGovernance } from './ProjectGovernance';
+import {
+  ProjectGovernance,
+  formatProjectGovernanceAuditJson,
+  formatProjectGovernanceAuditSnapshot,
+} from './ProjectGovernance';
 
 /* ── Fixtures ─────────────────────────────────────────────────────── */
 
@@ -232,5 +236,56 @@ describe('ProjectGovernance', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('project-governance-page')).not.toBeInTheDocument();
     });
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P100)', async () => {
+    expect(
+      formatProjectGovernanceAuditSnapshot({
+        projectId: 'proj-1',
+        projectType: 'coding',
+        activeTab: 'rules',
+        milestonesCount: 3,
+        profileCount: 2,
+        allowedPathsCount: 1,
+        scaffolding: false,
+      }),
+    ).toBe(
+      'projectGovernance|id=proj-1|type=coding|tab=rules|milestones=3|profile=2|paths=1|scaffolding=0',
+    );
+    expect(formatProjectGovernanceAuditSnapshot({})).toBe(
+      'projectGovernance|id=none|type=business|tab=overview|milestones=0|profile=0|paths=0|scaffolding=0',
+    );
+    expect(
+      JSON.parse(
+        formatProjectGovernanceAuditJson({
+          projectId: 'proj-1',
+          projectType: 'coding',
+          activeTab: 'overview',
+          milestonesCount: 1,
+          profileCount: 4,
+          allowedPathsCount: 2,
+          scaffolding: true,
+        }),
+      ),
+    ).toEqual({
+      projectId: 'proj-1',
+      projectType: 'coding',
+      activeTab: 'overview',
+      milestonesCount: 1,
+      profileCount: 4,
+      allowedPathsCount: 2,
+      scaffolding: true,
+    });
+
+    renderAt('proj-1');
+    await waitFor(() => {
+      expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
+    });
+    const snapBtn = screen.getByTestId('project-governance-copy-snapshot');
+    const jsonBtn = screen.getByTestId('project-governance-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });
