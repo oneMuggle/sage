@@ -17,7 +17,11 @@ vi.mock('../../../shared/api/desktopInvoke', () => ({
 
 import { invoke } from '../../../shared/api/desktopInvoke';
 import type { FreshnessSummaryInfo, Lane } from '../../../shared/api/types';
-import { useLaneBoardStore } from '../laneBoardStore';
+import {
+  buildLaneBoardStoreAuditJson,
+  buildLaneBoardStoreAuditSnapshot,
+  useLaneBoardStore,
+} from '../laneBoardStore';
 
 const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>;
 
@@ -176,5 +180,37 @@ describe('laneBoardStore.decide() (A4)', () => {
     expect(useLaneBoardStore.getState().error).toBe('conflict');
     expect(useLaneBoardStore.getState().lanes).toEqual([lane]);
   });
-});
 
+  it('exports laneBoardStore audit snapshot and JSON helpers', () => {
+    expect(buildLaneBoardStoreAuditSnapshot()).toBe(
+      'lanes:0|running:0|blocked:0|loading:no|err:no|freshness:none',
+    );
+    expect(
+      buildLaneBoardStoreAuditSnapshot({
+        laneCount: 4,
+        runningCount: 2,
+        blockedCount: 1,
+        loading: true,
+        hasError: true,
+        overallLevel: 'stale',
+      }),
+    ).toBe('lanes:4|running:2|blocked:1|loading:yes|err:yes|freshness:stale');
+
+    const parsed = JSON.parse(
+      buildLaneBoardStoreAuditJson({
+        laneCount: 2,
+        runningCount: 1,
+        overallLevel: 'fresh',
+      }),
+    );
+    expect(parsed).toEqual({
+      laneCount: 2,
+      runningCount: 1,
+      blockedCount: 0,
+      loading: false,
+      hasError: false,
+      overallLevel: 'fresh',
+      snapshot: 'lanes:2|running:1|blocked:0|loading:no|err:no|freshness:fresh',
+    });
+  });
+});

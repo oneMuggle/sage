@@ -1399,3 +1399,16 @@
   7. `src/entities/chat/btwState.ts`：新增 `buildBtwStateAuditSnapshot` 与 `buildBtwStateAuditJson` 纯函数导出及单测。
   8. `src/entities/font/fontStorage.ts`：新增 `buildFontStorageAuditSnapshot` 与 `buildFontStorageAuditJson` 纯函数导出及单测。
 - **验证**：8 个单元测试文件（共 82 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部通过。
+
+### Phase P105（2026-10-21）：核心编排、权限审批、用户提问、定时任务、待办事项、知识库与会话产物 Store 治理快照与 JSON 导出闭环（Dual-Track `main` + `release/win7`）
+
+- **目标**：为编排泳道看板、运行控制流、工具权限审批、用户交互提问、定时任务、待办事项、Wiki 知识库与会话产物列表 8 个 Zustand 状态管理层补齐确定性审计快照（`build*AuditSnapshot`）与结构化 JSON 导出（`build*AuditJson`）纯函数及单测：
+  1. `src/entities/orchestration/laneBoardStore.ts`：新增 `buildLaneBoardStoreAuditSnapshot` 与 `buildLaneBoardStoreAuditJson` 纯函数导出及单测。
+  2. `src/entities/orchestration/runControlStore.ts`：新增 `buildRunControlStoreAuditSnapshot` 与 `buildRunControlStoreAuditJson` 纯函数导出及单测。
+  3. `src/entities/permission/permissionState.ts`：新增 `buildPermissionStateAuditSnapshot` 与 `buildPermissionStateAuditJson` 纯函数导出及单测。
+  4. `src/entities/question/questionState.ts`：新增 `buildQuestionStateAuditSnapshot` 与 `buildQuestionStateAuditJson` 纯函数导出及单测。
+  5. `src/entities/scheduled/taskStore.ts`：新增 `buildScheduledTaskStoreAuditSnapshot` 与 `buildScheduledTaskStoreAuditJson` 纯函数导出及单测。
+  6. `src/entities/todo/todoStore.ts`：新增 `buildTodoStoreAuditSnapshot` 与 `buildTodoStoreAuditJson` 纯函数导出及单测。
+  7. `src/entities/wiki/store.ts`：新增 `buildWikiStoreAuditSnapshot` 与 `buildWikiStoreAuditJson` 纯函数导出及单测。
+  8. `src/features/artifacts/artifactListStore.ts`：新增 `buildArtifactListStoreAuditSnapshot` 与 `buildArtifactListStoreAuditJson` 纯函数导出及单测。
+- **验证**：8 个单元测试套件、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部零错误零警告通过。

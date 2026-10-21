@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { RunEvent, RunSnapshot } from '../../../shared/api/orchEvents';
-import { useRunControlStore } from '../runControlStore';
+import {
+  buildRunControlStoreAuditJson,
+  buildRunControlStoreAuditSnapshot,
+  useRunControlStore,
+} from '../runControlStore';
 
 function event(overrides: Partial<RunEvent> = {}): RunEvent {
   return {
@@ -122,5 +126,38 @@ describe('runControlStore — selectTask meta (RD19)', () => {
     store.selectTask(null, null);
     s = useRunControlStore.getState();
     expect(s.selectedTaskMeta).toBeNull();
+  });
+
+  it('exports runControlStore audit snapshot and JSON helpers', () => {
+    expect(buildRunControlStoreAuditSnapshot()).toBe(
+      'runs:0|resync:0|conn:disconnected|run:none|task:none|errs:0',
+    );
+    expect(
+      buildRunControlStoreAuditSnapshot({
+        runCount: 3,
+        resyncCount: 1,
+        connectionStatus: 'connected',
+        selectedRunId: 'run-1',
+        selectedTaskId: 'task-2',
+        errorCount: 2,
+      }),
+    ).toBe('runs:3|resync:1|conn:connected|run:run-1|task:task-2|errs:2');
+
+    const parsed = JSON.parse(
+      buildRunControlStoreAuditJson({
+        runCount: 1,
+        connectionStatus: 'connecting',
+        selectedRunId: 'run-9',
+      }),
+    );
+    expect(parsed).toEqual({
+      runCount: 1,
+      resyncCount: 0,
+      connectionStatus: 'connecting',
+      selectedRunId: 'run-9',
+      selectedTaskId: 'none',
+      errorCount: 0,
+      snapshot: 'runs:1|resync:0|conn:connecting|run:run-9|task:none|errs:0',
+    });
   });
 });
