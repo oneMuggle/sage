@@ -32,3 +32,35 @@ export function renderInlineMarks(text: string): ReactNode[] {
   }
   return nodes;
 }
+
+export function formatInlineMarksSummary(text: string): string {
+  const safe = text ?? '';
+  let boldCount = 0;
+  let italicCount = 0;
+  MARK_RE.lastIndex = 0;
+  for (let m = MARK_RE.exec(safe); m !== null; m = MARK_RE.exec(safe)) {
+    if (m[1] !== undefined) boldCount += 1;
+    else if (m[2] !== undefined) italicCount += 1;
+  }
+  const nodes = renderInlineMarks(safe);
+  return `bold=${boldCount} · italic=${italicCount} · segments=${nodes.length}`;
+}
+
+export function formatInlineMarksJson(text: string): string {
+  const safe = text ?? '';
+  let boldCount = 0;
+  let italicCount = 0;
+  MARK_RE.lastIndex = 0;
+  for (let m = MARK_RE.exec(safe); m !== null; m = MARK_RE.exec(safe)) {
+    if (m[1] !== undefined) boldCount += 1;
+    else if (m[2] !== undefined) italicCount += 1;
+  }
+  const nodes = renderInlineMarks(safe);
+  return JSON.stringify({
+    textLength: safe.length,
+    boldCount,
+    italicCount,
+    segmentCount: nodes.length,
+  });
+}
+
