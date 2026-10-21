@@ -6,6 +6,8 @@ import {
   computeQuoteButtonPosition,
   formatQuoteBlock,
   getQuotableSelection,
+  buildSelectionQuoteAuditJson,
+  buildSelectionQuoteAuditSnapshot,
   normalizeSelectedText,
 } from '../selectionQuote';
 
@@ -113,5 +115,32 @@ describe('computeQuoteButtonPosition', () => {
     expect(computeQuoteButtonPosition({ top: 10, bottom: 30, left: 980, width: 40 }, 1000)).toEqual(
       { top: 38, left: 952 },
     );
+  });
+});
+
+describe('selectionQuote governance audit helpers (Phase P107)', () => {
+  it('builds deterministic audit snapshot and JSON for blank and multi-line selections', () => {
+    const emptySnap = buildSelectionQuoteAuditSnapshot('   ');
+    expect(emptySnap).toEqual({
+      rawLength: 3,
+      normalizedLength: 0,
+      lineCount: 0,
+      quoteBlockLength: 0,
+      isQuotable: false,
+      scopeAttr: 'data-quote-scope',
+      signature: '3|0|0|0|0|data-quote-scope',
+    });
+
+    const snap = buildSelectionQuoteAuditSnapshot('第一行\n\n第三行');
+    expect(snap).toEqual({
+      rawLength: 8,
+      normalizedLength: 8,
+      lineCount: 3,
+      quoteBlockLength: 13,
+      isQuotable: true,
+      scopeAttr: 'data-quote-scope',
+      signature: '8|8|3|13|1|data-quote-scope',
+    });
+    expect(JSON.parse(buildSelectionQuoteAuditJson('第一行\n\n第三行'))).toEqual(snap);
   });
 });
