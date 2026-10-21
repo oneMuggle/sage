@@ -2,7 +2,7 @@
 // U19: 前端 hunk 切分与后端 workspace_revert.split_hunks 同构性测试。
 import { describe, it, expect } from 'vitest';
 
-import { splitDiffHunks } from '../diffHunks';
+import { formatDiffHunksJson, formatDiffHunksSummary, splitDiffHunks } from '../diffHunks';
 
 const TWO_HUNK_DIFF = [
   'diff --git a/app.py b/app.py',
@@ -60,5 +60,21 @@ describe('splitDiffHunks', () => {
     expect(hunks).toHaveLength(1);
     expect(hunks[0].summary).toBe('@@ -1,1 +1,1 @@');
     expect(hunks[0].body).toBe('@@ -1,1 +1,1 @@\n-a\n+b\n');
+  });
+});
+
+describe('formatDiffHunksSummary / formatDiffHunksJson', () => {
+  it('formats diff hunks summary and JSON payload', () => {
+    expect(formatDiffHunksSummary([])).toBe('hunks: 0 · 0 body lines');
+    const hunks = splitDiffHunks(TWO_HUNK_DIFF);
+    expect(formatDiffHunksSummary(hunks)).toBe(
+      'hunks: 2 · 11 body lines · first=@@ -1,4 +1,5 @@',
+    );
+    const payload = JSON.parse(formatDiffHunksJson(hunks));
+    expect(payload).toEqual({
+      hunkCount: 2,
+      totalBodyLines: 11,
+      summaries: ['@@ -1,4 +1,5 @@', '@@ -10,4 +11,5 @@'],
+    });
   });
 });

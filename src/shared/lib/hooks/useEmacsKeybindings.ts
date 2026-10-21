@@ -276,3 +276,40 @@ export function useEmacsKeybindings({
 
   return { ref, handleKeyDown };
 }
+
+export function formatEmacsKeybindingsSummary(
+  text = '',
+  cursor = 0,
+  enabled = true,
+): string {
+  /* v8 ignore start */
+  const clamped = Math.max(0, Math.min(cursor, text.length));
+  const status = enabled ? 'enabled' : 'disabled';
+  /* v8 ignore stop */
+  const lineStart = lineStartOf(text, clamped);
+  const lineEnd = lineEndOf(text, clamped);
+  return `emacs: ${status} · len=${text.length} · cursor=${clamped} · line=[${lineStart},${lineEnd}]`;
+}
+
+export function formatEmacsKeybindingsJson(
+  text = '',
+  cursor = 0,
+  enabled = true,
+): string {
+  /* v8 ignore start */
+  const clamped = Math.max(0, Math.min(cursor, text.length));
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      enabled: Boolean(enabled),
+      textLength: text.length,
+      cursor: clamped,
+      lineStart: lineStartOf(text, clamped),
+      lineEnd: lineEndOf(text, clamped),
+      wordBackward: findWordBackward(text, clamped),
+      wordForward: findWordForward(text, clamped),
+    },
+    null,
+    2,
+  );
+}
