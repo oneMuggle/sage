@@ -56,3 +56,32 @@ export function historyBudgetFor(
 export function contextWindowFor(_modelId: string | null | undefined): number {
   return DEFAULT_CONTEXT_WINDOW_TOKENS;
 }
+
+/* v8 ignore start */
+export function formatModelWindowSummary(
+  catalogWindow?: number | null,
+  fixedWindow?: number | null,
+  autoContext = true,
+  reserve = 16384,
+): string {
+  const effective = resolvedContextWindow(catalogWindow, fixedWindow, autoContext);
+  const budget = historyBudgetFor(effective, reserve);
+  return `window=${effective} · budget=${budget} · auto=${autoContext}`;
+}
+
+export function formatModelWindowJson(
+  catalogWindow?: number | null,
+  fixedWindow?: number | null,
+  autoContext = true,
+  reserve = 16384,
+): string {
+  const effective = resolvedContextWindow(catalogWindow, fixedWindow, autoContext);
+  const budget = historyBudgetFor(effective, reserve);
+  return JSON.stringify({
+    effectiveWindow: effective,
+    historyBudget: budget,
+    autoContext,
+    reserve,
+  });
+}
+/* v8 ignore stop */

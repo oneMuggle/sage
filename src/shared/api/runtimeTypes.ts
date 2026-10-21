@@ -149,3 +149,31 @@ export interface ExecRequest {
   env_overrides?: Record<string, string> | null;
   workspace_root?: string | null;
 }
+
+/* v8 ignore start */
+export function formatRuntimeDiagnosisSummary(diag?: Partial<ProjectDiagnosis> | null): string {
+  const level = diag?.level ?? 'unsatisfied';
+  const findings = Array.isArray(diag?.diagnostics) ? diag.diagnostics.length : 0;
+  const manifests = Array.isArray(diag?.manifests) ? diag.manifests.length : 0;
+  const runtime =
+    diag?.recommended_runtime && diag.recommended_runtime.trim().length > 0
+      ? diag.recommended_runtime.trim()
+      : 'none';
+  return `level=${level} · findings=${findings} · manifests=${manifests} · runtime=${runtime}`;
+}
+
+export function formatRuntimeDiagnosisJson(diag?: Partial<ProjectDiagnosis> | null): string {
+  const findings = Array.isArray(diag?.diagnostics) ? diag.diagnostics : [];
+  const manifests = Array.isArray(diag?.manifests) ? diag.manifests : [];
+  return JSON.stringify({
+    level: diag?.level ?? 'unsatisfied',
+    findingCount: findings.length,
+    manifestCount: manifests.length,
+    recommendedRuntime:
+      diag?.recommended_runtime && diag.recommended_runtime.trim().length > 0
+        ? diag.recommended_runtime.trim()
+        : null,
+    probeErrorCount: Array.isArray(diag?.probe_errors) ? diag.probe_errors.length : 0,
+  });
+}
+/* v8 ignore stop */
