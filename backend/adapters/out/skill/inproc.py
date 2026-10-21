@@ -494,6 +494,11 @@ class InprocSkillAdapter:
         v1 body fallback 路径)。返回的 ``content`` 是 SKILL.md body,
         供聊天层注入 system prompt 模板。
 
+        当 args 首个元素形如 ``script=<path>`` 时，解析为脚本分发，
+        **走 ``self.execute``（而非 slash_registry）以确保权限闸口
+        （``_enforce_permission``）生效** —— 与 REST ``POST /skills/{name}/execute``
+        同一权限模型，防止 slash 路径绕过权限检查。
+
         Args:
             command: slash command 名 (带或不带 ``/``)
             args: 命令参数列表 (透传给 execute_v2 params)
@@ -506,6 +511,21 @@ class InprocSkillAdapter:
         """
         if self._command_unavailable(command):
             raise LookupError(f"slash command unavailable: {command!r}")
+
+        # T-2: 检测 args 中的 script=<path> 前缀 → 走权限闸口分发
+        script_path, rest_args = self._extract_script_from_args(args)
+        if script_path is not None:
+            # 解析 slash command 对应的技能名
+            resolved = self._slash_registry.resolve(command)
+            if resolved is None:
+                raise LookupError(f"slash command unknown: {command!r}")
+            # 必须走 self.execute（不是 slash_registry）以触发 _enforce_permission
+            return await self.execute(
+                resolved.name,
+                "",
+                {"script": script_path, "args": rest_args},
+            )
+
         result = await self._slash_registry.execute_command(
             command_name=command,
             args=tuple(args),
@@ -523,6 +543,29 @@ class InprocSkillAdapter:
             metadata=dict(result.metadata),
             error=result.error,
         )
+
+    @staticmethod
+    def _extract_script_from_args(
+        args: Union[List[str], Tuple[str, ...]],
+    ) -> Tuple[Optional[str], List[str]]:
+        """从 args 首个元素提取 ``script=<path>`` 前缀。
+
+        Returns:
+            (script_path, remaining_args): script_path 为 None 表示无 script 前缀。
+
+        Examples:
+            ``["script=scripts/scan.py", "arg1"]`` → ``("scripts/scan.py", ["arg1"])``
+            ``["arg1", "arg2"]`` → ``(None, ["arg1", "arg2"])``
+            ``[]`` → ``(None, [])``
+        """
+        if not args:
+            return None, list(args)
+        first = args[0]
+        if isinstance(first, str) and first.startswith("script="):
+            script_path = first[len("script=") :]
+            if script_path:  # 拒绝空路径 "script="
+                return script_path, list(args[1:])
+        return None, list(args)
 
     def list_slash_commands(self) -> List[str]:
         """列出所有已注册的 slash command (M10)，排除已归档技能。
