@@ -80,3 +80,23 @@ describe('settingsClient', () => {
     });
   });
 });
+
+describe('settingsClient diagnostic formatters (Phase P113)', () => {
+  it('formats preference snapshot summary and JSON payload', async () => {
+    const { formatPreferenceSnapshotSummary, formatPreferenceSnapshotJson } = await import(
+      '../settingsClient'
+    );
+    expect(formatPreferenceSnapshotSummary('theme_mode', 'dark')).toBe('ui:theme_mode · dark');
+    expect(formatPreferenceSnapshotSummary('context_turn_limit', null, 'chat')).toBe(
+      'chat:context_turn_limit · unset',
+    );
+    const parsed = JSON.parse(formatPreferenceSnapshotJson('theme_mode', 'dark'));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.preference_snapshot.v1',
+      key: 'theme_mode',
+      category: 'ui',
+      value: 'dark',
+      hasValue: true,
+    });
+  });
+});

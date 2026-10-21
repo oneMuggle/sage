@@ -68,3 +68,24 @@ describe('todoClient', () => {
     await expect(todoClient.list()).rejects.toThrow('boom');
   });
 });
+
+describe('todoClient diagnostic formatters (Phase P113)', () => {
+  it('formats todo list summary and JSON payload', async () => {
+    const { formatTodoListSummary, formatTodoListJson } = await import('../todoClient');
+    const res = {
+      items: [],
+      total: 12,
+      limit: 50,
+      offset: 0,
+    };
+    expect(formatTodoListSummary(res)).toBe('0/12 todos · offset 0 · limit 50');
+    const parsed = JSON.parse(formatTodoListJson(res));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.todo_list.v1',
+      itemCount: 0,
+      total: 12,
+      limit: 50,
+      offset: 0,
+    });
+  });
+});
