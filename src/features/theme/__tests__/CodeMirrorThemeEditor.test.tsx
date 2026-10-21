@@ -9,10 +9,14 @@
  * 3. readOnly 属性透传
  */
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { CodeMirrorThemeEditor } from '../CodeMirrorThemeEditor';
+import {
+  CodeMirrorThemeEditor,
+  formatCodeMirrorThemeEditorAuditJson,
+  formatCodeMirrorThemeEditorAuditSnapshot,
+} from '../CodeMirrorThemeEditor';
 
 describe('CodeMirrorThemeEditor', () => {
   it('renders with initial value', () => {
@@ -47,5 +51,39 @@ describe('CodeMirrorThemeEditor', () => {
     // CodeMirror 6 在 jsdom 中无法真实触发输入事件，
     // 此处只验证 onChange prop 被接受且不报错。
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P100)', () => {
+    expect(
+      formatCodeMirrorThemeEditorAuditSnapshot({
+        cssLength: 24,
+        readOnly: true,
+        hasError: false,
+      }),
+    ).toBe('cmThemeEditor|len=24|readOnly=1|err=0');
+    expect(formatCodeMirrorThemeEditorAuditSnapshot({})).toBe(
+      'cmThemeEditor|len=0|readOnly=0|err=0',
+    );
+    expect(
+      JSON.parse(
+        formatCodeMirrorThemeEditorAuditJson({
+          cssLength: 12,
+          readOnly: false,
+          hasError: true,
+        }),
+      ),
+    ).toEqual({
+      cssLength: 12,
+      readOnly: false,
+      hasError: true,
+    });
+
+    render(<CodeMirrorThemeEditor value=":root {}" onChange={() => {}} />);
+    const snapBtn = screen.getByTestId('cm-theme-editor-copy-snapshot');
+    const jsonBtn = screen.getByTestId('cm-theme-editor-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

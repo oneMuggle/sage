@@ -10,7 +10,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { projectApi } from '../../shared/api';
 
 import { KnowledgeExtractionPanel } from './KnowledgeExtractionPanel';
-import { ProjectTypeBadge } from './ProjectTypeBadge';
+import {
+  ProjectTypeBadge,
+  formatProjectTypeBadgeAuditJson,
+  formatProjectTypeBadgeAuditSnapshot,
+} from './ProjectTypeBadge';
 import { ProjectTypeSelector } from './ProjectTypeSelector';
 import { SemanticSearchPanel } from './SemanticSearchPanel';
 import { StudioProfileTabPanel } from './StudioProfileTabPanel';
@@ -111,6 +115,29 @@ describe('ProjectTypeBadge', () => {
     const { container } = render(<ProjectTypeBadge type="coding" className="custom-class" />);
     const badge = container.firstChild as HTMLElement;
     expect(badge.className).toContain('custom-class');
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P100)', () => {
+    expect(formatProjectTypeBadgeAuditSnapshot({ type: 'research', detected: true })).toBe(
+      'projectTypeBadge|type=research|detected=1',
+    );
+    expect(formatProjectTypeBadgeAuditSnapshot({})).toBe(
+      'projectTypeBadge|type=unclassified|detected=0',
+    );
+    expect(
+      JSON.parse(formatProjectTypeBadgeAuditJson({ type: 'coding', detected: false })),
+    ).toEqual({
+      type: 'coding',
+      detected: false,
+    });
+
+    render(<ProjectTypeBadge type="coding" detected />);
+    const snapBtn = screen.getByTestId('project-type-badge-copy-snapshot');
+    const jsonBtn = screen.getByTestId('project-type-badge-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });
 

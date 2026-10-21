@@ -8,7 +8,7 @@
 import { css } from '@codemirror/lang-css';
 import type { Extension } from '@codemirror/state';
 import CodeMirror from '@uiw/react-codemirror';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
 interface CodeMirrorThemeEditorProps {
   value: string;
@@ -18,6 +18,26 @@ interface CodeMirrorThemeEditorProps {
   readOnly?: boolean;
 }
 
+export function formatCodeMirrorThemeEditorAuditSnapshot(opts: {
+  cssLength?: number;
+  readOnly?: boolean;
+  hasError?: boolean;
+}): string {
+  return `cmThemeEditor|len=${opts.cssLength ?? 0}|readOnly=${opts.readOnly ? 1 : 0}|err=${opts.hasError ? 1 : 0}`;
+}
+
+export function formatCodeMirrorThemeEditorAuditJson(opts: {
+  cssLength?: number;
+  readOnly?: boolean;
+  hasError?: boolean;
+}): string {
+  return JSON.stringify({
+    cssLength: opts.cssLength ?? 0,
+    readOnly: Boolean(opts.readOnly),
+    hasError: Boolean(opts.hasError),
+  });
+}
+
 export function CodeMirrorThemeEditor({
   value,
   onChange,
@@ -25,6 +45,38 @@ export function CodeMirrorThemeEditor({
   readOnly = false,
 }: CodeMirrorThemeEditorProps) {
   const extensions: Extension[] = useMemo(() => [css()], []);
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatCodeMirrorThemeEditorAuditSnapshot({
+          cssLength: value.length,
+          readOnly,
+          hasError: Boolean(error),
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatCodeMirrorThemeEditorAuditJson({
+          cssLength: value.length,
+          readOnly,
+          hasError: Boolean(error),
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <div
@@ -45,6 +97,18 @@ export function CodeMirrorThemeEditor({
           foldGutter: true,
         }}
       />
+      <span
+        data-testid="cm-theme-editor-copy-snapshot"
+        onClick={() => void handleCopySnapshot()}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="cm-theme-editor-copy-json"
+        onClick={() => void handleCopyJson()}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
     </div>
   );
 }
