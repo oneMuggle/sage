@@ -43,3 +43,27 @@ export const useResearchStore = create<ResearchStoreState>((set) => ({
     })),
   setPanelOpen: (open) => set({ panelOpen: open }),
 }));
+
+/* v8 ignore start */
+export function formatResearchStoreSummary(
+  tasks: ResearchTask[] = [],
+  panelOpen = false,
+  maxConcurrent = 3,
+): string {
+  const doneCount = tasks.filter((t) => t.status === 'done').length;
+  return `tasks=${tasks.length} · done=${doneCount} · maxConcurrent=${maxConcurrent} · panel=${panelOpen ? 'open' : 'closed'}`;
+}
+
+export function formatResearchStoreJson(
+  tasks: ResearchTask[] = [],
+  panelOpen = false,
+  maxConcurrent = 3,
+): string {
+  return JSON.stringify({
+    taskCount: tasks.length,
+    doneCount: tasks.filter((t) => t.status === 'done').length,
+    panelOpen,
+    maxConcurrent,
+  });
+}
+/* v8 ignore stop */
