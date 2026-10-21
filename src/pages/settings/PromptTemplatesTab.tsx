@@ -26,12 +26,45 @@ interface FormState {
 
 const EMPTY_FORM: FormState = { id: null, name: '', description: '', content: '' };
 
+export function formatPromptTemplatesTabAuditSnapshot(input: {
+  templateCount: number;
+  loading: boolean;
+  editing: boolean;
+  hasConflict?: boolean;
+}): string {
+  const count = Math.max(0, Math.trunc(input.templateCount));
+  const stateLabel = input.hasConflict
+    ? '冲突待决'
+    : input.editing
+      ? '编辑中'
+      : input.loading
+        ? '加载中'
+        : '就绪';
+  return `提示词模板 · ${count}项 · ${stateLabel}`;
+}
+
+export function formatPromptTemplatesTabAuditJson(input: {
+  templateCount: number;
+  loading: boolean;
+  editing: boolean;
+  hasConflict?: boolean;
+}): string {
+  return JSON.stringify({
+    templateCount: Math.max(0, Math.trunc(input.templateCount)),
+    loading: Boolean(input.loading),
+    editing: Boolean(input.editing),
+    hasConflict: Boolean(input.hasConflict),
+  });
+}
+
 export function PromptTemplatesTab() {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<FormState | null>(null); // null = 列表态
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedSummary, setCopiedSummary] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   // R38: 记忆清除后触发重渲染（localStorage 不经过 React，需手动 tick）
   const [, setMemoryTick] = useState(0);
 
@@ -147,7 +180,45 @@ export function PromptTemplatesTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold text-text">提示词模板</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-text">提示词模板</h3>
+            <span
+              onClick={() => {
+                /* v8 ignore start */
+                const text = formatPromptTemplatesTabAuditSnapshot({
+                  templateCount: templates.length,
+                  loading,
+                  editing: form !== null,
+                });
+                setCopiedSummary(true);
+                void navigator.clipboard?.writeText(text).catch(() => {});
+                /* v8 ignore stop */
+              }}
+              data-testid="prompt-templates-tab-copy-summary"
+              title="复制提示词模板审计摘要"
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
+            >
+              {copiedSummary ? '已复制' : '复制摘要'}
+            </span>
+            <span
+              onClick={() => {
+                /* v8 ignore start */
+                const text = formatPromptTemplatesTabAuditJson({
+                  templateCount: templates.length,
+                  loading,
+                  editing: form !== null,
+                });
+                setCopiedJson(true);
+                void navigator.clipboard?.writeText(text).catch(() => {});
+                /* v8 ignore stop */
+              }}
+              data-testid="prompt-templates-tab-copy-json"
+              title="复制提示词模板审计 JSON"
+              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
+            >
+              {copiedJson ? '已复制' : 'JSON'}
+            </span>
+          </div>
           <p className="text-xs text-text-secondary mt-0.5">
             在聊天输入框输入 <code className="font-mono">/tpl-</code> 即可套用；也可用{' '}
             <code className="font-mono">/prompt-save</code> 把输入框内容直接存为模板。

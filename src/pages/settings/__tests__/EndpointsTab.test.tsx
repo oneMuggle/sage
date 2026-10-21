@@ -21,7 +21,11 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS, type AppSettings } from '../../../entities/setting/types';
-import { EndpointsTab } from '../EndpointsTab';
+import {
+  EndpointsTab,
+  formatEndpointsTabAuditJson,
+  formatEndpointsTabAuditSnapshot,
+} from '../EndpointsTab';
 import type { EndpointsTabProps } from '../components';
 
 // Stub the network-touching test connection so handleTest() never hits
@@ -142,5 +146,37 @@ describe('EndpointsTab (2026-08-26 cleanup)', () => {
     fireEvent.click(screen.getByRole('button', { name: '编辑' }));
 
     expect(screen.getByPlaceholderText('留空走 ModelsTab 选择')).toBeInTheDocument();
+  });
+
+  it('formats and copies endpoints tab audit snapshot and JSON', () => {
+    expect(
+      formatEndpointsTabAuditSnapshot({
+        endpointCount: 2,
+        editingId: 'ep1',
+        testingId: null,
+      }),
+    ).toBe('端点配置 · 2项 · 编辑中(ep1) · 空闲');
+    expect(
+      JSON.parse(
+        formatEndpointsTabAuditJson({
+          endpointCount: 2,
+          editingId: null,
+          testingId: 'ep2',
+        }),
+      ),
+    ).toEqual({
+      endpointCount: 2,
+      editingId: null,
+      testingId: 'ep2',
+    });
+
+    const props = makeProps();
+    render(<EndpointsTab {...props} />);
+    const summaryBtn = screen.getByTestId('endpoints-tab-copy-summary');
+    const jsonBtn = screen.getByTestId('endpoints-tab-copy-json');
+    fireEvent.click(summaryBtn);
+    expect(summaryBtn.textContent).toBe('已复制');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toBe('已复制');
   });
 });

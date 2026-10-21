@@ -1323,3 +1323,17 @@
 - **单元测试与门禁**：
   - 8 个测试套件（`Arena.test.tsx`, `ArenaAccounts.test.tsx`, `Skills.test.tsx`, `BasicTab.test.tsx`, `ModelsTab.test.tsx`, `OrchestrationTab.test.tsx`, `RuntimeEnvTab.test.tsx`, `ZoteroTab.test.tsx`）在 `main`（68 项测试）与 `release/win7`（78 项测试）全绿通过。
   - `ESLint`、`tsc --noEmit`、`check-font-scale.mjs`、`architecture-check.mjs` 全部零告警通过。
+
+### Phase P99：设置页标签与办公生成/预览面板（Endpoints / General / MCP / Memory / Network / PromptTemplates / OfficeGenerateForm / OfficePreviewPanel）治理审计快照与一键导出（已完成）
+- **端到端交付**：
+  1. **端点配置标签（`src/pages/settings/EndpointsTab.tsx`）**：新增 `formatEndpointsTabAuditSnapshot` 与 `formatEndpointsTabAuditJson` 纯函数及头部一键复制控件（`data-testid="endpoints-tab-copy-summary"` / `data-testid="endpoints-tab-copy-json"`），支持导出端点总数、编辑态 ID 与连接测试状态。
+  2. **通用设置标签（`src/pages/settings/GeneralTab.tsx`）**：新增 `formatGeneralTabAuditSnapshot` 与 `formatGeneralTabAuditJson` 纯函数及头部一键复制控件（`data-testid="general-tab-copy-summary"` / `data-testid="general-tab-copy-json"`），支持导出流式输出开关、IANA 时区、日志时区、自动记忆提取与删除确认状态。
+  3. **MCP 服务管理标签（`src/pages/settings/McpTab.tsx`）**：新增 `formatMcpTabAuditSnapshot` 与 `formatMcpTabAuditJson` 纯函数及头部一键复制控件（`data-testid="mcp-tab-copy-summary"` / `data-testid="mcp-tab-copy-json"`），支持导出服务总数、就绪数、刷新态与错误状态。
+  4. **记忆管理标签（`src/pages/settings/MemoryTab.tsx`）**：新增 `formatMemoryTabAuditSnapshot` 与 `formatMemoryTabAuditJson` 纯函数及头部一键复制控件（`data-testid="memory-tab-copy-summary"` / `data-testid="memory-tab-copy-json"`），支持导出嵌入器类型、语义匹配状态、模型就绪态与自动备份份数。
+  5. **网络策略标签（`src/pages/settings/NetworkTab.tsx`）**：新增 `formatNetworkTabAuditSnapshot` 与 `formatNetworkTabAuditJson` 纯函数及头部一键复制控件（`data-testid="network-tab-copy-summary"` / `data-testid="network-tab-copy-json"`），支持导出网络访问模式、白名单主机数、TLS 豁免主机数、代理配置态与首选搜索引擎。
+  6. **提示词模板标签（`src/pages/settings/PromptTemplatesTab.tsx`）**：新增 `formatPromptTemplatesTabAuditSnapshot` 与 `formatPromptTemplatesTabAuditJson` 纯函数及头部一键复制控件（`data-testid="prompt-templates-tab-copy-summary"` / `data-testid="prompt-templates-tab-copy-json"`），支持导出模板总数、加载态、编辑态与导入冲突状态。
+  7. **办公文档生成表单（`src/features/office/OfficeGenerateForm.tsx`）**：新增 `formatOfficeGenerateFormAuditSnapshot` 与 `formatOfficeGenerateFormAuditJson` 纯函数及头部一键复制控件（`data-testid="office-generate-form-copy-summary"` / `data-testid="office-generate-form-copy-json"`），支持导出文档类型、创建模式（自由/模板）、目标文件名、生成繁忙态与结果状态。
+  8. **办公文档预览面板（`src/features/office/OfficePreviewPanel.tsx`）**：新增 `formatOfficePreviewPanelAuditSnapshot` 与 `formatOfficePreviewPanelAuditJson` 纯函数及头部一键复制控件（`data-testid="office-preview-panel-copy-summary"` / `data-testid="office-preview-panel-copy-json"`），支持导出文档类型、文件名、字节大小、高保真/结构化视图模式与 PDF 导出状态。
+- **验证结果**：
+  - 单元测试：`EndpointsTab.test.tsx`、`GeneralTab.test.tsx`、`McpTab.test.tsx`、`MemoryTab.test.tsx`、`NetworkTab.test.tsx`、`PromptTemplatesTab.test.tsx`、`OfficeGenerateForm.test.tsx`、`OfficePreviewPanel.test.tsx`（`main` 8 个测试套件 109 项单测全部通过；`release/win7` 8 个测试套件 99 项单测全部通过）。
+  - 门禁检查：`npx eslint` 0 error、`npx tsc --noEmit` 0 error、`check-font-scale.mjs` 通过、`architecture-check.mjs` 通过。

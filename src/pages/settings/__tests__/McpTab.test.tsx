@@ -2,7 +2,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { McpTab } from '../McpTab';
+import {
+  McpTab,
+  formatMcpTabAuditJson,
+  formatMcpTabAuditSnapshot,
+} from '../McpTab';
 
 const mocks = vi.hoisted(() => ({
   status: vi.fn(),
@@ -263,4 +267,39 @@ describe('McpTab', () => {
       expect(mocks.addServer).not.toHaveBeenCalled();
     },
   );
+
+  it('formats and copies MCP tab audit snapshot and JSON', async () => {
+    expect(
+      formatMcpTabAuditSnapshot({
+        serverCount: 3,
+        readyCount: 2,
+        loading: false,
+        hasError: false,
+      }),
+    ).toBe('MCP服务 · 2/3就绪 · 就绪');
+    expect(
+      JSON.parse(
+        formatMcpTabAuditJson({
+          serverCount: 3,
+          readyCount: 1,
+          loading: true,
+          hasError: true,
+        }),
+      ),
+    ).toEqual({
+      serverCount: 3,
+      readyCount: 1,
+      loading: true,
+      hasError: true,
+    });
+
+    render(<McpTab />);
+    await waitFor(() => expect(mocks.status).toHaveBeenCalled());
+    const summaryBtn = screen.getByTestId('mcp-tab-copy-summary');
+    const jsonBtn = screen.getByTestId('mcp-tab-copy-json');
+    fireEvent.click(summaryBtn);
+    expect(summaryBtn.textContent).toBe('已复制');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toBe('已复制');
+  });
 });
