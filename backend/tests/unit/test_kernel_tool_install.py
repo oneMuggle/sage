@@ -2,7 +2,7 @@
 """R80：``backend.application.kernel.tool_install`` 的机制单测。
 
 这一层只管编排、不认识任何具体工具，因此用只记录顺序的假注册表即可覆盖：
-顺序保真 / 能力门控 / 失败策略 / 报告差集 / 开关解析。
+顺序保真 / 能力门控 / 失败策略 / 报告差集。
 """
 
 from __future__ import annotations
@@ -12,12 +12,10 @@ from typing import List, Sequence, Tuple
 import pytest
 
 from backend.application.kernel.tool_install import (
-    TOOL_BUNDLES_ENV,
     InstallReport,
     ToolBundle,
     ToolInstallContext,
     install_bundles,
-    tool_bundles_enabled,
 )
 
 
@@ -147,23 +145,6 @@ def test_report_is_frozen() -> None:
     report = InstallReport(installed=("a",))
     with pytest.raises(Exception):  # noqa: B017, PT011 —— dataclass(frozen=True) 的语义检查
         report.installed = ()  # type: ignore[misc]
-
-
-@pytest.mark.parametrize("raw", ["1", "true", "TRUE", " yes ", "on"])
-def test_switch_accepts_truthy(raw: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(TOOL_BUNDLES_ENV, raw)
-    assert tool_bundles_enabled() is True
-
-
-@pytest.mark.parametrize("raw", ["", "0", "false", "off", "no", "maybe"])
-def test_switch_defaults_to_legacy(raw: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(TOOL_BUNDLES_ENV, raw)
-    assert tool_bundles_enabled() is False
-
-
-def test_switch_absent_means_legacy(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(TOOL_BUNDLES_ENV, raising=False)
-    assert tool_bundles_enabled() is False
 
 
 def test_install_order_matches_bundle_sequence() -> None:

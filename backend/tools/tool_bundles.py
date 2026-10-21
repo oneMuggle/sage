@@ -17,8 +17,9 @@ import 全部走 ``.子模块``（而不是 ``from backend.tools import ...``）
 
 from __future__ import annotations
 
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
+from backend.application.kernel.harness_config import HarnessConfig, select_bundles
 from backend.application.kernel.tool_install import (
     InstallReport,
     ToolBundle,
@@ -425,6 +426,21 @@ BUNDLES: Tuple[ToolBundle, ...] = (
 )
 
 
+def bundle_names() -> Tuple[str, ...]:
+    """内置 bundle 名清单（顺序与 :data:`BUNDLES` 一致）。"""
+    return tuple(bundle.name for bundle in BUNDLES)
+
+
+def select_bundle_objects(
+    config: Optional[HarnessConfig],
+) -> Tuple[ToolBundle, ...]:
+    """按 R81 harness 选择结果筛出 bundle 对象，并保持声明顺序。"""
+    if config is None:
+        return BUNDLES
+    selected = set(select_bundles(bundle_names(), config))
+    return tuple(bundle for bundle in BUNDLES if bundle.name in selected)
+
+
 def build_context(
     registry: Any,
     policy: Any,
@@ -454,10 +470,16 @@ def install_default_bundles(
     scheduler_service_getter: Any = None,
     todo_service_getter: Any = None,
     *,
+    harness: Optional[HarnessConfig] = None,
     strict: bool = True,
 ) -> InstallReport:
-    """安装全部内置工具，返回 :class:`InstallReport`。"""
+    """按可选 harness 选择安装内置工具，返回 :class:`InstallReport`。
+
+    ``harness=None`` 表示全量安装；这是无配置文件以及配置加载兜底时
+    的行为。传入 :class:`HarnessConfig` 时只筛 bundle，不改变 bundle
+    内部的工具顺序或网络能力门控。
+    """
     ctx = build_context(
         registry, policy, network_policy, scheduler_service_getter, todo_service_getter
     )
-    return install_bundles(ctx, BUNDLES, strict=strict)
+    return install_bundles(ctx, select_bundle_objects(harness), strict=strict)

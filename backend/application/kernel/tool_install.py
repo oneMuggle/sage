@@ -22,24 +22,10 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
-
-#: 环境开关：置 ``1`` / ``true`` 时 ``register_all_tools`` 走 bundle 路径。
-#: 默认关闭 —— 与 R79 的 ``SAGE_KERNEL_HOOKS`` 同一策略，保证生产路径零变更。
-TOOL_BUNDLES_ENV = "SAGE_KERNEL_TOOL_BUNDLES"
-
-_TRUTHY = ("1", "true", "yes", "on")
-
-
-def tool_bundles_enabled() -> bool:
-    """bundle 装配路径是否启用（默认关闭）。"""
-    raw = os.environ.get(TOOL_BUNDLES_ENV, "")
-    return raw.strip().lower() in _TRUTHY
-
 
 @dataclass(frozen=True)
 class ToolBundle:
