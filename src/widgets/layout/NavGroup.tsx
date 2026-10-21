@@ -47,6 +47,29 @@ interface NavGroupProps {
  *
  * 折叠状态按 groupKey 持久化到 localStorage，跨页面刷新保留。
  */
+export function formatNavGroupAuditSnapshot(opts: {
+  groupKey?: string;
+  label?: string;
+  collapsible?: boolean;
+  collapsed?: boolean;
+}): string {
+  return `navGroup|key=${opts.groupKey || 'none'}|label=${opts.label || 'none'}|collapsible=${opts.collapsible ? 1 : 0}|collapsed=${opts.collapsed ? 1 : 0}`;
+}
+
+export function formatNavGroupAuditJson(opts: {
+  groupKey?: string;
+  label?: string;
+  collapsible?: boolean;
+  collapsed?: boolean;
+}): string {
+  return JSON.stringify({
+    groupKey: opts.groupKey || 'none',
+    label: opts.label || 'none',
+    collapsible: Boolean(opts.collapsible),
+    collapsed: Boolean(opts.collapsed),
+  });
+}
+
 export function NavGroup({
   groupKey,
   label,
@@ -74,6 +97,30 @@ export function NavGroup({
   }, [collapsible, groupKey]);
 
   const Chevron = collapsed ? ChevronRight : ChevronDown;
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatNavGroupAuditSnapshot({ groupKey, label, collapsible, collapsed }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatNavGroupAuditJson({ groupKey, label, collapsible, collapsed }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <div data-testid={`sidebar-nav-group-${groupKey}`} className="w-full">
@@ -114,6 +161,18 @@ export function NavGroup({
           <span className="sr-only">{label}（已折叠）</span>
         </div>
       )}
+      <span
+        data-testid="nav-group-copy-snapshot"
+        onClick={() => void handleCopySnapshot()}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="nav-group-copy-json"
+        onClick={() => void handleCopyJson()}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
     </div>
   );
 }

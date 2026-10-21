@@ -1,11 +1,15 @@
-import { render, fireEvent, waitFor } from '@testing-library/react';
+import { render, fireEvent, screen, waitFor } from '@testing-library/react';
 import { useEffect } from 'react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, it, expect, vi } from 'vitest';
 
 import { NavHistoryProvider } from '../../../app/providers/NavHistoryProvider';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { TitlebarActions } from '../TitlebarActions';
+import {
+  TitlebarActions,
+  formatTitlebarActionsAuditJson,
+  formatTitlebarActionsAuditSnapshot,
+} from '../TitlebarActions';
 
 const renderWithProvider = (initialEntries: string[] = ['/']) => {
   return render(
@@ -72,5 +76,26 @@ describe('TitlebarActions', () => {
     fireEvent.click(backBtn);
     expect(consoleSpy).not.toHaveBeenCalled();
     consoleSpy.mockRestore();
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P101)', () => {
+    expect(formatTitlebarActionsAuditSnapshot({ canBack: true, canForward: false })).toBe(
+      'titlebarActions|back=1|forward=0',
+    );
+    expect(formatTitlebarActionsAuditSnapshot({})).toBe('titlebarActions|back=0|forward=0');
+    expect(
+      JSON.parse(formatTitlebarActionsAuditJson({ canBack: false, canForward: true })),
+    ).toEqual({
+      canBack: false,
+      canForward: true,
+    });
+
+    renderWithProvider();
+    const snapBtn = screen.getByTestId('titlebar-actions-copy-snapshot');
+    const jsonBtn = screen.getByTestId('titlebar-actions-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

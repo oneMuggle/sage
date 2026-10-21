@@ -4,7 +4,11 @@ import { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { SelectionQuoteButton } from '../SelectionQuoteButton';
+import {
+  SelectionQuoteButton,
+  formatSelectionQuoteButtonAuditJson,
+  formatSelectionQuoteButtonAuditSnapshot,
+} from '../SelectionQuoteButton';
 
 function Harness({ onQuote }: { onQuote: (text: string) => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -101,5 +105,46 @@ describe('SelectionQuoteButton', () => {
       screen.getByTestId('body').dispatchEvent(new Event('scroll'));
     });
     expect(screen.queryByTestId('selection-quote-button')).toBeNull();
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P101)', () => {
+    expect(
+      formatSelectionQuoteButtonAuditSnapshot({
+        active: true,
+        textLength: 10,
+        top: 120,
+        left: 240,
+      }),
+    ).toBe('selectionQuote|active=1|len=10|top=120|left=240');
+    expect(formatSelectionQuoteButtonAuditSnapshot({})).toBe(
+      'selectionQuote|active=0|len=0|top=0|left=0',
+    );
+    expect(
+      JSON.parse(
+        formatSelectionQuoteButtonAuditJson({
+          active: true,
+          textLength: 5,
+          top: 40,
+          left: 80,
+        }),
+      ),
+    ).toEqual({
+      active: true,
+      textLength: 5,
+      top: 40,
+      left: 80,
+    });
+
+    render(<Harness onQuote={vi.fn()} />);
+    selectContents(screen.getByTestId('body'));
+    mouseUpAndFlush();
+    const snapBtn = screen.getByTestId('selection-quote-copy-snapshot');
+    const jsonBtn = screen.getByTestId('selection-quote-copy-json');
+    fireEvent.mouseDown(snapBtn);
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.mouseDown(jsonBtn);
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });
