@@ -51,3 +51,30 @@ export function focusSettingsEntry(container: HTMLElement, entry: SettingsSearch
   row.focus({ preventScroll: true });
   return true;
 }
+
+export function formatSettingsGroupsSummary(
+  available: readonly SettingsTabKey[],
+  locale = 'zh',
+): string {
+  const groups = settingsGroups(available, locale);
+  const tabCount = groups.reduce((acc, g) => acc + g.keys.length, 0);
+  return `settings-groups: ${groups.length} groups · ${tabCount} tabs · locale=${locale}`;
+}
+
+export function formatSettingsGroupsJson(
+  available: readonly SettingsTabKey[],
+  locale = 'zh',
+): string {
+  const groups = settingsGroups(available, locale);
+  const tabCount = groups.reduce((acc, g) => acc + g.keys.length, 0);
+  return JSON.stringify(
+    {
+      groupCount: groups.length,
+      tabCount,
+      locale,
+      groupIds: groups.map((g) => g.id),
+    },
+    null,
+    2,
+  );
+}

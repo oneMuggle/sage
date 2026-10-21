@@ -61,3 +61,30 @@ export function setCoverImage(dataUrl: string): void {
     root.setProperty('--cover-image', `url("${escapeDataUrl(dataUrl)}")`);
   }
 }
+
+export function formatBackgroundInjectionSummary(persistedId?: string): string {
+  if (typeof document === 'undefined') return 'ssr';
+  const hasPreview = Boolean(document.getElementById(PREVIEW_ID));
+  const hasPersisted = persistedId
+    ? Boolean(document.getElementById(persistId(persistedId)))
+    : false;
+  const hasCover = Boolean(document.documentElement.style.getPropertyValue('--cover-image'));
+  return `preview=${hasPreview} · persisted=${hasPersisted} · cover=${hasCover}`;
+}
+
+export function formatBackgroundInjectionJson(persistedId?: string): string {
+  const hasDoc = typeof document !== 'undefined';
+  return JSON.stringify(
+    {
+      hasPreview: hasDoc ? Boolean(document.getElementById(PREVIEW_ID)) : false,
+      persistedId: persistedId ?? null,
+      hasPersisted:
+        hasDoc && persistedId ? Boolean(document.getElementById(persistId(persistedId))) : false,
+      hasCoverImage: hasDoc
+        ? Boolean(document.documentElement.style.getPropertyValue('--cover-image'))
+        : false,
+    },
+    null,
+    2,
+  );
+}

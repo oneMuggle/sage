@@ -358,4 +358,88 @@ describe('chatStreamStore', () => {
       );
     });
   });
+
+  // 2026-10-20: LLM 重试可视化 —— retryInfo 的写入与自动清理。
+  describe('LLM 重试 retryInfo', () => {
+    const info = {
+      attempt: 1,
+      max_attempts: 3,
+      error_type: 'timeout',
+      error_message: '请求 LLM 超时',
+      delay: 2,
+    };
+
+    it('setRetryInfo 写入重试信息', () => {
+      useChatStreamStore.getState().startStream(SESS, 'msg-1', { initialContent: '' });
+      useChatStreamStore.getState().setRetryInfo(SESS, 'msg-1', info);
+      expect(slots().streaming?.retryInfo).toEqual(info);
+    });
+
+    it('非 retry 状态到达时自动清空 retryInfo', () => {
+      const store = useChatStreamStore.getState();
+      store.startStream(SESS, 'msg-1', { initialContent: '' });
+      store.setRetryInfo(SESS, 'msg-1', info);
+      store.setStreamingMeta(SESS, 'msg-1', { state: 'acting' });
+      expect(slots().streaming?.retryInfo).toBeNull();
+    });
+
+    it('retry 状态自身不清空 retryInfo', () => {
+      const store = useChatStreamStore.getState();
+      store.startStream(SESS, 'msg-1', { initialContent: '' });
+      store.setRetryInfo(SESS, 'msg-1', info);
+      store.setStreamingMeta(SESS, 'msg-1', { state: 'retry' });
+      expect(slots().streaming?.retryInfo).toEqual(info);
+    });
+
+    it('新一次重试覆盖旧的重试信息', () => {
+      const store = useChatStreamStore.getState();
+      store.startStream(SESS, 'msg-1', { initialContent: '' });
+      store.setRetryInfo(SESS, 'msg-1', info);
+      store.setRetryInfo(SESS, 'msg-1', { ...info, attempt: 2, delay: 4 });
+      expect(slots().streaming?.retryInfo?.attempt).toBe(2);
+      expect(slots().streaming?.retryInfo?.delay).toBe(4);
+    });
+
+    it('startStream 初始化时清空上一轮残留的 retryInfo', () => {
+      const store = useChatStreamStore.getState();
+      store.startStream(SESS, 'msg-1', { initialContent: '' });
+      store.setRetryInfo(SESS, 'msg-1', info);
+      store.startStream(SESS, 'msg-2', { initialContent: '' });
+      expect(slots().streaming?.retryInfo).toBeNull();
+    });
+
+    it('其它 messageId 的重试事件被忽略（防止跨流污染）', () => {
+      const store = useChatStreamStore.getState();
+      store.startStream(SESS, 'msg-A', { initialContent: '' });
+      store.setRetryInfo(SESS, 'msg-B', info);
+      expect(slots().streaming?.retryInfo).toBeNull();
+    });
+
+    it('重试信息按会话隔离,不串到并行会话的槽位', () => {
+      const store = useChatStreamStore.getState();
+      store.startStream('sess-A', 'msg-A1', { initialContent: '' });
+      store.startStream('sess-B', 'msg-B1', { initialContent: '' });
+      store.setRetryInfo('sess-A', 'msg-A1', info);
+      expect(
+        selectSessionSlots(useChatStreamStore.getState(), 'sess-A').streaming?.retryInfo,
+      ).toEqual(info);
+      expect(
+        selectSessionSlots(useChatStreamStore.getState(), 'sess-B').streaming?.retryInfo,
+      ).toBeNull();
+    });
+  });
+
+  describe('formatChatStreamSessionSummary & formatChatStreamSessionJson (Phase P110)', () => {
+    it('formats idle and streaming session state', async () => {
+      const { formatChatStreamSessionSummary, formatChatStreamSessionJson } = await import(
+        '../chatStreamStore'
+      );
+      expect(formatChatStreamSessionSummary('sess-idle')).toBe('sess-idle · idle · tools=0 · todos=0');
+      useChatStreamStore.getState().startStream(SESS, 'msg-99', { initialContent: '' });
+      expect(formatChatStreamSessionSummary(SESS)).toBe(`${SESS} · thinking · msg=msg-99 · tools=0`);
+      const parsed = JSON.parse(formatChatStreamSessionJson(SESS));
+      expect(parsed.streaming).toBe(true);
+      expect(parsed.messageId).toBe('msg-99');
+    });
+  });
 });

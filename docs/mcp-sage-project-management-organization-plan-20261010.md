@@ -1425,3 +1425,172 @@
   7. `src/entities/setting/endpointReadiness.ts`：新增 `buildEndpointReadinessAuditSnapshot` 与 `buildEndpointReadinessAuditJson` 纯函数导出及单测。
   8. `src/entities/welcome/recommendations.ts`：新增 `buildRecommendationsAuditSnapshot` 与 `buildRecommendationsAuditJson` 纯函数导出及单测。
 - **验证**：8 个单元测试套件（64 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部零错误零警告通过。
+
+### Phase P107（2026-10-21）：回答版本切换、会话内全文查找、实体引用补全、生成速度统计、Markdown 纯文本剥离、划词引用、语音朗读分片与 CSS 检索词高亮治理快照与 JSON 导出闭环（Dual-Track `main` + `release/win7`）
+
+- **目标**：为回答版本切换、会话内全文查找、输入栏 `@` 实体引用补全、生成速度统计格式化、Markdown 可见文本剥离、划词引用块生成、Web Speech 朗读分片与 CSS Custom Highlight 检索词高亮 8 个对话阅读与交互核心模块补齐确定性审计快照（`build*AuditSnapshot`）与结构化 JSON 导出（`build*AuditJson`）纯函数及单测：
+  1. `src/features/chat/answerVersions.ts`：新增 `buildAnswerVersionsAuditSnapshot` 与 `buildAnswerVersionsAuditJson` 纯函数导出及单测。
+  2. `src/features/chat/chatFind.ts`：新增 `buildChatFindAuditSnapshot` 与 `buildChatFindAuditJson` 纯函数导出及单测。
+  3. `src/features/chat/entityRefs.ts`：新增 `buildEntityRefsAuditSnapshot` 与 `buildEntityRefsAuditJson` 纯函数导出及单测。
+  4. `src/features/chat/generationStats.ts`：新增 `buildGenerationStatsAuditSnapshot` 与 `buildGenerationStatsAuditJson` 纯函数导出及单测。
+  5. `src/features/chat/markdownText.ts`：新增 `buildMarkdownTextAuditSnapshot` 与 `buildMarkdownTextAuditJson` 纯函数导出及单测。
+  6. `src/features/chat/selectionQuote.ts`：新增 `buildSelectionQuoteAuditSnapshot` 与 `buildSelectionQuoteAuditJson` 纯函数导出及单测。
+  7. `src/features/chat/speech.ts`：新增 `buildSpeechAuditSnapshot` 与 `buildSpeechAuditJson` 纯函数导出及单测。
+  8. `src/features/chat/textHighlight.ts`：新增 `buildTextHighlightAuditSnapshot` 与 `buildTextHighlightAuditJson` 纯函数导出及单测。
+- **验证**：8 个单元测试套件（59 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check` 在 `main` 与 `release/win7` 双轨全部零错误零警告通过。
+
+### Phase P108（已完成）：模型目录 API、会话持久化、设置适配器与存储、主题装饰预设与存储、产物 API 及定时任务 Cron 校验治理
+- **改造模块（8 项）**：
+  1. `src/entities/model-catalog/api.ts`：新增 `formatCatalogSnapshotMetaSummary` 与 `formatCatalogSnapshotMetaJson`，支持模型目录快照元数据（`id · source · digest · created_at`）摘要与可复制 JSON 序列化。
+  2. `src/entities/session/storage.ts`：新增 `formatCurrentSessionStorageSummary` 与 `formatCurrentSessionStorageJson`，支持当前活跃会话与本地缓存状态摘要及 JSON 导出。
+  3. `src/entities/setting/settingsAdapter.ts`：新增 `formatSettingAdapterRouteSummary` 与 `formatSettingAdapterRouteJson`，支持设置键存储后端路由（`preference / app_settings / electron / local`）与可见性审计摘要及 JSON 导出。
+  4. `src/entities/setting/storage.ts`：新增 `formatAppSettingsStorageSummary` 与 `formatAppSettingsStorageJson`，支持应用全局设置（端点数量、主对话模型、流式开关与重试配置）摘要及 JSON 导出。
+  5. `src/entities/theme/decorative-presets.ts`：新增 `formatDecorativePresetSummary` 与 `formatDecorativePresetsJson`，支持装饰主题预设（渐变起止色与封面路径）摘要与列表 JSON 导出。
+  6. `src/entities/theme/storage.ts`：新增 `formatThemeStorageSummary` 与 `formatThemeStorageJson`，支持主题模式与预设 ID 持久化状态摘要及 JSON 导出。
+  7. `src/features/artifacts/artifactApi.ts`：新增 `formatArtifactRecordSummary` 与 `formatArtifactRecordJson`，支持会话产物记录（`id · name · kind · size`）摘要与 JSON 导出。
+  8. `src/features/scheduled/cronValidator.ts`：新增 `formatCronValidationSummary` 与 `formatCronValidationJson`，支持定时任务 5 字段 Cron 表达式合法性校验、预设匹配与错误原因摘要及 JSON 导出。
+- **单元测试（8 项）**：
+  - `src/entities/model-catalog/api.test.ts`、`src/entities/session/__tests__/storage.test.ts`、`src/entities/setting/__tests__/settingsAdapter.test.ts`、`src/entities/setting/__tests__/storage.test.ts`、`src/entities/theme/__tests__/decorative-presets.test.ts`、`src/entities/theme/__tests__/storage.test.ts`、`src/features/artifacts/__tests__/artifactApi.test.ts`、`src/features/scheduled/__tests__/cronValidator.test.ts` 全部通过（85 tests passed）。
+
+### Phase P109（已完成）：产物内容与列表 Hook、@文件引用查询、/btw 旁路问答、对话大纲与轮次导航、草稿引用注入及期刊模板 Hook 治理
+- **改造模块（8 项）**：
+  1. `src/features/artifacts/useArtifactContent.ts`：新增 `formatArtifactContentStateSummary` 与 `formatArtifactContentStateJson`，支持产物内容加载态、类型、字符数与错误原因摘要及可复制 JSON 序列化。
+  2. `src/features/artifacts/useArtifacts.ts`：新增 `formatArtifactsHookStateSummary` 与 `formatArtifactsHookStateJson`，支持会话产物列表数量、ID 集合与加载状态摘要及 JSON 导出。
+  3. `src/features/chat/useAtFileQuery.ts`：新增 `formatAtFileQuerySummary` 与 `formatAtFileQueryJson`，支持光标前 `@` 文件引用触发状态、查询串与起止索引摘要及 JSON 导出。
+  4. `src/features/chat/useBtwCommand.ts`：新增 `formatBtwCommandStateSummary` 与 `formatBtwCommandStateJson`，支持 `/btw` 旁路问答浮层开关态、加载态及问答长度摘要与 JSON 导出。
+  5. `src/features/chat/useConversationOutline.ts`：新增 `formatConversationOutlineSummary` 与 `formatConversationOutlineJson`，支持会话大纲 `h2/h3` 标题计数与条目列表摘要及 JSON 导出。
+  6. `src/features/chat/useConversationTurns.ts`：新增 `formatConversationTurnsSummary` 与 `formatConversationTurnsJson`，支持对话轮次计数、最新轮次索引及预览摘要与 JSON 导出。
+  7. `src/features/chat/useQuoteDraft.ts`：新增 `formatQuoteDraftInjectionSummary` 与 `formatQuoteDraftInjectionJson`，支持草稿引用追加注入状态、字符长度与随机戳摘要及 JSON 导出。
+  8. `src/features/journal/useJournalTemplates.ts`：新增 `formatJournalTemplateDraftSummary` 与 `formatJournalTemplateDraftJson`，支持期刊模板规格 ID、论文标题、章节键列表、参考文献计数与违规计数摘要及 JSON 导出。
+- **单元测试（8 项）**：
+  - `src/features/artifacts/__tests__/useArtifactContent.test.ts`、`src/features/artifacts/__tests__/useArtifacts.test.ts`、`src/features/chat/__tests__/useAtFileQuery.test.tsx`、`src/features/chat/__tests__/useBtwCommand.test.ts`、`src/features/chat/__tests__/useConversationOutline.test.ts`、`src/features/chat/__tests__/useConversationTurns.test.ts`、`src/features/chat/__tests__/useQuoteDraft.test.ts`、`src/features/journal/__tests__/useJournalTemplates.test.ts` 全部通过（42 tests passed）。
+
+### Phase P110（已完成）：端点与模型探测 API、全局设置 Hook、Office 引用导入与能力发现、Office 文档管理 Hook、右侧面板 Store、流式会话 Store 及编排事件路由治理
+- **改造模块（8 项）**：
+  1. `src/features/manage-endpoints/api.ts`：新增 `formatProbeResultSummary` 与 `formatProbeResultJson`，支持模型上下文窗口探测结果（状态、适配器、原生上下文、架构与量化精度）摘要及可复制 JSON 序列化。
+  2. `src/features/manage-settings/useSettings.ts`：新增 `formatUseSettingsSnapshotSummary` 与 `formatUseSettingsSnapshotJson`，支持全局设置 Hook 加载态、最大上下文与流式开关及端点数量摘要与 JSON 导出。
+  3. `src/features/office/importOfficeReference.ts`：新增 `formatOfficeImportRefSummary` 与 `formatOfficeImportRefJson`，支持聊天区 `@` 导入 Office 引用记录（`docId · docType · filename`）摘要与 JSON 导出。
+  4. `src/features/office/officeCapabilities.ts`：新增 `formatOfficeCapabilitiesSummary` 与 `formatOfficeCapabilitiesJson`，支持平台级 PDF 导出格式、LibreOffice 与 Word COM 能力发现摘要及 JSON 导出。
+  5. `src/features/office/useOfficeDocuments.ts`：新增 `formatOfficeDocumentsBatchSummary` 与 `formatOfficeDocumentsBatchJson`，支持 Office 托管文档批量归档与恢复结果（成功/失败计数及 ID 列表）摘要与 JSON 导出。
+  6. `src/features/right-panel/rightPanelStore.ts`：新增 `formatRightPanelStateSummary` 与 `formatRightPanelStateJson`，支持右侧工作台面板展开态、当前 Tab、最大化状态及选中产物 ID 摘要与 JSON 导出。
+  7. `src/features/send-message/chatStreamStore.ts`：新增 `formatChatStreamSessionSummary` 与 `formatChatStreamSessionJson`，支持按会话隔离的流式槽位状态、当前消息 ID、工具调用数与待办计数摘要及 JSON 导出。
+  8. `src/features/send-message/orchestrationEvents.ts`：新增 `formatRestoredBoardSummary` 与 `formatRestoredBoardJson`，支持历史编排运行恢复任务板（计划项数、总任务数、已完成/失败数及时间戳）摘要与 JSON 导出。
+- **单元测试（8 项）**：
+  - `src/features/manage-endpoints/__tests__/api.test.ts`、`src/features/manage-settings/__tests__/useSettings.test.ts`、`src/features/office/__tests__/importOfficeReference.test.ts`、`src/features/office/__tests__/officeCapabilities.test.ts`、`src/features/office/__tests__/useOfficeDocuments.test.ts`、`src/features/right-panel/__tests__/rightPanelStore.test.ts`、`src/features/send-message/__tests__/chatStreamStore.test.ts`、`src/features/send-message/__tests__/orchestrationEvents.test.ts` 全部通过（147 tests on `main`, 132 tests on `release/win7`）。
+
+### Phase P111（已完成）：分会话通知判定、任务中心 Store、主题样式注入与校验、打字机占位 Hook、Wiki 对话流 Hook 及 Cookie 导入解析器治理
+- **改造模块（8 项）**：
+  1. `src/features/send-message/sessionNotify.ts`：新增 `formatSessionNotifyDecisionSummary` 与 `formatSessionNotifyDecisionJson`，支持分会话 OS 通知打扰判定（目标会话、当前会话、是否触发与正文长度）摘要及可复制 JSON 序列化。
+  2. `src/features/task-center/taskCenterStore.ts`：新增 `formatTaskCenterStateSummary` 与 `formatTaskCenterStateJson`，支持后台任务中心总任务数、运行中任务数、任务 ID 列表及交付抽屉开关态摘要与 JSON 导出。
+  3. `src/features/theme/backgroundInjector.ts`：新增 `formatBackgroundInjectionSummary` 与 `formatBackgroundInjectionJson`，支持实时预览样式、持久化主题样式及封面图 CSS 变量注入状态摘要与 JSON 导出。
+  4. `src/features/theme/themeCssTypes.ts`：新增 `formatThemeCssPayloadSummary` 与 `formatThemeCssPayloadJson`，支持自定义 CSS 主题载荷（ID、名称、外观模式、CSS 字符数与更新时间戳）摘要与 JSON 导出。
+  5. `src/features/theme/themeCssValidator.ts`：新增 `formatThemeCssValidationSummary` 与 `formatThemeCssValidationJson`，支持自定义 CSS 16 变量白名单与危险模式校验结果、变量计数及变量名列表摘要与 JSON 导出。
+  6. `src/features/welcome/useTypewriterPlaceholder.ts`：新增 `formatTypewriterStateSummary` 与 `formatTypewriterStateJson`，支持欢迎页打字机占位文本当前阶段、字符长度与短语总数摘要及 JSON 导出。
+  7. `src/features/wiki/useWikiChatStream.ts`：新增 `formatWikiChatStreamStateSummary` 与 `formatWikiChatStreamStateJson`，支持 Wiki 流式问答阶段、回答长度、引用数、来源数及错误原因摘要与 JSON 导出。
+  8. `src/pages/settings/credentialCookieParser.ts`：新增 `formatCookieHeaderSummary` 与 `formatCookieHeaderJson`，支持脱敏（不暴露 Cookie secret 值）的 Cookie 条目计数与键名列表摘要及 JSON 导出。
+- **单元测试（8 项）**：
+  - `src/features/send-message/__tests__/sessionNotify.test.ts`、`src/features/task-center/__tests__/taskCenterStore.test.ts`、`src/features/theme/__tests__/backgroundInjector.test.ts`、`src/features/theme/__tests__/themeCssTypes.test.ts`、`src/features/theme/__tests__/themeCssValidator.test.ts`、`src/features/welcome/__tests__/useTypewriterPlaceholder.test.ts`、`src/features/wiki/__tests__/useWikiChatStream.test.tsx`、`src/pages/settings/__tests__/credentialCookieParser.test.ts` 全部通过（88 tests passed）。
+
+### Phase P112（已完成）：设置检索索引、通用日志器、桌面后端请求桥、Demo 拦截器、文件检索客户端、NDJSON 事件流解析、编排运行客户端及多智能体 Lane 客户端治理
+- **改造模块（8 项）**：
+  1. `src/pages/settings/settingsSearchIndex.ts`：新增 `formatSettingsSearchSummary` 与 `formatSettingsSearchJson`，支持设置页全文搜索查询词、命中数、命中键列表及目标 Tab 集合摘要与可复制 JSON 序列化。
+  2. `src/shared/logger.ts`：新增 `formatLoggerEntrySummary` 与 `formatLoggerEntryJson`，支持带作用域（scope）与日志级别的标准化日志摘要及 JSON 导出。
+  3. `src/shared/api/backendRequest.ts`：新增 `formatBackendRequestSummary` 与 `formatBackendRequestJson`，支持桌面端后端中继请求方法、路径、请求体存在性及桥接可用性摘要与 JSON 导出。
+  4. `src/shared/api/demoInterceptors.ts`：新增 `formatDemoInvokeSummary` 与 `formatDemoInvokeJson`，支持 Demo 模式 IPC 拦截命中状态、返回值存在性及已注册处理器计数摘要与 JSON 导出。
+  5. `src/shared/api/fileSearchClient.ts`：新增 `formatFileSearchResultSummary` 与 `formatFileSearchResultJson`，支持工作区 `@` 文件检索结果（文件名、路径、类型、Office/普通文件分类及文档 ID）摘要与 JSON 导出。
+  6. `src/shared/api/llmStream.ts`：新增 `formatAgentEventSummary` 与 `formatAgentEventJson`，支持 NDJSON 流式 Agent 事件（`state · run · task`、状态及计划项数）摘要与 JSON 导出。
+  7. `src/shared/api/orchRunClient.ts`：新增 `formatOrchRunDetailSummary` 与 `formatOrchRunDetailJson`，支持编排 Run 生命周期详情（运行 ID、会话 ID、状态、计划项数与任务数）摘要与 JSON 导出。
+  8. `src/shared/api/orchestrationClient.ts`：新增 `formatLaneDecisionSummary` 与 `formatLaneDecisionJson`，支持多智能体 Lane 交付包验收决议（`lane_id · decision · merged · already` 及告警信息）摘要与 JSON 导出。
+- **单元测试（8 项）**：
+  - `src/pages/settings/__tests__/settingsSearchIndex.test.ts`、`src/shared/__tests__/logger.test.ts`、`src/shared/api/__tests__/backendRequest.test.ts`、`src/shared/api/__tests__/demoInterceptors.test.ts`、`src/shared/api/__tests__/fileSearchClient.test.ts`、`src/shared/api/__tests__/llmStream.test.ts`、`src/shared/api/__tests__/orchRunClient.test.ts`、`src/shared/api/__tests__/orchestrationClient.test.ts` 全部通过（68 tests on `main`, 60 tests on `release/win7`）。
+
+### Phase P113 — Shared Memory, Office, Scheduled, Settings, Theme CSS, Todo, Window Controls & Workspace API Diagnostic Formatters (Completed)
+- `src/shared/api/memoryApi.ts` (`formatMemoryListSummary` / `formatMemoryListJson`) + `src/shared/api/__tests__/memoryApi.test.ts`
+- `src/shared/api/officeApi.ts` (`formatOfficeWordLintSummary` / `formatOfficeWordLintJson`) + `src/shared/api/__tests__/officeApi.test.ts`
+- `src/shared/api/scheduledClient.ts` (`formatScheduledTaskSummary` / `formatScheduledTaskJson`) + `src/shared/api/__tests__/scheduledClient.test.ts`
+- `src/shared/api/settingsClient.ts` (`formatPreferenceSnapshotSummary` / `formatPreferenceSnapshotJson`) + `src/shared/api/__tests__/settingsClient.test.ts`
+- `src/shared/api/themeCssClient.ts` (`formatThemeCssSummary` / `formatThemeCssJson`) + `src/shared/api/__tests__/themeCssClient.test.ts`
+- `src/shared/api/todoClient.ts` (`formatTodoListSummary` / `formatTodoListJson`) + `src/shared/api/__tests__/todoClient.test.ts`
+- `src/shared/api/windowControlsClient.ts` (`formatWindowPlatformSummary` / `formatWindowPlatformJson`) + `src/shared/api/__tests__/windowControlsClient.test.ts`
+- `src/shared/api/workspaceApi.ts` (`formatWorkspaceBindingSummary` / `formatWorkspaceBindingJson`) + `src/shared/api/__tests__/workspaceApi.test.ts`
+
+### Phase P114 — Shared Lib Agent State, Endpoint Status, Humanize, Last Workspace, Local Image, Markdown Chunks, Action Failure & Store Diagnostic Formatters (Completed)
+- `src/shared/lib/agentStateMapping.ts` (`formatAgentPhaseSummary` / `formatAgentPhaseJson`) + `src/shared/lib/__tests__/agentStateMapping.test.ts`
+- `src/shared/lib/endpointStatus.ts` (`formatEndpointIssueSummary` / `formatEndpointIssueJson`) + `src/shared/lib/__tests__/endpointStatus.test.ts`
+- `src/shared/lib/humanize.ts` (`formatHumanizedToolSummary` / `formatHumanizedToolJson`) + `src/shared/lib/__tests__/humanize.test.ts`
+- `src/shared/lib/lastWorkspace.ts` (`formatLastWorkspaceSummary` / `formatLastWorkspaceJson`) + `src/shared/lib/__tests__/lastWorkspace.test.ts`
+- `src/shared/lib/localImageSrc.ts` (`formatLocalImageSrcSummary` / `formatLocalImageSrcJson`) + `src/shared/lib/__tests__/localImageSrc.test.ts`
+- `src/shared/lib/markdownChunks.ts` (`formatChunkSplitSummary` / `formatChunkSplitJson`) + `src/shared/lib/__tests__/markdownChunks.test.ts`
+- `src/shared/lib/reportActionFailure.ts` (`formatActionFailureSummary` / `formatActionFailureJson`) + `src/shared/lib/__tests__/reportActionFailure.test.ts`
+- `src/shared/lib/store.ts` (`formatStoreSessionSummary` / `formatStoreSessionJson`) + `src/shared/lib/__tests__/store.test.ts`
+
+### Phase P115（已完成 — Shared Diff, Navigation History, Emacs Keybindings, File Upload, Client Log, Diff Hunks & Session Fork Tree Diagnostic Summary/JSON Helpers）
+
+1. **`src/shared/lib/textDiff.ts` (`src/shared/lib/__tests__/textDiff.test.ts`)**：
+   - 新增 `formatTextDiffSummary(side)` 与 `formatTextDiffJson(side)`，提供字符级 diff 分段统计摘要与结构化 JSON 快照。
+2. **`src/shared/lib/unifiedDiff.ts` (`src/shared/lib/__tests__/unifiedDiff.test.ts`)**：
+   - 新增 `formatUnifiedDiffSummary(diffText, oldLabel, newLabel)` 与 `formatUnifiedDiffJson(diffText, oldLabel, newLabel)`，提供行级 unified diff hunk 与增删行统计摘要与 JSON 快照。
+3. **`src/shared/lib/useNavigationHistory.ts` (`src/shared/lib/__tests__/useNavigationHistory.test.tsx`)**：
+   - 新增 `formatNavHistorySummary(ctx)` 与 `formatNavHistoryJson(ctx)`，提供导航历史上下文前进/后退能力诊断摘要与 JSON 快照。
+4. **`src/shared/lib/hooks/useEmacsKeybindings.ts` (`src/shared/lib/hooks/__tests__/useEmacsKeybindings.test.ts`)**：
+   - 新增 `formatEmacsKeybindingsSummary(text, cursor, enabled)` 与 `formatEmacsKeybindingsJson(text, cursor, enabled)`，提供 Emacs 快捷键缓冲区行边界与分词游标诊断摘要与 JSON 快照。
+5. **`src/shared/lib/hooks/useFileUpload.ts` (`src/shared/lib/hooks/__tests__/useFileUpload.test.ts`)**：
+   - 新增 `formatFileUploadSummary(files, images, isDragOver)` 与 `formatFileUploadJson(files, images, isDragOver)`，提供聊天文件/图片上传队列诊断摘要与 JSON 快照。
+6. **`src/shared/log/client.ts` (`src/shared/log/__tests__/client.test.ts`)**：
+   - 新增 `formatClientLogSummary(level, msg, meta)` 与 `formatClientLogJson(level, msg, meta)`，提供前端渲染进程日志桥接状态诊断摘要与 JSON 快照。
+7. **`src/widgets/chat/changes/diffHunks.ts` (`src/widgets/chat/changes/__tests__/diffHunks.test.ts`)**：
+   - 新增 `formatDiffHunksSummary(hunks)` 与 `formatDiffHunksJson(hunks)`，提供前端 unified diff hunk 切分诊断摘要与 JSON 快照。
+8. **`src/widgets/session/forkTree.ts` (`src/widgets/session/__tests__/forkTree.test.ts`)**：
+   - 新增 `formatForkTreeSummary(nodes)` 与 `formatForkTreeJson(nodes)`，提供会话分叉家族树深度与节点拓扑诊断摘要与 JSON 快照。
+
+### Phase P116（已完成 — Chat Memory Pause, Confirmed Preferences, Office Preview Revision, Scheduled Skill Links, Task Brief & Settings Presentation Diagnostic Summary/JSON Helpers）
+
+1. **`src/features/chat/useSessionMemoryPause.ts` (`src/features/chat/__tests__/useSessionMemoryPause.test.ts`)**：
+   - 新增 `formatSessionMemoryPauseSummary(ids, sessionId, unconfirmed)` 与 `formatSessionMemoryPauseJson(ids, sessionId, unconfirmed)`，提供设备本地会话记忆暂停状态诊断摘要与结构化 JSON 快照。
+2. **`src/features/manage-settings/useConfirmedPreference.ts` (`src/features/manage-settings/__tests__/useConfirmedPreference.test.ts`)**：
+   - 新增 `formatConfirmedPreferenceSummary(key, status, loaded)` 与 `formatConfirmedPreferenceJson(key, status, loaded)`，提供受控偏好确认写入状态诊断摘要与 JSON 快照。
+3. **`src/features/office/previewRevision.ts` (`src/features/office/__tests__/previewRevision.test.ts`)**：
+   - 新增 `formatPreviewRevisionSummary(cacheKey)` 与 `formatPreviewRevisionJson(cacheKey)`，提供 Office 预览内容修订缓存键健康度诊断摘要与 JSON 快照。
+4. **`src/features/scheduled/skillLink.ts` (`src/features/scheduled/__tests__/skillLink.test.ts`)**：
+   - 新增 `formatTaskSkillHealthSummary(health)` 与 `formatTaskSkillHealthJson(health)`，提供定时任务技能引用健康度诊断摘要与 JSON 快照。
+5. **`src/features/task-brief/modelTaskFit.ts` (`src/features/task-brief/__tests__/modelTaskFit.test.ts`)**：
+   - 新增 `formatModelTaskFitSummary(model, needsTools)` 与 `formatModelTaskFitJson(model, needsTools)`，提供候选模型任务适配度与工具能力诊断摘要与 JSON 快照。
+6. **`src/features/task-brief/taskBrief.ts` (`src/features/task-brief/__tests__/taskBrief.test.ts`)**：
+   - 新增 `formatTaskBriefSummary(brief)` 与 `formatTaskBriefJson(brief)`，提供交付任务简报场景与输出格式诊断摘要与 JSON 快照。
+7. **`src/features/task-brief/taskRecipes.ts` (`src/features/task-brief/__tests__/taskRecipes.test.ts`)**：
+   - 新增 `formatTaskRecipesSummary(recipes)` 与 `formatTaskRecipesJson(recipes)`，提供持久化任务配方列表复核状态诊断摘要与 JSON 快照。
+8. **`src/pages/settings/settingsPresentation.ts` (`src/pages/settings/__tests__/settingsPresentation.test.ts`)**：
+   - 新增 `formatSettingsGroupsSummary(available, locale)` 与 `formatSettingsGroupsJson(available, locale)`，提供设置页分组导航与多语言标签诊断摘要与 JSON 快照。
+
+### Phase P117（已完成 — Shared Demo Flag, Desktop Event/Invoke, Gateway, Journal, Knowledge, Learn & Media API Diagnostic Summary/JSON Helpers）
+
+1. **`src/shared/api/demoFlag.ts` (`src/shared/api/__tests__/demoFlag.test.ts`)**：
+   - 新增 `formatDemoFlagSummary()` 与 `formatDemoFlagJson()`，提供演示模式优先级链（override / Electron 注入 / settings store）诊断摘要与结构化 JSON 快照。
+2. **`src/shared/api/desktopEvent.ts` (`src/shared/api/__tests__/desktopEvent.test.ts`)**：
+   - 新增 `formatDesktopEventSummary(event, options)` 与 `formatDesktopEventJson(event, options)`，提供桌面端 IPC 流事件监听通道与 `streamId` 诊断摘要与 JSON 快照。
+3. **`src/shared/api/desktopInvoke.ts` (`src/shared/api/__tests__/desktopInvoke.test.ts`)**：
+   - 新增 `formatDesktopInvokeSummary(cmd, args)` 与 `formatDesktopInvokeJson(cmd, args)`，提供桌面端 IPC 命令调用与演示拦截模式诊断摘要与 JSON 快照。
+4. **`src/shared/api/gatewayApi.ts` (`src/shared/api/__tests__/gatewayApi.test.ts`)**：
+   - 新增 `formatGatewayConfigSummary(platform, config)` 与 `formatGatewayConfigJson(platform, config)`，提供多平台网关（Telegram / Discord / Slack）配置与白名单计数诊断摘要与 JSON 快照。
+5. **`src/shared/api/journalApi.ts` (`src/shared/api/__tests__/journalApi.test.ts`)**：
+   - 新增 `formatJournalFillSummary(req)` 与 `formatJournalFillJson(req)`，提供期刊模板填充请求规格与章节统计诊断摘要与 JSON 快照。
+6. **`src/shared/api/knowledgeApi.ts` (`src/shared/api/__tests__/knowledgeApi.test.ts`)**：
+   - 新增 `formatKnowledgeDocsSummary(docs, query)` 与 `formatKnowledgeDocsJson(docs, query)`，提供知识库兼容层（已由 Wiki 替代）查询状态诊断摘要与 JSON 快照。
+7. **`src/shared/api/learnApi.ts` (`src/shared/api/__tests__/learnApi.test.ts`)**：
+   - 新增 `formatLearnTriggerSummary(sessionId, prompt, response)` 与 `formatLearnTriggerJson(sessionId, prompt, response)`，提供显式后台复盘触发状态诊断摘要与 JSON 快照。
+8. **`src/shared/api/mediaApi.ts` (`src/shared/api/__tests__/mediaApi.test.ts`)**：
+   - 新增 `formatMediaUrlSummary(apiUrl, mimeType)` 与 `formatMediaUrlJson(apiUrl, mimeType)`，提供多模态媒体资源 URL 解析与 MIME 类型诊断摘要与 JSON 快照。
+
+### Phase P118：对话轨迹/设置导航/错误映射/倒计时/侧栏排序/特性解锁/斜杠命令/对话轮次分组审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/features/chat/useConversationTrajectory.ts`：新增 `formatTrajectorySummaryText` 与 `formatTrajectorySummaryJson`，支持一键导出对话轨迹聚合统计摘要（`entries=<totalEntries> · tools=<totalToolCalls> · in=<totalInputTokens> · out=<totalOutputTokens> · latency=<totalLatencyMs>ms`）与 JSON 快照。
+  2. `src/pages/settings/settingsNavigation.ts`：新增 `formatSettingsNavigationSummary` 与 `formatSettingsNavigationJson`，支持一键导出设置标签页书签解析审计摘要（`<requested> -> <resolved> · providers=<providersEnabled>`）与 JSON 快照。
+  3. `src/shared/lib/errorMapping.ts`：新增 `formatLLMErrorSummary` 与 `formatLLMErrorJson`，支持一键导出结构化 LLM 错误映射审计摘要（`<type> · status=<status_code> · retry=<retry_after> · <mappedText>`）与 JSON 快照。
+  4. `src/shared/lib/useCountdown.ts`：新增 `formatCountdownSummary` 与 `formatCountdownJson`，支持一键导出倒计时状态审计摘要（`<ticking|done> · <remaining>/<initialSeconds>s · key=<resetKey>`）与 JSON 快照。
+  5. `src/shared/lib/dnd/siderOrder.ts`：新增 `formatSiderOrderSummary` 与 `formatSiderOrderJson`，支持一键导出侧栏拖拽顺序审计摘要（`count=<length> · ids=[...]`）与 JSON 快照。
+  6. `src/shared/lib/hooks/useFeatureUnlock.ts`：新增 `formatFeatureUnlockSummary` 与 `formatFeatureUnlockJson`，支持一键导出隐藏特性解锁状态审计摘要（`<featureKey> · <unlocked|locked>`）与 JSON 快照。
+  7. `src/widgets/chat/slashCommands.ts`：新增 `formatSlashCommandsSummary` 与 `formatSlashCommandsJson`，支持一键导出斜杠命令与动态 SKILL.md 合并审计摘要（`total=<totalCount> · skills=<skillCount> · names=[...]`）与 JSON 快照。
+  8. `src/widgets/chat/turnGrouping.ts`：新增 `formatTurnItemsSummary` 与 `formatTurnItemsJson`，支持一键导出对话轮次分组审计摘要（`total=<totalItems> · turns=<turnCount> · standalones=<standaloneCount>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 115 项单测全部通过；`release/win7` 8 个测试文件 115 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。

@@ -357,6 +357,7 @@ export const enChatAndSider = {
   'settings.network.search.engine.tavily': 'Tavily (API key required)',
   'settings.network.search.engine.zhipu': 'Zhipu (API key required)',
   'settings.tab.evolution': 'Evolution',
+  'settings.tab.harness': 'Harness',
   'settings.tab.updates': 'Updates',
   'settings.tab.usage-stats': 'Usage Stats',
   'settings.section.theme': 'Theme',

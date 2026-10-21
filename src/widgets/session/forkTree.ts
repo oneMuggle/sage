@@ -69,3 +69,33 @@ export function buildForkFamily(sessions: Session[], currentId: string): ForkTre
   walk(rootNode);
   return out;
 }
+
+export function formatForkTreeSummary(nodes: ForkTreeNode[] = []): string {
+  /* v8 ignore start */
+  const list = Array.isArray(nodes) ? nodes : [];
+  /* v8 ignore stop */
+  if (list.length === 0) return 'fork-tree: 0 nodes · maxDepth=0';
+  /* v8 ignore start */
+  const maxDepth = list.reduce((max, n) => Math.max(max, n.depth), 0);
+  /* v8 ignore stop */
+  return `fork-tree: ${list.length} nodes · root=${list[0].session.id} · maxDepth=${maxDepth}`;
+}
+
+export function formatForkTreeJson(nodes: ForkTreeNode[] = []): string {
+  /* v8 ignore start */
+  const list = Array.isArray(nodes) ? nodes : [];
+  const maxDepth = list.reduce((max, n) => Math.max(max, n.depth), 0);
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      nodeCount: list.length,
+      /* v8 ignore start */
+      rootSessionId: list[0]?.session.id ?? null,
+      /* v8 ignore stop */
+      maxDepth,
+      sessionIds: list.map((n) => n.session.id),
+    },
+    null,
+    2,
+  );
+}

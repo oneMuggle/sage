@@ -25,7 +25,7 @@ vi.mock('../demoInterceptors', () => ({
   },
 }));
 
-import { invoke } from '../desktopInvoke';
+import { formatDesktopInvokeJson, formatDesktopInvokeSummary, invoke } from '../desktopInvoke';
 
 function stubApi(invokeImpl: () => Promise<unknown> | unknown) {
   const apiInvoke = vi.fn(invokeImpl);
@@ -104,5 +104,20 @@ describe('invoke 错误漏斗', () => {
   it('非 Error 拒绝包装为 Error', async () => {
     stubApi(() => Promise.reject('plain string failure'));
     await expect(invoke('cmd_a')).rejects.toThrow('plain string failure');
+  });
+});
+
+describe('formatDesktopInvokeSummary / formatDesktopInvokeJson', () => {
+  it('formats desktop invoke summary and JSON payload', () => {
+    expect(formatDesktopInvokeSummary('sessions_list', { limit: 10, page: 1 })).toBe(
+      'desktop-invoke: sessions_list · 2 args · mode=ipc',
+    );
+    const payload = JSON.parse(formatDesktopInvokeJson('sessions_list', { page: 1, limit: 10 }));
+    expect(payload).toEqual({
+      cmd: 'sessions_list',
+      argKeys: ['limit', 'page'],
+      demoMode: false,
+      hasElectronInvoke: false,
+    });
   });
 });

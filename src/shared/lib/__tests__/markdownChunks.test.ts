@@ -60,3 +60,18 @@ describe('hasUnclosedFence', () => {
     expect(hasUnclosedFence('普通文本，没有代码。')).toBe(false);
   });
 });
+
+describe('markdownChunks diagnostic formatters (Phase P114)', () => {
+  it('formats markdown chunk split summary and JSON payload', async () => {
+    const { formatChunkSplitSummary, formatChunkSplitJson } = await import('../markdownChunks');
+    expect(formatChunkSplitSummary('hello')).toBe('0 stable · live 5 chars · fences-closed');
+    const parsed = JSON.parse(formatChunkSplitJson('```ts\nconst x = 1;'));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.markdown_chunks.v1',
+      totalLength: 18,
+      stableCount: 0,
+      liveLength: 18,
+      unclosedFence: true,
+    });
+  });
+});

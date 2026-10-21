@@ -18,6 +18,7 @@ from collections import deque
 from threading import Lock
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Optional, Tuple
 
+from backend.application.services.harness_recorder import HarnessProbe
 from backend.chat.empty_response_guard import (
     EMPTY_RESPONSE_FALLBACK_TEXT,
     EMPTY_RESPONSE_SYSTEM_PROMPT,
@@ -1169,6 +1170,30 @@ class SageAgent:
         args: Dict[str, Any],
         tool_call_id: Optional[str] = None,
     ) -> Tuple[bool, Any]:
+        """执行工具并与中断事件竞争，附带 harness effectiveness 埋点。
+
+        埋点在 ``finally`` 中 await —— 写事务在返回前完成，
+        杜绝后台线程与测试 teardown 的 use-after-free 竞争；
+        未安装 recorder 时是零开销 no-op。
+        """
+        probe = HarnessProbe("tool", name)
+        try:
+            with probe:
+                cancelled, result = await self._await_tool_execution_inner(
+                    tool, name, args, tool_call_id
+                )
+                probe.result = result
+                return cancelled, result
+        finally:
+            await probe.aemit()
+
+    async def _await_tool_execution_inner(
+        self,
+        tool: Any,
+        name: str,
+        args: Dict[str, Any],
+        tool_call_id: Optional[str] = None,
+    ) -> Tuple[bool, Any]:
         """L12-lite: 执行工具并与中断事件竞争。
 
         返回 ``(cancelled, result)``。同步内联工具瞬时完成不参与竞争;
@@ -1415,16 +1440,29 @@ class SageAgent:
         tool_sig_counts: Dict[str, int] = {}
         repeat_nudged: set = set()
 
-        # 阶段 1: max_iterations 默认从 profile 读, 否则兜底 DEFAULT_MAX_ITERATIONS
-        effective_max_iterations = (
-            max_iterations
-            if max_iterations is not None
-            else (
-                self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
-                if self.profile
-                else DEFAULT_MAX_ITERATIONS
-            )
-        )
+        # 阶段 1: max_iterations 优先级：
+        # 1. 显式传入的 max_iterations 参数（最高优先级）
+        # 2. OrchSettings.max_iterations（UI 可配置，2026-10-20 新增）
+        # 3. AgentProfile.max_iterations（profile 硬编码默认值）
+        # 4. DEFAULT_MAX_ITERATIONS（兜底值 10）
+        if max_iterations is not None:
+            effective_max_iterations = max_iterations
+        else:
+            try:
+                from backend.orchestration.orch_settings import load_orch_settings
+                orch_settings_max = load_orch_settings().max_iterations
+                if orch_settings_max > 0:
+                    effective_max_iterations = orch_settings_max
+                elif self.profile:
+                    effective_max_iterations = self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
+                else:
+                    effective_max_iterations = DEFAULT_MAX_ITERATIONS
+            except Exception:  # noqa: BLE001 — settings 读取失败回落 profile 默认
+                effective_max_iterations = (
+                    self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
+                    if self.profile
+                    else DEFAULT_MAX_ITERATIONS
+                )
 
         # 如果传入了动态 LLM 配置,临时覆盖
         original_llm_client = self.llm_client

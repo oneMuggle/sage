@@ -226,3 +226,23 @@ export function humanizeToolCall(tool: string, args?: ToolArgs | null): Humanize
     }
   }
 }
+
+export function formatHumanizedToolSummary(tool: string, args?: ToolArgs | null): string {
+  const h = humanizeToolCall(tool, args);
+  return `${h.verb}${h.object ? ` ${h.object}` : ''} · ${h.scope ?? 'internal'}`;
+}
+
+export function formatHumanizedToolJson(tool: string, args?: ToolArgs | null): string {
+  const h = humanizeToolCall(tool, args);
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.humanized_tool.v1',
+      tool,
+      verb: h.verb,
+      object: h.object,
+      scope: h.scope ?? null,
+    },
+    null,
+    2,
+  );
+}

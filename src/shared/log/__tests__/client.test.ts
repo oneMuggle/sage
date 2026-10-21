@@ -43,3 +43,21 @@ describe('clientLogger', () => {
     expect(mockLog).toHaveBeenCalled();
   });
 });
+
+describe('formatClientLogSummary / formatClientLogJson', () => {
+  it('formats client logger summary and JSON payload', async () => {
+    const { formatClientLogJson, formatClientLogSummary } = await import('../client');
+    expect(formatClientLogSummary('warn', 'disk almost full', { freeMb: 128, path: '/tmp' })).toBe(
+      'client-log: [warn] disk almost full · 2 keys',
+    );
+    const payload = JSON.parse(
+      formatClientLogJson('error', 'ipc timeout', { channel: 'chat:send' }),
+    );
+    expect(payload).toEqual({
+      level: 'error',
+      message: 'ipc timeout',
+      metaKeys: ['channel'],
+      hasBridge: false,
+    });
+  });
+});

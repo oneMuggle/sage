@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { decorativePresets, findDecorativeThemeById } from '../decorative-presets';
+import { formatDecorativePresetSummary, formatDecorativePresetsJson } from '../decorative-presets';
 
 describe('decorative-presets', () => {
   it('导出 5 套装饰主题', () => {
@@ -75,5 +76,13 @@ describe('decorative-presets', () => {
         expect(theme.darkColors).toHaveProperty(key);
       }
     }
+  });
+
+  it('formats decorative preset summary and JSON (Phase P108)', () => {
+    const sakura = findDecorativeThemeById('sakura')!;
+    expect(formatDecorativePresetSummary(sakura)).toBe('sakura · Sakura · #ec4899->#f472b6');
+    const parsed = JSON.parse(formatDecorativePresetsJson());
+    expect(parsed).toHaveLength(5);
+    expect(parsed[1].id).toBe('sakura');
   });
 });

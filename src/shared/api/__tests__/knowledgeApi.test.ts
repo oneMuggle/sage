@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import { knowledgeApi } from '../knowledgeApi';
+import { formatKnowledgeDocsJson, formatKnowledgeDocsSummary, knowledgeApi } from '../knowledgeApi';
 
 describe('knowledgeApi', () => {
   it('list() returns empty array (wiki replacement)', async () => {
@@ -14,5 +14,19 @@ describe('knowledgeApi', () => {
   it('search() returns empty array (wiki replacement)', async () => {
     const r = await knowledgeApi.search('query');
     expect(r).toEqual([]);
+  });
+});
+
+describe('formatKnowledgeDocsSummary / formatKnowledgeDocsJson', () => {
+  it('formats knowledge docs summary and JSON payload', () => {
+    expect(formatKnowledgeDocsSummary([], 'architecture')).toBe(
+      'knowledge-docs: 0 docs · query=architecture · legacy=wiki-replaced',
+    );
+    const payload = JSON.parse(formatKnowledgeDocsJson([], 'architecture'));
+    expect(payload).toEqual({
+      docCount: 0,
+      query: 'architecture',
+      wikiReplaced: true,
+    });
   });
 });

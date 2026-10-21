@@ -193,3 +193,23 @@ export async function updateArtifactContent(
     );
   }
 }
+
+export function formatArtifactRecordSummary(artifact: Artifact): string {
+  return `${artifact.id} · ${artifact.name} · ${artifact.kind} · ${artifact.size}B`;
+}
+
+export function formatArtifactRecordJson(artifact: Artifact): string {
+  return JSON.stringify(
+    {
+      id: artifact.id,
+      sessionId: artifact.session_id,
+      name: artifact.name,
+      kind: artifact.kind,
+      size: artifact.size,
+      path: artifact.path,
+      workspacePath: artifact.workspace_path ?? null,
+    },
+    null,
+    2,
+  );
+}

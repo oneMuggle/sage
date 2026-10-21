@@ -36,3 +36,57 @@ export function formatRate(rate: number): string {
 export function formatCount(count: number, locale: string): string {
   return Math.round(count).toLocaleString(locale === 'en' ? 'en-US' : 'zh-CN');
 }
+
+export interface GenerationStatsAuditSnapshot {
+  hasStats: boolean;
+  outputTokens: number;
+  inputTokens: number;
+  latencyMs: number;
+  firstTokenMs: number | null;
+  rateTokensPerSec: number | null;
+  formattedRate: string | null;
+  formattedDuration: string | null;
+  signature: string;
+}
+
+export function buildGenerationStatsAuditSnapshot(
+  stats?: GenerationStats | null,
+): GenerationStatsAuditSnapshot {
+  const hasStats = Boolean(stats && typeof stats === 'object');
+  const outputTokens =
+    typeof stats?.output_tokens === 'number' && stats.output_tokens > 0
+      ? Math.round(stats.output_tokens)
+      : 0;
+  const inputTokens =
+    typeof stats?.input_tokens === 'number' && stats.input_tokens > 0
+      ? Math.round(stats.input_tokens)
+      : 0;
+  const latencyMs =
+    typeof stats?.latency_ms === 'number' && stats.latency_ms > 0
+      ? Math.round(stats.latency_ms)
+      : 0;
+  const firstTokenMs =
+    typeof stats?.first_token_ms === 'number' && stats.first_token_ms >= 0
+      ? Math.round(stats.first_token_ms)
+      : null;
+  const rawRate = tokensPerSecond(stats);
+  const rateTokensPerSec = rawRate !== null ? Number(rawRate.toFixed(2)) : null;
+  const formattedRate = rawRate !== null ? formatRate(rawRate) : null;
+  const formattedDuration = latencyMs > 0 ? formatDuration(latencyMs) : null;
+  const signature = `${hasStats ? 1 : 0}|${outputTokens}|${inputTokens}|${latencyMs}|${firstTokenMs ?? -1}|${formattedRate ?? '-'}|${formattedDuration ?? '-'}`;
+  return {
+    hasStats,
+    outputTokens,
+    inputTokens,
+    latencyMs,
+    firstTokenMs,
+    rateTokensPerSec,
+    formattedRate,
+    formattedDuration,
+    signature,
+  };
+}
+
+export function buildGenerationStatsAuditJson(stats?: GenerationStats | null): string {
+  return JSON.stringify(buildGenerationStatsAuditSnapshot(stats), null, 2);
+}

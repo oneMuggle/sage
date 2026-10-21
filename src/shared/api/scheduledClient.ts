@@ -35,3 +35,26 @@ export const scheduledClient = {
     return invoke<ScheduledTask>('scheduled_run_task', { id });
   },
 };
+
+export function formatScheduledTaskSummary(
+  task: Pick<ScheduledTask, 'id' | 'name' | 'type' | 'enabled'>,
+): string {
+  return `${task.id} · ${task.name} · ${task.type} · ${task.enabled ? 'enabled' : 'disabled'}`;
+}
+
+export function formatScheduledTaskJson(
+  task: Pick<ScheduledTask, 'id' | 'name' | 'type' | 'enabled' | 'session_id'>,
+): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.scheduled_task.v1',
+      id: task.id,
+      name: task.name,
+      type: task.type,
+      enabled: task.enabled,
+      sessionId: task.session_id ?? null,
+    },
+    null,
+    2,
+  );
+}

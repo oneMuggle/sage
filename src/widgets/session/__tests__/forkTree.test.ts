@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Session } from '../../../shared/api/types';
-import { buildForkFamily } from '../forkTree';
+import { buildForkFamily, formatForkTreeJson, formatForkTreeSummary } from '../forkTree';
 
 function sess(id: string, forkRoot: string | null, createdAt: number): Session {
   return {
@@ -74,5 +74,25 @@ describe('buildForkFamily', () => {
     const family = buildForkFamily(sessions, 'me');
     // me 向上：a → b → (b->a 已访问) 根=b；下行：b 的子 a、a 的子 me
     expect(family.map((n) => n.session.id)).toEqual(['b', 'a', 'me']);
+  });
+});
+
+describe('formatForkTreeSummary / formatForkTreeJson', () => {
+  it('formats fork tree summary and JSON payload', () => {
+    expect(formatForkTreeSummary([])).toBe('fork-tree: 0 nodes · maxDepth=0');
+    const sessions = [
+      sess('root', null, T0),
+      sess('b', 'root', T0 + 2),
+      sess('c', 'b', T0 + 1),
+    ];
+    const family = buildForkFamily(sessions, 'c');
+    expect(formatForkTreeSummary(family)).toBe('fork-tree: 3 nodes · root=root · maxDepth=2');
+    const payload = JSON.parse(formatForkTreeJson(family));
+    expect(payload).toEqual({
+      nodeCount: 3,
+      rootSessionId: 'root',
+      maxDepth: 2,
+      sessionIds: ['root', 'b', 'c'],
+    });
   });
 });

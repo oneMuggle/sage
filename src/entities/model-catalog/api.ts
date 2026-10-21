@@ -213,3 +213,20 @@ export async function exportSnapshot(snapshotId: string): Promise<unknown> {
     method: 'GET',
   });
 }
+
+export function formatCatalogSnapshotMetaSummary(meta: SnapshotMeta): string {
+  return `${meta.id} · ${meta.source} · ${meta.digest} · ${meta.created_at}`;
+}
+
+export function formatCatalogSnapshotMetaJson(meta: SnapshotMeta): string {
+  return JSON.stringify(
+    {
+      id: meta.id,
+      source: meta.source,
+      digest: meta.digest,
+      createdAt: meta.created_at,
+    },
+    null,
+    2,
+  );
+}

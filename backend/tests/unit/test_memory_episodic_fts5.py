@@ -79,6 +79,98 @@ class TestEpisodicFtsIndex:
         count = cursor.execute("SELECT COUNT(*) FROM memories_episodic_fts").fetchone()[0]
         assert count == 1
 
+    def test_backfill_indexes_more_than_500_rows(self, episodic: EpisodicMemory):
+        """回归测试: 修复前 _backfill_fts 单批 LIMIT 500 即返回, 超过 500 条
+        存量的记忆永远进不了 FTS 索引, search() 静默漏召回。修复后循环分批直到
+        全部补齐, 600 条存量应全部被索引。"""
+        conn = episodic.db.get_connection()
+        for i in range(600):
+            conn.execute(
+                "INSERT INTO memories_episodic "
+                "(id, content, summary, importance, tags, created_at, is_valid) "
+                "VALUES (?, ?, ?, ?, ?, ?, 1)",
+                (
+                    f"bulk-{i:04d}",
+                    f"bulk topic alpha {i}",
+                    f"bulk topic alpha {i}",
+                    5,
+                    '["alpha"]',
+                    1000 + i,
+                ),
+            )
+        conn.commit()
+
+        episodic._backfill_fts()
+
+        cursor = conn.cursor()
+        count = cursor.execute("SELECT COUNT(*) FROM memories_episodic_fts").fetchone()[0]
+        assert count == 600, f"期望 600 行入 FTS 索引, 实际 {count}"
+
+
+class TestSyncFtsRowForId:
+    """模块级 sync_fts_row_for_id() 辅助函数测试。"""
+
+    def test_syncs_single_row(self):
+        """直接调用可为指定 id 同步 FTS 索引。"""
+        import os
+        import tempfile
+
+        from backend.data.database import Database
+        from backend.memory.episodic import sync_fts_row_for_id
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_path = os.path.join(tmp_dir, "sync_test.db")
+            db = Database(db_path=db_path)
+            db.init_db()
+            # FTS 表由 EpisodicMemory.__init__ 创建, 必须先实例化一次
+            EpisodicMemory(db)
+            conn = db.get_connection()
+            conn.execute(
+                "INSERT INTO memories_episodic "
+                "(id, content, summary, importance, tags, created_at, is_valid) "
+                "VALUES (?, ?, ?, ?, ?, ?, 1)",
+                ("m-sync-1", "sync test content", "sync test", 5, '["t1"]', 1000),
+            )
+            conn.commit()
+
+            sync_fts_row_for_id(conn, "m-sync-1")
+            conn.commit()
+
+            cursor = conn.cursor()
+            count = cursor.execute(
+                "SELECT COUNT(*) FROM memories_episodic_fts WHERE rowid = "
+                "(SELECT rowid FROM memories_episodic WHERE id = 'm-sync-1')"
+            ).fetchone()[0]
+            assert count == 1
+
+            db.close()
+
+    def test_noop_for_unknown_id(self):
+        """不存在的 memory_id 不抛异常, 索引数不变。"""
+        import os
+        import tempfile
+
+        from backend.data.database import Database
+        from backend.memory.episodic import sync_fts_row_for_id
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_path = os.path.join(tmp_dir, "sync_test.db")
+            db = Database(db_path=db_path)
+            db.init_db()
+            EpisodicMemory(db)
+            conn = db.get_connection()
+
+            sync_fts_row_for_id(conn, "does-not-exist")
+            conn.commit()
+
+            cursor = conn.cursor()
+            count = cursor.execute(
+                "SELECT COUNT(*) FROM memories_episodic_fts"
+            ).fetchone()[0]
+            assert count == 0
+
+            db.close()
+
 
 class TestEpisodicFtsSearch:
     def test_chinese_content_is_searchable(self, episodic: EpisodicMemory):

@@ -65,3 +65,41 @@ export function markdownToPlainText(markdown: string, options: PlainTextOptions 
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+export interface MarkdownTextAuditSnapshot {
+  rawLength: number;
+  plainLength: number;
+  lineCount: number;
+  hasCodeBlockReplacement: boolean;
+  isEmpty: boolean;
+  signature: string;
+}
+
+export function buildMarkdownTextAuditSnapshot(
+  markdown = '',
+  options: PlainTextOptions = {},
+): MarkdownTextAuditSnapshot {
+  const safeMd = typeof markdown === 'string' ? markdown : '';
+  const plain = markdownToPlainText(safeMd, options);
+  const rawLength = safeMd.length;
+  const plainLength = plain.length;
+  const lineCount = plain ? plain.split('\n').length : 0;
+  const hasCodeBlockReplacement = typeof options?.codeBlockReplacement === 'string';
+  const isEmpty = plainLength === 0;
+  const signature = `${rawLength}|${plainLength}|${lineCount}|${hasCodeBlockReplacement ? 1 : 0}|${isEmpty ? 1 : 0}`;
+  return {
+    rawLength,
+    plainLength,
+    lineCount,
+    hasCodeBlockReplacement,
+    isEmpty,
+    signature,
+  };
+}
+
+export function buildMarkdownTextAuditJson(
+  markdown = '',
+  options: PlainTextOptions = {},
+): string {
+  return JSON.stringify(buildMarkdownTextAuditSnapshot(markdown, options), null, 2);
+}

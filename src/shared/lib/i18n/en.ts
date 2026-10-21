@@ -5,6 +5,7 @@ import { enChatAndSider } from './locales/en/chatAndSider';
 import { enSettingsAndModels } from './locales/en/settingsAndModels';
 import { enWorkspaceAndTools } from './locales/en/workspaceAndTools';
 import { pausedMemoryEn } from './pausedMemory';
+import { retryBannerEn } from './retryBanner';
 import type { TranslationKey } from './zh';
 
 export const en: Record<TranslationKey, string> = {
@@ -12,4 +13,5 @@ export const en: Record<TranslationKey, string> = {
   ...enSettingsAndModels,
   ...enWorkspaceAndTools,
   ...pausedMemoryEn,
+  ...retryBannerEn,
 };

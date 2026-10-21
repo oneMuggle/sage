@@ -151,3 +151,22 @@ export function useConversationTrajectory(sessionId: string | null): {
     };
   }, [messages, sessionId]);
 }
+
+export function formatTrajectorySummaryText(summary: TrajectorySummary): string {
+  return `entries=${summary.totalEntries} · tools=${summary.totalToolCalls} · in=${summary.totalInputTokens} · out=${summary.totalOutputTokens} · latency=${summary.totalLatencyMs}ms`;
+}
+
+export function formatTrajectorySummaryJson(summary: TrajectorySummary): string {
+  return JSON.stringify(
+    {
+      totalEntries: summary.totalEntries,
+      totalToolCalls: summary.totalToolCalls,
+      totalInputTokens: summary.totalInputTokens,
+      totalOutputTokens: summary.totalOutputTokens,
+      totalLatencyMs: summary.totalLatencyMs,
+      maxLatencyMs: summary.maxLatencyMs,
+    },
+    null,
+    2,
+  );
+}

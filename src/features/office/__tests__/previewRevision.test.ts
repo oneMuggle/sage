@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buildPreviewCacheKey, isCurrentKey, isRevisionConflict } from '../previewRevision';
+import { buildPreviewCacheKey, formatPreviewRevisionJson, formatPreviewRevisionSummary, isCurrentKey, isRevisionConflict } from '../previewRevision';
 
 describe('buildPreviewCacheKey', () => {
   it('separates same-size edits by content revision', () => {
@@ -82,5 +82,19 @@ describe('isRevisionConflict', () => {
   it('does not swallow unrelated failures', () => {
     expect(isRevisionConflict('op replace_text rejected: text_not_found')).toBe(false);
     expect(isRevisionConflict('Request failed with status 422')).toBe(false);
+  });
+});
+
+describe('formatPreviewRevisionSummary / formatPreviewRevisionJson', () => {
+  it('formats preview revision cache key summary and JSON payload', () => {
+    expect(formatPreviewRevisionSummary(null)).toBe('preview-rev: none');
+    const ck = buildPreviewCacheKey({ docId: 'doc-1', revision: 'sha256:abc' });
+    expect(formatPreviewRevisionSummary(ck)).toBe('preview-rev: doc-1@sha256:abc · verified');
+    const payload = JSON.parse(formatPreviewRevisionJson(ck));
+    expect(payload).toEqual({
+      key: 'doc-1@sha256:abc',
+      degraded: false,
+      hasKey: true,
+    });
   });
 });

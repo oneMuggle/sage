@@ -116,6 +116,10 @@ export interface OrchSettings {
   // 与后端 ``OrchSettings.max_tool_calls_per_run`` camelCase 对齐。
   // 默认 100；0 回落默认值（当前为 100，不视为"不限"）。
   maxToolCallsPerRun: number; // 100
+  // Primary agent 迭代次数上限（2026-10-20 新增）。
+  // 与后端 ``OrchSettings.max_iterations`` camelCase 对齐。
+  // 默认 25；0 回落 profile 默认值。
+  maxIterations: number; // 25
   // Round 1 (2026-09-19) 计划前置: multi 拆解前的澄清+侦察总开关（默认开）。
   // 与后端 OrchSettings.plan_preflight_enabled camelCase 对齐。
   planPreflightEnabled: boolean; // true
@@ -213,6 +217,7 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   subagentTaskTimeoutS: 900,
   maxRetryOfChains: 10,
   maxToolCallsPerRun: 100,
+  maxIterations: 25, // 2026-10-20: primary agent 迭代次数上限
   planPreflightEnabled: true,
   planScoutEnabled: true,
 };

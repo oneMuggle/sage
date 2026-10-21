@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { readTaskRecipes, reviewTaskRecipe, saveTaskRecipe } from '../taskRecipes';
+import { formatTaskRecipesJson, formatTaskRecipesSummary, readTaskRecipes, reviewTaskRecipe, saveTaskRecipe } from '../taskRecipes';
 const brief = {
   scenario: 'report' as const,
   goal: 'Weekly report',
@@ -27,5 +27,24 @@ describe('explicit task recipe persistence', () => {
   });
   it('requires a known recipe for explicit review', () => {
     expect(() => reviewTaskRecipe('unknown')).toThrow();
+  });
+});
+
+describe('formatTaskRecipesSummary / formatTaskRecipesJson', () => {
+  it('formats task recipes summary and JSON payload', () => {
+    const r = saveTaskRecipe(brief);
+    expect(formatTaskRecipesSummary(readTaskRecipes())).toBe(
+      'task-recipes: 1 total · 0 reviewed · 1 pending',
+    );
+    reviewTaskRecipe(r.id);
+    const list = readTaskRecipes();
+    expect(formatTaskRecipesSummary(list)).toBe('task-recipes: 1 total · 1 reviewed · 0 pending');
+    const payload = JSON.parse(formatTaskRecipesJson(list));
+    expect(payload).toEqual({
+      totalCount: 1,
+      reviewedCount: 1,
+      pendingCount: 0,
+      recipeIds: [r.id],
+    });
   });
 });

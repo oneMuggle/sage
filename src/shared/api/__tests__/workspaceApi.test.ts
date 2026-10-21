@@ -138,3 +138,29 @@ describe('workspaceApi', () => {
     expect(result.results[0]).not.toHaveProperty('source_path');
   });
 });
+
+describe('workspaceApi diagnostic formatters (Phase P113)', () => {
+  it('formats workspace binding summary and JSON payload', async () => {
+    const { formatWorkspaceBindingSummary, formatWorkspaceBindingJson } = await import(
+      '../workspaceApi'
+    );
+    const binding = {
+      sessionId: 'sess-1',
+      workspacePath: '/repo/sage',
+      generation: 3,
+      activatedAt: 100,
+      revokedAt: null,
+    };
+    expect(formatWorkspaceBindingSummary(binding)).toBe('sess-1 · /repo/sage · gen 3 · active');
+    expect(formatWorkspaceBindingSummary(null)).toBe('unbound');
+    const parsed = JSON.parse(formatWorkspaceBindingJson(binding));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.workspace_binding.v1',
+      bound: true,
+      sessionId: 'sess-1',
+      workspacePath: '/repo/sage',
+      generation: 3,
+      active: true,
+    });
+  });
+});

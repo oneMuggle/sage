@@ -179,3 +179,45 @@ export function scrollRangeIntoView(range: Range, scroller: HTMLElement | null):
   scroller.scrollTop += rect.top - box.top - (box.height - rect.height) / 2;
   return true;
 }
+
+export interface TextHighlightAuditSnapshot {
+  supported: boolean;
+  query: string;
+  termCount: number;
+  rangeCount: number;
+  searchHitTtlMs: number;
+  highlightNames: [string, string, string];
+  signature: string;
+}
+
+export function buildTextHighlightAuditSnapshot(
+  root?: Element | null,
+  query = '',
+): TextHighlightAuditSnapshot {
+  const supported = isHighlightSupported();
+  const normalizedQuery = typeof query === 'string' ? query.trim() : '';
+  const termCount = normalizedQuery
+    ? Array.from(new Set(normalizedQuery.split(/\s+/).filter(Boolean))).length
+    : 0;
+  const rangeCount = root && normalizedQuery ? findTextRanges(root, normalizedQuery).length : 0;
+  const searchHitTtlMs = SEARCH_HIT_HIGHLIGHT_MS;
+  const highlightNames: [string, string, string] = [
+    SEARCH_HIT_HIGHLIGHT,
+    FIND_HIGHLIGHT,
+    FIND_CURRENT_HIGHLIGHT,
+  ];
+  const signature = `${supported ? 1 : 0}|${normalizedQuery || '-'}|${termCount}|${rangeCount}|${searchHitTtlMs}`;
+  return {
+    supported,
+    query: normalizedQuery,
+    termCount,
+    rangeCount,
+    searchHitTtlMs,
+    highlightNames,
+    signature,
+  };
+}
+
+export function buildTextHighlightAuditJson(root?: Element | null, query = ''): string {
+  return JSON.stringify(buildTextHighlightAuditSnapshot(root, query), null, 2);
+}

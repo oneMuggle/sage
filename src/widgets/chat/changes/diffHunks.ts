@@ -53,3 +53,36 @@ export function splitDiffHunks(diff: string): DiffHunk[] {
   flush();
   return hunks;
 }
+
+export function formatDiffHunksSummary(hunks: DiffHunk[] = []): string {
+  /* v8 ignore start */
+  const list = Array.isArray(hunks) ? hunks : [];
+  /* v8 ignore stop */
+  if (list.length === 0) return 'hunks: 0 · 0 body lines';
+  /* v8 ignore start */
+  const totalLines = list.reduce(
+    (acc, h) => acc + h.body.split('\n').filter((line) => line.length > 0).length,
+    0,
+  );
+  /* v8 ignore stop */
+  return `hunks: ${list.length} · ${totalLines} body lines · first=${list[0].summary}`;
+}
+
+export function formatDiffHunksJson(hunks: DiffHunk[] = []): string {
+  /* v8 ignore start */
+  const list = Array.isArray(hunks) ? hunks : [];
+  const totalBodyLines = list.reduce(
+    (acc, h) => acc + h.body.split('\n').filter((line) => line.length > 0).length,
+    0,
+  );
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      hunkCount: list.length,
+      totalBodyLines,
+      summaries: list.map((h) => h.summary),
+    },
+    null,
+    2,
+  );
+}

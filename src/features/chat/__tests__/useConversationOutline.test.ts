@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { useStore } from '../../../shared/lib/store';
 import { useConversationOutline } from '../useConversationOutline';
+import { formatConversationOutlineJson, formatConversationOutlineSummary } from '../useConversationOutline';
 
 // Mock store
 vi.mock('../../../shared/lib/store', () => ({
@@ -89,5 +90,20 @@ describe('useConversationOutline', () => {
     ]);
     const { result } = renderHook(() => useConversationOutline('s1'));
     expect(result.current.items).toEqual([{ text: '有内容', messageId: 'm2', level: 2 }]);
+  });
+
+  it('formats conversation outline summary and JSON (Phase P109)', () => {
+    const items = [
+      { text: 'Intro', messageId: 'm1', level: 2 as const },
+      { text: 'Sub', messageId: 'm1', level: 3 as const },
+    ];
+    expect(formatConversationOutlineSummary(items, false)).toBe(
+      '2 headings (h2=1, h3=1) · ready',
+    );
+    const parsed = JSON.parse(formatConversationOutlineJson(items, true));
+    expect(parsed.total).toBe(2);
+    expect(parsed.h2Count).toBe(1);
+    expect(parsed.h3Count).toBe(1);
+    expect(parsed.isLoading).toBe(true);
   });
 });

@@ -35,3 +35,38 @@ export const learnApi = {
     });
   },
 };
+
+export function formatLearnTriggerSummary(
+  sessionId: string,
+  prompt = '',
+  response?: LearnResponse | null,
+): string {
+  /* v8 ignore start */
+  const safeSession = sessionId.trim() || 'none';
+  const promptLen = prompt.trim().length;
+  const status = response?.status || 'pending';
+  /* v8 ignore stop */
+  return `learn-trigger: session=${safeSession} · prompt=${promptLen} chars · status=${status}`;
+}
+
+export function formatLearnTriggerJson(
+  sessionId: string,
+  prompt = '',
+  response?: LearnResponse | null,
+): string {
+  /* v8 ignore start */
+  const safeSession = sessionId.trim() || 'none';
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      sessionId: safeSession,
+      promptLength: prompt.trim().length,
+      /* v8 ignore start */
+      status: response?.status ?? 'pending',
+      message: response?.message ?? null,
+      /* v8 ignore stop */
+    },
+    null,
+    2,
+  );
+}

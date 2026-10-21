@@ -21,6 +21,7 @@ export type SettingsTabKey =
   | 'zotero'
   | 'runtime'
   | 'evolution'
+  | 'harness'
   | 'updates'
   | 'usage-stats'
   | 'providers';
@@ -581,4 +582,25 @@ export function searchSettings(query: string): SettingsSearchEntry[] {
     const haystack = `${entry.keywords} ${entry.label} ${entry.labelEn} ${entry.key}`.toLowerCase();
     return terms.every((term) => haystack.includes(term));
   });
+}
+
+export function formatSettingsSearchSummary(query: string): string {
+  const hits = searchSettings(query);
+  const tabs = Array.from(new Set(hits.map((h) => h.tab)));
+  return `query="${query.trim()}" · hits=${hits.length} · tabs=[${tabs.join(',')}]`;
+}
+
+export function formatSettingsSearchJson(query: string): string {
+  const hits = searchSettings(query);
+  return JSON.stringify(
+    {
+      query: query.trim(),
+      totalIndexSize: SETTINGS_SEARCH_INDEX.length,
+      hitCount: hits.length,
+      keys: hits.map((h) => h.key),
+      tabs: Array.from(new Set(hits.map((h) => h.tab))),
+    },
+    null,
+    2,
+  );
 }

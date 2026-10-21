@@ -87,3 +87,29 @@ export function useConversationOutline(sessionId: string | null): {
 
   return { items, isLoading };
 }
+
+export function formatConversationOutlineSummary(
+  items: readonly OutlineItem[],
+  isLoading = false,
+): string {
+  const h2Count = items.filter((i) => i.level === 2).length;
+  const h3Count = items.filter((i) => i.level === 3).length;
+  return `${items.length} headings (h2=${h2Count}, h3=${h3Count}) · ${isLoading ? 'loading' : 'ready'}`;
+}
+
+export function formatConversationOutlineJson(
+  items: readonly OutlineItem[],
+  isLoading = false,
+): string {
+  return JSON.stringify(
+    {
+      total: items.length,
+      h2Count: items.filter((i) => i.level === 2).length,
+      h3Count: items.filter((i) => i.level === 3).length,
+      isLoading,
+      items,
+    },
+    null,
+    2,
+  );
+}
