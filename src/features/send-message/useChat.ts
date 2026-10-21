@@ -148,9 +148,7 @@ export function useChat() {
     // 快照会与服务端行 (step_index 相同) 叠加导致重复渲染. 以 step_index 去重:
     // 服务端行优先, completedSteps 中同 step_index 的条目丢弃.
     const persistedStepIndexes = new Set<number>(
-      messages
-        .filter((m) => m.step_index != null)
-        .map((m) => m.step_index as number),
+      messages.filter((m) => m.step_index != null).map((m) => m.step_index as number),
     );
     const visibleSteps =
       persistedStepIndexes.size > 0
