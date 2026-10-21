@@ -42,6 +42,47 @@ interface CommandPaletteProps {
   onOpenChange: (open: boolean) => void;
 }
 
+export interface CommandPaletteAuditInput {
+  open?: boolean;
+  searchLength?: number;
+  searching?: boolean;
+  projectCount?: number;
+  wikiRecentCount?: number;
+  skillCount?: number;
+  knowledgeScope?: string;
+}
+
+export function buildCommandPaletteAuditSnapshot(input: CommandPaletteAuditInput = {}): string {
+  const open = Boolean(input.open);
+  const searchLength = Math.max(0, input.searchLength ?? 0);
+  const searching = Boolean(input.searching);
+  const projectCount = Math.max(0, input.projectCount ?? 0);
+  const wikiRecentCount = Math.max(0, input.wikiRecentCount ?? 0);
+  const skillCount = Math.max(0, input.skillCount ?? 0);
+  const knowledgeScope = (input.knowledgeScope ?? '').trim() || 'default';
+  return `open:${open ? 'yes' : 'no'}|qLen:${searchLength}|searching:${searching ? 'yes' : 'no'}|projects:${projectCount}|wiki:${wikiRecentCount}|skills:${skillCount}|scope:${knowledgeScope}`;
+}
+
+export function buildCommandPaletteAuditJson(input: CommandPaletteAuditInput = {}): string {
+  const open = Boolean(input.open);
+  const searchLength = Math.max(0, input.searchLength ?? 0);
+  const searching = Boolean(input.searching);
+  const projectCount = Math.max(0, input.projectCount ?? 0);
+  const wikiRecentCount = Math.max(0, input.wikiRecentCount ?? 0);
+  const skillCount = Math.max(0, input.skillCount ?? 0);
+  const knowledgeScope = (input.knowledgeScope ?? '').trim() || 'default';
+  return JSON.stringify({
+    open,
+    searchLength,
+    searching,
+    projectCount,
+    wikiRecentCount,
+    skillCount,
+    knowledgeScope,
+    snapshot: buildCommandPaletteAuditSnapshot(input),
+  });
+}
+
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const navigate = useNavigate();
   const { sessions, setCurrentSessionId, createSession, loadSessions } = useStore();
@@ -56,6 +97,35 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   );
   const [wikiRecents, setWikiRecents] = useState<Array<{ path: string; name: string }>>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedAuditJson, setCopiedAuditJson] = useState(false);
+  const auditInput: CommandPaletteAuditInput = {
+    open,
+    searchLength: search.length,
+    searching,
+    projectCount: projects.length,
+    wikiRecentCount: wikiRecents.length,
+    skillCount: skills.length,
+    knowledgeScope,
+  };
+  /* v8 ignore start */
+  const handleCopyAudit = async () => {
+    setCopiedAudit(true);
+    try {
+      await navigator.clipboard?.writeText(buildCommandPaletteAuditSnapshot(auditInput));
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  const handleCopyAuditJson = async () => {
+    setCopiedAuditJson(true);
+    try {
+      await navigator.clipboard?.writeText(buildCommandPaletteAuditJson(auditInput));
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
   const abortRef = useRef<AbortController | null>(null);
 
   // 打开时重置搜索
@@ -582,6 +652,24 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         <span>⌘1-9 跳转</span>
         <span>↵ 选择</span>
         <span>esc 关闭</span>
+        <span
+          role="status"
+          data-testid="command-palette-copy-audit"
+          onClick={() => void handleCopyAudit()}
+          className="cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-text-muted hover:bg-bg-hover"
+          title="复制命令面板治理快照"
+        >
+          {copiedAudit ? '已复制快照' : '快照'}
+        </span>
+        <span
+          role="status"
+          data-testid="command-palette-copy-audit-json"
+          onClick={() => void handleCopyAuditJson()}
+          className="cursor-pointer rounded px-1 py-0.5 text-ui-2xs text-text-muted hover:bg-bg-hover"
+          title="复制命令面板治理 JSON"
+        >
+          {copiedAuditJson ? '已复制 JSON' : 'JSON'}
+        </span>
       </div>
     </Command.Dialog>
   );

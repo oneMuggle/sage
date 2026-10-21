@@ -138,3 +138,36 @@ export async function saveFontSettings(value: unknown): Promise<void> {
   // Only the remote write is serialized through the remote queue.
   await enqueueRemote(() => doSave(settings, thisVersion));
 }
+
+export interface FontStorageAuditInput {
+  fontUi?: string;
+  fontCode?: string;
+  fontSizeUi?: number;
+  fontSizeCode?: number;
+  pending?: boolean;
+}
+
+export function buildFontStorageAuditSnapshot(input: FontStorageAuditInput = {}): string {
+  const fontUi = (input.fontUi ?? '').trim() || 'inter';
+  const fontCode = (input.fontCode ?? '').trim() || 'jetbrains-mono';
+  const fontSizeUi = input.fontSizeUi ?? 14;
+  const fontSizeCode = input.fontSizeCode ?? 13;
+  const pending = Boolean(input.pending);
+  return `ui:${fontUi}|code:${fontCode}|sizeUi:${fontSizeUi}|sizeCode:${fontSizeCode}|pending:${pending ? 'yes' : 'no'}`;
+}
+
+export function buildFontStorageAuditJson(input: FontStorageAuditInput = {}): string {
+  const fontUi = (input.fontUi ?? '').trim() || 'inter';
+  const fontCode = (input.fontCode ?? '').trim() || 'jetbrains-mono';
+  const fontSizeUi = input.fontSizeUi ?? 14;
+  const fontSizeCode = input.fontSizeCode ?? 13;
+  const pending = Boolean(input.pending);
+  return JSON.stringify({
+    fontUi,
+    fontCode,
+    fontSizeUi,
+    fontSizeCode,
+    pending,
+    snapshot: buildFontStorageAuditSnapshot(input),
+  });
+}

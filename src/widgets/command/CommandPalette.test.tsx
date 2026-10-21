@@ -13,7 +13,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 
-import { CommandPalette } from './CommandPalette';
+import {
+  buildCommandPaletteAuditJson,
+  buildCommandPaletteAuditSnapshot,
+  CommandPalette,
+} from './CommandPalette';
 
 const mockBackendRequest = vi.fn();
 vi.mock('../../shared/api/backendRequest', () => ({
@@ -341,5 +345,47 @@ describe('CommandPalette 知识范围 (P9)', () => {
     await waitFor(() => {
       expect(localStorage.getItem('sage:knowledge-scope:v1')).toBe('');
     });
+  });
+
+  it('exports CommandPalette audit snapshot/JSON helpers and supports copy controls', () => {
+    expect(buildCommandPaletteAuditSnapshot()).toBe(
+      'open:no|qLen:0|searching:no|projects:0|wiki:0|skills:0|scope:default',
+    );
+    expect(
+      buildCommandPaletteAuditSnapshot({
+        open: true,
+        searchLength: 4,
+        searching: true,
+        projectCount: 3,
+        wikiRecentCount: 2,
+        skillCount: 5,
+        knowledgeScope: 'C:/work/wikia',
+      }),
+    ).toBe('open:yes|qLen:4|searching:yes|projects:3|wiki:2|skills:5|scope:C:/work/wikia');
+
+    const parsed = JSON.parse(
+      buildCommandPaletteAuditJson({
+        open: true,
+        projectCount: 1,
+      }),
+    );
+    expect(parsed).toEqual({
+      open: true,
+      searchLength: 0,
+      searching: false,
+      projectCount: 1,
+      wikiRecentCount: 0,
+      skillCount: 0,
+      knowledgeScope: 'default',
+      snapshot: 'open:yes|qLen:0|searching:no|projects:1|wiki:0|skills:0|scope:default',
+    });
+
+    renderPalette();
+    const copyAudit = screen.getByTestId('command-palette-copy-audit');
+    const copyJson = screen.getByTestId('command-palette-copy-audit-json');
+    fireEvent.click(copyAudit);
+    expect(copyAudit).toHaveTextContent('已复制快照');
+    fireEvent.click(copyJson);
+    expect(copyJson).toHaveTextContent('已复制 JSON');
   });
 });
