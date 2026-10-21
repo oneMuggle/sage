@@ -12,7 +12,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ExportButton } from '../ExportButton';
+import {
+  ExportButton,
+  formatExportButtonAuditJson,
+  formatExportButtonAuditSnapshot,
+} from '../ExportButton';
 
 beforeEach(() => {
   (window as any).electronAPI = {
@@ -118,5 +122,42 @@ describe('ExportButton', () => {
 
     await waitFor(() => expect(mock).toHaveBeenCalled());
     expect(mock).toHaveBeenCalledWith({ includePrompts: true, includeHostname: true });
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P100)', () => {
+    expect(
+      formatExportButtonAuditSnapshot({
+        includePrompts: true,
+        includeHostname: false,
+        busy: true,
+        hasMessage: true,
+      }),
+    ).toBe('exportButton|prompts=1|hostname=0|busy=1|msg=1');
+    expect(formatExportButtonAuditSnapshot({})).toBe(
+      'exportButton|prompts=0|hostname=0|busy=0|msg=0',
+    );
+    expect(
+      JSON.parse(
+        formatExportButtonAuditJson({
+          includePrompts: true,
+          includeHostname: true,
+          busy: false,
+          hasMessage: false,
+        }),
+      ),
+    ).toEqual({
+      includePrompts: true,
+      includeHostname: true,
+      busy: false,
+      hasMessage: false,
+    });
+
+    render(<ExportButton includePrompts={true} includeHostname={false} />);
+    const snapBtn = screen.getByTestId('export-button-copy-snapshot');
+    const jsonBtn = screen.getByTestId('export-button-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });
