@@ -3,7 +3,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { listen } from '../desktopEvent';
+import { formatDesktopEventJson, formatDesktopEventSummary, listen } from '../desktopEvent';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -43,5 +43,20 @@ describe('desktopEvent.listen', () => {
   it('无 electronAPI（纯浏览器）抛可读错误且不触发 handler', async () => {
     vi.stubGlobal('window', {});
     await expect(listen('evt', () => {})).rejects.toThrow('electronAPI not available');
+  });
+});
+
+describe('formatDesktopEventSummary / formatDesktopEventJson', () => {
+  it('formats desktop event summary and JSON payload', () => {
+    vi.stubGlobal('window', { electronAPI: { listen: vi.fn() } });
+    expect(formatDesktopEventSummary('orch-events-run-1', { streamId: 'sid-9' })).toBe(
+      'desktop-event: orch-events-run-1 · stream=sid-9 · ready',
+    );
+    const payload = JSON.parse(formatDesktopEventJson('orch-events-run-1', { streamId: 'sid-9' }));
+    expect(payload).toEqual({
+      event: 'orch-events-run-1',
+      streamId: 'sid-9',
+      hasElectronListen: true,
+    });
   });
 });

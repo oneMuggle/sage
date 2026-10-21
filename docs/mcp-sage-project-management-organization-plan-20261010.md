@@ -1561,3 +1561,22 @@
    - 新增 `formatTaskRecipesSummary(recipes)` 与 `formatTaskRecipesJson(recipes)`，提供持久化任务配方列表复核状态诊断摘要与 JSON 快照。
 8. **`src/pages/settings/settingsPresentation.ts` (`src/pages/settings/__tests__/settingsPresentation.test.ts`)**：
    - 新增 `formatSettingsGroupsSummary(available, locale)` 与 `formatSettingsGroupsJson(available, locale)`，提供设置页分组导航与多语言标签诊断摘要与 JSON 快照。
+
+### Phase P117（已完成 — Shared Demo Flag, Desktop Event/Invoke, Gateway, Journal, Knowledge, Learn & Media API Diagnostic Summary/JSON Helpers）
+
+1. **`src/shared/api/demoFlag.ts` (`src/shared/api/__tests__/demoFlag.test.ts`)**：
+   - 新增 `formatDemoFlagSummary()` 与 `formatDemoFlagJson()`，提供演示模式优先级链（override / Electron 注入 / settings store）诊断摘要与结构化 JSON 快照。
+2. **`src/shared/api/desktopEvent.ts` (`src/shared/api/__tests__/desktopEvent.test.ts`)**：
+   - 新增 `formatDesktopEventSummary(event, options)` 与 `formatDesktopEventJson(event, options)`，提供桌面端 IPC 流事件监听通道与 `streamId` 诊断摘要与 JSON 快照。
+3. **`src/shared/api/desktopInvoke.ts` (`src/shared/api/__tests__/desktopInvoke.test.ts`)**：
+   - 新增 `formatDesktopInvokeSummary(cmd, args)` 与 `formatDesktopInvokeJson(cmd, args)`，提供桌面端 IPC 命令调用与演示拦截模式诊断摘要与 JSON 快照。
+4. **`src/shared/api/gatewayApi.ts` (`src/shared/api/__tests__/gatewayApi.test.ts`)**：
+   - 新增 `formatGatewayConfigSummary(platform, config)` 与 `formatGatewayConfigJson(platform, config)`，提供多平台网关（Telegram / Discord / Slack）配置与白名单计数诊断摘要与 JSON 快照。
+5. **`src/shared/api/journalApi.ts` (`src/shared/api/__tests__/journalApi.test.ts`)**：
+   - 新增 `formatJournalFillSummary(req)` 与 `formatJournalFillJson(req)`，提供期刊模板填充请求规格与章节统计诊断摘要与 JSON 快照。
+6. **`src/shared/api/knowledgeApi.ts` (`src/shared/api/__tests__/knowledgeApi.test.ts`)**：
+   - 新增 `formatKnowledgeDocsSummary(docs, query)` 与 `formatKnowledgeDocsJson(docs, query)`，提供知识库兼容层（已由 Wiki 替代）查询状态诊断摘要与 JSON 快照。
+7. **`src/shared/api/learnApi.ts` (`src/shared/api/__tests__/learnApi.test.ts`)**：
+   - 新增 `formatLearnTriggerSummary(sessionId, prompt, response)` 与 `formatLearnTriggerJson(sessionId, prompt, response)`，提供显式后台复盘触发状态诊断摘要与 JSON 快照。
+8. **`src/shared/api/mediaApi.ts` (`src/shared/api/__tests__/mediaApi.test.ts`)**：
+   - 新增 `formatMediaUrlSummary(apiUrl, mimeType)` 与 `formatMediaUrlJson(apiUrl, mimeType)`，提供多模态媒体资源 URL 解析与 MIME 类型诊断摘要与 JSON 快照。
