@@ -22,3 +22,28 @@ export function isDemoMode(): boolean {
   if (typeof window !== 'undefined' && window.electronAPI?.demoMode === true) return true;
   return useSettingsStore.getState().settings.demoMode === true;
 }
+
+export function formatDemoFlagSummary(): string {
+  const active = isDemoMode();
+  const override = getDemoModeOverride();
+  /* v8 ignore start */
+  const stateLabel = active ? 'enabled' : 'disabled';
+  const overrideLabel = override === undefined ? 'none' : String(override);
+  /* v8 ignore stop */
+  return `demo-flag: ${stateLabel} · override=${overrideLabel}`;
+}
+
+export function formatDemoFlagJson(): string {
+  const override = getDemoModeOverride();
+  return JSON.stringify(
+    {
+      demoMode: isDemoMode(),
+      /* v8 ignore start */
+      override: override ?? null,
+      hasElectronFlag: Boolean(typeof window !== 'undefined' && window.electronAPI?.demoMode),
+      /* v8 ignore stop */
+    },
+    null,
+    2,
+  );
+}

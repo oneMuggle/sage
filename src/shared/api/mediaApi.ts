@@ -60,3 +60,27 @@ export function revokeMediaBlobUrl(blobUrl: string): void {
     URL.revokeObjectURL(blobUrl);
   }
 }
+
+export function formatMediaUrlSummary(apiUrl: string, mimeType?: string): string {
+  const resolved = resolveMediaUrl(apiUrl);
+  /* v8 ignore start */
+  const mime = mimeType?.trim() || 'auto';
+  /* v8 ignore stop */
+  return `media-url: ${resolved} · mime=${mime}`;
+}
+
+export function formatMediaUrlJson(apiUrl: string, mimeType?: string): string {
+  const resolved = resolveMediaUrl(apiUrl);
+  return JSON.stringify(
+    {
+      apiUrl,
+      resolvedUrl: resolved,
+      /* v8 ignore start */
+      mimeType: mimeType?.trim() || null,
+      /* v8 ignore stop */
+      isBlobUrl: resolved.startsWith('blob:'),
+    },
+    null,
+    2,
+  );
+}

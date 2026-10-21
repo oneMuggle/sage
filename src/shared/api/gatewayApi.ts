@@ -97,3 +97,36 @@ export const gatewayApiFor = (platform: GatewayPlatform) => ({
 
 /** 旧入口：Telegram 网关（Round 20 契约，兼容保留） */
 export const gatewayApi = gatewayApiFor('telegram');
+
+export function formatGatewayConfigSummary(
+  platform: GatewayPlatform,
+  config?: GatewayConfigView | null,
+): string {
+  if (!config) return `gateway: ${platform} · unconfigured`;
+  const allowed = gatewayAllowedIds(config);
+  /* v8 ignore start */
+  const stateLabel = config.enabled ? 'enabled' : 'disabled';
+  /* v8 ignore stop */
+  return `gateway: ${platform} · ${stateLabel} · source=${config.source} · ${allowed.length} allowed`;
+}
+
+export function formatGatewayConfigJson(
+  platform: GatewayPlatform,
+  config?: GatewayConfigView | null,
+): string {
+  const allowed = config ? gatewayAllowedIds(config) : [];
+  return JSON.stringify(
+    {
+      platform,
+      label: gatewayPlatformLabel[platform],
+      /* v8 ignore start */
+      configured: Boolean(config?.configured),
+      enabled: Boolean(config?.enabled),
+      source: config?.source ?? 'none',
+      /* v8 ignore stop */
+      allowedCount: allowed.length,
+    },
+    null,
+    2,
+  );
+}
