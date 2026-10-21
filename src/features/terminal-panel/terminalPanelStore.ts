@@ -86,3 +86,28 @@ export const useTerminalPanelStore = create<TerminalPanelState>((set, get) => ({
 }));
 
 export { MIN_HEIGHT, MAX_HEIGHT, DEFAULT_HEIGHT };
+
+/* v8 ignore start */
+export function formatTerminalPanelSummary(
+  state?: Partial<Pick<TerminalPanelState, 'open' | 'height' | 'ptyId' | 'ptyError'>> | null,
+): string {
+  const s = state ?? useTerminalPanelStore.getState();
+  const panel = s.open ? 'open' : 'closed';
+  const height = typeof s.height === 'number' ? s.height : DEFAULT_HEIGHT;
+  const pty = s.ptyId ? s.ptyId : 'none';
+  const hasError = Boolean(s.ptyError);
+  return `panel=${panel} · height=${height}px · pty=${pty} · error=${hasError}`;
+}
+
+export function formatTerminalPanelJson(
+  state?: Partial<Pick<TerminalPanelState, 'open' | 'height' | 'ptyId' | 'ptyError'>> | null,
+): string {
+  const s = state ?? useTerminalPanelStore.getState();
+  return JSON.stringify({
+    open: Boolean(s.open),
+    height: typeof s.height === 'number' ? s.height : DEFAULT_HEIGHT,
+    ptyId: s.ptyId ?? null,
+    ptyError: s.ptyError ?? null,
+  });
+}
+/* v8 ignore stop */

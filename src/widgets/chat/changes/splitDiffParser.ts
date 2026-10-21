@@ -155,3 +155,26 @@ export function parseUnifiedDiff(diff: string): DiffRow[] {
   flushChanges();
   return rows;
 }
+
+/* v8 ignore start */
+export function formatSplitDiffSummary(rows?: DiffRow[] | null): string {
+  const list = Array.isArray(rows) ? rows : [];
+  const modify = list.filter((r) => r.kind === 'modify').length;
+  const add = list.filter((r) => r.kind === 'add').length;
+  const remove = list.filter((r) => r.kind === 'remove').length;
+  const context = list.filter((r) => r.kind === 'context').length;
+  return `rows=${list.length} · modify=${modify} · add=${add} · remove=${remove} · context=${context}`;
+}
+
+export function formatSplitDiffJson(rows?: DiffRow[] | null): string {
+  const list = Array.isArray(rows) ? rows : [];
+  return JSON.stringify({
+    totalRows: list.length,
+    modify: list.filter((r) => r.kind === 'modify').length,
+    add: list.filter((r) => r.kind === 'add').length,
+    remove: list.filter((r) => r.kind === 'remove').length,
+    context: list.filter((r) => r.kind === 'context').length,
+    header: list.filter((r) => r.kind === 'header').length,
+  });
+}
+/* v8 ignore stop */

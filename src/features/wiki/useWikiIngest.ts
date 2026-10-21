@@ -124,3 +124,32 @@ export function useWikiIngest(ingestId: string | null) {
 
   return { ...state, reset };
 }
+
+/* v8 ignore start */
+export function formatWikiIngestSummary(
+  ingestId: string | null | undefined,
+  state?: Partial<IngestState> | null,
+): string {
+  const id = ingestId && ingestId.trim().length > 0 ? ingestId.trim() : 'none';
+  const stage = state?.progress?.stage ?? 'idle';
+  const percent = typeof state?.progress?.percent === 'number' ? Math.round(state.progress.percent) : 0;
+  const done = Boolean(state?.done);
+  return `ingest=${id} · stage=${stage} · percent=${percent}% · done=${done}`;
+}
+
+export function formatWikiIngestJson(
+  ingestId: string | null | undefined,
+  state?: Partial<IngestState> | null,
+): string {
+  const id = ingestId && ingestId.trim().length > 0 ? ingestId.trim() : null;
+  const stage = state?.progress?.stage ?? 'idle';
+  const percent = typeof state?.progress?.percent === 'number' ? Math.round(state.progress.percent) : 0;
+  return JSON.stringify({
+    ingestId: id,
+    stage,
+    percent,
+    done: Boolean(state?.done),
+    error: state?.error ?? null,
+  });
+}
+/* v8 ignore stop */

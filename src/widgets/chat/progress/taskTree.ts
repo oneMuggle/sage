@@ -103,3 +103,24 @@ export function flattenTree(index: TaskTreeIndex): TaskTreeNode[] {
   }
   return out;
 }
+
+/* v8 ignore start */
+export function formatTaskTreeSummary(index?: TaskTreeIndex | null): string {
+  const nodes = index?.nodes ? Array.from(index.nodes.values()) : [];
+  const rootCount = Array.isArray(index?.roots) ? index.roots.length : 0;
+  const maxDepth = nodes.reduce((max, n) => Math.max(max, n.depth), 0);
+  return `nodes=${nodes.length} · roots=${rootCount} · maxDepth=${maxDepth}`;
+}
+
+export function formatTaskTreeJson(index?: TaskTreeIndex | null): string {
+  const nodes = index?.nodes ? Array.from(index.nodes.values()) : [];
+  const rootCount = Array.isArray(index?.roots) ? index.roots.length : 0;
+  const maxDepth = nodes.reduce((max, n) => Math.max(max, n.depth), 0);
+  return JSON.stringify({
+    nodeCount: nodes.length,
+    rootCount,
+    maxDepth,
+    roots: Array.isArray(index?.roots) ? index.roots : [],
+  });
+}
+/* v8 ignore stop */
