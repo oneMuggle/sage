@@ -60,3 +60,21 @@ describe('agentStateToPhase', () => {
     expect(agentStateToPhase(undefined)).toBeNull();
   });
 });
+
+describe('agentStateMapping diagnostic formatters (Phase P114)', () => {
+  it('formats agent phase summary and JSON payload', async () => {
+    const { formatAgentPhaseSummary, formatAgentPhaseJson } = await import('../agentStateMapping');
+    expect(formatAgentPhaseSummary('acting', 'web_search')).toBe(
+      'acting · Wrench:执行工具 · 🔧 调工具 web_search…',
+    );
+    expect(formatAgentPhaseSummary(null)).toBe('none · no-phase · no-text');
+    const parsed = JSON.parse(formatAgentPhaseJson('thinking'));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.agent_state_mapping.v1',
+      state: 'thinking',
+      toolName: null,
+      phase: { iconName: 'Brain', label: '思考中' },
+      text: '🤔 思考中…',
+    });
+  });
+});

@@ -33,3 +33,24 @@ export function clearLastWorkspacePath(): void {
     // Non-fatal
   }
 }
+
+export function formatLastWorkspaceSummary(
+  workspacePath: string | null = getLastWorkspacePath(),
+): string {
+  return workspacePath ? `persisted · ${workspacePath}` : 'none';
+}
+
+export function formatLastWorkspaceJson(
+  workspacePath: string | null = getLastWorkspacePath(),
+): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.last_workspace.v1',
+      key: LAST_WORKSPACE_KEY,
+      persisted: Boolean(workspacePath),
+      workspacePath: workspacePath ?? null,
+    },
+    null,
+    2,
+  );
+}

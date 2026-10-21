@@ -138,3 +138,31 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
       return assertNever(state);
   }
 }
+
+export function formatAgentPhaseSummary(
+  state: AgentState | null | undefined,
+  toolName?: string,
+): string {
+  const phase = agentStateToPhase(state);
+  const text = state ? agentStateToText(state, toolName) : null;
+  return `${state ?? 'none'} · ${phase ? `${phase.iconName}:${phase.label}` : 'no-phase'} · ${text ?? 'no-text'}`;
+}
+
+export function formatAgentPhaseJson(
+  state: AgentState | null | undefined,
+  toolName?: string,
+): string {
+  const phase = agentStateToPhase(state);
+  const text = state ? agentStateToText(state, toolName) : null;
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.agent_state_mapping.v1',
+      state: state ?? null,
+      toolName: toolName ?? null,
+      phase,
+      text,
+    },
+    null,
+    2,
+  );
+}
