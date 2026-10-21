@@ -527,6 +527,8 @@ export interface RetryInfo {
 export interface AgentEvent {
   state: AgentState;
   iteration: number;
+  /** 2026-09 step-by-step: 当前事件所属 step 序号（与 iteration 对齐; STEP_DONE 时明确设置）。 */
+  step_index?: number;
   content?: string;
   reasoning?: string; // LLM 思考/推理过程内容
   tool_call?: AgentToolCall;

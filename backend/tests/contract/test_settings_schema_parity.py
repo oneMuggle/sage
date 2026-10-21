@@ -47,6 +47,11 @@ EXPECTED_TOP_KEYS = frozenset(
         "wiki",
         "version",
         "orch",
+        # 2026-10-21: LLM 自动重试参数 — 前端用户配置必须透传, 否则 sanitizeForBackend
+        # 丢弃后后端永远用默认值 (max_attempts=3, base_delay=1.0, max_delay=15.0).
+        "llmRetryMaxAttempts",
+        "llmRetryBaseDelayS",
+        "llmRetryMaxDelayS",
     }
 )
 
