@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { HarnessComponent } from '../../../entities/harness/types';
 import { harnessApi } from '../../../shared/api/harnessApi';
-
 import { HarnessDashboard } from '../HarnessDashboard';
 
 vi.mock('../../../shared/api/harnessApi', () => ({
@@ -49,7 +48,11 @@ describe('HarnessDashboard', () => {
   });
 
   it('渲染组件卡片及其效果指标', async () => {
-    mockedApi.listComponents.mockResolvedValue({ items: [component()], total: 1, component_types: ['tool_guidance'] });
+    mockedApi.listComponents.mockResolvedValue({
+      items: [component()],
+      total: 1,
+      component_types: ['tool_guidance'],
+    });
     render(<HarnessDashboard />);
     await waitFor(() => expect(screen.getByText('bash 工具引导')).toBeTruthy());
     expect(screen.getByText('工具引导')).toBeTruthy();
@@ -85,7 +88,11 @@ describe('HarnessDashboard', () => {
   });
 
   it('健康组件不带待改进标记', async () => {
-    mockedApi.listComponents.mockResolvedValue({ items: [component()], total: 1, component_types: ['tool_guidance'] });
+    mockedApi.listComponents.mockResolvedValue({
+      items: [component()],
+      total: 1,
+      component_types: ['tool_guidance'],
+    });
     render(<HarnessDashboard />);
     await waitFor(() => expect(screen.getByText('bash 工具引导')).toBeTruthy());
     expect(screen.queryByTestId('harness-needs-improvement')).toBeNull();
@@ -115,9 +122,7 @@ describe('HarnessDashboard', () => {
   it('无组件时展示空态提示', async () => {
     mockedApi.listComponents.mockResolvedValue({ items: [], total: 0, component_types: [] });
     render(<HarnessDashboard />);
-    await waitFor(() =>
-      expect(screen.getByText(/暂无 harness 组件/)).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(/暂无 harness 组件/)).toBeTruthy());
   });
 
   it('加载失败时展示错误与重试按钮', async () => {

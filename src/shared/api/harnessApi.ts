@@ -12,6 +12,7 @@ import type {
   HarnessComponentListResponse,
   HarnessNeedingImprovementResponse,
 } from '../../entities/harness/types';
+
 import { backendRequest } from './backendRequest';
 import { isDemoMode } from './demoFlag';
 
