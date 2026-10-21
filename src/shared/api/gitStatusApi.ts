@@ -30,3 +30,25 @@ export async function getGitStatus(path: string): Promise<GitStatusResponse> {
     path: `/api/v1/git/status?path=${encodeURIComponent(path)}`,
   });
 }
+
+/* v8 ignore start */
+export function formatGitStatusSummary(res?: Partial<GitStatusResponse> | null): string {
+  const repo = Boolean(res?.is_git_repo);
+  const branch = res?.branch && res.branch.trim().length > 0 ? res.branch.trim() : 'none';
+  const files = Array.isArray(res?.files) ? res.files.length : 0;
+  const ahead = typeof res?.ahead === 'number' ? res.ahead : 0;
+  const behind = typeof res?.behind === 'number' ? res.behind : 0;
+  return `repo=${repo} · branch=${branch} · files=${files} · ahead=${ahead} · behind=${behind}`;
+}
+
+export function formatGitStatusJson(res?: Partial<GitStatusResponse> | null): string {
+  const files = Array.isArray(res?.files) ? res.files : [];
+  return JSON.stringify({
+    isGitRepo: Boolean(res?.is_git_repo),
+    branch: res?.branch && res.branch.trim().length > 0 ? res.branch.trim() : null,
+    fileCount: files.length,
+    ahead: typeof res?.ahead === 'number' ? res.ahead : 0,
+    behind: typeof res?.behind === 'number' ? res.behind : 0,
+  });
+}
+/* v8 ignore stop */

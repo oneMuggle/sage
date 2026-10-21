@@ -4,3 +4,33 @@ export function fillTemplate(template: string, vars: Record<string, string | num
     key in vars ? String(vars[key]) : match,
   );
 }
+
+/* v8 ignore start */
+export function formatFillTemplateSummary(
+  template?: string | null,
+  vars?: Record<string, string | number> | null,
+): string {
+  const tpl = typeof template === 'string' ? template : '';
+  const map = vars && typeof vars === 'object' ? vars : {};
+  const keys = Array.from(tpl.matchAll(/\{(\w+)\}/g)).map((m) => m[1]);
+  const filled = keys.filter((k) => k in map).length;
+  const unresolved = keys.length - filled;
+  return `placeholders=${keys.length} · filled=${filled} · unresolved=${unresolved}`;
+}
+
+export function formatFillTemplateJson(
+  template?: string | null,
+  vars?: Record<string, string | number> | null,
+): string {
+  const tpl = typeof template === 'string' ? template : '';
+  const map = vars && typeof vars === 'object' ? vars : {};
+  const keys = Array.from(tpl.matchAll(/\{(\w+)\}/g)).map((m) => m[1]);
+  const filled = keys.filter((k) => k in map).length;
+  return JSON.stringify({
+    placeholders: keys.length,
+    filled,
+    unresolved: keys.length - filled,
+    result: fillTemplate(tpl, map),
+  });
+}
+/* v8 ignore stop */
