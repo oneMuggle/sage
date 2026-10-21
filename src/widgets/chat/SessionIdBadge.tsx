@@ -29,7 +29,7 @@ export function SessionIdBadge({ sessionId }: SessionIdBadgeProps) {
     <button
       type="button"
       onClick={handleCopy}
-      className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-bg-hover text-text-tertiary hover:text-text-secondary hover:bg-border/50 transition-colors"
+      className="px-1.5 py-0.5 text-ui-2xs font-mono rounded bg-bg-hover text-text-tertiary hover:text-text-secondary hover:bg-border/50 transition-colors"
       title={copied ? '已复制完整 ID' : `点击复制完整会话 ID: ${sessionId}`}
     >
       {copied ? '✓ 已复制' : `#${shortId}`}
