@@ -88,3 +88,44 @@ export function buildFindMatches(
   }
   return matches;
 }
+
+export interface ChatFindAuditSnapshot {
+  query: string;
+  messageCount: number;
+  searchableMessageCount: number;
+  matchCount: number;
+  matchedMessageCount: number;
+  firstMatchMessageId: string | null;
+  signature: string;
+}
+
+export function buildChatFindAuditSnapshot(
+  messages: ReadonlyArray<FindableMessage> = [],
+  query = '',
+): ChatFindAuditSnapshot {
+  const safeMessages: ReadonlyArray<FindableMessage> = Array.isArray(messages) ? messages : [];
+  const normalizedQuery = typeof query === 'string' ? query.trim().toLowerCase() : '';
+  const messageCount = safeMessages.length;
+  const searchableMessageCount = safeMessages.filter(isSearchable).length;
+  const matches = buildFindMatches(safeMessages, normalizedQuery);
+  const matchCount = matches.length;
+  const matchedMessageCount = new Set(matches.map((m) => m.messageId)).size;
+  const firstMatchMessageId = matches[0]?.messageId ?? null;
+  const signature = `${normalizedQuery || '-'}|${messageCount}|${searchableMessageCount}|${matchCount}|${matchedMessageCount}|${firstMatchMessageId ?? '-'}`;
+  return {
+    query: normalizedQuery,
+    messageCount,
+    searchableMessageCount,
+    matchCount,
+    matchedMessageCount,
+    firstMatchMessageId,
+    signature,
+  };
+}
+
+export function buildChatFindAuditJson(
+  messages: ReadonlyArray<FindableMessage> = [],
+  query = '',
+): string {
+  return JSON.stringify(buildChatFindAuditSnapshot(messages, query), null, 2);
+}
