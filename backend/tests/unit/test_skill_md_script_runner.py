@@ -127,8 +127,14 @@ async def test_script_runner_happy_path(tmp_path):
     req = call_args.args[0]
     assert isinstance(req, SandboxRequest)
     assert req.script_path != script.resolve()
+    # 镜像布局：脚本在快照内的相对路径保持与技能目录一致
     assert req.script_path.name == script.name
-    assert req.cwd == script.parent.resolve()
+    # cwd 改为快照内的对应目录（不再是真实技能目录）
+    assert req.cwd != script.parent.resolve()
+    assert req.script_path.parent == req.cwd
+    import tempfile as _tempfile
+
+    assert str(req.cwd).startswith(_tempfile.gettempdir())
 
 
 @pytest.mark.asyncio()
@@ -503,7 +509,7 @@ async def test_script_runner_rejects_snapshot_creation_failure(tmp_path, monkeyp
     confirmer = MagicMock(spec=ConfirmationPort)
     confirmer.confirm = AsyncMock(return_value=True)
     runner = ScriptRunner(sandbox=sandbox, confirmer=confirmer, allowed_roots=[tmp_path])
-    monkeypatch.setattr(runner, "_create_snapshot", lambda path, content: (_ for _ in ()).throw(OSError("no snapshot")))
+    monkeypatch.setattr(runner, "_create_snapshot", lambda path, content, base_dir: (_ for _ in ()).throw(OSError("no snapshot")))
 
     result = await runner.run_script(doc, "test.py", ())
 
