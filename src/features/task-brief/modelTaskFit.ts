@@ -17,3 +17,28 @@ export function modelTaskFit(model: CandidateModel, needsTools: boolean) {
     knownPrice: model.price.input_per_million !== null && model.price.output_per_million !== null,
   };
 }
+
+export function formatModelTaskFitSummary(model: CandidateModel, needsTools: boolean): string {
+  const fit = modelTaskFit(model, needsTools);
+  /* v8 ignore start */
+  const eligLabel = fit.eligible ? 'eligible' : 'ineligible';
+  const priceLabel = fit.knownPrice ? 'known' : 'unknown';
+  /* v8 ignore stop */
+  return `model-fit: ${model.model_key.provider}/${model.model_key.model_id} · ${eligLabel} · tools=${fit.tools} · price=${priceLabel}`;
+}
+
+export function formatModelTaskFitJson(model: CandidateModel, needsTools: boolean): string {
+  const fit = modelTaskFit(model, needsTools);
+  return JSON.stringify(
+    {
+      provider: model.model_key.provider,
+      modelId: model.model_key.model_id,
+      needsTools: Boolean(needsTools),
+      eligible: fit.eligible,
+      tools: fit.tools,
+      knownPrice: fit.knownPrice,
+    },
+    null,
+    2,
+  );
+}
