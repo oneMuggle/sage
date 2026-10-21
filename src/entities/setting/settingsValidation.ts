@@ -43,3 +43,21 @@ export function validateSettingValue(key: string, value: unknown): string | null
   if (!metadata) return `未知设置项: ${key}`;
   return validateConstraint(metadata, value);
 }
+
+export function formatSettingValidationSummary(key: string, value: unknown): string {
+  const error = validateSettingValue(key, value);
+  return `${key} · ${error === null ? 'valid' : `invalid(${error})`}`;
+}
+
+export function formatSettingValidationJson(key: string, value: unknown): string {
+  const error = validateSettingValue(key, value);
+  return JSON.stringify(
+    {
+      key,
+      valid: error === null,
+      error,
+    },
+    null,
+    2,
+  );
+}

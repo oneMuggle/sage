@@ -1608,3 +1608,17 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 97 项单测全部通过；`release/win7` 8 个测试文件 97 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+
+### Phase P120：主题上下文/产品愿景/自主目标客户端/自主目标状态/自主目标契约/字体选项/模型目录契约/设置项校验审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/app/providers/useTheme.ts`：新增 `formatThemeAuditSummary` 与 `formatThemeAuditJson` 及单测 `useTheme.test.ts`，支持一键导出主题模式与来源审计摘要（`mode=<mode>(<resolved>) · preset=<presetId> · source=<kind>:<id> · css=<count>`）与 JSON 快照。
+  2. `src/content/about/vision.ts`：新增 `formatVisionAuditSummary` 与 `formatVisionAuditJson` 及单测 `vision.test.ts`，支持一键导出产品愿景与四项核心哲学原则审计摘要（`visionChars=<len> · principles=<count> · names=[...]`）与 JSON 快照。
+  3. `src/entities/autonomous-goals/goalApi.ts`：新增 `formatGoalListQuerySummary` 与 `formatGoalListQueryJson` 及单测 `goalApi.test.ts`，支持一键导出闲时自主目标查询参数审计摘要（`path=/api/v1/goals · status=<status> · limit=<limit> · offset=<offset>`）与 JSON 快照。
+  4. `src/entities/autonomous-goals/goalStore.ts`：新增 `formatGoalStoreSummary` 与 `formatGoalStoreJson` 及单测 `goalStore.test.ts`，支持一键导出自主目标 Zustand Store 状态审计摘要（`goals=<count>/<total> · filter=<statusFilter> · loading=<loading> · error=<error>`）与 JSON 快照。
+  5. `src/entities/autonomous-goals/types.ts`：新增 `formatGoalAuditSummary` 与 `formatGoalAuditJson` 及单测 `types.test.ts`，支持一键导出自主目标进度与检查点核验审计摘要（`<id> · status=<status> · progress=<pct>% · checkpoints=<verified>/<total> · deg=<degradation_level>`）与 JSON 快照。
+  6. `src/entities/font/fontOptions.ts`：新增 `formatFontSettingsSummary` 与 `formatFontSettingsJson` 及单测 `fontOptions.test.ts`，支持一键导出 UI 与代码字体配置审计摘要（`ui=<fontUi>@<fontSizeUi>px · code=<fontCode>@<fontSizeCode>px`）与 JSON 快照。
+  7. `src/entities/model-catalog/types.ts`：新增 `formatCandidateModelSummary` 与 `formatCandidateModelJson` 及单测 `types.test.ts`，支持一键导出候选模型目录条目审计摘要（`<provider>/<model_id> · ctx=<native> · source=<source>`）与 JSON 快照。
+  8. `src/entities/setting/settingsValidation.ts`：新增 `formatSettingValidationSummary` 与 `formatSettingValidationJson` 及单测 `settingsValidation.test.ts`，支持一键导出设置项约束校验结果审计摘要（`<key> · <valid|invalid(error)>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。

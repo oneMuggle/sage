@@ -154,3 +154,31 @@ export const useGoalStore = create<GoalState>((set, get) => ({
     set({ error: null });
   },
 }));
+
+export function formatGoalStoreSummary(
+  state: Pick<
+    GoalState,
+    'goals' | 'total' | 'loading' | 'error' | 'statusFilter'
+  > = useGoalStore.getState(),
+): string {
+  return `goals=${state.goals.length}/${state.total} · filter=${state.statusFilter ?? 'all'} · loading=${state.loading} · error=${state.error ?? 'none'}`;
+}
+
+export function formatGoalStoreJson(
+  state: Pick<
+    GoalState,
+    'goals' | 'total' | 'loading' | 'error' | 'statusFilter'
+  > = useGoalStore.getState(),
+): string {
+  return JSON.stringify(
+    {
+      goalCount: state.goals.length,
+      total: state.total,
+      statusFilter: state.statusFilter,
+      loading: state.loading,
+      error: state.error,
+    },
+    null,
+    2,
+  );
+}
