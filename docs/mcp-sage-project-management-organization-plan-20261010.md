@@ -1726,4 +1726,17 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P129：顶层 Provider 栈 (`AppProviders`/`ErrorBoundary`/`QueryClientProvider`/`ToastProvider`/`providers/index`)、Arena 实体 (`arena/api`/`arena/index`) 与端点协议注册表 (`providerRegistry`) 审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/app/providers/AppProviders.tsx`：新增 `formatAppProvidersSummary` 与 `formatAppProvidersJson` 及单测 `AppProviders.test.tsx`，支持一键导出顶层 Provider 嵌套栈、Toast 兄弟挂载位与子节点装配态审计摘要（`stack=ErrorBoundary>Theme>Font>SessionWorkspace>I18n>QueryClient · toast=sibling · children=<bool>`）与 JSON 快照。
+  2. `src/app/providers/ErrorBoundary.tsx`：新增 `formatErrorBoundarySummary` 与 `formatErrorBoundaryJson` 及单测 `ErrorBoundary.test.tsx`，支持一键导出错误边界捕获状态、异常信息与自定义降级 UI 配置审计摘要（`caught=<bool> · message=<msg|none> · customFallback=<bool>`）与 JSON 快照。
+  3. `src/app/providers/QueryClientProvider.tsx`：新增 `formatQueryClientConfigSummary` 与 `formatQueryClientConfigJson` 及单测 `QueryClientProvider.test.tsx`，支持一键导出 TanStack Query 客户端默认缓存窗口、重试次数与失焦重拉策略审计摘要（`staleTimeMs=<n> · retry=<n> · refetchOnWindowFocus=<bool>`）与 JSON 快照。
+  4. `src/app/providers/ToastProvider.tsx`：新增 `formatToastProviderSummary` 与 `formatToastProviderJson` 及单测 `ToastProvider.test.tsx`，支持一键导出 Sonner Toast 容器明暗主题、弹出方位与驻留时长审计摘要（`theme=<light|dark> · position=top-right · durationMs=<n>`）与 JSON 快照。
+  5. `src/app/providers/index.ts`：新增 `formatProvidersBarrelSummary` 与 `formatProvidersBarrelJson` 及单测 `index.test.ts`，支持一键导出顶层 Provider Barrel 导出符号清单与数量审计摘要（`exports=AppProviders,ErrorBoundary,QueryClientProvider,ThemeProvider,ToastProvider,useTheme · count=6`）与 JSON 快照。
+  6. `src/entities/arena/api.ts`：新增 `formatArenaAccountSummary` 与 `formatArenaAccountJson` 及单测 `api.test.ts`，支持一键导出 Arena 账号池个体状态与累计失败计数审计摘要（`id=<id> · state=<state> · failures=<n>`）与 JSON 快照。
+  7. `src/entities/arena/index.ts`：新增 `formatArenaEntityBarrelSummary` 与 `formatArenaEntityBarrelJson` 及单测 `index.test.ts`，支持一键导出 Arena 实体 Barrel 路由前缀与重导出模块审计摘要（`module=entities/arena · base=/api/v1/arena · reExports=api`）与 JSON 快照。
+  8. `src/entities/endpoint/providerRegistry.ts`：新增 `formatProviderRegistrySummary` 与 `formatProviderRegistryJson` 及单测 `providerRegistry.test.ts`，支持一键导出前端 LLM 协议注册表已注册协议列表与代理路由前缀审计摘要（`providers=<count> · ids=<csv> · proxyBase=/api/v1/llm`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
 

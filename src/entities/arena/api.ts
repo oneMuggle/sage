@@ -380,3 +380,21 @@ export async function tokenWindowState(): Promise<TokenWindowState> {
     method: 'GET',
   });
 }
+export function formatArenaAccountSummary(
+  account: Pick<ArenaAccount, 'id' | 'state' | 'failure_count'>,
+): string {
+  const id = account.id.trim() || 'unknown';
+  const failures = Math.max(0, Math.trunc(account.failure_count));
+  return `id=${id} · state=${account.state} · failures=${failures}`;
+}
+
+export function formatArenaAccountJson(
+  account: Pick<ArenaAccount, 'id' | 'state' | 'failure_count'>,
+): string {
+  return JSON.stringify({
+    id: account.id.trim() || 'unknown',
+    state: account.state,
+    failures: Math.max(0, Math.trunc(account.failure_count)),
+  });
+}
+

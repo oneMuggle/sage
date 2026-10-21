@@ -94,3 +94,23 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return this.props.children;
   }
 }
+export function formatErrorBoundarySummary(
+  error: Error | null,
+  hasCustomFallback = false,
+): string {
+  const caught = error !== null;
+  const msg = error?.message?.trim() || 'none';
+  return `caught=${caught} · message=${msg} · customFallback=${Boolean(hasCustomFallback)}`;
+}
+
+export function formatErrorBoundaryJson(
+  error: Error | null,
+  hasCustomFallback = false,
+): string {
+  return JSON.stringify({
+    caught: error !== null,
+    message: error?.message?.trim() || null,
+    hasCustomFallback: Boolean(hasCustomFallback),
+  });
+}
+
