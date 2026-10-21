@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { TaskPlanItem as StreamTaskPlanItem } from '../llmStream';
 import type { TaskPlanItem } from '../types';
+import { formatTaskPlanItemJson, formatTaskPlanItemSummary } from '../types';
 
 describe('TaskPlanItem', () => {
   it('supports optional parent_task_id and depth', () => {
@@ -39,5 +40,23 @@ describe('TaskPlanItem', () => {
 
     expect(item.parent_task_id).toBeUndefined();
     expect(item.depth).toBeUndefined();
+  });
+
+  it('formats TaskPlanItem summary and JSON (Phase P119)', () => {
+    const item: TaskPlanItem = {
+      task_id: 't2',
+      agent_id: 'coder',
+      goal: 'implement feature',
+      parent_task_id: 't1',
+      depth: 1,
+    };
+    expect(formatTaskPlanItemSummary(item)).toBe('t2 · agent=coder · parent=t1 · depth=1');
+    expect(JSON.parse(formatTaskPlanItemJson(item))).toEqual({
+      taskId: 't2',
+      agentId: 'coder',
+      goal: 'implement feature',
+      parentTaskId: 't1',
+      depth: 1,
+    });
   });
 });

@@ -130,3 +130,26 @@ export const DialogDescription = forwardRef<
   />
 ));
 DialogDescription.displayName = DialogPrimitive.Description.displayName;
+export function formatDialogConfigSummary(config: {
+  open?: boolean;
+  showCloseButton?: boolean;
+  title?: string;
+}): string {
+  return `${config.open ? 'open' : 'closed'} · closeBtn=${config.showCloseButton ?? true} · title=${config.title ?? 'untitled'}`;
+}
+
+export function formatDialogConfigJson(config: {
+  open?: boolean;
+  showCloseButton?: boolean;
+  title?: string;
+}): string {
+  return JSON.stringify(
+    {
+      open: Boolean(config.open),
+      showCloseButton: config.showCloseButton ?? true,
+      title: config.title ?? null,
+    },
+    null,
+    2,
+  );
+}
