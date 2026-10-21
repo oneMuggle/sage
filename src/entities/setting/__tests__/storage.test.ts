@@ -336,4 +336,20 @@ describe('mergeWithDefaults (endpoints / modelSelections deepMerge)', () => {
     expect(merged.endpoints[1].protocol).toBe('openai-compatible');
     expect(merged.endpoints[1].lastDiscoveredAt).toBeNull();
   });
+
+  it('formats app settings storage summary and JSON (Phase P108)', async () => {
+    const { formatAppSettingsStorageSummary, formatAppSettingsStorageJson } = await import('../storage');
+    const merged = mergeWithDefaults({
+      streaming: true,
+      modelSelections: {
+        ...DEFAULT_SETTINGS.modelSelections,
+        chatModel: { endpointId: 'ep-1', modelId: 'gpt-4o' },
+      },
+    });
+    expect(formatAppSettingsStorageSummary(merged)).toBe('endpoints=0 · chat=gpt-4o · streaming=true');
+    const parsed = JSON.parse(formatAppSettingsStorageJson(merged));
+    expect(parsed.endpointCount).toBe(0);
+    expect(parsed.chatModel).toEqual({ endpointId: 'ep-1', modelId: 'gpt-4o' });
+    expect(parsed.streaming).toBe(true);
+  });
 });

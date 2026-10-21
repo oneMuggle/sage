@@ -10,6 +10,7 @@ vi.mock('../../../shared/api/settingsClient', () => ({
 }));
 
 import { loadTheme, saveTheme } from '../storage';
+import { formatThemeStorageJson, formatThemeStorageSummary } from '../storage';
 
 const CACHE_KEY = 'sage-theme';
 
@@ -47,5 +48,17 @@ describe('theme storage', () => {
   it('saveTheme 接受 system 模式', async () => {
     await saveTheme('system');
     expect(localStorage.getItem(CACHE_KEY)).toBe('system');
+  });
+
+  it('formats theme storage summary and JSON (Phase P108)', () => {
+    expect(formatThemeStorageSummary('dark', 'sakura')).toBe('mode=dark · preset=sakura');
+    expect(formatThemeStorageSummary(null)).toBe('mode=none · preset=default');
+    const parsed = JSON.parse(formatThemeStorageJson('light', 'mint-blue'));
+    expect(parsed).toEqual({
+      cacheKey: 'sage-theme',
+      presetKey: 'sage-theme-preset',
+      mode: 'light',
+      presetId: 'mint-blue',
+    });
   });
 });

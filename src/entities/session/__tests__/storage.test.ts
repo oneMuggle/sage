@@ -10,6 +10,7 @@ vi.mock('../../../shared/api/settingsClient', () => ({
 }));
 
 import { loadCurrentSessionId, saveCurrentSessionId } from '../storage';
+import { formatCurrentSessionStorageJson, formatCurrentSessionStorageSummary } from '../storage';
 
 const CACHE_KEY = 'sage-current-session-id';
 
@@ -48,5 +49,21 @@ describe('session storage', () => {
     localStorage.setItem(CACHE_KEY, 'old');
     await saveCurrentSessionId(null);
     expect(localStorage.getItem(CACHE_KEY)).toBeNull();
+  });
+
+  it('formats current session storage summary and JSON (Phase P108)', () => {
+    localStorage.setItem(CACHE_KEY, 'cached-01');
+    expect(formatCurrentSessionStorageSummary('active-01')).toBe(
+      'sage-current-session-id · current=active-01 · cached=cached-01',
+    );
+    expect(formatCurrentSessionStorageSummary(null)).toBe(
+      'sage-current-session-id · current=none · cached=cached-01',
+    );
+    const parsed = JSON.parse(formatCurrentSessionStorageJson('active-01'));
+    expect(parsed).toEqual({
+      cacheKey: 'sage-current-session-id',
+      currentSessionId: 'active-01',
+      cachedSessionId: 'cached-01',
+    });
   });
 });

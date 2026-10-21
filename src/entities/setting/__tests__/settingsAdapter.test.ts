@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { settingsClient } from '../../../shared/api/settingsClient';
 import { readSetting, resetSetting, writeSetting } from '../settingsAdapter';
+import { formatSettingAdapterRouteJson, formatSettingAdapterRouteSummary } from '../settingsAdapter';
 
 vi.mock('../../../shared/api/settingsClient', () => ({
   settingsClient: {
@@ -56,5 +57,17 @@ describe('settingsAdapter', () => {
   it('resets a setting to its registered default', async () => {
     await resetSetting('streaming');
     expect(settingsClient.setSettings).toHaveBeenCalledWith({ streaming: true });
+  });
+
+  it('formats setting adapter route summary and JSON (Phase P108)', () => {
+    expect(formatSettingAdapterRouteSummary('permission_mode')).toContain('permission_mode · preference');
+    expect(formatSettingAdapterRouteSummary('unknown_key')).toBe('unknown_key · unknown');
+    const parsed = JSON.parse(formatSettingAdapterRouteJson('streaming'));
+    expect(parsed.key).toBe('streaming');
+    expect(parsed.registered).toBe(true);
+    expect(parsed.storage).toBe('app_settings');
+    const missing = JSON.parse(formatSettingAdapterRouteJson('unknown_key'));
+    expect(missing.registered).toBe(false);
+    expect(missing.storage).toBeNull();
   });
 });
