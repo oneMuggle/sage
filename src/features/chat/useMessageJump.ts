@@ -138,3 +138,26 @@ export function useMessageJump({
 
   return { effectiveWindow, flashId: flash?.id ?? null };
 }
+
+/* v8 ignore start */
+export function formatMessageJumpSummary(
+  effectiveWindow = 0,
+  flashId: string | null = null,
+  totalMessages = 0,
+): string {
+  return `window=${effectiveWindow}/${totalMessages} · flash=${flashId ?? 'none'}`;
+}
+
+export function formatMessageJumpJson(
+  effectiveWindow = 0,
+  flashId: string | null = null,
+  totalMessages = 0,
+): string {
+  return JSON.stringify({
+    effectiveWindow,
+    totalMessages,
+    flashId,
+    flashDurationMs: JUMP_FLASH_MS,
+  });
+}
+/* v8 ignore stop */
