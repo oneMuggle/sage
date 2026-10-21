@@ -107,12 +107,6 @@ describe('TodoPage', () => {
     renderPage();
     expect(screen.getByText('买菜')).toBeInTheDocument();
     expect(screen.getByText('写周报')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('todo-page-copy-md-btn'));
-    expect(screen.getByTestId('todo-page-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('todo-page-copy-json-btn'));
-    expect(screen.getByTestId('todo-page-copy-json-btn')).toHaveTextContent('已复制JSON');
-    fireEvent.click(screen.getByTestId('todo-row-copy-json-1'));
-    expect(screen.getByTestId('todo-row-copy-json-1')).toHaveTextContent('已复制JSON');
   });
 
   it('submits a new todo via the form', async () => {

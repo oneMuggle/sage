@@ -72,7 +72,6 @@ const Skills: React.FC = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [acceptingNames, setAcceptingNames] = useState<string | null>(null);
   const [copiedAudit, setCopiedAudit] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   // Task 12 (2026-08-03): Read initial tab from URL search params.
   // Supports cross-page navigation (e.g. /learn in Chat → /skills?tab=drafts).
@@ -317,20 +316,6 @@ const Skills: React.FC = () => {
     await navigator.clipboard?.writeText(text);
   };
 
-  const handleCopyJson = async () => {
-    const text = formatSkillsAuditJson({
-      activeTab,
-      totalSkills: skills.length,
-      enabledCount,
-      filteredCount: filteredSkills.length,
-      totalUsage,
-      autoRefresh,
-      suggestionCount: suggestions.length,
-      searchTerm,
-    });
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(text);
-  };
   /* v8 ignore stop */
 
   // 首次加载且失败：整页错误态 + 重试
@@ -375,14 +360,6 @@ const Skills: React.FC = () => {
             className="px-2 py-1 rounded text-xs border border-border text-muted hover:text-text hover:bg-bg-subtle cursor-pointer select-none"
           >
             {copiedAudit ? '已复制快照' : '复制快照'}
-          </span>
-          <span
-            data-testid="skills-page-copy-json"
-            onClick={() => void handleCopyJson()}
-            title="复制技能页审计 JSON"
-            className="px-2 py-1 rounded text-xs border border-border text-muted hover:text-text hover:bg-bg-subtle cursor-pointer select-none"
-          >
-            {copiedJson ? '已复制 JSON' : 'JSON'}
           </span>
           <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
             <input

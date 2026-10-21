@@ -26,11 +26,7 @@ vi.mock('../../../shared/api/zoteroClient', () => ({
 }));
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  formatZoteroTabAuditJson,
-  formatZoteroTabAuditSnapshot,
-  ZoteroTab,
-} from '../ZoteroTab';
+import { formatZoteroTabAuditJson, formatZoteroTabAuditSnapshot, ZoteroTab } from '../ZoteroTab';
 
 function availableStatus() {
   return {
@@ -171,7 +167,6 @@ describe('ZoteroTab 搜索', () => {
     renderTab();
     await waitFor(() => expect(screen.getByText('已连接')).toBeInTheDocument());
     expect(screen.getByTestId('zotero-tab-copy-audit')).toBeInTheDocument();
-    expect(screen.getByTestId('zotero-tab-copy-json')).toBeInTheDocument();
 
     const snapshot = formatZoteroTabAuditSnapshot({
       connected: true,

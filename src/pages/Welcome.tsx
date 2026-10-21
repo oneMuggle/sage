@@ -87,8 +87,6 @@ export function Welcome() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [reusedBrief, setReusedBrief] = useState<TaskBrief | undefined>();
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   // R26: 首启向导 —— 尚无可用端点（缺 baseUrl 或必填 apiKey）时展示三步引导
   const { settings: wizardSettings, isLoading: settingsLoading } = useSettings();
@@ -137,39 +135,7 @@ export function Welcome() {
   ];
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatWelcomePageMarkdown({
-          locale,
-          needsOnboarding,
-          recommendationCount: defaultRecommendations.length,
-          activeRecommendationId: briefRecommendation?.id ?? null,
-        }),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatWelcomePageJson({
-          locale,
-          needsOnboarding,
-          recommendationCount: defaultRecommendations.length,
-          activeRecommendationId: briefRecommendation?.id ?? null,
-        }),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -208,20 +174,6 @@ export function Welcome() {
           >
             {locale === 'en' ? 'Documents and review' : '文档与验收'}
           </button>
-          <span
-            data-testid="welcome-page-copy-md"
-            onClick={() => void handleCopyMarkdown()}
-            className="inline-flex items-center cursor-pointer rounded border border-ui-border px-2 py-1 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </span>
-          <span
-            data-testid="welcome-page-copy-json"
-            onClick={() => void handleCopyJson()}
-            className="inline-flex items-center cursor-pointer rounded border border-ui-border px-2 py-1 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </span>
         </div>
         <AssistantRecommendations
           recommendations={defaultRecommendations}

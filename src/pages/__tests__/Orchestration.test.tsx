@@ -21,11 +21,7 @@ import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import { invoke } from '../../shared/api/desktopInvoke';
 import type { Lane } from '../../shared/api/types';
 import { I18nProvider } from '../../shared/lib/i18n';
-import {
-  Orchestration,
-  formatOrchestrationPageJson,
-  formatOrchestrationPageMarkdown,
-} from '../Orchestration';
+import { Orchestration, formatOrchestrationPageJson, formatOrchestrationPageMarkdown } from '../Orchestration';
 
 const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>;
 const toastMock = toast as unknown as {
@@ -169,9 +165,5 @@ describe('Orchestration page', () => {
     expect(parsed.creating).toBe(true);
 
     renderPage();
-    fireEvent.click(screen.getByTestId('orch-page-copy-md'));
-    expect(screen.getByTestId('orch-page-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('orch-page-copy-json'));
-    expect(screen.getByTestId('orch-page-copy-json').textContent).toContain('已复制 JSON');
   });
 });

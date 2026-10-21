@@ -146,7 +146,6 @@ function TextField({
 export function OrchestrationTab() {
   const { settings, updateSettings } = useSettings();
   const [copiedAudit, setCopiedAudit] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const setOrch = (patch: Partial<typeof settings.orch>) =>
     updateSettings({ orch: { ...settings.orch, ...patch } });
 
@@ -167,21 +166,6 @@ export function OrchestrationTab() {
     await navigator.clipboard?.writeText(text);
   };
 
-  const handleCopyJson = async () => {
-    const text = formatOrchestrationTabAuditJson({
-      planPreflightEnabled: settings.orch.planPreflightEnabled,
-      planScoutEnabled: settings.orch.planScoutEnabled,
-      maxConcurrentSubagents: settings.orch.maxConcurrentSubagents,
-      maxRetries: settings.orch.maxRetries,
-      maxLaneIterations: settings.orch.maxLaneIterations,
-      maxSubagentIterations: settings.orch.maxSubagentIterations,
-      subagentApprovalMode: settings.orch.subagentApprovalMode,
-      worktreeIsolation: settings.orch.worktreeIsolation,
-      scratchRoot: settings.orch.scratchRoot,
-    });
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(text);
-  };
   /* v8 ignore stop */
 
   return (
@@ -199,14 +183,6 @@ export function OrchestrationTab() {
             className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
           >
             {copiedAudit ? '已复制快照' : '复制快照'}
-          </span>
-          <span
-            data-testid="orchestration-tab-copy-json"
-            onClick={() => void handleCopyJson()}
-            title="复制编排设置审计 JSON"
-            className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
-          >
-            {copiedJson ? '已复制 JSON' : 'JSON'}
           </span>
         </div>
       </div>

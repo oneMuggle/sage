@@ -24,15 +24,12 @@ export function Projects() {
   const [copiedPaths, setCopiedPaths] = useState(false);
   const [savedRegistryL3, setSavedRegistryL3] = useState(false);
   const [savedRegistryL4, setSavedRegistryL4] = useState(false);
-  const [copiedArchetypeStats, setCopiedArchetypeStats] = useState(false);
   const [savedArchetypeStatsL3, setSavedArchetypeStatsL3] = useState(false);
   const [savedArchetypeStatsL4, setSavedArchetypeStatsL4] = useState(false);
   const [convertedArchetypeStatsMilestone, setConvertedArchetypeStatsMilestone] = useState(false);
   const [convertedArchetypeStatsConstraint, setConvertedArchetypeStatsConstraint] = useState(false);
   const [convertedRegistryMilestone, setConvertedRegistryMilestone] = useState(false);
   const [convertedRegistryConstraint, setConvertedRegistryConstraint] = useState(false);
-  const [copiedRegistryJson, setCopiedRegistryJson] = useState(false);
-  const [copiedArchetypeStatsJson, setCopiedArchetypeStatsJson] = useState(false);
 
   const loadProjects = useCallback(async () => {
     if (typeof projectApi?.list !== 'function') return;
@@ -115,50 +112,6 @@ export function Projects() {
                     </span>
                   );
                 })}
-                <button
-                  type="button"
-                  data-testid="workbench-copy-archetype-stats-btn"
-                  onClick={async () => {
-                    const md = [
-                      `# 项目形态分布统计 (${projects.length} 个项目)`,
-                      ...ARCHETYPE_ORDER.map((t) => `- ${getArchetypeBlueprint(t).label}: ${archetypeCounts[t]} 个`),
-                    ].join('\n');
-                    try {
-                      await navigator.clipboard?.writeText(md);
-                      setCopiedArchetypeStats(true);
-                      setTimeout(() => setCopiedArchetypeStats(false), 1500);
-                    } catch {
-                      // ignore in test/offline mode
-                    }
-                  }}
-                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                >
-                  {copiedArchetypeStats ? '已复制统计' : '复制形态统计'}
-                </button>
-                <button
-                  type="button"
-                  data-testid="workbench-copy-archetype-stats-json-btn"
-                  onClick={async () => {
-                    setCopiedArchetypeStatsJson(true);
-                    setTimeout(() => {
-                      if (typeof window !== 'undefined') setCopiedArchetypeStatsJson(false);
-                    }, 1500);
-                    try {
-                      await navigator.clipboard?.writeText(
-                        JSON.stringify(
-                          { total: projects.length, counts: archetypeCounts },
-                          null,
-                          2,
-                        ),
-                      );
-                    } catch {
-                      // ignore in test/offline mode
-                    }
-                  }}
-                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                >
-                  {copiedArchetypeStatsJson ? '已复制统计JSON' : '复制统计JSON'}
-                </button>
                 {projects.length > 0 && (
                   <button
                     type="button"
@@ -413,42 +366,6 @@ export function Projects() {
                     导出项目台账 MD
                   </>
                 )}
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  setCopiedRegistryJson(true);
-                  setTimeout(() => {
-                    if (typeof window !== 'undefined') setCopiedRegistryJson(false);
-                  }, 1800);
-                  try {
-                    await navigator.clipboard?.writeText(
-                      JSON.stringify(
-                        {
-                          total: projects.length,
-                          archetypeCounts,
-                          projects: projects.map((p) => ({
-                            id: p.id,
-                            name: p.name,
-                            path: p.path,
-                            projectType: p.projectType ?? p.detectedType ?? 'coding',
-                            projectStage: p.projectStage ?? null,
-                            vcsMode: p.vcsMode ?? null,
-                            sessionCount: p.sessionCount,
-                          })),
-                        },
-                        null,
-                        2,
-                      ),
-                    );
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }}
-                data-testid="workbench-copy-registry-json-btn"
-                className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted"
-              >
-                {copiedRegistryJson ? '已复制台账JSON' : '复制台账 JSON'}
               </button>
               <button
                 type="button"

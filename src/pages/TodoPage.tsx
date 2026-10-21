@@ -36,40 +36,10 @@ export function TodoPage() {
 
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
-  const [copiedPageMd, setCopiedPageMd] = useState(false);
-  const [copiedPageJson, setCopiedPageJson] = useState(false);
 
   useEffect(() => {
     void load();
   }, [load]);
-
-  const handleCopyPageMd = () => {
-    setCopiedPageMd(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedPageMd(false), 2000);
-    const lines = [
-      '# 待办事项报告',
-      '',
-      `- 总数: ${todos.length}`,
-      '',
-      ...todos.map((item, idx) => `${idx + 1}. [${item.status === 'completed' ? 'x' : ' '}] **${item.title}** (${item.priority ?? 'medium'})`),
-    ];
-    void navigator.clipboard?.writeText(lines.join('\n'));
-    /* v8 ignore stop */
-  };
-
-  const handleCopyPageJson = () => {
-    setCopiedPageJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedPageJson(false), 2000);
-    const payload = {
-      total: todos.length,
-      todos,
-      exportedAt: new Date().toISOString(),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,22 +60,6 @@ export function TodoPage() {
         title={t('todos.title')}
         actions={
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              data-testid="todo-page-copy-md-btn"
-              onClick={handleCopyPageMd}
-              className="px-2.5 py-1 border border-border rounded-radius-sm text-xs bg-surface text-text-muted hover:text-text"
-            >
-              {copiedPageMd ? '已复制MD' : '复制待办MD'}
-            </button>
-            <button
-              type="button"
-              data-testid="todo-page-copy-json-btn"
-              onClick={handleCopyPageJson}
-              className="px-2.5 py-1 border border-border rounded-radius-sm text-xs bg-surface text-text-muted hover:text-text"
-            >
-              {copiedPageJson ? '已复制JSON' : '复制待办JSON'}
-            </button>
           </div>
         }
       />
@@ -192,19 +146,6 @@ interface TodoRowProps {
 function TodoRow({ todo, onComplete, onCancel, onDelete }: TodoRowProps) {
   const isDone = todo.status === 'completed';
   const isCancelled = todo.status === 'cancelled';
-  const [copiedRowJson, setCopiedRowJson] = useState(false);
-
-  const handleCopyRowJson = () => {
-    setCopiedRowJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedRowJson(false), 2000);
-    const payload = {
-      ...todo,
-      exportedAt: new Date().toISOString(),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
 
   return (
     <li className="flex items-center justify-between gap-2 px-3 py-2 bg-surface border border-border rounded-radius-sm">
@@ -224,14 +165,6 @@ function TodoRow({ todo, onComplete, onCancel, onDelete }: TodoRowProps) {
         )}
       </div>
       <div className="flex items-center gap-1">
-        <button
-          type="button"
-          data-testid={`todo-row-copy-json-${todo.id}`}
-          onClick={handleCopyRowJson}
-          className="px-1.5 py-0.5 text-ui-2xs border border-border rounded text-text-muted hover:text-text"
-        >
-          {copiedRowJson ? '已复制JSON' : '复制JSON'}
-        </button>
         {!isDone && !isCancelled && (
           <>
             <button

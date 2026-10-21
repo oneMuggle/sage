@@ -276,12 +276,10 @@ describe('ModelCatalog page', () => {
     );
     await screen.findByText('openrouter/openai/gpt-4o-mini');
 
-    fireEvent.click(screen.getByTestId('catalog-table-copy-md-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 模型目录'));
     });
 
-    fireEvent.click(screen.getByTestId('catalog-table-copy-json-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('openai/gpt-4o-mini'));
     });
@@ -324,9 +322,5 @@ describe('ModelCatalog page', () => {
         </I18nProvider>
       </MemoryRouter>,
     );
-    fireEvent.click(screen.getByTestId('model-catalog-page-copy-md'));
-    expect(screen.getByTestId('model-catalog-page-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('model-catalog-page-copy-json'));
-    expect(screen.getByTestId('model-catalog-page-copy-json').textContent).toContain('已复制 JSON');
   });
 });
