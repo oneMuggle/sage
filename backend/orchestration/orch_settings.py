@@ -39,6 +39,7 @@ _RAW_KEYS = {
     "runWallClockLimitMinutes": "run_wall_clock_limit_min",
     "maxRetryOfChains": "max_retry_of_chains",
     "maxToolCallsPerRun": "max_tool_calls_per_run",
+    "maxIterations": "max_iterations",  # 2026-10-20: primary agent 迭代次数上限
     "planPreflightEnabled": "plan_preflight_enabled",
     "planScoutEnabled": "plan_scout_enabled",
 }
@@ -89,6 +90,11 @@ class OrchSettings:
     #: 与 ``ToolPolicy.max_tool_calls_per_run`` 同源语义，此处开放 UI 可调。
     #: 默认 100（与 ToolPolicy dataclass 默认一致）。0 = 不限制。
     max_tool_calls_per_run: int = 100
+    #: 全局迭代上限（2026-10-20 新增, Win7 适配语义）：
+    #: 0 = 回落下方 per-agent 各项独立设置（primary/coder/reviewer/writer）;
+    #: >0 = 全局统一上限, legacy_routes.py 用它覆盖 per-agent 细分值。
+    #: 与前端 ``OrchSettings.maxIterations`` camelCase 对齐。
+    max_iterations: int = 0
     #: 计划前置 (2026-09-19): multi 拆解前的澄清+侦察总开关。关闭后拆解
     #: 行为与 2026-09-19 之前完全一致（decompose_request(context=None)）。
     #: env 总闸 ``SAGE_ORCH_PLAN_PREFLIGHT``（tests conftest 置 0）优先于本值。

@@ -13,8 +13,9 @@ SageAgent profile 接通测试（阶段 1）
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Optional
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -206,7 +207,11 @@ async def test_sage_agent_call_llm_appends_memory_context_to_system_prompt():
 
 @pytest.mark.asyncio()
 async def test_sage_agent_profile_max_iterations_used_when_not_overridden():
-    """run_loop 不传 max_iterations 时，使用 profile 的值。"""
+    """OrchSettings.max_iterations=0 时，回落使用 profile 的值。
+
+    2026-10-20 起优先级链：显式参数 > OrchSettings（UI 可配，0=回落）
+    > AgentProfile > DEFAULT_MAX_ITERATIONS(10)。
+    """
     repo = AgentRepository()
     repo.update("coder", {"max_iterations": 7})
 
@@ -222,9 +227,14 @@ async def test_sage_agent_profile_max_iterations_used_when_not_overridden():
     mock_tool.execute = MagicMock(return_value=MagicMock(success=True, content={}, error=None))
     agent.tool_registry.get = MagicMock(return_value=mock_tool)
 
-    events = []
-    async for evt in agent.run_loop([{"role": "user", "content": "x"}]):
-        events.append(evt)
+    settings_stub = SimpleNamespace(max_iterations=0)
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=settings_stub,
+    ):
+        events = []
+        async for evt in agent.run_loop([{"role": "user", "content": "x"}]):
+            events.append(evt)
 
     failed = [e for e in events if e.state == AgentState.FAILED]
     assert len(failed) == 1

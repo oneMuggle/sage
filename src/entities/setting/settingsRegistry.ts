@@ -465,6 +465,13 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     100,
     0,
   ),
+  'orch.maxIterations': orchNumber(
+    'orch.maxIterations',
+    '全局迭代上限（0=按下方各 agent 分别设置）',
+    'Win7 适配：0 = 回落下方 primary/coder/reviewer/writer 各项独立设置；>0 = 全局统一上限覆盖各 agent 细分值',
+    0,
+    0,
+  ),
   'orch.subagentApprovalMode': enumSetting(
     'orch.subagentApprovalMode',
     '子代理自动批准',

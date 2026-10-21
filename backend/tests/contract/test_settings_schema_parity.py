@@ -149,6 +149,8 @@ def test_legal_orch_keys_is_stable() -> None:
             "maxCoderIterations",
             "maxReviewerIterations",
             "maxWriterIterations",
+            # 2026-10-20 全局迭代上限 (Win7 适配: 0=按各 agent 分别设置)
+            "maxIterations",
         }
     ) == LEGAL_ORCH_KEYS
 

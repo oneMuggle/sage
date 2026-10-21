@@ -350,6 +350,13 @@ export function OrchestrationTab() {
           value={settings.orch.maxToolCallsPerRun}
           onChange={(v) => setOrch({ maxToolCallsPerRun: v })}
         />
+        <NumberField
+          label="全局迭代上限（次，0=按下方各 agent 分别设置）"
+          desc="Win7 适配：0 = 回落下方 primary/coder/reviewer/writer 各项独立设置；>0 = 全局统一上限覆盖各 agent 细分值"
+          dataTestId="orch-max-iterations"
+          value={settings.orch.maxIterations}
+          onChange={(v) => setOrch({ maxIterations: v })}
+        />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">隔离与审批</h3>
