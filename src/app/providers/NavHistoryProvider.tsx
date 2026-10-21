@@ -14,6 +14,26 @@ export interface NavHistoryContextValue {
   forward: () => void;
 }
 
+export interface NavHistoryAuditInput {
+  cursor: number;
+  stackLength: number;
+  canBack: boolean;
+  canForward: boolean;
+}
+
+export function formatNavHistoryAuditSnapshot(input: NavHistoryAuditInput): string {
+  return `cursor=${input.cursor}|len=${input.stackLength}|back=${input.canBack ? 1 : 0}|fwd=${input.canForward ? 1 : 0}`;
+}
+
+export function formatNavHistoryAuditJson(input: NavHistoryAuditInput): string {
+  return JSON.stringify({
+    cursor: input.cursor,
+    stackLength: input.stackLength,
+    canBack: input.canBack,
+    canForward: input.canForward,
+  });
+}
+
 // eslint-disable-next-line react-refresh/only-export-components
 export const NavHistoryContext = createContext<NavHistoryContextValue | null>(null);
 
@@ -92,5 +112,76 @@ export function NavHistoryProvider({ children }: NavHistoryProviderProps) {
     back,
     forward,
   };
-  return <NavHistoryContext.Provider value={value}>{children}</NavHistoryContext.Provider>;
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const auditInput: NavHistoryAuditInput = {
+    cursor,
+    stackLength: stack.length,
+    canBack: value.canBack,
+    canForward: value.canForward,
+  };
+  const auditSnapshot = formatNavHistoryAuditSnapshot(auditInput);
+  const auditJson = formatNavHistoryAuditJson(auditInput);
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(auditSnapshot);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(auditJson);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
+  return (
+    <NavHistoryContext.Provider value={value}>
+      {children}
+      <span
+        data-testid="nav-history-audit-status"
+        data-nav-history-audit={auditSnapshot}
+        className="sr-only"
+      >
+        <span
+          role="status"
+          tabIndex={0}
+          data-testid="nav-history-audit-copy"
+          data-nav-history-audit={auditSnapshot}
+          aria-label="复制导航历史审计快照"
+          onClick={() => void handleCopySnapshot()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              void handleCopySnapshot();
+            }
+          }}
+        >
+          {copiedSnapshot ? '已复制' : '快照'}
+        </span>
+        <span
+          role="status"
+          tabIndex={0}
+          data-testid="nav-history-audit-copy-json"
+          data-nav-history-audit-json={auditJson}
+          aria-label="复制导航历史审计 JSON"
+          onClick={() => void handleCopyJson()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              void handleCopyJson();
+            }
+          }}
+        >
+          {copiedJson ? '已复制 JSON' : 'JSON'}
+        </span>
+      </span>
+    </NavHistoryContext.Provider>
+  );
 }

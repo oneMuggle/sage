@@ -1374,3 +1374,16 @@
   7. **指数退避重试按钮审计快照与 JSON 导出（`RetryButton.tsx`）**：新增 `formatRetryButtonAuditSnapshot` / `formatRetryButtonAuditJson` 纯函数及 `retry-button-copy-snapshot` / `retry-button-copy-json` 审计控件，输出已尝试次数、最大尝试上限、忙碌状态、当前冷却毫秒数与按钮标签。
   8. **Radix 选择器原语审计快照与 JSON 导出（`Select.tsx`）**：新增 `formatSelectAuditSnapshot` / `formatSelectAuditJson` 纯函数及 `select-copy-snapshot` / `select-copy-json` 审计控件，输出定位模式、禁用状态与值绑定状态。
 - **验证结果**：8 个目标单测套件（共 52 条单测）、`eslint`、`tsc --noEmit`、`check-font-scale.mjs` 与 `architecture-check.mjs` 在 `main` 与 `release/win7` 双轨全部通过。
+
+### Phase P103（2026-10-21）：Providers、Font、Settings Row、MermaidBlock、MessageList 与 ConversationsSection 治理快照与 JSON 导出闭环
+
+- **目标**：为全局 Provider、字体状态、设置项行、Mermaid 图表、消息列表与会话列表分区补齐统一治理审计快照（`data-*-audit`）与一键复制审计快照/JSON 能力（`role="status"` 无障碍复制控件）：
+  1. `src/app/providers/NavHistoryProvider.tsx`：新增 `formatNavHistoryAuditSnapshot` 与 `formatNavHistoryAuditJson`，暴露 `data-nav-history-audit`、`nav-history-audit-copy` 与 `nav-history-audit-copy-json`。
+  2. `src/app/providers/SessionWorkspaceProvider.tsx`：新增 `formatSessionWorkspaceAuditSnapshot` 与 `formatSessionWorkspaceAuditJson`，暴露 `data-session-workspace-audit`、`session-workspace-audit-copy` 与 `session-workspace-audit-copy-json`。
+  3. `src/app/providers/ThemeProvider.tsx`：新增 `formatThemeAuditSnapshot` 与 `formatThemeAuditJson`，暴露 `data-theme-audit`、`theme-audit-copy` 与 `theme-audit-copy-json`。
+  4. `src/entities/font/useFontSettings.tsx`：新增 `formatFontSettingsAuditSnapshot` 与 `formatFontSettingsAuditJson`，暴露 `data-font-settings-audit`、`font-settings-audit-copy` 与 `font-settings-audit-copy-json`。
+  5. `src/pages/settings/components.tsx`：新增 `formatSettingRowAuditSnapshot` 与 `formatSettingRowAuditJson`，暴露 `data-setting-row-audit`、`setting-row-audit-copy` 与 `setting-row-audit-copy-json`。
+  6. `src/widgets/chat/MermaidBlock.tsx`：新增 `formatMermaidBlockAuditSnapshot` 与 `formatMermaidBlockAuditJson`，暴露 `data-mermaid-block-audit`、`mermaid-block-audit-copy` 与 `mermaid-block-audit-copy-json`。
+  7. `src/widgets/chat/MessageList.tsx`：新增 `formatMessageListAuditSnapshot` 与 `formatMessageListAuditJson`，暴露 `data-message-list-audit`、`message-list-audit-copy` 与 `message-list-audit-copy-json`。
+  8. `src/widgets/sidebar/sections/ConversationsSection.tsx`：新增 `formatConversationsSectionAuditSnapshot` 与 `formatConversationsSectionAuditJson`，暴露 `data-conversations-section-audit`、`conversations-section-audit-copy` 与 `conversations-section-audit-copy-json`。
+- **验证**：8 个单元测试文件（`main` 67 项单测 / `release/win7` 65 项单测）、ESLint、TypeScript、`check-font-scale.mjs`、`architecture-check.mjs` 全部零警告通过。
