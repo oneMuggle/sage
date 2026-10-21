@@ -498,6 +498,10 @@ class PluginLifecycleManager:
             logger.error(f"更新配置失败: {e}")
             raise PluginLifecycleError(f"更新失败: {e}") from e
 
+    def record_event(self, plugin_name: str, event: str, detail: str = "") -> None:
+        """Record an audit event from another plugin subsystem component."""
+        self._record_event(plugin_name, event, detail)
+
     def _record_event(self, plugin_name: str, event: str, detail: str = "") -> None:
         """记录一条生命周期事件（审计旁路，失败只警告不影响主操作）。"""
         try:

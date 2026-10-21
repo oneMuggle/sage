@@ -1,9 +1,9 @@
 # ruff: noqa: UP006, UP007, UP035
-"""插件生命周期 REST 路由（R82）。
+"""插件生命周期与进程外 runtime REST 路由（R82/R83）。
 
-这一层只把既有的 :class:`PluginLifecycleManager` 记录面接出来：
-列出、安装、启停、配置、卸载/恢复以及事件日志。插件代码本身的加载与
-托管属于 R83；这里不会读取或执行 ``install_path`` 下的任何代码。
+R82 把既有的 :class:`PluginLifecycleManager` 记录面接出来；R83 在同一
+router 上增加显式 runtime start/stop/restart/invoke。安装与启用记录都
+不会自动执行插件代码，子进程只由 runtime start 显式拉起。
 
 安全约束沿用高权限路由的既有做法：
 
@@ -14,15 +14,23 @@
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import json
 import logging
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
 from backend.api.permission_routes import forbidden_origin_response
+from backend.plugins.host import (
+    PluginHostError,
+    PluginHostManager,
+    PluginRuntimeStatus,
+    get_plugin_host_manager,
+)
 from backend.plugins.lifecycle import (
     PluginAlreadyExistsError,
     PluginLifecycleError,
@@ -53,6 +61,13 @@ class UpdatePluginConfigBody(BaseModel):
     config: Dict[str, Any] = Field(default_factory=dict)
 
 
+class InvokePluginBody(BaseModel):
+    """调用一个已加载插件 tool 的请求体。"""
+
+    capability: str = Field(..., min_length=1)
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+
+
 def _manager() -> PluginLifecycleManager:
     """每个请求构造新的生命周期管理器。
 
@@ -61,6 +76,19 @@ def _manager() -> PluginLifecycleManager:
     """
 
     return PluginLifecycleManager()
+
+
+def _host_manager() -> PluginHostManager:
+    """Return the process-wide out-of-process plugin host."""
+
+    return get_plugin_host_manager()
+
+
+async def _run_host(function: Callable[..., Any], *args: Any) -> Any:
+    """Run synchronous process supervision in a thread, not the event loop."""
+
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, functools.partial(function, *args))
 
 
 def _normalize_name(name: str) -> str:
@@ -122,7 +150,17 @@ def _permission_summary(manifest: Any) -> Tuple[List[str], List[Dict[str, Any]]]
     return _permission_groups(_value(manifest, "capabilities") or [])
 
 
-def _record_view(record: PluginRecord) -> Dict[str, Any]:
+def _runtime_view(
+    plugin_name: str,
+    runtime: Optional[PluginRuntimeStatus] = None,
+) -> Dict[str, Any]:
+    return (runtime or _host_manager().status(plugin_name)).to_dict()
+
+
+def _record_view(
+    record: PluginRecord,
+    runtime: Optional[PluginRuntimeStatus] = None,
+) -> Dict[str, Any]:
     view = _model_to_dict(record)
     manifest = record.manifest if isinstance(record.manifest, dict) else {}
     metadata = manifest.get("metadata") if isinstance(manifest.get("metadata"), dict) else {}
@@ -133,6 +171,7 @@ def _record_view(record: PluginRecord) -> Dict[str, Any]:
     view["description"] = str(metadata.get("description") or "")
     view["permissions"] = permissions
     view["by_capability"] = by_capability
+    view["runtime"] = _runtime_view(record.name, runtime)
     return view
 
 
@@ -157,6 +196,52 @@ def _lifecycle_error_response(exc: PluginLifecycleError) -> JSONResponse:
 
     logger.error("插件生命周期操作失败: %s", exc)
     return _error(500, "plugin_lifecycle_error", str(exc))
+
+
+def _host_error_response(
+    exc: PluginHostError,
+    plugin_name: str,
+    runtime: Optional[PluginRuntimeStatus] = None,
+) -> JSONResponse:
+    return _error(
+        exc.status_code,
+        exc.code.lower(),
+        exc.message,
+        code=exc.code,
+        runtime=_runtime_view(plugin_name, runtime),
+    )
+
+
+def _record_or_error(
+    manager: PluginLifecycleManager,
+    plugin_name: str,
+) -> Tuple[Optional[PluginRecord], Optional[JSONResponse]]:
+    try:
+        return manager.get_plugin(plugin_name), None
+    except PluginLifecycleError as exc:
+        return None, _lifecycle_error_response(exc)
+
+
+def _stop_runtime_sync(
+    manager: PluginLifecycleManager,
+    plugin_name: str,
+    reason: str,
+) -> PluginRuntimeStatus:
+    host = _host_manager()
+    before = host.status(plugin_name)
+    if before.state.value == "pending":
+        return before
+    stopped = host.stop(plugin_name)
+    manager.record_event(plugin_name, "runtime_stopped", reason[:500])
+    return stopped
+
+
+async def _stop_runtime(
+    manager: PluginLifecycleManager,
+    plugin_name: str,
+    reason: str,
+) -> PluginRuntimeStatus:
+    return await _run_host(_stop_runtime_sync, manager, plugin_name, reason)
 
 
 def _blocked_origin(request: Request) -> Optional[JSONResponse]:
@@ -293,8 +378,122 @@ async def list_plugin_logs(request: Request, name: str, limit: int = 100):
     return {"logs": [_model_to_dict(event) for event in events]}
 
 
-def _run_action(name: str, action: str) -> JSONResponse:
+@router.get("/{name}/runtime")
+async def get_plugin_runtime(request: Request, name: str):
+    blocked = _blocked_origin(request)
+    if blocked is not None:
+        return blocked
+
+    plugin_name = _normalize_name(name)
+    record, error = _record_or_error(_manager(), plugin_name)
+    if error is not None:
+        return error
+
+    runtime = _host_manager().status(plugin_name)
+    return {"plugin": _record_view(record, runtime), "runtime": runtime.to_dict()}
+
+
+async def _runtime_start(request: Request, name: str, *, restart: bool):
+    blocked = _blocked_origin(request)
+    if blocked is not None:
+        return blocked
+
+    plugin_name = _normalize_name(name)
     manager = _manager()
+    record, error = _record_or_error(manager, plugin_name)
+    if error is not None:
+        return error
+
+    host = _host_manager()
+    operation = host.restart if restart else host.start
+    try:
+        runtime = await _run_host(operation, record)
+    except PluginHostError as exc:
+        manager.record_event(plugin_name, "runtime_failed", exc.code)
+        return _host_error_response(exc, plugin_name)
+
+    event = "runtime_restarted" if restart else "runtime_started"
+    manager.record_event(plugin_name, event, f"pid={runtime.pid}")
+    return {"plugin": _record_view(record, runtime), "runtime": runtime.to_dict()}
+
+
+@router.post("/{name}/runtime/start")
+async def start_plugin_runtime(request: Request, name: str):
+    return await _runtime_start(request, name, restart=False)
+
+
+@router.post("/{name}/runtime/restart")
+async def restart_plugin_runtime(request: Request, name: str):
+    return await _runtime_start(request, name, restart=True)
+
+
+@router.post("/{name}/runtime/stop")
+async def stop_plugin_runtime(request: Request, name: str):
+    blocked = _blocked_origin(request)
+    if blocked is not None:
+        return blocked
+
+    plugin_name = _normalize_name(name)
+    manager = _manager()
+    record, error = _record_or_error(manager, plugin_name)
+    if error is not None:
+        return error
+
+    runtime = await _stop_runtime(manager, plugin_name, "manual")
+    return {"plugin": _record_view(record, runtime), "runtime": runtime.to_dict()}
+
+
+@router.post("/{name}/runtime/invoke")
+async def invoke_plugin_runtime(
+    request: Request,
+    name: str,
+    body: InvokePluginBody,
+):
+    blocked = _blocked_origin(request)
+    if blocked is not None:
+        return blocked
+
+    plugin_name = _normalize_name(name)
+    capability = body.capability.strip()
+    if not capability:
+        return _error(422, "invalid_capability", "capability 不能为空")
+
+    manager = _manager()
+    _, error = _record_or_error(manager, plugin_name)
+    if error is not None:
+        return error
+
+    try:
+        result = await _run_host(
+            _host_manager().invoke,
+            plugin_name,
+            capability,
+            body.arguments,
+        )
+    except PluginHostError as exc:
+        manager.record_event(
+            plugin_name,
+            "runtime_invoke_failed",
+            f"{capability}:{exc.code}"[:500],
+        )
+        return _host_error_response(exc, plugin_name)
+
+    manager.record_event(plugin_name, "runtime_invoked", capability[:500])
+    runtime = _host_manager().status(plugin_name)
+    return {
+        "plugin_name": plugin_name,
+        "capability": capability,
+        "result": result,
+        "runtime": runtime.to_dict(),
+    }
+
+
+def _run_action(
+    name: str,
+    action: str,
+    manager: Optional[PluginLifecycleManager] = None,
+) -> JSONResponse:
+    manager = manager or _manager()
     try:
         if action == "enable":
             record = manager.enable(name)
@@ -326,7 +525,14 @@ async def disable_plugin(request: Request, name: str):
     if blocked is not None:
         return blocked
 
-    return _run_action(_normalize_name(name), "disable")
+    plugin_name = _normalize_name(name)
+    manager = _manager()
+    _, error = _record_or_error(manager, plugin_name)
+    if error is not None:
+        return error
+
+    await _stop_runtime(manager, plugin_name, "disabled")
+    return _run_action(plugin_name, "disable", manager)
 
 
 @router.post("/{name}/restore")
@@ -344,7 +550,14 @@ async def uninstall_plugin(request: Request, name: str):
     if blocked is not None:
         return blocked
 
-    return _run_action(_normalize_name(name), "uninstall")
+    plugin_name = _normalize_name(name)
+    manager = _manager()
+    _, error = _record_or_error(manager, plugin_name)
+    if error is not None:
+        return error
+
+    await _stop_runtime(manager, plugin_name, "uninstalled")
+    return _run_action(plugin_name, "uninstall", manager)
 
 
 @router.patch("/{name}/config")
@@ -357,9 +570,18 @@ async def update_plugin_config(
     if blocked is not None:
         return blocked
 
+    plugin_name = _normalize_name(name)
+    manager = _manager()
+    _, error = _record_or_error(manager, plugin_name)
+    if error is not None:
+        return error
+
+    # Runtime config is supplied at worker initialize; stop first so a running
+    # worker cannot keep executing with stale config after this update.
+    runtime = await _stop_runtime(manager, plugin_name, "config_updated")
     try:
-        record = _manager().update_config(_normalize_name(name), body.config)
+        record = manager.update_config(plugin_name, body.config)
     except PluginLifecycleError as exc:
         return _lifecycle_error_response(exc)
 
-    return {"plugin": _record_view(record)}
+    return {"plugin": _record_view(record, runtime)}

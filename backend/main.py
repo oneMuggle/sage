@@ -963,6 +963,14 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001 — shutdown must not raise
         logger.warning("MCP client shutdown failed: %s", exc)
 
+    # R83: stop out-of-process plugin workers held by the global host.
+    try:
+        from backend.plugins.host import shutdown_plugin_hosts
+
+        shutdown_plugin_hosts()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("Plugin host shutdown failed: %s", exc)
+
 
 async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
     """每 60s 清理一次孤儿流(创建后 5 分钟仍未 done/failed 的)。"""

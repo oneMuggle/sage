@@ -1,9 +1,9 @@
 /**
- * Settings 页面 - 插件 Tab（R82）。
+ * Settings 页面 - 插件 Tab（R82/R83）。
  *
- * 管理后端保存的插件生命周期记录：安装（粘贴 manifest）、启停、配置、
- * 软卸载/恢复、权限确认与事件日志。插件代码的实际加载与托管属于 R83，
- * 本页明确标注这一边界，不把“已登记”冒充为“已运行”。
+ * 管理插件生命周期记录与进程外 runtime：安装、记录启停、显式启动/停止
+ * 子进程、工具调用、配置、软卸载/恢复、权限确认与事件日志。本页始终把
+ * 数据库 enabled 与真实 running 状态分开展示。
  */
 import { clsx } from 'clsx';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -21,6 +21,12 @@ import {
 } from '../../shared/api/pluginClient';
 import { useI18n } from '../../shared/lib/i18n';
 
+import {
+  PluginRuntimeControls,
+  PluginRuntimePanel,
+  RuntimeStateBadge,
+  type PluginRuntimeAction,
+} from './PluginRuntimePanel';
 import { Toggle } from './components';
 
 type StatusFilter = '' | PluginStatus;
@@ -48,7 +54,7 @@ const MANIFEST_TEMPLATE = JSON.stringify(
         type: 'tool',
         name: 'example-tool',
         description: 'Describe this capability',
-        entry_point: 'tools.example',
+        entry_point: 'tools.example_tool:run',
         permissions: ['file:read'],
         config_schema: {},
       },
@@ -81,11 +87,11 @@ export function PluginsTab() {
     title: en ? 'Plugins' : '插件',
     refresh: en ? 'Refresh' : '刷新',
     desc: en
-      ? 'Install and manage plugin lifecycle records, permissions, configuration, and event logs.'
-      : '安装并管理插件生命周期记录、权限、配置与事件日志。',
+      ? 'Install and manage plugin lifecycle records, out-of-process runtimes, permissions, configuration, and event logs.'
+      : '安装并管理插件生命周期记录、进程外运行进程、权限、配置与事件日志。',
     boundary: en
-      ? 'R82 manages records only. Plugin code loading and hosting will arrive in R83, so an enabled record does not mean plugin code is running yet.'
-      : 'R82 只管理生命周期记录；插件代码加载与托管将在 R83 接入。因此“已启用”目前表示记录状态，不代表插件代码已经运行。',
+      ? 'Enabling a record never starts code automatically. “Start runtime” launches the plugin as the current OS user in a separate Python process; this contains crashes but is not a security sandbox. Saving configuration stops a running worker.'
+      : '启用记录不会自动运行代码。“启动运行”会以当前 OS 用户在独立 Python 子进程中加载插件；进程隔离可隔离崩溃，但不是安全沙箱。保存配置会先停止正在运行的 worker。',
     loading: en ? 'Loading…' : '加载中…',
     empty: en ? 'No plugins in this view.' : '当前筛选下没有插件。',
     filter: en ? 'Status filter' : '状态筛选',
@@ -148,6 +154,12 @@ export function PluginsTab() {
           uninstalled: 'Uninstalled',
           restored: 'Restored',
           config_updated: 'Config updated',
+          runtime_started: 'Runtime started',
+          runtime_stopped: 'Runtime stopped',
+          runtime_restarted: 'Runtime restarted',
+          runtime_failed: 'Runtime failed',
+          runtime_invoked: 'Tool invoked',
+          runtime_invoke_failed: 'Tool invoke failed',
         }
       : {
           installed: '已安装',
@@ -156,6 +168,12 @@ export function PluginsTab() {
           uninstalled: '已卸载',
           restored: '已恢复',
           config_updated: '配置已更新',
+          runtime_started: '运行进程已启动',
+          runtime_stopped: '运行进程已停止',
+          runtime_restarted: '运行进程已重启',
+          runtime_failed: '运行进程失败',
+          runtime_invoked: '工具已调用',
+          runtime_invoke_failed: '工具调用失败',
         };
     return labels[event] ?? event;
   };
@@ -167,6 +185,7 @@ export function PluginsTab() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busyName, setBusyName] = useState<string | null>(null);
+  const [runtimeBusyName, setRuntimeBusyName] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
 
   const [selectedName, setSelectedName] = useState<string | null>(null);
@@ -266,6 +285,42 @@ export function PluginsTab() {
     } finally {
       setBusyName(null);
     }
+  };
+
+  const runRuntimeAction = async (
+    plugin: PluginRecord,
+    action: PluginRuntimeAction,
+  ): Promise<void> => {
+    setRuntimeBusyName(plugin.name);
+    setActionError(null);
+    setNotice(null);
+    try {
+      const response =
+        action === 'start'
+          ? await pluginClient.startRuntime(plugin.name)
+          : action === 'stop'
+            ? await pluginClient.stopRuntime(plugin.name)
+            : await pluginClient.restartRuntime(plugin.name);
+      replacePlugin(response.plugin);
+      await refresh();
+      if (selectedName === plugin.name) await loadPluginLogs(plugin.name);
+    } catch (error) {
+      setActionError(errorMessage(error));
+      await refresh();
+    } finally {
+      setRuntimeBusyName(null);
+    }
+  };
+
+  const invokeRuntime = async (
+    plugin: PluginRecord,
+    capability: string,
+    args: Record<string, unknown>,
+  ): Promise<unknown> => {
+    const response = await pluginClient.invokeRuntime(plugin.name, capability, args);
+    await refresh();
+    if (selectedName === plugin.name) await loadPluginLogs(plugin.name);
+    return response.result;
   };
 
   const handleSelect = async (plugin: PluginRecord): Promise<void> => {
@@ -457,7 +512,7 @@ export function PluginsTab() {
           <div className="space-y-3">
             {plugins.map((plugin) => {
               const selected = selectedName === plugin.name;
-              const busy = busyName === plugin.name;
+              const busy = busyName === plugin.name || runtimeBusyName === plugin.name;
               return (
                 <article
                   key={plugin.name}
@@ -477,6 +532,13 @@ export function PluginsTab() {
                         >
                           {statusLabel[plugin.status]}
                         </span>
+                        {plugin.runtime && (
+                          <RuntimeStateBadge
+                            runtime={plugin.runtime}
+                            en={en}
+                            testId={`plugin-runtime-state-${plugin.name}`}
+                          />
+                        )}
                       </div>
                       <div className="mt-0.5 font-mono text-xs text-muted">
                         {plugin.name} · v{plugin.version}
@@ -511,6 +573,14 @@ export function PluginsTab() {
                   </dl>
 
                   <div className="mt-3 flex flex-wrap gap-2">
+                    {plugin.status !== 'uninstalled' && (
+                      <PluginRuntimeControls
+                        plugin={plugin}
+                        en={en}
+                        busy={busy}
+                        onAction={runRuntimeAction}
+                      />
+                    )}
                     <button
                       type="button"
                       data-testid={`plugin-details-${plugin.name}`}
@@ -547,6 +617,8 @@ export function PluginsTab() {
                       data-testid={`plugin-detail-${plugin.name}`}
                       className="mt-4 space-y-4 border-t border-border pt-3"
                     >
+                      <PluginRuntimePanel plugin={plugin} en={en} onInvoke={invokeRuntime} />
+
                       <div>
                         <h5 className="mb-2 text-xs font-semibold text-text">
                           {copy.capabilities}

@@ -1,4 +1,4 @@
-/** R82：pluginClient 请求契约与 409 权限确认解析测试。 */
+/** R82/R83：pluginClient 请求契约、runtime 与 409 权限确认解析测试。 */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const backendRequest = vi.fn();
@@ -15,6 +15,30 @@ import {
   PluginPermissionConfirmationRequiredError,
 } from '../pluginClient';
 
+const runtime = {
+  plugin_name: 'alpha',
+  state: 'active',
+  running: true,
+  pid: 123,
+  started_at: 1,
+  stopped_at: null,
+  exit_code: null,
+  restart_count: 0,
+  capabilities: ['reader'],
+  last_error: null,
+  stderr_tail: '',
+  limits: {
+    startup_timeout_seconds: 10,
+    request_timeout_seconds: 30,
+    shutdown_timeout_seconds: 3,
+    max_message_bytes: 1048576,
+    memory_bytes: 536870912,
+    cpu_seconds: 300,
+    memory_limit_enforced: true,
+    cpu_limit_enforced: false,
+  },
+};
+
 const plugin = {
   name: 'alpha',
   version: '1.0.0',
@@ -26,6 +50,7 @@ const plugin = {
   description: '',
   permissions: [],
   by_capability: [],
+  runtime,
   error_message: null,
   created_at: '2026-10-21T00:00:00Z',
   updated_at: '2026-10-21T00:00:00Z',
@@ -141,6 +166,43 @@ describe('pluginClient', () => {
       { method: 'GET', path: '/api/v1/plugins/alpha/permissions' },
       { method: 'GET', path: '/api/v1/plugins/alpha/logs?limit=5' },
       { method: 'GET', path: '/api/v1/plugins/logs?limit=7' },
+    ]);
+  });
+
+  it('runtime actions and invoke use the out-of-process host endpoints', async () => {
+    backendRequest
+      .mockResolvedValueOnce({ plugin, runtime })
+      .mockResolvedValueOnce({ plugin, runtime })
+      .mockResolvedValueOnce({ plugin, runtime })
+      .mockResolvedValueOnce({ plugin, runtime })
+      .mockResolvedValueOnce({
+        plugin_name: 'alpha',
+        capability: 'reader',
+        result: { ok: true },
+        runtime,
+      });
+
+    await expect(pluginClient.runtime('alpha')).resolves.toEqual({ plugin, runtime });
+    await pluginClient.startRuntime('alpha');
+    await pluginClient.restartRuntime('alpha');
+    await pluginClient.stopRuntime('alpha');
+    await expect(pluginClient.invokeRuntime('alpha', 'reader', { path: 'a.txt' })).resolves.toEqual({
+      plugin_name: 'alpha',
+      capability: 'reader',
+      result: { ok: true },
+      runtime,
+    });
+
+    expect(backendRequest.mock.calls.map(([request]) => request)).toEqual([
+      { method: 'GET', path: '/api/v1/plugins/alpha/runtime' },
+      { method: 'POST', path: '/api/v1/plugins/alpha/runtime/start' },
+      { method: 'POST', path: '/api/v1/plugins/alpha/runtime/restart' },
+      { method: 'POST', path: '/api/v1/plugins/alpha/runtime/stop' },
+      {
+        method: 'POST',
+        path: '/api/v1/plugins/alpha/runtime/invoke',
+        body: { capability: 'reader', arguments: { path: 'a.txt' } },
+      },
     ]);
   });
 });

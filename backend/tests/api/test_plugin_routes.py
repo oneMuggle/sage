@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 from typing import Any, Dict
 
 import pytest
 
+from backend.plugins.host import PluginHostLimits, PluginHostManager
 from backend.plugins.manifest import EXAMPLE_MANIFEST
+from backend.plugins.registry import CapabilityRegistry
 
 pytestmark = pytest.mark.unit
 
@@ -81,6 +84,8 @@ async def test_plugin_lifecycle_full_chain(client):
     assert plugin["display_name"] == "Example Plugin"
     assert plugin["permissions"] == ["file:read", "network:write"]
     assert plugin["manifest"]["capabilities"][0]["name"] == "example-tool"
+    assert plugin["runtime"]["state"] == "pending"
+    assert plugin["runtime"]["running"] is False
 
     listed = await client.get("/api/v1/plugins", params={"status": "installed"})
     assert listed.status_code == 200
@@ -171,6 +176,8 @@ async def test_unknown_plugin_returns_404(client):
         ("get", "/api/v1/plugins/missing-plugin"),
         ("post", "/api/v1/plugins/missing-plugin/enable"),
         ("get", "/api/v1/plugins/missing-plugin/logs"),
+        ("get", "/api/v1/plugins/missing-plugin/runtime"),
+        ("post", "/api/v1/plugins/missing-plugin/runtime/start"),
     ]:
         response = await getattr(client, method)(path)
         assert response.status_code == 404
@@ -204,3 +211,113 @@ async def test_plugin_routes_reject_untrusted_origin(client):
 
     assert response.status_code == 403
     assert response.json()["error"] == "forbidden_origin"
+
+
+@pytest.mark.asyncio()
+async def test_plugin_runtime_full_chain(client, tmp_path: Path, monkeypatch):
+    root = tmp_path / "runtime-plugin"
+    root.mkdir()
+    (root / "handlers.py").write_text(
+        """
+def add(a, b):
+    return {"sum": a + b}
+""",
+        encoding="utf-8",
+    )
+    body = _body("runtime-plugin", with_permissions=False)
+    body["install_path"] = str(root)
+    body["manifest"]["capabilities"][0]["entry_point"] = "handlers:add"
+
+    host = PluginHostManager(
+        PluginHostLimits(
+            startup_timeout_seconds=5,
+            request_timeout_seconds=2,
+            shutdown_timeout_seconds=1,
+        ),
+        registry=CapabilityRegistry(),
+    )
+    monkeypatch.setattr(
+        "backend.api.plugin_routes.get_plugin_host_manager",
+        lambda: host,
+    )
+
+    try:
+        installed = await client.post("/api/v1/plugins", json=body)
+        assert installed.status_code == 201
+        assert installed.json()["plugin"]["runtime"]["state"] == "pending"
+
+        premature_start = await client.post(
+            "/api/v1/plugins/runtime-plugin/runtime/start"
+        )
+        assert premature_start.status_code == 409
+        assert premature_start.json()["code"] == "PLUGIN_NOT_ENABLED"
+
+        enabled = await client.post("/api/v1/plugins/runtime-plugin/enable")
+        assert enabled.status_code == 200
+        assert enabled.json()["plugin"]["runtime"]["state"] == "pending"
+
+        premature_invoke = await client.post(
+            "/api/v1/plugins/runtime-plugin/runtime/invoke",
+            json={"capability": "example-tool", "arguments": {"a": 1, "b": 2}},
+        )
+        assert premature_invoke.status_code == 409
+        assert premature_invoke.json()["code"] == "PLUGIN_NOT_RUNNING"
+
+        started = await client.post(
+            "/api/v1/plugins/runtime-plugin/runtime/start"
+        )
+        assert started.status_code == 200
+        runtime = started.json()["runtime"]
+        assert runtime["state"] == "active"
+        assert runtime["running"] is True
+        assert runtime["pid"] is not None
+        assert runtime["capabilities"] == ["example-tool"]
+        assert started.json()["plugin"]["runtime"]["state"] == "active"
+
+        invoked = await client.post(
+            "/api/v1/plugins/runtime-plugin/runtime/invoke",
+            json={"capability": "example-tool", "arguments": {"a": 2, "b": 5}},
+        )
+        assert invoked.status_code == 200
+        assert invoked.json()["result"] == {"sum": 7}
+
+        restarted = await client.post(
+            "/api/v1/plugins/runtime-plugin/runtime/restart"
+        )
+        assert restarted.status_code == 200
+        assert restarted.json()["runtime"]["restart_count"] == 1
+        assert restarted.json()["runtime"]["state"] == "active"
+
+        configured = await client.patch(
+            "/api/v1/plugins/runtime-plugin/config",
+            json={"config": {"fresh": True}},
+        )
+        assert configured.status_code == 200
+        assert configured.json()["plugin"]["runtime"]["state"] == "disposed"
+
+        restarted_after_config = await client.post(
+            "/api/v1/plugins/runtime-plugin/runtime/start"
+        )
+        assert restarted_after_config.status_code == 200
+        assert restarted_after_config.json()["runtime"]["state"] == "active"
+
+        disabled = await client.post("/api/v1/plugins/runtime-plugin/disable")
+        assert disabled.status_code == 200
+        assert disabled.json()["plugin"]["status"] == "disabled"
+        assert disabled.json()["plugin"]["runtime"]["state"] == "disposed"
+
+        runtime_status = await client.get(
+            "/api/v1/plugins/runtime-plugin/runtime"
+        )
+        assert runtime_status.status_code == 200
+        assert runtime_status.json()["runtime"]["running"] is False
+
+        logs = await client.get("/api/v1/plugins/runtime-plugin/logs")
+        events = [event["event"] for event in reversed(logs.json()["logs"])]
+        assert "runtime_started" in events
+        assert "runtime_invoked" in events
+        assert "runtime_restarted" in events
+        assert events.count("runtime_stopped") == 2  # config update, disable
+        assert "runtime_failed" in events  # premature start attempt
+    finally:
+        host.shutdown_all()

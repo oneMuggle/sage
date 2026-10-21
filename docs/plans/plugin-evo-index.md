@@ -17,7 +17,7 @@
 | R80 | tool 收编：硬编码装配改为 bundle 注册 + 权限 → RiskClass | ✅ #2206 |
 | R81 | 三层配置 + 四预设 + `--dump-config` | ✅ #2206 |
 | R82 | 插件 UI / REST（安装、启停、权限确认、日志） | ✅ #2206 |
-| R83 | 进程外宿主（含 DSH 边车，仅在触发条件满足时） | 待启动 |
+| R83 | 进程外宿主（含 DSH 边车，仅在触发条件满足时） | ✅ #2206 |
 | R84 | harness 文件化 + lock + 差异视图 | 待启动 |
 | R85 | 提案引擎（Propose–Probe–Compose + 证据锚定） | 待启动 |
 | R86 | 生态（脚手架 / 索引 / 贡献指南） | 待启动 |
@@ -31,6 +31,7 @@
 | R80 | `application/kernel/tool_install.py`（127 行机制）+ `tools/tool_bundles.py`（31 个 bundle / 94 个工具）+ 39 例单测 | #2206 | 待对齐 | ✅ 已交付 |
 | R81 | `application/kernel/harness_config.py`（546 行）+ `backend/cli/harness.py`（215 行）+ 删除 legacy/旧开关 + 55 例单测 | #2206 | 待对齐 | ✅ 已交付 |
 | R82 | `api/plugin_routes.py` + lifecycle manifest/events 补强 + `pluginClient.ts` / `PluginsTab.tsx` + 后端 59 例相关测试、前端 16 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
+| R83 | `plugins/{host,host_process,host_worker}.py` + runtime REST/审计 + `PluginRuntimePanel.tsx` + 后端 111 例相关测试、前端 19 例定向测试 | #2206 | 待对齐 | ✅ 已交付 |
 
 ## 3. R78 交付边界
 
@@ -99,5 +100,30 @@
 - **本地证据**：后端 59 例相关测试、前端新增 16 例测试与既有设置搜索 12 例通过；
   ruff、tsc、eslint、vite build、architecture-check 全绿（`backend/main.py` 仅 +3 行，
   基线按 ratchet 从 1272 调整到 1275）。
+
+## 8. R83 交付边界
+
+- **默认拒绝自动执行**：install/enable/后端重启都不会拉起插件进程；runtime 只能由
+  已认证本地用户显式 start，且仅 `enabled` 记录可启动。后端重启后 runtime 统一
+  回到 `pending`，不做跨重启恢复。
+- **第一垂直切片只托管 tool**：只加载 manifest 中带 entry_point 的 tool 能力，
+  支持 `module:attr`、兼容点路径与模块约定入口，并把进程外代理注册到既有
+  `CapabilityRegistry`。本轮不自动暴露给 LLM `ToolRegistry`，也不执行
+  skill/hook/mcp_server/command。
+- **崩溃隔离不是安全沙箱**：worker 是同 OS 用户下的独立 Python 子进程，
+  以 stdio JSON-RPC 通信，使用 cwd/env 白名单、1 MiB 消息上限、启动/调用/关闭
+  超时与有界 stderr；Windows 优先 Job Object 512 MiB 内存上限，POSIX 在导入
+  插件前设置 memory/CPU rlimit。manifest 权限仍是安装确认语义，不宣称内核级
+  文件/网络强制。
+- **停机联动完整**：disable、uninstall、配置更新都会先停 worker；普通工具异常
+  不杀进程，超时/崩溃/协议损坏进入 `failed` 并注销代理，宿主不自动重启。
+  FastAPI shutdown 统一停止全部 worker；runtime start/stop/restart/invoke 均写
+  `plugin_events` 审计，事件不记录 arguments/config 内容。
+- **DSH 边车未触发，不扩围**：T1–T4 触发条件均无新证据满足，本轮不做 Node
+  边车、cordis-shim 或 Cordis ABI 兼容；完整设计与残余风险见
+  `2026-10-21_out-of-process-plugin-host-r83.md`。
+- **本地证据**：后端相关 111 例、前端定向 19 例通过；ruff、py38 兼容、静默异常
+  ratchet、tsc、eslint、vite build、architecture-check 全绿。`backend/main.py`
+  仅 +8 行 lifespan shutdown 接线，基线按 ratchet 从 1275 调整到 1283。
 
 —— 本账本由插件化循环维护，随轮次追加。

@@ -1,14 +1,48 @@
 /**
- * 插件生命周期 API 客户端（R82）。
+ * 插件生命周期与进程外 runtime API 客户端（R82/R83）。
  *
  * 经 Electron ``backendRequest`` 中继调用 ``/api/v1/plugins/*``。
- * R82 只管理生命周期记录；插件代码加载/托管属于 R83。
+ * 生命周期记录与 runtime 状态是两套语义：enabled 不代表代码正在运行。
  */
 import { backendRequest } from './backendRequest';
 
 const BASE = '/api/v1/plugins';
 
 export type PluginStatus = 'installed' | 'enabled' | 'disabled' | 'uninstalled';
+
+export type PluginRuntimeState =
+  | 'pending'
+  | 'loading'
+  | 'active'
+  | 'failed'
+  | 'unloading'
+  | 'disposed';
+
+export interface PluginRuntimeLimits {
+  startup_timeout_seconds: number;
+  request_timeout_seconds: number;
+  shutdown_timeout_seconds: number;
+  max_message_bytes: number;
+  memory_bytes: number;
+  cpu_seconds: number;
+  memory_limit_enforced: boolean;
+  cpu_limit_enforced: boolean;
+}
+
+export interface PluginRuntimeStatus {
+  plugin_name: string;
+  state: PluginRuntimeState;
+  running: boolean;
+  pid: number | null;
+  started_at: number | null;
+  stopped_at: number | null;
+  exit_code: number | null;
+  restart_count: number;
+  capabilities: string[];
+  last_error: string | null;
+  stderr_tail: string;
+  limits: PluginRuntimeLimits;
+}
 
 export interface PluginCapability {
   type: string;
@@ -59,6 +93,7 @@ export interface PluginRecord {
   description: string;
   permissions: string[];
   by_capability: PluginPermissionGroup[];
+  runtime: PluginRuntimeStatus;
   error_message: string | null;
   created_at: string;
   updated_at: string;
@@ -77,6 +112,18 @@ export interface PluginPermissions {
   plugin: string;
   permissions: string[];
   by_capability: PluginPermissionGroup[];
+}
+
+export interface PluginRuntimeActionResponse {
+  plugin: PluginRecord;
+  runtime: PluginRuntimeStatus;
+}
+
+export interface PluginInvokeResponse {
+  plugin_name: string;
+  capability: string;
+  result: unknown;
+  runtime: PluginRuntimeStatus;
 }
 
 export interface InstallPluginInput {
@@ -230,6 +277,16 @@ async function runAction(name: string, action: string): Promise<PluginRecord> {
   return response.plugin;
 }
 
+async function runRuntimeAction(
+  name: string,
+  action: 'start' | 'stop' | 'restart',
+): Promise<PluginRuntimeActionResponse> {
+  return backendRequest<PluginRuntimeActionResponse>({
+    method: 'POST',
+    path: `${pluginPath(name)}/runtime/${action}`,
+  });
+}
+
 export const pluginClient = {
   async list(status?: PluginStatus): Promise<PluginRecord[]> {
     const query = status ? `?status=${encodeURIComponent(status)}` : '';
@@ -290,6 +347,37 @@ export const pluginClient = {
       body: { config },
     });
     return response.plugin;
+  },
+
+  async runtime(name: string): Promise<PluginRuntimeActionResponse> {
+    return backendRequest<PluginRuntimeActionResponse>({
+      method: 'GET',
+      path: `${pluginPath(name)}/runtime`,
+    });
+  },
+
+  startRuntime(name: string): Promise<PluginRuntimeActionResponse> {
+    return runRuntimeAction(name, 'start');
+  },
+
+  stopRuntime(name: string): Promise<PluginRuntimeActionResponse> {
+    return runRuntimeAction(name, 'stop');
+  },
+
+  restartRuntime(name: string): Promise<PluginRuntimeActionResponse> {
+    return runRuntimeAction(name, 'restart');
+  },
+
+  async invokeRuntime(
+    name: string,
+    capability: string,
+    args: Record<string, unknown>,
+  ): Promise<PluginInvokeResponse> {
+    return backendRequest<PluginInvokeResponse>({
+      method: 'POST',
+      path: `${pluginPath(name)}/runtime/invoke`,
+      body: { capability, arguments: args },
+    });
   },
 
   async permissions(name: string): Promise<PluginPermissions> {
