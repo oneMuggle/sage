@@ -306,7 +306,7 @@ def create_default_agents() -> List[AgentProfile]:
             tools=list(_PRIMARY_SEED_TOOLS),
             memory_access=["working", "episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.7),
-            max_iterations=15,
+            max_iterations=25,  # 2026-10-20: 15→25，支持更长的复杂任务
         ),
         AgentProfile(
             id="researcher",

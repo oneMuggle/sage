@@ -350,6 +350,14 @@ export function OrchestrationTab() {
           value={settings.orch.maxToolCallsPerRun}
           onChange={(v) => setOrch({ maxToolCallsPerRun: v })}
         />
+        <NumberField
+          anchor="orch.maxIterations"
+          label="Agent 迭代次数上限（次，0=默认值）"
+          desc="Primary agent 最大迭代次数（每次迭代 LLM 思考一次，可能调用多个工具），超限后会话终止并归因 max_iterations_exceeded"
+          dataTestId="orch-max-iterations"
+          value={settings.orch.maxIterations}
+          onChange={(v) => setOrch({ maxIterations: v })}
+        />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">隔离与审批</h3>

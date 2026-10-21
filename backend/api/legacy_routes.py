@@ -1909,6 +1909,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 extract_sources_from_tool(r81_tool_name, tr.content),
                             )
                         await entry.queue.put(evt.to_dict())
+                    # 2026-10-20: 处理 agent 循环的 FAILED 事件（如 max_iterations_exceeded）
+                    # 将错误信息传递给 _producer_error，避免默认的"运行失败"
+                    elif evt.state.value == "failed":
+                        _producer_error = getattr(evt, "error", None) or "Agent 运行失败"
+                        logger.warning(
+                            "[REQ %s] agent run_loop failed: %s",
+                            request_id,
+                            _producer_error,
+                        )
+                        await entry.queue.put(evt.to_dict())
                     # 2026-09 step-by-step: 每完成一次 ReAct 迭代(OBSERVING 之后),
                     # agent.py 在该迭代边界 yield STEP_DONE。这里把"当前 step 的累加器"
                     # 快照成一行 assistant 消息,重置累加器准备下一步。最终步骤由 done
