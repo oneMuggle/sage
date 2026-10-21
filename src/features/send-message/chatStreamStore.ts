@@ -27,6 +27,7 @@ import { create } from 'zustand';
 
 import type {
   AgentEvent,
+  RetryInfo,
   SubagentLiveEvent,
   SubagentLiveState,
   TaskPlanItem,
@@ -34,7 +35,8 @@ import type {
   TaskStatusEvent,
   TodoItem,
 } from '../../shared/api';
-import type { ToolCall } from '../../shared/lib/store';
+import type { Message, ToolCall } from '../../shared/lib/store';
+import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
 /** 流式消息的临时覆盖层（'🤔 思考中…' + LLM 累积的 content/reasoning） */
 export interface StreamingState {
@@ -46,6 +48,12 @@ export interface StreamingState {
   currentAgentId: string | null;
   /** P2: 当前 ReAct 迭代轮次 */
   iteration: number;
+  /**
+   * 2026-10-20: LLM 重试可视化。state === 'retry' 时由 setRetryInfo 写入,
+   * Message.tsx 读此字段渲染 RetryBanner（带倒计时）。非 retry 状态到达时
+   * setStreamingMeta 自动清 null。
+   */
+  retryInfo?: RetryInfo | null;
 }
 
 /** 进度可视化 5 元组（与 useChat 内 TaskBoard 同字段，提取独立文件便于 store 引用） */
@@ -132,6 +140,15 @@ export interface SessionStreamSlots {
    * task_plan 初始化 / finishStream 兜底时清空。
    */
   preflightPhase: 'clarify' | 'scout' | null;
+  /**
+   * 2026-09 step-by-step: 已完成 ReAct 步骤的快照数组（每条对应独立消息气泡）。
+   * - 收到 step_done 事件时,把当前 streaming state 打包成 Message 推入此数组
+   * - 同时重置 streaming.content=THINKING_PLACEHOLDER / streaming.reasoning=''
+   *   / streamingToolCalls=[],以便下一步的 deltas 路由到新的 messageId
+   * - DONE 事件不追加(最后一步走 finishStream 路径)
+   * - startStream / resetAll 时清空
+   */
+  completedSteps: Message[];
 }
 
 const EMPTY_SLOTS: SessionStreamSlots = {
@@ -139,6 +156,7 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   streamingToolCalls: [],
   taskBoard: null,
   todos: [],
+  completedSteps: [],
   shiftInfo: null,
   preflightPhase: null,
 };
@@ -181,6 +199,22 @@ interface ChatStreamStoreState {
     messageId: string,
     patch: Partial<Pick<StreamingState, 'state' | 'currentAgentId' | 'iteration'>>,
   ) => void;
+  /**
+   * 2026-10-20: 写入 LLM 重试信息。Message.tsx 从 streaming.retryInfo 读
+   * 取并渲染 RetryBanner。retry 事件到达时覆盖，其他状态到达时由
+   * setStreamingMeta 自动清 null。
+   */
+  setRetryInfo: (sessionId: string, messageId: string, info: RetryInfo | null) => void;
+  /**
+   * 2026-09 step-by-step: 把当前 streaming 状态快照为一条已完成的 Message,
+   * 推入 completedSteps。
+   */
+  addCompletedStep: (sessionId: string, messageId: string, message: Message) => void;
+  /**
+   * 2026-09 step-by-step: 完成一步后重置 streaming 为占位态,
+   * 并切换 streaming.messageId 到 newMessageId,让后续 deltas 路由到新消息。
+   */
+  finalizeStep: (sessionId: string, oldMessageId: string, newMessageId: string) => void;
   clearStream: (sessionId: string, messageId: string) => void;
 
   // —— 工具调用 ——
@@ -238,10 +272,12 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
           state: 'thinking',
           currentAgentId: opts?.agentId ?? null,
           iteration: 0,
+          retryInfo: null,
         },
         streamingToolCalls: [],
         taskBoard: null,
         todos: [],
+        completedSteps: [],
         // Task 11 (2026-09-17): 新一轮流式清掉 topic_shifted 横幅态
         shiftInfo: null,
       }),
@@ -300,10 +336,26 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
   setStreamingMeta: (sessionId, messageId, patch) =>
     set((prev) => {
       const slots = selectSessionSlots(prev, sessionId);
+      if (!slots.streaming || slots.streaming.messageId !== messageId) return prev;
+      // 2026-10-20: 非 retry 状态到达时自动清 retryInfo —— Banner 随之消失
+      const autoClearRetry =
+        patch.state !== undefined && patch.state !== 'retry' && slots.streaming.retryInfo != null;
+      const nextStreaming = autoClearRetry
+        ? { ...slots.streaming, ...patch, retryInfo: null }
+        : { ...slots.streaming, ...patch };
+      return {
+        sessions: writeSlots(prev.sessions, sessionId, { streaming: nextStreaming }),
+      };
+    }),
+
+  // 2026-10-20: LLM 重试可视化 —— 写入 retryInfo 供 Message.tsx 渲染 RetryBanner
+  setRetryInfo: (sessionId, messageId, info) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
       return slots.streaming && slots.streaming.messageId === messageId
         ? {
             sessions: writeSlots(prev.sessions, sessionId, {
-              streaming: { ...slots.streaming, ...patch },
+              streaming: { ...slots.streaming, retryInfo: info },
             }),
           }
         : prev;
@@ -337,6 +389,39 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
 
   setTodos: (sessionId, todos) =>
     set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { todos }) })),
+
+  // 2026-09 step-by-step: 把当前 streaming 快照为 Message 推入 completedSteps
+  addCompletedStep: (sessionId, messageId, message) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      if (!slots.streaming || slots.streaming.messageId !== messageId) return prev;
+      return {
+        sessions: writeSlots(prev.sessions, sessionId, {
+          completedSteps: [...slots.completedSteps, message],
+        }),
+      };
+    }),
+
+  // 2026-09 step-by-step: 重置 streaming 为占位 + 切换 messageId; 下一步 deltas 路由到新 messageId
+  finalizeStep: (sessionId, oldMessageId, newMessageId) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      if (!slots.streaming || slots.streaming.messageId !== oldMessageId) return prev;
+      return {
+        sessions: writeSlots(prev.sessions, sessionId, {
+          streaming: {
+            messageId: newMessageId,
+            content: THINKING_PLACEHOLDER,
+            reasoning: '',
+            state: 'thinking',
+            currentAgentId: slots.streaming.currentAgentId,
+            iteration: slots.streaming.iteration,
+            retryInfo: null,
+          },
+          streamingToolCalls: [],
+        }),
+      };
+    }),
 
   // Task 11 (2026-09-17): topic_shifted 横幅态 — 写入后由 TopicShiftBanner 展示
   setShiftInfo: (sessionId, info) =>

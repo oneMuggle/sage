@@ -130,6 +130,7 @@ export type {
   SkillExecuteRequest,
   SkillExecuteResult,
   ReviewVerdict,
+  RetryInfo,
   TaskPlanEvent,
   TaskPlanItem,
   TaskProgressEvent,
