@@ -30,6 +30,7 @@ from typing import List, Optional, Tuple
 
 from backend.skills.base import SkillResult
 from backend.skills.skill_md.confirm import ConfirmationPort
+from backend.skills.skill_md.resources import ALLOWED_RESOURCE_DIRS
 from backend.skills.skill_md.sandbox import SandboxPort, SandboxRequest
 from backend.skills.skill_md.skill import SkillMdDocument
 from backend.skills.skill_md.validation import validate_base_dir
@@ -52,7 +53,7 @@ def _has_symlink_component(path: Path) -> bool:
 def _is_relative_to(path: Path, parent: Path) -> bool:
     """兼容 Python 3.8 的 Path.is_relative_to。"""
     try:
-        return path.is_relative_to(parent)  # py38: guarded (AttributeError fallback below)  # py38-ok 守卫/降级已覆盖（win7 适配写法）
+        return path.is_relative_to(parent)  # py38: guarded AttributeError 守卫 + relative_to 降级
     except AttributeError:
         try:
             path.relative_to(parent)
@@ -246,15 +247,18 @@ class ScriptRunner:
             )
             if current_identity != original_identity or current_hash != original_hash:
                 raise ValueError("script identity or content changed after confirmation")
-            snapshot_path = self._create_snapshot(validated_path, current_content)
+            snapshot_path = self._create_snapshot(
+                validated_path, current_content, base_dir=doc.base_dir
+            )
         except Exception as exc:
             return self._make_error(f"确认后脚本快照失败: {exc}")
 
-        # 5. 沙箱执行；cwd 保持原技能目录，只有执行文件来自快照。
+        # 5. 沙箱执行；cwd 改为快照内对应目录，让脚本 dirname(__file__) / ".."
+        #    相对路径能正确找到镜像到快照中的 assets / references 等资源。
         sandbox_request = SandboxRequest(
             script_path=snapshot_path,
             args=args,
-            cwd=validated_path.parent,
+            cwd=snapshot_path.parent,
         )
 
         try:
@@ -295,42 +299,177 @@ class ScriptRunner:
             error=None,
         )
 
-    def _create_snapshot(self, script_path: Path, content: bytes) -> Path:
-        """原子创建 0700 临时目录和 0600 脚本快照，失败则不执行。
+    def _create_snapshot(
+        self, validated_path: Path, content: bytes, base_dir: Path
+    ) -> Path:
+        """创建 0700 临时目录并镜像 base_dir 白名单资源子目录，返回脚本在快照中的路径。
+
+        布局（镜像 doc.base_dir 结构）::
+
+            <tmp>/sage-skill-XXXX/
+            ├── scripts/
+            │   ├── build_report.py       ← 已确认字节
+            │   └── scan.py               ← 安全读取副本
+            ├── assets/
+            │   └── report_template.html  ← 安全读取副本
+            ├── references/...
+            └── templates/...
+
+        脚本文件用已确认的 ``content`` 写入；其余白名单文件逐一走
+        ``_read_bound_regular_file`` 读取后复制。符号链接 / 重解析点一律跳过。
 
         Windows：``os.fchmod`` 不存在、目录 ACL 与 POSIX 位模型不同 ——
         mkdtemp 默认已为当前用户私有（%TEMP% 每用户目录），文件以 0600
         等价创建后跳过位调整；快照目录本身每用户隔离，安全语义等价。
         """
-        snapshot_dir = Path(tempfile.mkdtemp(prefix="sage-skill-"))
+        snapshot_root = Path(tempfile.mkdtemp(prefix="sage-skill-"))
         try:
             if os.name == "posix":
-                snapshot_dir.chmod(stat.S_IRWXU)
-            snapshot_path = snapshot_dir / script_path.name
-            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-            if hasattr(os, "O_BINARY"):
-                flags |= os.O_BINARY
-            fd = os.open(str(snapshot_path), flags, 0o600)
+                snapshot_root.chmod(stat.S_IRWXU)
+
+            # 计算脚本在 base_dir 下的相对路径
             try:
-                with os.fdopen(fd, "wb") as snapshot_file:
-                    fd = -1
-                    snapshot_file.write(content)
-                    snapshot_file.flush()
-                    if os.name == "posix":
-                        os.fchmod(snapshot_file.fileno(), stat.S_IRUSR | stat.S_IWUSR)
-            finally:
-                if fd != -1:
-                    os.close(fd)
-            return snapshot_path
+                script_rel = validated_path.resolve().relative_to(
+                    base_dir.resolve()
+                )
+            except ValueError as exc:
+                raise ValueError("script not under base_dir") from exc
+
+            # 镜像每个白名单子目录，但跳过脚本自身（稍后用确认字节写入）
+            skip_resolved = validated_path.resolve()
+            for subdir_name in sorted(ALLOWED_RESOURCE_DIRS):
+                source_subdir = base_dir / subdir_name
+                try:
+                    if source_subdir.is_symlink():
+                        continue
+                    if _has_symlink_component(source_subdir):
+                        continue
+                    if not source_subdir.is_dir():
+                        continue
+                except OSError:
+                    continue
+                target_subdir = snapshot_root / subdir_name
+                self._mirror_subdir(
+                    source_subdir, target_subdir, base_dir, skip_resolved
+                )
+
+            # 用已确认内容写入脚本的镜像位置
+            snapshot_script = snapshot_root / script_rel
+            snapshot_script.parent.mkdir(parents=True, exist_ok=True)
+            if os.name == "posix":
+                # 确保脚本父目录权限为 0700（_mirror_subdir 已处理则幂等）
+                for ancestor in (snapshot_script.parent, snapshot_root):
+                    try:
+                        if stat.S_IMODE(ancestor.stat().st_mode) != 0o700:
+                            ancestor.chmod(stat.S_IRWXU)
+                    except OSError:
+                        pass
+            self._write_snapshot_file(snapshot_script, content)
+
+            return snapshot_script
         except Exception:
-            shutil.rmtree(str(snapshot_dir), ignore_errors=True)
+            shutil.rmtree(str(snapshot_root), ignore_errors=True)
             raise
+
+    def _mirror_subdir(
+        self,
+        source_subdir: Path,
+        target_subdir: Path,
+        base_dir: Path,
+        skip_resolved: Path,
+    ) -> None:
+        """递归镜像一个白名单资源子目录到快照，跳过符号链接和 ``skip_resolved``。"""
+        target_subdir.mkdir(parents=True, exist_ok=True)
+        if os.name == "posix":
+            target_subdir.chmod(stat.S_IRWXU)
+
+        try:
+            entries = list(source_subdir.iterdir())
+        except OSError:
+            return
+
+        for entry in entries:
+            try:
+                name = entry.name
+                if name.startswith("."):
+                    continue
+                if entry.is_symlink():
+                    continue
+                if entry.is_dir():
+                    if _has_symlink_component(entry):
+                        continue
+                    self._mirror_subdir(
+                        entry, target_subdir / name, base_dir, skip_resolved
+                    )
+                elif entry.is_file():
+                    resolved_entry = entry.resolve()
+                    if resolved_entry == skip_resolved:
+                        continue  # 脚本本身稍后用已确认字节写入
+                    if _has_symlink_component(entry):
+                        continue
+                    # 边界校验：必须仍在 base_dir 下
+                    try:
+                        resolved_entry.relative_to(base_dir.resolve())
+                    except (ValueError, OSError):
+                        continue
+                    data, _identity, _hash = _read_bound_regular_file(entry)
+                    target_file = target_subdir / name
+                    target_file.parent.mkdir(parents=True, exist_ok=True)
+                    self._write_snapshot_file(target_file, data)
+            except OSError:
+                continue
+
+    @staticmethod
+    def _write_snapshot_file(path: Path, content: bytes) -> None:
+        """原子创建 0600 文件写入 ``content``；已存在则先删除再创建。"""
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_BINARY"):
+            flags |= os.O_BINARY
+        fd = os.open(str(path), flags, 0o600)
+        try:
+            with os.fdopen(fd, "wb") as snapshot_file:
+                fd = -1
+                snapshot_file.write(content)
+                snapshot_file.flush()
+                if os.name == "posix":
+                    os.fchmod(snapshot_file.fileno(), stat.S_IRUSR | stat.S_IWUSR)
+        finally:
+            if fd != -1:
+                os.close(fd)
 
     @staticmethod
     def _cleanup_snapshot(snapshot_path: Path) -> None:
-        """尽力清理快照；清理失败只记录日志，不改变执行结果。"""
+        """尽力清理快照；沿父级向上查找 ``sage-skill-*`` 临时目录并整棵删除。
+
+        镜像布局下 ``snapshot_path`` 可能是 ``<tmp>/sage-skill-XXXX/scripts/foo.py``，
+        必须向上找到 ``sage-skill-XXXX`` 才是 mkdtemp 创建的快照根。
+        清理失败只记录日志，不改变执行结果。
+
+        安全约束：匹配的祖先目录必须直接位于 ``tempfile.gettempdir()`` 之下，
+        避免把技能自身以 ``sage-skill-*`` 命名的 ``base_dir`` 误判为快照根。
+        """
+        import tempfile
+
+        temp_root = Path(tempfile.gettempdir()).resolve()
+        root: Optional[Path] = None
+        for ancestor in snapshot_path.parents:
+            if (
+                ancestor.name.startswith("sage-skill-")
+                and ancestor.parent.resolve() == temp_root
+            ):
+                root = ancestor
+                break
+        if root is None:
+            # 兜底：按旧布局尝试 snapshot_path.parent
+            root = snapshot_path.parent
         try:
-            shutil.rmtree(str(snapshot_path.parent))
+            shutil.rmtree(str(root))
         except OSError as exc:
             logger.warning("skill script snapshot cleanup failed: %s", exc)
 

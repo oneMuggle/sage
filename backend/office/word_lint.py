@@ -57,14 +57,32 @@ def _issue(rule_id: str, severity: str, message: str, fix_hint: str = "") -> Wor
     return WordLintIssue(rule_id=rule_id, severity=severity, message=message, fix_hint=fix_hint)
 
 
-def _document_has_toc_field(doc: Document) -> bool:
-    """检测文档是否存在 TOC 域（兼容 fldSimple 与 fldChar 复杂域两种载体）。"""
+def _document_has_field_with_instr(doc: Document, token: str) -> bool:
+    r"""检测文档是否存在 instr 含 token 的域（fldSimple/fldChar 双载体）。
+
+    注意 "TOC" 是 `\c` 图/表目录域（TOF）的前缀——区分 TOC 与 TOF 用
+    ``_document_has_toc_field`` 的排除逻辑，不要直接用裸 "TOC" token。
+    """
     for p in doc.paragraphs:
         for fld in p._p.findall(".//" + qn("w:fldSimple")):
-            if (fld.get(qn("w:instr")) or "").startswith("TOC"):
+            if token in (fld.get(qn("w:instr")) or ""):
                 return True
         for instr in p._p.findall(".//" + qn("w:instrText")):
-            if "TOC" in (instr.text or ""):
+            if token in (instr.text or ""):
+                return True
+    return False
+
+
+def _document_has_toc_field(doc: Document) -> bool:
+    """检测文档是否存在目录域（排除图/表目录域——后者 instr 也含 TOC）。"""
+    for p in doc.paragraphs:
+        for fld in p._p.findall(".//" + qn("w:fldSimple")):
+            instr = fld.get(qn("w:instr")) or ""
+            if "TOC" in instr and r"\c" not in instr:
+                return True
+        for instr in p._p.findall(".//" + qn("w:instrText")):
+            text = instr.text or ""
+            if "TOC" in text and r"\c" not in text:
                 return True
     return False
 
@@ -75,6 +93,29 @@ def _cm(value: Optional[Any]) -> Optional[float]:
 
 def _check_page(doc: Document, page: WordPageSetupSpec, issues: List[WordLintIssue]) -> None:
     section = doc.sections[0]
+
+    # Round 53：节内页码格式/起始号校验（spec 声明了才校验）。
+    if page.page_number_format is not None or page.page_number_start is not None:
+        sect_pr = section._sectPr
+        pg = sect_pr.find(qn("w:pgNumType"))
+        actual_fmt = pg.get(qn("w:fmt")) if pg is not None else None
+        actual_start = pg.get(qn("w:start")) if pg is not None else None
+        if page.page_number_format is not None and actual_fmt != page.page_number_format:
+            issues.append(_issue(
+                "page/numbering", "error",
+                f"页码格式实测 {actual_fmt or '未设置'}，期望 {page.page_number_format}",
+                f"在节属性的 pgNumType 设置 fmt={page.page_number_format}"
+                "（或用 format_spec.page.page_number_format 重新生成）",
+            ))
+        if page.page_number_start is not None and (
+            actual_start is None or int(actual_start) != page.page_number_start
+        ):
+            issues.append(_issue(
+                "page/numbering", "error",
+                f"页码起始号实测 {actual_start or '未设置'}，期望 {page.page_number_start}",
+                f"在节属性的 pgNumType 设置 start={page.page_number_start}"
+                "（或用 format_spec.page.page_number_start 重新生成）",
+            ))
     if page.margins_cm is not None:
         margins = page.margins_cm
         actual = {
@@ -260,10 +301,34 @@ def _check_numbering(
             ))
 
 
+def _iter_paragraphs_outside_fields(doc: Document):
+    """跳过复杂域缓存内容中的段落（Round 42）。
+
+    目录/图目录域（fldChar begin...end）的缓存行形如"图N　标题"，
+    会被 caption/sequence 规则误判为正文题注重复——begin 与 end 之间
+    的纯缓存段落不参与规则；begin/end 所在段自身文本为空，无影响。
+    """
+    inside_field = False
+    for para in doc.paragraphs:
+        has_toggle = False
+        for run in para.runs:
+            for fld in run._r.findall(qn("w:fldChar")):
+                fld_type = fld.get(qn("w:fldCharType"))
+                if fld_type == "begin":
+                    inside_field = True
+                    has_toggle = True
+                elif fld_type == "end":
+                    inside_field = False
+                    has_toggle = True
+        if has_toggle or not inside_field:
+            yield para
+
+
 def _check_captions(doc: Document, issues: List[WordLintIssue]) -> None:
     for label, regex in (("图", _FIGURE_CAPTION_RE), ("表", _TABLE_CAPTION_RE)):
         expected = 1
-        for para in doc.paragraphs:
+        seen_texts: dict = {}
+        for para in _iter_paragraphs_outside_fields(doc):
             match = regex.match(para.text)
             if match is None:
                 continue
@@ -276,6 +341,82 @@ def _check_captions(doc: Document, issues: List[WordLintIssue]) -> None:
                 ))
                 expected = actual
             expected += 1
+            # Round 48：重复题注文本提示（交叉引用按题注文本匹配指向
+            # 首个；警告级——不阻断交付）。
+            caption_text = regex.sub("", para.text, count=1).strip()
+            if caption_text in seen_texts:
+                issues.append(_issue(
+                    "caption/duplicate", "warning",
+                    f'{label}题注文本重复："{caption_text}"（第 '
+                    f"{seen_texts[caption_text]} 处与当前处）",
+                    "区分同类题注的标题文本，避免交叉引用指向首个",
+                ))
+            else:
+                seen_texts[caption_text] = expected - 1
+
+
+_CROSS_REF_RESIDUE_RE = re.compile(r"\{\{(fig|tbl|fn|en):[^}]+\}\}")
+
+
+def _check_cross_ref_residue(doc: Document, issues: List[WordLintIssue]) -> None:
+    """正文残留未解析的交叉引用占位符 → error（Round 45）。
+
+    生成通路会 fail-fast（未命中题注即生成失败），残渍只来自手工编辑
+    或外部导入的文档——此时占位符是死文本，提示直接写 图N/表N 或重新
+    生成。
+    """
+    residue = [
+        para.text
+        for para in _iter_paragraphs_outside_fields(doc)
+        if _CROSS_REF_RESIDUE_RE.search(para.text)
+    ]
+    if residue:
+        issues.append(_issue(
+            "cross_ref/residue", "error",
+            f"存在未解析的交叉引用占位符（{len(residue)} 处，如 {residue[0][:40]}）",
+            "占位符仅在 office_create 生成时解析；手工编辑请直接写 图N/表N，"
+            "或用原 format_spec 重新生成",
+        ))
+
+
+def _check_ref_consistency(doc: Document, issues: List[WordLintIssue]) -> None:
+    """脚注/尾注引用 id 必须在对应 part 有 note（Round 63）。
+
+    正文 ``footnoteReference``/``endnoteReference`` 的 id 对照
+    footnotes/endnotes part 的真实 note id 集合（系统脚注跳过）；
+    无引用的文档零开销跳过。
+    """
+    W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    for kind, partname in (
+        ("footnote", "/word/footnotes.xml"),
+        ("endnote", "/word/endnotes.xml"),
+    ):
+        refs = [
+            int(el.get(qn("w:id")))
+            for p in doc.paragraphs
+            for el in p._p.findall(f".//{{{W}}}{kind}Reference")
+        ]
+        if not refs:
+            continue
+        note_ids: set = set()
+        for part in doc.part.package.iter_parts():
+            if str(part.partname) != partname:
+                continue
+            from xml.etree import ElementTree
+
+            root = ElementTree.fromstring(part.blob)
+            for note in root.findall(f"{{{W}}}{kind}"):
+                if note.get(f"{{{W}}}type") is None:
+                    note_ids.add(int(note.get(f"{{{W}}}id")))
+            break
+        broken = sorted({r for r in refs if r not in note_ids})
+        if broken:
+            issues.append(_issue(
+                f"{kind}/broken_ref", "error",
+                f"{len(broken)} 处 {kind}Reference 引用了不存在的 note id"
+                f"（{broken}）",
+                "文档可能被手工改动——用原 format_spec 重新生成",
+            ))
 
 
 def _check_citations(doc: Document, issues: List[WordLintIssue]) -> None:
@@ -345,6 +486,24 @@ def lint_docx(path: Path, spec: WordFormatSpec) -> WordLintResult:
                 "未检测到目录域（TOC instr）",
                 "在标题后插入 TOC 域（或用 format_spec.toc 重新生成）",
             ))
+    # Round 44：图/表目录域在位校验（spec 声明了 index 就必须真的有
+    # 对应 TOC \c 域——字面"图N"文本不算，必须可被 Word 收录）。
+    if spec.figure_index is not None:
+        checked.append("figure_index")
+        if not _document_has_field_with_instr(doc, r'\c "图"'):
+            issues.append(_issue(
+                "figure_index/presence", "error",
+                r'未检测到插图目录域（TOC \c "图"）',
+                "用 format_spec.figure_index 重新生成（题注需 SEQ 域）",
+            ))
+    if spec.table_index is not None:
+        checked.append("table_index")
+        if not _document_has_field_with_instr(doc, r'\c "表"'):
+            issues.append(_issue(
+                "table_index/presence", "error",
+                r'未检测到表格目录域（TOC \c "表"）',
+                "用 format_spec.table_index 重新生成（题注需 SEQ 域）",
+            ))
     if spec.numbering:
         checked.append("numbering")
         bib_heading = (
@@ -357,6 +516,14 @@ def lint_docx(path: Path, spec: WordFormatSpec) -> WordLintResult:
         _check_captions(doc, issues)
     checked.append("citations")
     _check_citations(doc, issues)
+    # Round 45：交叉引用占位符残渍检查（无条件启用——残渍在任何语境
+    # 下都是死文本）。
+    checked.append("cross_ref")
+    _check_cross_ref_residue(doc, issues)
+    # Round 63：脚注/尾注引用一致性（损坏文档检出——引用 id 无对应
+    # note 时 Word 打开即报"内容有问题"）。
+    checked.append("ref_consistency")
+    _check_ref_consistency(doc, issues)
 
     errors = [i for i in issues if i.severity == "error"]
     warnings = [i for i in issues if i.severity == "warning"]

@@ -11,7 +11,7 @@ Date: 2026-09-26
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from backend.skills.base import BaseSkill, SkillResult, SkillSchema
 from backend.skills.discovery import SkillDiscoveryService, SkillMetadata
@@ -109,7 +109,7 @@ class EnhancedSkillRegistry(SkillRegistry):
         """
         return self._metadata_cache.get(skill_name)
 
-    def list_with_metadata(self) -> List[tuple[BaseSkill, Optional[SkillMetadata]]]:
+    def list_with_metadata(self) -> List[Tuple[BaseSkill, Optional[SkillMetadata]]]:
         """
         List all skills with their metadata.
 
