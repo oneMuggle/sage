@@ -1,7 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { AttnBadge } from '../AttnBadge';
+import {
+  AttnBadge,
+  formatAttnBadgeAuditJson,
+  formatAttnBadgeAuditSnapshot,
+} from '../AttnBadge';
 
 describe('AttnBadge', () => {
   it('renders nothing when count is zero, negative or non-finite', () => {
@@ -51,5 +55,37 @@ describe('AttnBadge', () => {
     const badge = screen.getByRole('status');
     expect(badge).toHaveClass('ml-auto');
     expect(badge).toHaveClass('bg-accent');
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P102)', () => {
+    expect(
+      formatAttnBadgeAuditSnapshot({
+        count: 120,
+        capped: true,
+        title: '120 项待处理',
+      }),
+    ).toBe('attnBadge|count=120|capped=1|title=120 项待处理');
+    expect(formatAttnBadgeAuditSnapshot({})).toBe('attnBadge|count=0|capped=0|title=none');
+    expect(
+      JSON.parse(
+        formatAttnBadgeAuditJson({
+          count: 5,
+          capped: false,
+          title: '5 项待处理',
+        }),
+      ),
+    ).toEqual({
+      count: 5,
+      capped: false,
+      title: '5 项待处理',
+    });
+
+    render(<AttnBadge count={3} />);
+    const snapBtn = screen.getByTestId('attn-badge-copy-snapshot');
+    const jsonBtn = screen.getByTestId('attn-badge-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

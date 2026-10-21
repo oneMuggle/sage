@@ -1362,3 +1362,15 @@
   7. **Markdown 图片渲染与灯箱审计快照与 JSON 导出（`MarkdownImage.tsx`）**：新增 `formatMarkdownImageAuditSnapshot` / `formatMarkdownImageAuditJson` 纯函数及 `markdown-image-copy-snapshot` / `markdown-image-copy-json` 审计控件，输出图片地址、替代文本、加载状态、本地媒体标识与灯箱预览开启状态。
   8. **对话划词引用按钮审计快照与 JSON 导出（`SelectionQuoteButton.tsx`）**：新增 `formatSelectionQuoteButtonAuditSnapshot` / `formatSelectionQuoteButtonAuditJson` 纯函数及 `selection-quote-copy-snapshot` / `selection-quote-copy-json` 审计控件，输出选区激活态、选中文本长度与浮动坐标。
 - **验证结果**：8 个目标单测套件（共 71 条单测）、`eslint`、`tsc --noEmit`、`check-font-scale.mjs` 与 `architecture-check.mjs` 在 `main` 与 `release/win7` 双轨全部通过。
+
+### Phase P102（2026-10-21）：共享 UI 原语（待办徽标、品牌标志、活跃状态点、下拉菜单、错误态、加载态、重试按钮与选择器）审计快照与 JSON 导出（Dual-Track `main` + `release/win7`）
+- **定位与目标**：将确定性单行审计快照（`format*AuditSnapshot`）与结构化 JSON 审计载荷（`format*AuditJson`）扩展至 `src/shared/ui/` 8 个核心设计系统原语组件：
+  1. **待处理数量徽标审计快照与 JSON 导出（`AttnBadge.tsx`）**：新增 `formatAttnBadgeAuditSnapshot` / `formatAttnBadgeAuditJson` 纯函数及 `attn-badge-copy-snapshot` / `attn-badge-copy-json` 审计控件，输出待处理计数、99+ 截断标记与解析后标题。
+  2. **品牌标志组件审计快照与 JSON 导出（`BrandLogo.tsx`）**：新增 `formatBrandLogoAuditSnapshot` / `formatBrandLogoAuditJson` 纯函数及 `brand-logo-copy-snapshot` / `brand-logo-copy-json` 审计控件，输出尺寸档位、Wordmark 启用态、替代文本与测试标识。
+  3. **活跃度指示点审计快照与 JSON 导出（`LiveDot.tsx`）**：新增 `formatLiveDotAuditSnapshot` / `formatLiveDotAuditJson` 纯函数及 `live-dot-copy-snapshot` / `live-dot-copy-json` 审计控件，输出活跃状态档位（`working` / `sleeping` / `idle`）与提示标签。
+  4. **Radix 下拉菜单审计快照与 JSON 导出（`DropdownMenu.tsx`）**：新增 `formatDropdownMenuAuditSnapshot` / `formatDropdownMenuAuditJson` 纯函数及 `dropdown-menu-copy-snapshot` / `dropdown-menu-copy-json` 审计控件，输出对齐方式、偏移像素、菜单项计数与危险操作标记。
+  5. **统一错误态面板审计快照与 JSON 导出（`ErrorState.tsx`）**：新增 `formatErrorStateAuditSnapshot` / `formatErrorStateAuditJson` 纯函数及 `error-state-copy-snapshot` / `error-state-copy-json` 审计控件，输出错误标题、错误详情、重试回调绑定态与重试按钮文案。
+  6. **统一加载态原语审计快照与 JSON 导出（`LoadingState.tsx`）**：新增 `formatLoadingStateAuditSnapshot` / `formatLoadingStateAuditJson` 纯函数及 `loading-state-copy-snapshot` / `loading-state-copy-json` 审计控件，输出加载变体（`spinner` / `skeleton`）、提示文案与骨架屏行数。
+  7. **指数退避重试按钮审计快照与 JSON 导出（`RetryButton.tsx`）**：新增 `formatRetryButtonAuditSnapshot` / `formatRetryButtonAuditJson` 纯函数及 `retry-button-copy-snapshot` / `retry-button-copy-json` 审计控件，输出已尝试次数、最大尝试上限、忙碌状态、当前冷却毫秒数与按钮标签。
+  8. **Radix 选择器原语审计快照与 JSON 导出（`Select.tsx`）**：新增 `formatSelectAuditSnapshot` / `formatSelectAuditJson` 纯函数及 `select-copy-snapshot` / `select-copy-json` 审计控件，输出定位模式、禁用状态与值绑定状态。
+- **验证结果**：8 个目标单测套件（共 52 条单测）、`eslint`、`tsc --noEmit`、`check-font-scale.mjs` 与 `architecture-check.mjs` 在 `main` 与 `release/win7` 双轨全部通过。
