@@ -174,3 +174,23 @@ export const fileSearchClient = {
     }
   },
 };
+
+export function formatFileSearchResultSummary(item: FileSearchResult): string {
+  const classification = classifyAtFileSelection(item);
+  return `${item.name} · ${item.kind ?? 'file'} · class=${classification}`;
+}
+
+export function formatFileSearchResultJson(item: FileSearchResult): string {
+  return JSON.stringify(
+    {
+      name: item.name,
+      path: item.path,
+      kind: item.kind ?? 'file',
+      classification: classifyAtFileSelection(item),
+      docId: item.docId ?? null,
+      docType: item.docType ?? null,
+    },
+    null,
+    2,
+  );
+}

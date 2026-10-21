@@ -97,3 +97,22 @@ export const orchestrationClient = {
     }) as Promise<V extends 'ui_minimal' ? BoardProjectionEnvelope : LaneBoardSnapshot>;
   },
 };
+
+export function formatLaneDecisionSummary(res: LaneDecisionResult): string {
+  return `${res.lane.lane_id} · ${res.decision} · merged=${res.merged} · already=${res.already}`;
+}
+
+export function formatLaneDecisionJson(res: LaneDecisionResult): string {
+  return JSON.stringify(
+    {
+      ok: res.ok,
+      laneId: res.lane.lane_id,
+      decision: res.decision,
+      merged: res.merged,
+      already: res.already,
+      warning: res.warning,
+    },
+    null,
+    2,
+  );
+}
