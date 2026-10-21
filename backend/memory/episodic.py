@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional
 
 from backend.data.database import fts_row_texts
 from backend.memory import scope as memory_scope
+from backend.memory.auto_tag import derive_tags, normalize_tags
 from backend.memory.chinese_tokenizer import tokenize, tokenize_for_search
 from backend.memory.summary_text import truncate_summary
 
@@ -210,10 +211,12 @@ class EpisodicMemory:
             self.db, scope, project_key, session_id
         )
 
-        # 处理标签
-        tags = "[]"
-        if metadata and "tags" in metadata:
-            tags = json.dumps(metadata["tags"], ensure_ascii=False)
+        # 处理标签：显式标签优先；缺省时从内容自动派生（缓解标签稀疏，
+        # 否则 TagCooccurrenceGraph 的共现矩阵几乎没有边）
+        tag_list = normalize_tags(metadata.get("tags") if metadata else None)
+        if not tag_list:
+            tag_list = derive_tags(content)
+        tags = json.dumps(tag_list, ensure_ascii=False)
 
         # 生成摘要（F2 — 允许调用方覆盖，如 ConsolidationPipeline）
         if summary is None:
