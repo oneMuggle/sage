@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "name": "hello-tool",
+  "version": "0.1.0",
+  "type": "personal",
+  "metadata": {
+    "display_name": "Hello Tool",
+    "description": "A minimal out-of-process Sage tool plugin.",
+    "icon": null,
+    "author": "Sage contributors",
+    "homepage": null,
+    "repository": null,
+    "license": "MIT",
+    "categories": [
+      "tool"
+    ],
+    "tags": [
+      "sage-plugin",
+      "tool"
+    ],
+    "hero_image": null,
+    "example_prompts": []
+  },
+  "capabilities": [
+    {
+      "type": "tool",
+      "name": "hello_tool",
+      "description": "Run the Hello Tool tool.",
+      "version": "0.1.0",
+      "entry_point": "handlers:run",
+      "permissions": [],
+      "config_schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "default": "World"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  ],
+  "dependencies": [],
+  "min_sage_version": "0.4.0",
+  "python_version": ">=3.8",
+  "hooks": [],
+  "user_config": {
+    "type": "object",
+    "properties": {
+      "greeting": {
+        "type": "string",
+        "default": "Hello"
+      }
+    },
+    "additionalProperties": false
+  }
+}

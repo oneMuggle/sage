@@ -20,7 +20,7 @@
 | R83 | 进程外宿主（含 DSH 边车，仅在触发条件满足时） | ✅ #2206 |
 | R84 | harness 文件化 + lock + 差异视图 | ✅ #2206 |
 | R85 | 提案引擎（Propose–Probe–Compose + 证据锚定） | ✅ #2206 |
-| R86 | 生态（脚手架 / 索引 / 贡献指南） | 待启动 |
+| R86 | 生态（脚手架 / 索引 / 贡献指南） | ✅ #2206 |
 
 ## 2. 交付总账
 
@@ -34,6 +34,7 @@
 | R83 | `plugins/{host,host_process,host_worker}.py` + runtime REST/审计 + `PluginRuntimePanel.tsx` + 后端 111 例相关测试、前端 19 例定向测试 | #2206 | 待对齐 | ✅ 已交付 |
 | R84 | `application/kernel/{harness_files,harness_snapshots}.py` + `cli/harness_export.py` + `files` CLI + 启动 lock gate + 14 例新增单测 | #2206 | 待对齐 | ✅ 已交付 |
 | R85 | `application/kernel/{harness_evidence,harness_proposals,harness_proposal_engine}.py` + SkillDraft 审批桥 + `proposals` CLI + 17 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
+| R86 | `plugins/{scaffold_templates,scaffold,index_catalog}.py` + `cli/plugin.py` + hello-tool 示例/静态索引/开发指南 + 25 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
 
 ## 3. R78 交付边界
 
@@ -179,5 +180,30 @@
 - **本地证据**：新增 17 例测试；R85 定向（含既有审批 API）34 passed，
   R84/draft/review/harness CLI 回归 77 passed/1 skipped；ruff 与
   architecture-check 全绿。
+
+## 11. R86 交付边界
+
+- **30 分钟路径以真实宿主收口**：`plugin init -> validate -> dev -> index
+  build/validate/search` 全走现有 manifest、R82 lifecycle 与 R83 进程外宿主；
+  `dev` 用临时生命周期库做一次显式 invoke 后停机，不改应用数据库，也不提供
+  watch/hot-reload。
+- **只有 tool 标为已托管**：脚手架提供 tool/hook/mcp/skill 四模板；tool 标记
+  supported，其余三类标记 preview 并由校验器给出 `RUNTIME_PREVIEW_ONLY`。
+  进程外 tool 仍只注册到 `CapabilityRegistry`，不自动暴露给 LLM
+  `ToolRegistry`。仓库尚无 UI capability 与前端插件加载器，本轮不生成
+  不可运行的 `npm create`/TS widget 假模板。
+- **静态索引只做目录，不做市场**：`plugins/index.json` 可离线 build、
+  validate 与 search，登记 git/archive/local 来源、兼容矩阵与可选签名元数据；
+  不下载、不安装、不验签，也不建立信任根。没有 Win7 实测的条目固定
+  `win7=unknown`。
+- **生成物可独立维护**：插件包只依赖 Python 标准库并兼容 3.8，脚手架默认
+  拒绝覆盖既有文件，`--force` 不删除额外文件；包校验只做 AST 静态解析，
+  不导入插件代码。权限仍是安装确认与审计语义，不是 OS 沙箱。
+- **贡献面分三层**：L1 内容走 skill/prompt/harness 校验，L2 插件走本轮
+  CLI 闭环，L3 新 capability/provider/宿主语义继续 spec 先行与评审；
+  仓库内 hello-tool 示例与种子索引由 backend CI 显式校验。
+- **本地证据**：新增 25 例生态测试、四模板自带 7 例测试、插件相关全集
+  126 passed；ruff、py38 hazard scan、diagnostics 与 architecture-check
+  全绿。完整设计见 `2026-10-21_plugin-ecosystem-r86.md`。
 
 —— 本账本由插件化循环维护，随轮次追加。
