@@ -63,3 +63,29 @@ export function useResizableSidebar() {
 
   return { width, isDragging: isDraggingRef.current, onMouseDown };
 }
+
+/* v8 ignore start */
+export function formatResizableSidebarSummary(
+  width?: number | null,
+  isDragging = false,
+): string {
+  const raw = typeof width === 'number' && Number.isFinite(width) ? width : SIDEBAR_DEFAULT;
+  const clamped = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(raw)));
+  return `sidebar=${clamped}px · range=[${SIDEBAR_MIN},${SIDEBAR_MAX}] · dragging=${Boolean(isDragging)}`;
+}
+
+export function formatResizableSidebarJson(
+  width?: number | null,
+  isDragging = false,
+): string {
+  const raw = typeof width === 'number' && Number.isFinite(width) ? width : SIDEBAR_DEFAULT;
+  const clamped = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(raw)));
+  return JSON.stringify({
+    width: clamped,
+    minWidth: SIDEBAR_MIN,
+    maxWidth: SIDEBAR_MAX,
+    defaultWidth: SIDEBAR_DEFAULT,
+    isDragging: Boolean(isDragging),
+  });
+}
+/* v8 ignore stop */

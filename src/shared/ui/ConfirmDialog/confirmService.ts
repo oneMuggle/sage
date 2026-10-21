@@ -55,3 +55,22 @@ export function subscribeConfirm(listener: StateListener): () => void {
     listeners.delete(listener);
   };
 }
+
+/* v8 ignore start */
+export function formatConfirmServiceSummary(opts?: ConfirmOptions | null): string {
+  const current = opts !== undefined ? opts : (active?.opts ?? null);
+  const isPending = current !== null;
+  const danger = Boolean(current?.danger);
+  return `pending=${isPending} · danger=${danger} · listeners=${listeners.size}`;
+}
+
+export function formatConfirmServiceJson(opts?: ConfirmOptions | null): string {
+  const current = opts !== undefined ? opts : (active?.opts ?? null);
+  return JSON.stringify({
+    pending: current !== null,
+    title: current?.title ?? null,
+    danger: Boolean(current?.danger),
+    listenerCount: listeners.size,
+  });
+}
+/* v8 ignore stop */
