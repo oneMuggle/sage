@@ -569,3 +569,20 @@ export function demoAppendMessages(
     }
   }
 }
+
+export function formatDemoInvokeSummary(cmd: string, result: DemoInvokeResult): string {
+  return `${cmd} · ${result.hit ? 'hit' : 'miss'}`;
+}
+
+export function formatDemoInvokeJson(cmd: string, result: DemoInvokeResult): string {
+  return JSON.stringify(
+    {
+      cmd,
+      hit: result.hit,
+      hasValue: result.value !== undefined,
+      registeredHandlerCount: Object.keys(demoHandlers).length,
+    },
+    null,
+    2,
+  );
+}

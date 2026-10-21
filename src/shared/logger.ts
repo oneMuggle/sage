@@ -8,3 +8,27 @@ export function createLogger(scope: string) {
     error: (message: string, ...args: unknown[]) => console.error(`[${scope}] ${message}`, ...args),
   };
 }
+
+export function formatLoggerEntrySummary(
+  scope: string,
+  level: 'debug' | 'info' | 'warn' | 'error',
+  message: string,
+): string {
+  return `[${scope}] ${level.toUpperCase()} · ${message}`;
+}
+
+export function formatLoggerEntryJson(
+  scope: string,
+  level: 'debug' | 'info' | 'warn' | 'error',
+  message: string,
+): string {
+  return JSON.stringify(
+    {
+      scope,
+      level,
+      message,
+    },
+    null,
+    2,
+  );
+}

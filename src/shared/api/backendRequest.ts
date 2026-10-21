@@ -23,3 +23,23 @@ export async function backendRequest<T>(request: BackendRequest): Promise<T> {
   if (!bridge) throw new BackendNotAvailableError();
   return bridge<T>(request);
 }
+
+export function formatBackendRequestSummary(request: BackendRequest): string {
+  const method = request.method ?? 'GET';
+  const hasBody = request.body !== undefined;
+  return `${method} ${request.path} · body=${hasBody}`;
+}
+
+export function formatBackendRequestJson(request: BackendRequest): string {
+  return JSON.stringify(
+    {
+      method: request.method ?? 'GET',
+      path: request.path,
+      hasBody: request.body !== undefined,
+      bridgeAvailable:
+        typeof window !== 'undefined' && Boolean(window.electronAPI?.backendRequest),
+    },
+    null,
+    2,
+  );
+}

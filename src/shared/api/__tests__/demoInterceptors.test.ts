@@ -216,4 +216,17 @@ describe('demo office template library (parity batch 3, item 3.2; round-3 N2)', 
       generated_filename: '项目评审模板-2026-09-10.pptx',
     });
   });
+
+  it('formats demo invoke summary and JSON (Phase P112)', async () => {
+    const { formatDemoInvokeSummary, formatDemoInvokeJson } = await import('../demoInterceptors');
+    const res = demoInvoke('office_list_documents', {});
+    expect(formatDemoInvokeSummary('office_list_documents', res)).toBe(
+      'office_list_documents · hit',
+    );
+    expect(formatDemoInvokeSummary('unknown_cmd', { hit: false })).toBe('unknown_cmd · miss');
+    const parsed = JSON.parse(formatDemoInvokeJson('office_list_documents', res));
+    expect(parsed.hit).toBe(true);
+    expect(parsed.hasValue).toBe(true);
+    expect(parsed.registeredHandlerCount).toBeGreaterThan(0);
+  });
 });
