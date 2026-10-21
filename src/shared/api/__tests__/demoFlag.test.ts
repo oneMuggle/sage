@@ -21,7 +21,7 @@ vi.mock('../../../features/manage-settings/settingsStore', () => ({
   },
 }));
 
-import { isDemoMode } from '../demoFlag';
+import { formatDemoFlagJson, formatDemoFlagSummary, isDemoMode } from '../demoFlag';
 import { setDemoModeOverride } from '../demoRuntime';
 
 beforeEach(() => {
@@ -59,5 +59,19 @@ describe('isDemoMode 优先级', () => {
 
   it('全关为假（无 window 环境不炸）', () => {
     expect(isDemoMode()).toBe(false);
+  });
+});
+
+describe('formatDemoFlagSummary / formatDemoFlagJson', () => {
+  it('formats demo mode flag summary and JSON payload', () => {
+    expect(formatDemoFlagSummary()).toBe('demo-flag: disabled · override=none');
+    setDemoModeOverride(true);
+    expect(formatDemoFlagSummary()).toBe('demo-flag: enabled · override=true');
+    const payload = JSON.parse(formatDemoFlagJson());
+    expect(payload).toEqual({
+      demoMode: true,
+      override: true,
+      hasElectronFlag: false,
+    });
   });
 });
