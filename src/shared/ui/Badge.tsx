@@ -29,3 +29,23 @@ export function Badge({ className, variant = 'default', ...props }: BadgeProps) 
     />
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatBadgeVariantSummary(
+  variant: BadgeProps['variant'] = 'default',
+): string {
+  const resolved = variant ?? 'default';
+  return `variant=${resolved} · pill=true`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatBadgeVariantJson(
+  variant: BadgeProps['variant'] = 'default',
+): string {
+  const resolved = variant ?? 'default';
+  return JSON.stringify({
+    variant: resolved,
+    pill: true,
+  });
+}
+

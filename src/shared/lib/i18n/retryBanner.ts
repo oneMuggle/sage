@@ -31,3 +31,23 @@ export const retryBannerEn: Record<keyof typeof retryBannerZh, string> = {
   'chat.retry.error.context_overflow': 'Context overflow',
   'chat.retry.error.unknown': 'Unknown error',
 };
+
+export function formatRetryBannerI18nSummary(): string {
+  const zhKeys = Object.keys(retryBannerZh);
+  const enKeys = Object.keys(retryBannerEn);
+  const parity = zhKeys.length === enKeys.length && zhKeys.every((k) => k in retryBannerEn);
+  return `zh=${zhKeys.length} · en=${enKeys.length} · parity=${parity}`;
+}
+
+export function formatRetryBannerI18nJson(): string {
+  const zhKeys = Object.keys(retryBannerZh);
+  const enKeys = Object.keys(retryBannerEn);
+  const parity = zhKeys.length === enKeys.length && zhKeys.every((k) => k in retryBannerEn);
+  return JSON.stringify({
+    zhCount: zhKeys.length,
+    enCount: enKeys.length,
+    parity,
+    keys: zhKeys,
+  });
+}
+

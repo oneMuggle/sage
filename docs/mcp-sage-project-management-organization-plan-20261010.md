@@ -1687,4 +1687,69 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P126：Word 内联粗斜体标记渲染/命令面板打开信号/产品状态提示多语言/快捷键注册表/会话工作区上下文访问器/暂停记忆词典/重试横幅词典/Wiki API 客户端审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/InlineMarks.tsx`：新增 `formatInlineMarksSummary` 与 `formatInlineMarksJson` 及单测 `InlineMarks.test.tsx`，支持一键导出 Word 内联粗斜体标记计数与节点分段数审计摘要（`bold=<count> · italic=<count> · segments=<count>`）与 JSON 快照。
+  2. `src/shared/lib/commandPaletteEvents.ts`：新增 `formatCommandPaletteEventSummary` 与 `formatCommandPaletteEventJson` 及单测 `commandPaletteEvents.test.ts`，支持一键导出命令面板跨组件打开信号事件名与派发目标就绪态审计摘要（`event=sage:command-palette:open · targetReady=<bool>`）与 JSON 快照。
+  3. `src/shared/lib/productMessages.ts`：新增 `formatProductMessagesSummary` 与 `formatProductMessagesJson` 及单测 `productMessages.test.ts`，支持一键导出产品状态提示词典语种、键数与中英对齐审计摘要（`locale=<zh|en> · keys=<count> · parity=<bool>`）与 JSON 快照。
+  4. `src/shared/lib/shortcuts.ts`：新增 `formatShortcutRegistrySummary` 与 `formatShortcutRegistryJson` 及单测 `shortcuts.test.ts`，支持一键导出快捷键帮助分组数与条目总数审计摘要（`groups=<count> · shortcuts=<count>`）与 JSON 快照。
+  5. `src/shared/lib/workspaceContext.tsx`：新增 `WorkspaceBindingAuditInput`、`formatWorkspaceBindingSummary` 与 `formatWorkspaceBindingJson` 及单测 `workspaceContext.test.ts`，支持一键导出工作区上下文挂载态、加载状态与路径绑定态审计摘要（`provider=<mounted|unmounted> · status=<status> · bound=<bool>`）与 JSON 快照。
+  6. `src/shared/lib/i18n/pausedMemory.ts`：新增 `formatPausedMemoryI18nSummary` 与 `formatPausedMemoryI18nJson` 及单测 `pausedMemory.test.ts`，支持一键导出暂停长期记忆中英词典键数对齐审计摘要（`zh=<count> · en=<count> · parity=<bool>`）与 JSON 快照。
+  7. `src/shared/lib/i18n/retryBanner.ts`：新增 `formatRetryBannerI18nSummary` 与 `formatRetryBannerI18nJson` 及单测 `retryBanner.test.ts`，支持一键导出 LLM 重试横幅中英词典键数对齐审计摘要（`zh=<count> · en=<count> · parity=<bool>`）与 JSON 快照。
+  8. `src/shared/api-client/wiki.ts`：新增 `WIKI_API_BASE`、`formatWikiApiClientSummary` 与 `formatWikiApiClientJson` 及单测 `wiki.test.ts`，支持一键导出 Wiki 后端 API 基础地址、演示模式拦截态与默认检索上限审计摘要（`baseUrl=http://127.0.0.1:8765/api/v1 · demoBlocked=<bool> · defaultLimit=<n>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P127：国际化聚合词典（en/zh）与分域翻译词典（chatAndSider/settingsAndModels/workspaceAndTools）审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/i18n/en.ts`：新增 `formatEnglishTranslationsSummary` 与 `formatEnglishTranslationsJson` 及单测 `en.test.ts`，支持一键导出英文聚合词典总键数审计摘要（`locale=en · keys=<count>`）与 JSON 快照。
+  2. `src/shared/lib/i18n/zh.ts`：新增 `formatChineseTranslationsSummary` 与 `formatChineseTranslationsJson` 及单测 `zh.test.ts`，支持一键导出中文聚合词典总键数审计摘要（`locale=zh · keys=<count>`）与 JSON 快照。
+  3. `src/shared/lib/i18n/locales/en/chatAndSider.ts`：新增 `formatEnChatAndSiderSummary` 与 `formatEnChatAndSiderJson` 及单测 `chatAndSider.test.ts`，支持一键导出英文对话与侧边栏分域词典键数审计摘要（`domain=en.chatAndSider · keys=<count>`）与 JSON 快照。
+  4. `src/shared/lib/i18n/locales/en/settingsAndModels.ts`：新增 `formatEnSettingsAndModelsSummary` 与 `formatEnSettingsAndModelsJson` 及单测 `settingsAndModels.test.ts`，支持一键导出英文设置与模型分域词典键数审计摘要（`domain=en.settingsAndModels · keys=<count>`）与 JSON 快照。
+  5. `src/shared/lib/i18n/locales/en/workspaceAndTools.ts`：新增 `formatEnWorkspaceAndToolsSummary` 与 `formatEnWorkspaceAndToolsJson` 及单测 `workspaceAndTools.test.ts`，支持一键导出英文工作区与工具分域词典键数审计摘要（`domain=en.workspaceAndTools · keys=<count>`）与 JSON 快照。
+  6. `src/shared/lib/i18n/locales/zh/chatAndSider.ts`：新增 `formatZhChatAndSiderSummary` 与 `formatZhChatAndSiderJson` 及单测 `chatAndSider.test.ts`，支持一键导出中文对话与侧边栏分域词典键数审计摘要（`domain=zh.chatAndSider · keys=<count>`）与 JSON 快照。
+  7. `src/shared/lib/i18n/locales/zh/settingsAndModels.ts`：新增 `formatZhSettingsAndModelsSummary` 与 `formatZhSettingsAndModelsJson` 及单测 `settingsAndModels.test.ts`，支持一键导出中文设置与模型分域词典键数审计摘要（`domain=zh.settingsAndModels · keys=<count>`）与 JSON 快照。
+  8. `src/shared/lib/i18n/locales/zh/workspaceAndTools.ts`：新增 `formatZhWorkspaceAndToolsSummary` 与 `formatZhWorkspaceAndToolsJson` 及单测 `workspaceAndTools.test.ts`，支持一键导出中文工作区与工具分域词典键数审计摘要（`domain=zh.workspaceAndTools · keys=<count>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 9 个测试文件（含 `welcome-translations.test.ts`）全部通过；`release/win7` 9 个测试文件全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P128：I18n 上下文提供器/Wiki 领域类型/Badge/Button/Card/Input/Modal/PageHeader 基础组件审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/i18n/index.tsx`：新增 `formatI18nProviderSummary` 与 `formatI18nProviderJson` 及单测 `index.test.tsx`，支持一键导出 I18nProvider 激活语种、聚合词条数与持久化存储键审计摘要（`locale=<zh|en> · keys=<count> · storageKey=sage.locale`）与 JSON 快照。
+  2. `src/shared/types/wiki.ts`：新增 `formatWikiProjectSummary` 与 `formatWikiProjectJson` 及单测 `wiki.test.ts`，支持一键导出 Wiki 项目绑定状态与最近项目计数审计摘要（`project=<id|none> · bound=<bool> · recent=<n>`）与 JSON 快照。
+  3. `src/shared/ui/Badge.tsx`：新增 `formatBadgeVariantSummary` 与 `formatBadgeVariantJson` 及单测 `Badge.test.tsx`，支持一键导出徽章视觉变体与胶囊圆角形态审计摘要（`variant=<default|secondary|outline|destructive> · pill=true`）与 JSON 快照。
+  4. `src/shared/ui/Button.tsx`：新增 `formatButtonVariantSummary` 与 `formatButtonVariantJson` 及单测 `Button.test.tsx`，支持一键导出按钮视觉变体、尺寸规格与禁用态审计摘要（`variant=<v> · size=<s> · disabled=<bool>`）与 JSON 快照。
+  5. `src/shared/ui/Card.tsx`：新增 `formatCardLayoutSummary` 与 `formatCardLayoutJson` 及单测 `Card.test.tsx`，支持一键导出卡片容器头部、标题与正文区块装配态审计摘要（`header=<bool> · title=<bool> · content=<bool>`）与 JSON 快照。
+  6. `src/shared/ui/Input.tsx`：新增 `formatInputFieldSummary` 与 `formatInputFieldJson` 及单测 `Input.test.tsx`，支持一键导出输入框校验错误态与禁用态审计摘要（`error=<bool> · disabled=<bool>`）与 JSON 快照。
+  7. `src/shared/ui/Modal.tsx`：新增 `formatModalDialogSummary` 与 `formatModalDialogJson` 及单测 `Modal.test.tsx`，支持一键导出模态框打开态、标题栏与底部操作区配置审计摘要（`open=<bool> · title=<bool> · footer=<bool>`）与 JSON 快照。
+  8. `src/shared/ui/PageHeader.tsx`：新增 `formatPageHeaderSummary` 与 `formatPageHeaderJson` 及单测 `PageHeader.test.tsx`，支持一键导出二级页面统一 48px 顶栏标题、副标题与操作区装配态审计摘要（`title=<title> · subtitle=<bool> · actions=<bool>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P129：顶层 Provider 栈 (`AppProviders`/`ErrorBoundary`/`QueryClientProvider`/`ToastProvider`/`providers/index`)、Arena 实体 (`arena/api`/`arena/index`) 与端点协议注册表 (`providerRegistry`) 审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/app/providers/AppProviders.tsx`：新增 `formatAppProvidersSummary` 与 `formatAppProvidersJson` 及单测 `AppProviders.test.tsx`，支持一键导出顶层 Provider 嵌套栈、Toast 兄弟挂载位与子节点装配态审计摘要（`stack=ErrorBoundary>Theme>Font>SessionWorkspace>I18n>QueryClient · toast=sibling · children=<bool>`）与 JSON 快照。
+  2. `src/app/providers/ErrorBoundary.tsx`：新增 `formatErrorBoundarySummary` 与 `formatErrorBoundaryJson` 及单测 `ErrorBoundary.test.tsx`，支持一键导出错误边界捕获状态、异常信息与自定义降级 UI 配置审计摘要（`caught=<bool> · message=<msg|none> · customFallback=<bool>`）与 JSON 快照。
+  3. `src/app/providers/QueryClientProvider.tsx`：新增 `formatQueryClientConfigSummary` 与 `formatQueryClientConfigJson` 及单测 `QueryClientProvider.test.tsx`，支持一键导出 TanStack Query 客户端默认缓存窗口、重试次数与失焦重拉策略审计摘要（`staleTimeMs=<n> · retry=<n> · refetchOnWindowFocus=<bool>`）与 JSON 快照。
+  4. `src/app/providers/ToastProvider.tsx`：新增 `formatToastProviderSummary` 与 `formatToastProviderJson` 及单测 `ToastProvider.test.tsx`，支持一键导出 Sonner Toast 容器明暗主题、弹出方位与驻留时长审计摘要（`theme=<light|dark> · position=top-right · durationMs=<n>`）与 JSON 快照。
+  5. `src/app/providers/index.ts`：新增 `formatProvidersBarrelSummary` 与 `formatProvidersBarrelJson` 及单测 `index.test.ts`，支持一键导出顶层 Provider Barrel 导出符号清单与数量审计摘要（`exports=AppProviders,ErrorBoundary,QueryClientProvider,ThemeProvider,ToastProvider,useTheme · count=6`）与 JSON 快照。
+  6. `src/entities/arena/api.ts`：新增 `formatArenaAccountSummary` 与 `formatArenaAccountJson` 及单测 `api.test.ts`，支持一键导出 Arena 账号池个体状态与累计失败计数审计摘要（`id=<id> · state=<state> · failures=<n>`）与 JSON 快照。
+  7. `src/entities/arena/index.ts`：新增 `formatArenaEntityBarrelSummary` 与 `formatArenaEntityBarrelJson` 及单测 `index.test.ts`，支持一键导出 Arena 实体 Barrel 路由前缀与重导出模块审计摘要（`module=entities/arena · base=/api/v1/arena · reExports=api`）与 JSON 快照。
+  8. `src/entities/endpoint/providerRegistry.ts`：新增 `formatProviderRegistrySummary` 与 `formatProviderRegistryJson` 及单测 `providerRegistry.test.ts`，支持一键导出前端 LLM 协议注册表已注册协议列表与代理路由前缀审计摘要（`providers=<count> · ids=<csv> · proxyBase=/api/v1/llm`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P130：设置注册表 (`settingsRegistry`)、主题预设 (`theme/presets`)、Attention Barrel (`attention/index`)、自主目标视图 (`CreateGoalModal`/`GoalDetailPage`/`GoalListPage`) 与对话附件/实体菜单 (`AtEntityMenu`/`MediaAttachment`) 审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/entities/setting/settingsRegistry.ts`：新增 `formatSettingsRegistrySummary` 与 `formatSettingsRegistryJson` 及单测 `settingsRegistry.test.ts`，支持一键导出设置元数据注册表总项数、基础可见项与高级可见项审计摘要（`total=<count> · basic=<count> · advanced=<count>`）与 JSON 快照。
+  2. `src/entities/theme/presets.ts`：新增 `formatThemePresetsSummary` 与 `formatThemePresetsJson` 及单测 `presets.audit.test.ts`，支持一键导出内置主题预设数量、默认主题 ID 与预设 ID 清单审计摘要（`count=<n> · defaultId=indigo · ids=<csv>`）与 JSON 快照。
+  3. `src/features/attention/index.ts`：新增 `formatAttentionBarrelSummary` 与 `formatAttentionBarrelJson` 及单测 `index.test.ts`，支持一键导出 Attention 特性 Barrel 注意力分类数与导出符号计数审计摘要（`module=features/attention · kinds=<n> · exports=8`）与 JSON 快照。
+  4. `src/features/autonomous-goals/CreateGoalModal.tsx`：新增 `formatCreateGoalModalSummary` 与 `formatCreateGoalModalJson` 及单测 `CreateGoalModal.test.tsx`，支持一键导出创建自主目标弹窗打开态、最大执行时长与 Token 预算审计摘要（`open=<bool> · maxHours=<n> · maxTokens=<n>`）与 JSON 快照。
+  5. `src/features/autonomous-goals/GoalDetailPage.tsx`：新增 `formatGoalDetailSummary` 与 `formatGoalDetailJson` 及单测 `GoalDetailPage.test.tsx`，支持一键导出自主目标详情页运行状态、本地化标签与检查点计数审计摘要（`status=<status|none> · label=<label|none> · checkpoints=<n>`）与 JSON 快照。
+  6. `src/features/autonomous-goals/GoalListPage.tsx`：新增 `formatGoalListFilterSummary` 与 `formatGoalListFilterJson` 及单测 `GoalListPage.test.tsx`，支持一键导出自主目标列表筛选器状态、当前目标计数与筛选项数量审计摘要（`filter=<status|all> · goals=<n> · options=7`）与 JSON 快照。
+  7. `src/features/chat/AtEntityMenu.tsx`：新增 `formatAtEntityMenuSummary` 与 `formatAtEntityMenuJson` 及单测 `AtEntityMenu.test.tsx`，支持一键导出 `@` 实体菜单查询词、匹配项计数与支持实体类型审计摘要（`query=<query|empty> · matches=<n> · kinds=memory,wiki,skill,agent`）与 JSON 快照。
+  8. `src/features/chat/MediaAttachment.tsx`：新增 `formatMediaAttachmentSummary` 与 `formatMediaAttachmentJson` 及单测 `MediaAttachment.test.tsx`，支持一键导出对话媒体附件 MIME 类型、渲染类别与说明文字配置审计摘要（`mimeType=<mime> · category=<image|audio|file> · caption=<bool>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
 

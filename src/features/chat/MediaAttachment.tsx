@@ -115,3 +115,35 @@ export const MediaAttachment: React.FC<MediaAttachmentProps> = ({ url, mimeType,
     </div>
   );
 };
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatMediaAttachmentSummary(
+  mimeType: string,
+  hasCaption = false,
+): string {
+  const mime = mimeType.trim() || 'application/octet-stream';
+  const category = mime.startsWith('image/')
+    ? 'image'
+    : mime.startsWith('audio/')
+      ? 'audio'
+      : 'file';
+  return `mimeType=${mime} · category=${category} · caption=${Boolean(hasCaption)}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatMediaAttachmentJson(
+  mimeType: string,
+  hasCaption = false,
+): string {
+  const mime = mimeType.trim() || 'application/octet-stream';
+  const category = mime.startsWith('image/')
+    ? 'image'
+    : mime.startsWith('audio/')
+      ? 'audio'
+      : 'file';
+  return JSON.stringify({
+    mimeType: mime,
+    category,
+    hasCaption: Boolean(hasCaption),
+  });
+}
+

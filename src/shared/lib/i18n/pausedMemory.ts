@@ -18,3 +18,23 @@ export const pausedMemoryEn = {
   'chat.temp_chat_off':
     'Pause long-term memory for this chat on this device (not an ephemeral-history or offline mode)',
 } as const;
+
+export function formatPausedMemoryI18nSummary(): string {
+  const zhKeys = Object.keys(pausedMemoryZh);
+  const enKeys = Object.keys(pausedMemoryEn);
+  const parity = zhKeys.length === enKeys.length && zhKeys.every((k) => k in pausedMemoryEn);
+  return `zh=${zhKeys.length} · en=${enKeys.length} · parity=${parity}`;
+}
+
+export function formatPausedMemoryI18nJson(): string {
+  const zhKeys = Object.keys(pausedMemoryZh);
+  const enKeys = Object.keys(pausedMemoryEn);
+  const parity = zhKeys.length === enKeys.length && zhKeys.every((k) => k in pausedMemoryEn);
+  return JSON.stringify({
+    zhCount: zhKeys.length,
+    enCount: enKeys.length,
+    parity,
+    keys: zhKeys,
+  });
+}
+
