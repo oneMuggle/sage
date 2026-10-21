@@ -13,3 +13,26 @@ export function ToastProvider() {
     <SonnerToaster theme={resolved} position="top-right" richColors closeButton duration={4000} />
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatToastProviderSummary(
+  theme: 'light' | 'dark' = 'light',
+  durationMs = 4000,
+): string {
+  const safeDuration = Math.max(0, Math.trunc(durationMs));
+  return `theme=${theme} · position=top-right · durationMs=${safeDuration}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatToastProviderJson(
+  theme: 'light' | 'dark' = 'light',
+  durationMs = 4000,
+): string {
+  return JSON.stringify({
+    theme,
+    position: 'top-right',
+    richColors: true,
+    closeButton: true,
+    durationMs: Math.max(0, Math.trunc(durationMs)),
+  });
+}
+
