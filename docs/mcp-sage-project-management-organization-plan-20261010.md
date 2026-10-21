@@ -1594,3 +1594,57 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 115 项单测全部通过；`release/win7` 8 个测试文件 115 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+
+### Phase P119：Office 编辑差异预览/任务计划契约/通用弹窗/开关控件/输入卡片/对话消息/重试横幅/侧栏分组状态审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/features/office/OfficeEditPreviewDialog.tsx`：新增 `formatOfficeDiffChangeSummary` 与 `formatOfficeDiffChangeJson`，支持一键导出 Office 文档编辑差异条目审计摘要（`<op> · target=<target> · hasBefore=<bool> · hasAfter=<bool>`）与 JSON 快照。
+  2. `src/shared/api/types.ts`：新增 `formatTaskPlanItemSummary` 与 `formatTaskPlanItemJson`，支持一键导出多智能体任务计划节点审计摘要（`<task_id> · agent=<agent_id> · parent=<parent_task_id> · depth=<depth>`）与 JSON 快照。
+  3. `src/shared/ui/Dialog/Dialog.tsx`：新增 `formatDialogConfigSummary` 与 `formatDialogConfigJson`，支持一键导出通用模态弹窗配置审计摘要（`<open|closed> · closeBtn=<showCloseButton> · title=<title>`）与 JSON 快照。
+  4. `src/shared/ui/Switch/Switch.tsx`：新增 `formatSwitchStateSummary` 与 `formatSwitchStateJson`，支持一键导出无障碍开关控件状态审计摘要（`<label> · <checked|unchecked> · disabled=<disabled>`）与 JSON 快照。
+  5. `src/widgets/chat/InputCard.tsx`：新增 `formatInputCardAuditSummary` 与 `formatInputCardAuditJson`，支持一键导出对话输入卡片水位审计摘要（`chars=<len>/4000 · loading=<isLoading> · attachments=<hasAttachments> · overLimit=<overLimit>`）与 JSON 快照。
+  6. `src/widgets/chat/Message.tsx`：新增 `formatMessageAuditSummary` 与 `formatMessageAuditJson`，支持一键导出对话消息气泡渲染状态审计摘要（`<id> · role=<role> · streaming=<isStreaming> · tools=<toolCount> · chars=<len>`）与 JSON 快照。
+  7. `src/widgets/chat/RetryBanner.tsx`：新增 `formatRetryBannerSummary` 与 `formatRetryBannerJson`，支持一键导出 LLM 自动重试横幅状态审计摘要（`attempt=<attempt>/<max_attempts> · type=<error_type> · severity=<severity> · delay=<delay>s`）与 JSON 快照。
+  8. `src/widgets/sidebar/useSiderSections.ts`：新增 `formatSiderSectionsSummary` 与 `formatSiderSectionsJson`，支持一键导出侧栏分区折叠与排序状态审计摘要（`sections=<len> · collapsed=<size> · order=[...]`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 97 项单测全部通过；`release/win7` 8 个测试文件 97 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+
+### Phase P120：主题上下文/产品愿景/自主目标客户端/自主目标状态/自主目标契约/字体选项/模型目录契约/设置项校验审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/app/providers/useTheme.ts`：新增 `formatThemeAuditSummary` 与 `formatThemeAuditJson` 及单测 `useTheme.test.ts`，支持一键导出主题模式与来源审计摘要（`mode=<mode>(<resolved>) · preset=<presetId> · source=<kind>:<id> · css=<count>`）与 JSON 快照。
+  2. `src/content/about/vision.ts`：新增 `formatVisionAuditSummary` 与 `formatVisionAuditJson` 及单测 `vision.test.ts`，支持一键导出产品愿景与四项核心哲学原则审计摘要（`visionChars=<len> · principles=<count> · names=[...]`）与 JSON 快照。
+  3. `src/entities/autonomous-goals/goalApi.ts`：新增 `formatGoalListQuerySummary` 与 `formatGoalListQueryJson` 及单测 `goalApi.test.ts`，支持一键导出闲时自主目标查询参数审计摘要（`path=/api/v1/goals · status=<status> · limit=<limit> · offset=<offset>`）与 JSON 快照。
+  4. `src/entities/autonomous-goals/goalStore.ts`：新增 `formatGoalStoreSummary` 与 `formatGoalStoreJson` 及单测 `goalStore.test.ts`，支持一键导出自主目标 Zustand Store 状态审计摘要（`goals=<count>/<total> · filter=<statusFilter> · loading=<loading> · error=<error>`）与 JSON 快照。
+  5. `src/entities/autonomous-goals/types.ts`：新增 `formatGoalAuditSummary` 与 `formatGoalAuditJson` 及单测 `types.test.ts`，支持一键导出自主目标进度与检查点核验审计摘要（`<id> · status=<status> · progress=<pct>% · checkpoints=<verified>/<total> · deg=<degradation_level>`）与 JSON 快照。
+  6. `src/entities/font/fontOptions.ts`：新增 `formatFontSettingsSummary` 与 `formatFontSettingsJson` 及单测 `fontOptions.test.ts`，支持一键导出 UI 与代码字体配置审计摘要（`ui=<fontUi>@<fontSizeUi>px · code=<fontCode>@<fontSizeCode>px`）与 JSON 快照。
+  7. `src/entities/model-catalog/types.ts`：新增 `formatCandidateModelSummary` 与 `formatCandidateModelJson` 及单测 `types.test.ts`，支持一键导出候选模型目录条目审计摘要（`<provider>/<model_id> · ctx=<native> · source=<source>`）与 JSON 快照。
+  8. `src/entities/setting/settingsValidation.ts`：新增 `formatSettingValidationSummary` 与 `formatSettingValidationJson` 及单测 `settingsValidation.test.ts`，支持一键导出设置项约束校验结果审计摘要（`<key> · <valid|invalid(error)>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P121：设置深度合并/设置元数据/设置契约/Wiki 活动队列/Wiki 质量检查/Wiki 演示数据/Wiki 摄入队列/编排事件订阅审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/entities/setting/deepMerge.ts`：新增 `formatDeepMergeSummary` 与 `formatDeepMergeJson` 及单测 `deepMerge.test.ts`，支持一键导出设置深度合并策略与冲突处理器审计摘要（`policy=<policy> · conflicts=<count> · customHandler=<bool>`）与 JSON 快照。
+  2. `src/entities/setting/metadata.ts`：新增 `formatSettingMetadataSummary` 与 `formatSettingMetadataJson` 及单测 `metadata.test.ts`，支持一键导出设置项元数据作用域与生效时机审计摘要（`<key> · <scope> · <applyMode> · risk=<riskLevel>`）与 JSON 快照。
+  3. `src/entities/setting/types.ts`：新增 `formatSettingsAuditSummary` 与 `formatSettingsAuditJson` 及单测 `types.test.ts`，支持一键导出全局设置版本、端点数量与演示模式审计摘要（`v<version> · endpoints=<count> · demo=<demoMode>`）与 JSON 快照。
+  4. `src/entities/wiki/activity-store.ts`：新增 `formatActivityStoreSummary` 与 `formatActivityStoreJson` 及单测 `activity-store.test.ts`，支持一键导出 Wiki 操作历史队列水位审计摘要（`activities=<total>/<maxItems> · running=<running> · errors=<errors>`）与 JSON 快照。
+  5. `src/entities/wiki/lint-store.ts`：新增 `formatLintStoreSummary` 与 `formatLintStoreJson` 及单测 `lint-store.test.ts`，支持一键导出 Wiki 文档质量检查状态审计摘要（`status=<status> · issues=<count> · warnings=<warnings>`）与 JSON 快照。
+  6. `src/entities/wiki/mock-data.ts`：新增 `formatWikiMockDataSummary` 与 `formatWikiMockDataJson` 及单测 `mock-data.test.ts`，支持一键导出 Wiki 演示数据集规模审计摘要（`lint=<count> · reviews=<count> · activities=<count> · research=<count>`）与 JSON 快照。
+  7. `src/entities/wiki/queue-store.ts`：新增 `formatQueueStoreSummary` 与 `formatQueueStoreJson` 及单测 `queue-store.test.ts`，支持一键导出 Wiki 持久化摄入队列状态审计摘要（`tasks=<count> · pending=<n> · processing=<n> · completed=<n> · failed=<n> · loading=<bool>`）与 JSON 快照。
+  8. `src/entities/orchestration/useOrchEventSubscription.ts`：新增 `formatOrchSubscriptionSummary` 与 `formatOrchSubscriptionJson` 及单测 `useOrchEventSubscription.test.ts`，支持一键导出编排运行事件流订阅水位审计摘要（`run=<runId> · enabled=<enabled> · lastSeq=<lastSeq>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P122：Wiki 深度研究队列/Wiki 审核队列/产物事件计数/消息跳转定位/诊断预览水位/全局设置 Store/Office 进度轮询/项目工作台状态审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/entities/wiki/research-store.ts`：新增 `formatResearchStoreSummary` 与 `formatResearchStoreJson` 及单测 `research-store.test.ts`，支持一键导出 Wiki 深度研究队列状态审计摘要（`tasks=<count> · done=<done> · maxConcurrent=<max> · panel=<open|closed>`）与 JSON 快照。
+  2. `src/entities/wiki/review-store.ts`：新增 `formatReviewStoreSummary` 与 `formatReviewStoreJson` 及单测 `review-store.test.ts`，支持一键导出 Wiki 审核队列未决条目审计摘要（`status=<status> · reviews=<count> · unresolved=<unresolved>`）与 JSON 快照。
+  3. `src/features/artifacts/artifactEventsStore.ts`：新增 `formatArtifactEventsSummary` 与 `formatArtifactEventsJson` 及单测 `artifactEventsStore.test.ts`，支持一键导出会话产物创建事件计数审计摘要（`sessions=<count> · totalEvents=<total>`）与 JSON 快照。
+  4. `src/features/chat/useMessageJump.ts`：新增 `formatMessageJumpSummary` 与 `formatMessageJumpJson` 及单测 `useMessageJump.test.ts`，支持一键导出对话阅读跳转窗口与闪烁目标审计摘要（`window=<effectiveWindow>/<totalMessages> · flash=<flashId>`）与 JSON 快照。
+  5. `src/features/diagnostic/useDiagnosticPreview.ts`：新增 `formatDiagnosticPreviewSummary` 与 `formatDiagnosticPreviewJson` 及单测 `useDiagnosticPreview.test.ts`，支持一键导出诊断日志预览水位审计摘要（`count=<count> · version=<version> · loading=<loading> · error=<hasError>`）与 JSON 快照。
+  6. `src/features/manage-settings/settingsStore.ts`：新增 `formatSettingsStoreSummary` 与 `formatSettingsStoreJson` 及单测 `settingsStore.test.ts`，支持一键导出全局设置 Zustand Store 水位审计摘要（`loading=<isLoading> · endpoints=<count> · demo=<demoMode>`）与 JSON 快照。
+  7. `src/features/office/officeProgress.ts`：新增 `formatOfficeProgressSummary` 与 `formatOfficeProgressJson` 及单测 `officeProgress.test.ts`，支持一键导出 Office 长任务进度轮询快照审计摘要（`task=<taskId> · stage=<stage> · percent=<pct>%`）与 JSON 快照。
+  8. `src/features/project-type/useStudioState.ts`：新增 `formatStudioStateSummary` 与 `formatStudioStateJson` 及单测 `useStudioState.test.ts`，支持一键导出项目原型工作台选中态与向导开关审计摘要（`projects=<count> · active=<id> · archetype=<type> · wizard=<open|closed>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。

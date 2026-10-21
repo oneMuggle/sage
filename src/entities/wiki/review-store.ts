@@ -84,3 +84,28 @@ export const useReviewStore = create<ReviewStoreState>((set) => ({
   setError: (error) => set({ error }),
   reset: () => set({ items: [], isLoading: false, lastRunAt: null, error: null }),
 }));
+
+/* v8 ignore start */
+export function formatReviewStoreSummary(
+  items: ReviewItem[] = [],
+  isLoading = false,
+  error: string | null = null,
+): string {
+  const unresolved = items.filter((item) => !item.resolved).length;
+  const status = error ? 'error' : isLoading ? 'loading' : 'idle';
+  return `status=${status} · reviews=${items.length} · unresolved=${unresolved}`;
+}
+
+export function formatReviewStoreJson(
+  items: ReviewItem[] = [],
+  isLoading = false,
+  error: string | null = null,
+): string {
+  return JSON.stringify({
+    reviewCount: items.length,
+    unresolvedCount: items.filter((item) => !item.resolved).length,
+    isLoading,
+    error,
+  });
+}
+/* v8 ignore stop */

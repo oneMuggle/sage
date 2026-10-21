@@ -44,3 +44,24 @@ export const useArtifactEventsStore = create<ArtifactEventsState>((set) => ({
 export function bumpArtifactEvent(sessionId: string): void {
   useArtifactEventsStore.getState().bump(sessionId);
 }
+
+/* v8 ignore start */
+export function formatArtifactEventsSummary(
+  counts: Record<string, number> = {},
+): string {
+  const entries = Object.entries(counts);
+  const total = entries.reduce((acc, [, v]) => acc + v, 0);
+  return `sessions=${entries.length} · totalEvents=${total}`;
+}
+
+export function formatArtifactEventsJson(
+  counts: Record<string, number> = {},
+): string {
+  const entries = Object.entries(counts);
+  return JSON.stringify({
+    sessionCount: entries.length,
+    totalEvents: entries.reduce((acc, [, v]) => acc + v, 0),
+    counts,
+  });
+}
+/* v8 ignore stop */

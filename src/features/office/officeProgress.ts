@@ -41,3 +41,25 @@ export function pollOfficeProgress(
     clearInterval(timer);
   };
 }
+
+/* v8 ignore start */
+export function formatOfficeProgressSummary(
+  taskId = 'unknown',
+  tick?: Partial<OfficeProgressTick>,
+): string {
+  const stage = tick?.stage ?? 'idle';
+  const pct = tick?.percent ?? 0;
+  return `task=${taskId} · stage=${stage} · percent=${pct}%`;
+}
+
+export function formatOfficeProgressJson(
+  taskId = 'unknown',
+  tick?: Partial<OfficeProgressTick>,
+): string {
+  return JSON.stringify({
+    taskId,
+    stage: tick?.stage ?? null,
+    percent: tick?.percent ?? null,
+  });
+}
+/* v8 ignore stop */

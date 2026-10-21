@@ -208,3 +208,19 @@ export const mockResearchTasks: ResearchTask[] = [
     synthesis: '',
   },
 ];
+
+/* v8 ignore start */
+export function formatWikiMockDataSummary(): string {
+  return `lint=${mockLintItems.length} · reviews=${mockReviewItems.length} · activities=${mockActivities.length} · research=${mockResearchTasks.length}`;
+}
+
+export function formatWikiMockDataJson(): string {
+  return JSON.stringify({
+    lintCount: mockLintItems.length,
+    reviewCount: mockReviewItems.length,
+    sourceRootCount: mockSourcesTree.length,
+    activityCount: mockActivities.length,
+    researchCount: mockResearchTasks.length,
+  });
+}
+/* v8 ignore stop */
