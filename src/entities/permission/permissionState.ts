@@ -85,3 +85,40 @@ export const usePermissionState = create<PermissionState>((set) => ({
       return { pendingBySession: pending, currentRequest: pickDisplayedPermission(pending) };
     }),
 }));
+
+export interface PermissionStateAuditInput {
+  pendingCount?: number;
+  currentRequestId?: string | null;
+  currentToolName?: string | null;
+  currentRisk?: string | null;
+  currentSessionId?: string | null;
+}
+
+export function buildPermissionStateAuditSnapshot(
+  input: PermissionStateAuditInput = {},
+): string {
+  const pendingCount = Math.max(0, input.pendingCount ?? 0);
+  const currentRequestId = (input.currentRequestId ?? '').trim() || 'none';
+  const currentToolName = (input.currentToolName ?? '').trim() || 'none';
+  const currentRisk = (input.currentRisk ?? '').trim() || 'none';
+  const currentSessionId = (input.currentSessionId ?? '').trim() || 'none';
+  return `pending:${pendingCount}|req:${currentRequestId}|tool:${currentToolName}|risk:${currentRisk}|session:${currentSessionId}`;
+}
+
+export function buildPermissionStateAuditJson(
+  input: PermissionStateAuditInput = {},
+): string {
+  const pendingCount = Math.max(0, input.pendingCount ?? 0);
+  const currentRequestId = (input.currentRequestId ?? '').trim() || 'none';
+  const currentToolName = (input.currentToolName ?? '').trim() || 'none';
+  const currentRisk = (input.currentRisk ?? '').trim() || 'none';
+  const currentSessionId = (input.currentSessionId ?? '').trim() || 'none';
+  return JSON.stringify({
+    pendingCount,
+    currentRequestId,
+    currentToolName,
+    currentRisk,
+    currentSessionId,
+    snapshot: buildPermissionStateAuditSnapshot(input),
+  });
+}

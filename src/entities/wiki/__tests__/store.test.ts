@@ -12,7 +12,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { FileNode, WikiProject } from '../../../shared/types/wiki';
-import { useWikiStore } from '../store';
+import {
+  buildWikiStoreAuditJson,
+  buildWikiStoreAuditSnapshot,
+  useWikiStore,
+} from '../store';
 
 // Mock api-client：useWikiStore 通过这层访问 invoke
 const listDir = vi.fn();
@@ -149,5 +153,38 @@ describe('useWikiStore', () => {
 
     s.setError('oops');
     expect(useWikiStore.getState().error).toBe('oops');
+  });
+
+  it('exports wiki store audit snapshot and JSON helpers', () => {
+    expect(buildWikiStoreAuditSnapshot()).toBe(
+      'project:no|tree:0|file:none|view:browser|loading:no|err:no',
+    );
+    expect(
+      buildWikiStoreAuditSnapshot({
+        hasProject: true,
+        fileTreeCount: 4,
+        selectedFile: 'a.md',
+        activeView: 'graph',
+        isLoading: true,
+        hasError: true,
+      }),
+    ).toBe('project:yes|tree:4|file:a.md|view:graph|loading:yes|err:yes');
+
+    const parsed = JSON.parse(
+      buildWikiStoreAuditJson({
+        hasProject: true,
+        fileTreeCount: 1,
+        selectedFile: 'index.md',
+      }),
+    );
+    expect(parsed).toEqual({
+      hasProject: true,
+      fileTreeCount: 1,
+      selectedFile: 'index.md',
+      activeView: 'browser',
+      isLoading: false,
+      hasError: false,
+      snapshot: 'project:yes|tree:1|file:index.md|view:browser|loading:no|err:no',
+    });
   });
 });

@@ -10,7 +10,11 @@ vi.mock('../artifactApi', () => ({
 }));
 
 import { listArtifacts, type Artifact } from '../artifactApi';
-import { useArtifactListStore } from '../artifactListStore';
+import {
+  buildArtifactListStoreAuditJson,
+  buildArtifactListStoreAuditSnapshot,
+  useArtifactListStore,
+} from '../artifactListStore';
 
 const mockedList = vi.mocked(listArtifacts);
 
@@ -59,5 +63,35 @@ describe('artifactListStore', () => {
     await useArtifactListStore.getState().fetch('s1');
     useArtifactListStore.getState().clear('s1');
     expect(useArtifactListStore.getState().bySession['s1']).toBeUndefined();
+  });
+
+  it('exports artifactListStore audit snapshot and JSON helpers', () => {
+    expect(buildArtifactListStoreAuditSnapshot()).toBe(
+      'sessions:0|total:0|active:none|activeCount:0',
+    );
+    expect(
+      buildArtifactListStoreAuditSnapshot({
+        sessionCount: 2,
+        totalArtifacts: 5,
+        activeSessionId: 's1',
+        activeSessionCount: 3,
+      }),
+    ).toBe('sessions:2|total:5|active:s1|activeCount:3');
+
+    const parsed = JSON.parse(
+      buildArtifactListStoreAuditJson({
+        sessionCount: 1,
+        totalArtifacts: 2,
+        activeSessionId: 's1',
+        activeSessionCount: 2,
+      }),
+    );
+    expect(parsed).toEqual({
+      sessionCount: 1,
+      totalArtifacts: 2,
+      activeSessionId: 's1',
+      activeSessionCount: 2,
+      snapshot: 'sessions:1|total:2|active:s1|activeCount:2',
+    });
   });
 });
