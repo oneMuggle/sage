@@ -1465,3 +1465,15 @@
 - **单元测试（8 项）**：
   - `src/features/artifacts/__tests__/useArtifactContent.test.ts`、`src/features/artifacts/__tests__/useArtifacts.test.ts`、`src/features/chat/__tests__/useAtFileQuery.test.tsx`、`src/features/chat/__tests__/useBtwCommand.test.ts`、`src/features/chat/__tests__/useConversationOutline.test.ts`、`src/features/chat/__tests__/useConversationTurns.test.ts`、`src/features/chat/__tests__/useQuoteDraft.test.ts`、`src/features/journal/__tests__/useJournalTemplates.test.ts` 全部通过（42 tests passed）。
 
+### Phase P110（已完成）：端点与模型探测 API、全局设置 Hook、Office 引用导入与能力发现、Office 文档管理 Hook、右侧面板 Store、流式会话 Store 及编排事件路由治理
+- **改造模块（8 项）**：
+  1. `src/features/manage-endpoints/api.ts`：新增 `formatProbeResultSummary` 与 `formatProbeResultJson`，支持模型上下文窗口探测结果（状态、适配器、原生上下文、架构与量化精度）摘要及可复制 JSON 序列化。
+  2. `src/features/manage-settings/useSettings.ts`：新增 `formatUseSettingsSnapshotSummary` 与 `formatUseSettingsSnapshotJson`，支持全局设置 Hook 加载态、最大上下文与流式开关及端点数量摘要与 JSON 导出。
+  3. `src/features/office/importOfficeReference.ts`：新增 `formatOfficeImportRefSummary` 与 `formatOfficeImportRefJson`，支持聊天区 `@` 导入 Office 引用记录（`docId · docType · filename`）摘要与 JSON 导出。
+  4. `src/features/office/officeCapabilities.ts`：新增 `formatOfficeCapabilitiesSummary` 与 `formatOfficeCapabilitiesJson`，支持平台级 PDF 导出格式、LibreOffice 与 Word COM 能力发现摘要及 JSON 导出。
+  5. `src/features/office/useOfficeDocuments.ts`：新增 `formatOfficeDocumentsBatchSummary` 与 `formatOfficeDocumentsBatchJson`，支持 Office 托管文档批量归档与恢复结果（成功/失败计数及 ID 列表）摘要与 JSON 导出。
+  6. `src/features/right-panel/rightPanelStore.ts`：新增 `formatRightPanelStateSummary` 与 `formatRightPanelStateJson`，支持右侧工作台面板展开态、当前 Tab、最大化状态及选中产物 ID 摘要与 JSON 导出。
+  7. `src/features/send-message/chatStreamStore.ts`：新增 `formatChatStreamSessionSummary` 与 `formatChatStreamSessionJson`，支持按会话隔离的流式槽位状态、当前消息 ID、工具调用数与待办计数摘要及 JSON 导出。
+  8. `src/features/send-message/orchestrationEvents.ts`：新增 `formatRestoredBoardSummary` 与 `formatRestoredBoardJson`，支持历史编排运行恢复任务板（计划项数、总任务数、已完成/失败数及时间戳）摘要与 JSON 导出。
+- **单元测试（8 项）**：
+  - `src/features/manage-endpoints/__tests__/api.test.ts`、`src/features/manage-settings/__tests__/useSettings.test.ts`、`src/features/office/__tests__/importOfficeReference.test.ts`、`src/features/office/__tests__/officeCapabilities.test.ts`、`src/features/office/__tests__/useOfficeDocuments.test.ts`、`src/features/right-panel/__tests__/rightPanelStore.test.ts`、`src/features/send-message/__tests__/chatStreamStore.test.ts`、`src/features/send-message/__tests__/orchestrationEvents.test.ts` 全部通过（147 tests on `main`, 132 tests on `release/win7`）。

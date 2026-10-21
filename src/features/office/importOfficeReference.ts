@@ -193,3 +193,19 @@ export async function importOfficeReference(
     filename: result.name,
   };
 }
+
+export function formatOfficeImportRefSummary(ref: ChatOfficeRef): string {
+  return `${ref.docId} · ${ref.docType} · ${ref.filename}`;
+}
+
+export function formatOfficeImportRefJson(ref: ChatOfficeRef): string {
+  return JSON.stringify(
+    {
+      docId: ref.docId,
+      docType: ref.docType,
+      filename: ref.filename,
+    },
+    null,
+    2,
+  );
+}

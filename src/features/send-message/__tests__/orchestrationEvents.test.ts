@@ -404,4 +404,37 @@ describe('restoreRunToBoard — retry_of 映射 (RT26)', () => {
     expect(restored!.statuses.b.retry_of).toBe('t0');
     expect(restored!.statuses.a.retry_of).toBeUndefined();
   });
+
+  it('formats restored board summary and JSON (Phase P110)', async () => {
+    const { formatRestoredBoardSummary, formatRestoredBoardJson } = await import(
+      '../orchestrationEvents'
+    );
+    expect(formatRestoredBoardSummary(null)).toBe('empty');
+    const run: OrchRunDetail = {
+      run_id: 'orch-p110',
+      session_id: SID,
+      status: 'completed',
+      created_at: 1_000,
+      plan: [],
+      original_request: '',
+      tasks: [
+        {
+          task_id: 'a',
+          agent_id: 'primary',
+          goal: 'GA',
+          status: 'done',
+          error: null,
+          output_preview: 'OK',
+          retry_count: 0,
+          finished_at: 2_000,
+        },
+      ],
+    } as unknown as OrchRunDetail;
+    const restored = restoreRunToBoard(run);
+    expect(formatRestoredBoardSummary(restored)).toBe('plan=1 · total=1 · done=1 · failed=0');
+    const parsed = JSON.parse(formatRestoredBoardJson(restored));
+    expect(parsed.active).toBe(true);
+    expect(parsed.planCount).toBe(1);
+    expect(parsed.endedAt).toBe(2_000);
+  });
 });
