@@ -205,4 +205,17 @@ describe('isImportableOfficeResult', () => {
       }),
     ).toBe(false);
   });
+
+  it('formats office import ref summary and JSON (Phase P110)', async () => {
+    const { formatOfficeImportRefSummary, formatOfficeImportRefJson } = await import(
+      '../importOfficeReference'
+    );
+    const ref = { docId: 'doc-1', docType: 'ppt' as const, filename: 'deck.pptx' };
+    expect(formatOfficeImportRefSummary(ref)).toBe('doc-1 · ppt · deck.pptx');
+    expect(JSON.parse(formatOfficeImportRefJson(ref))).toEqual({
+      docId: 'doc-1',
+      docType: 'ppt',
+      filename: 'deck.pptx',
+    });
+  });
 });

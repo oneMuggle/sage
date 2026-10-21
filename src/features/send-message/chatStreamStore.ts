@@ -360,3 +360,27 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
 
   resetAll: () => set({ sessions: {} }),
 }));
+
+export function formatChatStreamSessionSummary(sessionId: string): string {
+  const slots = selectSessionSlots(useChatStreamStore.getState(), sessionId);
+  if (!slots.streaming) {
+    return `${sessionId} · idle · tools=${slots.streamingToolCalls.length} · todos=${slots.todos.length}`;
+  }
+  return `${sessionId} · ${slots.streaming.state} · msg=${slots.streaming.messageId} · tools=${slots.streamingToolCalls.length}`;
+}
+
+export function formatChatStreamSessionJson(sessionId: string): string {
+  const slots = selectSessionSlots(useChatStreamStore.getState(), sessionId);
+  return JSON.stringify(
+    {
+      sessionId,
+      streaming: slots.streaming !== null,
+      state: slots.streaming?.state ?? null,
+      messageId: slots.streaming?.messageId ?? null,
+      toolCallCount: slots.streamingToolCalls.length,
+      todoCount: slots.todos.length,
+    },
+    null,
+    2,
+  );
+}

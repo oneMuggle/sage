@@ -18,3 +18,23 @@ export function pdfAvailableForDocument(
   const format = docType === 'word' ? 'docx' : docType === 'excel' ? 'xlsx' : docType === 'ppt' ? 'pptx' : null;
   return format !== null && pdfFormats(caps).includes(format);
 }
+
+export function formatOfficeCapabilitiesSummary(caps: OfficeCapabilities | null): string {
+  if (!caps) return 'unavailable';
+  const formats = pdfFormats(caps);
+  return `${caps.platform} · pdf=[${formats.join(',') || 'none'}] · soffice=${Boolean(caps.soffice_available)}`;
+}
+
+export function formatOfficeCapabilitiesJson(caps: OfficeCapabilities | null): string {
+  return JSON.stringify(
+    {
+      available: caps !== null,
+      platform: caps?.platform ?? null,
+      pdfFormats: pdfFormats(caps),
+      sofficeAvailable: Boolean(caps?.soffice_available),
+      wordComAvailable: Boolean(caps?.word_com_available),
+    },
+    null,
+    2,
+  );
+}
