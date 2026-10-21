@@ -19,7 +19,7 @@
  * start; only the latest response is allowed to update state.
  */
 
-import { act, render, renderHook, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -37,6 +37,8 @@ vi.mock('../../../shared/api/workspaceApi', () => ({
 
 import {
   SessionWorkspaceProvider,
+  formatSessionWorkspaceAuditJson,
+  formatSessionWorkspaceAuditSnapshot,
   useWorkspaceContext,
   type WorkspaceContextValue,
 } from '../../../app/providers/SessionWorkspaceProvider';
@@ -296,5 +298,48 @@ describe('SessionWorkspaceProvider — state immutability', () => {
     });
     const uniqueRefs = new Set(snapshots);
     expect(uniqueRefs.size).toBeGreaterThanOrEqual(2);
+  });
+});
+describe('SessionWorkspaceProvider — audit helpers (P103)', () => {
+  it('formats audit snapshot/JSON and copies via status controls', async () => {
+    expect(
+      formatSessionWorkspaceAuditSnapshot({
+        sessionId: 'session-a',
+        hasBinding: true,
+        status: 'ready',
+        hasError: false,
+      }),
+    ).toBe('session=session-a|bound=1|status=ready|err=0');
+
+    expect(
+      JSON.parse(
+        formatSessionWorkspaceAuditJson({
+          sessionId: null,
+          hasBinding: false,
+          status: 'idle',
+          hasError: true,
+        }),
+      ),
+    ).toEqual({
+      sessionId: null,
+      hasBinding: false,
+      status: 'idle',
+      hasError: true,
+    });
+
+    mockGet.mockResolvedValue({ binding: BINDING_A });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<div />, { wrapper: makeWrapper('session-a') });
+    await waitFor(() =>
+      expect(screen.getByTestId('session-workspace-audit-status')).toHaveAttribute(
+        'data-session-workspace-audit',
+        'session=session-a|bound=1|status=ready|err=0',
+      ),
+    );
+    fireEvent.click(screen.getByTestId('session-workspace-audit-copy'));
+    expect(writeText).toHaveBeenCalledWith('session=session-a|bound=1|status=ready|err=0');
+    fireEvent.click(screen.getByTestId('session-workspace-audit-copy-json'));
+    expect(writeText).toHaveBeenCalledTimes(2);
   });
 });

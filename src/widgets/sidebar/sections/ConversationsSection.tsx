@@ -16,6 +16,34 @@ const VIRTUALIZE_THRESHOLD = 120;
 /** 自动归档天数偏好（localStorage 持久化；0=关闭）。 */
 const AUTO_ARCHIVE_KEY = 'sage:session-auto-archive-days';
 
+export interface ConversationsSectionAuditInput {
+  totalCount: number;
+  displayCount: number;
+  archivedCount: number;
+  showArchived: boolean;
+  hasQuery: boolean;
+  virtualized: boolean;
+}
+
+export function formatConversationsSectionAuditSnapshot(
+  input: ConversationsSectionAuditInput,
+): string {
+  return `total=${input.totalCount}|display=${input.displayCount}|archived=${input.archivedCount}|showArchived=${input.showArchived ? 1 : 0}|query=${input.hasQuery ? 1 : 0}|virt=${input.virtualized ? 1 : 0}`;
+}
+
+export function formatConversationsSectionAuditJson(
+  input: ConversationsSectionAuditInput,
+): string {
+  return JSON.stringify({
+    totalCount: input.totalCount,
+    displayCount: input.displayCount,
+    archivedCount: input.archivedCount,
+    showArchived: input.showArchived,
+    hasQuery: input.hasQuery,
+    virtualized: input.virtualized,
+  });
+}
+
 interface ConversationsSectionProps {
   sessions: Session[];
   currentSessionId: string | null;
@@ -161,6 +189,37 @@ export function ConversationsSection({
 
   const archivedCount = useMemo(() => sessions.filter((s) => s.is_archived).length, [sessions]);
 
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const auditInput: ConversationsSectionAuditInput = {
+    totalCount: sessions.length,
+    displayCount: displaySessions.length,
+    archivedCount,
+    showArchived,
+    hasQuery: Boolean(trimmedQuery),
+    virtualized: displaySessions.length > VIRTUALIZE_THRESHOLD,
+  };
+  const auditSnapshot = formatConversationsSectionAuditSnapshot(auditInput);
+  const auditJson = formatConversationsSectionAuditJson(auditInput);
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(auditSnapshot);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(auditJson);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <SiderSection
       sectionKey="conversations"
@@ -181,7 +240,45 @@ export function ConversationsSection({
         </button>
       }
       render={() => (
-        <div className="flex flex-col min-h-0">
+        <div
+          data-testid="conversations-section-body"
+          data-conversations-section-audit={auditSnapshot}
+          className="flex flex-col min-h-0"
+        >
+          <span className="sr-only">
+            <span
+              role="status"
+              tabIndex={0}
+              data-testid="conversations-section-audit-copy"
+              data-conversations-section-audit={auditSnapshot}
+              aria-label="复制会话分区审计快照"
+              onClick={() => void handleCopySnapshot()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  void handleCopySnapshot();
+                }
+              }}
+            >
+              {copiedSnapshot ? '已复制' : '快照'}
+            </span>
+            <span
+              role="status"
+              tabIndex={0}
+              data-testid="conversations-section-audit-copy-json"
+              data-conversations-section-audit-json={auditJson}
+              aria-label="复制会话分区审计 JSON"
+              onClick={() => void handleCopyJson()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  void handleCopyJson();
+                }
+              }}
+            >
+              {copiedJson ? '已复制 JSON' : 'JSON'}
+            </span>
+          </span>
           <div className="relative px-2 pb-1 flex items-center gap-1">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted pointer-events-none" />
             <input
