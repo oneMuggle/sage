@@ -4,11 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { GenerationStats } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  formatGenerationStatsJson,
-  formatGenerationStatsMarkdown,
-  GenerationStatsBadge,
-} from '../GenerationStatsBadge';
+import { formatGenerationStatsJson, formatGenerationStatsMarkdown, GenerationStatsBadge } from '../GenerationStatsBadge';
 
 const renderBadge = (stats: GenerationStats | null | undefined) =>
   render(

@@ -4,13 +4,7 @@ vi.mock('../../../shared/api/settingsClient', () => ({
   settingsClient: { getPreference: vi.fn(), setPreference: vi.fn(), setPreferenceStrict: vi.fn() },
 }));
 import { settingsClient } from '../../../shared/api/settingsClient';
-import {
-  CODE_FONT_OPTIONS,
-  FONT_DEFAULTS,
-  normalizeFontSettings,
-  normalizeFontSize,
-  UI_FONT_OPTIONS,
-} from '../fontOptions';
+import { CODE_FONT_OPTIONS, FONT_DEFAULTS, normalizeFontSettings, normalizeFontSize, UI_FONT_OPTIONS } from '../fontOptions';
 import { FONT_STORAGE_KEY, loadFontSettings, saveFontSettings } from '../fontStorage';
 
 const defaults = { fontUi: 'inter', fontCode: 'jetbrains-mono', fontSizeUi: 14, fontSizeCode: 13 };

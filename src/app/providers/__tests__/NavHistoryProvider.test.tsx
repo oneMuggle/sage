@@ -4,11 +4,7 @@ import { useContext, useEffect } from 'react';
 import { MemoryRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
 
-import {
-  NavHistoryProvider,
-  NavHistoryContext,
-  type NavHistoryContextValue,
-} from '../NavHistoryProvider';
+import { NavHistoryProvider, NavHistoryContext, type NavHistoryContextValue } from '../NavHistoryProvider';
 
 describe('NavHistoryProvider', () => {
   it('renders children without crashing', () => {

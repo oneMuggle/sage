@@ -6,14 +6,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  extractTemplateVars,
-  loadRememberedValues,
-  resolveTemplate,
-  saveRememberedValues,
-  TemplateFillDialog,
-  tplStorageKey,
-} from '../TemplateFillDialog';
+import { extractTemplateVars, loadRememberedValues, resolveTemplate, saveRememberedValues, TemplateFillDialog, tplStorageKey } from '../TemplateFillDialog';
 
 
 

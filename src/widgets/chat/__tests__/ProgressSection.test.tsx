@@ -3,11 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import type { TaskBoard } from '../../../features/send-message/useChat';
-import {
-  formatProgressSectionJson,
-  formatProgressSectionMarkdown,
-  ProgressSection,
-} from '../progress/ProgressSection';
+import { formatProgressSectionJson, formatProgressSectionMarkdown, ProgressSection } from '../progress/ProgressSection';
 
 describe('ProgressSection', () => {
   it('shows iteration when > 0', () => {

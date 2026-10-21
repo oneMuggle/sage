@@ -10,11 +10,7 @@ vi.mock('../../../shared/api/sessionApi', () => ({
 }));
 
 import { sessionApi } from '../../../shared/api/sessionApi';
-import {
-  formatTopicShiftJson,
-  formatTopicShiftMarkdown,
-  TopicShiftBanner,
-} from '../TopicShiftBanner';
+import { formatTopicShiftJson, formatTopicShiftMarkdown, TopicShiftBanner } from '../TopicShiftBanner';
 
 describe('TopicShiftBanner', () => {
   beforeEach(() => {

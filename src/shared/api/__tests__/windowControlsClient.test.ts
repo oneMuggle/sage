@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  createWebControlsBridge,
-  detectPlatform,
-  isElectronDesktop,
-  getWindowControlsBridge,
-} from '../windowControlsClient';
+import { createWebControlsBridge, detectPlatform, isElectronDesktop, getWindowControlsBridge } from '../windowControlsClient';
 
 describe('detectPlatform', () => {
   it('detects macOS from UA', () => {

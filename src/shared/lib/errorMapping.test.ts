@@ -1,11 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import {
-  AGENT_RUNTIME_MESSAGES,
-  mapAgentErrorToText,
-  mapLLMErrorToText,
-  type LLMErrorResponse,
-} from './errorMapping';
+import { AGENT_RUNTIME_MESSAGES, mapAgentErrorToText, mapLLMErrorToText, type LLMErrorResponse } from './errorMapping';
 
 describe('mapAgentErrorToText', () => {
   it('maps max_iterations_exceeded to actionable Chinese text', () => {

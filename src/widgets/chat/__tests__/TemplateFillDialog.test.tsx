@@ -9,13 +9,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  extractTemplateVars,
-  formatTemplateFillJson,
-  formatTemplateFillMarkdown,
-  resolveTemplate,
-  TemplateFillDialog,
-} from '../TemplateFillDialog';
+import { extractTemplateVars, formatTemplateFillJson, formatTemplateFillMarkdown, resolveTemplate, TemplateFillDialog } from '../TemplateFillDialog';
 
 const renderDialog = (content: string, onConfirm = vi.fn(), onCancel = vi.fn()) => {
   render(

@@ -16,12 +16,7 @@ vi.mock('../changes/SplitDiff', () => ({
   SplitDiff: ({ diff }: { diff: string }) => <div data-testid="split-diff">{diff}</div>,
 }));
 
-import {
-  getArtifactVersion,
-  listArtifactVersions,
-  readArtifactContent,
-  type ArtifactVersion,
-} from '../../../features/artifacts/artifactApi';
+import { getArtifactVersion, listArtifactVersions, readArtifactContent, type ArtifactVersion } from '../../../features/artifacts/artifactApi';
 import { VersionHistory } from '../artifacts/VersionHistory';
 
 const mockedList = vi.mocked(listArtifactVersions);

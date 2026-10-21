@@ -5,11 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import { useStore } from '../../../shared/lib/store';
-import {
-  formatKeyboardShortcutsJson,
-  formatKeyboardShortcutsMarkdown,
-  KeyboardShortcutsHelp,
-} from '../KeyboardShortcutsHelp';
+import { formatKeyboardShortcutsJson, formatKeyboardShortcutsMarkdown, KeyboardShortcutsHelp } from '../KeyboardShortcutsHelp';
 
 const SESSION = 'sess-kb-1';
 

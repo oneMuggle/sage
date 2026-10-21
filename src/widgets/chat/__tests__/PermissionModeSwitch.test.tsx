@@ -5,11 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  PermissionModeSwitch,
-  formatPermissionModeJson,
-  formatPermissionModeMarkdown,
-} from '../PermissionModeSwitch';
+import { PermissionModeSwitch, formatPermissionModeJson, formatPermissionModeMarkdown } from '../PermissionModeSwitch';
 
 const getPreset = vi.fn();
 const setPreset = vi.fn();

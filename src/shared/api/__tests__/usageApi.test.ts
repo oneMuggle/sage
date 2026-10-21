@@ -10,13 +10,7 @@ vi.mock('../desktopInvoke', () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
-import {
-  fetchUsageSummary,
-  fetchUsageRequests,
-  fetchSessionUsage,
-  fetchUsageTrend,
-  fetchUsageCsvExport,
-} from '../usageApi';
+import { fetchUsageSummary, fetchUsageRequests, fetchSessionUsage, fetchUsageTrend, fetchUsageCsvExport } from '../usageApi';
 
 beforeEach(() => { mockInvoke.mockReset(); });
 

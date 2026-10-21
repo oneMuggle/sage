@@ -3,14 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import {
-  isControlEvent,
-  isRunEvent,
-  isStepEvent,
-  isTaskEvent,
-  isTerminalTaskStatus,
-  type RunEvent,
-} from '../orchEvents';
+import { isControlEvent, isRunEvent, isStepEvent, isTaskEvent, isTerminalTaskStatus, type RunEvent } from '../orchEvents';
 
 function event(event_type: string): RunEvent {
   return {

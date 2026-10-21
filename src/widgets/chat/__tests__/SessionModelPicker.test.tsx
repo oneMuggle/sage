@@ -3,11 +3,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import {
-  SessionModelPicker,
-  formatSessionModelPickerJson,
-  formatSessionModelPickerMarkdown,
-} from '../SessionModelPicker';
+import { SessionModelPicker, formatSessionModelPickerJson, formatSessionModelPickerMarkdown } from '../SessionModelPicker';
 
 const mockGetModelOverride = vi.fn<() => Promise<string | null>>();
 const mockSetModelOverride = vi.fn<(sessionId: string, model: string) => Promise<string | null>>();

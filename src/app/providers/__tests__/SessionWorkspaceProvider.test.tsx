@@ -35,15 +35,8 @@ vi.mock('../../../shared/api/workspaceApi', () => ({
   },
 }));
 
-import {
-  SessionWorkspaceProvider,
-  useWorkspaceContext,
-  type WorkspaceContextValue,
-} from '../../../app/providers/SessionWorkspaceProvider';
-import type {
-  SessionWorkspaceBinding,
-  WorkspaceRevokeResponse,
-} from '../../../shared/api/types';
+import { SessionWorkspaceProvider, useWorkspaceContext, type WorkspaceContextValue } from '../../../app/providers/SessionWorkspaceProvider';
+import type { SessionWorkspaceBinding, WorkspaceRevokeResponse } from '../../../shared/api/types';
 import { useStore } from '../../../shared/lib/store';
 import { useCurrentWorkspace } from '../../../shared/lib/workspaceContext';
 

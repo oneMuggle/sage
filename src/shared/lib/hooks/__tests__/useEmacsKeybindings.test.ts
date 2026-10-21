@@ -3,13 +3,7 @@ import { createElement, useState } from 'react';
 import type { ChangeEvent as ReactChangeEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  findWordBackward,
-  findWordForward,
-  lineEndOf,
-  lineStartOf,
-  useEmacsKeybindings,
-} from '../useEmacsKeybindings';
+import { findWordBackward, findWordForward, lineEndOf, lineStartOf, useEmacsKeybindings } from '../useEmacsKeybindings';
 
 // ---------------------------------------------------------------------------
 // Pure text helpers

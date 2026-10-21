@@ -3,11 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import {
-  defaultRecommendations,
-  lucideIconMap,
-  type AssistantRecommendation,
-} from '../recommendations';
+import { defaultRecommendations, lucideIconMap, type AssistantRecommendation } from '../recommendations';
 
 describe('recommendations data', () => {
   it('exports the deliverable-oriented default recommendations', () => {
