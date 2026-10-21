@@ -1,7 +1,11 @@
 // 对话阅读体验 B1：朗读播放状态 —— 分片入队、末片结束复位、切换打断、错误收尾。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useReadAloudStore } from '../readAloudStore';
+import {
+  buildReadAloudStoreAuditJson,
+  buildReadAloudStoreAuditSnapshot,
+  useReadAloudStore,
+} from '../readAloudStore';
 
 class FakeUtterance {
   text: string;
@@ -90,5 +94,28 @@ describe('readAloudStore (B1)', () => {
     useReadAloudStore.getState().speak('m1', '   ', 'code');
     expect(synth.speak).not.toHaveBeenCalled();
     expect(useReadAloudStore.getState().speakingId).toBeNull();
+  });
+});
+
+describe('readAloudStore governance audit helpers (Phase P106)', () => {
+  it('builds deterministic audit snapshot and JSON across idle and speaking states', () => {
+    const idleSnap = buildReadAloudStoreAuditSnapshot();
+    expect(idleSnap).toEqual({
+      isSpeaking: false,
+      speakingId: null,
+      speechSupported: false,
+      signature: '0|-|0',
+    });
+
+    installSpeech();
+    useReadAloudStore.getState().speak('msg-88', '测试朗读内容。', '代码略');
+    const speakingSnap = buildReadAloudStoreAuditSnapshot();
+    expect(speakingSnap).toEqual({
+      isSpeaking: true,
+      speakingId: 'msg-88',
+      speechSupported: true,
+      signature: '1|msg-88|1',
+    });
+    expect(JSON.parse(buildReadAloudStoreAuditJson())).toEqual(speakingSnap);
   });
 });

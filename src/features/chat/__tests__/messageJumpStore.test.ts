@@ -1,7 +1,13 @@
 // 对话阅读导航 A1: 定位请求通道（登记 / 消费 / TTL 过期）。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MESSAGE_JUMP_TTL_MS, requestMessageJump, useMessageJumpStore } from '../messageJumpStore';
+import {
+  buildMessageJumpStoreAuditJson,
+  buildMessageJumpStoreAuditSnapshot,
+  MESSAGE_JUMP_TTL_MS,
+  requestMessageJump,
+  useMessageJumpStore,
+} from '../messageJumpStore';
 
 describe('messageJumpStore', () => {
   beforeEach(() => {
@@ -47,5 +53,41 @@ describe('messageJumpStore', () => {
     expect(useMessageJumpStore.getState().pending?.nonce).toBe(newer);
     vi.advanceTimersByTime(MESSAGE_JUMP_TTL_MS);
     expect(useMessageJumpStore.getState().pending).toBeNull();
+  });
+});
+
+describe('messageJumpStore governance audit helpers (Phase P106)', () => {
+  it('builds deterministic audit snapshot and JSON across idle and pending states', () => {
+    useMessageJumpStore.setState({ pending: null });
+    const idleSnap = buildMessageJumpStoreAuditSnapshot();
+    expect(idleSnap).toEqual({
+      hasPending: false,
+      messageId: null,
+      nonce: null,
+      hasHeadingHint: false,
+      hasHighlightQuery: false,
+      highlightIndex: null,
+      ttlMs: MESSAGE_JUMP_TTL_MS,
+      signature: `0|-|-1|0|0|-1|${MESSAGE_JUMP_TTL_MS}`,
+    });
+
+    const nonce = requestMessageJump({
+      messageId: 'm42',
+      headingText: '架构设计',
+      highlightQuery: 'zustand',
+      highlightIndex: 2,
+    });
+    const activeSnap = buildMessageJumpStoreAuditSnapshot();
+    expect(activeSnap).toEqual({
+      hasPending: true,
+      messageId: 'm42',
+      nonce,
+      hasHeadingHint: true,
+      hasHighlightQuery: true,
+      highlightIndex: 2,
+      ttlMs: MESSAGE_JUMP_TTL_MS,
+      signature: `1|m42|${nonce}|1|1|2|${MESSAGE_JUMP_TTL_MS}`,
+    });
+    expect(JSON.parse(buildMessageJumpStoreAuditJson())).toEqual(activeSnap);
   });
 });

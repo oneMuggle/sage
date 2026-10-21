@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { isEndpointConfigured } from '../endpointReadiness';
+import {
+  buildEndpointReadinessAuditJson,
+  buildEndpointReadinessAuditSnapshot,
+  isEndpointConfigured,
+} from '../endpointReadiness';
 
 describe('protocol-aware endpoint readiness', () => {
   it('allows local Ollama without a key', () => {
@@ -27,5 +31,42 @@ describe('protocol-aware endpoint readiness', () => {
         protocol: 'anthropic',
       }),
     ).toBe(true);
+  });
+});
+
+describe('endpointReadiness governance audit helpers (Phase P106)', () => {
+  it('builds deterministic audit snapshot and JSON for null, ollama, and cloud endpoints', () => {
+    const emptySnap = buildEndpointReadinessAuditSnapshot(null);
+    expect(emptySnap).toEqual({
+      configured: false,
+      protocol: null,
+      hasBaseUrl: false,
+      hasApiKey: false,
+      requiresApiKey: true,
+      signature: '0|-|0|0|1',
+    });
+
+    const ollamaSnap = buildEndpointReadinessAuditSnapshot({
+      baseUrl: 'http://localhost:11434',
+      apiKey: '',
+      protocol: 'ollama',
+    });
+    expect(ollamaSnap).toEqual({
+      configured: true,
+      protocol: 'ollama',
+      hasBaseUrl: true,
+      hasApiKey: false,
+      requiresApiKey: false,
+      signature: '1|ollama|1|0|0',
+    });
+    expect(
+      JSON.parse(
+        buildEndpointReadinessAuditJson({
+          baseUrl: 'http://localhost:11434',
+          apiKey: '',
+          protocol: 'ollama',
+        }),
+      ),
+    ).toEqual(ollamaSnap);
   });
 });
