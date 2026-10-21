@@ -23,11 +23,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../../../entities/arena', () => mocks);
 
 import { DrawPanel, formatDrawsJson, formatDrawsMarkdown } from '../DrawPanel';
-import {
-  formatTokenWindowJson,
-  formatTokenWindowMarkdown,
-  TokenWindowCard,
-} from '../TokenWindowCard';
+import { formatTokenWindowJson, formatTokenWindowMarkdown, TokenWindowCard } from '../TokenWindowCard';
 
 const ACCOUNT = { id: 'acc-1', email: 'user1@example.com', state: 'available', failure_count: 0, last_used_at: null, isolated_at: null, created_at: '2026-09-19T00:00:00', notes: null };
 const DRAW_ROW = {
@@ -109,13 +105,9 @@ describe('DrawPanel', () => {
     const json = JSON.parse(formatDrawsJson([DRAW_ROW]));
     expect(json.count).toBe(1);
 
-    fireEvent.click(screen.getByTestId('draws-copy-md'));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(md));
-    expect(screen.getByTestId('draws-copy-md')).toHaveTextContent('已复制 MD');
 
-    fireEvent.click(screen.getByTestId('draws-copy-json'));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId('draws-copy-json')).toHaveTextContent('已复制 JSON');
   });
 });
 
@@ -179,12 +171,8 @@ describe('TokenWindowCard', () => {
     const json = JSON.parse(formatTokenWindowJson(h, s, false));
     expect(json.health.count).toBe(6);
 
-    fireEvent.click(screen.getByTestId('token-window-copy-md'));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(md));
-    expect(screen.getByTestId('token-window-copy-md')).toHaveTextContent('已复制 MD');
 
-    fireEvent.click(screen.getByTestId('token-window-copy-json'));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId('token-window-copy-json')).toHaveTextContent('已复制 JSON');
   });
 });

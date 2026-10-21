@@ -68,8 +68,6 @@ export function UpdateDialog() {
   const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isInFlight, setIsInFlight] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -183,41 +181,11 @@ export function UpdateDialog() {
   if (isDismissed) return null;
   if (!hasPendingUpdate && !isUpdateAvailable && !isDownloading) return null;
 
-  /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatUpdateDialogMarkdown(state, progress));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
-
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatUpdateDialogJson(state, progress));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
-  /* v8 ignore stop */
-
   // ── Phase 3: Download complete — ready to install ───────────────────────
   if (hasPendingUpdate) {
     const version = state!.pendingUpdate!.version;
     return (
-      <DialogShell
-        ariaLabel={t('updateDialog.readyToInstall')}
-        dialogRef={dialogRef}
-        error={error}
-        copiedMd={copiedMd}
-        copiedJson={copiedJson}
-        onCopyMd={() => void handleCopyMarkdown()}
-        onCopyJson={() => void handleCopyJson()}
-      >
+      <DialogShell ariaLabel={t('updateDialog.readyToInstall')} dialogRef={dialogRef} error={error}>
         <h3 className="text-sm font-semibold text-text mb-2">{t('updateDialog.readyToInstall')}</h3>
         <p className="text-xs text-text-secondary mb-4">
           {t('updateDialog.readyMessage').replace('{version}', version)}
@@ -246,10 +214,6 @@ export function UpdateDialog() {
         ariaLabel={t('updateDialog.downloading').replace('{version}', version)}
         dialogRef={dialogRef}
         error={error}
-        copiedMd={copiedMd}
-        copiedJson={copiedJson}
-        onCopyMd={() => void handleCopyMarkdown()}
-        onCopyJson={() => void handleCopyJson()}
       >
         <h3 className="text-sm font-semibold text-text mb-2">
           {t('updateDialog.downloading').replace('{version}', version)}
@@ -291,10 +255,6 @@ export function UpdateDialog() {
       ariaLabel={t('updateDialog.newVersion').replace('{version}', version)}
       dialogRef={dialogRef}
       error={error}
-      copiedMd={copiedMd}
-      copiedJson={copiedJson}
-      onCopyMd={() => void handleCopyMarkdown()}
-      onCopyJson={() => void handleCopyJson()}
     >
       <h3 className="text-sm font-semibold text-text mb-2">
         {t('updateDialog.newVersion').replace('{version}', version)}
@@ -335,22 +295,9 @@ interface DialogShellProps {
   children: React.ReactNode;
   dialogRef: React.RefObject<HTMLDivElement>;
   error: string | null;
-  copiedMd?: boolean;
-  copiedJson?: boolean;
-  onCopyMd?: () => void;
-  onCopyJson?: () => void;
 }
 
-function DialogShell({
-  ariaLabel,
-  children,
-  dialogRef,
-  error,
-  copiedMd,
-  copiedJson,
-  onCopyMd,
-  onCopyJson,
-}: DialogShellProps) {
+function DialogShell({ ariaLabel, children, dialogRef, error }: DialogShellProps) {
   return (
     <div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
@@ -365,22 +312,7 @@ function DialogShell({
         data-testid="update-dialog"
         className="bg-surface border border-border rounded-lg w-full max-w-[480px] mx-4 p-5 shadow-xl outline-none"
       >
-        <div className="mb-2 flex items-center justify-end gap-1.5 text-ui-2xs">
-          <span
-            data-testid="update-dialog-copy-md"
-            onClick={onCopyMd}
-            className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </span>
-          <span
-            data-testid="update-dialog-copy-json"
-            onClick={onCopyJson}
-            className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </span>
-        </div>
+        <div className="mb-2 flex items-center justify-end gap-1.5 text-ui-2xs"></div>
         {error && (
           <div
             role="alert"

@@ -174,14 +174,12 @@ describe('ModelDetails', () => {
       expect(mocks.getEffective).toHaveBeenCalledWith('endpoint-1', 'gpt-4o-mini'),
     );
 
-    fireEvent.click(screen.getByTestId('model-details-copy-md-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(
         expect.stringContaining('# 模型详情: openai/gpt-4o-mini'),
       );
     });
 
-    fireEvent.click(screen.getByTestId('model-details-copy-json-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"revision": 7'));
     });

@@ -17,11 +17,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../entities/arena', () => mocks);
 
-import {
-  BatchRegisterPanel,
-  formatBatchRegisterJson,
-  formatBatchRegisterMarkdown,
-} from '../BatchRegisterPanel';
+import { BatchRegisterPanel, formatBatchRegisterJson, formatBatchRegisterMarkdown } from '../BatchRegisterPanel';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -76,9 +72,7 @@ describe('BatchRegisterPanel', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     render(<BatchRegisterPanel />);
-    fireEvent.click(screen.getByTestId('batch-register-copy-md'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Arena 批量注册配置'));
-    fireEvent.click(screen.getByTestId('batch-register-copy-json'));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"proxyMode": "off"'));
   });
 });

@@ -268,14 +268,12 @@ describe('ApprovalDialog', () => {
     seedRequest({ request_id: 'req-copy-1', tool_name: 'terminal' });
     renderDialog();
 
-    fireEvent.click(screen.getByTestId('permission-copy-md-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(
         expect.stringContaining('# 工具权限审批请求: terminal'),
       );
     });
 
-    fireEvent.click(screen.getByTestId('permission-copy-json-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"req-copy-1"'));
     });

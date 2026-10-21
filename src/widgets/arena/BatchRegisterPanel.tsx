@@ -51,33 +51,9 @@ export function BatchRegisterPanel() {
   const [jobId, setJobId] = useState('');
   const [error, setError] = useState('');
   const [starting, setStarting] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatBatchRegisterMarkdown({ count, concurrency, proxyMode, jobId }),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatBatchRegisterJson({ count, concurrency, proxyMode, jobId }),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   async function handleStart(): Promise<void> {
@@ -108,22 +84,6 @@ export function BatchRegisterPanel() {
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-medium">批量注册</h2>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              data-testid="batch-register-copy-md"
-              onClick={() => void handleCopyMarkdown()}
-              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
-            >
-              {copiedMd ? '已复制 MD' : '复制 MD'}
-            </button>
-            <button
-              type="button"
-              data-testid="batch-register-copy-json"
-              onClick={() => void handleCopyJson()}
-              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
-            >
-              {copiedJson ? '已复制 JSON' : '复制 JSON'}
-            </button>
           </div>
         </div>
         <p className="text-xs text-text-muted">

@@ -20,11 +20,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../entities/arena', () => mocks);
 
-import {
-  formatJobConsoleJson,
-  formatJobConsoleMarkdown,
-  JobConsole,
-} from '../JobConsole';
+import { formatJobConsoleJson, formatJobConsoleMarkdown, JobConsole } from '../JobConsole';
 
 const RUNNING = { id: 'job-1', kind: 'draw', status: 'running', created_at: '', total: 3, done: 1, ok: 1, failed: 0, params: {}, result_count: 1, error: '', last_seq: 2 };
 const DONE = { ...RUNNING, status: 'done', ok: 3, done: 3, failed: 0 };

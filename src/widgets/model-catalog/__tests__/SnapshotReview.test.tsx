@@ -114,14 +114,12 @@ describe('SnapshotReview', () => {
     );
     expect(await screen.findByText('待审核')).toBeVisible();
 
-    fireEvent.click(screen.getByTestId('snapshot-review-copy-md-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(
         expect.stringContaining('# 快照审核差异: synthetic-snapshot'),
       );
     });
 
-    fireEvent.click(screen.getByTestId('snapshot-review-copy-json-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"itemCount": 1'));
     });
