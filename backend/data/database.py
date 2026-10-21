@@ -385,9 +385,10 @@ class Database:
         return self._conn_proxy
 
     def close(self):
-        """关闭数据库连接"""
+        """关闭数据库连接（在 _SQLITE_LOCK 下执行，杜绝并发 close-while-executing）。"""
         if self._connection:
-            self._connection.close()
+            with _SQLITE_LOCK:
+                self._connection.close()
             self._connection = None
             self._conn_proxy = None
 

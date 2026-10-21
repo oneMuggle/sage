@@ -150,16 +150,23 @@ class SkillTool(BaseTool):
         # 而技能执行路径是 async —— 临时事件循环跑完即关。
         import asyncio
 
-        with HarnessProbe("skill", skill) as probe:
-            loop = asyncio.new_event_loop()
+        probe = HarnessProbe("skill", skill)
+        loop = asyncio.new_event_loop()
+        try:
+            with probe:
+                try:
+                    result = loop.run_until_complete(
+                        self._invoke(adapter, skill, args_raw, args_list, script=script)
+                    )
+                    probe.result = result  # SkillResult.success 供 probe 读取
+                except Exception as exc:  # noqa: BLE001 — 工具约定：错误走 ToolResult 不抛
+                    logger.error("skill 执行失败: skill=%s error=%s", skill, exc)
+                    return ToolResult(success=False, error=f"skill 执行失败: {exc}")
+        finally:
+            # __exit__ 已计算 metrics；loop 仍 open —— 在此 await 埋点，
+            # 保证写事务在函数返回前完成（杜绝后台线程 use-after-free）。
             try:
-                result = loop.run_until_complete(
-                    self._invoke(adapter, skill, args_raw, args_list, script=script)
-                )
-                probe.result = result  # SkillResult.success 供 probe 读取
-            except Exception as exc:  # noqa: BLE001 — 工具约定：错误走 ToolResult 不抛
-                logger.error("skill 执行失败: skill=%s error=%s", skill, exc)
-                return ToolResult(success=False, error=f"skill 执行失败: {exc}")
+                loop.run_until_complete(probe.aemit())
             finally:
                 loop.close()
 

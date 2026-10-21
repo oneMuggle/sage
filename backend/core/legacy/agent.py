@@ -1172,15 +1172,20 @@ class SageAgent:
     ) -> Tuple[bool, Any]:
         """执行工具并与中断事件竞争，附带 harness effectiveness 埋点。
 
-        埋点由 ``HarnessProbe`` 包裹完成（fire-and-forget，不阻塞主路径）；
+        埋点在 ``finally`` 中 await —— 写事务在返回前完成，
+        杜绝后台线程与测试 teardown 的 use-after-free 竞争；
         未安装 recorder 时是零开销 no-op。
         """
-        with HarnessProbe("tool", name) as probe:
-            cancelled, result = await self._await_tool_execution_inner(
-                tool, name, args, tool_call_id
-            )
-            probe.result = result
-            return cancelled, result
+        probe = HarnessProbe("tool", name)
+        try:
+            with probe:
+                cancelled, result = await self._await_tool_execution_inner(
+                    tool, name, args, tool_call_id
+                )
+                probe.result = result
+                return cancelled, result
+        finally:
+            await probe.aemit()
 
     async def _await_tool_execution_inner(
         self,

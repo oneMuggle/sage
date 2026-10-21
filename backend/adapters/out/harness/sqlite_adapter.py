@@ -99,10 +99,14 @@ class SqliteHarnessAdapter:
 
     @property
     def db(self) -> Any:
-        """惰性获取 Database 实例。"""
-        if self._db is None:
-            self._db = get_database()
-        return self._db
+        """惰性获取 Database 实例（不缓存：测试 teardown 换 DB 后须能拿到新的）。
+
+        构造时显式注入的 ``_db``（测试 fixture）优先返回；否则每次重新解析
+        ``get_database()``，避免缓存旧 DB 实例导致 close 后仍写入 use-after-free。
+        """
+        if self._db is not None:
+            return self._db
+        return get_database()
 
     # ------------------------------------------------------------------
     # 公开 async 接口

@@ -4,8 +4,8 @@
 - Domain：HarnessComponent / EffectivenessMetrics（不可变 + needs_improvement 阈值）
 - Adapter：SqliteHarnessAdapter（CRUD + record_usage 累积）
 - Service：HarnessService（类型校验 + record_usage 永不抛出）
-- Recorder：HarnessRecorder（懒注册 + fire-and-forget + flush_pending）
-- HarnessProbe（计时 + success 推断 + 异常传播）
+- Recorder：HarnessRecorder（懒注册 + async 埋点 + ensure_component 缓存）
+- HarnessProbe（计时 + success 推断 + aemit 写库）
 """
 
 from __future__ import annotations
@@ -19,11 +19,8 @@ from backend.adapters.out.harness import SqliteHarnessAdapter
 from backend.application.services.harness_recorder import (
     HarnessProbe,
     HarnessRecorder,
-    flush_pending,
     get_recorder,
     install_recorder,
-    record_skill_usage,
-    record_tool_usage,
 )
 from backend.application.services.harness_service import (
     HarnessService,
@@ -307,41 +304,6 @@ class TestHarnessRecorder:
         await broken.record("tool:x", "tool_guidance", "x", True, 10.0)  # 应吞异常
 
 
-class TestRecordFireAndForget:
-    @pytest.fixture(autouse=True)
-    def _setup(self, setup_test_db):
-        install_recorder(None)
-        self.service = HarnessService(SqliteHarnessAdapter())
-        install_recorder(HarnessRecorder(self.service))
-        yield
-        install_recorder(None)
-
-    def test_record_tool_usage_from_sync_context(self):
-        """fire-and-forget 在同步上下文也能 dispatch（线程池兜底）。"""
-        record_tool_usage("bash", True, 50.0)
-        record_tool_usage("bash", True, 100.0)
-        assert flush_pending(timeout=3.0)
-
-        c = asyncio.run(self.service.get_component("tool:bash"))
-        assert c is not None
-        assert c.effectiveness.usage_count == 2
-
-    def test_record_skill_usage_from_sync(self):
-        record_skill_usage("review-code", True, 75.0)
-        assert flush_pending(timeout=3.0)
-        c = asyncio.run(self.service.get_component("skill:review-code"))
-        assert c is not None
-        assert c.effectiveness.usage_count == 1
-
-    def test_no_recorder_is_noop(self):
-        install_recorder(None)
-        record_tool_usage("bash", True, 50.0)  # 不应抛
-        record_skill_usage("review-code", True, 50.0)
-
-    def test_get_recorder_returns_installed(self):
-        assert get_recorder() is not None
-
-
 class TestHarnessProbe:
     @pytest.fixture(autouse=True)
     def _setup(self, setup_test_db):
@@ -357,7 +319,7 @@ class TestHarnessProbe:
             probe.result = _FakeResult(success=True)
         assert probe.success is True
         assert probe.latency_ms >= 10  # 至少 10ms
-        flush_pending(timeout=3.0)
+        asyncio.run(probe.aemit())
         c = asyncio.run(self.service.get_component("tool:bash"))
         assert c is not None
         assert c.effectiveness.success_rate == 1.0
@@ -366,7 +328,7 @@ class TestHarnessProbe:
         with pytest.raises(RuntimeError), HarnessProbe("tool", "bash") as probe:
             raise RuntimeError("boom")
         assert probe.success is False
-        flush_pending(timeout=3.0)
+        asyncio.run(probe.aemit())
         c = asyncio.run(self.service.get_component("tool:bash"))
         assert c is not None
         assert c.effectiveness.success_rate == 0.0
@@ -376,7 +338,7 @@ class TestHarnessProbe:
         with HarnessProbe("tool", "bash") as probe:
             pass  # 未设置 probe.result
         assert probe.success is False
-        flush_pending(timeout=3.0)
+        asyncio.run(probe.aemit())
         c = asyncio.run(self.service.get_component("tool:bash"))
         assert c is not None
         assert c.effectiveness.success_rate == 0.0
@@ -384,7 +346,7 @@ class TestHarnessProbe:
     def test_probe_skill_kind(self):
         with HarnessProbe("skill", "review-code") as probe:
             probe.result = _FakeResult(success=True)
-        flush_pending(timeout=3.0)
+        asyncio.run(probe.aemit())
         c = asyncio.run(self.service.get_component("skill:review-code"))
         assert c is not None
         assert c.type == "skills"
