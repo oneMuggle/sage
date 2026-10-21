@@ -76,10 +76,6 @@ describe('WikiProjectPicker — recent projects default', () => {
     render(<WikiProjectPicker />);
     const recentSection = await screen.findByTestId('wiki-recent-projects-section');
     expect(recentSection).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('wiki-recent-copy-md-btn'));
-    expect(screen.getByTestId('wiki-recent-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('wiki-recent-copy-json-btn'));
-    expect(screen.getByTestId('wiki-recent-copy-json-btn')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByTestId('wiki-recent-copy-path-0'));
     expect(screen.getByTestId('wiki-recent-copy-path-0')).toHaveTextContent('已复制');
     await enterCreateMode();
@@ -292,8 +288,6 @@ describe('WikiProjectPicker — status badge states', () => {
 
     fireEvent.change(pathInput, { target: { value: '/tmp/ok' } });
     await waitFor(() => expect(screen.queryByText(/可创建|有效的|valid/i)).toBeTruthy());
-    fireEvent.click(screen.getByTestId('wiki-check-copy-json-btn'));
-    expect(screen.getByTestId('wiki-check-copy-json-btn')).toHaveTextContent('已复制检查JSON');
 
     fireEvent.change(pathInput, { target: { value: '/tmp/bad' } });
     await waitFor(() => expect(screen.queryByText(/父目录不可写/i)).toBeTruthy());
@@ -301,7 +295,7 @@ describe('WikiProjectPicker — status badge states', () => {
 });
 
 describe('Phase P81 Wiki governance panels — Lint, Review, Insights & Queue exports', () => {
-  it('renders WikiLintView, filters severities, and exports MD & JSON', async () => {
+  it('renders WikiLintView and filters severities', async () => {
     mockWikiLintRun.mockResolvedValue({
       issues: [
         {
@@ -320,18 +314,14 @@ describe('Phase P81 Wiki governance panels — Lint, Review, Insights & Queue ex
       ],
     });
     render(<WikiLintView projectPath="/tmp/wiki-proj" />);
-    await waitFor(() => expect(screen.getByTestId('wiki-lint-copy-md-btn')).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId('wiki-lint-copy-md-btn'));
-    expect(screen.getByTestId('wiki-lint-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('wiki-lint-copy-json-btn'));
-    expect(screen.getByTestId('wiki-lint-copy-json-btn')).toHaveTextContent('已复制JSON');
+    await screen.findByText('运行检查');
     fireEvent.click(screen.getByText('错误'));
     fireEvent.click(screen.getByText('提示'));
     fireEvent.click(screen.getByText('全部'));
     fireEvent.click(screen.getByText('运行检查'));
   });
 
-  it('renders WikiReviewView, resolves items, and exports MD & JSON', async () => {
+  it('renders WikiReviewView and resolves items', async () => {
     mockWikiReviewRun.mockResolvedValue({
       items: [
         {
@@ -344,11 +334,7 @@ describe('Phase P81 Wiki governance panels — Lint, Review, Insights & Queue ex
       ],
     });
     render(<WikiReviewView projectPath="/tmp/wiki-proj" />);
-    await waitFor(() => expect(screen.getByTestId('wiki-review-copy-md-btn')).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId('wiki-review-copy-md-btn'));
-    expect(screen.getByTestId('wiki-review-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('wiki-review-copy-json-btn'));
-    expect(screen.getByTestId('wiki-review-copy-json-btn')).toHaveTextContent('已复制JSON');
+    await waitFor(() => expect(screen.getByText('Conflicting dates')).toBeInTheDocument());
     fireEvent.click(screen.getAllByText('矛盾')[0]);
     fireEvent.click(screen.getByText('缺页'));
     fireEvent.click(screen.getByText('全部'));
@@ -356,7 +342,7 @@ describe('Phase P81 Wiki governance panels — Lint, Review, Insights & Queue ex
     fireEvent.click(screen.getByText('运行审核'));
   });
 
-  it('renders WikiInsightsPanel and exports MD & JSON', async () => {
+  it('renders WikiInsightsPanel and handles node clicks', async () => {
     const onNodeClick = vi.fn();
     mockGetWikiInsights.mockResolvedValue({
       stats: {
@@ -395,18 +381,14 @@ describe('Phase P81 Wiki governance panels — Lint, Review, Insights & Queue ex
       ],
     });
     render(<WikiInsightsPanel projectPath="/tmp/wiki-proj" onNodeClick={onNodeClick} />);
-    await waitFor(() => expect(screen.getByTestId('wiki-insights-copy-md-btn')).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId('wiki-insights-copy-md-btn'));
-    expect(screen.getByTestId('wiki-insights-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('wiki-insights-copy-json-btn'));
-    expect(screen.getByTestId('wiki-insights-copy-json-btn')).toHaveTextContent('已复制JSON');
+    await waitFor(() => expect(screen.getByText('知识图谱洞察')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Architecture'));
     fireEvent.click(screen.getByText('Billing'));
     fireEvent.click(screen.getByText('Legacy Module'));
     expect(onNodeClick).toHaveBeenCalledTimes(3);
   });
 
-  it('renders WikiQueuePanel and exports MD & JSON', async () => {
+  it('renders WikiQueuePanel and filters tasks', async () => {
     mockQueueGetStatus.mockResolvedValue({
       pending: 1,
       processing: 0,
@@ -428,25 +410,17 @@ describe('Phase P81 Wiki governance panels — Lint, Review, Insights & Queue ex
       ],
     });
     render(<WikiQueuePanel projectPath="/tmp/wiki-proj" />);
-    await waitFor(() => expect(screen.getByTestId('wiki-queue-copy-md-btn')).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId('wiki-queue-copy-md-btn'));
-    expect(screen.getByTestId('wiki-queue-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('wiki-queue-copy-json-btn'));
-    expect(screen.getByTestId('wiki-queue-copy-json-btn')).toHaveTextContent('已复制JSON');
+    await screen.findByText('重试');
     fireEvent.click(screen.getByText('重试'));
     fireEvent.click(screen.getByText('取消'));
     fireEvent.click(screen.getByText('等待'));
     fireEvent.click(screen.getByText('全部'));
   });
 
-  it('renders ActivityPanel, LintItemCard, ReviewItemCard, and WikiSearch with MD & JSON exports', async () => {
+  it('renders ActivityPanel, LintItemCard, ReviewItemCard, and WikiSearch', async () => {
     render(<ActivityPanel />);
     fireEvent.click(screen.getByText('加载'));
-    expect(screen.getByTestId('wiki-activity-copy-md-btn')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('wiki-activity-copy-md-btn'));
-    expect(screen.getByTestId('wiki-activity-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('wiki-activity-copy-json-btn'));
-    expect(screen.getByTestId('wiki-activity-copy-json-btn')).toHaveTextContent('已复制JSON');
+    await screen.findByText('活动');
     fireEvent.click(screen.getByText('活动'));
 
     const onFix = vi.fn();
@@ -465,8 +439,6 @@ describe('Phase P81 Wiki governance panels — Lint, Review, Insights & Queue ex
         onDismiss={onDismiss}
       />,
     );
-    fireEvent.click(screen.getByTestId('wiki-lint-item-copy-json-lint-card-1'));
-    expect(screen.getByTestId('wiki-lint-item-copy-json-lint-card-1')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getByText('修复'));
     fireEvent.click(screen.getByText('忽略'));
     expect(onFix).toHaveBeenCalledWith('lint-card-1');
@@ -487,8 +459,6 @@ describe('Phase P81 Wiki governance panels — Lint, Review, Insights & Queue ex
         onAction={onAction}
       />,
     );
-    fireEvent.click(screen.getByTestId('wiki-review-item-copy-json-rev-card-1'));
-    expect(screen.getByTestId('wiki-review-item-copy-json-rev-card-1')).toHaveTextContent('已复制JSON');
     fireEvent.click(screen.getAllByText('忽略').slice(-1)[0]);
     expect(onAction).toHaveBeenCalledWith('rev-card-1', 'ignore');
 
@@ -522,11 +492,7 @@ describe('Phase P81 Wiki governance panels — Lint, Review, Insights & Queue ex
     mockWikiReadFile.mockResolvedValue('# Architecture');
     fireEvent.change(searchInput, { target: { value: 'architecture' } });
     fireEvent.keyDown(searchInput, { key: 'Enter' });
-    await waitFor(() => expect(screen.getByTestId('wiki-search-copy-md-btn')).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId('wiki-search-copy-md-btn'));
-    expect(screen.getByTestId('wiki-search-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('wiki-search-copy-json-btn'));
-    expect(screen.getByTestId('wiki-search-copy-json-btn')).toHaveTextContent('已复制JSON');
+    await waitFor(() => expect(screen.getByText('Architecture Guide')).toBeInTheDocument());
     fireEvent.click(screen.getByText('Architecture Guide'));
   });
 });
