@@ -497,3 +497,24 @@ export function ExcelPptEditFormFields({
               </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatExcelPptEditFormSummary(
+  docType: 'excel' | 'ppt',
+  sheetCount = 0,
+): string {
+  const safeSheets = Math.max(0, Math.trunc(sheetCount));
+  return `docType=${docType} · sheets=${safeSheets} · testId=office-edit-form-${docType}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatExcelPptEditFormJson(
+  docType: 'excel' | 'ppt',
+  sheetCount = 0,
+): string {
+  return JSON.stringify({
+    docType,
+    sheetCount: Math.max(0, Math.trunc(sheetCount)),
+    testId: `office-edit-form-${docType}`,
+  });
+}
+
