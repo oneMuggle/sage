@@ -63,3 +63,24 @@ export function hasUnclosedFence(content: string): boolean {
   const count = content.match(FENCE_G_RE)?.length ?? 0;
   return count % 2 === 1;
 }
+
+export function formatChunkSplitSummary(content: string): string {
+  const split = splitStableChunks(content);
+  const unclosed = hasUnclosedFence(content);
+  return `${split.stable.length} stable · live ${split.live.length} chars · ${unclosed ? 'unclosed-fence' : 'fences-closed'}`;
+}
+
+export function formatChunkSplitJson(content: string): string {
+  const split = splitStableChunks(content);
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.markdown_chunks.v1',
+      totalLength: content.length,
+      stableCount: split.stable.length,
+      liveLength: split.live.length,
+      unclosedFence: hasUnclosedFence(content),
+    },
+    null,
+    2,
+  );
+}
