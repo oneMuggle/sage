@@ -18,6 +18,7 @@ from collections import deque
 from threading import Lock
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Optional, Tuple
 
+from backend.application.services.harness_recorder import HarnessProbe
 from backend.chat.empty_response_guard import (
     EMPTY_RESPONSE_FALLBACK_TEXT,
     EMPTY_RESPONSE_SYSTEM_PROMPT,
@@ -1166,6 +1167,30 @@ class SageAgent:
         return groups
 
     async def _await_tool_execution(
+        self,
+        tool: Any,
+        name: str,
+        args: Dict[str, Any],
+        tool_call_id: Optional[str] = None,
+    ) -> Tuple[bool, Any]:
+        """执行工具并与中断事件竞争，附带 harness effectiveness 埋点。
+
+        埋点在 ``finally`` 中 await —— 写事务在返回前完成，
+        杜绝后台线程与测试 teardown 的 use-after-free 竞争；
+        未安装 recorder 时是零开销 no-op。
+        """
+        probe = HarnessProbe("tool", name)
+        try:
+            with probe:
+                cancelled, result = await self._await_tool_execution_inner(
+                    tool, name, args, tool_call_id
+                )
+                probe.result = result
+                return cancelled, result
+        finally:
+            await probe.aemit()
+
+    async def _await_tool_execution_inner(
         self,
         tool: Any,
         name: str,

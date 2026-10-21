@@ -12,6 +12,7 @@ const visibleTabs: readonly SettingsTabKey[] = [
   'zotero',
   'runtime',
   'evolution',
+  'harness',
   'updates',
   'usage-stats',
   'providers',
