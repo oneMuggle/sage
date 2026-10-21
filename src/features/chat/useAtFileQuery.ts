@@ -33,3 +33,29 @@ export function useAtFileQuery(
 
   return { query: null, startIdx: 0, endIdx: 0 };
 }
+
+export function formatAtFileQuerySummary(result: {
+  query: string | null;
+  startIdx: number;
+  endIdx: number;
+}): string {
+  if (result.query === null) return 'inactive · 0..0';
+  return `active · @${result.query} · ${result.startIdx}..${result.endIdx}`;
+}
+
+export function formatAtFileQueryJson(result: {
+  query: string | null;
+  startIdx: number;
+  endIdx: number;
+}): string {
+  return JSON.stringify(
+    {
+      active: result.query !== null,
+      query: result.query,
+      startIdx: result.startIdx,
+      endIdx: result.endIdx,
+    },
+    null,
+    2,
+  );
+}

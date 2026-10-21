@@ -34,3 +34,31 @@ export function useBtwCommand() {
     close,
   };
 }
+
+export function formatBtwCommandStateSummary(state: {
+  isOpen: boolean;
+  question: string;
+  answer: string;
+  isLoading: boolean;
+}): string {
+  if (!state.isOpen) return 'closed';
+  return `open · ${state.isLoading ? 'loading' : 'idle'} · q=${state.question.length}c · a=${state.answer.length}c`;
+}
+
+export function formatBtwCommandStateJson(state: {
+  isOpen: boolean;
+  question: string;
+  answer: string;
+  isLoading: boolean;
+}): string {
+  return JSON.stringify(
+    {
+      isOpen: state.isOpen,
+      isLoading: state.isLoading,
+      question: state.question,
+      answerLength: state.answer.length,
+    },
+    null,
+    2,
+  );
+}

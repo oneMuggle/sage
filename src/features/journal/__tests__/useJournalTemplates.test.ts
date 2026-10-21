@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { journalApi } from '../../../shared/api/journalApi';
 import { useJournalTemplates } from '../useJournalTemplates';
+import { formatJournalTemplateDraftJson, formatJournalTemplateDraftSummary } from '../useJournalTemplates';
 
 vi.mock('../../../shared/api/journalApi', () => ({
   journalApi: {
@@ -103,5 +104,29 @@ describe('useJournalTemplates', () => {
     });
     expect(result.current.error).toMatch(/未选择期刊模板/);
     expect(journalApi.fillFromContent).not.toHaveBeenCalled();
+  });
+
+  it('formats journal template draft summary and JSON (Phase P109)', () => {
+    const draft = {
+      title: 'My Paper',
+      abstract: 'Abs',
+      sections: { keywords: 'AI', intro: 'Hello' },
+      references: ['[1] Ref'],
+    };
+    expect(formatJournalTemplateDraftSummary(stubSpec, draft, [])).toBe(
+      'spec_001 (simple.docx) · title=My Paper · sections=2 · violations=0',
+    );
+    expect(formatJournalTemplateDraftSummary(null, { ...draft, title: '' }, [])).toBe(
+      'no-spec · title=untitled · sections=2 · violations=0',
+    );
+    const parsed = JSON.parse(formatJournalTemplateDraftJson(stubSpec, draft, []));
+    expect(parsed).toEqual({
+      specId: 'spec_001',
+      templateFilename: 'simple.docx',
+      title: 'My Paper',
+      sectionKeys: ['keywords', 'intro'],
+      referenceCount: 1,
+      violationCount: 0,
+    });
   });
 });
