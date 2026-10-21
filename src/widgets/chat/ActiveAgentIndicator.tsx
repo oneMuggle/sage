@@ -1,11 +1,8 @@
-import { Brain, Eye, Pencil, Wrench } from 'lucide-react';
+import { Brain, Eye, Pencil, RefreshCw, Wrench } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { AgentEvent } from '../../shared/api';
-import {
-  agentStateToPhase,
-  type PhaseIconName,
-} from '../../shared/lib/agentStateMapping';
+import { agentStateToPhase, type PhaseIconName } from '../../shared/lib/agentStateMapping';
 
 interface ActiveAgentIndicatorProps {
   /** 当前活跃 agent 的 ID (null 表示无流式处理) */
@@ -21,6 +18,8 @@ const PHASE_ICON: Record<PhaseIconName, React.ComponentType<{ className?: string
   Wrench,
   Eye,
   Pencil,
+  // 2026-10-20: LLM 重试阶段图标（旋转）
+  RefreshCw,
   // Loader2 暂未用,留接口
   Loader2: Wrench,
 };
@@ -115,10 +114,20 @@ export function ActiveAgentIndicator({
           {phaseInfo && (
             <>
               <span className="text-border">·</span>
-              <span className="flex items-center gap-1">
+              <span
+                className={`flex items-center gap-1 ${
+                  phaseInfo.iconName === 'RefreshCw' ? 'text-warning' : ''
+                }`}
+              >
                 {(() => {
                   const Icon = PHASE_ICON[phaseInfo.iconName];
-                  return <Icon className="w-3.5 h-3.5 text-muted" />;
+                  // 重试阶段图标旋转,提示"系统正在自动恢复"
+                  const spin = phaseInfo.iconName === 'RefreshCw' ? ' animate-spin' : '';
+                  return (
+                    <Icon
+                      className={`w-3.5 h-3.5 ${phaseInfo.iconName === 'RefreshCw' ? 'text-warning' : 'text-muted'}${spin}`}
+                    />
+                  );
                 })()}
                 {phaseInfo.label}
               </span>

@@ -190,4 +190,38 @@ describe('reattach ownership and teardown', () => {
     expect(await cancelSessionStream(sid)).toBe(false);
     expect(chatApi.interrupt).toHaveBeenCalledWith(undefined, sid);
   });
+
+  // 2026-10-20: 重接路径同步处理 LLM 重试事件 —— 重放时 store.retryInfo 落位,
+  // 与主路径 useChat.ts 同一套 setRetryInfo + setStreamingMeta 写入。
+  it('reattach replay routes retry events into store.retryInfo', async () => {
+    vi.mocked(chatApi.listenStream).mockImplementationOnce(async (_id, h) => {
+      h.onEvent({
+        state: 'retry',
+        iteration: 0,
+        retry_info: {
+          attempt: 2,
+          max_attempts: 3,
+          error_type: 'server_error',
+          error_message: 'HTTP 503',
+          delay: 4,
+        },
+      } as AgentEvent);
+      // 重放继续 —— 不立刻 done,保持 retry 态在槽位
+      return { cancel };
+    });
+    const hook = renderHook(() => useChat());
+    await act(async () => {
+      await hook.result.current.reattachActiveStream(sid);
+    });
+
+    expect(slots().streaming?.retryInfo).toEqual({
+      attempt: 2,
+      max_attempts: 3,
+      error_type: 'server_error',
+      error_message: 'HTTP 503',
+      delay: 4,
+    });
+    // streaming 槽位保持活跃（后续 content_delta / done 到达时自动清 retryInfo）
+    expect(slots().streaming).not.toBeNull();
+  });
 });
