@@ -16,7 +16,7 @@ boundary — we delegate to it on the **resolved** path and never compare
 strings.
 
 All helpers are pure stdlib. **Python 3.8-compatible syntax** (no PEP 604
-``X | None``, no ``list[int]`` annotation, no ``:=`` walrus) so this
+``X | None``, no ``List[int]`` annotation, no ``:=`` walrus) so this
 module can be cherry-picked to ``release/win7`` later without a separate
 backport branch.
 """
@@ -64,7 +64,7 @@ def is_within(base: PurePath, candidate: PurePath) -> bool:
     directories like ``/tmp/work-evil`` share a common string prefix with
     ``/tmp/work`` but are NOT children. ``PurePath.relative_to`` raises
     ``ValueError`` for non-children, which is the precise semantic we
-    want — identical to ``Path.is_relative_to`` but available on 3.8+.
+    want — identical to ``Path.is_relative_to()`` but available on 3.8+.
     """
     try:
         candidate.relative_to(base)

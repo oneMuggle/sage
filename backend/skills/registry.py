@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import builtins
 import logging
 from typing import Dict, List, Optional
 
@@ -77,7 +78,7 @@ class SkillRegistry:
         """
         return [skill.schema for skill in self._skills.values()]
 
-    def list_names(self) -> List[str]:
+    def list_names(self) -> builtins.List[str]:
         """
         列出所有已注册技能的名称
 
@@ -101,7 +102,7 @@ class SkillRegistry:
                 return skill
         return None
 
-    def match_all(self, text: str) -> List[BaseSkill]:
+    def match_all(self, text: str) -> builtins.List[BaseSkill]:
         """
         查找所有匹配的技能
 

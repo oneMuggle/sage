@@ -20,8 +20,29 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-#: 触发优化的字节阈值（≤8MB 原样返回；嵌入硬上限仍为 10MB）
-OPTIMIZE_THRESHOLD_BYTES = 8 * 1024 * 1024
+#: 触发优化的字节阈值默认值（≤8MB 原样返回；嵌入硬上限仍为 10MB）
+DEFAULT_OPTIMIZE_THRESHOLD_BYTES = 8 * 1024 * 1024
+
+#: 环境变量 SAGE_IMAGE_OPTIMIZE_THRESHOLD_BYTES 覆盖；0 = 禁用优化
+_THRESHOLD_ENV = "SAGE_IMAGE_OPTIMIZE_THRESHOLD_BYTES"
+
+
+def _threshold_bytes() -> int:
+    import os
+
+    raw = os.environ.get(_THRESHOLD_ENV)
+    if raw is None:
+        return DEFAULT_OPTIMIZE_THRESHOLD_BYTES
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        logger.warning("非法的 %s: %r，使用默认 8MB", _THRESHOLD_ENV, raw)
+        return DEFAULT_OPTIMIZE_THRESHOLD_BYTES
+
+
+def optimize_threshold_bytes() -> int:
+    """当前生效的优化阈值（环境变量优先，默认 8MB）。"""
+    return _threshold_bytes()
 
 #: 降采样后的最长边像素
 _MAX_LONG_EDGE = 2000
@@ -69,7 +90,7 @@ def _reencode_jpeg(source: bytes, max_bytes: int) -> Optional[bytes]:
         return None
 
 
-def optimize_image_bytes(data: bytes, max_bytes: int = OPTIMIZE_THRESHOLD_BYTES) -> bytes:
+def optimize_image_bytes(data: bytes, max_bytes: int = DEFAULT_OPTIMIZE_THRESHOLD_BYTES) -> bytes:
     """超 ``max_bytes`` 的图片尝试 Pillow 压缩；不可优化时原样返回。
 
     - ≤ 阈值：原样返回（零开销）；
