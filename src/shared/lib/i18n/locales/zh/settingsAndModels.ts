@@ -414,3 +414,17 @@ export const zhSettingsAndModels = {
   'office.preview.slideSuffix': ' 页',
   'office.preview.paragraphCount': '个段落',
 } as const;
+
+export function formatZhSettingsAndModelsSummary(): string {
+  const keys = Object.keys(zhSettingsAndModels);
+  return `domain=zh.settingsAndModels · keys=${keys.length}`;
+}
+
+export function formatZhSettingsAndModelsJson(): string {
+  const keys = Object.keys(zhSettingsAndModels);
+  return JSON.stringify({
+    domain: 'zh.settingsAndModels',
+    keyCount: keys.length,
+  });
+}
+
