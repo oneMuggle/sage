@@ -427,3 +427,17 @@ export const zhWorkspaceAndTools = {
   'git.loading': '加载中…',
   'git.clean': '工作区干净',
 } as const;
+
+export function formatZhWorkspaceAndToolsSummary(): string {
+  const keys = Object.keys(zhWorkspaceAndTools);
+  return `domain=zh.workspaceAndTools · keys=${keys.length}`;
+}
+
+export function formatZhWorkspaceAndToolsJson(): string {
+  const keys = Object.keys(zhWorkspaceAndTools);
+  return JSON.stringify({
+    domain: 'zh.workspaceAndTools',
+    keyCount: keys.length,
+  });
+}
+

@@ -445,3 +445,17 @@ export const enChatAndSider = {
   'settings.zotero.error.unavailable':
     'Zotero database not found. Please install Zotero or specify the path manually above.',
 };
+
+export function formatEnChatAndSiderSummary(): string {
+  const keys = Object.keys(enChatAndSider);
+  return `domain=en.chatAndSider · keys=${keys.length}`;
+}
+
+export function formatEnChatAndSiderJson(): string {
+  const keys = Object.keys(enChatAndSider);
+  return JSON.stringify({
+    domain: 'en.chatAndSider',
+    keyCount: keys.length,
+  });
+}
+
