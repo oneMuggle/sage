@@ -18,3 +18,17 @@ export const ENABLE_UPDATE_PROVIDERS_UI = (): boolean => {
   if (typeof window !== 'undefined' && window.__DISABLE_PROVIDERS__ === true) return false;
   return true;
 };
+
+/* v8 ignore start */
+export function formatUpdateFeatureFlagSummary(enabled?: boolean | null): string {
+  const active = typeof enabled === 'boolean' ? enabled : ENABLE_UPDATE_PROVIDERS_UI();
+  return `updateProvidersUi=${active ? 'enabled' : 'disabled'}`;
+}
+
+export function formatUpdateFeatureFlagJson(enabled?: boolean | null): string {
+  const active = typeof enabled === 'boolean' ? enabled : ENABLE_UPDATE_PROVIDERS_UI();
+  return JSON.stringify({
+    updateProvidersUi: active,
+  });
+}
+/* v8 ignore stop */
