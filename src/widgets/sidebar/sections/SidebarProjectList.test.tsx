@@ -5,7 +5,11 @@ import type { ProjectSummary } from '../../../shared/api/projectApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 
-import { SidebarProjectList } from './SidebarProjectList';
+import {
+  SidebarProjectList,
+  formatSidebarProjectListAuditJson,
+  formatSidebarProjectListAuditSnapshot,
+} from './SidebarProjectList';
 
 const listMock = vi.fn();
 const registerMock = vi.fn();
@@ -418,5 +422,46 @@ describe('SidebarProjectList', () => {
     renderWithI18n(<SidebarProjectList {...baseProps} />);
     const stageBadge = await screen.findByTestId('project-row-stage-badge');
     expect(stageBadge).toHaveTextContent('立卷归集');
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P101)', async () => {
+    expect(
+      formatSidebarProjectListAuditSnapshot({
+        projectsCount: 3,
+        expandedCount: 1,
+        missingCount: 0,
+        collapsed: false,
+        dropActive: true,
+      }),
+    ).toBe('sidebarProjectList|projects=3|expanded=1|missing=0|collapsed=0|drop=1');
+    expect(formatSidebarProjectListAuditSnapshot({})).toBe(
+      'sidebarProjectList|projects=0|expanded=0|missing=0|collapsed=0|drop=0',
+    );
+    expect(
+      JSON.parse(
+        formatSidebarProjectListAuditJson({
+          projectsCount: 2,
+          expandedCount: 1,
+          missingCount: 1,
+          collapsed: true,
+          dropActive: false,
+        }),
+      ),
+    ).toEqual({
+      projectsCount: 2,
+      expandedCount: 1,
+      missingCount: 1,
+      collapsed: true,
+      dropActive: false,
+    });
+
+    renderWithI18n(<SidebarProjectList {...baseProps} />);
+    await waitFor(() => expect(screen.getByTestId('project-empty')).toBeInTheDocument());
+    const snapBtn = screen.getByTestId('sidebar-project-list-copy-snapshot');
+    const jsonBtn = screen.getByTestId('sidebar-project-list-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

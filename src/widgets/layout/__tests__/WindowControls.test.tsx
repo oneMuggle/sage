@@ -3,7 +3,11 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import type { WindowControlsBridge } from '../../../shared/api/windowControlsClient';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { WindowControls } from '../WindowControls';
+import {
+  WindowControls,
+  formatWindowControlsAuditJson,
+  formatWindowControlsAuditSnapshot,
+} from '../WindowControls';
 
 function renderWithI18n(ui: React.ReactElement) {
   return render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
@@ -81,5 +85,26 @@ describe('WindowControls', () => {
 
     // Should still render without crashing
     expect(screen.getByRole('button', { name: /最小化/i })).toBeInTheDocument();
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P101)', () => {
+    expect(formatWindowControlsAuditSnapshot({ hasCustomBridge: true, actionCount: 3 })).toBe(
+      'windowControls|customBridge=1|actions=3',
+    );
+    expect(formatWindowControlsAuditSnapshot({})).toBe('windowControls|customBridge=0|actions=3');
+    expect(
+      JSON.parse(formatWindowControlsAuditJson({ hasCustomBridge: false, actionCount: 3 })),
+    ).toEqual({
+      hasCustomBridge: false,
+      actionCount: 3,
+    });
+
+    renderWithI18n(<WindowControls bridge={mockBridge} />);
+    const snapBtn = screen.getByTestId('window-controls-copy-snapshot');
+    const jsonBtn = screen.getByTestId('window-controls-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });
