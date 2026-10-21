@@ -11,3 +11,32 @@ export * from './types/chatAndEventTypes';
 export * from './types/domainEntityTypes';
 export * from './types/officeDocTypes';
 export * from './types/templateAndTaskTypes';
+export function formatTaskPlanItemSummary(item: {
+  task_id: string;
+  agent_id: string;
+  goal: string;
+  parent_task_id?: string | null;
+  depth?: number;
+}): string {
+  return `${item.task_id} · agent=${item.agent_id} · parent=${item.parent_task_id ?? 'root'} · depth=${item.depth ?? 0}`;
+}
+
+export function formatTaskPlanItemJson(item: {
+  task_id: string;
+  agent_id: string;
+  goal: string;
+  parent_task_id?: string | null;
+  depth?: number;
+}): string {
+  return JSON.stringify(
+    {
+      taskId: item.task_id,
+      agentId: item.agent_id,
+      goal: item.goal,
+      parentTaskId: item.parent_task_id ?? null,
+      depth: item.depth ?? 0,
+    },
+    null,
+    2,
+  );
+}
