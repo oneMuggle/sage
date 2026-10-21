@@ -1792,12 +1792,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             from backend.orchestration.orch_settings import load_orch_settings
             _orch = load_orch_settings()
             _profile_name = agent.profile.get("name", "primary") if agent.profile else "primary"
-            _profile_max_iter = {
-                "primary": _orch.max_primary_iterations,
-                "coder": _orch.max_coder_iterations,
-                "reviewer": _orch.max_reviewer_iterations,
-                "writer": _orch.max_writer_iterations,
-            }.get(_profile_name, _orch.max_primary_iterations)
+            # Win7 适配: 全局迭代上限 >0 时覆盖 per-agent 细分值；
+            # =0 时回落 per-agent 各自设置 (primary/coder/reviewer/writer)。
+            if _orch.max_iterations > 0:
+                _profile_max_iter = _orch.max_iterations
+            else:
+                _profile_max_iter = {
+                    "primary": _orch.max_primary_iterations,
+                    "coder": _orch.max_coder_iterations,
+                    "reviewer": _orch.max_reviewer_iterations,
+                    "writer": _orch.max_writer_iterations,
+                }.get(_profile_name, _orch.max_primary_iterations)
 
             # Wall-clock timeout: 包裹 agent.run_loop() 防止 LLM API hang
             # 导致 session 永远 running。默认 600s，可通过环境变量覆盖。

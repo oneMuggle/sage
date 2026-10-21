@@ -351,9 +351,8 @@ export function OrchestrationTab() {
           onChange={(v) => setOrch({ maxToolCallsPerRun: v })}
         />
         <NumberField
-          anchor="orch.maxIterations"
-          label="Agent 迭代次数上限（次，0=默认值）"
-          desc="Primary agent 最大迭代次数（每次迭代 LLM 思考一次，可能调用多个工具），超限后会话终止并归因 max_iterations_exceeded"
+          label="全局迭代上限（次，0=按下方各 agent 分别设置）"
+          desc="Win7 适配：0 = 回落下方 primary/coder/reviewer/writer 各项独立设置；>0 = 全局统一上限覆盖各 agent 细分值"
           dataTestId="orch-max-iterations"
           value={settings.orch.maxIterations}
           onChange={(v) => setOrch({ maxIterations: v })}

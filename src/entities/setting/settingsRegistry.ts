@@ -467,9 +467,9 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
   ),
   'orch.maxIterations': orchNumber(
     'orch.maxIterations',
-    'Agent 迭代次数上限',
-    'Primary agent 最大迭代次数，0 回落 profile 默认值（当前为 25）',
-    25,
+    '全局迭代上限（0=按下方各 agent 分别设置）',
+    'Win7 适配：0 = 回落下方 primary/coder/reviewer/writer 各项独立设置；>0 = 全局统一上限覆盖各 agent 细分值',
+    0,
     0,
   ),
   'orch.subagentApprovalMode': enumSetting(

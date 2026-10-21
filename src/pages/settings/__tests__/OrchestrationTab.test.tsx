@@ -225,7 +225,7 @@ describe('OrchestrationTab — 计划前置旋钮 (Round 3)', () => {
  */
 describe('OrchestrationTab profile 迭代上限（主对话循环实际预算）', () => {
   const PROFILE_CASES = [
-    { testId: 'orch-max-primary-iterations', key: 'maxPrimaryIterations', def: '15', defValue: 15 },
+    { testId: 'orch-max-primary-iterations', key: 'maxPrimaryIterations', def: '25', defValue: 25 },
     { testId: 'orch-max-coder-iterations', key: 'maxCoderIterations', def: '15', defValue: 15 },
     { testId: 'orch-max-reviewer-iterations', key: 'maxReviewerIterations', def: '8', defValue: 8 },
     { testId: 'orch-max-writer-iterations', key: 'maxWriterIterations', def: '5', defValue: 5 },

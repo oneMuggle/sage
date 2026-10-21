@@ -179,6 +179,8 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "maxCoderIterations",
         "maxReviewerIterations",
         "maxWriterIterations",
+        # 2026-10-20 全局迭代上限 (Win7 适配: 0=按各 agent 分别设置)
+        "maxIterations",
     }
 )
 
