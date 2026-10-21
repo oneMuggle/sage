@@ -97,6 +97,11 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "version",
         # Wave 3 P2-9 (2026-08-14): 编排执行参数段。
         "orch",
+        # 2026-10-21: LLM 自动重试参数 — 前端用户配置必须透传, 否则 sanitizeForBackend
+        # 丢弃后后端永远用默认值 (max_attempts=3, base_delay=1.0, max_delay=15.0).
+        "llmRetryMaxAttempts",
+        "llmRetryBaseDelayS",
+        "llmRetryMaxDelayS",
     }
 )
 LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
