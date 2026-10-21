@@ -93,3 +93,23 @@ export function getTurnToolCallCount(messages: Message[]): number {
   }
   return count;
 }
+
+export function formatTurnItemsSummary(items: TurnItem[]): string {
+  const turns = items.filter((i) => i.kind === 'turn').length;
+  const standalones = items.length - turns;
+  return `total=${items.length} · turns=${turns} · standalones=${standalones}`;
+}
+
+export function formatTurnItemsJson(items: TurnItem[]): string {
+  const turns = items.filter((i) => i.kind === 'turn').length;
+  return JSON.stringify(
+    {
+      totalItems: items.length,
+      turnCount: turns,
+      standaloneCount: items.length - turns,
+      ids: items.map((i) => i.id),
+    },
+    null,
+    2,
+  );
+}
