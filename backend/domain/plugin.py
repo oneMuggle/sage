@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -25,12 +24,47 @@ from typing import Optional
 # 常量与校验
 # --------------------------------------------------------------------------- #
 
+# 注意：``backend/tests/unit/test_domain_models.py`` 的领域纯净性守卫只允许
+# dataclasses / enum / typing / abc / collections / __future__ / uuid /
+# datetime / asyncio / time，因此这里**不能用 re**，校验一律用字符串原语实现。
+
 MAX_PLUGIN_ID_LENGTH = 100
 MAX_CAPABILITY_NAME_LENGTH = 100
 
-_PLUGIN_ID_RE = re.compile(r"^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$")
-_CAPABILITY_NAME_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$")
-_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$")
+_PLUGIN_ID_EDGE = frozenset("abcdefghijklmnopqrstuvwxyz0123456789")
+_PLUGIN_ID_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789._-")
+_CAP_EDGE = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+_CAP_CHARS = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+_VERSION_TAIL = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-")
+_ASCII_DIGITS = frozenset("0123456789")
+
+
+def _has_edges_and_chars(value: str, edge: frozenset, chars: frozenset) -> bool:
+    """首尾必须是 ``edge`` 中的字符，中间只能是 ``chars`` 中的字符。"""
+    if not value:
+        return False
+    if value[0] not in edge or value[-1] not in edge:
+        return False
+    return all(ch in chars for ch in value)
+
+
+def _is_semver(value: str) -> bool:
+    """``1.2.3`` / ``1.2.3-rc.1`` / ``1.2.3+build.5`` 判定（无正则）。"""
+    if not value:
+        return False
+    core = value
+    for sep in ("+", "-"):
+        idx = core.find(sep)
+        if idx == -1:
+            continue
+        tail = core[idx + 1:]
+        if not tail or not all(ch in _VERSION_TAIL for ch in tail):
+            return False
+        core = core[:idx]
+    parts = core.split(".")
+    if len(parts) != 3:
+        return False
+    return all(part and all(ch in _ASCII_DIGITS for ch in part) for part in parts)
 
 
 class PluginContractError(ValueError):
@@ -48,7 +82,7 @@ def validate_plugin_id(value: str) -> str:
         raise PluginContractError(
             f"plugin_id 过长（{len(value)} > {MAX_PLUGIN_ID_LENGTH}）"
         )
-    if not _PLUGIN_ID_RE.match(value):
+    if not _has_edges_and_chars(value, _PLUGIN_ID_EDGE, _PLUGIN_ID_CHARS):
         raise PluginContractError(
             f"plugin_id 非法: {value!r}（小写字母/数字开头结尾，允许 . _ -）"
         )
@@ -63,7 +97,7 @@ def validate_capability_name(value: str) -> str:
         raise PluginContractError(
             f"capability name 过长（{len(value)} > {MAX_CAPABILITY_NAME_LENGTH}）"
         )
-    if not _CAPABILITY_NAME_RE.match(value):
+    if not _has_edges_and_chars(value, _CAP_EDGE, _CAP_CHARS):
         raise PluginContractError(
             f"capability name 非法: {value!r}（字母/数字开头结尾，允许 . _ -）"
         )
@@ -72,7 +106,7 @@ def validate_capability_name(value: str) -> str:
 
 def validate_version(value: str) -> str:
     """校验语义化版本（``1.2.3`` / ``1.2.3-rc.1``），返回原值。"""
-    if not isinstance(value, str) or not _VERSION_RE.match(value):
+    if not isinstance(value, str) or not _is_semver(value):
         raise PluginContractError(f"version 必须是语义化版本: {value!r}")
     return value
 
