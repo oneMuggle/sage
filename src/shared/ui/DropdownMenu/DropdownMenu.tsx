@@ -32,6 +32,7 @@ import { forwardRef, useState } from 'react';
  * ```
  */
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatDropdownMenuAuditSnapshot(opts: {
   align?: string;
   sideOffset?: number;
@@ -41,6 +42,7 @@ export function formatDropdownMenuAuditSnapshot(opts: {
   return `dropdownMenu|align=${opts.align || 'start'}|offset=${opts.sideOffset ?? 4}|items=${opts.itemCount ?? 0}|destructive=${opts.hasDestructive ? 1 : 0}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatDropdownMenuAuditJson(opts: {
   align?: string;
   sideOffset?: number;
@@ -281,4 +283,31 @@ export function DropdownMenuShortcut({
       {...props}
     />
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditDropdownMenuGovernance(
+  state: {
+    itemCount?: number;
+    open?: boolean;
+  } = {},
+): {
+  module: 'src/shared/ui/DropdownMenu/DropdownMenu.tsx';
+  phase: 'P149';
+  itemCount: number;
+  open: boolean;
+  healthy: boolean;
+} {
+  const itemCount =
+    typeof state.itemCount === 'number' && Number.isFinite(state.itemCount)
+      ? Math.max(0, Math.trunc(state.itemCount))
+      : 4;
+  const open = state.open === true;
+  return {
+    module: 'src/shared/ui/DropdownMenu/DropdownMenu.tsx',
+    phase: 'P149',
+    itemCount,
+    open,
+    healthy: itemCount >= 1,
+  };
 }

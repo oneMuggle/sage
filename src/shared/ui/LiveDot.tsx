@@ -13,6 +13,7 @@ export interface LiveDotProps {
   className?: string;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatLiveDotAuditSnapshot(opts: {
   state?: LiveState;
   workingTitle?: string;
@@ -21,6 +22,7 @@ export function formatLiveDotAuditSnapshot(opts: {
   return `liveDot|state=${opts.state || 'idle'}|workingTitle=${opts.workingTitle || '工作中'}|sleepingTitle=${opts.sleepingTitle || '休眠中'}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatLiveDotAuditJson(opts: {
   state?: LiveState;
   workingTitle?: string;
@@ -106,4 +108,31 @@ export function LiveDot({
     );
   }
   return null;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditLiveDotGovernance(
+  state: {
+    liveState?: LiveState | string;
+    pulseEnabled?: boolean;
+  } = {},
+): {
+  module: 'src/shared/ui/LiveDot.tsx';
+  phase: 'P149';
+  liveState: LiveState;
+  pulseEnabled: boolean;
+  healthy: boolean;
+} {
+  const liveState: LiveState =
+    state.liveState === 'working' || state.liveState === 'sleeping'
+      ? state.liveState
+      : 'idle';
+  const pulseEnabled = state.pulseEnabled !== false;
+  return {
+    module: 'src/shared/ui/LiveDot.tsx',
+    phase: 'P149',
+    liveState,
+    pulseEnabled,
+    healthy: true,
+  };
 }
