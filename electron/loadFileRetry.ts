@@ -25,8 +25,8 @@
 /** Default delay between loadFile attempts (ms). */
 export const LOAD_FILE_RETRY_DELAY_MS = 2_000;
 
-/** Default maximum attempts (initial + retries). 2 = one retry. */
-export const DEFAULT_MAX_LOAD_FILE_ATTEMPTS = 2;
+/** Default maximum attempts (initial + retries). 3 = two retries. */
+export const DEFAULT_MAX_LOAD_FILE_ATTEMPTS = 3;
 
 /**
  * Retry an async loader up to `maxAttempts` times. Returns when the
