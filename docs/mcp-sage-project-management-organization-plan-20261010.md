@@ -1835,3 +1835,15 @@
   - `src/widgets/chat/__tests__/TerminalPanel.p135.test.ts`
   - `src/widgets/chat/__tests__/TopicSeparator.p135.test.ts`
   - `src/widgets/chat/__tests__/TruncationNotice.p135.test.ts`
+
+## Phase P136 — Chat Turn Group, Artifact/Document Preview, Context Input & Tool Renderer Governance Audit (2026-10-22)
+
+- **PRs**: `#2282` (`main` @ `7ec887b8d`) / `#2283` (`release/win7` @ `2e02027fa`) merged for Phase P135; Phase P136 extends deterministic governance audit contracts across 8 chat turn group, barrel export, artifact/document preview, context input, and tool renderer modules:
+  1. `src/widgets/chat/TurnGroup.tsx` (`evaluateTurnGroupGovernanceAudit` + `src/widgets/chat/__tests__/TurnGroup.p136.test.ts`)
+  2. `src/widgets/chat/index.ts` (`evaluateChatWidgetsBarrelGovernanceAudit` + `src/widgets/chat/__tests__/index.p136.test.ts`)
+  3. `src/widgets/chat/artifacts/ArtifactViewer.tsx` (`evaluateArtifactViewerGovernanceAudit` + `src/widgets/chat/artifacts/__tests__/ArtifactViewer.p136.test.ts`)
+  4. `src/widgets/chat/preview/DocumentPreview.tsx` (`evaluateDocumentPreviewGovernanceAudit` + `src/widgets/chat/preview/__tests__/DocumentPreview.p136.test.ts`)
+  5. `src/widgets/chat/progress/ContextInput.tsx` (`evaluateContextInputGovernanceAudit` + `src/widgets/chat/progress/__tests__/ContextInput.p136.test.ts`)
+  6. `src/widgets/chat/toolRenderers/BashToolRenderer.tsx` (`evaluateBashToolRendererGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/BashToolRenderer.p136.test.ts`)
+  7. `src/widgets/chat/toolRenderers/FileWriteToolRenderer.tsx` (`evaluateFileWriteToolRendererGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/FileWriteToolRenderer.p136.test.ts`)
+  8. `src/widgets/chat/toolRenderers/ToolCallCard.tsx` (`evaluateToolCallCardGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/ToolCallCard.p136.test.ts`)
