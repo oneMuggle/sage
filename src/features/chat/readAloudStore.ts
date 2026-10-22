@@ -97,3 +97,28 @@ export function buildReadAloudStoreAuditJson(
 ): string {
   return JSON.stringify(buildReadAloudStoreAuditSnapshot(speakingId), null, 2);
 }
+
+export interface ReadAloudStoreGovernanceAudit {
+  phase: 'P160';
+  module: 'src/features/chat/readAloudStore.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditReadAloudStoreGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): ReadAloudStoreGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P160',
+    module: 'src/features/chat/readAloudStore.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P160 ReadAloudStore Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

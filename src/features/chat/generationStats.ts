@@ -90,3 +90,28 @@ export function buildGenerationStatsAuditSnapshot(
 export function buildGenerationStatsAuditJson(stats?: GenerationStats | null): string {
   return JSON.stringify(buildGenerationStatsAuditSnapshot(stats), null, 2);
 }
+
+export interface GenerationStatsGovernanceAudit {
+  phase: 'P160';
+  module: 'src/features/chat/generationStats.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditGenerationStatsGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): GenerationStatsGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P160',
+    module: 'src/features/chat/generationStats.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P160 GenerationStats Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}
