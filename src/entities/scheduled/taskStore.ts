@@ -99,3 +99,29 @@ export function buildScheduledTaskStoreAuditJson(
     snapshot: buildScheduledTaskStoreAuditSnapshot(input),
   });
 }
+
+export function auditScheduledTaskStoreGovernance(
+  state: {
+    taskCount?: number;
+    hasError?: boolean;
+  } = {},
+): {
+  module: 'src/entities/scheduled/taskStore.ts';
+  phase: 'P154';
+  taskCount: number;
+  hasError: boolean;
+  healthy: boolean;
+} {
+  const taskCount =
+    typeof state.taskCount === 'number' && Number.isFinite(state.taskCount)
+      ? Math.max(0, Math.trunc(state.taskCount))
+      : 0;
+  const hasError = state.hasError === true;
+  return {
+    module: 'src/entities/scheduled/taskStore.ts',
+    phase: 'P154',
+    taskCount,
+    hasError,
+    healthy: !hasError && taskCount <= 500,
+  };
+}
