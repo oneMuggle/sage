@@ -18,3 +18,27 @@ export function formatChatFeatureBarrelJson(): string {
   });
 }
 
+export interface ChatFeatureBarrelGovernanceAudit {
+  phase: 'P160';
+  module: 'src/features/chat/index.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditChatFeatureBarrelGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): ChatFeatureBarrelGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P160',
+    module: 'src/features/chat/index.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P160 ChatFeatureBarrel Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

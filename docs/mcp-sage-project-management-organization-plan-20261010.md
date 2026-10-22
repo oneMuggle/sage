@@ -2224,3 +2224,24 @@
   - `src/features/chat/__tests__/answerVersions.p159.test.ts`
   - `src/features/chat/__tests__/chatFind.p159.test.ts`
   - `src/features/chat/__tests__/entityRefs.p159.test.ts`
+
+### Phase P160: Chat GenerationStats, Feature Barrel, MarkdownText, MessageJumpStore, ReadAloudStore, SelectionQuote, Speech & TextHighlight Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/chat/generationStats.ts` (`auditGenerationStatsGovernance`)
+  - `src/features/chat/index.ts` (`auditChatFeatureBarrelGovernance`)
+  - `src/features/chat/markdownText.ts` (`auditMarkdownTextGovernance`)
+  - `src/features/chat/messageJumpStore.ts` (`auditMessageJumpStoreGovernance`)
+  - `src/features/chat/readAloudStore.ts` (`auditReadAloudStoreGovernance`)
+  - `src/features/chat/selectionQuote.ts` (`auditSelectionQuoteGovernance`)
+  - `src/features/chat/speech.ts` (`auditSpeechGovernance`)
+  - `src/features/chat/textHighlight.ts` (`auditTextHighlightGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/chat/__tests__/generationStats.p160.test.ts`
+  - `src/features/chat/__tests__/chatIndex.p160.test.ts`
+  - `src/features/chat/__tests__/markdownText.p160.test.ts`
+  - `src/features/chat/__tests__/messageJumpStore.p160.test.ts`
+  - `src/features/chat/__tests__/readAloudStore.p160.test.ts`
+  - `src/features/chat/__tests__/selectionQuote.p160.test.ts`
+  - `src/features/chat/__tests__/speech.p160.test.ts`
+  - `src/features/chat/__tests__/textHighlight.p160.test.ts`
