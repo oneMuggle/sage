@@ -49,3 +49,57 @@ export function ReadAloudButton({ messageId, content }: ReadAloudButtonProps) {
     </button>
   );
 }
+
+export interface ReadAloudButtonAuditInput {
+  textLength: number;
+  speechSupported: boolean;
+  isSpeaking: boolean;
+  voiceAvailable: boolean;
+}
+
+export interface ReadAloudButtonAuditReport {
+  textLength: number;
+  speechSupported: boolean;
+  isSpeaking: boolean;
+  canSpeak: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateReadAloudButtonAudit(
+  input: ReadAloudButtonAuditInput,
+): ReadAloudButtonAuditReport {
+  const textLength = Math.max(0, Math.trunc(input.textLength));
+  const speechSupported = Boolean(input.speechSupported);
+  const voiceAvailable = Boolean(input.voiceAvailable);
+  const issueCodes: string[] = [];
+
+  if (textLength === 0) {
+    issueCodes.push('empty_read_aloud_text');
+  }
+  if (!speechSupported) {
+    issueCodes.push('speech_synthesis_unsupported');
+  }
+  if (speechSupported && !voiceAvailable) {
+    issueCodes.push('no_speech_voice_available');
+  }
+
+  const canSpeak = textLength > 0 && speechSupported && voiceAvailable;
+
+  return {
+    textLength,
+    speechSupported,
+    isSpeaking: Boolean(input.isSpeaking),
+    canSpeak,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportReadAloudButtonAuditJson(
+  input: ReadAloudButtonAuditInput,
+): string {
+  return JSON.stringify(evaluateReadAloudButtonAudit(input));
+}

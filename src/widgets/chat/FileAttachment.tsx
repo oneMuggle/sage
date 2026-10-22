@@ -37,3 +37,57 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1048576).toFixed(1)} MB`;
 }
+
+export interface FileAttachmentAuditInput {
+  fileName: string;
+  fileSizeBytes: number;
+  mimeType: string;
+  maxAllowedBytes: number;
+}
+
+export interface FileAttachmentAuditReport {
+  fileName: string;
+  fileSizeBytes: number;
+  mimeType: string;
+  withinSizeLimit: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateFileAttachmentAudit(
+  input: FileAttachmentAuditInput,
+): FileAttachmentAuditReport {
+  const fileName = input.fileName.trim();
+  const mimeType = input.mimeType.trim() || 'application/octet-stream';
+  const fileSizeBytes = Math.max(0, Math.trunc(input.fileSizeBytes));
+  const maxAllowedBytes = Math.max(1, Math.trunc(input.maxAllowedBytes));
+  const withinSizeLimit = fileSizeBytes <= maxAllowedBytes;
+  const issueCodes: string[] = [];
+
+  if (!fileName) {
+    issueCodes.push('missing_attachment_filename');
+  }
+  if (fileSizeBytes === 0) {
+    issueCodes.push('empty_attachment_payload');
+  }
+  if (!withinSizeLimit) {
+    issueCodes.push('attachment_exceeds_size_limit');
+  }
+
+  return {
+    fileName,
+    fileSizeBytes,
+    mimeType,
+    withinSizeLimit,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportFileAttachmentAuditJson(
+  input: FileAttachmentAuditInput,
+): string {
+  return JSON.stringify(evaluateFileAttachmentAudit(input));
+}
