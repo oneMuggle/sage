@@ -202,3 +202,29 @@ export function formatCreateGoalModalJson(
   });
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditCreateGoalModalGovernance(
+  state: {
+    isOpen?: boolean;
+    maxTurns?: number;
+  } = {},
+): {
+  module: 'src/features/autonomous-goals/CreateGoalModal.tsx';
+  phase: 'P158';
+  isOpen: boolean;
+  maxTurns: number;
+  healthy: boolean;
+} {
+  const isOpen = state.isOpen === true;
+  const maxTurns =
+    typeof state.maxTurns === 'number' && Number.isFinite(state.maxTurns)
+      ? Math.max(0, Math.trunc(state.maxTurns))
+      : 10;
+  return {
+    module: 'src/features/autonomous-goals/CreateGoalModal.tsx',
+    phase: 'P158',
+    isOpen,
+    maxTurns,
+    healthy: maxTurns >= 1 && maxTurns <= 100,
+  };
+}
