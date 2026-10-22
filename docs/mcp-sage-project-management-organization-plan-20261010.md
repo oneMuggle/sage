@@ -2203,3 +2203,24 @@
   - `src/features/autonomous-goals/__tests__/CreateGoalModal.p158.test.ts`
   - `src/features/autonomous-goals/__tests__/GoalDetailPage.p158.test.ts`
   - `src/features/autonomous-goals/__tests__/GoalListPage.p158.test.ts`
+
+### Phase P159: Changes List Store and Chat Entity/File Menus, BtwOverlay, MediaAttachment, AnswerVersions, ChatFind & EntityRefs Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/changes/changesListStore.ts` (`auditChangesListStoreGovernance`)
+  - `src/features/chat/AtEntityMenu.tsx` (`auditAtEntityMenuGovernance`)
+  - `src/features/chat/AtFileMenu.tsx` (`auditAtFileMenuGovernance`)
+  - `src/features/chat/BtwOverlay.tsx` (`auditBtwOverlayGovernance`)
+  - `src/features/chat/MediaAttachment.tsx` (`auditMediaAttachmentGovernance`)
+  - `src/features/chat/answerVersions.ts` (`auditAnswerVersionsGovernance`)
+  - `src/features/chat/chatFind.ts` (`auditChatFindGovernance`)
+  - `src/features/chat/entityRefs.ts` (`auditEntityRefsGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/changes/__tests__/changesListStore.p159.test.ts`
+  - `src/features/chat/__tests__/AtEntityMenu.p159.test.ts`
+  - `src/features/chat/__tests__/AtFileMenu.p159.test.ts`
+  - `src/features/chat/__tests__/BtwOverlay.p159.test.ts`
+  - `src/features/chat/__tests__/MediaAttachment.p159.test.ts`
+  - `src/features/chat/__tests__/answerVersions.p159.test.ts`
+  - `src/features/chat/__tests__/chatFind.p159.test.ts`
+  - `src/features/chat/__tests__/entityRefs.p159.test.ts`
