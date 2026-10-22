@@ -245,3 +245,32 @@ export function buildPanelRegistryAuditJson(
 ): string {
   return JSON.stringify(buildPanelRegistryAuditSnapshot(definitions), null, 2);
 }
+
+export function auditPanelRegistryGovernance(
+  state: {
+    slotCount?: number;
+    panelCount?: number;
+  } = {},
+): {
+  module: 'src/features/app-panels/panelRegistry.ts';
+  phase: 'P157';
+  slotCount: number;
+  panelCount: number;
+  healthy: boolean;
+} {
+  const slotCount =
+    typeof state.slotCount === 'number' && Number.isFinite(state.slotCount)
+      ? Math.max(0, Math.trunc(state.slotCount))
+      : PANEL_SLOT_IDS.length;
+  const panelCount =
+    typeof state.panelCount === 'number' && Number.isFinite(state.panelCount)
+      ? Math.max(0, Math.trunc(state.panelCount))
+      : PANEL_DEFINITIONS.length;
+  return {
+    module: 'src/features/app-panels/panelRegistry.ts',
+    phase: 'P157',
+    slotCount,
+    panelCount,
+    healthy: slotCount >= 1 && panelCount >= 1,
+  };
+}

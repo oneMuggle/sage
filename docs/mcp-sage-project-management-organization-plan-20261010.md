@@ -2161,3 +2161,24 @@
   - `src/entities/wiki/__tests__/lintStore.p156.test.ts`
   - `src/entities/wiki/__tests__/mockData.p156.test.ts`
   - `src/entities/wiki/__tests__/queueStore.p156.test.ts`
+
+### Phase P157: Entity Wiki Research, Review & Main Store, App Panels Registry & Store, and Artifact API & Stores Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/entities/wiki/research-store.ts` (`auditWikiResearchStoreGovernance`)
+  - `src/entities/wiki/review-store.ts` (`auditWikiReviewStoreGovernance`)
+  - `src/entities/wiki/store.ts` (`auditWikiStoreGovernance`)
+  - `src/features/app-panels/panelRegistry.ts` (`auditPanelRegistryGovernance`)
+  - `src/features/app-panels/usePanelStore.ts` (`auditUsePanelStoreGovernance`)
+  - `src/features/artifacts/artifactApi.ts` (`auditArtifactApiGovernance`)
+  - `src/features/artifacts/artifactEventsStore.ts` (`auditArtifactEventsStoreGovernance`)
+  - `src/features/artifacts/artifactListStore.ts` (`auditArtifactListStoreGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/entities/wiki/__tests__/researchStore.p157.test.ts`
+  - `src/entities/wiki/__tests__/reviewStore.p157.test.ts`
+  - `src/entities/wiki/__tests__/store.p157.test.ts`
+  - `src/features/app-panels/__tests__/panelRegistry.p157.test.ts`
+  - `src/features/app-panels/__tests__/usePanelStore.p157.test.ts`
+  - `src/features/artifacts/__tests__/artifactApi.p157.test.ts`
+  - `src/features/artifacts/__tests__/artifactEventsStore.p157.test.ts`
+  - `src/features/artifacts/__tests__/artifactListStore.p157.test.ts`
