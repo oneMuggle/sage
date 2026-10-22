@@ -36,3 +36,51 @@ export function TruncationNotice({ finishReason, onContinue }: TruncationNoticeP
     </div>
   );
 }
+
+export interface TruncationNoticeAuditInput {
+  originalCharCount: number;
+  displayedCharCount: number;
+  canExpand: boolean;
+}
+
+export interface TruncationNoticeAuditReport {
+  originalCharCount: number;
+  displayedCharCount: number;
+  omittedCharCount: number;
+  canExpand: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateTruncationNoticeAudit(
+  input: TruncationNoticeAuditInput,
+): TruncationNoticeAuditReport {
+  const originalCharCount = Math.max(0, Math.trunc(input.originalCharCount));
+  const displayedCharCount = Math.max(0, Math.trunc(input.displayedCharCount));
+  const omittedCharCount = Math.max(0, originalCharCount - displayedCharCount);
+  const issueCodes: string[] = [];
+
+  if (displayedCharCount >= originalCharCount) {
+    issueCodes.push('non_truncated_content_notice');
+  }
+  if (!input.canExpand && omittedCharCount > 0) {
+    issueCodes.push('truncated_content_not_expandable');
+  }
+
+  return {
+    originalCharCount,
+    displayedCharCount,
+    omittedCharCount,
+    canExpand: Boolean(input.canExpand),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportTruncationNoticeAuditJson(
+  input: TruncationNoticeAuditInput,
+): string {
+  return JSON.stringify(evaluateTruncationNoticeAudit(input));
+}

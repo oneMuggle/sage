@@ -71,3 +71,53 @@ export function SubagentLivePanel({ sessionId }: { sessionId: string | null | un
     </div>
   );
 }
+
+export interface SubagentLivePanelAuditInput {
+  activeSubagentCount: number;
+  completedSubagentCount: number;
+  failedSubagentCount: number;
+  streamConnected: boolean;
+}
+
+export interface SubagentLivePanelAuditReport {
+  activeSubagentCount: number;
+  completedSubagentCount: number;
+  failedSubagentCount: number;
+  streamConnected: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateSubagentLivePanelAudit(
+  input: SubagentLivePanelAuditInput,
+): SubagentLivePanelAuditReport {
+  const activeSubagentCount = Math.max(0, Math.trunc(input.activeSubagentCount));
+  const completedSubagentCount = Math.max(0, Math.trunc(input.completedSubagentCount));
+  const failedSubagentCount = Math.max(0, Math.trunc(input.failedSubagentCount));
+  const streamConnected = Boolean(input.streamConnected);
+  const issueCodes: string[] = [];
+
+  if (activeSubagentCount > 0 && !streamConnected) {
+    issueCodes.push('subagent_stream_disconnected');
+  }
+  if (failedSubagentCount > 0) {
+    issueCodes.push('subagent_failures_detected');
+  }
+
+  return {
+    activeSubagentCount,
+    completedSubagentCount,
+    failedSubagentCount,
+    streamConnected,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportSubagentLivePanelAuditJson(
+  input: SubagentLivePanelAuditInput,
+): string {
+  return JSON.stringify(evaluateSubagentLivePanelAudit(input));
+}
