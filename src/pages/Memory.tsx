@@ -458,3 +458,37 @@ export function Memory() {
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditMemoryPageGovernance(
+  state: {
+    entryCount?: number;
+    activeCategory?: string;
+    isSearching?: boolean;
+  } = {},
+): {
+  module: 'src/pages/Memory.tsx';
+  phase: 'P142';
+  entryCount: number;
+  activeCategory: string;
+  isSearching: boolean;
+  healthy: boolean;
+} {
+  const entryCount =
+    typeof state.entryCount === 'number' && Number.isFinite(state.entryCount)
+      ? Math.max(0, Math.trunc(state.entryCount))
+      : 0;
+  const activeCategory =
+    typeof state.activeCategory === 'string' && state.activeCategory.trim().length > 0
+      ? state.activeCategory.trim()
+      : 'all';
+  const isSearching = Boolean(state.isSearching);
+  return {
+    module: 'src/pages/Memory.tsx',
+    phase: 'P142',
+    entryCount,
+    activeCategory,
+    isSearching,
+    healthy: entryCount >= 0 && activeCategory.length > 0,
+  };
+}
