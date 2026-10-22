@@ -152,3 +152,32 @@ export function formatGoalListFilterJson(
   });
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditGoalListPageGovernance(
+  state: {
+    goalCount?: number;
+    statusFilter?: string;
+  } = {},
+): {
+  module: 'src/features/autonomous-goals/GoalListPage.tsx';
+  phase: 'P158';
+  goalCount: number;
+  statusFilter: string;
+  healthy: boolean;
+} {
+  const goalCount =
+    typeof state.goalCount === 'number' && Number.isFinite(state.goalCount)
+      ? Math.max(0, Math.trunc(state.goalCount))
+      : 0;
+  const statusFilter =
+    typeof state.statusFilter === 'string' && state.statusFilter.trim().length > 0
+      ? state.statusFilter.trim()
+      : 'all';
+  return {
+    module: 'src/features/autonomous-goals/GoalListPage.tsx',
+    phase: 'P158',
+    goalCount,
+    statusFilter,
+    healthy: goalCount <= 1000 && statusFilter.length > 0,
+  };
+}

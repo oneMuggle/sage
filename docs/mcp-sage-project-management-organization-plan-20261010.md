@@ -2182,3 +2182,24 @@
   - `src/features/artifacts/__tests__/artifactApi.p157.test.ts`
   - `src/features/artifacts/__tests__/artifactEventsStore.p157.test.ts`
   - `src/features/artifacts/__tests__/artifactListStore.p157.test.ts`
+
+### Phase P158: Artifact Hooks, Attention Center & Snapshot, and Autonomous Goals Modal & Pages Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/artifacts/useArtifactContent.ts` (`auditUseArtifactContentGovernance`)
+  - `src/features/artifacts/useArtifacts.ts` (`auditUseArtifactsGovernance`)
+  - `src/features/attention/attentionCenter.ts` (`auditAttentionCenterGovernance`)
+  - `src/features/attention/index.ts` (`auditAttentionBarrelGovernance`)
+  - `src/features/attention/useAttentionSnapshot.ts` (`auditUseAttentionSnapshotGovernance`)
+  - `src/features/autonomous-goals/CreateGoalModal.tsx` (`auditCreateGoalModalGovernance`)
+  - `src/features/autonomous-goals/GoalDetailPage.tsx` (`auditGoalDetailPageGovernance`)
+  - `src/features/autonomous-goals/GoalListPage.tsx` (`auditGoalListPageGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/artifacts/__tests__/useArtifactContent.p158.test.ts`
+  - `src/features/artifacts/__tests__/useArtifacts.p158.test.ts`
+  - `src/features/attention/__tests__/attentionCenter.p158.test.ts`
+  - `src/features/attention/__tests__/attentionIndex.p158.test.ts`
+  - `src/features/attention/__tests__/useAttentionSnapshot.p158.test.ts`
+  - `src/features/autonomous-goals/__tests__/CreateGoalModal.p158.test.ts`
+  - `src/features/autonomous-goals/__tests__/GoalDetailPage.p158.test.ts`
+  - `src/features/autonomous-goals/__tests__/GoalListPage.p158.test.ts`

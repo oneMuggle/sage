@@ -76,3 +76,29 @@ export function formatArtifactContentStateJson(
     2,
   );
 }
+
+export function auditUseArtifactContentGovernance(
+  state: {
+    sessionId?: string;
+    hasError?: boolean;
+  } = {},
+): {
+  module: 'src/features/artifacts/useArtifactContent.ts';
+  phase: 'P158';
+  sessionId: string;
+  hasError: boolean;
+  healthy: boolean;
+} {
+  const sessionId =
+    typeof state.sessionId === 'string' && state.sessionId.trim().length > 0
+      ? state.sessionId.trim()
+      : 'default';
+  const hasError = state.hasError === true;
+  return {
+    module: 'src/features/artifacts/useArtifactContent.ts',
+    phase: 'P158',
+    sessionId,
+    hasError,
+    healthy: sessionId.length > 0 && !hasError,
+  };
+}

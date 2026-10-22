@@ -97,3 +97,32 @@ export function buildUseAttentionSnapshotAuditJson(
     snapshot: buildUseAttentionSnapshotAuditSnapshot(input),
   });
 }
+
+export function auditUseAttentionSnapshotGovernance(
+  state: {
+    pendingTodoCount?: number;
+    dirtyFileCount?: number;
+  } = {},
+): {
+  module: 'src/features/attention/useAttentionSnapshot.ts';
+  phase: 'P158';
+  pendingTodoCount: number;
+  dirtyFileCount: number;
+  healthy: boolean;
+} {
+  const pendingTodoCount =
+    typeof state.pendingTodoCount === 'number' && Number.isFinite(state.pendingTodoCount)
+      ? Math.max(0, Math.trunc(state.pendingTodoCount))
+      : 0;
+  const dirtyFileCount =
+    typeof state.dirtyFileCount === 'number' && Number.isFinite(state.dirtyFileCount)
+      ? Math.max(0, Math.trunc(state.dirtyFileCount))
+      : 0;
+  return {
+    module: 'src/features/attention/useAttentionSnapshot.ts',
+    phase: 'P158',
+    pendingTodoCount,
+    dirtyFileCount,
+    healthy: pendingTodoCount <= 500 && dirtyFileCount <= 500,
+  };
+}
