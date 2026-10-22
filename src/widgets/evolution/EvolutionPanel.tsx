@@ -109,3 +109,40 @@ export const EvolutionPanel: React.FC = () => {
 };
 
 export default EvolutionPanel;
+
+export interface EvolutionPanelAuditInput {
+  refreshIntervalMs: number;
+  recentLogLimit: number;
+  backgroundCronActive: boolean;
+}
+
+export interface EvolutionPanelAuditReport {
+  refreshIntervalMs: number;
+  recentLogLimit: number;
+  backgroundCronActive: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateEvolutionPanelGovernanceAudit(
+  input: EvolutionPanelAuditInput,
+): EvolutionPanelAuditReport {
+  const issueCodes: string[] = [];
+  if (!Number.isFinite(input.refreshIntervalMs) || input.refreshIntervalMs < 5000) {
+    issueCodes.push('EVOLUTION_PANEL_REFRESH_TOO_FAST');
+  }
+  if (input.recentLogLimit <= 0 || input.recentLogLimit > 50) {
+    issueCodes.push('EVOLUTION_PANEL_LOG_LIMIT_OUT_OF_RANGE');
+  }
+  if (!input.backgroundCronActive) {
+    issueCodes.push('EVOLUTION_PANEL_CRON_INACTIVE');
+  }
+  return {
+    refreshIntervalMs: input.refreshIntervalMs,
+    recentLogLimit: input.recentLogLimit,
+    backgroundCronActive: input.backgroundCronActive,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
