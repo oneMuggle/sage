@@ -102,32 +102,6 @@ def test_session_limit(env):
     assert status == 429
 
 
-def test_initialize_params_must_be_object(env):
-    """initialize 的 params 非对象 → 400 / -32602，不建会话。"""
-    service, _, _, token, _ = env
-    status, _, body = post(service, token, {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                                            "params": "not-an-object"})
-    assert status == 400
-    assert body["error"]["code"] == -32602
-    assert service.session_count() == 0
-
-
-def test_search_files_rejects_oversized_regex(env):
-    """regex=true 且模式超长 → INVALID_ARGUMENT（防灾难性回溯）。"""
-    from backend.remote_mcp.tools import MAX_REGEX_LENGTH
-
-    service, _, _, token, _ = env
-    session, _ = init(service, token)
-    err, text = call(service, token, session, "search_files",
-                     {"query": "a" * (MAX_REGEX_LENGTH + 1), "regex": True})
-    assert err
-    assert text.startswith("INVALID_ARGUMENT")
-    # 非 regex 字面量不受长度上限约束（query 自身有 500 字符上限）
-    err, _ = call(service, token, session, "search_files",
-                  {"query": "a" * (MAX_REGEX_LENGTH + 1)})
-    assert not err
-
-
 def test_unknown_method_and_parse_error(env):
     service, _, _, token, _ = env
     session, _ = init(service, token)

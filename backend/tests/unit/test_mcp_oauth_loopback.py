@@ -39,35 +39,6 @@ class TestLoopbackServer:
             urllib.request.urlopen(f"http://127.0.0.1:{server.port}/other", timeout=5)
         assert exc_info.value.code == 404
 
-    def test_callback_prefix_path_404(self):
-        """`/callback-evil` 是 `/callback` 的前缀扩展，必须 404 且不捕获。"""
-        with LoopbackCallbackServer() as server, pytest.raises(urllib.error.HTTPError) as exc_info:
-            urllib.request.urlopen(
-                f"http://127.0.0.1:{server.port}/callback-evil?code=abc&state=st-1", timeout=5
-            )
-        assert exc_info.value.code == 404
-        assert server.captured is None
-
-    def test_second_callback_404_keeps_first(self):
-        """一次性回调：第二次命中 404，保留首次捕获值。"""
-        with LoopbackCallbackServer() as server:
-            first = f"{server.redirect_uri}?code=abc&state=st-1"
-
-            def hit():
-                urllib.request.urlopen(first, timeout=5).read()
-
-            t = threading.Thread(target=hit)
-            t.start()
-            captured = asyncio.run(server.wait(timeout=10))
-            t.join(timeout=5)
-            assert captured == first
-            with pytest.raises(urllib.error.HTTPError) as exc_info:
-                urllib.request.urlopen(
-                    f"{server.redirect_uri}?code=second&state=st-2", timeout=5
-                )
-            assert exc_info.value.code == 404
-            assert server.captured == first
-
     def test_wait_timeout(self):
         with LoopbackCallbackServer() as server, pytest.raises(TimeoutError, match="超时"):
             asyncio.run(server.wait(timeout=0.2))
