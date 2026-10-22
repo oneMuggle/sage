@@ -84,3 +84,30 @@ export function formatThemeStorageJson(
     2,
   );
 }
+
+export function auditThemeStorageGovernance(
+  state: {
+    mode?: ThemeMode | string;
+    presetId?: string;
+  } = {},
+): {
+  module: 'src/entities/theme/storage.ts';
+  phase: 'P156';
+  mode: ThemeMode;
+  presetId: string;
+  healthy: boolean;
+} {
+  const mode: ThemeMode =
+    state.mode === 'light' || state.mode === 'dark' ? state.mode : 'system';
+  const presetId =
+    typeof state.presetId === 'string' && state.presetId.trim().length > 0
+      ? state.presetId.trim()
+      : 'indigo';
+  return {
+    module: 'src/entities/theme/storage.ts',
+    phase: 'P156',
+    mode,
+    presetId,
+    healthy: presetId.length > 0,
+  };
+}

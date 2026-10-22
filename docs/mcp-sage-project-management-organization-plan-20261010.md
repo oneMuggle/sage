@@ -2140,3 +2140,24 @@
   - `src/entities/setting/__tests__/storage.p155.test.ts`
   - `src/entities/setting/__tests__/types.p155.test.ts`
   - `src/entities/theme/__tests__/decorativePresets.p155.test.ts`
+
+### Phase P156: Entity Theme Presets, Theme Storage, Todo Store, Welcome Recommendations & Wiki Stores Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/entities/theme/presets.ts` (`auditThemePresetsGovernance`)
+  - `src/entities/theme/storage.ts` (`auditThemeStorageGovernance`)
+  - `src/entities/todo/todoStore.ts` (`auditTodoStoreGovernance`)
+  - `src/entities/welcome/recommendations.ts` (`auditWelcomeRecommendationsGovernance`)
+  - `src/entities/wiki/activity-store.ts` (`auditWikiActivityStoreGovernance`)
+  - `src/entities/wiki/lint-store.ts` (`auditWikiLintStoreGovernance`)
+  - `src/entities/wiki/mock-data.ts` (`auditWikiMockDataGovernance`)
+  - `src/entities/wiki/queue-store.ts` (`auditWikiQueueStoreGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/entities/theme/__tests__/presets.p156.test.ts`
+  - `src/entities/theme/__tests__/storage.p156.test.ts`
+  - `src/entities/todo/__tests__/todoStore.p156.test.ts`
+  - `src/entities/welcome/__tests__/recommendations.p156.test.ts`
+  - `src/entities/wiki/__tests__/activityStore.p156.test.ts`
+  - `src/entities/wiki/__tests__/lintStore.p156.test.ts`
+  - `src/entities/wiki/__tests__/mockData.p156.test.ts`
+  - `src/entities/wiki/__tests__/queueStore.p156.test.ts`

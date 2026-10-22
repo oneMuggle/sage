@@ -131,3 +131,33 @@ export function buildRecommendationsAuditJson(
 ): string {
   return JSON.stringify(buildRecommendationsAuditSnapshot(items), null, 2);
 }
+
+export function auditWelcomeRecommendationsGovernance(
+  state: {
+    recommendationCount?: number;
+    iconCount?: number;
+  } = {},
+): {
+  module: 'src/entities/welcome/recommendations.ts';
+  phase: 'P156';
+  recommendationCount: number;
+  iconCount: number;
+  healthy: boolean;
+} {
+  const recommendationCount =
+    typeof state.recommendationCount === 'number' &&
+    Number.isFinite(state.recommendationCount)
+      ? Math.max(0, Math.trunc(state.recommendationCount))
+      : defaultRecommendations.length;
+  const iconCount =
+    typeof state.iconCount === 'number' && Number.isFinite(state.iconCount)
+      ? Math.max(0, Math.trunc(state.iconCount))
+      : Object.keys(lucideIconMap).length;
+  return {
+    module: 'src/entities/welcome/recommendations.ts',
+    phase: 'P156',
+    recommendationCount,
+    iconCount,
+    healthy: recommendationCount >= 1 && iconCount >= 1,
+  };
+}

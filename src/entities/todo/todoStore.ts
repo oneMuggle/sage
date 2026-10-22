@@ -114,3 +114,32 @@ export function buildTodoStoreAuditJson(
     snapshot: buildTodoStoreAuditSnapshot(input),
   });
 }
+
+export function auditTodoStoreGovernance(
+  state: {
+    totalCount?: number;
+    inProgressCount?: number;
+  } = {},
+): {
+  module: 'src/entities/todo/todoStore.ts';
+  phase: 'P156';
+  totalCount: number;
+  inProgressCount: number;
+  healthy: boolean;
+} {
+  const totalCount =
+    typeof state.totalCount === 'number' && Number.isFinite(state.totalCount)
+      ? Math.max(0, Math.trunc(state.totalCount))
+      : 0;
+  const inProgressCount =
+    typeof state.inProgressCount === 'number' && Number.isFinite(state.inProgressCount)
+      ? Math.max(0, Math.trunc(state.inProgressCount))
+      : 0;
+  return {
+    module: 'src/entities/todo/todoStore.ts',
+    phase: 'P156',
+    totalCount,
+    inProgressCount,
+    healthy: inProgressCount <= 1 && inProgressCount <= totalCount + 1,
+  };
+}
