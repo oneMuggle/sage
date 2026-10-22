@@ -10,9 +10,8 @@ import asyncio
 import inspect
 import logging
 import os
-from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Iterable, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 

@@ -20,9 +20,8 @@ From pi's packages/ai/src/providers/faux.ts pattern.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from sage_core import Message, Role
 
