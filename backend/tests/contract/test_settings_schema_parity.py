@@ -52,6 +52,8 @@ EXPECTED_TOP_KEYS = frozenset(
         "llmRetryMaxAttempts",
         "llmRetryBaseDelayS",
         "llmRetryMaxDelayS",
+        # 2026-10-22: 整轮任务 wall-clock 上限（秒）— 0 = 不限；函数式读取
+        "llmTotalTimeoutS",
     }
 )
 

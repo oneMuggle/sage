@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 
-import { AGENT_RUNTIME_MESSAGES, mapAgentErrorToText, mapLLMErrorToText, parseAgentErrorLimit, type LLMErrorResponse } from './errorMapping';
+import {
+  AGENT_RUNTIME_MESSAGES,
+  mapAgentErrorToText,
+  mapLLMErrorToText,
+  parseAgentErrorLimit,
+  type LLMErrorResponse,
+} from './errorMapping';
 
 describe('mapAgentErrorToText', () => {
   it('maps max_iterations_exceeded to actionable Chinese text', () => {
@@ -99,6 +105,17 @@ describe('mapAgentErrorToText — limit rendering', () => {
 
     expect(text).toContain('6');
     expect(text).not.toContain('{limit}');
+  });
+
+  it('renders the llm_total_timeout ceiling in seconds', () => {
+    const text = mapAgentErrorToText('llm_total_timeout (limit=1800)');
+
+    expect(text).toContain('1800');
+    expect(text).toContain('秒');
+    expect(text).toContain('整轮任务总耗时');
+    expect(text).toContain('与网络或端点连通性无关');
+    expect(text).not.toContain('{limit}');
+    expect(text).not.toContain('llm_total_timeout');
   });
 
   it('strips the placeholder for bare codes so it never leaks to users', () => {

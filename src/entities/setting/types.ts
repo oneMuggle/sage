@@ -166,6 +166,10 @@ export interface AppSettings {
   llmRetryBaseDelayS: number; // 1.0 (秒)
   llmRetryMaxDelayS: number; // 30.0 (秒)
 
+  // 2026-10-22: 整轮任务 wall-clock 上限（秒）。0 = 不限。
+  // 与后端 SettingsPayload.llmTotalTimeoutS 对齐；后端函数式读取，改后立即生效。
+  llmTotalTimeoutS: number; // 1800
+
   // 演示模式开关 (2026-08-27): 启用后 Electron main 进程跳过 Python 后端
   // spawn, 前端可走 /demo 路由录屏. 关闭时回到正常 LLM 调用路径.
   demoMode: boolean;
@@ -267,6 +271,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   llmRetryMaxAttempts: 3,
   llmRetryBaseDelayS: 1.0,
   llmRetryMaxDelayS: 30.0,
+
+  // 2026-10-22: 整轮任务 wall-clock 默认上限（秒）= 2 × subagentTaskTimeoutS 默认 900s。
+  llmTotalTimeoutS: 1800,
 
   // 演示模式: 默认关闭. 开启后 main 进程跳过 Python 后端启动.
   demoMode: false,

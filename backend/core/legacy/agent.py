@@ -1953,6 +1953,8 @@ class SageAgent:
                             yield AgentEvent(
                                 state=AgentState.FAILED,
                                 iteration=i,
+                                # 上限值随错误码一并下发，前端据此提示用户
+                                # "该调到多少"，而不是只说"超预算了"。
                                 error=f"tool_budget_exceeded (limit={max_tool_calls})",
                                 agent_id=self.agent_id,
                             )
@@ -2386,6 +2388,8 @@ class SageAgent:
             yield AgentEvent(
                 state=AgentState.FAILED,
                 iteration=effective_max_iterations,
+                # 上限值随错误码一并下发，前端据此提示用户
+                # "该调到多少"，而不是只说"超上限了"。
                 error=f"max_iterations_exceeded (limit={effective_max_iterations})",
                 agent_id=self.agent_id,
             )

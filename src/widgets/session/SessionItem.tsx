@@ -89,6 +89,11 @@ export function SessionItem({
   const completedFresh = !isLive && dbStatus === 'completed' && hasFreshRunAt(session.last_run_at);
   const showCompletedTick = useExpireAfter(completedFresh, session.last_run_at, COMPLETED_FRESH_MS);
   const failed = !isLive && dbStatus === 'failed';
+  // 失败原因走统一映射：后端存的是 "<code> (limit=<N>)" 之类的原始串，
+  // 映射后带上"当前上限 N"的信息；未知码回退原始文本。
+  const failedReason = session.last_error
+    ? (mapAgentErrorToText(session.last_error) ?? session.last_error)
+    : '';
   const suspended = !isLive && dbStatus === 'suspended';
   // 失败原因渲染成中文提示；未知错误码回退到原始 last_error 文本
   const failedReason = session.last_error

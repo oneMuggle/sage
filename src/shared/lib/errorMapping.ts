@@ -57,10 +57,14 @@ export const AGENT_RUNTIME_MESSAGES: Record<string, string> = {
     '工具调用次数超出单轮预算{limit}，可在「设置 → 编排 → 工具调用预算」调高或拆分任务后重试',
   prompt_blocked_by_hook: '消息被用户自定义钩子拦截（可在 设置 → 通用 → 钩子 管理）',
   spend_limit_exceeded:
-    '已达到今日花费限额（可在 设置 → 通用 调整），为控制成本本次请求未发送',
+    '已达到今日花费限额{limit}，为控制成本本次请求未发送（可在 设置 → 通用 调整）',
   subagent_loop_failed: '子代理执行未完成，请重试或简化子任务',
   subagent_exhausted_iterations:
     '子代理未在迭代预算内收敛{limit}，可在「设置 → 编排 → 子代理迭代上限」调高或拆分任务后重试',
+  // 2026-10-22: 整轮任务 wall-clock 预算耗尽。显式排除网络/端点语义，
+  // 否则用户会误以为是接口断了而去查端点连通性。
+  llm_total_timeout:
+    '整轮任务总耗时超出上限{limit}（含 LLM 调用 + 工具执行 + 子代理的累计耗时），与网络或端点连通性无关，可在「设置 → 基础 → LLM 任务上限」调高后重试',
 };
 
 /**
@@ -70,6 +74,8 @@ const AGENT_RUNTIME_LIMIT_UNITS: Record<string, string> = {
   max_iterations_exceeded: '次',
   tool_budget_exceeded: '次',
   subagent_exhausted_iterations: '次',
+  spend_limit_exceeded: 'USD',
+  llm_total_timeout: '秒',
 };
 
 /**
