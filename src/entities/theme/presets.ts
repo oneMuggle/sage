@@ -422,3 +422,31 @@ export function formatThemePresetsJson(): string {
   });
 }
 
+export function auditThemePresetsGovernance(
+  state: {
+    presetCount?: number;
+    defaultId?: string;
+  } = {},
+): {
+  module: 'src/entities/theme/presets.ts';
+  phase: 'P156';
+  presetCount: number;
+  defaultId: string;
+  healthy: boolean;
+} {
+  const presetCount =
+    typeof state.presetCount === 'number' && Number.isFinite(state.presetCount)
+      ? Math.max(0, Math.trunc(state.presetCount))
+      : themePresets.length;
+  const defaultId =
+    typeof state.defaultId === 'string' && state.defaultId.trim().length > 0
+      ? state.defaultId.trim()
+      : DEFAULT_THEME_ID;
+  return {
+    module: 'src/entities/theme/presets.ts',
+    phase: 'P156',
+    presetCount,
+    defaultId,
+    healthy: presetCount >= 1 && defaultId.length > 0,
+  };
+}
