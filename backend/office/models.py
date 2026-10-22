@@ -709,6 +709,28 @@ class WordSectionBreakSpec(BaseModel):
     page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
 
 
+class WordIndexSpec(BaseModel):
+    r"""图目录/表目录设置（Round 42）。
+
+    TOF 域（``TOC \h \z \c "<图|表>"``）由 Word 收录 SEQ 题注段；
+    生成器插入域与静态缓存条目（无页码——由渲染器/COM 刷新域计算），
+    与 R13 目录域同一思路。
+
+    定义位置须在 ``WordFormatSpec`` 之前：pydantic v1 下
+    ``figure_index``/``table_index`` 若在此之前声明会留未解析的 ForwardRef，
+    首次使用时抛 ConfigError（“field \"figure_index\" not yet prepared”）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    heading_text: str = Field(default="图目录", max_length=50)
+    placeholder_text: str = Field(
+        default='（图目录：在 Word 中按 F9 或右键"更新域"生成）',
+        max_length=200,
+        description="域未更新时的占位提示",
+    )
+
+
 class WordFormatSpec(BaseModel):
     """Word 文档版式规范。
 
@@ -758,24 +780,6 @@ class WordFormatSpec(BaseModel):
     # Round 42：图目录/表目录（TOC \c 收录 SEQ 题注；None = 不插入）。
     figure_index: Optional[WordIndexSpec] = None
     table_index: Optional[WordIndexSpec] = None
-
-
-class WordIndexSpec(BaseModel):
-    r"""图目录/表目录设置（Round 42）。
-
-    TOF 域（``TOC \h \z \c "<图|表>"``）由 Word 收录 SEQ 题注段；
-    生成器插入域与静态缓存条目（无页码——由渲染器/COM 刷新域计算），
-    与 R13 目录域同一思路。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    heading_text: str = Field(default="图目录", max_length=50)
-    placeholder_text: str = Field(
-        default='（图目录：在 Word 中按 F9 或右键"更新域"生成）',
-        max_length=200,
-        description="域未更新时的占位提示",
-    )
 
 
 class OfficeWordGenerateRequest(BaseModel):
