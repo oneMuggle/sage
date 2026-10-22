@@ -1871,3 +1871,15 @@
   6. `src/widgets/layout/index.ts` (`evaluateLayoutBarrelGovernanceAudit` + `src/widgets/layout/__tests__/index.p138.test.ts`)
   7. `src/widgets/memory/index.ts` (`evaluateMemoryWidgetsBarrelGovernanceAudit` + `src/widgets/memory/__tests__/index.p138.test.ts`)
   8. `src/widgets/model-catalog/index.ts` (`evaluateModelCatalogBarrelGovernanceAudit` + `src/widgets/model-catalog/__tests__/index.p138.test.ts`)
+
+## Phase P139 — Permission/Question/Session/Skills Barrels, SessionItem, VirtualSessionList, MaterialStatusBadge & BackendStatusBanner Governance Audit (2026-10-22)
+
+- **PRs**: `#2294` (`main` @ `39da10f53`) / `#2295` (`release/win7` @ `549dbcdbf`) merged for Phase P138; Phase P139 extends deterministic governance audit contracts across 8 permission/question/session/skills barrel, session list/item, material status badge, and backend status banner modules:
+  1. `src/widgets/permission/index.ts` (`evaluatePermissionBarrelGovernanceAudit` + `src/widgets/permission/__tests__/index.p139.test.ts`)
+  2. `src/widgets/question/index.ts` (`evaluateQuestionBarrelGovernanceAudit` + `src/widgets/question/__tests__/index.p139.test.ts`)
+  3. `src/widgets/session/SessionItem.tsx` (`evaluateSessionItemGovernanceAudit` + `src/widgets/session/__tests__/SessionItem.p139.test.ts`)
+  4. `src/widgets/session/VirtualSessionList.tsx` (`evaluateVirtualSessionListGovernanceAudit` + `src/widgets/session/__tests__/VirtualSessionList.p139.test.ts`)
+  5. `src/widgets/session/index.ts` (`evaluateSessionBarrelGovernanceAudit` + `src/widgets/session/__tests__/index.p139.test.ts`)
+  6. `src/widgets/sidebar/sections/MaterialStatusBadge.tsx` (`evaluateMaterialStatusBadgeGovernanceAudit` + `src/widgets/sidebar/sections/__tests__/MaterialStatusBadge.p139.test.ts`)
+  7. `src/widgets/skills/index.ts` (`evaluateSkillsBarrelGovernanceAudit` + `src/widgets/skills/__tests__/index.p139.test.ts`)
+  8. `src/widgets/system/BackendStatusBanner.tsx` (`evaluateBackendStatusBannerGovernanceAudit` + `src/widgets/system/__tests__/BackendStatusBanner.p139.test.ts`)
