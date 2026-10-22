@@ -101,7 +101,8 @@ class PptTemplateFillRequest(BaseModel):
         max_length=200,
         description="输出文件名（自动补 .pptx 扩展名；须与模板同目录产出）",
     )
-    fills: List[PptTemplateFillItem] = Field(min_length=1, max_length=200)
+    # P4-B: min_items/max_items 为 pydantic v1（win7 py38 通道）兼容写法
+    fills: List[PptTemplateFillItem] = Field(min_items=1, max_items=200)
 
 
 class PptTemplateFillResult(BaseModel):
