@@ -213,3 +213,32 @@ export function formatArtifactRecordJson(artifact: Artifact): string {
     2,
   );
 }
+
+export function auditArtifactApiGovernance(
+  state: {
+    artifactCount?: number;
+    versionCount?: number;
+  } = {},
+): {
+  module: 'src/features/artifacts/artifactApi.ts';
+  phase: 'P157';
+  artifactCount: number;
+  versionCount: number;
+  healthy: boolean;
+} {
+  const artifactCount =
+    typeof state.artifactCount === 'number' && Number.isFinite(state.artifactCount)
+      ? Math.max(0, Math.trunc(state.artifactCount))
+      : 1;
+  const versionCount =
+    typeof state.versionCount === 'number' && Number.isFinite(state.versionCount)
+      ? Math.max(0, Math.trunc(state.versionCount))
+      : 1;
+  return {
+    module: 'src/features/artifacts/artifactApi.ts',
+    phase: 'P157',
+    artifactCount,
+    versionCount,
+    healthy: versionCount >= artifactCount,
+  };
+}
