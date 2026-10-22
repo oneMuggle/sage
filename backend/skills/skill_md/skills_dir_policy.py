@@ -49,7 +49,7 @@ def read_skills_dir_preference(repo: Any = None) -> Path | None:
 
     try:
         candidate = Path(value).expanduser()
-    except (OSError, RuntimeError, ValueError) as exc:
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
         logger.warning("skills_dir preference 路径无法解析 '%s': %s", value, exc)
         return None
 
