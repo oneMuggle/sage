@@ -121,7 +121,7 @@ def _build_adapter_from_existing(tmp_path: Path) -> InprocSkillAdapter:  # noqa:
     "backend.skills.skill_md.script_policy.is_script_execution_allowed",
     return_value=True,
 )
-def test_script_dispatch_denied_before_sandbox(_mock_policy, tmp_path: Path):
+def test_script_dispatch_denied_before_sandbox(mock_policy, tmp_path: Path):
     """REST/adapter script dispatch defaults to permission enforcement."""
     from backend.adapters.out.skill import InprocSkillAdapter
     from backend.skills.registry import SkillRegistry
@@ -162,7 +162,7 @@ def test_script_dispatch_denied_before_sandbox(_mock_policy, tmp_path: Path):
     "backend.skills.skill_md.script_policy.is_script_execution_allowed",
     return_value=True,
 )
-def test_script_dispatch_check_exception_fails_closed(_mock_policy, tmp_path: Path):
+def test_script_dispatch_check_exception_fails_closed(mock_policy, tmp_path: Path):
     """A permission backend failure must not become an unhandled REST error."""
     from backend.adapters.out.skill import InprocSkillAdapter
     from backend.skills.registry import SkillRegistry
@@ -202,7 +202,7 @@ def test_script_dispatch_check_exception_fails_closed(_mock_policy, tmp_path: Pa
     return_value=True,
 )
 def test_script_dispatch_needs_approval_is_not_auto_approved(
-    _mock_policy, tmp_path: Path
+    mock_policy, tmp_path: Path
 ):
     """Approval decisions fail closed because adapter has no approval gate."""
     from backend.adapters.out.skill import InprocSkillAdapter

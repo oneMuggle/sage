@@ -158,9 +158,9 @@ def test_async_handler_count_matches_design():
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
 
-    # 7 个 keep_async (execute_skill, execute_slash_command,
-    # import_skills, import_skill_directory, chat, chat_stream_create,
-    # chat_stream_attach)
+    # 7 个 keep_async：execute_skill、execute_slash_command、
+    # import_skills、import_skill_directory、chat、chat_stream_create、
+    # chat_stream_attach
     # C1b 后 = 4：execute_skill/execute_slash_command/import_skills 迁至 legacy_skills_routes。
     # compact_session 已拆至 legacy_session_routes (L1, P8), 在那里由
     # test_keep_async_handlers_actually_async 的合并扫描覆盖。

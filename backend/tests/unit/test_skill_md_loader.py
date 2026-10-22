@@ -34,15 +34,17 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture(autouse=True)
-def _stub_skills_dir_preference(monkeypatch):
+def stub_skills_dir_preference(monkeypatch):
     """默认屏蔽 skills_dir preference, 避免真实 DB 的自定义目录影响断言。
 
-    需要覆盖 preference 的用例自行 monkeypatch 覆盖本 fixture 的返回值。
+    返回被替换的 stub, 需要覆盖 preference 的用例可自行再 monkeypatch。
     """
-    monkeypatch.setattr(
-        skill_md_loader, "read_skills_dir_preference", lambda *a, **k: None
-    )
-    return None
+
+    def _no_preference(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(skill_md_loader, "read_skills_dir_preference", _no_preference)
+    return _no_preference
 
 
 # =====================================================================
