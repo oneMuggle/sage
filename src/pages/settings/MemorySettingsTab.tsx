@@ -53,3 +53,30 @@ export function MemorySettingsTab() {
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditMemorySettingsTabGovernance(
+  state: {
+    retentionDays?: number;
+    autoCaptureEnabled?: boolean;
+  } = {},
+): {
+  module: 'src/pages/settings/MemorySettingsTab.tsx';
+  phase: 'P143';
+  retentionDays: number;
+  autoCaptureEnabled: boolean;
+  healthy: boolean;
+} {
+  const retentionDays =
+    typeof state.retentionDays === 'number' && Number.isFinite(state.retentionDays)
+      ? Math.max(1, Math.trunc(state.retentionDays))
+      : 90;
+  const autoCaptureEnabled = state.autoCaptureEnabled !== false;
+  return {
+    module: 'src/pages/settings/MemorySettingsTab.tsx',
+    phase: 'P143',
+    retentionDays,
+    autoCaptureEnabled,
+    healthy: retentionDays >= 1,
+  };
+}
