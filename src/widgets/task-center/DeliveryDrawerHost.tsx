@@ -39,3 +39,42 @@ export function DeliveryDrawerHost() {
     />
   );
 }
+
+export interface DeliveryDrawerHostAuditInput {
+  isOpen: boolean;
+  activeSessionId: string;
+  deliverableCount: number;
+  hasCloseCallback: boolean;
+}
+
+export interface DeliveryDrawerHostAuditReport {
+  isOpen: boolean;
+  normalizedSessionId: string;
+  normalizedDeliverableCount: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateDeliveryDrawerHostGovernanceAudit(
+  input: DeliveryDrawerHostAuditInput,
+): DeliveryDrawerHostAuditReport {
+  const issueCodes: string[] = [];
+  const normalizedSessionId = input.activeSessionId.trim();
+  if (input.isOpen && !normalizedSessionId) {
+    issueCodes.push('DELIVERY_DRAWER_HOST_SESSION_MISSING');
+  }
+  if (input.deliverableCount < 0) {
+    issueCodes.push('DELIVERY_DRAWER_HOST_COUNT_NEGATIVE');
+  }
+  if (!input.hasCloseCallback) {
+    issueCodes.push('DELIVERY_DRAWER_HOST_CLOSE_CALLBACK_MISSING');
+  }
+  return {
+    isOpen: input.isOpen,
+    normalizedSessionId,
+    normalizedDeliverableCount: Math.max(0, Math.trunc(input.deliverableCount)),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
