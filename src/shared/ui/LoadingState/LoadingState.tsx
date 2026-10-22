@@ -10,6 +10,7 @@ export interface LoadingStateProps {
   rows?: number;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatLoadingStateAuditSnapshot(opts: {
   variant?: LoadingVariant;
   label?: string;
@@ -18,6 +19,7 @@ export function formatLoadingStateAuditSnapshot(opts: {
   return `loadingState|variant=${opts.variant || 'spinner'}|label=${opts.label || '加载中…'}|rows=${opts.rows ?? 3}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatLoadingStateAuditJson(opts: {
   variant?: LoadingVariant;
   label?: string;
@@ -99,4 +101,31 @@ export function LoadingState({
       {copyControls}
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditLoadingStateGovernance(
+  state: {
+    variant?: LoadingVariant | string;
+    skeletonRows?: number;
+  } = {},
+): {
+  module: 'src/shared/ui/LoadingState/LoadingState.tsx';
+  phase: 'P149';
+  variant: LoadingVariant;
+  skeletonRows: number;
+  healthy: boolean;
+} {
+  const variant: LoadingVariant = state.variant === 'skeleton' ? 'skeleton' : 'spinner';
+  const skeletonRows =
+    typeof state.skeletonRows === 'number' && Number.isFinite(state.skeletonRows)
+      ? Math.max(1, Math.min(20, Math.trunc(state.skeletonRows)))
+      : 3;
+  return {
+    module: 'src/shared/ui/LoadingState/LoadingState.tsx',
+    phase: 'P149',
+    variant,
+    skeletonRows,
+    healthy: skeletonRows >= 1 && skeletonRows <= 20,
+  };
 }

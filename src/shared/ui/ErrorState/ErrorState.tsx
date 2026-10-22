@@ -9,6 +9,7 @@ export interface ErrorStateProps {
   className?: string;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatErrorStateAuditSnapshot(opts: {
   title?: string;
   message?: string;
@@ -18,6 +19,7 @@ export function formatErrorStateAuditSnapshot(opts: {
   return `errorState|title=${opts.title || '出错了'}|msg=${opts.message || 'none'}|retry=${opts.hasRetry ? 1 : 0}|retryLabel=${opts.retryLabel || '重试'}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatErrorStateAuditJson(opts: {
   title?: string;
   message?: string;
@@ -105,4 +107,31 @@ export function ErrorState({
       </span>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditErrorStateGovernance(
+  state: {
+    hasRetryCallback?: boolean;
+    messageLength?: number;
+  } = {},
+): {
+  module: 'src/shared/ui/ErrorState/ErrorState.tsx';
+  phase: 'P149';
+  hasRetryCallback: boolean;
+  messageLength: number;
+  healthy: boolean;
+} {
+  const hasRetryCallback = state.hasRetryCallback !== false;
+  const messageLength =
+    typeof state.messageLength === 'number' && Number.isFinite(state.messageLength)
+      ? Math.max(0, Math.trunc(state.messageLength))
+      : 24;
+  return {
+    module: 'src/shared/ui/ErrorState/ErrorState.tsx',
+    phase: 'P149',
+    hasRetryCallback,
+    messageLength,
+    healthy: messageLength > 0,
+  };
 }
