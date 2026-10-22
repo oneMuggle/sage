@@ -23,3 +23,25 @@ export function PreferenceSaveStatus({ status, reload }: Props) {
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatPreferenceSaveStatusSummary(
+  status: 'loading' | 'idle' | 'saving' | 'saved' | 'error',
+): string {
+  const visible = status !== 'idle' && status !== 'loading';
+  const role = !visible ? 'none' : status === 'error' ? 'alert' : 'status';
+  return `status=${status} · visible=${visible} · role=${role}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatPreferenceSaveStatusJson(
+  status: 'loading' | 'idle' | 'saving' | 'saved' | 'error',
+): string {
+  const visible = status !== 'idle' && status !== 'loading';
+  const role = !visible ? 'none' : status === 'error' ? 'alert' : 'status';
+  return JSON.stringify({
+    status,
+    visible,
+    role,
+  });
+}
+
