@@ -356,3 +356,25 @@ export function formatDecorativePresetsJson(
     2,
   );
 }
+
+export function auditDecorativePresetsGovernance(
+  state: {
+    presetCount?: number;
+  } = {},
+): {
+  module: 'src/entities/theme/decorative-presets.ts';
+  phase: 'P155';
+  presetCount: number;
+  healthy: boolean;
+} {
+  const presetCount =
+    typeof state.presetCount === 'number' && Number.isFinite(state.presetCount)
+      ? Math.max(0, Math.trunc(state.presetCount))
+      : decorativePresets.length;
+  return {
+    module: 'src/entities/theme/decorative-presets.ts',
+    phase: 'P155',
+    presetCount,
+    healthy: presetCount >= 1,
+  };
+}

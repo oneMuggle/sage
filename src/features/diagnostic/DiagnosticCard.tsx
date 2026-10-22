@@ -56,33 +56,9 @@ export function DiagnosticCard() {
   const { data, loading, error, refresh } = useDiagnosticPreview();
   const [includePrompts, setIncludePrompts] = useState(false);
   const [includeHostname, setIncludeHostname] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatDiagnosticPreviewMarkdown(data, includePrompts, includeHostname),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatDiagnosticPreviewJson(data, includePrompts, includeHostname),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -93,22 +69,6 @@ export function DiagnosticCard() {
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">LLM 诊断导出</h2>
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            data-testid="diagnostic-card-copy-md"
-            onClick={() => void handleCopyMarkdown()}
-            className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="diagnostic-card-copy-json"
-            onClick={() => void handleCopyJson()}
-            className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
         </div>
       </div>
 

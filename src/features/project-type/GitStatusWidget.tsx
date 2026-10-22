@@ -5,7 +5,7 @@
  * Coding 项目专属：显示 Git 仓库状态、支持复制 Markdown 状态报告、按状态筛选变更文件并一键纳入 L4 资料池
  */
 
-import { GitBranch, AlertCircle, CheckCircle2, Copy, Check, RefreshCw, BookmarkPlus } from 'lucide-react';
+import { GitBranch, AlertCircle, CheckCircle2, RefreshCw, BookmarkPlus } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
 import { projectApi } from '../../shared/api';
@@ -37,7 +37,6 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
   const [filesExpanded, setFilesExpanded] = useState(false);
   const [fileFilter, setFileFilter] = useState<'all' | 'staged' | 'modified' | 'untracked'>('all');
   const [ingestedFiles, setIngestedFiles] = useState<Set<string>>(new Set());
-  const [copiedMd, setCopiedMd] = useState(false);
   const [copiedSha, setCopiedSha] = useState<string | null>(null);
   const [guardedFiles, setGuardedFiles] = useState<Set<string>>(new Set());
   const [commitMilestones, setCommitMilestones] = useState<Set<string>>(new Set());
@@ -109,9 +108,9 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
     status.modified_files.length + status.staged_files.length + status.untracked_files.length;
 
   const visibleChangedFiles = [
-    ...((fileFilter === 'all' || fileFilter === 'staged') ? status.staged_files : []),
-    ...((fileFilter === 'all' || fileFilter === 'modified') ? status.modified_files : []),
-    ...((fileFilter === 'all' || fileFilter === 'untracked') ? status.untracked_files : []),
+    ...(fileFilter === 'all' || fileFilter === 'staged' ? status.staged_files : []),
+    ...(fileFilter === 'all' || fileFilter === 'modified' ? status.modified_files : []),
+    ...(fileFilter === 'all' || fileFilter === 'untracked' ? status.untracked_files : []),
   ];
 
   const handleGuardChangedFile = async (relPath: string) => {
@@ -158,33 +157,6 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
     }
   };
 
-  const handleCopyMarkdown = () => {
-    const lines = [
-      `# Git 仓库状态报告 (${status.current_branch || 'HEAD'})`,
-      `- **分支**: \`${status.current_branch || 'HEAD'}\``,
-      `- **变更统计**: 暂存 ${status.staged_files.length} · 修改 ${status.modified_files.length} · 未跟踪 ${status.untracked_files.length}`,
-    ];
-    if (totalChanges > 0) {
-      lines.push('', '## 变更文件明细');
-      status.staged_files.forEach((f) => lines.push(`- [S] \`${f}\``));
-      status.modified_files.forEach((f) => lines.push(`- [M] \`${f}\``));
-      status.untracked_files.forEach((f) => lines.push(`- [U] \`${f}\``));
-    }
-    if (status.recent_commits.length > 0) {
-      lines.push('', '## 最近提交');
-      status.recent_commits.slice(0, 5).forEach((c) => {
-        lines.push(`- \`${c.sha.slice(0, 7)}\` ${c.message} (${c.author}, ${c.date.split(' ')[0]})`);
-      });
-    }
-    try {
-      void navigator.clipboard?.writeText(lines.join('\n'));
-      setCopiedMd(true);
-      setTimeout(() => setCopiedMd(false), 2000);
-    } catch {
-      // ignore clipboard errors in test/offline mode
-    }
-  };
-
   return (
     <Card data-testid="git-status-widget">
       <CardHeader className="pb-2">
@@ -194,16 +166,6 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
             Git 状态
           </CardTitle>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              data-testid="git-status-copy-md-btn"
-              onClick={handleCopyMarkdown}
-              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="复制 Git 状态 Markdown 报告"
-            >
-              {copiedMd ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-              {copiedMd ? '已复制' : '复制报告'}
-            </button>
             <button
               type="button"
               data-testid="git-status-refresh-btn"
@@ -300,93 +262,93 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                   ))}
                   {visibleChangedFiles.length > 0 && (
                     <div className="ml-auto flex items-center gap-1">
-                    <button
-                      type="button"
-                      data-testid="git-widget-copy-paths-btn"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard?.writeText(visibleChangedFiles.join('\n'));
-                          setCopiedAllPaths(true);
-                          setTimeout(() => setCopiedAllPaths(false), 1500);
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }}
-                      className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-                    >
-                      {copiedAllPaths ? '已复制路径' : '复制变更路径'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="git-widget-files-to-milestone-btn"
-                      onClick={async () => {
-                        if (convertedFilesMilestone) return;
-                        setConvertedFilesMilestone(true);
-                        if (typeof projectApi?.createMilestone === 'function') {
+                      <button
+                        type="button"
+                        data-testid="git-widget-copy-paths-btn"
+                        onClick={async () => {
                           try {
-                            await projectApi.createMilestone(projectId, {
-                              title: `工作区 Git 变更审校 (${visibleChangedFiles.length} 个文件)`,
-                              description: visibleChangedFiles.join(', '),
-                              status: 'in_progress',
-                            });
+                            await navigator.clipboard?.writeText(visibleChangedFiles.join('\n'));
+                            setCopiedAllPaths(true);
+                            setTimeout(() => setCopiedAllPaths(false), 1500);
                           } catch {
                             // ignore in test/offline mode
                           }
-                        }
-                      }}
-                      className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-                    >
-                      {convertedFilesMilestone ? '已转里程碑' : '变更转里程碑'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="git-widget-files-to-l3-btn"
-                      onClick={async () => {
-                        if (savedFilesL3) return;
-                        setSavedFilesL3(true);
-                        if (typeof projectApi?.confirmKnowledge === 'function') {
-                          try {
-                            await projectApi.confirmKnowledge(projectId, {
-                              entries: [
-                                {
-                                  category: 'note',
-                                  content: `工作区 Git 变更文件 (${status.current_branch || 'HEAD'})：${visibleChangedFiles.join(', ')}`,
-                                  importance: 6,
-                                  sourceMessageIds: [],
-                                  reasoning: 'Git 变更文件清单沉淀至 L3 画像',
-                                },
-                              ],
-                            });
-                          } catch {
-                            // ignore in test/offline mode
+                        }}
+                        className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                      >
+                        {copiedAllPaths ? '已复制路径' : '复制变更路径'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="git-widget-files-to-milestone-btn"
+                        onClick={async () => {
+                          if (convertedFilesMilestone) return;
+                          setConvertedFilesMilestone(true);
+                          if (typeof projectApi?.createMilestone === 'function') {
+                            try {
+                              await projectApi.createMilestone(projectId, {
+                                title: `工作区 Git 变更审校 (${visibleChangedFiles.length} 个文件)`,
+                                description: visibleChangedFiles.join(', '),
+                                status: 'in_progress',
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
                           }
-                        }
-                      }}
-                      className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-                    >
-                      {savedFilesL3 ? '已存变更 L3' : '变更存 L3'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="git-widget-guard-all-btn"
-                      onClick={async () => {
-                        for (const filePath of visibleChangedFiles) {
-                          await handleGuardChangedFile(filePath);
-                        }
-                      }}
-                      className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-                    >
-                      批量护栏 L2 ({visibleChangedFiles.length})
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="git-widget-ingest-all-btn"
-                      onClick={() => void handleBatchIngestChangedFiles()}
-                      className="inline-flex items-center gap-0.5 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
-                    >
-                      <BookmarkPlus className="h-2.5 w-2.5" />
-                      批量纳入 L4 ({visibleChangedFiles.length})
-                    </button>
+                        }}
+                        className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                      >
+                        {convertedFilesMilestone ? '已转里程碑' : '变更转里程碑'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="git-widget-files-to-l3-btn"
+                        onClick={async () => {
+                          if (savedFilesL3) return;
+                          setSavedFilesL3(true);
+                          if (typeof projectApi?.confirmKnowledge === 'function') {
+                            try {
+                              await projectApi.confirmKnowledge(projectId, {
+                                entries: [
+                                  {
+                                    category: 'note',
+                                    content: `工作区 Git 变更文件 (${status.current_branch || 'HEAD'})：${visibleChangedFiles.join(', ')}`,
+                                    importance: 6,
+                                    sourceMessageIds: [],
+                                    reasoning: 'Git 变更文件清单沉淀至 L3 画像',
+                                  },
+                                ],
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                      >
+                        {savedFilesL3 ? '已存变更 L3' : '变更存 L3'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="git-widget-guard-all-btn"
+                        onClick={async () => {
+                          for (const filePath of visibleChangedFiles) {
+                            await handleGuardChangedFile(filePath);
+                          }
+                        }}
+                        className="inline-flex items-center gap-0.5 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
+                      >
+                        批量护栏 L2 ({visibleChangedFiles.length})
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="git-widget-ingest-all-btn"
+                        onClick={() => void handleBatchIngestChangedFiles()}
+                        className="inline-flex items-center gap-0.5 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+                      >
+                        <BookmarkPlus className="h-2.5 w-2.5" />
+                        批量纳入 L4 ({visibleChangedFiles.length})
+                      </button>
                     </div>
                   )}
                 </div>
@@ -399,39 +361,39 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                       >
                         <span className="truncate">[S] {f}</span>
                         <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          data-testid={`git-widget-copy-path-${f}`}
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard?.writeText(f);
-                              setCopiedFilePath(f);
-                              setTimeout(() => setCopiedFilePath(null), 1500);
-                            } catch {
-                              // ignore in test/offline mode
-                            }
-                          }}
-                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
-                        >
-                          {copiedFilePath === f ? '已复制' : '复制'}
-                        </button>
-                        <button
-                          type="button"
-                          data-testid={`git-widget-guard-${f}`}
-                          onClick={() => void handleGuardChangedFile(f)}
-                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
-                        >
-                          {guardedFiles.has(f) ? '已护栏' : '+L2'}
-                        </button>
-                        <button
-                          type="button"
-                          data-testid={`git-widget-ingest-${f}`}
-                          onClick={() => void handleIngestChangedFile(f)}
-                          className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
-                        >
-                          <BookmarkPlus className="h-2.5 w-2.5" />
-                          {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
-                        </button>
+                          <button
+                            type="button"
+                            data-testid={`git-widget-copy-path-${f}`}
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard?.writeText(f);
+                                setCopiedFilePath(f);
+                                setTimeout(() => setCopiedFilePath(null), 1500);
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }}
+                            className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                          >
+                            {copiedFilePath === f ? '已复制' : '复制'}
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`git-widget-guard-${f}`}
+                            onClick={() => void handleGuardChangedFile(f)}
+                            className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
+                          >
+                            {guardedFiles.has(f) ? '已护栏' : '+L2'}
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`git-widget-ingest-${f}`}
+                            onClick={() => void handleIngestChangedFile(f)}
+                            className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                          >
+                            <BookmarkPlus className="h-2.5 w-2.5" />
+                            {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -443,39 +405,39 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                       >
                         <span className="truncate">[M] {f}</span>
                         <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          data-testid={`git-widget-copy-path-${f}`}
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard?.writeText(f);
-                              setCopiedFilePath(f);
-                              setTimeout(() => setCopiedFilePath(null), 1500);
-                            } catch {
-                              // ignore in test/offline mode
-                            }
-                          }}
-                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
-                        >
-                          {copiedFilePath === f ? '已复制' : '复制'}
-                        </button>
-                        <button
-                          type="button"
-                          data-testid={`git-widget-guard-${f}`}
-                          onClick={() => void handleGuardChangedFile(f)}
-                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
-                        >
-                          {guardedFiles.has(f) ? '已护栏' : '+L2'}
-                        </button>
-                        <button
-                          type="button"
-                          data-testid={`git-widget-ingest-${f}`}
-                          onClick={() => void handleIngestChangedFile(f)}
-                          className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
-                        >
-                          <BookmarkPlus className="h-2.5 w-2.5" />
-                          {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
-                        </button>
+                          <button
+                            type="button"
+                            data-testid={`git-widget-copy-path-${f}`}
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard?.writeText(f);
+                                setCopiedFilePath(f);
+                                setTimeout(() => setCopiedFilePath(null), 1500);
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }}
+                            className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                          >
+                            {copiedFilePath === f ? '已复制' : '复制'}
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`git-widget-guard-${f}`}
+                            onClick={() => void handleGuardChangedFile(f)}
+                            className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
+                          >
+                            {guardedFiles.has(f) ? '已护栏' : '+L2'}
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`git-widget-ingest-${f}`}
+                            onClick={() => void handleIngestChangedFile(f)}
+                            className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                          >
+                            <BookmarkPlus className="h-2.5 w-2.5" />
+                            {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -487,39 +449,39 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                       >
                         <span className="truncate">[U] {f}</span>
                         <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          data-testid={`git-widget-copy-path-${f}`}
-                          onClick={async () => {
-                            try {
-                              await navigator.clipboard?.writeText(f);
-                              setCopiedFilePath(f);
-                              setTimeout(() => setCopiedFilePath(null), 1500);
-                            } catch {
-                              // ignore in test/offline mode
-                            }
-                          }}
-                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
-                        >
-                          {copiedFilePath === f ? '已复制' : '复制'}
-                        </button>
-                        <button
-                          type="button"
-                          data-testid={`git-widget-guard-${f}`}
-                          onClick={() => void handleGuardChangedFile(f)}
-                          className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
-                        >
-                          {guardedFiles.has(f) ? '已护栏' : '+L2'}
-                        </button>
-                        <button
-                          type="button"
-                          data-testid={`git-widget-ingest-${f}`}
-                          onClick={() => void handleIngestChangedFile(f)}
-                          className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
-                        >
-                          <BookmarkPlus className="h-2.5 w-2.5" />
-                          {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
-                        </button>
+                          <button
+                            type="button"
+                            data-testid={`git-widget-copy-path-${f}`}
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard?.writeText(f);
+                                setCopiedFilePath(f);
+                                setTimeout(() => setCopiedFilePath(null), 1500);
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }}
+                            className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                          >
+                            {copiedFilePath === f ? '已复制' : '复制'}
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`git-widget-guard-${f}`}
+                            onClick={() => void handleGuardChangedFile(f)}
+                            className="rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-primary hover:bg-primary/10"
+                          >
+                            {guardedFiles.has(f) ? '已护栏' : '+L2'}
+                          </button>
+                          <button
+                            type="button"
+                            data-testid={`git-widget-ingest-${f}`}
+                            onClick={() => void handleIngestChangedFile(f)}
+                            className="shrink-0 inline-flex items-center gap-0.5 rounded border border-border bg-background px-1 py-0.2 text-ui-2xs font-sans text-muted-foreground hover:text-foreground"
+                          >
+                            <BookmarkPlus className="h-2.5 w-2.5" />
+                            {ingestedFiles.has(f) ? '已纳入 L4' : '+L4'}
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -540,100 +502,103 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
             <div className="mb-1 flex flex-wrap items-center justify-between gap-1.5">
               <div className="text-xs text-muted-foreground">最近提交</div>
               <div className="flex flex-wrap items-center gap-1">
-              <button
-                type="button"
-                data-testid="git-widget-copy-commits-md-btn"
-                onClick={async () => {
-                  const md = status.recent_commits
-                    .slice(0, 5)
-                    .map((c) => `- \`${c.sha.slice(0, 7)}\` ${c.message} (${c.author})`)
-                    .join('\n');
-                  try {
-                    await navigator.clipboard?.writeText(md);
-                    setCopiedCommitsMd(true);
-                    setTimeout(() => setCopiedCommitsMd(false), 1500);
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }}
-                className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-              >
-                {copiedCommitsMd ? '已复制提交' : '复制提交记录'}
-              </button>
-              <button
-                type="button"
-                data-testid="git-widget-commits-to-constraint-btn"
-                onClick={async () => {
-                  if (convertedCommitsL2) return;
-                  setConvertedCommitsL2(true);
-                  if (typeof projectApi?.createConstraint === 'function') {
+                <button
+                  type="button"
+                  data-testid="git-widget-copy-commits-md-btn"
+                  onClick={async () => {
+                    const md = status.recent_commits
+                      .slice(0, 5)
+                      .map((c) => `- \`${c.sha.slice(0, 7)}\` ${c.message} (${c.author})`)
+                      .join('\n');
                     try {
-                      await projectApi.createConstraint(projectId, {
-                        category: 'git_commit_baseline',
-                        content: `[提交基线护栏] 保持最近提交规范 (${status.current_branch ?? 'main'})：${status.recent_commits[0]?.message ?? ''}`,
-                        triggerPattern: 'always',
-                        priority: 7,
-                      });
+                      await navigator.clipboard?.writeText(md);
+                      setCopiedCommitsMd(true);
+                      setTimeout(() => setCopiedCommitsMd(false), 1500);
                     } catch {
                       // ignore in test/offline mode
                     }
-                  }
-                }}
-                className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-              >
-                {convertedCommitsL2 ? '已转提交L2' : '提交转L2护栏'}
-              </button>
-              <button
-                type="button"
-                data-testid="git-widget-save-commits-l3-btn"
-                onClick={async () => {
-                  if (savedCommitsL3) return;
-                  setSavedCommitsL3(true);
-                  if (typeof projectApi?.confirmKnowledge === 'function') {
-                    try {
-                      await projectApi.confirmKnowledge(projectId, {
-                        entries: [
-                          {
-                            category: 'note',
-                            content: `Git 最近提交摘要 (${status.current_branch})：${status.recent_commits.slice(0, 3).map((c) => `${c.sha.slice(0, 7)} ${c.message}`).join('；')}`,
-                            importance: 6,
-                            sourceMessageIds: [],
-                            reasoning: 'Git 最近提交沉淀至 L3 画像',
-                          },
-                        ],
-                      });
-                    } catch {
-                      // ignore in test/offline mode
+                  }}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  {copiedCommitsMd ? '已复制提交' : '复制提交记录'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="git-widget-commits-to-constraint-btn"
+                  onClick={async () => {
+                    if (convertedCommitsL2) return;
+                    setConvertedCommitsL2(true);
+                    if (typeof projectApi?.createConstraint === 'function') {
+                      try {
+                        await projectApi.createConstraint(projectId, {
+                          category: 'git_commit_baseline',
+                          content: `[提交基线护栏] 保持最近提交规范 (${status.current_branch ?? 'main'})：${status.recent_commits[0]?.message ?? ''}`,
+                          triggerPattern: 'always',
+                          priority: 7,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
                     }
-                  }
-                }}
-                className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-              >
-                {savedCommitsL3 ? '已沉淀至 L3' : '沉淀提交摘要至 L3'}
-              </button>
-              <button
-                type="button"
-                data-testid="git-widget-save-l4-btn"
-                onClick={async () => {
-                  if (savedCommitsL4) return;
-                  setSavedCommitsL4(true);
-                  if (typeof projectApi?.addMaterial === 'function') {
-                    try {
-                      await projectApi.addMaterial(projectId, {
-                        content: `# Git 最近提交记录 (${status.current_branch ?? 'default'})\n${status.recent_commits
-                          .slice(0, 5)
-                          .map((c) => `- \`${c.sha.slice(0, 7)}\` ${c.message} (${c.author})`)
-                          .join('\n')}`,
-                      });
-                    } catch {
-                      // ignore in test/offline mode
+                  }}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  {convertedCommitsL2 ? '已转提交L2' : '提交转L2护栏'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="git-widget-save-commits-l3-btn"
+                  onClick={async () => {
+                    if (savedCommitsL3) return;
+                    setSavedCommitsL3(true);
+                    if (typeof projectApi?.confirmKnowledge === 'function') {
+                      try {
+                        await projectApi.confirmKnowledge(projectId, {
+                          entries: [
+                            {
+                              category: 'note',
+                              content: `Git 最近提交摘要 (${status.current_branch})：${status.recent_commits
+                                .slice(0, 3)
+                                .map((c) => `${c.sha.slice(0, 7)} ${c.message}`)
+                                .join('；')}`,
+                              importance: 6,
+                              sourceMessageIds: [],
+                              reasoning: 'Git 最近提交沉淀至 L3 画像',
+                            },
+                          ],
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
                     }
-                  }
-                }}
-                className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-              >
-                {savedCommitsL4 ? '已存提交至 L4' : '存提交至 L4'}
-              </button>
+                  }}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  {savedCommitsL3 ? '已沉淀至 L3' : '沉淀提交摘要至 L3'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="git-widget-save-l4-btn"
+                  onClick={async () => {
+                    if (savedCommitsL4) return;
+                    setSavedCommitsL4(true);
+                    if (typeof projectApi?.addMaterial === 'function') {
+                      try {
+                        await projectApi.addMaterial(projectId, {
+                          content: `# Git 最近提交记录 (${status.current_branch ?? 'default'})\n${status.recent_commits
+                            .slice(0, 5)
+                            .map((c) => `- \`${c.sha.slice(0, 7)}\` ${c.message} (${c.author})`)
+                            .join('\n')}`,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                >
+                  {savedCommitsL4 ? '已存提交至 L4' : '存提交至 L4'}
+                </button>
               </div>
             </div>
             <div className="space-y-1">
@@ -642,93 +607,93 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-medium truncate">{commit.message}</div>
                     <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      data-testid={`git-widget-commit-to-milestone-${commit.sha}`}
-                      onClick={async () => {
-                        if (commitMilestones.has(commit.sha)) return;
-                        setCommitMilestones((prev) => new Set(prev).add(commit.sha));
-                        if (typeof projectApi?.createMilestone === 'function') {
+                      <button
+                        type="button"
+                        data-testid={`git-widget-commit-to-milestone-${commit.sha}`}
+                        onClick={async () => {
+                          if (commitMilestones.has(commit.sha)) return;
+                          setCommitMilestones((prev) => new Set(prev).add(commit.sha));
+                          if (typeof projectApi?.createMilestone === 'function') {
+                            try {
+                              await projectApi.createMilestone(projectId, {
+                                title: `[Git ${commit.sha.slice(0, 7)}] ${commit.message.slice(0, 70)}`,
+                                description: `提交作者: ${commit.author} · 日期: ${commit.date}`,
+                                status: 'completed',
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
+                      >
+                        {commitMilestones.has(commit.sha) ? '已建里程碑' : '+里程碑'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`git-widget-commit-to-l3-${commit.sha}`}
+                        onClick={async () => {
+                          if (commitL3Shas.has(commit.sha)) return;
+                          setCommitL3Shas((prev) => new Set(prev).add(commit.sha));
+                          if (typeof projectApi?.confirmKnowledge === 'function') {
+                            try {
+                              await projectApi.confirmKnowledge(projectId, {
+                                entries: [
+                                  {
+                                    category: 'decision',
+                                    content: `Git 提交记录 [${commit.sha.slice(0, 7)}]：${commit.message} (${commit.author})`,
+                                    importance: 7,
+                                    sourceMessageIds: [],
+                                    reasoning: 'Git 单条提交记录沉淀至 L3 画像',
+                                  },
+                                ],
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
+                      >
+                        {commitL3Shas.has(commit.sha) ? '已存L3' : '+L3'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`git-widget-commit-to-l4-${commit.sha}`}
+                        onClick={async () => {
+                          if (commitL4Shas.has(commit.sha)) return;
+                          setCommitL4Shas((prev) => new Set(prev).add(commit.sha));
+                          if (typeof projectApi?.addMaterial === 'function') {
+                            try {
+                              await projectApi.addMaterial(projectId, {
+                                content: `# Git 提交记录 [${commit.sha.slice(0, 7)}]\n- 作者: ${commit.author}\n- 时间: ${commit.date}\n\n${commit.message}`,
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
+                      >
+                        {commitL4Shas.has(commit.sha) ? '已存L4' : '+L4'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`git-widget-copy-sha-${commit.sha}`}
+                        onClick={async () => {
                           try {
-                            await projectApi.createMilestone(projectId, {
-                              title: `[Git ${commit.sha.slice(0, 7)}] ${commit.message.slice(0, 70)}`,
-                              description: `提交作者: ${commit.author} · 日期: ${commit.date}`,
-                              status: 'completed',
-                            });
+                            await navigator.clipboard?.writeText(commit.sha);
+                            setCopiedSha(commit.sha);
+                            setTimeout(() => setCopiedSha(null), 1500);
                           } catch {
                             // ignore in test/offline mode
                           }
-                        }
-                      }}
-                      className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
-                    >
-                      {commitMilestones.has(commit.sha) ? '已建里程碑' : '+里程碑'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid={`git-widget-commit-to-l3-${commit.sha}`}
-                      onClick={async () => {
-                        if (commitL3Shas.has(commit.sha)) return;
-                        setCommitL3Shas((prev) => new Set(prev).add(commit.sha));
-                        if (typeof projectApi?.confirmKnowledge === 'function') {
-                          try {
-                            await projectApi.confirmKnowledge(projectId, {
-                              entries: [
-                                {
-                                  category: 'decision',
-                                  content: `Git 提交记录 [${commit.sha.slice(0, 7)}]：${commit.message} (${commit.author})`,
-                                  importance: 7,
-                                  sourceMessageIds: [],
-                                  reasoning: 'Git 单条提交记录沉淀至 L3 画像',
-                                },
-                              ],
-                            });
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }
-                      }}
-                      className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
-                    >
-                      {commitL3Shas.has(commit.sha) ? '已存L3' : '+L3'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid={`git-widget-commit-to-l4-${commit.sha}`}
-                      onClick={async () => {
-                        if (commitL4Shas.has(commit.sha)) return;
-                        setCommitL4Shas((prev) => new Set(prev).add(commit.sha));
-                        if (typeof projectApi?.addMaterial === 'function') {
-                          try {
-                            await projectApi.addMaterial(projectId, {
-                              content: `# Git 提交记录 [${commit.sha.slice(0, 7)}]\n- 作者: ${commit.author}\n- 时间: ${commit.date}\n\n${commit.message}`,
-                            });
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }
-                      }}
-                      className="rounded border border-border bg-muted/40 px-1 py-0.2 text-ui-2xs text-muted-foreground hover:text-foreground"
-                    >
-                      {commitL4Shas.has(commit.sha) ? '已存L4' : '+L4'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid={`git-widget-copy-sha-${commit.sha}`}
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard?.writeText(commit.sha);
-                          setCopiedSha(commit.sha);
-                          setTimeout(() => setCopiedSha(null), 1500);
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }}
-                      className="shrink-0 rounded border border-border bg-muted/40 px-1 py-0.2 font-mono text-ui-2xs text-muted-foreground hover:text-foreground"
-                      title="复制提交 SHA"
-                    >
-                      {copiedSha === commit.sha ? '已复制' : commit.sha.slice(0, 7)}
-                    </button>
+                        }}
+                        className="shrink-0 rounded border border-border bg-muted/40 px-1 py-0.2 font-mono text-ui-2xs text-muted-foreground hover:text-foreground"
+                        title="复制提交 SHA"
+                      >
+                        {copiedSha === commit.sha ? '已复制' : commit.sha.slice(0, 7)}
+                      </button>
                     </div>
                   </div>
                   <div className="text-muted-foreground">

@@ -101,9 +101,15 @@ class SubprocessSandboxAdapter:
 
         if output_exceeded:
             await self._terminate_process_tree(process)
+            returncode = process.returncode
+            # The sandbox rejected the output, so the run failed regardless of how
+            # the child exited.  A zero exit code here would contradict
+            # success=False and break the SandboxResult invariant
+            # ("success == (exit_code == 0)"); -1 matches the _failure() sentinel.
+            exit_code = returncode if returncode not in (None, 0) else -1
             return SandboxResult(
                 success=False,
-                exit_code=process.returncode if process.returncode is not None else -1,
+                exit_code=exit_code,
                 stdout=stdout.decode("utf-8", errors="replace"),
                 stderr=stderr.decode("utf-8", errors="replace"),
                 duration_ms=self._duration_ms(start_time),

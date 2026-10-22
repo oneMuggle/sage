@@ -131,8 +131,6 @@ export function OfficeDeliveryDrawer({
   // 失败不能让已渲染的 lint 结果消失。
   const [repairState, setRepairState] = useState<'idle' | 'running' | 'failed'>('idle');
   const [repairReport, setRepairReport] = useState<WordRepairResult | null>(null);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -197,43 +195,7 @@ export function OfficeDeliveryDrawer({
   };
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatOfficeDeliveryMarkdown({
-          entryId,
-          workspacePath,
-          filePath,
-          lintState,
-          lint,
-          decided,
-        }),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatOfficeDeliveryJson({
-          entryId,
-          workspacePath,
-          filePath,
-          lintState,
-          lint,
-          decided,
-        }),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   /**
@@ -282,22 +244,6 @@ export function OfficeDeliveryDrawer({
           )}
         </div>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            data-testid="delivery-drawer-copy-md"
-            onClick={() => void handleCopyMarkdown()}
-            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border-primary text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="delivery-drawer-copy-json"
-            onClick={() => void handleCopyJson()}
-            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border-primary text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
           <button
             type="button"
             onClick={onClose}

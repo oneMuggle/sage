@@ -69,8 +69,6 @@ function SpanText({ spans, side }: { spans: DiffSpan[]; side: 'del' | 'add' }) {
 export function SplitDiff({ diff }: SplitDiffProps) {
   const rows = useMemo(() => parseUnifiedDiff(diff), [diff]);
   const [visibleCount, setVisibleCount] = useState(INITIAL_ROWS);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const sentinelRef = useRef<HTMLTableRowElement | null>(null);
 
   // diff 变化（切换文件/刷新）后重置渐进渲染进度
@@ -111,54 +109,6 @@ export function SplitDiff({ diff }: SplitDiffProps) {
   return (
     <div className="font-mono text-xs overflow-x-auto" data-testid="split-diff">
       <div className="flex items-center justify-end gap-1.5 px-2 py-1 border-b border-border bg-bg-muted/20">
-        <button
-          type="button"
-          onClick={() => {
-            /* v8 ignore start */
-            const lines = [
-              `# 分栏 Diff (${rows.length} 行)`,
-              '',
-              ...rows.map((r) =>
-                r.kind === 'header'
-                  ? `@@ ${r.oldText}`
-                  : `[${r.kind}] L${r.oldLine ?? '-'}: ${r.oldText} => R${r.newLine ?? '-'}: ${r.newText}`,
-              ),
-            ];
-            setCopiedMd(true);
-            void navigator.clipboard?.writeText(lines.join('\n'));
-            setTimeout(() => setCopiedMd(false), 1500);
-            /* v8 ignore stop */
-          }}
-          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-          data-testid="split-diff-copy-md-btn"
-        >
-          {copiedMd ? '已复制MD' : '复制分栏MD'}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            /* v8 ignore start */
-            const payload = {
-              totalRows: rows.length,
-              visibleCount: visibleRows.length,
-              rows: rows.map((r) => ({
-                kind: r.kind,
-                oldLine: r.oldLine ?? null,
-                oldText: r.oldText,
-                newLine: r.newLine ?? null,
-                newText: r.newText,
-              })),
-            };
-            setCopiedJson(true);
-            void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-            setTimeout(() => setCopiedJson(false), 1500);
-            /* v8 ignore stop */
-          }}
-          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-          data-testid="split-diff-copy-json-btn"
-        >
-          {copiedJson ? '已复制JSON' : '复制分栏JSON'}
-        </button>
       </div>
       <table className="w-full border-collapse">
         <thead>

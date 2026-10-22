@@ -69,8 +69,6 @@ export function ProvidersManager(): JSX.Element {
   const [list, setList] = useState<ProviderConfigSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   // Controlled Add Provider modal state
   const [addOpen, setAddOpen] = useState(false);
@@ -205,44 +203,6 @@ export function ProvidersManager(): JSX.Element {
           </p>
         </div>
         <div className="flex items-center gap-1.5">
-          <span
-            data-testid="providers-copy-md"
-            onClick={
-              /* v8 ignore start */
-              async () => {
-                try {
-                  setCopiedMd(true);
-                  await navigator.clipboard?.writeText(formatProvidersListMarkdown(list));
-                  setTimeout(() => setCopiedMd(false), 1500);
-                } catch {
-                  // ignore clipboard errors
-                }
-              }
-              /* v8 ignore stop */
-            }
-            className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </span>
-          <span
-            data-testid="providers-copy-json"
-            onClick={
-              /* v8 ignore start */
-              async () => {
-                try {
-                  setCopiedJson(true);
-                  await navigator.clipboard?.writeText(formatProvidersListJson(list));
-                  setTimeout(() => setCopiedJson(false), 1500);
-                } catch {
-                  // ignore clipboard errors
-                }
-              }
-              /* v8 ignore stop */
-            }
-            className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </span>
           <button
             type="button"
             data-testid="providers-add-button"

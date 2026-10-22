@@ -156,15 +156,12 @@ export function MilestoneEditor({
   const [sortOrder, setSortOrder] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copiedMilestoneMd, setCopiedMilestoneMd] = useState(false);
   const [convertedConstraint, setConvertedConstraint] = useState(false);
   const [savedMilestoneL4, setSavedMilestoneL4] = useState(false);
   const [savedMilestoneL3, setSavedMilestoneL3] = useState(false);
   const [copiedDueDate, setCopiedDueDate] = useState(false);
   const [copiedDesc, setCopiedDesc] = useState(false);
   const [copiedTitle, setCopiedTitle] = useState(false);
-  const [copiedStage, setCopiedStage] = useState(false);
-  const [copiedMilestoneJson, setCopiedMilestoneJson] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -389,22 +386,6 @@ export function MilestoneEditor({
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
-                    data-testid="milestone-copy-stage-btn"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard?.writeText(stage);
-                        setCopiedStage(true);
-                        setTimeout(() => setCopiedStage(false), 1500);
-                      } catch {
-                        // ignore in test/offline mode
-                      }
-                    }}
-                    className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    {copiedStage ? '已复制阶段' : '复制阶段'}
-                  </button>
-                  <button
-                    type="button"
                     data-testid="milestone-clear-stage-btn"
                     onClick={() => setStage('')}
                     className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -571,59 +552,6 @@ export function MilestoneEditor({
         </div>
 
         <DialogFooter>
-          <button
-            type="button"
-            data-testid="milestone-editor-copy-md-btn"
-            onClick={async () => {
-              const md = [
-                `# 里程碑节点：${title || '未命名'}`,
-                `- **阶段**: ${stage || '默认阶段'}`,
-                `- **截止日期**: ${dueDate || '未设置'}`,
-                `- **状态**: ${status}`,
-                '',
-                description || '（无详细交付说明）',
-              ].join('\n');
-              try {
-                await navigator.clipboard?.writeText(md);
-                setCopiedMilestoneMd(true);
-                setTimeout(() => setCopiedMilestoneMd(false), 1500);
-              } catch {
-                // ignore in test/offline mode
-              }
-            }}
-            className="mr-auto rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
-          >
-            {copiedMilestoneMd ? '已复制节点 MD' : '复制节点 MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="milestone-editor-copy-json-btn"
-            onClick={async () => {
-              setCopiedMilestoneJson(true);
-              setTimeout(() => setCopiedMilestoneJson(false), 1500);
-              try {
-                await navigator.clipboard?.writeText(
-                  JSON.stringify(
-                    {
-                      title: title || '',
-                      description: description || '',
-                      stage: stage || '',
-                      dueDate: dueDate || null,
-                      status,
-                      sortOrder,
-                    },
-                    null,
-                    2,
-                  ),
-                );
-              } catch {
-                // ignore in test/offline mode
-              }
-            }}
-            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
-          >
-            {copiedMilestoneJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
           <button
             type="button"
             data-testid="milestone-editor-reset-btn"

@@ -31,9 +31,6 @@ const VCS_SHORT_LABELS: Record<string, string> = {
 export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgeProps) {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [copiedPath, setCopiedPath] = useState(false);
-  const [copiedSummaryMd, setCopiedSummaryMd] = useState(false);
-  const [copiedSummaryJson, setCopiedSummaryJson] = useState(false);
-  const [copiedBlueprintMd, setCopiedBlueprintMd] = useState(false);
 
   useEffect(() => {
     if (!workspacePath || typeof projectApi?.list !== 'function') return;
@@ -126,94 +123,6 @@ export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgePro
           <Copy className="w-2.5 h-2.5 shrink-0" aria-hidden="true" />
         )}
       </button>
-      <button
-        type="button"
-        onClick={async () => {
-          setCopiedSummaryMd(true);
-          /* v8 ignore next */
-          setTimeout(() => {
-            if (typeof window !== 'undefined') setCopiedSummaryMd(false);
-          }, 1500);
-          const md = [
-            `# 当前会话项目语境 — ${name}`,
-            `- **工作区路径**：\`${workspacePath}\``,
-            `- **项目形态**：${blueprint?.label ?? '未分类'}`,
-            `- **当前阶段**：${stageLabel ?? '默认阶段'}`,
-            `- **版本保护**：${vcsBadgeLabel ?? '默认'}`,
-          ].join('\n');
-          try {
-            await navigator.clipboard?.writeText(md);
-          } catch {
-            // ignore in test/offline mode
-          }
-        }}
-        data-testid="chat-project-copy-summary-md-btn"
-        title="复制项目语境摘要 Markdown"
-        className="inline-flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
-      >
-        {copiedSummaryMd ? '已复制语境' : '复制语境MD'}
-      </button>
-      <button
-        type="button"
-        onClick={async () => {
-          setCopiedSummaryJson(true);
-          /* v8 ignore next */
-          setTimeout(() => {
-            if (typeof window !== 'undefined') setCopiedSummaryJson(false);
-          }, 1500);
-          try {
-            await navigator.clipboard?.writeText(
-              JSON.stringify(
-                {
-                  name,
-                  path: workspacePath,
-                  projectType: effectiveType,
-                  stage: stageLabel,
-                  vcsMode: registered?.vcsMode ?? null,
-                },
-                null,
-                2,
-              ),
-            );
-          } catch {
-            // ignore in test/offline mode
-          }
-        }}
-        data-testid="chat-project-copy-summary-json-btn"
-        title="复制项目语境 JSON"
-        className="inline-flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
-      >
-        {copiedSummaryJson ? '已复制JSON' : '复制语境JSON'}
-      </button>
-      {blueprint && (
-        <button
-          type="button"
-          onClick={async () => {
-            setCopiedBlueprintMd(true);
-            /* v8 ignore next */
-            setTimeout(() => {
-              if (typeof window !== 'undefined') setCopiedBlueprintMd(false);
-            }, 1500);
-            const md = [
-              `# 项目形态蓝图指引 — ${blueprint.label}`,
-              `- **形态定位**：${blueprint.positioning}`,
-              `- **版本治理**：${blueprint.vcsLabel}`,
-              `- **标准目录**：${blueprint.directories.join(' / ')}`,
-              ...blueprint.stages.map((s) => `- **阶段 [${s.label}]**：${s.hint}`),
-            ].join('\n');
-            try {
-              await navigator.clipboard?.writeText(md);
-            } catch {
-              // ignore in test/offline mode
-            }
-          }}
-          data-testid="chat-project-copy-blueprint-md-btn"
-          title="复制当前项目形态蓝图指引 Markdown"
-          className="inline-flex items-center gap-0.5 rounded-full border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
-        >
-          {copiedBlueprintMd ? '已复制蓝图' : '复制蓝图MD'}
-        </button>
-      )}
       {onOpenWorkbench && (
         <button
           type="button"

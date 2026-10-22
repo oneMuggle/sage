@@ -140,3 +140,29 @@ export function formatSettingAdapterRouteJson(key: string): string {
     2,
   );
 }
+
+export function auditSettingsAdapterGovernance(
+  state: {
+    key?: string;
+    routeHealthy?: boolean;
+  } = {},
+): {
+  module: 'src/entities/setting/settingsAdapter.ts';
+  phase: 'P155';
+  key: string;
+  routeHealthy: boolean;
+  healthy: boolean;
+} {
+  const key =
+    typeof state.key === 'string' && state.key.trim().length > 0
+      ? state.key.trim()
+      : 'general.theme';
+  const routeHealthy = state.routeHealthy !== false;
+  return {
+    module: 'src/entities/setting/settingsAdapter.ts',
+    phase: 'P155',
+    key,
+    routeHealthy,
+    healthy: key.length > 0 && routeHealthy,
+  };
+}

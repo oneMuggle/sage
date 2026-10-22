@@ -125,3 +125,29 @@ export function formatOrchSubscriptionJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditUseOrchEventSubscriptionGovernance(
+  state: {
+    enabled?: boolean;
+    reconnectCount?: number;
+  } = {},
+): {
+  module: 'src/entities/orchestration/useOrchEventSubscription.ts';
+  phase: 'P154';
+  enabled: boolean;
+  reconnectCount: number;
+  healthy: boolean;
+} {
+  const enabled = state.enabled !== false;
+  const reconnectCount =
+    typeof state.reconnectCount === 'number' && Number.isFinite(state.reconnectCount)
+      ? Math.max(0, Math.trunc(state.reconnectCount))
+      : 0;
+  return {
+    module: 'src/entities/orchestration/useOrchEventSubscription.ts',
+    phase: 'P154',
+    enabled,
+    reconnectCount,
+    healthy: reconnectCount <= 10,
+  };
+}

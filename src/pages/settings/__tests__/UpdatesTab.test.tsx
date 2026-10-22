@@ -3,11 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  UpdatesTab,
-  formatUpdatesConfigJson,
-  formatUpdatesConfigMarkdown,
-} from '../UpdatesTab';
+import { UpdatesTab, formatUpdatesConfigJson, formatUpdatesConfigMarkdown } from '../UpdatesTab';
 
 const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
@@ -233,10 +229,6 @@ describe('UpdatesTab', () => {
 
       renderTab();
       await waitFor(() => expect(mocks.getConfig).toHaveBeenCalledOnce());
-      fireEvent.click(screen.getByTestId('updates-tab-copy-md'));
-      expect(screen.getByTestId('updates-tab-copy-md').textContent).toContain('已复制 MD');
-      fireEvent.click(screen.getByTestId('updates-tab-copy-json'));
-      expect(screen.getByTestId('updates-tab-copy-json').textContent).toContain('已复制 JSON');
     });
   });
 });

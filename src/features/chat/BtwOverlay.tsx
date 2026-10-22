@@ -95,25 +95,27 @@ export function BtwOverlay() {
   /* v8 ignore start */
   const handleCopyMarkdown = async () => {
     try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
+      if (!navigator.clipboard?.writeText) return;
+      await navigator.clipboard.writeText(
         formatBtwOverlayMarkdown({ question, answer, isLoading, sources }),
       );
+      setCopiedMd(true);
       setTimeout(() => setCopiedMd(false), 1500);
     } catch {
-      // ignore clipboard errors
+      setCopiedMd(false);
     }
   };
 
   const handleCopyJson = async () => {
     try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
+      if (!navigator.clipboard?.writeText) return;
+      await navigator.clipboard.writeText(
         formatBtwOverlayJson({ question, answer, isLoading, sources }),
       );
+      setCopiedJson(true);
       setTimeout(() => setCopiedJson(false), 1500);
     } catch {
-      // ignore clipboard errors
+      setCopiedJson(false);
     }
   };
   /* v8 ignore stop */

@@ -53,8 +53,6 @@ export function OfficeStagingInspector({ workspacePath }: { workspacePath: strin
   const [report, setReport] = useState<OfficeStagingReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   useEffect(() => {
     generation.current += 1;
     setReport(null);
@@ -83,25 +81,7 @@ export function OfficeStagingInspector({ workspacePath }: { workspacePath: strin
   };
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatOfficeStagingMarkdown(workspacePath, report));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatOfficeStagingJson(workspacePath, report));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -119,22 +99,6 @@ export function OfficeStagingInspector({ workspacePath }: { workspacePath: strin
       {report && (
         <div aria-live="polite">
           <div className="mt-2 flex items-center gap-1.5">
-            <button
-              type="button"
-              data-testid="office-staging-copy-md"
-              onClick={() => void handleCopyMarkdown()}
-              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
-            >
-              {copiedMd ? '已复制 MD' : '复制 MD'}
-            </button>
-            <button
-              type="button"
-              data-testid="office-staging-copy-json"
-              onClick={() => void handleCopyJson()}
-              className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
-            >
-              {copiedJson ? '已复制 JSON' : '复制 JSON'}
-            </button>
           </div>
           {report.truncated && <p>{t('office.staging.truncated')}</p>}
           {report.items.length === 0 && <p>{t('office.staging.empty')}</p>}

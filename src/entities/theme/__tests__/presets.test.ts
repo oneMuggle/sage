@@ -7,12 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { decorativePresets } from '../decorative-presets';
-import {
-  DEFAULT_THEME_ID,
-  getThemeById,
-  themePresets,
-  type ThemeColors,
-} from '../presets';
+import { DEFAULT_THEME_ID, getThemeById, themePresets, type ThemeColors } from '../presets';
 
 const THEME_COLORS_FIELDS = [
   'primary', 'primaryHover', 'secondary', 'accent',

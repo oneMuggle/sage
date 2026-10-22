@@ -1,16 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import {
-  useFeatureUnlock,
-  unlockFeature,
-  lockFeature,
-  isFeatureUnlocked,
-  isFeatureExplicitlyDisabled,
-  FEATURE_UNLOCK_STORAGE_KEY,
-  FEATURE_UNLOCK_EVENT,
-  FEATURE_UNLOCK_LOCK_EVENT,
-} from '../useFeatureUnlock';
+import { useFeatureUnlock, unlockFeature, lockFeature, isFeatureUnlocked, isFeatureExplicitlyDisabled, FEATURE_UNLOCK_STORAGE_KEY, FEATURE_UNLOCK_EVENT, FEATURE_UNLOCK_LOCK_EVENT } from '../useFeatureUnlock';
 
 beforeEach(() => {
   localStorage.clear();

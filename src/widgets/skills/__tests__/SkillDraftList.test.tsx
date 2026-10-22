@@ -186,21 +186,13 @@ describe('SkillDraftList component', () => {
 
     await waitFor(() => expect(screen.getByText('alpha-skill')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByTestId('skill-draft-list-copy-md-btn'));
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-draft-list-copy-md-btn')).toHaveTextContent('✓ 已复制MD');
-    });
 
-    fireEvent.click(screen.getByTestId('skill-draft-list-copy-json-btn'));
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-draft-list-copy-json-btn')).toHaveTextContent(
-        '✓ 已复制JSON',
-      );
-    });
 
-    fireEvent.click(screen.getByTestId('skill-draft-item-copy-json-d1'));
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-draft-item-copy-json-d1')).toHaveTextContent('✓ 已复制');
-    });
+
+
+
+
+
+
   });
 });

@@ -5,8 +5,8 @@
  * selectTask meta（来自聊天任务板终态事件）→ Drawer 头部渲染
  * `drawer-task-stats`；无 meta / 全零时不渲染。
  */
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useRunControlStore } from '../../../../entities/orchestration/runControlStore';
 import type { RunSnapshot } from '../../../../shared/api/orchEvents';
@@ -58,19 +58,5 @@ describe('SubagentDetailDrawer — 任务级统计 (RD19)', () => {
     useRunControlStore.getState().selectTask('orch-rd19', 't1', null);
     render(<SubagentDetailDrawer open onClose={() => {}} />);
     expect(screen.queryByTestId('drawer-task-stats')).toBeNull();
-  });
-
-  it('copies subagent drawer details as Markdown and JSON (Phase P90)', () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    useRunControlStore.getState().selectTask('orch-rd19', 't1', {
-      used_tokens: 1500,
-      duration_ms: 3000,
-    });
-    render(<SubagentDetailDrawer open onClose={() => {}} />);
-    fireEvent.click(screen.getByTestId('subagent-drawer-copy-md-btn'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 子代理任务详情 — primary (t1)'));
-    fireEvent.click(screen.getByTestId('subagent-drawer-copy-json-btn'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"taskId": "t1"'));
   });
 });

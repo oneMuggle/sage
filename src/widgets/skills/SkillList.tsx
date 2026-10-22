@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 
 import { type Skill } from '../../shared/api';
 
@@ -57,9 +57,6 @@ const SkillList: React.FC<SkillListProps> = ({
   onPin,
   onRolledBack,
 }) => {
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-
   if (skills.length === 0) {
     return (
       <div className="text-center py-8">
@@ -69,47 +66,12 @@ const SkillList: React.FC<SkillListProps> = ({
   }
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatSkillListMarkdown(skills));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatSkillListJson(skills));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
     <div className="space-y-2" data-testid="skill-list">
-      <div className="flex items-center justify-end gap-1.5">
-        <button
-          type="button"
-          data-testid="skill-list-copy-md"
-          onClick={() => void handleCopyMarkdown()}
-          className="px-2 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedMd ? '已复制 MD' : '复制 MD'}
-        </button>
-        <button
-          type="button"
-          data-testid="skill-list-copy-json"
-          onClick={() => void handleCopyJson()}
-          className="px-2 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedJson ? '已复制 JSON' : '复制 JSON'}
-        </button>
-      </div>
+      <div className="flex items-center justify-end gap-1.5"></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {skills.map((skill) => (
           <SkillCard

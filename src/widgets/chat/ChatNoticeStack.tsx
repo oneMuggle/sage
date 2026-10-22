@@ -74,8 +74,6 @@ export function formatChatNoticeStackJson(
 
 export function ChatNoticeStack({ notices }: ChatNoticeStackProps) {
   const [expanded, setExpanded] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const active = notices
     .filter((n): n is ChatNotice => Boolean(n))
     .sort((a, b) => b.priority - a.priority);
@@ -86,25 +84,7 @@ export function ChatNoticeStack({ notices }: ChatNoticeStackProps) {
   const visible = expanded ? active : [primary];
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatChatNoticeStackMarkdown(notices, expanded));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatChatNoticeStackJson(notices, expanded));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -115,22 +95,6 @@ export function ChatNoticeStack({ notices }: ChatNoticeStackProps) {
         </div>
       ))}
       <div className="flex items-center justify-end gap-1 px-5 py-0.5 border-b border-border text-ui-2xs text-text-muted">
-        <button
-          type="button"
-          data-testid="chat-notice-stack-copy-md"
-          onClick={() => void handleCopyMarkdown()}
-          className="rounded border border-border px-1.5 py-0.5 hover:bg-bg-hover"
-        >
-          {copiedMd ? '已复制 MD' : '复制 MD'}
-        </button>
-        <button
-          type="button"
-          data-testid="chat-notice-stack-copy-json"
-          onClick={() => void handleCopyJson()}
-          className="rounded border border-border px-1.5 py-0.5 hover:bg-bg-hover"
-        >
-          {copiedJson ? '已复制 JSON' : '复制 JSON'}
-        </button>
       </div>
       {rest.length > 0 && (
         <button

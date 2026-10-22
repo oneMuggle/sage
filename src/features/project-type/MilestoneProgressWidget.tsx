@@ -5,7 +5,7 @@
  * 显示项目里程碑的进度统计、逾期预警徽标、进度报告 Markdown 复制、中文阶段胶囊、手动刷新、空状态一键生成形态推荐里程碑与快捷状态切换
  */
 
-import { Target, CheckCircle2, Clock, AlertCircle, Sparkles, RefreshCw, Copy, Check } from 'lucide-react';
+import { Target, CheckCircle2, Clock, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
 import { projectApi, type ProjectMilestone, type ProjectType } from '../../shared/api';
@@ -24,7 +24,6 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copiedProgress, setCopiedProgress] = useState(false);
   const [recentFilter, setRecentFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [selectedStageFilter, setSelectedStageFilter] = useState<string | null>(null);
   const [savedProgressL3, setSavedProgressL3] = useState(false);
@@ -39,7 +38,6 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
   const [convertedCompletedL3, setConvertedCompletedL3] = useState(false);
   const [convertedCompletedL4, setConvertedCompletedL4] = useState(false);
   const [copiedMilestoneId, setCopiedMilestoneId] = useState<string | null>(null);
-  const [copiedStagesDist, setCopiedStagesDist] = useState(false);
   const [savedStagesDistL3, setSavedStagesDistL3] = useState(false);
   const [savedStagesDistL4, setSavedStagesDistL4] = useState(false);
 
@@ -169,27 +167,6 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
     (m) => m.status !== 'completed' && Boolean(m.dueDate && m.dueDate < todayStr),
   ).length;
 
-  const handleCopyProgressMarkdown = async () => {
-    const lines = [
-      `# 项目里程碑进度报告 (${Math.round(progress)}%)`,
-      `- **总体进度**：${completed} / ${milestones.length} 已完成（进行中 ${inProgress} · 阻塞 ${blocked}${overdueCount > 0 ? ` · 逾期 ${overdueCount}` : ''}）`,
-      '',
-      '## 里程碑列表',
-      ...milestones.map((m) => {
-        const st = m.stage ? ` [${stageLabelMap.get(m.stage) ?? m.stage}]` : '';
-        const due = m.dueDate ? ` (截止: ${m.dueDate})` : '';
-        return `- [${m.status === 'completed' ? 'x' : ' '}] **${m.title}**${st} — \`${m.status}\`${due}`;
-      }),
-    ];
-    try {
-      await navigator.clipboard?.writeText(lines.join('\n'));
-      setCopiedProgress(true);
-      setTimeout(() => setCopiedProgress(false), 1800);
-    } catch {
-      // ignore in test/offline mode
-    }
-  };
-
   return (
     <Card data-testid="milestone-progress-widget">
       <CardHeader className="pb-2">
@@ -273,9 +250,7 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
               onClick={async () => {
                 if (convertedActiveL2) return;
                 setConvertedActiveL2(true);
-                const activeList = milestones
-                  .filter((m) => m.status !== 'completed')
-                  .slice(0, 3);
+                const activeList = milestones.filter((m) => m.status !== 'completed').slice(0, 3);
                 if (typeof projectApi?.createConstraint === 'function') {
                   for (const m of activeList) {
                     try {
@@ -374,7 +349,10 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                     try {
                       await projectApi.addMaterial(projectId, {
                         content: `# 阻塞与逾期风险里程碑清单 (${riskList.length} 项)\n${riskList
-                          .map((rm) => `- [${rm.status}] ${rm.title}${rm.dueDate ? ` (截止: ${rm.dueDate})` : ''}`)
+                          .map(
+                            (rm) =>
+                              `- [${rm.status}] ${rm.title}${rm.dueDate ? ` (截止: ${rm.dueDate})` : ''}`,
+                          )
                           .join('\n')}`,
                       });
                     } catch {
@@ -443,25 +421,6 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
             )}
             <button
               type="button"
-              onClick={() => void handleCopyProgressMarkdown()}
-              data-testid="milestone-summary-copy-md-btn"
-              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              title="复制里程碑进度报告 Markdown"
-            >
-              {copiedProgress ? (
-                <>
-                  <Check className="h-3 w-3 text-emerald-500" />
-                  已复制
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3 w-3" />
-                  复制进度
-                </>
-              )}
-            </button>
-            <button
-              type="button"
               onClick={() => void fetchMilestones()}
               data-testid="milestone-summary-refresh-btn"
               className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -493,7 +452,10 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
         </div>
 
         {milestones.some((m) => m.stage) && (
-          <div className="flex flex-wrap items-center gap-1 pt-1" data-testid="milestone-summary-stage-bar">
+          <div
+            className="flex flex-wrap items-center gap-1 pt-1"
+            data-testid="milestone-summary-stage-bar"
+          >
             {Array.from(
               milestones.reduce((acc, m) => {
                 const st = m.stage || 'default';
@@ -505,7 +467,9 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 key={stageId}
                 type="button"
                 data-testid={`milestone-summary-stage-pill-${stageId}`}
-                onClick={() => setSelectedStageFilter((prev) => (prev === stageId ? null : stageId))}
+                onClick={() =>
+                  setSelectedStageFilter((prev) => (prev === stageId ? null : stageId))
+                }
                 className={`rounded border px-1.5 py-0.5 text-ui-2xs transition-colors ${
                   selectedStageFilter === stageId
                     ? 'border-primary bg-primary/10 text-primary font-medium'
@@ -515,24 +479,6 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
                 {stageLabelMap.get(stageId) ?? stageId}: {count}
               </button>
             ))}
-            <button
-              type="button"
-              data-testid="milestone-summary-copy-stages-btn"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard?.writeText(
-                    milestones.map((m) => stageLabelMap.get(m.stage || 'default') ?? m.stage).join(' · '),
-                  );
-                  setCopiedStagesDist(true);
-                  setTimeout(() => setCopiedStagesDist(false), 1500);
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="ml-auto rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              {copiedStagesDist ? '已复制阶段分布' : '复制阶段分布'}
-            </button>
             <button
               type="button"
               data-testid="milestone-summary-stages-to-l3-btn"
@@ -632,134 +578,138 @@ export function MilestoneProgressWidget({ projectId, projectType }: MilestonePro
             </div>
             <div className="space-y-1">
               {milestones
-                .filter((m) =>
-                  (!selectedStageFilter || (m.stage || 'default') === selectedStageFilter) &&
-                  (recentFilter === 'all'
-                    ? true
-                    : recentFilter === 'completed'
-                      ? m.status === 'completed'
-                      : m.status !== 'completed'),
+                .filter(
+                  (m) =>
+                    (!selectedStageFilter || (m.stage || 'default') === selectedStageFilter) &&
+                    (recentFilter === 'all'
+                      ? true
+                      : recentFilter === 'completed'
+                        ? m.status === 'completed'
+                        : m.status !== 'completed'),
                 )
                 .slice(0, 3)
                 .map((milestone) => (
-                <div key={milestone.id} className="flex items-center justify-between gap-2 text-xs">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      {getStatusIcon(milestone.status)}
-                      <span className="font-medium truncate">{milestone.title}</span>
-                      {milestone.stage && (
-                        <span
-                          className="shrink-0 rounded bg-muted px-1 py-0.5 text-ui-2xs text-muted-foreground"
-                          data-testid={`milestone-summary-stage-${milestone.id}`}
-                        >
-                          {stageLabelMap.get(milestone.stage) ?? milestone.stage}
-                        </span>
+                  <div
+                    key={milestone.id}
+                    className="flex items-center justify-between gap-2 text-xs"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        {getStatusIcon(milestone.status)}
+                        <span className="font-medium truncate">{milestone.title}</span>
+                        {milestone.stage && (
+                          <span
+                            className="shrink-0 rounded bg-muted px-1 py-0.5 text-ui-2xs text-muted-foreground"
+                            data-testid={`milestone-summary-stage-${milestone.id}`}
+                          >
+                            {stageLabelMap.get(milestone.stage) ?? milestone.stage}
+                          </span>
+                        )}
+                      </div>
+                      {milestone.dueDate && (
+                        <div className="text-muted-foreground ml-5">截止：{milestone.dueDate}</div>
                       )}
                     </div>
-                    {milestone.dueDate && (
-                      <div className="text-muted-foreground ml-5">截止：{milestone.dueDate}</div>
-                    )}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        data-testid={`milestone-summary-copy-item-${milestone.id}`}
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard?.writeText(
+                              `[${milestone.status}] ${milestone.title}${milestone.dueDate ? ` (截止: ${milestone.dueDate})` : ''}`,
+                            );
+                            setCopiedMilestoneId(milestone.id);
+                            setTimeout(() => setCopiedMilestoneId(null), 1500);
+                          } catch {
+                            // ignore in test/offline mode
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        {copiedMilestoneId === milestone.id ? '已复制' : '复制'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`milestone-summary-to-constraint-${milestone.id}`}
+                        onClick={async () => {
+                          if (promotedConstraintIds.has(milestone.id)) return;
+                          setPromotedConstraintIds((prev) => new Set(prev).add(milestone.id));
+                          if (typeof projectApi?.createConstraint === 'function') {
+                            try {
+                              await projectApi.createConstraint(projectId, {
+                                category: 'deliverable_guard',
+                                content: `里程碑交付准入标准 [${milestone.title}]`,
+                                priority: 8,
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+                      >
+                        {promotedConstraintIds.has(milestone.id) ? '已转L2' : '+L2'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`milestone-summary-to-l3-${milestone.id}`}
+                        onClick={async () => {
+                          if (promotedL3Ids.has(milestone.id)) return;
+                          setPromotedL3Ids((prev) => new Set(prev).add(milestone.id));
+                          if (typeof projectApi?.confirmKnowledge === 'function') {
+                            try {
+                              await projectApi.confirmKnowledge(projectId, {
+                                entries: [
+                                  {
+                                    category: 'decision',
+                                    content: `里程碑进展 [${milestone.title}] (${milestone.status})`,
+                                    importance: 7,
+                                    sourceMessageIds: [],
+                                    reasoning: '里程碑进度摘要单条沉淀至 L3 画像',
+                                  },
+                                ],
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        {promotedL3Ids.has(milestone.id) ? '已存L3' : '+L3'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`milestone-summary-to-l4-${milestone.id}`}
+                        onClick={async () => {
+                          if (promotedL4Ids.has(milestone.id)) return;
+                          setPromotedL4Ids((prev) => new Set(prev).add(milestone.id));
+                          if (typeof projectApi?.addMaterial === 'function') {
+                            try {
+                              await projectApi.addMaterial(projectId, {
+                                content: `# 里程碑摘要归档：${milestone.title}\n- 状态：${milestone.status}\n- 阶段：${milestone.stage || '默认阶段'}`,
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        {promotedL4Ids.has(milestone.id) ? '已存L4' : '+L4'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleQuickToggleStatus(milestone)}
+                        data-testid={`milestone-quick-toggle-${milestone.id}`}
+                        className="shrink-0 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                      >
+                        {milestone.status === 'completed' ? '重开' : '标记完成'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    data-testid={`milestone-summary-copy-item-${milestone.id}`}
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard?.writeText(
-                          `[${milestone.status}] ${milestone.title}${milestone.dueDate ? ` (截止: ${milestone.dueDate})` : ''}`,
-                        );
-                        setCopiedMilestoneId(milestone.id);
-                        setTimeout(() => setCopiedMilestoneId(null), 1500);
-                      } catch {
-                        // ignore in test/offline mode
-                      }
-                    }}
-                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    {copiedMilestoneId === milestone.id ? '已复制' : '复制'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`milestone-summary-to-constraint-${milestone.id}`}
-                    onClick={async () => {
-                      if (promotedConstraintIds.has(milestone.id)) return;
-                      setPromotedConstraintIds((prev) => new Set(prev).add(milestone.id));
-                      if (typeof projectApi?.createConstraint === 'function') {
-                        try {
-                          await projectApi.createConstraint(projectId, {
-                            category: 'deliverable_guard',
-                            content: `里程碑交付准入标准 [${milestone.title}]`,
-                            priority: 8,
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
-                  >
-                    {promotedConstraintIds.has(milestone.id) ? '已转L2' : '+L2'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`milestone-summary-to-l3-${milestone.id}`}
-                    onClick={async () => {
-                      if (promotedL3Ids.has(milestone.id)) return;
-                      setPromotedL3Ids((prev) => new Set(prev).add(milestone.id));
-                      if (typeof projectApi?.confirmKnowledge === 'function') {
-                        try {
-                          await projectApi.confirmKnowledge(projectId, {
-                            entries: [
-                              {
-                                category: 'decision',
-                                content: `里程碑进展 [${milestone.title}] (${milestone.status})`,
-                                importance: 7,
-                                sourceMessageIds: [],
-                                reasoning: '里程碑进度摘要单条沉淀至 L3 画像',
-                              },
-                            ],
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    {promotedL3Ids.has(milestone.id) ? '已存L3' : '+L3'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`milestone-summary-to-l4-${milestone.id}`}
-                    onClick={async () => {
-                      if (promotedL4Ids.has(milestone.id)) return;
-                      setPromotedL4Ids((prev) => new Set(prev).add(milestone.id));
-                      if (typeof projectApi?.addMaterial === 'function') {
-                        try {
-                          await projectApi.addMaterial(projectId, {
-                            content: `# 里程碑摘要归档：${milestone.title}\n- 状态：${milestone.status}\n- 阶段：${milestone.stage || '默认阶段'}`,
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                  >
-                    {promotedL4Ids.has(milestone.id) ? '已存L4' : '+L4'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleQuickToggleStatus(milestone)}
-                    data-testid={`milestone-quick-toggle-${milestone.id}`}
-                    className="shrink-0 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                  >
-                    {milestone.status === 'completed' ? '重开' : '标记完成'}
-                  </button>
-                  </div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
         )}

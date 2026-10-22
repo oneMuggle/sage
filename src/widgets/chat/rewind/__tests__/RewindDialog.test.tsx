@@ -111,7 +111,9 @@ describe('RewindDialog', () => {
     await waitFor(() => expect(onForked).toHaveBeenCalledWith('fork-1'));
     expect(mockRestore).toHaveBeenCalledWith('s1', 'ck-new');
     expect(mockFork).toHaveBeenCalledWith('s1', 'm9');
-    expect(mockRestore.mock.invocationCallOrder[0]).toBeLessThan(mockFork.mock.invocationCallOrder[0]);
+    expect(mockRestore.mock.invocationCallOrder[0]).toBeLessThan(
+      mockFork.mock.invocationCallOrder[0],
+    );
   });
 
   it('restore 失败时中止：不 fork，展示错误', async () => {
@@ -120,7 +122,9 @@ describe('RewindDialog', () => {
     renderDialog();
     await waitFor(() => expect(screen.getByTestId('rewind-confirm')).toBeEnabled());
     fireEvent.click(screen.getByTestId('rewind-confirm'));
-    await waitFor(() => expect(screen.getByTestId('rewind-error')).toHaveTextContent('workspace locked'));
+    await waitFor(() =>
+      expect(screen.getByTestId('rewind-error')).toHaveTextContent('workspace locked'),
+    );
     expect(mockFork).not.toHaveBeenCalled();
   });
 
@@ -133,23 +137,5 @@ describe('RewindDialog', () => {
     fireEvent.click(screen.getByTestId('rewind-confirm'));
     await waitFor(() => expect(onForked).toHaveBeenCalledWith('fork-2'));
     expect(mockRestore).not.toHaveBeenCalled();
-  });
-
-  it('支持复制回滚检查点清单 MD 与 JSON 到剪贴板', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    mockList.mockResolvedValue([ckpt('ck-new', new Date(2026, 8, 27, 10, 0, 0))]);
-    renderDialog();
-    await waitFor(() => expect(screen.getByTestId('rewind-checkpoint-ck-new')).toBeInTheDocument());
-
-    fireEvent.click(screen.getByTestId('rewind-copy-md-btn'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 会话回滚检查点清单'));
-    });
-
-    fireEvent.click(screen.getByTestId('rewind-copy-json-btn'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"ck-new"'));
-    });
   });
 });

@@ -326,23 +326,44 @@ export function SnapshotReview({ snapshotId, onClose }: SnapshotReviewProps) {
           `| ${it.after.model_key.provider}/${it.after.model_key.model_id} | ${it.classification} | ${it.status} | ${it.clear_fields.join(', ') || '-'} |`,
       ),
     ];
-    setCopiedMd(true);
-    await navigator.clipboard?.writeText(lines.join('\n'));
-    setTimeout(() => setCopiedMd(false), 1800);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopiedMd(true);
+      setStatusBanner(null);
+      setTimeout(() => setCopiedMd(false), 1800);
+    } catch {
+      setCopiedMd(false);
+      setStatusBanner('复制快照差异MD失败');
+    }
   }
 
   async function handleCopyJson(): Promise<void> {
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(
-      JSON.stringify({ snapshotId, itemCount: items.length, items }, null, 2),
-    );
-    setTimeout(() => setCopiedJson(false), 1800);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(
+        JSON.stringify({ snapshotId, itemCount: items.length, items }, null, 2),
+      );
+      setCopiedJson(true);
+      setStatusBanner(null);
+      setTimeout(() => setCopiedJson(false), 1800);
+    } catch {
+      setCopiedJson(false);
+      setStatusBanner('复制快照差异JSON失败');
+    }
   }
 
   async function handleCopyItemJson(item: SnapshotDiffItem): Promise<void> {
-    setCopiedItemId(item.id);
-    await navigator.clipboard?.writeText(JSON.stringify(item, null, 2));
-    setTimeout(() => setCopiedItemId((prev) => (prev === item.id ? null : prev)), 1800);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(JSON.stringify(item, null, 2));
+      setCopiedItemId(item.id);
+      setStatusBanner(null);
+      setTimeout(() => setCopiedItemId((prev) => (prev === item.id ? null : prev)), 1800);
+    } catch {
+      setCopiedItemId(null);
+      setStatusBanner('复制快照条目JSON失败');
+    }
   }
   /* v8 ignore stop */
 

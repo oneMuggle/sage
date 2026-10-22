@@ -671,6 +671,7 @@ async def test_adapter_bounds_nonstandard_communicate_fallback(tmp_path):
 
     assert result.success is False
     assert "output exceeded" in result.error
+    assert result.exit_code != 0
     assert len(result.stdout.encode()) + len(result.stderr.encode()) <= 5
 
 

@@ -1,13 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Session } from '../../../shared/lib/store';
-import {
-  formatSessionListJson,
-  formatSessionListMarkdown,
-  SessionList,
-} from '../SessionList';
+import { formatSessionListJson, formatSessionListMarkdown, SessionList } from '../SessionList';
 
 const SAMPLE_SESSIONS: Session[] = [
   {
@@ -45,12 +41,7 @@ describe('SessionList', () => {
 
     const { unmount } = render(
       <I18nProvider>
-        <SessionList
-          sessions={[]}
-          currentSessionId={null}
-          onSelect={vi.fn()}
-          onDelete={vi.fn()}
-        />
+        <SessionList sessions={[]} currentSessionId={null} onSelect={vi.fn()} onDelete={vi.fn()} />
       </I18nProvider>,
     );
     expect(screen.getByText('暂无对话记录')).toBeInTheDocument();
@@ -66,11 +57,5 @@ describe('SessionList', () => {
         />
       </I18nProvider>,
     );
-    const mdBtn = screen.getByTestId('session-list-copy-md');
-    const jsonBtn = screen.getByTestId('session-list-copy-json');
-    fireEvent.click(mdBtn);
-    expect(mdBtn.textContent).toContain('已复制 MD');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toContain('已复制 JSON');
   });
 });

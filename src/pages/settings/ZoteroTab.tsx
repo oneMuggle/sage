@@ -73,7 +73,6 @@ export function ZoteroTab() {
   const [status, setStatus] = useState<ZoteroStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [copiedAudit, setCopiedAudit] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   // ── path config ─────────────────────────────────────────────────────────────
   const [pathInput, setPathInput] = useState('');
@@ -239,20 +238,6 @@ export function ZoteroTab() {
     await navigator.clipboard?.writeText(text);
   };
 
-  const handleCopyJson = async () => {
-    const text = formatZoteroTabAuditJson({
-      connected,
-      statusLoading,
-      itemCount,
-      collectionCount,
-      searchResultCount: searchResults.length,
-      query,
-      selectedCollectionKey,
-      selectedTag,
-    });
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(text);
-  };
   /* v8 ignore stop */
 
   return (
@@ -271,14 +256,6 @@ export function ZoteroTab() {
             className="px-2 py-0.5 text-xs rounded border border-line-subtle text-faint hover:text-primary cursor-pointer select-none"
           >
             {copiedAudit ? '已复制快照' : '复制快照'}
-          </span>
-          <span
-            data-testid="zotero-tab-copy-json"
-            onClick={() => void handleCopyJson()}
-            title="复制 Zotero 审计 JSON"
-            className="px-2 py-0.5 text-xs rounded border border-line-subtle text-faint hover:text-primary cursor-pointer select-none"
-          >
-            {copiedJson ? '已复制 JSON' : 'JSON'}
           </span>
         </div>
       </div>

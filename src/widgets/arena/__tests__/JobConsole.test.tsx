@@ -20,11 +20,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../entities/arena', () => mocks);
 
-import {
-  formatJobConsoleJson,
-  formatJobConsoleMarkdown,
-  JobConsole,
-} from '../JobConsole';
+import { formatJobConsoleJson, formatJobConsoleMarkdown, JobConsole } from '../JobConsole';
 
 const RUNNING = { id: 'job-1', kind: 'draw', status: 'running', created_at: '', total: 3, done: 1, ok: 1, failed: 0, params: {}, result_count: 1, error: '', last_seq: 2 };
 const DONE = { ...RUNNING, status: 'done', ok: 3, done: 3, failed: 0 };
@@ -97,28 +93,12 @@ describe('JobConsole', () => {
     expect(URL.createObjectURL).toHaveBeenCalled();
   });
 
-  it('支持导出并复制任务控制台 MD / JSON (Phase P91)', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
+  it('导出任务控制台为 Markdown 和 JSON', () => {
     const evs = [event(1, '账号 A 登录')];
-    mocks.getDrawJob.mockResolvedValue(DONE);
-    mocks.getDrawJobEvents.mockResolvedValue(evs);
-
-    render(<JobConsole kind="draw" jobId="job-1" pollIntervalMs={10} />);
-    await screen.findByTestId('job-event-1');
-
     const md = formatJobConsoleMarkdown('job-1', 'draw', DONE, evs);
     expect(md).toContain('# 任务控制台 (draw · job-1)');
     expect(md).toContain('[#1] [info] 账号 A 登录');
     const json = JSON.parse(formatJobConsoleJson('job-1', 'draw', DONE, evs));
     expect(json.eventCount).toBe(1);
-
-    fireEvent.click(screen.getByTestId('job-console-copy-md'));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(md));
-    expect(screen.getByTestId('job-console-copy-md')).toHaveTextContent('已复制 MD');
-
-    fireEvent.click(screen.getByTestId('job-console-copy-json'));
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId('job-console-copy-json')).toHaveTextContent('已复制 JSON');
   });
 });

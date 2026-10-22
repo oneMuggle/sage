@@ -80,8 +80,6 @@ export function ArtifactsSection({
 }: ArtifactsSectionProps) {
   // right-panel R4 批次 C: 类型过滤（仅影响列表渲染，计数徽标口径不变）
   const [filter, setFilter] = useState<KindFilter>('all');
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const openDelivery = useTaskCenterStore((s) => s.openDelivery);
 
   const filtered = useMemo(
@@ -97,24 +95,7 @@ export function ArtifactsSection({
   }
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    const lines = [
-      `# 会话产物列表 (${filtered.length}/${artifacts.length})`,
-      '',
-      '| 名称 | 类型 | 大小 | 路径 |',
-      '| --- | --- | --- | --- |',
-      ...filtered.map((a) => `| ${a.name} | ${a.kind} | ${a.size} B | \`${a.path}\` |`),
-    ];
-    setCopiedMd(true);
-    await navigator.clipboard?.writeText(lines.join('\n'));
-    setTimeout(() => setCopiedMd(false), 1800);
-  };
 
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(JSON.stringify(filtered, null, 2));
-    setTimeout(() => setCopiedJson(false), 1800);
-  };
   /* v8 ignore stop */
 
   // F1: Office 产物一键打开 OfficeDeliveryDrawer（质检 + 排版修复 + 对比）
@@ -151,22 +132,6 @@ export function ArtifactsSection({
       <div className="flex items-center justify-end gap-1 px-2 py-1 border-b border-border">
         {artifacts.length > 0 && (
           <>
-            <button
-              type="button"
-              data-testid="artifacts-section-copy-md-btn"
-              onClick={() => void handleCopyMd()}
-              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedMd ? '✓ 已复制MD' : '复制产物MD'}
-            </button>
-            <button
-              type="button"
-              data-testid="artifacts-section-copy-json-btn"
-              onClick={() => void handleCopyJson()}
-              className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedJson ? '✓ 已复制JSON' : '复制产物JSON'}
-            </button>
           </>
         )}
         {artifacts.length > 0 && (

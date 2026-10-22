@@ -403,3 +403,32 @@ export function formatSettingsAuditJson(settings?: Partial<AppSettings>): string
   });
 }
 /* v8 ignore stop */
+
+export function auditSettingTypesGovernance(
+  state: {
+    version?: string;
+    storageKey?: string;
+  } = {},
+): {
+  module: 'src/entities/setting/types.ts';
+  phase: 'P155';
+  version: string;
+  storageKey: string;
+  healthy: boolean;
+} {
+  const version =
+    typeof state.version === 'string' && state.version.trim().length > 0
+      ? state.version.trim()
+      : SETTINGS_VERSION;
+  const storageKey =
+    typeof state.storageKey === 'string' && state.storageKey.trim().length > 0
+      ? state.storageKey.trim()
+      : SETTINGS_STORAGE_KEY;
+  return {
+    module: 'src/entities/setting/types.ts',
+    phase: 'P155',
+    version,
+    storageKey,
+    healthy: version === SETTINGS_VERSION && storageKey === SETTINGS_STORAGE_KEY,
+  };
+}

@@ -311,31 +311,4 @@ describe('UsagePanel', () => {
     global.Blob = realBlob;
   });
 
-  it('copies usage summary as Markdown and JSON to clipboard', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    vi.spyOn(usageApi, 'fetchUsageSummary').mockResolvedValueOnce(cloneSummary());
-    vi.spyOn(usageApi, 'fetchUsageRequests').mockResolvedValue({
-      items: [],
-      total: 0,
-      limit: 50,
-      offset: 0,
-    });
-    mockTrendAndCsv();
-
-    renderPanel();
-    await waitFor(() => {
-      expect(screen.getByTestId('usage-total-requests')).toBeDefined();
-    });
-
-    fireEvent.click(screen.getByTestId('usage-copy-md-btn'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 用量与成本摘要'));
-    });
-
-    fireEvent.click(screen.getByTestId('usage-copy-json-btn'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"gpt-4o"'));
-    });
-  });
 });

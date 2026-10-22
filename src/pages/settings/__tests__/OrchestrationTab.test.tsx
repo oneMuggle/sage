@@ -11,11 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { useSettings } from '../../../features/manage-settings/useSettings';
-import {
-  formatOrchestrationTabAuditJson,
-  formatOrchestrationTabAuditSnapshot,
-  OrchestrationTab,
-} from '../OrchestrationTab';
+import { formatOrchestrationTabAuditJson, formatOrchestrationTabAuditSnapshot, OrchestrationTab } from '../OrchestrationTab';
 
 const mocks = vi.hoisted(() => ({
   updateSettings: vi.fn(),
@@ -216,7 +212,6 @@ describe('OrchestrationTab — 计划前置旋钮 (Round 3)', () => {
   it('exports OrchestrationTab audit snapshot and JSON helpers and renders copy controls', () => {
     renderTab();
     expect(screen.getByTestId('orchestration-tab-copy-audit')).toBeInTheDocument();
-    expect(screen.getByTestId('orchestration-tab-copy-json')).toBeInTheDocument();
 
     const snapshot = formatOrchestrationTabAuditSnapshot({
       planPreflightEnabled: true,

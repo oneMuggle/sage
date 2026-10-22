@@ -446,3 +446,29 @@ export function formatAppSettingsStorageJson(settings: AppSettings): string {
 // 后端只存 v3 格式；前端 localStorage 中的 v1/v2 数据由后端首次读 + 旧
 // 客户端链路完成迁移后，本地不再有旧格式。YAGNI — 删。
 // 如未来后端需回滚兼容老数据，再从 git history 恢复。
+
+export function auditSettingStorageGovernance(
+  state: {
+    endpointCount?: number;
+    sanitized?: boolean;
+  } = {},
+): {
+  module: 'src/entities/setting/storage.ts';
+  phase: 'P155';
+  endpointCount: number;
+  sanitized: boolean;
+  healthy: boolean;
+} {
+  const endpointCount =
+    typeof state.endpointCount === 'number' && Number.isFinite(state.endpointCount)
+      ? Math.max(0, Math.trunc(state.endpointCount))
+      : 1;
+  const sanitized = state.sanitized !== false;
+  return {
+    module: 'src/entities/setting/storage.ts',
+    phase: 'P155',
+    endpointCount,
+    sanitized,
+    healthy: endpointCount >= 1 && sanitized,
+  };
+}
