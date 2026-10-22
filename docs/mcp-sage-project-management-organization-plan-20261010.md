@@ -2021,3 +2021,24 @@
   - `src/widgets/chat/__tests__/RightPanel.p148.test.ts`
   - `src/pages/settings/__tests__/settingsIndex.p148.test.ts`
 - **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
+
+### Phase P149: AttnBadge, BrandLogo, LiveDot, DropdownMenu, ErrorState, LoadingState, RetryButton & Select Governance (Completed)
+- **Target Modules**:
+  - `src/shared/ui/AttnBadge.tsx`: `auditAttnBadgeGovernance`
+  - `src/shared/ui/BrandLogo.tsx`: `auditBrandLogoGovernance`
+  - `src/shared/ui/LiveDot.tsx`: `auditLiveDotGovernance`
+  - `src/shared/ui/DropdownMenu/DropdownMenu.tsx`: `auditDropdownMenuGovernance`
+  - `src/shared/ui/ErrorState/ErrorState.tsx`: `auditErrorStateGovernance`
+  - `src/shared/ui/LoadingState/LoadingState.tsx`: `auditLoadingStateGovernance`
+  - `src/shared/ui/RetryButton/RetryButton.tsx`: `auditRetryButtonGovernance`
+  - `src/shared/ui/Select/Select.tsx`: `auditSelectGovernance`
+- **Unit Test Suites**:
+  - `src/shared/ui/__tests__/AttnBadge.p149.test.ts`
+  - `src/shared/ui/__tests__/BrandLogo.p149.test.ts`
+  - `src/shared/ui/__tests__/LiveDot.p149.test.ts`
+  - `src/shared/ui/__tests__/DropdownMenu.p149.test.ts`
+  - `src/shared/ui/__tests__/ErrorState.p149.test.ts`
+  - `src/shared/ui/__tests__/LoadingState.p149.test.ts`
+  - `src/shared/ui/__tests__/RetryButton.p149.test.ts`
+  - `src/shared/ui/__tests__/Select.p149.test.ts`
+- **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
