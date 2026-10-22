@@ -413,3 +413,56 @@ export function ArtifactViewer({ artifact, sessionId, onBack }: ArtifactViewerPr
     </div>
   );
 }
+
+export interface ArtifactViewerAuditInput {
+  artifactId: string;
+  artifactType: string;
+  contentByteLength: number;
+  sandboxEnabled: boolean;
+}
+
+export interface ArtifactViewerAuditReport {
+  artifactId: string;
+  normalizedType: string;
+  contentByteLength: number;
+  sandboxEnabled: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateArtifactViewerAudit(
+  input: ArtifactViewerAuditInput,
+): ArtifactViewerAuditReport {
+  const artifactId = input.artifactId.trim();
+  const normalizedType = input.artifactType.trim().toLowerCase() || 'unknown';
+  const contentByteLength = Math.max(0, Math.trunc(input.contentByteLength));
+  const sandboxEnabled = Boolean(input.sandboxEnabled);
+  const issueCodes: string[] = [];
+
+  if (!artifactId) {
+    issueCodes.push('missing_artifact_id');
+  }
+  if (contentByteLength === 0) {
+    issueCodes.push('empty_artifact_content');
+  }
+  if ((normalizedType === 'html' || normalizedType === 'svg') && !sandboxEnabled) {
+    issueCodes.push('unsandboxed_rich_artifact');
+  }
+
+  return {
+    artifactId,
+    normalizedType,
+    contentByteLength,
+    sandboxEnabled,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportArtifactViewerAuditJson(
+  input: ArtifactViewerAuditInput,
+): string {
+  return JSON.stringify(evaluateArtifactViewerAudit(input));
+}
