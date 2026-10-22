@@ -179,3 +179,32 @@ export function formatQueueStoreJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditWikiQueueStoreGovernance(
+  state: {
+    pendingCount?: number;
+    failedCount?: number;
+  } = {},
+): {
+  module: 'src/entities/wiki/queue-store.ts';
+  phase: 'P156';
+  pendingCount: number;
+  failedCount: number;
+  healthy: boolean;
+} {
+  const pendingCount =
+    typeof state.pendingCount === 'number' && Number.isFinite(state.pendingCount)
+      ? Math.max(0, Math.trunc(state.pendingCount))
+      : 0;
+  const failedCount =
+    typeof state.failedCount === 'number' && Number.isFinite(state.failedCount)
+      ? Math.max(0, Math.trunc(state.failedCount))
+      : 0;
+  return {
+    module: 'src/entities/wiki/queue-store.ts',
+    phase: 'P156',
+    pendingCount,
+    failedCount,
+    healthy: failedCount === 0,
+  };
+}
