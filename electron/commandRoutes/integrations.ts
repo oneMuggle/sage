@@ -1,7 +1,6 @@
 import type { CommandRoute } from '../commands';
 
 export const integrationRoutes: Record<string, CommandRoute> = {
-
   // M3: MCP multi-server management (backend/api/mcp_routes.py).
   // mcp_server_add: args are the full server config, forwarded as body.
   // mcp_server_update: name goes in the path; body carries only the
@@ -19,8 +18,20 @@ export const integrationRoutes: Record<string, CommandRoute> = {
       const body: Record<string, unknown> = {};
       if (a.enabled !== undefined) body.enabled = a.enabled;
       if (a.timeout_seconds !== undefined) body.timeout_seconds = a.timeout_seconds;
+      // R53: 工具禁用列表（全量替换）
+      if (a.disabled_tools !== undefined) body.disabled_tools = a.disabled_tools;
       return body;
     },
+  },
+  // r53-B: per-tool 开关面板的只读清单（工具名 + 截断描述 + 当前禁用项）
+  mcp_server_tools: {
+    method: 'GET',
+    path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}/tools`,
+  },
+  // r64: OAuth 授权（长请求——后端阻塞等待浏览器回调，上限 300s）
+  mcp_server_authorize: {
+    method: 'POST',
+    path: (a) => `/api/v1/mcp/servers/${encodeURIComponent(String(a.name))}/authorize`,
   },
   mcp_server_delete: {
     method: 'DELETE',
