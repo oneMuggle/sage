@@ -21,6 +21,7 @@
 | R84 | harness 文件化 + lock + 差异视图 | ✅ #2206 |
 | R85 | 提案引擎（Propose–Probe–Compose + 证据锚定） | ✅ #2206 |
 | R86 | 生态（脚手架 / 索引 / 贡献指南） | ✅ #2206 |
+| R90 | 进程外插件 tool → 聊天 `ToolRegistry` 桥 | 实施中 |
 
 ## 2. 交付总账
 
@@ -35,6 +36,7 @@
 | R84 | `application/kernel/{harness_files,harness_snapshots}.py` + `cli/harness_export.py` + `files` CLI + 启动 lock gate + 14 例新增单测 | #2206 | 待对齐 | ✅ 已交付 |
 | R85 | `application/kernel/{harness_evidence,harness_proposals,harness_proposal_engine}.py` + SkillDraft 审批桥 + `proposals` CLI + 17 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
 | R86 | `plugins/{scaffold_templates,scaffold,index_catalog}.py` + `cli/plugin.py` + hello-tool 示例/静态索引/开发指南 + 25 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
+| R90 | `plugins/tool_bridge.py` + host publish/unpublish 通知与 running 查询 + `plugins` tool bundle + `input_schema` 契约/权限门/桥接测试与文档 | 本 PR（待合并） | 待对齐 | 实施中 |
 
 ## 3. R78 交付边界
 
@@ -111,8 +113,8 @@
   回到 `pending`，不做跨重启恢复。
 - **第一垂直切片只托管 tool**：只加载 manifest 中带 entry_point 的 tool 能力，
   支持 `module:attr`、兼容点路径与模块约定入口，并把进程外代理注册到既有
-  `CapabilityRegistry`。本轮不自动暴露给 LLM `ToolRegistry`，也不执行
-  skill/hook/mcp_server/command。
+  `CapabilityRegistry`。本轮不自动暴露给 LLM `ToolRegistry`（这一缺口由
+  R90 补齐），也不执行 skill/hook/mcp_server/command。
 - **崩溃隔离不是安全沙箱**：worker 是同 OS 用户下的独立 Python 子进程，
   以 stdio JSON-RPC 通信，使用 cwd/env 白名单、1 MiB 消息上限、启动/调用/关闭
   超时与有界 stderr；Windows 优先 Job Object 512 MiB 内存上限，POSIX 在导入
@@ -190,8 +192,8 @@
 - **只有 tool 标为已托管**：脚手架提供 tool/hook/mcp/skill 四模板；tool 标记
   supported，其余三类标记 preview 并由校验器给出 `RUNTIME_PREVIEW_ONLY`。
   进程外 tool 仍只注册到 `CapabilityRegistry`，不自动暴露给 LLM
-  `ToolRegistry`。仓库尚无 UI capability 与前端插件加载器，本轮不生成
-  不可运行的 `npm create`/TS widget 假模板。
+  `ToolRegistry`（这一边界由 R90 改变）。仓库尚无 UI capability 与前端
+  插件加载器，本轮不生成不可运行的 `npm create`/TS widget 假模板。
 - **静态索引只做目录，不做市场**：`plugins/index.json` 可离线 build、
   validate 与 search，登记 git/archive/local 来源、兼容矩阵与可选签名元数据；
   不下载、不安装、不验签，也不建立信任根。没有 Win7 实测的条目固定
@@ -205,5 +207,28 @@
 - **本地证据**：新增 25 例生态测试、四模板自带 7 例测试、插件相关全集
   126 passed；ruff、py38 hazard scan、diagnostics 与 architecture-check
   全绿。完整设计见 `2026-10-21_plugin-ecosystem-r86.md`。
+
+## 12. R90 交付边界
+
+- **只发布运行中且有参数契约的 tool**：install/enable/后端重启都不会让
+  插件工具进入聊天；只有用户显式 start 的 R83 session，且 capability
+  提供 object 形 `input_schema`（或 R86 兼容的 `config_schema` 参数
+  schema）时才发布。无 schema 的 tool 保持 REST/设置页 API-only。
+- **动态同步有精确所有权**：工具名为
+  `plugin__<plugin>__<capability>`，桥接以弱引用 fan-out 到存活
+  `ToolRegistry`；stop、restart、failed、保存配置/禁用/卸载引发停机时按
+  桥接自己的发布记录精确注销。第一注册者胜出，插件不能覆盖内置工具。
+- **风险不靠自报降级**：`PluginTool` 的 `RiskClass` 下限为 EXEC，
+  network/external 信号升 EXTERNAL；旧权限执行器把 `plugin__*` 归为
+  EXECUTE，默认逐次审批、`read_only` 拒绝。工具声明
+  `concurrency_safe=False`、`is_blocking=True`，且不接收宿主 ToolContext。
+- **profile 仍是精确白名单**：R90 不展开 `plugin__*` 通配，不把插件
+  工具塞进子代理只读面；无插件 runtime 时 94 个静态 schema 的集合与顺序
+  不变。R84 harness 静态导出排除 `plugins` 动态 bundle，不把临时 runtime
+  schema 写入 lock。完整的参数归一化、冲突与验收标准见
+  `2026-10-22_plugin-tools-llm-r90.md`。
+- **不扩围**：仍非 OS 沙箱，不自动启动、不做市场/下载/验签，不启动
+  parked 的 DSH ABI/Node 边车；Win7 继续标“待对齐”，等待既有同步链路，
+  本账不冒称完成。
 
 —— 本账本由插件化循环维护，随轮次追加。

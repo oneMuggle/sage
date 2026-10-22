@@ -75,6 +75,8 @@ def test_tool_scaffold_is_complete_and_strictly_valid(tmp_path: Path) -> None:
     manifest = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
     assert manifest["name"] == "acme-echo"
     assert manifest["capabilities"][0]["entry_point"] == "handlers:run"
+    assert manifest["capabilities"][0]["input_schema"]["properties"]["name"]
+    assert manifest["capabilities"][0]["config_schema"] is None
     assert manifest["python_version"] == ">=3.8"
 
     validation = validate_plugin_package(root, strict=True)

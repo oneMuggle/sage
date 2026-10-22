@@ -1,6 +1,6 @@
 # 插件开发：30 分钟跑通第一个插件
 
-> 适用范围：Sage 插件 manifest schema 1.0、R82 生命周期记录、R83 进程外宿主与 R86 生态工具。
+> 适用范围：Sage 插件 manifest schema 1.0、R82 生命周期记录、R83 进程外宿主、R86 生态工具与 R90 聊天工具桥。
 
 本指南带你从零生成一个 Python tool 插件，静态校验后在独立子进程里调用一次，再把它登记到可离线校验的静态索引。完成标准不是“生成了一堆文件”，而是这条链全部退出 0：
 
@@ -20,7 +20,7 @@ Sage 刻意把“登记”“启用”和“运行”拆开：
 
 进程外 worker 提供崩溃隔离、超时和资源边界，但它仍以当前 OS 用户运行，**不是安全沙箱**。只运行你审阅过的代码。manifest 权限声明用于安装确认与审计，不等于操作系统级文件/网络强制隔离。
 
-当前宿主只执行 Python `tool` capability；进程外工具会进入插件 `CapabilityRegistry` 并可在设置页调用，但不会自动暴露给 LLM 的内置 `ToolRegistry`。`skill`、`hook`、`mcp_server` 与 `command` 可以写进 manifest，宿主成熟度见模板表。
+当前宿主只执行 Python `tool` capability；进程外工具会进入插件 `CapabilityRegistry` 并可在设置页调用。声明了参数 `input_schema` 的 tool 在 runtime 被显式启动后，还会以 `plugin__<plugin>__<capability>` 发布给聊天 Agent 的 `ToolRegistry`；runtime 停止或失败时同步消失。安装或启用记录本身不会暴露工具。`skill`、`hook`、`mcp_server` 与 `command` 可以写进 manifest，宿主成熟度见模板表。
 
 ## 2. 前置条件
 
@@ -161,6 +161,30 @@ python -m backend.cli.plugin index build examples/plugins/hello-tool \
 
 返回值必须 JSON serializable。普通异常会变成结构化工具错误且 worker 继续运行；超时、崩溃和协议损坏会让 runtime 进入 failed 并注销代理。不要向 `sys.stdout` 写协议外文本；诊断请写 stderr/logging，设置页会展示有界的 stderr tail。
 
+### 4.1 让聊天 Agent 调用
+
+给 tool capability 声明调用参数的 JSON Schema：
+
+```json
+{
+  "type": "tool",
+  "name": "hello_tool",
+  "entry_point": "handlers:run",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": {"type": "string", "default": "World"}
+    },
+    "required": [],
+    "additionalProperties": false
+  }
+}
+```
+
+这个示例在 hello-tool runtime 启动后会成为 `plugin__hello-tool__hello_tool`。已有聊天和随后新建的聊天都能看到它；stop、restart 失败、worker 崩溃、保存配置、禁用或卸载导致停机时，它会从聊天工具面注销。没有 object 形 `input_schema` 的 tool 仍可在设置页手动 invoke，但不会猜参数后交给 LLM。旧插件若按 R86 模板把参数 schema 写在 `config_schema`，桥接仍兼容读取；新插件请用 `input_schema`，`user_config` 只描述生命周期配置。
+
+插件调用按第三方代码执行面处理：风险下限为 EXEC，默认 `workspace_write` 模式会逐次请求批准，`read_only` 会拒绝。用户可在权限规则中对可信的完整名或 `plugin__<plugin>__*` 显式 allow/deny/ask。带 `allowed_tools` 白名单的 agent profile 必须列出完整工具名，不做插件通配展开。
+
 ## 5. Manifest 最小契约
 
 脚手架生成的 `plugin.json` 是完整样例。关键字段：
@@ -174,6 +198,7 @@ python -m backend.cli.plugin index build examples/plugins/hello-tool \
 | `capabilities[].type` | `tool` / `skill` / `hook` / `mcp_server` / `command` |
 | `capabilities[].entry_point` | tool 必填；其他模板也应明确声明 |
 | `capabilities[].permissions` | `scope:action` 列表，只声明真实需要的权限 |
+| `capabilities[].input_schema` | tool 调用参数的 object JSON Schema；提供后才向聊天 Agent 暴露 |
 | `min_sage_version` / `python_version` | 兼容下限；索引 compatibility 会据此派生 |
 | `user_config` | 生命周期配置的 JSON Schema |
 
@@ -197,10 +222,10 @@ preview 的确切含义是“manifest 与文件契约可生成、可校验、可
 3. 若 manifest 声明权限，逐项审阅后勾选确认，再点“确认权限并安装”；
 4. 对新记录点“启用”。此时仍没有代码执行；
 5. 点“启动运行”，确认 runtime 状态变为 active；
-6. 选择 tool capability，填写 JSON 参数并点“调用工具”；
+6. 选择 tool capability，填写 JSON 参数并点“调用工具”；若该 tool 声明了 `input_schema`，也可回到聊天让 Agent 调用并逐次批准；
 7. 修改配置后点“保存配置”——正在运行的 worker 会先停止；改代码后点“重启运行”。
 
-禁用、卸载、保存配置都会联动停止 worker。后端重启后 runtime 不自动恢复，必须再次显式启动。
+禁用、卸载、保存配置都会联动停止 worker，并同步从聊天工具面注销插件工具。后端重启后 runtime 不自动恢复，必须再次显式启动。
 
 ## 8. 静态索引格式
 
@@ -227,6 +252,8 @@ preview 的确切含义是“manifest 与文件契约可生成、可校验、可
 ## 9. 权限与安全清单
 
 - 默认权限为空；需要时逐项加 `file:read`、`network:write` 等最小声明；
+- `input_schema` 只声明 handler 真正接收的参数，能用 `additionalProperties: false` 时不要放开任意字段；
+- 权限声明不会把插件工具降成纯读：桥接按代码执行面处理，网络权限还会升为外部风险；
 - 未知 scope 会 warning 并在安装确认中原文展示，不要发明看似更弱的别名；
 - 不把 API key、用户文件正文或配置值写进日志、索引或测试快照；
 - 入口参数来自调用方，先验类型和边界再使用；
@@ -245,6 +272,7 @@ preview 的确切含义是“manifest 与文件契约可生成、可校验、可
 | `INVALID_PERMISSION` | 权限必须是全小写 `scope:action` |
 | tool 返回不可序列化 | 返回 dict/list/str/number/bool/null 组合，不要返回 Path、set 或自定义对象 |
 | 改代码后仍是旧结果 | 重跑 `dev`，或在设置页 restart runtime |
+| 聊天里看不到插件工具 | runtime 是否 active、tool 是否有 object 形 `input_schema`、当前 profile 白名单是否列出完整 `plugin__...` 名 |
 | `INDEX_LOCAL_MANIFEST_DRIFT` | plugin.json 改过但索引未重建；重新 `index build` |
 
 ## 11. 下一步贡献

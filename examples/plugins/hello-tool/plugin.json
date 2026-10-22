@@ -29,7 +29,7 @@
       "version": "0.1.0",
       "entry_point": "handlers:run",
       "permissions": [],
-      "config_schema": {
+      "input_schema": {
         "type": "object",
         "properties": {
           "name": {

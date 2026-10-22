@@ -150,7 +150,8 @@ def test_files_export_diff_snapshot_rollback_and_plugins_layer(
     assert tools["bash"]["bundle"] == "shell"
     assert tools["bash"]["risk"] == "exec"
     assert guidance["excluded_bundles"] == [
-        {"name": "mcp", "reason": "external_discovery"}
+        {"name": "mcp", "reason": "external_discovery"},
+        {"name": "plugins", "reason": "dynamic_plugin_runtime"},
     ]
 
     assert "WORKSPACE DEMO" in (

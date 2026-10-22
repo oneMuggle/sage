@@ -157,7 +157,7 @@ def _manifest_for_template(options: ScaffoldOptions) -> PluginManifest:
             version=options.version,
             entry_point="handlers:run",
             permissions=[],
-            config_schema={
+            input_schema={
                 "type": "object",
                 "properties": {
                     "name": {"type": "string", "default": "World"},
@@ -271,6 +271,11 @@ def _render_readme(manifest: PluginManifest, template: str) -> str:
                 "",
                 "Installing or enabling a lifecycle record never executes this code. "
                 "The runtime starts only through an explicit dev/UI/API action.",
+                "",
+                "After that explicit start, the tool is available to chat agents as "
+                "`plugin__<plugin>__<capability>` because the manifest declares an "
+                "`input_schema`; calls remain subject to Sage tool approval, and "
+                "stopping the runtime removes it.",
                 "",
             ]
         )
