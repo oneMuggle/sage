@@ -1772,3 +1772,24 @@
   - Added `AttachmentUploadAuditReport`, `auditAttachmentUpload()`, and `exportAttachmentUploadAuditJson()` plus `TransparencyPayloadAuditReport`, `auditTransparencyPayload()`, and `exportTransparencyPayloadAuditJson()`.
 - **Unit Test Coverage**:
   - Added 8 unit test suites (`16` tests total) verifying nominal and fallback audit diagnostics and JSON export across all 8 modules.
+
+### Phase P133 — Agents Form/Barrel, Arena Table/Feed/Assist/Barrel & Chat Active-Agent/Compact-Banner Audit Diagnostics & JSON Export (Completed)
+
+- **Target Modules**:
+  - `src/widgets/agents/EditAgentForm.tsx`: Added `EditAgentFormAuditInput`, `EditAgentFormAuditReport`, `evaluateEditAgentFormAudit`, and `exportEditAgentFormAuditJson`.
+  - `src/widgets/agents/index.ts`: Added `AgentsWidgetBarrelAuditInput`, `AgentsWidgetBarrelAuditReport`, `evaluateAgentsWidgetBarrelAudit`, and `exportAgentsWidgetBarrelAuditJson`.
+  - `src/widgets/arena/AccountTable.tsx`: Added `AccountTableAuditInput`, `AccountTableAuditReport`, `evaluateAccountTableAudit`, and `exportAccountTableAuditJson`.
+  - `src/widgets/arena/ObservationFeed.tsx`: Added `ObservationFeedAuditInput`, `ObservationFeedAuditReport`, `evaluateObservationFeedAudit`, and `exportObservationFeedAuditJson`.
+  - `src/widgets/arena/RegisterAssist.tsx`: Added `RegisterAssistAuditInput`, `RegisterAssistAuditReport`, `evaluateRegisterAssistAudit`, and `exportRegisterAssistAuditJson`.
+  - `src/widgets/arena/index.ts`: Added `ArenaWidgetBarrelAuditInput`, `ArenaWidgetBarrelAuditReport`, `evaluateArenaWidgetBarrelAudit`, and `exportArenaWidgetBarrelAuditJson`.
+  - `src/widgets/chat/ActiveAgentIndicator.tsx`: Added `ActiveAgentIndicatorAuditInput`, `ActiveAgentIndicatorAuditReport`, `evaluateActiveAgentIndicatorAudit`, and `exportActiveAgentIndicatorAuditJson`.
+  - `src/widgets/chat/CompactBanner.tsx`: Added `CompactBannerAuditInput`, `CompactBannerAuditReport`, `evaluateCompactBannerAudit`, and `exportCompactBannerAuditJson`.
+- **Unit Tests**:
+  - `src/widgets/agents/__tests__/EditAgentForm.p133.test.ts`
+  - `src/widgets/agents/__tests__/index.p133.test.ts`
+  - `src/widgets/arena/__tests__/AccountTable.p133.test.ts`
+  - `src/widgets/arena/__tests__/ObservationFeed.p133.test.ts`
+  - `src/widgets/arena/__tests__/RegisterAssist.p133.test.ts`
+  - `src/widgets/arena/__tests__/index.p133.test.ts`
+  - `src/widgets/chat/__tests__/ActiveAgentIndicator.p133.test.ts`
+  - `src/widgets/chat/__tests__/CompactBanner.p133.test.ts`

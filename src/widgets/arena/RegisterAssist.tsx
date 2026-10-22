@@ -274,3 +274,35 @@ export function RegisterAssist({ onCompleted, onError, onStatus }: RegisterAssis
     </section>
   );
 }
+
+export interface RegisterAssistAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/widgets/arena/RegisterAssist.tsx';
+  componentName: 'RegisterAssist';
+  hasEmailInput: boolean;
+  isRunning: boolean;
+  exportedAt: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditRegisterAssist(
+  email = 'user@example.com',
+  isRunning = false,
+): RegisterAssistAuditReport {
+  return {
+    schemaVersion: '1.0',
+    module: 'src/widgets/arena/RegisterAssist.tsx',
+    componentName: 'RegisterAssist',
+    hasEmailInput: email.trim().length > 0,
+    isRunning: Boolean(isRunning),
+    exportedAt: '2026-10-22',
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportRegisterAssistAuditJson(
+  email = 'user@example.com',
+  isRunning = false,
+): string {
+  return JSON.stringify(auditRegisterAssist(email, isRunning), null, 2);
+}

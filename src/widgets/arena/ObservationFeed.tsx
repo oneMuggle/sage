@@ -120,3 +120,34 @@ export function ObservationFeed({ onError, onStatus }: ObservationFeedProps) {
     </section>
   );
 }
+
+export interface ObservationFeedAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/widgets/arena/ObservationFeed.tsx';
+  componentName: 'ObservationFeed';
+  entryCount: number;
+  isEmpty: boolean;
+  exportedAt: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditObservationFeed(
+  entryCount = 0,
+): ObservationFeedAuditReport {
+  const normalized = Math.max(0, entryCount);
+  return {
+    schemaVersion: '1.0',
+    module: 'src/widgets/arena/ObservationFeed.tsx',
+    componentName: 'ObservationFeed',
+    entryCount: normalized,
+    isEmpty: normalized === 0,
+    exportedAt: '2026-10-22',
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportObservationFeedAuditJson(
+  entryCount = 0,
+): string {
+  return JSON.stringify(auditObservationFeed(entryCount), null, 2);
+}
