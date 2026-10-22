@@ -210,7 +210,7 @@ export type AgentState =
   | 'failed'
   // 2026-09 step-by-step: 每次 ReAct 迭代结束（OBSERVING 之后）由后端产出,
   // 前端据此把当前 streaming 气泡快照为已完成 step + 准备下一步占位。
-  // win7: 后端枚举暂未产出 step_done,类型先行对齐 main（r112 全态锁定测试需要）。
+  // win7: 后端已同步 main 的 step-by-step 落库(AgentState.STEP_DONE + 事件产出)。
   | 'step_done'
   // Multi-Agent Orchestration (2026-08-11)
   | 'task_plan'

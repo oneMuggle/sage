@@ -2296,9 +2296,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     if accumulated_tool_calls
                                     else None
                                 ),
+                                # 2026-09 step-by-step: partial 行归属到当前
+                                # 中断时正在执行的 iteration(== last_evt.iteration)。
+                                step_index=(
+                                    last_evt.iteration if last_evt is not None else 0
+                                ),
                                 # R81: 中断行也带上已捕获的引用信息（首写 flag
-                                # 置位防与已落库的 step 行重复）。win7 无
-                                # step-by-step 落库, 不写 step_index。
+                                # 置位防与已落库的 step 行重复）。
                                 rag_citations=(
                                     r81_rag_citations_json
                                     if not r81_rag_citations_written
