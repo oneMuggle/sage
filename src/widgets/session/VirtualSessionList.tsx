@@ -142,3 +142,45 @@ export function VirtualSessionList({
     </div>
   );
 }
+
+export interface VirtualSessionListAuditInput {
+  totalSessionCount: number;
+  renderedRowCount: number;
+  rowHeightPx: number;
+  overscanCount: number;
+}
+
+export interface VirtualSessionListAuditReport {
+  totalSessionCount: number;
+  renderedRowCount: number;
+  virtualizationRatio: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateVirtualSessionListGovernanceAudit(
+  input: VirtualSessionListAuditInput,
+): VirtualSessionListAuditReport {
+  const issueCodes: string[] = [];
+  const totalSessionCount = Math.max(0, Math.trunc(input.totalSessionCount));
+  const renderedRowCount = Math.max(0, Math.trunc(input.renderedRowCount));
+  if (input.rowHeightPx < 24 || input.rowHeightPx > 160) {
+    issueCodes.push('VIRTUAL_SESSION_LIST_ROW_HEIGHT_INVALID');
+  }
+  if (input.overscanCount < 0 || input.overscanCount > 50) {
+    issueCodes.push('VIRTUAL_SESSION_LIST_OVERSCAN_OUT_OF_RANGE');
+  }
+  if (totalSessionCount > 0 && renderedRowCount > totalSessionCount + Math.max(0, input.overscanCount) * 2) {
+    issueCodes.push('VIRTUAL_SESSION_LIST_RENDER_OVERFLOW');
+  }
+  const virtualizationRatio =
+    totalSessionCount > 0 ? Number((renderedRowCount / totalSessionCount).toFixed(4)) : 1;
+  return {
+    totalSessionCount,
+    renderedRowCount,
+    virtualizationRatio,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
