@@ -37,6 +37,7 @@ interface AtFileMenuProps {
   onClose: () => void;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatAtFileMenuMarkdown(
   query: string | null,
   results: ReadonlyArray<FileSearchResult>,
@@ -60,6 +61,7 @@ export function formatAtFileMenuMarkdown(
   return lines.join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatAtFileMenuJson(
   query: string | null,
   results: ReadonlyArray<FileSearchResult>,
@@ -348,4 +350,23 @@ export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
       )}
     </div>
   );
+}
+
+export interface AtFileMenuGovernanceAudit {
+  module: 'features.chat.AtFileMenu';
+  phase: 'P159';
+  hasMenuComponent: boolean;
+  hasMarkdownFormatter: boolean;
+  healthy: boolean;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditAtFileMenuGovernance(): AtFileMenuGovernanceAudit {
+  return {
+    module: 'features.chat.AtFileMenu',
+    phase: 'P159',
+    hasMenuComponent: typeof AtFileMenu === 'function',
+    hasMarkdownFormatter: typeof formatAtFileMenuMarkdown === 'function',
+    healthy: typeof AtFileMenu === 'function' && typeof formatAtFileMenuMarkdown === 'function',
+  };
 }

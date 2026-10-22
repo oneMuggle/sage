@@ -82,3 +82,22 @@ export function buildEntityRefsAuditSnapshot(
 export function buildEntityRefsAuditJson(query: string | null = null): string {
   return JSON.stringify(buildEntityRefsAuditSnapshot(query), null, 2);
 }
+
+export interface EntityRefsGovernanceAudit {
+  module: 'features.chat.entityRefs';
+  phase: 'P159';
+  kindCount: number;
+  defaultSuggestionCount: number;
+  healthy: boolean;
+}
+
+export function auditEntityRefsGovernance(): EntityRefsGovernanceAudit {
+  const suggestions = getEntityKindSuggestions('');
+  return {
+    module: 'features.chat.entityRefs',
+    phase: 'P159',
+    kindCount: ENTITY_REF_KINDS.length,
+    defaultSuggestionCount: suggestions.length,
+    healthy: ENTITY_REF_KINDS.length === 4 && suggestions.length === 4,
+  };
+}
