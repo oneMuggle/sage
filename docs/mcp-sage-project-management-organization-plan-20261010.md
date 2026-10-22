@@ -1883,3 +1883,15 @@
   6. `src/widgets/sidebar/sections/MaterialStatusBadge.tsx` (`evaluateMaterialStatusBadgeGovernanceAudit` + `src/widgets/sidebar/sections/__tests__/MaterialStatusBadge.p139.test.ts`)
   7. `src/widgets/skills/index.ts` (`evaluateSkillsBarrelGovernanceAudit` + `src/widgets/skills/__tests__/index.p139.test.ts`)
   8. `src/widgets/system/BackendStatusBanner.tsx` (`evaluateBackendStatusBannerGovernanceAudit` + `src/widgets/system/__tests__/BackendStatusBanner.p139.test.ts`)
+
+## Phase P140 — DeliveryDrawerHost, Wiki Sidebar/Preview/Trees/Barrel, SavedTaskRecipes & TaskModelAdvisor Governance Audit (2026-10-22)
+
+- **PRs**: `#2300` (`main` @ `262b8c600`) / `#2301` (`release/win7` @ `cc09b908c`) merged for Phase P139; Phase P140 completes all `src/widgets/` modules and extends deterministic governance audit contracts across 8 delivery drawer, wiki sidebar/preview/tree/barrel, and task-brief recipe/advisor modules:
+  1. `src/widgets/task-center/DeliveryDrawerHost.tsx` (`evaluateDeliveryDrawerHostGovernanceAudit` + `src/widgets/task-center/__tests__/DeliveryDrawerHost.p140.test.ts`)
+  2. `src/widgets/wiki/IconSidebar.tsx` (`evaluateWikiIconSidebarGovernanceAudit` + `src/widgets/wiki/__tests__/IconSidebar.p140.test.ts`)
+  3. `src/widgets/wiki/MarkdownPreview.tsx` (`evaluateWikiMarkdownPreviewGovernanceAudit` + `src/widgets/wiki/__tests__/MarkdownPreview.p140.test.ts`)
+  4. `src/widgets/wiki/SourcesTree.tsx` (`evaluateWikiSourcesTreeGovernanceAudit` + `src/widgets/wiki/__tests__/SourcesTree.p140.test.ts`)
+  5. `src/widgets/wiki/WikiFileTree.tsx` (`evaluateWikiFileTreeGovernanceAudit` + `src/widgets/wiki/__tests__/WikiFileTree.p140.test.ts`)
+  6. `src/widgets/wiki/index.ts` (`evaluateWikiBarrelGovernanceAudit` + `src/widgets/wiki/__tests__/index.p140.test.ts`)
+  7. `src/features/task-brief/SavedTaskRecipes.tsx` (`evaluateSavedTaskRecipesGovernanceAudit` + `src/features/task-brief/__tests__/SavedTaskRecipes.p140.test.ts`)
+  8. `src/features/task-brief/TaskModelAdvisor.tsx` (`evaluateTaskModelAdvisorGovernanceAudit` + `src/features/task-brief/__tests__/TaskModelAdvisor.p140.test.ts`)

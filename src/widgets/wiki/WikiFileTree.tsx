@@ -100,3 +100,43 @@ function TreeNode({
     </div>
   );
 }
+
+export interface WikiFileTreeAuditInput {
+  pageCount: number;
+  selectedPagePath: string;
+  expandedFolderPaths: string[];
+}
+
+export interface WikiFileTreeAuditReport {
+  normalizedPageCount: number;
+  uniqueExpandedFolderCount: number;
+  hasValidSelectedPath: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateWikiFileTreeGovernanceAudit(
+  input: WikiFileTreeAuditInput,
+): WikiFileTreeAuditReport {
+  const issueCodes: string[] = [];
+  if (input.pageCount < 0) {
+    issueCodes.push('WIKI_FILE_TREE_PAGE_COUNT_NEGATIVE');
+  }
+  const trimmedSelected = input.selectedPagePath.trim();
+  const hasValidSelectedPath =
+    trimmedSelected.length === 0 || !trimmedSelected.includes('..');
+  if (!hasValidSelectedPath) {
+    issueCodes.push('WIKI_FILE_TREE_SELECTED_PATH_TRAVERSAL');
+  }
+  const normalizedFolders = input.expandedFolderPaths
+    .map((folder) => folder.trim())
+    .filter((folder) => folder.length > 0);
+  return {
+    normalizedPageCount: Math.max(0, Math.trunc(input.pageCount)),
+    uniqueExpandedFolderCount: new Set(normalizedFolders).size,
+    hasValidSelectedPath,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

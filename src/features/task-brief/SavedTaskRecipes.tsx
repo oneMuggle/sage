@@ -94,3 +94,44 @@ export function SavedTaskRecipes({ onUse }: { onUse: (recipe: TaskRecipe) => voi
     </section>
   );
 }
+
+export interface SavedTaskRecipesAuditInput {
+  recipeIds: string[];
+  maxRecipesAllowed: number;
+  hasOnUseHandler: boolean;
+}
+
+export interface SavedTaskRecipesAuditReport {
+  uniqueRecipeCount: number;
+  withinCapacity: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateSavedTaskRecipesGovernanceAudit(
+  input: SavedTaskRecipesAuditInput,
+): SavedTaskRecipesAuditReport {
+  const issueCodes: string[] = [];
+  const normalized = input.recipeIds
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
+  const uniqueRecipeCount = new Set(normalized).size;
+  if (uniqueRecipeCount !== normalized.length) {
+    issueCodes.push('SAVED_TASK_RECIPES_DUPLICATE_ID');
+  }
+  const withinCapacity =
+    input.maxRecipesAllowed > 0 && uniqueRecipeCount <= input.maxRecipesAllowed;
+  if (!withinCapacity) {
+    issueCodes.push('SAVED_TASK_RECIPES_CAPACITY_EXCEEDED');
+  }
+  if (!input.hasOnUseHandler) {
+    issueCodes.push('SAVED_TASK_RECIPES_USE_HANDLER_MISSING');
+  }
+  return {
+    uniqueRecipeCount,
+    withinCapacity,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
