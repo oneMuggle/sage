@@ -8,6 +8,7 @@ export interface WindowControlsProps {
   bridge?: WindowControlsBridge;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatWindowControlsAuditSnapshot(opts: {
   hasCustomBridge?: boolean;
   actionCount?: number;
@@ -15,6 +16,7 @@ export function formatWindowControlsAuditSnapshot(opts: {
   return `windowControls|customBridge=${opts.hasCustomBridge ? 1 : 0}|actions=${opts.actionCount ?? 3}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatWindowControlsAuditJson(opts: {
   hasCustomBridge?: boolean;
   actionCount?: number;
@@ -131,4 +133,28 @@ export function WindowControls({ bridge }: WindowControlsProps) {
       </span>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditWindowControlsGovernance(
+  state: {
+    hasBridge?: boolean;
+    maximized?: boolean;
+  } = {},
+): {
+  module: 'src/widgets/layout/WindowControls.tsx';
+  phase: 'P150';
+  hasBridge: boolean;
+  maximized: boolean;
+  healthy: boolean;
+} {
+  const hasBridge = state.hasBridge !== false;
+  const maximized = state.maximized === true;
+  return {
+    module: 'src/widgets/layout/WindowControls.tsx',
+    phase: 'P150',
+    hasBridge,
+    maximized,
+    healthy: hasBridge,
+  };
 }

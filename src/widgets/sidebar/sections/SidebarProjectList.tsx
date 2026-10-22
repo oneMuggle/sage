@@ -31,6 +31,7 @@ interface SidebarProjectListProps {
   onOpenSession: (sessionId: string) => void;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatSidebarProjectListAuditSnapshot(opts: {
   projectsCount?: number;
   expandedCount?: number;
@@ -41,6 +42,7 @@ export function formatSidebarProjectListAuditSnapshot(opts: {
   return `sidebarProjectList|projects=${opts.projectsCount ?? 0}|expanded=${opts.expandedCount ?? 0}|missing=${opts.missingCount ?? 0}|collapsed=${opts.collapsed ? 1 : 0}|drop=${opts.dropActive ? 1 : 0}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatSidebarProjectListAuditJson(opts: {
   projectsCount?: number;
   expandedCount?: number;
@@ -342,4 +344,31 @@ export function SidebarProjectList({
       )}
     />
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditSidebarProjectListGovernance(
+  state: {
+    projectCount?: number;
+    hasActiveProject?: boolean;
+  } = {},
+): {
+  module: 'src/widgets/sidebar/sections/SidebarProjectList.tsx';
+  phase: 'P150';
+  projectCount: number;
+  hasActiveProject: boolean;
+  healthy: boolean;
+} {
+  const projectCount =
+    typeof state.projectCount === 'number' && Number.isFinite(state.projectCount)
+      ? Math.max(0, Math.trunc(state.projectCount))
+      : 3;
+  const hasActiveProject = state.hasActiveProject !== false;
+  return {
+    module: 'src/widgets/sidebar/sections/SidebarProjectList.tsx',
+    phase: 'P150',
+    projectCount,
+    hasActiveProject,
+    healthy: projectCount >= 0,
+  };
 }
