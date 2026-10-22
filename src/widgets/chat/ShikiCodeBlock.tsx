@@ -200,3 +200,55 @@ export function ShikiCodeBlock({ language, children }: ShikiCodeBlockProps) {
     </div>
   );
 }
+
+export interface ShikiCodeBlockAuditInput {
+  language: string;
+  lineCount: number;
+  charCount: number;
+  highlighterReady: boolean;
+}
+
+export interface ShikiCodeBlockAuditReport {
+  normalizedLanguage: string;
+  lineCount: number;
+  charCount: number;
+  highlighterReady: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateShikiCodeBlockAudit(
+  input: ShikiCodeBlockAuditInput,
+): ShikiCodeBlockAuditReport {
+  const normalizedLanguage = input.language.trim().toLowerCase() || 'plaintext';
+  const lineCount = Math.max(0, Math.trunc(input.lineCount));
+  const charCount = Math.max(0, Math.trunc(input.charCount));
+  const issueCodes: string[] = [];
+
+  if (charCount === 0 || lineCount === 0) {
+    issueCodes.push('empty_code_block_content');
+  }
+  if (!input.highlighterReady) {
+    issueCodes.push('shiki_highlighter_fallback');
+  }
+  if (lineCount > 5000) {
+    issueCodes.push('oversized_code_block_lines');
+  }
+
+  return {
+    normalizedLanguage,
+    lineCount,
+    charCount,
+    highlighterReady: Boolean(input.highlighterReady),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportShikiCodeBlockAuditJson(
+  input: ShikiCodeBlockAuditInput,
+): string {
+  return JSON.stringify(evaluateShikiCodeBlockAudit(input));
+}

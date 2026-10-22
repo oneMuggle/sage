@@ -46,3 +46,54 @@ export function RightPanelToggle({ open, onClick, unseenCount = 0 }: RightPanelT
     </Tooltip>
   );
 }
+
+export interface RightPanelToggleAuditInput {
+  isOpen: boolean;
+  activeTab: string;
+  badgeCount: number;
+  shortcutConfigured: boolean;
+}
+
+export interface RightPanelToggleAuditReport {
+  isOpen: boolean;
+  activeTab: string;
+  badgeCount: number;
+  shortcutConfigured: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateRightPanelToggleAudit(
+  input: RightPanelToggleAuditInput,
+): RightPanelToggleAuditReport {
+  const activeTab = input.activeTab.trim();
+  const badgeCount = Math.max(0, Math.trunc(input.badgeCount));
+  const issueCodes: string[] = [];
+
+  if (!activeTab) {
+    issueCodes.push('missing_right_panel_active_tab');
+  }
+  if (input.badgeCount < 0) {
+    issueCodes.push('negative_badge_count');
+  }
+  if (!input.shortcutConfigured) {
+    issueCodes.push('missing_toggle_shortcut');
+  }
+
+  return {
+    isOpen: Boolean(input.isOpen),
+    activeTab,
+    badgeCount,
+    shortcutConfigured: Boolean(input.shortcutConfigured),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportRightPanelToggleAuditJson(
+  input: RightPanelToggleAuditInput,
+): string {
+  return JSON.stringify(evaluateRightPanelToggleAudit(input));
+}

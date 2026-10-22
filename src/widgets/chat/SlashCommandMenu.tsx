@@ -39,3 +39,56 @@ export function SlashCommandMenu({ commands, selectedIndex, onSelect }: SlashCom
     </div>
   );
 }
+
+export interface SlashCommandMenuAuditInput {
+  query: string;
+  matchedCommandCount: number;
+  selectedIndex: number;
+  isOpen: boolean;
+}
+
+export interface SlashCommandMenuAuditReport {
+  normalizedQuery: string;
+  matchedCommandCount: number;
+  selectedIndex: number;
+  selectionValid: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateSlashCommandMenuAudit(
+  input: SlashCommandMenuAuditInput,
+): SlashCommandMenuAuditReport {
+  const normalizedQuery = input.query.trim();
+  const matchedCommandCount = Math.max(0, Math.trunc(input.matchedCommandCount));
+  const selectedIndex = Math.trunc(input.selectedIndex);
+  const selectionValid =
+    matchedCommandCount === 0
+      ? selectedIndex === 0 || selectedIndex === -1
+      : selectedIndex >= 0 && selectedIndex < matchedCommandCount;
+  const issueCodes: string[] = [];
+
+  if (input.isOpen && matchedCommandCount === 0) {
+    issueCodes.push('no_matching_slash_commands');
+  }
+  if (!selectionValid) {
+    issueCodes.push('slash_menu_selection_out_of_bounds');
+  }
+
+  return {
+    normalizedQuery,
+    matchedCommandCount,
+    selectedIndex,
+    selectionValid,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportSlashCommandMenuAuditJson(
+  input: SlashCommandMenuAuditInput,
+): string {
+  return JSON.stringify(evaluateSlashCommandMenuAudit(input));
+}

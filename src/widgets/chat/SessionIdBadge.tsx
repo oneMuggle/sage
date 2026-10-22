@@ -36,3 +36,48 @@ export function SessionIdBadge({ sessionId }: SessionIdBadgeProps) {
     </button>
   );
 }
+
+export interface SessionIdBadgeAuditInput {
+  sessionId: string;
+  copiedRecently: boolean;
+  displayPrefixLength: number;
+}
+
+export interface SessionIdBadgeAuditReport {
+  sessionId: string;
+  shortLabel: string;
+  copiedRecently: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateSessionIdBadgeAudit(
+  input: SessionIdBadgeAuditInput,
+): SessionIdBadgeAuditReport {
+  const sessionId = input.sessionId.trim();
+  const prefixLen = Math.max(4, Math.min(36, Math.trunc(input.displayPrefixLength || 8)));
+  const shortLabel = sessionId.slice(0, prefixLen);
+  const issueCodes: string[] = [];
+
+  if (!sessionId) {
+    issueCodes.push('missing_session_id');
+  } else if (sessionId.length < 6) {
+    issueCodes.push('session_id_too_short');
+  }
+
+  return {
+    sessionId,
+    shortLabel,
+    copiedRecently: Boolean(input.copiedRecently),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportSessionIdBadgeAuditJson(
+  input: SessionIdBadgeAuditInput,
+): string {
+  return JSON.stringify(evaluateSessionIdBadgeAudit(input));
+}
