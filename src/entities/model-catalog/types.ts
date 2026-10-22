@@ -145,3 +145,26 @@ export function formatCandidateModelJson(model: CandidateModel): string {
     2,
   );
 }
+
+export function auditModelCatalogTypesGovernance(
+  state: {
+    reviewableFieldCount?: number;
+  } = {},
+): {
+  module: 'src/entities/model-catalog/types.ts';
+  phase: 'P153';
+  reviewableFieldCount: number;
+  healthy: boolean;
+} {
+  const reviewableFieldCount =
+    typeof state.reviewableFieldCount === 'number' &&
+    Number.isFinite(state.reviewableFieldCount)
+      ? Math.max(0, Math.trunc(state.reviewableFieldCount))
+      : REVIEWABLE_FIELDS.length;
+  return {
+    module: 'src/entities/model-catalog/types.ts',
+    phase: 'P153',
+    reviewableFieldCount,
+    healthy: reviewableFieldCount === REVIEWABLE_FIELDS.length,
+  };
+}

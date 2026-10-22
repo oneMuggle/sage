@@ -92,3 +92,30 @@ export function formatFontSettingsSummary(settings: FontSettings): string {
 export function formatFontSettingsJson(settings: FontSettings): string {
   return JSON.stringify(normalizeFontSettings(settings), null, 2);
 }
+
+export function auditFontOptionsGovernance(
+  state: {
+    uiSize?: number;
+    codeSize?: number;
+  } = {},
+): {
+  module: 'src/entities/font/fontOptions.ts';
+  phase: 'P153';
+  uiSize: number;
+  codeSize: number;
+  healthy: boolean;
+} {
+  const uiSize = normalizeFontSize(state.uiSize, FONT_DEFAULTS.fontSizeUi);
+  const codeSize = normalizeFontSize(state.codeSize, FONT_DEFAULTS.fontSizeCode);
+  return {
+    module: 'src/entities/font/fontOptions.ts',
+    phase: 'P153',
+    uiSize,
+    codeSize,
+    healthy:
+      uiSize >= FONT_SIZE_MIN &&
+      uiSize <= FONT_SIZE_MAX &&
+      codeSize >= FONT_SIZE_MIN &&
+      codeSize <= FONT_SIZE_MAX,
+  };
+}
