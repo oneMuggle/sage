@@ -66,3 +66,15 @@
 4. 残差 226 文件是稳态：以后 main 合入后 `check_py38_compat.py` + `parity_report.py` 即可发现新增偏差。
 
 > 由 `scripts/win7/classify_diff.py` + `parity_report.py` 生成；批次表手工维护。
+
+## 口径变更（2026-10-21）：docs 差异改为 `docs-drift`
+
+`parity_report.py` 不再把 `docs/**` 计入「需要动作」。原因：main 每写一篇计划文档，
+旧口径下的「需要动作」就会 +1，导致 M1/M2 在代码零退步时也达不成。
+
+- 默认 `--docs-mode exempt`：docs → `docs-drift`，只观测、不计数、不进 `parity-allow.txt`
+- `--docs-mode count`：完整复现旧口径，历史数字可对照
+- 实测（base `f111bb9b2` / head `9cac234a5`）：需动作 963 → **668**，docs-drift 338；
+  非 docs 文件的 (path, grade, raw_grade) 在两种口径下逐条相同
+
+口径变更后 M1/M2 需按 docs 排除后重新表述，详见 `docs/plans/2026-10-21_win7-parity-docs-exempt.md`。
