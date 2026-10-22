@@ -22,3 +22,24 @@ export function formatProvidersBarrelJson(): string {
   });
 }
 
+export function auditProvidersBarrelGovernance(
+  state: {
+    exportedCount?: number;
+  } = {},
+): {
+  module: 'src/app/providers/index.ts';
+  phase: 'P151';
+  exportedCount: number;
+  healthy: boolean;
+} {
+  const exportedCount =
+    typeof state.exportedCount === 'number' && Number.isFinite(state.exportedCount)
+      ? Math.max(0, Math.trunc(state.exportedCount))
+      : 6;
+  return {
+    module: 'src/app/providers/index.ts',
+    phase: 'P151',
+    exportedCount,
+    healthy: exportedCount >= 5,
+  };
+}

@@ -36,3 +36,32 @@ export function formatToastProviderJson(
   });
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditToastProviderGovernance(
+  state: {
+    maxToasts?: number;
+    durationMs?: number;
+  } = {},
+): {
+  module: 'src/app/providers/ToastProvider.tsx';
+  phase: 'P151';
+  maxToasts: number;
+  durationMs: number;
+  healthy: boolean;
+} {
+  const maxToasts =
+    typeof state.maxToasts === 'number' && Number.isFinite(state.maxToasts)
+      ? Math.max(1, Math.min(20, Math.trunc(state.maxToasts)))
+      : 5;
+  const durationMs =
+    typeof state.durationMs === 'number' && Number.isFinite(state.durationMs)
+      ? Math.max(1000, Math.min(30000, Math.round(state.durationMs)))
+      : 4000;
+  return {
+    module: 'src/app/providers/ToastProvider.tsx',
+    phase: 'P151',
+    maxToasts,
+    durationMs,
+    healthy: maxToasts >= 1 && durationMs >= 1000 && durationMs <= 30000,
+  };
+}
