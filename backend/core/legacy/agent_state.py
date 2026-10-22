@@ -40,6 +40,10 @@ class AgentState(str, Enum):
     # ASK_USER_QUESTION 事件(携带 user_question 字段),前端渲染
     # QuestionDialog 并 POST /api/v1/questions/{request_id}/answer。
     ASK_USER_QUESTION = "ask_user_question"
+    # 2026-09 step-by-step: 每次工具调用迭代边界推一个 STEP_DONE 事件,
+    # legacy_routes 收到后把当前累加的 reasoning/tool_calls/content 快照成
+    # 一条 assistant 消息,并重置累加器准备下一步。
+    STEP_DONE = "step_done"
     DONE = "done"
     FAILED = "failed"
 
