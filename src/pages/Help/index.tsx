@@ -103,3 +103,43 @@ export function Help() {
     </div>
   );
 }
+
+export interface HelpPageContainerAuditInput {
+  activeSubTab: string;
+  availableSubTabs: string[];
+  hasTabSwitchHandler: boolean;
+}
+
+export interface HelpPageContainerAuditReport {
+  activeSubTabValid: boolean;
+  subTabCount: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateHelpPageContainerGovernanceAudit(
+  input: HelpPageContainerAuditInput,
+): HelpPageContainerAuditReport {
+  const issueCodes: string[] = [];
+  const normalized = input.availableSubTabs
+    .map((tab) => tab.trim())
+    .filter((tab) => tab.length > 0);
+  const subTabCount = new Set(normalized).size;
+  if (subTabCount < 3) {
+    issueCodes.push('HELP_PAGE_SUBTABS_INCOMPLETE');
+  }
+  const activeSubTabValid = normalized.includes(input.activeSubTab.trim());
+  if (!activeSubTabValid) {
+    issueCodes.push('HELP_PAGE_ACTIVE_SUBTAB_INVALID');
+  }
+  if (!input.hasTabSwitchHandler) {
+    issueCodes.push('HELP_PAGE_TAB_SWITCH_HANDLER_MISSING');
+  }
+  return {
+    activeSubTabValid,
+    subTabCount,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
