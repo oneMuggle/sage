@@ -60,3 +60,28 @@ export function formatDiagnosticPreviewJson(
   });
 }
 /* v8 ignore stop */
+
+export interface UseDiagnosticPreviewGovernanceAudit {
+  phase: 'P162';
+  module: 'src/features/diagnostic/useDiagnosticPreview.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseDiagnosticPreviewGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseDiagnosticPreviewGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P162',
+    module: 'src/features/diagnostic/useDiagnosticPreview.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P162 UseDiagnosticPreview Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}
