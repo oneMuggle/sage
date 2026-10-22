@@ -23,3 +23,24 @@ export function formatAttentionBarrelJson(): string {
   });
 }
 
+export function auditAttentionBarrelGovernance(
+  state: {
+    exportedCount?: number;
+  } = {},
+): {
+  module: 'src/features/attention/index.ts';
+  phase: 'P158';
+  exportedCount: number;
+  healthy: boolean;
+} {
+  const exportedCount =
+    typeof state.exportedCount === 'number' && Number.isFinite(state.exportedCount)
+      ? Math.max(0, Math.trunc(state.exportedCount))
+      : 8;
+  return {
+    module: 'src/features/attention/index.ts',
+    phase: 'P158',
+    exportedCount,
+    healthy: exportedCount >= 5,
+  };
+}
