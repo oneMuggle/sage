@@ -33,7 +33,7 @@ def test_resource_write_rejected_when_parent_escapes(
     scripts = skills_dir / "scripts"
     scripts.symlink_to(outside, target_is_directory=True)
 
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match="Refusing skill resource write outside skills dir"):
         _write_resource_file(skills_dir, Path("scripts/scan.py"), b"payload")
 
     assert not (outside / "scan.py").exists()

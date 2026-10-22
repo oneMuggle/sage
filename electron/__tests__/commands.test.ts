@@ -253,7 +253,7 @@ describe('skills IPC (PR-C)', () => {
     });
     const handler = registeredHandlers.get('skills:pick-directory')!;
     const result = await handler({});
-    expect(result).toBe('/tmp/skill-dir');
+    expect(result).toBe(resolve('/tmp/skill-dir'));
     expect(mocks.dialog.showOpenDialog).toHaveBeenCalledTimes(1);
   });
 
@@ -358,9 +358,9 @@ describe('skills IPC (PR-C)', () => {
       return Buffer.from('');
     }) as never);
 
-    await registeredHandlers.get('skills:pick-directory')!({});
+    const picked = await registeredHandlers.get('skills:pick-directory')!({});
     const handler = registeredHandlers.get('skills:import-directory')!;
-    const result = (await handler({}, '/tmp/skill-dir')) as {
+    const result = (await handler({}, picked)) as {
       imported: Array<{ name: string; path: string }>;
       skipped: Array<{ name: string; reason: string }>;
     };
@@ -404,9 +404,9 @@ describe('skills IPC (PR-C)', () => {
     mocks.fs.readdirSync.mockReturnValueOnce(['SKILL.md']);
     mocks.fs.readFileSync.mockReturnValue(Buffer.from('---\nname: x\n---\nb'));
 
-    await registeredHandlers.get('skills:pick-directory')!({});
+    const picked = await registeredHandlers.get('skills:pick-directory')!({});
     const handler = registeredHandlers.get('skills:import-directory')!;
-    await expect(handler({}, '/tmp/skill-dir')).rejects.toThrow(/missing_skill_md/);
+    await expect(handler({}, picked)).rejects.toThrow(/missing_skill_md/);
   });
 });
 
