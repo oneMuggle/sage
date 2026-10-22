@@ -69,3 +69,26 @@ export function formatCurrentSessionStorageJson(id: string | null): string {
     2,
   );
 }
+
+export function auditSessionStorageGovernance(
+  state: {
+    hasSessionId?: boolean;
+    storageValid?: boolean;
+  } = {},
+): {
+  module: 'src/entities/session/storage.ts';
+  phase: 'P154';
+  hasSessionId: boolean;
+  storageValid: boolean;
+  healthy: boolean;
+} {
+  const hasSessionId = state.hasSessionId !== false;
+  const storageValid = state.storageValid !== false;
+  return {
+    module: 'src/entities/session/storage.ts',
+    phase: 'P154',
+    hasSessionId,
+    storageValid,
+    healthy: storageValid,
+  };
+}

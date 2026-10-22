@@ -2105,3 +2105,17 @@
   - `src/entities/model-catalog/types.ts`: `auditModelCatalogTypesGovernance`
 - **Verification**:
   - Added 8 dedicated Vitest suites (`*.p153.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
+
+### Phase P154: Orchestration LaneBoard/RunControl/EventSubscription, Permission/Question State, Scheduled TaskStore, Session Storage & Setting DeepMerge Governance Audit (Completed 2026-10-22)
+
+- **Target Modules**:
+  - `src/entities/orchestration/laneBoardStore.ts`: `auditLaneBoardStoreGovernance`
+  - `src/entities/orchestration/runControlStore.ts`: `auditRunControlStoreGovernance`
+  - `src/entities/orchestration/useOrchEventSubscription.ts`: `auditUseOrchEventSubscriptionGovernance`
+  - `src/entities/permission/permissionState.ts`: `auditPermissionStateGovernance`
+  - `src/entities/question/questionState.ts`: `auditQuestionStateGovernance`
+  - `src/entities/scheduled/taskStore.ts`: `auditScheduledTaskStoreGovernance`
+  - `src/entities/session/storage.ts`: `auditSessionStorageGovernance`
+  - `src/entities/setting/deepMerge.ts`: `auditDeepMergeGovernance`
+- **Verification**:
+  - Added 8 dedicated Vitest suites (`*.p154.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
