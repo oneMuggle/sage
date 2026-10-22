@@ -47,9 +47,7 @@ export async function loadFileWithRetry<TArg, TResult>(
   maxAttempts: number = DEFAULT_MAX_LOAD_FILE_ATTEMPTS,
 ): Promise<TResult> {
   if (maxAttempts < 1) {
-    throw new RangeError(
-      `loadFileWithRetry: maxAttempts must be >= 1, got ${maxAttempts}`,
-    );
+    throw new RangeError(`loadFileWithRetry: maxAttempts must be >= 1, got ${maxAttempts}`);
   }
   let lastError: unknown;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {

@@ -19,10 +19,7 @@ describe('loadFileWithRetry', () => {
     vi.useFakeTimers();
     try {
       const err = new Error("ERR_FAILED (-2) loading 'file:///dist/index.html'");
-      const loader = vi
-        .fn()
-        .mockRejectedValueOnce(err)
-        .mockResolvedValue('ok');
+      const loader = vi.fn().mockRejectedValueOnce(err).mockResolvedValue('ok');
 
       const promise = loadFileWithRetry(loader, '/dist/index.html');
       // First attempt fails synchronously in microtask; advance past the
@@ -40,10 +37,7 @@ describe('loadFileWithRetry', () => {
     try {
       const err1 = new Error('ERR_FAILED (-2) attempt 1');
       const err2 = new Error('ERR_FAILED (-2) attempt 2');
-      const loader = vi
-        .fn()
-        .mockRejectedValueOnce(err1)
-        .mockRejectedValueOnce(err2);
+      const loader = vi.fn().mockRejectedValueOnce(err1).mockRejectedValueOnce(err2);
 
       const promise = loadFileWithRetry(loader, '/dist/index.html', 2);
       // Attach rejection handler BEFORE draining timers — otherwise the
@@ -87,10 +81,7 @@ describe('loadFileWithRetry', () => {
   it('defaults maxAttempts to DEFAULT_MAX_LOAD_FILE_ATTEMPTS', async () => {
     vi.useFakeTimers();
     try {
-      const loader = vi
-        .fn()
-        .mockRejectedValueOnce(new Error('fail'))
-        .mockResolvedValue('ok');
+      const loader = vi.fn().mockRejectedValueOnce(new Error('fail')).mockResolvedValue('ok');
 
       const promise = loadFileWithRetry(loader, 'x');
       await vi.runAllTimersAsync();
@@ -104,10 +95,7 @@ describe('loadFileWithRetry', () => {
   it('waits LOAD_FILE_RETRY_DELAY_MS between attempts', async () => {
     vi.useFakeTimers();
     try {
-      const loader = vi
-        .fn()
-        .mockRejectedValueOnce(new Error('fail'))
-        .mockResolvedValue('ok');
+      const loader = vi.fn().mockRejectedValueOnce(new Error('fail')).mockResolvedValue('ok');
 
       const promise = loadFileWithRetry(loader, 'x');
 
