@@ -178,3 +178,48 @@ export function Layout() {
     </div>
   );
 }
+
+export interface LayoutShellAuditInput {
+  sidebarWidthPx: number;
+  sidebarCollapsed: boolean;
+  viewportWidthPx: number;
+  mainContentVisible: boolean;
+}
+
+export interface LayoutShellAuditReport {
+  effectiveSidebarWidthPx: number;
+  remainingContentWidthPx: number;
+  mainContentVisible: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateLayoutShellGovernanceAudit(
+  input: LayoutShellAuditInput,
+): LayoutShellAuditReport {
+  const issueCodes: string[] = [];
+  const effectiveSidebarWidthPx = input.sidebarCollapsed
+    ? 56
+    : Math.max(180, Math.min(480, Math.trunc(input.sidebarWidthPx)));
+  if (!input.sidebarCollapsed && (input.sidebarWidthPx < 180 || input.sidebarWidthPx > 480)) {
+    issueCodes.push('LAYOUT_SIDEBAR_WIDTH_OUT_OF_BOUNDS');
+  }
+  const remainingContentWidthPx = Math.max(
+    0,
+    Math.trunc(input.viewportWidthPx) - effectiveSidebarWidthPx,
+  );
+  if (remainingContentWidthPx < 360) {
+    issueCodes.push('LAYOUT_MAIN_CONTENT_CRAMPED');
+  }
+  if (!input.mainContentVisible) {
+    issueCodes.push('LAYOUT_MAIN_CONTENT_HIDDEN');
+  }
+  return {
+    effectiveSidebarWidthPx,
+    remainingContentWidthPx,
+    mainContentVisible: input.mainContentVisible,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

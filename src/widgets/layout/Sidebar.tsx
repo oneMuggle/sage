@@ -527,3 +527,44 @@ export function Sidebar({ width = 300, collapsed = false, onToggleCollapse }: Si
     </aside>
   );
 }
+
+export interface SidebarGovernanceAuditInput {
+  sessionCount: number;
+  projectCount: number;
+  widthPx: number;
+  collapsed: boolean;
+}
+
+export interface SidebarGovernanceAuditReport {
+  sessionCount: number;
+  projectCount: number;
+  effectiveWidthPx: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateSidebarGovernanceAudit(
+  input: SidebarGovernanceAuditInput,
+): SidebarGovernanceAuditReport {
+  const issueCodes: string[] = [];
+  if (input.sessionCount < 0) {
+    issueCodes.push('SIDEBAR_SESSION_COUNT_NEGATIVE');
+  }
+  if (input.projectCount < 0) {
+    issueCodes.push('SIDEBAR_PROJECT_COUNT_NEGATIVE');
+  }
+  if (!input.collapsed && (input.widthPx < 180 || input.widthPx > 480)) {
+    issueCodes.push('SIDEBAR_WIDTH_OUT_OF_RANGE');
+  }
+  const effectiveWidthPx = input.collapsed
+    ? 56
+    : Math.max(180, Math.min(480, Math.trunc(input.widthPx)));
+  return {
+    sessionCount: Math.max(0, Math.trunc(input.sessionCount)),
+    projectCount: Math.max(0, Math.trunc(input.projectCount)),
+    effectiveWidthPx,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

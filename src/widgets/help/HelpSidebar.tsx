@@ -108,3 +108,44 @@ function SidebarItem({ item, activeItem, onItemClick, depth }: SidebarItemProps)
     </li>
   );
 }
+
+export interface HelpSidebarAuditInput {
+  itemIds: string[];
+  activeItemId: string;
+  searchQuery: string;
+}
+
+export interface HelpSidebarAuditReport {
+  uniqueItemCount: number;
+  activeItemResolved: boolean;
+  normalizedSearchQuery: string;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateHelpSidebarGovernanceAudit(
+  input: HelpSidebarAuditInput,
+): HelpSidebarAuditReport {
+  const issueCodes: string[] = [];
+  const normalizedIds = input.itemIds.map((id) => id.trim()).filter((id) => id.length > 0);
+  const uniqueSet = new Set(normalizedIds);
+  if (uniqueSet.size === 0) {
+    issueCodes.push('HELP_SIDEBAR_ITEMS_EMPTY');
+  }
+  if (uniqueSet.size !== normalizedIds.length) {
+    issueCodes.push('HELP_SIDEBAR_DUPLICATE_ITEM_ID');
+  }
+  const activeItemResolved = uniqueSet.has(input.activeItemId.trim());
+  if (!activeItemResolved) {
+    issueCodes.push('HELP_SIDEBAR_ACTIVE_ITEM_UNRESOLVED');
+  }
+  const normalizedSearchQuery = input.searchQuery.trim();
+  return {
+    uniqueItemCount: uniqueSet.size,
+    activeItemResolved,
+    normalizedSearchQuery,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

@@ -82,3 +82,44 @@ export function SidebarNavItem({ item, active, variant, trailing, ariaLabel }: S
     </Link>
   );
 }
+
+export interface SidebarNavItemAuditInput {
+  itemId: string;
+  label: string;
+  badgeCount?: number;
+  disabled?: boolean;
+}
+
+export interface SidebarNavItemAuditReport {
+  normalizedId: string;
+  normalizedLabel: string;
+  normalizedBadgeCount: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateSidebarNavItemGovernanceAudit(
+  input: SidebarNavItemAuditInput,
+): SidebarNavItemAuditReport {
+  const issueCodes: string[] = [];
+  const normalizedId = input.itemId.trim();
+  const normalizedLabel = input.label.trim();
+  if (!normalizedId) {
+    issueCodes.push('SIDEBAR_NAV_ITEM_ID_EMPTY');
+  }
+  if (!normalizedLabel) {
+    issueCodes.push('SIDEBAR_NAV_ITEM_LABEL_EMPTY');
+  }
+  const rawBadge = input.badgeCount ?? 0;
+  if (rawBadge < 0) {
+    issueCodes.push('SIDEBAR_NAV_ITEM_BADGE_NEGATIVE');
+  }
+  return {
+    normalizedId,
+    normalizedLabel,
+    normalizedBadgeCount: Math.max(0, Math.trunc(rawBadge)),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
