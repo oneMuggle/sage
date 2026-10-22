@@ -90,7 +90,7 @@ export interface ArenaTokenElectronApiBridge {
 
 /**
  * Shape of `window.electronAPI.skills` — populated by the preload bridge.
- * Three methods back the Skills page Rescan + Import buttons (PR-C).
+ * Five methods back the Skills page Rescan + Import + Import-directory buttons (PR-C + T-4b).
  */
 export interface SkillsElectronApiBridge {
   /** Open native multi-select dialog for SKILL.md files. Returns paths or null on cancel. */
@@ -99,6 +99,12 @@ export interface SkillsElectronApiBridge {
   rescanSkills: () => Promise<RescanResult>;
   /** POST /api/v1/skills/import (multipart FormData) — write + hot-reload selected files. */
   importSkills: () => Promise<ImportResult>;
+  /** T-4b: Open native directory picker. Returns realpath or null on cancel. */
+  pickSkillDirectory: () => Promise<string | null>;
+  /** T-4b: POST /api/v1/skills/import-directory — walk + multipart with posix relative paths.
+   *  `pickedPath` 必须与上一次 pick 返回的路径一致（主进程会比对 recentPickedDirectory）；
+   *  不一致 → 抛出「directory selection changed, please pick again」。 */
+  importSkillDirectory: (pickedPath: string) => Promise<ImportResult>;
 }
 
 /**

@@ -32,6 +32,7 @@ import { PluginsTab } from './PluginsTab';
 import { ProvidersManager } from './ProvidersManager';
 import { RemoteWorkspacesTab } from './RemoteWorkspacesTab';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
+import { SkillsTab } from './SkillsTab';
 import { ToolsConnectionsTab } from './ToolsConnectionsTab';
 import { UpdatesTab } from './UpdatesTab';
 import { UsageStatsTab } from './UsageStatsTab';
@@ -125,6 +126,8 @@ export function Settings() {
   if (ENABLE_UPDATE_PROVIDERS_UI()) {
     tabs.push({ key: 'providers', label: t('settings.tab.providers' as TranslationKey) });
   }
+  // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
+  tabs.push({ key: 'skills', label: t('settings.tab.skills' as TranslationKey) });
 
   // 设置项级搜索：命中项列表 + 其所属 tab（导航区仍按 tab 名过滤）
   const matchedItems = useMemo(() => searchSettings(searchQuery), [searchQuery]);
@@ -330,6 +333,7 @@ export function Settings() {
             {activeTab === 'updates' && <UpdatesTab />}
             {activeTab === 'usage-stats' && <UsageStatsTab />}
             {activeTab === 'providers' && ENABLE_UPDATE_PROVIDERS_UI() && <ProvidersManager />}
+            {activeTab === 'skills' && <SkillsTab />}
           </div>
         </div>
       </div>

@@ -2021,3 +2021,59 @@
   - `src/widgets/chat/__tests__/RightPanel.p148.test.ts`
   - `src/pages/settings/__tests__/settingsIndex.p148.test.ts`
 - **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
+
+### Phase P149: AttnBadge, BrandLogo, LiveDot, DropdownMenu, ErrorState, LoadingState, RetryButton & Select Governance (Completed)
+- **Target Modules**:
+  - `src/shared/ui/AttnBadge.tsx`: `auditAttnBadgeGovernance`
+  - `src/shared/ui/BrandLogo.tsx`: `auditBrandLogoGovernance`
+  - `src/shared/ui/LiveDot.tsx`: `auditLiveDotGovernance`
+  - `src/shared/ui/DropdownMenu/DropdownMenu.tsx`: `auditDropdownMenuGovernance`
+  - `src/shared/ui/ErrorState/ErrorState.tsx`: `auditErrorStateGovernance`
+  - `src/shared/ui/LoadingState/LoadingState.tsx`: `auditLoadingStateGovernance`
+  - `src/shared/ui/RetryButton/RetryButton.tsx`: `auditRetryButtonGovernance`
+  - `src/shared/ui/Select/Select.tsx`: `auditSelectGovernance`
+- **Unit Test Suites**:
+  - `src/shared/ui/__tests__/AttnBadge.p149.test.ts`
+  - `src/shared/ui/__tests__/BrandLogo.p149.test.ts`
+  - `src/shared/ui/__tests__/LiveDot.p149.test.ts`
+  - `src/shared/ui/__tests__/DropdownMenu.p149.test.ts`
+  - `src/shared/ui/__tests__/ErrorState.p149.test.ts`
+  - `src/shared/ui/__tests__/LoadingState.p149.test.ts`
+  - `src/shared/ui/__tests__/RetryButton.p149.test.ts`
+  - `src/shared/ui/__tests__/Select.p149.test.ts`
+- **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
+
+### Phase P150: MarkdownImage, SelectionQuoteButton, NavGroup, Titlebar, TitlebarActions, WindowControls, TwoStepDelete & SidebarProjectList Governance (Completed)
+- **Target Modules**:
+  - `src/widgets/chat/MarkdownImage.tsx`: `auditMarkdownImageGovernance`
+  - `src/widgets/chat/SelectionQuoteButton.tsx`: `auditSelectionQuoteButtonGovernance`
+  - `src/widgets/layout/NavGroup.tsx`: `auditNavGroupGovernance`
+  - `src/widgets/layout/Titlebar.tsx`: `auditTitlebarGovernance`
+  - `src/widgets/layout/TitlebarActions.tsx`: `auditTitlebarActionsGovernance`
+  - `src/widgets/layout/WindowControls.tsx`: `auditWindowControlsGovernance`
+  - `src/widgets/sidebar/TwoStepDelete.tsx`: `auditTwoStepDeleteGovernance`
+  - `src/widgets/sidebar/sections/SidebarProjectList.tsx`: `auditSidebarProjectListGovernance`
+- **Unit Test Suites**:
+  - `src/widgets/chat/__tests__/MarkdownImage.p150.test.ts`
+  - `src/widgets/chat/__tests__/SelectionQuoteButton.p150.test.ts`
+  - `src/widgets/layout/__tests__/NavGroup.p150.test.ts`
+  - `src/widgets/layout/__tests__/Titlebar.p150.test.ts`
+  - `src/widgets/layout/__tests__/TitlebarActions.p150.test.ts`
+  - `src/widgets/layout/__tests__/WindowControls.p150.test.ts`
+  - `src/widgets/sidebar/__tests__/TwoStepDelete.p150.test.ts`
+  - `src/widgets/sidebar/__tests__/SidebarProjectList.p150.test.ts`
+- **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
+
+### Phase P151: Application Providers Layer (AppProviders, ErrorBoundary, NavHistory, QueryClient, SessionWorkspace, Theme, Toast & Barrel) Governance Audit (Completed 2026-10-22)
+
+- **Target Modules**:
+  - `src/app/providers/AppProviders.tsx`: `auditAppProvidersGovernance`
+  - `src/app/providers/ErrorBoundary.tsx`: `auditErrorBoundaryGovernance`
+  - `src/app/providers/NavHistoryProvider.tsx`: `auditNavHistoryProviderGovernance`
+  - `src/app/providers/QueryClientProvider.tsx`: `auditQueryClientProviderGovernance`
+  - `src/app/providers/SessionWorkspaceProvider.tsx`: `auditSessionWorkspaceProviderGovernance`
+  - `src/app/providers/ThemeProvider.tsx`: `auditThemeProviderGovernance`
+  - `src/app/providers/ToastProvider.tsx`: `auditToastProviderGovernance`
+  - `src/app/providers/index.ts`: `auditProvidersBarrelGovernance`
+- **Verification**:
+  - Added 8 dedicated Vitest suites (`*.p151.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.

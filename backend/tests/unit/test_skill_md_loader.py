@@ -33,6 +33,20 @@ from backend.skills.skill_md.validation import (
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def stub_skills_dir_preference(monkeypatch):
+    """默认屏蔽 skills_dir preference, 避免真实 DB 的自定义目录影响断言。
+
+    返回被替换的 stub, 需要覆盖 preference 的用例可自行再 monkeypatch。
+    """
+
+    def _no_preference(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(skill_md_loader, "read_skills_dir_preference", _no_preference)
+    return _no_preference
+
+
 # =====================================================================
 # helpers
 # =====================================================================

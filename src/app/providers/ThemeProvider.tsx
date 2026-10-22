@@ -24,10 +24,12 @@ export interface ThemeAuditInput {
   cssCount: number;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatThemeAuditSnapshot(input: ThemeAuditInput): string {
   return `mode=${input.mode}|resolved=${input.resolved}|preset=${input.presetId}|source=${input.sourceKind}|css=${input.cssCount}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatThemeAuditJson(input: ThemeAuditInput): string {
   return JSON.stringify({
     mode: input.mode,
@@ -306,4 +308,29 @@ export function ThemeProvider({ children, defaultMode = 'system' }: ThemeProvide
       </span>
     </ThemeContext.Provider>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditThemeProviderGovernance(
+  state: {
+    mode?: 'light' | 'dark' | 'system' | string;
+    presetActive?: boolean;
+  } = {},
+): {
+  module: 'src/app/providers/ThemeProvider.tsx';
+  phase: 'P151';
+  mode: 'light' | 'dark' | 'system';
+  presetActive: boolean;
+  healthy: boolean;
+} {
+  const mode: 'light' | 'dark' | 'system' =
+    state.mode === 'light' || state.mode === 'dark' ? state.mode : 'system';
+  const presetActive = state.presetActive !== false;
+  return {
+    module: 'src/app/providers/ThemeProvider.tsx',
+    phase: 'P151',
+    mode,
+    presetActive,
+    healthy: true,
+  };
 }

@@ -64,10 +64,12 @@ export interface SessionWorkspaceAuditInput {
   hasError: boolean;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatSessionWorkspaceAuditSnapshot(input: SessionWorkspaceAuditInput): string {
   return `session=${input.sessionId ?? 'none'}|bound=${input.hasBinding ? 1 : 0}|status=${input.status}|err=${input.hasError ? 1 : 0}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatSessionWorkspaceAuditJson(input: SessionWorkspaceAuditInput): string {
   return JSON.stringify({
     sessionId: input.sessionId,
@@ -303,4 +305,33 @@ export function useWorkspaceContext(): WorkspaceContextValue {
     );
   }
   return ctx;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditSessionWorkspaceProviderGovernance(
+  state: {
+    status?: WorkspaceStatus | string;
+    hasActiveSession?: boolean;
+  } = {},
+): {
+  module: 'src/app/providers/SessionWorkspaceProvider.tsx';
+  phase: 'P151';
+  status: WorkspaceStatus;
+  hasActiveSession: boolean;
+  healthy: boolean;
+} {
+  const status: WorkspaceStatus =
+    state.status === 'idle' ||
+    state.status === 'loading' ||
+    state.status === 'error'
+      ? state.status
+      : 'ready';
+  const hasActiveSession = state.hasActiveSession !== false;
+  return {
+    module: 'src/app/providers/SessionWorkspaceProvider.tsx',
+    phase: 'P151',
+    status,
+    hasActiveSession,
+    healthy: status !== 'error',
+  };
 }
