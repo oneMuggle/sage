@@ -21,7 +21,11 @@ import { useLaneBoardStore } from '../../entities/orchestration/laneBoardStore';
 import { invoke } from '../../shared/api/desktopInvoke';
 import type { Lane } from '../../shared/api/types';
 import { I18nProvider } from '../../shared/lib/i18n';
-import { Orchestration, formatOrchestrationPageJson, formatOrchestrationPageMarkdown } from '../Orchestration';
+import {
+  Orchestration,
+  formatOrchestrationPageJson,
+  formatOrchestrationPageMarkdown,
+} from '../Orchestration';
 
 const invokeMock = invoke as unknown as ReturnType<typeof vi.fn>;
 const toastMock = toast as unknown as {
