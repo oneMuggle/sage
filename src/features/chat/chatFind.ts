@@ -129,3 +129,27 @@ export function buildChatFindAuditJson(
 ): string {
   return JSON.stringify(buildChatFindAuditSnapshot(messages, query), null, 2);
 }
+
+export interface ChatFindGovernanceAudit {
+  module: 'features.chat.chatFind';
+  phase: 'P159';
+  findEventName: string;
+  focusSearchEventName: string;
+  sampleMatchCount: number;
+  healthy: boolean;
+}
+
+export function auditChatFindGovernance(): ChatFindGovernanceAudit {
+  const sampleMatchCount = countOccurrences('sage governance audit sage', 'sage');
+  return {
+    module: 'features.chat.chatFind',
+    phase: 'P159',
+    findEventName: CHAT_FIND_EVENT,
+    focusSearchEventName: FOCUS_SEARCH_EVENT,
+    sampleMatchCount,
+    healthy:
+      CHAT_FIND_EVENT === 'sage:open-chat-find' &&
+      FOCUS_SEARCH_EVENT === 'sage:focus-search' &&
+      sampleMatchCount === 2,
+  };
+}

@@ -68,3 +68,21 @@ export function formatAtEntityMenuJson(query: string | null): string {
   });
 }
 
+export interface AtEntityMenuGovernanceAudit {
+  module: 'features.chat.AtEntityMenu';
+  phase: 'P159';
+  hasMenuComponent: boolean;
+  hasSummaryFormatter: boolean;
+  healthy: boolean;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditAtEntityMenuGovernance(): AtEntityMenuGovernanceAudit {
+  return {
+    module: 'features.chat.AtEntityMenu',
+    phase: 'P159',
+    hasMenuComponent: typeof AtEntityMenu === 'function',
+    hasSummaryFormatter: typeof formatAtEntityMenuSummary === 'function',
+    healthy: typeof AtEntityMenu === 'function' && typeof formatAtEntityMenuSummary === 'function',
+  };
+}

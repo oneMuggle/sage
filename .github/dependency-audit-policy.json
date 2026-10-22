@@ -1023,6 +1023,20 @@
       "controls": "same as PYSEC-2026-165 (Pillow 10.4.0 is the last Python 3.8-compatible release on PyPI; fixes require Pillow >=11/12 on Python >=3.9); upload size limits, MIME type validation, image dimension caps, sandboxing, quarterly review through Win7 LTS EOL 2027-12-13",
       "exception": "temporary exception pending Win7 LTS EOL or upstream backport to a Py3.8-compatible release",
       "notes": "py38-ceiling: GHSA alias published in OSV for existing Pillow 10.4.0 advisories on the Win7 Python 3.8 track."
+    },
+    {
+        "owner": "Sage maintainers",
+        "review_by": "2027-01-01",
+        "source": "pip",
+        "package": "opentelemetry-api",
+        "package_version": "1.27.0",
+        "advisory": "GHSA-xcq7-p3pf-p88h",
+        "advisory_url": "https://osv.dev/vulnerability/GHSA-xcq7-p3pf-p88h",
+        "affected_path": "main Python 3.11 production path",
+        "actual_reachability": "transitive dependency via chromadb telemetry instrumentation; Sage disables anonymized telemetry and does not expose untrusted OpenTelemetry context propagation headers",
+        "controls": "Chroma telemetry disabled in local embedded client; no external OTLP collector or untrusted W3C traceparent/baggage ingestion exposed; scheduled lockfile bump in next dependency maintenance window",
+        "exception": "temporary exception pending transitive opentelemetry-api pin bump in requirements.lock",
+        "notes": "main-py311: newly published GHSA-xcq7-p3pf-p88h on opentelemetry-api 1.27.0."
     }
   ]
 }

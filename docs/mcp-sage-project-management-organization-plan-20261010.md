@@ -2161,3 +2161,66 @@
   - `src/entities/wiki/__tests__/lintStore.p156.test.ts`
   - `src/entities/wiki/__tests__/mockData.p156.test.ts`
   - `src/entities/wiki/__tests__/queueStore.p156.test.ts`
+
+### Phase P157: Entity Wiki Research, Review & Main Store, App Panels Registry & Store, and Artifact API & Stores Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/entities/wiki/research-store.ts` (`auditWikiResearchStoreGovernance`)
+  - `src/entities/wiki/review-store.ts` (`auditWikiReviewStoreGovernance`)
+  - `src/entities/wiki/store.ts` (`auditWikiStoreGovernance`)
+  - `src/features/app-panels/panelRegistry.ts` (`auditPanelRegistryGovernance`)
+  - `src/features/app-panels/usePanelStore.ts` (`auditUsePanelStoreGovernance`)
+  - `src/features/artifacts/artifactApi.ts` (`auditArtifactApiGovernance`)
+  - `src/features/artifacts/artifactEventsStore.ts` (`auditArtifactEventsStoreGovernance`)
+  - `src/features/artifacts/artifactListStore.ts` (`auditArtifactListStoreGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/entities/wiki/__tests__/researchStore.p157.test.ts`
+  - `src/entities/wiki/__tests__/reviewStore.p157.test.ts`
+  - `src/entities/wiki/__tests__/store.p157.test.ts`
+  - `src/features/app-panels/__tests__/panelRegistry.p157.test.ts`
+  - `src/features/app-panels/__tests__/usePanelStore.p157.test.ts`
+  - `src/features/artifacts/__tests__/artifactApi.p157.test.ts`
+  - `src/features/artifacts/__tests__/artifactEventsStore.p157.test.ts`
+  - `src/features/artifacts/__tests__/artifactListStore.p157.test.ts`
+
+### Phase P158: Artifact Hooks, Attention Center & Snapshot, and Autonomous Goals Modal & Pages Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/artifacts/useArtifactContent.ts` (`auditUseArtifactContentGovernance`)
+  - `src/features/artifacts/useArtifacts.ts` (`auditUseArtifactsGovernance`)
+  - `src/features/attention/attentionCenter.ts` (`auditAttentionCenterGovernance`)
+  - `src/features/attention/index.ts` (`auditAttentionBarrelGovernance`)
+  - `src/features/attention/useAttentionSnapshot.ts` (`auditUseAttentionSnapshotGovernance`)
+  - `src/features/autonomous-goals/CreateGoalModal.tsx` (`auditCreateGoalModalGovernance`)
+  - `src/features/autonomous-goals/GoalDetailPage.tsx` (`auditGoalDetailPageGovernance`)
+  - `src/features/autonomous-goals/GoalListPage.tsx` (`auditGoalListPageGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/artifacts/__tests__/useArtifactContent.p158.test.ts`
+  - `src/features/artifacts/__tests__/useArtifacts.p158.test.ts`
+  - `src/features/attention/__tests__/attentionCenter.p158.test.ts`
+  - `src/features/attention/__tests__/attentionIndex.p158.test.ts`
+  - `src/features/attention/__tests__/useAttentionSnapshot.p158.test.ts`
+  - `src/features/autonomous-goals/__tests__/CreateGoalModal.p158.test.ts`
+  - `src/features/autonomous-goals/__tests__/GoalDetailPage.p158.test.ts`
+  - `src/features/autonomous-goals/__tests__/GoalListPage.p158.test.ts`
+
+### Phase P159: Changes List Store and Chat Entity/File Menus, BtwOverlay, MediaAttachment, AnswerVersions, ChatFind & EntityRefs Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/changes/changesListStore.ts` (`auditChangesListStoreGovernance`)
+  - `src/features/chat/AtEntityMenu.tsx` (`auditAtEntityMenuGovernance`)
+  - `src/features/chat/AtFileMenu.tsx` (`auditAtFileMenuGovernance`)
+  - `src/features/chat/BtwOverlay.tsx` (`auditBtwOverlayGovernance`)
+  - `src/features/chat/MediaAttachment.tsx` (`auditMediaAttachmentGovernance`)
+  - `src/features/chat/answerVersions.ts` (`auditAnswerVersionsGovernance`)
+  - `src/features/chat/chatFind.ts` (`auditChatFindGovernance`)
+  - `src/features/chat/entityRefs.ts` (`auditEntityRefsGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/changes/__tests__/changesListStore.p159.test.ts`
+  - `src/features/chat/__tests__/AtEntityMenu.p159.test.ts`
+  - `src/features/chat/__tests__/AtFileMenu.p159.test.ts`
+  - `src/features/chat/__tests__/BtwOverlay.p159.test.ts`
+  - `src/features/chat/__tests__/MediaAttachment.p159.test.ts`
+  - `src/features/chat/__tests__/answerVersions.p159.test.ts`
+  - `src/features/chat/__tests__/chatFind.p159.test.ts`
+  - `src/features/chat/__tests__/entityRefs.p159.test.ts`

@@ -131,3 +131,26 @@ export function buildAnswerVersionsAuditJson(
 ): string {
   return JSON.stringify(buildAnswerVersionsAuditSnapshot(list), null, 2);
 }
+
+export interface AnswerVersionsGovernanceAudit {
+  module: 'features.chat.answerVersions';
+  phase: 'P159';
+  hasFetchApi: boolean;
+  hasActivateApi: boolean;
+  hasAnchorHelper: boolean;
+  healthy: boolean;
+}
+
+export function auditAnswerVersionsGovernance(): AnswerVersionsGovernanceAudit {
+  return {
+    module: 'features.chat.answerVersions',
+    phase: 'P159',
+    hasFetchApi: typeof fetchAnswerVersions === 'function',
+    hasActivateApi: typeof activateAnswerVersion === 'function',
+    hasAnchorHelper: typeof lastTurnAnchorIndex === 'function',
+    healthy:
+      typeof fetchAnswerVersions === 'function' &&
+      typeof activateAnswerVersion === 'function' &&
+      typeof lastTurnAnchorIndex === 'function',
+  };
+}

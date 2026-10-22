@@ -375,3 +375,32 @@ export function formatGoalDetailJson(
   });
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditGoalDetailPageGovernance(
+  state: {
+    goalId?: string;
+    iterationCount?: number;
+  } = {},
+): {
+  module: 'src/features/autonomous-goals/GoalDetailPage.tsx';
+  phase: 'P158';
+  goalId: string;
+  iterationCount: number;
+  healthy: boolean;
+} {
+  const goalId =
+    typeof state.goalId === 'string' && state.goalId.trim().length > 0
+      ? state.goalId.trim()
+      : 'goal-default';
+  const iterationCount =
+    typeof state.iterationCount === 'number' && Number.isFinite(state.iterationCount)
+      ? Math.max(0, Math.trunc(state.iterationCount))
+      : 0;
+  return {
+    module: 'src/features/autonomous-goals/GoalDetailPage.tsx',
+    phase: 'P158',
+    goalId,
+    iterationCount,
+    healthy: goalId.length > 0 && iterationCount <= 200,
+  };
+}
