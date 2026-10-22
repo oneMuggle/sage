@@ -1895,3 +1895,18 @@
   6. `src/widgets/wiki/index.ts` (`evaluateWikiBarrelGovernanceAudit` + `src/widgets/wiki/__tests__/index.p140.test.ts`)
   7. `src/features/task-brief/SavedTaskRecipes.tsx` (`evaluateSavedTaskRecipesGovernanceAudit` + `src/features/task-brief/__tests__/SavedTaskRecipes.p140.test.ts`)
   8. `src/features/task-brief/TaskModelAdvisor.tsx` (`evaluateTaskModelAdvisorGovernanceAudit` + `src/features/task-brief/__tests__/TaskModelAdvisor.p140.test.ts`)
+### Phase P141 — Office Generate Subforms, Word Edit Form Fields, Chat Stream Runtime, Help Tabs/Container & Knowledge Page Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P140 Merged: `#2302` (`main` @ `e14696554deeb729b681ce0d51a50a06159b8cec`), `#2303` (`release/win7` @ `3b354f55b94d06e173fbf26fa4afa46e02727748`)
+  - Phase P141: `feat/project-governance-p141` (`main`) & `feat/win7-project-governance-p141` (`release/win7`)
+- **Scope**:
+  - `src/features/office/OfficeGenerateSubforms.tsx`: Exported `auditOfficeGenerateSubformsGovernance()` validating office document generation subforms (`ppt`, `docx`, `xlsx`), topic/section/sheet count invariants, and structured subform state transitions.
+  - `src/features/office/WordEditFormFields.tsx`: Exported `auditWordEditFormFieldsGovernance()` validating Word edit form field contracts, replacement/insertion operation invariants, and target paragraph/section selectors.
+  - `src/features/send-message/chatStreamRuntime.ts`: Exported `auditChatStreamRuntimeGovernance()` validating SSE chat stream runtime lifecycle, active stream count invariants, and abort/timeout recovery contracts.
+  - `src/pages/Help/AboutTab.tsx`: Exported `auditHelpAboutTabGovernance()` validating Help About tab version/build metadata, runtime environment readiness, and system diagnostic presentation contracts.
+  - `src/pages/Help/ChangelogTab.tsx`: Exported `auditHelpChangelogTabGovernance()` validating Help Changelog tab release entries, version ordering invariants, and release note rendering contracts.
+  - `src/pages/Help/HelpTab.tsx`: Exported `auditHelpGuideTabGovernance()` validating Help Guide tab section navigation, quick-start onboarding topics, and troubleshooting guide contracts.
+  - `src/pages/Help/index.tsx`: Exported `auditHelpPageContainerGovernance()` validating Help page container tab switching (`help`, `changelog`, `about`), active tab persistence, and layout header contracts.
+  - `src/pages/Knowledge.tsx`: Exported `auditKnowledgePageGovernance()` validating Knowledge page workspace wiki integration, document/source count invariants, and search/index synchronization state.
+  - Unit tests: Added 8 dedicated Vitest suites (`OfficeGenerateSubforms.p141.test.ts`, `WordEditFormFields.p141.test.ts`, `chatStreamRuntime.p141.test.ts`, `AboutTab.p141.test.ts`, `ChangelogTab.p141.test.ts`, `HelpTab.p141.test.ts`, `index.p141.test.ts`, `Knowledge.p141.test.ts`).

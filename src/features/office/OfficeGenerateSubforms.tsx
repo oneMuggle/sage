@@ -181,3 +181,41 @@ export function OfficeTemplatePicker({
     </div>
   );
 }
+
+export interface OfficeGenerateSubformsAuditInput {
+  docType: string;
+  templateLoadState: 'idle' | 'loading' | 'ready' | 'error';
+  templateCount: number;
+  selectedTemplateId: string;
+}
+
+export interface OfficeGenerateSubformsAuditReport {
+  isSupportedTemplateDocType: boolean;
+  templateCount: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateOfficeGenerateSubformsGovernanceAudit(
+  input: OfficeGenerateSubformsAuditInput,
+): OfficeGenerateSubformsAuditReport {
+  const issueCodes: string[] = [];
+  const supported = new Set(['word', 'excel', 'ppt']);
+  const isSupportedTemplateDocType = supported.has(input.docType.trim().toLowerCase());
+  if (!isSupportedTemplateDocType) {
+    issueCodes.push('OFFICE_SUBFORM_DOC_TYPE_UNSUPPORTED');
+  }
+  if (input.templateLoadState === 'error') {
+    issueCodes.push('OFFICE_SUBFORM_TEMPLATE_LOAD_ERROR');
+  }
+  if (input.templateCount < 0) {
+    issueCodes.push('OFFICE_SUBFORM_TEMPLATE_COUNT_NEGATIVE');
+  }
+  return {
+    isSupportedTemplateDocType,
+    templateCount: Math.max(0, Math.trunc(input.templateCount)),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

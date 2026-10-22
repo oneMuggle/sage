@@ -133,3 +133,40 @@ function getPlatform(): string {
     return 'N/A';
   }
 }
+
+export interface HelpAboutTabAuditInput {
+  appVersion: string;
+  electronVersion: string;
+  hasLicenseDisclosure: boolean;
+}
+
+export interface HelpAboutTabAuditReport {
+  normalizedAppVersion: string;
+  hasValidSemverPrefix: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateHelpAboutTabGovernanceAudit(
+  input: HelpAboutTabAuditInput,
+): HelpAboutTabAuditReport {
+  const issueCodes: string[] = [];
+  const normalizedAppVersion = input.appVersion.trim();
+  const hasValidSemverPrefix = /^v?\d+\.\d+\.\d+/.test(normalizedAppVersion);
+  if (!hasValidSemverPrefix) {
+    issueCodes.push('HELP_ABOUT_VERSION_INVALID');
+  }
+  if (!input.electronVersion.trim()) {
+    issueCodes.push('HELP_ABOUT_ELECTRON_VERSION_EMPTY');
+  }
+  if (!input.hasLicenseDisclosure) {
+    issueCodes.push('HELP_ABOUT_LICENSE_DISCLOSURE_MISSING');
+  }
+  return {
+    normalizedAppVersion,
+    hasValidSemverPrefix,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
