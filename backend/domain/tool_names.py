@@ -35,7 +35,6 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any, Iterable, Optional
 
 # 执行三件套：bash 起进程（run_in_background=true 返回 shell_id），
@@ -255,9 +254,26 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
 #: 进程外插件工具的 LLM 命名空间前缀（单一来源）。
 PLUGIN_TOOL_PREFIX = "plugin__"
 
-# 与 tool_bridge 发布校验同一字符集：完整工具名只允许 ASCII 字母、
-# 数字与 ``_.-``。
-_PLUGIN_NAME_CHARS_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+def _is_valid_plugin_name_chars(value: str) -> bool:
+    """与 tool_bridge 发布校验同一字符集：ASCII 字母、数字与 ``_.-``。
+
+    手写逐字校验而非 ``re``：domain 纯度测试
+    （test_domain_models.TestDomainPurity）只放行白名单内的标准库，
+    本模块不为一次字符集判断扩大那张名单。
+    """
+    if not value:
+        return False
+    for char in value:
+        if (
+            "a" <= char <= "z"
+            or "A" <= char <= "Z"
+            or "0" <= char <= "9"
+            or char in "_.-"
+        ):
+            continue
+        return False
+    return True
 
 
 def is_plugin_tool_name(name: Any) -> bool:
@@ -266,7 +282,7 @@ def is_plugin_tool_name(name: Any) -> bool:
         return False
     if not name.startswith(PLUGIN_TOOL_PREFIX):
         return False
-    if _PLUGIN_NAME_CHARS_RE.match(name) is None:
+    if not _is_valid_plugin_name_chars(name):
         return False
     plugin_segment, separator, capability_segment = name[
         len(PLUGIN_TOOL_PREFIX) :
@@ -290,7 +306,7 @@ def plugin_tool_wildcard_prefix(entry: Any) -> Optional[str]:
     plugin_segment = entry[len(PLUGIN_TOOL_PREFIX) : -3]
     if not plugin_segment or "*" in plugin_segment:
         return None
-    if _PLUGIN_NAME_CHARS_RE.match(plugin_segment) is None:
+    if not _is_valid_plugin_name_chars(plugin_segment):
         return None
     return entry[:-1]
 
