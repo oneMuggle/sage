@@ -215,8 +215,8 @@ Content-Type: multipart/form-data
 - [x] 步骤 10：后端 T-4b 单测 + 集成测试 — 35 tests pass（26 unit + 9 integration）
 - [x] 步骤 11：前端 T-4b —— `skillsApi.importDirectory()` + `Skills.tsx` 按钮（Skills.test.tsx 8/8 pass）
 - [x] 步骤 12：Electron smoke + 前端构建 + 后端全量测试（前端构建 `tsc && vite build` 绿）
-- [ ] 步骤 13：code-review + security-review
-- [ ] 步骤 14：提交 + 推送 + 开 PR
+- [x] 步骤 13：code-review + security-review
+- [x] 步骤 14：提交 + 推送 + 开 PR — PR #2296
 
 ## 风险评估
 
