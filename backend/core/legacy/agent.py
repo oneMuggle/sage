@@ -1948,8 +1948,8 @@ class SageAgent:
                         # legacy run_loop 无刹车。超限时终止本次 run（与前端
                         # mapAgentErrorToText 的 "tool_budget_exceeded" 文案对齐）。
                         tool_calls_used += 1
-                        if tool_calls_used > self._effective_max_tool_calls_per_run():
-                            max_tool_calls = self._effective_max_tool_calls_per_run()
+                        max_tool_calls = self._effective_max_tool_calls_per_run()
+                        if tool_calls_used > max_tool_calls:
                             yield AgentEvent(
                                 state=AgentState.FAILED,
                                 iteration=i,
