@@ -145,3 +145,21 @@ export function buildChangesListStoreAuditJson(
 ): string {
   return JSON.stringify(buildChangesListStoreAuditSnapshot(state), null, 2);
 }
+
+export interface ChangesListStoreGovernanceAudit {
+  module: 'features.changes.changesListStore';
+  phase: 'P159';
+  debounceMs: number;
+  hasStoreHook: boolean;
+  healthy: boolean;
+}
+
+export function auditChangesListStoreGovernance(): ChangesListStoreGovernanceAudit {
+  return {
+    module: 'features.changes.changesListStore',
+    phase: 'P159',
+    debounceMs: CHANGES_FETCH_DEBOUNCE_MS,
+    hasStoreHook: typeof useChangesListStore === 'function',
+    healthy: CHANGES_FETCH_DEBOUNCE_MS > 0 && typeof useChangesListStore === 'function',
+  };
+}
