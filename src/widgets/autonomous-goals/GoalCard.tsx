@@ -122,3 +122,62 @@ export function GoalCard({ goal }: GoalCardProps) {
     </Card>
   );
 }
+
+export interface GoalCardAuditInput {
+  goalId: string;
+  title: string;
+  status: 'active' | 'paused' | 'completed' | 'failed';
+  completedStepCount: number;
+  totalStepCount: number;
+  hasSchedule: boolean;
+}
+
+export interface GoalCardAuditReport {
+  goalId: string;
+  status: 'active' | 'paused' | 'completed' | 'failed';
+  progressPct: number;
+  hasSchedule: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateGoalCardAudit(
+  input: GoalCardAuditInput,
+): GoalCardAuditReport {
+  const goalId = input.goalId.trim();
+  const title = input.title.trim();
+  const total = Math.max(0, Math.trunc(input.totalStepCount));
+  const completed = Math.max(0, Math.min(total, Math.trunc(input.completedStepCount)));
+  const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const issueCodes: string[] = [];
+
+  if (!goalId) {
+    issueCodes.push('missing_goal_id');
+  }
+  if (!title) {
+    issueCodes.push('missing_goal_title');
+  }
+  if (input.status === 'failed') {
+    issueCodes.push('goal_execution_failed');
+  }
+  if (input.status === 'completed' && total > 0 && completed < total) {
+    issueCodes.push('completed_goal_incomplete_steps');
+  }
+
+  return {
+    goalId,
+    status: input.status,
+    progressPct,
+    hasSchedule: Boolean(input.hasSchedule),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportGoalCardAuditJson(
+  input: GoalCardAuditInput,
+): string {
+  return JSON.stringify(evaluateGoalCardAudit(input));
+}

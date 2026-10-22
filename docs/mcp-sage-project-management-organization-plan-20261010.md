@@ -1793,3 +1793,24 @@
   - `src/widgets/arena/__tests__/index.p133.test.ts`
   - `src/widgets/chat/__tests__/ActiveAgentIndicator.p133.test.ts`
   - `src/widgets/chat/__tests__/CompactBanner.p133.test.ts`
+
+### Phase P134 — Autonomous-Goals Card/Progress & Chat Inline-Error/Attachment/HtmlCodeBlock/KnowledgeChip/MarkdownParts/ReadAloud Audit Diagnostics & JSON Export (Completed)
+
+- **Target Modules**:
+  - `src/widgets/autonomous-goals/GoalCard.tsx`: Added `GoalCardAuditInput`, `GoalCardAuditReport`, `evaluateGoalCardAudit`, and `exportGoalCardAuditJson`.
+  - `src/widgets/autonomous-goals/GoalProgress.tsx`: Added `GoalProgressAuditInput`, `GoalProgressAuditReport`, `evaluateGoalProgressAudit`, and `exportGoalProgressAuditJson`.
+  - `src/widgets/chat/ChatInlineError.tsx`: Added `ChatInlineErrorAuditInput`, `ChatInlineErrorAuditReport`, `evaluateChatInlineErrorAudit`, and `exportChatInlineErrorAuditJson`.
+  - `src/widgets/chat/FileAttachment.tsx`: Added `FileAttachmentAuditInput`, `FileAttachmentAuditReport`, `evaluateFileAttachmentAudit`, and `exportFileAttachmentAuditJson`.
+  - `src/widgets/chat/HtmlCodeBlock.tsx`: Added `HtmlCodeBlockAuditInput`, `HtmlCodeBlockAuditReport`, `evaluateHtmlCodeBlockAudit`, and `exportHtmlCodeBlockAuditJson`.
+  - `src/widgets/chat/KnowledgeChip.tsx`: Added `KnowledgeChipAuditInput`, `KnowledgeChipAuditReport`, `evaluateKnowledgeChipAudit`, and `exportKnowledgeChipAuditJson`.
+  - `src/widgets/chat/MessageMarkdownParts.tsx`: Added `MessageMarkdownPartsAuditInput`, `MessageMarkdownPartsAuditReport`, `evaluateMessageMarkdownPartsAudit`, and `exportMessageMarkdownPartsAuditJson`.
+  - `src/widgets/chat/ReadAloudButton.tsx`: Added `ReadAloudButtonAuditInput`, `ReadAloudButtonAuditReport`, `evaluateReadAloudButtonAudit`, and `exportReadAloudButtonAuditJson`.
+- **Unit Tests**:
+  - `src/widgets/autonomous-goals/__tests__/GoalCard.p134.test.ts`
+  - `src/widgets/autonomous-goals/__tests__/GoalProgress.p134.test.ts`
+  - `src/widgets/chat/__tests__/ChatInlineError.p134.test.ts`
+  - `src/widgets/chat/__tests__/FileAttachment.p134.test.ts`
+  - `src/widgets/chat/__tests__/HtmlCodeBlock.p134.test.ts`
+  - `src/widgets/chat/__tests__/KnowledgeChip.p134.test.ts`
+  - `src/widgets/chat/__tests__/MessageMarkdownParts.p134.test.ts`
+  - `src/widgets/chat/__tests__/ReadAloudButton.p134.test.ts`
