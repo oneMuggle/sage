@@ -25,3 +25,29 @@ export const messageApi = {
     });
   },
 };
+
+export function auditMessageApiGovernance(
+  state: {
+    endpointCount?: number;
+    supportsFeedback?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/messageApi.ts';
+  phase: 'P144';
+  endpointCount: number;
+  supportsFeedback: boolean;
+  healthy: boolean;
+} {
+  const endpointCount =
+    typeof state.endpointCount === 'number' && Number.isFinite(state.endpointCount)
+      ? Math.max(0, Math.trunc(state.endpointCount))
+      : 2;
+  const supportsFeedback = state.supportsFeedback !== false;
+  return {
+    module: 'src/shared/api/messageApi.ts',
+    phase: 'P144',
+    endpointCount,
+    supportsFeedback,
+    healthy: endpointCount > 0 && supportsFeedback,
+  };
+}

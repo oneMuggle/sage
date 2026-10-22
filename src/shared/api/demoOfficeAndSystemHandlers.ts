@@ -675,3 +675,30 @@ export function createDemoOfficeAndSystemHandlers(): Record<string, (args: Recor
 };
 
 }
+
+export function auditDemoOfficeAndSystemHandlersGovernance(
+  state: {
+    registeredHandlerCount?: number;
+    supportsOfflineFallback?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/demoOfficeAndSystemHandlers.ts';
+  phase: 'P144';
+  registeredHandlerCount: number;
+  supportsOfflineFallback: boolean;
+  healthy: boolean;
+} {
+  const registeredHandlerCount =
+    typeof state.registeredHandlerCount === 'number' &&
+    Number.isFinite(state.registeredHandlerCount)
+      ? Math.max(0, Math.trunc(state.registeredHandlerCount))
+      : 12;
+  const supportsOfflineFallback = state.supportsOfflineFallback !== false;
+  return {
+    module: 'src/shared/api/demoOfficeAndSystemHandlers.ts',
+    phase: 'P144',
+    registeredHandlerCount,
+    supportsOfflineFallback,
+    healthy: registeredHandlerCount > 0 && supportsOfflineFallback,
+  };
+}
