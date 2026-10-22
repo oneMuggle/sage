@@ -41,7 +41,7 @@ def chunk_markdown(content: str, target_chunk_size: int = DEFAULT_CHUNK_SIZE) ->
         target_chunk_size: 目标块大小（字符数）
 
     Returns:
-        list[str]: 分块后的文本列表
+        List[str]: 分块后的文本列表
     """
     if not content:
         return []
@@ -92,7 +92,7 @@ def _split_long_paragraph(text: str, chunk_size: int, overlap: int) -> List[str]
         overlap: 重叠大小
 
     Returns:
-        list[str]: 分割后的文本块
+        List[str]: 分割后的文本块
     """
     chunks = []
     start = 0
@@ -140,7 +140,7 @@ def parse_embed_response(body: str, expected_dim: int = 0) -> List[List[float]]:
         expected_dim: 期望的向量维度（0 表示不检查）
 
     Returns:
-        list[list[float]]: 嵌入向量列表
+        List[List[float]]: 嵌入向量列表
 
     Raises:
         ValueError: 如果向量维度不匹配
