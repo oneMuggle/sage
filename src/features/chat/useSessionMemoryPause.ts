@@ -100,3 +100,28 @@ export function formatSessionMemoryPauseJson(
     2,
   );
 }
+
+export interface UseSessionMemoryPauseGovernanceAudit {
+  phase: 'P161';
+  module: 'src/features/chat/useSessionMemoryPause.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseSessionMemoryPauseGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseSessionMemoryPauseGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P161',
+    module: 'src/features/chat/useSessionMemoryPause.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P161 UseSessionMemoryPause Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}
