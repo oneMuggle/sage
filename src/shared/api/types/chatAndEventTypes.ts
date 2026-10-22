@@ -681,3 +681,35 @@ export interface ChatConfig {
   /** 第二轮 C2: 原位重新生成 —— 锚点 user 消息 id（后端不再落 user 消息） */
   regenerateOf?: string;
 }
+
+export function auditChatAndEventTypesGovernance(
+  state: {
+    taskStatus?: TaskStatusValue | string;
+    todoStatus?: TodoStatus | string;
+  } = {},
+): {
+  module: 'src/shared/api/types/chatAndEventTypes.ts';
+  phase: 'P146';
+  taskStatus: TaskStatusValue;
+  todoStatus: TodoStatus;
+  healthy: boolean;
+} {
+  const taskStatus: TaskStatusValue =
+    state.taskStatus === 'queued' ||
+    state.taskStatus === 'running' ||
+    state.taskStatus === 'failed' ||
+    state.taskStatus === 'cancelled'
+      ? state.taskStatus
+      : 'done';
+  const todoStatus: TodoStatus =
+    state.todoStatus === 'pending' || state.todoStatus === 'in_progress'
+      ? state.todoStatus
+      : 'completed';
+  return {
+    module: 'src/shared/api/types/chatAndEventTypes.ts',
+    phase: 'P146',
+    taskStatus,
+    todoStatus,
+    healthy: taskStatus !== 'failed',
+  };
+}

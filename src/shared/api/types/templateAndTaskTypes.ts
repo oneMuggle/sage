@@ -459,3 +459,34 @@ export interface TodoListParams {
   limit?: number;
   offset?: number;
 }
+
+export function auditTemplateAndTaskTypesGovernance(
+  state: {
+    todoPriority?: TodoPriority | string;
+    todoStatus?: TodoItemStatus | string;
+  } = {},
+): {
+  module: 'src/shared/api/types/templateAndTaskTypes.ts';
+  phase: 'P146';
+  todoPriority: TodoPriority;
+  todoStatus: TodoItemStatus;
+  healthy: boolean;
+} {
+  const todoPriority: TodoPriority =
+    state.todoPriority === 'high' || state.todoPriority === 'low'
+      ? state.todoPriority
+      : 'medium';
+  const todoStatus: TodoItemStatus =
+    state.todoStatus === 'pending' ||
+    state.todoStatus === 'in_progress' ||
+    state.todoStatus === 'cancelled'
+      ? state.todoStatus
+      : 'completed';
+  return {
+    module: 'src/shared/api/types/templateAndTaskTypes.ts',
+    phase: 'P146',
+    todoPriority,
+    todoStatus,
+    healthy: todoStatus !== 'cancelled',
+  };
+}
