@@ -119,3 +119,28 @@ export function buildSelectionQuoteAuditSnapshot(rawText = ''): SelectionQuoteAu
 export function buildSelectionQuoteAuditJson(rawText = ''): string {
   return JSON.stringify(buildSelectionQuoteAuditSnapshot(rawText), null, 2);
 }
+
+export interface SelectionQuoteGovernanceAudit {
+  phase: 'P160';
+  module: 'src/features/chat/selectionQuote.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditSelectionQuoteGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): SelectionQuoteGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P160',
+    module: 'src/features/chat/selectionQuote.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P160 SelectionQuote Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

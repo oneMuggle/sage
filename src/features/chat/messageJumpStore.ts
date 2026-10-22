@@ -108,3 +108,28 @@ export function buildMessageJumpStoreAuditJson(
 ): string {
   return JSON.stringify(buildMessageJumpStoreAuditSnapshot(pending), null, 2);
 }
+
+export interface MessageJumpStoreGovernanceAudit {
+  phase: 'P160';
+  module: 'src/features/chat/messageJumpStore.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditMessageJumpStoreGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): MessageJumpStoreGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P160',
+    module: 'src/features/chat/messageJumpStore.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P160 MessageJumpStore Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

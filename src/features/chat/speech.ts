@@ -134,3 +134,28 @@ export function buildSpeechAuditSnapshot(
 export function buildSpeechAuditJson(markdown = '', codeOmitted = '[code]'): string {
   return JSON.stringify(buildSpeechAuditSnapshot(markdown, codeOmitted), null, 2);
 }
+
+export interface SpeechGovernanceAudit {
+  phase: 'P160';
+  module: 'src/features/chat/speech.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditSpeechGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): SpeechGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P160',
+    module: 'src/features/chat/speech.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P160 Speech Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

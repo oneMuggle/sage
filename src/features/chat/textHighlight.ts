@@ -221,3 +221,28 @@ export function buildTextHighlightAuditSnapshot(
 export function buildTextHighlightAuditJson(root?: Element | null, query = ''): string {
   return JSON.stringify(buildTextHighlightAuditSnapshot(root, query), null, 2);
 }
+
+export interface TextHighlightGovernanceAudit {
+  phase: 'P160';
+  module: 'src/features/chat/textHighlight.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditTextHighlightGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): TextHighlightGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P160',
+    module: 'src/features/chat/textHighlight.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P160 TextHighlight Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

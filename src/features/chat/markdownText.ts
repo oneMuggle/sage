@@ -103,3 +103,28 @@ export function buildMarkdownTextAuditJson(
 ): string {
   return JSON.stringify(buildMarkdownTextAuditSnapshot(markdown, options), null, 2);
 }
+
+export interface MarkdownTextGovernanceAudit {
+  phase: 'P160';
+  module: 'src/features/chat/markdownText.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditMarkdownTextGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): MarkdownTextGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P160',
+    module: 'src/features/chat/markdownText.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P160 MarkdownText Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}
