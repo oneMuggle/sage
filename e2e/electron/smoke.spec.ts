@@ -166,6 +166,27 @@ test.afterAll(async () => {
   }
 });
 
+/**
+ * 测试失败时把 main 进程的完整现场倒出来。
+ *
+ * 之前只在 `firstWindow` 超时时打印诊断, 而 renderer 崩溃的失败发生在
+ * `waitForLoadState` —— 那条路径没有任何 main 侧上下文, CI 日志里只剩
+ * "Navigation failed because page crashed!", 无法区分是 sandbox、GPU
+ * 还是 OOM。`mainOutput` 捕获了 main 进程的全部 stdout/stderr (不只是
+ * 噪声行), `collectMainDiagnostics` 还会读 electron-log 的 ndjson 尾部,
+ * 两者合起来包含 render-process-gone 的 reason/exitCode。
+ */
+// eslint-disable-next-line no-empty-pattern -- Playwright 要求 hook 首参是对象解构模式, 而本钩子不消费任何 fixture
+test.afterEach(async ({}, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  const diagnostics = await collectMainDiagnostics();
+  process.stderr.write(
+    `\n[electron-smoke] test failed: ${testInfo.title} (${testInfo.status})\n` +
+      `${diagnostics}\n` +
+      `--- electron main output tail ---\n${mainOutput.join('\n')}\n`,
+  );
+});
+
 test('Electron launches and exposes electronAPI', async () => {
   test.setTimeout(180_000);
   expect(app, 'electron app must have launched').not.toBeNull();
