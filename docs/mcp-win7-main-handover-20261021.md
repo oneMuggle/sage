@@ -10,7 +10,7 @@
 ## 0. 一句话现状
 
 P0/P1/P3/P4 已完成；P2 已做完 B1/B2/B3/B5（共 275 个文件）+ harness 移植。
-**7 个 PR 全部已开**（#2232 #2233 #2234 #2237 #2252 #2269 #2274 #2275）。**所有闸门（py38 / ruff / pytest / tsc / vitest / eslint / parity）
+**12 个 PR 全部已开**，7 个分支全部推送并核对本地/远端一致。**所有闸门（py38 / ruff / pytest / tsc / vitest / eslint / parity）
 均已验证通过。**剩下的 P2 批次（B4 tests / B6 electron 剩余 / B7 其余）和 P3 残差决策未开始。
 
 ---
@@ -39,6 +39,29 @@ P0/P1/P3/P4 已完成；P2 已做完 B1/B2/B3/B5（共 275 个文件）+ harness
 | 4 | `chore/win7-align-b3-20261021` | `443f5868e` | 26 文件 | B3: office+skills+wiki |
 | 5 | `chore/win7-align-b5-20261021` | `588570ea3` | 216 文件 | B5: src/* + electron 命令路由 → **PR #2274** |
 | 6 | `feat/win7-harness-20261021` | `cc537327d` | 23 文件 | harness 移植（stacked 在 #2274 上）→ **PR #2275** |
+| 7 | `feat/win7-mcp-oauth-o1-20261022` | `efc1d3b2d` | 9 文件 | MCP OAuth O1+O2（stacked 在 #2291 上）→ **PR #2292** |
+
+### 全部 PR 与 stacked 关系
+
+| PR | base ← head | 内容 |
+|---|---|---|
+| #2232 | `main` ← p0-perms | CI 推送改 PAT + parity 门禁分级 |
+| #2233 | `main` ← version-lockstep | 版本 lockstep 归位 alpha.64 |
+| #2234 | `release/win7` ← dead-artifacts | 清理调试残留与零引用模块 |
+| #2237 | `release/win7` ← parity-docs-exempt | docs 差异改为只观测 |
+| #2252 | `main` ← handover-doc | 本交接文档 |
+| #2269 | `main` ← katex-fix | 补回 remark-math（main 回归，3 处） |
+| #2274 | `release/win7` ← align-b5 | B5: src/* + electron 命令路由 |
+| #2275 | **#2274** ← harness | harness 可观测性移植 |
+| **#2288** | `release/win7` ← py38-drift-gate | **所有 backend 批次的前置** |
+| **#2289** | `release/win7` ← align-b1 | B1: backend/core+adapters |
+| **#2290** | `release/win7` ← align-b2 | B2: backend/api |
+| **#2291** | `release/win7` ← align-b3 | B3: backend/office+skills+wiki（依赖 #2288） |
+| **#2292** | **#2291** ← mcp-oauth-o1 | MCP OAuth O1+O2 |
+
+> **拓扑澄清**：B1/B2/B3 三个分支的父提交都是 `9cac234a5`，**彼此独立、不是 stacked**。
+> 只有 #2292 真正 stacked（在 B3 + drift-gate 之上）。
+> 合并顺序上 #2288 必须先于 #2291/#2292。
 
 **依赖关系（重要）**：分支 4（B3）**依赖分支 1（闸门）先合并**；
 分支 5（B5）依赖 branch 4 之前的全部后端批次无直接关系，但**它自己包含了 B6 的一部分**（见 §5.4）。
@@ -283,6 +306,26 @@ B5 覆盖 `ProjectArchetypeStudio.tsx` 时发生 CRLF → LF，`git diff` 显示
 测试「通过」其实是空转。**人为破坏一次**（移除 `HelpTab` 的 `remark-math`）才发现，
 破坏后它精确报出 offender 文件名。
 
+### 5.12 批次边界由测试文件的归属决定，不是源码模块
+
+MCP OAuth 原规划拆 O1（`oauth.py` + `oauth_store.py`）/ O2（`http_client.py`）。
+实测 **O1 单独跑不绿**：main 的 `test_mcp_oauth_store.py` 一个文件里混了
+r61（存储）与 r70（401 自愈）两个切片的测试，而 r70 同时改了 `http_client.py`。
+
+```
+TestHttpClientInjection   ×5   TestUnauthorizedSelfHeal  ×2
+7 failed, 58 passed   →   合并 O1+O2 后 143 passed
+```
+
+与 B5 的教训同构：前端最小单元是「类型定义 + 全部消费者」，
+后端移植最小单元是「模块 + 它的全部测试文件」。
+
+### 5.13 移植多条提交构成的特性线时取最终态，不逐个 cherry-pick
+
+main 的 OAuth 线有 10 个提交（r60 r61 r62×2 r63 r64 r65 r70 r102 r153），
+其中 r62 有两个同名提交、r70 是修 r61 的 fail-open 行为。
+逐个 pick 会重复踩 main 自己已经修过的坑 → `git checkout origin/main -- <file>`。
+
 ### 5.3 附带发现：标记口径不一致
 
 win7 的检查器只认 `py38: guarded` 标记，而 main 上书写习惯是 `py38-ok except ... 守卫 + ... 降级`。
@@ -352,7 +395,14 @@ win7 的检查器只认 `py38: guarded` 标记，而 main 上书写习惯是 `py
 
 5. ~~KaTeX 渲染能力是否回灌 main？~~ → **已做，PR #2269**（main 上共 3 处，含 HelpTab）
 
-6. **M1/M2 验收指标需按新口径重新表述**
+6. ~~win7 LTS 上要不要 MCP OAuth？~~ → **要**（用户 2026-10-22 确认）。
+   已完成可行性勘察 + O1/O2 实施（#2292）。剩余决策：
+   - **O3（loopback）暂缓** —— 需本机开端口 + 拉起浏览器，Win7 会触发防火墙弹窗，
+     属 host-local 人工确认项
+   - **token 明文落盘与 main 一致** —— 不加 DPAPI
+   - **`McpTab.tsx`（O4）先做差异归因** —— win7↔main 差 1944 行，不只缺 OAuth
+
+7. **M1/M2 验收指标需按新口径重新表述**
    docs 豁免后：起点 668；M1 对应 ≤271；M2 对应 ≤193（原 500/226 的分母含 docs）。
 
 ---
