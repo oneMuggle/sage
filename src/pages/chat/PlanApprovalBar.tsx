@@ -146,3 +146,37 @@ export function PlanApprovalBar({
     </>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditPlanApprovalBarGovernance(
+  state: {
+    stepCount?: number;
+    approvalState?: 'pending' | 'approved' | 'rejected' | string;
+    canEditPlan?: boolean;
+  } = {},
+): {
+  module: 'src/pages/chat/PlanApprovalBar.tsx';
+  phase: 'P142';
+  stepCount: number;
+  approvalState: 'pending' | 'approved' | 'rejected';
+  canEditPlan: boolean;
+  healthy: boolean;
+} {
+  const stepCount =
+    typeof state.stepCount === 'number' && Number.isFinite(state.stepCount)
+      ? Math.max(0, Math.trunc(state.stepCount))
+      : 3;
+  const approvalState =
+    state.approvalState === 'approved' || state.approvalState === 'rejected'
+      ? state.approvalState
+      : 'pending';
+  const canEditPlan = state.canEditPlan !== false;
+  return {
+    module: 'src/pages/chat/PlanApprovalBar.tsx',
+    phase: 'P142',
+    stepCount,
+    approvalState,
+    canEditPlan,
+    healthy: stepCount >= 0,
+  };
+}

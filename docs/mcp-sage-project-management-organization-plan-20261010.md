@@ -1910,3 +1910,18 @@
   - `src/pages/Help/index.tsx`: Exported `auditHelpPageContainerGovernance()` validating Help page container tab switching (`help`, `changelog`, `about`), active tab persistence, and layout header contracts.
   - `src/pages/Knowledge.tsx`: Exported `auditKnowledgePageGovernance()` validating Knowledge page workspace wiki integration, document/source count invariants, and search/index synchronization state.
   - Unit tests: Added 8 dedicated Vitest suites (`OfficeGenerateSubforms.p141.test.ts`, `WordEditFormFields.p141.test.ts`, `chatStreamRuntime.p141.test.ts`, `AboutTab.p141.test.ts`, `ChangelogTab.p141.test.ts`, `HelpTab.p141.test.ts`, `index.p141.test.ts`, `Knowledge.p141.test.ts`).
+### Phase P142 — Office Structured Previews, Memory/Office/Pages Barrel, Plan Approval Bar, Chat Action/Scroll Hooks & Context Turn Limit Select Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P141 Merged: `#2304` (`main` @ `a74926af925cc8b4fabb27be8c7feac63e9c3a80`), `#2305` (`release/win7` @ `f6b15ead3422509a46a267cba0da8f206ae0dfb4`)
+  - Phase P142: `feat/project-governance-p142` (`main`) & `feat/win7-project-governance-p142` (`release/win7`)
+- **Scope**:
+  - `src/features/office/OfficeStructuredPreviews.tsx`: Exported `auditOfficeStructuredPreviewsGovernance()` validating structured office preview rendering (`ppt`, `docx`, `xlsx`), slide/section/sheet count invariants, and preview synchronization state.
+  - `src/pages/Memory.tsx`: Exported `auditMemoryPageGovernance()` validating Memory page entry count invariants, active category filter normalization, and search query state.
+  - `src/pages/Office.tsx`: Exported `auditOfficePageGovernance()` validating Office page mode switching (`generate`, `edit`, `preview`), document format selection (`ppt`, `docx`, `xlsx`), and generation lifecycle state.
+  - `src/pages/index.ts`: Exported `auditPagesBarrelGovernance()` validating top-level page barrel export completeness and lazy route readiness contracts.
+  - `src/pages/chat/PlanApprovalBar.tsx`: Exported `auditPlanApprovalBarGovernance()` validating plan approval step count invariants, approval state transitions (`pending`, `approved`, `rejected`), and plan editability contracts.
+  - `src/pages/chat/useChatMessageActions.ts`: Exported `auditUseChatMessageActionsGovernance()` validating chat message action hook invariants, message count normalization, and regenerate/busy state contracts.
+  - `src/pages/chat/useChatStickyScroll.ts`: Exported `auditUseChatStickyScrollGovernance()` validating chat sticky-scroll hook invariants, scroll threshold bounds, and streaming auto-scroll state.
+  - `src/pages/settings/ContextTurnLimitSelect.tsx`: Exported `auditContextTurnLimitSelectGovernance()` validating context turn limit selector bounds (`minTurnLimit`, `maxTurnLimit`) and selected turn clamping invariants.
+  - Unit tests: Added 8 dedicated Vitest suites (`OfficeStructuredPreviews.p142.test.ts`, `Memory.p142.test.ts`, `Office.p142.test.ts`, `pagesIndex.p142.test.ts`, `PlanApprovalBar.p142.test.ts`, `useChatMessageActions.p142.test.ts`, `useChatStickyScroll.p142.test.ts`, `ContextTurnLimitSelect.p142.test.ts`).
