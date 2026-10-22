@@ -57,3 +57,40 @@ export function EffectiveSettingsSummary(): JSX.Element {
     </section>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditEffectiveSettingsSummaryGovernance(
+  state: {
+    activeProvider?: string;
+    permissionMode?: string;
+    contextTurnLimit?: number;
+  } = {},
+): {
+  module: 'src/pages/settings/EffectiveSettingsSummary.tsx';
+  phase: 'P143';
+  activeProvider: string;
+  permissionMode: string;
+  contextTurnLimit: number;
+  healthy: boolean;
+} {
+  const activeProvider =
+    typeof state.activeProvider === 'string' && state.activeProvider.trim().length > 0
+      ? state.activeProvider.trim()
+      : 'default';
+  const permissionMode =
+    typeof state.permissionMode === 'string' && state.permissionMode.trim().length > 0
+      ? state.permissionMode.trim()
+      : 'workspace_write';
+  const contextTurnLimit =
+    typeof state.contextTurnLimit === 'number' && Number.isFinite(state.contextTurnLimit)
+      ? Math.max(0, Math.trunc(state.contextTurnLimit))
+      : 20;
+  return {
+    module: 'src/pages/settings/EffectiveSettingsSummary.tsx',
+    phase: 'P143',
+    activeProvider,
+    permissionMode,
+    contextTurnLimit,
+    healthy: activeProvider.length > 0 && permissionMode.length > 0 && contextTurnLimit >= 0,
+  };
+}

@@ -1925,3 +1925,18 @@
   - `src/pages/chat/useChatStickyScroll.ts`: Exported `auditUseChatStickyScrollGovernance()` validating chat sticky-scroll hook invariants, scroll threshold bounds, and streaming auto-scroll state.
   - `src/pages/settings/ContextTurnLimitSelect.tsx`: Exported `auditContextTurnLimitSelectGovernance()` validating context turn limit selector bounds (`minTurnLimit`, `maxTurnLimit`) and selected turn clamping invariants.
   - Unit tests: Added 8 dedicated Vitest suites (`OfficeStructuredPreviews.p142.test.ts`, `Memory.p142.test.ts`, `Office.p142.test.ts`, `pagesIndex.p142.test.ts`, `PlanApprovalBar.p142.test.ts`, `useChatMessageActions.p142.test.ts`, `useChatStickyScroll.p142.test.ts`, `ContextTurnLimitSelect.p142.test.ts`).
+### Phase P143 — Chat Page, Effective Settings Summary, Font Settings, Memory/Knowledge Settings Tabs, Network Credentials, Usage Stats & Agents API Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P142 Merged: `#2306` (`main` @ `ab4f85f8dfdf765679607b8057ccd0021f99e91e`), `#2307` (`release/win7` @ `a0c76523a129b0dd8a2198dc4e3f644566561a56`)
+  - Phase P143: `feat/project-governance-p143` (`main`) & `feat/win7-project-governance-p143` (`release/win7`)
+- **Scope**:
+  - `src/pages/Chat.tsx`: Exported `auditChatPageGovernance()` validating Chat page top header bar control placement (`headerControlsInTopBar`), clean single-row bottom composer contract (`singleRowBottomComposer`), and active session identifier normalization.
+  - `src/pages/settings/EffectiveSettingsSummary.tsx`: Exported `auditEffectiveSettingsSummaryGovernance()` validating effective provider, permission mode, and context turn limit summary invariants.
+  - `src/pages/settings/FontSettingsSection.tsx`: Exported `auditFontSettingsSectionGovernance()` validating font scale percentage clamping (`minScalePercent`, `maxScalePercent`) and typography scale contracts.
+  - `src/pages/settings/MemoryKnowledgeTab.tsx`: Exported `auditMemoryKnowledgeTabGovernance()` validating memory enablement, knowledge source count normalization, and auto-indexing state.
+  - `src/pages/settings/MemorySettingsTab.tsx`: Exported `auditMemorySettingsTabGovernance()` validating memory retention days bounds and auto-capture toggle invariants.
+  - `src/pages/settings/NetworkCredentialsSection.tsx`: Exported `auditNetworkCredentialsSectionGovernance()` validating configured credential key counts, proxy mode normalization (`system`, `custom`, `none`), and TLS verification invariants.
+  - `src/pages/settings/UsageStatsTab.tsx`: Exported `auditUsageStatsTabGovernance()` validating token usage totals, session count normalization, and reporting window bounds.
+  - `src/shared/api/agentsApi.ts`: Exported `auditAgentsApiGovernance()` validating agent management REST API endpoint coverage and request timeout bounds.
+  - Unit tests: Added 8 dedicated Vitest suites (`Chat.p143.test.ts`, `EffectiveSettingsSummary.p143.test.ts`, `FontSettingsSection.p143.test.ts`, `MemoryKnowledgeTab.p143.test.ts`, `MemorySettingsTab.p143.test.ts`, `NetworkCredentialsSection.p143.test.ts`, `UsageStatsTab.p143.test.ts`, `agentsApi.p143.test.ts`).

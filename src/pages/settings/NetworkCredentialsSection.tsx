@@ -483,3 +483,35 @@ export function CredentialsSection() {
     </section>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditNetworkCredentialsSectionGovernance(
+  state: {
+    configuredKeyCount?: number;
+    proxyMode?: 'system' | 'custom' | 'none' | string;
+    tlsVerifyEnabled?: boolean;
+  } = {},
+): {
+  module: 'src/pages/settings/NetworkCredentialsSection.tsx';
+  phase: 'P143';
+  configuredKeyCount: number;
+  proxyMode: 'system' | 'custom' | 'none';
+  tlsVerifyEnabled: boolean;
+  healthy: boolean;
+} {
+  const configuredKeyCount =
+    typeof state.configuredKeyCount === 'number' && Number.isFinite(state.configuredKeyCount)
+      ? Math.max(0, Math.trunc(state.configuredKeyCount))
+      : 0;
+  const proxyMode =
+    state.proxyMode === 'custom' || state.proxyMode === 'none' ? state.proxyMode : 'system';
+  const tlsVerifyEnabled = state.tlsVerifyEnabled !== false;
+  return {
+    module: 'src/pages/settings/NetworkCredentialsSection.tsx',
+    phase: 'P143',
+    configuredKeyCount,
+    proxyMode,
+    tlsVerifyEnabled,
+    healthy: configuredKeyCount >= 0 && tlsVerifyEnabled,
+  };
+}
