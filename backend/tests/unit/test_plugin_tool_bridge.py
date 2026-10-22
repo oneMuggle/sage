@@ -310,7 +310,7 @@ def test_namespaced_collision_across_plugin_segments_first_wins() -> None:
     assert tool.capability_name == "c"
 
 
-def test_profile_whitelist_requires_exact_plugin_tool_name() -> None:
+def test_profile_whitelist_exact_and_plugin_wildcards_r92() -> None:
     host = _FakeHost(running=[("demo", _cap())])
     bridge = PluginToolBridge()
     registry = ToolRegistry()
@@ -319,7 +319,13 @@ def test_profile_whitelist_requires_exact_plugin_tool_name() -> None:
 
     assert registry.get_schemas_for_llm(allowed_tools=[tool_name])
     assert registry.get_schemas_for_llm(allowed_tools=[]) == []
-    assert registry.get_schemas_for_llm(allowed_tools=["plugin__demo__*"]) == []
+    # R92: per-plugin / global plugin wildcards expose the same tool.
+    for allowed in (["plugin__demo__*"], ["plugin__*"]):
+        schemas = registry.get_schemas_for_llm(allowed_tools=allowed)
+        assert [s["name"] for s in schemas] == [tool_name]
+    # Another plugin's namespace and malformed globs stay fail-closed.
+    assert registry.get_schemas_for_llm(allowed_tools=["plugin__other__*"]) == []
+    assert registry.get_schemas_for_llm(allowed_tools=["plugin__demo*"]) == []
 
 
 def test_overlong_namespaced_name_is_skipped() -> None:

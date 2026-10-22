@@ -31,6 +31,7 @@ from backend.domain.tool_names import (
     SYMBOL_TOOLS,
     TODO_TOOLS,
     WEB_FETCH_TOOLS,
+    is_plugin_tool_reference,
 )
 
 logger = logging.getLogger(__name__)
@@ -788,7 +789,10 @@ def validate_profile_tools(repo: Any | None = None) -> int:
     未注册名对 LLM 本就不可见（``get_schemas_for_llm`` 只遍历已注册工具），
     所以只 warning 不改库 —— 剔除会误伤引用 MCP 等动态工具的自定义
     profile。MCP / ``dispatch_subagents`` / ``wiki_*`` 等动态名字会产生
-    告警噪音，属预期（见 domain/tool_names.py 模块注释）。
+    告警噪音，属预期（见 domain/tool_names.py 模块注释）。R92 起合法
+    形状的插件引用（``plugin__<plugin>__<capability>`` 精确名与
+    ``plugin__*`` / ``plugin__<plugin>__*`` 通配）视为已知动态引用
+    不告警；无效通配写法仍按未注册名告警。
 
     Returns:
         告警的 profile 数（测试断言用）。
@@ -798,7 +802,11 @@ def validate_profile_tools(repo: Any | None = None) -> int:
     known = set(ALL_BUILTIN_TOOL_NAMES)
     warned = 0
     for profile in repo.list_all():
-        unknown = [t for t in (profile.get("tools") or []) if t not in known]
+        unknown = [
+            t
+            for t in (profile.get("tools") or [])
+            if t not in known and not is_plugin_tool_reference(t)
+        ]
         if unknown:
             warned += 1
             logger.warning(

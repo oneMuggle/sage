@@ -37,6 +37,7 @@ from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.domain.scheduler import SchedulerServicePort
+from backend.domain.tool_names import tool_name_in_allowlist
 from backend.domain.tool_policy import DEFAULT_MAX_TOOL_CALLS_PER_RUN, ToolPolicy
 
 # ===== M6 HOOKS BEGIN: user-defined hooks around tool execution =====
@@ -1081,14 +1082,17 @@ class SageAgent:
         # Phase 1: profile whitelist pre-pass (batch-level, no side effects).
         # Reject the whole batch BEFORE any enforcer.check call so a tool
         # outside the profile's whitelist cannot slip through on the strength
-        # of an earlier in-whitelist tool passing the enforcer.
+        # of an earlier in-whitelist tool passing the enforcer. Membership
+        # uses the shared domain matcher so R92 plugin wildcards behave
+        # identically here, in registry schema filtering, and at dispatch.
         allowed_profile_tools = (
-            set(self.profile.get("tools") or [])
+            list(self.profile.get("tools") or [])
             if self.profile and self.profile.get("tools") is not None
             else None
         )
         if allowed_profile_tools is not None and any(
-            tc.name not in allowed_profile_tools for tc in batch
+            not tool_name_in_allowlist(tc.name, allowed_profile_tools)
+            for tc in batch
         ):
             return False
         # Phase 2: per-tool invariants + enforcer pre-check.
@@ -1122,12 +1126,13 @@ class SageAgent:
         # profile 白名单批级预检（与 L6 同款：任何越界工具即整批串行，
         # 避免靠前面的白名单工具"带飞"越界工具通过 enforcer）。
         allowed_profile_tools = (
-            set(self.profile.get("tools") or [])
+            list(self.profile.get("tools") or [])
             if self.profile and self.profile.get("tools") is not None
             else None
         )
         if allowed_profile_tools is not None and any(
-            tc.name not in allowed_profile_tools for tc in batch
+            not tool_name_in_allowlist(tc.name, allowed_profile_tools)
+            for tc in batch
         ):
             return [("serial", [tc]) for tc in batch]
 
@@ -2478,12 +2483,13 @@ class SageAgent:
         # 1) profile 白名单：不仅控制 schema 暴露，也必须在执行边界再校验，
         # 防止伪造/异常 tool call 直接从全局 registry 取到未授权工具。
         allowed_profile_tools = (
-            set(self.profile.get("tools") or [])
+            list(self.profile.get("tools") or [])
             if self.profile and self.profile.get("tools") is not None
             else None
         )
         profile_denied = (
-            allowed_profile_tools is not None and tc.name not in allowed_profile_tools
+            allowed_profile_tools is not None
+            and not tool_name_in_allowlist(tc.name, allowed_profile_tools)
         )
         if profile_denied:
             logger.warning(

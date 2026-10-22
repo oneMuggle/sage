@@ -19,12 +19,14 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from backend.domain.risk import RiskClass
+from backend.domain.tool_names import PLUGIN_TOOL_PREFIX
 from backend.plugins.manifest import CapabilityType, PluginCapability
 from backend.tools.base import BaseTool, ToolResult, ToolSchema
 
 logger = logging.getLogger(__name__)
 
-PLUGIN_TOOL_PREFIX = "plugin__"
+# PLUGIN_TOOL_PREFIX 的单一来源在 backend.domain.tool_names；此处导入后
+# 仍以模块级名字再导出（__all__ 保留），既有导入面不变。
 MAX_TOOL_NAME_LENGTH = 128
 MAX_DESCRIPTION_CHARS = 1024
 MAX_SCHEMA_BYTES = 16 * 1024

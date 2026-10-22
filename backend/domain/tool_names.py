@@ -27,9 +27,16 @@
 - ``update_pending_task`` / ``cancel_pending_task`` / ``add_task_to_plan``：
   同上（re-plan 工具族，tools/replan_tool.py，与 dispatch 同一 tool-toggle 门）；
 - MCP 工具：外部服务器运行期提供。
+- 进程外插件工具（R90）：动态名字 ``plugin__<plugin>__<capability>``
+  不在内置清单内；其命名空间前缀、形状识别与 profile 白名单匹配
+  （含 R92 受限通配）定义于本模块下方，启动期校验把合法形状的插件
+  引用视为已知动态引用，不告警。
 """
 
 from __future__ import annotations
+
+import re
+from typing import Any, Iterable, Optional
 
 # 执行三件套：bash 起进程（run_in_background=true 返回 shell_id），
 # bash_output 轮询输出，kill_shell 终止。暴露 bash 的白名单必须三件
@@ -234,6 +241,97 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
     )
 )
 
+# ---------------------------------------------------------------------------
+# R90/R92 动态插件工具名字语义（与上面的静态内置清单互不混入）
+#
+# 桥接层（plugins/tool_bridge.py）发布的名字固定为
+# ``plugin__<plugin>__<capability>``。前缀原先在 tool_bridge 与
+# tools/permissions 各有一份字面量；R92 起收敛到本模块单一来源，
+# profile 白名单的三道判定（registry schema 过滤、agent 并行预检、
+# agent 执行边界）也统一走 ``tool_name_in_allowlist()``，防止各写一份
+# 精确判定导致口径漂移。
+# ---------------------------------------------------------------------------
+
+#: 进程外插件工具的 LLM 命名空间前缀（单一来源）。
+PLUGIN_TOOL_PREFIX = "plugin__"
+
+# 与 tool_bridge 发布校验同一字符集：完整工具名只允许 ASCII 字母、
+# 数字与 ``_.-``。
+_PLUGIN_NAME_CHARS_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def is_plugin_tool_name(name: Any) -> bool:
+    """``name`` 是否呈合法插件工具形状（只判形状，不判是否在运行）。"""
+    if not isinstance(name, str) or "*" in name:
+        return False
+    if not name.startswith(PLUGIN_TOOL_PREFIX):
+        return False
+    if _PLUGIN_NAME_CHARS_RE.match(name) is None:
+        return False
+    plugin_segment, separator, capability_segment = name[
+        len(PLUGIN_TOOL_PREFIX) :
+    ].partition("__")
+    return bool(separator and plugin_segment and capability_segment)
+
+
+def plugin_tool_wildcard_prefix(entry: Any) -> Optional[str]:
+    """解析 R92 受限通配，合法时返回待匹配的命名空间前缀。
+
+    只承认 ``plugin__*``（全部插件）与 ``plugin__<plugin>__*``（单个
+    插件的全部 capability）；其它含 ``*`` 的写法一律返回 ``None``，
+    由调用方按精确字符串处理（匹配不到合法工具名，fail-closed）。
+    """
+    if not isinstance(entry, str):
+        return None
+    if entry == PLUGIN_TOOL_PREFIX + "*":
+        return PLUGIN_TOOL_PREFIX
+    if not entry.startswith(PLUGIN_TOOL_PREFIX) or not entry.endswith("__*"):
+        return None
+    plugin_segment = entry[len(PLUGIN_TOOL_PREFIX) : -3]
+    if not plugin_segment or "*" in plugin_segment:
+        return None
+    if _PLUGIN_NAME_CHARS_RE.match(plugin_segment) is None:
+        return None
+    return entry[:-1]
+
+
+def is_plugin_tool_wildcard(entry: Any) -> bool:
+    """``entry`` 是否为 R92 承认的插件工具通配条目。"""
+    return plugin_tool_wildcard_prefix(entry) is not None
+
+
+def is_plugin_tool_reference(entry: Any) -> bool:
+    """``entry`` 是否为合法形状的插件工具引用（精确名或受限通配）。"""
+    return is_plugin_tool_name(entry) or is_plugin_tool_wildcard(entry)
+
+
+def tool_name_in_allowlist(
+    tool_name: Any, allowed_tools: Optional[Iterable[Any]]
+) -> bool:
+    """profile 白名单单一匹配口径（精确名 + R92 插件受限通配）。
+
+    - ``allowed_tools is None``：无白名单限制（保持既有语义）；
+    - 空可迭代对象：不放行任何工具（保持既有语义）；
+    - 普通条目精确匹配；仅 ``plugin__*`` 与 ``plugin__<plugin>__*``
+      做命名空间通配，其余含 ``*`` 的条目不展开；
+    - 显式白名单下非字符串工具名不放行，坏条目不能放宽整个白名单。
+    """
+    if allowed_tools is None:
+        return True
+    if not isinstance(tool_name, str):
+        return False
+    for entry in allowed_tools:
+        if entry == tool_name:
+            return True
+        prefix = plugin_tool_wildcard_prefix(entry)
+        if prefix is None or not is_plugin_tool_name(tool_name):
+            continue
+        if prefix == PLUGIN_TOOL_PREFIX:
+            return True
+        if tool_name.startswith(prefix) and len(tool_name) > len(prefix):
+            return True
+    return False
+
 __all__ = [
     "ALL_BUILTIN_TOOL_NAMES",
     "BROWSER_TOOLS",
@@ -250,6 +348,7 @@ __all__ = [
     "OFFICE_TOOLS",
     "ORCH_TOOLS",
     "PATCH_TOOLS",
+    "PLUGIN_TOOL_PREFIX",
     "RUNTIME_EXEC_TOOLS",
     "RUNTIME_PROBE_TOOLS",
     "RUNTIME_TOOLS",
@@ -261,4 +360,9 @@ __all__ = [
     "WEB_FETCH_TOOLS",
     "WEB_SEARCH_TOOLS",
     "WEB_TOOLS",
+    "is_plugin_tool_name",
+    "is_plugin_tool_reference",
+    "is_plugin_tool_wildcard",
+    "plugin_tool_wildcard_prefix",
+    "tool_name_in_allowlist",
 ]
