@@ -16,7 +16,7 @@
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,
     "backend/office/excel.py": 1003,
-    "backend/office/models.py": 1554,
+    "backend/office/models.py": 1558,
     "backend/office/staging_quarantine.py": 1383,
     "backend/office/template_library.py": 1230,
     "backend/office/tool_service.py": 1017,

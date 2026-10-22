@@ -694,6 +694,21 @@ class WordHeaderFooterSpec(BaseModel):
     page_number: bool = False
 
 
+class WordSectionBreakSpec(BaseModel):
+    """分节设置（Round 26）：start_paragraph 前插入 NEW_PAGE 分节，
+    新节应用 page_setup（横排宽表/财务页场景）。复用 WordPageSetupSpec。
+
+    定义位置须在 ``WordFormatSpec`` 之前：pydantic v1 不支持字符串形式的
+    ``conlist`` item_type（会在解析注解时对 str 调 issubclass() → TypeError），
+    因此不能靠前向引用，必须真正先定义。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_paragraph: int = Field(ge=0, description="该 0-based 段落下标起进入新节")
+    page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
+
+
 class WordFormatSpec(BaseModel):
     """Word 文档版式规范。
 
@@ -737,7 +752,7 @@ class WordFormatSpec(BaseModel):
     even_page_footer: Optional[WordHeaderFooterSpec] = None
     # Round 26：横排/分节。每个 break 在 start_paragraph（0-based）前
     # 插入 NEW_PAGE 分节并对新节应用 page_setup；按列表顺序依次生效。
-    section_breaks: _constrained_list("WordSectionBreakSpec", max_length=20) = Field(
+    section_breaks: _constrained_list(WordSectionBreakSpec, max_length=20) = Field(
         default_factory=list
     )
     # Round 42：图目录/表目录（TOC \c 收录 SEQ 题注；None = 不插入）。
@@ -761,17 +776,6 @@ class WordIndexSpec(BaseModel):
         max_length=200,
         description="域未更新时的占位提示",
     )
-
-
-class WordSectionBreakSpec(BaseModel):
-    """分节设置（Round 26）：start_paragraph 前插入 NEW_PAGE 分节，
-    新节应用 page_setup（横排宽表/财务页场景）。复用 WordPageSetupSpec。
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    start_paragraph: int = Field(ge=0, description="该 0-based 段落下标起进入新节")
-    page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
 
 
 class OfficeWordGenerateRequest(BaseModel):
