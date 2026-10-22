@@ -1432,6 +1432,12 @@ from backend.api.search_routes import router as search_router
 
 app.include_router(search_router, prefix="/api/v1")
 
+# Workspace MCP Server 管理端点: /api/v1/remote-mcp/*（受 local_auth 保护；
+# MCP 监听器本身在独立端口 127.0.0.1:8767，默认关闭）
+from backend.remote_mcp.admin_routes import router as remote_mcp_router  # noqa: E402
+
+app.include_router(remote_mcp_router, prefix="/api/v1")
+
 # Update system: /api/v1/updates/{latest, history, channels}
 app.include_router(updates_router_module.router, prefix="/api/v1")
 
