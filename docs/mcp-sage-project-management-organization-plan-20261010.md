@@ -1762,3 +1762,13 @@
   - Added `PreferenceSaveStatusAuditReport`, `auditPreferenceSaveStatus()`, and `exportPreferenceSaveStatusAuditJson()` plus `ExcelPptEditFormFieldsAuditReport`, `auditExcelPptEditFormFields()`, and `exportExcelPptEditFormFieldsAuditJson()`.
 - **Unit Test Coverage**:
   - Added 8 unit test suites (`16` tests total) verifying nominal and fallback audit diagnostics and JSON export across all 8 modules.
+### Phase P132 — Office Capability/Snapshot/PDF Dialogs & Barrels, Project-Type Barrel, Send-Message Attachment/Transparency & Workspace Barrel Audit Diagnostics & JSON Export (2026-10-22)
+
+- **Office Capability Bar, Snapshot Panel, PDF Form Fill Dialog & Barrel (`src/features/office/OfficeCapabilityBar.tsx`, `src/features/office/OfficeSnapshotPanel.tsx`, `src/features/office/PdfFormFillDialog.tsx`, `src/features/office/index.ts`)**:
+  - Added `OfficeCapabilityBarAuditReport`, `auditOfficeCapabilityBar()`, and `exportOfficeCapabilityBarAuditJson()`, `OfficeSnapshotPanelAuditReport`, `auditOfficeSnapshotPanel()`, and `exportOfficeSnapshotPanelAuditJson()`, `PdfFormFillDialogAuditReport`, `auditPdfFormFillDialog()`, and `exportPdfFormFillDialogAuditJson()`, plus `OfficeFeatureBarrelAuditReport`, `auditOfficeFeatureBarrel()`, and `exportOfficeFeatureBarrelAuditJson()` with `schemaVersion: '1.0'` and `exportedAt: '2026-10-22'` (`src/features/office/` is now 100% covered).
+- **Project-Type & Workspace Feature Barrels (`src/features/project-type/index.ts`, `src/features/workspace/index.ts`)**:
+  - Added `ProjectTypeFeatureBarrelAuditReport`, `auditProjectTypeFeatureBarrel()`, and `exportProjectTypeFeatureBarrelAuditJson()` plus `WorkspaceFeatureBarrelAuditReport`, `auditWorkspaceFeatureBarrel()`, and `exportWorkspaceFeatureBarrelAuditJson()` (`src/features/project-type/` and `src/features/workspace/` are now 100% covered).
+- **Send-Message Attachment Upload & Transparency Payload Validators (`src/features/send-message/AttachmentUpload.tsx`, `src/features/send-message/transparencyPayload.ts`)**:
+  - Added `AttachmentUploadAuditReport`, `auditAttachmentUpload()`, and `exportAttachmentUploadAuditJson()` plus `TransparencyPayloadAuditReport`, `auditTransparencyPayload()`, and `exportTransparencyPayloadAuditJson()`.
+- **Unit Test Coverage**:
+  - Added 8 unit test suites (`16` tests total) verifying nominal and fallback audit diagnostics and JSON export across all 8 modules.

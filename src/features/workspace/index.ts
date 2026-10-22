@@ -11,3 +11,26 @@
 export { WorkspaceBindModal } from './WorkspaceBindModal';
 export { WorkspaceEmptyGuard } from './WorkspaceEmptyGuard';
 export type { WorkspaceGuardFeature } from './WorkspaceEmptyGuard';
+
+export interface WorkspaceFeatureBarrelAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/features/workspace/index.ts';
+  exportedSymbols: readonly string[];
+  symbolCount: number;
+  exportedAt: string;
+}
+
+export function auditWorkspaceFeatureBarrel(): WorkspaceFeatureBarrelAuditReport {
+  const exportedSymbols = ['WorkspaceBindModal', 'WorkspaceEmptyGuard'] as const;
+  return {
+    schemaVersion: '1.0',
+    module: 'src/features/workspace/index.ts',
+    exportedSymbols,
+    symbolCount: exportedSymbols.length,
+    exportedAt: '2026-10-22',
+  };
+}
+
+export function exportWorkspaceFeatureBarrelAuditJson(): string {
+  return JSON.stringify(auditWorkspaceFeatureBarrel(), null, 2);
+}
