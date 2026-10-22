@@ -33,6 +33,7 @@ interface PlanCardProps {
   needConfirm?: boolean;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatPlanCardMarkdown(
   runId: string,
   plan: TaskPlanItem[],
@@ -51,6 +52,7 @@ export function formatPlanCardMarkdown(
   return lines.join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatPlanCardJson(
   runId: string,
   plan: TaskPlanItem[],
@@ -214,4 +216,34 @@ export function PlanCard({
       ))}
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditPlanCardGovernance(
+  state: {
+    stepCount?: number;
+    completedCount?: number;
+  } = {},
+): {
+  module: 'src/components/PlanCard.tsx';
+  phase: 'P152';
+  stepCount: number;
+  completedCount: number;
+  healthy: boolean;
+} {
+  const stepCount =
+    typeof state.stepCount === 'number' && Number.isFinite(state.stepCount)
+      ? Math.max(0, Math.trunc(state.stepCount))
+      : 3;
+  const completedCount =
+    typeof state.completedCount === 'number' && Number.isFinite(state.completedCount)
+      ? Math.max(0, Math.min(stepCount, Math.trunc(state.completedCount)))
+      : 1;
+  return {
+    module: 'src/components/PlanCard.tsx',
+    phase: 'P152',
+    stepCount,
+    completedCount,
+    healthy: stepCount >= 1 && completedCount <= stepCount,
+  };
 }

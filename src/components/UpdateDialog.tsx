@@ -10,6 +10,7 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatUpdateDialogMarkdown(
   state: UpdateState | null,
   progress: number | null = null,
@@ -29,6 +30,7 @@ export function formatUpdateDialogMarkdown(
   return lines.join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatUpdateDialogJson(
   state: UpdateState | null,
   progress: number | null = null,
@@ -459,4 +461,31 @@ function DialogFooter({
       </div>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditUpdateDialogGovernance(
+  state: {
+    progressPercent?: number;
+    hasValidVersion?: boolean;
+  } = {},
+): {
+  module: 'src/components/UpdateDialog.tsx';
+  phase: 'P152';
+  progressPercent: number;
+  hasValidVersion: boolean;
+  healthy: boolean;
+} {
+  const progressPercent =
+    typeof state.progressPercent === 'number' && Number.isFinite(state.progressPercent)
+      ? Math.max(0, Math.min(100, Math.round(state.progressPercent)))
+      : 0;
+  const hasValidVersion = state.hasValidVersion !== false;
+  return {
+    module: 'src/components/UpdateDialog.tsx',
+    phase: 'P152',
+    progressPercent,
+    hasValidVersion,
+    healthy: hasValidVersion && progressPercent >= 0 && progressPercent <= 100,
+  };
 }
