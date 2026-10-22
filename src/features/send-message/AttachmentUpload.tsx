@@ -168,3 +168,37 @@ export const AttachmentUpload: React.FC<AttachmentUploadProps> = ({
     </div>
   );
 };
+
+export interface AttachmentUploadAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/features/send-message/AttachmentUpload.tsx';
+  componentName: 'AttachmentUpload';
+  attachmentCount: number;
+  isUploading: boolean;
+  acceptedTypesCount: number;
+  exportedAt: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditAttachmentUpload(
+  attachmentCount = 0,
+  isUploading = false,
+): AttachmentUploadAuditReport {
+  return {
+    schemaVersion: '1.0',
+    module: 'src/features/send-message/AttachmentUpload.tsx',
+    componentName: 'AttachmentUpload',
+    attachmentCount: Math.max(0, attachmentCount),
+    isUploading: Boolean(isUploading),
+    acceptedTypesCount: ACCEPTED_TYPES.split(',').filter(Boolean).length,
+    exportedAt: '2026-10-22',
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportAttachmentUploadAuditJson(
+  attachmentCount = 0,
+  isUploading = false,
+): string {
+  return JSON.stringify(auditAttachmentUpload(attachmentCount, isUploading), null, 2);
+}
