@@ -1222,10 +1222,12 @@ function createMainWindow(): void {
     });
     // Diagnostic: capture page crashes (using non-deprecated render-process-gone)
     win.webContents.on('render-process-gone', (_event, details) => {
-      logger.error('main: frontend render-process-gone', {
-        reason: details.reason,
-        exitCode: details.exitCode,
-      });
+      // 崩溃原因必须内联到 message 字符串里 —— electron-log 的 text formatter
+      // 在 CI 默认丢弃 object payload, 只剩 message 就看不到 reason/exitCode,
+      // 而这正是定位 renderer 终止原因的唯一线索。
+      logger.error(
+        `main: frontend render-process-gone [${details.reason}] exitCode=${details.exitCode}`,
+      );
     });
     win.webContents.on('unresponsive', () => {
       logger.error('main: frontend unresponsive');
