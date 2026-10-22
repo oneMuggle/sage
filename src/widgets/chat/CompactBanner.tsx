@@ -43,3 +43,39 @@ export function CompactBanner({ info }: { info: CompactInfo }) {
     </div>
   );
 }
+
+export interface CompactBannerAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/widgets/chat/CompactBanner.tsx';
+  componentName: 'CompactBanner';
+  beforeCount: number;
+  afterCount: number;
+  removedCount: number;
+  exportedAt: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditCompactBanner(
+  beforeCount = 20,
+  afterCount = 6,
+  removedCount = 14,
+): CompactBannerAuditReport {
+  return {
+    schemaVersion: '1.0',
+    module: 'src/widgets/chat/CompactBanner.tsx',
+    componentName: 'CompactBanner',
+    beforeCount: Math.max(0, beforeCount),
+    afterCount: Math.max(0, afterCount),
+    removedCount: Math.max(0, removedCount),
+    exportedAt: '2026-10-22',
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportCompactBannerAuditJson(
+  beforeCount = 20,
+  afterCount = 6,
+  removedCount = 14,
+): string {
+  return JSON.stringify(auditCompactBanner(beforeCount, afterCount, removedCount), null, 2);
+}

@@ -117,3 +117,37 @@ export function AccountTable({
     </div>
   );
 }
+
+export interface AccountTableAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/widgets/arena/AccountTable.tsx';
+  componentName: 'AccountTable';
+  accountCount: number;
+  activeCount: number;
+  exportedAt: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditAccountTable(
+  accountCount = 0,
+  activeCount = 0,
+): AccountTableAuditReport {
+  const normalizedTotal = Math.max(0, accountCount);
+  const normalizedActive = Math.min(normalizedTotal, Math.max(0, activeCount));
+  return {
+    schemaVersion: '1.0',
+    module: 'src/widgets/arena/AccountTable.tsx',
+    componentName: 'AccountTable',
+    accountCount: normalizedTotal,
+    activeCount: normalizedActive,
+    exportedAt: '2026-10-22',
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportAccountTableAuditJson(
+  accountCount = 0,
+  activeCount = 0,
+): string {
+  return JSON.stringify(auditAccountTable(accountCount, activeCount), null, 2);
+}
