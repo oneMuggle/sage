@@ -162,3 +162,56 @@ export function DocumentPreview({ filePath }: DocumentPreviewProps) {
     </div>
   );
 }
+
+export interface DocumentPreviewAuditInput {
+  documentPath: string;
+  format: string;
+  pageCount: number;
+  previewReady: boolean;
+}
+
+export interface DocumentPreviewAuditReport {
+  documentPath: string;
+  normalizedFormat: string;
+  pageCount: number;
+  previewReady: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateDocumentPreviewAudit(
+  input: DocumentPreviewAuditInput,
+): DocumentPreviewAuditReport {
+  const documentPath = input.documentPath.trim();
+  const normalizedFormat = input.format.trim().toLowerCase() || 'unknown';
+  const pageCount = Math.max(0, Math.trunc(input.pageCount));
+  const previewReady = Boolean(input.previewReady);
+  const issueCodes: string[] = [];
+
+  if (!documentPath) {
+    issueCodes.push('missing_document_path');
+  }
+  if (pageCount === 0) {
+    issueCodes.push('zero_document_pages');
+  }
+  if (!previewReady) {
+    issueCodes.push('document_preview_not_ready');
+  }
+
+  return {
+    documentPath,
+    normalizedFormat,
+    pageCount,
+    previewReady,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportDocumentPreviewAuditJson(
+  input: DocumentPreviewAuditInput,
+): string {
+  return JSON.stringify(evaluateDocumentPreviewAudit(input));
+}

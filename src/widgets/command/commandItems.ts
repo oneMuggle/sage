@@ -87,3 +87,43 @@ export const actionCommands: ActionCommand[] = [
     icon: PanelRight,
   },
 ];
+
+export interface CommandItemsAuditInput {
+  itemIds: string[];
+  missingLabelCount: number;
+  missingShortcutConflictCount: number;
+}
+
+export interface CommandItemsAuditReport {
+  uniqueCommandCount: number;
+  hasDuplicateIds: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+export function evaluateCommandItemsGovernanceAudit(
+  input: CommandItemsAuditInput,
+): CommandItemsAuditReport {
+  const issueCodes: string[] = [];
+  const normalizedIds = input.itemIds.map((id) => id.trim()).filter((id) => id.length > 0);
+  const uniqueCommandCount = new Set(normalizedIds).size;
+  const hasDuplicateIds = uniqueCommandCount !== normalizedIds.length;
+  if (uniqueCommandCount === 0) {
+    issueCodes.push('COMMAND_ITEMS_EMPTY');
+  }
+  if (hasDuplicateIds) {
+    issueCodes.push('COMMAND_ITEMS_DUPLICATE_ID');
+  }
+  if (input.missingLabelCount > 0) {
+    issueCodes.push('COMMAND_ITEMS_LABEL_MISSING');
+  }
+  if (input.missingShortcutConflictCount > 0) {
+    issueCodes.push('COMMAND_ITEMS_SHORTCUT_CONFLICT');
+  }
+  return {
+    uniqueCommandCount,
+    hasDuplicateIds,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

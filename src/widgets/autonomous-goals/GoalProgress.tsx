@@ -39,3 +39,60 @@ function formatTokens(n: number): string {
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
 }
+
+export interface GoalProgressAuditInput {
+  completedSteps: number;
+  totalSteps: number;
+  failedSteps: number;
+  inProgressSteps: number;
+}
+
+export interface GoalProgressAuditReport {
+  completedSteps: number;
+  totalSteps: number;
+  failedSteps: number;
+  inProgressSteps: number;
+  completionRatePct: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateGoalProgressAudit(
+  input: GoalProgressAuditInput,
+): GoalProgressAuditReport {
+  const totalSteps = Math.max(0, Math.trunc(input.totalSteps));
+  const completedSteps = Math.max(0, Math.trunc(input.completedSteps));
+  const failedSteps = Math.max(0, Math.trunc(input.failedSteps));
+  const inProgressSteps = Math.max(0, Math.trunc(input.inProgressSteps));
+  const completionRatePct =
+    totalSteps > 0 ? Math.min(100, Math.round((completedSteps / totalSteps) * 100)) : 0;
+  const issueCodes: string[] = [];
+
+  if (totalSteps === 0) {
+    issueCodes.push('empty_goal_step_plan');
+  }
+  if (failedSteps > 0) {
+    issueCodes.push('failed_steps_present');
+  }
+  if (completedSteps + failedSteps + inProgressSteps > totalSteps && totalSteps > 0) {
+    issueCodes.push('step_count_overflow');
+  }
+
+  return {
+    completedSteps,
+    totalSteps,
+    failedSteps,
+    inProgressSteps,
+    completionRatePct,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportGoalProgressAuditJson(
+  input: GoalProgressAuditInput,
+): string {
+  return JSON.stringify(evaluateGoalProgressAudit(input));
+}

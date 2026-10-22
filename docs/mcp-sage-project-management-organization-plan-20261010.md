@@ -1793,3 +1793,81 @@
   - `src/widgets/arena/__tests__/index.p133.test.ts`
   - `src/widgets/chat/__tests__/ActiveAgentIndicator.p133.test.ts`
   - `src/widgets/chat/__tests__/CompactBanner.p133.test.ts`
+
+### Phase P134 — Autonomous-Goals Card/Progress & Chat Inline-Error/Attachment/HtmlCodeBlock/KnowledgeChip/MarkdownParts/ReadAloud Audit Diagnostics & JSON Export (Completed)
+
+- **Target Modules**:
+  - `src/widgets/autonomous-goals/GoalCard.tsx`: Added `GoalCardAuditInput`, `GoalCardAuditReport`, `evaluateGoalCardAudit`, and `exportGoalCardAuditJson`.
+  - `src/widgets/autonomous-goals/GoalProgress.tsx`: Added `GoalProgressAuditInput`, `GoalProgressAuditReport`, `evaluateGoalProgressAudit`, and `exportGoalProgressAuditJson`.
+  - `src/widgets/chat/ChatInlineError.tsx`: Added `ChatInlineErrorAuditInput`, `ChatInlineErrorAuditReport`, `evaluateChatInlineErrorAudit`, and `exportChatInlineErrorAuditJson`.
+  - `src/widgets/chat/FileAttachment.tsx`: Added `FileAttachmentAuditInput`, `FileAttachmentAuditReport`, `evaluateFileAttachmentAudit`, and `exportFileAttachmentAuditJson`.
+  - `src/widgets/chat/HtmlCodeBlock.tsx`: Added `HtmlCodeBlockAuditInput`, `HtmlCodeBlockAuditReport`, `evaluateHtmlCodeBlockAudit`, and `exportHtmlCodeBlockAuditJson`.
+  - `src/widgets/chat/KnowledgeChip.tsx`: Added `KnowledgeChipAuditInput`, `KnowledgeChipAuditReport`, `evaluateKnowledgeChipAudit`, and `exportKnowledgeChipAuditJson`.
+  - `src/widgets/chat/MessageMarkdownParts.tsx`: Added `MessageMarkdownPartsAuditInput`, `MessageMarkdownPartsAuditReport`, `evaluateMessageMarkdownPartsAudit`, and `exportMessageMarkdownPartsAuditJson`.
+  - `src/widgets/chat/ReadAloudButton.tsx`: Added `ReadAloudButtonAuditInput`, `ReadAloudButtonAuditReport`, `evaluateReadAloudButtonAudit`, and `exportReadAloudButtonAuditJson`.
+- **Unit Tests**:
+  - `src/widgets/autonomous-goals/__tests__/GoalCard.p134.test.ts`
+  - `src/widgets/autonomous-goals/__tests__/GoalProgress.p134.test.ts`
+  - `src/widgets/chat/__tests__/ChatInlineError.p134.test.ts`
+  - `src/widgets/chat/__tests__/FileAttachment.p134.test.ts`
+  - `src/widgets/chat/__tests__/HtmlCodeBlock.p134.test.ts`
+  - `src/widgets/chat/__tests__/KnowledgeChip.p134.test.ts`
+  - `src/widgets/chat/__tests__/MessageMarkdownParts.p134.test.ts`
+  - `src/widgets/chat/__tests__/ReadAloudButton.p134.test.ts`
+
+### Phase P135 — Chat Right-Panel/Session-Id/Shiki/Slash-Menu/Subagent-Panel/Terminal/Topic-Separator/Truncation Audit Diagnostics & JSON Export (Completed)
+
+- **Target Modules**:
+  - `src/widgets/chat/RightPanelToggle.tsx`: Added `RightPanelToggleAuditInput`, `RightPanelToggleAuditReport`, `evaluateRightPanelToggleAudit`, and `exportRightPanelToggleAuditJson`.
+  - `src/widgets/chat/SessionIdBadge.tsx`: Added `SessionIdBadgeAuditInput`, `SessionIdBadgeAuditReport`, `evaluateSessionIdBadgeAudit`, and `exportSessionIdBadgeAuditJson`.
+  - `src/widgets/chat/ShikiCodeBlock.tsx`: Added `ShikiCodeBlockAuditInput`, `ShikiCodeBlockAuditReport`, `evaluateShikiCodeBlockAudit`, and `exportShikiCodeBlockAuditJson`.
+  - `src/widgets/chat/SlashCommandMenu.tsx`: Added `SlashCommandMenuAuditInput`, `SlashCommandMenuAuditReport`, `evaluateSlashCommandMenuAudit`, and `exportSlashCommandMenuAuditJson`.
+  - `src/widgets/chat/SubagentLivePanel.tsx`: Added `SubagentLivePanelAuditInput`, `SubagentLivePanelAuditReport`, `evaluateSubagentLivePanelAudit`, and `exportSubagentLivePanelAuditJson`.
+  - `src/widgets/chat/TerminalPanel.tsx`: Added `TerminalPanelAuditInput`, `TerminalPanelAuditReport`, `evaluateTerminalPanelAudit`, and `exportTerminalPanelAuditJson`.
+  - `src/widgets/chat/TopicSeparator.tsx`: Added `TopicSeparatorAuditInput`, `TopicSeparatorAuditReport`, `evaluateTopicSeparatorAudit`, and `exportTopicSeparatorAuditJson`.
+  - `src/widgets/chat/TruncationNotice.tsx`: Added `TruncationNoticeAuditInput`, `TruncationNoticeAuditReport`, `evaluateTruncationNoticeAudit`, and `exportTruncationNoticeAuditJson`.
+- **Unit Tests**:
+  - `src/widgets/chat/__tests__/RightPanelToggle.p135.test.ts`
+  - `src/widgets/chat/__tests__/SessionIdBadge.p135.test.ts`
+  - `src/widgets/chat/__tests__/ShikiCodeBlock.p135.test.ts`
+  - `src/widgets/chat/__tests__/SlashCommandMenu.p135.test.ts`
+  - `src/widgets/chat/__tests__/SubagentLivePanel.p135.test.ts`
+  - `src/widgets/chat/__tests__/TerminalPanel.p135.test.ts`
+  - `src/widgets/chat/__tests__/TopicSeparator.p135.test.ts`
+  - `src/widgets/chat/__tests__/TruncationNotice.p135.test.ts`
+
+## Phase P136 — Chat Turn Group, Artifact/Document Preview, Context Input & Tool Renderer Governance Audit (2026-10-22)
+
+- **PRs**: `#2282` (`main` @ `7ec887b8d`) / `#2283` (`release/win7` @ `2e02027fa`) merged for Phase P135; Phase P136 extends deterministic governance audit contracts across 8 chat turn group, barrel export, artifact/document preview, context input, and tool renderer modules:
+  1. `src/widgets/chat/TurnGroup.tsx` (`evaluateTurnGroupGovernanceAudit` + `src/widgets/chat/__tests__/TurnGroup.p136.test.ts`)
+  2. `src/widgets/chat/index.ts` (`evaluateChatWidgetsBarrelGovernanceAudit` + `src/widgets/chat/__tests__/index.p136.test.ts`)
+  3. `src/widgets/chat/artifacts/ArtifactViewer.tsx` (`evaluateArtifactViewerGovernanceAudit` + `src/widgets/chat/artifacts/__tests__/ArtifactViewer.p136.test.ts`)
+  4. `src/widgets/chat/preview/DocumentPreview.tsx` (`evaluateDocumentPreviewGovernanceAudit` + `src/widgets/chat/preview/__tests__/DocumentPreview.p136.test.ts`)
+  5. `src/widgets/chat/progress/ContextInput.tsx` (`evaluateContextInputGovernanceAudit` + `src/widgets/chat/progress/__tests__/ContextInput.p136.test.ts`)
+  6. `src/widgets/chat/toolRenderers/BashToolRenderer.tsx` (`evaluateBashToolRendererGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/BashToolRenderer.p136.test.ts`)
+  7. `src/widgets/chat/toolRenderers/FileWriteToolRenderer.tsx` (`evaluateFileWriteToolRendererGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/FileWriteToolRenderer.p136.test.ts`)
+  8. `src/widgets/chat/toolRenderers/ToolCallCard.tsx` (`evaluateToolCallCardGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/ToolCallCard.p136.test.ts`)
+
+## Phase P137 — Tool Renderer Registry, Command Widget, Evolution Log/Panel & Help Footer Governance Audit (2026-10-22)
+
+- **PRs**: `#2284` (`main` @ `978c18e04`) / `#2285` (`release/win7` @ `7d1c34369`) merged for Phase P136; Phase P137 extends deterministic governance audit contracts across 8 tool renderer registry, command widget, evolution log/panel, and help footer modules:
+  1. `src/widgets/chat/toolRenderers/WebSearchToolRenderer.tsx` (`evaluateWebSearchToolRendererGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/WebSearchToolRenderer.p137.test.ts`)
+  2. `src/widgets/chat/toolRenderers/index.ts` (`evaluateToolRenderersBarrelGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/index.p137.test.ts`)
+  3. `src/widgets/chat/toolRenderers/registry.ts` (`evaluateToolRendererRegistryGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/registry.p137.test.ts`)
+  4. `src/widgets/command/commandItems.ts` (`evaluateCommandItemsGovernanceAudit` + `src/widgets/command/__tests__/commandItems.p137.test.ts`)
+  5. `src/widgets/command/index.ts` (`evaluateCommandWidgetBarrelGovernanceAudit` + `src/widgets/command/__tests__/index.p137.test.ts`)
+  6. `src/widgets/evolution/EvolutionLog.tsx` (`evaluateEvolutionLogGovernanceAudit` + `src/widgets/evolution/__tests__/EvolutionLog.p137.test.ts`)
+  7. `src/widgets/evolution/EvolutionPanel.tsx` (`evaluateEvolutionPanelGovernanceAudit` + `src/widgets/evolution/__tests__/EvolutionPanel.p137.test.ts`)
+  8. `src/widgets/help/HelpFooter.tsx` (`evaluateHelpFooterGovernanceAudit` + `src/widgets/help/__tests__/HelpFooter.p137.test.ts`)
+
+## Phase P138 — Help Sidebar, Layout Shell/Sidebar/Divider & Memory/Model-Catalog Barrel Governance Audit (2026-10-22)
+
+- **PRs**: `#2286` (`main` @ `89e7dc922`) / `#2287` (`release/win7` @ `6b1a567dd`) merged for Phase P137; Phase P138 extends deterministic governance audit contracts across 8 help sidebar, layout shell/sidebar/divider, and memory/model-catalog barrel modules:
+  1. `src/widgets/help/HelpSidebar.tsx` (`evaluateHelpSidebarGovernanceAudit` + `src/widgets/help/__tests__/HelpSidebar.p138.test.ts`)
+  2. `src/widgets/layout/Layout.tsx` (`evaluateLayoutShellGovernanceAudit` + `src/widgets/layout/__tests__/Layout.p138.test.ts`)
+  3. `src/widgets/layout/ResizeDivider.tsx` (`evaluateResizeDividerGovernanceAudit` + `src/widgets/layout/__tests__/ResizeDivider.p138.test.ts`)
+  4. `src/widgets/layout/Sidebar.tsx` (`evaluateSidebarGovernanceAudit` + `src/widgets/layout/__tests__/Sidebar.p138.test.ts`)
+  5. `src/widgets/layout/SidebarNavItem.tsx` (`evaluateSidebarNavItemGovernanceAudit` + `src/widgets/layout/__tests__/SidebarNavItem.p138.test.ts`)
+  6. `src/widgets/layout/index.ts` (`evaluateLayoutBarrelGovernanceAudit` + `src/widgets/layout/__tests__/index.p138.test.ts`)
+  7. `src/widgets/memory/index.ts` (`evaluateMemoryWidgetsBarrelGovernanceAudit` + `src/widgets/memory/__tests__/index.p138.test.ts`)
+  8. `src/widgets/model-catalog/index.ts` (`evaluateModelCatalogBarrelGovernanceAudit` + `src/widgets/model-catalog/__tests__/index.p138.test.ts`)

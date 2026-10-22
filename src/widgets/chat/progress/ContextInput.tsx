@@ -241,3 +241,55 @@ function extractErrorDetail(err: unknown): Record<string, unknown> {
   }
   return { error: String(err) };
 }
+
+export interface ContextInputAuditInput {
+  usedTokens: number;
+  maxTokens: number;
+  pinnedItemCount: number;
+  autoCompactEnabled: boolean;
+}
+
+export interface ContextInputAuditReport {
+  usedTokens: number;
+  maxTokens: number;
+  usagePct: number;
+  pinnedItemCount: number;
+  autoCompactEnabled: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateContextInputAudit(
+  input: ContextInputAuditInput,
+): ContextInputAuditReport {
+  const usedTokens = Math.max(0, Math.trunc(input.usedTokens));
+  const maxTokens = Math.max(1, Math.trunc(input.maxTokens));
+  const usagePct = Math.min(100, Math.round((usedTokens / maxTokens) * 100));
+  const pinnedItemCount = Math.max(0, Math.trunc(input.pinnedItemCount));
+  const autoCompactEnabled = Boolean(input.autoCompactEnabled);
+  const issueCodes: string[] = [];
+
+  if (usedTokens > maxTokens) {
+    issueCodes.push('context_token_budget_exceeded');
+  } else if (usagePct >= 90 && !autoCompactEnabled) {
+    issueCodes.push('high_context_pressure_without_autocompact');
+  }
+
+  return {
+    usedTokens,
+    maxTokens,
+    usagePct,
+    pinnedItemCount,
+    autoCompactEnabled,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportContextInputAuditJson(
+  input: ContextInputAuditInput,
+): string {
+  return JSON.stringify(evaluateContextInputAudit(input));
+}
