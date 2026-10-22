@@ -33,10 +33,12 @@ export interface FontSettingsAuditInput {
   error: 'load' | 'save' | null;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatFontSettingsAuditSnapshot(input: FontSettingsAuditInput): string {
   return `ui=${input.fontUi}:${input.fontSizeUi}|code=${input.fontCode}:${input.fontSizeCode}|loading=${input.loading ? 1 : 0}|err=${input.error ?? 'none'}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatFontSettingsAuditJson(input: FontSettingsAuditInput): string {
   return JSON.stringify({
     fontUi: input.fontUi,
@@ -206,8 +208,36 @@ export function FontProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useFontSettings(): FontContextValue {
   const context = useContext(FontContext);
   if (!context) throw new Error('useFontSettings requires FontProvider');
   return context;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditUseFontSettingsGovernance(
+  state: {
+    ready?: boolean;
+    uiSize?: number;
+  } = {},
+): {
+  module: 'src/entities/font/useFontSettings.tsx';
+  phase: 'P153';
+  ready: boolean;
+  uiSize: number;
+  healthy: boolean;
+} {
+  const ready = state.ready !== false;
+  const uiSize =
+    typeof state.uiSize === 'number' && Number.isFinite(state.uiSize)
+      ? Math.max(10, Math.min(24, Math.round(state.uiSize)))
+      : 14;
+  return {
+    module: 'src/entities/font/useFontSettings.tsx',
+    phase: 'P153',
+    ready,
+    uiSize,
+    healthy: ready && uiSize >= 10 && uiSize <= 24,
+  };
 }

@@ -2091,3 +2091,17 @@
   - `src/entities/autonomous-goals/goalStore.ts`: `auditGoalStoreGovernance`
 - **Verification**:
   - Added 8 dedicated Vitest suites (`*.p152.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
+
+### Phase P153: Autonomous Goal Types, Chat BtwState, Endpoint Provider Registry, Font Options/Storage/Settings & Model Catalog API/Types Governance Audit (Completed 2026-10-22)
+
+- **Target Modules**:
+  - `src/entities/autonomous-goals/types.ts`: `auditAutonomousGoalsTypesGovernance`
+  - `src/entities/chat/btwState.ts`: `auditBtwStateGovernance`
+  - `src/entities/endpoint/providerRegistry.ts`: `auditProviderRegistryGovernance`
+  - `src/entities/font/fontOptions.ts`: `auditFontOptionsGovernance`
+  - `src/entities/font/fontStorage.ts`: `auditFontStorageGovernance`
+  - `src/entities/font/useFontSettings.tsx`: `auditUseFontSettingsGovernance`
+  - `src/entities/model-catalog/api.ts`: `auditModelCatalogApiGovernance`
+  - `src/entities/model-catalog/types.ts`: `auditModelCatalogTypesGovernance`
+- **Verification**:
+  - Added 8 dedicated Vitest suites (`*.p153.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
