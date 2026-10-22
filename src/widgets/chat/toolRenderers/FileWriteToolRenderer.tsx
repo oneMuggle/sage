@@ -13,6 +13,7 @@ import { ToolCallCard } from './ToolCallCard';
 
 const FILE_TOOLS = new Set(['write_file', 'edit_file']);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function isFileWriteTool(name: string): boolean {
   return FILE_TOOLS.has(name);
 }
@@ -48,4 +49,53 @@ export function FileWriteToolRenderer({ tc }: { tc: ToolCall }) {
       <div className="font-mono text-ui-2xs text-text-secondary py-0.5">{filePath}</div>
     </ToolCallCard>
   );
+}
+
+export interface FileWriteToolRendererAuditInput {
+  targetPath: string;
+  bytesWritten: number;
+  createdNewFile: boolean;
+  succeeded: boolean;
+}
+
+export interface FileWriteToolRendererAuditReport {
+  targetPath: string;
+  bytesWritten: number;
+  createdNewFile: boolean;
+  succeeded: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateFileWriteToolRendererAudit(
+  input: FileWriteToolRendererAuditInput,
+): FileWriteToolRendererAuditReport {
+  const targetPath = input.targetPath.trim();
+  const bytesWritten = Math.max(0, Math.trunc(input.bytesWritten));
+  const succeeded = Boolean(input.succeeded);
+  const issueCodes: string[] = [];
+
+  if (!targetPath) {
+    issueCodes.push('missing_file_write_target_path');
+  }
+  if (!succeeded) {
+    issueCodes.push('file_write_operation_failed');
+  }
+
+  return {
+    targetPath,
+    bytesWritten,
+    createdNewFile: Boolean(input.createdNewFile),
+    succeeded,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportFileWriteToolRendererAuditJson(
+  input: FileWriteToolRendererAuditInput,
+): string {
+  return JSON.stringify(evaluateFileWriteToolRendererAudit(input));
 }
