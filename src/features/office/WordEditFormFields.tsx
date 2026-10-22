@@ -397,3 +397,41 @@ export function WordEditFormFields({
               </div>
   );
 }
+
+export interface WordEditFormFieldsAuditInput {
+  operationMode: string;
+  targetPath: string;
+  replacementRuleCount: number;
+  hasInstructionText: boolean;
+}
+
+export interface WordEditFormFieldsAuditReport {
+  hasDocxExtension: boolean;
+  normalizedReplacementRuleCount: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateWordEditFormFieldsGovernanceAudit(
+  input: WordEditFormFieldsAuditInput,
+): WordEditFormFieldsAuditReport {
+  const issueCodes: string[] = [];
+  const trimmedPath = input.targetPath.trim();
+  const hasDocxExtension = trimmedPath.toLowerCase().endsWith('.docx');
+  if (!hasDocxExtension) {
+    issueCodes.push('WORD_EDIT_TARGET_NOT_DOCX');
+  }
+  if (input.replacementRuleCount < 0) {
+    issueCodes.push('WORD_EDIT_RULE_COUNT_NEGATIVE');
+  }
+  if (!input.hasInstructionText && input.replacementRuleCount <= 0) {
+    issueCodes.push('WORD_EDIT_ACTION_EMPTY');
+  }
+  return {
+    hasDocxExtension,
+    normalizedReplacementRuleCount: Math.max(0, Math.trunc(input.replacementRuleCount)),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

@@ -195,3 +195,42 @@ export function ChangelogTab() {
     </div>
   );
 }
+
+export interface HelpChangelogTabAuditInput {
+  releaseEntryVersions: string[];
+  hasReleaseDates: boolean;
+  latestEntryHighlighted: boolean;
+}
+
+export interface HelpChangelogTabAuditReport {
+  uniqueReleaseCount: number;
+  hasReleaseDates: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateHelpChangelogTabGovernanceAudit(
+  input: HelpChangelogTabAuditInput,
+): HelpChangelogTabAuditReport {
+  const issueCodes: string[] = [];
+  const normalized = input.releaseEntryVersions
+    .map((ver) => ver.trim())
+    .filter((ver) => ver.length > 0);
+  const uniqueReleaseCount = new Set(normalized).size;
+  if (uniqueReleaseCount === 0) {
+    issueCodes.push('HELP_CHANGELOG_ENTRIES_EMPTY');
+  }
+  if (uniqueReleaseCount !== normalized.length) {
+    issueCodes.push('HELP_CHANGELOG_DUPLICATE_VERSION');
+  }
+  if (!input.hasReleaseDates) {
+    issueCodes.push('HELP_CHANGELOG_DATES_MISSING');
+  }
+  return {
+    uniqueReleaseCount,
+    hasReleaseDates: input.hasReleaseDates,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
