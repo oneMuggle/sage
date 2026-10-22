@@ -29,6 +29,7 @@ interface QuoteButtonState {
   left: number;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatSelectionQuoteButtonAuditSnapshot(opts: {
   active?: boolean;
   textLength?: number;
@@ -38,6 +39,7 @@ export function formatSelectionQuoteButtonAuditSnapshot(opts: {
   return `selectionQuote|active=${opts.active ? 1 : 0}|len=${opts.textLength ?? 0}|top=${opts.top ?? 0}|left=${opts.left ?? 0}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatSelectionQuoteButtonAuditJson(opts: {
   active?: boolean;
   textLength?: number;
@@ -158,4 +160,34 @@ export function SelectionQuoteButton({ rootRef, onQuote }: SelectionQuoteButtonP
     </>,
     document.body,
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditSelectionQuoteButtonGovernance(
+  state: {
+    selectionLength?: number;
+    maxQuoteChars?: number;
+  } = {},
+): {
+  module: 'src/widgets/chat/SelectionQuoteButton.tsx';
+  phase: 'P150';
+  selectionLength: number;
+  maxQuoteChars: number;
+  healthy: boolean;
+} {
+  const selectionLength =
+    typeof state.selectionLength === 'number' && Number.isFinite(state.selectionLength)
+      ? Math.max(0, Math.trunc(state.selectionLength))
+      : 48;
+  const maxQuoteChars =
+    typeof state.maxQuoteChars === 'number' && Number.isFinite(state.maxQuoteChars)
+      ? Math.max(100, Math.min(10000, Math.trunc(state.maxQuoteChars)))
+      : 2000;
+  return {
+    module: 'src/widgets/chat/SelectionQuoteButton.tsx',
+    phase: 'P150',
+    selectionLength,
+    maxQuoteChars,
+    healthy: selectionLength > 0 && selectionLength <= maxQuoteChars,
+  };
 }

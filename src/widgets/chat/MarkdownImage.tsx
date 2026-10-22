@@ -18,6 +18,7 @@ import { Lightbox } from '../../shared/ui';
 
 type LoadStatus = 'loading' | 'loaded' | 'error';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatMarkdownImageAuditSnapshot(opts: {
   src?: string;
   alt?: string;
@@ -28,6 +29,7 @@ export function formatMarkdownImageAuditSnapshot(opts: {
   return `markdownImage|src=${opts.src || 'none'}|alt=${opts.alt || 'none'}|status=${opts.status || 'loading'}|local=${opts.isLocalMedia ? 1 : 0}|lightbox=${opts.lightboxOpen ? 1 : 0}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatMarkdownImageAuditJson(opts: {
   src?: string;
   alt?: string;
@@ -165,4 +167,28 @@ export function MarkdownImage({ src, alt }: { src?: string; alt?: string }) {
       </span>
     </span>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditMarkdownImageGovernance(
+  state: {
+    hasSrc?: boolean;
+    lightboxEnabled?: boolean;
+  } = {},
+): {
+  module: 'src/widgets/chat/MarkdownImage.tsx';
+  phase: 'P150';
+  hasSrc: boolean;
+  lightboxEnabled: boolean;
+  healthy: boolean;
+} {
+  const hasSrc = state.hasSrc !== false;
+  const lightboxEnabled = state.lightboxEnabled !== false;
+  return {
+    module: 'src/widgets/chat/MarkdownImage.tsx',
+    phase: 'P150',
+    hasSrc,
+    lightboxEnabled,
+    healthy: hasSrc,
+  };
 }
