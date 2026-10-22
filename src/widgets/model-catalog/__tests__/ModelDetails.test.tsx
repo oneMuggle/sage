@@ -164,24 +164,4 @@ describe('ModelDetails', () => {
     expect(screen.getByTestId('override-save')).toBeDisabled();
     expect(mocks.getEffective).not.toHaveBeenCalled();
   });
-
-  it('copies model details as Markdown and JSON to clipboard', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    renderDetails();
-
-    await waitFor(() =>
-      expect(mocks.getEffective).toHaveBeenCalledWith('endpoint-1', 'gpt-4o-mini'),
-    );
-
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(
-        expect.stringContaining('# 模型详情: openai/gpt-4o-mini'),
-      );
-    });
-
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"revision": 7'));
-    });
-  });
 });

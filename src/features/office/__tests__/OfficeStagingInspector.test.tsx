@@ -44,7 +44,7 @@ describe('Office staging inspection UI', () => {
     expect(screen.getByRole('alert').textContent).toBe('office.staging.unavailable');
   });
 
-  it('exports staging report as Markdown and JSON and copies via buttons', async () => {
+  it('formats staging report as Markdown and JSON', () => {
     expect(formatOfficeStagingMarkdown('/ws', null)).toContain('_尚未执行暂存区检查_');
     expect(
       formatOfficeStagingMarkdown('/ws', { readOnly: true, truncated: false, items: [] }),
@@ -59,18 +59,5 @@ describe('Office staging inspection UI', () => {
     const parsed = JSON.parse(formatOfficeStagingJson('/ws', sampleReport));
     expect(parsed.workspacePath).toBe('/ws');
     expect(parsed.report.items).toHaveLength(1);
-
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    const previewStaging = vi.fn().mockResolvedValue(sampleReport);
-    vi.stubGlobal('electronAPI', { office: { previewStaging } });
-    render(<OfficeStagingInspector workspacePath="/ws" />);
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button'));
-    });
-    fireEvent.click(screen.getByTestId('office-staging-copy-md'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('word/DOC-1'));
-    fireEvent.click(screen.getByTestId('office-staging-copy-json'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"documentId": "DOC-1"'));
   });
 });

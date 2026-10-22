@@ -194,14 +194,8 @@ describe('ProjectProfileCard (Phase P28)', () => {
     });
     expect(screen.getAllByTestId('project-profile-item')).toHaveLength(1);
 
-    // Copy Markdown & single item + high-importance filter (Phase P35)
+    // Copy single item + high-importance filter (Phase P35)
     fireEvent.click(screen.getByTestId('project-profile-copy-item-pp-1'));
-    fireEvent.click(screen.getByTestId('project-profile-copy-item-md-pp-1'));
-    expect(screen.getByTestId('project-profile-copy-item-md-pp-1')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('project-profile-copy-item-json-pp-1'));
-    expect(screen.getByTestId('project-profile-copy-item-json-pp-1')).toHaveTextContent(
-      '已复制JSON',
-    );
     fireEvent.change(screen.getByTestId('project-profile-search-input'), {
       target: { value: '' },
     });

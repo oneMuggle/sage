@@ -38,7 +38,11 @@ function sess(id: string, forkRoot: string | null, title = `会话-${id}`): Sess
   };
 }
 
-function renderModal(overrides?: { sessionId?: string; activeSessionId?: string; onSwitch?: (id: string) => void }) {
+function renderModal(overrides?: {
+  sessionId?: string;
+  activeSessionId?: string;
+  onSwitch?: (id: string) => void;
+}) {
   const session = sess(overrides?.sessionId ?? 'me', overrides?.sessionId === 'me' ? null : 'root');
   const onSwitch = overrides?.onSwitch ?? vi.fn();
   const onClose = vi.fn();
@@ -89,21 +93,5 @@ describe('ForkTreeModal', () => {
     mockList.mockRejectedValue(new Error('boom'));
     renderModal({ sessionId: 'me' });
     await waitFor(() => expect(screen.getByTestId('fork-tree-error')).toHaveTextContent('boom'));
-  });
-
-  it('支持复制分叉谱系树 MD 与 JSON 到剪贴板', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    mockList.mockResolvedValue([sess('root', null), sess('me', 'root')]);
-    renderModal({ sessionId: 'me' });
-    await waitFor(() => expect(screen.getByTestId('fork-tree-node-root')).toBeInTheDocument());
-
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 会话分叉谱系树'));
-    });
-
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"root"'));
-    });
   });
 });

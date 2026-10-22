@@ -41,12 +41,7 @@ describe('SessionList', () => {
 
     const { unmount } = render(
       <I18nProvider>
-        <SessionList
-          sessions={[]}
-          currentSessionId={null}
-          onSelect={vi.fn()}
-          onDelete={vi.fn()}
-        />
+        <SessionList sessions={[]} currentSessionId={null} onSelect={vi.fn()} onDelete={vi.fn()} />
       </I18nProvider>,
     );
     expect(screen.getByText('暂无对话记录')).toBeInTheDocument();

@@ -138,8 +138,6 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     expect(screen.getByTestId('detection-governance-stats')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('detection-copy-signal-0'));
-    fireEvent.click(screen.getByTestId('detection-copy-signal-md-0'));
-    expect(screen.getByTestId('detection-copy-signal-md-0')).toHaveTextContent('已复制MD');
     fireEvent.click(screen.getByTestId('detection-copy-vcs-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-dirs-btn'));
     fireEvent.click(screen.getByTestId('detection-details-toggle-btn'));

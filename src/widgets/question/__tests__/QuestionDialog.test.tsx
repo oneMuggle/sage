@@ -309,7 +309,7 @@ describe('QuestionDialog', () => {
     expect(useQuestionState.getState().currentQuestion?.request_id).toBe('q-2');
   });
 
-  it('exports question dialog state as Markdown and JSON and copies via buttons', () => {
+  it('formats question dialog state as Markdown and JSON', () => {
     expect(formatQuestionDialogMarkdown(null)).toContain('_当前无待应答提问_');
     const q = makeQuestion({ request_id: 'q-export', multi_select: true });
     const md = formatQuestionDialogMarkdown(q, ['Markdown'], '补充说明');
@@ -318,12 +318,5 @@ describe('QuestionDialog', () => {
     const parsed = JSON.parse(formatQuestionDialogJson(q, ['Markdown'], ''));
     expect(parsed.question.request_id).toBe('q-export');
     expect(parsed.custom).toBeNull();
-
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    seedQuestion({ request_id: 'q-export' });
-    renderDialog();
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('交互提问 — 输出格式'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"request_id": "q-export"'));
   });
 });

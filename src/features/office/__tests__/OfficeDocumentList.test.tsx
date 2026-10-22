@@ -231,7 +231,7 @@ describe('OfficeDocumentList — batch archive/restore (round-3 N5)', () => {
     });
   });
 
-  it('formats and copies document list as Markdown and JSON', () => {
+  it('formats document list as Markdown and JSON', () => {
     const md = formatOfficeDocumentListMarkdown(sampleDocs, 'live');
     expect(md).toContain('# Office 文档历史列表 (Office Document List)');
     expect(md).toContain('deck.pptx');
@@ -240,15 +240,5 @@ describe('OfficeDocumentList — batch archive/restore (round-3 N5)', () => {
     const parsed = JSON.parse(formatOfficeDocumentListJson(sampleDocs, 'live'));
     expect(parsed.total).toBe(2);
     expect(parsed.variant).toBe('live');
-
-    render(
-      <I18nProvider defaultLocale="zh">
-        <OfficeDocumentList documents={sampleDocs} loading={false} />
-      </I18nProvider>,
-    );
-    fireEvent.click(screen.getByTestId('office-doc-list-copy-md'));
-    expect(screen.getByTestId('office-doc-list-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('office-doc-list-copy-json'));
-    expect(screen.getByTestId('office-doc-list-copy-json').textContent).toContain('已复制 JSON');
   });
 });

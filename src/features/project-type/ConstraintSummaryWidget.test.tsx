@@ -13,7 +13,11 @@ import { projectApi } from '../../shared/api';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { GitStatusSection } from '../../widgets/sidebar/sections/GitStatusSection';
 
-import { BusinessDocumentStyleBar, CodingHooksGovernanceBar, ResearchCitationAndToneBar } from './BuiltinCheckpointAndStyleBar';
+import {
+  BusinessDocumentStyleBar,
+  CodingHooksGovernanceBar,
+  ResearchCitationAndToneBar,
+} from './BuiltinCheckpointAndStyleBar';
 import { ConstraintEditor } from './ConstraintEditor';
 import { ConstraintManager } from './ConstraintManager';
 import { ConstraintSummaryWidget } from './ConstraintSummaryWidget';
@@ -23,7 +27,11 @@ import { ProjectAdvisorCard } from './ProjectAdvisorCard';
 // Mock projectApi
 vi.mock('../../shared/api', () => ({
   projectApi: {
-    list: vi.fn().mockResolvedValue([{ id: 'proj-sider-1', path: '/workspace/proj-sider-1', name: 'sider', lastOpenedAt: 100 }]),
+    list: vi
+      .fn()
+      .mockResolvedValue([
+        { id: 'proj-sider-1', path: '/workspace/proj-sider-1', name: 'sider', lastOpenedAt: 100 },
+      ]),
     listConstraints: vi.fn(),
     createConstraint: vi.fn().mockResolvedValue({}),
     createMilestone: vi.fn().mockResolvedValue({}),
@@ -34,7 +42,9 @@ vi.mock('../../shared/api', () => ({
     getAdvice: vi.fn().mockResolvedValue({
       healthScore: 86,
       summary: '项目约束与阶段运转健康',
-      risks: [{ severity: 'medium', description: '部分文书未留存快照', suggestion: '创建归档快照' }],
+      risks: [
+        { severity: 'medium', description: '部分文书未留存快照', suggestion: '创建归档快照' },
+      ],
       suggestions: [{ priority: 'high', action: '补齐法务复核', reason: '提升合规完备度' }],
       cachedAt: 1700000000,
     }),
@@ -51,15 +61,19 @@ vi.mock('../../shared/api/desktopInvoke', () => ({
     modified_files: ['src/App.tsx'],
     staged_files: ['README.md'],
     untracked_files: [],
-    recent_commits: [{ sha: 'abc1234567', author: 'dev', date: '2026-10-13 10:00:00', message: 'feat: init' }],
+    recent_commits: [
+      { sha: 'abc1234567', author: 'dev', date: '2026-10-13 10:00:00', message: 'feat: init' },
+    ],
   }),
 }));
 
 vi.mock('../../shared/api/projectApi', () => ({
   projectApi: {
-    list: vi.fn().mockResolvedValue([
-      { id: 'proj-sider-1', path: '/workspace/proj-sider-1', name: 'sider', lastOpenedAt: 100 },
-    ]),
+    list: vi
+      .fn()
+      .mockResolvedValue([
+        { id: 'proj-sider-1', path: '/workspace/proj-sider-1', name: 'sider', lastOpenedAt: 100 },
+      ]),
     addMaterial: vi.fn().mockResolvedValue({}),
     addMaterialFromFile: vi.fn().mockResolvedValue({}),
     confirmKnowledge: vi.fn().mockResolvedValue({}),
@@ -167,11 +181,17 @@ describe('ConstraintSummaryWidget', () => {
       expect(screen.getByText('code-style')).toBeInTheDocument();
       expect(screen.getByText('git-commit')).toBeInTheDocument();
       fireEvent.click(screen.getByTestId('constraint-summary-cats-to-l3-btn'));
-      expect(screen.getByTestId('constraint-summary-cats-to-l3-btn')).toHaveTextContent('已存分布L3');
+      expect(screen.getByTestId('constraint-summary-cats-to-l3-btn')).toHaveTextContent(
+        '已存分布L3',
+      );
       fireEvent.click(screen.getByTestId('constraint-summary-cats-to-l4-btn'));
-      expect(screen.getByTestId('constraint-summary-cats-to-l4-btn')).toHaveTextContent('已存分布L4');
+      expect(screen.getByTestId('constraint-summary-cats-to-l4-btn')).toHaveTextContent(
+        '已存分布L4',
+      );
       fireEvent.click(screen.getByTestId('constraint-summary-glob-to-l4-btn'));
-      expect(screen.getByTestId('constraint-summary-glob-to-l4-btn')).toHaveTextContent('已存Glob至L4');
+      expect(screen.getByTestId('constraint-summary-glob-to-l4-btn')).toHaveTextContent(
+        '已存Glob至L4',
+      );
     });
   });
 
@@ -238,7 +258,6 @@ describe('ConstraintSummaryWidget', () => {
     });
   });
 
-
   it('supports ConstraintManager sample glob pills, clear button, keyword search, and ProjectAdvisorCard markdown copy (Phase P27)', async () => {
     mockListConstraints.mockResolvedValue([
       {
@@ -264,7 +283,9 @@ describe('ConstraintSummaryWidget', () => {
     const sampleBtn = await screen.findByTestId('constraint-glob-sample-1');
     fireEvent.click(sampleBtn);
     await waitFor(() => {
-      expect(screen.getByTestId('constraint-glob-match-count')).toHaveTextContent('命中 1 条生效约束');
+      expect(screen.getByTestId('constraint-glob-match-count')).toHaveTextContent(
+        '命中 1 条生效约束',
+      );
     });
 
     fireEvent.click(screen.getByTestId('constraint-glob-copy-path-btn'));
@@ -275,7 +296,6 @@ describe('ConstraintSummaryWidget', () => {
       target: { value: 'GB/T 9704' },
     });
     expect(screen.getByText('严格遵循 GB/T 9704 公文格式')).toBeInTheDocument();
-
   });
 
   it('supports ConstraintSummaryWidget top-priority preview toggle, active rules Markdown export, and ProjectAdvisorCard M3 Risk -> Constraint closed loop (Phase P30)', async () => {
@@ -311,19 +331,28 @@ describe('ConstraintSummaryWidget', () => {
       </>,
     );
 
+    await screen.findByTestId('constraint-summary-save-l3-btn');
     fireEvent.click(screen.getByTestId('constraint-summary-save-l3-btn'));
     expect(screen.getByTestId('constraint-summary-save-l3-btn')).toHaveTextContent('已存高优 L3');
     fireEvent.click(screen.getByTestId('constraint-summary-save-l4-btn'));
     expect(screen.getByTestId('constraint-summary-save-l4-btn')).toHaveTextContent('已存 L4');
     fireEvent.click(screen.getByTestId('constraint-summary-top-to-milestone-btn'));
-    expect(screen.getByTestId('constraint-summary-top-to-milestone-btn')).toHaveTextContent('已转里程碑');
+    expect(screen.getByTestId('constraint-summary-top-to-milestone-btn')).toHaveTextContent(
+      '已转里程碑',
+    );
 
-    expect(screen.getByTestId('constraint-summary-high-priority-count')).toHaveTextContent('高优 ≥P8：1 条');
+    expect(screen.getByTestId('constraint-summary-high-priority-count')).toHaveTextContent(
+      '高优 ≥P8：1 条',
+    );
     fireEvent.click(screen.getByTestId('constraint-summary-glob-to-l3-btn'));
-    expect(screen.getByTestId('constraint-summary-glob-to-l3-btn')).toHaveTextContent('已存Glob至L3');
+    expect(screen.getByTestId('constraint-summary-glob-to-l3-btn')).toHaveTextContent(
+      '已存Glob至L3',
+    );
     fireEvent.click(screen.getByTestId('constraint-summary-copy-glob-btn'));
     fireEvent.click(screen.getByTestId('constraint-summary-disabled-to-milestone-btn'));
-    expect(screen.getByTestId('constraint-summary-disabled-to-milestone-btn')).toHaveTextContent('已建复核里程碑');
+    expect(screen.getByTestId('constraint-summary-disabled-to-milestone-btn')).toHaveTextContent(
+      '已建复核里程碑',
+    );
     fireEvent.click(screen.getByTestId('constraint-summary-enable-all-btn'));
     await waitFor(() => {
       expect(projectApi.updateConstraint).toHaveBeenCalledWith('test-project', 'c-p39-disabled', {
@@ -337,9 +366,13 @@ describe('ConstraintSummaryWidget', () => {
     );
     fireEvent.click(screen.getByTestId('constraint-summary-copy-preview-btn'));
     fireEvent.click(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1'));
-    expect(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1')).toHaveTextContent('已存 L3');
+    expect(screen.getByTestId('constraint-summary-rule-to-l3-c-p30-1')).toHaveTextContent(
+      '已存 L3',
+    );
     fireEvent.click(screen.getByTestId('constraint-summary-rule-to-milestone-c-p30-1'));
-    expect(screen.getByTestId('constraint-summary-rule-to-milestone-c-p30-1')).toHaveTextContent('已转里程碑');
+    expect(screen.getByTestId('constraint-summary-rule-to-milestone-c-p30-1')).toHaveTextContent(
+      '已转里程碑',
+    );
     fireEvent.click(screen.getByTestId('constraint-summary-rule-to-l4-c-p30-1'));
     expect(screen.getByTestId('constraint-summary-rule-to-l4-c-p30-1')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('constraint-summary-rule-copy-c-p30-1'));
@@ -370,11 +403,17 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('advisor-risk-filter-high'));
     fireEvent.click(screen.getByTestId('advisor-risk-filter-all'));
     fireEvent.click(screen.getByTestId('advisor-batch-risks-to-milestone-btn'));
-    expect(screen.getByTestId('advisor-batch-risks-to-milestone-btn')).toHaveTextContent('已全部风险转里程碑');
+    expect(screen.getByTestId('advisor-batch-risks-to-milestone-btn')).toHaveTextContent(
+      '已全部风险转里程碑',
+    );
     fireEvent.click(screen.getByTestId('advisor-batch-risks-to-l3-btn'));
-    expect(screen.getByTestId('advisor-batch-risks-to-l3-btn')).toHaveTextContent('已全部风险存 L3');
+    expect(screen.getByTestId('advisor-batch-risks-to-l3-btn')).toHaveTextContent(
+      '已全部风险存 L3',
+    );
     fireEvent.click(screen.getByTestId('advisor-batch-suggestions-to-l3-btn'));
-    expect(screen.getByTestId('advisor-batch-suggestions-to-l3-btn')).toHaveTextContent('已全部建议存 L3');
+    expect(screen.getByTestId('advisor-batch-suggestions-to-l3-btn')).toHaveTextContent(
+      '已全部建议存 L3',
+    );
     fireEvent.click(screen.getByTestId('advisor-guard-all-risks-btn'));
     await waitFor(() => {
       expect(projectApi.createConstraint).toHaveBeenCalledWith(
@@ -438,13 +477,17 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('git-widget-guard-all-btn'));
     fireEvent.click(screen.getByTestId('git-widget-copy-commits-md-btn'));
     fireEvent.click(screen.getByTestId('git-widget-commits-to-constraint-btn'));
-    expect(screen.getByTestId('git-widget-commits-to-constraint-btn')).toHaveTextContent('已转提交L2');
+    expect(screen.getByTestId('git-widget-commits-to-constraint-btn')).toHaveTextContent(
+      '已转提交L2',
+    );
     fireEvent.click(screen.getByTestId('git-widget-save-commits-l3-btn'));
     expect(screen.getByTestId('git-widget-save-commits-l3-btn')).toHaveTextContent('已沉淀至 L3');
     fireEvent.click(screen.getByTestId('git-widget-save-l4-btn'));
     expect(screen.getByTestId('git-widget-save-l4-btn')).toHaveTextContent('已存提交至 L4');
     fireEvent.click(screen.getByTestId('git-widget-commit-to-milestone-abc1234567'));
-    expect(screen.getByTestId('git-widget-commit-to-milestone-abc1234567')).toHaveTextContent('已建里程碑');
+    expect(screen.getByTestId('git-widget-commit-to-milestone-abc1234567')).toHaveTextContent(
+      '已建里程碑',
+    );
     fireEvent.click(screen.getByTestId('git-widget-commit-to-l3-abc1234567'));
     expect(screen.getByTestId('git-widget-commit-to-l3-abc1234567')).toHaveTextContent('已存L3');
     fireEvent.click(screen.getByTestId('git-widget-commit-to-l4-abc1234567'));
@@ -475,7 +518,9 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('constraint-editor-save-l3-btn'));
     expect(screen.getByTestId('constraint-editor-save-l3-btn')).toHaveTextContent('已沉淀至 L3');
     fireEvent.click(screen.getByTestId('constraint-editor-to-milestone-btn'));
-    expect(screen.getByTestId('constraint-editor-to-milestone-btn')).toHaveTextContent('已转里程碑');
+    expect(screen.getByTestId('constraint-editor-to-milestone-btn')).toHaveTextContent(
+      '已转里程碑',
+    );
     fireEvent.click(screen.getByTestId('constraint-editor-save-l4-btn'));
     expect(screen.getByTestId('constraint-editor-save-l4-btn')).toHaveTextContent('已存 L4');
   });
@@ -530,9 +575,13 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('constraint-batch-save-l4-btn'));
     expect(screen.getByTestId('constraint-batch-save-l4-btn')).toHaveTextContent('已批量存 L4');
     fireEvent.click(screen.getByTestId('constraint-batch-to-milestone-btn'));
-    expect(screen.getByTestId('constraint-batch-to-milestone-btn')).toHaveTextContent('已批量转里程碑');
+    expect(screen.getByTestId('constraint-batch-to-milestone-btn')).toHaveTextContent(
+      '已批量转里程碑',
+    );
     fireEvent.click(screen.getByTestId('constraint-to-milestone-c-p33-high'));
-    expect(screen.getByTestId('constraint-to-milestone-c-p33-high')).toHaveTextContent('已转里程碑');
+    expect(screen.getByTestId('constraint-to-milestone-c-p33-high')).toHaveTextContent(
+      '已转里程碑',
+    );
     fireEvent.click(screen.getByTestId('constraint-to-l4-c-p33-high'));
     expect(screen.getByTestId('constraint-to-l4-c-p33-high')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('constraint-promote-profile-c-p33-high'));
@@ -588,18 +637,30 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('workbench-row-to-l4-proj-sider-1'));
     expect(screen.getByTestId('workbench-row-to-l4-proj-sider-1')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('workbench-row-to-milestone-proj-sider-1'));
-    expect(screen.getByTestId('workbench-row-to-milestone-proj-sider-1')).toHaveTextContent('已建里程碑');
+    expect(screen.getByTestId('workbench-row-to-milestone-proj-sider-1')).toHaveTextContent(
+      '已建里程碑',
+    );
     fireEvent.click(screen.getByTestId('workbench-row-to-constraint-proj-sider-1'));
-    expect(screen.getByTestId('workbench-row-to-constraint-proj-sider-1')).toHaveTextContent('已转L2');
+    expect(screen.getByTestId('workbench-row-to-constraint-proj-sider-1')).toHaveTextContent(
+      '已转L2',
+    );
     fireEvent.click(screen.getByTestId('workbench-row-scaffold-proj-sider-1'));
     expect(screen.getByTestId('workbench-row-scaffold-proj-sider-1')).toHaveTextContent('已脚手架');
     fireEvent.click(screen.getByTestId('workbench-save-archetype-stats-l4-btn'));
-    expect(screen.getByTestId('workbench-save-archetype-stats-l4-btn')).toHaveTextContent('已存统计L4');
+    expect(screen.getByTestId('workbench-save-archetype-stats-l4-btn')).toHaveTextContent(
+      '已存统计L4',
+    );
     fireEvent.click(screen.getByTestId('workbench-archetype-stats-to-milestone-btn'));
-    expect(screen.getByTestId('workbench-archetype-stats-to-milestone-btn')).toHaveTextContent('已转统计里程碑');
+    expect(screen.getByTestId('workbench-archetype-stats-to-milestone-btn')).toHaveTextContent(
+      '已转统计里程碑',
+    );
     fireEvent.click(screen.getByTestId('workbench-archetype-stats-to-constraint-btn'));
-    expect(screen.getByTestId('workbench-archetype-stats-to-constraint-btn')).toHaveTextContent('已转统计L2');
+    expect(screen.getByTestId('workbench-archetype-stats-to-constraint-btn')).toHaveTextContent(
+      '已转统计L2',
+    );
     fireEvent.click(screen.getByTestId('workbench-registry-to-constraint-btn'));
-    expect(screen.getByTestId('workbench-registry-to-constraint-btn')).toHaveTextContent('已转台账L2');
+    expect(screen.getByTestId('workbench-registry-to-constraint-btn')).toHaveTextContent(
+      '已转台账L2',
+    );
   });
 });

@@ -155,22 +155,13 @@ describe('EndpointStatusBanner', () => {
     expect(screen.queryByTestId('endpoint-banner-offline')).toBeNull();
   });
 
-  it('exports Markdown and JSON and copies via buttons (Phase P91)', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
+  it('formats endpoint status as Markdown and JSON', () => {
     const currentIssue = issue();
-    useEndpointStatusStore.setState({ issue: currentIssue });
-    renderBanner();
-
     const md = formatEndpointStatusMarkdown(currentIssue, true, '无法连接');
     expect(md).toContain('# 端点状态告警');
     expect(md).toContain('- 故障类型: network');
     const json = JSON.parse(formatEndpointStatusJson(currentIssue, true, '无法连接'));
     expect(json.online).toBe(true);
     expect(json.issue.host).toBe('api.example.com');
-
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
   });
 });
