@@ -64,3 +64,29 @@ export const skillDraftsApi = {
     });
   },
 };
+
+export function auditSkillDraftsApiGovernance(
+  state: {
+    draftCount?: number;
+    supportsAcceptReject?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/skillDraftsApi.ts';
+  phase: 'P145';
+  draftCount: number;
+  supportsAcceptReject: boolean;
+  healthy: boolean;
+} {
+  const draftCount =
+    typeof state.draftCount === 'number' && Number.isFinite(state.draftCount)
+      ? Math.max(0, Math.trunc(state.draftCount))
+      : 0;
+  const supportsAcceptReject = state.supportsAcceptReject !== false;
+  return {
+    module: 'src/shared/api/skillDraftsApi.ts',
+    phase: 'P145',
+    draftCount,
+    supportsAcceptReject,
+    healthy: draftCount >= 0 && supportsAcceptReject,
+  };
+}

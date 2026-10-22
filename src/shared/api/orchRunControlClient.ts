@@ -88,3 +88,30 @@ export const orchRunControlClient = {
     return invoke<SetApprovalModeResponse>('orchestration_set_approval_mode', { ...params });
   },
 };
+
+export function auditOrchRunControlClientGovernance(
+  state: {
+    supportsSteer?: boolean;
+    supportsCancel?: boolean;
+    supportsApprovalMode?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/orchRunControlClient.ts';
+  phase: 'P145';
+  supportsSteer: boolean;
+  supportsCancel: boolean;
+  supportsApprovalMode: boolean;
+  healthy: boolean;
+} {
+  const supportsSteer = state.supportsSteer !== false;
+  const supportsCancel = state.supportsCancel !== false;
+  const supportsApprovalMode = state.supportsApprovalMode !== false;
+  return {
+    module: 'src/shared/api/orchRunControlClient.ts',
+    phase: 'P145',
+    supportsSteer,
+    supportsCancel,
+    supportsApprovalMode,
+    healthy: supportsSteer && supportsCancel && supportsApprovalMode,
+  };
+}

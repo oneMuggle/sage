@@ -463,3 +463,33 @@ export function downloadHtmlFile(html: string, filename: string): void {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+export function auditSessionApiGovernance(
+  state: {
+    sessionCount?: number;
+    supportsExport?: boolean;
+    supportsSearch?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/sessionApi.ts';
+  phase: 'P145';
+  sessionCount: number;
+  supportsExport: boolean;
+  supportsSearch: boolean;
+  healthy: boolean;
+} {
+  const sessionCount =
+    typeof state.sessionCount === 'number' && Number.isFinite(state.sessionCount)
+      ? Math.max(0, Math.trunc(state.sessionCount))
+      : 0;
+  const supportsExport = state.supportsExport !== false;
+  const supportsSearch = state.supportsSearch !== false;
+  return {
+    module: 'src/shared/api/sessionApi.ts',
+    phase: 'P145',
+    sessionCount,
+    supportsExport,
+    supportsSearch,
+    healthy: sessionCount >= 0 && supportsExport && supportsSearch,
+  };
+}

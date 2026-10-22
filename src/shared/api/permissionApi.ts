@@ -186,3 +186,35 @@ export const permissionApi = {
     }
   },
 };
+
+export function auditPermissionApiGovernance(
+  state: {
+    activePreset?: PermissionPreset | string;
+    autoApprovalCount?: number;
+  } = {},
+): {
+  module: 'src/shared/api/permissionApi.ts';
+  phase: 'P145';
+  activePreset: PermissionPreset;
+  presetCount: number;
+  autoApprovalCount: number;
+  healthy: boolean;
+} {
+  const activePreset: PermissionPreset =
+    state.activePreset === 'careful' || state.activePreset === 'auto'
+      ? state.activePreset
+      : 'standard';
+  const presetCount = PERMISSION_PRESETS.length;
+  const autoApprovalCount =
+    typeof state.autoApprovalCount === 'number' && Number.isFinite(state.autoApprovalCount)
+      ? Math.max(0, Math.trunc(state.autoApprovalCount))
+      : 0;
+  return {
+    module: 'src/shared/api/permissionApi.ts',
+    phase: 'P145',
+    activePreset,
+    presetCount,
+    autoApprovalCount,
+    healthy: presetCount === 3 && autoApprovalCount >= 0,
+  };
+}

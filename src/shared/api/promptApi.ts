@@ -99,3 +99,29 @@ export const promptApi = {
     }
   },
 };
+
+export function auditPromptApiGovernance(
+  state: {
+    templateCount?: number;
+    supportsCustomVariables?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/promptApi.ts';
+  phase: 'P145';
+  templateCount: number;
+  supportsCustomVariables: boolean;
+  healthy: boolean;
+} {
+  const templateCount =
+    typeof state.templateCount === 'number' && Number.isFinite(state.templateCount)
+      ? Math.max(0, Math.trunc(state.templateCount))
+      : 6;
+  const supportsCustomVariables = state.supportsCustomVariables !== false;
+  return {
+    module: 'src/shared/api/promptApi.ts',
+    phase: 'P145',
+    templateCount,
+    supportsCustomVariables,
+    healthy: templateCount >= 0 && supportsCustomVariables,
+  };
+}
