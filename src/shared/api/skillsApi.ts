@@ -251,3 +251,33 @@ export const skillsApi = {
     });
   },
 };
+
+export function auditSkillsApiGovernance(
+  state: {
+    skillCount?: number;
+    supportsConsolidation?: boolean;
+    supportsRollback?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/skillsApi.ts';
+  phase: 'P146';
+  skillCount: number;
+  supportsConsolidation: boolean;
+  supportsRollback: boolean;
+  healthy: boolean;
+} {
+  const skillCount =
+    typeof state.skillCount === 'number' && Number.isFinite(state.skillCount)
+      ? Math.max(0, Math.trunc(state.skillCount))
+      : 0;
+  const supportsConsolidation = state.supportsConsolidation !== false;
+  const supportsRollback = state.supportsRollback !== false;
+  return {
+    module: 'src/shared/api/skillsApi.ts',
+    phase: 'P146',
+    skillCount,
+    supportsConsolidation,
+    supportsRollback,
+    healthy: skillCount >= 0 && supportsConsolidation && supportsRollback,
+  };
+}
