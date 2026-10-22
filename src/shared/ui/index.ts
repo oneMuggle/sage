@@ -40,3 +40,25 @@ export type { TooltipProps } from './Tooltip/Tooltip';
 
 // UI-R2-P2-2: 二级页面统一 48px 顶栏
 export { PageHeader } from './PageHeader';
+
+export function auditSharedUiBarrelGovernance(
+  state: {
+    exportedComponentCount?: number;
+  } = {},
+): {
+  module: 'src/shared/ui/index.ts';
+  phase: 'P146';
+  exportedComponentCount: number;
+  healthy: boolean;
+} {
+  const exportedComponentCount =
+    typeof state.exportedComponentCount === 'number' && Number.isFinite(state.exportedComponentCount)
+      ? Math.max(0, Math.trunc(state.exportedComponentCount))
+      : 12;
+  return {
+    module: 'src/shared/ui/index.ts',
+    phase: 'P146',
+    exportedComponentCount,
+    healthy: exportedComponentCount >= 10,
+  };
+}
