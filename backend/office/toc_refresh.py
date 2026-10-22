@@ -33,7 +33,10 @@ import threading
 from pathlib import Path
 from typing import Literal, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
+
+# win7 LTS py38 环境钉 pydantic 1.10.13，ConfigDict 是 v2 专有 → 走兼容垫片（v2 下为 no-op）。
+from backend.compat.win7.pydantic_compat import ConfigDict
 
 from .errors import OfficeError
 from .path_safety import resolve_within

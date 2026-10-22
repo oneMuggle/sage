@@ -13,7 +13,11 @@ import logging
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, conlist, field_validator
+from pydantic import BaseModel, Field, conlist
+
+# win7 LTS 的 py38 环境钉 pydantic 1.10.13（2.x 要求 py3.9+），v2 专有符号
+# 必须走兼容垫片；pydantic 2.x 下该垫片是 no-op，因此与 main 共享同一份源码。
+from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
 
 logger = logging.getLogger(__name__)
 
