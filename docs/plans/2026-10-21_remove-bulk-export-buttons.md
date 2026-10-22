@@ -98,7 +98,7 @@ const handleCopyJson = () => { ... };
 - Consumes: CLI 参数 = 待处理 `.tsx` 文件路径列表
 - Produces: 就地改写文件；stdout 输出每文件的 `✓ changed` / `- no change` 汇总
 
-- [ ] **Step 0.1: 创建目录**
+- [x] **Step 0.1: 创建目录**
 
 ```bash
 mkdir -p scripts/codemod && pwd && git rev-parse --abbrev-ref HEAD
@@ -106,7 +106,7 @@ mkdir -p scripts/codemod && pwd && git rev-parse --abbrev-ref HEAD
 
 预期输出：cwd 是 `/home/fz/project/sage/.worktrees/refactor-remove-bulk-export-buttons`，分支是 `refactor/remove-bulk-export-buttons`。
 
-- [ ] **Step 0.2: 写脚本**
+- [x] **Step 0.2: 写脚本**
 
 创建 `scripts/codemod/remove-bulk-export-buttons.mjs`：
 
@@ -323,7 +323,7 @@ for (const f of files) {
 console.log(`\nProcessed ${files.length} files, changed ${changed}`);
 ```
 
-- [ ] **Step 0.3: 在样本文件上验证**
+- [x] **Step 0.3: 在样本文件上验证**
 
 ```bash
 cp src/widgets/todo/TodoItem.tsx /tmp/TodoItem.bak.tsx
@@ -344,7 +344,7 @@ diff -u /tmp/TodoItem.bak.tsx src/widgets/todo/TodoItem.tsx
 git checkout src/widgets/todo/TodoItem.tsx && rm /tmp/TodoItem.bak.tsx
 ```
 
-- [ ] **Step 0.4: 提交**
+- [x] **Step 0.4: 提交**
 
 ```bash
 git add scripts/codemod/remove-bulk-export-buttons.mjs
@@ -355,7 +355,7 @@ git commit -m "chore(codemod): add bulk export button cleanup script"
 
 ## Task 1: `src/widgets/chat/` (21 files)
 
-- [ ] **Step 1.1: 列出 + 备份**
+- [x] **Step 1.1: 列出 + 备份**
 
 ```bash
 cat > /tmp/a-group-re.txt <<'EOF'
@@ -369,13 +369,13 @@ mkdir -p /tmp/bak/batch1
 while IFS= read -r f; do cp "$f" "/tmp/bak/batch1/$(echo "$f" | tr '/' '_')"; done < /tmp/batch1.txt
 ```
 
-- [ ] **Step 1.2: 跑 codemod**
+- [x] **Step 1.2: 跑 codemod**
 
 ```bash
 node scripts/codemod/remove-bulk-export-buttons.mjs $(cat /tmp/batch1.txt)
 ```
 
-- [ ] **Step 1.3: diff 审核（安全网，必做）**
+- [x] **Step 1.3: diff 审核（安全网，必做）**
 
 ```bash
 while IFS= read -r f; do
@@ -386,7 +386,7 @@ done < /tmp/batch1.txt | head -300
 
 检查点：只有 `copied*` state、`handleCopy*` handler、`复制MD/JSON` 按钮被删；无其他删除。
 
-- [ ] **Step 1.4: 残留检查（block gate）**
+- [x] **Step 1.4: 残留检查（block gate）**
 
 ```bash
 A_RE=$(cat /tmp/a-group-re.txt)
@@ -399,7 +399,7 @@ done < /tmp/batch1.txt
 
 预期：无输出。有输出则手工补删后再继续。
 
-- [ ] **Step 1.5: tsc + vitest**
+- [x] **Step 1.5: tsc + vitest**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -20
@@ -408,7 +408,7 @@ npx vitest run src/widgets/chat 2>&1 | tail -20
 
 vitest 失败的典型原因：测试文件里 `getByTestId('*-copy-md')` 找不到元素。逐条删除对应断言 + `fireEvent.click` 步骤，**不删** B+C 组断言。
 
-- [ ] **Step 1.6: 提交**
+- [x] **Step 1.6: 提交**
 
 ```bash
 git add src/widgets/chat
@@ -419,7 +419,7 @@ git commit -m "refactor(ui): remove bulk MD/JSON export buttons (widgets/chat)"
 
 ## Task 2: `src/widgets/wiki/` (19 files)
 
-- [ ] **Step 2.1: 列出 + 备份 + codemod**
+- [x] **Step 2.1: 列出 + 备份 + codemod**
 
 ```bash
 A_RE=$(cat /tmp/a-group-re.txt)
@@ -430,18 +430,18 @@ while IFS= read -r f; do cp "$f" "/tmp/bak/batch2/$(echo "$f" | tr '/' '_')"; do
 node scripts/codemod/remove-bulk-export-buttons.mjs $(cat /tmp/batch2.txt)
 ```
 
-- [ ] **Step 2.2: diff 审核**（同 Task 1.3 格式）
+- [x] **Step 2.2: diff 审核**（同 Task 1.3 格式）
 
-- [ ] **Step 2.3: 残留检查**（同 Task 1.4 格式，batch 路径改 batch2）
+- [x] **Step 2.3: 残留检查**（同 Task 1.4 格式，batch 路径改 batch2）
 
-- [ ] **Step 2.4: tsc + vitest**
+- [x] **Step 2.4: tsc + vitest**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -20
 npx vitest run src/widgets/wiki 2>&1 | tail -20
 ```
 
-- [ ] **Step 2.5: 提交**
+- [x] **Step 2.5: 提交**
 
 ```bash
 git add src/widgets/wiki
@@ -454,7 +454,7 @@ git commit -m "refactor(ui): remove bulk MD/JSON export buttons (widgets/wiki)"
 
 `src/features/project-type/ProjectTypeSelector.tsx` 单文件含 16 个 `copied*` state，是 codemod 的压力测试。
 
-- [ ] **Step 3.1: 列出 + 备份 + codemod**
+- [x] **Step 3.1: 列出 + 备份 + codemod**
 
 ```bash
 A_RE=$(cat /tmp/a-group-re.txt)
@@ -465,9 +465,9 @@ while IFS= read -r f; do cp "$f" "/tmp/bak/batch3/$(echo "$f" | tr '/' '_')"; do
 node scripts/codemod/remove-bulk-export-buttons.mjs $(cat /tmp/batch3.txt)
 ```
 
-- [ ] **Step 3.2: diff 审核**
+- [x] **Step 3.2: diff 审核**
 
-- [ ] **Step 3.3: 重灾区专项检查**
+- [x] **Step 3.3: 重灾区专项检查**
 
 ```bash
 grep -n "copied" src/features/project-type/ProjectTypeSelector.tsx
@@ -475,16 +475,16 @@ grep -n "copied" src/features/project-type/ProjectTypeSelector.tsx
 
 预期：仅剩 B+C 组（如 `copiedSelectorPath`）；若残留 A 组 state 手工删。
 
-- [ ] **Step 3.4: 残留检查**（batch3）
+- [x] **Step 3.4: 残留检查**（batch3）
 
-- [ ] **Step 3.5: tsc + vitest**
+- [x] **Step 3.5: tsc + vitest**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -20
 npx vitest run src/features/project-type 2>&1 | tail -20
 ```
 
-- [ ] **Step 3.6: 提交**
+- [x] **Step 3.6: 提交**
 
 ```bash
 git add src/features/project-type
@@ -495,7 +495,7 @@ git commit -m "refactor(ui): remove bulk MD/JSON export buttons (features/projec
 
 ## Task 4: `src/pages/` + `src/pages/settings/` (18 files)
 
-- [ ] **Step 4.1: 列出 + 备份 + codemod**
+- [x] **Step 4.1: 列出 + 备份 + codemod**
 
 ```bash
 A_RE=$(cat /tmp/a-group-re.txt)
@@ -506,18 +506,18 @@ while IFS= read -r f; do cp "$f" "/tmp/bak/batch4/$(echo "$f" | tr '/' '_')"; do
 node scripts/codemod/remove-bulk-export-buttons.mjs $(cat /tmp/batch4.txt)
 ```
 
-- [ ] **Step 4.2: diff 审核**
+- [x] **Step 4.2: diff 审核**
 
-- [ ] **Step 4.3: 残留检查**（batch4）
+- [x] **Step 4.3: 残留检查**（batch4）
 
-- [ ] **Step 4.4: tsc + vitest**
+- [x] **Step 4.4: tsc + vitest**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -20
 npx vitest run src/pages 2>&1 | tail -20
 ```
 
-- [ ] **Step 4.5: 提交**
+- [x] **Step 4.5: 提交**
 
 ```bash
 git add src/pages
@@ -530,7 +530,7 @@ git commit -m "refactor(ui): remove bulk MD/JSON export buttons (pages)"
 
 **`src/widgets/settings/ProjectHooksPanel.tsx` 必须手工验证**：其 `copiedMd` / 「复制审计摘要」属于 C 组保留，codemod 的 `KEEP_RE` 应正确保护它，但必须人工确认。
 
-- [ ] **Step 5.1: 备份 + codemod（排除 ProjectHooksPanel）**
+- [x] **Step 5.1: 备份 + codemod（排除 ProjectHooksPanel）**
 
 ```bash
 A_RE=$(cat /tmp/a-group-re.txt)
@@ -541,7 +541,7 @@ while IFS= read -r f; do cp "$f" "/tmp/bak/batch5/$(echo "$f" | tr '/' '_')"; do
 node scripts/codemod/remove-bulk-export-buttons.mjs $(cat /tmp/batch5.txt)
 ```
 
-- [ ] **Step 5.2: 手工处理 ProjectHooksPanel.tsx**
+- [x] **Step 5.2: 手工处理 ProjectHooksPanel.tsx**
 
 ```bash
 cp src/widgets/settings/ProjectHooksPanel.tsx /tmp/bak/batch5/ProjectHooksPanel.tsx
@@ -550,7 +550,7 @@ grep -nE 'copied|handleCopy|project-hooks-copy' src/widgets/settings/ProjectHook
 
 按「参考样板 2」的逐行表格处理：删 `copiedJson`（22 行）、`handleCopyAuditJson`（129–151）、两处 `project-hooks-copy-json-btn`（213–221 / 300–308）。其余全留。
 
-- [ ] **Step 5.3: 验证保留项仍在**
+- [x] **Step 5.3: 验证保留项仍在**
 
 ```bash
 grep -cE 'project-hooks-copy-md-btn|project-hooks-copy-path-btn|project-hooks-copy-config-path-btn' src/widgets/settings/ProjectHooksPanel.tsx
@@ -559,7 +559,7 @@ grep -cE 'project-hooks-copy-md-btn|project-hooks-copy-path-btn|project-hooks-co
 
 预期：`copy-md-btn` 出现 2 次、`copy-path-btn` 2 次、`copy-config-path-btn` 2 次，共 6。`copy-json-btn` 应为 0。
 
-- [ ] **Step 5.4: tsc + vitest**
+- [x] **Step 5.4: tsc + vitest**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -20
@@ -568,7 +568,7 @@ npx vitest run src/widgets/settings 2>&1 | tail -20
 
 修 `src/widgets/settings/__tests__/ProjectHooksPanel.test.tsx`：删 `project-hooks-copy-json-btn` 相关用例，保留 `copy-md-btn` / `copy-path-btn` / `copy-config-path-btn` 用例。
 
-- [ ] **Step 5.5: 提交**
+- [x] **Step 5.5: 提交**
 
 ```bash
 git add src/widgets/settings
@@ -579,7 +579,7 @@ git commit -m "refactor(ui): remove bulk MD/JSON export buttons (widgets/setting
 
 ## Task 6: `src/widgets/skills/` + `src/widgets/agents/` (7 files)
 
-- [ ] **Step 6.1: 列出 + 备份 + codemod**
+- [x] **Step 6.1: 列出 + 备份 + codemod**
 
 ```bash
 A_RE=$(cat /tmp/a-group-re.txt)
@@ -590,18 +590,18 @@ while IFS= read -r f; do cp "$f" "/tmp/bak/batch6/$(echo "$f" | tr '/' '_')"; do
 node scripts/codemod/remove-bulk-export-buttons.mjs $(cat /tmp/batch6.txt)
 ```
 
-- [ ] **Step 6.2: diff 审核**
+- [x] **Step 6.2: diff 审核**
 
-- [ ] **Step 6.3: 残留检查**（batch6）
+- [x] **Step 6.3: 残留检查**（batch6）
 
-- [ ] **Step 6.4: tsc + vitest**
+- [x] **Step 6.4: tsc + vitest**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -20
 npx vitest run src/widgets/skills src/widgets/agents 2>&1 | tail -20
 ```
 
-- [ ] **Step 6.5: 提交**
+- [x] **Step 6.5: 提交**
 
 ```bash
 git add src/widgets/skills src/widgets/agents
@@ -612,7 +612,7 @@ git commit -m "refactor(ui): remove bulk MD/JSON export buttons (widgets/skills+
 
 ## Task 7: `src/widgets/memory/` + `session/` + `orchestration/` + `todo/` (10 files)
 
-- [ ] **Step 7.1: 列出 + 备份 + codemod**
+- [x] **Step 7.1: 列出 + 备份 + codemod**
 
 ```bash
 A_RE=$(cat /tmp/a-group-re.txt)
@@ -623,25 +623,25 @@ while IFS= read -r f; do cp "$f" "/tmp/bak/batch7/$(echo "$f" | tr '/' '_')"; do
 node scripts/codemod/remove-bulk-export-buttons.mjs $(cat /tmp/batch7.txt)
 ```
 
-- [ ] **Step 7.2: diff 审核**
+- [x] **Step 7.2: diff 审核**
 
-- [ ] **Step 7.3: MemoryBrowser 专项检查**
+- [x] **Step 7.3: MemoryBrowser 专项检查**
 
 ```bash
 grep -c "copied" src/widgets/memory/MemoryBrowser.tsx
 # 预期：0
 ```
 
-- [ ] **Step 7.4: 残留检查**（batch7）
+- [x] **Step 7.4: 残留检查**（batch7）
 
-- [ ] **Step 7.5: tsc + vitest**
+- [x] **Step 7.5: tsc + vitest**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -20
 npx vitest run src/widgets/memory src/widgets/session src/widgets/orchestration src/widgets/todo 2>&1 | tail -20
 ```
 
-- [ ] **Step 7.6: 提交**
+- [x] **Step 7.6: 提交**
 
 ```bash
 git add src/widgets/memory src/widgets/session src/widgets/orchestration src/widgets/todo
@@ -652,7 +652,7 @@ git commit -m "refactor(ui): remove bulk MD/JSON export buttons (widgets/memory+
 
 ## Task 8: 剩余目录 (17 files)
 
-- [ ] **Step 8.1: 列出 + 备份 + codemod**
+- [x] **Step 8.1: 列出 + 备份 + codemod**
 
 ```bash
 A_RE=$(cat /tmp/a-group-re.txt)
@@ -667,18 +667,18 @@ while IFS= read -r f; do cp "$f" "/tmp/bak/batch8/$(echo "$f" | tr '/' '_')"; do
 node scripts/codemod/remove-bulk-export-buttons.mjs $(cat /tmp/batch8.txt)
 ```
 
-- [ ] **Step 8.2: diff 审核**
+- [x] **Step 8.2: diff 审核**
 
-- [ ] **Step 8.3: 残留检查**（batch8）
+- [x] **Step 8.3: 残留检查**（batch8）
 
-- [ ] **Step 8.4: tsc + vitest**
+- [x] **Step 8.4: tsc + vitest**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -20
 npx vitest run src/widgets/welcome src/widgets/system src/features 2>&1 | tail -20
 ```
 
-- [ ] **Step 8.5: 提交**
+- [x] **Step 8.5: 提交**
 
 ```bash
 git add src/widgets/welcome src/widgets/system src/features
@@ -689,7 +689,7 @@ git commit -m "refactor(ui): remove bulk MD/JSON export buttons (misc widgets+fe
 
 ## Task 9: 全局验证 + PR
 
-- [ ] **Step 9.1: 全量 vitest**
+- [x] **Step 9.1: 全量 vitest**
 
 ```bash
 npx vitest run 2>&1 | tail -30
@@ -697,7 +697,7 @@ npx vitest run 2>&1 | tail -30
 
 预期：全绿。有失败逐个修（几乎都是已删 testid 的残留断言）。
 
-- [ ] **Step 9.2: A 组全局残留 = 0**
+- [x] **Step 9.2: A 组全局残留 = 0**
 
 ```bash
 A_RE=$(cat /tmp/a-group-re.txt)
@@ -706,7 +706,7 @@ grep -rnE "$A_RE" src/ --include=*.tsx | grep -v __tests__ | grep -vE "$KEEP_RE"
 # 预期：0
 ```
 
-- [ ] **Step 9.3: B+C 组数量未减少**
+- [x] **Step 9.3: B+C 组数量未减少**
 
 ```bash
 grep -rnE '复制路径|复制SHA|复制分支|复制配置路径|复制快照|复制审计摘要|已复制摘要|复制源码|复制对话MD|复制对话JSON' src/ --include=*.tsx | grep -v __tests__ | wc -l
@@ -715,7 +715,7 @@ grep -rnE '复制路径|复制SHA|复制分支|复制配置路径|复制快照|�
 
 若少于基线 → 从 `/tmp/bak/` 还原对应文件。
 
-- [ ] **Step 9.4: tsc + eslint + build**
+- [x] **Step 9.4: tsc + eslint + build**
 
 ```bash
 npx tsc --noEmit 2>&1 | head -20
@@ -723,11 +723,15 @@ npx eslint src/ 2>&1 | tail -20
 npm run build 2>&1 | tail -20
 ```
 
-- [ ] **Step 9.5: 标记 plan 完成**
+- [x] **Step 9.5: 标记 plan 完成**
 
 把本文件所有 `- [ ]` 改成 `- [x]`。
 
 - [ ] **Step 9.6: push + 开 PR**
+
+> ⏸️ **待用户授权**：依既定约束「未经明确授权不 push、不创建 PR」，Step 9.6 尚未执行。
+> 分支 `refactor/remove-bulk-export-buttons` 已在本地完成 13 个 commit（Task 0 rewrite + 10 个分批 + 白名单恢复 + 测试清理），
+> 全量 vitest 1937/1937、tsc + eslint + build 全绿、A 组残留 0、B+C 组 40 ≥ 基线 37。
 
 ```bash
 git push -u origin refactor/remove-bulk-export-buttons
