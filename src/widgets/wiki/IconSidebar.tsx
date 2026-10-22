@@ -111,3 +111,47 @@ export function IconSidebar() {
     </div>
   );
 }
+
+export interface WikiIconSidebarAuditInput {
+  activeTab: string;
+  availableTabs: string[];
+  badgeCountByTab: Record<string, number>;
+}
+
+export interface WikiIconSidebarAuditReport {
+  activeTabValid: boolean;
+  totalBadgeCount: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateWikiIconSidebarGovernanceAudit(
+  input: WikiIconSidebarAuditInput,
+): WikiIconSidebarAuditReport {
+  const issueCodes: string[] = [];
+  const normalizedTabs = input.availableTabs
+    .map((tab) => tab.trim())
+    .filter((tab) => tab.length > 0);
+  if (normalizedTabs.length === 0) {
+    issueCodes.push('WIKI_ICON_SIDEBAR_TABS_EMPTY');
+  }
+  const activeTabValid = normalizedTabs.includes(input.activeTab.trim());
+  if (!activeTabValid) {
+    issueCodes.push('WIKI_ICON_SIDEBAR_ACTIVE_TAB_INVALID');
+  }
+  let totalBadgeCount = 0;
+  for (const val of Object.values(input.badgeCountByTab)) {
+    if (val < 0) {
+      issueCodes.push('WIKI_ICON_SIDEBAR_BADGE_NEGATIVE');
+    } else {
+      totalBadgeCount += Math.trunc(val);
+    }
+  }
+  return {
+    activeTabValid,
+    totalBadgeCount,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
