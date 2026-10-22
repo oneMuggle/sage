@@ -65,3 +65,26 @@ export function formatArtifactEventsJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditArtifactEventsStoreGovernance(
+  state: {
+    trackedSessionCount?: number;
+  } = {},
+): {
+  module: 'src/features/artifacts/artifactEventsStore.ts';
+  phase: 'P157';
+  trackedSessionCount: number;
+  healthy: boolean;
+} {
+  const trackedSessionCount =
+    typeof state.trackedSessionCount === 'number' &&
+    Number.isFinite(state.trackedSessionCount)
+      ? Math.max(0, Math.trunc(state.trackedSessionCount))
+      : 0;
+  return {
+    module: 'src/features/artifacts/artifactEventsStore.ts',
+    phase: 'P157',
+    trackedSessionCount,
+    healthy: trackedSessionCount <= 200,
+  };
+}

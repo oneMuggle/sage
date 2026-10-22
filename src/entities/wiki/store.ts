@@ -177,3 +177,32 @@ export function buildWikiStoreAuditJson(
     snapshot: buildWikiStoreAuditSnapshot(input),
   });
 }
+
+export function auditWikiStoreGovernance(
+  state: {
+    pageCount?: number;
+    activeSlug?: string;
+  } = {},
+): {
+  module: 'src/entities/wiki/store.ts';
+  phase: 'P157';
+  pageCount: number;
+  activeSlug: string;
+  healthy: boolean;
+} {
+  const pageCount =
+    typeof state.pageCount === 'number' && Number.isFinite(state.pageCount)
+      ? Math.max(0, Math.trunc(state.pageCount))
+      : 1;
+  const activeSlug =
+    typeof state.activeSlug === 'string' && state.activeSlug.trim().length > 0
+      ? state.activeSlug.trim()
+      : 'index';
+  return {
+    module: 'src/entities/wiki/store.ts',
+    phase: 'P157',
+    pageCount,
+    activeSlug,
+    healthy: pageCount >= 1 && activeSlug.length > 0,
+  };
+}
