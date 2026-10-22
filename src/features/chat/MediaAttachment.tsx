@@ -147,3 +147,23 @@ export function formatMediaAttachmentJson(
   });
 }
 
+export interface MediaAttachmentGovernanceAudit {
+  module: 'features.chat.MediaAttachment';
+  phase: 'P159';
+  hasComponent: boolean;
+  hasSummaryFormatter: boolean;
+  healthy: boolean;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditMediaAttachmentGovernance(): MediaAttachmentGovernanceAudit {
+  return {
+    module: 'features.chat.MediaAttachment',
+    phase: 'P159',
+    hasComponent: typeof MediaAttachment === 'function',
+    hasSummaryFormatter: typeof formatMediaAttachmentSummary === 'function',
+    healthy:
+      typeof MediaAttachment === 'function' &&
+      typeof formatMediaAttachmentSummary === 'function',
+  };
+}
