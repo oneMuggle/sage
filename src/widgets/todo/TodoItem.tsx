@@ -1,4 +1,5 @@
 import { Check, Trash2 } from 'lucide-react';
+
 import { useTodoStore } from '../../entities/todo/todoStore';
 import type { Todo } from '../../shared/api/types';
 

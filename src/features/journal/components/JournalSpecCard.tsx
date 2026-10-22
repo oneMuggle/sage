@@ -1,4 +1,5 @@
 import { FileText } from 'lucide-react';
+
 import type { JournalSpec } from '../../../shared/api/types';
 
 export interface JournalSpecCardProps {
