@@ -21,7 +21,11 @@ const require = createRequire(import.meta.url);
 const ts = require('typescript');
 
 // ---- 分类规则 ----
-const KEEP_C = ['复制审计摘要', '复制源码', '复制对话 MD', '复制对话 JSON', '复制对话MD', '复制对话JSON'];
+const KEEP_C = [
+  '复制审计摘要', '复制源码',
+  '复制对话 MD', '复制对话 JSON', '复制对话MD', '复制对话JSON',
+  '复制 MD', '复制 JSON', '复制MD', '复制JSON',
+];
 const KEEP_B = ['复制路径', '复制 SHA', '复制SHA', '复制分支', '复制配置路径', '复制快照'];
 const A_NOUN = [
   '蓝图', '支柱', '管线', '阶段', '规范包', '台账', '清单', '语境', '全部依据', '置信度',
@@ -34,10 +38,22 @@ function norm(arr) {
 
 function verdict(sig) {
   const j = sig.join(' ');
-  for (const k of KEEP_C) if (j.includes(k)) return { v: 'KEEP_C', why: k };
+  // KEEP_C: 纯精确信号匹配
+  // BtwOverlay 信号 ['已复制 MD', '复制 MD'] → '复制 MD' 精确命中 → KEEP
+  // ThemeProvider 信号 ['已复制 JSON', 'JSON', '复制主题审计 JSON'] → 无 '复制 JSON' 精确命中 → 落到 JSON 正则 → DELETE
+  // 注意: 不加 '已${k}' / '✓ ${k}' 前缀变体, 否则反馈文案 '已复制 JSON' 会误命中 '复制 JSON'
+  for (const k of KEEP_C) {
+    if (sig.some((s) => s === k)) {
+      return { v: 'KEEP_C', why: k };
+    }
+  }
+  // KEEP_B: 子串匹配 (标签较长且独特, 如 '复制快照差异MD' 含 '复制快照')
+  // 必须在 MD/JSON 正则之前, 否则 '复制快照差异MD' 被 /\bMD\b/ 误判 DELETE
+  for (const k of KEEP_B) if (j.includes(k)) return { v: 'KEEP_B', why: k };
+  // Governance audit controls were added after the bulk noise buttons and remain functional UI.
+  if (/审计|治理/.test(j) && /\bJSON\b/.test(j)) return { v: 'KEEP', why: 'governance-json' };
   if (/\bMD\b|Markdown/.test(j)) return { v: 'DELETE', why: 'MD' };
   if (/\bJSON\b/.test(j)) return { v: 'DELETE', why: 'JSON' };
-  for (const k of KEEP_B) if (j.includes(k)) return { v: 'KEEP_B', why: k };
   for (const k of A_NOUN) if (j.includes(k)) return { v: 'DELETE', why: `A:${k}` };
   return { v: 'KEEP', why: 'no-marker' };
 }
