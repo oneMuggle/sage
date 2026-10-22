@@ -62,3 +62,28 @@ export function formatBtwCommandStateJson(state: {
     2,
   );
 }
+
+export interface UseBtwCommandGovernanceAudit {
+  phase: 'P161';
+  module: 'src/features/chat/useBtwCommand.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseBtwCommandGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseBtwCommandGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P161',
+    module: 'src/features/chat/useBtwCommand.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P161 UseBtwCommand Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

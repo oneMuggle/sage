@@ -54,3 +54,28 @@ export function formatQuoteDraftInjectionJson(draft: QuoteDraftInjection | null)
     2,
   );
 }
+
+export interface UseQuoteDraftGovernanceAudit {
+  phase: 'P161';
+  module: 'src/features/chat/useQuoteDraft.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseQuoteDraftGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseQuoteDraftGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P161',
+    module: 'src/features/chat/useQuoteDraft.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P161 UseQuoteDraft Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

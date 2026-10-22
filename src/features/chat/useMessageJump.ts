@@ -161,3 +161,28 @@ export function formatMessageJumpJson(
   });
 }
 /* v8 ignore stop */
+
+export interface UseMessageJumpGovernanceAudit {
+  phase: 'P161';
+  module: 'src/features/chat/useMessageJump.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseMessageJumpGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseMessageJumpGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P161',
+    module: 'src/features/chat/useMessageJump.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P161 UseMessageJump Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

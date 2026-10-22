@@ -113,3 +113,28 @@ export function formatConversationOutlineJson(
     2,
   );
 }
+
+export interface UseConversationOutlineGovernanceAudit {
+  phase: 'P161';
+  module: 'src/features/chat/useConversationOutline.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseConversationOutlineGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseConversationOutlineGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P161',
+    module: 'src/features/chat/useConversationOutline.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P161 UseConversationOutline Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}
