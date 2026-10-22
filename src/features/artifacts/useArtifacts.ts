@@ -77,3 +77,29 @@ export function formatArtifactsHookStateJson(
     2,
   );
 }
+
+export function auditUseArtifactsGovernance(
+  state: {
+    artifactCount?: number;
+    hasError?: boolean;
+  } = {},
+): {
+  module: 'src/features/artifacts/useArtifacts.ts';
+  phase: 'P158';
+  artifactCount: number;
+  hasError: boolean;
+  healthy: boolean;
+} {
+  const artifactCount =
+    typeof state.artifactCount === 'number' && Number.isFinite(state.artifactCount)
+      ? Math.max(0, Math.trunc(state.artifactCount))
+      : 0;
+  const hasError = state.hasError === true;
+  return {
+    module: 'src/features/artifacts/useArtifacts.ts',
+    phase: 'P158',
+    artifactCount,
+    hasError,
+    healthy: !hasError,
+  };
+}

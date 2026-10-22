@@ -152,3 +152,32 @@ export function buildAttentionCenterAuditJson(
 ): string {
   return JSON.stringify(buildAttentionCenterAuditSnapshot(inputOrSnapshot), null, 2);
 }
+
+export function auditAttentionCenterGovernance(
+  state: {
+    kindCount?: number;
+    totalCount?: number;
+  } = {},
+): {
+  module: 'src/features/attention/attentionCenter.ts';
+  phase: 'P158';
+  kindCount: number;
+  totalCount: number;
+  healthy: boolean;
+} {
+  const kindCount =
+    typeof state.kindCount === 'number' && Number.isFinite(state.kindCount)
+      ? Math.max(0, Math.trunc(state.kindCount))
+      : ATTENTION_KINDS.length;
+  const totalCount =
+    typeof state.totalCount === 'number' && Number.isFinite(state.totalCount)
+      ? Math.max(0, Math.trunc(state.totalCount))
+      : 0;
+  return {
+    module: 'src/features/attention/attentionCenter.ts',
+    phase: 'P158',
+    kindCount,
+    totalCount,
+    healthy: kindCount === ATTENTION_KINDS.length && totalCount <= 500,
+  };
+}
