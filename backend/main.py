@@ -91,6 +91,7 @@ from backend.api.diagnostic_routes import router as diagnostic_router
 from backend.api.embedder_routes import router as embedder_router
 from backend.api.export_routes import router as export_router
 from backend.api.git_status_routes import router as git_status_router
+from backend.api.harness_routes import router as harness_router
 from backend.api.hex_routes import router as hex_router
 from backend.api.hooks_routes import router as hooks_router
 from backend.api.legacy_routes import router as legacy_router
@@ -1050,6 +1051,23 @@ async def lifespan(app: FastAPI):
         # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
         # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
         app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
+
+        # M7 (2026-10-21): Harness 自进化埋点装配——工具/技能每次调用写入
+        # harness_components 累积 effectiveness 指标（usage_count / success_rate
+        # / avg_latency_ms），供 GET /api/v1/harness/components 消费。
+        # 装配顺序：必须在 harness_routes 挂载之前（依赖覆盖工厂依赖注入）。
+        try:
+            from backend.adapters.out.harness import SqliteHarnessAdapter
+            from backend.application.services.harness_recorder import (
+                HarnessRecorder,
+                install_recorder,
+            )
+            from backend.application.services.harness_service import HarnessService
+
+            install_recorder(HarnessRecorder(HarnessService(SqliteHarnessAdapter())))
+            logger.info("harness recorder 已装配（工具/技能 effectiveness 埋点）")
+        except Exception as exc:  # noqa: BLE001 — 埋点装配失败不得阻塞启动
+            logger.warning("harness recorder 装配失败（埋点变 no-op）: %s", exc)
         # Phase 2: 后台构建标签共现图谱（daemon thread，不阻塞启动）
         # build-then-swap 模式：图谱未完成前 retrieve() 走 2 路（keyword+vector），
         # 完成后自动升级为 3 路（keyword+vector+tag_graph）。
@@ -1391,6 +1409,8 @@ app.include_router(system_router, prefix="/api/v1")
 app.include_router(prompt_router, prefix="/api/v1")
 # Artifacts 面板: /sessions/{id}/artifacts (list / content / reveal)
 app.include_router(artifact_router, prefix="/api/v1")
+# Harness 自进化: /api/v1/harness/* (组件注册表 + effectiveness 可观测性)
+app.include_router(harness_router, prefix="/api/v1")
 
 # 闲时自主目标执行系统: /api/v1/goals/*
 from backend.api.autonomous_goals_router import router as autonomous_goals_router
