@@ -56,7 +56,7 @@ function litTexts(node) {
   return out;
 }
 
-function signals(el, sf) {
+function signals(el) {
   const s = new Set();
   for (const child of el.children) {
     if (ts.isJsxText(child)) {
@@ -79,7 +79,7 @@ function signals(el, sf) {
 // `{cond && <button/>}`     → 删整个 JsxExpression
 // `{cond ? <button/> : null}` → 删整个 JsxExpression
 // 孤立的 `<button/>`         → 只删该元素
-function findDeletionTarget(node, sf) {
+function findDeletionTarget(node) {
   let cur = node;
   for (let guard = 0; guard < 12; guard++) {
     const parent = cur.parent;
@@ -131,11 +131,11 @@ function classify(source, fileName) {
     if (ts.isJsxElement(node)) {
       const tag = node.openingElement.tagName.getText(sf);
       if (tag === 'button' || tag === 'span' || tag === 'a') {
-        const sig = norm(signals(node, sf));
+        const sig = norm(signals(node));
         if (sig.some((s) => s.includes('复制'))) {
           const vd = verdict(sig);
           if (vd.v === 'DELETE') {
-            const delNode = findDeletionTarget(node, sf);
+            const delNode = findDeletionTarget(node);
             let start = delNode.getStart(sf);
             let end = delNode.getEnd();
             // 向前吃缩进 (同行的前导空白)
@@ -256,7 +256,7 @@ function cleanup(source) {
     source = source.replace(/useState,\s*/g, '');
     source = source.replace(/,\s*useState\s*/g, '');
     // 处理 import React, { useState, useEffect } from 'react'; 情况
-    source = source.replace(/\{\s*\}\s*from\s*'react'/g, (m) => {
+    source = source.replace(/\{\s*\}\s*from\s*'react'/g, () => {
       // 若 import 列表空了，整行删
       return '';
     });
