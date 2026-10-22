@@ -1985,3 +1985,18 @@
   - `src/shared/api/types/templateAndTaskTypes.ts`: Exported `auditTemplateAndTaskTypesGovernance()` validating `TodoPriority` and `TodoItemStatus` schema state contracts.
   - `src/shared/ui/index.ts`: Exported `auditSharedUiBarrelGovernance()` validating shared UI component barrel export count and completeness.
   - Unit tests: Added 8 dedicated Vitest suites (`skillsApi.p146.test.ts`, `usageApi.p146.test.ts`, `worktreeApi.p146.test.ts`, `zoteroClient.p146.test.ts`, `chatAndEventTypes.p146.test.ts`, `domainEntityTypes.p146.test.ts`, `templateAndTaskTypes.p146.test.ts`, `uiIndex.p146.test.ts`).
+### Phase P147 — Shared UI Progress, Textarea, ConfirmDialogHost, Dialog Barrel, ErrorState Barrel, Lightbox, LoadingState Barrel & PageSkeleton Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P146 Merged: `#2314` (`main` @ `ccd8d727a5c7459f4940719e3758baa10f0ee042`), `#2315` (`release/win7` @ `b3e10ed5c2fdfb2160eba86657eff06e82ed49ef`)
+  - Phase P147: `feat/project-governance-p147` (`main`) & `feat/win7-project-governance-p147` (`release/win7`)
+- **Scope**:
+  - `src/shared/ui/Progress.tsx`: Exported `auditProgressGovernance()` validating progress bar value clamping (`0..100`) and finite numeric bounds.
+  - `src/shared/ui/Textarea.tsx`: Exported `auditTextareaGovernance()` validating textarea visible row clamping (`1..40`) and disabled state normalization.
+  - `src/shared/ui/ConfirmDialog/ConfirmDialogHost.tsx`: Exported `auditConfirmDialogHostGovernance()` validating modal open state and confirmation variant (`default`/`danger`) contracts.
+  - `src/shared/ui/Dialog/index.ts`: Exported `auditDialogBarrelGovernance()` validating Radix dialog primitive barrel export completeness.
+  - `src/shared/ui/ErrorState/index.ts`: Exported `auditErrorStateBarrelGovernance()` validating error state barrel retry callback availability.
+  - `src/shared/ui/Lightbox/Lightbox.tsx`: Exported `auditLightboxGovernance()` validating lightbox zoom scale bounds (`0.25..4`) and image source readiness.
+  - `src/shared/ui/LoadingState/index.ts`: Exported `auditLoadingStateBarrelGovernance()` validating loading state accessible label contract.
+  - `src/shared/ui/PageSkeleton/PageSkeleton.tsx`: Exported `auditPageSkeletonGovernance()` validating skeleton placeholder block count bounds (`1..12`).
+  - Unit tests: Added 8 dedicated Vitest suites (`Progress.p147.test.ts`, `Textarea.p147.test.ts`, `ConfirmDialogHost.p147.test.ts`, `DialogIndex.p147.test.ts`, `ErrorStateIndex.p147.test.ts`, `Lightbox.p147.test.ts`, `LoadingStateIndex.p147.test.ts`, `PageSkeleton.p147.test.ts`).
