@@ -11,6 +11,8 @@
  * What this DOES NOT verify:
  *   - Backend spawn + /health (SAGE_SKIP_BACKEND=1 — CI has no conda env)
  *   - chat-stream-{id} NDJSON relay (requires live backend)
+ *   - Chromium sandbox policy (smoke launches with --no-sandbox; the product
+ *     default on modern Windows remains sandboxed)
  *   - Win7-specific GPU flags (Electron 21 + Win7 D3D11 — covered by Phase 5
  *     self-hosted Win7 runner smoke test)
  *
@@ -131,11 +133,17 @@ async function waitForFirstWindow(timeoutMs: number): Promise<Page> {
 test.beforeAll(async () => {
   test.setTimeout(120_000);
   app = await electron.launch({
-    args: [MAIN_JS],
+    args: ['--no-sandbox', MAIN_JS],
     cwd: process.cwd(),
     env: {
       ...process.env,
       SAGE_SKIP_BACKEND: '1',
+      // Electron 21's sandboxed renderer access-violates (0xC0000005)
+      // during loadFile on the windows-2025-vs2026 20261018.275 runner
+      // image, before the page can commit. Reuse main.ts's existing
+      // legacy-Windows escape hatch for this smoke only; packaged/user
+      // launches do not set it and keep the modern sandbox default.
+      SAGE_NO_SANDBOX: '1',
       // This smoke verifies Electron + preload + renderer only. The doctor
       // subprocess probes a Python/conda backend that CI deliberately does
       // not install here, and it runs before createMainWindow().
