@@ -199,3 +199,33 @@ export function formatSettingMetadataJson(meta?: Partial<SettingMetadata>): stri
   });
 }
 /* v8 ignore stop */
+
+export function auditSettingMetadataGovernance(
+  state: {
+    scope?: SettingScope | string;
+    riskLevel?: RiskLevel | string;
+  } = {},
+): {
+  module: 'src/entities/setting/metadata.ts';
+  phase: 'P155';
+  scope: SettingScope;
+  riskLevel: RiskLevel;
+  healthy: boolean;
+} {
+  const scope: SettingScope =
+    state.scope === 'session' ||
+    state.scope === 'run' ||
+    state.scope === 'endpoint' ||
+    state.scope === 'model'
+      ? state.scope
+      : 'global';
+  const riskLevel: RiskLevel =
+    state.riskLevel === 'medium' || state.riskLevel === 'high' ? state.riskLevel : 'low';
+  return {
+    module: 'src/entities/setting/metadata.ts',
+    phase: 'P155',
+    scope,
+    riskLevel,
+    healthy: true,
+  };
+}

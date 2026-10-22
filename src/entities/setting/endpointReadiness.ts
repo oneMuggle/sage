@@ -51,3 +51,32 @@ export function buildEndpointReadinessAuditJson(
 ): string {
   return JSON.stringify(buildEndpointReadinessAuditSnapshot(endpoint), null, 2);
 }
+
+export function auditEndpointReadinessGovernance(
+  state: {
+    configuredCount?: number;
+    enabledCount?: number;
+  } = {},
+): {
+  module: 'src/entities/setting/endpointReadiness.ts';
+  phase: 'P155';
+  configuredCount: number;
+  enabledCount: number;
+  healthy: boolean;
+} {
+  const configuredCount =
+    typeof state.configuredCount === 'number' && Number.isFinite(state.configuredCount)
+      ? Math.max(0, Math.trunc(state.configuredCount))
+      : 1;
+  const enabledCount =
+    typeof state.enabledCount === 'number' && Number.isFinite(state.enabledCount)
+      ? Math.max(0, Math.trunc(state.enabledCount))
+      : 1;
+  return {
+    module: 'src/entities/setting/endpointReadiness.ts',
+    phase: 'P155',
+    configuredCount,
+    enabledCount,
+    healthy: configuredCount >= 1 && enabledCount >= 1,
+  };
+}
