@@ -56,6 +56,7 @@ import {
   unregisterAllowedPaths,
 } from './sageFileProtocol';
 import { extractSageUrlFromArgv, parseSageDeepLink, SAGE_PROTOCOL } from './deepLink';
+import { loadFileWithRetry } from './loadFileRetry';
 import { getCloseToTrayPath, readCloseToTray, writeCloseToTray } from './closeToTray';
 import { readLogTimezone, writeLogTimezone } from './logTimezone';
 import { setLogTimezone } from './logger';
@@ -1029,7 +1030,7 @@ function createMainWindow(): void {
     } catch (e) {
       logger.error('main: failed to read index.html', { error: (e as Error).message });
     }
-    win.loadFile(indexHtml).catch(async (e) => {
+    loadFileWithRetry((p) => win.loadFile(p), indexHtml).catch(async (e) => {
       logger.error('main: loadFile failed', { path: indexHtml, err: e.message });
       closeSplashWindow();
       await showStartupFailureDialog({
