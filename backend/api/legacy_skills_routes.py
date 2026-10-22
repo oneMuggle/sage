@@ -410,6 +410,49 @@ async def import_skills(files: List[UploadFile] = File(default=[])):
     return result
 
 
+@router.post("/skills/import-directory")
+async def import_skill_directory(files: List[UploadFile] = File(default=[])):
+    """导入整个技能目录 (multipart, filename 携带相对路径)。
+
+    与 ``POST /skills/import`` 的区别: 这里每个 part 的 filename 是**相对路径**
+    (如 ``SKILL.md`` / ``scripts/scan.py`` / ``assets/tpl.html``), 一次导入
+    入口文件 + 附属资源。
+
+    - 200 + ``{"imported": [{"name", "path": "."}], "skipped": [{"name", "reason"}]}``
+    - 400 + detail: 目录缺 SKILL.md / 入口文件不合法
+    - 500 + detail: skills_dir 无法创建 (NoSkillsDirError)
+
+    partial success 策略与单文件导入一致: 部分文件失败仍返回 200, 在 skipped 中报告。
+    """
+    if not files:
+        raise HTTPException(
+            status_code=400,
+            detail={"type": "invalid_request", "message": "no files provided"},
+        )
+
+    from backend.skills.skill_md.exceptions import (
+        NoSkillsDirError,
+        SkillDirectoryImportError,
+    )
+
+    adapter = _get_skill_adapter()
+    try:
+        result = await adapter.import_skill_directory(files)
+    except SkillDirectoryImportError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"type": exc.error_type, "message": exc.message},
+        ) from exc
+    except NoSkillsDirError as exc:
+        logger.error("skill directory import unavailable: error_type=%s", type(exc).__name__)
+        raise HTTPException(
+            status_code=500,
+            detail={"type": "no_skills_dir", "message": "技能目录不可用"},
+        ) from exc
+
+    return result
+
+
 # ==================== Settings & Preferences API ====================
 #
 # 这些端点在 hex_routes 中也有定义。legacy 模式下 hex_routes 不注册，

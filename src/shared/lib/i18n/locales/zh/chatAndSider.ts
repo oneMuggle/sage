@@ -326,11 +326,19 @@ export const zhChatAndSider = {
   'settings.tab.harness': 'Harness',
   'settings.tab.updates': '更新',
   'settings.tab.usage-stats': '使用统计',
+  'settings.tab.skills': '技能',
   'settings.section.theme': '主题',
   'settings.section.appearance': '外观',
   'settings.section.chat': '对话',
   'settings.section.data': '数据',
   'settings.section.orch': '编排（Orchestration）',
+  'settings.section.skills': '技能',
+  'settings.skills.allow_script_execution.label': '允许执行技能脚本',
+  'settings.skills.allow_script_execution.desc':
+    '启用后，SKILL.md 中的脚本（如 Bash/PowerShell）可被分发执行。关闭时所有脚本分发请求均被拒绝。',
+  'settings.skills.directory.label': '技能目录',
+  'settings.skills.directory.desc':
+    'SKILL.md 文件的搜索目录（绝对路径）。留空表示使用缺省路径 ~/.sage/skills。',
 
   // ─── 设置页 · MCP ─────────────────
   'settings.mcp.title': 'MCP 服务器',

@@ -22,6 +22,7 @@ vi.mock('../../../shared/api', () => ({
     list: vi.fn(),
     rescan: vi.fn(),
     importFiles: vi.fn(),
+    importDirectory: vi.fn(),
   },
 }));
 
@@ -33,6 +34,8 @@ const mockElectronAPI = {
     pickSkillFiles: vi.fn(),
     rescanSkills: vi.fn(),
     importSkills: vi.fn(),
+    pickSkillDirectory: vi.fn(),
+    importSkillDirectory: vi.fn(),
   },
 };
 Object.defineProperty(globalThis.window, 'electronAPI', {
@@ -56,6 +59,8 @@ beforeEach(() => {
   vi.mocked(skillsApi.list).mockResolvedValue([]);
   // default pickSkillFiles → no selection (cancel path)
   mockElectronAPI.skills.pickSkillFiles.mockResolvedValue(null);
+  // default pickSkillDirectory → cancel path
+  mockElectronAPI.skills.pickSkillDirectory.mockResolvedValue(null);
 });
 
 const renderWithToast = () =>
@@ -176,6 +181,86 @@ describe('Skills page — Rescan + Import buttons', () => {
     fireEvent.click(screen.getByLabelText('导入 SKILL.md'));
     await waitFor(() => {
       const btn = screen.getByLabelText('导入 SKILL.md') as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+    });
+    resolveImport({ imported: [], skipped: [] });
+  });
+});
+
+describe('Skills page — 导入技能目录 button (T-4b)', () => {
+  it('renders the import-directory button in the header', async () => {
+    renderWithToast();
+    await waitFor(() => {
+      expect(screen.getByLabelText('导入技能目录')).toBeInTheDocument();
+    });
+  });
+
+  it('directory import button opens the native directory picker', async () => {
+    mockElectronAPI.skills.pickSkillDirectory.mockResolvedValue('/path/to/skill-dir');
+    vi.mocked(skillsApi.importDirectory).mockResolvedValue({
+      imported: [{ name: 'dir-skill', path: '.' }],
+      skipped: [],
+    });
+    renderWithToast();
+    await waitFor(() => screen.getByLabelText('导入技能目录'));
+    fireEvent.click(screen.getByLabelText('导入技能目录'));
+    await waitFor(() => {
+      expect(mockElectronAPI.skills.pickSkillDirectory).toHaveBeenCalledTimes(1);
+      expect(skillsApi.importDirectory).toHaveBeenCalledWith('/path/to/skill-dir');
+    });
+  });
+
+  it('directory import cancel does not call importDirectory', async () => {
+    mockElectronAPI.skills.pickSkillDirectory.mockResolvedValue(null);
+    renderWithToast();
+    await waitFor(() => screen.getByLabelText('导入技能目录'));
+    fireEvent.click(screen.getByLabelText('导入技能目录'));
+    await waitFor(() => {
+      expect(mockElectronAPI.skills.pickSkillDirectory).toHaveBeenCalledTimes(1);
+    });
+    expect(skillsApi.importDirectory).not.toHaveBeenCalled();
+  });
+
+  it('directory import success shows success toast', async () => {
+    mockElectronAPI.skills.pickSkillDirectory.mockResolvedValue('/path/to/skill-dir');
+    vi.mocked(skillsApi.importDirectory).mockResolvedValue({
+      imported: [{ name: 'dir-skill', path: '.' }],
+      skipped: [],
+    });
+    renderWithToast();
+    await waitFor(() => screen.getByLabelText('导入技能目录'));
+    fireEvent.click(screen.getByLabelText('导入技能目录'));
+    await waitFor(() => {
+      expect(findToastByText(/已导入 1 个技能（目录）/)).toBeInTheDocument();
+    });
+  });
+
+  it('directory import error shows error toast', async () => {
+    mockElectronAPI.skills.pickSkillDirectory.mockResolvedValue('/path/to/skill-dir');
+    vi.mocked(skillsApi.importDirectory).mockRejectedValue(
+      new Error('missing_skill_md: no SKILL.md'),
+    );
+    renderWithToast();
+    await waitFor(() => screen.getByLabelText('导入技能目录'));
+    fireEvent.click(screen.getByLabelText('导入技能目录'));
+    await waitFor(() => {
+      expect(findToastByText(/目录导入失败/)).toBeInTheDocument();
+    });
+  });
+
+  it('directory import loading state disables the import-directory button', async () => {
+    mockElectronAPI.skills.pickSkillDirectory.mockResolvedValue('/path/to/skill-dir');
+    let resolveImport!: (v: Awaited<ReturnType<typeof skillsApi.importDirectory>>) => void;
+    vi.mocked(skillsApi.importDirectory).mockReturnValue(
+      new Promise((resolve) => {
+        resolveImport = resolve;
+      }) as ReturnType<typeof skillsApi.importDirectory>,
+    );
+    renderWithToast();
+    await waitFor(() => screen.getByLabelText('导入技能目录'));
+    fireEvent.click(screen.getByLabelText('导入技能目录'));
+    await waitFor(() => {
+      const btn = screen.getByLabelText('导入技能目录') as HTMLButtonElement;
       expect(btn.disabled).toBe(true);
     });
     resolveImport({ imported: [], skipped: [] });

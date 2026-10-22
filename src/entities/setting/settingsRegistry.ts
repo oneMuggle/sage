@@ -281,6 +281,34 @@ export const settingsRegistry: Record<string, SettingMetadata> = {
     'preference',
     true,
   ),
+  // T-3: 技能脚本执行开关（fail-closed，缺省关闭）。
+  // 读取口径见 backend/skills/skill_md/script_policy.py
+  allow_skill_scripts: {
+    key: 'allow_skill_scripts',
+    label: '允许执行技能脚本',
+    description: '启用后，SKILL.md 中的脚本（如 Bash/PowerShell）可被分发执行',
+    scope: 'global',
+    storage: 'preference',
+    defaultValue: false,
+    applyMode: 'next-run',
+    visibility: 'advanced',
+    riskLevel: 'high',
+    constraints: { type: 'boolean' },
+  },
+  // T-4a: 自定义技能目录（缺省 = ~/.sage/skills）。
+  // 读取口径见 backend/skills/skill_md/importer.py:_resolve_skills_dir
+  skills_dir: {
+    key: 'skills_dir',
+    label: '技能目录',
+    description: 'SKILL.md 文件的搜索目录（绝对路径）',
+    scope: 'global',
+    storage: 'preference',
+    defaultValue: '',
+    applyMode: 'next-run',
+    visibility: 'advanced',
+    riskLevel: 'low',
+    constraints: { type: 'string' },
+  },
   spend_limit_usd: numberSetting(
     'spend_limit_usd',
     '每日花费限额 (USD)',
