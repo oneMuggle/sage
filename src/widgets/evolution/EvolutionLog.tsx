@@ -205,3 +205,46 @@ export const EvolutionLog: React.FC = () => {
 };
 
 export default EvolutionLog;
+
+export interface EvolutionLogAuditInput {
+  entryCount: number;
+  pageSize: number;
+  failedEntryCount: number;
+  loadingStuckMs: number;
+}
+
+export interface EvolutionLogAuditReport {
+  normalizedEntryCount: number;
+  normalizedPageSize: number;
+  failureRate: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateEvolutionLogGovernanceAudit(
+  input: EvolutionLogAuditInput,
+): EvolutionLogAuditReport {
+  const issueCodes: string[] = [];
+  const normalizedEntryCount = Math.max(0, Math.trunc(input.entryCount));
+  const normalizedPageSize = Math.max(1, Math.trunc(input.pageSize));
+  if (input.pageSize <= 0 || input.pageSize > 100) {
+    issueCodes.push('EVOLUTION_LOG_PAGE_SIZE_INVALID');
+  }
+  const failed = Math.max(0, Math.trunc(input.failedEntryCount));
+  const failureRate =
+    normalizedEntryCount > 0 ? Number((failed / normalizedEntryCount).toFixed(4)) : 0;
+  if (failureRate > 0.5) {
+    issueCodes.push('EVOLUTION_LOG_HIGH_FAILURE_RATE');
+  }
+  if (!Number.isFinite(input.loadingStuckMs) || input.loadingStuckMs > 15000) {
+    issueCodes.push('EVOLUTION_LOG_LOADING_STUCK');
+  }
+  return {
+    normalizedEntryCount,
+    normalizedPageSize,
+    failureRate,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
