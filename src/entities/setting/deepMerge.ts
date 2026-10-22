@@ -193,3 +193,29 @@ export function formatDeepMergeJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditDeepMergeGovernance(
+  state: {
+    maxDepth?: number;
+    preserveUndefined?: boolean;
+  } = {},
+): {
+  module: 'src/entities/setting/deepMerge.ts';
+  phase: 'P154';
+  maxDepth: number;
+  preserveUndefined: boolean;
+  healthy: boolean;
+} {
+  const maxDepth =
+    typeof state.maxDepth === 'number' && Number.isFinite(state.maxDepth)
+      ? Math.max(1, Math.min(32, Math.trunc(state.maxDepth)))
+      : 16;
+  const preserveUndefined = state.preserveUndefined === true;
+  return {
+    module: 'src/entities/setting/deepMerge.ts',
+    phase: 'P154',
+    maxDepth,
+    preserveUndefined,
+    healthy: maxDepth >= 1 && maxDepth <= 32,
+  };
+}
