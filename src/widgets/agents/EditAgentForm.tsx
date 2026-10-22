@@ -159,3 +159,39 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
     </div>
   );
 }
+
+export interface EditAgentFormAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/widgets/agents/EditAgentForm.tsx';
+  componentName: 'EditAgentForm';
+  hasNameField: boolean;
+  hasSystemPromptField: boolean;
+  isDirty: boolean;
+  exportedAt: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditEditAgentForm(
+  name = 'Research Agent',
+  systemPrompt = 'You are a helpful research assistant.',
+  isDirty = false,
+): EditAgentFormAuditReport {
+  return {
+    schemaVersion: '1.0',
+    module: 'src/widgets/agents/EditAgentForm.tsx',
+    componentName: 'EditAgentForm',
+    hasNameField: name.trim().length > 0,
+    hasSystemPromptField: systemPrompt.trim().length > 0,
+    isDirty: Boolean(isDirty),
+    exportedAt: '2026-10-22',
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportEditAgentFormAuditJson(
+  name = 'Research Agent',
+  systemPrompt = 'You are a helpful research assistant.',
+  isDirty = false,
+): string {
+  return JSON.stringify(auditEditAgentForm(name, systemPrompt, isDirty), null, 2);
+}

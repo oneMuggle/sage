@@ -138,3 +138,35 @@ export function ActiveAgentIndicator({
     </div>
   );
 }
+
+export interface ActiveAgentIndicatorAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/widgets/chat/ActiveAgentIndicator.tsx';
+  componentName: 'ActiveAgentIndicator';
+  hasActiveAgent: boolean;
+  isStreaming: boolean;
+  exportedAt: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditActiveAgentIndicator(
+  agentName: string | null = 'Sage',
+  isStreaming = false,
+): ActiveAgentIndicatorAuditReport {
+  return {
+    schemaVersion: '1.0',
+    module: 'src/widgets/chat/ActiveAgentIndicator.tsx',
+    componentName: 'ActiveAgentIndicator',
+    hasActiveAgent: Boolean(agentName && agentName.trim().length > 0),
+    isStreaming: Boolean(isStreaming),
+    exportedAt: '2026-10-22',
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportActiveAgentIndicatorAuditJson(
+  agentName: string | null = 'Sage',
+  isStreaming = false,
+): string {
+  return JSON.stringify(auditActiveAgentIndicator(agentName, isStreaming), null, 2);
+}
