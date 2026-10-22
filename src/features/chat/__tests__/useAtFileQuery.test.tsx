@@ -3,6 +3,7 @@ import { renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { useAtFileQuery } from '../useAtFileQuery';
+import { formatAtFileQueryJson, formatAtFileQuerySummary } from '../useAtFileQuery';
 
 describe('useAtFileQuery', () => {
   it('returns null when no @ in input', () => {
@@ -65,6 +66,20 @@ describe('useAtFileQuery', () => {
       query: 'bar',
       startIdx: 5,
       endIdx: 9,
+    });
+  });
+
+  it('formats @file query summary and JSON (Phase P109)', () => {
+    expect(formatAtFileQuerySummary({ query: null, startIdx: 0, endIdx: 0 })).toBe('inactive · 0..0');
+    expect(formatAtFileQuerySummary({ query: 'foo', startIdx: 6, endIdx: 10 })).toBe(
+      'active · @foo · 6..10',
+    );
+    const parsed = JSON.parse(formatAtFileQueryJson({ query: 'foo', startIdx: 6, endIdx: 10 }));
+    expect(parsed).toEqual({
+      active: true,
+      query: 'foo',
+      startIdx: 6,
+      endIdx: 10,
     });
   });
 });

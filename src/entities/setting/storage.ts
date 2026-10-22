@@ -43,6 +43,11 @@ const TOP_KEYS: ReadonlySet<keyof AppSettings> = new Set([
   'wiki',
   'orch',
   'version',
+  // 2026-10-21: LLM 自动重试参数 — 用户配置需透传到后端, 否则 sanitizeForBackend
+  // 会丢弃这些字段, 后端永远用默认值 (max_attempts=3, base_delay=1.0, max_delay=15.0).
+  'llmRetryMaxAttempts',
+  'llmRetryBaseDelayS',
+  'llmRetryMaxDelayS',
   // 'memoryServerSync' 不在此白名单内 — 后端已下线该字段, 前端发出去会 400.
 ]);
 const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([
@@ -415,6 +420,26 @@ export async function resetSettings(): Promise<void> {
 /** @deprecated use loadSettings() async */
 export function loadSettingsSync(): AppSettings {
   return mergeWithDefaults(readLocalCacheSync() ?? {});
+}
+
+export function formatAppSettingsStorageSummary(settings: AppSettings): string {
+  const endpointCount = settings.endpoints?.length ?? 0;
+  const chatModelId = settings.modelSelections?.chatModel?.modelId || 'none';
+  return `endpoints=${endpointCount} · chat=${chatModelId} · streaming=${Boolean(settings.streaming)}`;
+}
+
+export function formatAppSettingsStorageJson(settings: AppSettings): string {
+  return JSON.stringify(
+    {
+      endpointCount: settings.endpoints?.length ?? 0,
+      endpointIds: (settings.endpoints ?? []).map((ep) => ep.id),
+      chatModel: settings.modelSelections?.chatModel ?? null,
+      streaming: Boolean(settings.streaming),
+      maxRetries: settings.orch?.maxRetries ?? null,
+    },
+    null,
+    2,
+  );
 }
 
 // 注：原 migrateFromV1 / migrateFromV2 函数在新架构下不再需要：

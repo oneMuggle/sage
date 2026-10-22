@@ -301,4 +301,32 @@ describe('artifactApi - version history', () => {
       await expect(updateArtifactContent('s', 'a1', 'wrong', 'x')).rejects.toThrow(/409/);
     });
   });
+
+  describe('formatArtifactRecordSummary & formatArtifactRecordJson (Phase P108)', () => {
+    it('formats artifact record summary and JSON', async () => {
+      const { formatArtifactRecordSummary, formatArtifactRecordJson } = await import('../artifactApi');
+      const artifact = {
+        id: 'art-1',
+        session_id: 'sess-1',
+        tool_call_id: 'tc-1',
+        path: '/tmp/report.md',
+        name: 'report.md',
+        kind: 'markdown' as const,
+        size: 1024,
+        created_at: 1700000000,
+        workspace_path: '/workspace',
+      };
+      expect(formatArtifactRecordSummary(artifact)).toBe('art-1 · report.md · markdown · 1024B');
+      const parsed = JSON.parse(formatArtifactRecordJson(artifact));
+      expect(parsed).toEqual({
+        id: 'art-1',
+        sessionId: 'sess-1',
+        name: 'report.md',
+        kind: 'markdown',
+        size: 1024,
+        path: '/tmp/report.md',
+        workspacePath: '/workspace',
+      });
+    });
+  });
 });

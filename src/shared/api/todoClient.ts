@@ -63,3 +63,25 @@ export const todoClient = {
     return invoke<TodoStats>('todo_stats', {});
   },
 };
+
+export function formatTodoListSummary(
+  res: Pick<TodoListResponse, 'items' | 'total' | 'limit' | 'offset'>,
+): string {
+  return `${res.items.length}/${res.total} todos · offset ${res.offset} · limit ${res.limit}`;
+}
+
+export function formatTodoListJson(
+  res: Pick<TodoListResponse, 'items' | 'total' | 'limit' | 'offset'>,
+): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.todo_list.v1',
+      itemCount: res.items.length,
+      total: res.total,
+      limit: res.limit,
+      offset: res.offset,
+    },
+    null,
+    2,
+  );
+}

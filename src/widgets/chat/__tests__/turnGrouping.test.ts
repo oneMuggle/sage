@@ -205,4 +205,16 @@ describe('getTurnToolCallCount', () => {
     ];
     expect(getTurnToolCallCount(msgs)).toBe(0);
   });
+
+  it('formats turn items summary and JSON (Phase P118)', async () => {
+    const { formatTurnItemsSummary, formatTurnItemsJson, groupMessagesIntoTurns } = await import(
+      '../turnGrouping'
+    );
+    const items = groupMessagesIntoTurns([user('hi'), assistant('hello')]);
+    expect(formatTurnItemsSummary(items)).toBe('total=1 · turns=1 · standalones=0');
+    const parsed = JSON.parse(formatTurnItemsJson(items));
+    expect(parsed.totalItems).toBe(1);
+    expect(parsed.turnCount).toBe(1);
+    expect(parsed.standaloneCount).toBe(0);
+  });
 });

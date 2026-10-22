@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { settingsGroups, focusSettingsEntry } from '../settingsPresentation';
+import { focusSettingsEntry, formatSettingsGroupsJson, formatSettingsGroupsSummary, settingsGroups } from '../settingsPresentation';
 describe('settings presentation', () => {
   it('groups known tabs without creating unsupported platform tabs', () => {
     const groups = settingsGroups(['basic', 'models', 'network', 'usage-stats'], 'en');
@@ -33,5 +33,21 @@ describe('settings presentation', () => {
       false,
     );
     container.remove();
+  });
+});
+
+describe('formatSettingsGroupsSummary / formatSettingsGroupsJson', () => {
+  it('formats settings presentation groups summary and JSON payload', () => {
+    const tabs = ['basic', 'models', 'network', 'usage-stats'] as const;
+    expect(formatSettingsGroupsSummary(tabs, 'en')).toBe(
+      'settings-groups: 4 groups · 4 tabs · locale=en',
+    );
+    const payload = JSON.parse(formatSettingsGroupsJson(tabs, 'en'));
+    expect(payload).toEqual({
+      groupCount: 4,
+      tabCount: 4,
+      locale: 'en',
+      groupIds: ['basic', 'models', 'network', 'diagnostics'],
+    });
   });
 });

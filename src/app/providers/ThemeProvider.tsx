@@ -16,6 +16,28 @@ import { ThemeContext, type ActiveThemeSource, type ThemeMode } from './useTheme
 const VALID_MODES: ReadonlyArray<ThemeMode> = ['light', 'dark', 'system'];
 const ACTIVE_CSS_THEME_KEY = 'sage-active-css-theme';
 
+export interface ThemeAuditInput {
+  mode: ThemeMode;
+  resolved: 'light' | 'dark';
+  presetId: string;
+  sourceKind: 'preset' | 'css';
+  cssCount: number;
+}
+
+export function formatThemeAuditSnapshot(input: ThemeAuditInput): string {
+  return `mode=${input.mode}|resolved=${input.resolved}|preset=${input.presetId}|source=${input.sourceKind}|css=${input.cssCount}`;
+}
+
+export function formatThemeAuditJson(input: ThemeAuditInput): string {
+  return JSON.stringify({
+    mode: input.mode,
+    resolved: input.resolved,
+    presetId: input.presetId,
+    sourceKind: input.sourceKind,
+    cssCount: input.cssCount,
+  });
+}
+
 function resolveSystemTheme(): 'light' | 'dark' {
   if (typeof window === 'undefined') return 'light';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -199,6 +221,36 @@ export function ThemeProvider({ children, defaultMode = 'system' }: ThemeProvide
     await loadCssThemes();
   }, [loadCssThemes]);
 
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const auditInput: ThemeAuditInput = {
+    mode,
+    resolved,
+    presetId,
+    sourceKind: activeSource.kind,
+    cssCount: cssThemes.length,
+  };
+  const auditSnapshot = formatThemeAuditSnapshot(auditInput);
+  const auditJson = formatThemeAuditJson(auditInput);
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(auditSnapshot);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(auditJson);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
   return (
     <ThemeContext.Provider
       value={{
@@ -214,6 +266,44 @@ export function ThemeProvider({ children, defaultMode = 'system' }: ThemeProvide
       }}
     >
       {children}
+      <span
+        data-testid="theme-audit-status"
+        data-theme-audit={auditSnapshot}
+        className="sr-only"
+      >
+        <span
+          role="status"
+          tabIndex={0}
+          data-testid="theme-audit-copy"
+          data-theme-audit={auditSnapshot}
+          aria-label="复制主题审计快照"
+          onClick={() => void handleCopySnapshot()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              void handleCopySnapshot();
+            }
+          }}
+        >
+          {copiedSnapshot ? '已复制' : '快照'}
+        </span>
+        <span
+          role="status"
+          tabIndex={0}
+          data-testid="theme-audit-copy-json"
+          data-theme-audit-json={auditJson}
+          aria-label="复制主题审计 JSON"
+          onClick={() => void handleCopyJson()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              void handleCopyJson();
+            }
+          }}
+        >
+          {copiedJson ? '已复制 JSON' : 'JSON'}
+        </span>
+      </span>
     </ThemeContext.Provider>
   );
 }

@@ -1,15 +1,10 @@
-import {
-  BookOpen,
-  Wrench,
-  ChevronDown,
-  FileText,
-  Zap,
-} from 'lucide-react';
+import { BookOpen, Wrench, ChevronDown, FileText, Zap } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { MediaAttachment } from '../../features/chat/MediaAttachment';
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
+import { useChatStreamStore } from '../../features/send-message/chatStreamStore';
 import { THINKING_PLACEHOLDER } from '../../features/send-message/thinkingPlaceholder';
 import { useI18n } from '../../shared/lib/i18n';
 import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownChunks';
@@ -28,6 +23,7 @@ import {
   ToolCallResult,
   ToolCallTitle,
 } from './MessageMarkdownParts';
+import { RetryBanner } from './RetryBanner';
 import { TruncationNotice } from './TruncationNotice';
 import { FileChangeCards } from './changes/FileChangeCard';
 import { resolveToolRenderer } from './toolRenderers';
@@ -93,11 +89,23 @@ function MessageComponent({
   const isAssistant = message.role === 'assistant';
   const isSystem = message.role === 'system';
   const isError = message.content?.startsWith('[错误') ?? false;
+  // 2026-10-20: LLM 重试可视化 —— 从流式 store 读当前消息的重试信息。
+  // 只有「正在流式的这条消息」才显示横幅，故需 messageId 匹配。
+  // 2026-10-21: 选择器只取 retryInfo，避免每次 setStreamingMeta({state}) 都
+  // 把整个 streaming 对象换引用导致 Message 重渲染（ReactMarkdown 很重）。
+  const retryInfo = useChatStreamStore((s) => {
+    if (!isAssistant || !isStreaming || !message.session_id) return null;
+    const slot = s.sessions[message.session_id]?.streaming;
+    return slot && slot.messageId === message.id ? (slot.retryInfo ?? null) : null;
+  });
   // 2026-09-13 P0: 首个 token 到达前 content 是哨兵占位值 — 渲染 shimmer
   // 骨架而非把 "🤔 思考中…" 当 markdown 静态文本展示。agent 中间态文案
   // (思考/调用工具) 会覆盖占位值，覆盖后自动回退 markdown 渲染。
   const isThinkingPlaceholder =
     isAssistant && isStreaming === true && message.content === THINKING_PLACEHOLDER;
+  // 2026-10-20: 重试期间内容仍是哨兵占位 — 只显示横幅，跳过气泡本体；
+  // 否则哨兵会被当 markdown 静态文本渲染（与 2026-09-13 P0 修复意图冲突）。
+  const showRetryBannerOnly = isAssistant && retryInfo !== null && isThinkingPlaceholder;
   // 2026-09 step-by-step: 多步 run 中,中间步骤可能 content="" 但有
   // tool_calls / reasoning_content。气泡只在有内容时渲染;其他部件
   // (ThinkingPanel / tool_calls) 始终渲染,确保中间步骤不会"空泡"。
@@ -220,6 +228,10 @@ function MessageComponent({
           <ThinkingPanel reasoning={message.reasoning_content} isStreaming={isStreaming} />
         )}
 
+        {/* 2026-10-20: LLM 重试横幅 —— 置于思考面板之下、工具调用之上。
+            重试期间气泡内仍是占位符，横幅承担"系统正在自动恢复"的告知职责。 */}
+        {isAssistant && retryInfo && <RetryBanner info={retryInfo} />}
+
         {/* Knowledge references */}
         {knowledgeRefs && knowledgeRefs.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-1">
@@ -268,9 +280,7 @@ function MessageComponent({
                 className="flex items-center gap-2 px-2.5 py-1.5 rounded-radius-sm border border-border bg-bg-subtle hover:bg-bg-hover text-ui-xs text-text-secondary transition-colors text-left"
               >
                 <Wrench className="w-3.5 h-3.5 text-primary shrink-0" />
-                <span className="font-medium text-text">
-                  已执行 {toolCalls.length} 步工具调用
-                </span>
+                <span className="font-medium text-text">已执行 {toolCalls.length} 步工具调用</span>
                 <span className="text-text-tertiary truncate font-mono text-ui-2xs">
                   ({toolGroupSummary})
                 </span>
@@ -284,112 +294,114 @@ function MessageComponent({
             )}
             {(!canGroupToolCalls || toolGroupExpanded) &&
               toolCalls.map((tc, idx) => {
-              const hasImage = tc.metadata?.imageData;
-              // right-panel R5: 写文件工具的内联 diff 卡片（展开懒加载,
-              // 点击面板按钮直达右侧变更 Tab）
-              const changePaths = message.session_id ? fileChangePaths(tc) : [];
-              const isBlocked = Boolean(tc.metadata?.blockReason);
-              const SpecializedRenderer = resolveToolRenderer(tc.name);
+                const hasImage = tc.metadata?.imageData;
+                // right-panel R5: 写文件工具的内联 diff 卡片（展开懒加载,
+                // 点击面板按钮直达右侧变更 Tab）
+                const changePaths = message.session_id ? fileChangePaths(tc) : [];
+                const isBlocked = Boolean(tc.metadata?.blockReason);
+                const SpecializedRenderer = resolveToolRenderer(tc.name);
 
-              // Artifact chips / image / media refs — 无论是否使用专用渲染器都渲染
-              const extras = (
-                <>
-                  {tc.id && artifactsByToolCall?.[tc.id]?.length ? (
-                    <div className="flex flex-wrap gap-1 px-2 pb-1.5">
-                      {artifactsByToolCall[tc.id].map((art) => (
-                        <button
-                          key={art.id}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-ui-2xs text-primary transition-colors"
-                          onClick={() => useRightPanelStore.getState().selectArtifact(art.id)}
-                          title="在右侧面板中查看"
-                          data-testid="message-artifact-chip"
-                        >
-                          <FileText className="w-3 h-3 shrink-0" />
-                          <span className="truncate max-w-48">{art.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                  {hasImage && (
-                    <div className="px-2 pb-2">
-                      <img
-                        src={tc.metadata!.imageData}
-                        alt={`Diagram from ${tc.name}`}
-                        className="max-w-full rounded border border-border"
-                        style={{ maxHeight: '400px', backgroundColor: '#ffffff' }}
-                      />
-                    </div>
-                  )}
-                  {tc.metadata?.mediaRefs && tc.metadata.mediaRefs.length > 0 && (
-                    <div className="px-2 pb-2">
-                      {tc.metadata.mediaRefs.map((ref, refIdx) => (
-                        <MediaAttachment
-                          key={ref.id || refIdx}
-                          url={ref.api_url ?? `/api/v1/media/${ref.id}`}
-                          mimeType={ref.mime_type}
-                          caption={`${ref.kind} — ${ref.source || tc.name}`}
+                // Artifact chips / image / media refs — 无论是否使用专用渲染器都渲染
+                const extras = (
+                  <>
+                    {tc.id && artifactsByToolCall?.[tc.id]?.length ? (
+                      <div className="flex flex-wrap gap-1 px-2 pb-1.5">
+                        {artifactsByToolCall[tc.id].map((art) => (
+                          <button
+                            key={art.id}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-border bg-surface hover:bg-bg-hover text-ui-2xs text-primary transition-colors"
+                            onClick={() => useRightPanelStore.getState().selectArtifact(art.id)}
+                            title="在右侧面板中查看"
+                            data-testid="message-artifact-chip"
+                          >
+                            <FileText className="w-3 h-3 shrink-0" />
+                            <span className="truncate max-w-48">{art.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                    {hasImage && (
+                      <div className="px-2 pb-2">
+                        <img
+                          src={tc.metadata!.imageData}
+                          alt={`Diagram from ${tc.name}`}
+                          className="max-w-full rounded border border-border"
+                          style={{ maxHeight: '400px', backgroundColor: '#ffffff' }}
                         />
-                      ))}
-                    </div>
-                  )}
-                </>
-              );
+                      </div>
+                    )}
+                    {tc.metadata?.mediaRefs && tc.metadata.mediaRefs.length > 0 && (
+                      <div className="px-2 pb-2">
+                        {tc.metadata.mediaRefs.map((ref, refIdx) => (
+                          <MediaAttachment
+                            key={ref.id || refIdx}
+                            url={ref.api_url ?? `/api/v1/media/${ref.id}`}
+                            mimeType={ref.mime_type}
+                            caption={`${ref.kind} — ${ref.source || tc.name}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
 
-              // 专用渲染器（ZCode-inspired） — 替代通用卡片头部+结果区
-              if (SpecializedRenderer && !isBlocked) {
+                // 专用渲染器（ZCode-inspired） — 替代通用卡片头部+结果区
+                if (SpecializedRenderer && !isBlocked) {
+                  return (
+                    <div key={`${tc.name}-${idx}`} className="flex flex-col gap-1.5">
+                      <SpecializedRenderer tc={tc} />
+                      {changePaths.length > 0 && (
+                        <FileChangeCards sessionId={message.session_id} paths={changePaths} />
+                      )}
+                      {extras}
+                    </div>
+                  );
+                }
+
+                // 通用卡片（未注册专用渲染器 or 被拦截时走旧路径）
                 return (
-                  <div key={`${tc.name}-${idx}`} className="flex flex-col gap-1.5">
-                    <SpecializedRenderer tc={tc} />
+                  <div
+                    key={`${tc.name}-${idx}`}
+                    className="flex flex-col gap-1.5 rounded border border-border bg-bg-subtle text-ui-sm"
+                  >
+                    {/* Tool call header — U8: humanized title + 弱化的原始工具名(调试用) */}
+                    <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
+                      <Wrench className="w-3 h-3 text-primary shrink-0" />
+                      <ToolCallTitle name={tc.name} args={tc.args} />
+                      <span className="font-mono text-ui-xs text-muted">{tc.name}</span>
+                    </div>
+                    {/* right-panel R5/R6: 文件修改卡组（<3 个平铺,≥3 个折叠为汇总条） */}
                     {changePaths.length > 0 && (
                       <FileChangeCards sessionId={message.session_id} paths={changePaths} />
+                    )}
+                    {/* R19-W1: 拦截卡片 — 网页访问被反爬/登录墙/网络错误拦截时，
+                      渲染可视化卡片（原因 + 目标 URL + 建议动作按钮）代替原始错误文本 */}
+                    {isBlocked && (
+                      <BlockedCard
+                        blockReason={tc.metadata!.blockReason!}
+                        blockedUrl={tc.metadata?.blockedUrl}
+                        suggestedActions={tc.metadata?.suggestedActions}
+                        errorMessage={typeof tc.result === 'string' ? tc.result : undefined}
+                        onAction={onBlockedAction}
+                      />
+                    )}
+                    {/* Tool result — 大文件内容可折叠（拦截卡片已承载错误信息时跳过裸文本） */}
+                    {!isBlocked && tc.result !== undefined && tc.result !== '' && !hasImage && (
+                      <div className="px-2 pb-1.5">
+                        <ToolCallResult result={tc.result} />
+                      </div>
                     )}
                     {extras}
                   </div>
                 );
-              }
-
-              // 通用卡片（未注册专用渲染器 or 被拦截时走旧路径）
-              return (
-                <div
-                  key={`${tc.name}-${idx}`}
-                  className="flex flex-col gap-1.5 rounded border border-border bg-bg-subtle text-ui-sm"
-                >
-                  {/* Tool call header — U8: humanized title + 弱化的原始工具名(调试用) */}
-                  <div className="flex flex-wrap items-center gap-1.5 px-2 py-1.5">
-                    <Wrench className="w-3 h-3 text-primary shrink-0" />
-                    <ToolCallTitle name={tc.name} args={tc.args} />
-                    <span className="font-mono text-ui-xs text-muted">{tc.name}</span>
-                  </div>
-                  {/* right-panel R5/R6: 文件修改卡组（<3 个平铺,≥3 个折叠为汇总条） */}
-                  {changePaths.length > 0 && (
-                    <FileChangeCards sessionId={message.session_id} paths={changePaths} />
-                  )}
-                  {/* R19-W1: 拦截卡片 — 网页访问被反爬/登录墙/网络错误拦截时，
-                      渲染可视化卡片（原因 + 目标 URL + 建议动作按钮）代替原始错误文本 */}
-                  {isBlocked && (
-                    <BlockedCard
-                      blockReason={tc.metadata!.blockReason!}
-                      blockedUrl={tc.metadata?.blockedUrl}
-                      suggestedActions={tc.metadata?.suggestedActions}
-                      errorMessage={typeof tc.result === 'string' ? tc.result : undefined}
-                      onAction={onBlockedAction}
-                    />
-                  )}
-                  {/* Tool result — 大文件内容可折叠（拦截卡片已承载错误信息时跳过裸文本） */}
-                  {!isBlocked && tc.result !== undefined && tc.result !== '' && !hasImage && (
-                    <div className="px-2 pb-1.5">
-                      <ToolCallResult result={tc.result} />
-                    </div>
-                  )}
-                  {extras}
-                </div>
-              );
-            })}
+              })}
           </div>
         )}
 
-        {/* 消息气泡 — 2026-09 step-by-step: 空内容时不渲染,避免空白气泡 */}
-        {showBubble && (
+        {/* 消息气泡 — 2026-09 step-by-step: 空内容时不渲染,避免空白气泡。
+            2026-10-21: 重试期间内容仍是哨兵占位时跳过气泡,
+            否则哨兵会被当 markdown 静态文本渲染(与 P0 修复冲突)。 */}
+        {showBubble && !showRetryBannerOnly && (
           <div
             data-error={isError ? 'true' : undefined}
             data-quote-scope="message-body"
@@ -703,3 +715,22 @@ export const Message = memo(MessageComponent, (prev, next) => {
     prev.onBlockedAction === next.onBlockedAction
   );
 });
+export function formatMessageAuditSummary(message: MessageType, isStreaming = false): string {
+  const toolCount = Array.isArray(message.tool_calls) ? message.tool_calls.length : 0;
+  return `${message.id} · role=${message.role} · streaming=${isStreaming} · tools=${toolCount} · chars=${(message.content ?? '').length}`;
+}
+
+export function formatMessageAuditJson(message: MessageType, isStreaming = false): string {
+  const toolCount = Array.isArray(message.tool_calls) ? message.tool_calls.length : 0;
+  return JSON.stringify(
+    {
+      id: message.id,
+      role: message.role,
+      isStreaming,
+      toolCallCount: toolCount,
+      contentLength: (message.content ?? '').length,
+    },
+    null,
+    2,
+  );
+}

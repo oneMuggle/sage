@@ -1,7 +1,17 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../DropdownMenu';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  formatDropdownMenuAuditJson,
+  formatDropdownMenuAuditSnapshot,
+} from '../DropdownMenu';
 
 function renderMenu(onOpenChange = (_open: boolean) => {}) {
   return render(
@@ -117,5 +127,44 @@ describe('DropdownMenu', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole('menu')).toBeNull();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P102)', async () => {
+    expect(
+      formatDropdownMenuAuditSnapshot({
+        align: 'end',
+        sideOffset: 8,
+        itemCount: 4,
+        hasDestructive: true,
+      }),
+    ).toBe('dropdownMenu|align=end|offset=8|items=4|destructive=1');
+    expect(formatDropdownMenuAuditSnapshot({})).toBe(
+      'dropdownMenu|align=start|offset=4|items=0|destructive=0',
+    );
+    expect(
+      JSON.parse(
+        formatDropdownMenuAuditJson({
+          align: 'center',
+          sideOffset: 6,
+          itemCount: 2,
+          hasDestructive: false,
+        }),
+      ),
+    ).toEqual({
+      align: 'center',
+      sideOffset: 6,
+      itemCount: 2,
+      hasDestructive: false,
+    });
+
+    renderMenu();
+    openMenu();
+    await screen.findByRole('menu');
+    const snapBtn = screen.getByTestId('dropdown-menu-copy-snapshot');
+    const jsonBtn = screen.getByTestId('dropdown-menu-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

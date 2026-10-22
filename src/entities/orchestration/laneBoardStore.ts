@@ -259,3 +259,44 @@ export const useLaneBoardStore = create<LaneBoardState>((set, get) => ({
     return groupLanes(get().lanes);
   },
 }));
+
+export interface LaneBoardStoreAuditInput {
+  laneCount?: number;
+  runningCount?: number;
+  blockedCount?: number;
+  loading?: boolean;
+  hasError?: boolean;
+  overallLevel?: string | null;
+}
+
+export function buildLaneBoardStoreAuditSnapshot(
+  input: LaneBoardStoreAuditInput = {},
+): string {
+  const laneCount = Math.max(0, input.laneCount ?? 0);
+  const runningCount = Math.max(0, input.runningCount ?? 0);
+  const blockedCount = Math.max(0, input.blockedCount ?? 0);
+  const loading = Boolean(input.loading);
+  const hasError = Boolean(input.hasError);
+  const overallLevel = (input.overallLevel ?? '').trim() || 'none';
+  return `lanes:${laneCount}|running:${runningCount}|blocked:${blockedCount}|loading:${loading ? 'yes' : 'no'}|err:${hasError ? 'yes' : 'no'}|freshness:${overallLevel}`;
+}
+
+export function buildLaneBoardStoreAuditJson(
+  input: LaneBoardStoreAuditInput = {},
+): string {
+  const laneCount = Math.max(0, input.laneCount ?? 0);
+  const runningCount = Math.max(0, input.runningCount ?? 0);
+  const blockedCount = Math.max(0, input.blockedCount ?? 0);
+  const loading = Boolean(input.loading);
+  const hasError = Boolean(input.hasError);
+  const overallLevel = (input.overallLevel ?? '').trim() || 'none';
+  return JSON.stringify({
+    laneCount,
+    runningCount,
+    blockedCount,
+    loading,
+    hasError,
+    overallLevel,
+    snapshot: buildLaneBoardStoreAuditSnapshot(input),
+  });
+}

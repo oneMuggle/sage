@@ -26,3 +26,19 @@ export const PHILOSOPHY = [
     description: '优先选择简单方案,除非复杂性能证明其价值。避免过度工程。',
   },
 ];
+
+export function formatVisionAuditSummary(): string {
+  return `visionChars=${VISION.length} · principles=${PHILOSOPHY.length} · names=[${PHILOSOPHY.map((p) => p.principle).join(',')}]`;
+}
+
+export function formatVisionAuditJson(): string {
+  return JSON.stringify(
+    {
+      visionLength: VISION.length,
+      principleCount: PHILOSOPHY.length,
+      principles: PHILOSOPHY.map((p) => p.principle),
+    },
+    null,
+    2,
+  );
+}

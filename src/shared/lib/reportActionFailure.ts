@@ -35,3 +35,30 @@ export function reportActionFailure(
   }
   return message;
 }
+
+export function formatActionFailureSummary(
+  context: string,
+  error: unknown,
+  fallback = '操作失败',
+): string {
+  const detail = formatActionError(error, fallback);
+  return `${context} · ${detail}`;
+}
+
+export function formatActionFailureJson(
+  context: string,
+  error: unknown,
+  fallback = '操作失败',
+): string {
+  const detail = formatActionError(error, fallback);
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.action_failure.v1',
+      context,
+      detail,
+      message: `${context}：${detail}`,
+    },
+    null,
+    2,
+  );
+}

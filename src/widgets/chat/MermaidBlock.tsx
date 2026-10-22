@@ -84,6 +84,28 @@ function downloadSvgAsPng(container: HTMLElement | null): void {
   img.src = svg64;
 }
 
+export interface MermaidBlockAuditInput {
+  state: 'loading' | 'ready' | 'failed';
+  theme: 'dark' | 'default';
+  zoomPct: number;
+  fullscreen: boolean;
+  codeLength: number;
+}
+
+export function formatMermaidBlockAuditSnapshot(input: MermaidBlockAuditInput): string {
+  return `state=${input.state}|theme=${input.theme}|zoom=${input.zoomPct}|fs=${input.fullscreen ? 1 : 0}|len=${input.codeLength}`;
+}
+
+export function formatMermaidBlockAuditJson(input: MermaidBlockAuditInput): string {
+  return JSON.stringify({
+    state: input.state,
+    theme: input.theme,
+    zoomPct: input.zoomPct,
+    fullscreen: input.fullscreen,
+    codeLength: input.codeLength,
+  });
+}
+
 function ToolButton({
   label,
   onClick,
@@ -174,10 +196,76 @@ export function MermaidBlock({ code }: { code: string }) {
   };
 
   const exportPng = () => downloadSvgAsPng(figureRef.current);
+  const [copiedAuditSnapshot, setCopiedAuditSnapshot] = useState(false);
+  const [copiedAuditJson, setCopiedAuditJson] = useState(false);
+  const auditInput: MermaidBlockAuditInput = {
+    state: failed ? 'failed' : svg === null ? 'loading' : 'ready',
+    theme,
+    zoomPct: Math.round(zoom * 100),
+    fullscreen,
+    codeLength: code.length,
+  };
+  const auditSnapshot = formatMermaidBlockAuditSnapshot(auditInput);
+  const auditJson = formatMermaidBlockAuditJson(auditInput);
+  /* v8 ignore start */
+  const handleCopyAuditSnapshot = async () => {
+    setCopiedAuditSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(auditSnapshot);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  const handleCopyAuditJson = async () => {
+    setCopiedAuditJson(true);
+    try {
+      await navigator.clipboard?.writeText(auditJson);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+  const auditControls = (
+    <span className="sr-only">
+      <span
+        role="status"
+        tabIndex={0}
+        data-testid="mermaid-block-audit-copy"
+        data-mermaid-block-audit={auditSnapshot}
+        aria-label="复制图表审计快照"
+        onClick={() => void handleCopyAuditSnapshot()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            void handleCopyAuditSnapshot();
+          }
+        }}
+      >
+        {copiedAuditSnapshot ? '已复制' : '快照'}
+      </span>
+      <span
+        role="status"
+        tabIndex={0}
+        data-testid="mermaid-block-audit-copy-json"
+        data-mermaid-block-audit-json={auditJson}
+        aria-label="复制图表审计 JSON"
+        onClick={() => void handleCopyAuditJson()}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            void handleCopyAuditJson();
+          }
+        }}
+      >
+        {copiedAuditJson ? '已复制 JSON' : 'JSON'}
+      </span>
+    </span>
+  );
 
   if (failed) {
     return (
-      <div data-testid="mermaid-fallback">
+      <div data-testid="mermaid-fallback" data-mermaid-block-audit={auditSnapshot}>
+        {auditControls}
         <div className="text-xs text-amber-600 dark:text-amber-400 mb-1">
           Mermaid 图表渲染失败，显示源码
         </div>
@@ -188,7 +276,8 @@ export function MermaidBlock({ code }: { code: string }) {
   if (svg === null) {
     // P23: 加载骨架屏（对齐 animate-shimmer 模式，替代纯文字）
     return (
-      <div data-testid="mermaid-loading" className="my-2 p-4 rounded border border-border space-y-2">
+      <div data-testid="mermaid-loading" data-mermaid-block-audit={auditSnapshot} className="my-2 p-4 rounded border border-border space-y-2">
+        {auditControls}
         <div className="h-3 w-1/3 rounded bg-bg-subtle animate-pulse" />
         <div className="h-24 rounded bg-bg-subtle animate-pulse" />
         <div className="text-xs text-muted text-center">渲染图表…</div>
@@ -233,9 +322,11 @@ export function MermaidBlock({ code }: { code: string }) {
           strict 模式下输出无脚本，dangerouslySetInnerHTML 安全。 */}
       <div className="relative group">
         {toolbar}
+        {auditControls}
         <div
           ref={figureRef}
           data-testid="mermaid-figure"
+          data-mermaid-block-audit={auditSnapshot}
           className="my-2 p-2 overflow-auto rounded border border-border bg-white dark:bg-transparent [&_svg]:max-w-none"
         >
           <div

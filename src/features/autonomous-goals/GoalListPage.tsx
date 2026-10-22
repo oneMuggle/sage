@@ -130,3 +130,25 @@ export function GoalListPage() {
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatGoalListFilterSummary(
+  statusFilter: GoalStatus | null,
+  goalCount = 0,
+): string {
+  const filterKey = statusFilter ?? 'all';
+  const safeGoals = Math.max(0, Math.trunc(goalCount));
+  return `filter=${filterKey} · goals=${safeGoals} · options=${STATUS_OPTIONS.length}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatGoalListFilterJson(
+  statusFilter: GoalStatus | null,
+  goalCount = 0,
+): string {
+  return JSON.stringify({
+    filter: statusFilter ?? 'all',
+    goalCount: Math.max(0, Math.trunc(goalCount)),
+    optionCount: STATUS_OPTIONS.length,
+  });
+}
+

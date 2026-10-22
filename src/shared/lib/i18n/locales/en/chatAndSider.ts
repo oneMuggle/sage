@@ -253,6 +253,7 @@ export const enChatAndSider = {
   'settings.tab.network': 'Network',
   'settings.tab.remote-workspaces': 'Remote workspaces',
   'settings.tab.mcp': 'MCP',
+  'settings.tab.plugins': 'Plugins',
   'settings.tab.zotero': 'Library',
   'settings.tab.runtime': 'Dev Environment',
   'settings.tab.providers': 'Update Sources',
@@ -356,13 +357,22 @@ export const enChatAndSider = {
   'settings.network.search.engine.tavily': 'Tavily (API key required)',
   'settings.network.search.engine.zhipu': 'Zhipu (API key required)',
   'settings.tab.evolution': 'Evolution',
+  'settings.tab.harness': 'Harness',
   'settings.tab.updates': 'Updates',
   'settings.tab.usage-stats': 'Usage Stats',
+  'settings.tab.skills': 'Skills',
   'settings.section.theme': 'Theme',
   'settings.section.appearance': 'Appearance',
   'settings.section.chat': 'Chat',
   'settings.section.data': 'Data',
   'settings.section.orch': 'Orchestration',
+  'settings.section.skills': 'Skills',
+  'settings.skills.allow_script_execution.label': 'Allow skill script execution',
+  'settings.skills.allow_script_execution.desc':
+    'When enabled, scripts in SKILL.md (e.g. Bash/PowerShell) may be dispatched for execution. When disabled, all script dispatch requests are denied.',
+  'settings.skills.directory.label': 'Skills directory',
+  'settings.skills.directory.desc':
+    'Directory for SKILL.md files (absolute path). Empty = default path ~/.sage/skills.',
 
   // ─── Settings · MCP ──────────────
   'settings.mcp.title': 'MCP Servers',
@@ -444,3 +454,17 @@ export const enChatAndSider = {
   'settings.zotero.error.unavailable':
     'Zotero database not found. Please install Zotero or specify the path manually above.',
 };
+
+export function formatEnChatAndSiderSummary(): string {
+  const keys = Object.keys(enChatAndSider);
+  return `domain=en.chatAndSider · keys=${keys.length}`;
+}
+
+export function formatEnChatAndSiderJson(): string {
+  const keys = Object.keys(enChatAndSider);
+  return JSON.stringify({
+    domain: 'en.chatAndSider',
+    keyCount: keys.length,
+  });
+}
+

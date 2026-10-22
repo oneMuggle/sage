@@ -51,3 +51,26 @@ export function useTypewriterPlaceholder(phrases: string[]): TypewriterState {
     isTyping,
   };
 }
+
+export function formatTypewriterStateSummary(
+  state: TypewriterState,
+  totalPhrases: number,
+): string {
+  return `${state.isTyping ? 'typing' : 'paused'} · len=${state.current.length} · phrases=${totalPhrases}`;
+}
+
+export function formatTypewriterStateJson(
+  state: TypewriterState,
+  totalPhrases: number,
+): string {
+  return JSON.stringify(
+    {
+      current: state.current,
+      length: state.current.length,
+      isTyping: state.isTyping,
+      totalPhrases,
+    },
+    null,
+    2,
+  );
+}

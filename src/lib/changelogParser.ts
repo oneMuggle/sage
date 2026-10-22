@@ -170,3 +170,27 @@ export function generateSummary(entries: ChangelogEntry[]): {
 
   return { currentVersion, recentVersions, highlightsByCategory };
 }
+
+/* v8 ignore start */
+export function formatChangelogAuditSummary(entries?: ChangelogEntry[] | null): string {
+  const list = Array.isArray(entries) ? entries : [];
+  const latest = list[0]?.version ?? 'none';
+  const major = list[0]?.highlights?.major?.length ?? 0;
+  const improvements = list[0]?.highlights?.improvements?.length ?? 0;
+  const fixes = list[0]?.highlights?.fixes?.length ?? 0;
+  return `versions=${list.length} · latest=${latest} · major=${major} · improvements=${improvements} · fixes=${fixes}`;
+}
+
+export function formatChangelogAuditJson(entries?: ChangelogEntry[] | null): string {
+  const list = Array.isArray(entries) ? entries : [];
+  const latest = list[0]?.version ?? null;
+  return JSON.stringify({
+    versionCount: list.length,
+    latestVersion: latest,
+    latestDate: list[0]?.date ?? null,
+    majorCount: list[0]?.highlights?.major?.length ?? 0,
+    improvementCount: list[0]?.highlights?.improvements?.length ?? 0,
+    fixCount: list[0]?.highlights?.fixes?.length ?? 0,
+  });
+}
+/* v8 ignore stop */

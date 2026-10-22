@@ -127,3 +127,42 @@ export function SourcesTree({ nodes, onFileClick, onIngest, onDelete }: SourcesT
     </div>
   );
 }
+
+export interface WikiSourcesTreeAuditInput {
+  rootNodeCount: number;
+  totalSourceFileCount: number;
+  hasFileClickHandler: boolean;
+  hasIngestHandler: boolean;
+}
+
+export interface WikiSourcesTreeAuditReport {
+  rootNodeCount: number;
+  totalSourceFileCount: number;
+  interactiveReady: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateWikiSourcesTreeGovernanceAudit(
+  input: WikiSourcesTreeAuditInput,
+): WikiSourcesTreeAuditReport {
+  const issueCodes: string[] = [];
+  if (input.rootNodeCount < 0 || input.totalSourceFileCount < 0) {
+    issueCodes.push('WIKI_SOURCES_TREE_COUNT_NEGATIVE');
+  }
+  if (input.rootNodeCount === 0 && input.totalSourceFileCount > 0) {
+    issueCodes.push('WIKI_SOURCES_TREE_ORPHAN_FILES');
+  }
+  const interactiveReady = input.hasFileClickHandler && input.hasIngestHandler;
+  if (!interactiveReady) {
+    issueCodes.push('WIKI_SOURCES_TREE_HANDLERS_INCOMPLETE');
+  }
+  return {
+    rootNodeCount: Math.max(0, Math.trunc(input.rootNodeCount)),
+    totalSourceFileCount: Math.max(0, Math.trunc(input.totalSourceFileCount)),
+    interactiveReady,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

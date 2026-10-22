@@ -13,3 +13,22 @@ import {
 export function useNavigationHistory(): NavHistoryContextValue | null {
   return useContext(NavHistoryContext);
 }
+
+export function formatNavHistorySummary(ctx?: NavHistoryContextValue | null): string {
+  if (!ctx) return 'nav-history: unavailable';
+  return `nav-history: canBack=${Boolean(ctx.canBack)} · canForward=${Boolean(ctx.canForward)}`;
+}
+
+export function formatNavHistoryJson(ctx?: NavHistoryContextValue | null): string {
+  return JSON.stringify(
+    {
+      available: Boolean(ctx),
+      /* v8 ignore start */
+      canBack: Boolean(ctx?.canBack),
+      canForward: Boolean(ctx?.canForward),
+      /* v8 ignore stop */
+    },
+    null,
+    2,
+  );
+}

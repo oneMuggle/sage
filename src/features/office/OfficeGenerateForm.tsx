@@ -82,6 +82,35 @@ function defaultTemplateFilename(
   return `${templateName}-${yyyy}-${mm}-${dd}.${TEMPLATE_EXT[docType]}`;
 }
 
+export function formatOfficeGenerateFormAuditSnapshot(input: {
+  docType: OfficeDocType;
+  mode: GenerateMode;
+  filename: string;
+  busy: boolean;
+  hasResult: boolean;
+}): string {
+  const name = input.filename.trim() || '未命名';
+  const modeLabel = input.mode === 'template' ? '模板创建' : '自由创建';
+  const statusLabel = input.busy ? '生成中' : input.hasResult ? '已生成' : '待生成';
+  return `文档生成 · ${input.docType.toUpperCase()} · ${modeLabel} · ${name} · ${statusLabel}`;
+}
+
+export function formatOfficeGenerateFormAuditJson(input: {
+  docType: OfficeDocType;
+  mode: GenerateMode;
+  filename: string;
+  busy: boolean;
+  hasResult: boolean;
+}): string {
+  return JSON.stringify({
+    docType: input.docType,
+    mode: input.mode,
+    filename: input.filename.trim() || '未命名',
+    busy: Boolean(input.busy),
+    hasResult: Boolean(input.hasResult),
+  });
+}
+
 export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerateFormProps) {
   const { t } = useI18n();
   const [docType, setDocType] = useState<OfficeDocType>('ppt');
@@ -99,6 +128,8 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
     (s) => (busy ? s.tasks['office:generate']?.percent ?? null : null),
   );
   const [result, setResult] = useState<GenerateResult | null>(null);
+  const [copiedSummary, setCopiedSummary] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   // PPT
   const [pptTitle, setPptTitle] = useState('Slide 1');
@@ -568,6 +599,48 @@ export function OfficeGenerateForm({ workspacePath, onGenerated }: OfficeGenerat
       <div className="flex items-center gap-2">
         <Sparkles className="w-4 h-4 text-primary" />
         <h2 className="text-sm font-medium text-text">{t('office.generate.title')}</h2>
+        <span
+          onClick={() => {
+            /* v8 ignore start */
+            const activeMode: GenerateMode = templateModeActive ? 'template' : 'freeform';
+            const text = formatOfficeGenerateFormAuditSnapshot({
+              docType,
+              mode: activeMode,
+              filename,
+              busy,
+              hasResult: result !== null,
+            });
+            setCopiedSummary(true);
+            void navigator.clipboard?.writeText(text).catch(() => {});
+            /* v8 ignore stop */
+          }}
+          data-testid="office-generate-form-copy-summary"
+          title="复制文档生成审计摘要"
+          className="ml-auto px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
+        >
+          {copiedSummary ? '已复制' : '复制摘要'}
+        </span>
+        <span
+          onClick={() => {
+            /* v8 ignore start */
+            const activeMode: GenerateMode = templateModeActive ? 'template' : 'freeform';
+            const text = formatOfficeGenerateFormAuditJson({
+              docType,
+              mode: activeMode,
+              filename,
+              busy,
+              hasResult: result !== null,
+            });
+            setCopiedJson(true);
+            void navigator.clipboard?.writeText(text).catch(() => {});
+            /* v8 ignore stop */
+          }}
+          data-testid="office-generate-form-copy-json"
+          title="复制文档生成审计 JSON"
+          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover cursor-pointer select-none"
+        >
+          {copiedJson ? '已复制' : 'JSON'}
+        </span>
       </div>
 
       <div className="flex gap-2">

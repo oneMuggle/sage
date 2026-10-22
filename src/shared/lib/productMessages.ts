@@ -24,3 +24,25 @@ const en: typeof zh = {
 export function productMessages(locale?: string): typeof zh {
   return locale === 'en' ? en : zh;
 }
+
+export function formatProductMessagesSummary(locale?: string): string {
+  const resolved = locale === 'en' ? 'en' : 'zh';
+  const zhKeys = Object.keys(zh);
+  const enKeys = Object.keys(en);
+  const parity = zhKeys.length === enKeys.length && zhKeys.every((k) => k in en);
+  return `locale=${resolved} · keys=${zhKeys.length} · parity=${parity}`;
+}
+
+export function formatProductMessagesJson(locale?: string): string {
+  const resolved = locale === 'en' ? 'en' : 'zh';
+  const zhKeys = Object.keys(zh);
+  const enKeys = Object.keys(en);
+  const parity = zhKeys.length === enKeys.length && zhKeys.every((k) => k in en);
+  return JSON.stringify({
+    locale: resolved,
+    keyCount: zhKeys.length,
+    parity,
+    keys: zhKeys,
+  });
+}
+

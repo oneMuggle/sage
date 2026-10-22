@@ -4,7 +4,14 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { clearPreviewCss, injectPersistedStyle, injectPreviewCss, removePersistedStyle, setCoverImage } from '../backgroundInjector';
+import {
+  clearPreviewCss,
+  injectPersistedStyle,
+  injectPreviewCss,
+  removePersistedStyle,
+  setCoverImage,
+} from '../backgroundInjector';
+import { formatBackgroundInjectionJson, formatBackgroundInjectionSummary } from '../backgroundInjector';
 
 describe('backgroundInjector', () => {
   beforeEach(() => {
@@ -75,6 +82,25 @@ describe('backgroundInjector', () => {
       setCoverImage('');
       const value = document.documentElement.style.getPropertyValue('--cover-image');
       expect(value).toBe('');
+    });
+  });
+
+  describe('formatBackgroundInjectionSummary & formatBackgroundInjectionJson (Phase P111)', () => {
+    it('summarizes injected preview, persisted style and cover image', () => {
+      injectPreviewCss(':root {}');
+      injectPersistedStyle('custom-1', ':root {}');
+      setCoverImage('data:image/png;base64,abc');
+      expect(formatBackgroundInjectionSummary('custom-1')).toBe(
+        'preview=true · persisted=true · cover=true',
+      );
+      const parsed = JSON.parse(formatBackgroundInjectionJson('custom-1'));
+      expect(parsed).toEqual({
+        hasPreview: true,
+        persistedId: 'custom-1',
+        hasPersisted: true,
+        hasCoverImage: true,
+      });
+      setCoverImage('');
     });
   });
 });

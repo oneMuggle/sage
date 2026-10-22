@@ -15,7 +15,11 @@ vi.mock('../../../features/chat/messageJumpStore', () => ({
 
 import { useStore } from '../../../shared/lib/store';
 import type { Session } from '../../../shared/lib/store';
-import { TrajectoryPane } from '../TrajectoryPane';
+import {
+  buildTrajectoryPaneAuditJson,
+  buildTrajectoryPaneAuditSnapshot,
+  TrajectoryPane,
+} from '../TrajectoryPane';
 
 const sid = 's-pane';
 
@@ -167,5 +171,46 @@ describe('TrajectoryPane', () => {
     render(<TrajectoryPane sessionId={sid} />);
     expect(screen.getByText('暂无轨迹')).toBeInTheDocument();
     expect(screen.queryByTestId('trajectory-entry')).not.toBeInTheDocument();
+  });
+
+  it('exports TrajectoryPane audit snapshot/JSON helpers and supports copy controls', () => {
+    expect(buildTrajectoryPaneAuditSnapshot()).toBe(
+      'session:none|total:0|filtered:0|filter:all|query:no|expanded:none',
+    );
+    expect(
+      buildTrajectoryPaneAuditSnapshot({
+        sessionId: 'sess-1',
+        totalEntries: 4,
+        filteredCount: 2,
+        roleFilter: 'tool',
+        hasQuery: true,
+        expandedId: 'a1',
+      }),
+    ).toBe('session:sess-1|total:4|filtered:2|filter:tool|query:yes|expanded:a1');
+
+    const parsed = JSON.parse(
+      buildTrajectoryPaneAuditJson({
+        sessionId: 'sess-1',
+        totalEntries: 2,
+        filteredCount: 2,
+      }),
+    );
+    expect(parsed).toEqual({
+      sessionId: 'sess-1',
+      totalEntries: 2,
+      filteredCount: 2,
+      roleFilter: 'all',
+      hasQuery: false,
+      expandedId: 'none',
+      snapshot: 'session:sess-1|total:2|filtered:2|filter:all|query:no|expanded:none',
+    });
+
+    render(<TrajectoryPane sessionId={sid} />);
+    const copyAudit = screen.getByTestId('trajectory-pane-copy-audit');
+    const copyJson = screen.getByTestId('trajectory-pane-copy-audit-json');
+    fireEvent.click(copyAudit);
+    expect(copyAudit).toHaveTextContent('已复制快照');
+    fireEvent.click(copyJson);
+    expect(copyJson).toHaveTextContent('已复制 JSON');
   });
 });

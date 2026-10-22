@@ -96,3 +96,48 @@ describe('memoryApi.getMemories response normalization', () => {
     });
   });
 });
+
+describe('memoryApi diagnostic formatters (Phase P113)', () => {
+  it('formats memory list summary and JSON payload', async () => {
+    const { formatMemoryListSummary, formatMemoryListJson } = await import('../memoryApi');
+    const res = {
+      items: [
+        {
+          id: 'm1',
+          content: 'remember this',
+          importance: 5,
+          tags: [],
+          created_at: 100,
+          access_count: 1,
+        },
+      ],
+      total: 4,
+      page: 2,
+      page_size: 20,
+      offset: 20,
+      layer: 'semantic' as const,
+      source_breakdown: {
+        episodic: 1,
+        semantic: 3,
+        working: 0,
+        session_summary: 0,
+      },
+    };
+    expect(formatMemoryListSummary(res)).toBe('semantic · 1/4 items · page 2');
+    const parsed = JSON.parse(formatMemoryListJson(res));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.memory_list.v1',
+      layer: 'semantic',
+      page: 2,
+      pageSize: 20,
+      total: 4,
+      itemCount: 1,
+      sourceBreakdown: {
+        episodic: 1,
+        semantic: 3,
+        working: 0,
+        session_summary: 0,
+      },
+    });
+  });
+});

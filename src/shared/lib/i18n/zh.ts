@@ -5,12 +5,29 @@ import { zhChatAndSider } from './locales/zh/chatAndSider';
 import { zhSettingsAndModels } from './locales/zh/settingsAndModels';
 import { zhWorkspaceAndTools } from './locales/zh/workspaceAndTools';
 import { pausedMemoryZh } from './pausedMemory';
+import { retryBannerZh } from './retryBanner';
 
 export const zh = {
   ...zhChatAndSider,
   ...zhSettingsAndModels,
   ...zhWorkspaceAndTools,
   ...pausedMemoryZh,
+  ...retryBannerZh,
 } as const;
 
 export type TranslationKey = keyof typeof zh;
+
+export function formatChineseTranslationsSummary(): string {
+  const keys = Object.keys(zh);
+  return `locale=zh · keys=${keys.length}`;
+}
+
+export function formatChineseTranslationsJson(): string {
+  const keys = Object.keys(zh);
+  return JSON.stringify({
+    locale: 'zh',
+    keyCount: keys.length,
+    hasChatTitle: 'chat.title' in zh,
+  });
+}
+

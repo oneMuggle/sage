@@ -355,3 +355,40 @@ function ModelBreakdown({
     </Card>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditUsageStatsTabGovernance(
+  state: {
+    totalTokens?: number;
+    sessionCount?: number;
+    timeRangeDays?: number;
+  } = {},
+): {
+  module: 'src/pages/settings/UsageStatsTab.tsx';
+  phase: 'P143';
+  totalTokens: number;
+  sessionCount: number;
+  timeRangeDays: number;
+  healthy: boolean;
+} {
+  const totalTokens =
+    typeof state.totalTokens === 'number' && Number.isFinite(state.totalTokens)
+      ? Math.max(0, Math.trunc(state.totalTokens))
+      : 0;
+  const sessionCount =
+    typeof state.sessionCount === 'number' && Number.isFinite(state.sessionCount)
+      ? Math.max(0, Math.trunc(state.sessionCount))
+      : 0;
+  const timeRangeDays =
+    typeof state.timeRangeDays === 'number' && Number.isFinite(state.timeRangeDays)
+      ? Math.max(1, Math.trunc(state.timeRangeDays))
+      : 30;
+  return {
+    module: 'src/pages/settings/UsageStatsTab.tsx',
+    phase: 'P143',
+    totalTokens,
+    sessionCount,
+    timeRangeDays,
+    healthy: totalTokens >= 0 && sessionCount >= 0 && timeRangeDays >= 1,
+  };
+}

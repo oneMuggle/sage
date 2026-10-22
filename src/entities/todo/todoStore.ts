@@ -77,3 +77,40 @@ export const useTodoStore = create<TodoState>((set, get) => ({
     set({ summary: next });
   },
 }));
+
+export interface TodoStoreAuditInput {
+  todoCount?: number;
+  pendingCount?: number;
+  loading?: boolean;
+  hasError?: boolean;
+  hasSummary?: boolean;
+}
+
+export function buildTodoStoreAuditSnapshot(
+  input: TodoStoreAuditInput = {},
+): string {
+  const todoCount = Math.max(0, input.todoCount ?? 0);
+  const pendingCount = Math.max(0, input.pendingCount ?? 0);
+  const loading = Boolean(input.loading);
+  const hasError = Boolean(input.hasError);
+  const hasSummary = Boolean(input.hasSummary);
+  return `todos:${todoCount}|pending:${pendingCount}|loading:${loading ? 'yes' : 'no'}|err:${hasError ? 'yes' : 'no'}|summary:${hasSummary ? 'yes' : 'no'}`;
+}
+
+export function buildTodoStoreAuditJson(
+  input: TodoStoreAuditInput = {},
+): string {
+  const todoCount = Math.max(0, input.todoCount ?? 0);
+  const pendingCount = Math.max(0, input.pendingCount ?? 0);
+  const loading = Boolean(input.loading);
+  const hasError = Boolean(input.hasError);
+  const hasSummary = Boolean(input.hasSummary);
+  return JSON.stringify({
+    todoCount,
+    pendingCount,
+    loading,
+    hasError,
+    hasSummary,
+    snapshot: buildTodoStoreAuditSnapshot(input),
+  });
+}

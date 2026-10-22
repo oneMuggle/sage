@@ -17,6 +17,7 @@ import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { ENABLE_UPDATE_PROVIDERS_UI } from '../../shared/updateFeatureFlag';
 import { EvolutionLog } from '../../widgets/evolution/EvolutionLog';
 import { EvolutionPanel } from '../../widgets/evolution/EvolutionPanel';
+import { HarnessDashboard } from '../../widgets/harness/HarnessDashboard';
 
 import { BasicTab } from './BasicTab';
 import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
@@ -27,9 +28,11 @@ import { MemorySettingsTab } from './MemorySettingsTab';
 import { ModelsTab } from './ModelsTab';
 import { NetworkTab } from './NetworkTab';
 import { OrchestrationTab } from './OrchestrationTab';
+import { PluginsTab } from './PluginsTab';
 import { ProvidersManager } from './ProvidersManager';
 import { RemoteWorkspacesTab } from './RemoteWorkspacesTab';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
+import { SkillsTab } from './SkillsTab';
 import { ToolsConnectionsTab } from './ToolsConnectionsTab';
 import { UpdatesTab } from './UpdatesTab';
 import { UsageStatsTab } from './UsageStatsTab';
@@ -111,16 +114,20 @@ export function Settings() {
     { key: 'memory', label: t('settings.tab.memory') },
     { key: 'network', label: t('settings.tab.network') },
     { key: 'mcp', label: t('settings.tab.mcp') },
+    { key: 'plugins', label: t('settings.tab.plugins') },
     { key: 'remote-workspaces', label: t('settings.tab.remote-workspaces') },
     { key: 'zotero', label: t('settings.tab.zotero') },
     { key: 'runtime', label: t('settings.tab.runtime') },
     { key: 'evolution', label: t('settings.tab.evolution') },
+    { key: 'harness', label: t('settings.tab.harness') },
     { key: 'updates', label: t('settings.tab.updates') },
     { key: 'usage-stats', label: t('settings.tab.usage-stats' as TranslationKey) },
   ];
   if (ENABLE_UPDATE_PROVIDERS_UI()) {
     tabs.push({ key: 'providers', label: t('settings.tab.providers' as TranslationKey) });
   }
+  // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
+  tabs.push({ key: 'skills', label: t('settings.tab.skills' as TranslationKey) });
 
   // 设置项级搜索：命中项列表 + 其所属 tab（导航区仍按 tab 名过滤）
   const matchedItems = useMemo(() => searchSettings(searchQuery), [searchQuery]);
@@ -313,6 +320,7 @@ export function Settings() {
             {activeTab === 'network' && <NetworkTab />}
             {activeTab === 'remote-workspaces' && <RemoteWorkspacesTab />}
             {activeTab === 'mcp' && <McpTab />}
+            {activeTab === 'plugins' && <PluginsTab />}
             {activeTab === 'zotero' && <ZoteroTab />}
             {activeTab === 'runtime' && <RuntimeEnvTab />}
             {activeTab === 'evolution' && (
@@ -321,9 +329,11 @@ export function Settings() {
                 <EvolutionLog />
               </div>
             )}
+            {activeTab === 'harness' && <HarnessDashboard />}
             {activeTab === 'updates' && <UpdatesTab />}
             {activeTab === 'usage-stats' && <UsageStatsTab />}
             {activeTab === 'providers' && ENABLE_UPDATE_PROVIDERS_UI() && <ProvidersManager />}
+            {activeTab === 'skills' && <SkillsTab />}
           </div>
         </div>
       </div>

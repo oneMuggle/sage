@@ -9,7 +9,7 @@ vi.mock('../backendRequest', () => ({
   backendRequest: (...args: unknown[]) => mockBackendRequest(...args),
 }));
 
-import { gatewayApiFor, gatewayAllowedIds } from '../gatewayApi';
+import { formatGatewayConfigJson, formatGatewayConfigSummary, gatewayAllowedIds, gatewayApiFor } from '../gatewayApi';
 
 beforeEach(() => { mockBackendRequest.mockReset(); });
 
@@ -56,5 +56,30 @@ describe('gatewayAllowedIds', () => {
 
   it('extracts allowed_channel_ids from Discord/Slack config', () => {
     expect(gatewayAllowedIds({ allowed_channel_ids: ['456'], configured: true, enabled: true, source: 'env', bot_token_masked: '***' } as never)).toEqual(['456']);
+  });
+});
+
+describe('formatGatewayConfigSummary / formatGatewayConfigJson', () => {
+  it('formats gateway config summary and JSON payload', () => {
+    expect(formatGatewayConfigSummary('telegram', null)).toBe('gateway: telegram · unconfigured');
+    const cfg = {
+      configured: true,
+      enabled: true,
+      source: 'settings' as const,
+      bot_token_masked: '***',
+      allowed_chat_ids: ['123', '456'],
+    };
+    expect(formatGatewayConfigSummary('telegram', cfg)).toBe(
+      'gateway: telegram · enabled · source=settings · 2 allowed',
+    );
+    const payload = JSON.parse(formatGatewayConfigJson('telegram', cfg));
+    expect(payload).toEqual({
+      platform: 'telegram',
+      label: 'Telegram',
+      configured: true,
+      enabled: true,
+      source: 'settings',
+      allowedCount: 2,
+    });
   });
 });

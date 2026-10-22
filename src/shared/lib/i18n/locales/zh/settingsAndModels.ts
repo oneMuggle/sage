@@ -427,3 +427,17 @@ export const zhSettingsAndModels = {
   'office.generate.size': '大小:',
   'office.preview.empty': '选择一个文件以预览',
 } as const;
+
+export function formatZhSettingsAndModelsSummary(): string {
+  const keys = Object.keys(zhSettingsAndModels);
+  return `domain=zh.settingsAndModels · keys=${keys.length}`;
+}
+
+export function formatZhSettingsAndModelsJson(): string {
+  const keys = Object.keys(zhSettingsAndModels);
+  return JSON.stringify({
+    domain: 'zh.settingsAndModels',
+    keyCount: keys.length,
+  });
+}
+

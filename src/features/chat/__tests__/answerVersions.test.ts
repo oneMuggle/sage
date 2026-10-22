@@ -2,7 +2,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Message } from '../../../shared/lib/store';
-import { activateAnswerVersion, fetchAnswerVersions, lastTurnAnchorIndex, regenerateInPlace } from '../answerVersions';
+import {
+  activateAnswerVersion,
+  fetchAnswerVersions,
+  lastTurnAnchorIndex,
+  buildAnswerVersionsAuditJson,
+  buildAnswerVersionsAuditSnapshot,
+  regenerateInPlace,
+} from '../answerVersions';
 
 const backendRequest = vi.fn();
 vi.mock('../../../shared/api/backendRequest', () => ({
@@ -87,5 +94,54 @@ describe('answer version api', () => {
       path: '/api/v1/sessions/s1/answer-versions/ver-1/activate',
       method: 'POST',
     });
+  });
+});
+
+describe('answerVersions governance audit helpers (Phase P107)', () => {
+  it('builds deterministic audit snapshot and JSON across empty and populated version lists', () => {
+    const emptySnap = buildAnswerVersionsAuditSnapshot(null);
+    expect(emptySnap).toEqual({
+      anchorId: null,
+      total: 0,
+      currentIndex: 0,
+      versionCount: 0,
+      currentVersionId: null,
+      hasMultipleVersions: false,
+      demoMode: false,
+      signature: '-|0|0|0|-|0|0',
+    });
+
+    const populated = buildAnswerVersionsAuditSnapshot({
+      anchor_id: 'u2',
+      total: 2,
+      current_index: 2,
+      versions: [
+        { id: 'ver-1', generated_at: 100, preview: 'old', current: false },
+        { id: 'current', generated_at: 200, preview: 'new', current: true },
+      ],
+    });
+    expect(populated).toEqual({
+      anchorId: 'u2',
+      total: 2,
+      currentIndex: 2,
+      versionCount: 2,
+      currentVersionId: 'current',
+      hasMultipleVersions: true,
+      demoMode: false,
+      signature: 'u2|2|2|2|current|1|0',
+    });
+    expect(
+      JSON.parse(
+        buildAnswerVersionsAuditJson({
+          anchor_id: 'u2',
+          total: 2,
+          current_index: 2,
+          versions: [
+            { id: 'ver-1', generated_at: 100, preview: 'old', current: false },
+            { id: 'current', generated_at: 200, preview: 'new', current: true },
+          ],
+        }),
+      ),
+    ).toEqual(populated);
   });
 });

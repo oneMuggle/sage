@@ -339,4 +339,22 @@ describe('fileSearchClient — AtFileSelection helpers', () => {
       }),
     ).toBeNull();
   });
+
+  it('formats file search result summary and JSON (Phase P112)', async () => {
+    const { formatFileSearchResultSummary, formatFileSearchResultJson } = await import(
+      '../fileSearchClient'
+    );
+    const item = {
+      path: '/w/m.pptx',
+      name: 'm.pptx',
+      kind: 'office-ppt' as const,
+      docId: 'doc-m',
+      docType: 'ppt' as const,
+      sourcePath: '/w/m.pptx',
+    };
+    expect(formatFileSearchResultSummary(item)).toBe('m.pptx · office-ppt · class=office');
+    const parsed = JSON.parse(formatFileSearchResultJson(item));
+    expect(parsed.classification).toBe('office');
+    expect(parsed.docId).toBe('doc-m');
+  });
 });

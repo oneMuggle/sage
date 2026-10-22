@@ -112,3 +112,20 @@ describe('themeCssClient', () => {
     });
   });
 });
+
+describe('themeCssClient diagnostic formatters (Phase P113)', () => {
+  it('formats custom theme CSS summary and JSON payload', async () => {
+    const { formatThemeCssSummary, formatThemeCssJson } = await import('../themeCssClient');
+    expect(formatThemeCssSummary(validPayload)).toBe(
+      `测试主题 (${validPayload.id}) · dark · ${validPayload.css.length} chars`,
+    );
+    const parsed = JSON.parse(formatThemeCssJson(validPayload));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.theme_css.v1',
+      id: validPayload.id,
+      name: '测试主题',
+      appearance: 'dark',
+      cssLength: validPayload.css.length,
+    });
+  });
+});

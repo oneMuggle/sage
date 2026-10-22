@@ -5,7 +5,7 @@ const { read, write } = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }));
 vi.mock('../../../shared/api/settingsClient', () => ({
   settingsClient: { getPreferenceStrict: read, setPreferenceStrict: write },
 }));
-import { useConfirmedPreference } from '../useConfirmedPreference';
+import { formatConfirmedPreferenceJson, formatConfirmedPreferenceSummary, useConfirmedPreference } from '../useConfirmedPreference';
 const options = {
   key: 'fallback_model' as const,
   initial: '',
@@ -65,5 +65,19 @@ describe('confirmed preference updates', () => {
       await state.result.current.reload();
     });
     expect(state.result.current.value).toBe('confirmed');
+  });
+});
+
+describe('formatConfirmedPreferenceSummary / formatConfirmedPreferenceJson', () => {
+  it('formats confirmed preference summary and JSON payload', () => {
+    expect(formatConfirmedPreferenceSummary('fallback_model', 'saved', true)).toBe(
+      'preference: fallback_model · status=saved · loaded',
+    );
+    const payload = JSON.parse(formatConfirmedPreferenceJson('fallback_model', 'error', false));
+    expect(payload).toEqual({
+      key: 'fallback_model',
+      status: 'error',
+      loaded: false,
+    });
   });
 });

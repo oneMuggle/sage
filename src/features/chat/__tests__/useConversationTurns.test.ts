@@ -9,7 +9,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useStore } from '../../../shared/lib/store';
 import type { Session } from '../../../shared/lib/store';
-import { TURN_PREVIEW_MAX_CHARS, useConversationTurns } from '../useConversationTurns';
+import {
+  TURN_PREVIEW_MAX_CHARS,
+  useConversationTurns,
+} from '../useConversationTurns';
+import { formatConversationTurnsJson, formatConversationTurnsSummary } from '../useConversationTurns';
 
 
 const sid = 's-turns';
@@ -98,5 +102,18 @@ describe('useConversationTurns', () => {
   it('returns empty for null session', () => {
     const { result } = renderHook(() => useConversationTurns(null));
     expect(result.current.items).toHaveLength(0);
+  });
+
+  it('formats conversation turns summary and JSON (Phase P109)', () => {
+    expect(formatConversationTurnsSummary([])).toBe('0 turns');
+    const items = [
+      { index: 1, messageId: 'u1', preview: 'First' },
+      { index: 2, messageId: 'u2', preview: 'Second' },
+    ];
+    expect(formatConversationTurnsSummary(items)).toBe('2 turns · latest=#2 (u2)');
+    const parsed = JSON.parse(formatConversationTurnsJson(items));
+    expect(parsed.turnCount).toBe(2);
+    expect(parsed.maxPreviewChars).toBe(TURN_PREVIEW_MAX_CHARS);
+    expect(parsed.items).toHaveLength(2);
   });
 });

@@ -82,3 +82,28 @@ function createWindowControls(): WindowControlsBridge {
 }
 
 export const windowControls: WindowControlsBridge = createWindowControls();
+
+export function formatWindowPlatformSummary(
+  platform: Platform,
+  hasNativeBridge = getWindowControlsBridge() !== null,
+): string {
+  const env = isElectronDesktop(platform) ? 'desktop' : 'web';
+  const bridge = hasNativeBridge ? 'ipc-bridge' : 'web-stub';
+  return `${platform} · ${env} · ${bridge}`;
+}
+
+export function formatWindowPlatformJson(
+  platform: Platform,
+  hasNativeBridge = getWindowControlsBridge() !== null,
+): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.window_platform.v1',
+      platform,
+      isDesktop: isElectronDesktop(platform),
+      hasNativeBridge,
+    },
+    null,
+    2,
+  );
+}

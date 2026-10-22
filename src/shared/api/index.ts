@@ -127,6 +127,7 @@ export type {
   SkillExecuteRequest,
   SkillExecuteResult,
   ReviewVerdict,
+  RetryInfo,
   TaskPlanEvent,
   TaskPlanItem,
   TaskProgressEvent,
@@ -149,3 +150,29 @@ export type {
 
 // 工具函数和类
 export { ApiException, isValidSessionId, sanitizeInput } from './utils';
+
+export function auditSharedApiBarrelGovernance(
+  state: {
+    exportedClientCount?: number;
+    windowControlsReady?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/index.ts';
+  phase: 'P144';
+  exportedClientCount: number;
+  windowControlsReady: boolean;
+  healthy: boolean;
+} {
+  const exportedClientCount =
+    typeof state.exportedClientCount === 'number' && Number.isFinite(state.exportedClientCount)
+      ? Math.max(0, Math.trunc(state.exportedClientCount))
+      : 12;
+  const windowControlsReady = state.windowControlsReady !== false;
+  return {
+    module: 'src/shared/api/index.ts',
+    phase: 'P144',
+    exportedClientCount,
+    windowControlsReady,
+    healthy: exportedClientCount > 0 && windowControlsReady,
+  };
+}

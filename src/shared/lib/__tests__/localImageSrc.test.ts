@@ -34,3 +34,20 @@ describe('buildLocalImageSrc', () => {
     expect(buildLocalImageSrc('/api/v1/media/abc')).toBe('/api/v1/media/abc');
   });
 });
+
+describe('localImageSrc diagnostic formatters (Phase P114)', () => {
+  it('formats local image src summary and JSON payload', async () => {
+    const { formatLocalImageSrcSummary, formatLocalImageSrcJson } = await import(
+      '../localImageSrc'
+    );
+    expect(formatLocalImageSrcSummary('https://x/a.png')).toBe('passthrough · https://x/a.png');
+    const parsed = JSON.parse(formatLocalImageSrcJson('./img/chart.png', '/home/u/ws'));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.local_image_src.v1',
+      src: './img/chart.png',
+      workspacePath: '/home/u/ws',
+      resolved: `sage-file://p/${encodeURIComponent('/home/u/ws/img/chart.png')}`,
+      isSageFile: true,
+    });
+  });
+});

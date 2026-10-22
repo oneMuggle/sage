@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Skill } from '../../../shared/api/types';
-import { insertSkillRef, invalidRefLabels, parseSkillRefs, removeSkillRef, summarizeTaskSkillHealth, validateSkillRefs } from '../skillLink';
+import {
+  insertSkillRef,
+  invalidRefLabels,
+  parseSkillRefs,
+  removeSkillRef,
+  formatTaskSkillHealthJson,
+  formatTaskSkillHealthSummary,
+  summarizeTaskSkillHealth,
+  validateSkillRefs,
+} from '../skillLink';
 
 function skill(name: string, enabled = true): Skill {
   return {
@@ -70,5 +79,23 @@ describe('scheduled/skillLink', () => {
     expect(loaded.hasInvalid).toBe(true);
     expect(loaded.known).toEqual(['writer']);
     expect(loaded.invalidLabels).toEqual(['/ghost（未注册）', '/search（已停用）']);
+  });
+});
+
+describe('formatTaskSkillHealthSummary / formatTaskSkillHealthJson', () => {
+  it('formats task skill health summary and JSON payload', () => {
+    expect(formatTaskSkillHealthSummary(null)).toBe('skill-refs: 0 refs · unloaded');
+    const health = summarizeTaskSkillHealth('执行 /writer 与 /ghost', [skill('writer', true)]);
+    expect(formatTaskSkillHealthSummary(health)).toBe(
+      'skill-refs: 2 refs · 1 known · 1 invalid · loaded',
+    );
+    const payload = JSON.parse(formatTaskSkillHealthJson(health));
+    expect(payload).toEqual({
+      totalRefs: 2,
+      knownCount: 1,
+      invalidCount: 1,
+      hasInvalid: true,
+      skillsLoaded: true,
+    });
   });
 });

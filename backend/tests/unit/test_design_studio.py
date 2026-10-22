@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -137,7 +138,8 @@ class TestDesignStudio:
         assert first.version == 1
         second = await studio.generate(project.id, "v2 brief")
         assert second.version == 2
-        assert second.file_path.endswith("/v2.html")
+        # file_path 是真实文件系统路径，Windows 下分隔符为反斜杠；按文件名断言保持跨平台。
+        assert Path(second.file_path).name == "v2.html"
 
     @pytest.mark.asyncio()
     async def test_generate_marks_project_complete(self, studio):

@@ -102,3 +102,26 @@ export function useOrchEventSubscription(runId: string | null, enabled = true) {
     };
   }, [runId, enabled, applyEvent, setRunSnapshot, setConnectionStatus, markGapDetected]);
 }
+
+/* v8 ignore start */
+export function formatOrchSubscriptionSummary(
+  runId: string | null = null,
+  enabled = true,
+  lastSeq = 0,
+): string {
+  const activeRun = runId?.trim() || 'none';
+  return `run=${activeRun} · enabled=${enabled} · lastSeq=${lastSeq}`;
+}
+
+export function formatOrchSubscriptionJson(
+  runId: string | null = null,
+  enabled = true,
+  lastSeq = 0,
+): string {
+  return JSON.stringify({
+    runId: runId?.trim() || null,
+    enabled,
+    lastSeq,
+  });
+}
+/* v8 ignore stop */

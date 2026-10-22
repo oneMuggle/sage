@@ -243,3 +243,28 @@ export interface SelectDirectoryOpts {
   intent: 'create' | 'open';
   defaultPath?: string;
 }
+
+export function formatWikiProjectSummary(
+  project: WikiProject | null | undefined,
+  recentCount = 0,
+): string {
+  const safeRecent = Math.max(0, Math.round(recentCount));
+  const projectId = project?.id?.trim() ? project.id.trim() : 'none';
+  const bound = Boolean(project?.path?.trim());
+  return `project=${projectId} · bound=${bound} · recent=${safeRecent}`;
+}
+
+export function formatWikiProjectJson(
+  project: WikiProject | null | undefined,
+  recentCount = 0,
+): string {
+  const safeRecent = Math.max(0, Math.round(recentCount));
+  return JSON.stringify({
+    projectId: project?.id?.trim() ? project.id.trim() : null,
+    name: project?.name?.trim() ? project.name.trim() : null,
+    path: project?.path?.trim() ? project.path.trim() : null,
+    bound: Boolean(project?.path?.trim()),
+    recentCount: safeRecent,
+  });
+}
+

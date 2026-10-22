@@ -1,7 +1,15 @@
 // 对话阅读体验 B4：会话内查找的纯逻辑 —— 命中列表、计数口径、快捷键分发。
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildFindMatches, CHAT_FIND_EVENT, countOccurrences, dispatchFindShortcut, FOCUS_SEARCH_EVENT } from '../chatFind';
+import {
+  buildFindMatches,
+  CHAT_FIND_EVENT,
+  countOccurrences,
+  dispatchFindShortcut,
+  buildChatFindAuditJson,
+  buildChatFindAuditSnapshot,
+  FOCUS_SEARCH_EVENT,
+} from '../chatFind';
 
 const messages = [
   { id: 'u1', role: 'user', content: '怎么配置 **Sage** 的代理？' },
@@ -66,5 +74,32 @@ describe('dispatchFindShortcut', () => {
     window.removeEventListener(CHAT_FIND_EVENT, claim);
     expect(dispatchFindShortcut(false)).toBe(false);
     expect(focusSearch).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('chatFind governance audit helpers (Phase P107)', () => {
+  it('builds deterministic audit snapshot and JSON across empty and matched searches', () => {
+    const emptySnap = buildChatFindAuditSnapshot();
+    expect(emptySnap).toEqual({
+      query: '',
+      messageCount: 0,
+      searchableMessageCount: 0,
+      matchCount: 0,
+      matchedMessageCount: 0,
+      firstMatchMessageId: null,
+      signature: '-|0|0|0|0|-',
+    });
+
+    const hitSnap = buildChatFindAuditSnapshot(messages, ' SAGE ');
+    expect(hitSnap).toEqual({
+      query: 'sage',
+      messageCount: 4,
+      searchableMessageCount: 2,
+      matchCount: 4,
+      matchedMessageCount: 2,
+      firstMatchMessageId: 'u1',
+      signature: 'sage|4|2|4|2|u1',
+    });
+    expect(JSON.parse(buildChatFindAuditJson(messages, ' SAGE '))).toEqual(hitSnap);
   });
 });

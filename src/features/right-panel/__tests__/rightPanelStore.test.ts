@@ -7,7 +7,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useStore } from '../../../shared/lib/store';
 import { useArtifactEventsStore } from '../../artifacts/artifactEventsStore';
-import { isArtifactAutoOpenEnabled, maybeAutoOpenArtifactPanel, setArtifactAutoOpenEnabled, useRightPanelStore } from '../rightPanelStore';
+import {
+  isArtifactAutoOpenEnabled,
+  maybeAutoOpenArtifactPanel,
+  setArtifactAutoOpenEnabled,
+  useRightPanelStore,
+} from '../rightPanelStore';
+import { formatRightPanelStateJson, formatRightPanelStateSummary } from '../rightPanelStore';
 
 const SID = 'sess-rp1';
 
@@ -101,5 +107,19 @@ describe('maybeAutoOpenArtifactPanel — 自动唤起守卫', () => {
     expect(isArtifactAutoOpenEnabled()).toBe(false);
     maybeAutoOpenArtifactPanel(SID);
     expect(useRightPanelStore.getState().open).toBe(false);
+  });
+
+  it('formats right panel state summary and JSON (Phase P110)', () => {
+    useRightPanelStore.getState().selectArtifact('art-42');
+    expect(formatRightPanelStateSummary()).toBe(
+      'open · tab=artifacts · max=false · artifact=art-42',
+    );
+    const parsed = JSON.parse(formatRightPanelStateJson());
+    expect(parsed).toEqual({
+      open: true,
+      tab: 'artifacts',
+      maximized: false,
+      selectedArtifactId: 'art-42',
+    });
   });
 });

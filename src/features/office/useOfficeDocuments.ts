@@ -421,3 +421,27 @@ export function useOfficeDocuments(workspacePath: string | null): UseOfficeDocum
     findDocument,
   };
 }
+
+export function formatOfficeDocumentsBatchSummary(result: {
+  succeeded: string[];
+  failed: string[];
+}): string {
+  return `succeeded=${result.succeeded.length} · failed=${result.failed.length}`;
+}
+
+export function formatOfficeDocumentsBatchJson(result: {
+  succeeded: string[];
+  failed: string[];
+}): string {
+  return JSON.stringify(
+    {
+      total: result.succeeded.length + result.failed.length,
+      succeededCount: result.succeeded.length,
+      failedCount: result.failed.length,
+      succeeded: result.succeeded,
+      failed: result.failed,
+    },
+    null,
+    2,
+  );
+}

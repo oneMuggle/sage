@@ -57,3 +57,26 @@ export const Switch = forwardRef<
   </SwitchPrimitive.Root>
 ));
 Switch.displayName = SwitchPrimitive.Root.displayName;
+export function formatSwitchStateSummary(state: {
+  checked?: boolean;
+  disabled?: boolean;
+  label?: string;
+}): string {
+  return `${state.label ?? 'switch'} · ${state.checked ? 'checked' : 'unchecked'} · disabled=${Boolean(state.disabled)}`;
+}
+
+export function formatSwitchStateJson(state: {
+  checked?: boolean;
+  disabled?: boolean;
+  label?: string;
+}): string {
+  return JSON.stringify(
+    {
+      label: state.label ?? null,
+      checked: Boolean(state.checked),
+      disabled: Boolean(state.disabled),
+    },
+    null,
+    2,
+  );
+}

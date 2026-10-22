@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-10-21T14:48:51Z",
+  "plugins": [
+    {
+      "name": "hello-tool",
+      "version": "0.1.0",
+      "manifest": {
+        "schema_version": "1.0",
+        "name": "hello-tool",
+        "version": "0.1.0",
+        "type": "personal",
+        "metadata": {
+          "display_name": "Hello Tool",
+          "description": "A minimal out-of-process Sage tool plugin.",
+          "icon": null,
+          "author": "Sage contributors",
+          "homepage": null,
+          "repository": null,
+          "license": "MIT",
+          "categories": [
+            "tool"
+          ],
+          "tags": [
+            "sage-plugin",
+            "tool"
+          ],
+          "hero_image": null,
+          "example_prompts": []
+        },
+        "capabilities": [
+          {
+            "type": "tool",
+            "name": "hello_tool",
+            "description": "Run the Hello Tool tool.",
+            "version": "0.1.0",
+            "entry_point": "handlers:run",
+            "permissions": [],
+            "config_schema": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "default": "World"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        ],
+        "dependencies": [],
+        "min_sage_version": "0.4.0",
+        "python_version": ">=3.8",
+        "hooks": [],
+        "user_config": {
+          "type": "object",
+          "properties": {
+            "greeting": {
+              "type": "string",
+              "default": "Hello"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "source": {
+        "kind": "git",
+        "url": "https://github.com/oneMuggle/sage.git",
+        "ref": "main",
+        "subdir": "examples/plugins/hello-tool",
+        "path": null,
+        "sha256": null
+      },
+      "compatibility": {
+        "sage": ">=0.4.0",
+        "python": ">=3.8",
+        "platforms": [
+          "any"
+        ],
+        "win7": "unknown"
+      },
+      "signature": null,
+      "published_at": null
+    }
+  ]
+}

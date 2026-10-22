@@ -144,6 +144,29 @@ export const skillsApi = {
   },
 
   /**
+   * T-4b: 通过 IPC bridge 导入用户选中的技能目录。
+   * main process 遍历目录 → 组装 multipart（filename 为 posix 相对路径）
+   * → POST /api/v1/skills/import-directory。
+   *
+   * Returns `{imported, skipped}` — 部分成功时仍返回 200。
+   *
+   * 不用 `withRetry`：这是变更性写操作（写盘 + 注册），后端在已存在时返回
+   * `already_exists` 而非重复写入，但重试仍会重复 HTTP 请求；失败时直接抛错
+   * 让用户决定下一步比静默重试更明确。
+   */
+  async importDirectory(pickedPath: string): Promise<ImportResult> {
+    try {
+      const bridge = window.electronAPI?.skills;
+      if (!bridge) {
+        throw new Error('skills IPC bridge not available');
+      }
+      return await bridge.importSkillDirectory(pickedPath);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
    * 钉住 / 取消钉住技能（Round 17 管理面）。
    * pin 后 archive 返回 409 `skill_pinned`、巡检不给出该技能的 archive 建议。
    *
@@ -251,3 +274,33 @@ export const skillsApi = {
     });
   },
 };
+
+export function auditSkillsApiGovernance(
+  state: {
+    skillCount?: number;
+    supportsConsolidation?: boolean;
+    supportsRollback?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/skillsApi.ts';
+  phase: 'P146';
+  skillCount: number;
+  supportsConsolidation: boolean;
+  supportsRollback: boolean;
+  healthy: boolean;
+} {
+  const skillCount =
+    typeof state.skillCount === 'number' && Number.isFinite(state.skillCount)
+      ? Math.max(0, Math.trunc(state.skillCount))
+      : 0;
+  const supportsConsolidation = state.supportsConsolidation !== false;
+  const supportsRollback = state.supportsRollback !== false;
+  return {
+    module: 'src/shared/api/skillsApi.ts',
+    phase: 'P146',
+    skillCount,
+    supportsConsolidation,
+    supportsRollback,
+    healthy: skillCount >= 0 && supportsConsolidation && supportsRollback,
+  };
+}

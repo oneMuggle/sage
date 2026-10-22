@@ -7,7 +7,11 @@ import { FEATURE_DISABLE_STORAGE_KEY, FEATURE_UNLOCK_STORAGE_KEY } from '../../.
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { Sidebar } from '../../../widgets/layout/Sidebar';
-import { ArenaAccountsToggle } from '../ArenaAccountsToggle';
+import {
+  ArenaAccountsToggle,
+  formatArenaAccountsToggleAuditJson,
+  formatArenaAccountsToggleAuditSnapshot,
+} from '../ArenaAccountsToggle';
 
 vi.mock('../../../features/manage-settings/useSettings', () => ({
   useSettings: () => ({
@@ -139,5 +143,23 @@ describe('ArenaAccountsToggle — Sidebar integration', () => {
 
     // 设置页 toggle 应 hydrate 为 ON
     expect(screen.getByTestId('toggle-arena-accounts')).toHaveClass('bg-primary');
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P100)', () => {
+    expect(formatArenaAccountsToggleAuditSnapshot({ enabled: true })).toBe(
+      'arenaAccountsToggle|enabled=1',
+    );
+    expect(formatArenaAccountsToggleAuditSnapshot({})).toBe('arenaAccountsToggle|enabled=0');
+    expect(JSON.parse(formatArenaAccountsToggleAuditJson({ enabled: true }))).toEqual({
+      enabled: true,
+    });
+
+    render(<ArenaAccountsToggle />);
+    const snapBtn = screen.getByTestId('arena-accounts-toggle-copy-snapshot');
+    const jsonBtn = screen.getByTestId('arena-accounts-toggle-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

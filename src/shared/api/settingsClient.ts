@@ -44,7 +44,11 @@ export type PreferenceKey =
   // M6 生态扩展 / F5 花费限额 —— 此前只有 HooksCard / SpendLimitInput 经裸
   // invoke 写；resetPreferencesToDefaults 需要走类型化客户端。
   | 'hooks'
-  | 'spend_limit_usd';
+  | 'spend_limit_usd'
+  // T-3: 技能脚本执行开关（fail-closed，缺省关闭）
+  | 'allow_skill_scripts'
+  // T-4a: 自定义技能目录
+  | 'skills_dir';
 
 async function ipcCall<T>(cmd: string, args?: Record<string, unknown>): Promise<T | null> {
   try {
@@ -147,3 +151,30 @@ export const settingsClient = {
     await settingsClient.setPreference('context_turn_limit', stored);
   },
 };
+
+export function formatPreferenceSnapshotSummary(
+  key: PreferenceKey,
+  value: string | null,
+  category = 'ui',
+): string {
+  const display = value === null ? 'unset' : value || '(empty)';
+  return `${category}:${key} · ${display}`;
+}
+
+export function formatPreferenceSnapshotJson(
+  key: PreferenceKey,
+  value: string | null,
+  category = 'ui',
+): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.preference_snapshot.v1',
+      key,
+      category,
+      value,
+      hasValue: value !== null && value.length > 0,
+    },
+    null,
+    2,
+  );
+}

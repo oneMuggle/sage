@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
 
-import { clampSize, getPanelDefinition, isExclusiveConflict, isRegisteredPanel, panelsForSlot, PANEL_DEFINITIONS, PANEL_SLOT_IDS, PANEL_SLOTS, slotGeometry, type PanelMigrationBatch } from '../panelRegistry';
+import {
+  clampSize,
+  getPanelDefinition,
+  isExclusiveConflict,
+  isRegisteredPanel,
+  panelsForSlot,
+  PANEL_DEFINITIONS,
+  PANEL_SLOT_IDS,
+  PANEL_SLOTS,
+  slotGeometry,
+  buildPanelRegistryAuditJson,
+  buildPanelRegistryAuditSnapshot,
+  type PanelMigrationBatch,
+} from '../panelRegistry';
 
 describe('panelRegistry', () => {
   it('登记了本次审计发现的全部侧边面', () => {
@@ -75,5 +88,24 @@ describe('panelRegistry', () => {
     // 底部轴向是高度
     expect(clampSize('bottom', 50)).toBe(120);
     expect(clampSize('bottom', 1000)).toBe(600);
+  });
+});
+
+describe('panelRegistry governance audit helpers (Phase P106)', () => {
+  it('builds deterministic audit snapshot and JSON for default and custom definitions', () => {
+    const defaultSnap = buildPanelRegistryAuditSnapshot();
+    expect(defaultSnap.slotCount).toBe(5);
+    expect(defaultSnap.exclusiveSlotCount).toBe(4);
+    expect(defaultSnap.maximizableSlotCount).toBe(2);
+    expect(defaultSnap.panelCount).toBe(9);
+    expect(defaultSnap.batchCountMap).toEqual({ A: 0, B: 4, C: 5, D: 0 });
+    expect(defaultSnap.signature).toBe('5|4|2|9|0,4,5,0');
+
+    const customSnap = buildPanelRegistryAuditSnapshot([
+      { id: 'custom-a', slot: 'right', label: 'A', migrationBatch: 'A' },
+    ]);
+    expect(customSnap.panelCount).toBe(1);
+    expect(customSnap.batchCountMap.A).toBe(1);
+    expect(JSON.parse(buildPanelRegistryAuditJson())).toEqual(defaultSnap);
   });
 });

@@ -258,3 +258,27 @@ export function restoreRunToBoard(
     endedAt,
   };
 }
+
+export function formatRestoredBoardSummary(
+  restored: ReturnType<typeof restoreRunToBoard>,
+): string {
+  if (!restored) return 'empty';
+  const p = restored.progress;
+  return `plan=${restored.plan.length} · total=${p?.total ?? 0} · done=${p?.done ?? 0} · failed=${p?.failed ?? 0}`;
+}
+
+export function formatRestoredBoardJson(
+  restored: ReturnType<typeof restoreRunToBoard>,
+): string {
+  return JSON.stringify(
+    {
+      active: restored !== null,
+      planCount: restored?.plan.length ?? 0,
+      progress: restored?.progress ?? null,
+      dispatchedAt: restored?.dispatchedAt ?? null,
+      endedAt: restored?.endedAt ?? null,
+    },
+    null,
+    2,
+  );
+}

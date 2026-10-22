@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../shared/lib/i18n', () => ({ useI18n: () => ({ locale: 'en' }) }));
 vi.mock('sonner', () => ({ toast: { warning: vi.fn() } }));
-import { useSessionMemoryPause } from '../useSessionMemoryPause';
+import { formatSessionMemoryPauseJson, formatSessionMemoryPauseSummary, useSessionMemoryPause } from '../useSessionMemoryPause';
 const KEY = 'sage:paused-memory-sessions:v1';
 beforeEach(() => {
   localStorage.clear();
@@ -36,5 +36,22 @@ describe('durable device-local memory pause', () => {
     expect(state.result.current[0].has('session-a')).toBe(true);
     expect(state.result.current[2]).toBe(true);
     expect(localStorage.getItem(KEY)).toBe('{corrupt');
+  });
+});
+
+describe('formatSessionMemoryPauseSummary / formatSessionMemoryPauseJson', () => {
+  it('formats session memory pause summary and JSON payload', () => {
+    const paused = new Set(['session-a', 'session-b']);
+    expect(formatSessionMemoryPauseSummary(paused, 'session-a', false)).toBe(
+      'memory-pause: 2 paused · active=paused · confirmed',
+    );
+    const payload = JSON.parse(formatSessionMemoryPauseJson(paused, 'session-c', true));
+    expect(payload).toEqual({
+      pausedCount: 2,
+      sessionId: 'session-c',
+      isSessionPaused: true,
+      unconfirmed: true,
+      maxSessions: 2048,
+    });
   });
 });

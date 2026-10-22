@@ -86,6 +86,7 @@ from backend.api.diagnostic_routes import router as diagnostic_router
 from backend.api.embedder_routes import router as embedder_router
 from backend.api.export_routes import router as export_router
 from backend.api.git_status_routes import router as git_status_router
+from backend.api.harness_routes import router as harness_router
 from backend.api.hex_routes import router as hex_router
 from backend.api.hooks_routes import router as hooks_router
 from backend.api.legacy_routes import router as legacy_router
@@ -106,10 +107,12 @@ from backend.api.office_routes import (
 )
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.permission_routes import router as permission_router
+from backend.api.plugin_routes import router as plugin_router
 from backend.api.project_ai_routes import router as project_ai_router
 from backend.api.project_routes import router as project_router
 from backend.api.prompt_routes import router as prompt_router
 from backend.api.question_routes import router as question_router
+from backend.api.request_body_limit import MaxRequestBodyMiddleware
 from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.system_routes import router as system_router
@@ -324,6 +327,11 @@ async def lifespan(app: FastAPI):
     # Local desktop capability: resolve the token before serving any sensitive route.
     # The value is intentionally never logged or returned by the health endpoint.
     initialize_local_auth_token()
+
+    # R84: 已采用的 fileized harness lock 必须在任何 DB/恢复副作用前通过。
+    from backend.application.kernel.harness_files import assert_adopted_harness_files_valid
+
+    assert_adopted_harness_files_valid()
 
     # R21-A: 应用待恢复备份（必须在 init_db 之前 —— 原子替换主库文件后
     # 再建连接，避免旧 WAL 污染恢复出的库）。fail-safe，不阻塞启动。
@@ -817,6 +825,23 @@ async def lifespan(app: FastAPI):
     # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
     # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
     app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
+
+    # M7 (2026-10-21): Harness 自进化埋点装配——工具/技能每次调用写入
+    # harness_components 累积 effectiveness 指标（usage_count / success_rate
+    # / avg_latency_ms），供 GET /api/v1/harness/components 消费。
+    # 装配顺序：必须在 harness_routes 挂载之前（依赖覆盖工厂依赖注入）。
+    try:
+        from backend.adapters.out.harness import SqliteHarnessAdapter
+        from backend.application.services.harness_recorder import (
+            HarnessRecorder,
+            install_recorder,
+        )
+        from backend.application.services.harness_service import HarnessService
+
+        install_recorder(HarnessRecorder(HarnessService(SqliteHarnessAdapter())))
+        logger.info("harness recorder 已装配（工具/技能 effectiveness 埋点）")
+    except Exception as exc:  # noqa: BLE001 — 埋点装配失败不得阻塞启动
+        logger.warning("harness recorder 装配失败（埋点变 no-op）: %s", exc)
     # Phase 2: 后台构建标签共现图谱（daemon thread，不阻塞启动）
     # build-then-swap 模式：图谱未完成前 retrieve() 走 2 路（keyword+vector），
     # 完成后自动升级为 3 路（keyword+vector+tag_graph）。
@@ -962,6 +987,14 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001 — shutdown must not raise
         logger.warning("MCP client shutdown failed: %s", exc)
 
+    # R83: stop out-of-process plugin workers held by the global host.
+    try:
+        from backend.plugins.host import shutdown_plugin_hosts
+
+        shutdown_plugin_hosts()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("Plugin host shutdown failed: %s", exc)
+
 
 async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
     """每 60s 清理一次孤儿流(创建后 5 分钟仍未 done/failed 的)。"""
@@ -1039,6 +1072,16 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Sage-Local-Authorization", "X-Request-ID"],
 )
 
+# 技能导入走 multipart, 业务层的 10MB 校验在 ``UploadFile`` 已经把 body 落盘之后
+# 才执行, 中间件提前拦一道。limit = 业务上限 10MB + 2MB multipart overhead。
+# 放在 LocalAuth 之前(add_middleware 是 prepend, 早加 = 外层), 保证 401 先于 413。
+app.add_middleware(
+    MaxRequestBodyMiddleware,
+    limits={
+        "/api/v1/skills/import": 12 * 1024 * 1024,
+        "/api/v1/skills/import-directory": 12 * 1024 * 1024,
+    },
+)
 
 # Local capability enforcement runs as a pure ASGI middleware (not
 # BaseHTTPMiddleware) so it does not add per-request task-group/stream overhead
@@ -1096,6 +1139,8 @@ app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")
 # M6 生态扩展 Phase 1: /api/v1/hooks/builtins 内置钩子元数据 (设置页"推荐 Hook")
 app.include_router(hooks_router, prefix="/api/v1")
+# R82: /api/v1/plugins 插件生命周期记录 REST（代码托管留待 R83）
+app.include_router(plugin_router, prefix="/api/v1")
 # M2 part B: /api/v1/questions/{pending, <id>/answer}（AskUserQuestion）
 app.include_router(question_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
@@ -1114,6 +1159,8 @@ app.include_router(system_router, prefix="/api/v1")
 app.include_router(prompt_router, prefix="/api/v1")
 # Artifacts 面板: /sessions/{id}/artifacts (list / content / reveal)
 app.include_router(artifact_router, prefix="/api/v1")
+# Harness 自进化: /api/v1/harness/* (组件注册表 + effectiveness 可观测性)
+app.include_router(harness_router, prefix="/api/v1")
 
 # 闲时自主目标执行系统: /api/v1/goals/*
 from backend.api.autonomous_goals_router import router as autonomous_goals_router

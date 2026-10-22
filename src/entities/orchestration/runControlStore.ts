@@ -390,3 +390,44 @@ export const useRunControlStore = create<RunControlState>((set, get) => ({
     });
   },
 }));
+
+export interface RunControlStoreAuditInput {
+  runCount?: number;
+  resyncCount?: number;
+  connectionStatus?: ConnectionStatus;
+  selectedRunId?: string | null;
+  selectedTaskId?: string | null;
+  errorCount?: number;
+}
+
+export function buildRunControlStoreAuditSnapshot(
+  input: RunControlStoreAuditInput = {},
+): string {
+  const runCount = Math.max(0, input.runCount ?? 0);
+  const resyncCount = Math.max(0, input.resyncCount ?? 0);
+  const connectionStatus = input.connectionStatus ?? 'disconnected';
+  const selectedRunId = (input.selectedRunId ?? '').trim() || 'none';
+  const selectedTaskId = (input.selectedTaskId ?? '').trim() || 'none';
+  const errorCount = Math.max(0, input.errorCount ?? 0);
+  return `runs:${runCount}|resync:${resyncCount}|conn:${connectionStatus}|run:${selectedRunId}|task:${selectedTaskId}|errs:${errorCount}`;
+}
+
+export function buildRunControlStoreAuditJson(
+  input: RunControlStoreAuditInput = {},
+): string {
+  const runCount = Math.max(0, input.runCount ?? 0);
+  const resyncCount = Math.max(0, input.resyncCount ?? 0);
+  const connectionStatus = input.connectionStatus ?? 'disconnected';
+  const selectedRunId = (input.selectedRunId ?? '').trim() || 'none';
+  const selectedTaskId = (input.selectedTaskId ?? '').trim() || 'none';
+  const errorCount = Math.max(0, input.errorCount ?? 0);
+  return JSON.stringify({
+    runCount,
+    resyncCount,
+    connectionStatus,
+    selectedRunId,
+    selectedTaskId,
+    errorCount,
+    snapshot: buildRunControlStoreAuditSnapshot(input),
+  });
+}

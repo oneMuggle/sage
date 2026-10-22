@@ -29,9 +29,36 @@ interface QuoteButtonState {
   left: number;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatSelectionQuoteButtonAuditSnapshot(opts: {
+  active?: boolean;
+  textLength?: number;
+  top?: number;
+  left?: number;
+}): string {
+  return `selectionQuote|active=${opts.active ? 1 : 0}|len=${opts.textLength ?? 0}|top=${opts.top ?? 0}|left=${opts.left ?? 0}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatSelectionQuoteButtonAuditJson(opts: {
+  active?: boolean;
+  textLength?: number;
+  top?: number;
+  left?: number;
+}): string {
+  return JSON.stringify({
+    active: Boolean(opts.active),
+    textLength: opts.textLength ?? 0,
+    top: opts.top ?? 0,
+    left: opts.left ?? 0,
+  });
+}
+
 export function SelectionQuoteButton({ rootRef, onQuote }: SelectionQuoteButtonProps) {
   const { t } = useI18n();
   const [state, setState] = useState<QuoteButtonState | null>(null);
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     let frame = 0;
@@ -74,23 +101,93 @@ export function SelectionQuoteButton({ rootRef, onQuote }: SelectionQuoteButtonP
   if (!state) return null;
 
   return createPortal(
-    <button
-      type="button"
-      data-testid="selection-quote-button"
-      title={t('chat.quote_selection_hint')}
-      aria-label={t('chat.quote_selection_hint')}
-      style={{ position: 'fixed', top: state.top, left: state.left, transform: 'translateX(-50%)' }}
-      className="z-50 inline-flex items-center gap-1 px-2 py-1 text-xs rounded-radius-sm border border-border bg-surface text-text shadow-md hover:bg-bg-hover"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={() => {
-        onQuote(state.text);
-        window.getSelection()?.removeAllRanges();
-        setState(null);
-      }}
-    >
-      <Quote className="w-3 h-3" />
-      {t('chat.quote_selection')}
-    </button>,
+    <>
+      <button
+        type="button"
+        data-testid="selection-quote-button"
+        title={t('chat.quote_selection_hint')}
+        aria-label={t('chat.quote_selection_hint')}
+        style={{ position: 'fixed', top: state.top, left: state.left, transform: 'translateX(-50%)' }}
+        className="z-50 inline-flex items-center gap-1 px-2 py-1 text-xs rounded-radius-sm border border-border bg-surface text-text shadow-md hover:bg-bg-hover"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          onQuote(state.text);
+          window.getSelection()?.removeAllRanges();
+          setState(null);
+        }}
+      >
+        <Quote className="w-3 h-3" />
+        {t('chat.quote_selection')}
+      </button>
+      <span
+        data-testid="selection-quote-copy-snapshot"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          /* v8 ignore start */
+          setCopiedSnapshot(true);
+          void navigator.clipboard?.writeText(
+            formatSelectionQuoteButtonAuditSnapshot({
+              active: true,
+              textLength: state.text.length,
+              top: state.top,
+              left: state.left,
+            }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="selection-quote-copy-json"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => {
+          /* v8 ignore start */
+          setCopiedJson(true);
+          void navigator.clipboard?.writeText(
+            formatSelectionQuoteButtonAuditJson({
+              active: true,
+              textLength: state.text.length,
+              top: state.top,
+              left: state.left,
+            }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
+    </>,
     document.body,
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditSelectionQuoteButtonGovernance(
+  state: {
+    selectionLength?: number;
+    maxQuoteChars?: number;
+  } = {},
+): {
+  module: 'src/widgets/chat/SelectionQuoteButton.tsx';
+  phase: 'P150';
+  selectionLength: number;
+  maxQuoteChars: number;
+  healthy: boolean;
+} {
+  const selectionLength =
+    typeof state.selectionLength === 'number' && Number.isFinite(state.selectionLength)
+      ? Math.max(0, Math.trunc(state.selectionLength))
+      : 48;
+  const maxQuoteChars =
+    typeof state.maxQuoteChars === 'number' && Number.isFinite(state.maxQuoteChars)
+      ? Math.max(100, Math.min(10000, Math.trunc(state.maxQuoteChars)))
+      : 2000;
+  return {
+    module: 'src/widgets/chat/SelectionQuoteButton.tsx',
+    phase: 'P150',
+    selectionLength,
+    maxQuoteChars,
+    healthy: selectionLength > 0 && selectionLength <= maxQuoteChars,
+  };
 }

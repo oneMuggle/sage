@@ -4,10 +4,14 @@
  * - "同步到内部服务器" 死开关 (memoryServerSync, 后端已下线) 不得回流 UI。
  * - 不得硬编码展示 %APPDATA%\Sage\memory.db 路径。
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MemoryTab } from '../MemoryTab';
+import {
+  MemoryTab,
+  formatMemoryTabAuditJson,
+  formatMemoryTabAuditSnapshot,
+} from '../MemoryTab';
 
 const invokeMock = vi.fn();
 vi.mock('../../../shared/api/desktopInvoke', () => ({
@@ -39,5 +43,39 @@ describe('MemoryTab', () => {
         expect(value).not.toContain('%APPDATA%');
       }
     }
+  });
+
+  it('formats and copies memory tab audit snapshot and JSON', () => {
+    expect(
+      formatMemoryTabAuditSnapshot({
+        embedderType: 'onnx',
+        semantic: true,
+        modelReady: true,
+        backupCount: 4,
+      }),
+    ).toBe('记忆管理 · onnx · 语义匹配 · 模型就绪 · 备份4份');
+    expect(
+      JSON.parse(
+        formatMemoryTabAuditJson({
+          embedderType: null,
+          semantic: false,
+          modelReady: false,
+          backupCount: 0,
+        }),
+      ),
+    ).toEqual({
+      embedderType: null,
+      semantic: false,
+      modelReady: false,
+      backupCount: 0,
+    });
+
+    render(<MemoryTab />);
+    const summaryBtn = screen.getByTestId('memory-tab-copy-summary');
+    const jsonBtn = screen.getByTestId('memory-tab-copy-json');
+    fireEvent.click(summaryBtn);
+    expect(summaryBtn.textContent).toBe('已复制');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toBe('已复制');
   });
 });

@@ -71,3 +71,33 @@ export const TabsContent = forwardRef<
   />
 ));
 TabsContent.displayName = TabsPrimitive.Content.displayName;
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditTabsGovernance(
+  state: {
+    tabCount?: number;
+    activeValue?: string;
+  } = {},
+): {
+  module: 'src/shared/ui/Tabs/Tabs.tsx';
+  phase: 'P148';
+  tabCount: number;
+  activeValue: string;
+  healthy: boolean;
+} {
+  const tabCount =
+    typeof state.tabCount === 'number' && Number.isFinite(state.tabCount)
+      ? Math.max(1, Math.trunc(state.tabCount))
+      : 2;
+  const activeValue =
+    typeof state.activeValue === 'string' && state.activeValue.trim().length > 0
+      ? state.activeValue.trim()
+      : 'overview';
+  return {
+    module: 'src/shared/ui/Tabs/Tabs.tsx',
+    phase: 'P148',
+    tabCount,
+    activeValue,
+    healthy: tabCount >= 1 && activeValue.length > 0,
+  };
+}

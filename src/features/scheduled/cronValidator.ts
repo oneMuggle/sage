@@ -117,3 +117,29 @@ export function describeSchedule(
   }
   return `cron: ${schedule.cron}`;
 }
+
+export function formatCronValidationSummary(input: string): string {
+  const res = validateCronExpression(input);
+  const trimmed = (input ?? '').trim();
+  if (!res.ok) {
+    return `invalid · ${trimmed || 'empty'} · ${res.reason}`;
+  }
+  const preset = CRON_PRESETS.find((p) => p.cron === trimmed);
+  return `valid · ${trimmed} · ${preset ? preset.id : 'custom'}`;
+}
+
+export function formatCronValidationJson(input: string): string {
+  const res = validateCronExpression(input);
+  const trimmed = (input ?? '').trim();
+  const preset = res.ok ? (CRON_PRESETS.find((p) => p.cron === trimmed) ?? null) : null;
+  return JSON.stringify(
+    {
+      expression: trimmed,
+      ok: res.ok,
+      reason: res.ok ? null : res.reason,
+      presetId: preset?.id ?? null,
+    },
+    null,
+    2,
+  );
+}

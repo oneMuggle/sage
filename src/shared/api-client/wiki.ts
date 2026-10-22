@@ -540,3 +540,26 @@ export async function queueClearTasks(
     completed_only: completedOnly,
   });
 }
+
+export const WIKI_API_BASE = API_BASE;
+
+export function formatWikiApiClientSummary(
+  demoMode = isDemoMode(),
+  defaultSearchLimit = 20,
+): string {
+  const safeLimit = Math.max(1, Math.round(defaultSearchLimit));
+  return `baseUrl=${WIKI_API_BASE} · demoBlocked=${Boolean(demoMode)} · defaultLimit=${safeLimit}`;
+}
+
+export function formatWikiApiClientJson(
+  demoMode = isDemoMode(),
+  defaultSearchLimit = 20,
+): string {
+  const safeLimit = Math.max(1, Math.round(defaultSearchLimit));
+  return JSON.stringify({
+    baseUrl: WIKI_API_BASE,
+    demoBlocked: Boolean(demoMode),
+    defaultSearchLimit: safeLimit,
+  });
+}
+

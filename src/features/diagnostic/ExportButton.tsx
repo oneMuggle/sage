@@ -12,9 +12,66 @@ const ERROR_MESSAGES: Record<string, string> = {
   write_failed: '无法写入文件,请检查路径权限和磁盘空间',
 };
 
+export function formatExportButtonAuditSnapshot(opts: {
+  includePrompts?: boolean;
+  includeHostname?: boolean;
+  busy?: boolean;
+  hasMessage?: boolean;
+}): string {
+  return `exportButton|prompts=${opts.includePrompts ? 1 : 0}|hostname=${opts.includeHostname ? 1 : 0}|busy=${opts.busy ? 1 : 0}|msg=${opts.hasMessage ? 1 : 0}`;
+}
+
+export function formatExportButtonAuditJson(opts: {
+  includePrompts?: boolean;
+  includeHostname?: boolean;
+  busy?: boolean;
+  hasMessage?: boolean;
+}): string {
+  return JSON.stringify({
+    includePrompts: Boolean(opts.includePrompts),
+    includeHostname: Boolean(opts.includeHostname),
+    busy: Boolean(opts.busy),
+    hasMessage: Boolean(opts.hasMessage),
+  });
+}
+
 export function ExportButton({ includePrompts, includeHostname }: ExportButtonProps) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatExportButtonAuditSnapshot({
+          includePrompts,
+          includeHostname,
+          busy,
+          hasMessage: Boolean(message),
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatExportButtonAuditJson({
+          includePrompts,
+          includeHostname,
+          busy,
+          hasMessage: Boolean(message),
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  /* v8 ignore stop */
 
   const handleClick = async () => {
     setBusy(true);
@@ -51,6 +108,20 @@ export function ExportButton({ includePrompts, includeHostname }: ExportButtonPr
       >
         {busy ? '导出中…' : '导出诊断包…'}
       </button>
+      <span
+        data-testid="export-button-copy-snapshot"
+        onClick={() => void handleCopySnapshot()}
+        className="ml-2 cursor-pointer text-xs text-muted-foreground"
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="export-button-copy-json"
+        onClick={() => void handleCopyJson()}
+        className="ml-1 cursor-pointer text-xs text-muted-foreground"
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
       {message && (
         <p className="text-sm mt-1" data-testid="diagnostic-message">
           {message}

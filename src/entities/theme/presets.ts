@@ -409,3 +409,16 @@ export function getThemeById(id: string): ThemePreset | undefined {
 
 /** 默认主题 id */
 export const DEFAULT_THEME_ID = 'indigo';
+export function formatThemePresetsSummary(): string {
+  const ids = themePresets.map((t) => t.id).join(',');
+  return `count=${themePresets.length} · defaultId=${DEFAULT_THEME_ID} · ids=${ids}`;
+}
+
+export function formatThemePresetsJson(): string {
+  return JSON.stringify({
+    count: themePresets.length,
+    defaultId: DEFAULT_THEME_ID,
+    ids: themePresets.map((t) => t.id),
+  });
+}
+

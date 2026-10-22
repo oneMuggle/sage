@@ -700,3 +700,28 @@ function InputCardInner({
 
 // memo (F1): 随 Chat 每 token 重渲染的输入卡片, props 不变时跳过。
 export const InputCard = memo(InputCardInner);
+export function formatInputCardAuditSummary(
+  value: string,
+  isLoading = false,
+  hasAttachments = false,
+): string {
+  return `chars=${value.length}/${CHAR_HARD_LIMIT} · loading=${isLoading} · attachments=${hasAttachments} · overLimit=${value.length > CHAR_HARD_LIMIT}`;
+}
+
+export function formatInputCardAuditJson(
+  value: string,
+  isLoading = false,
+  hasAttachments = false,
+): string {
+  return JSON.stringify(
+    {
+      charCount: value.length,
+      hardLimit: CHAR_HARD_LIMIT,
+      overLimit: value.length > CHAR_HARD_LIMIT,
+      isLoading,
+      hasAttachments,
+    },
+    null,
+    2,
+  );
+}

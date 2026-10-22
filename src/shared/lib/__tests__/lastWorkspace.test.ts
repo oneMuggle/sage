@@ -52,3 +52,20 @@ describe('lastWorkspace — localStorage persistence', () => {
     spy.mockRestore();
   });
 });
+
+describe('lastWorkspace diagnostic formatters (Phase P114)', () => {
+  it('formats last workspace summary and JSON payload', async () => {
+    const { formatLastWorkspaceSummary, formatLastWorkspaceJson } = await import(
+      '../lastWorkspace'
+    );
+    expect(formatLastWorkspaceSummary(null)).toBe('none');
+    expect(formatLastWorkspaceSummary('/tmp/ws-1')).toBe('persisted · /tmp/ws-1');
+    const parsed = JSON.parse(formatLastWorkspaceJson('/tmp/ws-1'));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.last_workspace.v1',
+      key: 'sage-last-workspace-path',
+      persisted: true,
+      workspacePath: '/tmp/ws-1',
+    });
+  });
+});

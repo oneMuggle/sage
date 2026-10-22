@@ -13,6 +13,7 @@ import type { ToolCall } from '../../../shared/lib/store';
 export type ToolStatus = 'running' | 'success' | 'error';
 
 /** 推断工具调用状态：无 result → running；result 含 "error"/"failed" → error */
+// eslint-disable-next-line react-refresh/only-export-components
 export function inferToolStatus(tc: ToolCall): ToolStatus {
   if (tc.result === undefined) return 'running';
   const r = typeof tc.result === 'string' ? tc.result.toLowerCase() : '';
@@ -85,4 +86,56 @@ export function ToolCallCard({
       {!collapsed && <div className="px-2 pb-1.5">{children}</div>}
     </div>
   );
+}
+
+export interface ToolCallCardAuditInput {
+  toolName: string;
+  callId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  durationMs: number;
+}
+
+export interface ToolCallCardAuditReport {
+  toolName: string;
+  callId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  durationMs: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateToolCallCardAudit(
+  input: ToolCallCardAuditInput,
+): ToolCallCardAuditReport {
+  const toolName = input.toolName.trim();
+  const callId = input.callId.trim();
+  const durationMs = Math.max(0, Math.trunc(input.durationMs));
+  const issueCodes: string[] = [];
+
+  if (!toolName) {
+    issueCodes.push('missing_tool_name');
+  }
+  if (!callId) {
+    issueCodes.push('missing_tool_call_id');
+  }
+  if (input.status === 'failed') {
+    issueCodes.push('tool_call_failed');
+  }
+
+  return {
+    toolName,
+    callId,
+    status: input.status,
+    durationMs,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportToolCallCardAuditJson(
+  input: ToolCallCardAuditInput,
+): string {
+  return JSON.stringify(evaluateToolCallCardAudit(input));
 }

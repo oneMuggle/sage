@@ -4,12 +4,16 @@
  * - 多条消息按顺序渲染
  * - 透传 knowledgeRefs/attachments 到 Message
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Message as MessageType } from '../../../shared/lib/store';
-import { MessageList } from '../MessageList';
+import {
+  MessageList,
+  formatMessageListAuditJson,
+  formatMessageListAuditSnapshot,
+} from '../MessageList';
 
 // Mock BtwOverlay to avoid I18nProvider context issues
 vi.mock('../../../features/chat', () => ({
@@ -62,5 +66,46 @@ describe('MessageList', () => {
     const wrapper = container.firstChild as HTMLElement;
     expect(wrapper.className).not.toMatch(/max-w-3xl/);
     expect(wrapper.className).not.toMatch(/mx-auto/);
+  });
+
+  it('formats MessageList audit snapshot/JSON and supports copy controls (P103)', () => {
+    expect(
+      formatMessageListAuditSnapshot({
+        totalCount: 2,
+        visibleCount: 2,
+        hiddenCount: 0,
+        turnCount: 2,
+        streaming: false,
+      }),
+    ).toBe('total=2|visible=2|hidden=0|turns=2|streaming=0');
+    expect(
+      JSON.parse(
+        formatMessageListAuditJson({
+          totalCount: 100,
+          visibleCount: 60,
+          hiddenCount: 40,
+          turnCount: 30,
+          streaming: true,
+        }),
+      ),
+    ).toEqual({
+      totalCount: 100,
+      visibleCount: 60,
+      hiddenCount: 40,
+      turnCount: 30,
+      streaming: true,
+    });
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    const messages: MessageType[] = [
+      baseMsg('1', 'user', '问题'),
+      baseMsg('2', 'assistant', '回答'),
+    ];
+    renderWithI18n(<MessageList messages={messages} />);
+    fireEvent.click(screen.getByTestId('message-list-audit-copy'));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('total=2|visible=2|hidden=0|turns='));
+    fireEvent.click(screen.getByTestId('message-list-audit-copy-json'));
+    expect(writeText).toHaveBeenCalledTimes(2);
   });
 });

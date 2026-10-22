@@ -2,6 +2,10 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 // 走 barrel 导入：验证 shared/ui 的对外出口可用（批次 B/C 的面板都从这里取）
+import {
+  buildPanelShellAuditJson,
+  buildPanelShellAuditSnapshot,
+} from '../PanelShell';
 import { PanelShell, PanelShellAction } from '../index';
 
 describe('PanelShell', () => {
@@ -133,5 +137,46 @@ describe('PanelShell', () => {
     expect(btn.className).toContain('h-7');
     expect(btn.className).toContain('min-w-7');
     expect(btn).toHaveAttribute('title', '最大化面板');
+  });
+
+  it('exports PanelShell audit snapshot/JSON helpers and supports copy controls', () => {
+    expect(buildPanelShellAuditSnapshot()).toBe(
+      'title:no|tabs:0|active:none|actions:no|empty:no|resize:no',
+    );
+    expect(
+      buildPanelShellAuditSnapshot({
+        hasTitle: true,
+        tabCount: 2,
+        activeTab: 'artifacts',
+        hasActions: true,
+        empty: true,
+        hasResize: true,
+      }),
+    ).toBe('title:yes|tabs:2|active:artifacts|actions:yes|empty:yes|resize:yes');
+
+    const parsed = JSON.parse(
+      buildPanelShellAuditJson({
+        hasTitle: true,
+        tabCount: 1,
+        activeTab: 'progress',
+      }),
+    );
+    expect(parsed).toEqual({
+      hasTitle: true,
+      tabCount: 1,
+      activeTab: 'progress',
+      hasActions: false,
+      empty: false,
+      hasResize: false,
+      snapshot: 'title:yes|tabs:1|active:progress|actions:no|empty:no|resize:no',
+    });
+
+    render(<PanelShell title="测试"><p>内容</p></PanelShell>);
+    const copyAudit = screen.getByTestId('panel-shell-copy-audit');
+    const copyJson = screen.getByTestId('panel-shell-copy-audit-json');
+    fireEvent.click(copyAudit);
+    expect(copyAudit).toHaveTextContent('已复制快照');
+    fireEvent.click(copyJson);
+    expect(copyJson).toHaveTextContent('已复制 JSON');
   });
 });

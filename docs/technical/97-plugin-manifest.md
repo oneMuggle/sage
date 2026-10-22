@@ -4,6 +4,13 @@
 > 作者：Claude
 > 标签：插件、可扩展性、Pydantic v2
 
+> **当前契约（R82/R83/R86，2026-10-21）**：本文后半部分保留了早期设计示例，
+> 个别 JSON/API 形态已经过时。现行实现以 `backend/plugins/manifest.py` 的
+> 数组形 `capabilities` 为准：R82 只保存生命周期记录且不执行代码；R83 只显式
+> 托管带 entry_point 的 Python `tool`，子进程不是安全沙箱；R86 提供
+> `python -m backend.cli.plugin` 脚手架、静态校验与离线索引。开发步骤请先看
+> [插件开发：30 分钟跑通第一个插件](../user-manual/21-plugin-development.md)。
+
 ## 概述
 
 Sage 插件系统提供可扩展的架构，允许第三方开发者通过标准化接口扩展 Sage 的功能。

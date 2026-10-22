@@ -277,3 +277,54 @@ function TerminalPanelInner() {
 
 /** memo 防止 Chat 流式渲染期间无谓重渲染 */
 export const TerminalPanel = memo(TerminalPanelInner);
+
+export interface TerminalPanelAuditInput {
+  sessionCount: number;
+  activeSessionId: string;
+  bufferLineCount: number;
+  maxBufferLines: number;
+}
+
+export interface TerminalPanelAuditReport {
+  sessionCount: number;
+  activeSessionId: string;
+  bufferLineCount: number;
+  withinBufferCap: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateTerminalPanelAudit(
+  input: TerminalPanelAuditInput,
+): TerminalPanelAuditReport {
+  const sessionCount = Math.max(0, Math.trunc(input.sessionCount));
+  const activeSessionId = input.activeSessionId.trim();
+  const bufferLineCount = Math.max(0, Math.trunc(input.bufferLineCount));
+  const maxBufferLines = Math.max(100, Math.trunc(input.maxBufferLines));
+  const withinBufferCap = bufferLineCount <= maxBufferLines;
+  const issueCodes: string[] = [];
+
+  if (sessionCount > 0 && !activeSessionId) {
+    issueCodes.push('missing_active_terminal_session_id');
+  }
+  if (!withinBufferCap) {
+    issueCodes.push('terminal_buffer_overflow');
+  }
+
+  return {
+    sessionCount,
+    activeSessionId,
+    bufferLineCount,
+    withinBufferCap,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportTerminalPanelAuditJson(
+  input: TerminalPanelAuditInput,
+): string {
+  return JSON.stringify(evaluateTerminalPanelAudit(input));
+}

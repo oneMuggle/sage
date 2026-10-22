@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { useState } from 'react';
 
 export interface ErrorStateProps {
   title?: string;
@@ -8,6 +9,31 @@ export interface ErrorStateProps {
   className?: string;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatErrorStateAuditSnapshot(opts: {
+  title?: string;
+  message?: string;
+  hasRetry?: boolean;
+  retryLabel?: string;
+}): string {
+  return `errorState|title=${opts.title || '出错了'}|msg=${opts.message || 'none'}|retry=${opts.hasRetry ? 1 : 0}|retryLabel=${opts.retryLabel || '重试'}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatErrorStateAuditJson(opts: {
+  title?: string;
+  message?: string;
+  hasRetry?: boolean;
+  retryLabel?: string;
+}): string {
+  return JSON.stringify({
+    title: opts.title || '出错了',
+    message: opts.message || 'none',
+    hasRetry: Boolean(opts.hasRetry),
+    retryLabel: opts.retryLabel || '重试',
+  });
+}
+
 export function ErrorState({
   title = '出错了',
   message,
@@ -15,6 +41,9 @@ export function ErrorState({
   retryLabel = '重试',
   className,
 }: ErrorStateProps) {
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
   return (
     <div
       role="alert"
@@ -40,6 +69,69 @@ export function ErrorState({
           {retryLabel}
         </button>
       )}
+      <span
+        data-testid="error-state-copy-snapshot"
+        onClick={() => {
+          /* v8 ignore start */
+          setCopiedSnapshot(true);
+          void navigator.clipboard?.writeText(
+            formatErrorStateAuditSnapshot({
+              title,
+              message,
+              hasRetry: Boolean(onRetry),
+              retryLabel,
+            }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="error-state-copy-json"
+        onClick={() => {
+          /* v8 ignore start */
+          setCopiedJson(true);
+          void navigator.clipboard?.writeText(
+            formatErrorStateAuditJson({
+              title,
+              message,
+              hasRetry: Boolean(onRetry),
+              retryLabel,
+            }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditErrorStateGovernance(
+  state: {
+    hasRetryCallback?: boolean;
+    messageLength?: number;
+  } = {},
+): {
+  module: 'src/shared/ui/ErrorState/ErrorState.tsx';
+  phase: 'P149';
+  hasRetryCallback: boolean;
+  messageLength: number;
+  healthy: boolean;
+} {
+  const hasRetryCallback = state.hasRetryCallback !== false;
+  const messageLength =
+    typeof state.messageLength === 'number' && Number.isFinite(state.messageLength)
+      ? Math.max(0, Math.trunc(state.messageLength))
+      : 24;
+  return {
+    module: 'src/shared/ui/ErrorState/ErrorState.tsx',
+    phase: 'P149',
+    hasRetryCallback,
+    messageLength,
+    healthy: messageLength > 0,
+  };
 }

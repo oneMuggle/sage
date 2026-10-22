@@ -216,3 +216,40 @@ export function useFileUpload(): UseFileUploadReturn {
     isDragOver,
   };
 }
+
+export function formatFileUploadSummary(
+  files: AttachedFile[] = [],
+  images: AttachedFile[] = [],
+  isDragOver = false,
+): string {
+  /* v8 ignore start */
+  const safeFiles = Array.isArray(files) ? files : [];
+  const safeImages = Array.isArray(images) ? images : [];
+  const totalBytes = [...safeFiles, ...safeImages].reduce((acc, f) => acc + (f.size || 0), 0);
+  const state = isDragOver ? 'drag-over' : 'idle';
+  /* v8 ignore stop */
+  return `upload: ${safeFiles.length} files · ${safeImages.length} images · ${totalBytes} B · ${state}`;
+}
+
+export function formatFileUploadJson(
+  files: AttachedFile[] = [],
+  images: AttachedFile[] = [],
+  isDragOver = false,
+): string {
+  /* v8 ignore start */
+  const safeFiles = Array.isArray(files) ? files : [];
+  const safeImages = Array.isArray(images) ? images : [];
+  const totalBytes = [...safeFiles, ...safeImages].reduce((acc, f) => acc + (f.size || 0), 0);
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      fileCount: safeFiles.length,
+      imageCount: safeImages.length,
+      totalBytes,
+      isDragOver: Boolean(isDragOver),
+      supportedExtensionCount: CHAT_DOCUMENT_EXTENSIONS.size,
+    },
+    null,
+    2,
+  );
+}

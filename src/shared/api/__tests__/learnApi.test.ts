@@ -9,7 +9,7 @@ vi.mock('../desktopInvoke', () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
-import { learnApi } from '../learnApi';
+import { formatLearnTriggerJson, formatLearnTriggerSummary, learnApi } from '../learnApi';
 
 beforeEach(() => {
   mockInvoke.mockReset();
@@ -53,5 +53,22 @@ describe('learnApi.trigger', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('formatLearnTriggerSummary / formatLearnTriggerJson', () => {
+  it('formats learn trigger summary and JSON payload', () => {
+    expect(
+      formatLearnTriggerSummary('s-1', '复习上下文', { status: 'queued', message: 'ok' }),
+    ).toBe('learn-trigger: session=s-1 · prompt=5 chars · status=queued');
+    const payload = JSON.parse(
+      formatLearnTriggerJson('s-1', '复习上下文', { status: 'queued', message: 'ok' }),
+    );
+    expect(payload).toEqual({
+      sessionId: 's-1',
+      promptLength: 5,
+      status: 'queued',
+      message: 'ok',
+    });
   });
 });

@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { searchSettings, SETTINGS_SEARCH_INDEX } from '../settingsSearchIndex';
+import { formatSettingsSearchJson, formatSettingsSearchSummary } from '../settingsSearchIndex';
 
 describe('SETTINGS_SEARCH_INDEX 不变量', () => {
   it('key 全局唯一', () => {
@@ -27,8 +28,9 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
   it('tab 值均在已知 tab 集合内', () => {
     const knownTabs = new Set([
       'general', 'basic', 'tools-connections', 'endpoints',
-      'models', 'orchestration', 'memory', 'network', 'mcp', 'remote-workspaces', 'zotero',
+      'models', 'orchestration', 'memory', 'network', 'mcp', 'plugins', 'remote-workspaces', 'zotero',
       'runtime', 'evolution', 'updates', 'providers', 'usage-stats',
+      'skills',
     ]);
     for (const e of SETTINGS_SEARCH_INDEX) {
       expect(knownTabs.has(e.tab), `tab of ${e.key}`).toBe(true);
@@ -45,8 +47,15 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
 
   it('P1-5：记忆相关条目全部收敛到同一个 memory tab', () => {
     // IA1 的可执行判据：记忆能力的设置入口只有一个。
-    const memoryKeys = ['autoMemory', 'confirmDelete', 'context_turn_limit', 'auto_checkpoint',
-      'memory_embedding', 'memory_consolidation', 'memory_backup'];
+    const memoryKeys = [
+      'autoMemory',
+      'confirmDelete',
+      'context_turn_limit',
+      'auto_checkpoint',
+      'memory_embedding',
+      'memory_consolidation',
+      'memory_backup',
+    ];
     for (const key of memoryKeys) {
       const entry = SETTINGS_SEARCH_INDEX.find((e) => e.key === key);
       expect(entry, `missing index entry ${key}`).toBeTruthy();
@@ -87,5 +96,13 @@ describe('searchSettings', () => {
 
   it('无命中返回空数组且不抛错', () => {
     expect(searchSettings('完全不存在的设置项xyz')).toEqual([]);
+  });
+
+  it('formats settings search summary and JSON (Phase P112)', () => {
+    expect(formatSettingsSearchSummary('ZOTERO')).toBe('query="ZOTERO" · hits=1 · tabs=[zotero]');
+    const parsed = JSON.parse(formatSettingsSearchJson('ZOTERO'));
+    expect(parsed.hitCount).toBe(1);
+    expect(parsed.keys).toEqual(['zotero']);
+    expect(parsed.tabs).toEqual(['zotero']);
   });
 });

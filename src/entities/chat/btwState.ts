@@ -50,3 +50,40 @@ export const useBtwState = create<BtwState>((set) => ({
   setLoading: (v) => set({ isLoading: v }),
   setSources: (sources) => set({ sources }),
 }));
+
+export interface BtwStateAuditInput {
+  isOpen?: boolean;
+  hasQuestion?: boolean;
+  answerLength?: number;
+  isLoading?: boolean;
+  parentTaskRunning?: boolean;
+  sourceCount?: number;
+}
+
+export function buildBtwStateAuditSnapshot(input: BtwStateAuditInput = {}): string {
+  const isOpen = Boolean(input.isOpen);
+  const hasQuestion = Boolean(input.hasQuestion);
+  const answerLength = Math.max(0, input.answerLength ?? 0);
+  const isLoading = Boolean(input.isLoading);
+  const parentTaskRunning = Boolean(input.parentTaskRunning);
+  const sourceCount = Math.max(0, input.sourceCount ?? 0);
+  return `open:${isOpen ? 'yes' : 'no'}|question:${hasQuestion ? 'yes' : 'no'}|answerLen:${answerLength}|loading:${isLoading ? 'yes' : 'no'}|parentRunning:${parentTaskRunning ? 'yes' : 'no'}|sources:${sourceCount}`;
+}
+
+export function buildBtwStateAuditJson(input: BtwStateAuditInput = {}): string {
+  const isOpen = Boolean(input.isOpen);
+  const hasQuestion = Boolean(input.hasQuestion);
+  const answerLength = Math.max(0, input.answerLength ?? 0);
+  const isLoading = Boolean(input.isLoading);
+  const parentTaskRunning = Boolean(input.parentTaskRunning);
+  const sourceCount = Math.max(0, input.sourceCount ?? 0);
+  return JSON.stringify({
+    isOpen,
+    hasQuestion,
+    answerLength,
+    isLoading,
+    parentTaskRunning,
+    sourceCount,
+    snapshot: buildBtwStateAuditSnapshot(input),
+  });
+}

@@ -535,3 +535,39 @@ export const DEMO_SURVEY_REPORT_MD = `## 文献调研：大模型医学应用进
 - 文献对比表：文献对比表-23篇核心文献.xlsx（2 个工作表：核心文献、年份分布）
 - 综述报告：文献综述报告-大模型医学应用.docx（6 章节）
 `;
+
+export function auditDemoFixturesCoreGovernance(
+  state: {
+    memoryCount?: number;
+    knowledgeDocCount?: number;
+    skillCount?: number;
+  } = {},
+): {
+  module: 'src/shared/api/demoFixturesCore.ts';
+  phase: 'P144';
+  memoryCount: number;
+  knowledgeDocCount: number;
+  skillCount: number;
+  healthy: boolean;
+} {
+  const memoryCount =
+    typeof state.memoryCount === 'number' && Number.isFinite(state.memoryCount)
+      ? Math.max(0, Math.trunc(state.memoryCount))
+      : DEMO_MEMORIES.length;
+  const knowledgeDocCount =
+    typeof state.knowledgeDocCount === 'number' && Number.isFinite(state.knowledgeDocCount)
+      ? Math.max(0, Math.trunc(state.knowledgeDocCount))
+      : DEMO_KNOWLEDGE_DOCS.length;
+  const skillCount =
+    typeof state.skillCount === 'number' && Number.isFinite(state.skillCount)
+      ? Math.max(0, Math.trunc(state.skillCount))
+      : DEMO_SKILLS.length;
+  return {
+    module: 'src/shared/api/demoFixturesCore.ts',
+    phase: 'P144',
+    memoryCount,
+    knowledgeDocCount,
+    skillCount,
+    healthy: memoryCount > 0 && knowledgeDocCount > 0 && skillCount > 0,
+  };
+}

@@ -3,7 +3,12 @@ import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FONT_DEFAULTS, type FontSettings } from '../fontOptions';
-import { FontProvider, useFontSettings } from '../useFontSettings';
+import {
+  FontProvider,
+  formatFontSettingsAuditJson,
+  formatFontSettingsAuditSnapshot,
+  useFontSettings,
+} from '../useFontSettings';
 const storage = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn() }));
 vi.mock('../fontStorage', () => ({
   loadFontSettings: storage.load,
@@ -118,5 +123,46 @@ describe('FontProvider', () => {
     mount();
     await waitFor(() => expect(screen.getByTestId('one-loading')).toHaveTextContent('false'));
     expect(screen.getByTestId('two-loading')).toHaveTextContent('false');
+  });
+  it('formats FontProvider audit snapshot/JSON and supports copy controls (P103)', async () => {
+    expect(
+      formatFontSettingsAuditSnapshot({
+        fontUi: 'inter',
+        fontCode: 'jetbrains',
+        fontSizeUi: 14,
+        fontSizeCode: 13,
+        loading: false,
+        error: null,
+      }),
+    ).toBe('ui=inter:14|code=jetbrains:13|loading=0|err=none');
+
+    expect(
+      JSON.parse(
+        formatFontSettingsAuditJson({
+          fontUi: 'system',
+          fontCode: 'fira',
+          fontSizeUi: 16,
+          fontSizeCode: 15,
+          loading: true,
+          error: 'save',
+        }),
+      ),
+    ).toEqual({
+      fontUi: 'system',
+      fontCode: 'fira',
+      fontSizeUi: 16,
+      fontSizeCode: 15,
+      loading: true,
+      error: 'save',
+    });
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    mount();
+    await waitFor(() => expect(screen.getByTestId('one-loading')).toHaveTextContent('false'));
+    fireEvent.click(screen.getByTestId('font-settings-audit-copy'));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('font-settings-audit-copy-json'));
+    expect(writeText).toHaveBeenCalledTimes(2);
   });
 });

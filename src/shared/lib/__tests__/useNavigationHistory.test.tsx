@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect } from 'vitest';
 
 import { NavHistoryProvider } from '../../../app/providers/NavHistoryProvider';
-import { useNavigationHistory } from '../useNavigationHistory';
+import { formatNavHistoryJson, formatNavHistorySummary, useNavigationHistory } from '../useNavigationHistory';
 
 describe('useNavigationHistory', () => {
   it('returns null when used outside NavHistoryProvider', () => {
@@ -35,5 +35,24 @@ describe('useNavigationHistory', () => {
     );
     expect(value).not.toBeNull();
     expect(value!.canBack).toBe(false);
+  });
+});
+
+describe('formatNavHistorySummary / formatNavHistoryJson', () => {
+  it('formats navigation history summary and JSON payload', () => {
+    expect(formatNavHistorySummary(null)).toBe('nav-history: unavailable');
+    const mockCtx = {
+      canBack: true,
+      canForward: false,
+      back: () => {},
+      forward: () => {},
+    };
+    expect(formatNavHistorySummary(mockCtx)).toBe('nav-history: canBack=true · canForward=false');
+    const payload = JSON.parse(formatNavHistoryJson(mockCtx));
+    expect(payload).toEqual({
+      available: true,
+      canBack: true,
+      canForward: false,
+    });
   });
 });

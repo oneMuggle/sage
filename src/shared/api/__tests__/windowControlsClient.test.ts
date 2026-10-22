@@ -150,3 +150,20 @@ describe('windowControls singleton', () => {
     await expect(freshSingleton.capturePage()).rejects.toThrow('Not in desktop');
   });
 });
+
+describe('windowControlsClient diagnostic formatters (Phase P113)', () => {
+  it('formats window platform summary and JSON payload', async () => {
+    const { formatWindowPlatformSummary, formatWindowPlatformJson } = await import(
+      '../windowControlsClient'
+    );
+    expect(formatWindowPlatformSummary('windows', true)).toBe('windows · desktop · ipc-bridge');
+    expect(formatWindowPlatformSummary('web', false)).toBe('web · web · web-stub');
+    const parsed = JSON.parse(formatWindowPlatformJson('windows', true));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.window_platform.v1',
+      platform: 'windows',
+      isDesktop: true,
+      hasNativeBridge: true,
+    });
+  });
+});

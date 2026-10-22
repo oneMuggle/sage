@@ -204,3 +204,29 @@ export async function fetchUsageCsvExport(
 ): Promise<string> {
   return invoke<string>('usage_export_csv', params);
 }
+
+export function auditUsageApiGovernance(
+  state: {
+    activeRange?: UsageRange | string;
+    supportsCsvExport?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/usageApi.ts';
+  phase: 'P146';
+  activeRange: UsageRange;
+  supportsCsvExport: boolean;
+  healthy: boolean;
+} {
+  const activeRange: UsageRange =
+    state.activeRange === 'today' || state.activeRange === '30d' || state.activeRange === 'total'
+      ? state.activeRange
+      : '7d';
+  const supportsCsvExport = state.supportsCsvExport !== false;
+  return {
+    module: 'src/shared/api/usageApi.ts',
+    phase: 'P146',
+    activeRange,
+    supportsCsvExport,
+    healthy: supportsCsvExport,
+  };
+}

@@ -2,7 +2,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MessageSquare } from 'lucide-react';
 import { describe, expect, it, beforeEach } from 'vitest';
 
-import { NavGroup } from '../NavGroup';
+import {
+  NavGroup,
+  formatNavGroupAuditJson,
+  formatNavGroupAuditSnapshot,
+} from '../NavGroup';
 
 const STORAGE_PREFIX = 'sage:nav-group:';
 
@@ -95,5 +99,42 @@ describe('NavGroup', () => {
 
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('formats audit snapshot and JSON and supports copy controls (Phase P101)', () => {
+    expect(
+      formatNavGroupAuditSnapshot({
+        groupKey: 'tools',
+        label: '工具',
+        collapsible: true,
+        collapsed: false,
+      }),
+    ).toBe('navGroup|key=tools|label=工具|collapsible=1|collapsed=0');
+    expect(formatNavGroupAuditSnapshot({})).toBe(
+      'navGroup|key=none|label=none|collapsible=0|collapsed=0',
+    );
+    expect(
+      JSON.parse(
+        formatNavGroupAuditJson({
+          groupKey: 'advanced',
+          label: '高级',
+          collapsible: true,
+          collapsed: true,
+        }),
+      ),
+    ).toEqual({
+      groupKey: 'advanced',
+      label: '高级',
+      collapsible: true,
+      collapsed: true,
+    });
+
+    renderGroup();
+    const snapBtn = screen.getByTestId('nav-group-copy-snapshot');
+    const jsonBtn = screen.getByTestId('nav-group-copy-json');
+    fireEvent.click(snapBtn);
+    expect(snapBtn).toHaveTextContent('已复制快照');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn).toHaveTextContent('已复制JSON');
   });
 });

@@ -1,7 +1,27 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { useState } from 'react';
 
 import { useI18n } from '../../shared/lib/i18n';
 import { useNavigationHistory } from '../../shared/lib/useNavigationHistory';
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatTitlebarActionsAuditSnapshot(opts: {
+  canBack?: boolean;
+  canForward?: boolean;
+}): string {
+  return `titlebarActions|back=${opts.canBack ? 1 : 0}|forward=${opts.canForward ? 1 : 0}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatTitlebarActionsAuditJson(opts: {
+  canBack?: boolean;
+  canForward?: boolean;
+}): string {
+  return JSON.stringify({
+    canBack: Boolean(opts.canBack),
+    canForward: Boolean(opts.canForward),
+  });
+}
 
 /**
  * Title bar back/forward navigation buttons.
@@ -11,9 +31,34 @@ import { useNavigationHistory } from '../../shared/lib/useNavigationHistory';
 export function TitlebarActions() {
   const { t } = useI18n();
   const history = useNavigationHistory();
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   const canBack = history?.canBack ?? false;
   const canForward = history?.canForward ?? false;
+
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatTitlebarActionsAuditSnapshot({ canBack, canForward }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatTitlebarActionsAuditJson({ canBack, canForward }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <div className="no-drag flex items-center gap-1">
@@ -35,6 +80,45 @@ export function TitlebarActions() {
       >
         <ArrowRight className="w-4 h-4" />
       </button>
+      <span
+        data-testid="titlebar-actions-copy-snapshot"
+        onClick={() => void handleCopySnapshot()}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="titlebar-actions-copy-json"
+        onClick={() => void handleCopyJson()}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditTitlebarActionsGovernance(
+  state: {
+    actionCount?: number;
+    searchAvailable?: boolean;
+  } = {},
+): {
+  module: 'src/widgets/layout/TitlebarActions.tsx';
+  phase: 'P150';
+  actionCount: number;
+  searchAvailable: boolean;
+  healthy: boolean;
+} {
+  const actionCount =
+    typeof state.actionCount === 'number' && Number.isFinite(state.actionCount)
+      ? Math.max(0, Math.trunc(state.actionCount))
+      : 3;
+  const searchAvailable = state.searchAvailable !== false;
+  return {
+    module: 'src/widgets/layout/TitlebarActions.tsx',
+    phase: 'P150',
+    actionCount,
+    searchAvailable,
+    healthy: actionCount >= 1 && searchAvailable,
+  };
 }

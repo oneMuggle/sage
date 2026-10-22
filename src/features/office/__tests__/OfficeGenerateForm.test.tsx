@@ -42,7 +42,11 @@ vi.mock('sonner', () => ({
 
 import type { OfficeTemplateMeta } from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { OfficeGenerateForm } from '../OfficeGenerateForm';
+import {
+  OfficeGenerateForm,
+  formatOfficeGenerateFormAuditJson,
+  formatOfficeGenerateFormAuditSnapshot,
+} from '../OfficeGenerateForm';
 
 const toastMock = toast as unknown as {
   success: ReturnType<typeof vi.fn>;
@@ -342,5 +346,42 @@ describe('OfficeGenerateForm — template mode on excel/ppt tabs (round-3 N2)', 
       expect(toastMock.error).toHaveBeenCalledWith('请先选择一个模板');
     });
     expect(mockInstantiate).not.toHaveBeenCalled();
+  });
+
+  it('formats and copies office generate form audit snapshot and JSON', () => {
+    expect(
+      formatOfficeGenerateFormAuditSnapshot({
+        docType: 'word',
+        mode: 'template',
+        filename: 'weekly-report.docx',
+        busy: false,
+        hasResult: true,
+      }),
+    ).toBe('文档生成 · WORD · 模板创建 · weekly-report.docx · 已生成');
+    expect(
+      JSON.parse(
+        formatOfficeGenerateFormAuditJson({
+          docType: 'ppt',
+          mode: 'freeform',
+          filename: ' ',
+          busy: true,
+          hasResult: false,
+        }),
+      ),
+    ).toEqual({
+      docType: 'ppt',
+      mode: 'freeform',
+      filename: '未命名',
+      busy: true,
+      hasResult: false,
+    });
+
+    renderForm();
+    const summaryBtn = screen.getByTestId('office-generate-form-copy-summary');
+    const jsonBtn = screen.getByTestId('office-generate-form-copy-json');
+    fireEvent.click(summaryBtn);
+    expect(summaryBtn.textContent).toBe('已复制');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toBe('已复制');
   });
 });

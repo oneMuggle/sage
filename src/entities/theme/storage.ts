@@ -61,3 +61,26 @@ export async function saveThemePreset(presetId: string): Promise<void> {
   }
   await settingsClient.setPreference('theme_preset', presetId, 'ui');
 }
+
+export function formatThemeStorageSummary(
+  mode: ThemeMode | null,
+  presetId: string | null = null,
+): string {
+  return `mode=${mode ?? 'none'} · preset=${presetId ?? 'default'}`;
+}
+
+export function formatThemeStorageJson(
+  mode: ThemeMode | null,
+  presetId: string | null = null,
+): string {
+  return JSON.stringify(
+    {
+      cacheKey: CACHE_KEY,
+      presetKey: PRESET_KEY,
+      mode: mode ?? null,
+      presetId: presetId ?? null,
+    },
+    null,
+    2,
+  );
+}

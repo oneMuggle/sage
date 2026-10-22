@@ -9,13 +9,17 @@ const visibleTabs: readonly SettingsTabKey[] = [
   'memory',
   'network',
   'mcp',
+  'plugins',
   'remote-workspaces',
   'zotero',
   'runtime',
   'evolution',
+  'harness',
   'updates',
   'usage-stats',
   'providers',
+  // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
+  'skills',
 ];
 
 /** Keep old settings bookmarks, never render an unknown/hidden initial tab. */
@@ -25,4 +29,27 @@ export function initialSettingsTab(value: string | null, providersEnabled = fals
   if (value === 'memory-knowledge') return 'memory';
   if (value === 'providers' && !providersEnabled) return 'basic';
   return visibleTabs.includes(value as SettingsTabKey) ? (value as SettingsTabKey) : 'basic';
+}
+
+export function formatSettingsNavigationSummary(
+  rawValue: string | null,
+  providersEnabled = false,
+): string {
+  const resolved = initialSettingsTab(rawValue, providersEnabled);
+  return `${rawValue ?? 'null'} -> ${resolved} · providers=${providersEnabled}`;
+}
+
+export function formatSettingsNavigationJson(
+  rawValue: string | null,
+  providersEnabled = false,
+): string {
+  return JSON.stringify(
+    {
+      requested: rawValue,
+      resolved: initialSettingsTab(rawValue, providersEnabled),
+      providersEnabled,
+    },
+    null,
+    2,
+  );
 }

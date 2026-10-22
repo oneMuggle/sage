@@ -1,7 +1,16 @@
 // 对话阅读体验 B1：朗读的纯逻辑 —— 支持检测、朗读文本、语言判断、切片、选语音。
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { detectSpeechLang, isSpeechSupported, pickVoice, SPEECH_CHUNK_MAX, splitSpeechChunks, toSpeechText } from '../speech';
+import {
+  detectSpeechLang,
+  isSpeechSupported,
+  pickVoice,
+  SPEECH_CHUNK_MAX,
+  splitSpeechChunks,
+  buildSpeechAuditJson,
+  buildSpeechAuditSnapshot,
+  toSpeechText,
+} from '../speech';
 
 function voice(lang: string, localService: boolean): SpeechSynthesisVoice {
   const name = `${lang}-${localService ? 'local' : 'remote'}`;
@@ -63,5 +72,27 @@ describe('speech helpers (B1)', () => {
     expect(pickVoice([remoteZh], 'zh-CN')).toBe(remoteZh);
     expect(pickVoice([voice('en_GB', false)], 'en-US')?.lang).toBe('en_GB');
     expect(pickVoice([localEn], 'zh-CN')).toBeNull();
+  });
+});
+
+describe('speech governance audit helpers (Phase P107)', () => {
+  it('builds deterministic audit snapshot and JSON for Chinese and English markdown', () => {
+    const emptySnap = buildSpeechAuditSnapshot('');
+    expect(emptySnap).toEqual({
+      supported: false,
+      lang: 'en-US',
+      speechTextLength: 0,
+      chunkCount: 0,
+      maxChunkLength: 0,
+      chunkLimit: SPEECH_CHUNK_MAX,
+      signature: `0|en-US|0|0|0|${SPEECH_CHUNK_MAX}`,
+    });
+
+    const zhSnap = buildSpeechAuditSnapshot('## 你好世界\n```js\nx()\n```', '代码已略过。');
+    expect(zhSnap.lang).toBe('zh-CN');
+    expect(zhSnap.chunkCount).toBe(1);
+    expect(JSON.parse(buildSpeechAuditJson('## 你好世界\n```js\nx()\n```', '代码已略过。'))).toEqual(
+      zhSnap,
+    );
   });
 });

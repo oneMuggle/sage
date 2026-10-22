@@ -30,3 +30,26 @@ export function useSettings(): UseSettingsReturn {
 
   return { settings, isLoading, loadSettings, updateSettings, updateSettingsStrict, resetSettings };
 }
+
+export function formatUseSettingsSnapshotSummary(
+  settings: AppSettings,
+  isLoading: boolean,
+): string {
+  return `${isLoading ? 'loading' : 'ready'} · maxContext=${settings.maxContext} · streaming=${Boolean(settings.streaming)}`;
+}
+
+export function formatUseSettingsSnapshotJson(
+  settings: AppSettings,
+  isLoading: boolean,
+): string {
+  return JSON.stringify(
+    {
+      isLoading,
+      maxContext: settings.maxContext,
+      streaming: Boolean(settings.streaming),
+      endpointCount: settings.endpoints?.length ?? 0,
+    },
+    null,
+    2,
+  );
+}

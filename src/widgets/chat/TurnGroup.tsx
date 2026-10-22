@@ -162,3 +162,52 @@ function formatTurnTime(ts: number): string {
 }
 
 export const TurnGroup = memo(TurnGroupComponent);
+
+export interface TurnGroupAuditInput {
+  turnId: string;
+  messageCount: number;
+  toolCallCount: number;
+  isStreaming: boolean;
+}
+
+export interface TurnGroupAuditReport {
+  turnId: string;
+  messageCount: number;
+  toolCallCount: number;
+  isStreaming: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateTurnGroupAudit(
+  input: TurnGroupAuditInput,
+): TurnGroupAuditReport {
+  const turnId = input.turnId.trim();
+  const messageCount = Math.max(0, Math.trunc(input.messageCount));
+  const toolCallCount = Math.max(0, Math.trunc(input.toolCallCount));
+  const issueCodes: string[] = [];
+
+  if (!turnId) {
+    issueCodes.push('missing_turn_id');
+  }
+  if (messageCount === 0) {
+    issueCodes.push('empty_turn_group');
+  }
+
+  return {
+    turnId,
+    messageCount,
+    toolCallCount,
+    isStreaming: Boolean(input.isStreaming),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportTurnGroupAuditJson(
+  input: TurnGroupAuditInput,
+): string {
+  return JSON.stringify(evaluateTurnGroupAudit(input));
+}

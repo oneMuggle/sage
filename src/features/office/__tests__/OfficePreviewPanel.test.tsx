@@ -29,9 +29,20 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-import type { OfficeExcelReadResult, OfficePdfReadResult, OfficePptReadResult } from '../../../shared/api/types';
+import type {
+  OfficeExcelReadResult,
+  OfficePdfReadResult,
+  OfficePptReadResult,
+} from '../../../shared/api/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { OfficePreviewPanel, PARAGRAPH_RENDER_CAP, ROW_RENDER_CAP, type OfficePreviewData } from '../OfficePreviewPanel';
+import {
+  OfficePreviewPanel,
+  PARAGRAPH_RENDER_CAP,
+  ROW_RENDER_CAP,
+  formatOfficePreviewPanelAuditJson,
+  formatOfficePreviewPanelAuditSnapshot,
+  type OfficePreviewData,
+} from '../OfficePreviewPanel';
 
 const toastMock = toast as unknown as {
   success: ReturnType<typeof vi.fn>;
@@ -481,5 +492,42 @@ describe('OfficePreviewPanel — export PDF button (item 2.7)', () => {
     renderPanel(WORD_PREVIEW, onEditPreview);
     fireEvent.click(screen.getByTestId('office-edit-preview-button'));
     expect(onEditPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it('formats and copies office preview panel audit snapshot and JSON', () => {
+    expect(
+      formatOfficePreviewPanelAuditSnapshot({
+        docType: 'word',
+        filename: 'report.docx',
+        sizeBytes: 2048,
+        fidelityOn: false,
+        exporting: false,
+      }),
+    ).toBe('文档预览 · WORD · report.docx · 2.0KB · 结构化视图 · 就绪');
+    expect(
+      JSON.parse(
+        formatOfficePreviewPanelAuditJson({
+          docType: 'excel',
+          filename: ' ',
+          sizeBytes: 4096,
+          fidelityOn: true,
+          exporting: true,
+        }),
+      ),
+    ).toEqual({
+      docType: 'excel',
+      filename: '未命名',
+      sizeBytes: 4096,
+      fidelityOn: true,
+      exporting: true,
+    });
+
+    renderPanel(WORD_PREVIEW);
+    const summaryBtn = screen.getByTestId('office-preview-panel-copy-summary');
+    const jsonBtn = screen.getByTestId('office-preview-panel-copy-json');
+    fireEvent.click(summaryBtn);
+    expect(summaryBtn.textContent).toBe('已复制');
+    fireEvent.click(jsonBtn);
+    expect(jsonBtn.textContent).toBe('已复制');
   });
 });

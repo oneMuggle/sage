@@ -13,3 +13,49 @@ export function TopicSeparator({ content }: { content?: string | null }) {
     </div>
   );
 }
+
+export interface TopicSeparatorAuditInput {
+  topicTitle: string;
+  timestampMs: number;
+  messageCountBefore: number;
+}
+
+export interface TopicSeparatorAuditReport {
+  topicTitle: string;
+  hasValidTimestamp: boolean;
+  messageCountBefore: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateTopicSeparatorAudit(
+  input: TopicSeparatorAuditInput,
+): TopicSeparatorAuditReport {
+  const topicTitle = input.topicTitle.trim();
+  const hasValidTimestamp = Number.isFinite(input.timestampMs) && input.timestampMs > 0;
+  const messageCountBefore = Math.max(0, Math.trunc(input.messageCountBefore));
+  const issueCodes: string[] = [];
+
+  if (!topicTitle) {
+    issueCodes.push('empty_topic_separator_title');
+  }
+  if (!hasValidTimestamp) {
+    issueCodes.push('invalid_topic_separator_timestamp');
+  }
+
+  return {
+    topicTitle,
+    hasValidTimestamp,
+    messageCountBefore,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportTopicSeparatorAuditJson(
+  input: TopicSeparatorAuditInput,
+): string {
+  return JSON.stringify(evaluateTopicSeparatorAudit(input));
+}

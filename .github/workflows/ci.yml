@@ -118,6 +118,14 @@ jobs:
         run: |
           conda run -n sage-backend ruff check backend/
 
+      # R86：仓库内示例与静态插件索引必须与当前 manifest/host 契约同步；
+      # 定向单测随后仍会覆盖脚手架、索引模型与 CLI 退出码。
+      - name: Plugin ecosystem check (R86)
+        shell: bash -el {0}
+        run: |
+          conda run -n sage-backend python -m backend.cli.plugin validate examples/plugins/hello-tool --strict
+          conda run -n sage-backend python -m backend.cli.plugin index validate plugins/index.json --check-local
+
       - name: Mypy (domain + ports)
         shell: bash -el {0}
         env:

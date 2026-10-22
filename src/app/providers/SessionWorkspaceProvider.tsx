@@ -57,6 +57,26 @@ export interface WorkspaceContextValue {
   refresh: () => Promise<void>;
 }
 
+export interface SessionWorkspaceAuditInput {
+  sessionId: string | null;
+  hasBinding: boolean;
+  status: WorkspaceStatus;
+  hasError: boolean;
+}
+
+export function formatSessionWorkspaceAuditSnapshot(input: SessionWorkspaceAuditInput): string {
+  return `session=${input.sessionId ?? 'none'}|bound=${input.hasBinding ? 1 : 0}|status=${input.status}|err=${input.hasError ? 1 : 0}`;
+}
+
+export function formatSessionWorkspaceAuditJson(input: SessionWorkspaceAuditInput): string {
+  return JSON.stringify({
+    sessionId: input.sessionId,
+    hasBinding: input.hasBinding,
+    status: input.status,
+    hasError: input.hasError,
+  });
+}
+
 interface SessionWorkspaceProviderProps {
   children: ReactNode;
 }
@@ -199,7 +219,78 @@ export function SessionWorkspaceProvider({ children }: SessionWorkspaceProviderP
     [sessionId, binding, status, error, bind, revoke, refresh],
   );
 
-  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const auditInput: SessionWorkspaceAuditInput = {
+    sessionId,
+    hasBinding: Boolean(binding?.workspacePath),
+    status,
+    hasError: Boolean(error),
+  };
+  const auditSnapshot = formatSessionWorkspaceAuditSnapshot(auditInput);
+  const auditJson = formatSessionWorkspaceAuditJson(auditInput);
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(auditSnapshot);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(auditJson);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+  /* v8 ignore stop */
+
+  return (
+    <WorkspaceContext.Provider value={value}>
+      {children}
+      <span
+        data-testid="session-workspace-audit-status"
+        data-session-workspace-audit={auditSnapshot}
+        className="sr-only"
+      >
+        <span
+          role="status"
+          tabIndex={0}
+          data-testid="session-workspace-audit-copy"
+          data-session-workspace-audit={auditSnapshot}
+          aria-label="复制会话工作区审计快照"
+          onClick={() => void handleCopySnapshot()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              void handleCopySnapshot();
+            }
+          }}
+        >
+          {copiedSnapshot ? '已复制' : '快照'}
+        </span>
+        <span
+          role="status"
+          tabIndex={0}
+          data-testid="session-workspace-audit-copy-json"
+          data-session-workspace-audit-json={auditJson}
+          aria-label="复制会话工作区审计 JSON"
+          onClick={() => void handleCopyJson()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              void handleCopyJson();
+            }
+          }}
+        >
+          {copiedJson ? '已复制 JSON' : 'JSON'}
+        </span>
+      </span>
+    </WorkspaceContext.Provider>
+  );
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

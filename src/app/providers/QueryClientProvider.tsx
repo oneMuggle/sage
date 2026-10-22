@@ -36,3 +36,27 @@ export function QueryClientProvider({ children }: QueryClientProviderProps) {
 
   return <TanstackQueryClientProvider client={client}>{children}</TanstackQueryClientProvider>;
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatQueryClientConfigSummary(
+  staleTimeMs = 30_000,
+  retry = 1,
+  refetchOnWindowFocus = false,
+): string {
+  const safeStale = Math.max(0, Math.trunc(staleTimeMs));
+  const safeRetry = Math.max(0, Math.trunc(retry));
+  return `staleTimeMs=${safeStale} · retry=${safeRetry} · refetchOnWindowFocus=${Boolean(refetchOnWindowFocus)}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatQueryClientConfigJson(
+  staleTimeMs = 30_000,
+  retry = 1,
+  refetchOnWindowFocus = false,
+): string {
+  return JSON.stringify({
+    staleTimeMs: Math.max(0, Math.trunc(staleTimeMs)),
+    retry: Math.max(0, Math.trunc(retry)),
+    refetchOnWindowFocus: Boolean(refetchOnWindowFocus),
+  });
+}
+

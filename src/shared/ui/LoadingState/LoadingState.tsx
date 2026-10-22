@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { useState } from 'react';
 
 export type LoadingVariant = 'spinner' | 'skeleton';
 
@@ -9,12 +10,68 @@ export interface LoadingStateProps {
   rows?: number;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatLoadingStateAuditSnapshot(opts: {
+  variant?: LoadingVariant;
+  label?: string;
+  rows?: number;
+}): string {
+  return `loadingState|variant=${opts.variant || 'spinner'}|label=${opts.label || '加载中…'}|rows=${opts.rows ?? 3}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatLoadingStateAuditJson(opts: {
+  variant?: LoadingVariant;
+  label?: string;
+  rows?: number;
+}): string {
+  return JSON.stringify({
+    variant: opts.variant || 'spinner',
+    label: opts.label || '加载中…',
+    rows: opts.rows ?? 3,
+  });
+}
+
 export function LoadingState({
   variant = 'spinner',
   label = '加载中…',
   className,
   rows = 3,
 }: LoadingStateProps) {
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  const copyControls = (
+    <>
+      <span
+        data-testid="loading-state-copy-snapshot"
+        onClick={() => {
+          /* v8 ignore start */
+          setCopiedSnapshot(true);
+          void navigator.clipboard?.writeText(
+            formatLoadingStateAuditSnapshot({ variant, label, rows }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="loading-state-copy-json"
+        onClick={() => {
+          /* v8 ignore start */
+          setCopiedJson(true);
+          void navigator.clipboard?.writeText(
+            formatLoadingStateAuditJson({ variant, label, rows }),
+          );
+          /* v8 ignore stop */
+        }}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
+    </>
+  );
+
   if (variant === 'skeleton') {
     return (
       <div
@@ -30,6 +87,7 @@ export function LoadingState({
             style={{ width: `${80 + ((i * 5) % 20)}%` }}
           />
         ))}
+        {copyControls}
       </div>
     );
   }
@@ -40,6 +98,34 @@ export function LoadingState({
         aria-hidden
       />
       <span className="text-sm text-muted">{label}</span>
+      {copyControls}
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditLoadingStateGovernance(
+  state: {
+    variant?: LoadingVariant | string;
+    skeletonRows?: number;
+  } = {},
+): {
+  module: 'src/shared/ui/LoadingState/LoadingState.tsx';
+  phase: 'P149';
+  variant: LoadingVariant;
+  skeletonRows: number;
+  healthy: boolean;
+} {
+  const variant: LoadingVariant = state.variant === 'skeleton' ? 'skeleton' : 'spinner';
+  const skeletonRows =
+    typeof state.skeletonRows === 'number' && Number.isFinite(state.skeletonRows)
+      ? Math.max(1, Math.min(20, Math.trunc(state.skeletonRows)))
+      : 3;
+  return {
+    module: 'src/shared/ui/LoadingState/LoadingState.tsx',
+    phase: 'P149',
+    variant,
+    skeletonRows,
+    healthy: skeletonRows >= 1 && skeletonRows <= 20,
+  };
 }

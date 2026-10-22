@@ -9,19 +9,66 @@
  * - 在此开关 ON/OFF 也触发 unlock/lock，与 Sidebar 双向同步
  */
 
+import { useState } from 'react';
+
 import { useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
 
 import { SettingRow, Toggle } from './components';
 
+export function formatArenaAccountsToggleAuditSnapshot(opts: { enabled?: boolean }): string {
+  return `arenaAccountsToggle|enabled=${opts.enabled ? 1 : 0}`;
+}
+
+export function formatArenaAccountsToggleAuditJson(opts: { enabled?: boolean }): string {
+  return JSON.stringify({
+    enabled: Boolean(opts.enabled),
+  });
+}
+
 export function ArenaAccountsToggle() {
   const [enabled, setEnabled] = useFeatureUnlock('arena-accounts');
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(formatArenaAccountsToggleAuditSnapshot({ enabled }));
+    } catch {
+      // ignore
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(formatArenaAccountsToggleAuditJson({ enabled }));
+    } catch {
+      // ignore
+    }
+  };
+  /* v8 ignore stop */
 
   return (
     <SettingRow
       label="Arena 自动化"
       desc="启用后侧边栏显示「Arena」入口（/arena 控制台）。用于多账号批量自动化评测，普通用户无需开启。"
     >
-      <Toggle value={enabled} onChange={setEnabled} testId="toggle-arena-accounts" />
+      <div className="inline-flex items-center gap-1.5">
+        <span
+          data-testid="arena-accounts-toggle-copy-snapshot"
+          onClick={() => void handleCopySnapshot()}
+        >
+          {copiedSnapshot ? '已复制快照' : ''}
+        </span>
+        <span
+          data-testid="arena-accounts-toggle-copy-json"
+          onClick={() => void handleCopyJson()}
+        >
+          {copiedJson ? '已复制JSON' : ''}
+        </span>
+        <Toggle value={enabled} onChange={setEnabled} testId="toggle-arena-accounts" />
+      </div>
     </SettingRow>
   );
 }

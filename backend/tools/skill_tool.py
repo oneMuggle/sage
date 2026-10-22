@@ -28,6 +28,7 @@ import logging
 import shlex
 from typing import Any, List, Optional
 
+from backend.application.services.harness_recorder import HarnessProbe
 from backend.domain.tool_policy import ToolPolicy
 
 from .base import BaseTool, ToolResult, ToolSchema
@@ -90,21 +91,44 @@ class SkillTool(BaseTool):
                         "type": "string",
                         "description": "传给技能的参数字符串（按 shell 词法切分为参数列表）",
                     },
+                    "script": {
+                        "type": "string",
+                        "description": (
+                            "相对技能目录的脚本路径（如 'scripts/scan.py'）。"
+                            "提供时走权限闸口（_enforce_permission），执行技能绑定的外部脚本。"
+                        ),
+                    },
                 },
                 "required": ["skill"],
             },
         )
 
-    def execute(self, skill: str = "", args: Optional[str] = None, **kwargs) -> ToolResult:
+    def execute(
+        self,
+        skill: str = "",
+        args: Optional[str] = None,
+        script: Optional[str] = None,
+        **kwargs,
+    ) -> ToolResult:
         """解析并执行技能。
 
         Args:
             skill: 技能名（必填）
             args:  可选参数字符串
+            script: 相对技能目录的脚本路径（提供时走权限闸口执行外部脚本）
         """
         del kwargs
-        if not isinstance(skill, str) or not skill.strip():
-            return ToolResult(success=False, error="skill 参数必须是非空字符串")
+        skill_ok = isinstance(skill, str) and bool(skill.strip())
+        # script 路径合法性由 adapter.execute → script_runner 链校验，
+        # 这里仅做基本类型检查
+        script_ok = script is None or isinstance(script, str)
+        if not skill_ok or not script_ok:
+            message = (
+                "skill 参数必须是非空字符串"
+                if not skill_ok
+                else "script 参数必须是字符串"
+            )
+            return ToolResult(success=False, error=message)
         skill = skill.strip()
 
         adapter = self._resolve_adapter()
@@ -126,16 +150,25 @@ class SkillTool(BaseTool):
         # 而技能执行路径是 async —— 临时事件循环跑完即关。
         import asyncio
 
+        probe = HarnessProbe("skill", skill)
         loop = asyncio.new_event_loop()
         try:
-            result = loop.run_until_complete(
-                self._invoke(adapter, skill, args_raw, args_list)
-            )
-        except Exception as exc:  # noqa: BLE001 — 工具约定：错误走 ToolResult 不抛
-            logger.error("skill 执行失败: skill=%s error=%s", skill, exc)
-            return ToolResult(success=False, error=f"skill 执行失败: {exc}")
+            with probe:
+                try:
+                    result = loop.run_until_complete(
+                        self._invoke(adapter, skill, args_raw, args_list, script=script)
+                    )
+                    probe.result = result  # SkillResult.success 供 probe 读取
+                except Exception as exc:  # noqa: BLE001 — 工具约定：错误走 ToolResult 不抛
+                    logger.error("skill 执行失败: skill=%s error=%s", skill, exc)
+                    return ToolResult(success=False, error=f"skill 执行失败: {exc}")
         finally:
-            loop.close()
+            # __exit__ 已计算 metrics；loop 仍 open —— 在此 await 埋点，
+            # 保证写事务在函数返回前完成（杜绝后台线程 use-after-free）。
+            try:
+                loop.run_until_complete(probe.aemit())
+            finally:
+                loop.close()
 
         if not result.success:
             return ToolResult(success=False, error=result.error or "skill 执行失败")
@@ -147,14 +180,22 @@ class SkillTool(BaseTool):
         skill: str,
         args_raw: str,
         args_list: List[str],
+        *,
+        script: Optional[str] = None,
     ) -> Any:
-        """走既有执行路径：slash command 优先，builtin 回退。
+        """走既有执行路径：script 优先 → slash command → builtin 回退。
 
+        - 提供 ``script`` 时直接走 ``adapter.execute`` —— 即
+          ``POST /skills/{name}/execute`` 的同一函数，自动触发
+          ``_is_script_dispatch`` + ``_enforce_permission`` 权限闸口。
         - ``adapter.execute_command`` —— POST /skills/command 的同一函数
           （user_invocable 的 SKILL.md 技能；未注册命令抛 LookupError）。
         - ``adapter.execute`` —— POST /skills/{name}/execute 的同一函数
           （builtin 等非 slash 技能）。
         """
+        if script is not None:
+            # script 分发走权限闸口（_enforce_permission 在 adapter.execute 内部）
+            return await adapter.execute(skill, "", {"script": script, "args": args_list})
         try:
             return await adapter.execute_command(skill, args_list)
         except LookupError:

@@ -6,7 +6,7 @@
  * - render 失败（语法错误）→ 回退 ShikiCodeBlock 源码展示 + 提示
  * - 加载中 → 占位
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const renderMock = vi.fn();
@@ -20,7 +20,11 @@ vi.mock('mermaid', () => ({
 }));
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { MermaidBlock } from '../MermaidBlock';
+import {
+  MermaidBlock,
+  formatMermaidBlockAuditJson,
+  formatMermaidBlockAuditSnapshot,
+} from '../MermaidBlock';
 
 const FLOWCHART = 'graph TD\n  A[开始] --> B[结束]';
 
@@ -71,5 +75,51 @@ describe('MermaidBlock (U7\')', () => {
     expect(screen.getByText(/graph TD/)).toBeInTheDocument();
     expect(screen.getByText(/渲染失败/)).toBeInTheDocument();
     expect(screen.queryByTestId('mermaid-figure')).not.toBeInTheDocument();
+  });
+
+  it('formats MermaidBlock audit snapshot/JSON and supports copy controls (P103)', async () => {
+    expect(
+      formatMermaidBlockAuditSnapshot({
+        state: 'ready',
+        theme: 'default',
+        zoomPct: 100,
+        fullscreen: false,
+        codeLength: 25,
+      }),
+    ).toBe('state=ready|theme=default|zoom=100|fs=0|len=25');
+    expect(
+      JSON.parse(
+        formatMermaidBlockAuditJson({
+          state: 'failed',
+          theme: 'dark',
+          zoomPct: 125,
+          fullscreen: true,
+          codeLength: 10,
+        }),
+      ),
+    ).toEqual({
+      state: 'failed',
+      theme: 'dark',
+      zoomPct: 125,
+      fullscreen: true,
+      codeLength: 10,
+    });
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    renderMock.mockResolvedValue({ svg: '<svg><text>ok</text></svg>' });
+    renderBlock(<MermaidBlock code={FLOWCHART} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('mermaid-figure')).toHaveAttribute(
+        'data-mermaid-block-audit',
+        `state=ready|theme=default|zoom=100|fs=0|len=${FLOWCHART.length}`,
+      );
+    });
+    fireEvent.click(screen.getByTestId('mermaid-block-audit-copy'));
+    expect(writeText).toHaveBeenCalledWith(
+      `state=ready|theme=default|zoom=100|fs=0|len=${FLOWCHART.length}`,
+    );
+    fireEvent.click(screen.getByTestId('mermaid-block-audit-copy-json'));
+    expect(writeText).toHaveBeenCalledTimes(2);
   });
 });

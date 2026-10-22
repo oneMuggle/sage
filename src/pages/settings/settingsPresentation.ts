@@ -13,7 +13,7 @@ const GROUPS = [
     id: 'tools',
     zh: '工具与安全',
     en: 'Tools and safety',
-    keys: ['tools-connections', 'mcp', 'orchestration', 'evolution'],
+    keys: ['tools-connections', 'mcp', 'plugins', 'orchestration', 'evolution', 'skills'],
   },
   {
     id: 'network',
@@ -50,4 +50,31 @@ export function focusSettingsEntry(container: HTMLElement, entry: SettingsSearch
   row.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
   row.focus({ preventScroll: true });
   return true;
+}
+
+export function formatSettingsGroupsSummary(
+  available: readonly SettingsTabKey[],
+  locale = 'zh',
+): string {
+  const groups = settingsGroups(available, locale);
+  const tabCount = groups.reduce((acc, g) => acc + g.keys.length, 0);
+  return `settings-groups: ${groups.length} groups · ${tabCount} tabs · locale=${locale}`;
+}
+
+export function formatSettingsGroupsJson(
+  available: readonly SettingsTabKey[],
+  locale = 'zh',
+): string {
+  const groups = settingsGroups(available, locale);
+  const tabCount = groups.reduce((acc, g) => acc + g.keys.length, 0);
+  return JSON.stringify(
+    {
+      groupCount: groups.length,
+      tabCount,
+      locale,
+      groupIds: groups.map((g) => g.id),
+    },
+    null,
+    2,
+  );
 }

@@ -57,3 +57,25 @@ export function JournalActions({ templates, workspacePath }: JournalActionsProps
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatJournalActionsSummary(
+  hasSpec: boolean,
+  loading = false,
+  hasError = false,
+): string {
+  return `hasSpec=${Boolean(hasSpec)} · loading=${Boolean(loading)} · error=${Boolean(hasError)}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatJournalActionsJson(
+  hasSpec: boolean,
+  loading = false,
+  hasError = false,
+): string {
+  return JSON.stringify({
+    hasSpec: Boolean(hasSpec),
+    loading: Boolean(loading),
+    hasError: Boolean(hasError),
+  });
+}
+

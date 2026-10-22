@@ -143,3 +143,44 @@ export const mcpClient = {
     return invoke('mcp_server_delete', { name });
   },
 };
+
+export function auditMcpClientGovernance(
+  state: {
+    serverName?: string;
+    serverState?: McpServerState;
+    toolCount?: number;
+  } = {},
+): {
+  module: 'src/shared/api/mcpClient.ts';
+  phase: 'P144';
+  serverName: string;
+  serverState: McpServerState;
+  toolCount: number;
+  validName: boolean;
+  healthy: boolean;
+} {
+  const serverName =
+    typeof state.serverName === 'string' && state.serverName.trim().length > 0
+      ? state.serverName.trim()
+      : 'shuncode-bridge';
+  const serverState: McpServerState =
+    state.serverState === 'discovering' ||
+    state.serverState === 'failed' ||
+    state.serverState === 'disabled'
+      ? state.serverState
+      : 'ready';
+  const toolCount =
+    typeof state.toolCount === 'number' && Number.isFinite(state.toolCount)
+      ? Math.max(0, Math.trunc(state.toolCount))
+      : 16;
+  const validName = MCP_NAME_REGEX.test(serverName);
+  return {
+    module: 'src/shared/api/mcpClient.ts',
+    phase: 'P144',
+    serverName,
+    serverState,
+    toolCount,
+    validName,
+    healthy: validName && serverState !== 'failed' && toolCount >= 0,
+  };
+}

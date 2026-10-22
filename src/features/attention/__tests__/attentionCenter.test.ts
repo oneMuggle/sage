@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Todo } from '../../../shared/api/types';
-import { aggregateAttention, attentionSummary, attentionTitle, emptyAttentionSnapshot, ATTENTION_KINDS } from '../index';
+import {
+  buildAttentionCenterAuditJson,
+  buildAttentionCenterAuditSnapshot,
+} from '../attentionCenter';
+import {
+  aggregateAttention,
+  attentionSummary,
+  attentionTitle,
+  emptyAttentionSnapshot,
+  ATTENTION_KINDS,
+} from '../index';
 import { countDirtyFiles, countPendingTodos } from '../index';
 
 function todo(status: Todo['status']): Todo {
@@ -133,5 +143,46 @@ describe('countDirtyFiles', () => {
   it('不干净时返回涉及文件数', () => {
     const changes = [{ path: 'a.ts' }, { path: 'b.ts' }] as never;
     expect(countDirtyFiles({ clean: false, changes } as never)).toBe(2);
+  });
+});
+
+describe('attentionCenter governance audit helpers (Phase P106)', () => {
+  it('builds deterministic audit snapshot and JSON from AttentionInput or AttentionSnapshot', () => {
+    const emptySnap = buildAttentionCenterAuditSnapshot();
+    expect(emptySnap).toEqual({
+      total: 0,
+      entryCount: 0,
+      topKind: null,
+      hasApprovalOrQuestion: false,
+      title: '无待处理',
+      summary: '无待处理',
+      kinds: [],
+      signature: '0|0|-|0|',
+    });
+
+    const populated = buildAttentionCenterAuditSnapshot({
+      pendingApprovals: 1,
+      pendingTodos: 3,
+      dirtyFiles: 2,
+    });
+    expect(populated.total).toBe(6);
+    expect(populated.entryCount).toBe(3);
+    expect(populated.topKind).toBe('approval');
+    expect(populated.hasApprovalOrQuestion).toBe(true);
+    expect(populated.signature).toBe('6|3|approval|1|approval,todo,git');
+    expect(
+      buildAttentionCenterAuditSnapshot(
+        aggregateAttention({ pendingApprovals: 1, pendingTodos: 3, dirtyFiles: 2 }),
+      ),
+    ).toEqual(populated);
+    expect(
+      JSON.parse(
+        buildAttentionCenterAuditJson({
+          pendingApprovals: 1,
+          pendingTodos: 3,
+          dirtyFiles: 2,
+        }),
+      ),
+    ).toEqual(populated);
   });
 });

@@ -50,3 +50,47 @@ export function WebSearchToolRenderer({ tc }: { tc: ToolCall }) {
     </ToolCallCard>
   );
 }
+
+export interface WebSearchToolRendererAuditInput {
+  queryText: string;
+  resultCount: number | null;
+  searchCompleted: boolean;
+  latencyMs: number;
+}
+
+export interface WebSearchToolRendererAuditReport {
+  hasQuery: boolean;
+  normalizedResultCount: number;
+  searchCompleted: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateWebSearchToolRendererGovernanceAudit(
+  input: WebSearchToolRendererAuditInput,
+): WebSearchToolRendererAuditReport {
+  const issueCodes: string[] = [];
+  const hasQuery = input.queryText.trim().length > 0;
+  if (!hasQuery) {
+    issueCodes.push('WEB_SEARCH_QUERY_EMPTY');
+  }
+  const normalizedResultCount =
+    input.resultCount === null ? 0 : Math.max(0, Math.trunc(input.resultCount));
+  if (input.resultCount !== null && input.resultCount < 0) {
+    issueCodes.push('WEB_SEARCH_RESULT_COUNT_NEGATIVE');
+  }
+  if (!input.searchCompleted) {
+    issueCodes.push('WEB_SEARCH_INCOMPLETE');
+  }
+  if (!Number.isFinite(input.latencyMs) || input.latencyMs < 0 || input.latencyMs > 60000) {
+    issueCodes.push('WEB_SEARCH_LATENCY_OUT_OF_RANGE');
+  }
+  return {
+    hasQuery,
+    normalizedResultCount,
+    searchCompleted: input.searchCompleted,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

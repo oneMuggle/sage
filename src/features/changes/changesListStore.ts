@@ -96,3 +96,52 @@ export const useChangesListStore = create<ChangesListState>((set, get) => ({
     });
   },
 }));
+
+export interface ChangesListStoreAuditSnapshot {
+  sessionCount: number;
+  dirtySessionCount: number;
+  totalChangedFilesCount: number;
+  loadingSessionCount: number;
+  errorSessionCount: number;
+  signature: string;
+}
+
+export function buildChangesListStoreAuditSnapshot(
+  state?: Partial<Pick<ChangesListState, 'bySession' | 'errors' | 'loadingBy'>>,
+): ChangesListStoreAuditSnapshot {
+  const s = state ?? useChangesListStore.getState();
+  const bySession = s.bySession ?? {};
+  const errors = s.errors ?? {};
+  const loadingBy = s.loadingBy ?? {};
+  const sessionIds = Object.keys(bySession);
+  const sessionCount = sessionIds.length;
+  let dirtySessionCount = 0;
+  let totalChangedFilesCount = 0;
+  for (const sid of sessionIds) {
+    const entry = bySession[sid];
+    const count = Array.isArray(entry?.changes) ? entry.changes.length : 0;
+    totalChangedFilesCount += count;
+    if (entry && (!entry.clean || count > 0)) {
+      dirtySessionCount += 1;
+    }
+  }
+  const loadingSessionCount = Object.values(loadingBy).filter(Boolean).length;
+  const errorSessionCount = Object.values(errors).filter(
+    (msg) => typeof msg === 'string' && msg.trim().length > 0,
+  ).length;
+  const signature = `${sessionCount}|${dirtySessionCount}|${totalChangedFilesCount}|${loadingSessionCount}|${errorSessionCount}`;
+  return {
+    sessionCount,
+    dirtySessionCount,
+    totalChangedFilesCount,
+    loadingSessionCount,
+    errorSessionCount,
+    signature,
+  };
+}
+
+export function buildChangesListStoreAuditJson(
+  state?: Partial<Pick<ChangesListState, 'bySession' | 'errors' | 'loadingBy'>>,
+): string {
+  return JSON.stringify(buildChangesListStoreAuditSnapshot(state), null, 2);
+}

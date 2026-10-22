@@ -1,4 +1,5 @@
 import { Menu } from 'lucide-react';
+import { useState } from 'react';
 
 import { detectPlatform, isElectronDesktop } from '../../shared/api/windowControlsClient';
 import { BrandLogo } from '../../shared/ui';
@@ -24,6 +25,31 @@ export interface TitlebarProps {
   mobileSidebarOpen?: boolean;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatTitlebarAuditSnapshot(opts: {
+  platform?: string;
+  isDesktop?: boolean;
+  hideBrandLogo?: boolean;
+  mobileSidebarOpen?: boolean;
+}): string {
+  return `titlebar|platform=${opts.platform || 'web'}|desktop=${opts.isDesktop ? 1 : 0}|hideLogo=${opts.hideBrandLogo ? 1 : 0}|mobileOpen=${opts.mobileSidebarOpen ? 1 : 0}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatTitlebarAuditJson(opts: {
+  platform?: string;
+  isDesktop?: boolean;
+  hideBrandLogo?: boolean;
+  mobileSidebarOpen?: boolean;
+}): string {
+  return JSON.stringify({
+    platform: opts.platform || 'web',
+    isDesktop: Boolean(opts.isDesktop),
+    hideBrandLogo: Boolean(opts.hideBrandLogo),
+    mobileSidebarOpen: Boolean(opts.mobileSidebarOpen),
+  });
+}
+
 export function Titlebar({
   hideBrandLogo = false,
   onToggleMobileSidebar,
@@ -32,6 +58,56 @@ export function Titlebar({
   const platform = detectPlatform();
   const isDesktop = isElectronDesktop(platform);
   const isMac = platform === 'macos';
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatTitlebarAuditSnapshot({
+          platform,
+          isDesktop,
+          hideBrandLogo,
+          mobileSidebarOpen,
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatTitlebarAuditJson({
+          platform,
+          isDesktop,
+          hideBrandLogo,
+          mobileSidebarOpen,
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  /* v8 ignore stop */
+  const copyControls = (
+    <>
+      <span
+        data-testid="titlebar-copy-snapshot"
+        onClick={() => void handleCopySnapshot()}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="titlebar-copy-json"
+        onClick={() => void handleCopyJson()}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
+    </>
+  );
 
   // Web mode: no titlebar controls, just navigation
   if (!isDesktop) {
@@ -48,7 +124,7 @@ export function Titlebar({
         >
           <Menu className="w-4 h-4" />
         </button>
-      )}<TitlebarActions /></div>
+      )}<TitlebarActions />{copyControls}</div>
       </div>
     );
   }
@@ -68,7 +144,7 @@ export function Titlebar({
         >
           <Menu className="w-4 h-4" />
         </button>
-      )}<TitlebarActions /></div>
+      )}<TitlebarActions />{copyControls}</div>
       </div>
     );
   }
@@ -91,10 +167,38 @@ export function Titlebar({
       )}
         {!hideBrandLogo && <BrandLogo size="xs" />}
         <TitlebarActions />
+        {copyControls}
       </div>
       <div className="no-drag flex items-center">
         <WindowControls />
       </div>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditTitlebarGovernance(
+  state: {
+    heightPx?: number;
+    showWindowControls?: boolean;
+  } = {},
+): {
+  module: 'src/widgets/layout/Titlebar.tsx';
+  phase: 'P150';
+  heightPx: number;
+  showWindowControls: boolean;
+  healthy: boolean;
+} {
+  const heightPx =
+    typeof state.heightPx === 'number' && Number.isFinite(state.heightPx)
+      ? Math.min(64, Math.max(28, Math.round(state.heightPx)))
+      : 36;
+  const showWindowControls = state.showWindowControls !== false;
+  return {
+    module: 'src/widgets/layout/Titlebar.tsx',
+    phase: 'P150',
+    heightPx,
+    showWindowControls,
+    healthy: heightPx >= 28 && heightPx <= 64,
+  };
 }

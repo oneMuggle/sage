@@ -12,7 +12,6 @@ import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 
 import { selectSessionSlots, type TaskBoardState, useChatStreamStore } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
-import { formatRetryEventText } from './retryEventText';
 import {
   isValidCitationsPayload,
   isValidCompactPayload,
@@ -450,9 +449,12 @@ export function useChatReattachAndBtw(params: {
             }
             // 2026-10-13: 重接路径同步处理 LLM 重试事件 — 在消息气泡内
             // 显示动态重试提示（与主路径 useChat.ts 同格式）。
-            // 文本格式化抽到 retryEventText.ts（主路径/重接路径共用）。
+            // 2026-10-20: 改为结构化写入 store，由 Message.tsx 渲染 RetryBanner
+            // （带倒计时、颜色编码、进度点），替代纯文本 replaceContent。
+            // 错误类型标签 + 严重程度配色在 RetryBanner.tsx 的 RETRY_ERROR_META
+            // 单源维护；标签文本走 i18n/retryBanner.ts。
             if (evt.state === 'retry' && evt.retry_info) {
-              useChatStreamStore.getState().replaceContent(sid, messageId, formatRetryEventText(evt.retry_info));
+              useChatStreamStore.getState().setRetryInfo(sid, messageId, evt.retry_info);
               useChatStreamStore.getState().setStreamingMeta(sid, messageId, { state: evt.state });
               return;
             }
@@ -589,4 +591,41 @@ export function useChatReattachAndBtw(params: {
   );
 
   return { reattachActiveStream, askBtw };
+}
+
+export interface ChatStreamRuntimeAuditInput {
+  activeStreamCount: number;
+  maxConcurrentStreams: number;
+  pendingMessageCount: number;
+  hasAbortController: boolean;
+}
+
+export interface ChatStreamRuntimeAuditReport {
+  activeStreamCount: number;
+  withinConcurrencyLimit: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+export function evaluateChatStreamRuntimeGovernanceAudit(
+  input: ChatStreamRuntimeAuditInput,
+): ChatStreamRuntimeAuditReport {
+  const issueCodes: string[] = [];
+  if (input.activeStreamCount < 0 || input.pendingMessageCount < 0) {
+    issueCodes.push('CHAT_STREAM_RUNTIME_COUNT_NEGATIVE');
+  }
+  const withinConcurrencyLimit =
+    input.maxConcurrentStreams > 0 && input.activeStreamCount <= input.maxConcurrentStreams;
+  if (!withinConcurrencyLimit) {
+    issueCodes.push('CHAT_STREAM_RUNTIME_CONCURRENCY_EXCEEDED');
+  }
+  if (input.activeStreamCount > 0 && !input.hasAbortController) {
+    issueCodes.push('CHAT_STREAM_RUNTIME_ABORT_CONTROLLER_MISSING');
+  }
+  return {
+    activeStreamCount: Math.max(0, Math.trunc(input.activeStreamCount)),
+    withinConcurrencyLimit,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
 }

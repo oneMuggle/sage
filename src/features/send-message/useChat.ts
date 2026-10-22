@@ -37,7 +37,6 @@ import {
 } from './chatStreamRuntime';
 import { selectSessionSlots, useChatStreamStore } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
-import { formatRetryEventText } from './retryEventText';
 import { notifySession, shouldNotify } from './sessionNotify';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
@@ -144,8 +143,22 @@ export function useChat() {
     // 拼接顺序:store.messages(持久化/加载) → completedSteps(本 run 已完成步骤快照)
     // → 流式覆盖层(若 streaming.messageId 不在 store.messages / completedSteps 中,
     //   说明当前正在流的是新一步,需要追加一个虚拟消息承载流式内容)
+    //
+    // 2026-10-21 dedup: loadMessages 落库服务端行后, completedSteps 里的本地
+    // 快照会与服务端行 (step_index 相同) 叠加导致重复渲染. 以 step_index 去重:
+    // 服务端行优先, completedSteps 中同 step_index 的条目丢弃.
+    const persistedStepIndexes = new Set<number>(
+      messages.filter((m) => m.step_index != null).map((m) => m.step_index as number),
+    );
+    const visibleSteps =
+      persistedStepIndexes.size > 0
+        ? completedSteps.filter(
+            (m) => m.step_index == null || !persistedStepIndexes.has(m.step_index),
+          )
+        : completedSteps;
+
     if (!streamingMessageId) {
-      return completedSteps.length > 0 ? [...messages, ...completedSteps] : messages;
+      return visibleSteps.length > 0 ? [...messages, ...visibleSteps] : messages;
     }
     const overlay: Partial<Message> = {
       content: streamingContent,
@@ -153,12 +166,12 @@ export function useChat() {
       tool_calls: streamingToolCalls.length > 0 ? streamingToolCalls : undefined,
     };
     const overlayInStore = messages.some((m) => m.id === streamingMessageId);
-    const overlayInCompleted = completedSteps.some((m) => m.id === streamingMessageId);
+    const overlayInCompleted = visibleSteps.some((m) => m.id === streamingMessageId);
     let next = messages.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m));
-    if (completedSteps.length > 0) {
+    if (visibleSteps.length > 0) {
       next = [
         ...next,
-        ...completedSteps.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m)),
+        ...visibleSteps.map((m) => (m.id === streamingMessageId ? { ...m, ...overlay } : m)),
       ];
     }
     if (!overlayInStore && !overlayInCompleted && streaming) {
@@ -615,11 +628,12 @@ export function useChat() {
                 return;
               }
 
-              // 2026-10-13: LLM 重试事件 — 在消息气泡内显示动态重试提示
-              // （次数/原因/等待秒数），随后 return 跳过正常 uiText 流程。
-              // 文本格式化抽到 retryEventText.ts（主路径/重接路径共用）。
+              // 2026-10-20: LLM 重试事件 — 结构化写入 store，由 Message.tsx 渲染
+              // RetryBanner（带倒计时、颜色编码、进度点），随后 return 跳过正常
+              // uiText 流程。错误类型标签 + 严重程度配色在 RetryBanner.tsx 的
+              // RETRY_ERROR_META 单源维护；标签文本走 i18n/retryBanner.ts。
               if (evt.state === 'retry' && evt.retry_info) {
-                replaceContent(formatRetryEventText(evt.retry_info));
+                useChatStreamStore.getState().setRetryInfo(sid, assistantId, evt.retry_info);
                 useChatStreamStore
                   .getState()
                   .setStreamingMeta(sid, assistantId, { state: evt.state });

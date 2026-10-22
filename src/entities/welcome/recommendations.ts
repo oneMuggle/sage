@@ -90,3 +90,44 @@ export const defaultRecommendations: AssistantRecommendation[] = [
     },
   },
 ];
+
+export interface RecommendationsAuditSnapshot {
+  recommendationCount: number;
+  bilingualCount: number;
+  validIconCount: number;
+  ids: string[];
+  iconNames: string[];
+  signature: string;
+}
+
+export function buildRecommendationsAuditSnapshot(
+  items: readonly AssistantRecommendation[] = defaultRecommendations,
+): RecommendationsAuditSnapshot {
+  const safeItems: readonly AssistantRecommendation[] = Array.isArray(items) ? items : defaultRecommendations;
+  const recommendationCount = safeItems.length;
+  const bilingualCount = safeItems.filter(
+    (r) =>
+      Boolean(r.labels?.zh?.title?.trim()) &&
+      Boolean(r.labels?.zh?.desc?.trim()) &&
+      Boolean(r.labels?.en?.title?.trim()) &&
+      Boolean(r.labels?.en?.desc?.trim()),
+  ).length;
+  const validIconCount = safeItems.filter((r) => Boolean(lucideIconMap[r.icon])).length;
+  const ids = safeItems.map((r) => r.id);
+  const iconNames = safeItems.map((r) => r.icon);
+  const signature = `${recommendationCount}|${bilingualCount}|${validIconCount}|${ids.join(',')}`;
+  return {
+    recommendationCount,
+    bilingualCount,
+    validIconCount,
+    ids,
+    iconNames,
+    signature,
+  };
+}
+
+export function buildRecommendationsAuditJson(
+  items: readonly AssistantRecommendation[] = defaultRecommendations,
+): string {
+  return JSON.stringify(buildRecommendationsAuditSnapshot(items), null, 2);
+}

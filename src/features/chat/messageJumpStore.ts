@@ -62,3 +62,49 @@ export const useMessageJumpStore = create<MessageJumpState>((set, get) => ({
 export function requestMessageJump(input: MessageJumpInput): number {
   return useMessageJumpStore.getState().request(input);
 }
+
+export interface MessageJumpStoreAuditSnapshot {
+  hasPending: boolean;
+  messageId: string | null;
+  nonce: number | null;
+  hasHeadingHint: boolean;
+  hasHighlightQuery: boolean;
+  highlightIndex: number | null;
+  ttlMs: number;
+  signature: string;
+}
+
+export function buildMessageJumpStoreAuditSnapshot(
+  pending: MessageJumpRequest | null = useMessageJumpStore.getState().pending,
+): MessageJumpStoreAuditSnapshot {
+  const req = pending ?? null;
+  const hasPending = req !== null;
+  const messageId = req?.messageId ?? null;
+  const nonce = typeof req?.nonce === 'number' ? req.nonce : null;
+  const hasHeadingHint = Boolean(
+    (typeof req?.headingText === 'string' && req.headingText.trim().length > 0) ||
+      typeof req?.headingIndex === 'number',
+  );
+  const hasHighlightQuery = Boolean(
+    typeof req?.highlightQuery === 'string' && req.highlightQuery.trim().length > 0,
+  );
+  const highlightIndex = typeof req?.highlightIndex === 'number' ? req.highlightIndex : null;
+  const ttlMs = MESSAGE_JUMP_TTL_MS;
+  const signature = `${hasPending ? 1 : 0}|${messageId ?? '-'}|${nonce ?? -1}|${hasHeadingHint ? 1 : 0}|${hasHighlightQuery ? 1 : 0}|${highlightIndex ?? -1}|${ttlMs}`;
+  return {
+    hasPending,
+    messageId,
+    nonce,
+    hasHeadingHint,
+    hasHighlightQuery,
+    highlightIndex,
+    ttlMs,
+    signature,
+  };
+}
+
+export function buildMessageJumpStoreAuditJson(
+  pending: MessageJumpRequest | null = useMessageJumpStore.getState().pending,
+): string {
+  return JSON.stringify(buildMessageJumpStoreAuditSnapshot(pending), null, 2);
+}

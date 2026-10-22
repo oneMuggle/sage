@@ -670,4 +670,26 @@ describe('probeModel', () => {
     expect(result.status).toBe('error');
     expect(result.error).toContain('connection refused');
   });
+
+  it('formats probe result summary and JSON (Phase P110)', async () => {
+    const { formatProbeResultSummary, formatProbeResultJson } = await import('../api');
+    const okRes = {
+      status: 'success' as const,
+      adapter: 'ollama',
+      data: { native: 32768, service: null, architecture: 'llama', quantization: 'Q4_K_M' },
+      error: null,
+    };
+    expect(formatProbeResultSummary(okRes)).toBe('success · ollama · native=32768 · arch=llama');
+    expect(
+      formatProbeResultSummary({
+        status: 'error',
+        adapter: 'ollama',
+        data: null,
+        error: 'timeout',
+      }),
+    ).toBe('error · ollama · timeout');
+    const parsed = JSON.parse(formatProbeResultJson(okRes));
+    expect(parsed.native).toBe(32768);
+    expect(parsed.architecture).toBe('llama');
+  });
 });

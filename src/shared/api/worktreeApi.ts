@@ -211,3 +211,30 @@ export const worktreeApi = {
     }
   },
 };
+
+export function auditWorktreeApiGovernance(
+  state: {
+    mode?: WorktreeMode | string;
+    worktreeCount?: number;
+  } = {},
+): {
+  module: 'src/shared/api/worktreeApi.ts';
+  phase: 'P146';
+  mode: WorktreeMode;
+  worktreeCount: number;
+  healthy: boolean;
+} {
+  const mode: WorktreeMode =
+    state.mode === 'open' || state.mode === 'checkout' ? state.mode : 'new';
+  const worktreeCount =
+    typeof state.worktreeCount === 'number' && Number.isFinite(state.worktreeCount)
+      ? Math.max(0, Math.trunc(state.worktreeCount))
+      : 0;
+  return {
+    module: 'src/shared/api/worktreeApi.ts',
+    phase: 'P146',
+    mode,
+    worktreeCount,
+    healthy: worktreeCount >= 0,
+  };
+}

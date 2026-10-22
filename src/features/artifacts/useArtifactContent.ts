@@ -47,3 +47,32 @@ export function useArtifactContent(sessionId: string, artifactId: string | null)
 
   return { content, loading, refresh };
 }
+
+export function formatArtifactContentStateSummary(
+  content: ArtifactContent | null,
+  loading: boolean,
+): string {
+  if (loading) return 'loading';
+  if (!content) return 'empty';
+  if (!content.ok) return `error · ${content.error ?? 'unknown'}`;
+  return `ok · ${content.kind ?? 'unknown'} · ${(content.content ?? '').length} chars`;
+}
+
+export function formatArtifactContentStateJson(
+  content: ArtifactContent | null,
+  loading: boolean,
+): string {
+  return JSON.stringify(
+    {
+      loading,
+      hasContent: content !== null,
+      ok: content?.ok ?? null,
+      kind: content?.kind ?? null,
+      contentLength: content?.content?.length ?? 0,
+      truncated: Boolean(content?.truncated),
+      error: content?.error ?? null,
+    },
+    null,
+    2,
+  );
+}

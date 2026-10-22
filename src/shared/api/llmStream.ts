@@ -209,3 +209,25 @@ export async function* parseNDJSONStream(
     reader.releaseLock();
   }
 }
+
+export function formatAgentEventSummary(
+  evt: Pick<AgentEvent, 'state' | 'run_id' | 'task_id'>,
+): string {
+  return `${evt.state} · run=${evt.run_id ?? 'none'} · task=${evt.task_id ?? 'none'}`;
+}
+
+export function formatAgentEventJson(
+  evt: Pick<AgentEvent, 'state' | 'run_id' | 'task_id' | 'status' | 'plan'>,
+): string {
+  return JSON.stringify(
+    {
+      state: evt.state,
+      runId: evt.run_id ?? null,
+      taskId: evt.task_id ?? null,
+      status: evt.status ?? null,
+      planCount: evt.plan?.length ?? 0,
+    },
+    null,
+    2,
+  );
+}

@@ -52,3 +52,28 @@ export function useArtifacts(sessionId: string | null): {
     refresh,
   };
 }
+
+export function formatArtifactsHookStateSummary(
+  sessionId: string | null,
+  artifacts: readonly Artifact[],
+  loading: boolean,
+): string {
+  return `${sessionId ?? 'none'} · ${artifacts.length} artifacts · ${loading ? 'loading' : 'ready'}`;
+}
+
+export function formatArtifactsHookStateJson(
+  sessionId: string | null,
+  artifacts: readonly Artifact[],
+  loading: boolean,
+): string {
+  return JSON.stringify(
+    {
+      sessionId,
+      loading,
+      count: artifacts.length,
+      artifactIds: artifacts.map((a) => a.id),
+    },
+    null,
+    2,
+  );
+}

@@ -14,26 +14,20 @@ from typing import List, Optional
 
 from backend.domain.memory import MemoryContext
 from backend.memory import ConsolidationPipeline, MemoryManager
+from backend.memory.auto_tag import extract_tags
 from backend.memory.embedder_factory import create_embedder
 from backend.memory.manager import classify_memory_type
 from backend.memory.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
-# Phase 2: 停用词表（用于 _extract_query_tags 过滤无意义 token）
-_TAG_STOPWORDS = frozenset({
-    "的", "了", "是", "在", "和", "与", "或", "也", "都", "就",
-    "不", "有", "这", "那", "我", "你", "他", "她", "它", "们",
-    "到", "从", "把", "被", "让", "给", "向", "对", "关于",
-    "一个", "这个", "那个", "什么", "怎么", "如何", "为什么",
-})
-
 
 def _extract_query_tags(query: str, max_tags: int = 5) -> List[str]:
     """从自由文本 query 中提取标签（用于 tag_graph 查询）。
 
-    策略：jieba 分词 → 过滤 len≥2 → 去停用词 → 取 top N。
-    纯英文 token 保留（如 ``python``、``fastapi``）。
+    与存储侧 ``auto_tag.derive_tags`` 共用 ``auto_tag.extract_tags``——同一段
+    文本在两侧得到同一个标签集合（查询侧上限更大，故查询标签 ⊇ 存储标签），
+    图谱的「标签 → 记忆」和「查询 → 标签」两端才对得上，共现边才建得起来。
 
     Args:
         query: 用户查询文本
@@ -42,14 +36,7 @@ def _extract_query_tags(query: str, max_tags: int = 5) -> List[str]:
     Returns:
         标签列表（可能为空）
     """
-    from backend.memory.chinese_tokenizer import tokenize
-
-    tokens = tokenize(query).split()
-    filtered = [
-        t for t in tokens
-        if len(t) >= 2 and t not in _TAG_STOPWORDS
-    ]
-    return filtered[:max_tags]
+    return extract_tags(query, max_tags)
 
 
 class MemoryAdapter:

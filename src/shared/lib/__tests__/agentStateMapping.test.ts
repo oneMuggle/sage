@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AgentState } from '../../api/types';
-import { agentStateToText } from '../agentStateMapping';
+import { agentStateToPhase, agentStateToText } from '../agentStateMapping';
 
 const cases: Array<[AgentState, string | null, string?]> = [
   ['thinking', '🤔 思考中…'],
@@ -47,5 +47,34 @@ const cases: Array<[AgentState, string | null, string?]> = [
 describe('agentStateToText', () => {
   it.each(cases)('%s → %s', (state, expected, toolName) => {
     expect(agentStateToText(state, toolName)).toBe(expected);
+  });
+});
+
+describe('agentStateToPhase', () => {
+  it('retry → RefreshCw + 重试中', () => {
+    expect(agentStateToPhase('retry')).toEqual({ iconName: 'RefreshCw', label: '重试中' });
+  });
+
+  it('null / undefined → null', () => {
+    expect(agentStateToPhase(null)).toBeNull();
+    expect(agentStateToPhase(undefined)).toBeNull();
+  });
+});
+
+describe('agentStateMapping diagnostic formatters (Phase P114)', () => {
+  it('formats agent phase summary and JSON payload', async () => {
+    const { formatAgentPhaseSummary, formatAgentPhaseJson } = await import('../agentStateMapping');
+    expect(formatAgentPhaseSummary('acting', 'web_search')).toBe(
+      'acting · Wrench:执行工具 · 🔧 调工具 web_search…',
+    );
+    expect(formatAgentPhaseSummary(null)).toBe('none · no-phase · no-text');
+    const parsed = JSON.parse(formatAgentPhaseJson('thinking'));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.agent_state_mapping.v1',
+      state: 'thinking',
+      toolName: null,
+      phase: { iconName: 'Brain', label: '思考中' },
+      text: '🤔 思考中…',
+    });
   });
 });

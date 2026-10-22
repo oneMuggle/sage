@@ -213,3 +213,30 @@ export function maybeAutoOpenArtifactPanel(sessionId: string): void {
   state.setOpen(true);
   state.setTab('artifacts');
 }
+
+export function formatRightPanelStateSummary(
+  state: Pick<
+    RightPanelState,
+    'open' | 'tab' | 'maximized' | 'selectedArtifactId'
+  > = useRightPanelStore.getState(),
+): string {
+  return `${state.open ? 'open' : 'closed'} · tab=${state.tab} · max=${state.maximized} · artifact=${state.selectedArtifactId ?? 'none'}`;
+}
+
+export function formatRightPanelStateJson(
+  state: Pick<
+    RightPanelState,
+    'open' | 'tab' | 'maximized' | 'selectedArtifactId'
+  > = useRightPanelStore.getState(),
+): string {
+  return JSON.stringify(
+    {
+      open: state.open,
+      tab: state.tab,
+      maximized: state.maximized,
+      selectedArtifactId: state.selectedArtifactId,
+    },
+    null,
+    2,
+  );
+}

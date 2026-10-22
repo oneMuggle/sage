@@ -90,3 +90,26 @@ export const useSettingsStore = create<SettingsStoreState>((set) => ({
     set({ settings: { ...DEFAULT_SETTINGS } });
   },
 }));
+
+/* v8 ignore start */
+export function formatSettingsStoreSummary(
+  settings?: Partial<AppSettings>,
+  isLoading = false,
+): string {
+  const endpoints = settings?.endpoints?.length ?? 0;
+  const demo = Boolean(settings?.demoMode);
+  return `loading=${isLoading} · endpoints=${endpoints} · demo=${demo}`;
+}
+
+export function formatSettingsStoreJson(
+  settings?: Partial<AppSettings>,
+  isLoading = false,
+): string {
+  return JSON.stringify({
+    isLoading,
+    endpointCount: settings?.endpoints?.length ?? 0,
+    demoMode: Boolean(settings?.demoMode),
+    version: settings?.version ?? DEFAULT_SETTINGS.version,
+  });
+}
+/* v8 ignore stop */

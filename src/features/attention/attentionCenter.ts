@@ -98,3 +98,57 @@ export function attentionSummary(snapshot: AttentionSnapshot): string {
   if (snapshot.entries.length === 0) return '无待处理';
   return snapshot.entries.map((e) => `${e.label} ${e.count}`).join(' · ');
 }
+
+export interface AttentionCenterAuditSnapshot {
+  total: number;
+  entryCount: number;
+  topKind: AttentionKind | null;
+  hasApprovalOrQuestion: boolean;
+  title: string;
+  summary: string;
+  kinds: AttentionKind[];
+  signature: string;
+}
+
+function isAttentionSnapshot(
+  inputOrSnapshot: AttentionInput | AttentionSnapshot,
+): inputOrSnapshot is AttentionSnapshot {
+  return (
+    typeof inputOrSnapshot === 'object' &&
+    inputOrSnapshot !== null &&
+    'total' in inputOrSnapshot &&
+    Array.isArray((inputOrSnapshot as AttentionSnapshot).entries)
+  );
+}
+
+export function buildAttentionCenterAuditSnapshot(
+  inputOrSnapshot: AttentionInput | AttentionSnapshot = {},
+): AttentionCenterAuditSnapshot {
+  const snapshot = isAttentionSnapshot(inputOrSnapshot)
+    ? inputOrSnapshot
+    : aggregateAttention(inputOrSnapshot ?? {});
+  const total = snapshot.total;
+  const entryCount = snapshot.entries.length;
+  const kinds = snapshot.entries.map((e) => e.kind);
+  const topKind = kinds[0] ?? null;
+  const hasApprovalOrQuestion = kinds.includes('approval') || kinds.includes('question');
+  const title = attentionTitle(snapshot);
+  const summary = attentionSummary(snapshot);
+  const signature = `${total}|${entryCount}|${topKind ?? '-'}|${hasApprovalOrQuestion ? 1 : 0}|${kinds.join(',')}`;
+  return {
+    total,
+    entryCount,
+    topKind,
+    hasApprovalOrQuestion,
+    title,
+    summary,
+    kinds,
+    signature,
+  };
+}
+
+export function buildAttentionCenterAuditJson(
+  inputOrSnapshot: AttentionInput | AttentionSnapshot = {},
+): string {
+  return JSON.stringify(buildAttentionCenterAuditSnapshot(inputOrSnapshot), null, 2);
+}

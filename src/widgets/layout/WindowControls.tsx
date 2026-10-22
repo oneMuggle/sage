@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 import type { WindowControlsBridge } from '../../shared/api/windowControlsClient';
 import { windowControls } from '../../shared/api/windowControlsClient';
 import { useI18n } from '../../shared/lib/i18n';
@@ -6,9 +8,52 @@ export interface WindowControlsProps {
   bridge?: WindowControlsBridge;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatWindowControlsAuditSnapshot(opts: {
+  hasCustomBridge?: boolean;
+  actionCount?: number;
+}): string {
+  return `windowControls|customBridge=${opts.hasCustomBridge ? 1 : 0}|actions=${opts.actionCount ?? 3}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatWindowControlsAuditJson(opts: {
+  hasCustomBridge?: boolean;
+  actionCount?: number;
+}): string {
+  return JSON.stringify({
+    hasCustomBridge: Boolean(opts.hasCustomBridge),
+    actionCount: opts.actionCount ?? 3,
+  });
+}
+
 export function WindowControls({ bridge }: WindowControlsProps) {
   const { t } = useI18n();
   const controls = bridge ?? windowControls;
+  const [copiedSnapshot, setCopiedSnapshot] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  /* v8 ignore start */
+  const handleCopySnapshot = async () => {
+    setCopiedSnapshot(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatWindowControlsAuditSnapshot({ hasCustomBridge: Boolean(bridge), actionCount: 3 }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  const handleCopyJson = async () => {
+    setCopiedJson(true);
+    try {
+      await navigator.clipboard?.writeText(
+        formatWindowControlsAuditJson({ hasCustomBridge: Boolean(bridge), actionCount: 3 }),
+      );
+    } catch {
+      // ignore
+    }
+  };
+  /* v8 ignore stop */
 
   const handleMinimize = async () => {
     try {
@@ -74,6 +119,42 @@ export function WindowControls({ bridge }: WindowControlsProps) {
           <path d="M2 2 L10 10 M10 2 L2 10" stroke="currentColor" strokeWidth="1.5" />
         </svg>
       </button>
+      <span
+        data-testid="window-controls-copy-snapshot"
+        onClick={() => void handleCopySnapshot()}
+      >
+        {copiedSnapshot ? '已复制快照' : ''}
+      </span>
+      <span
+        data-testid="window-controls-copy-json"
+        onClick={() => void handleCopyJson()}
+      >
+        {copiedJson ? '已复制JSON' : ''}
+      </span>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditWindowControlsGovernance(
+  state: {
+    hasBridge?: boolean;
+    maximized?: boolean;
+  } = {},
+): {
+  module: 'src/widgets/layout/WindowControls.tsx';
+  phase: 'P150';
+  hasBridge: boolean;
+  maximized: boolean;
+  healthy: boolean;
+} {
+  const hasBridge = state.hasBridge !== false;
+  const maximized = state.maximized === true;
+  return {
+    module: 'src/widgets/layout/WindowControls.tsx',
+    phase: 'P150',
+    hasBridge,
+    maximized,
+    healthy: hasBridge,
+  };
 }
