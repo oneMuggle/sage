@@ -214,10 +214,12 @@ const electronAPI = {
     ipcRenderer.invoke('sage:session:notify', payload) as Promise<{ shown: boolean }>,
 
   /**
-   * PR-C (2026-07-02): Skills load-new bridge.
+   * PR-C (2026-07-02) + T-4b (2026-10-21): Skills load-new bridge.
    * - pickSkillFiles: native multi-select dialog → string[] | null
    * - rescanSkills: POST /api/v1/skills/rescan → RescanResult
    * - importSkills: POST /api/v1/skills/import (multipart) → ImportResult
+   * - pickSkillDirectory: native directory picker → string | null (T-4b)
+   * - importSkillDirectory: POST /api/v1/skills/import-directory → ImportResult (T-4b)
    *
    * Nested under `skills` (mirrors `windowControls` pattern) so future
    * skills IPC additions group naturally without polluting top-level.
@@ -226,6 +228,9 @@ const electronAPI = {
     pickSkillFiles: () => ipcRenderer.invoke('skills:pick-files') as Promise<string[] | null>,
     rescanSkills: () => ipcRenderer.invoke('skills:rescan') as Promise<RescanResult>,
     importSkills: () => ipcRenderer.invoke('skills:import') as Promise<ImportResult>,
+    pickSkillDirectory: () => ipcRenderer.invoke('skills:pick-directory') as Promise<string | null>,
+    importSkillDirectory: (pickedPath: string) =>
+      ipcRenderer.invoke('skills:import-directory', pickedPath) as Promise<ImportResult>,
   } satisfies SkillsElectronApiBridge,
 
   /** Workspace MCP Server (M4): tunnel, emergency stop, copy URL to clipboard. */

@@ -17,16 +17,18 @@ from __future__ import annotations
 
 import logging
 import os
+import stat
 from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import yaml
 
+from ...utils.py_compat import to_thread
 from ...wiki.files import secure_delete_path
 from ..registry import SkillRegistry
 from ..safe_writer import write_skill_file
-from .exceptions import NoSkillsDirError
+from .exceptions import NoSkillsDirError, SkillDirectoryImportError
 from .frontmatter import (
     SkillMdParseError,
     _is_valid_name,
@@ -34,6 +36,8 @@ from .frontmatter import (
     _strip_bom,
     parse,
 )
+from .resources import ALLOWED_RESOURCE_DIRS
+from .skills_dir_policy import read_skills_dir_preference
 
 if TYPE_CHECKING:
     from .loader import SkillMdHotLoader
@@ -47,6 +51,22 @@ MAX_FILE_SIZE_BYTES = 1024 * 1024  # 1 MB per file
 MAX_IMPORT_FILES = 100
 MAX_IMPORT_TOTAL_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB per batch
 _UPLOAD_READ_CHUNK_BYTES = 64 * 1024
+
+#: 目录导入：相对路径最大段数（防超深目录树打爆递归与路径长度）
+MAX_DIRECTORY_DEPTH = 8
+
+#: 目录导入：入口文件名（大小写不敏感匹配）
+_ENTRY_FILENAME = "skill.md"
+
+#: Windows reparse point 文件属性位（与 resources.py 口径一致）
+_WINDOWS_REPARSE_POINT = 0x0400
+
+#: Windows 保留设备名（大小写不敏感）。带扩展名同样保留：``NUL.txt`` 也会落到设备。
+_WINDOWS_RESERVED_DEVICE_NAMES = frozenset(
+    {"con", "prn", "aux", "nul"}
+    | {f"com{i}" for i in range(1, 10)}
+    | {f"lpt{i}" for i in range(1, 10)}
+)
 
 # Type alias for the input UploadFile-like object
 UploadedFile = Any  # fastapi.UploadFile 等;运行时 duck-typed
@@ -159,6 +179,101 @@ def _classify_parse_error(exc: BaseException, content: bytes) -> str:
     if isinstance(exc, SkillMdParseError) and _name_field_is_invalid(content):
         return "invalid_name"
     return "parse_error"
+
+
+def _is_windows_reserved_device_name(segment: str) -> bool:
+    """判断路径段是否是 Windows 保留设备名。
+
+    ``CON`` / ``NUL`` / ``COM1`` 等名字在 Windows 上即使带扩展名也无法创建普通文件
+    （``NUL.txt`` 实际落到 NUL 设备）。Win7 安装包是受支持平台 → 导入阶段直接拒绝，
+    不让它们在写盘时才以 ``write_failed`` 的面目出现。
+    """
+    stem = segment.split(".")[0].strip().rstrip(" ")
+    return stem.lower() in _WINDOWS_RESERVED_DEVICE_NAMES
+
+
+def _safe_relative_path(raw: Any) -> Optional[Path]:
+    """把 multipart 的 filename 解析成安全的相对路径。
+
+    目录导入用 filename 携带相对路径（如 ``SKILL.md`` / ``scripts/scan.py``），
+    这里做规范化与路径穿越防御：拒绝绝对路径、盘符前缀、反斜杠、
+    ``.``/``..`` 段、空段、控制字符、Windows 保留设备名与超深路径。
+
+    Returns:
+        合法时返回相对 ``Path``（各段均非空且不含分隔符），否则 ``None``。
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    parts = raw.split("/")
+    has_drive_prefix = len(parts[0]) == 2 and parts[0][1] == ":" and parts[0][0].isalpha()
+    if (
+        "\\" in raw
+        or raw.startswith("/")
+        or has_drive_prefix
+        or any(part in ("", ".", "..") for part in parts)
+        or len(parts) > MAX_DIRECTORY_DEPTH
+        or any(_is_unsafe_upload_label_char(char) for char in raw)
+        or any(_is_windows_reserved_device_name(part) for part in parts)
+    ):
+        return None
+    return Path(*parts)
+
+
+def _ensure_real_directory(path: Path) -> None:
+    """确保路径是一个真实目录（不存在则创建；symlink/reparse point 一律拒绝）。"""
+    try:
+        st = os.lstat(str(path))
+    except FileNotFoundError:
+        path.mkdir(mode=0o700)
+        return
+    if stat.S_ISLNK(st.st_mode):
+        raise OSError(f"Refusing skill resource write through symlink: {path}")
+    attributes = getattr(st, "st_file_attributes", 0)
+    if attributes & _WINDOWS_REPARSE_POINT:
+        raise OSError(f"Refusing skill resource write through reparse point: {path}")
+    if not stat.S_ISDIR(st.st_mode):
+        raise NotADirectoryError(str(path))
+
+
+def _write_resource_file(skill_dir: Path, rel_path: Path, content: bytes) -> None:
+    """在技能目录下安全写入一个附属资源文件。
+
+    逐段校验中间目录不是 symlink/reparse point；最终文件以
+    ``O_EXCL|O_NOFOLLOW`` 创建（已存在 → ``FileExistsError``），不覆盖既有内容。
+
+    额外做一次 resolve-and-contain 复核：``_ensure_real_directory`` 是
+    lstat 逐段检查，与后续 open 之间存在 TOCTOU 窗口；解析后的父目录必须
+    仍在 ``skill_dir`` 之内，否则拒绝写入。
+    """
+    _ensure_real_directory(skill_dir)
+    current = skill_dir
+    for part in rel_path.parent.parts:
+        current = current / part
+        _ensure_real_directory(current)
+
+    target = current / rel_path.name
+    base = skill_dir.resolve()
+    resolved_parent = target.parent.resolve()
+    if resolved_parent != base and base not in resolved_parent.parents:
+        raise OSError(f"Refusing skill resource write outside skills dir: {rel_path}")
+
+    if os.name == "nt":
+        from backend.tools.win_reparse_io import write_file_reparse_safe
+
+        write_file_reparse_safe(str(target), content, overwrite=False)
+        return
+
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(str(target), flags, 0o600)
+    try:
+        view = memoryview(content)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise OSError(f"Short write for skill resource: {rel_path}")
+            view = view[written:]
+    finally:
+        os.close(fd)
 
 
 class SkillMdImporter:
@@ -301,8 +416,214 @@ class SkillMdImporter:
 
         return {"imported": imported, "skipped": skipped}
 
+    async def import_directory(
+        self, files: List[UploadedFile]
+    ) -> Dict[str, List[Dict[str, str]]]:
+        """按相对路径导入整个技能目录（SKILL.md + scripts/ + references/ + assets/ + templates/）。
+
+        与 ``import_files`` 的区别：multipart 的 filename 携带相对路径，
+        根目录的 ``SKILL.md`` 决定技能名，附属资源按相对路径落盘到技能目录下。
+
+        与 ``import_files`` 一致的部分：单文件 1MB / 总 10MB / 最多 100 个文件；
+        builtin 冲突与写失败都记入 ``skipped``（HTTP 仍 200，部分成功）。
+
+        Raises:
+            SkillDirectoryImportError: 目录里没有 ``SKILL.md``，或入口文件不合法。
+        """
+        if not files:
+            raise SkillDirectoryImportError("no_files", "no files provided")
+        if len(files) > MAX_IMPORT_FILES:
+            return {
+                "imported": [],
+                "skipped": [
+                    {
+                        "name": "<batch>",
+                        "reason": f"batch_too_many_files: {len(files)} > {MAX_IMPORT_FILES}",
+                    }
+                ],
+            }
+
+        skipped: List[Dict[str, str]] = []
+        entries: List[Tuple[Path, bytes]] = []
+        total_size = 0
+
+        for f in files:
+            raw_name = getattr(f, "filename", None)
+            rel = _safe_relative_path(raw_name)
+            if rel is None:
+                skipped.append(
+                    {"name": _safe_upload_basename(raw_name), "reason": "invalid_path"}
+                )
+                continue
+            try:
+                content, content_size = await _read_upload_with_limit(f)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to read upload %s: %s", rel.as_posix(), exc)
+                skipped.append({"name": rel.as_posix(), "reason": "read_failed"})
+                continue
+            if content is None:
+                skipped.append(
+                    {
+                        "name": rel.as_posix(),
+                        "reason": f"file_too_large: {content_size} > {MAX_FILE_SIZE_BYTES}",
+                    }
+                )
+                continue
+            if total_size + content_size > MAX_IMPORT_TOTAL_SIZE_BYTES:
+                skipped.append(
+                    {
+                        "name": rel.as_posix(),
+                        "reason": (
+                            f"batch_too_large: {total_size + content_size} > "
+                            f"{MAX_IMPORT_TOTAL_SIZE_BYTES}"
+                        ),
+                    }
+                )
+                continue
+            total_size += content_size
+            entries.append((rel, content))
+
+        entry_rel, entry_content = self._extract_directory_entry(entries)
+        if entry_rel is None:
+            raise SkillDirectoryImportError(
+                "missing_skill_md", "技能目录中缺少 SKILL.md"
+            )
+
+        try:
+            meta, _body = parse_file_from_bytes(entry_content, fallback_name="SKILL.md")
+        except Exception as exc:  # noqa: BLE001
+            # 与单文件导入共用同一分类口径：显式非法的 name → invalid_name，
+            # 其余解析失败 → parse_error。
+            raise SkillDirectoryImportError(
+                _classify_parse_error(exc, entry_content),
+                f"SKILL.md 解析失败: {type(exc).__name__}",
+            ) from exc
+
+        name = meta.get("name", "")
+        if not _is_valid_name(name):
+            raise SkillDirectoryImportError("invalid_name", "SKILL.md 的 name 字段非法")
+
+        if self._registry.exists(name):
+            return {
+                "imported": [],
+                "skipped": skipped + [{"name": name, "reason": "builtin_conflict"}],
+            }
+
+        skills_dir = self._resolve_skills_dir()
+        skill_dir = skills_dir / name
+
+        # 写盘是纯同步 I/O（最多 100 个文件 / 10 MB），放线程里跑，
+        # 避免阻塞事件循环（与 legacy_routes 的 to_thread 约定一致）。
+        status, resource_skipped = await to_thread(
+            self._write_directory_files,
+            skills_dir,
+            name,
+            entry_content,
+            entries,
+            entry_rel,
+        )
+        if status == "already_exists":
+            return {
+                "imported": [],
+                "skipped": skipped + [{"name": name, "reason": "already_exists"}],
+            }
+        if status == "write_failed":
+            return {
+                "imported": [],
+                "skipped": skipped + [{"name": name, "reason": "write_failed"}],
+            }
+        skipped.extend(resource_skipped)
+
+        try:
+            self._hot_reload_from_path(skill_dir / "SKILL.md")
+        except Exception as exc:  # noqa: BLE001
+            # 磁盘与注册表必须保持一致：回滚整个技能目录（含附属资源）。
+            logger.error("Hot reload failed for %s: %s; rolling back", name, exc)
+            with suppress(OSError):
+                secure_delete_path(skills_dir, skill_dir)
+            return {
+                "imported": [],
+                "skipped": skipped + [{"name": name, "reason": "hot_reload_failed"}],
+            }
+
+        return {"imported": [{"name": name, "path": "."}], "skipped": skipped}
+
+    def _write_directory_files(
+        self,
+        skills_dir: Path,
+        name: str,
+        entry_content: bytes,
+        entries: List[Tuple[Path, bytes]],
+        entry_rel: Path,
+    ) -> Tuple[str, List[Dict[str, str]]]:
+        """把入口文件与附属资源写到磁盘（纯同步 I/O，由调用方放到线程里执行）。
+
+        Returns:
+            ``(status, skipped)``。status 取值：
+
+            - ``"ok"``：入口文件与资源都已处理，skipped 是附属资源的跳过原因
+            - ``"already_exists"`` / ``"write_failed"``：入口文件没落盘，
+              此时**不写任何附属资源**，skipped 为空
+        """
+        skill_dir = skills_dir / name
+        try:
+            write_skill_file(skills_dir, name, entry_content, overwrite=False)
+        except FileExistsError:
+            return "already_exists", []
+        except OSError as exc:
+            logger.warning("Write failed for %s: %s", skill_dir, exc)
+            return "write_failed", []
+
+        skipped: List[Dict[str, str]] = []
+        for rel, content in entries:
+            if rel == entry_rel:
+                continue
+            top = rel.parts[0]
+            if top not in ALLOWED_RESOURCE_DIRS:
+                skipped.append(
+                    {"name": rel.as_posix(), "reason": "resource_dir_not_allowed"}
+                )
+                continue
+            if len(rel.parts) < 2:
+                # 单段文件名（形如 ``scripts``）与同名资源目录冲突 —— 明确拒绝，
+                # 不让它以 write_failed 的面目混进 skipped。
+                skipped.append(
+                    {"name": rel.as_posix(), "reason": "resource_path_too_shallow"}
+                )
+                continue
+            if any(part.startswith(".") for part in rel.parts):
+                skipped.append({"name": rel.as_posix(), "reason": "hidden_path_rejected"})
+                continue
+            try:
+                _write_resource_file(skill_dir, rel, content)
+            except FileExistsError:
+                skipped.append({"name": rel.as_posix(), "reason": "already_exists"})
+            except OSError as exc:
+                logger.warning("Resource write failed for %s: %s", rel.as_posix(), exc)
+                skipped.append({"name": rel.as_posix(), "reason": "write_failed"})
+        return "ok", skipped
+
+    @staticmethod
+    def _extract_directory_entry(
+        entries: List[Tuple[Path, bytes]]
+    ) -> Tuple[Optional[Path], bytes]:
+        """挑出根目录的入口 ``SKILL.md``（大小写不敏感）。
+
+        Returns:
+            ``(rel_path, content)``；找不到入口时 ``rel_path`` 为 ``None``、
+            ``content`` 为空字节。
+        """
+        for rel, content in entries:
+            if rel.as_posix().lower() == _ENTRY_FILENAME:
+                return rel, content
+        return None, b""
+
     def _resolve_skills_dir(self) -> Path:
-        """解析 skills_dir: 显式参数 > SAGE_SKILLS_DIR > ~/.sage/skills (auto-mkdir)。
+        """解析 skills_dir: 显式参数 > SAGE_SKILLS_DIR > preference > ~/.sage/skills (auto-mkdir)。
+
+        env var 优先于 DB preference —— 与代码库其它设置一致
+        (``SAGE_COMPACT_THRESHOLD`` 等): 运维/开发覆盖 > 用户配置,
+        避免 DB 损坏或误配阻止开发环境启动。
 
         与 SkillMdDeleter._resolve_skills_dir 行为对齐, 但增加了 auto-mkdir。
         """
@@ -322,6 +643,16 @@ class SkillMdImporter:
                 return d
             except OSError as exc:
                 raise NoSkillsDirError(f"Cannot create SAGE_SKILLS_DIR={d}: {exc}") from exc
+
+        preferred = read_skills_dir_preference()
+        if preferred is not None:
+            try:
+                preferred.mkdir(parents=True, exist_ok=True)
+                return preferred
+            except OSError as exc:
+                logger.warning(
+                    "skills_dir preference 目录不可创建 %s，回退下一级: %s", preferred, exc
+                )
 
         user = Path.home() / ".sage" / "skills"
         try:

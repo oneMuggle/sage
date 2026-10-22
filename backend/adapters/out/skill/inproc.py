@@ -208,7 +208,19 @@ class InprocSkillAdapter:
         assert skill is not None  # exists() 已 guard
         # Only the SKILL.md script path dispatches an external process.  Preserve
         # the legacy builtin/body REST contract while gating the dangerous path.
+        # T-3: 两层闸口串联 —— 第一道是用户显式授权的 fail-closed 开关
+        # （script_policy.is_script_execution_allowed，缺省关闭），
+        # 第二道是既有的模式矩阵权限执行器。任一不过即拒绝。
         if self._is_script_dispatch(skill, args):
+            if not self._is_script_allowed():
+                return SkillResult(
+                    success=False,
+                    error=(
+                        "技能脚本执行未启用：请在设置 → 技能 中开启"
+                        "「允许执行技能脚本」"
+                    ),
+                    metadata={"permission_denied": True},
+                )
             denied = self._enforce_permission(args)
             if denied is not None:
                 return denied
@@ -238,6 +250,22 @@ class InprocSkillAdapter:
         from backend.skills.skill_md.skill import SkillMdSkill
 
         return isinstance(skill, SkillMdSkill) and args.get("script") is not None
+
+    def _is_script_allowed(self) -> bool:
+        """T-3 第一道闸口：fail-closed 开关查询。
+
+        惰性导入 ``script_policy`` 避免 adapters ↔ skills 模块级循环；
+        读取失败时由 script_policy 内部 fail-closed 返回 False。
+        """
+        from backend.skills.skill_md.script_policy import is_script_execution_allowed
+
+        try:
+            return is_script_execution_allowed()
+        except Exception as exc:  # noqa: BLE001 - 双重保险：脚本政策层之外的意外
+            logging.getLogger(__name__).warning(
+                "技能脚本开关查询失败，拒绝执行: %s", exc
+            )
+            return False
 
     def _enforce_permission(self, args: Dict[str, Any]) -> Optional[SkillResult]:
         """Check skill EXECUTE permission; no HTTP approval channel exists."""
@@ -707,6 +735,28 @@ class InprocSkillAdapter:
         self._rebuild_slash_registry()
         # The importer needs the real path for filesystem work, but the adapter
         # result is forwarded to REST/IPC clients and must remain path-neutral.
+        safe_result = dict(result)
+        safe_result["imported"] = [
+            {**item, "path": _SAFE_SKILL_PATH} if "path" in item else dict(item)
+            for item in result.get("imported", [])
+        ]
+        return safe_result
+
+    async def import_skill_directory(
+        self, files: List[Any]
+    ) -> Dict[str, List[Dict[str, str]]]:
+        """异步包装 SkillMdImporter.import_directory()。
+
+        与 ``import_skill_mds`` 一样把结果里的 path 归一化成 ``"."``，
+        避免本机绝对路径泄漏到 REST/IPC 响应。
+        """
+        if self._skill_importer is None:
+            return {
+                "imported": [],
+                "skipped": [{"name": "<unknown>", "reason": "adapter_init_failed"}],
+            }
+        result = await self._skill_importer.import_directory(files)
+        self._rebuild_slash_registry()
         safe_result = dict(result)
         safe_result["imported"] = [
             {**item, "path": _SAFE_SKILL_PATH} if "path" in item else dict(item)
