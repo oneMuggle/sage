@@ -1814,3 +1814,24 @@
   - `src/widgets/chat/__tests__/KnowledgeChip.p134.test.ts`
   - `src/widgets/chat/__tests__/MessageMarkdownParts.p134.test.ts`
   - `src/widgets/chat/__tests__/ReadAloudButton.p134.test.ts`
+
+### Phase P135 — Chat Right-Panel/Session-Id/Shiki/Slash-Menu/Subagent-Panel/Terminal/Topic-Separator/Truncation Audit Diagnostics & JSON Export (Completed)
+
+- **Target Modules**:
+  - `src/widgets/chat/RightPanelToggle.tsx`: Added `RightPanelToggleAuditInput`, `RightPanelToggleAuditReport`, `evaluateRightPanelToggleAudit`, and `exportRightPanelToggleAuditJson`.
+  - `src/widgets/chat/SessionIdBadge.tsx`: Added `SessionIdBadgeAuditInput`, `SessionIdBadgeAuditReport`, `evaluateSessionIdBadgeAudit`, and `exportSessionIdBadgeAuditJson`.
+  - `src/widgets/chat/ShikiCodeBlock.tsx`: Added `ShikiCodeBlockAuditInput`, `ShikiCodeBlockAuditReport`, `evaluateShikiCodeBlockAudit`, and `exportShikiCodeBlockAuditJson`.
+  - `src/widgets/chat/SlashCommandMenu.tsx`: Added `SlashCommandMenuAuditInput`, `SlashCommandMenuAuditReport`, `evaluateSlashCommandMenuAudit`, and `exportSlashCommandMenuAuditJson`.
+  - `src/widgets/chat/SubagentLivePanel.tsx`: Added `SubagentLivePanelAuditInput`, `SubagentLivePanelAuditReport`, `evaluateSubagentLivePanelAudit`, and `exportSubagentLivePanelAuditJson`.
+  - `src/widgets/chat/TerminalPanel.tsx`: Added `TerminalPanelAuditInput`, `TerminalPanelAuditReport`, `evaluateTerminalPanelAudit`, and `exportTerminalPanelAuditJson`.
+  - `src/widgets/chat/TopicSeparator.tsx`: Added `TopicSeparatorAuditInput`, `TopicSeparatorAuditReport`, `evaluateTopicSeparatorAudit`, and `exportTopicSeparatorAuditJson`.
+  - `src/widgets/chat/TruncationNotice.tsx`: Added `TruncationNoticeAuditInput`, `TruncationNoticeAuditReport`, `evaluateTruncationNoticeAudit`, and `exportTruncationNoticeAuditJson`.
+- **Unit Tests**:
+  - `src/widgets/chat/__tests__/RightPanelToggle.p135.test.ts`
+  - `src/widgets/chat/__tests__/SessionIdBadge.p135.test.ts`
+  - `src/widgets/chat/__tests__/ShikiCodeBlock.p135.test.ts`
+  - `src/widgets/chat/__tests__/SlashCommandMenu.p135.test.ts`
+  - `src/widgets/chat/__tests__/SubagentLivePanel.p135.test.ts`
+  - `src/widgets/chat/__tests__/TerminalPanel.p135.test.ts`
+  - `src/widgets/chat/__tests__/TopicSeparator.p135.test.ts`
+  - `src/widgets/chat/__tests__/TruncationNotice.p135.test.ts`
