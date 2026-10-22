@@ -360,11 +360,19 @@ export const enChatAndSider = {
   'settings.tab.harness': 'Harness',
   'settings.tab.updates': 'Updates',
   'settings.tab.usage-stats': 'Usage Stats',
+  'settings.tab.skills': 'Skills',
   'settings.section.theme': 'Theme',
   'settings.section.appearance': 'Appearance',
   'settings.section.chat': 'Chat',
   'settings.section.data': 'Data',
   'settings.section.orch': 'Orchestration',
+  'settings.section.skills': 'Skills',
+  'settings.skills.allow_script_execution.label': 'Allow skill script execution',
+  'settings.skills.allow_script_execution.desc':
+    'When enabled, scripts in SKILL.md (e.g. Bash/PowerShell) may be dispatched for execution. When disabled, all script dispatch requests are denied.',
+  'settings.skills.directory.label': 'Skills directory',
+  'settings.skills.directory.desc':
+    'Directory for SKILL.md files (absolute path). Empty = default path ~/.sage/skills.',
 
   // ─── Settings · MCP ──────────────
   'settings.mcp.title': 'MCP Servers',

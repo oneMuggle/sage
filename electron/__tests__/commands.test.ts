@@ -2,15 +2,17 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { resolve } from 'node:path';
 import { COMMAND_ROUTES, UnknownIpcCommandError } from '../commands';
 
-// ===== Skills IPC (Task 4: PR-C load-new) =====
+// ===== Skills IPC (Task 4: PR-C load-new + T-4b directory import) =====
 //
 // The skills IPC module (`electron/skillsIpc.ts`) is a pure module that
 // takes an injected `register(channel, handler)` function so we can mock
 // electron without booting the runtime. Tests assert that:
-//   - all 3 channels are registered with the right name
+//   - all 5 channels are registered with the right name
 //   - pick-files delegates to dialog.showOpenDialog + handles cancel
 //   - rescan + import forward to backend via injected fetch
 //   - import error response surfaces detail.type as message
+//   - pick-directory stores picked dir and returns realpath (or null)
+//   - import-directory builds multipart with posix relative-path filenames
 
 // `vi.mock` is hoisted to the top of the file by Vitest — before any
 // imports. The factory closure cannot reference top-level `const`s
@@ -19,7 +21,12 @@ import { COMMAND_ROUTES, UnknownIpcCommandError } from '../commands';
 const mocks = vi.hoisted(() => ({
   dialog: { showOpenDialog: vi.fn() },
   BrowserWindow: { getFocusedWindow: vi.fn(() => null) },
-  fs: { readFileSync: vi.fn(), lstatSync: vi.fn(), realpathSync: vi.fn((path: string) => path) },
+  fs: {
+    readFileSync: vi.fn(),
+    lstatSync: vi.fn(),
+    realpathSync: vi.fn((path: string) => path),
+    readdirSync: vi.fn<() => string[]>(),
+  },
 }));
 
 vi.mock('electron', () => ({
@@ -38,10 +45,12 @@ vi.mock('fs', () => ({
     readFileSync: mocks.fs.readFileSync,
     lstatSync: mocks.fs.lstatSync,
     realpathSync: mocks.fs.realpathSync,
+    readdirSync: mocks.fs.readdirSync,
   },
   readFileSync: mocks.fs.readFileSync,
   lstatSync: mocks.fs.lstatSync,
   realpathSync: mocks.fs.realpathSync,
+  readdirSync: mocks.fs.readdirSync,
 }));
 
 // Injectable register fn captures all ipcMain.handle calls.
@@ -64,7 +73,9 @@ describe('skills IPC (PR-C)', () => {
     mocks.fs.readFileSync.mockReset();
     mocks.fs.lstatSync.mockReset();
     mocks.fs.realpathSync.mockReset();
+    mocks.fs.readdirSync.mockReset();
     mocks.fs.realpathSync.mockImplementation((path: string) => path);
+    mocks.fs.readdirSync.mockReturnValue([]);
     mocks.fs.lstatSync.mockReturnValue({
       isFile: () => true,
       isSymbolicLink: () => false,
@@ -76,10 +87,12 @@ describe('skills IPC (PR-C)', () => {
     registerSkillsIpc(fakeRegister);
   });
 
-  it('registers all 3 channels', () => {
+  it('registers all 5 channels (T-4b: pick-directory + import-directory)', () => {
     expect(registeredHandlers.has('skills:pick-files')).toBe(true);
     expect(registeredHandlers.has('skills:rescan')).toBe(true);
     expect(registeredHandlers.has('skills:import')).toBe(true);
+    expect(registeredHandlers.has('skills:pick-directory')).toBe(true);
+    expect(registeredHandlers.has('skills:import-directory')).toBe(true);
   });
 
   it('pick-files returns paths from dialog', async () => {
@@ -222,6 +235,178 @@ describe('skills IPC (PR-C)', () => {
     mocks.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ['/path/a.md'] });
     await registeredHandlers.get('skills:pick-files')!({});
     await expect(handler({}, ['/path/a.md'])).rejects.toThrow(/no_skills_dir/);
+  });
+
+  // ── T-4b: skills:pick-directory ──────────────────────────────────────────
+
+  it('pick-directory returns picked directory realpath', async () => {
+    mocks.dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: ['/tmp/skill-dir'],
+    });
+    // lstatSync default is isFile:true — override to isDirectory:true for the picked path
+    mocks.fs.lstatSync.mockReturnValue({
+      isFile: () => false,
+      isDirectory: () => true,
+      isSymbolicLink: () => false,
+      size: 0,
+    });
+    const handler = registeredHandlers.get('skills:pick-directory')!;
+    const result = await handler({});
+    expect(result).toBe('/tmp/skill-dir');
+    expect(mocks.dialog.showOpenDialog).toHaveBeenCalledTimes(1);
+  });
+
+  it('pick-directory returns null on cancel', async () => {
+    mocks.dialog.showOpenDialog.mockResolvedValue({ canceled: true, filePaths: [] });
+    const handler = registeredHandlers.get('skills:pick-directory')!;
+    const result = await handler({});
+    expect(result).toBeNull();
+  });
+
+  it('pick-directory throws if selected path is not a directory', async () => {
+    mocks.dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: ['/tmp/not-a-dir'],
+    });
+    mocks.fs.lstatSync.mockReturnValue({
+      isFile: () => true,
+      isDirectory: () => false,
+      isSymbolicLink: () => false,
+      size: 0,
+    });
+    const handler = registeredHandlers.get('skills:pick-directory')!;
+    await expect(handler({})).rejects.toThrow(/not a regular directory/);
+  });
+
+  // ── T-4b: skills:import-directory ────────────────────────────────────────
+
+  it('import-directory throws when no directory was picked', async () => {
+    const handler = registeredHandlers.get('skills:import-directory')!;
+    await expect(handler({})).rejects.toThrow(/no directory selected/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('import-directory rejects when pickedPath does not match recent pick', async () => {
+    // pick-directory first to populate recentPickedDirectory
+    mocks.dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: ['/tmp/skill-dir'],
+    });
+    mocks.fs.lstatSync.mockReturnValue({
+      isFile: () => false,
+      isDirectory: () => true,
+      isSymbolicLink: () => false,
+      size: 0,
+    });
+    await registeredHandlers.get('skills:pick-directory')!({});
+
+    const handler = registeredHandlers.get('skills:import-directory')!;
+    // Pass a DIFFERENT path → must fail before reaching the network
+    await expect(handler({}, '/tmp/other-dir')).rejects.toThrow(
+      /directory selection changed/,
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('import-directory posts multipart with posix relative-path filenames', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        imported: [{ name: 'dir-skill', path: '.' }],
+        skipped: [],
+      }),
+    });
+
+    // pick-directory first
+    mocks.dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: ['/tmp/skill-dir'],
+    });
+    // Path-based dispatch: lstatSync returns different shapes based on the path suffix.
+    // This avoids brittle call-order dependencies (mockReturnValueOnce).
+    mocks.fs.lstatSync.mockImplementation(((path: string) => {
+      if (path.endsWith('SKILL.md')) {
+        return {
+          isFile: () => true,
+          isDirectory: () => false,
+          isSymbolicLink: () => false,
+          size: 20,
+        };
+      }
+      if (path.endsWith('scan.py')) {
+        return {
+          isFile: () => true,
+          isDirectory: () => false,
+          isSymbolicLink: () => false,
+          size: 15,
+        };
+      }
+      // directory: both the picked root and scripts/ subdir
+      return { isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false, size: 0 };
+    }) as never);
+    // Path-based dispatch for readdirSync: root has SKILL.md + scripts/, scripts/ has scan.py
+    mocks.fs.readdirSync.mockImplementation(((path: string) => {
+      if (path.endsWith('scripts')) return ['scan.py'];
+      return ['SKILL.md', 'scripts'];
+    }) as never);
+    mocks.fs.readFileSync.mockImplementation(((path: string) => {
+      if (path.endsWith('SKILL.md'))
+        return Buffer.from('---\nname: dir-skill\ndescription: test\n---\nbody');
+      if (path.endsWith('scan.py')) return Buffer.from("print('hi')\n");
+      return Buffer.from('');
+    }) as never);
+
+    await registeredHandlers.get('skills:pick-directory')!({});
+    const handler = registeredHandlers.get('skills:import-directory')!;
+    const result = (await handler({}, '/tmp/skill-dir')) as {
+      imported: Array<{ name: string; path: string }>;
+      skipped: Array<{ name: string; reason: string }>;
+    };
+
+    expect(result.imported).toEqual([{ name: 'dir-skill', path: '.' }]);
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(String(url)).toContain('/api/v1/skills/import-directory');
+    expect(init.method).toBe('POST');
+    const body = init.body as Buffer;
+    expect(Buffer.isBuffer(body)).toBe(true);
+    const text = body.toString('utf8');
+    // Relative path filenames (not basenames!)
+    expect(text).toContain('filename="SKILL.md"');
+    expect(text).toContain('filename="scripts/scan.py"');
+    expect(init.headers['Content-Type']).toMatch(/^multipart\/form-data; boundary=----sage-/);
+  });
+
+  it('import-directory surfaces detail.type as error message', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ detail: { type: 'missing_skill_md', message: 'no SKILL.md found' } }),
+    });
+
+    // pick-directory first
+    mocks.dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: ['/tmp/skill-dir'],
+    });
+    mocks.fs.lstatSync.mockImplementation(((path: string) => {
+      if (path.endsWith('SKILL.md')) {
+        return {
+          isFile: () => true,
+          isDirectory: () => false,
+          isSymbolicLink: () => false,
+          size: 20,
+        };
+      }
+      return { isFile: () => false, isDirectory: () => true, isSymbolicLink: () => false, size: 0 };
+    }) as never);
+    mocks.fs.readdirSync.mockReturnValueOnce(['SKILL.md']);
+    mocks.fs.readFileSync.mockReturnValue(Buffer.from('---\nname: x\n---\nb'));
+
+    await registeredHandlers.get('skills:pick-directory')!({});
+    const handler = registeredHandlers.get('skills:import-directory')!;
+    await expect(handler({}, '/tmp/skill-dir')).rejects.toThrow(/missing_skill_md/);
   });
 });
 
