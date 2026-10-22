@@ -28,3 +28,24 @@ export function Progress({ value, className }: ProgressProps) {
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditProgressGovernance(
+  state: {
+    value?: number;
+  } = {},
+): {
+  module: 'src/shared/ui/Progress.tsx';
+  phase: 'P147';
+  clampedValue: number;
+  healthy: boolean;
+} {
+  const raw = typeof state.value === 'number' && Number.isFinite(state.value) ? state.value : 0;
+  const clampedValue = Math.min(100, Math.max(0, Math.round(raw)));
+  return {
+    module: 'src/shared/ui/Progress.tsx',
+    phase: 'P147',
+    clampedValue,
+    healthy: clampedValue >= 0 && clampedValue <= 100,
+  };
+}

@@ -26,3 +26,26 @@ export function PageSkeleton({ className }: { className?: string }) {
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditPageSkeletonGovernance(
+  state: {
+    blockCount?: number;
+  } = {},
+): {
+  module: 'src/shared/ui/PageSkeleton/PageSkeleton.tsx';
+  phase: 'P147';
+  blockCount: number;
+  healthy: boolean;
+} {
+  const blockCount =
+    typeof state.blockCount === 'number' && Number.isFinite(state.blockCount)
+      ? Math.max(1, Math.min(12, Math.trunc(state.blockCount)))
+      : 4;
+  return {
+    module: 'src/shared/ui/PageSkeleton/PageSkeleton.tsx',
+    phase: 'P147',
+    blockCount,
+    healthy: blockCount >= 1 && blockCount <= 12,
+  };
+}

@@ -123,3 +123,30 @@ function LbButton({
     </button>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditLightboxGovernance(
+  state: {
+    zoomScale?: number;
+    hasValidSrc?: boolean;
+  } = {},
+): {
+  module: 'src/shared/ui/Lightbox/Lightbox.tsx';
+  phase: 'P147';
+  zoomScale: number;
+  hasValidSrc: boolean;
+  healthy: boolean;
+} {
+  const zoomScale =
+    typeof state.zoomScale === 'number' && Number.isFinite(state.zoomScale)
+      ? Math.min(4, Math.max(0.25, state.zoomScale))
+      : 1;
+  const hasValidSrc = state.hasValidSrc !== false;
+  return {
+    module: 'src/shared/ui/Lightbox/Lightbox.tsx',
+    phase: 'P147',
+    zoomScale,
+    hasValidSrc,
+    healthy: hasValidSrc && zoomScale >= 0.25 && zoomScale <= 4,
+  };
+}
