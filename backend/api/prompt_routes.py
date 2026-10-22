@@ -65,7 +65,9 @@ def list_templates() -> Dict[str, Any]:
 class ReorderIn(BaseModel):
     """PUT /prompts/templates/reorder body —— 按新顺序排列的模板 id 列表。"""
 
-    ordered_ids: List[str] = Field(min_length=1)
+    # win7 LTS py38 通道钉 pydantic 1.10.13：容器字段的长度约束必须写
+    # min_items/max_items（v1 下 min_length 会在类定义期抛 ValueError）。
+    ordered_ids: List[str] = Field(min_items=1)
 
 
 @router.put("/templates/reorder")
