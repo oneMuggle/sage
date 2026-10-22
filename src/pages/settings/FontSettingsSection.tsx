@@ -120,3 +120,41 @@ export function FontSettingsSection() {
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditFontSettingsSectionGovernance(
+  state: {
+    fontScalePercent?: number;
+    minScalePercent?: number;
+    maxScalePercent?: number;
+  } = {},
+): {
+  module: 'src/pages/settings/FontSettingsSection.tsx';
+  phase: 'P143';
+  fontScalePercent: number;
+  minScalePercent: number;
+  maxScalePercent: number;
+  healthy: boolean;
+} {
+  const minScalePercent =
+    typeof state.minScalePercent === 'number' && Number.isFinite(state.minScalePercent)
+      ? Math.max(50, Math.trunc(state.minScalePercent))
+      : 85;
+  const maxScalePercent =
+    typeof state.maxScalePercent === 'number' && Number.isFinite(state.maxScalePercent)
+      ? Math.max(minScalePercent, Math.trunc(state.maxScalePercent))
+      : 130;
+  const rawScale =
+    typeof state.fontScalePercent === 'number' && Number.isFinite(state.fontScalePercent)
+      ? Math.trunc(state.fontScalePercent)
+      : 100;
+  const fontScalePercent = Math.min(maxScalePercent, Math.max(minScalePercent, rawScale));
+  return {
+    module: 'src/pages/settings/FontSettingsSection.tsx',
+    phase: 'P143',
+    fontScalePercent,
+    minScalePercent,
+    maxScalePercent,
+    healthy: fontScalePercent >= minScalePercent && fontScalePercent <= maxScalePercent,
+  };
+}

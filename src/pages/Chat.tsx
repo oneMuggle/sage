@@ -595,3 +595,34 @@ export function Chat() {
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditChatPageGovernance(
+  state: {
+    headerControlsInTopBar?: boolean;
+    singleRowBottomComposer?: boolean;
+    activeSessionId?: string;
+  } = {},
+): {
+  module: 'src/pages/Chat.tsx';
+  phase: 'P143';
+  headerControlsInTopBar: boolean;
+  singleRowBottomComposer: boolean;
+  activeSessionId: string;
+  healthy: boolean;
+} {
+  const headerControlsInTopBar = state.headerControlsInTopBar !== false;
+  const singleRowBottomComposer = state.singleRowBottomComposer !== false;
+  const activeSessionId =
+    typeof state.activeSessionId === 'string' && state.activeSessionId.trim().length > 0
+      ? state.activeSessionId.trim()
+      : 'default';
+  return {
+    module: 'src/pages/Chat.tsx',
+    phase: 'P143',
+    headerControlsInTopBar,
+    singleRowBottomComposer,
+    activeSessionId,
+    healthy: headerControlsInTopBar && singleRowBottomComposer && activeSessionId.length > 0,
+  };
+}
