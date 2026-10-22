@@ -361,6 +361,14 @@ def _install_mcp(ctx: ToolInstallContext) -> None:
     register_mcp_tools(ctx.registry)
 
 
+def _install_plugins(ctx: ToolInstallContext) -> None:
+    # R90: 只同步用户已显式 start 的进程外插件 tool；这里绝不启动进程。
+    # ``critical=False`` 于声明处指定：动态桥接失败不拖垮内置工具装配。
+    from backend.plugins.tool_bridge import register_plugin_tools
+
+    register_plugin_tools(ctx.registry)
+
+
 def _install_todo(ctx: ToolInstallContext) -> None:
     # Todo 持久化管理工具（Task 5-13）：依赖 TodoService（service-getter 延迟解析）。
     from .todo_mgmt_tool import (
@@ -421,6 +429,7 @@ BUNDLES: Tuple[ToolBundle, ...] = (
     ToolBundle("sage_config", _install_sage_config),
     ToolBundle("schedule", _install_schedule),
     ToolBundle("mcp", _install_mcp, critical=False),
+    ToolBundle("plugins", _install_plugins, critical=False),
     ToolBundle("todo", _install_todo),
     ToolBundle("design", _install_design),
 )

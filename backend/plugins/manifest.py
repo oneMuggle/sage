@@ -64,6 +64,9 @@ class PluginCapability(BaseModel):
     permissions: List[str] = Field(
         default_factory=list, description="所需权限列表（如 file:read, network:write）"
     )
+    input_schema: Optional[Dict[str, Any]] = Field(
+        default=None, description="工具调用参数 JSON Schema（object）"
+    )
     config_schema: Optional[Dict[str, Any]] = Field(
         default=None, description="配置项 JSON Schema"
     )

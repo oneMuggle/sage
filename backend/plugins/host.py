@@ -20,7 +20,7 @@ import os
 import sys
 import threading
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from backend.domain.plugin import FiberState
 from backend.plugins.host_process import (
@@ -75,11 +75,13 @@ class PluginHostManager:
         registry: Optional[CapabilityRegistry] = None,
         python_executable: Optional[str] = None,
         worker_script: Optional[Path] = None,
+        tool_bridge: Optional[Any] = None,
     ) -> None:
         self._limits = limits or PluginHostLimits()
         self._registry = registry if registry is not None else get_capability_registry()
         self._python_executable = python_executable or sys.executable
         self._worker_script = Path(worker_script) if worker_script is not None else _WORKER_SCRIPT
+        self._tool_bridge = tool_bridge
         self._sessions: Dict[str, _PluginProcess] = {}
         self._sessions_lock = threading.RLock()
         self._plugin_locks: Dict[str, threading.RLock] = {}
@@ -93,6 +95,23 @@ class PluginHostManager:
     @property
     def limits(self) -> PluginHostLimits:
         return self._limits
+
+    @property
+    def tool_bridge(self) -> Optional[Any]:
+        return self._tool_bridge
+
+    def set_tool_bridge(self, bridge: Optional[Any]) -> None:
+        """Attach/detach the R90 LLM tool bridge without starting anything."""
+
+        old_bridge = self._tool_bridge
+        if old_bridge is bridge:
+            return
+        self._tool_bridge = bridge
+        if old_bridge is not None:
+            unpublish = getattr(old_bridge, "unpublish_host", None)
+            if callable(unpublish):
+                with contextlib.suppress(Exception):
+                    unpublish(self)
 
     def start(self, record: PluginRecord) -> PluginRuntimeStatus:
         with self._plugin_lock(record.name):
@@ -140,6 +159,26 @@ class PluginHostManager:
         finally:
             if session.state == FiberState.FAILED:
                 self._unregister(plugin_name)
+
+    def running_tool_capabilities(
+        self,
+    ) -> List[Tuple[str, PluginCapability]]:
+        """Return tool capabilities backed by currently running sessions."""
+
+        with self._sessions_lock:
+            sessions = list(self._sessions.items())
+        running: List[Tuple[str, PluginCapability]] = []
+        for plugin_name, session in sessions:
+            transitioned = session.reconcile()
+            if transitioned or session.state == FiberState.FAILED:
+                self._unregister(plugin_name)
+                continue
+            if session.running:
+                running.extend(
+                    (plugin_name, capability)
+                    for capability in session.capabilities
+                )
+        return running
 
     def shutdown_all(self) -> None:
         with self._sessions_lock:
@@ -337,6 +376,7 @@ class PluginHostManager:
                     _truncate(exc),
                     status_code=409,
                 ) from exc
+        self._notify_tool_bridge_publish(plugin_name, capabilities)
 
     def _make_proxy(self, plugin_name: str, capability_name: str) -> Callable[..., Any]:
         def handler(arguments: Optional[Dict[str, Any]] = None, **kwargs: Any) -> Any:
@@ -358,6 +398,37 @@ class PluginHostManager:
     def _unregister(self, plugin_name: str) -> None:
         with self._registry_lock, contextlib.suppress(Exception):
             self._registry.unregister_all(plugin_name)
+        self._notify_tool_bridge_unpublish(plugin_name)
+
+    def _notify_tool_bridge_publish(
+        self,
+        plugin_name: str,
+        capabilities: Sequence[PluginCapability],
+    ) -> None:
+        bridge = self._tool_bridge
+        if bridge is None:
+            return
+        try:
+            bridge.publish_plugin(self, plugin_name, list(capabilities))
+        except Exception:  # noqa: BLE001 - LLM bridge is additive to R83
+            logger.warning(
+                "Failed to publish plugin %s tools to the LLM bridge",
+                plugin_name,
+                exc_info=True,
+            )
+
+    def _notify_tool_bridge_unpublish(self, plugin_name: str) -> None:
+        bridge = self._tool_bridge
+        if bridge is None:
+            return
+        try:
+            bridge.unpublish_plugin(self, plugin_name)
+        except Exception:  # noqa: BLE001 - cleanup must not mask host state
+            logger.warning(
+                "Failed to unpublish plugin %s tools from the LLM bridge",
+                plugin_name,
+                exc_info=True,
+            )
 
 
 def _env_float(name: str, default: float) -> float:
@@ -417,7 +488,14 @@ def get_plugin_host_manager() -> PluginHostManager:
     global _HOST_MANAGER
     with _HOST_MANAGER_LOCK:
         if _HOST_MANAGER is None:
-            _HOST_MANAGER = PluginHostManager(limits=_limits_from_env())
+            from backend.plugins.tool_bridge import get_plugin_tool_bridge
+
+            bridge = get_plugin_tool_bridge()
+            _HOST_MANAGER = PluginHostManager(
+                limits=_limits_from_env(),
+                tool_bridge=bridge,
+            )
+            bridge.attach_host(_HOST_MANAGER, sync=False)
         return _HOST_MANAGER
 
 
@@ -430,6 +508,10 @@ def reset_plugin_host_manager() -> None:
         _HOST_MANAGER = None
     if manager is not None:
         manager.shutdown_all()
+        bridge = manager.tool_bridge
+        if bridge is not None:
+            with contextlib.suppress(Exception):
+                bridge.detach_host(manager)
 
 
 def shutdown_plugin_hosts() -> None:

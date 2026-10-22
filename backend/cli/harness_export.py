@@ -59,6 +59,8 @@ FILE_VERSION = 1
 PROJECT_INSTRUCTION_FILES = ("SAGE.md", "CLAUDE.md", "AGENTS.md")
 MAX_PROJECT_INSTRUCTION_BYTES = 512 * 1024
 _SKILLS_ENV = "SAGE_SKILLS_DIR"
+# Dynamic/external bundles are runtime state, not a static harness baseline.
+_EXPORT_EXCLUDED_BUNDLES: Dict[str, str] = {"mcp": "external_discovery", "plugins": "dynamic_plugin_runtime"}
 
 __all__ = [
     "FILE_VERSION",
@@ -347,7 +349,7 @@ def _tool_guidance_payload(
 
     selected_bundles = select_bundle_objects(config)
     exported_bundles = tuple(
-        bundle for bundle in selected_bundles if bundle.name != "mcp"
+        bundle for bundle in selected_bundles if bundle.name not in _EXPORT_EXCLUDED_BUNDLES
     )
     bundle_rows: List[Dict[str, Any]] = []
     tools: List[Dict[str, Any]] = []
@@ -388,9 +390,8 @@ def _tool_guidance_payload(
 
     selected_names = {bundle.name for bundle in selected_bundles}
     for bundle in BUNDLES:
-        if bundle.name == "mcp":
-            status = "excluded_from_export"
-            reason = "external_discovery"
+        if bundle.name in _EXPORT_EXCLUDED_BUNDLES:
+            status, reason = "excluded_from_export", _EXPORT_EXCLUDED_BUNDLES[bundle.name]
         elif bundle.name in selected_names:
             status = "selected"
             reason = ""
@@ -412,8 +413,7 @@ def _tool_guidance_payload(
         "network_mode_for_export": NetworkMode.ONLINE.value,
         "schemas_included": bool(include_tool_schemas),
         "excluded_bundles": [
-            {"name": "mcp", "reason": "external_discovery"}
-        ],
+            {"name": name, "reason": reason} for name, reason in _EXPORT_EXCLUDED_BUNDLES.items()],
         "bundles": bundle_rows,
         "tools": tools,
     }

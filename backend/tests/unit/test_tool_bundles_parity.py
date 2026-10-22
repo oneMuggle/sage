@@ -234,6 +234,7 @@ _EXPECTED_BUNDLE_NAMES = (
     "sage_config",
     "schedule",
     "mcp",
+    "plugins",
     "todo",
     "design",
 )
@@ -260,6 +261,7 @@ _FOCUS_BUNDLES = (
     "sage_config",
     "schedule",
     "mcp",
+    "plugins",
     "todo",
 )
 
@@ -302,6 +304,14 @@ def _stub_mcp(monkeypatch: pytest.MonkeyPatch) -> None:
     import backend.mcp as mcp_pkg
 
     monkeypatch.setattr(mcp_pkg, "register_mcp_tools", lambda registry: None, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _stub_plugin_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    """R90 动态插件工具不属于静态黄金快照，单测里打成 no-op。"""
+    import backend.plugins.tool_bridge as bridge
+
+    monkeypatch.setattr(bridge, "register_plugin_tools", lambda registry: 0)
 
 
 @pytest.fixture(autouse=True)
@@ -433,7 +443,7 @@ def test_bundle_selection_for_standard_focus_headless_and_dev() -> None:
     assert tuple(b.name for b in select_bundle_objects(_harness("focus"))) == _FOCUS_BUNDLES
 
     headless = tuple(b.name for b in select_bundle_objects(_harness("headless")))
-    assert len(headless) == 30
+    assert len(headless) == 31
     assert "ask_user" not in headless
     assert [name for name in _EXPECTED_BUNDLE_NAMES if name in set(headless)] == list(headless)
 

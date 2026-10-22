@@ -60,6 +60,11 @@ def _enforcer(mode, rules=()):
         (PermissionMode.READ_ONLY, "mystery_tool", {}, False, False),
         (PermissionMode.WORKSPACE_WRITE, "mystery_tool", {}, True, False),
         (PermissionMode.PROMPT, "mystery_tool", {}, False, True),
+        # R90 插件工具统一 EXECUTE: 只读拒绝, 默认/提示逐次审批, 全放行才免审
+        (PermissionMode.READ_ONLY, "plugin__demo__run", {}, False, False),
+        (PermissionMode.WORKSPACE_WRITE, "plugin__demo__run", {}, False, True),
+        (PermissionMode.PROMPT, "plugin__demo__run", {}, False, True),
+        (PermissionMode.FULL_ACCESS, "plugin__demo__run", {}, True, False),
     ],
 )
 def test_enforcer_mode_capability_matrix(mode, tool, args, expect_allowed, expect_approval):
@@ -289,6 +294,11 @@ def test_classify_tool_unknown_defaults_to_write_fail_safe():
     # Arrange / Act / Assert
     assert classify_tool("brand_new_tool") is DEFAULT_TOOL_CAPABILITY
     assert DEFAULT_TOOL_CAPABILITY is ToolCapability.WRITE
+
+
+def test_classify_tool_plugin_namespace_is_execute():
+    """R90: plugin__* 是第三方代码执行面, 不能落入未知工具 WRITE 默认。"""
+    assert classify_tool("plugin__hello-tool__hello_tool") is ToolCapability.EXECUTE
 
 
 # ---------------------------------------------------------------------------

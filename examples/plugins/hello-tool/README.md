@@ -21,6 +21,8 @@ python -m backend.cli.plugin dev /path/to/hello-tool \
 
 Installing or enabling a lifecycle record never executes this code. The runtime starts only through an explicit dev/UI/API action.
 
+After that explicit start, the tool is available to chat agents as `plugin__hello-tool__hello_tool` because the manifest declares an `input_schema`; calls remain subject to Sage tool approval, and stopping the runtime removes it.
+
 ## Test without Sage
 
 ```bash

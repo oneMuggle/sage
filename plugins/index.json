@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-10-21T14:48:51Z",
+  "generated_at": "2026-10-22T06:08:31Z",
   "plugins": [
     {
       "name": "hello-tool",
@@ -36,7 +36,7 @@
             "version": "0.1.0",
             "entry_point": "handlers:run",
             "permissions": [],
-            "config_schema": {
+            "input_schema": {
               "type": "object",
               "properties": {
                 "name": {
@@ -45,7 +45,8 @@
                 }
               },
               "additionalProperties": true
-            }
+            },
+            "config_schema": null
           }
         ],
         "dependencies": [],

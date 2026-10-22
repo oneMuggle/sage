@@ -51,6 +51,7 @@ export interface PluginCapability {
   version?: string;
   entry_point?: string | null;
   permissions?: string[];
+  input_schema?: Record<string, unknown> | null;
   config_schema?: Record<string, unknown> | null;
 }
 

@@ -56,7 +56,11 @@ const MANIFEST_TEMPLATE = JSON.stringify(
         description: 'Describe this capability',
         entry_point: 'tools.example_tool:run',
         permissions: ['file:read'],
-        config_schema: {},
+        input_schema: {
+          type: 'object',
+          properties: {},
+          additionalProperties: false,
+        },
       },
     ],
     dependencies: [],
