@@ -42,3 +42,52 @@ export function ChatInlineError({ error, onRetry, onClose }: ChatInlineErrorProp
     </div>
   );
 }
+
+export interface ChatInlineErrorAuditInput {
+  errorMessage: string;
+  errorCode?: string | null;
+  retryable: boolean;
+  hasRetryHandler: boolean;
+}
+
+export interface ChatInlineErrorAuditReport {
+  normalizedCode: string;
+  messageLength: number;
+  retryable: boolean;
+  actionable: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateChatInlineErrorAudit(
+  input: ChatInlineErrorAuditInput,
+): ChatInlineErrorAuditReport {
+  const msg = input.errorMessage.trim();
+  const normalizedCode = (input.errorCode ?? 'UNKNOWN_ERROR').trim() || 'UNKNOWN_ERROR';
+  const actionable = !input.retryable || Boolean(input.hasRetryHandler);
+  const issueCodes: string[] = [];
+
+  if (!msg) {
+    issueCodes.push('empty_inline_error_message');
+  }
+  if (input.retryable && !input.hasRetryHandler) {
+    issueCodes.push('missing_retry_handler');
+  }
+
+  return {
+    normalizedCode,
+    messageLength: msg.length,
+    retryable: Boolean(input.retryable),
+    actionable,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportChatInlineErrorAuditJson(
+  input: ChatInlineErrorAuditInput,
+): string {
+  return JSON.stringify(evaluateChatInlineErrorAudit(input));
+}

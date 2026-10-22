@@ -399,3 +399,55 @@ export function ToolCallResult({ result }: { result: unknown }) {
   );
 }
 
+export interface MessageMarkdownPartsAuditInput {
+  blockCount: number;
+  codeBlockCount: number;
+  tableCount: number;
+  unfinishedFenceCount: number;
+}
+
+export interface MessageMarkdownPartsAuditReport {
+  blockCount: number;
+  codeBlockCount: number;
+  tableCount: number;
+  unfinishedFenceCount: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateMessageMarkdownPartsAudit(
+  input: MessageMarkdownPartsAuditInput,
+): MessageMarkdownPartsAuditReport {
+  const blockCount = Math.max(0, Math.trunc(input.blockCount));
+  const codeBlockCount = Math.max(0, Math.trunc(input.codeBlockCount));
+  const tableCount = Math.max(0, Math.trunc(input.tableCount));
+  const unfinishedFenceCount = Math.max(0, Math.trunc(input.unfinishedFenceCount));
+  const issueCodes: string[] = [];
+
+  if (blockCount === 0) {
+    issueCodes.push('empty_markdown_parts');
+  }
+  if (unfinishedFenceCount > 0) {
+    issueCodes.push('unclosed_markdown_code_fence');
+  }
+  if (codeBlockCount + tableCount > blockCount && blockCount > 0) {
+    issueCodes.push('part_count_mismatch');
+  }
+
+  return {
+    blockCount,
+    codeBlockCount,
+    tableCount,
+    unfinishedFenceCount,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportMessageMarkdownPartsAuditJson(
+  input: MessageMarkdownPartsAuditInput,
+): string {
+  return JSON.stringify(evaluateMessageMarkdownPartsAudit(input));
+}
