@@ -60,3 +60,32 @@ export function formatQueryClientConfigJson(
   });
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditQueryClientProviderGovernance(
+  state: {
+    staleTimeMs?: number;
+    retryCount?: number;
+  } = {},
+): {
+  module: 'src/app/providers/QueryClientProvider.tsx';
+  phase: 'P151';
+  staleTimeMs: number;
+  retryCount: number;
+  healthy: boolean;
+} {
+  const staleTimeMs =
+    typeof state.staleTimeMs === 'number' && Number.isFinite(state.staleTimeMs)
+      ? Math.max(0, Math.round(state.staleTimeMs))
+      : 60000;
+  const retryCount =
+    typeof state.retryCount === 'number' && Number.isFinite(state.retryCount)
+      ? Math.max(0, Math.min(10, Math.trunc(state.retryCount)))
+      : 1;
+  return {
+    module: 'src/app/providers/QueryClientProvider.tsx',
+    phase: 'P151',
+    staleTimeMs,
+    retryCount,
+    healthy: staleTimeMs >= 1000 && retryCount >= 0 && retryCount <= 10,
+  };
+}

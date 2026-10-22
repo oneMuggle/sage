@@ -21,10 +21,12 @@ export interface NavHistoryAuditInput {
   canForward: boolean;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatNavHistoryAuditSnapshot(input: NavHistoryAuditInput): string {
   return `cursor=${input.cursor}|len=${input.stackLength}|back=${input.canBack ? 1 : 0}|fwd=${input.canForward ? 1 : 0}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatNavHistoryAuditJson(input: NavHistoryAuditInput): string {
   return JSON.stringify({
     cursor: input.cursor,
@@ -184,4 +186,34 @@ export function NavHistoryProvider({ children }: NavHistoryProviderProps) {
       </span>
     </NavHistoryContext.Provider>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditNavHistoryProviderGovernance(
+  state: {
+    entryCount?: number;
+    maxEntries?: number;
+  } = {},
+): {
+  module: 'src/app/providers/NavHistoryProvider.tsx';
+  phase: 'P151';
+  entryCount: number;
+  maxEntries: number;
+  healthy: boolean;
+} {
+  const entryCount =
+    typeof state.entryCount === 'number' && Number.isFinite(state.entryCount)
+      ? Math.max(0, Math.trunc(state.entryCount))
+      : 1;
+  const maxEntries =
+    typeof state.maxEntries === 'number' && Number.isFinite(state.maxEntries)
+      ? Math.max(10, Math.min(500, Math.trunc(state.maxEntries)))
+      : 50;
+  return {
+    module: 'src/app/providers/NavHistoryProvider.tsx',
+    phase: 'P151',
+    entryCount,
+    maxEntries,
+    healthy: entryCount >= 1 && entryCount <= maxEntries,
+  };
 }
