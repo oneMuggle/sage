@@ -585,3 +585,40 @@ export function useChatReattachAndBtw(params: {
 
   return { reattachActiveStream, askBtw };
 }
+
+export interface ChatStreamRuntimeAuditInput {
+  activeStreamCount: number;
+  maxConcurrentStreams: number;
+  pendingMessageCount: number;
+  hasAbortController: boolean;
+}
+
+export interface ChatStreamRuntimeAuditReport {
+  activeStreamCount: number;
+  withinConcurrencyLimit: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+export function evaluateChatStreamRuntimeGovernanceAudit(
+  input: ChatStreamRuntimeAuditInput,
+): ChatStreamRuntimeAuditReport {
+  const issueCodes: string[] = [];
+  if (input.activeStreamCount < 0 || input.pendingMessageCount < 0) {
+    issueCodes.push('CHAT_STREAM_RUNTIME_COUNT_NEGATIVE');
+  }
+  const withinConcurrencyLimit =
+    input.maxConcurrentStreams > 0 && input.activeStreamCount <= input.maxConcurrentStreams;
+  if (!withinConcurrencyLimit) {
+    issueCodes.push('CHAT_STREAM_RUNTIME_CONCURRENCY_EXCEEDED');
+  }
+  if (input.activeStreamCount > 0 && !input.hasAbortController) {
+    issueCodes.push('CHAT_STREAM_RUNTIME_ABORT_CONTROLLER_MISSING');
+  }
+  return {
+    activeStreamCount: Math.max(0, Math.trunc(input.activeStreamCount)),
+    withinConcurrencyLimit,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
