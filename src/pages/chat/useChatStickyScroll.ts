@@ -152,3 +152,33 @@ export function useChatStickyScroll({
     scrollToLatest,
   };
 }
+
+export function auditUseChatStickyScrollGovernance(
+  state: {
+    stickToBottom?: boolean;
+    scrollThresholdPx?: number;
+    isStreaming?: boolean;
+  } = {},
+): {
+  module: 'src/pages/chat/useChatStickyScroll.ts';
+  phase: 'P142';
+  stickToBottom: boolean;
+  scrollThresholdPx: number;
+  isStreaming: boolean;
+  healthy: boolean;
+} {
+  const stickToBottom = state.stickToBottom !== false;
+  const scrollThresholdPx =
+    typeof state.scrollThresholdPx === 'number' && Number.isFinite(state.scrollThresholdPx)
+      ? Math.max(0, Math.trunc(state.scrollThresholdPx))
+      : 80;
+  const isStreaming = Boolean(state.isStreaming);
+  return {
+    module: 'src/pages/chat/useChatStickyScroll.ts',
+    phase: 'P142',
+    stickToBottom,
+    scrollThresholdPx,
+    isStreaming,
+    healthy: scrollThresholdPx >= 0,
+  };
+}

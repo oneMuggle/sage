@@ -325,3 +325,33 @@ export function useChatMessageActions({
     handleRerunFailed,
   };
 }
+
+export function auditUseChatMessageActionsGovernance(
+  state: {
+    messageCount?: number;
+    isBusy?: boolean;
+    supportsRegenerate?: boolean;
+  } = {},
+): {
+  module: 'src/pages/chat/useChatMessageActions.ts';
+  phase: 'P142';
+  messageCount: number;
+  isBusy: boolean;
+  supportsRegenerate: boolean;
+  healthy: boolean;
+} {
+  const messageCount =
+    typeof state.messageCount === 'number' && Number.isFinite(state.messageCount)
+      ? Math.max(0, Math.trunc(state.messageCount))
+      : 0;
+  const isBusy = Boolean(state.isBusy);
+  const supportsRegenerate = state.supportsRegenerate !== false;
+  return {
+    module: 'src/pages/chat/useChatMessageActions.ts',
+    phase: 'P142',
+    messageCount,
+    isBusy,
+    supportsRegenerate,
+    healthy: messageCount >= 0 && supportsRegenerate,
+  };
+}

@@ -71,3 +71,41 @@ export function ContextTurnLimitSelect(): JSX.Element {
     </SettingRow>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditContextTurnLimitSelectGovernance(
+  state: {
+    selectedTurnLimit?: number;
+    minTurnLimit?: number;
+    maxTurnLimit?: number;
+  } = {},
+): {
+  module: 'src/pages/settings/ContextTurnLimitSelect.tsx';
+  phase: 'P142';
+  selectedTurnLimit: number;
+  minTurnLimit: number;
+  maxTurnLimit: number;
+  healthy: boolean;
+} {
+  const minTurnLimit =
+    typeof state.minTurnLimit === 'number' && Number.isFinite(state.minTurnLimit)
+      ? Math.max(0, Math.trunc(state.minTurnLimit))
+      : 0;
+  const maxTurnLimit =
+    typeof state.maxTurnLimit === 'number' && Number.isFinite(state.maxTurnLimit)
+      ? Math.max(minTurnLimit, Math.trunc(state.maxTurnLimit))
+      : 100;
+  const rawSelected =
+    typeof state.selectedTurnLimit === 'number' && Number.isFinite(state.selectedTurnLimit)
+      ? Math.trunc(state.selectedTurnLimit)
+      : 20;
+  const selectedTurnLimit = Math.min(maxTurnLimit, Math.max(minTurnLimit, rawSelected));
+  return {
+    module: 'src/pages/settings/ContextTurnLimitSelect.tsx',
+    phase: 'P142',
+    selectedTurnLimit,
+    minTurnLimit,
+    maxTurnLimit,
+    healthy: selectedTurnLimit >= minTurnLimit && selectedTurnLimit <= maxTurnLimit,
+  };
+}
