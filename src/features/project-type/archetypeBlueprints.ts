@@ -185,3 +185,29 @@ export const ARCHETYPE_ORDER: ProjectType[] = ['coding', 'business', 'research',
 export function getArchetypeBlueprint(type?: ProjectType | null): ArchetypeBlueprintMeta {
   return ARCHETYPE_BLUEPRINTS[type ?? 'business'] ?? ARCHETYPE_BLUEPRINTS.business;
 }
+
+export function auditArchetypeBlueprintsGovernance(
+  state: {
+    blueprintCount?: number;
+    supportsCustomArchetype?: boolean;
+  } = {},
+): {
+  module: 'src/features/project-type/archetypeBlueprints.ts';
+  phase: 'P148';
+  blueprintCount: number;
+  supportsCustomArchetype: boolean;
+  healthy: boolean;
+} {
+  const blueprintCount =
+    typeof state.blueprintCount === 'number' && Number.isFinite(state.blueprintCount)
+      ? Math.max(0, Math.trunc(state.blueprintCount))
+      : 6;
+  const supportsCustomArchetype = state.supportsCustomArchetype !== false;
+  return {
+    module: 'src/features/project-type/archetypeBlueprints.ts',
+    phase: 'P148',
+    blueprintCount,
+    supportsCustomArchetype,
+    healthy: blueprintCount >= 4 && supportsCustomArchetype,
+  };
+}

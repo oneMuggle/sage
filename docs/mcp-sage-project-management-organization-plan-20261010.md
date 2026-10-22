@@ -2000,3 +2000,24 @@
   - `src/shared/ui/LoadingState/index.ts`: Exported `auditLoadingStateBarrelGovernance()` validating loading state accessible label contract.
   - `src/shared/ui/PageSkeleton/PageSkeleton.tsx`: Exported `auditPageSkeletonGovernance()` validating skeleton placeholder block count bounds (`1..12`).
   - Unit tests: Added 8 dedicated Vitest suites (`Progress.p147.test.ts`, `Textarea.p147.test.ts`, `ConfirmDialogHost.p147.test.ts`, `DialogIndex.p147.test.ts`, `ErrorStateIndex.p147.test.ts`, `Lightbox.p147.test.ts`, `LoadingStateIndex.p147.test.ts`, `PageSkeleton.p147.test.ts`).
+
+### Phase P148: ArchetypeBlueprints, Shared API Utils, RetryButton/Tabs/Settings Barrels, Tabs, Tooltip & RightPanel Governance (Completed)
+- **Target Modules**:
+  - `src/features/project-type/archetypeBlueprints.ts`: `auditArchetypeBlueprintsGovernance`
+  - `src/shared/api/utils.ts`: `auditSharedApiUtilsGovernance`
+  - `src/shared/ui/RetryButton/index.ts`: `auditRetryButtonBarrelGovernance`
+  - `src/shared/ui/Tabs/Tabs.tsx`: `auditTabsGovernance`
+  - `src/shared/ui/Tabs/index.ts`: `auditTabsBarrelGovernance`
+  - `src/shared/ui/Tooltip/Tooltip.tsx`: `auditTooltipGovernance`
+  - `src/widgets/chat/RightPanel.tsx`: `auditChatRightPanelGovernance`
+  - `src/pages/settings/index.ts`: `auditSettingsBarrelGovernance`
+- **Unit Test Suites**:
+  - `src/features/project-type/__tests__/archetypeBlueprints.p148.test.ts`
+  - `src/shared/api/__tests__/utils.p148.test.ts`
+  - `src/shared/ui/__tests__/RetryButtonIndex.p148.test.ts`
+  - `src/shared/ui/__tests__/Tabs.p148.test.ts`
+  - `src/shared/ui/__tests__/TabsIndex.p148.test.ts`
+  - `src/shared/ui/__tests__/Tooltip.p148.test.ts`
+  - `src/widgets/chat/__tests__/RightPanel.p148.test.ts`
+  - `src/pages/settings/__tests__/settingsIndex.p148.test.ts`
+- **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
