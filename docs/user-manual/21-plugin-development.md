@@ -183,7 +183,7 @@ python -m backend.cli.plugin index build examples/plugins/hello-tool \
 
 这个示例在 hello-tool runtime 启动后会成为 `plugin__hello-tool__hello_tool`。已有聊天和随后新建的聊天都能看到它；stop、restart 失败、worker 崩溃、保存配置、禁用或卸载导致停机时，它会从聊天工具面注销。没有 object 形 `input_schema` 的 tool 仍可在设置页手动 invoke，但不会猜参数后交给 LLM。旧插件若按 R86 模板把参数 schema 写在 `config_schema`，桥接仍兼容读取；新插件请用 `input_schema`，`user_config` 只描述生命周期配置。
 
-插件调用按第三方代码执行面处理：风险下限为 EXEC，默认 `workspace_write` 模式会逐次请求批准，`read_only` 会拒绝。用户可在权限规则中对可信的完整名或 `plugin__<plugin>__*` 显式 allow/deny/ask。带 `allowed_tools` 白名单的 agent profile 必须列出完整工具名，不做插件通配展开。
+插件调用按第三方代码执行面处理：风险下限为 EXEC，默认 `workspace_write` 模式会逐次请求批准，`read_only` 会拒绝。用户可在权限规则中对可信的完整名或 `plugin__<plugin>__*` 显式 allow/deny/ask。带工具白名单的 agent profile 可列出完整工具名，也可用 `plugin__<plugin>__*` 放行某个插件的全部工具或 `plugin__*` 放行全部插件工具（仅这两种插件通配会被展开，其它 `*` 写法不通配）；在「智能体」页编辑目标 Agent 的工具白名单即可添加。通配会让该插件将来新增的能力自动对该 Agent 可见，调用仍逐次审批；最小权限场景请列完整工具名。
 
 ## 5. Manifest 最小契约
 

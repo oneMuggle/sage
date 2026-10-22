@@ -170,6 +170,36 @@ def test_registry_get_schemas_allowed_tools_empty_returns_empty():
     assert schemas == []
 
 
+def test_registry_get_schemas_plugin_wildcards_r92():
+    """R92：profile 通配只展开插件命名空间，通用 glob 不展开。"""
+    reg = ToolRegistry()
+    reg.register(_DummyTool(name="memory_search"))
+    reg.register(_DummyTool(name="plugin__demo__hello"))
+    reg.register(_DummyTool(name="plugin__demo__bye"))
+    reg.register(_DummyTool(name="plugin__other__ping"))
+
+    def names(allowed):
+        return {s["name"] for s in reg.get_schemas_for_llm(allowed_tools=allowed)}
+
+    assert names(["plugin__demo__*"]) == {
+        "plugin__demo__hello",
+        "plugin__demo__bye",
+    }
+    assert names(["plugin__*"]) == {
+        "plugin__demo__hello",
+        "plugin__demo__bye",
+        "plugin__other__ping",
+    }
+    assert names(["plugin__demo__*", "memory_search"]) == {
+        "plugin__demo__hello",
+        "plugin__demo__bye",
+        "memory_search",
+    }
+    assert names(["memory_*"]) == set()
+    assert names(["*"]) == set()
+    assert names(["plugin__demo*"]) == set()
+
+
 # ---------- register_all_tools 集成 ----------
 
 

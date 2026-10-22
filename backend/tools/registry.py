@@ -10,6 +10,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from backend.domain.risk import RiskClass, RiskOverrides, classify as classify_risk
+from backend.domain.tool_names import tool_name_in_allowlist
 
 from .base import BaseTool, ToolSchema
 from .context import ToolExecutionContext, current_tool_context
@@ -126,7 +127,11 @@ class ToolRegistry:
                 "no whitelist" -- every tool passing the context filter
                 is exposed (legacy behavior, used when ``SageAgent`` has
                 no profile loaded). An explicit list filters the result
-                to those names only; pass ``[]`` to expose nothing.
+                to those names only; pass ``[]`` to expose nothing. R92:
+                entries ``plugin__*`` / ``plugin__<plugin>__*`` wildcard
+                the dynamic plugin-tool namespace (see
+                ``backend.domain.tool_names.tool_name_in_allowlist``);
+                every other entry still matches exactly.
 
         Returns:
             包含 name, description, parameters 的字典列表
@@ -144,7 +149,9 @@ class ToolRegistry:
             if tool.requires_tool_context and effective_context is None:
                 continue
             # profile.tools 白名单:仅当 allowed_tools 显式给出时才过滤
-            if allowed_tools is not None and tool.schema.name not in allowed_tools:
+            if allowed_tools is not None and not tool_name_in_allowlist(
+                tool.schema.name, allowed_tools
+            ):
                 continue
             result.append(
                 {

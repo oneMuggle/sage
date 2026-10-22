@@ -21,7 +21,8 @@
 | R84 | harness 文件化 + lock + 差异视图 | ✅ #2206 |
 | R85 | 提案引擎（Propose–Probe–Compose + 证据锚定） | ✅ #2206 |
 | R86 | 生态（脚手架 / 索引 / 贡献指南） | ✅ #2206 |
-| R90 | 进程外插件 tool → 聊天 `ToolRegistry` 桥 | 实施中 |
+| R90 | 进程外插件 tool → 聊天 `ToolRegistry` 桥 | ✅ #2327 |
+| R92 | 插件工具 profile 受限通配 + Agent 工具白名单编辑 | #2360（待合并） |
 
 ## 2. 交付总账
 
@@ -36,7 +37,8 @@
 | R84 | `application/kernel/{harness_files,harness_snapshots}.py` + `cli/harness_export.py` + `files` CLI + 启动 lock gate + 14 例新增单测 | #2206 | 待对齐 | ✅ 已交付 |
 | R85 | `application/kernel/{harness_evidence,harness_proposals,harness_proposal_engine}.py` + SkillDraft 审批桥 + `proposals` CLI + 17 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
 | R86 | `plugins/{scaffold_templates,scaffold,index_catalog}.py` + `cli/plugin.py` + hello-tool 示例/静态索引/开发指南 + 25 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
-| R90 | `plugins/tool_bridge.py` + host publish/unpublish 通知与 running 查询 + `plugins` tool bundle + `input_schema` 契约/权限门/桥接测试与文档 | 本 PR（待合并） | 待对齐 | 实施中 |
+| R90 | `plugins/tool_bridge.py` + host publish/unpublish 通知与 running 查询 + `plugins` tool bundle + `input_schema` 契约/权限门/桥接测试与文档 | #2327 | 待对齐 | ✅ 已交付 |
+| R92 | `domain/tool_names.py` 共享 matcher 与前缀单一来源 + registry/agent 三道闸统一 + 启动期校验识别插件引用 + `EditAgentForm` 工具白名单编辑与测试/文档 | #2360（待合并） | 待对齐 | 实施中 |
 
 ## 3. R78 交付边界
 
@@ -222,7 +224,8 @@
   network/external 信号升 EXTERNAL；旧权限执行器把 `plugin__*` 归为
   EXECUTE，默认逐次审批、`read_only` 拒绝。工具声明
   `concurrency_safe=False`、`is_blocking=True`，且不接收宿主 ToolContext。
-- **profile 仍是精确白名单**：R90 不展开 `plugin__*` 通配，不把插件
+- **profile 在 R90 是精确白名单**：R90 不展开 `plugin__*` 通配（该
+  限制由 R92 受限放宽，见 §13），不把插件
   工具塞进子代理只读面；无插件 runtime 时 94 个静态 schema 的集合与顺序
   不变。R84 harness 静态导出排除 `plugins` 动态 bundle，不把临时 runtime
   schema 写入 lock。完整的参数归一化、冲突与验收标准见
@@ -230,5 +233,28 @@
 - **不扩围**：仍非 OS 沙箱，不自动启动、不做市场/下载/验签，不启动
   parked 的 DSH ABI/Node 边车；Win7 继续标“待对齐”，等待既有同步链路，
   本账不冒称完成。
+
+## 13. R92 交付边界
+
+> R91 是 Windows `skills_dir` 路径语义修复（非插件轮次，见
+> `2026-10-22_r91-windows-skills-dir-path-semantics.md`），故本账由
+> R90 直接续 R92。
+
+- **只承认两种插件通配**：profile `tools` 中 `plugin__*`（全部插件）与
+  `plugin__<plugin>__*`（单个插件全部 capability）会被展开；普通条目
+  仍精确匹配，`*`、`memory_*`、`plugin__demo*` 等其它写法不通配、
+  fail-closed。三道闸（registry schema 过滤、agent 并行预检、agent
+  执行边界）共用 `domain/tool_names.py` 的单一 matcher，`plugin__`
+  前缀也收敛为 domain 单一来源。
+- **通配只决定可见性**：插件仍须用户显式 start 才发布，调用仍按
+  EXECUTE/EXTERNAL 逐次审批，权限规则不变；通配会让插件将来新增的
+  capability 自动对该 Agent 可见，最小权限场景应继续写完整精确名。
+  默认种子 profile 不新增任何插件通配。
+- **配置入口补齐**：Agent 管理页可直接编辑工具白名单（文本形式，
+  保存时去重）；启动期 `validate_profile_tools` 对合法插件精确名与
+  通配不再误告警，无效写法仍告警。完整语义与验收见
+  `2026-10-22_plugin-profile-wildcard-r92.md`。
+- **不扩围**：不做通用 glob、不做运行中工具动态复选框、不做「按插件
+  记住放行」；Win7 继续标“待对齐”。
 
 —— 本账本由插件化循环维护，随轮次追加。

@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from backend.domain.tool_names import PLUGIN_TOOL_PREFIX
 from backend.tools.base import _is_safe_path
 from backend.tools.bash_validation import BashRisk, validate_bash
 
@@ -94,8 +95,9 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
 #: 未知工具默认能力（fail-safe）
 DEFAULT_TOOL_CAPABILITY = ToolCapability.WRITE
 
-#: R90 进程外插件工具的 LLM 命名空间（plugin__<plugin>__<capability>）
-PLUGIN_TOOL_PREFIX = "plugin__"
+# R90 进程外插件工具的 LLM 命名空间前缀 PLUGIN_TOOL_PREFIX 单一来源在
+# backend.domain.tool_names；本模块导入后再导出，classify_tool 用它把
+# 全部 plugin__* 动态工具归入 EXECUTE。
 
 #: PermissionRule.decision 合法取值
 _VALID_RULE_DECISIONS = ("allow", "deny", "ask")
