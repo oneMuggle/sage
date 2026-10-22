@@ -481,3 +481,44 @@ function progressPercent(
   if (total <= 0) return 0;
   return Math.min(100, Math.round((done / total) * 100));
 }
+
+export interface SessionItemAuditInput {
+  sessionId: string;
+  title: string;
+  messageCount: number;
+  isPinned: boolean;
+  isEditingTitle: boolean;
+}
+
+export interface SessionItemAuditReport {
+  normalizedSessionId: string;
+  normalizedTitle: string;
+  normalizedMessageCount: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateSessionItemGovernanceAudit(
+  input: SessionItemAuditInput,
+): SessionItemAuditReport {
+  const issueCodes: string[] = [];
+  const normalizedSessionId = input.sessionId.trim();
+  const normalizedTitle = input.title.trim();
+  if (!normalizedSessionId) {
+    issueCodes.push('SESSION_ITEM_ID_EMPTY');
+  }
+  if (!normalizedTitle && !input.isEditingTitle) {
+    issueCodes.push('SESSION_ITEM_TITLE_EMPTY');
+  }
+  if (input.messageCount < 0) {
+    issueCodes.push('SESSION_ITEM_MESSAGE_COUNT_NEGATIVE');
+  }
+  return {
+    normalizedSessionId,
+    normalizedTitle,
+    normalizedMessageCount: Math.max(0, Math.trunc(input.messageCount)),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

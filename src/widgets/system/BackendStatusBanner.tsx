@@ -121,3 +121,41 @@ export function BackendStatusBanner() {
     </div>
   );
 }
+
+export interface BackendStatusBannerAuditInput {
+  bannerState: 'ok' | 'starting' | 'reconnecting' | 'failed' | 'recovered' | 'auth_failed';
+  reconnectAttempt: number;
+  recoveredVisibleMs: number;
+}
+
+export interface BackendStatusBannerAuditReport {
+  isBannerVisible: boolean;
+  requiresAppRestart: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateBackendStatusBannerGovernanceAudit(
+  input: BackendStatusBannerAuditInput,
+): BackendStatusBannerAuditReport {
+  const issueCodes: string[] = [];
+  if (input.bannerState === 'failed') {
+    issueCodes.push('BACKEND_BANNER_CONNECTION_FAILED');
+  }
+  if (input.bannerState === 'auth_failed') {
+    issueCodes.push('BACKEND_BANNER_AUTH_FAILED');
+  }
+  if (input.bannerState === 'reconnecting' && (input.reconnectAttempt <= 0 || input.reconnectAttempt > 10)) {
+    issueCodes.push('BACKEND_BANNER_RECONNECT_ATTEMPT_INVALID');
+  }
+  if (input.recoveredVisibleMs < 500 || input.recoveredVisibleMs > 10000) {
+    issueCodes.push('BACKEND_BANNER_RECOVER_TIMEOUT_OUT_OF_RANGE');
+  }
+  return {
+    isBannerVisible: input.bannerState !== 'ok',
+    requiresAppRestart: input.bannerState === 'failed' || input.bannerState === 'auth_failed',
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
