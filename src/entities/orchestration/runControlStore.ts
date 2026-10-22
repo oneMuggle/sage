@@ -431,3 +431,29 @@ export function buildRunControlStoreAuditJson(
     snapshot: buildRunControlStoreAuditSnapshot(input),
   });
 }
+
+export function auditRunControlStoreGovernance(
+  state: {
+    activeRunCount?: number;
+    hasError?: boolean;
+  } = {},
+): {
+  module: 'src/entities/orchestration/runControlStore.ts';
+  phase: 'P154';
+  activeRunCount: number;
+  hasError: boolean;
+  healthy: boolean;
+} {
+  const activeRunCount =
+    typeof state.activeRunCount === 'number' && Number.isFinite(state.activeRunCount)
+      ? Math.max(0, Math.trunc(state.activeRunCount))
+      : 0;
+  const hasError = state.hasError === true;
+  return {
+    module: 'src/entities/orchestration/runControlStore.ts',
+    phase: 'P154',
+    activeRunCount,
+    hasError,
+    healthy: !hasError && activeRunCount <= 50,
+  };
+}
