@@ -2042,3 +2042,24 @@
   - `src/shared/ui/__tests__/RetryButton.p149.test.ts`
   - `src/shared/ui/__tests__/Select.p149.test.ts`
 - **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
+
+### Phase P150: MarkdownImage, SelectionQuoteButton, NavGroup, Titlebar, TitlebarActions, WindowControls, TwoStepDelete & SidebarProjectList Governance (Completed)
+- **Target Modules**:
+  - `src/widgets/chat/MarkdownImage.tsx`: `auditMarkdownImageGovernance`
+  - `src/widgets/chat/SelectionQuoteButton.tsx`: `auditSelectionQuoteButtonGovernance`
+  - `src/widgets/layout/NavGroup.tsx`: `auditNavGroupGovernance`
+  - `src/widgets/layout/Titlebar.tsx`: `auditTitlebarGovernance`
+  - `src/widgets/layout/TitlebarActions.tsx`: `auditTitlebarActionsGovernance`
+  - `src/widgets/layout/WindowControls.tsx`: `auditWindowControlsGovernance`
+  - `src/widgets/sidebar/TwoStepDelete.tsx`: `auditTwoStepDeleteGovernance`
+  - `src/widgets/sidebar/sections/SidebarProjectList.tsx`: `auditSidebarProjectListGovernance`
+- **Unit Test Suites**:
+  - `src/widgets/chat/__tests__/MarkdownImage.p150.test.ts`
+  - `src/widgets/chat/__tests__/SelectionQuoteButton.p150.test.ts`
+  - `src/widgets/layout/__tests__/NavGroup.p150.test.ts`
+  - `src/widgets/layout/__tests__/Titlebar.p150.test.ts`
+  - `src/widgets/layout/__tests__/TitlebarActions.p150.test.ts`
+  - `src/widgets/layout/__tests__/WindowControls.p150.test.ts`
+  - `src/widgets/sidebar/__tests__/TwoStepDelete.p150.test.ts`
+  - `src/widgets/sidebar/__tests__/SidebarProjectList.p150.test.ts`
+- **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
