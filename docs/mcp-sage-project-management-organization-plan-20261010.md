@@ -1940,3 +1940,18 @@
   - `src/pages/settings/UsageStatsTab.tsx`: Exported `auditUsageStatsTabGovernance()` validating token usage totals, session count normalization, and reporting window bounds.
   - `src/shared/api/agentsApi.ts`: Exported `auditAgentsApiGovernance()` validating agent management REST API endpoint coverage and request timeout bounds.
   - Unit tests: Added 8 dedicated Vitest suites (`Chat.p143.test.ts`, `EffectiveSettingsSummary.p143.test.ts`, `FontSettingsSection.p143.test.ts`, `MemoryKnowledgeTab.p143.test.ts`, `MemorySettingsTab.p143.test.ts`, `NetworkCredentialsSection.p143.test.ts`, `UsageStatsTab.p143.test.ts`, `agentsApi.p143.test.ts`).
+### Phase P144 — Chat API, Demo Chat Script, Demo Fixtures Core/Sessions/Agents/Office, Shared API Barrel, MCP Client & Message API Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P143 Merged: `#2308` (`main` @ `5f5f6e758290114a37a6cb7bd6b73dbc455a4312`), `#2309` (`release/win7` @ `eb70da81efc4bef58c0a2078b29e73a77dcfe460`)
+  - Phase P144: `feat/project-governance-p144` (`main`) & `feat/win7-project-governance-p144` (`release/win7`)
+- **Scope**:
+  - `src/shared/api/chatApi.ts`: Exported `auditChatApiGovernance()` validating active SSE stream count bounds, max concurrency limits, and stream resume capability contracts.
+  - `src/shared/api/demoChatScript.ts`: Exported `auditDemoChatScriptGovernance()` validating demo chat script step count and chunk streaming delay bounds.
+  - `src/shared/api/demoFixturesCore.ts`: Exported `auditDemoFixturesCoreGovernance()` validating demo memory, knowledge document, and skill fixture collection integrity.
+  - `src/shared/api/demoFixturesSessionsAndAgents.ts`: Exported `auditDemoFixturesSessionsAndAgentsGovernance()` validating demo session, agent profile, and scheduled task fixture collection invariants.
+  - `src/shared/api/demoOfficeAndSystemHandlers.ts`: Exported `auditDemoOfficeAndSystemHandlersGovernance()` validating demo office and system IPC/HTTP handler registration count and offline fallback readiness.
+  - `src/shared/api/index.ts`: Exported `auditSharedApiBarrelGovernance()` validating shared API barrel client export completeness and window controls bridge availability.
+  - `src/shared/api/mcpClient.ts`: Exported `auditMcpClientGovernance()` validating MCP server name regex compliance (`MCP_NAME_REGEX`), server discovery/ready state, and registered tool count invariants.
+  - `src/shared/api/messageApi.ts`: Exported `auditMessageApiGovernance()` validating message API endpoint coverage and message feedback support contracts.
+  - Unit tests: Added 8 dedicated Vitest suites (`chatApi.p144.test.ts`, `demoChatScript.p144.test.ts`, `demoFixturesCore.p144.test.ts`, `demoFixturesSessionsAndAgents.p144.test.ts`, `demoOfficeAndSystemHandlers.p144.test.ts`, `apiIndex.p144.test.ts`, `mcpClient.p144.test.ts`, `messageApi.p144.test.ts`).
