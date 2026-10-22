@@ -5,7 +5,7 @@
  * 根据项目类型与版本控制策略显示对应的概览 Widget、L1 宪章就绪状态与一键初始化、阶段快捷切换、快捷快照按钮、AI 任务拆解入口及概览 Markdown 复制
  */
 
-import { Check, Copy, FileText, History, Layers, Plus, RefreshCw, Sparkles } from 'lucide-react';
+import { FileText, History, Layers, Plus, RefreshCw, Sparkles } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { projectApi, type ProjectSummary } from '../../shared/api';
@@ -39,7 +39,6 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [activeStageId, setActiveStageId] = useState<string | null>(
     project.projectStage ?? blueprint.stages[0]?.id ?? null,
   );
-  const [copiedSummary, setCopiedSummary] = useState(false);
   const [savedStageProfile, setSavedStageProfile] = useState(false);
   const [savedOverviewL4, setSavedOverviewL4] = useState(false);
   const [createdStageMilestone, setCreatedStageMilestone] = useState(false);
@@ -47,12 +46,10 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const [seededStageMilestones, setSeededStageMilestones] = useState(false);
   const [seededStageConstraints, setSeededStageConstraints] = useState(false);
   const [scaffoldedOverviewDirs, setScaffoldedOverviewDirs] = useState(false);
-  const [copiedPillars, setCopiedPillars] = useState(false);
   const [convertedPillarsL2, setConvertedPillarsL2] = useState(false);
   const [savedPillarsL3, setSavedPillarsL3] = useState(false);
   const [savedPillarsL4, setSavedPillarsL4] = useState(false);
   const [convertedPillarsMilestone, setConvertedPillarsMilestone] = useState(false);
-  const [copiedStagePipeline, setCopiedStagePipeline] = useState(false);
   const [savedStagesL3, setSavedStagesL3] = useState(false);
   const [savedStagesL4, setSavedStagesL4] = useState(false);
   const [convertedStagesL2, setConvertedStagesL2] = useState(false);
@@ -139,25 +136,6 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
   const vcsLabel =
     VCS_MODE_LABELS[project.vcsMode ?? ''] ??
     (projectType === 'coding' ? VCS_MODE_LABELS.git : VCS_MODE_LABELS.builtin);
-
-  const handleCopyOverviewMarkdown = async () => {
-    const lines = [
-      `# 项目治理概览：${project.name}`,
-      `- **工作区路径**：\`${project.path}\``,
-      `- **项目形态**：${blueprint.label}`,
-      `- **当前生命周期阶段**：${stageLabel}`,
-      `- **L1 宪章 (SAGE.md)**：${hasSageMd ? '已就绪' : '待初始化'}`,
-      totalFiles !== null ? `- **受控文件总数**：${totalFiles} 个` : '',
-      `- **版本保护策略**：${vcsLabel}（${checkpointCount} 个快照）`,
-    ].filter(Boolean);
-    try {
-      await navigator.clipboard?.writeText(lines.join('\n'));
-      setCopiedSummary(true);
-      setTimeout(() => setCopiedSummary(false), 1800);
-    } catch {
-      // ignore in test/offline mode
-    }
-  };
 
   return (
     <div className="space-y-3">
@@ -263,7 +241,9 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               type="button"
               onClick={() => {
                 setDecomposeReq(`完成「${stageLabel}」阶段核心交付与核查`);
-                setDecomposeCtx(`项目形态：${blueprint.label}；护栏支柱：${blueprint.contextPillars.join('、')}`);
+                setDecomposeCtx(
+                  `项目形态：${blueprint.label}；护栏支柱：${blueprint.contextPillars.join('、')}`,
+                );
                 setDecomposeOpen(true);
               }}
               data-testid="overview-decompose-stage-btn"
@@ -441,45 +421,6 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
             </button>
             <button
               type="button"
-              onClick={() => void handleCopyOverviewMarkdown()}
-              data-testid="overview-copy-summary-md-btn"
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-              title="复制项目治理概览 Markdown"
-            >
-              {copiedSummary ? (
-                <>
-                  <Check className="h-2.5 w-2.5 text-emerald-600" />
-                  已复制
-                </>
-              ) : (
-                <>
-                  <Copy className="h-2.5 w-2.5" />
-                  复制概览 MD
-                </>
-              )}
-            </button>
-            <button
-              type="button"
-              data-testid="overview-copy-pillars-btn"
-              onClick={async () => {
-                const md = [
-                  `# ${blueprint.label} · 上下文护栏支柱`,
-                  ...blueprint.contextPillars.map((p) => `- [ ] ${p}`),
-                ].join('\n');
-                try {
-                  await navigator.clipboard?.writeText(md);
-                  setCopiedPillars(true);
-                  setTimeout(() => setCopiedPillars(false), 1500);
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-2 py-0.5 text-ui-2xs font-medium text-foreground hover:bg-muted"
-            >
-              {copiedPillars ? '已复制支柱' : '复制护栏支柱'}
-            </button>
-            <button
-              type="button"
               data-testid="overview-pillars-to-l2-btn"
               onClick={async () => {
                 if (convertedPillarsL2) return;
@@ -606,25 +547,6 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
               </button>
             );
           })}
-          <button
-            type="button"
-            data-testid="overview-copy-stages-btn"
-            onClick={async () => {
-              const md = blueprint.stages
-                .map((s) => (s.id === activeStageId ? `[${s.label}*]` : s.label))
-                .join(' → ');
-              try {
-                await navigator.clipboard?.writeText(md);
-                setCopiedStagePipeline(true);
-                setTimeout(() => setCopiedStagePipeline(false), 1500);
-              } catch {
-                // ignore in test/offline mode
-              }
-            }}
-            className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            {copiedStagePipeline ? '已复制管线' : '复制阶段管线'}
-          </button>
           <button
             type="button"
             data-testid="overview-stages-to-l3-btn"

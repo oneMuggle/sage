@@ -1,12 +1,7 @@
 /** r67 — 附件检索注入配置存取单测。 */
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import {
-  ATTACHMENT_RAG_STORAGE_KEY,
-  DEFAULT_ATTACHMENT_RAG_CONFIG,
-  loadAttachmentRagConfig,
-  saveAttachmentRagConfig,
-} from '../attachmentRagConfig';
+import { ATTACHMENT_RAG_STORAGE_KEY, DEFAULT_ATTACHMENT_RAG_CONFIG, loadAttachmentRagConfig, saveAttachmentRagConfig } from '../attachmentRagConfig';
 
 describe('attachmentRagConfig', () => {
   beforeEach(() => {

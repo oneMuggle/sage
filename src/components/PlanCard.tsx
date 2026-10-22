@@ -86,8 +86,6 @@ export function PlanCard({
   const [items, setItems] = useState(initialPlan);
   // C4：开始执行落库成功后的本地锁定（后端首 status 事件到达前防重复点击）。
   const [locallyLocked, setLocallyLocked] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const effectiveLocked = locked || locallyLocked;
 
   const updateGoal = (idx: number, goal: string) => {
@@ -129,27 +127,7 @@ export function PlanCard({
   };
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    setCopiedMd(true);
-    try {
-      await navigator.clipboard?.writeText(
-        formatPlanCardMarkdown(runId, items, effectiveLocked, needConfirm),
-      );
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
 
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    try {
-      await navigator.clipboard?.writeText(
-        formatPlanCardJson(runId, items, effectiveLocked, needConfirm),
-      );
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -157,22 +135,6 @@ export function PlanCard({
       <div className="flex justify-between mb-2">
         <h3 className="text-sm font-semibold">编排计划（{items.length} 项）</h3>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => void handleCopyMd()}
-            data-testid="plan-card-copy-md"
-            className="px-2 py-1 text-xs border rounded"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCopyJson()}
-            data-testid="plan-card-copy-json"
-            className="px-2 py-1 text-xs border rounded"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
           <button
             disabled={effectiveLocked}
             onClick={() => void handleStart()}

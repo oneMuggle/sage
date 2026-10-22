@@ -57,8 +57,6 @@ export function formatKeyboardShortcutsJson(): string {
 
 export function KeyboardShortcutsHelp() {
   const [open, setOpen] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const currentSessionId = useStore((s) => s.currentSessionId);
 
   useEffect(() => {
@@ -78,25 +76,7 @@ export function KeyboardShortcutsHelp() {
   if (!open || !currentSessionId) return null;
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatKeyboardShortcutsMarkdown());
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatKeyboardShortcutsJson());
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -114,22 +94,6 @@ export function KeyboardShortcutsHelp() {
             键盘快捷键
           </h3>
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              data-testid="keyboard-shortcuts-copy-md"
-              onClick={() => void handleCopyMarkdown()}
-              className="rounded border border-slate-300 px-1.5 py-0.5 text-ui-2xs text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300"
-            >
-              {copiedMd ? '已复制 MD' : '复制 MD'}
-            </button>
-            <button
-              type="button"
-              data-testid="keyboard-shortcuts-copy-json"
-              onClick={() => void handleCopyJson()}
-              className="rounded border border-slate-300 px-1.5 py-0.5 text-ui-2xs text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300"
-            >
-              {copiedJson ? '已复制 JSON' : '复制 JSON'}
-            </button>
           </div>
         </div>
         <ul className="space-y-2">

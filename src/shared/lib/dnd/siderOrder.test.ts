@@ -1,13 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import {
-  readStoredSiderOrder,
-  writeStoredSiderOrder,
-  reconcileStoredSiderOrder,
-  sortSiderItemsByStoredOrder,
-  areSiderOrdersEqual,
-  reorderSiderIds,
-} from './siderOrder';
+import { readStoredSiderOrder, writeStoredSiderOrder, reconcileStoredSiderOrder, sortSiderItemsByStoredOrder, areSiderOrdersEqual, reorderSiderIds } from './siderOrder';
 
 describe('siderOrder (pure)', () => {
   it('module exports 6 functions', () => {

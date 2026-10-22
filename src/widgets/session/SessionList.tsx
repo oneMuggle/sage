@@ -1,5 +1,3 @@
-import { useState } from 'react';
-
 import type { Session } from '../../shared/lib/store';
 
 import { SessionItem } from './SessionItem';
@@ -32,9 +30,7 @@ export function formatSessionListMarkdown(
     for (const s of sessions) {
       const activeTag = s.id === currentSessionId ? ' [当前]' : '';
       const pinTag = s.is_pinned ? ' [置顶]' : '';
-      lines.push(
-        `- **${s.title}** (\`${s.id}\`)${activeTag}${pinTag} — 消息数 ${s.message_count}`,
-      );
+      lines.push(`- **${s.title}** (\`${s.id}\`)${activeTag}${pinTag} — 消息数 ${s.message_count}`);
     }
   }
   return lines.join('\n');
@@ -72,53 +68,17 @@ export function SessionList({
   onRename,
   messageHitsBySession,
 }: SessionListProps) {
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-
   if (sessions.length === 0) {
     return <div className="px-3 py-4 text-xs text-text-muted text-center">暂无对话记录</div>;
   }
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatSessionListMarkdown(sessions, currentSessionId));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatSessionListJson(sessions, currentSessionId));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
     <ul className="flex flex-col gap-0.5" data-testid="session-list">
-      <li className="flex items-center justify-end gap-1 px-2 py-0.5 text-ui-2xs text-text-muted">
-        <span
-          data-testid="session-list-copy-md"
-          onClick={() => void handleCopyMarkdown()}
-          className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedMd ? '已复制 MD' : '复制 MD'}
-        </span>
-        <span
-          data-testid="session-list-copy-json"
-          onClick={() => void handleCopyJson()}
-          className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedJson ? '已复制 JSON' : '复制 JSON'}
-        </span>
-      </li>
+      <li className="flex items-center justify-end gap-1 px-2 py-0.5 text-ui-2xs text-text-muted"></li>
       {sessions.map((session) => (
         <SessionItem
           key={session.id}

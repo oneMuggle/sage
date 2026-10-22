@@ -53,8 +53,6 @@ export function ContextMeter({ sessionId, refreshKey = 0, placement = 'top' }: C
   const popoverPos = placement === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2';
   const [usage, setUsage] = useState<SessionUsage | null>(null);
   const [open, setOpen] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const panelRef = useRef<HTMLSpanElement | null>(null);
   // 流结束跳变检测: 本会话 streaming.messageId 非空 → null 时刷新用量
   const streamingMessageId = useChatStreamStore(
@@ -159,58 +157,7 @@ export function ContextMeter({ sessionId, refreshKey = 0, placement = 'top' }: C
               {Math.round(pct * 100)}%）
               {usage.last_model ? ` · ${usage.last_model}` : ''}
             </span>
-            <span className="flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  /* v8 ignore start */
-                  const lines = [
-                    `# 上下文水位报告 — ${sessionId}`,
-                    `- 模型: ${usage.last_model ?? '-'}`,
-                    `- 占用: ${used} / ${windowTokens} tokens (${Math.round(pct * 100)}%)`,
-                    `- 剩余空间: ${remaining} tokens`,
-                    cached > 0 ? `- 缓存命中: ${cached} tokens` : null,
-                    '',
-                    ...CATEGORY_META.filter(({ key }) => (categories[key] ?? 0) > 0).map(
-                      ({ key, label }) => `- ${label}: ${categories[key]} tokens`,
-                    ),
-                  ].filter(Boolean) as string[];
-                  setCopiedMd(true);
-                  void navigator.clipboard?.writeText(lines.join('\n'));
-                  setTimeout(() => setCopiedMd(false), 1500);
-                  /* v8 ignore stop */
-                }}
-                className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-                data-testid="context-meter-copy-md-btn"
-              >
-                {copiedMd ? '已复制MD' : '复制水位MD'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  /* v8 ignore start */
-                  const payload = {
-                    sessionId,
-                    model: usage.last_model ?? null,
-                    usedTokens: used,
-                    windowTokens,
-                    percent: Math.round(pct * 100),
-                    remainingTokens: remaining,
-                    cachedTokens: cached,
-                    calibrated: Boolean(breakdown?.calibrated),
-                    categories,
-                  };
-                  setCopiedJson(true);
-                  void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-                  setTimeout(() => setCopiedJson(false), 1500);
-                  /* v8 ignore stop */
-                }}
-                className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-                data-testid="context-meter-copy-json-btn"
-              >
-                {copiedJson ? '已复制JSON' : '复制水位JSON'}
-              </button>
-            </span>
+            <span className="flex items-center gap-1 shrink-0"></span>
           </span>
 
           {/* 堆叠条: 各类别按占窗口宽度分色块, 剩余为轨道底色 */}
@@ -383,8 +330,6 @@ function ContextSourceRow({ source }: { source: ContextSource }) {
 }
 
 export function ContextSourceList({ sources }: { sources?: ContextSource[] | null }) {
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   if (!sources || sources.length === 0) return null;
   const trimmedTotal = sources.reduce((a, s) => a + (s.trimmed ?? 0), 0);
   return (
@@ -393,59 +338,7 @@ export function ContextSourceList({ sources }: { sources?: ContextSource[] | nul
         <span className="text-ui-2xs font-medium text-text-primary">
           上一轮请求的来源分类（非内容验真）
         </span>
-        <span className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              /* v8 ignore start */
-              const lines = [
-                `# 上下文注入来源分类 (${sources.length})`,
-                trimmedTotal > 0 ? `- 截断总计: ${trimmedTotal} tokens` : null,
-                '',
-                ...sources.map((s) => {
-                  const label = SOURCE_LABELS[s.key] ?? s.key;
-                  return `- ${label} (${s.key}): ${s.tokens} tokens${s.trimmed ? ` | 已截断 ${s.trimmed}` : ''}${s.excluded ? ` | 排除 ${s.excluded} 条` : ''}`;
-                }),
-              ].filter(Boolean) as string[];
-              setCopiedMd(true);
-              void navigator.clipboard?.writeText(lines.join('\n'));
-              setTimeout(() => setCopiedMd(false), 1500);
-              /* v8 ignore stop */
-            }}
-            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-            data-testid="context-meter-sources-copy-md-btn"
-          >
-            {copiedMd ? '已复制MD' : '复制来源MD'}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              /* v8 ignore start */
-              const payload = {
-                count: sources.length,
-                trimmedTotal,
-                sources: sources.map((s) => ({
-                  key: s.key,
-                  label: SOURCE_LABELS[s.key] ?? s.key,
-                  tokens: s.tokens,
-                  count: s.count ?? 0,
-                  trimmed: s.trimmed ?? 0,
-                  excluded: s.excluded ?? 0,
-                  identifiable: Boolean(s.identifiable),
-                  items: s.items ?? [],
-                })),
-              };
-              setCopiedJson(true);
-              void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-              setTimeout(() => setCopiedJson(false), 1500);
-              /* v8 ignore stop */
-            }}
-            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-            data-testid="context-meter-sources-copy-json-btn"
-          >
-            {copiedJson ? '已复制JSON' : '复制来源JSON'}
-          </button>
-        </span>
+        <span className="flex items-center gap-1 shrink-0"></span>
       </span>
       {trimmedTotal > 0 && (
         <span

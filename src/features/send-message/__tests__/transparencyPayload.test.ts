@@ -6,13 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 
-import {
-  isValidCitationsPayload,
-  isValidCompactPayload,
-  isValidMemoriesPayload,
-  isValidSkillsPayload,
-  isValidSourcesPayload,
-} from '../transparencyPayload';
+import { isValidCitationsPayload, isValidCompactPayload, isValidMemoriesPayload, isValidSkillsPayload, isValidSourcesPayload } from '../transparencyPayload';
 
 describe('isValidSourcesPayload', () => {
   it('四种合法 kind 均通过', () => {

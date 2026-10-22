@@ -2,11 +2,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  ThemeSelector,
-  formatThemeSelectorJson,
-  formatThemeSelectorMarkdown,
-} from '../ThemeSelector';
+import { ThemeSelector, formatThemeSelectorJson, formatThemeSelectorMarkdown } from '../ThemeSelector';
 
 // Mock useTheme
 const mockUseTheme = vi.fn();
@@ -260,9 +256,5 @@ describe('ThemeSelector', () => {
     expect(parsed.cssCount).toBe(1);
 
     render(<ThemeSelector />);
-    fireEvent.click(screen.getByTestId('theme-selector-copy-md'));
-    expect(screen.getByTestId('theme-selector-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('theme-selector-copy-json'));
-    expect(screen.getByTestId('theme-selector-copy-json').textContent).toContain('已复制 JSON');
   });
 });

@@ -90,8 +90,6 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
   const [auditOpen, setAuditOpen] = useState(false);
   const [count, setCount] = useState(0);
   const [items, setItems] = useState<AutoApprovalRecord[]>([]);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const streamingMessageId = useChatStreamStore((s) =>
@@ -165,47 +163,11 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
   const Icon = PRESET_ICON[preset];
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatPermissionModeMarkdown({ sessionId, preset, custom, count, items }),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatPermissionModeJson({ sessionId, preset, custom, count, items }),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
     <div ref={rootRef} className="relative flex items-center gap-1" data-testid="permission-mode-switch">
-      <span
-        data-testid="permission-mode-copy-md"
-        onClick={() => void handleCopyMarkdown()}
-        className="cursor-pointer rounded border border-border px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-      >
-        {copiedMd ? '已复制 MD' : '复制 MD'}
-      </span>
-      <span
-        data-testid="permission-mode-copy-json"
-        onClick={() => void handleCopyJson()}
-        className="cursor-pointer rounded border border-border px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-      >
-        {copiedJson ? '已复制 JSON' : '复制 JSON'}
-      </span>
       <button
         type="button"
         onClick={() => {

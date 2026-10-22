@@ -200,7 +200,6 @@ describe('BasicTab — LLM 重试 section', () => {
   it('exports BasicTab audit snapshot and JSON helpers and renders copy controls', () => {
     renderTab();
     expect(screen.getByTestId('basic-tab-copy-audit')).toBeTruthy();
-    expect(screen.getByTestId('basic-tab-copy-json')).toBeTruthy();
 
     const snapshot = formatBasicTabAuditSnapshot({
       streaming: true,

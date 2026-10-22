@@ -54,8 +54,6 @@ export function ModelDetails({ item, endpointId, onStatusChange, onReload }: Mod
   const [saveBusy, setSaveBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   // Revision belongs to the selected model — keep it inside the component so
   // a switch from model A (rev=5) to model B cannot leak A's token into B's save.
   const [revision, setRevision] = useState(0);
@@ -215,36 +213,6 @@ export function ModelDetails({ item, endpointId, onStatusChange, onReload }: Mod
     }
   }
 
-  /* v8 ignore start */
-  async function handleCopyMd(): Promise<void> {
-    if (!item) return;
-    const lines = [
-      `# 模型详情: ${modelKey}`,
-      '',
-      `- **来源**: ${sourceLabel(effective?.provenance?.native)}`,
-      `- **上下文窗口**: ${effective?.limits.native ?? item.native ?? '未知'}`,
-      `- **服务窗口**: ${effective?.limits.service ?? item.service ?? '未知'}`,
-      `- **价格 (effective)**: ${priceString(effective?.price)}`,
-      `- **价格 (catalog 源)**: ${priceString(item.price)}`,
-      `- **架构**: ${item.architecture ?? '未知'}`,
-      `- **量化**: ${item.quantization ?? '未知'}`,
-      `- **修订号 (revision)**: ${revision}`,
-    ];
-    setCopiedMd(true);
-    await navigator.clipboard?.writeText(lines.join('\n'));
-    setTimeout(() => setCopiedMd(false), 1800);
-  }
-
-  async function handleCopyJson(): Promise<void> {
-    if (!item) return;
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(
-      JSON.stringify({ item, effective, revision, draft, probe }, null, 2),
-    );
-    setTimeout(() => setCopiedJson(false), 1800);
-  }
-  /* v8 ignore stop */
-
   return (
     <div
       className="border border-border rounded p-3 space-y-3"
@@ -264,24 +232,7 @@ export function ModelDetails({ item, endpointId, onStatusChange, onReload }: Mod
               : ''}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            data-testid="model-details-copy-md-btn"
-            onClick={() => void handleCopyMd()}
-            className="px-2 py-0.5 text-ui-xs rounded border border-border hover:bg-bg-hover"
-          >
-            {copiedMd ? '✓ 已复制MD' : '复制详情MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="model-details-copy-json-btn"
-            onClick={() => void handleCopyJson()}
-            className="px-2 py-0.5 text-ui-xs rounded border border-border hover:bg-bg-hover"
-          >
-            {copiedJson ? '✓ 已复制JSON' : '复制详情JSON'}
-          </button>
-        </div>
+        <div className="flex items-center gap-1.5 shrink-0"></div>
       </div>
 
       {error && (

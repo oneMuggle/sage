@@ -46,26 +46,15 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const navigate = useNavigate();
   const { activeProject, selectedArchetype, setSelectedArchetype, wizardOpen, setWizardOpen } =
     useStudioState();
-  const [copiedBlueprint, setCopiedBlueprint] = useState(false);
-  const [copiedAllBlueprints, setCopiedAllBlueprints] = useState(false);
   const [copiedActivePath, setCopiedActivePath] = useState(false);
   const [savedBlueprintL4, setSavedBlueprintL4] = useState(false);
   const [savedBlueprintL3, setSavedBlueprintL3] = useState(false);
-  const [copiedDirs, setCopiedDirs] = useState(false);
-  const [copiedStages, setCopiedStages] = useState(false);
-  const [copiedPillars, setCopiedPillars] = useState(false);
-  const [copiedMilestones, setCopiedMilestones] = useState(false);
-  const [copiedSubtemplates, setCopiedSubtemplates] = useState(false);
   const [scaffolded, setScaffolded] = useState(false);
   const [seededMilestones, setSeededMilestones] = useState(false);
   const [convertedBlueprintL2, setConvertedBlueprintL2] = useState(false);
   const [copiedVcs, setCopiedVcs] = useState(false);
   const [createdBlueprintMs, setCreatedBlueprintMs] = useState(false);
-  const [copiedBlueprintJson, setCopiedBlueprintJson] = useState(false);
   const [copiedPositioning, setCopiedPositioning] = useState(false);
-  const [copiedAllBlueprintsJson, setCopiedAllBlueprintsJson] = useState(false);
-  const [copiedActiveProjectMd, setCopiedActiveProjectMd] = useState(false);
-  const [copiedActiveProjectJson, setCopiedActiveProjectJson] = useState(false);
 
   const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
 
@@ -87,111 +76,6 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              data-testid="studio-copy-all-blueprints-md-btn"
-              onClick={async () => {
-                const lines = [
-                  '# 四大项目形态组织规范对比矩阵',
-                  '',
-                  '| 形态 | 工作区定位 | 标准目录 | 版本策略 | 阶段数 |',
-                  '| :--- | :--- | :--- | :--- | :---: |',
-                  ...ARCHETYPE_ORDER.map((t) => {
-                    const b = ARCHETYPE_BLUEPRINTS[t];
-                    return `| ${b.label} (${b.englishLabel}) | ${b.positioning} | ${b.directories.map((d) => `${d}/`).join(' · ')} | ${b.vcsLabel} | ${b.stages.length} |`;
-                  }),
-                ];
-                try {
-                  await navigator.clipboard?.writeText(lines.join('\n'));
-                  setCopiedAllBlueprints(true);
-                  setTimeout(() => setCopiedAllBlueprints(false), 1500);
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
-            >
-              {copiedAllBlueprints ? '已复制全形态对比' : '复制四大蓝图对比 MD'}
-            </button>
-            <button
-              type="button"
-              data-testid="studio-copy-all-blueprints-json-btn"
-              onClick={async () => {
-                setCopiedAllBlueprintsJson(true);
-                setTimeout(() => {
-                  if (typeof window !== 'undefined') setCopiedAllBlueprintsJson(false);
-                }, 1500);
-                try {
-                  await navigator.clipboard?.writeText(
-                    JSON.stringify(
-                      ARCHETYPE_ORDER.map((t) => ARCHETYPE_BLUEPRINTS[t]),
-                      null,
-                      2,
-                    ),
-                  );
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
-            >
-              {copiedAllBlueprintsJson ? '已复制全形态 JSON' : '复制四大蓝图对比 JSON'}
-            </button>
-            <button
-              type="button"
-              data-testid="studio-copy-blueprint-md-btn"
-              onClick={async () => {
-                const md = [
-                  `# ${blueprint.label} (${blueprint.englishLabel}) 组织规范蓝图`,
-                  `- **工作区定位**：${blueprint.positioning}`,
-                  `- **标准目录**：${blueprint.directories.map((d) => `${d}/`).join(' · ')}`,
-                  `- **版本控制**：${blueprint.vcsLabel}`,
-                  `- **上下文支柱**：${blueprint.contextPillars.join('；')}`,
-                  `- **阶段管线**：${blueprint.stages.map((s) => s.label).join(' → ')}`,
-                ].join('\n');
-                try {
-                  await navigator.clipboard?.writeText(md);
-                  setCopiedBlueprint(true);
-                  setTimeout(() => setCopiedBlueprint(false), 1500);
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
-            >
-              {copiedBlueprint ? '已复制蓝图 MD' : '复制当前蓝图 MD'}
-            </button>
-            <button
-              type="button"
-              data-testid="studio-copy-blueprint-json-btn"
-              onClick={async () => {
-                setCopiedBlueprintJson(true);
-                setTimeout(() => setCopiedBlueprintJson(false), 1500);
-                try {
-                  await navigator.clipboard?.writeText(
-                    JSON.stringify(
-                      {
-                        type: blueprint.type,
-                        label: blueprint.label,
-                        englishLabel: blueprint.englishLabel,
-                        positioning: blueprint.positioning,
-                        vcsLabel: blueprint.vcsLabel,
-                        directories: blueprint.directories,
-                        contextPillars: blueprint.contextPillars,
-                        stages: blueprint.stages,
-                      },
-                      null,
-                      2,
-                    ),
-                  );
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
-            >
-              {copiedBlueprintJson ? '已复制蓝图 JSON' : '复制蓝图 JSON'}
-            </button>
             <Button
               size="sm"
               onClick={() => setWizardOpen(true)}
@@ -250,24 +134,6 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  data-testid="studio-copy-dirs-btn"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard?.writeText(
-                        blueprint.directories.map((d) => `${d}/`).join('\n'),
-                      );
-                      setCopiedDirs(true);
-                      setTimeout(() => setCopiedDirs(false), 1500);
-                    } catch {
-                      // ignore in test/offline mode
-                    }
-                  }}
-                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  {copiedDirs ? '已复制目录' : '复制目录清单'}
-                </button>
-                <button
-                  type="button"
                   data-testid="studio-copy-vcs-btn"
                   onClick={async () => {
                     try {
@@ -322,22 +188,6 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <div className="text-xs font-semibold text-foreground">2. 五层上下文注入与护栏重点</div>
-              <button
-                type="button"
-                data-testid="studio-copy-pillars-btn"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard?.writeText(blueprint.contextPillars.join('\n'));
-                    setCopiedPillars(true);
-                    setTimeout(() => setCopiedPillars(false), 1500);
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }}
-                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                {copiedPillars ? '已复制支柱' : '复制护栏重点'}
-              </button>
             </div>
             <ul className="space-y-1 text-xs text-muted-foreground">
               {blueprint.contextPillars.map((pillar, idx) => (
@@ -353,64 +203,6 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
             <div className="flex items-center justify-between gap-2">
               <div className="text-xs font-semibold text-foreground">3. 阶段推进管线与预设规则包</div>
               <div className="flex items-center gap-1">
-              <button
-                type="button"
-                data-testid="studio-copy-stages-btn"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard?.writeText(
-                      blueprint.stages.map((s, i) => `${i + 1}. ${s.label} (${s.id})`).join('\n'),
-                    );
-                    setCopiedStages(true);
-                    setTimeout(() => setCopiedStages(false), 1500);
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }}
-                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                {copiedStages ? '已复制阶段' : '复制阶段管线'}
-              </button>
-              <button
-                type="button"
-                data-testid="studio-copy-milestones-btn"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard?.writeText(
-                      blueprint.recommendedMilestones
-                        .map((m, i) => `${i + 1}. [${m.stage}] ${m.title} — ${m.description}`)
-                        .join('\n'),
-                    );
-                    setCopiedMilestones(true);
-                    setTimeout(() => setCopiedMilestones(false), 1500);
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }}
-                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                {copiedMilestones ? '已复制里程碑' : '复制推荐里程碑'}
-              </button>
-              <button
-                type="button"
-                data-testid="studio-copy-subtemplates-btn"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard?.writeText(
-                      blueprint.subTemplates
-                        .map((t, i) => `${i + 1}. ${t.label} (${t.key}) — ${t.description}`)
-                        .join('\n'),
-                    );
-                    setCopiedSubtemplates(true);
-                    setTimeout(() => setCopiedSubtemplates(false), 1500);
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }}
-                className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                {copiedSubtemplates ? '已复制预设包' : '复制预设包'}
-              </button>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -473,66 +265,6 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                 className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
               >
                 {copiedActivePath ? '已复制路径' : '复制项目路径'}
-              </button>
-              <button
-                type="button"
-                data-testid="studio-copy-active-project-md-btn"
-                onClick={async () => {
-                  setCopiedActiveProjectMd(true);
-                  setTimeout(() => {
-                    if (typeof window !== 'undefined') setCopiedActiveProjectMd(false);
-                  }, 1500);
-                  const bp =
-                    ARCHETYPE_BLUEPRINTS[
-                      (activeProject.projectType ?? activeProject.detectedType ?? 'business') as ProjectType
-                    ];
-                  const md = [
-                    `# 当前活动项目概览 (${activeProject.name})`,
-                    `- **项目 ID**: \`${activeProject.id}\``,
-                    `- **工作区路径**: \`${activeProject.path}\``,
-                    `- **项目形态**: ${bp.label} (${bp.type})`,
-                    `- **阶段管线**: ${bp.stages.map((s) => s.label).join(' → ')}`,
-                  ].join('\n');
-                  try {
-                    await navigator.clipboard?.writeText(md);
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }}
-                className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
-              >
-                {copiedActiveProjectMd ? '已复制项目 MD' : '复制项目 MD'}
-              </button>
-              <button
-                type="button"
-                data-testid="studio-copy-active-project-json-btn"
-                onClick={async () => {
-                  setCopiedActiveProjectJson(true);
-                  setTimeout(() => {
-                    if (typeof window !== 'undefined') setCopiedActiveProjectJson(false);
-                  }, 1500);
-                  try {
-                    await navigator.clipboard?.writeText(
-                      JSON.stringify(
-                        {
-                          id: activeProject.id,
-                          name: activeProject.name,
-                          path: activeProject.path,
-                          projectType: activeProject.projectType ?? activeProject.detectedType ?? 'business',
-                          projectStage: activeProject.projectStage ?? null,
-                          vcsMode: activeProject.vcsMode ?? null,
-                        },
-                        null,
-                        2,
-                      ),
-                    );
-                  } catch {
-                    // ignore in test/offline mode
-                  }
-                }}
-                className="rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
-              >
-                {copiedActiveProjectJson ? '已复制项目 JSON' : '复制项目 JSON'}
               </button>
               <button
                 type="button"

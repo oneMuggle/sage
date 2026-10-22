@@ -5,11 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { dispatchFindShortcut } from '../../../features/chat/chatFind';
 import { requestMessageJump, useMessageJumpStore } from '../../../features/chat/messageJumpStore';
-import {
-  FIND_CURRENT_HIGHLIGHT,
-  FIND_HIGHLIGHT,
-  SEARCH_HIT_HIGHLIGHT,
-} from '../../../features/chat/textHighlight';
+import { FIND_CURRENT_HIGHLIGHT, FIND_HIGHLIGHT, SEARCH_HIT_HIGHLIGHT } from '../../../features/chat/textHighlight';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import type { Message as MessageType } from '../../../shared/lib/store';
 import { MessageList } from '../MessageList';

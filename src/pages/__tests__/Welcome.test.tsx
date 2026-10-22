@@ -4,11 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
-import {
-  Welcome,
-  formatWelcomePageJson,
-  formatWelcomePageMarkdown,
-} from '../Welcome';
+import { Welcome, formatWelcomePageJson, formatWelcomePageMarkdown } from '../Welcome';
 
 const toastError = vi.fn();
 vi.mock('sonner', () => ({
@@ -137,9 +133,5 @@ describe('Welcome page', () => {
     expect(parsed.locale).toBe('en');
 
     renderWelcome();
-    fireEvent.click(screen.getByTestId('welcome-page-copy-md'));
-    expect(screen.getByTestId('welcome-page-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('welcome-page-copy-json'));
-    expect(screen.getByTestId('welcome-page-copy-json').textContent).toContain('已复制 JSON');
   });
 });

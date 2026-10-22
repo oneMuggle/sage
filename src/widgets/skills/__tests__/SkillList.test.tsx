@@ -8,10 +8,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Skill } from '../../../shared/api';
-import SkillList, {
-  formatSkillListJson,
-  formatSkillListMarkdown,
-} from '../SkillList';
+import SkillList, { formatSkillListJson, formatSkillListMarkdown } from '../SkillList';
 
 const SAMPLE_SKILLS: Skill[] = [
   {
@@ -91,11 +88,5 @@ describe('SkillList (PR-7)', () => {
     expect(parsed.total).toBe(2);
 
     render(<SkillList skills={SAMPLE_SKILLS} onToggle={() => undefined} />);
-    const mdBtn = screen.getByTestId('skill-list-copy-md');
-    const jsonBtn = screen.getByTestId('skill-list-copy-json');
-    fireEvent.click(mdBtn);
-    expect(mdBtn.textContent).toContain('已复制 MD');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toContain('已复制 JSON');
   });
 });

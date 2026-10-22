@@ -17,11 +17,7 @@ vi.mock('../../../shared/api/orchRunClient', () => ({
   },
 }));
 
-import {
-  formatPlanCardJson,
-  formatPlanCardMarkdown,
-  PlanCard,
-} from '../../../components/PlanCard';
+import { formatPlanCardJson, formatPlanCardMarkdown, PlanCard } from '../../../components/PlanCard';
 import { orchRunClient } from '../../../shared/api/orchRunClient';
 import type { TaskPlanItem } from '../../../shared/api/types';
 
@@ -205,12 +201,7 @@ describe('PlanCard needConfirm (Fix #3)', () => {
     toastErrorSpy.mockRestore();
   });
 
-  it('exports Markdown and JSON and copies via buttons (Phase P91)', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(
-      <PlanCard runId="r-p91" plan={plan} locked={false} onCancel={() => {}} needConfirm />,
-    );
+  it('formats plan card as Markdown and JSON', () => {
     const md = formatPlanCardMarkdown('r-p91', plan, false, true);
     expect(md).toContain('# 编排计划 (r-p91)');
     expect(md).toContain('- 状态: 待编辑');
@@ -219,13 +210,5 @@ describe('PlanCard needConfirm (Fix #3)', () => {
     expect(json.runId).toBe('r-p91');
     expect(json.needConfirm).toBe(true);
     expect(json.count).toBe(1);
-
-    fireEvent.click(screen.getByTestId('plan-card-copy-md'));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(md));
-    expect(screen.getByTestId('plan-card-copy-md')).toHaveTextContent('已复制 MD');
-
-    fireEvent.click(screen.getByTestId('plan-card-copy-json'));
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId('plan-card-copy-json')).toHaveTextContent('已复制 JSON');
   });
 });

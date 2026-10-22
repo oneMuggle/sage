@@ -9,7 +9,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { projectApi } from '../../shared/api';
 import { I18nProvider } from '../../shared/lib/i18n';
-import { ProjectMaterialsPanel, ProjectOverviewPanel } from '../../widgets/sidebar/sections/ProjectExpandedPanels';
+import {
+  ProjectMaterialsPanel,
+  ProjectOverviewPanel,
+} from '../../widgets/sidebar/sections/ProjectExpandedPanels';
 
 import { MilestoneEditor } from './MilestoneEditor';
 import { MilestoneManager } from './MilestoneManager';
@@ -67,8 +70,20 @@ vi.mock('../../shared/api', () => ({
       reasoning: '按科研生命周期拆解',
       totalCount: 2,
       milestones: [
-        { title: '主实验复现', description: '运行 baseline', stage: 'experiment', estimatedDays: 3, children: [] },
-        { title: '消融分析', description: '对比核心模块', stage: 'experiment', estimatedDays: 2, children: [] },
+        {
+          title: '主实验复现',
+          description: '运行 baseline',
+          stage: 'experiment',
+          estimatedDays: 3,
+          children: [],
+        },
+        {
+          title: '消融分析',
+          description: '对比核心模块',
+          stage: 'experiment',
+          estimatedDays: 2,
+          children: [],
+        },
       ],
     }),
     decomposeApply: vi.fn().mockResolvedValue([]),
@@ -179,15 +194,25 @@ describe('MilestoneProgressWidget', () => {
       expect(screen.getByText('进行：')).toBeInTheDocument();
       expect(screen.getByText('阻塞：')).toBeInTheDocument();
       fireEvent.click(screen.getByTestId('milestone-summary-risk-to-l2-btn'));
-      expect(screen.getByTestId('milestone-summary-risk-to-l2-btn')).toHaveTextContent('已转风险L2');
+      expect(screen.getByTestId('milestone-summary-risk-to-l2-btn')).toHaveTextContent(
+        '已转风险L2',
+      );
       fireEvent.click(screen.getByTestId('milestone-summary-risk-to-l3-btn'));
-      expect(screen.getByTestId('milestone-summary-risk-to-l3-btn')).toHaveTextContent('已存风险L3');
+      expect(screen.getByTestId('milestone-summary-risk-to-l3-btn')).toHaveTextContent(
+        '已存风险L3',
+      );
       fireEvent.click(screen.getByTestId('milestone-summary-risk-to-l4-btn'));
-      expect(screen.getByTestId('milestone-summary-risk-to-l4-btn')).toHaveTextContent('已存风险L4');
+      expect(screen.getByTestId('milestone-summary-risk-to-l4-btn')).toHaveTextContent(
+        '已存风险L4',
+      );
       fireEvent.click(screen.getByTestId('milestone-summary-completed-to-l3-btn'));
-      expect(screen.getByTestId('milestone-summary-completed-to-l3-btn')).toHaveTextContent('已存完成L3');
+      expect(screen.getByTestId('milestone-summary-completed-to-l3-btn')).toHaveTextContent(
+        '已存完成L3',
+      );
       fireEvent.click(screen.getByTestId('milestone-summary-completed-to-l4-btn'));
-      expect(screen.getByTestId('milestone-summary-completed-to-l4-btn')).toHaveTextContent('已存完成L4');
+      expect(screen.getByTestId('milestone-summary-completed-to-l4-btn')).toHaveTextContent(
+        '已存完成L4',
+      );
       fireEvent.click(screen.getByTestId('milestone-summary-copy-item-m1'));
     });
   });
@@ -250,8 +275,6 @@ describe('MilestoneProgressWidget', () => {
 
     expect(screen.getByTestId('milestone-editor-templates')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('milestone-template-0'));
-    fireEvent.click(screen.getByTestId('milestone-editor-copy-json-btn'));
-    expect(screen.getByTestId('milestone-editor-copy-json-btn')).toHaveTextContent('已复制 JSON');
     fireEvent.click(screen.getByTestId('milestone-editor-reset-btn'));
     fireEvent.click(screen.getByTestId('milestone-template-0'));
     fireEvent.click(screen.getByTestId('milestone-due-plus-7'));
@@ -285,7 +308,6 @@ describe('MilestoneProgressWidget', () => {
     const presetBtn = await screen.findByTestId('wizard-goal-preset-0');
     fireEvent.click(presetBtn);
     expect(screen.getByTestId('wizard-recommended-milestones-preview')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('wizard-copy-milestones-btn'));
     fireEvent.click(screen.getByTestId('wizard-allowed-paths-toggle-all-btn'));
     fireEvent.click(screen.getByTestId('wizard-allowed-paths-toggle-all-btn'));
     fireEvent.click(screen.getByTestId('wizard-templates-toggle-all-btn'));
@@ -294,9 +316,13 @@ describe('MilestoneProgressWidget', () => {
       target: { value: 'E:/Papers/2026/**' },
     });
     fireEvent.click(screen.getByTestId('wizard-custom-allowed-path-add-btn'));
-    expect(screen.getByTestId('wizard-selected-allowed-paths-list')).toHaveTextContent('E:/Papers/2026/**');
+    expect(screen.getByTestId('wizard-selected-allowed-paths-list')).toHaveTextContent(
+      'E:/Papers/2026/**',
+    );
     fireEvent.click(screen.getByTestId('wizard-copy-summary-md-btn'));
-    expect(screen.getByTestId('wizard-copy-summary-md-btn')).toHaveTextContent(/已复制|复制立项配置摘要/);
+    expect(screen.getByTestId('wizard-copy-summary-md-btn')).toHaveTextContent(
+      /已复制|复制立项配置摘要/,
+    );
     fireEvent.click(screen.getByTestId('wizard-remove-allowed-path-E:/Papers/2026/**'));
 
     expect(screen.getByTestId('wizard-description-input')).toHaveValue(
@@ -312,7 +338,8 @@ describe('MilestoneProgressWidget', () => {
         'proj-wiz-1',
         expect.objectContaining({
           description: '学术论文撰述、定量对比实验与可复现消融分析',
-          instructions: '采用严谨客观的学术被动语态，所有文献引用必须真实可查，固定并记录全部实验随机种子。',
+          instructions:
+            '采用严谨客观的学术被动语态，所有文献引用必须真实可查，固定并记录全部实验随机种子。',
         }),
       );
     });
@@ -344,8 +371,7 @@ describe('MilestoneProgressWidget', () => {
     );
 
     fireEvent.click(screen.getByTestId('decompose-preview-btn'));
-    const copyPlanBtn = await screen.findByTestId('decompose-copy-md-btn');
-    fireEvent.click(copyPlanBtn);
+    await screen.findByTestId('decompose-node-to-l4-0');
     fireEvent.click(screen.getByTestId('decompose-node-to-l4-0'));
     expect(screen.getByTestId('decompose-node-to-l4-0')).toHaveTextContent('已存L4');
 
@@ -355,9 +381,7 @@ describe('MilestoneProgressWidget', () => {
 
     await waitFor(() => {
       expect(projectApi.decomposeApply).toHaveBeenCalledWith('test-project', {
-        milestones: [
-          expect.objectContaining({ title: '主实验复现' }),
-        ],
+        milestones: [expect.objectContaining({ title: '主实验复现' })],
       });
     });
   });
@@ -381,10 +405,7 @@ describe('MilestoneProgressWidget', () => {
       />,
     );
 
-    const copyBtn = await screen.findByTestId('overview-copy-summary-md-btn');
-    fireEvent.click(copyBtn);
     fireEvent.click(screen.getByTestId('overview-copy-path-btn'));
-    fireEvent.click(screen.getByTestId('overview-copy-pillars-btn'));
     fireEvent.click(screen.getByTestId('overview-pillars-to-l2-btn'));
     expect(screen.getByTestId('overview-pillars-to-l2-btn')).toHaveTextContent('已转支柱L2');
 
@@ -484,11 +505,14 @@ describe('MilestoneProgressWidget', () => {
     expect(screen.getByTestId('milestone-summary-stage-bar')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('milestone-summary-stage-pill-experiment'));
     fireEvent.click(screen.getByTestId('milestone-summary-stage-pill-experiment'));
-    fireEvent.click(screen.getByTestId('milestone-summary-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('milestone-summary-stages-to-l3-btn'));
-    expect(screen.getByTestId('milestone-summary-stages-to-l3-btn')).toHaveTextContent('已存分布L3');
+    expect(screen.getByTestId('milestone-summary-stages-to-l3-btn')).toHaveTextContent(
+      '已存分布L3',
+    );
     fireEvent.click(screen.getByTestId('milestone-summary-stages-to-l4-btn'));
-    expect(screen.getByTestId('milestone-summary-stages-to-l4-btn')).toHaveTextContent('已存分布L4');
+    expect(screen.getByTestId('milestone-summary-stages-to-l4-btn')).toHaveTextContent(
+      '已存分布L4',
+    );
     fireEvent.click(screen.getByTestId('milestone-summary-save-l3-btn'));
     expect(screen.getByTestId('milestone-summary-save-l3-btn')).toHaveTextContent('已存进度 L3');
     fireEvent.click(screen.getByTestId('milestone-summary-save-l4-btn'));
@@ -496,15 +520,14 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('milestone-summary-active-to-l2-btn'));
     expect(screen.getByTestId('milestone-summary-active-to-l2-btn')).toHaveTextContent('已转 L2');
     fireEvent.click(screen.getByTestId('milestone-summary-to-constraint-m-overdue-1'));
-    expect(screen.getByTestId('milestone-summary-to-constraint-m-overdue-1')).toHaveTextContent('已转L2');
+    expect(screen.getByTestId('milestone-summary-to-constraint-m-overdue-1')).toHaveTextContent(
+      '已转L2',
+    );
     fireEvent.click(screen.getByTestId('milestone-summary-to-l3-m-overdue-1'));
     expect(screen.getByTestId('milestone-summary-to-l3-m-overdue-1')).toHaveTextContent('已存L3');
     fireEvent.click(screen.getByTestId('milestone-summary-to-l4-m-overdue-1'));
     expect(screen.getByTestId('milestone-summary-to-l4-m-overdue-1')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('milestone-summary-complete-active-btn'));
-
-    fireEvent.click(screen.getByTestId('milestone-summary-copy-md-btn'));
-    expect(screen.getByTestId('milestone-summary-copy-md-btn')).toHaveTextContent(/已复制|复制进度/);
 
     // L2 preset click
     fireEvent.click(screen.getByTestId('sidebar-overview-preset-0'));
@@ -513,7 +536,6 @@ describe('MilestoneProgressWidget', () => {
       'description',
       '学术论文撰述、定量对比实验与可复现消融分析',
     );
-    fireEvent.click(screen.getByTestId('sidebar-overview-copy-md'));
     fireEvent.click(screen.getByTestId('sidebar-overview-save-l3'));
     expect(screen.getByTestId('sidebar-overview-save-l3')).toHaveTextContent('已存L3');
     fireEvent.click(screen.getByTestId('sidebar-overview-to-constraint'));
@@ -527,8 +549,9 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('sidebar-material-to-constraint-mat-1'));
     expect(screen.getByTestId('sidebar-material-to-constraint-mat-1')).toHaveTextContent('已转L2');
     fireEvent.click(screen.getByTestId('sidebar-material-to-milestone-mat-1'));
-    expect(screen.getByTestId('sidebar-material-to-milestone-mat-1')).toHaveTextContent('已建里程碑');
-    fireEvent.click(screen.getByTestId('sidebar-materials-copy-md'));
+    expect(screen.getByTestId('sidebar-material-to-milestone-mat-1')).toHaveTextContent(
+      '已建里程碑',
+    );
     fireEvent.change(screen.getByTestId('sidebar-materials-search-input'), {
       target: { value: 'Transformer' },
     });
@@ -581,15 +604,23 @@ describe('MilestoneProgressWidget', () => {
     });
     fireEvent.click(screen.getByTestId('overview-prev-stage-btn'));
     fireEvent.click(screen.getByTestId('overview-save-stage-profile-btn'));
-    expect(screen.getByTestId('overview-save-stage-profile-btn')).toHaveTextContent('已存阶段至 L3');
+    expect(screen.getByTestId('overview-save-stage-profile-btn')).toHaveTextContent(
+      '已存阶段至 L3',
+    );
     fireEvent.click(screen.getByTestId('overview-save-l4-btn'));
     expect(screen.getByTestId('overview-save-l4-btn')).toHaveTextContent('已存概览 L4');
     fireEvent.click(screen.getByTestId('overview-stage-to-milestone-btn'));
-    expect(screen.getByTestId('overview-stage-to-milestone-btn')).toHaveTextContent('已建阶段里程碑');
+    expect(screen.getByTestId('overview-stage-to-milestone-btn')).toHaveTextContent(
+      '已建阶段里程碑',
+    );
     fireEvent.click(screen.getByTestId('overview-stage-to-constraint-btn'));
-    expect(screen.getByTestId('overview-stage-to-constraint-btn')).toHaveTextContent('已设阶段约束');
+    expect(screen.getByTestId('overview-stage-to-constraint-btn')).toHaveTextContent(
+      '已设阶段约束',
+    );
     fireEvent.click(screen.getByTestId('overview-seed-stage-milestones-btn'));
-    expect(screen.getByTestId('overview-seed-stage-milestones-btn')).toHaveTextContent('已导入阶段里程碑');
+    expect(screen.getByTestId('overview-seed-stage-milestones-btn')).toHaveTextContent(
+      '已导入阶段里程碑',
+    );
     fireEvent.click(screen.getByTestId('overview-scaffold-dirs-btn'));
     expect(screen.getByTestId('overview-scaffold-dirs-btn')).toHaveTextContent('已补齐目录');
     fireEvent.click(screen.getByTestId('overview-seed-constraints-btn'));
@@ -619,9 +650,13 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('decompose-select-stage-btn'));
     expect(screen.getByTestId('decompose-total-days-badge')).toHaveTextContent('预计总工期 5 天');
     fireEvent.click(screen.getByTestId('decompose-save-reasoning-profile-btn'));
-    expect(screen.getByTestId('decompose-save-reasoning-profile-btn')).toHaveTextContent('已沉淀至 L3');
+    expect(screen.getByTestId('decompose-save-reasoning-profile-btn')).toHaveTextContent(
+      '已沉淀至 L3',
+    );
     fireEvent.click(screen.getByTestId('decompose-batch-to-constraint-btn'));
-    expect(screen.getByTestId('decompose-batch-to-constraint-btn')).toHaveTextContent('已转 L2 约束');
+    expect(screen.getByTestId('decompose-batch-to-constraint-btn')).toHaveTextContent(
+      '已转 L2 约束',
+    );
     fireEvent.click(screen.getByTestId('decompose-batch-to-l3-btn'));
     expect(screen.getByTestId('decompose-batch-to-l3-btn')).toHaveTextContent('已批量存 L3');
     fireEvent.click(screen.getByTestId('decompose-save-plan-l4-btn'));
@@ -658,14 +693,14 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('milestone-copy-title-btn'));
     fireEvent.click(screen.getByTestId('milestone-clear-title-btn'));
     fireEvent.click(screen.getByTestId('milestone-stage-preset-analysis'));
-    fireEvent.click(screen.getByTestId('milestone-copy-stage-btn'));
     fireEvent.click(screen.getByTestId('milestone-clear-stage-btn'));
     fireEvent.click(screen.getByTestId('milestone-pillar-fill-all-btn'));
     fireEvent.click(screen.getByTestId('milestone-due-today-btn'));
     fireEvent.click(screen.getByTestId('milestone-copy-due-btn'));
-    fireEvent.click(screen.getByTestId('milestone-editor-copy-md-btn'));
     fireEvent.click(screen.getByTestId('milestone-editor-to-constraint-btn'));
-    expect(screen.getByTestId('milestone-editor-to-constraint-btn')).toHaveTextContent('已转 L2 约束');
+    expect(screen.getByTestId('milestone-editor-to-constraint-btn')).toHaveTextContent(
+      '已转 L2 约束',
+    );
     fireEvent.click(screen.getByTestId('milestone-editor-save-l4-btn'));
     expect(screen.getByTestId('milestone-editor-save-l4-btn')).toHaveTextContent('已存 L4');
     fireEvent.click(screen.getByTestId('milestone-editor-save-l3-btn'));
@@ -725,24 +760,27 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.click(screen.getByTestId('milestone-batch-save-l4-btn'));
     expect(screen.getByTestId('milestone-batch-save-l4-btn')).toHaveTextContent('已批量存 L4');
     fireEvent.click(screen.getByTestId('milestone-batch-to-constraint-btn'));
-    expect(screen.getByTestId('milestone-batch-to-constraint-btn')).toHaveTextContent('已批量转 L2');
+    expect(screen.getByTestId('milestone-batch-to-constraint-btn')).toHaveTextContent(
+      '已批量转 L2',
+    );
     fireEvent.click(screen.getByTestId('milestone-to-constraint-ms-p33-overdue'));
-    expect(screen.getByTestId('milestone-to-constraint-ms-p33-overdue')).toHaveTextContent('已转L2');
+    expect(screen.getByTestId('milestone-to-constraint-ms-p33-overdue')).toHaveTextContent(
+      '已转L2',
+    );
     fireEvent.click(screen.getByTestId('milestone-to-l4-ms-p33-overdue'));
     expect(screen.getByTestId('milestone-to-l4-ms-p33-overdue')).toHaveTextContent('已存L4');
     fireEvent.click(screen.getByTestId('milestone-promote-profile-ms-p33-overdue'));
-    expect(screen.getByTestId('milestone-promote-profile-ms-p33-overdue')).toHaveTextContent('已存L3');
+    expect(screen.getByTestId('milestone-promote-profile-ms-p33-overdue')).toHaveTextContent(
+      '已存L3',
+    );
     fireEvent.click(screen.getByTestId('milestone-copy-single-ms-p33-overdue'));
 
     // Batch complete in-progress
     fireEvent.click(screen.getByTestId('milestone-batch-complete-btn'));
     await waitFor(() => {
-      expect(projectApi.updateMilestone).toHaveBeenCalledWith(
-        'test-project',
-        'ms-p33-overdue',
-        { status: 'completed' },
-      );
+      expect(projectApi.updateMilestone).toHaveBeenCalledWith('test-project', 'ms-p33-overdue', {
+        status: 'completed',
+      });
     });
-
   });
 });

@@ -3,12 +3,7 @@ import { MessageCircle, Star, Globe } from 'lucide-react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  formatQuickActionsJson,
-  formatQuickActionsMarkdown,
-  QuickActionBar,
-  type QuickAction,
-} from '../QuickActionBar';
+import { formatQuickActionsJson, formatQuickActionsMarkdown, QuickActionBar, type QuickAction } from '../QuickActionBar';
 
 function renderWithI18n(ui: React.ReactNode) {
   return render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
@@ -85,11 +80,5 @@ describe('QuickActionBar', () => {
     expect(parsed.total).toBe(3);
 
     renderWithI18n(<QuickActionBar actions={sampleActions} />);
-    const mdBtn = screen.getByTestId('quick-actions-copy-md');
-    const jsonBtn = screen.getByTestId('quick-actions-copy-json');
-    fireEvent.click(mdBtn);
-    expect(mdBtn.textContent).toContain('已复制 MD');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toContain('已复制 JSON');
   });
 });

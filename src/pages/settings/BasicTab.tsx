@@ -118,7 +118,6 @@ function CloseToTrayCard(): JSX.Element {
 export function BasicTab() {
   const { settings, updateSettings } = useSettings();
   const [copiedAudit, setCopiedAudit] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   /* v8 ignore start */
   const handleCopyAudit = async () => {
@@ -135,19 +134,6 @@ export function BasicTab() {
     await navigator.clipboard?.writeText(text);
   };
 
-  const handleCopyJson = async () => {
-    const text = formatBasicTabAuditJson({
-      streaming: settings.streaming,
-      llmRetryMaxAttempts: settings.llmRetryMaxAttempts,
-      llmRetryBaseDelayS: settings.llmRetryBaseDelayS,
-      llmRetryMaxDelayS: settings.llmRetryMaxDelayS,
-      timezone: settings.timezone,
-      logTimezone: settings.logTimezone,
-      demoMode: settings.demoMode,
-    });
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(text);
-  };
   /* v8 ignore stop */
 
   return (
@@ -163,14 +149,6 @@ export function BasicTab() {
               className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
             >
               {copiedAudit ? '已复制快照' : '复制快照'}
-            </span>
-            <span
-              data-testid="basic-tab-copy-json"
-              onClick={() => void handleCopyJson()}
-              title="复制基础设置审计 JSON"
-              className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
-            >
-              {copiedJson ? '已复制 JSON' : 'JSON'}
             </span>
           </div>
         </div>

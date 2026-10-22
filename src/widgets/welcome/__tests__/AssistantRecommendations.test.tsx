@@ -1,16 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  defaultRecommendations,
-  type AssistantRecommendation,
-} from '../../../entities/welcome/recommendations';
+import { defaultRecommendations, type AssistantRecommendation } from '../../../entities/welcome/recommendations';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  AssistantRecommendations,
-  formatRecommendationsJson,
-  formatRecommendationsMarkdown,
-} from '../AssistantRecommendations';
+import { AssistantRecommendations, formatRecommendationsJson, formatRecommendationsMarkdown } from '../AssistantRecommendations';
 
 function renderWithI18n(ui: React.ReactNode) {
   return render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
@@ -79,11 +72,5 @@ describe('AssistantRecommendations', () => {
     renderWithI18n(
       <AssistantRecommendations recommendations={defaultRecommendations} onSelect={vi.fn()} />,
     );
-    const mdBtn = screen.getByTestId('recommendations-copy-md');
-    const jsonBtn = screen.getByTestId('recommendations-copy-json');
-    fireEvent.click(mdBtn);
-    expect(mdBtn.textContent).toContain('已复制 MD');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toContain('已复制 JSON');
   });
 });

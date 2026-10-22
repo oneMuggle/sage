@@ -18,11 +18,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  OfficeFilePicker,
-  formatOfficePickerJson,
-  formatOfficePickerMarkdown,
-} from '../OfficeFilePicker';
+import { OfficeFilePicker, formatOfficePickerJson, formatOfficePickerMarkdown } from '../OfficeFilePicker';
 
 describe('OfficeFilePicker — delegates to the hook', () => {
   it('clicking the picker calls onPick', async () => {
@@ -181,7 +177,7 @@ describe('OfficeFilePicker — delegates to the hook', () => {
     expect(onPick).not.toHaveBeenCalled();
   });
 
-  it('formats and copies file picker state as Markdown and JSON without triggering onPick', () => {
+  it('formats file picker state as Markdown and JSON', () => {
     const md = formatOfficePickerMarkdown({
       docType: 'word',
       workspacePath: '/ws',
@@ -201,22 +197,5 @@ describe('OfficeFilePicker — delegates to the hook', () => {
     );
     expect(parsed.docType).toBe('excel');
     expect(parsed.disabled).toBe(true);
-
-    const onPick = vi.fn();
-    render(
-      <I18nProvider defaultLocale="zh">
-        <OfficeFilePicker
-          docType="word"
-          workspacePath="/ws"
-          onPick={onPick}
-          onDropFile={vi.fn()}
-        />
-      </I18nProvider>,
-    );
-    fireEvent.click(screen.getByTestId('office-picker-word-copy-md'));
-    expect(screen.getByTestId('office-picker-word-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('office-picker-word-copy-json'));
-    expect(screen.getByTestId('office-picker-word-copy-json').textContent).toContain('已复制 JSON');
-    expect(onPick).not.toHaveBeenCalled();
   });
 });

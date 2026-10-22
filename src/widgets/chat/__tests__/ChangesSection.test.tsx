@@ -3,12 +3,7 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import type {
-  WorkspaceChanges,
-  WorkspaceCheckpoint,
-  WorkspaceDiff,
-  WorkspaceFileContent,
-} from '../../../shared/api/workspaceApi';
+import type { WorkspaceChanges, WorkspaceCheckpoint, WorkspaceDiff, WorkspaceFileContent } from '../../../shared/api/workspaceApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { ChangesSection } from '../changes/ChangesSection';

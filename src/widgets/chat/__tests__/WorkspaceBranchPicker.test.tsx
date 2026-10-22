@@ -102,12 +102,35 @@ describe('WorkspaceBranchPicker', () => {
     fireEvent.click(screen.getByTestId('workspace-branch-picker'));
     await waitFor(() => expect(screen.getByText('feat/x')).toBeInTheDocument());
     expect(screen.getByTestId('workspace-branch-picker-actions')).toBeInTheDocument();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
     fireEvent.click(screen.getByTestId('workspace-picker-copy-path-btn'));
-    expect(screen.getByTestId('workspace-picker-copy-path-btn')).toHaveTextContent('已复制路径');
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-picker-copy-path-btn')).toHaveTextContent('已复制路径');
+    });
+    expect(writeText).toHaveBeenNthCalledWith(1, '/home/me/repo');
+
     fireEvent.click(screen.getByTestId('workspace-picker-copy-md-btn'));
-    expect(screen.getByTestId('workspace-picker-copy-md-btn')).toHaveTextContent('已复制MD');
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-picker-copy-md-btn')).toHaveTextContent('已复制MD');
+    });
+    expect(writeText).toHaveBeenNthCalledWith(2, expect.stringContaining('- **当前分支**: `main`'));
+    expect(writeText).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('- `feat/x` (def5678) — work'),
+    );
+
     fireEvent.click(screen.getByTestId('workspace-picker-copy-json-btn'));
-    expect(screen.getByTestId('workspace-picker-copy-json-btn')).toHaveTextContent('已复制JSON');
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-picker-copy-json-btn')).toHaveTextContent('已复制JSON');
+    });
+    const copiedJson = writeText.mock.calls[2][0] as string;
+    expect(JSON.parse(copiedJson)).toMatchObject({
+      workspacePath: '/home/me/repo',
+      repoRoot: '/home/me/repo',
+      currentBranch: 'main',
+      localBranches: expect.arrayContaining([expect.objectContaining({ name: 'feat/x' })]),
+    });
     fireEvent.click(screen.getByText('feat/x'));
     await waitFor(() => {
       expect(mockCreate).toHaveBeenCalledWith('s1', 'open', 'feat/x', 'HEAD');

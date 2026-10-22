@@ -5,11 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
 import { I18nProvider } from '../../shared/lib/i18n';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
-import {
-  UpdateDialog,
-  formatUpdateDialogJson,
-  formatUpdateDialogMarkdown,
-} from '../UpdateDialog';
+import { UpdateDialog, formatUpdateDialogJson, formatUpdateDialogMarkdown } from '../UpdateDialog';
 
 vi.mock('../../shared/ui/ConfirmDialog/confirmService', () => ({
   confirmDialog: mocks.confirmDialog,
@@ -324,9 +320,5 @@ describe('UpdateDialog', () => {
     renderDialog();
     await emitState({ type: 'state', state });
     await screen.findByTestId('update-dialog');
-    fireEvent.click(screen.getByTestId('update-dialog-copy-md'));
-    expect(screen.getByTestId('update-dialog-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('update-dialog-copy-json'));
-    expect(screen.getByTestId('update-dialog-copy-json').textContent).toContain('已复制 JSON');
   });
 });

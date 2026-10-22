@@ -1,6 +1,5 @@
 // Review Item Card - 单个审核项卡片
 import { AlertTriangle, Copy, FileQuestion, HelpCircle, Lightbulb } from 'lucide-react';
-import { useState } from 'react';
 
 import type { ReviewItem } from '../../shared/types/wiki';
 
@@ -43,26 +42,8 @@ const TYPE_CONFIG = {
 };
 
 export function ReviewItemCard({ item, onAction }: ReviewItemCardProps) {
-  const [copiedJson, setCopiedJson] = useState(false);
   const config = TYPE_CONFIG[item.type];
   const Icon = config.icon;
-
-  const handleCopyJson = () => {
-    setCopiedJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedJson(false), 2000);
-    const payload = {
-      id: item.id,
-      type: item.type,
-      label: config.label,
-      title: item.title,
-      description: item.description,
-      affectedPages: item.affectedPages,
-      resolved: Boolean(item.resolved),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
 
   return (
     <div
@@ -85,14 +66,6 @@ export function ReviewItemCard({ item, onAction }: ReviewItemCardProps) {
               {config.label}
             </span>
             {item.resolved && <span className="text-xs text-muted">已解决</span>}
-            <button
-              type="button"
-              data-testid={`wiki-review-item-copy-json-${item.id}`}
-              onClick={handleCopyJson}
-              className="ml-auto px-2 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
-            >
-              {copiedJson ? '已复制JSON' : '复制JSON'}
-            </button>
           </div>
 
           <h3 className="text-sm font-medium text-text mb-1">{item.title}</h3>

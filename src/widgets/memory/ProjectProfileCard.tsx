@@ -85,12 +85,8 @@ export function ProjectProfileCard() {
   const [busy, setBusy] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
-  const [copiedMd, setCopiedMd] = useState(false);
   const [highImportanceOnly, setHighImportanceOnly] = useState(false);
   const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
-  const [copiedJson, setCopiedJson] = useState(false);
-  const [copiedItemMdId, setCopiedItemMdId] = useState<string | null>(null);
-  const [copiedItemJsonId, setCopiedItemJsonId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,27 +128,6 @@ export function ProjectProfileCard() {
       );
     });
   }, [items, searchQuery, categoryFilter, highImportanceOnly]);
-
-  const handleCopyMarkdown = async () => {
-    if (filteredItems.length === 0) return;
-    const title = projectKey ? basenameOf(projectKey) : '未命名项目';
-    const lines = [
-      `# 项目画像 (MEMORY.md) — ${title}`,
-      projectKey ? `> 工作区路径：\`${projectKey}\`` : '',
-      '',
-      ...filteredItems.map(
-        (item, idx) =>
-          `${idx + 1}. **[${labelOf(item.category)} · ★${item.importance}]** ${item.content}`,
-      ),
-    ].filter(Boolean);
-    try {
-      await navigator.clipboard?.writeText(lines.join('\n'));
-      setCopiedMd(true);
-      setTimeout(() => setCopiedMd(false), 1800);
-    } catch {
-      // ignore in test/offline mode
-    }
-  };
 
   const run = async (op: () => Promise<void>, failMsg: string): Promise<boolean> => {
     setBusy(true);
@@ -216,64 +191,6 @@ export function ProjectProfileCard() {
               </option>
             ))}
           </select>
-          {items.length > 0 && (
-            <button
-              type="button"
-              onClick={() => void handleCopyMarkdown()}
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-bg-hover text-text-secondary"
-              data-testid="project-profile-copy-md-btn"
-              title="复制项目画像 Markdown"
-            >
-              {copiedMd ? (
-                <>
-                  <Check className="w-3 h-3 text-emerald-600" aria-hidden />
-                  已复制
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3 h-3" aria-hidden />
-                  复制 MD
-                </>
-              )}
-            </button>
-          )}
-          {items.length > 0 && (
-            <button
-              type="button"
-              onClick={async () => {
-                setCopiedJson(true);
-                setTimeout(() => {
-                  if (typeof window !== 'undefined') setCopiedJson(false);
-                }, 1500);
-                try {
-                  await navigator.clipboard?.writeText(
-                    JSON.stringify(
-                      {
-                        projectKey,
-                        count: filteredItems.length,
-                        items: filteredItems.map((e) => ({
-                          id: e.id,
-                          category: e.category,
-                          label: labelOf(e.category),
-                          importance: e.importance,
-                          content: e.content,
-                        })),
-                      },
-                      null,
-                      2,
-                    ),
-                  );
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border hover:bg-bg-hover text-text-secondary"
-              data-testid="project-profile-copy-json-btn"
-              title="复制项目画像 JSON"
-            >
-              {copiedJson ? '已复制JSON' : '复制 JSON'}
-            </button>
-          )}
           <button
             type="button"
             onClick={() => void load()}
@@ -495,51 +412,6 @@ export function ProjectProfileCard() {
                   ) : (
                     <Copy className="w-3 h-3" aria-hidden />
                   )}
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setCopiedItemMdId(e.id);
-                    setTimeout(() => {
-                      if (typeof window !== 'undefined') setCopiedItemMdId(null);
-                    }, 1500);
-                    try {
-                      await navigator.clipboard?.writeText(
-                        `- **[${labelOf(e.category)} · ★${e.importance}]** ${e.content}`,
-                      );
-                    } catch {
-                      // ignore in test/offline mode
-                    }
-                  }}
-                  className="px-1.5 py-0.5 text-ui-2xs rounded border border-border hover:bg-bg-hover text-text-secondary shrink-0"
-                  data-testid={`project-profile-copy-item-md-${e.id}`}
-                >
-                  {copiedItemMdId === e.id ? '已复制MD' : '复制MD'}
-                </button>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setCopiedItemJsonId(e.id);
-                    setTimeout(() => {
-                      if (typeof window !== 'undefined') setCopiedItemJsonId(null);
-                    }, 1500);
-                    try {
-                      await navigator.clipboard?.writeText(
-                        JSON.stringify({
-                          id: e.id,
-                          category: e.category,
-                          importance: e.importance,
-                          content: e.content,
-                        }),
-                      );
-                    } catch {
-                      // ignore in test/offline mode
-                    }
-                  }}
-                  className="px-1.5 py-0.5 text-ui-2xs rounded border border-border hover:bg-bg-hover text-text-secondary shrink-0"
-                  data-testid={`project-profile-copy-item-json-${e.id}`}
-                >
-                  {copiedItemJsonId === e.id ? '已复制JSON' : '复制JSON'}
                 </button>
                 <button
                   type="button"

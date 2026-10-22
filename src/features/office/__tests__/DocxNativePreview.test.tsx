@@ -5,11 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import {
-  formatDocxPreviewMetaJson,
-  formatDocxPreviewMetaMarkdown,
-  sanitizeRenderedDocx,
-} from '../DocxNativePreview';
+import { formatDocxPreviewMetaJson, formatDocxPreviewMetaMarkdown, sanitizeRenderedDocx } from '../DocxNativePreview';
 
 function makeContainer(html: string): HTMLElement {
   const div = document.createElement('div');

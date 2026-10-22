@@ -10,11 +10,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  DiagnosticCard,
-  formatDiagnosticPreviewJson,
-  formatDiagnosticPreviewMarkdown,
-} from '../DiagnosticCard';
+import { DiagnosticCard, formatDiagnosticPreviewJson, formatDiagnosticPreviewMarkdown } from '../DiagnosticCard';
 
 const defaultPreview = {
   count: 12,
@@ -118,7 +114,7 @@ describe('DiagnosticCard', () => {
     });
   });
 
-  it('exports diagnostic preview as Markdown and JSON and copies via buttons', async () => {
+  it('formats diagnostic preview as Markdown and JSON', () => {
     expect(formatDiagnosticPreviewMarkdown(null)).toContain('_暂无诊断预览数据_');
     const md = formatDiagnosticPreviewMarkdown(defaultPreview, true, false);
     expect(md).toContain('# LLM 诊断预览摘要');
@@ -127,17 +123,5 @@ describe('DiagnosticCard', () => {
     const parsed = JSON.parse(formatDiagnosticPreviewJson(defaultPreview, true, false));
     expect(parsed.includePrompts).toBe(true);
     expect(parsed.preview.count).toBe(12);
-
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(<DiagnosticCard />);
-    const card = screen.getByTestId('diagnostic-card');
-    await waitFor(() => {
-      expect(card.textContent).toContain('12');
-    });
-    fireEvent.click(screen.getByTestId('diagnostic-card-copy-md'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('LLM 诊断预览摘要'));
-    fireEvent.click(screen.getByTestId('diagnostic-card-copy-json'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"count": 12'));
   });
 });

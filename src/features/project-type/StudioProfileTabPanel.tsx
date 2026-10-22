@@ -123,7 +123,6 @@ export function StudioProfileTabPanel({
   const [copiedEntryId, setCopiedEntryId] = useState<string | null>(null);
   const [seededPresets, setSeededPresets] = useState(false);
   const [seededPillars, setSeededPillars] = useState(false);
-  const [copiedCatStats, setCopiedCatStats] = useState(false);
   const [savedCatStatsL4, setSavedCatStatsL4] = useState(false);
   const [savedPillarsL4, setSavedPillarsL4] = useState(false);
   const [copiedDraft, setCopiedDraft] = useState(false);
@@ -551,29 +550,6 @@ export function StudioProfileTabPanel({
               }`}
             >
               高优 (≥7)
-            </button>
-            <button
-              type="button"
-              data-testid="studio-profile-copy-cats-btn"
-              onClick={async () => {
-                const lines = [
-                  `# L3 画像类别分布 (${profileEntries.length} 条)`,
-                  ...PROFILE_CATEGORIES.filter((c) => c !== 'all').map(
-                    (c) =>
-                      `- ${CATEGORY_LABELS[c] ?? c} (${c}): ${profileEntries.filter((e) => e.category === c).length} 条`,
-                  ),
-                ];
-                try {
-                  await navigator.clipboard?.writeText(lines.join('\n'));
-                  setCopiedCatStats(true);
-                  setTimeout(() => setCopiedCatStats(false), 1500);
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-            >
-              {copiedCatStats ? '已复制统计' : '复制类别分布'}
             </button>
             {projectId && (
               <button

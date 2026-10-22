@@ -94,8 +94,6 @@ function ChatFindPanel({ messages, focusNonce, onClose }: ChatFindPanelProps) {
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
   const [current, setCurrent] = useState(-1);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 打开或再次 Ctrl+F：聚焦并全选，方便直接输入新的查找词
@@ -170,25 +168,7 @@ function ChatFindPanel({ messages, focusNonce, onClose }: ChatFindPanelProps) {
       : '';
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatChatFindResultsMarkdown(query, matches));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatChatFindResultsJson(query, matches));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -239,22 +219,6 @@ function ChatFindPanel({ messages, focusNonce, onClose }: ChatFindPanelProps) {
           data-testid="chat-find-next"
         >
           <ChevronDown className="w-3.5 h-3.5" />
-        </button>
-        <button
-          type="button"
-          data-testid="chat-find-copy-md"
-          onClick={() => void handleCopyMarkdown()}
-          className="px-1 py-0.5 rounded border border-border text-ui-2xs text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedMd ? '已复制 MD' : '复制 MD'}
-        </button>
-        <button
-          type="button"
-          data-testid="chat-find-copy-json"
-          onClick={() => void handleCopyJson()}
-          className="px-1 py-0.5 rounded border border-border text-ui-2xs text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedJson ? '已复制 JSON' : '复制 JSON'}
         </button>
         <button
           type="button"

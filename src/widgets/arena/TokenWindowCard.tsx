@@ -54,8 +54,6 @@ export function TokenWindowCard({ pollIntervalMs = 5000 }: TokenWindowCardProps)
   const [state, setState] = useState<Awaited<ReturnType<typeof tokenWindowState>> | null>(null);
   const [error, setError] = useState('');
   const [disabled, setDisabled] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,23 +86,7 @@ export function TokenWindowCard({ pollIntervalMs = 5000 }: TokenWindowCardProps)
   }, [pollIntervalMs]);
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    setCopiedMd(true);
-    try {
-      await navigator.clipboard?.writeText(formatTokenWindowMarkdown(health, state, disabled));
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
 
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    try {
-      await navigator.clipboard?.writeText(formatTokenWindowJson(health, state, disabled));
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -120,22 +102,6 @@ export function TokenWindowCard({ pollIntervalMs = 5000 }: TokenWindowCardProps)
               {health.ready ? '就绪' : '待票'}
             </span>
           )}
-          <button
-            type="button"
-            onClick={() => void handleCopyMd()}
-            data-testid="token-window-copy-md"
-            className="text-xs rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCopyJson()}
-            data-testid="token-window-copy-json"
-            className="text-xs rounded border border-border px-2 py-0.5 hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
         </div>
       </div>
       {disabled ? (

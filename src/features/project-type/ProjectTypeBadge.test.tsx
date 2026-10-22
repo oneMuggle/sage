@@ -164,28 +164,11 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     expect(screen.getByTestId('detection-stages-preview')).toBeInTheDocument();
     expect(screen.getByTestId('detection-governance-stats')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('detection-copy-md-btn'));
-    fireEvent.click(screen.getByTestId('detection-copy-json-btn'));
-    expect(screen.getByTestId('detection-copy-json-btn')).toHaveTextContent('已复制检测JSON');
-    fireEvent.click(screen.getByTestId('detection-copy-confidence-btn'));
-    expect(screen.getByTestId('detection-copy-confidence-btn')).toHaveTextContent('已复制置信度');
-    fireEvent.click(screen.getByTestId('detection-copy-full-blueprint-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-signal-0'));
-    fireEvent.click(screen.getByTestId('detection-copy-signal-md-0'));
-    expect(screen.getByTestId('detection-copy-signal-md-0')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('detection-copy-all-signals-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-vcs-btn'));
-    fireEvent.click(screen.getByTestId('detection-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('detection-copy-dirs-btn'));
-    fireEvent.click(screen.getByTestId('detection-copy-suite-btn'));
     fireEvent.click(screen.getByTestId('detection-details-toggle-btn'));
     expect(screen.getByTestId('detection-details-panel')).toHaveTextContent('推荐规范包：');
-    fireEvent.click(screen.getByTestId('detection-copy-pillars-btn'));
-    fireEvent.click(screen.getByTestId('detection-copy-milestones-btn'));
-    fireEvent.click(screen.getByTestId('detection-copy-subtemplates-btn'));
-    fireEvent.click(screen.getByTestId('detection-copy-details-json-btn'));
-    expect(screen.getByTestId('detection-copy-details-json-btn')).toHaveTextContent('已复制详情JSON');
-    fireEvent.click(screen.getByTestId('detection-copy-details-md-btn'));
 
     const applyBtn = screen.getByTestId('apply-detected-type-btn');
     fireEvent.click(applyBtn);
@@ -213,26 +196,12 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
     fireEvent.click(applyDetectedBtn);
 
     expect(screen.getByTestId('selector-selected-summary')).toHaveTextContent('一般档案与文书');
-    fireEvent.click(screen.getByTestId('selector-copy-blueprint-btn'));
-    fireEvent.click(screen.getByTestId('selector-copy-blueprint-json-btn'));
-    expect(screen.getByTestId('selector-copy-blueprint-json-btn')).toHaveTextContent('已复制 JSON');
     fireEvent.click(screen.getByTestId('selector-suite-toggle-btn'));
     expect(screen.getByTestId('selector-suite-details')).toHaveTextContent('细分规范包：');
     fireEvent.click(screen.getByTestId('selector-copy-positioning-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-vcs-btn'));
-    fireEvent.click(screen.getByTestId('selector-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-dirs-btn'));
-    fireEvent.click(screen.getByTestId('selector-copy-subtemplates-btn'));
-    fireEvent.click(screen.getByTestId('selector-copy-milestones-btn'));
-    fireEvent.click(screen.getByTestId('selector-copy-pillars-btn'));
-    fireEvent.click(screen.getByTestId('selector-copy-all-suite-json-btn'));
-    expect(screen.getByTestId('selector-copy-all-suite-json-btn')).toHaveTextContent(
-      '已复制详情 JSON',
-    );
-    fireEvent.click(screen.getByTestId('selector-copy-all-suite-md-btn'));
-    expect(screen.getByTestId('selector-copy-all-suite-md-btn')).toHaveTextContent('已复制全部详情');
     fireEvent.click(screen.getByTestId('selector-copy-signal-0'));
-    fireEvent.click(screen.getByTestId('selector-copy-all-signals-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-path-btn'));
     fireEvent.click(screen.getByTestId('selector-copy-detection-btn'));
 
@@ -309,7 +278,6 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('studio-profile-pillar-fill-all-btn'));
     fireEvent.click(screen.getByTestId('studio-profile-seed-pillars-btn'));
     expect(screen.getByTestId('studio-profile-seed-pillars-btn')).toHaveTextContent('已写入支柱 L3');
-    fireEvent.click(screen.getByTestId('studio-profile-copy-cats-btn'));
     fireEvent.click(screen.getByTestId('studio-profile-copy-draft-btn'));
     fireEvent.click(screen.getByTestId('studio-profile-clear-draft-btn'));
   });
@@ -360,7 +328,6 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('knowledge-invert-selection-btn'));
     fireEvent.click(screen.getByTestId('knowledge-invert-selection-btn'));
     fireEvent.click(screen.getByTestId('knowledge-category-filter-all'));
-    fireEvent.click(screen.getByTestId('knowledge-copy-selected-md-btn'));
     fireEvent.click(screen.getByTestId('knowledge-batch-to-constraint-btn'));
     expect(screen.getByTestId('knowledge-to-constraint-0')).toHaveTextContent('已转 L2 约束');
     fireEvent.click(screen.getByTestId('knowledge-batch-to-l4-btn'));
@@ -417,7 +384,6 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
 
     fireEvent.click(screen.getByTestId('wiki-preview-btn'));
     const filterInput = await screen.findByTestId('wiki-preview-filter-input');
-    fireEvent.click(screen.getByTestId('wiki-copy-symbols-btn'));
     fireEvent.click(screen.getByTestId('wiki-save-symbols-profile-btn'));
     await waitFor(() => {
       expect(screen.getByTestId('wiki-save-symbols-profile-btn')).toHaveTextContent('已沉淀符号至 L3');

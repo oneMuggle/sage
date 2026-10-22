@@ -50,7 +50,6 @@ export function SemanticSearchPanel({
   const [savedBundleL4, setSavedBundleL4] = useState(false);
   const [savedStatsL3, setSavedStatsL3] = useState(false);
   const [savedStatsL4, setSavedStatsL4] = useState(false);
-  const [copiedStats, setCopiedStats] = useState(false);
   const [copiedQuery, setCopiedQuery] = useState(false);
 
   const presets = SEMANTIC_QUERY_PRESETS[projectType] ?? SEMANTIC_QUERY_PRESETS.coding;
@@ -283,23 +282,6 @@ export function SemanticSearchPanel({
               className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
             >
               {savedStatsL4 ? '已存统计 L4' : '索引统计存 L4'}
-            </button>
-            <button
-              type="button"
-              data-testid="semantic-stats-copy-btn"
-              onClick={async () => {
-                const md = `# M4 语义索引统计\n- 总材料: ${stats.totalMaterials}\n- 已索引: ${stats.indexedMaterials}\n- 待索引: ${stats.pendingMaterials}\n- 总 chunks: ${stats.totalChunks}`;
-                try {
-                  await navigator.clipboard?.writeText(md);
-                  setCopiedStats(true);
-                  setTimeout(() => setCopiedStats(false), 1500);
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              {copiedStats ? '已复制统计' : '复制统计'}
             </button>
           </div>
           {stats.embedderType && stats.embedderType !== 'unavailable' && (

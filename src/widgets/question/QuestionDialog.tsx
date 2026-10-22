@@ -88,8 +88,6 @@ export function QuestionDialog() {
   const [selected, setSelected] = useState<readonly string[]>([]);
   const [custom, setCustom] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   // 新提问到达时重置上一个提问遗留的局部 state（store 直接替换
   // currentQuestion，组件不卸载，必须显式重置）
@@ -154,29 +152,7 @@ export function QuestionDialog() {
   };
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatQuestionDialogMarkdown(currentQuestion, selected, custom),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatQuestionDialogJson(currentQuestion, selected, custom),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -271,22 +247,6 @@ export function QuestionDialog() {
 
           <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                data-testid="question-dialog-copy-md"
-                onClick={() => void handleCopyMarkdown()}
-                className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-              >
-                {copiedMd ? '已复制 MD' : '复制 MD'}
-              </button>
-              <button
-                type="button"
-                data-testid="question-dialog-copy-json"
-                onClick={() => void handleCopyJson()}
-                className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-              >
-                {copiedJson ? '已复制 JSON' : '复制 JSON'}
-              </button>
             </div>
             <button
               type="button"

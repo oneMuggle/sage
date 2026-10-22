@@ -30,52 +30,12 @@ const SkillDraftList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDraft, setSelectedDraft] = useState<SkillDraft | null>(null);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
 
   const { t } = useI18n();
 
   /* v8 ignore start */
-  const handleCopyListMd = useCallback(async () => {
-    const lines = [
-      '# 待审技能草稿清单',
-      '',
-      `- 总计: ${drafts.length}`,
-      '',
-      ...drafts.map(
-        (d) =>
-          `- **${d.name}** (\`${d.trigger_type}\`) — ${d.description} (何时使用: ${d.when_to_use})`,
-      ),
-    ];
-    setCopiedMd(true);
-    try {
-      await navigator.clipboard?.writeText(lines.join('\n'));
-    } catch {
-      // ignore clipboard errors
-    }
-    setTimeout(() => setCopiedMd(false), 1500);
-  }, [drafts]);
 
-  const handleCopyListJson = useCallback(async () => {
-    setCopiedJson(true);
-    try {
-      await navigator.clipboard?.writeText(JSON.stringify(drafts, null, 2));
-    } catch {
-      // ignore clipboard errors
-    }
-    setTimeout(() => setCopiedJson(false), 1500);
-  }, [drafts]);
 
-  const handleCopyDraftItemJson = useCallback(async (draft: SkillDraft) => {
-    setCopiedItemId(draft.id);
-    try {
-      await navigator.clipboard?.writeText(JSON.stringify(draft, null, 2));
-    } catch {
-      // ignore clipboard errors
-    }
-    setTimeout(() => setCopiedItemId(null), 1500);
-  }, []);
   /* v8 ignore stop */
 
   const fetchDrafts = useCallback(async () => {
@@ -158,22 +118,6 @@ const SkillDraftList: React.FC = () => {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end gap-2">
-        <button
-          type="button"
-          data-testid="skill-draft-list-copy-md-btn"
-          onClick={handleCopyListMd}
-          className="px-2.5 py-1 text-xs rounded border border-border bg-surface hover:bg-bg-subtle text-text-secondary transition-colors"
-        >
-          {copiedMd ? '✓ 已复制MD' : '复制草稿列表MD'}
-        </button>
-        <button
-          type="button"
-          data-testid="skill-draft-list-copy-json-btn"
-          onClick={handleCopyListJson}
-          className="px-2.5 py-1 text-xs rounded border border-border bg-surface hover:bg-bg-subtle text-text-secondary transition-colors"
-        >
-          {copiedJson ? '✓ 已复制JSON' : '复制草稿列表JSON'}
-        </button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {drafts.map((draft) => (
@@ -202,14 +146,6 @@ const SkillDraftList: React.FC = () => {
                 className="flex-1 px-3 py-1.5 text-xs rounded-radius-sm bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
               >
                 {t('skill_draft.preview')}
-              </button>
-              <button
-                type="button"
-                data-testid={`skill-draft-item-copy-json-${draft.id}`}
-                onClick={() => handleCopyDraftItemJson(draft)}
-                className="px-2 py-1.5 text-xs rounded-radius-sm border border-border bg-surface hover:bg-bg-subtle text-text-secondary transition-colors"
-              >
-                {copiedItemId === draft.id ? '✓ 已复制' : '复制JSON'}
               </button>
             </div>
           </div>

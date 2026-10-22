@@ -2,11 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  CronExpressionPicker,
-  formatCronPickerJson,
-  formatCronPickerMarkdown,
-} from '../CronExpressionPicker';
+import { CronExpressionPicker, formatCronPickerJson, formatCronPickerMarkdown } from '../CronExpressionPicker';
 
 function renderPicker(props: React.ComponentProps<typeof CronExpressionPicker>) {
   return render(
@@ -59,9 +55,5 @@ describe('CronExpressionPicker', () => {
     expect(parsed.valid).toBe(true);
 
     renderPicker({ value: '0 * * * *', onChange: () => {} });
-    fireEvent.click(screen.getByTestId('cron-picker-copy-md'));
-    expect(screen.getByTestId('cron-picker-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('cron-picker-copy-json'));
-    expect(screen.getByTestId('cron-picker-copy-json').textContent).toContain('已复制 JSON');
   });
 });

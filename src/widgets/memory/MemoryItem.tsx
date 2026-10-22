@@ -2,8 +2,6 @@
  * MemoryItem - 单条记忆显示组件
  * 显示记忆内容、重要性星级、标签和删除按钮
  */
-import { useState } from 'react';
-
 import { Memory } from '../../shared/api';
 import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
@@ -42,19 +40,6 @@ function formatTime(timestamp: number): string {
 export function MemoryItem({ memory, onDelete }: MemoryItemProps) {
   const tags = memory.tags || [];
   const memoryType = memory.memory_type || 'episodic';
-  const [copiedJson, setCopiedJson] = useState(false);
-
-  const handleCopyJson = () => {
-    setCopiedJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedJson(false), 2000);
-    const payload = {
-      ...memory,
-      exportedAt: new Date().toISOString(),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
 
   return (
     <div className={`memory-item memory-item-${memoryType}`}>
@@ -86,14 +71,6 @@ export function MemoryItem({ memory, onDelete }: MemoryItemProps) {
 
         {/* 时间 */}
         <div className="memory-time">{formatTime(memory.created_at)}</div>
-        <button
-          type="button"
-          data-testid={`memory-card-copy-json-${memory.id}`}
-          onClick={handleCopyJson}
-          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
-        >
-          {copiedJson ? '已复制JSON' : '复制记忆JSON'}
-        </button>
       </div>
 
       {/* 删除按钮 — U12: 两步式确认，不弹 modal */}

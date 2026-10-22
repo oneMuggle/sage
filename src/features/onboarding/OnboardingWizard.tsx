@@ -86,8 +86,6 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   const needsKey = protocol !== 'ollama';
 
@@ -224,32 +222,6 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
           </div>
           {/* v8 ignore start */}
           <div className="flex items-center gap-1">
-            <span
-              data-testid="wizard-copy-md"
-              onClick={() => {
-                setCopiedMd(true);
-                void navigator.clipboard?.writeText(
-                  formatOnboardingWizardMarkdown({ step, protocol, baseUrl, selectedModel, saved }),
-                );
-                setTimeout(() => setCopiedMd(false), 1500);
-              }}
-              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedMd ? '已复制 MD' : '复制 MD'}
-            </span>
-            <span
-              data-testid="wizard-copy-json"
-              onClick={() => {
-                setCopiedJson(true);
-                void navigator.clipboard?.writeText(
-                  formatOnboardingWizardJson({ step, protocol, baseUrl, selectedModel, saved }),
-                );
-                setTimeout(() => setCopiedJson(false), 1500);
-              }}
-              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedJson ? '已复制 JSON' : '复制 JSON'}
-            </span>
           </div>
           {/* v8 ignore stop */}
         </div>

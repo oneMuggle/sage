@@ -3,10 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  FEATURE_DISABLE_STORAGE_KEY,
-  FEATURE_UNLOCK_STORAGE_KEY,
-} from '../../../shared/lib/hooks/useFeatureUnlock';
+import { FEATURE_DISABLE_STORAGE_KEY, FEATURE_UNLOCK_STORAGE_KEY } from '../../../shared/lib/hooks/useFeatureUnlock';
 import { I18nProvider } from '../../../shared/lib/i18n';
 import { useStore } from '../../../shared/lib/store';
 import { Sidebar } from '../../../widgets/layout/Sidebar';

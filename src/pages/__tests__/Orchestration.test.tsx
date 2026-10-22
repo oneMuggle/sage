@@ -142,12 +142,6 @@ describe('Orchestration page', () => {
     const badges = await screen.findAllByTestId('lane-source-badge');
     expect(badges).toHaveLength(1);
     expect(badges[0]?.textContent).toBe('子代理');
-    fireEvent.click(screen.getByTestId('lane-board-copy-md-btn'));
-    expect(screen.getByTestId('lane-board-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('lane-board-copy-json-btn'));
-    expect(screen.getByTestId('lane-board-copy-json-btn')).toHaveTextContent('已复制JSON');
-    fireEvent.click(screen.getByTestId('lane-card-copy-json-lane-sub'));
-    expect(screen.getByTestId('lane-card-copy-json-lane-sub')).toHaveTextContent('已复制JSON');
   });
 
   it('formats and copies Orchestration page summary as Markdown and JSON', () => {
@@ -169,9 +163,5 @@ describe('Orchestration page', () => {
     expect(parsed.creating).toBe(true);
 
     renderPage();
-    fireEvent.click(screen.getByTestId('orch-page-copy-md'));
-    expect(screen.getByTestId('orch-page-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('orch-page-copy-json'));
-    expect(screen.getByTestId('orch-page-copy-json').textContent).toContain('已复制 JSON');
   });
 });
