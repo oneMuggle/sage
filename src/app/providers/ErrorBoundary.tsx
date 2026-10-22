@@ -114,3 +114,28 @@ export function formatErrorBoundaryJson(
   });
 }
 
+export function auditErrorBoundaryGovernance(
+  state: {
+    hasError?: boolean;
+    recoveryCount?: number;
+  } = {},
+): {
+  module: 'src/app/providers/ErrorBoundary.tsx';
+  phase: 'P151';
+  hasError: boolean;
+  recoveryCount: number;
+  healthy: boolean;
+} {
+  const hasError = state.hasError === true;
+  const recoveryCount =
+    typeof state.recoveryCount === 'number' && Number.isFinite(state.recoveryCount)
+      ? Math.max(0, Math.trunc(state.recoveryCount))
+      : 0;
+  return {
+    module: 'src/app/providers/ErrorBoundary.tsx',
+    phase: 'P151',
+    hasError,
+    recoveryCount,
+    healthy: !hasError,
+  };
+}

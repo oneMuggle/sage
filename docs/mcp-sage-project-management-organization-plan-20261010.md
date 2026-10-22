@@ -2063,3 +2063,17 @@
   - `src/widgets/sidebar/__tests__/TwoStepDelete.p150.test.ts`
   - `src/widgets/sidebar/__tests__/SidebarProjectList.p150.test.ts`
 - **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
+
+### Phase P151: Application Providers Layer (AppProviders, ErrorBoundary, NavHistory, QueryClient, SessionWorkspace, Theme, Toast & Barrel) Governance Audit (Completed 2026-10-22)
+
+- **Target Modules**:
+  - `src/app/providers/AppProviders.tsx`: `auditAppProvidersGovernance`
+  - `src/app/providers/ErrorBoundary.tsx`: `auditErrorBoundaryGovernance`
+  - `src/app/providers/NavHistoryProvider.tsx`: `auditNavHistoryProviderGovernance`
+  - `src/app/providers/QueryClientProvider.tsx`: `auditQueryClientProviderGovernance`
+  - `src/app/providers/SessionWorkspaceProvider.tsx`: `auditSessionWorkspaceProviderGovernance`
+  - `src/app/providers/ThemeProvider.tsx`: `auditThemeProviderGovernance`
+  - `src/app/providers/ToastProvider.tsx`: `auditToastProviderGovernance`
+  - `src/app/providers/index.ts`: `auditProvidersBarrelGovernance`
+- **Verification**:
+  - Added 8 dedicated Vitest suites (`*.p151.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
