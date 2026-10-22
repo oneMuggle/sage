@@ -710,8 +710,9 @@ class AgentTool(BaseTool):
                 run_loop_accepts_session_id,
             )
 
+            subagent_iterations = _resolve_subagent_iterations()
             run_kwargs: Dict[str, Any] = {
-                "max_iterations": _resolve_subagent_iterations()
+                "max_iterations": subagent_iterations
             }
             if session_id and run_loop_accepts_session_id(subagent):
                 run_kwargs["session_id"] = session_id
@@ -729,7 +730,8 @@ class AgentTool(BaseTool):
             if error is not None:
                 return "", error
             if not saw_done:
-                return "", "subagent_exhausted_iterations"
+                # 上限值随错误码一并下发，前端据此提示用户该调到多少
+                return "", f"subagent_exhausted_iterations (limit={subagent_iterations})"
             return answer, None
         finally:
             _cleanup_subagent_workspace(getattr(subagent, "_owned_workspace_root", None))

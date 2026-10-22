@@ -109,7 +109,8 @@ async def test_run_loop_respects_max_iterations():
 
     failed = [e for e in events if e.state == AgentState.FAILED]
     assert len(failed) == 1
-    assert failed[0].error == "max_iterations_exceeded"
+    # 2026-10-22: 错误串携带生效上限，前端据此提示用户该调到多少
+    assert failed[0].error == "max_iterations_exceeded (limit=2)"
 
 
 @pytest.mark.asyncio()
@@ -438,7 +439,7 @@ async def test_run_loop_max_iterations_exceeded_yields_failed_event():
     states = [e.state for e in events]
     assert AgentState.FAILED in states
     failed = next(e for e in events if e.state == AgentState.FAILED)
-    assert failed.error == "max_iterations_exceeded"
+    assert failed.error == "max_iterations_exceeded (limit=1)"
     # FAILED 后不应有 DONE
     failed_idx = states.index(AgentState.FAILED)
     assert AgentState.DONE not in states[failed_idx + 1 :]

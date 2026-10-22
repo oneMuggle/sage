@@ -2112,10 +2112,11 @@ class SageAgent:
                         # mapAgentErrorToText 的 "tool_budget_exceeded" 文案对齐）。
                         tool_calls_used += 1
                         if tool_calls_used > self._effective_max_tool_calls_per_run():
+                            max_tool_calls = self._effective_max_tool_calls_per_run()
                             yield AgentEvent(
                                 state=AgentState.FAILED,
                                 iteration=i,
-                                error="tool_budget_exceeded",
+                                error=f"tool_budget_exceeded (limit={max_tool_calls})",
                                 agent_id=self.agent_id,
                             )
                             return
@@ -2512,7 +2513,7 @@ class SageAgent:
             yield AgentEvent(
                 state=AgentState.FAILED,
                 iteration=effective_max_iterations,
-                error="max_iterations_exceeded",
+                error=f"max_iterations_exceeded (limit={effective_max_iterations})",
                 agent_id=self.agent_id,
             )
         finally:
