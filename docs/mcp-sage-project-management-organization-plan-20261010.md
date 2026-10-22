@@ -1752,4 +1752,13 @@
 - **验证结果**：
   - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
   - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P131 — Chat & Diagnostic Barrels, Journal Panel/Editors & Preference/Office Forms Audit Diagnostics & JSON Export (2026-10-22)
 
+- **Chat & Diagnostic Feature Barrels (`src/features/chat/index.ts`, `src/features/diagnostic/index.ts`)**:
+  - Added `ChatFeatureBarrelAuditReport`, `auditChatFeatureBarrel()`, and `exportChatFeatureBarrelAuditJson()` plus `DiagnosticFeatureBarrelAuditReport`, `auditDiagnosticFeatureBarrel()`, and `exportDiagnosticFeatureBarrelAuditJson()` with `schemaVersion: '1.0'` and `exportedAt: '2026-10-22'`.
+- **Journal Panel, Actions, Content Editor & Barrel (`src/features/journal/JournalPanel.tsx`, `src/features/journal/components/JournalActions.tsx`, `src/features/journal/components/JournalContentEditor.tsx`, `src/features/journal/index.ts`)**:
+  - Added `JournalPanelAuditReport`, `auditJournalPanel()`, and `exportJournalPanelAuditJson()`, `JournalActionsAuditReport`, `auditJournalActions()`, and `exportJournalActionsAuditJson()`, `JournalContentEditorAuditReport`, `auditJournalContentEditor()`, and `exportJournalContentEditorAuditJson()`, plus `JournalFeatureBarrelAuditReport`, `auditJournalFeatureBarrel()`, and `exportJournalFeatureBarrelAuditJson()` (`src/features/journal/` is now 100% covered).
+- **Preference Save Status & Excel/PPT Edit Form Fields (`src/features/manage-settings/PreferenceSaveStatus.tsx`, `src/features/office/ExcelPptEditFormFields.tsx`)**:
+  - Added `PreferenceSaveStatusAuditReport`, `auditPreferenceSaveStatus()`, and `exportPreferenceSaveStatusAuditJson()` plus `ExcelPptEditFormFieldsAuditReport`, `auditExcelPptEditFormFields()`, and `exportExcelPptEditFormFieldsAuditJson()`.
+- **Unit Test Coverage**:
+  - Added 8 unit test suites (`16` tests total) verifying nominal and fallback audit diagnostics and JSON export across all 8 modules.
