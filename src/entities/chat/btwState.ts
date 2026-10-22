@@ -87,3 +87,29 @@ export function buildBtwStateAuditJson(input: BtwStateAuditInput = {}): string {
     snapshot: buildBtwStateAuditSnapshot(input),
   });
 }
+
+export function auditBtwStateGovernance(
+  state: {
+    isOpen?: boolean;
+    messageCount?: number;
+  } = {},
+): {
+  module: 'src/entities/chat/btwState.ts';
+  phase: 'P153';
+  isOpen: boolean;
+  messageCount: number;
+  healthy: boolean;
+} {
+  const isOpen = state.isOpen === true;
+  const messageCount =
+    typeof state.messageCount === 'number' && Number.isFinite(state.messageCount)
+      ? Math.max(0, Math.trunc(state.messageCount))
+      : 0;
+  return {
+    module: 'src/entities/chat/btwState.ts',
+    phase: 'P153',
+    isOpen,
+    messageCount,
+    healthy: messageCount >= 0 && messageCount <= 500,
+  };
+}

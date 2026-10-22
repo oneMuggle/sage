@@ -361,3 +361,24 @@ export function formatProviderRegistryJson(): string {
   });
 }
 
+export function auditProviderRegistryGovernance(
+  state: {
+    providerCount?: number;
+  } = {},
+): {
+  module: 'src/entities/endpoint/providerRegistry.ts';
+  phase: 'P153';
+  providerCount: number;
+  healthy: boolean;
+} {
+  const providerCount =
+    typeof state.providerCount === 'number' && Number.isFinite(state.providerCount)
+      ? Math.max(0, Math.trunc(state.providerCount))
+      : listProviders().length;
+  return {
+    module: 'src/entities/endpoint/providerRegistry.ts',
+    phase: 'P153',
+    providerCount,
+    healthy: providerCount >= 1,
+  };
+}
