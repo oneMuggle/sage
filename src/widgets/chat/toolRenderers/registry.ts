@@ -42,3 +42,41 @@ const REGISTRY: Readonly<Record<string, ToolRenderer>> = {
 export function resolveToolRenderer(toolName: string): ToolRenderer | null {
   return REGISTRY[toolName] ?? null;
 }
+
+export interface ToolRendererRegistryAuditInput {
+  registeredToolNames: string[];
+  hasDefaultRenderer: boolean;
+  duplicateRegistrations: number;
+}
+
+export interface ToolRendererRegistryAuditReport {
+  uniqueToolCount: number;
+  hasDefaultRenderer: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+export function evaluateToolRendererRegistryGovernanceAudit(
+  input: ToolRendererRegistryAuditInput,
+): ToolRendererRegistryAuditReport {
+  const issueCodes: string[] = [];
+  const normalized = input.registeredToolNames
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0);
+  const uniqueToolCount = new Set(normalized).size;
+  if (uniqueToolCount === 0) {
+    issueCodes.push('TOOL_RENDERER_REGISTRY_EMPTY');
+  }
+  if (!input.hasDefaultRenderer) {
+    issueCodes.push('TOOL_RENDERER_DEFAULT_MISSING');
+  }
+  if (input.duplicateRegistrations > 0 || uniqueToolCount !== normalized.length) {
+    issueCodes.push('TOOL_RENDERER_DUPLICATE_REGISTRATION');
+  }
+  return {
+    uniqueToolCount,
+    hasDefaultRenderer: input.hasDefaultRenderer,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

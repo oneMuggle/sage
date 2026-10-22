@@ -1847,3 +1847,15 @@
   6. `src/widgets/chat/toolRenderers/BashToolRenderer.tsx` (`evaluateBashToolRendererGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/BashToolRenderer.p136.test.ts`)
   7. `src/widgets/chat/toolRenderers/FileWriteToolRenderer.tsx` (`evaluateFileWriteToolRendererGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/FileWriteToolRenderer.p136.test.ts`)
   8. `src/widgets/chat/toolRenderers/ToolCallCard.tsx` (`evaluateToolCallCardGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/ToolCallCard.p136.test.ts`)
+
+## Phase P137 — Tool Renderer Registry, Command Widget, Evolution Log/Panel & Help Footer Governance Audit (2026-10-22)
+
+- **PRs**: `#2284` (`main` @ `978c18e04`) / `#2285` (`release/win7` @ `7d1c34369`) merged for Phase P136; Phase P137 extends deterministic governance audit contracts across 8 tool renderer registry, command widget, evolution log/panel, and help footer modules:
+  1. `src/widgets/chat/toolRenderers/WebSearchToolRenderer.tsx` (`evaluateWebSearchToolRendererGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/WebSearchToolRenderer.p137.test.ts`)
+  2. `src/widgets/chat/toolRenderers/index.ts` (`evaluateToolRenderersBarrelGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/index.p137.test.ts`)
+  3. `src/widgets/chat/toolRenderers/registry.ts` (`evaluateToolRendererRegistryGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/registry.p137.test.ts`)
+  4. `src/widgets/command/commandItems.ts` (`evaluateCommandItemsGovernanceAudit` + `src/widgets/command/__tests__/commandItems.p137.test.ts`)
+  5. `src/widgets/command/index.ts` (`evaluateCommandWidgetBarrelGovernanceAudit` + `src/widgets/command/__tests__/index.p137.test.ts`)
+  6. `src/widgets/evolution/EvolutionLog.tsx` (`evaluateEvolutionLogGovernanceAudit` + `src/widgets/evolution/__tests__/EvolutionLog.p137.test.ts`)
+  7. `src/widgets/evolution/EvolutionPanel.tsx` (`evaluateEvolutionPanelGovernanceAudit` + `src/widgets/evolution/__tests__/EvolutionPanel.p137.test.ts`)
+  8. `src/widgets/help/HelpFooter.tsx` (`evaluateHelpFooterGovernanceAudit` + `src/widgets/help/__tests__/HelpFooter.p137.test.ts`)
