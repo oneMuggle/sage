@@ -109,3 +109,29 @@ export function isValidCompactPayload(
     typeof c.removed === 'number'
   );
 }
+
+export interface TransparencyPayloadAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/features/send-message/transparencyPayload.ts';
+  validatorCount: number;
+  sampleCompactValid: boolean;
+  exportedAt: string;
+}
+
+export function auditTransparencyPayload(
+  sampleCompact: unknown = { before: 1200, after: 400, removed: 800 },
+): TransparencyPayloadAuditReport {
+  return {
+    schemaVersion: '1.0',
+    module: 'src/features/send-message/transparencyPayload.ts',
+    validatorCount: 5,
+    sampleCompactValid: isValidCompactPayload(sampleCompact),
+    exportedAt: '2026-10-22',
+  };
+}
+
+export function exportTransparencyPayloadAuditJson(
+  sampleCompact: unknown = { before: 1200, after: 400, removed: 800 },
+): string {
+  return JSON.stringify(auditTransparencyPayload(sampleCompact), null, 2);
+}

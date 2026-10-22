@@ -12,3 +12,39 @@ export { OfficeGenerateForm } from './OfficeGenerateForm';
 export { OfficeCapabilityBar } from './OfficeCapabilityBar';
 // Round B P3: structured sub-previews shared with the chat ArtifactViewer.
 export { WordPreview, ExcelPreview, PptPreview } from './OfficePreviewPanel';
+
+export interface OfficeFeatureBarrelAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/features/office/index.ts';
+  exportedSymbols: readonly string[];
+  symbolCount: number;
+  exportedAt: string;
+}
+
+export function auditOfficeFeatureBarrel(): OfficeFeatureBarrelAuditReport {
+  const exportedSymbols = [
+    'useOfficeDocuments',
+    'OfficeFilePicker',
+    'OfficePreviewPanel',
+    'OfficeDocumentList',
+    'OfficeSnapshotPanel',
+    'OfficeEditPreviewDialog',
+    'buildUpdateOps',
+    'OfficeGenerateForm',
+    'OfficeCapabilityBar',
+    'WordPreview',
+    'ExcelPreview',
+    'PptPreview',
+  ] as const;
+  return {
+    schemaVersion: '1.0',
+    module: 'src/features/office/index.ts',
+    exportedSymbols,
+    symbolCount: exportedSymbols.length,
+    exportedAt: '2026-10-22',
+  };
+}
+
+export function exportOfficeFeatureBarrelAuditJson(): string {
+  return JSON.stringify(auditOfficeFeatureBarrel(), null, 2);
+}
