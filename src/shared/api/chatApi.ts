@@ -482,3 +482,36 @@ export const chatApi = {
     return { cancel };
   },
 };
+
+export function auditChatApiGovernance(
+  state: {
+    activeStreamCount?: number;
+    maxConcurrentStreams?: number;
+    supportsSseResume?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/chatApi.ts';
+  phase: 'P144';
+  activeStreamCount: number;
+  maxConcurrentStreams: number;
+  supportsSseResume: boolean;
+  healthy: boolean;
+} {
+  const activeStreamCount =
+    typeof state.activeStreamCount === 'number' && Number.isFinite(state.activeStreamCount)
+      ? Math.max(0, Math.trunc(state.activeStreamCount))
+      : 0;
+  const maxConcurrentStreams =
+    typeof state.maxConcurrentStreams === 'number' && Number.isFinite(state.maxConcurrentStreams)
+      ? Math.max(1, Math.trunc(state.maxConcurrentStreams))
+      : 4;
+  const supportsSseResume = state.supportsSseResume !== false;
+  return {
+    module: 'src/shared/api/chatApi.ts',
+    phase: 'P144',
+    activeStreamCount,
+    maxConcurrentStreams,
+    supportsSseResume,
+    healthy: activeStreamCount <= maxConcurrentStreams && supportsSseResume,
+  };
+}
