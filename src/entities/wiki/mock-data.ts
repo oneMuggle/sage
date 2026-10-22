@@ -224,3 +224,32 @@ export function formatWikiMockDataJson(): string {
   });
 }
 /* v8 ignore stop */
+
+export function auditWikiMockDataGovernance(
+  state: {
+    lintCount?: number;
+    reviewCount?: number;
+  } = {},
+): {
+  module: 'src/entities/wiki/mock-data.ts';
+  phase: 'P156';
+  lintCount: number;
+  reviewCount: number;
+  healthy: boolean;
+} {
+  const lintCount =
+    typeof state.lintCount === 'number' && Number.isFinite(state.lintCount)
+      ? Math.max(0, Math.trunc(state.lintCount))
+      : mockLintItems.length;
+  const reviewCount =
+    typeof state.reviewCount === 'number' && Number.isFinite(state.reviewCount)
+      ? Math.max(0, Math.trunc(state.reviewCount))
+      : mockReviewItems.length;
+  return {
+    module: 'src/entities/wiki/mock-data.ts',
+    phase: 'P156',
+    lintCount,
+    reviewCount,
+    healthy: lintCount >= 1 && reviewCount >= 1,
+  };
+}

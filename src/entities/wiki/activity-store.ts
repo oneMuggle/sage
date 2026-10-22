@@ -54,3 +54,32 @@ export function formatActivityStoreJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditWikiActivityStoreGovernance(
+  state: {
+    activityCount?: number;
+    maxRetained?: number;
+  } = {},
+): {
+  module: 'src/entities/wiki/activity-store.ts';
+  phase: 'P156';
+  activityCount: number;
+  maxRetained: number;
+  healthy: boolean;
+} {
+  const activityCount =
+    typeof state.activityCount === 'number' && Number.isFinite(state.activityCount)
+      ? Math.max(0, Math.trunc(state.activityCount))
+      : 0;
+  const maxRetained =
+    typeof state.maxRetained === 'number' && Number.isFinite(state.maxRetained)
+      ? Math.max(1, Math.trunc(state.maxRetained))
+      : 200;
+  return {
+    module: 'src/entities/wiki/activity-store.ts',
+    phase: 'P156',
+    activityCount,
+    maxRetained,
+    healthy: activityCount <= maxRetained,
+  };
+}

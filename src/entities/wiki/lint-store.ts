@@ -109,3 +109,33 @@ export function formatLintStoreJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditWikiLintStoreGovernance(
+  state: {
+    lintItemCount?: number;
+    unresolvedErrorCount?: number;
+  } = {},
+): {
+  module: 'src/entities/wiki/lint-store.ts';
+  phase: 'P156';
+  lintItemCount: number;
+  unresolvedErrorCount: number;
+  healthy: boolean;
+} {
+  const lintItemCount =
+    typeof state.lintItemCount === 'number' && Number.isFinite(state.lintItemCount)
+      ? Math.max(0, Math.trunc(state.lintItemCount))
+      : 0;
+  const unresolvedErrorCount =
+    typeof state.unresolvedErrorCount === 'number' &&
+    Number.isFinite(state.unresolvedErrorCount)
+      ? Math.max(0, Math.trunc(state.unresolvedErrorCount))
+      : 0;
+  return {
+    module: 'src/entities/wiki/lint-store.ts',
+    phase: 'P156',
+    lintItemCount,
+    unresolvedErrorCount,
+    healthy: unresolvedErrorCount === 0,
+  };
+}
