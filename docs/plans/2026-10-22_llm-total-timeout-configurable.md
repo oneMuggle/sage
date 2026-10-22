@@ -137,7 +137,7 @@ canonicalizer 的 `to_camel` 对未知 camelCase 键原样透传 ⇒ **不需要
 - [x] 步骤 13：后端 pytest + 前端 tsc / vitest / eslint 全绿（vitest 整跑 4742/4746 过，唯一失败 `ArenaAccounts.test.tsx` 与本改动无关；tsc 净、eslint 净、touch-file vitest 36/36 过、后端 pytest 92/92 过）
 - [ ] 步骤 14：代码审查（code-reviewer）
 - [x] 步骤 15：更新 `docs/plans/2026-10-22_agent-limit-error-details.md` 表格行（`llm_total_timeout` 改为 wire 形式）+ `docs/user-manual/20-settings.md`（补 `## 基础` 段，含 LLM 重试 + LLM 任务上限）+ 顺手修了 `errorMapping.ts` 路径文案从「基础与外观」→「基础」（与 `i18n/locales/zh/chatAndSider.ts:239` 实际 tab 标签对齐）；`legacy_routes.py` 日志空格修（LOW finding）
-- [ ] 步骤 16：cherry-pick 同步到 `release/win7`（py38 环境单跑；**不得**改任何 requirements 文件；**不得** merge）
+- [x] 步骤 16：cherry-pick 同步到 `release/win7`（py38 环境单跑；**不得**改任何 requirements 文件；**不得** merge）— PR 分支 `sync/win7-llm-total-timeout` 已推送（commit `550f0045`）；2 处冲突（`legacy_routes.py` nonlocal 块重排、`errorMapping.ts` `{limit}` 占位 + "Agent 迭代次数上限" 术语对齐）已解；py38 后端 pytest 152/152 过（含 `test_llm_total_timeout` / `test_settings_schema_parity` / `test_legacy_routes_last_error` / `test_agent_run_loop` / `test_agent_tool_budget` / `test_agent_parallel_interrupt`）；`from __future__ import annotations` 让 `float | None` 在 py3.8 惰性求值安全；requirements / package.json 零改动
 
 ---
 
