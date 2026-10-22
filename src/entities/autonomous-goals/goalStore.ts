@@ -182,3 +182,29 @@ export function formatGoalStoreJson(
     2,
   );
 }
+
+export function auditGoalStoreGovernance(
+  state: {
+    goalCount?: number;
+    hasError?: boolean;
+  } = {},
+): {
+  module: 'src/entities/autonomous-goals/goalStore.ts';
+  phase: 'P152';
+  goalCount: number;
+  hasError: boolean;
+  healthy: boolean;
+} {
+  const goalCount =
+    typeof state.goalCount === 'number' && Number.isFinite(state.goalCount)
+      ? Math.max(0, Math.trunc(state.goalCount))
+      : 0;
+  const hasError = state.hasError === true;
+  return {
+    module: 'src/entities/autonomous-goals/goalStore.ts',
+    phase: 'P152',
+    goalCount,
+    hasError,
+    healthy: !hasError,
+  };
+}
