@@ -2119,3 +2119,24 @@
   - `src/entities/setting/deepMerge.ts`: `auditDeepMergeGovernance`
 - **Verification**:
   - Added 8 dedicated Vitest suites (`*.p154.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
+
+### Phase P155: Entity Setting Readiness, Metadata, Adapter, Registry, Validation, Storage, Types & Decorative Presets Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/entities/setting/endpointReadiness.ts` (`auditEndpointReadinessGovernance`)
+  - `src/entities/setting/metadata.ts` (`auditSettingMetadataGovernance`)
+  - `src/entities/setting/settingsAdapter.ts` (`auditSettingsAdapterGovernance`)
+  - `src/entities/setting/settingsRegistry.ts` (`auditSettingsRegistryGovernance`)
+  - `src/entities/setting/settingsValidation.ts` (`auditSettingsValidationGovernance`)
+  - `src/entities/setting/storage.ts` (`auditSettingStorageGovernance`)
+  - `src/entities/setting/types.ts` (`auditSettingTypesGovernance`)
+  - `src/entities/theme/decorative-presets.ts` (`auditDecorativePresetsGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/entities/setting/__tests__/endpointReadiness.p155.test.ts`
+  - `src/entities/setting/__tests__/metadata.p155.test.ts`
+  - `src/entities/setting/__tests__/settingsAdapter.p155.test.ts`
+  - `src/entities/setting/__tests__/settingsRegistry.p155.test.ts`
+  - `src/entities/setting/__tests__/settingsValidation.p155.test.ts`
+  - `src/entities/setting/__tests__/storage.p155.test.ts`
+  - `src/entities/setting/__tests__/types.p155.test.ts`
+  - `src/entities/theme/__tests__/decorativePresets.p155.test.ts`
