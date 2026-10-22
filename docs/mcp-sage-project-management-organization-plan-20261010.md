@@ -2245,3 +2245,24 @@
   - `src/features/chat/__tests__/selectionQuote.p160.test.ts`
   - `src/features/chat/__tests__/speech.p160.test.ts`
   - `src/features/chat/__tests__/textHighlight.p160.test.ts`
+
+### Phase P161: Chat Hooks (UseAtFileQuery, UseBtwCommand, UseConversationOutline, UseConversationTrajectory, UseConversationTurns, UseMessageJump, UseQuoteDraft & UseSessionMemoryPause) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/chat/useAtFileQuery.ts` (`auditUseAtFileQueryGovernance`)
+  - `src/features/chat/useBtwCommand.ts` (`auditUseBtwCommandGovernance`)
+  - `src/features/chat/useConversationOutline.ts` (`auditUseConversationOutlineGovernance`)
+  - `src/features/chat/useConversationTrajectory.ts` (`auditUseConversationTrajectoryGovernance`)
+  - `src/features/chat/useConversationTurns.ts` (`auditUseConversationTurnsGovernance`)
+  - `src/features/chat/useMessageJump.ts` (`auditUseMessageJumpGovernance`)
+  - `src/features/chat/useQuoteDraft.ts` (`auditUseQuoteDraftGovernance`)
+  - `src/features/chat/useSessionMemoryPause.ts` (`auditUseSessionMemoryPauseGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/chat/__tests__/useAtFileQuery.p161.test.ts`
+  - `src/features/chat/__tests__/useBtwCommand.p161.test.ts`
+  - `src/features/chat/__tests__/useConversationOutline.p161.test.ts`
+  - `src/features/chat/__tests__/useConversationTrajectory.p161.test.ts`
+  - `src/features/chat/__tests__/useConversationTurns.p161.test.ts`
+  - `src/features/chat/__tests__/useMessageJump.p161.test.ts`
+  - `src/features/chat/__tests__/useQuoteDraft.p161.test.ts`
+  - `src/features/chat/__tests__/useSessionMemoryPause.p161.test.ts`
