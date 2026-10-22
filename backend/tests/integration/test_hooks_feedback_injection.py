@@ -70,9 +70,8 @@ async def test_post_hook_feedback_injected_as_system_message(tmp_path):
     agent = _make_agent("bash", '{"command": "echo hi"}', "处理完毕")
     events, messages = await _collect(agent)
 
-    step_done = getattr(AgentState, "STEP_DONE", None)
-    assert any(e.state == AgentState.DONE for e in events) or (
-        step_done is not None and any(e.state == step_done for e in events)
+    assert any(e.state == AgentState.DONE for e in events) or any(
+        e.state == AgentState.STEP_DONE for e in events
     ), "agent loop should reach done"
 
     system_msgs = [m for m in messages if m.get("role") == "system" and "钩子反馈" in m.get("content", "")]
