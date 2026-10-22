@@ -138,3 +138,38 @@ export function formatGoalAuditJson(
     2,
   );
 }
+
+export function auditAutonomousGoalsTypesGovernance(
+  state: {
+    status?: GoalStatus | string;
+    degradationLevel?: DegradationLevel | string;
+  } = {},
+): {
+  module: 'src/entities/autonomous-goals/types.ts';
+  phase: 'P153';
+  status: GoalStatus;
+  degradationLevel: DegradationLevel;
+  healthy: boolean;
+} {
+  const status: GoalStatus =
+    state.status === 'pending' ||
+    state.status === 'running' ||
+    state.status === 'paused' ||
+    state.status === 'failed' ||
+    state.status === 'cancelled'
+      ? state.status
+      : 'completed';
+  const degradationLevel: DegradationLevel =
+    state.degradationLevel === 'model_downgrade' ||
+    state.degradationLevel === 'task_simplify' ||
+    state.degradationLevel === 'stopped'
+      ? state.degradationLevel
+      : 'none';
+  return {
+    module: 'src/entities/autonomous-goals/types.ts',
+    phase: 'P153',
+    status,
+    degradationLevel,
+    healthy: status !== 'failed' && degradationLevel !== 'stopped',
+  };
+}
