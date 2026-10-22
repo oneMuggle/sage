@@ -44,6 +44,7 @@ from .frontmatter import (
 from .gating import GatingContext, build_gating_context, evaluate_gating
 from .resources import build_resource_index
 from .skill import DispatchMode, RequiresSpec, SkillMdDocument, SkillMdSkill
+from .skills_dir_policy import read_skills_dir_preference
 from .validation import sanitize_for_logging
 
 logger = logging.getLogger(__name__)
@@ -64,13 +65,34 @@ def _parse_allowed_tools(tools_str: Any) -> Tuple[str, ...]:
     return tuple(part for part in tools_str.split() if part)
 
 
+def _read_preferred_skills_dir() -> Optional[Path]:
+    """读取用户在"设置 → 技能"配置的技能根目录(``skills_dir`` preference)。
+
+    读取失败(DB 未初始化 / key 缺失 / 路径非法)一律回退为 ``None`` ——
+    设置损坏不应升级成启动失败, 调用方继续走 env / 缺省目录。
+
+    Returns:
+        校验通过的绝对路径 ``Path``;不可用时 ``None``。
+    """
+    try:
+        return read_skills_dir_preference()
+    except Exception as exc:  # noqa: BLE001 — 防御性兜底: 目录发现绝不抛错
+        logger.warning("读取 skills_dir preference 失败,跳过自定义目录: %s", exc)
+        return None
+
+
 def discover_skill_md_dirs() -> List[Path]:
     """按优先级返回 SKILL.md 搜索根列表(用户层)。
 
     优先级:
-      1. ``$SAGE_SKILLS_DIR`` 环境变量指向的目录 (若存在)
+      0. ``$SAGE_SKILLS_DIR`` 环境变量指向的目录 (若存在)
+      1. preference ``skills_dir`` (用户在"设置 → 技能"配置的技能根目录)
       2. ``$CWD/skills`` (若存在)
       3. ``~/.sage/skills`` (若存在)
+
+    env var 优先于 preference —— 与代码库其它设置一致(``SAGE_COMPACT_THRESHOLD``
+    等): 运维/开发覆盖 > 用户配置。导入端 ``_resolve_skills_dir()`` 采用相同顺序,
+    所以写入与读取一致。
 
     不存在的目录会被过滤掉 (而不是抛错), 调用方拿到的列表都是可直接扫描的。
 
@@ -88,6 +110,10 @@ def discover_skill_md_dirs() -> List[Path]:
         p = Path(env_dir).expanduser()
         if p.is_dir():
             roots.append(p)
+
+    preferred = _read_preferred_skills_dir()
+    if preferred is not None and preferred.is_dir() and preferred not in roots:
+        roots.append(preferred)
 
     cwd_skills = Path.cwd() / "skills"
     if cwd_skills.is_dir() and cwd_skills not in roots:

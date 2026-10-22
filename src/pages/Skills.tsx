@@ -1,4 +1,4 @@
-import { RefreshCw, RotateCw, ScanSearch, Upload } from 'lucide-react';
+import { FolderOpen, RefreshCw, RotateCw, ScanSearch, Upload } from 'lucide-react';
 import React, { useCallback, useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -62,6 +62,7 @@ const Skills: React.FC = () => {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [rescanLoading, setRescanLoading] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
+  const [directoryImportLoading, setDirectoryImportLoading] = useState(false);
   // R17-A1 管理面：固化巡检（scan → 建议列表 → 逐条采纳）
   const [scanLoading, setScanLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<ConsolidationSuggestion[]>([]);
@@ -290,6 +291,28 @@ const Skills: React.FC = () => {
     }
   };
 
+  // T-4b: 导入技能目录按钮 — pick-directory → import-directory 两步。
+  const handleImportDirectory = async () => {
+    const picked = await window.electronAPI?.skills?.pickSkillDirectory();
+    if (!picked) return;
+    setDirectoryImportLoading(true);
+    try {
+      const result = await skillsApi.importDirectory(picked);
+      if (result.imported.length > 0) {
+        toast.success(`已导入 ${result.imported.length} 个技能（目录）`);
+      }
+      if (result.skipped.length > 0) {
+        const reasons = result.skipped.map((s) => `${s.name}(${s.reason})`).join(', ');
+        toast.warning(`跳过 ${result.skipped.length} 个: ${reasons}`);
+      }
+      await loadSkills();
+    } catch (err) {
+      toast.error(`目录导入失败: ${(err as Error).message}`);
+    } finally {
+      setDirectoryImportLoading(false);
+    }
+  };
+
   const filteredSkills = skills.filter(
     (skill) =>
       skill.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -366,64 +389,74 @@ const Skills: React.FC = () => {
         title="技能"
         actions={
           <div className="flex items-center gap-3">
-          <span
-            data-testid="skills-page-copy-audit"
-            onClick={() => void handleCopyAudit()}
-            title="复制技能页审计快照"
-            className="px-2 py-1 rounded text-xs border border-border text-muted hover:text-text hover:bg-bg-subtle cursor-pointer select-none"
-          >
-            {copiedAudit ? '已复制快照' : '复制快照'}
-          </span>
-          <span
-            data-testid="skills-page-copy-json"
-            onClick={() => void handleCopyJson()}
-            title="复制技能页审计 JSON"
-            className="px-2 py-1 rounded text-xs border border-border text-muted hover:text-text hover:bg-bg-subtle cursor-pointer select-none"
-          >
-            {copiedJson ? '已复制 JSON' : 'JSON'}
-          </span>
-          <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
-            <input
-              type="checkbox"
-              role="switch"
-              aria-checked={autoRefresh}
-              aria-label="自动刷新"
-              checked={autoRefresh}
-              onChange={(e) => setAutoRefresh(e.target.checked)}
-              className="w-4 h-4 accent-primary"
-            />
-            自动刷新 (10s)
-          </label>
-          <button
-            type="button"
-            onClick={loadSkills}
-            disabled={loading}
-            aria-label="刷新技能列表"
-            title="刷新技能列表"
-            className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            type="button"
-            onClick={handleRescan}
-            disabled={rescanLoading}
-            aria-label="重扫磁盘"
-            title="重扫磁盘"
-            className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          >
-            <RotateCw className={`w-4 h-4 ${rescanLoading ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            type="button"
-            onClick={handleImport}
-            disabled={importLoading}
-            aria-label="导入 SKILL.md"
-            title="导入 SKILL.md"
-            className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-          >
-            <Upload className={`w-4 h-4 ${importLoading ? 'animate-pulse' : ''}`} />
-          </button>
+            <span
+              data-testid="skills-page-copy-audit"
+              onClick={() => void handleCopyAudit()}
+              title="复制技能页审计快照"
+              className="px-2 py-1 rounded text-xs border border-border text-muted hover:text-text hover:bg-bg-subtle cursor-pointer select-none"
+            >
+              {copiedAudit ? '已复制快照' : '复制快照'}
+            </span>
+            <span
+              data-testid="skills-page-copy-json"
+              onClick={() => void handleCopyJson()}
+              title="复制技能页审计 JSON"
+              className="px-2 py-1 rounded text-xs border border-border text-muted hover:text-text hover:bg-bg-subtle cursor-pointer select-none"
+            >
+              {copiedJson ? '已复制 JSON' : 'JSON'}
+            </span>
+            <label className="flex items-center gap-2 text-xs text-muted cursor-pointer">
+              <input
+                type="checkbox"
+                role="switch"
+                aria-checked={autoRefresh}
+                aria-label="自动刷新"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="w-4 h-4 accent-primary"
+              />
+              自动刷新 (10s)
+            </label>
+            <button
+              type="button"
+              onClick={loadSkills}
+              disabled={loading}
+              aria-label="刷新技能列表"
+              title="刷新技能列表"
+              className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={handleRescan}
+              disabled={rescanLoading}
+              aria-label="重扫磁盘"
+              title="重扫磁盘"
+              className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <RotateCw className={`w-4 h-4 ${rescanLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={handleImport}
+              disabled={importLoading}
+              aria-label="导入 SKILL.md"
+              title="导入 SKILL.md"
+              className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <Upload className={`w-4 h-4 ${importLoading ? 'animate-pulse' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={handleImportDirectory}
+              disabled={directoryImportLoading}
+              aria-label="导入技能目录"
+              title="导入技能目录（含 scripts/references/assets）"
+              className="p-1.5 rounded text-muted hover:text-text hover:bg-bg-subtle transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <FolderOpen className={`w-4 h-4 ${directoryImportLoading ? 'animate-pulse' : ''}`} />
+            </button>
           </div>
         }
       />

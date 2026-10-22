@@ -16,6 +16,8 @@ const visibleTabs: readonly SettingsTabKey[] = [
   'updates',
   'usage-stats',
   'providers',
+  // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
+  'skills',
 ];
 
 /** Keep old settings bookmarks, never render an unknown/hidden initial tab. */

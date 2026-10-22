@@ -97,6 +97,12 @@ class SettingsRepository:
             # 见 backend/api/zotero_routes.py —— 写入 POST /zotero/path, 读取
             # _get_configured_db_path, 环境变量 ZOTERO_DB_PATH 优先级兜底）
             "zotero_db_path",
+            # T-3: 技能脚本执行开关（"1" 开启 / "0" 或缺省 = 关闭，fail-closed）。
+            # 读取口径见 backend/skills/skill_md/script_policy.py
+            "allow_skill_scripts",
+            # T-4a: 自定义技能目录绝对路径（缺省 = ~/.sage/skills）。
+            # 读取口径见 backend/skills/skill_md/importer.py:_resolve_skills_dir
+            "skills_dir",
         }
     )
 

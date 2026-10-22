@@ -116,6 +116,7 @@ from backend.api.project_ai_routes import router as project_ai_router
 from backend.api.project_routes import router as project_router
 from backend.api.prompt_routes import router as prompt_router
 from backend.api.question_routes import router as question_router
+from backend.api.request_body_limit import MaxRequestBodyMiddleware
 from backend.api.runtime_routes import router as runtime_router
 from backend.api.scheduled_router import build_router as build_scheduled_router
 from backend.api.system_routes import router as system_router
@@ -1333,6 +1334,16 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Sage-Local-Authorization", "X-Request-ID"],
 )
 
+# 技能导入走 multipart, 业务层的 10MB 校验在 ``UploadFile`` 已经把 body 落盘之后
+# 才执行, 中间件提前拦一道。limit = 业务上限 10MB + 2MB multipart overhead。
+# 放在 LocalAuth 之前(add_middleware 是 prepend, 早加 = 外层), 保证 401 先于 413。
+app.add_middleware(
+    MaxRequestBodyMiddleware,
+    limits={
+        "/api/v1/skills/import": 12 * 1024 * 1024,
+        "/api/v1/skills/import-directory": 12 * 1024 * 1024,
+    },
+)
 
 # Local capability enforcement runs as a pure ASGI middleware (not
 # BaseHTTPMiddleware) so it does not add per-request task-group/stream overhead
