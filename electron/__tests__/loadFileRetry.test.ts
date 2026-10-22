@@ -81,7 +81,11 @@ describe('loadFileWithRetry', () => {
   it('defaults maxAttempts to DEFAULT_MAX_LOAD_FILE_ATTEMPTS', async () => {
     vi.useFakeTimers();
     try {
-      const loader = vi.fn().mockRejectedValueOnce(new Error('fail')).mockResolvedValue('ok');
+      const loader = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('fail'))
+        .mockRejectedValueOnce(new Error('fail again'))
+        .mockResolvedValue('ok');
 
       const promise = loadFileWithRetry(loader, 'x');
       await vi.runAllTimersAsync();

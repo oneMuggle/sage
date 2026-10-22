@@ -1030,7 +1030,17 @@ function createMainWindow(): void {
     } catch (e) {
       logger.error('main: failed to read index.html', { error: (e as Error).message });
     }
-    loadFileWithRetry((p) => win.loadFile(p), indexHtml).catch(async (e) => {
+    loadFileWithRetry(async (p) => {
+      try {
+        return await win.loadFile(p);
+      } catch (err) {
+        logger.warn('main: loadFile attempt failed', {
+          path: p,
+          error: (err as Error).message,
+        });
+        throw err;
+      }
+    }, indexHtml).catch(async (e) => {
       logger.error('main: loadFile failed', { path: indexHtml, err: e.message });
       closeSplashWindow();
       await showStartupFailureDialog({
