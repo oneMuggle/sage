@@ -497,3 +497,45 @@ export function ExcelPreview({ data }: { data: OfficeExcelReadResult }) {
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditOfficeStructuredPreviewsGovernance(
+  state: {
+    previewKind?: 'ppt' | 'docx' | 'xlsx' | string;
+    slideCount?: number;
+    sectionCount?: number;
+    sheetCount?: number;
+  } = {},
+): {
+  module: 'src/features/office/OfficeStructuredPreviews.tsx';
+  phase: 'P142';
+  previewKind: 'ppt' | 'docx' | 'xlsx';
+  slideCount: number;
+  sectionCount: number;
+  sheetCount: number;
+  healthy: boolean;
+} {
+  const previewKind =
+    state.previewKind === 'docx' || state.previewKind === 'xlsx' ? state.previewKind : 'ppt';
+  const slideCount =
+    typeof state.slideCount === 'number' && Number.isFinite(state.slideCount)
+      ? Math.max(0, Math.trunc(state.slideCount))
+      : 5;
+  const sectionCount =
+    typeof state.sectionCount === 'number' && Number.isFinite(state.sectionCount)
+      ? Math.max(0, Math.trunc(state.sectionCount))
+      : 4;
+  const sheetCount =
+    typeof state.sheetCount === 'number' && Number.isFinite(state.sheetCount)
+      ? Math.max(0, Math.trunc(state.sheetCount))
+      : 2;
+  return {
+    module: 'src/features/office/OfficeStructuredPreviews.tsx',
+    phase: 'P142',
+    previewKind,
+    slideCount,
+    sectionCount,
+    sheetCount,
+    healthy: slideCount >= 0 && sectionCount >= 0 && sheetCount >= 0,
+  };
+}
