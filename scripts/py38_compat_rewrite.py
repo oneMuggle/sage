@@ -571,6 +571,9 @@ def main() -> int:
                 unchanged += 1
 
     print(f"\nSummary: {changed} changed, {unchanged} unchanged")
+    if args.check and args.fail_on_drift and changed:
+        print(f"::error::py38 注解漂移：{changed} 个文件需要 py38_compat_rewrite 重写")
+        return 1
     return 0
 
 

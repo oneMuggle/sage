@@ -42,7 +42,9 @@ from __future__ import annotations
 
 import argparse
 import ast
+import io
 import re
+import tokenize
 import sys
 from pathlib import Path
 
@@ -168,6 +170,35 @@ RUNTIME_SKIP_FRAGMENTS = (
 )
 
 
+def _strip_strings(source: str) -> list[str]:
+    """把 STRING / COMMENT 令牌覆盖的字符替换成空格，只留下真正的代码。
+
+    运行时 API 正则必须只看代码：docstring 里写 ``Path.is_relative_to()`` 是在
+    说明「这个写法 3.9+ 才有，所以我们不用它」，不是真的调用。按行切 ``#``
+    只能去掉注释，去不掉字符串内容。
+
+    令牌失败（源码语法错误）时退回原文，保持旧的按行行为。
+    """
+    lines = source.splitlines()
+    keep = [list(line) for line in lines]
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+            if tok.type not in (tokenize.STRING, tokenize.COMMENT):
+                continue
+            (start_row, start_col), (end_row, end_col) = tok.start, tok.end
+            for row_no in range(start_row, end_row + 1):
+                idx = row_no - 1
+                if idx < 0 or idx >= len(keep):
+                    continue
+                begin = start_col if row_no == start_row else 0
+                finish = end_col if row_no == end_row else len(keep[idx])
+                for col in range(begin, min(finish, len(keep[idx]))):
+                    keep[idx][col] = " "
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return lines
+    return ["".join(chars) for chars in keep]
+
+
 def check_runtime_apis(path: Path, root: Path) -> list[tuple[int, str]]:
     rel = str(path.relative_to(root)).replace("\\", "/")
     if any(frag in rel for frag in RUNTIME_SKIP_FRAGMENTS):
@@ -177,6 +208,10 @@ def check_runtime_apis(path: Path, root: Path) -> list[tuple[int, str]]:
     except (OSError, UnicodeDecodeError):
         return []
     lines = source.splitlines()
+    # 代码视图：字符串/注释被抹成空格，正则只在真正的代码上匹配
+    code_lines = _strip_strings(source)
+    if len(code_lines) < len(lines):
+        code_lines += [""] * (len(lines) - len(code_lines))
     uses_asyncio_wait = "asyncio.wait_for(" in source or "asyncio.timeout(" in source
     out: list[tuple[int, str]] = []
     i = 0
@@ -186,15 +221,15 @@ def check_runtime_apis(path: Path, root: Path) -> list[tuple[int, str]]:
         if PY38_GUARD_MARKER in line:
             i += 1
             continue
-        # Drop trailing comments so `# noqa: UP017 — datetime.UTC is 3.11+` notes don't trip the regexes.
-        code = line.split("#", 1)[0] if not line.lstrip().startswith("#") else ""
+        # 字符串与注释已在 code_lines 里被抹成空格；标记判断仍用原始行（标记写在注释里）
+        code = code_lines[i]
         # Multi-line calls: `write_text(\n ..., newline="",\n)` — extend the window to the
         # closing paren (max 12 lines) for the call-kwarg patterns.
         window = code
         if "(" in code and ")" not in code.split("(", 1)[1]:
             k = i + 1
             while k < len(lines) and k <= i + 12:
-                window += "\n" + lines[k].split("#", 1)[0]
+                window += "\n" + code_lines[k]
                 if ")" in lines[k]:
                     break
                 k += 1
