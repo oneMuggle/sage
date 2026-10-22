@@ -295,3 +295,36 @@ function isBoundedString(value: unknown, maxLength: number): value is string {
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
+
+export function auditOrchEventStreamGovernance(
+  state: {
+    reconnectDelayMs?: number;
+    maxReconnectAttempts?: number;
+    supportsIpcFallback?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/orchEventStream.ts';
+  phase: 'P145';
+  reconnectDelayMs: number;
+  maxReconnectAttempts: number;
+  supportsIpcFallback: boolean;
+  healthy: boolean;
+} {
+  const reconnectDelayMs =
+    typeof state.reconnectDelayMs === 'number' && Number.isFinite(state.reconnectDelayMs)
+      ? Math.max(100, Math.trunc(state.reconnectDelayMs))
+      : 1000;
+  const maxReconnectAttempts =
+    typeof state.maxReconnectAttempts === 'number' && Number.isFinite(state.maxReconnectAttempts)
+      ? Math.max(0, Math.trunc(state.maxReconnectAttempts))
+      : 5;
+  const supportsIpcFallback = state.supportsIpcFallback !== false;
+  return {
+    module: 'src/shared/api/orchEventStream.ts',
+    phase: 'P145',
+    reconnectDelayMs,
+    maxReconnectAttempts,
+    supportsIpcFallback,
+    healthy: reconnectDelayMs >= 100 && maxReconnectAttempts >= 1 && supportsIpcFallback,
+  };
+}

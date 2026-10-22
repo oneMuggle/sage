@@ -1955,3 +1955,18 @@
   - `src/shared/api/mcpClient.ts`: Exported `auditMcpClientGovernance()` validating MCP server name regex compliance (`MCP_NAME_REGEX`), server discovery/ready state, and registered tool count invariants.
   - `src/shared/api/messageApi.ts`: Exported `auditMessageApiGovernance()` validating message API endpoint coverage and message feedback support contracts.
   - Unit tests: Added 8 dedicated Vitest suites (`chatApi.p144.test.ts`, `demoChatScript.p144.test.ts`, `demoFixturesCore.p144.test.ts`, `demoFixturesSessionsAndAgents.p144.test.ts`, `demoOfficeAndSystemHandlers.p144.test.ts`, `apiIndex.p144.test.ts`, `mcpClient.p144.test.ts`, `messageApi.p144.test.ts`).
+### Phase P145 — Orchestration Event Stream, Orchestration Events, Run Control Client, Permission API, Prompt API, Runtime API, Session API & Skill Drafts API Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P144 Merged: `#2310` (`main` @ `a44a6c6cfe9bc689adc9de354f8f1bf11acc4fc5`), `#2311` (`release/win7` @ `6a1a35d40f689656e3da1bfeb7f31ab46148b5ba`)
+  - Phase P145: `feat/project-governance-p145` (`main`) & `feat/win7-project-governance-p145` (`release/win7`)
+- **Scope**:
+  - `src/shared/api/orchEventStream.ts`: Exported `auditOrchEventStreamGovernance()` validating reconnect delay bounds, max reconnect attempts, and IPC fallback stream readiness.
+  - `src/shared/api/orchEvents.ts`: Exported `auditOrchEventsGovernance()` validating orchestration stream `ConnectionStatus` state and active task count invariants.
+  - `src/shared/api/orchRunControlClient.ts`: Exported `auditOrchRunControlClientGovernance()` validating task steer, run cancel, and approval mode control capability contracts.
+  - `src/shared/api/permissionApi.ts`: Exported `auditPermissionApiGovernance()` validating active permission preset (`PERMISSION_PRESETS`), preset count, and session auto-approval count invariants.
+  - `src/shared/api/promptApi.ts`: Exported `auditPromptApiGovernance()` validating prompt template catalog count and custom variable interpolation support.
+  - `src/shared/api/runtimeApi.ts`: Exported `auditRuntimeApiGovernance()` validating runtime backend connectivity and active profile identifier integrity.
+  - `src/shared/api/sessionApi.ts`: Exported `auditSessionApiGovernance()` validating session collection count, Markdown/HTML export readiness, and message search capability contracts.
+  - `src/shared/api/skillDraftsApi.ts`: Exported `auditSkillDraftsApiGovernance()` validating pending skill draft count and accept/reject workflow availability.
+  - Unit tests: Added 8 dedicated Vitest suites (`orchEventStream.p145.test.ts`, `orchEvents.p145.test.ts`, `orchRunControlClient.p145.test.ts`, `permissionApi.p145.test.ts`, `promptApi.p145.test.ts`, `runtimeApi.p145.test.ts`, `sessionApi.p145.test.ts`, `skillDraftsApi.p145.test.ts`).

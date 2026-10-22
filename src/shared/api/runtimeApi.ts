@@ -88,3 +88,29 @@ export const runtimeApi = {
     }
   },
 };
+
+export function auditRuntimeApiGovernance(
+  state: {
+    backendConnected?: boolean;
+    activeProfile?: string;
+  } = {},
+): {
+  module: 'src/shared/api/runtimeApi.ts';
+  phase: 'P145';
+  backendConnected: boolean;
+  activeProfile: string;
+  healthy: boolean;
+} {
+  const backendConnected = state.backendConnected !== false;
+  const activeProfile =
+    typeof state.activeProfile === 'string' && state.activeProfile.trim().length > 0
+      ? state.activeProfile.trim()
+      : 'default';
+  return {
+    module: 'src/shared/api/runtimeApi.ts',
+    phase: 'P145',
+    backendConnected,
+    activeProfile,
+    healthy: backendConnected && activeProfile.length > 0,
+  };
+}
