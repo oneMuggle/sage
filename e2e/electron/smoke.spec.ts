@@ -176,7 +176,8 @@ test.afterAll(async () => {
  * 噪声行), `collectMainDiagnostics` 还会读 electron-log 的 ndjson 尾部,
  * 两者合起来包含 render-process-gone 的 reason/exitCode。
  */
-test.afterEach(async (_fixtures, testInfo) => {
+// eslint-disable-next-line no-empty-pattern -- Playwright 要求 hook 首参是对象解构模式, 而本钩子不消费任何 fixture
+test.afterEach(async ({}, testInfo) => {
   if (testInfo.status === testInfo.expectedStatus) return;
   const diagnostics = await collectMainDiagnostics();
   process.stderr.write(
