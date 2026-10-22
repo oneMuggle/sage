@@ -424,3 +424,39 @@ export const DEMO_SKILL_RUN_OUTPUT = `# 2026-08-27 日报
 // ─────────────────────────────────────────────────────────────────────────
 // 可变状态 (写操作作用于这些集合, 演示期间增删可见)
 // ─────────────────────────────────────────────────────────────────────────
+
+export function auditDemoFixturesSessionsAndAgentsGovernance(
+  state: {
+    sessionCount?: number;
+    agentCount?: number;
+    scheduledTaskCount?: number;
+  } = {},
+): {
+  module: 'src/shared/api/demoFixturesSessionsAndAgents.ts';
+  phase: 'P144';
+  sessionCount: number;
+  agentCount: number;
+  scheduledTaskCount: number;
+  healthy: boolean;
+} {
+  const sessionCount =
+    typeof state.sessionCount === 'number' && Number.isFinite(state.sessionCount)
+      ? Math.max(0, Math.trunc(state.sessionCount))
+      : demoSessions.length;
+  const agentCount =
+    typeof state.agentCount === 'number' && Number.isFinite(state.agentCount)
+      ? Math.max(0, Math.trunc(state.agentCount))
+      : DEMO_AGENTS.length;
+  const scheduledTaskCount =
+    typeof state.scheduledTaskCount === 'number' && Number.isFinite(state.scheduledTaskCount)
+      ? Math.max(0, Math.trunc(state.scheduledTaskCount))
+      : DEMO_SCHEDULED_TASKS.length;
+  return {
+    module: 'src/shared/api/demoFixturesSessionsAndAgents.ts',
+    phase: 'P144',
+    sessionCount,
+    agentCount,
+    scheduledTaskCount,
+    healthy: sessionCount > 0 && agentCount > 0 && scheduledTaskCount >= 0,
+  };
+}
