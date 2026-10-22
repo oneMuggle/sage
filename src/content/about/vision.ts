@@ -42,3 +42,32 @@ export function formatVisionAuditJson(): string {
     2,
   );
 }
+
+export function auditVisionContentGovernance(
+  state: {
+    pillarCount?: number;
+    hasVisionStatement?: boolean;
+  } = {},
+): {
+  module: 'src/content/about/vision.ts';
+  phase: 'P152';
+  pillarCount: number;
+  hasVisionStatement: boolean;
+  healthy: boolean;
+} {
+  const pillarCount =
+    typeof state.pillarCount === 'number' && Number.isFinite(state.pillarCount)
+      ? Math.max(0, Math.trunc(state.pillarCount))
+      : PHILOSOPHY.length;
+  const hasVisionStatement =
+    state.hasVisionStatement !== undefined
+      ? Boolean(state.hasVisionStatement)
+      : VISION.trim().length > 0;
+  return {
+    module: 'src/content/about/vision.ts',
+    phase: 'P152',
+    pillarCount,
+    hasVisionStatement,
+    healthy: pillarCount >= 1 && hasVisionStatement,
+  };
+}

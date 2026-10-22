@@ -63,3 +63,28 @@ export function formatThemeAuditJson(state: {
     2,
   );
 }
+
+export function auditUseThemeGovernance(
+  state: {
+    mode?: ThemeMode | string;
+    resolvedTheme?: 'light' | 'dark' | string;
+  } = {},
+): {
+  module: 'src/app/providers/useTheme.ts';
+  phase: 'P152';
+  mode: ThemeMode;
+  resolvedTheme: 'light' | 'dark';
+  healthy: boolean;
+} {
+  const mode: ThemeMode =
+    state.mode === 'light' || state.mode === 'dark' ? state.mode : 'system';
+  const resolvedTheme: 'light' | 'dark' =
+    state.resolvedTheme === 'light' ? 'light' : 'dark';
+  return {
+    module: 'src/app/providers/useTheme.ts',
+    phase: 'P152',
+    mode,
+    resolvedTheme,
+    healthy: true,
+  };
+}

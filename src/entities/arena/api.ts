@@ -398,3 +398,31 @@ export function formatArenaAccountJson(
   });
 }
 
+export function auditArenaApiGovernance(
+  state: {
+    activeAccountCount?: number;
+    isolatedAccountCount?: number;
+  } = {},
+): {
+  module: 'src/entities/arena/api.ts';
+  phase: 'P152';
+  activeAccountCount: number;
+  isolatedAccountCount: number;
+  healthy: boolean;
+} {
+  const activeAccountCount =
+    typeof state.activeAccountCount === 'number' && Number.isFinite(state.activeAccountCount)
+      ? Math.max(0, Math.trunc(state.activeAccountCount))
+      : 1;
+  const isolatedAccountCount =
+    typeof state.isolatedAccountCount === 'number' && Number.isFinite(state.isolatedAccountCount)
+      ? Math.max(0, Math.trunc(state.isolatedAccountCount))
+      : 0;
+  return {
+    module: 'src/entities/arena/api.ts',
+    phase: 'P152',
+    activeAccountCount,
+    isolatedAccountCount,
+    healthy: activeAccountCount >= 0 && isolatedAccountCount >= 0,
+  };
+}
