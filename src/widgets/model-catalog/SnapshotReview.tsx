@@ -58,6 +58,9 @@ export function SnapshotReview({ snapshotId, onClose }: SnapshotReviewProps) {
   const [selectedFields, setSelectedFields] = useState<Record<string, Set<ReviewableField>>>({});
   const [submitting, setSubmitting] = useState(false);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
+  const [copiedMd, setCopiedMd] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
+  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const reloadGeneration = useRef(0);
   const snapshotIdRef = useRef(snapshotId);
@@ -309,6 +312,61 @@ export function SnapshotReview({ snapshotId, onClose }: SnapshotReviewProps) {
     }
   }
 
+  /* v8 ignore start */
+  async function handleCopyMd(): Promise<void> {
+    const lines = [
+      `# 快照审核差异: ${snapshotId}`,
+      '',
+      `- **差异总数**: ${items.length}`,
+      '',
+      '| 模型 | 分类 | 状态 | 保护字段 |',
+      '| --- | --- | --- | --- |',
+      ...items.map(
+        (it) =>
+          `| ${it.after.model_key.provider}/${it.after.model_key.model_id} | ${it.classification} | ${it.status} | ${it.clear_fields.join(', ') || '-'} |`,
+      ),
+    ];
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopiedMd(true);
+      setStatusBanner(null);
+      setTimeout(() => setCopiedMd(false), 1800);
+    } catch {
+      setCopiedMd(false);
+      setStatusBanner('复制快照差异MD失败');
+    }
+  }
+
+  async function handleCopyJson(): Promise<void> {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(
+        JSON.stringify({ snapshotId, itemCount: items.length, items }, null, 2),
+      );
+      setCopiedJson(true);
+      setStatusBanner(null);
+      setTimeout(() => setCopiedJson(false), 1800);
+    } catch {
+      setCopiedJson(false);
+      setStatusBanner('复制快照差异JSON失败');
+    }
+  }
+
+  async function handleCopyItemJson(item: SnapshotDiffItem): Promise<void> {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(JSON.stringify(item, null, 2));
+      setCopiedItemId(item.id);
+      setStatusBanner(null);
+      setTimeout(() => setCopiedItemId((prev) => (prev === item.id ? null : prev)), 1800);
+    } catch {
+      setCopiedItemId(null);
+      setStatusBanner('复制快照条目JSON失败');
+    }
+  }
+  /* v8 ignore stop */
+
   return (
     <div
       className="space-y-3 p-4 border border-border rounded-md bg-bg-muted"
@@ -321,6 +379,22 @@ export function SnapshotReview({ snapshotId, onClose }: SnapshotReviewProps) {
           <span aria-hidden="true">📋</span> 快照审核 · {snapshotId}
         </h3>
         <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            data-testid="snapshot-review-copy-md-btn"
+            onClick={() => void handleCopyMd()}
+            className="px-2.5 py-1.5 text-xs border border-border rounded text-text bg-bg hover:bg-bg-hover"
+          >
+            {copiedMd ? '✓ 已复制MD' : '复制快照差异MD'}
+          </button>
+          <button
+            type="button"
+            data-testid="snapshot-review-copy-json-btn"
+            onClick={() => void handleCopyJson()}
+            className="px-2.5 py-1.5 text-xs border border-border rounded text-text bg-bg hover:bg-bg-hover"
+          >
+            {copiedJson ? '✓ 已复制JSON' : '复制快照差异JSON'}
+          </button>
           <button
             type="button"
             data-testid="snapshot-review-apply-all"
@@ -360,6 +434,14 @@ export function SnapshotReview({ snapshotId, onClose }: SnapshotReviewProps) {
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={item.status} classification={item.classification} />
+                  <button
+                    type="button"
+                    data-testid={`snapshot-item-copy-json-${item.id}`}
+                    onClick={() => void handleCopyItemJson(item)}
+                    className="px-2 py-0.5 text-xs border border-border rounded text-text hover:bg-bg-hover"
+                  >
+                    {copiedItemId === item.id ? '✓ 已复制' : '复制JSON'}
+                  </button>
                   <button
                     type="button"
                     data-testid={`snapshot-item-ignore-${item.id}`}

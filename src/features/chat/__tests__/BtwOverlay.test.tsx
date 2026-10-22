@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useBtwState } from '../../../entities/chat/btwState';
@@ -100,7 +100,7 @@ describe('BtwOverlay', () => {
     expect(screen.getByText('补充问题')).toBeInTheDocument();
   });
 
-  it('should export /btw question and answer as Markdown and JSON and copy via buttons', () => {
+  it('should export /btw question and answer as Markdown and JSON and copy via buttons', async () => {
     const md = formatBtwOverlayMarkdown({
       question: 'What is React?',
       answer: 'A UI library.',
@@ -108,9 +108,7 @@ describe('BtwOverlay', () => {
     });
     expect(md).toContain('# /btw 补充问答');
     expect(md).toContain('[web] React Docs');
-    const parsed = JSON.parse(
-      formatBtwOverlayJson({ question: 'Q', answer: '', isLoading: true }),
-    );
+    const parsed = JSON.parse(formatBtwOverlayJson({ question: 'Q', answer: '', isLoading: true }));
     expect(parsed.question).toBe('Q');
     expect(parsed.isLoading).toBe(true);
 
@@ -119,7 +117,15 @@ describe('BtwOverlay', () => {
     useBtwState.getState().open('What is React?');
     useBtwState.getState().appendDelta('A UI library.');
     render(<BtwOverlay />);
+    fireEvent.click(screen.getByTestId('btw-overlay-copy-md'));
+    await waitFor(() => {
+      expect(screen.getByTestId('btw-overlay-copy-md')).toHaveTextContent('已复制 MD');
+    });
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/btw 补充问答'));
+    fireEvent.click(screen.getByTestId('btw-overlay-copy-json'));
+    await waitFor(() => {
+      expect(screen.getByTestId('btw-overlay-copy-json')).toHaveTextContent('已复制 JSON');
+    });
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"question": "What is React?"'));
   });
 });

@@ -114,12 +114,14 @@ describe('SnapshotReview', () => {
     );
     expect(await screen.findByText('待审核')).toBeVisible();
 
+    fireEvent.click(screen.getByTestId('snapshot-review-copy-md-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(
         expect.stringContaining('# 快照审核差异: synthetic-snapshot'),
       );
     });
 
+    fireEvent.click(screen.getByTestId('snapshot-review-copy-json-btn'));
     await waitFor(() => {
       expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"itemCount": 1'));
     });
@@ -130,5 +132,49 @@ describe('SnapshotReview', () => {
         expect.stringContaining('anthropic/claude-3.5-sonnet'),
       );
     });
+  });
+
+  it('does not report copied when clipboard writing fails', async () => {
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn().mockRejectedValue(new Error('clipboard denied')) },
+    });
+    vi.mocked(api.getDiff).mockResolvedValue([
+      {
+        id: 'item-1',
+        base_revision: 0,
+        before: null,
+        after: {
+          model_key: { provider: 'openrouter', model_id: 'anthropic/claude-3.5-sonnet' },
+          native: 200000,
+          price: { input_per_million: '3.0', output_per_million: '15.0', currency: 'USD' },
+          source: 'openrouter',
+          pricing_scope: 'base',
+        },
+        candidate: {
+          model_key: { provider: 'openrouter', model_id: 'anthropic/claude-3.5-sonnet' },
+          native: 200000,
+          price: { input_per_million: '3.0', output_per_million: '15.0', currency: 'USD' },
+          source: 'openrouter',
+          pricing_scope: 'base',
+        },
+        clear_fields: [],
+        classification: 'new',
+        status: 'pending',
+      },
+    ]);
+
+    const { SnapshotReview } = await import('../SnapshotReview');
+    render(
+      <I18nProvider defaultLocale="zh">
+        <SnapshotReview snapshotId="synthetic-snapshot" />
+      </I18nProvider>,
+    );
+    await screen.findByText('待审核');
+
+    fireEvent.click(screen.getByTestId('snapshot-review-copy-md-btn'));
+    expect(await screen.findByTestId('snapshot-review-banner')).toHaveTextContent(
+      '复制快照差异MD失败',
+    );
+    expect(screen.getByTestId('snapshot-review-copy-md-btn')).toHaveTextContent('复制快照差异MD');
   });
 });
