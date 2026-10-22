@@ -186,7 +186,7 @@ async def test_parallel_budget_overflow_falls_back():
         async for evt in agent.run_loop([{"role": "user", "content": "x"}]):
             events.append(evt)
         assert events[-1].state.value == "failed"
-        assert events[-1].error == "tool_budget_exceeded"
+        assert events[-1].error == "tool_budget_exceeded (limit=2)"
     finally:
         os.environ.pop("SAGE_MAX_TOOL_CALLS_PER_RUN", None)
 
