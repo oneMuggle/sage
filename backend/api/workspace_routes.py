@@ -9,8 +9,10 @@ from pathlib import Path
 from typing import List, Optional, Set
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
+# win7 LTS py38 环境钉 pydantic 1.10.13，ConfigDict 是 v2 专有 → 走兼容垫片（v2 下为 no-op）。
+from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
 from backend.office.models import OfficeDocType
