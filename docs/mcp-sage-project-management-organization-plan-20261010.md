@@ -2077,3 +2077,17 @@
   - `src/app/providers/index.ts`: `auditProvidersBarrelGovernance`
 - **Verification**:
   - Added 8 dedicated Vitest suites (`*.p151.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
+
+### Phase P152: Theme Hook, PlanCard, UpdateDialog, Vision Content, Arena API/Barrel & Autonomous Goal API/Store Governance Audit (Completed 2026-10-22)
+
+- **Target Modules**:
+  - `src/app/providers/useTheme.ts`: `auditUseThemeGovernance`
+  - `src/components/PlanCard.tsx`: `auditPlanCardGovernance`
+  - `src/components/UpdateDialog.tsx`: `auditUpdateDialogGovernance`
+  - `src/content/about/vision.ts`: `auditVisionContentGovernance`
+  - `src/entities/arena/api.ts`: `auditArenaApiGovernance`
+  - `src/entities/arena/index.ts`: `auditArenaEntityBarrelGovernance`
+  - `src/entities/autonomous-goals/goalApi.ts`: `auditGoalApiGovernance`
+  - `src/entities/autonomous-goals/goalStore.ts`: `auditGoalStoreGovernance`
+- **Verification**:
+  - Added 8 dedicated Vitest suites (`*.p152.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
