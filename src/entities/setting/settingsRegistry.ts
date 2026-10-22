@@ -689,3 +689,25 @@ export function formatSettingsRegistryJson(): string {
   });
 }
 
+export function auditSettingsRegistryGovernance(
+  state: {
+    registeredKeyCount?: number;
+  } = {},
+): {
+  module: 'src/entities/setting/settingsRegistry.ts';
+  phase: 'P155';
+  registeredKeyCount: number;
+  healthy: boolean;
+} {
+  const registeredKeyCount =
+    typeof state.registeredKeyCount === 'number' &&
+    Number.isFinite(state.registeredKeyCount)
+      ? Math.max(0, Math.trunc(state.registeredKeyCount))
+      : getAllSettingKeys().length;
+  return {
+    module: 'src/entities/setting/settingsRegistry.ts',
+    phase: 'P155',
+    registeredKeyCount,
+    healthy: registeredKeyCount >= 5,
+  };
+}
