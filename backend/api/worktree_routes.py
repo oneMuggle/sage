@@ -135,7 +135,11 @@ class WorktreeDeleteRequest(BaseModel):
     delete_branch: bool = False
 
 
-BranchesResponse.model_rebuild()
+# 解决自引用 (pydantic v1/v2 兼容)
+if hasattr(BranchesResponse, "model_rebuild"):
+    BranchesResponse.model_rebuild()
+else:
+    BranchesResponse.update_forward_refs()
 
 
 def _connection() -> sqlite3.Connection:
