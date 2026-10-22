@@ -90,6 +90,10 @@ class AgentEvent:
 
     state: AgentState
     iteration: int = 0
+    # 2026-09 step-by-step: 当前事件所属的 step index（从 0 开始）。
+    # STEP_DONE 事件携带该步的 step_index；其他事件与 iteration 对齐。
+    # 默认 0 与单步行为兼容（只有 1 个 step 时 step_index=0）。
+    step_index: int = 0
     content: Optional[str] = None
     reasoning: Optional[str] = None  # LLM 思考/推理过程内容
     tool_call: Optional[ToolCallRequest] = None
@@ -151,6 +155,7 @@ class AgentEvent:
         d: Dict[str, Any] = {
             "state": self.state.value,
             "iteration": self.iteration,
+            "step_index": self.step_index,
         }
         if self.content is not None:
             d["content"] = self.content
