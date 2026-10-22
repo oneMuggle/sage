@@ -628,3 +628,35 @@ export interface CreateLanesResponse {
  * (item 1.2) — backend counterpart `OfficeDocType` already carries
  * `PDF = "pdf"` (backend/office/models.py:38-44).
  */
+
+export function auditDomainEntityTypesGovernance(
+  state: {
+    heartbeatStatus?: HeartbeatStatus | string;
+    teamStatus?: TeamStatus | string;
+  } = {},
+): {
+  module: 'src/shared/api/types/domainEntityTypes.ts';
+  phase: 'P146';
+  heartbeatStatus: HeartbeatStatus;
+  teamStatus: TeamStatus;
+  healthy: boolean;
+} {
+  const heartbeatStatus: HeartbeatStatus =
+    state.heartbeatStatus === 'stalled' || state.heartbeatStatus === 'transport_dead'
+      ? state.heartbeatStatus
+      : 'healthy';
+  const teamStatus: TeamStatus =
+    state.teamStatus === 'created' ||
+    state.teamStatus === 'completed' ||
+    state.teamStatus === 'failed' ||
+    state.teamStatus === 'cancelled'
+      ? state.teamStatus
+      : 'running';
+  return {
+    module: 'src/shared/api/types/domainEntityTypes.ts',
+    phase: 'P146',
+    heartbeatStatus,
+    teamStatus,
+    healthy: heartbeatStatus === 'healthy' && teamStatus !== 'failed',
+  };
+}

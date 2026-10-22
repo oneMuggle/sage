@@ -1970,3 +1970,18 @@
   - `src/shared/api/sessionApi.ts`: Exported `auditSessionApiGovernance()` validating session collection count, Markdown/HTML export readiness, and message search capability contracts.
   - `src/shared/api/skillDraftsApi.ts`: Exported `auditSkillDraftsApiGovernance()` validating pending skill draft count and accept/reject workflow availability.
   - Unit tests: Added 8 dedicated Vitest suites (`orchEventStream.p145.test.ts`, `orchEvents.p145.test.ts`, `orchRunControlClient.p145.test.ts`, `permissionApi.p145.test.ts`, `promptApi.p145.test.ts`, `runtimeApi.p145.test.ts`, `sessionApi.p145.test.ts`, `skillDraftsApi.p145.test.ts`).
+### Phase P146 — Skills API, Usage API, Worktree API, Zotero Client, Chat/Domain/Template Types & Shared UI Barrel Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P145 Merged: `#2312` (`main` @ `ec1bc1e8877b72e7175e2813d2053019fe7b01e2`), `#2313` (`release/win7` @ `67dc72273d6a600b2bea2ead9c9116e8fa0c0673`)
+  - Phase P146: `feat/project-governance-p146` (`main`) & `feat/win7-project-governance-p146` (`release/win7`)
+- **Scope**:
+  - `src/shared/api/skillsApi.ts`: Exported `auditSkillsApiGovernance()` validating registered skill count, consolidation scan support, and skill rollback capability contracts.
+  - `src/shared/api/usageApi.ts`: Exported `auditUsageApiGovernance()` validating active usage range (`UsageRange`) normalization and CSV usage export readiness.
+  - `src/shared/api/worktreeApi.ts`: Exported `auditWorktreeApiGovernance()` validating worktree operation mode (`WorktreeMode`) normalization and active worktree count bounds.
+  - `src/shared/api/zoteroClient.ts`: Exported `auditZoteroClientGovernance()` validating Zotero bridge connection state and indexed literature item count invariants.
+  - `src/shared/api/types/chatAndEventTypes.ts`: Exported `auditChatAndEventTypesGovernance()` validating `TaskStatusValue` and `TodoStatus` schema state contracts.
+  - `src/shared/api/types/domainEntityTypes.ts`: Exported `auditDomainEntityTypesGovernance()` validating lane `HeartbeatStatus` and multi-agent `TeamStatus` schema state contracts.
+  - `src/shared/api/types/templateAndTaskTypes.ts`: Exported `auditTemplateAndTaskTypesGovernance()` validating `TodoPriority` and `TodoItemStatus` schema state contracts.
+  - `src/shared/ui/index.ts`: Exported `auditSharedUiBarrelGovernance()` validating shared UI component barrel export count and completeness.
+  - Unit tests: Added 8 dedicated Vitest suites (`skillsApi.p146.test.ts`, `usageApi.p146.test.ts`, `worktreeApi.p146.test.ts`, `zoteroClient.p146.test.ts`, `chatAndEventTypes.p146.test.ts`, `domainEntityTypes.p146.test.ts`, `templateAndTaskTypes.p146.test.ts`, `uiIndex.p146.test.ts`).
