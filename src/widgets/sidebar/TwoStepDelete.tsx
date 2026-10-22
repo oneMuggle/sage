@@ -34,6 +34,7 @@ export interface TwoStepDeleteProps {
   'data-testid'?: string;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatTwoStepDeleteAuditSnapshot(opts: {
   armed?: boolean;
   disabled?: boolean;
@@ -44,6 +45,7 @@ export function formatTwoStepDeleteAuditSnapshot(opts: {
   return `twoStepDelete|armed=${opts.armed ? 1 : 0}|disabled=${opts.disabled ? 1 : 0}|label=${opts.label || '删除'}|armedLabel=${opts.armedLabel || '确认删除?'}|timeout=${opts.disarmTimeoutMs ?? DEFAULT_DISARM_TIMEOUT_MS}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatTwoStepDeleteAuditJson(opts: {
   armed?: boolean;
   disabled?: boolean;
@@ -176,4 +178,31 @@ export function TwoStepDelete({
       </span>
     </>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditTwoStepDeleteGovernance(
+  state: {
+    confirmTimeoutMs?: number;
+    armed?: boolean;
+  } = {},
+): {
+  module: 'src/widgets/sidebar/TwoStepDelete.tsx';
+  phase: 'P150';
+  confirmTimeoutMs: number;
+  armed: boolean;
+  healthy: boolean;
+} {
+  const confirmTimeoutMs =
+    typeof state.confirmTimeoutMs === 'number' && Number.isFinite(state.confirmTimeoutMs)
+      ? Math.max(500, Math.min(10000, Math.round(state.confirmTimeoutMs)))
+      : 3000;
+  const armed = state.armed === true;
+  return {
+    module: 'src/widgets/sidebar/TwoStepDelete.tsx',
+    phase: 'P150',
+    confirmTimeoutMs,
+    armed,
+    healthy: confirmTimeoutMs >= 500 && confirmTimeoutMs <= 10000,
+  };
 }

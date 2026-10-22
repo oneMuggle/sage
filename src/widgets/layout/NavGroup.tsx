@@ -47,6 +47,7 @@ interface NavGroupProps {
  *
  * 折叠状态按 groupKey 持久化到 localStorage，跨页面刷新保留。
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatNavGroupAuditSnapshot(opts: {
   groupKey?: string;
   label?: string;
@@ -56,6 +57,7 @@ export function formatNavGroupAuditSnapshot(opts: {
   return `navGroup|key=${opts.groupKey || 'none'}|label=${opts.label || 'none'}|collapsible=${opts.collapsible ? 1 : 0}|collapsed=${opts.collapsed ? 1 : 0}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatNavGroupAuditJson(opts: {
   groupKey?: string;
   label?: string;
@@ -175,4 +177,31 @@ export function NavGroup({
       </span>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditNavGroupGovernance(
+  state: {
+    itemCount?: number;
+    collapsed?: boolean;
+  } = {},
+): {
+  module: 'src/widgets/layout/NavGroup.tsx';
+  phase: 'P150';
+  itemCount: number;
+  collapsed: boolean;
+  healthy: boolean;
+} {
+  const itemCount =
+    typeof state.itemCount === 'number' && Number.isFinite(state.itemCount)
+      ? Math.max(0, Math.trunc(state.itemCount))
+      : 4;
+  const collapsed = state.collapsed === true;
+  return {
+    module: 'src/widgets/layout/NavGroup.tsx',
+    phase: 'P150',
+    itemCount,
+    collapsed,
+    healthy: itemCount >= 1,
+  };
 }
