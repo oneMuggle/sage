@@ -1932,6 +1932,15 @@ class SageAgent:
                         await self._maybe_fire_error_hook(
                             m6_hooks, tc_p.name, content_p, err_p
                         )
+                    # 2026-09 step-by-step: 并行迭代边界，legacy_routes 收到后
+                    # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
+                    # 消息，并重置累加器准备下一步。
+                    yield AgentEvent(
+                        state=AgentState.STEP_DONE,
+                        iteration=i,
+                        step_index=i,
+                        agent_id=self.agent_id,
+                    )
                     continue
                 # ===== B2 分组调度 BEGIN（并发池 + 串行屏障，L6 全批并行为其特例）=====
                 execution_groups = self._plan_execution_groups(
@@ -2084,7 +2093,15 @@ class SageAgent:
                             await self._maybe_fire_error_hook(
                                 m6_hooks, tc_p.name, content_p, err_p
                             )
-                        continue
+                        # 2026-09 step-by-step: 并行迭代边界，legacy_routes 收到后
+                        # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
+                        # 消息，并重置累加器准备下一步。
+                        yield AgentEvent(
+                            state=AgentState.STEP_DONE,
+                            iteration=i,
+                            step_index=i,
+                            agent_id=self.agent_id,
+                        )
                         continue
                     # 串行屏障：单元素组走既有全守卫串行管线（预算/复读/
                     # 参数校验/M6 钩子/审批流全部仅在串行路径生效）
@@ -2480,6 +2497,17 @@ class SageAgent:
                             is_error,
                             cap_fn=cap_result_for_context,
                         )
+
+                # ===== B2 分组调度 END =====
+                # 2026-09 step-by-step: 串行迭代边界，legacy_routes 收到后
+                # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
+                # 消息，并重置累加器准备下一步。
+                yield AgentEvent(
+                    state=AgentState.STEP_DONE,
+                    iteration=i,
+                    step_index=i,
+                    agent_id=self.agent_id,
+                )
 
             yield AgentEvent(
                 state=AgentState.FAILED,

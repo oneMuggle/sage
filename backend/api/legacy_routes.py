@@ -1808,6 +1808,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 导致 session 永远 running。默认 600s，可通过环境变量覆盖。
             _producer_started_at = time.monotonic()
 
+            # 2026-09 step-by-step: 本次 run 已落盘为 assistant 行的中间 step 数
+            # (STEP_DONE 触发,不含最终 DONE 行)。message_count 增量 =
+            # 1 (user) + steps_completed (中间 step) + 1 (最终 done)。
+            steps_completed: int = 0
+            # 2026-09 step-by-step: 追踪最近一次 agent 事件 — RT7 中断落盘 partial
+            # 行时,partial 内容是"当前 step 的累加器",step_index 需对齐这次事件的
+            # iteration 范围。
+            last_evt = None
+
             async def _consume_run_loop():
                 """Execute agent.run_loop() with event processing.
 
@@ -1819,11 +1828,16 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 nonlocal accumulated_tool_calls, streamed_partial_parts
                 nonlocal r38_memory_refs_written, r81_rag_citations_written
                 nonlocal r81_pushed_sources_len
+                nonlocal steps_completed, last_evt
 
                 async for evt in agent.run_loop(
                     messages, llm_config=llm_config, session_id=data.session_id,
                     max_iterations=_profile_max_iter,
                 ):
+                    # 2026-09 step-by-step: 追踪最近一次事件 → RT7 partial 落盘时取
+                    # step_index 用。中断发生在 for 循环中,loop 变量 evt 仍存最后一次值,
+                    # 但显式存到 last_evt 更稳。
+                    last_evt = evt
                     # L2 真流式: run_loop 流式 THINKING 产出的内容增量直接转发
                     # (事件结构与旧 fake stream 的 content_delta 完全一致,前端无感)。
                     if evt.state.value == "content_delta":
@@ -1851,6 +1865,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         # 暂存 DONE 事件，不立即推入队列 —
                         # 待 post-loop 标题生成 + session_updated 事件后再推送，
                         # 保证前端 onDone → loadSessions() 时标题已落盘。
+                        # 2026-09 step-by-step: 显式把 evt.iteration 写回 step_index,
+                        # 前端消费 DONE 事件时也能拿到该步序号(便于流式气泡定位)。
+                        evt.step_index = evt.iteration
                         done_event = evt
                         run_outcome = "completed"
                     elif evt.state.value == "reasoning" and evt.reasoning:
@@ -1968,6 +1985,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 r38_memory_refs_written = True
                             if r81_rag_citations_json and not r81_rag_citations_written:
                                 r81_rag_citations_written = True
+                            steps_completed += 1
                         except Exception as step_db_err:
                             logger.warning(
                                 f"[REQ {request_id}] step {evt.step_index} 持久化失败: {step_db_err}"
@@ -2123,8 +2141,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             session_repo.update,
                             data.session_id,
                             last_message_at=assistant_now,
-                            # C2 重新生成不落 user 行: 只新增 1 条
+                            # 2026-09 step-by-step: 多步 run 产生 (steps_completed+1)
+                            # 条 assistant 行 (中间 step + 最终 done) 加 1 条 user 行,
+                            # 共 steps_completed+2 条新增消息 (C2 重新生成不落 user 行: +1)。
                             message_count=sess.message_count
+                            + steps_completed
                             + (1 if data.regenerate_of else 2),
                         )
                     except Exception as db_err:
@@ -2275,9 +2296,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     if accumulated_tool_calls
                                     else None
                                 ),
+                                # 2026-09 step-by-step: partial 行归属到当前
+                                # 中断时正在执行的 iteration(== last_evt.iteration)。
+                                step_index=(
+                                    last_evt.iteration if last_evt is not None else 0
+                                ),
                                 # R81: 中断行也带上已捕获的引用信息（首写 flag
-                                # 置位防与已落库的 step 行重复）。win7 无
-                                # step-by-step 落库, 不写 step_index。
+                                # 置位防与已落库的 step 行重复）。
                                 rag_citations=(
                                     r81_rag_citations_json
                                     if not r81_rag_citations_written

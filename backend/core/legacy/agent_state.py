@@ -40,6 +40,10 @@ class AgentState(str, Enum):
     # ASK_USER_QUESTION 事件(携带 user_question 字段),前端渲染
     # QuestionDialog 并 POST /api/v1/questions/{request_id}/answer。
     ASK_USER_QUESTION = "ask_user_question"
+    # 2026-09 step-by-step: 每次工具调用迭代边界推一个 STEP_DONE 事件,
+    # legacy_routes 收到后把当前累加的 reasoning/tool_calls/content 快照成
+    # 一条 assistant 消息,并重置累加器准备下一步。
+    STEP_DONE = "step_done"
     DONE = "done"
     FAILED = "failed"
 
@@ -86,6 +90,10 @@ class AgentEvent:
 
     state: AgentState
     iteration: int = 0
+    # 2026-09 step-by-step: 当前事件所属的 step index（从 0 开始）。
+    # STEP_DONE 事件携带该步的 step_index；其他事件与 iteration 对齐。
+    # 默认 0 与单步行为兼容（只有 1 个 step 时 step_index=0）。
+    step_index: int = 0
     content: Optional[str] = None
     reasoning: Optional[str] = None  # LLM 思考/推理过程内容
     tool_call: Optional[ToolCallRequest] = None
@@ -147,6 +155,7 @@ class AgentEvent:
         d: Dict[str, Any] = {
             "state": self.state.value,
             "iteration": self.iteration,
+            "step_index": self.step_index,
         }
         if self.content is not None:
             d["content"] = self.content
