@@ -37,6 +37,7 @@ from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.domain.scheduler import SchedulerServicePort
+from backend.domain.tool_names import tool_name_in_allowlist
 from backend.domain.tool_policy import DEFAULT_MAX_TOOL_CALLS_PER_RUN, ToolPolicy
 
 # ===== M6 HOOKS BEGIN: user-defined hooks around tool execution =====
@@ -1091,7 +1092,7 @@ class SageAgent:
             else None
         )
         if allowed_profile_tools is not None and any(
-            tc.name not in allowed_profile_tools for tc in batch
+            not tool_name_in_allowlist(tc.name, allowed_profile_tools) for tc in batch
         ):
             return False
         # Phase 2: per-tool invariants + enforcer pre-check.
@@ -1130,7 +1131,7 @@ class SageAgent:
             else None
         )
         if allowed_profile_tools is not None and any(
-            tc.name not in allowed_profile_tools for tc in batch
+            not tool_name_in_allowlist(tc.name, allowed_profile_tools) for tc in batch
         ):
             return [("serial", [tc]) for tc in batch]
 
@@ -2616,7 +2617,7 @@ class SageAgent:
             else None
         )
         profile_denied = (
-            allowed_profile_tools is not None and tc.name not in allowed_profile_tools
+            allowed_profile_tools is not None and not tool_name_in_allowlist(tc.name, allowed_profile_tools)
         )
         if profile_denied:
             logger.warning(

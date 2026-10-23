@@ -112,6 +112,7 @@ from backend.api.office_routes import (
 )
 from backend.api.orchestration_router import build_router as build_orchestration_router
 from backend.api.permission_routes import router as permission_router
+from backend.api.plugin_routes import router as plugin_router
 from backend.api.project_ai_routes import router as project_ai_router
 from backend.api.project_routes import router as project_router
 from backend.api.prompt_routes import router as prompt_router
@@ -1506,6 +1507,9 @@ app.include_router(arena_router)
 from backend.api.v1.design_routes import router as design_router
 
 app.include_router(design_router, prefix="/api/v1")
+
+# Plugins: /api/v1/plugins/{status,invoke,install,...}
+app.include_router(plugin_router, prefix="/api/v1")
 
 
 

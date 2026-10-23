@@ -9,6 +9,7 @@ const visibleTabs: readonly SettingsTabKey[] = [
   'memory',
   'network',
   'mcp',
+  'plugins',
   'zotero',
   'runtime',
   'evolution',
