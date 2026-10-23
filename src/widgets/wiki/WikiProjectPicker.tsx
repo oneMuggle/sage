@@ -240,10 +240,7 @@ export function WikiProjectPicker() {
   const [recents, setRecents] = useState<RecentProject[]>([]);
   const [checkResult, setCheckResult] = useState<ProjectCheckResponse | null>(null);
   const [useFolderPicker, setUseFolderPicker] = useState(true);
-  const [copiedRecentMd, setCopiedRecentMd] = useState(false);
-  const [copiedRecentJson, setCopiedRecentJson] = useState(false);
   const [copiedRecentIdx, setCopiedRecentIdx] = useState<number | null>(null);
-  const [copiedCheckJson, setCopiedCheckJson] = useState(false);
 
   const setErrorGlobal = useWikiStore((s) => s.setError);
   const setActivities = useActivityStore((s) => s.setItems);
@@ -443,46 +440,6 @@ export function WikiProjectPicker() {
                     最近打开的 Wiki 项目 ({recents.length})
                   </span>
                   <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      data-testid="wiki-recent-copy-md-btn"
-                      onClick={async () => {
-                        setCopiedRecentMd(true);
-                        setTimeout(() => {
-                          if (typeof window !== 'undefined') setCopiedRecentMd(false);
-                        }, 1500);
-                        const md = [
-                          `# 最近 Wiki 项目 (${recents.length})`,
-                          ...recents.map((r) => `- **${r.name}**: \`${r.path}\``),
-                        ].join('\n');
-                        try {
-                          await navigator.clipboard?.writeText(md);
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }}
-                      className="rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text hover:bg-bg-muted"
-                    >
-                      {copiedRecentMd ? '已复制MD' : '复制最近MD'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="wiki-recent-copy-json-btn"
-                      onClick={async () => {
-                        setCopiedRecentJson(true);
-                        setTimeout(() => {
-                          if (typeof window !== 'undefined') setCopiedRecentJson(false);
-                        }, 1500);
-                        try {
-                          await navigator.clipboard?.writeText(JSON.stringify(recents, null, 2));
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }}
-                      className="rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text hover:bg-bg-muted"
-                    >
-                      {copiedRecentJson ? '已复制JSON' : '复制最近JSON'}
-                    </button>
                   </div>
                 </div>
                 <ul className="space-y-1">
@@ -560,32 +517,6 @@ export function WikiProjectPicker() {
               </div>
               <div className="flex items-center justify-between gap-2">
                 <StatusBadge status={checkStatus} result={checkResult} />
-                {activePath && checkResult && (
-                  <button
-                    type="button"
-                    data-testid="wiki-check-copy-json-btn"
-                    onClick={async () => {
-                      setCopiedCheckJson(true);
-                      setTimeout(() => {
-                        if (typeof window !== 'undefined') setCopiedCheckJson(false);
-                      }, 1500);
-                      try {
-                        await navigator.clipboard?.writeText(
-                          JSON.stringify(
-                            { path: activePath, intent, status: checkStatus, ...checkResult },
-                            null,
-                            2,
-                          ),
-                        );
-                      } catch {
-                        // ignore in test/offline mode
-                      }
-                    }}
-                    className="mt-1 rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-muted hover:text-text"
-                  >
-                    {copiedCheckJson ? '已复制检查JSON' : '复制检查JSON'}
-                  </button>
-                )}
               </div>
             </div>
             <button

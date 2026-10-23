@@ -27,11 +27,7 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
 }
 
 import { memoryApi } from '../../../shared/api';
-import {
-  formatNewMemoryDraftJson,
-  formatNewMemoryDraftMarkdown,
-  NewMemoryModal,
-} from '../NewMemoryModal';
+import { formatNewMemoryDraftJson, formatNewMemoryDraftMarkdown, NewMemoryModal } from '../NewMemoryModal';
 
 vi.mock('../../../shared/api', () => ({
   memoryApi: {
@@ -73,10 +69,6 @@ describe('NewMemoryModal (fix/security-perf-quickwins §1.3b g)', () => {
     fireEvent.change(screen.getByLabelText('内容'), {
       target: { value: 'remember this' },
     });
-    fireEvent.click(screen.getByTestId('new-memory-copy-draft-json-btn'));
-    expect(screen.getByTestId('new-memory-copy-draft-json-btn')).toHaveTextContent('已复制JSON');
-    fireEvent.click(screen.getByTestId('new-memory-copy-draft-md-btn'));
-    expect(screen.getByTestId('new-memory-copy-draft-md-btn')).toHaveTextContent('已复制MD');
     expect(
       formatNewMemoryDraftMarkdown({
         content: '',

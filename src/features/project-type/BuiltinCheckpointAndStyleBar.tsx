@@ -31,7 +31,6 @@ export function BuiltinCheckpointTimelineBar({
   const [restoredHint, setRestoredHint] = useState<string | null>(null);
   const [previewDetail, setPreviewDetail] = useState<WorkspaceCheckpointDetail | null>(null);
   const [copiedContext, setCopiedContext] = useState(false);
-  const [copiedTimeline, setCopiedTimeline] = useState(false);
 
   const handleCreate = async () => {
     if (creating || typeof projectApi?.createCheckpoint !== 'function') return;
@@ -97,32 +96,6 @@ export function BuiltinCheckpointTimelineBar({
         <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
           <History className="h-3.5 w-3.5 text-emerald-500" />
           内置版本保护时间轴 (.sage/checkpoints)
-          {checkpoints.length > 0 && (
-            <button
-              type="button"
-              data-testid="checkpoint-copy-timeline-btn"
-              onClick={() => {
-                const lines = [
-                  '# 内置版本保护时间轴 (.sage/checkpoints)',
-                  '',
-                  ...checkpoints.map(
-                    (cp, i) => `${i + 1}. **${cp.label}** (\`${cp.id}\` · ${cp.fileCount} 份文件)`,
-                  ),
-                ];
-                try {
-                  void navigator.clipboard?.writeText(lines.join('\n'));
-                  setCopiedTimeline(true);
-                  setTimeout(() => setCopiedTimeline(false), 1800);
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs font-normal text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              <Copy className="h-2.5 w-2.5" />
-              {copiedTimeline ? '已复制时间轴' : '复制时间轴 MD'}
-            </button>
-          )}
         </div>
         <span className="text-ui-2xs text-muted-foreground">
           {restoredHint ? (
@@ -376,23 +349,6 @@ export function ResearchCitationAndToneBar({
         </Button>
         <button
           type="button"
-          data-testid="research-copy-style-md-btn"
-          onClick={() => {
-            const md = `# 科研规范配置\n- **引用格式**: ${citationStyle} (${CITATION_STYLES[citationStyle] ?? ''})\n- **学术文风**: ${writingTone} (${WRITING_TONES[writingTone] ?? ''})`;
-            try {
-              void navigator.clipboard?.writeText(md);
-              setAppliedHint('已复制学术规范 MD');
-            } catch {
-              // ignore in test/offline mode
-            }
-          }}
-          className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs text-foreground hover:bg-muted"
-        >
-          <Copy className="h-3 w-3" />
-          复制学术规范 MD
-        </button>
-        <button
-          type="button"
           data-testid="research-save-style-l3-btn"
           onClick={async () => {
             setAppliedHint('已沉淀学术规范至 L3');
@@ -555,7 +511,6 @@ export function CodingHooksGovernanceBar({
   );
 }
 
-
 export interface PersonalZettelkastenFooterProps {
   projectId: string;
   decisions: ProjectProfileEntry[];
@@ -569,7 +524,6 @@ export function PersonalZettelkastenFooter({
   checkpoints,
   onCreated,
 }: PersonalZettelkastenFooterProps) {
-  const [copiedNotes, setCopiedNotes] = useState(false);
   const [promotedCardConstraintIds, setPromotedCardConstraintIds] = useState<Set<string>>(new Set());
 
   return (
@@ -578,28 +532,6 @@ export function PersonalZettelkastenFooter({
         <div className="space-y-1">
           <div className="flex items-center justify-between text-ui-2xs text-muted-foreground">
             <span>永久卡片与关键洞察 ({decisions.length})</span>
-            <button
-              type="button"
-              data-testid="personal-notes-copy-md-btn"
-              onClick={() => {
-                const lines = [
-                  '# 个人知识空间永久卡片笔记 (Zettelkasten)',
-                  '',
-                  ...decisions.map((d, i) => `${i + 1}. ${d.content}`),
-                ];
-                try {
-                  void navigator.clipboard?.writeText(lines.join('\n'));
-                  setCopiedNotes(true);
-                  setTimeout(() => setCopiedNotes(false), 1800);
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-            >
-              <Copy className="h-2.5 w-2.5" />
-              {copiedNotes ? '已复制笔记' : '复制双链笔记 MD'}
-            </button>
           </div>
           <ul className="space-y-1 max-h-24 overflow-y-auto" data-testid="personal-notes-list">
           {decisions.slice(-4).map((d) => (
@@ -643,7 +575,6 @@ export function PersonalZettelkastenFooter({
     </div>
   );
 }
-
 
 const BUSINESS_DOC_FORMATS: Record<string, string> = {
   'GB/T 9704 公文版式': '严格遵循党政机关公文格式国家标准 GB/T 9704，标题、主送机关、正文层级（一、（一）、1.、（1））与落款规范统一',
@@ -750,23 +681,6 @@ export function BusinessDocumentStyleBar({
         >
           一键写入文书规范
         </Button>
-        <button
-          type="button"
-          data-testid="business-copy-style-md-btn"
-          onClick={() => {
-            const md = `# 一般档案文书规范配置\n- **版式标准**: ${docFormat} (${BUSINESS_DOC_FORMATS[docFormat] ?? ''})\n- **审校等级**: ${reviewLevel} (${BUSINESS_REVIEW_LEVELS[reviewLevel] ?? ''})`;
-            try {
-              void navigator.clipboard?.writeText(md);
-              setAppliedHint('已复制文书规范 MD');
-            } catch {
-              // ignore in test/offline mode
-            }
-          }}
-          className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs text-foreground hover:bg-muted"
-        >
-          <Copy className="h-3 w-3" />
-          复制文书规范 MD
-        </button>
         <button
           type="button"
           data-testid="business-save-style-l3-btn"

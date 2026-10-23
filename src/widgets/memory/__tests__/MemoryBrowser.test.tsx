@@ -73,14 +73,6 @@ describe('MemoryBrowser 加载与列表', () => {
     expect(screen.getByTestId('memory-episodic-item').textContent).toContain('用户');
     expect(screen.getAllByText('情景').length).toBeGreaterThan(0); // source 徽章
     expect(screen.getByText('本周新增')).toBeInTheDocument(); // 统计卡
-    fireEvent.click(screen.getByTestId('memory-browser-copy-md-btn'));
-    expect(screen.getByTestId('memory-browser-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('memory-browser-copy-json-btn'));
-    expect(screen.getByTestId('memory-browser-copy-json-btn')).toHaveTextContent('已复制JSON');
-    fireEvent.click(screen.getByTestId('memory-item-copy-md-m1'));
-    expect(screen.getByTestId('memory-item-copy-md-m1')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('memory-item-copy-json-m1'));
-    expect(screen.getByTestId('memory-item-copy-json-m1')).toHaveTextContent('已复制JSON');
   }, 20000);
 
   it('接口报错显示错误信息与重试按钮', async () => {

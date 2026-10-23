@@ -113,7 +113,6 @@ export function RuntimeEnvTab() {
   const [selectedRuntime, setSelectedRuntime] = useState<string | null>(null);
   const [code, setCode] = useState('print("hello from Sage runtime assistant")');
   const [copiedAudit, setCopiedAudit] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   const runProbe = useCallback(async () => {
     setProbe({ kind: 'loading' });
@@ -218,17 +217,6 @@ export function RuntimeEnvTab() {
     await navigator.clipboard?.writeText(text);
   };
 
-  const handleCopyJson = async () => {
-    const text = formatRuntimeEnvTabAuditJson({
-      probeKind: probe.kind,
-      runtimeCount,
-      selectedRuntime,
-      diagnoseKind: diagnose.kind,
-      execKind: exec.kind,
-    });
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(text);
-  };
   /* v8 ignore stop */
 
   return (
@@ -249,14 +237,6 @@ export function RuntimeEnvTab() {
               className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-ink cursor-pointer select-none"
             >
               {copiedAudit ? '已复制快照' : '复制快照'}
-            </span>
-            <span
-              data-testid="runtime-env-tab-copy-json"
-              onClick={() => void handleCopyJson()}
-              title="复制开发环境审计 JSON"
-              className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-ink cursor-pointer select-none"
-            >
-              {copiedJson ? '已复制 JSON' : 'JSON'}
             </span>
           </div>
         </div>

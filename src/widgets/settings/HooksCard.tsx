@@ -95,10 +95,6 @@ export function HooksCard(): JSX.Element | null {
   const [builtinsLoading, setBuiltinsLoading] = useState(true);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [copiedAllMd, setCopiedAllMd] = useState(false);
-  const [copiedAllJson, setCopiedAllJson] = useState(false);
-  const [copiedBuiltinId, setCopiedBuiltinId] = useState<string | null>(null);
-  const [copiedHookIdx, setCopiedHookIdx] = useState<number | null>(null);
 
   // 1) 加载用户自定义 + 已启用内置钩子
   useEffect(() => {
@@ -213,30 +209,6 @@ export function HooksCard(): JSX.Element | null {
                   </div>
                   <button
                     type="button"
-                    data-testid={`builtin-copy-json-${builtin.id}`}
-                    onClick={async () => {
-                      setCopiedBuiltinId(builtin.id);
-                      /* v8 ignore start */
-                      setTimeout(() => {
-                        if (typeof window !== 'undefined') {
-                          setCopiedBuiltinId((prev) => (prev === builtin.id ? null : prev));
-                        }
-                      }, 1500);
-                      try {
-                        await navigator.clipboard?.writeText(
-                          JSON.stringify({ ...builtin, enabled }, null, 2),
-                        );
-                      } catch {
-                        // ignore
-                      }
-                      /* v8 ignore stop */
-                    }}
-                    className="px-2 py-1 text-xs rounded-radius-sm border border-border text-text-secondary hover:bg-bg-hover"
-                  >
-                    {copiedBuiltinId === builtin.id ? '已复制' : '复制JSON'}
-                  </button>
-                  <button
-                    type="button"
                     aria-label={`${enabled ? '禁用' : '启用'}内置钩子 ${builtin.name}`}
                     className={`px-2 py-1 text-xs rounded-radius-sm border transition-colors ${
                       enabled
@@ -301,28 +273,6 @@ export function HooksCard(): JSX.Element | null {
                 placeholder="shell 命令(STDIN 收 JSON)"
               />
               <button
-                type="button"
-                data-testid={`hook-copy-json-${originalIdx}`}
-                onClick={async () => {
-                  setCopiedHookIdx(originalIdx);
-                  /* v8 ignore start */
-                  setTimeout(() => {
-                    if (typeof window !== 'undefined') {
-                      setCopiedHookIdx((prev) => (prev === originalIdx ? null : prev));
-                    }
-                  }, 1500);
-                  try {
-                    await navigator.clipboard?.writeText(JSON.stringify(hook, null, 2));
-                  } catch {
-                    // ignore
-                  }
-                  /* v8 ignore stop */
-                }}
-                className="px-1.5 py-1 text-ui-xs rounded border border-border text-text-secondary hover:text-text"
-              >
-                {copiedHookIdx === originalIdx ? '已复制' : '复制JSON'}
-              </button>
-              <button
                 aria-label={`删除钩子 ${originalIdx + 1}`}
                 className="p-1.5 rounded hover:bg-bg-hover text-text-secondary hover:text-red-500"
                 onClick={() => removeAt(originalIdx)}
@@ -340,55 +290,6 @@ export function HooksCard(): JSX.Element | null {
           data-testid="hooks-add"
         >
           <Plus className="w-3 h-3" /> 添加钩子
-        </button>
-        <button
-          type="button"
-          data-testid="hooks-copy-all-md-btn"
-          onClick={async () => {
-            setCopiedAllMd(true);
-            const md = [
-              `# 全局 Hook 配置清单 (${hooks.length})`,
-              ...hooks.map(
-                (h, idx) =>
-                  `- #${idx + 1} [${h.event}] matcher=\`${h.matcher}\` ${h.builtin_id ? `(内置: ${h.builtin_id})` : `cmd=\`${h.command}\``}`,
-              ),
-            ].join('\n');
-            /* v8 ignore start */
-            setTimeout(() => {
-              if (typeof window !== 'undefined') setCopiedAllMd(false);
-            }, 1500);
-            try {
-              await navigator.clipboard?.writeText(md);
-            } catch {
-              // ignore
-            }
-            /* v8 ignore stop */
-          }}
-          className="px-2 py-1 text-xs border border-border rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
-        >
-          {copiedAllMd ? '已复制MD' : '复制钩子MD'}
-        </button>
-        <button
-          type="button"
-          data-testid="hooks-copy-all-json-btn"
-          onClick={async () => {
-            setCopiedAllJson(true);
-            /* v8 ignore start */
-            setTimeout(() => {
-              if (typeof window !== 'undefined') setCopiedAllJson(false);
-            }, 1500);
-            try {
-              await navigator.clipboard?.writeText(
-                JSON.stringify({ count: hooks.length, hooks }, null, 2),
-              );
-            } catch {
-              // ignore
-            }
-            /* v8 ignore stop */
-          }}
-          className="px-2 py-1 text-xs border border-border rounded-radius-sm text-text-secondary hover:bg-bg-hover hover:text-text transition-colors"
-        >
-          {copiedAllJson ? '已复制JSON' : '复制钩子JSON'}
         </button>
         {saving && <span className="text-xs text-muted">保存中…</span>}
         <span className="text-ui-xs text-muted">

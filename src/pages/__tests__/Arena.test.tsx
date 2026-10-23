@@ -166,6 +166,5 @@ describe('Arena page', () => {
 
     await renderPage();
     expect(await screen.findByTestId('arena-copy-audit')).toBeInTheDocument();
-    expect(screen.getByTestId('arena-copy-json')).toBeInTheDocument();
   });
 });

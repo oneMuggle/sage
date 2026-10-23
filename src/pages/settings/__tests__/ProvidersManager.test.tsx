@@ -3,11 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  ProvidersManager,
-  formatProvidersListJson,
-  formatProvidersListMarkdown,
-} from '../ProvidersManager';
+import { ProvidersManager, formatProvidersListJson, formatProvidersListMarkdown } from '../ProvidersManager';
 
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
@@ -133,9 +129,5 @@ describe('ProvidersManager', () => {
 
     renderManager();
     await screen.findByTestId('provider-row-a');
-    fireEvent.click(screen.getByTestId('providers-copy-md'));
-    expect(screen.getByTestId('providers-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('providers-copy-json'));
-    expect(screen.getByTestId('providers-copy-json').textContent).toContain('已复制 JSON');
   });
 });

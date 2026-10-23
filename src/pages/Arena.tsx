@@ -87,7 +87,6 @@ export default function Arena() {
   const [error, setError] = useState('');
   const [status, setStatus] = useState<string | null>(null);
   const [copiedAudit, setCopiedAudit] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -141,18 +140,6 @@ export default function Arena() {
     await navigator.clipboard?.writeText(text);
   };
 
-  const handleCopyJson = async () => {
-    const text = formatArenaAuditJson({
-      tab,
-      accountCount: accounts.length,
-      availableCount,
-      disabled,
-      loading,
-      hasError: Boolean(error),
-    });
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(text);
-  };
   /* v8 ignore stop */
 
   return (
@@ -169,14 +156,6 @@ export default function Arena() {
               className="text-xs rounded border border-border px-2.5 py-1 hover:bg-bg-hover cursor-pointer select-none"
             >
               {copiedAudit ? '已复制快照' : '复制快照'}
-            </span>
-            <span
-              data-testid="arena-copy-json"
-              onClick={() => void handleCopyJson()}
-              title="复制 Arena 控制台审计 JSON"
-              className="text-xs rounded border border-border px-2.5 py-1 hover:bg-bg-hover cursor-pointer select-none"
-            >
-              {copiedJson ? '已复制 JSON' : 'JSON'}
             </span>
             <button
               type="button"

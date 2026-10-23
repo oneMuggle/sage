@@ -10,7 +10,6 @@ import {
   ListMinus,
   Unlink,
 } from 'lucide-react';
-import { useState } from 'react';
 
 import type { LintItem } from '../../shared/types/wiki';
 
@@ -105,30 +104,12 @@ const SEVERITY_COLOR: Record<string, string> = {
 };
 
 export function LintItemCard({ item, onFix, onDismiss }: LintItemCardProps) {
-  const [copiedJson, setCopiedJson] = useState(false);
   /* v8 ignore start */
   const config = TYPE_CONFIG[item.type] ?? FALLBACK_CONFIG;
   const Icon = config.icon;
   const SeverityIcon = SEVERITY_ICON[item.severity] ?? Info;
   const severityColor = SEVERITY_COLOR[item.severity] ?? 'text-muted';
   /* v8 ignore stop */
-
-  const handleCopyJson = () => {
-    setCopiedJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedJson(false), 2000);
-    const payload = {
-      id: item.id,
-      type: item.type,
-      label: config.label,
-      severity: item.severity,
-      page: item.page,
-      message: item.message,
-      suggestion: item.suggestion ?? null,
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
 
   return (
     <div className="rounded-lg border border-border bg-surface p-4 hover:border-primary/30 transition-colors">
@@ -162,14 +143,6 @@ export function LintItemCard({ item, onFix, onDismiss }: LintItemCardProps) {
 
         {/* Actions */}
         <div className="flex flex-col gap-1">
-          <button
-            type="button"
-            data-testid={`wiki-lint-item-copy-json-${item.id}`}
-            onClick={handleCopyJson}
-            className="px-2 py-1 text-xs rounded-radius-sm border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
-          >
-            {copiedJson ? '已复制JSON' : '复制JSON'}
-          </button>
           {onFix && (
             <button
               onClick={() => onFix(item.id)}

@@ -3,11 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { gatewayApiFor } from '../../../shared/api/gatewayApi';
-import {
-  formatGatewayCardJson,
-  formatGatewayCardMarkdown,
-  GatewayCard,
-} from '../GatewayCard';
+import { formatGatewayCardJson, formatGatewayCardMarkdown, GatewayCard } from '../GatewayCard';
 
 vi.mock('../../../shared/api/gatewayApi', () => ({
   gatewayApiFor: vi.fn(),
@@ -173,7 +169,7 @@ describe('GatewayCard', () => {
     expect(screen.queryByText(/chat 42 → session/)).not.toBeInTheDocument();
   });
 
-  it('exports gateway card config as Markdown and JSON and copies via buttons', async () => {
+  it('formats gateway card config as Markdown and JSON', () => {
     const md = formatGatewayCardMarkdown(
       'telegram',
       'Telegram',
@@ -194,16 +190,5 @@ describe('GatewayCard', () => {
     );
     expect(parsed.platform).toBe('discord');
     expect(parsed.allowedIds).toEqual([]);
-
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(<GatewayCard platform="telegram" />);
-    await waitFor(() => {
-      expect(screen.getByDisplayValue('****ABCD')).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByTestId('gateway-card-telegram-copy-md'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('消息网关（Telegram）'));
-    fireEvent.click(screen.getByTestId('gateway-card-telegram-copy-json'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"platform": "telegram"'));
   });
 });

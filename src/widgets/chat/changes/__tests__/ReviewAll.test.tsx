@@ -79,7 +79,10 @@ describe('splitReviewSections — 多文件 diff 切分', () => {
   });
 
   it('二进制文件标记 binary', () => {
-    const binary = ['diff --git a/img.png b/img.png', 'Binary files a/img.png and b/img.png differ'].join('\n');
+    const binary = [
+      'diff --git a/img.png b/img.png',
+      'Binary files a/img.png and b/img.png differ',
+    ].join('\n');
     const sections = splitReviewSections(binary);
     expect(sections[0]?.binary).toBe(true);
   });
@@ -158,19 +161,5 @@ describe('ReviewAll — 汇总视图 (right-panel R6)', () => {
     });
     fireEvent.click(screen.getByTestId('review-all-back'));
     expect(onBack).toHaveBeenCalledTimes(1);
-  });
-
-  it('copies review-all sections as Markdown and JSON (Phase P90)', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    useChangesListStore.setState({ bySession: { s1: STATS } });
-    render(<ReviewAll sessionId="s1" onBack={() => {}} />);
-    await waitFor(() => {
-      expect(screen.getByTestId('review-all-toggle-app.ts')).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByTestId('review-all-copy-md-btn'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 全部审查 (2 个文件)'));
-    fireEvent.click(screen.getByTestId('review-all-copy-json-btn'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"fileCount": 2'));
   });
 });

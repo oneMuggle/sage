@@ -61,8 +61,6 @@ export function WikiQueuePanel({ projectPath }: WikiQueuePanelProps) {
   const clearAll = useQueueStore((s) => s.clearAll);
 
   const [filter, setFilter] = useState<QueueStatus | 'all'>('all');
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     if (!projectPath) return;
@@ -89,59 +87,6 @@ export function WikiQueuePanel({ projectPath }: WikiQueuePanelProps) {
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-text">摄入队列</h3>
           <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              data-testid="wiki-queue-copy-md-btn"
-              onClick={async () => {
-                setCopiedMd(true);
-                const md = [
-                  `# Wiki 摄入队列报告 (${visibleTasks.length}/${totalCount})`,
-                  `- **项目路径**：\`${projectPath}\``,
-                  ...visibleTasks.map(
-                    (t) => `- [${STATUS_LABEL[t.status]}] ${t.source_path} (任务 ${t.task_id})`,
-                  ),
-                ].join('\n');
-                /* v8 ignore start */
-                setTimeout(() => {
-                  if (typeof window !== 'undefined') setCopiedMd(false);
-                }, 1500);
-                try {
-                  await navigator.clipboard?.writeText(md);
-                } catch {
-                  // ignore
-                }
-                /* v8 ignore stop */
-              }}
-              className="rounded border border-border bg-surface px-2 py-0.5 text-xs text-text-secondary hover:text-text"
-            >
-              {copiedMd ? '已复制MD' : '复制队列MD'}
-            </button>
-            <button
-              type="button"
-              data-testid="wiki-queue-copy-json-btn"
-              onClick={async () => {
-                setCopiedJson(true);
-                /* v8 ignore start */
-                setTimeout(() => {
-                  if (typeof window !== 'undefined') setCopiedJson(false);
-                }, 1500);
-                try {
-                  await navigator.clipboard?.writeText(
-                    JSON.stringify(
-                      { projectPath, filter, statusSummary, tasks: visibleTasks },
-                      null,
-                      2,
-                    ),
-                  );
-                } catch {
-                  // ignore
-                }
-                /* v8 ignore stop */
-              }}
-              className="rounded border border-border bg-surface px-2 py-0.5 text-xs text-text-secondary hover:text-text"
-            >
-              {copiedJson ? '已复制JSON' : '复制队列JSON'}
-            </button>
             <span className="text-xs text-muted">共 {totalCount} 个任务</span>
           </div>
         </div>

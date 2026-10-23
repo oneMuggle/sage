@@ -4,7 +4,6 @@
  * 网格展示 11 套主题（6 基础 + 5 装饰），点击切换主题。
  */
 import { clsx } from 'clsx';
-import { useState } from 'react';
 
 import { useTheme } from '../../app/providers/useTheme';
 import { decorativePresets } from '../../entities/theme/decorative-presets';
@@ -39,7 +38,11 @@ export function formatThemeGalleryJson(activePresetId: string): string {
       activePresetId,
       basicCount: themePresets.length,
       decorativeCount: decorativePresets.length,
-      basicPresets: themePresets.map((p) => ({ id: p.id, name: p.name, description: p.description })),
+      basicPresets: themePresets.map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+      })),
       decorativePresets: decorativePresets.map((p) => ({
         id: p.id,
         name: p.name,
@@ -54,29 +57,9 @@ export function formatThemeGalleryJson(activePresetId: string): string {
 export function ThemeGallery() {
   const { presetId, setPresetId } = useTheme();
   const { t } = useI18n();
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatThemeGalleryMarkdown(presetId));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatThemeGalleryJson(presetId));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -87,22 +70,7 @@ export function ThemeGallery() {
           <h3 className="text-sm font-medium text-text-secondary">
             {t('theme.gallery.section_basic')}
           </h3>
-          <div className="flex items-center gap-1.5 text-ui-2xs">
-            <span
-              data-testid="theme-gallery-copy-md"
-              onClick={() => void handleCopyMarkdown()}
-              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedMd ? '已复制 MD' : '复制 MD'}
-            </span>
-            <span
-              data-testid="theme-gallery-copy-json"
-              onClick={() => void handleCopyJson()}
-              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedJson ? '已复制 JSON' : '复制 JSON'}
-            </span>
-          </div>
+          <div className="flex items-center gap-1.5 text-ui-2xs"></div>
         </div>
         <div className="grid grid-cols-3 gap-3">
           {themePresets.map((preset) => {

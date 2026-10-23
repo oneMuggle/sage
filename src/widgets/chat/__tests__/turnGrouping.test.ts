@@ -6,12 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Message } from '../../../shared/lib/store';
-import {
-  getTurnSummary,
-  getTurnToolCallCount,
-  groupMessagesIntoTurns,
-  isTurnCollapsible,
-} from '../turnGrouping';
+import { getTurnSummary, getTurnToolCallCount, groupMessagesIntoTurns, isTurnCollapsible } from '../turnGrouping';
 
 // ---- fixtures ----
 const mk = (role: Message['role'], content: string, extra: Partial<Message> = {}): Message =>

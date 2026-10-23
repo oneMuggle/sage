@@ -91,8 +91,6 @@ export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.El
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string>('');
   const [loadError, setLoadError] = useState<string>('');
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   const reload = useCallback(async () => {
     setLoadError('');
@@ -161,29 +159,7 @@ export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.El
   }
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatGatewayCardMarkdown(platform, label, enabled, status, ids, binds),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatGatewayCardJson(platform, label, enabled, status, ids, binds),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -194,22 +170,6 @@ export function GatewayCard({ platform }: { platform: GatewayPlatform }): JSX.El
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold">消息网关（{label}）</h3>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            data-testid={`gateway-card-${platform}-copy-md`}
-            onClick={() => void handleCopyMarkdown()}
-            className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-hover text-text-secondary"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            data-testid={`gateway-card-${platform}-copy-json`}
-            onClick={() => void handleCopyJson()}
-            className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-hover text-text-secondary"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
           <button
             type="button"
             className="p-1 rounded hover:bg-bg-hover text-text-secondary"

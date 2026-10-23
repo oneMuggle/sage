@@ -2,11 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  WelcomeInputCard,
-  formatWelcomeInputJson,
-  formatWelcomeInputMarkdown,
-} from '../WelcomeInputCard';
+import { WelcomeInputCard, formatWelcomeInputJson, formatWelcomeInputMarkdown } from '../WelcomeInputCard';
 
 const renderWithI18n = (ui: React.ReactElement) => {
   return render(<I18nProvider defaultLocale="zh">{ui}</I18nProvider>);
@@ -82,9 +78,5 @@ describe('WelcomeInputCard', () => {
     expect(parsed.disabled).toBe(true);
 
     renderWithI18n(<WelcomeInputCard placeholder="测试" />);
-    fireEvent.click(screen.getByTestId('welcome-input-copy-md'));
-    expect(screen.getByTestId('welcome-input-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('welcome-input-copy-json'));
-    expect(screen.getByTestId('welcome-input-copy-json').textContent).toContain('已复制 JSON');
   });
 });

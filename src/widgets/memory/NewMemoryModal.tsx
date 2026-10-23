@@ -48,28 +48,6 @@ export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps
   const [importance, setImportance] = useState(5);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copiedDraftMd, setCopiedDraftMd] = useState(false);
-  const [copiedDraftJson, setCopiedDraftJson] = useState(false);
-
-  const handleCopyDraftMd = () => {
-    setCopiedDraftMd(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedDraftMd(false), 2000);
-    void navigator.clipboard?.writeText(
-      formatNewMemoryDraftMarkdown({ content, memoryType, importance }),
-    );
-    /* v8 ignore stop */
-  };
-
-  const handleCopyDraftJson = () => {
-    setCopiedDraftJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedDraftJson(false), 2000);
-    void navigator.clipboard?.writeText(
-      formatNewMemoryDraftJson({ content, memoryType, importance }),
-    );
-    /* v8 ignore stop */
-  };
 
   const resetForm = () => {
     setContent('');
@@ -175,22 +153,6 @@ export function NewMemoryModal({ isOpen, onClose, onSaved }: NewMemoryModalProps
       </div>
 
       <div className="flex justify-end gap-2 pt-4 mt-3 border-t border-border">
-        <button
-          type="button"
-          data-testid="new-memory-copy-draft-md-btn"
-          onClick={handleCopyDraftMd}
-          className="px-3 py-1.5 text-xs border border-border rounded text-text-secondary hover:text-text"
-        >
-          {copiedDraftMd ? '已复制MD' : '复制草稿MD'}
-        </button>
-        <button
-          type="button"
-          data-testid="new-memory-copy-draft-json-btn"
-          onClick={handleCopyDraftJson}
-          className="px-3 py-1.5 text-xs border border-border rounded text-text-secondary hover:text-text"
-        >
-          {copiedDraftJson ? '已复制JSON' : '复制草稿JSON'}
-        </button>
         <button
           type="button"
           onClick={handleClose}

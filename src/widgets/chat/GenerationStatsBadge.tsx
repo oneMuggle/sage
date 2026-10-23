@@ -1,7 +1,6 @@
 // 对话阅读体验 C1（docs/mcp-chat-reading-nav-optimization.md §10.6）：assistant 操作栏
 // 右侧的生成速度摘要，悬停显示明细。没有统计时不渲染。
 import { Gauge } from 'lucide-react';
-import { useState } from 'react';
 
 import {
   formatCount,
@@ -48,8 +47,6 @@ export function formatGenerationStatsJson(stats?: GenerationStats | null): strin
 
 export function GenerationStatsBadge({ stats }: GenerationStatsBadgeProps) {
   const { t, locale } = useI18n();
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   if (!stats) return null;
 
   const rate = tokensPerSecond(stats);
@@ -77,25 +74,7 @@ export function GenerationStatsBadge({ stats }: GenerationStatsBadgeProps) {
   }
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatGenerationStatsMarkdown(stats));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatGenerationStatsJson(stats));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -106,22 +85,6 @@ export function GenerationStatsBadge({ stats }: GenerationStatsBadgeProps) {
     >
       <Gauge className="w-3 h-3" aria-hidden="true" />
       {summary.join(' · ')}
-      <button
-        type="button"
-        data-testid="generation-stats-copy-md"
-        onClick={() => void handleCopyMarkdown()}
-        className="ml-1 rounded border border-border px-1 py-0.5 text-ui-2xs hover:bg-bg-hover"
-      >
-        {copiedMd ? '已复制 MD' : '复制 MD'}
-      </button>
-      <button
-        type="button"
-        data-testid="generation-stats-copy-json"
-        onClick={() => void handleCopyJson()}
-        className="rounded border border-border px-1 py-0.5 text-ui-2xs hover:bg-bg-hover"
-      >
-        {copiedJson ? '已复制 JSON' : '复制 JSON'}
-      </button>
     </span>
   );
 }

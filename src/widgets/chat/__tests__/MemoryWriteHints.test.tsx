@@ -143,33 +143,4 @@ describe('MemoryWriteHints', () => {
     await finishStream('s1');
     expect(screen.getByText('🧠 更新了关于你的画像')).toBeInTheDocument();
   });
-
-  it('copies memory write hints as Markdown and JSON (Phase P90)', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    getRecentWrites.mockResolvedValueOnce({ items: [], latest_seq: 0 }).mockResolvedValueOnce({
-      items: [
-        {
-          seq: 1,
-          id: 'p1',
-          kind: 'profile',
-          content: '偏好简洁回答',
-          category: 'preference',
-          memory_type: 'profile',
-          session_id: 's1',
-          created_at: 2,
-        },
-      ],
-      latest_seq: 1,
-    });
-    renderHints('s1');
-    await act(async () => {
-      await Promise.resolve();
-    });
-    await finishStream('s1');
-    fireEvent.click(screen.getByTestId('memory-hints-copy-md-btn'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 会话新增记忆提示 (1)'));
-    fireEvent.click(screen.getByTestId('memory-hints-copy-json-btn'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"content": "偏好简洁回答"'));
-  });
 });

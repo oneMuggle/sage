@@ -1,14 +1,10 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectType } from '../../shared/api';
 
-import {
-  GovernanceRulesPanel,
-  formatGovernanceRulesJson,
-  formatGovernanceRulesMarkdown,
-} from './GovernanceRulesPanel';
+import { GovernanceRulesPanel, formatGovernanceRulesJson, formatGovernanceRulesMarkdown } from './GovernanceRulesPanel';
 
 /* ── Mock child components ───────────────────────────────────────── */
 
@@ -134,9 +130,5 @@ describe('GovernanceRulesPanel', () => {
     expect(parsed.projectId).toBe('proj-1');
 
     renderPanel();
-    fireEvent.click(screen.getByTestId('governance-rules-copy-md'));
-    expect(screen.getByTestId('governance-rules-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('governance-rules-copy-json'));
-    expect(screen.getByTestId('governance-rules-copy-json').textContent).toContain('已复制 JSON');
   });
 });

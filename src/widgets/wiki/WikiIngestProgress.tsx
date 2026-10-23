@@ -1,6 +1,5 @@
 // WikiIngestProgress - 显示 ingest 进度 UI
 import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
-import { useState } from 'react';
 
 import type { IngestProgress } from '../../features/wiki/useWikiIngest';
 
@@ -21,24 +20,7 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 export function WikiIngestProgress({ progress, done, error }: Props) {
-  const [copiedProgressJson, setCopiedProgressJson] = useState(false);
 
-  const handleCopyProgressJson = () => {
-    setCopiedProgressJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedProgressJson(false), 2000);
-    const payload = {
-      stage: progress?.stage ?? null,
-      stageLabel: progress ? (STAGE_LABELS[progress.stage] ?? STAGE_LABELS.unknown) : null,
-      percent: progress?.percent ?? null,
-      message: progress?.message ?? null,
-      done,
-      error,
-      exportedAt: new Date().toISOString(),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
 
   if (error) {
     return (
@@ -47,14 +29,6 @@ export function WikiIngestProgress({ progress, done, error }: Props) {
           <XCircle className="h-4 w-4" />
           <span>导入失败: {error}</span>
         </div>
-        <button
-          type="button"
-          data-testid="wiki-ingest-copy-json-btn"
-          onClick={handleCopyProgressJson}
-          className="px-1.5 py-0.5 text-ui-2xs rounded border border-red-500/30 hover:bg-red-500/20 transition-colors"
-        >
-          {copiedProgressJson ? '已复制JSON' : '复制进度JSON'}
-        </button>
       </div>
     );
   }
@@ -65,14 +39,6 @@ export function WikiIngestProgress({ progress, done, error }: Props) {
           <CheckCircle2 className="h-4 w-4" />
           <span>{progress?.message ?? '导入完成'}</span>
         </div>
-        <button
-          type="button"
-          data-testid="wiki-ingest-copy-json-btn"
-          onClick={handleCopyProgressJson}
-          className="px-1.5 py-0.5 text-ui-2xs rounded border border-green-500/30 hover:bg-green-500/20 transition-colors"
-        >
-          {copiedProgressJson ? '已复制JSON' : '复制进度JSON'}
-        </button>
       </div>
     );
   }
@@ -88,14 +54,6 @@ export function WikiIngestProgress({ progress, done, error }: Props) {
           <span className="font-medium">{stageLabel}</span>
           {progress.message && <span className="text-muted">— {progress.message}</span>}
         </div>
-        <button
-          type="button"
-          data-testid="wiki-ingest-copy-json-btn"
-          onClick={handleCopyProgressJson}
-          className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
-        >
-          {copiedProgressJson ? '已复制JSON' : '复制进度JSON'}
-        </button>
       </div>
       <div className="h-1.5 w-full rounded-full bg-bg-muted overflow-hidden">
         <div

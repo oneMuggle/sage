@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 
 import type { TodoItem } from '../../../shared/api';
 import { TodoListSection } from '../progress/TodoListSection';
@@ -39,21 +39,5 @@ describe('TodoListSection', () => {
       />,
     );
     expect(screen.getByText(/正在写实现/)).toBeInTheDocument();
-  });
-
-  it('copies todo list section as Markdown and JSON to clipboard', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(<TodoListSection todos={TODOS} />);
-
-    fireEvent.click(screen.getByTestId('todo-list-section-copy-md-btn'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 会话任务清单'));
-    });
-
-    fireEvent.click(screen.getByTestId('todo-list-section-copy-json-btn'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"调研方案"'));
-    });
   });
 });

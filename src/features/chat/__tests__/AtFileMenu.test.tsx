@@ -4,11 +4,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  AtFileMenu,
-  formatAtFileMenuJson,
-  formatAtFileMenuMarkdown,
-} from '../AtFileMenu';
+import { AtFileMenu, formatAtFileMenuJson, formatAtFileMenuMarkdown } from '../AtFileMenu';
 
 vi.mock('../../../shared/api/fileSearchClient', () => ({
   fileSearchClient: {
@@ -236,9 +232,5 @@ describe('AtFileMenu — workspace-context plumbing', () => {
     expect(parsed.count).toBe(1);
 
     render(<AtFileMenu query="a" onSelect={vi.fn()} onClose={vi.fn()} />);
-    fireEvent.click(screen.getByTestId('at-file-menu-copy-md'));
-    expect(screen.getByTestId('at-file-menu-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('at-file-menu-copy-json'));
-    expect(screen.getByTestId('at-file-menu-copy-json').textContent).toContain('已复制 JSON');
   });
 });

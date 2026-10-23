@@ -6,16 +6,12 @@
  * - empty: series=[] 或 trend=null → 占位文案
  * - render: 正常 series → 两根 path + legend + ticks
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 
 import type { UsageTrend } from '../../../shared/api/usageApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  formatUsageTrendJson,
-  formatUsageTrendMarkdown,
-  UsageTrendChart,
-} from '../UsageTrendChart';
+import { formatUsageTrendJson, formatUsageTrendMarkdown, UsageTrendChart } from '../UsageTrendChart';
 
 function renderChart(props: { trend: UsageTrend | null; loading: boolean }) {
   return render(
@@ -150,24 +146,12 @@ describe('UsageTrendChart', () => {
     expect(texts.length).toBe(2);
   });
 
-  it('exports Markdown and JSON and copies via buttons (Phase P91)', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    renderChart({ trend: SAMPLE_TREND, loading: false });
-
+  it('formats usage trend as Markdown and JSON', () => {
     const md = formatUsageTrendMarkdown(SAMPLE_TREND);
     expect(md).toContain('# 用量趋势 (today · hour)');
     expect(md).toContain('- 数据点数: 4');
     const json = JSON.parse(formatUsageTrendJson(SAMPLE_TREND));
     expect(json.range).toBe('today');
     expect(json.count).toBe(4);
-
-    fireEvent.click(screen.getByTestId('usage-trend-copy-md'));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(md));
-    expect(screen.getByTestId('usage-trend-copy-md')).toHaveTextContent('已复制 MD');
-
-    fireEvent.click(screen.getByTestId('usage-trend-copy-json'));
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId('usage-trend-copy-json')).toHaveTextContent('已复制 JSON');
   });
 });

@@ -29,9 +29,6 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
   const [records, setRecords] = useState<HookHistoryRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-  const [copiedRecordId, setCopiedRecordId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,55 +66,6 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
         <div className="flex items-center gap-2">
           {records.length > 0 && (
             <>
-              <button
-                type="button"
-                data-testid="hook-history-copy-md-btn"
-                onClick={async () => {
-                  setCopiedMd(true);
-                  const md = [
-                    `# Hook 执行历史 (${records.length})`,
-                    ...records.map(
-                      (r) =>
-                        `- [${DECISION_LABELS[r.decision] ?? r.decision}] ${r.hook_id} → ${r.tool_name || '*'} (${Math.round(r.duration_ms)}ms)${r.reason ? ` — ${r.reason}` : ''}`,
-                    ),
-                  ].join('\n');
-                  /* v8 ignore start */
-                  setTimeout(() => {
-                    if (typeof window !== 'undefined') setCopiedMd(false);
-                  }, 1500);
-                  try {
-                    await navigator.clipboard?.writeText(md);
-                  } catch {
-                    // ignore
-                  }
-                  /* v8 ignore stop */
-                }}
-                className="text-ui-xs text-text-secondary hover:text-text"
-              >
-                {copiedMd ? '已复制MD' : '复制历史MD'}
-              </button>
-              <button
-                type="button"
-                data-testid="hook-history-copy-json-btn"
-                onClick={async () => {
-                  setCopiedJson(true);
-                  /* v8 ignore start */
-                  setTimeout(() => {
-                    if (typeof window !== 'undefined') setCopiedJson(false);
-                  }, 1500);
-                  try {
-                    await navigator.clipboard?.writeText(
-                      JSON.stringify({ count: records.length, records }, null, 2),
-                    );
-                  } catch {
-                    // ignore
-                  }
-                  /* v8 ignore stop */
-                }}
-                className="text-ui-xs text-text-secondary hover:text-text"
-              >
-                {copiedJson ? '已复制JSON' : '复制历史JSON'}
-              </button>
             </>
           )}
           <button
@@ -157,28 +105,6 @@ export function HookHistoryPanel({ refreshToken = 0 }: HookHistoryPanelProps): J
                 {record.reason ? `: ${record.reason}` : ''}
               </span>
               <span className="text-muted flex-shrink-0">{Math.round(record.duration_ms)}ms</span>
-              <button
-                type="button"
-                data-testid={`hook-history-copy-record-json-${record.id}`}
-                onClick={async () => {
-                  setCopiedRecordId(record.id);
-                  /* v8 ignore start */
-                  setTimeout(() => {
-                    if (typeof window !== 'undefined') {
-                      setCopiedRecordId((prev) => (prev === record.id ? null : prev));
-                    }
-                  }, 1500);
-                  try {
-                    await navigator.clipboard?.writeText(JSON.stringify(record, null, 2));
-                  } catch {
-                    // ignore
-                  }
-                  /* v8 ignore stop */
-                }}
-                className="text-ui-2xs text-text-secondary hover:text-text flex-shrink-0"
-              >
-                {copiedRecordId === record.id ? '已复制' : '复制JSON'}
-              </button>
             </div>
           ))}
         </div>

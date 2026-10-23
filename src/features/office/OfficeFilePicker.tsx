@@ -136,8 +136,6 @@ export function OfficeFilePicker({
   const [isDragging, setIsDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   const handleClick = async () => {
     if (disabled || busy) return;
@@ -201,31 +199,7 @@ export function OfficeFilePicker({
   };
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatOfficePickerMarkdown({ docType, workspacePath, disabled, error }),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatOfficePickerJson({ docType, workspacePath, disabled, error }),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -249,20 +223,6 @@ export function OfficeFilePicker({
         className="flex w-full items-center justify-end gap-1.5 text-ui-2xs"
         onClick={(e) => e.stopPropagation()}
       >
-        <span
-          data-testid={`office-picker-${docType}-copy-md`}
-          onClick={(e) => void handleCopyMarkdown(e)}
-          className="cursor-pointer rounded border border-border bg-surface px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedMd ? '已复制 MD' : '复制 MD'}
-        </span>
-        <span
-          data-testid={`office-picker-${docType}-copy-json`}
-          onClick={(e) => void handleCopyJson(e)}
-          className="cursor-pointer rounded border border-border bg-surface px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedJson ? '已复制 JSON' : '复制 JSON'}
-        </span>
       </div>
       {busy ? (
         <Upload className="w-8 h-8 animate-pulse text-muted" />

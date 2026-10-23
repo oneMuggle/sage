@@ -5,7 +5,7 @@
  * 显示项目的约束统计信息（启用数量、Glob 触发数量、中文类别分组、高优规则预览、复制规则 MD、手动刷新及空状态快速导入）
  */
 
-import { Shield, CheckCircle2, Sparkles, RefreshCw, Copy, Check } from 'lucide-react';
+import { Shield, CheckCircle2, Sparkles, RefreshCw } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
 import { projectApi, type ProjectConstraint, type ProjectType } from '../../shared/api';
@@ -40,7 +40,6 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copiedRules, setCopiedRules] = useState(false);
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [savedSummaryL3, setSavedSummaryL3] = useState(false);
@@ -50,7 +49,6 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
   const [promotedRuleMilestoneIds, setPromotedRuleMilestoneIds] = useState<Set<string>>(new Set());
   const [promotedRuleL4Ids, setPromotedRuleL4Ids] = useState<Set<string>>(new Set());
   const [copiedRuleId, setCopiedRuleId] = useState<string | null>(null);
-  const [copiedCategories, setCopiedCategories] = useState(false);
   const [convertedDisabledMilestone, setConvertedDisabledMilestone] = useState(false);
   const [savedGlobL3, setSavedGlobL3] = useState(false);
   const [savedGlobL4, setSavedGlobL4] = useState(false);
@@ -138,27 +136,6 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
     .sort((a, b) => b.priority - a.priority)
     .slice(0, 3);
 
-  const handleCopyActiveRules = async () => {
-    if (enabledConstraints.length === 0) return;
-    const lines = [
-      `# 项目生效约束规则清单 (${enabledConstraints.length} 条)`,
-      '',
-      ...enabledConstraints
-        .sort((a, b) => b.priority - a.priority)
-        .map(
-          (c) =>
-            `- **[P${c.priority} · ${CONSTRAINT_CATEGORY_LABELS[c.category] ?? c.category}]** \`${c.triggerPattern || 'always'}\`：${c.content}`,
-        ),
-    ];
-    try {
-      await navigator.clipboard?.writeText(lines.join('\n'));
-      setCopiedRules(true);
-      setTimeout(() => setCopiedRules(false), 1800);
-    } catch {
-      // ignore in test/offline mode
-    }
-  };
-
   return (
     <Card data-testid="constraint-summary-widget">
       <CardHeader className="pb-2">
@@ -170,97 +147,76 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
           <div className="flex items-center gap-1">
             {enabledConstraints.length > 0 && (
               <>
-              <button
-                type="button"
-                data-testid="constraint-summary-save-l3-btn"
-                onClick={async () => {
-                  if (savedSummaryL3) return;
-                  setSavedSummaryL3(true);
-                  if (typeof projectApi?.confirmKnowledge === 'function') {
-                    try {
-                      await projectApi.confirmKnowledge(projectId, {
-                        entries: enabledConstraints
-                          .slice(0, 5)
-                          .map((c) => ({
+                <button
+                  type="button"
+                  data-testid="constraint-summary-save-l3-btn"
+                  onClick={async () => {
+                    if (savedSummaryL3) return;
+                    setSavedSummaryL3(true);
+                    if (typeof projectApi?.confirmKnowledge === 'function') {
+                      try {
+                        await projectApi.confirmKnowledge(projectId, {
+                          entries: enabledConstraints.slice(0, 5).map((c) => ({
                             category: 'convention',
                             content: c.content,
                             importance: c.priority,
                             sourceMessageIds: [],
                             reasoning: '约束统计摘要高优规则沉淀至 L3 画像',
                           })),
-                      });
-                    } catch {
-                      // ignore in test/offline mode
-                    }
-                  }
-                }}
-                className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                {savedSummaryL3 ? '已存高优 L3' : '沉淀高优至 L3'}
-              </button>
-              <button
-                type="button"
-                data-testid="constraint-summary-save-l4-btn"
-                onClick={async () => {
-                  if (savedSummaryL4) return;
-                  setSavedSummaryL4(true);
-                  if (typeof projectApi?.addMaterial === 'function') {
-                    try {
-                      await projectApi.addMaterial(projectId, {
-                        content: `# L2 生效约束规则快照 (${enabledConstraints.length} 条)\n${enabledConstraints.map((c) => `- [P${c.priority} · ${c.category}] ${c.content}`).join('\n')}`,
-                      });
-                    } catch {
-                      // ignore in test/offline mode
-                    }
-                  }
-                }}
-                className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                {savedSummaryL4 ? '已存 L4' : '存 L4'}
-              </button>
-              <button
-                type="button"
-                data-testid="constraint-summary-top-to-milestone-btn"
-                onClick={async () => {
-                  if (convertedTopMilestones) return;
-                  setConvertedTopMilestones(true);
-                  if (typeof projectApi?.createMilestone === 'function') {
-                    for (const rule of topRules) {
-                      try {
-                        await projectApi.createMilestone(projectId, {
-                          title: `[高优约束验收] ${rule.content.slice(0, 60)}`,
-                          description: `来自 L2 高优规则 P${rule.priority} (${rule.category})`,
-                          status: 'pending',
                         });
                       } catch {
                         // ignore in test/offline mode
                       }
                     }
-                  }
-                }}
-                className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                {convertedTopMilestones ? '已转里程碑' : '高优转里程碑'}
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleCopyActiveRules()}
-                data-testid="constraint-summary-copy-md-btn"
-                className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                title="复制生效约束规则 Markdown"
-              >
-                {copiedRules ? (
-                  <>
-                    <Check className="h-3 w-3 text-emerald-500" />
-                    已复制
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3 w-3" />
-                    复制规则
-                  </>
-                )}
-              </button>
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {savedSummaryL3 ? '已存高优 L3' : '沉淀高优至 L3'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="constraint-summary-save-l4-btn"
+                  onClick={async () => {
+                    if (savedSummaryL4) return;
+                    setSavedSummaryL4(true);
+                    if (typeof projectApi?.addMaterial === 'function') {
+                      try {
+                        await projectApi.addMaterial(projectId, {
+                          content: `# L2 生效约束规则快照 (${enabledConstraints.length} 条)\n${enabledConstraints.map((c) => `- [P${c.priority} · ${c.category}] ${c.content}`).join('\n')}`,
+                        });
+                      } catch {
+                        // ignore in test/offline mode
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {savedSummaryL4 ? '已存 L4' : '存 L4'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="constraint-summary-top-to-milestone-btn"
+                  onClick={async () => {
+                    if (convertedTopMilestones) return;
+                    setConvertedTopMilestones(true);
+                    if (typeof projectApi?.createMilestone === 'function') {
+                      for (const rule of topRules) {
+                        try {
+                          await projectApi.createMilestone(projectId, {
+                            title: `[高优约束验收] ${rule.content.slice(0, 60)}`,
+                            description: `来自 L2 高优规则 P${rule.priority} (${rule.category})`,
+                            status: 'pending',
+                          });
+                        } catch {
+                          // ignore in test/offline mode
+                        }
+                      }
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {convertedTopMilestones ? '已转里程碑' : '高优转里程碑'}
+                </button>
               </>
             )}
             <button
@@ -388,7 +344,9 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                       try {
                         await projectApi.addMaterial(projectId, {
                           content: `# Glob 按需触发约束清单 (${globRules.length} 条)\n${globRules
-                            .map((gc) => `- \`${gc.triggerPattern}\` (P${gc.priority}): ${gc.content}`)
+                            .map(
+                              (gc) => `- \`${gc.triggerPattern}\` (P${gc.priority}): ${gc.content}`,
+                            )
                             .join('\n')}`,
                         });
                       } catch {
@@ -434,28 +392,6 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                 <div className="text-xs text-muted-foreground">按类别</div>
                 <button
                   type="button"
-                  data-testid="constraint-summary-copy-cats-btn"
-                  onClick={async () => {
-                    const md = [
-                      '# L2 约束类别分布',
-                      ...Array.from(categoryCount.entries()).map(
-                        ([cat, cnt]) => `- **${CONSTRAINT_CATEGORY_LABELS[cat] ?? cat} (${cat})**: ${cnt} 条`,
-                      ),
-                    ].join('\n');
-                    try {
-                      await navigator.clipboard?.writeText(md);
-                      setCopiedCategories(true);
-                      setTimeout(() => setCopiedCategories(false), 1500);
-                    } catch {
-                      // ignore in test/offline mode
-                    }
-                  }}
-                  className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  {copiedCategories ? '已复制分布' : '复制分布'}
-                </button>
-                <button
-                  type="button"
                   data-testid="constraint-summary-cats-to-l3-btn"
                   onClick={async () => {
                     if (savedCatsL3) return;
@@ -467,7 +403,10 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                             {
                               category: 'convention',
                               content: `L2 约束类别分布：${Array.from(categoryCount.entries())
-                                .map(([cat, cnt]) => `${CONSTRAINT_CATEGORY_LABELS[cat] ?? cat}(${cnt}条)`)
+                                .map(
+                                  ([cat, cnt]) =>
+                                    `${CONSTRAINT_CATEGORY_LABELS[cat] ?? cat}(${cnt}条)`,
+                                )
                                 .join('、')}`,
                               importance: 6,
                               sourceMessageIds: [],
@@ -496,7 +435,8 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                           content: [
                             '# L2 约束类别分布统计',
                             ...Array.from(categoryCount.entries()).map(
-                              ([cat, cnt]) => `- **${CONSTRAINT_CATEGORY_LABELS[cat] ?? cat} (${cat})**: ${cnt} 条`,
+                              ([cat, cnt]) =>
+                                `- **${CONSTRAINT_CATEGORY_LABELS[cat] ?? cat} (${cat})**: ${cnt} 条`,
                             ),
                           ].join('\n'),
                         });
@@ -535,10 +475,16 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                       setPreviewExpanded(true);
                     }}
                     className={`flex w-full items-center justify-between rounded px-1 py-0.5 text-xs transition-colors ${
-                      selectedCategory === category ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/50'
+                      selectedCategory === category
+                        ? 'bg-primary/10 text-primary font-medium'
+                        : 'hover:bg-muted/50'
                     }`}
                   >
-                    <span className={selectedCategory === category ? 'text-primary' : 'text-muted-foreground'}>
+                    <span
+                      className={
+                        selectedCategory === category ? 'text-primary' : 'text-muted-foreground'
+                      }
+                    >
                       {CONSTRAINT_CATEGORY_LABELS[category] ?? category}
                     </span>
                     <span className="font-medium">{count}</span>
@@ -557,9 +503,7 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                 data-testid="constraint-summary-preview-toggle"
                 className="text-xs font-medium text-primary hover:underline"
               >
-                {previewExpanded
-                  ? '收起高优规则预览'
-                  : `查看高优规则预览 (${topRules.length})`}
+                {previewExpanded ? '收起高优规则预览' : `查看高优规则预览 (${topRules.length})`}
               </button>
               {previewExpanded && (
                 <button
@@ -599,112 +543,112 @@ export function ConstraintSummaryWidget({ projectId, projectType }: ConstraintSu
                       <span className="truncate text-foreground">{rule.content}</span>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      data-testid={`constraint-summary-rule-to-l3-${rule.id}`}
-                      onClick={async () => {
-                        if (promotedRuleL3Ids.has(rule.id)) return;
-                        setPromotedRuleL3Ids((prev) => new Set(prev).add(rule.id));
-                        if (typeof projectApi?.confirmKnowledge === 'function') {
+                      <button
+                        type="button"
+                        data-testid={`constraint-summary-rule-to-l3-${rule.id}`}
+                        onClick={async () => {
+                          if (promotedRuleL3Ids.has(rule.id)) return;
+                          setPromotedRuleL3Ids((prev) => new Set(prev).add(rule.id));
+                          if (typeof projectApi?.confirmKnowledge === 'function') {
+                            try {
+                              await projectApi.confirmKnowledge(projectId, {
+                                entries: [
+                                  {
+                                    category: 'convention',
+                                    content: rule.content,
+                                    importance: rule.priority,
+                                    sourceMessageIds: [],
+                                    reasoning: '约束统计预览规则沉淀至 L3 画像',
+                                  },
+                                ],
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+                      >
+                        {promotedRuleL3Ids.has(rule.id) ? '已存 L3' : '+L3'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`constraint-summary-rule-to-milestone-${rule.id}`}
+                        onClick={async () => {
+                          if (promotedRuleMilestoneIds.has(rule.id)) return;
+                          setPromotedRuleMilestoneIds((prev) => new Set(prev).add(rule.id));
+                          if (typeof projectApi?.createMilestone === 'function') {
+                            try {
+                              await projectApi.createMilestone(projectId, {
+                                title: `[规则验收] ${rule.content.slice(0, 60)}`,
+                                description: `来自 L2 高优规则 P${rule.priority} (${rule.category})`,
+                                status: 'pending',
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        {promotedRuleMilestoneIds.has(rule.id) ? '已转里程碑' : '+里程碑'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`constraint-summary-rule-to-l4-${rule.id}`}
+                        onClick={async () => {
+                          if (promotedRuleL4Ids.has(rule.id)) return;
+                          setPromotedRuleL4Ids((prev) => new Set(prev).add(rule.id));
+                          if (typeof projectApi?.addMaterial === 'function') {
+                            try {
+                              await projectApi.addMaterial(projectId, {
+                                content: `# 高优约束归档 [P${rule.priority} · ${rule.category}]\n\n${rule.content}`,
+                              });
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        {promotedRuleL4Ids.has(rule.id) ? '已存L4' : '+L4'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`constraint-summary-rule-copy-${rule.id}`}
+                        onClick={async () => {
                           try {
-                            await projectApi.confirmKnowledge(projectId, {
-                              entries: [
-                                {
-                                  category: 'convention',
-                                  content: rule.content,
-                                  importance: rule.priority,
-                                  sourceMessageIds: [],
-                                  reasoning: '约束统计预览规则沉淀至 L3 画像',
-                                },
-                              ],
-                            });
+                            await navigator.clipboard?.writeText(
+                              `[P${rule.priority}] (${rule.triggerPattern || 'always'}) ${rule.content}`,
+                            );
+                            setCopiedRuleId(rule.id);
+                            setTimeout(() => setCopiedRuleId(null), 1500);
                           } catch {
                             // ignore in test/offline mode
                           }
-                        }
-                      }}
-                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
-                    >
-                      {promotedRuleL3Ids.has(rule.id) ? '已存 L3' : '+L3'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid={`constraint-summary-rule-to-milestone-${rule.id}`}
-                      onClick={async () => {
-                        if (promotedRuleMilestoneIds.has(rule.id)) return;
-                        setPromotedRuleMilestoneIds((prev) => new Set(prev).add(rule.id));
-                        if (typeof projectApi?.createMilestone === 'function') {
+                        }}
+                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        {copiedRuleId === rule.id ? '已复制' : '复制'}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid={`constraint-summary-quick-toggle-${rule.id}`}
+                        onClick={async () => {
+                          if (typeof projectApi?.updateConstraint !== 'function') return;
                           try {
-                            await projectApi.createMilestone(projectId, {
-                              title: `[规则验收] ${rule.content.slice(0, 60)}`,
-                              description: `来自 L2 高优规则 P${rule.priority} (${rule.category})`,
-                              status: 'pending',
+                            await projectApi.updateConstraint(projectId, rule.id, {
+                              enabled: !rule.enabled,
                             });
+                            await fetchConstraints();
                           } catch {
                             // ignore in test/offline mode
                           }
-                        }
-                      }}
-                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                    >
-                      {promotedRuleMilestoneIds.has(rule.id) ? '已转里程碑' : '+里程碑'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid={`constraint-summary-rule-to-l4-${rule.id}`}
-                      onClick={async () => {
-                        if (promotedRuleL4Ids.has(rule.id)) return;
-                        setPromotedRuleL4Ids((prev) => new Set(prev).add(rule.id));
-                        if (typeof projectApi?.addMaterial === 'function') {
-                          try {
-                            await projectApi.addMaterial(projectId, {
-                              content: `# 高优约束归档 [P${rule.priority} · ${rule.category}]\n\n${rule.content}`,
-                            });
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }
-                      }}
-                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                    >
-                      {promotedRuleL4Ids.has(rule.id) ? '已存L4' : '+L4'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid={`constraint-summary-rule-copy-${rule.id}`}
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard?.writeText(
-                            `[P${rule.priority}] (${rule.triggerPattern || 'always'}) ${rule.content}`,
-                          );
-                          setCopiedRuleId(rule.id);
-                          setTimeout(() => setCopiedRuleId(null), 1500);
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }}
-                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                    >
-                      {copiedRuleId === rule.id ? '已复制' : '复制'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid={`constraint-summary-quick-toggle-${rule.id}`}
-                      onClick={async () => {
-                        if (typeof projectApi?.updateConstraint !== 'function') return;
-                        try {
-                          await projectApi.updateConstraint(projectId, rule.id, {
-                            enabled: !rule.enabled,
-                          });
-                          await fetchConstraints();
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }}
-                      className="shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                    >
-                      停用
-                    </button>
+                        }}
+                        className="shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        停用
+                      </button>
                     </div>
                   </div>
                 ))}

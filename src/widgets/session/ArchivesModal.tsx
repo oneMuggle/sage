@@ -36,9 +36,6 @@ export function ArchivesModal({ isOpen, onClose, sessionId }: ArchivesModalProps
   const [selected, setSelected] = useState<LineageArchive | null>(null);
   const [messages, setMessages] = useState<MessageType[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen || !sessionId) return;
@@ -78,50 +75,7 @@ export function ArchivesModal({ isOpen, onClose, sessionId }: ArchivesModalProps
   }, []);
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    const lines = selected
-      ? [
-          `# 压缩归档: ${selected.title}`,
-          '',
-          `- **归档 ID**: \`${selected.archive_session_id}\``,
-          `- **消息数**: ${selected.message_count}`,
-          '',
-          ...messages.map(
-            (m) =>
-              `### ${m.role}\n\n${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`,
-          ),
-        ]
-      : [
-          '# 会话压缩归档列表',
-          '',
-          `- **归档总数**: ${archives.length}`,
-          '',
-          ...archives.map(
-            (a) =>
-              `- **${a.title}** (\`${a.archive_session_id}\`) · ${a.message_count} 条 · ${formatTime(a.archived_at)}`,
-          ),
-        ];
-    setCopiedMd(true);
-    await navigator.clipboard?.writeText(lines.join('\n'));
-    setTimeout(() => setCopiedMd(false), 1800);
-  };
 
-  const handleCopyJson = async () => {
-    const payload = selected ? { archive: selected, messages } : { sessionId, archives };
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    setTimeout(() => setCopiedJson(false), 1800);
-  };
-
-  const handleCopyItemJson = async (e: React.MouseEvent, archive: LineageArchive) => {
-    e.stopPropagation();
-    setCopiedItemId(archive.archive_session_id);
-    await navigator.clipboard?.writeText(JSON.stringify(archive, null, 2));
-    setTimeout(
-      () => setCopiedItemId((prev) => (prev === archive.archive_session_id ? null : prev)),
-      1800,
-    );
-  };
   /* v8 ignore stop */
 
   return (
@@ -156,24 +110,6 @@ export function ArchivesModal({ isOpen, onClose, sessionId }: ArchivesModalProps
                     压缩归档
                   </Dialog.Title>
                   <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      data-testid="archives-modal-copy-md-btn"
-                      disabled={!selected && archives.length === 0}
-                      onClick={() => void handleCopyMd()}
-                      className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text hover:bg-bg-subtle disabled:opacity-50"
-                    >
-                      {copiedMd ? '✓ 已复制MD' : '复制归档MD'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="archives-modal-copy-json-btn"
-                      disabled={!selected && archives.length === 0}
-                      onClick={() => void handleCopyJson()}
-                      className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text hover:bg-bg-subtle disabled:opacity-50"
-                    >
-                      {copiedJson ? '✓ 已复制JSON' : '复制归档JSON'}
-                    </button>
                     <button
                       type="button"
                       onClick={onClose}
@@ -213,15 +149,6 @@ export function ArchivesModal({ isOpen, onClose, sessionId }: ArchivesModalProps
                           <span className="text-xs text-muted flex-shrink-0 flex items-center gap-2">
                             <span>
                               {archive.message_count} 条 · {formatTime(archive.archived_at)}
-                            </span>
-                            <span
-                              role="button"
-                              tabIndex={0}
-                              data-testid={`archive-item-copy-json-${archive.archive_session_id}`}
-                              onClick={(e) => void handleCopyItemJson(e, archive)}
-                              className="px-1.5 py-0.5 rounded border border-border text-ui-2xs hover:text-text"
-                            >
-                              {copiedItemId === archive.archive_session_id ? '✓ 已复制' : '复制JSON'}
                             </span>
                           </span>
                         </button>

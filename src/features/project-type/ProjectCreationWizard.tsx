@@ -127,7 +127,6 @@ export function ProjectCreationWizard({
   const [selectedAllowedPaths, setSelectedAllowedPaths] = useState<string[]>([]);
   const [customAllowedPath, setCustomAllowedPath] = useState<string>('');
   const [copiedSummaryMd, setCopiedSummaryMd] = useState(false);
-  const [copiedWizardMilestones, setCopiedWizardMilestones] = useState(false);
   const [projectDescription, setProjectDescription] = useState<string>('');
   const [projectInstructions, setProjectInstructions] = useState<string>('');
   const [vcsMode, setVcsMode] = useState<'git' | 'builtin' | 'none'>('builtin');
@@ -529,25 +528,6 @@ export function ProjectCreationWizard({
                             <span className="text-foreground">{ms.title}</span>
                           </span>
                         ))}
-                        <button
-                          type="button"
-                          data-testid="wizard-copy-milestones-btn"
-                          onClick={async () => {
-                            const md = blueprint.recommendedMilestones
-                              .map((m, i) => `${i + 1}. [${m.stage}] ${m.title} — ${m.description}`)
-                              .join('\n');
-                            try {
-                              await navigator.clipboard?.writeText(md);
-                              setCopiedWizardMilestones(true);
-                              setTimeout(() => setCopiedWizardMilestones(false), 1500);
-                            } catch {
-                              // ignore in test/offline mode
-                            }
-                          }}
-                          className="ml-auto rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                        >
-                          {copiedWizardMilestones ? '已复制里程碑' : '复制推荐里程碑'}
-                        </button>
                       </div>
                     )}
                     <div className="space-y-1 pt-1">

@@ -12,14 +12,8 @@ import type { AgentEvent } from '../../../shared/api/types';
 import { useStore } from '../../../shared/lib/store';
 import { useChangesListStore } from '../../changes/changesListStore';
 import { useRightPanelStore } from '../../right-panel/rightPanelStore';
-import {
-  selectSessionSlots,
-  useChatStreamStore,
-} from '../chatStreamStore';
-import {
-  applyOrchestrationEventToBoard,
-  restoreRunToBoard,
-} from '../orchestrationEvents';
+import { selectSessionSlots, useChatStreamStore } from '../chatStreamStore';
+import { applyOrchestrationEventToBoard, restoreRunToBoard } from '../orchestrationEvents';
 
 const SID = 'sess-r35';
 

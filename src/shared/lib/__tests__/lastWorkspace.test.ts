@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  clearLastWorkspacePath,
-  getLastWorkspacePath,
-  setLastWorkspacePath,
-} from '../lastWorkspace';
+import { clearLastWorkspacePath, getLastWorkspacePath, setLastWorkspacePath } from '../lastWorkspace';
 
 describe('lastWorkspace — localStorage persistence', () => {
   beforeEach(() => {

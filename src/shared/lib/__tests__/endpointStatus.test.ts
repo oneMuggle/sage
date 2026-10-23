@@ -1,14 +1,7 @@
 // 对话阅读体验第二轮 C3：端点可达性判定与状态。
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import {
-  classifyEndpointError,
-  hostOf,
-  isSameEndpoint,
-  reportStreamFailure,
-  reportStreamSuccess,
-  useEndpointStatusStore,
-} from '../endpointStatus';
+import { classifyEndpointError, hostOf, isSameEndpoint, reportStreamFailure, reportStreamSuccess, useEndpointStatusStore } from '../endpointStatus';
 
 beforeEach(() => {
   useEndpointStatusStore.setState({ issue: null, dismissed: false });
