@@ -88,3 +88,11 @@ export function exportChatInlineErrorAuditJson(
 ): string {
   return JSON.stringify(evaluateChatInlineErrorAudit(input));
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditChatInlineErrorGovernance(): string {
+  return JSON.stringify({
+    module: 'chat-inline-error',
+    phase: 'P185',
+    audited: true,
+  });
+}

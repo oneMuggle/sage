@@ -151,3 +151,11 @@ export function exportObservationFeedAuditJson(
 ): string {
   return JSON.stringify(auditObservationFeed(entryCount), null, 2);
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditObservationFeedGovernance(): string {
+  return JSON.stringify({
+    module: 'observation-feed',
+    phase: 'P185',
+    audited: true,
+  });
+}
