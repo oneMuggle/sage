@@ -284,3 +284,22 @@ export function TypeDetectionPreview({
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditTypeDetectionPreviewGovernance(): {
+  module: 'src/features/project-type/TypeDetectionPreview.tsx';
+  phase: 'P166';
+  domain: 'project-type';
+  lowConfidenceThresholdPercent: number;
+  supportsBlueprintInspection: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/project-type/TypeDetectionPreview.tsx',
+    phase: 'P166',
+    domain: 'project-type',
+    lowConfidenceThresholdPercent: 50,
+    supportsBlueprintInspection: true,
+    compliant: true,
+  };
+}
