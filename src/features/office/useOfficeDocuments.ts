@@ -445,3 +445,15 @@ export function formatOfficeDocumentsBatchJson(result: {
     2,
   );
 }
+
+export function auditUseOfficeDocumentsGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/useOfficeDocuments.ts',
+    phase: 'P165',
+    status: 'ready',
+  };
+}

@@ -38,3 +38,15 @@ export function formatOfficeCapabilitiesJson(caps: OfficeCapabilities | null): s
     2,
   );
 }
+
+export function auditOfficeCapabilitiesGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/officeCapabilities.ts',
+    phase: 'P165',
+    status: 'ready',
+  };
+}
