@@ -23,7 +23,7 @@
 | R86 | 生态（脚手架 / 索引 / 贡献指南） | ✅ #2206 |
 | R90 | 进程外插件 tool → 聊天 `ToolRegistry` 桥 | ✅ #2327 |
 | R92 | 插件工具 profile 受限通配 + Agent 工具白名单编辑 | ✅ #2360 |
-| R94 | 运行中插件工具动态选择器 | 实施中 |
+| R94 | 运行中插件工具动态选择器 | #2407（待合并） |
 
 ## 2. 交付总账
 
@@ -40,7 +40,7 @@
 | R86 | `plugins/{scaffold_templates,scaffold,index_catalog}.py` + `cli/plugin.py` + hello-tool 示例/静态索引/开发指南 + 25 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
 | R90 | `plugins/tool_bridge.py` + host publish/unpublish 通知与 running 查询 + `plugins` tool bundle + `input_schema` 契约/权限门/桥接测试与文档 | #2327 | 待对齐 | ✅ 已交付 |
 | R92 | `domain/tool_names.py` 共享 matcher 与前缀单一来源 + registry/agent 三道闸统一 + 启动期校验识别插件引用 + `EditAgentForm` 工具白名单编辑与测试/文档 | #2360 | 待对齐 | ✅ 已交付 |
-| R94 | `PluginToolBridge.published_tools()` 权威快照 + `GET /plugins/runtime/tools` + `pluginClient.runtimeTools()` + Agent 运行中插件工具动态复选框与测试/文档 | 实施中 | 待对齐 | 实施中 |
+| R94 | `PluginToolBridge.published_tools()` 权威快照 + `GET /plugins/runtime/tools` + `pluginClient.runtimeTools()` + Agent 运行中插件工具动态复选框与测试/文档 | #2407（待合并） | 待对齐 | 实施中 |
 
 ## 3. R78 交付边界
 
