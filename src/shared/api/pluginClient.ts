@@ -127,6 +127,15 @@ export interface PluginInvokeResponse {
   runtime: PluginRuntimeStatus;
 }
 
+export interface PublishedPluginTool {
+  plugin_name: string;
+  capability_name: string;
+  tool_name: string;
+  description: string;
+  risk: string;
+  permissions: string[];
+}
+
 export interface InstallPluginInput {
   manifest: Record<string, unknown>;
   installPath: string;
@@ -355,6 +364,14 @@ export const pluginClient = {
       method: 'GET',
       path: `${pluginPath(name)}/runtime`,
     });
+  },
+
+  async runtimeTools(): Promise<PublishedPluginTool[]> {
+    const response = await backendRequest<{ tools: PublishedPluginTool[]; count: number }>({
+      method: 'GET',
+      path: `${BASE}/runtime/tools`,
+    });
+    return response.tools;
   },
 
   startRuntime(name: string): Promise<PluginRuntimeActionResponse> {
