@@ -2617,3 +2617,22 @@
   - `src/shared/lib/__tests__/useIsMobile.p180.test.ts`
   - `src/shared/lib/__tests__/useNavigationHistory.p180.test.ts`
   - `src/shared/lib/__tests__/useResizablePanel.p180.test.ts`
+### Phase P181 — Shared Lib UseResizableSidebar, Utils, WorkspaceContext, SiderOrder, UseEmacsKeybindings, UseFeatureUnlock, UseFileUpload & UseSessionDraft Governance Audit Contracts (Completed)
+- **8 Shared Lib, DnD & Hooks Modules**:
+  - `src/shared/lib/useResizableSidebar.ts` (`auditUseResizableSidebarGovernance`)
+  - `src/shared/lib/utils.ts` (`auditUtilsGovernance`)
+  - `src/shared/lib/workspaceContext.tsx` (`auditWorkspaceContextGovernance`)
+  - `src/shared/lib/dnd/siderOrder.ts` (`auditSiderOrderGovernance`)
+  - `src/shared/lib/hooks/useEmacsKeybindings.ts` (`auditUseEmacsKeybindingsGovernance`)
+  - `src/shared/lib/hooks/useFeatureUnlock.ts` (`auditUseFeatureUnlockGovernance`)
+  - `src/shared/lib/hooks/useFileUpload.ts` (`auditUseFileUploadGovernance`)
+  - `src/shared/lib/hooks/useSessionDraft.ts` (`auditUseSessionDraftGovernance`)
+- **8 Unit Test Suites**:
+  - `src/shared/lib/__tests__/useResizableSidebar.p181.test.ts`
+  - `src/shared/lib/__tests__/utils.p181.test.ts`
+  - `src/shared/lib/__tests__/workspaceContext.p181.test.ts`
+  - `src/shared/lib/dnd/__tests__/siderOrder.p181.test.ts`
+  - `src/shared/lib/hooks/__tests__/useEmacsKeybindings.p181.test.ts`
+  - `src/shared/lib/hooks/__tests__/useFeatureUnlock.p181.test.ts`
+  - `src/shared/lib/hooks/__tests__/useFileUpload.p181.test.ts`
+  - `src/shared/lib/hooks/__tests__/useSessionDraft.p181.test.ts`

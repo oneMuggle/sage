@@ -91,3 +91,19 @@ export function formatWorkspaceBindingJson(
   });
 }
 
+export function auditWorkspaceContextGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.workspace_context.governance.v1',
+      phase: 'P181',
+      unmountedSummary: formatWorkspaceBindingSummary(null),
+      boundSummary: formatWorkspaceBindingSummary({
+        sessionId: 's1',
+        binding: { workspacePath: '/workspace' },
+        status: 'ready',
+      }),
+    },
+    null,
+    2,
+  );
+}

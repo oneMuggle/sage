@@ -130,3 +130,16 @@ export function formatSiderOrderJson(order: SiderOrder): string {
     2,
   );
 }
+
+export function auditSiderOrderGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.dnd.sider_order.governance.v1',
+      phase: 'P181',
+      sampleSummary: formatSiderOrderSummary(['a', 'b', 'c']),
+      reorderedSample: reorderSiderIds(['a', 'b', 'c'], 0, 2),
+    },
+    null,
+    2,
+  );
+}
