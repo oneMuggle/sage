@@ -2650,3 +2650,17 @@
 - **Verification**:
   - 8 unit test suites under `src/shared/lib/__tests__/*.p182.test.ts`.
   - All 6 repository gates (`npx eslint --max-warnings=0`, `npx vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, `npx tsc --noEmit`) passed across `.worktrees/proj-p112-main` and `.worktrees/proj-p112-win7`.
+### Phase P183 — Shared I18n Provider, Chinese Locale Domains, Log, Wiki Types & ConfirmService Governance Audit Contracts (2026-10-23)
+
+- **Scope (`src/shared/`)**:
+  1. `src/shared/lib/i18n/index.tsx`: `auditI18nProviderGovernance()` (`module: 'i18n-provider'`)
+  2. `src/shared/lib/i18n/locales/zh/chatAndSider.ts`: `auditZhChatAndSiderGovernance()` (`module: 'zh-chat-and-sider'`)
+  3. `src/shared/lib/i18n/locales/zh/settingsAndModels.ts`: `auditZhSettingsAndModelsGovernance()` (`module: 'zh-settings-and-models'`)
+  4. `src/shared/lib/i18n/locales/zh/workspaceAndTools.ts`: `auditZhWorkspaceAndToolsGovernance()` (`module: 'zh-workspace-and-tools'`)
+  5. `src/shared/log/client.ts`: `auditLogClientGovernance()` (`module: 'log-client'`)
+  6. `src/shared/log/levels.ts`: `auditLogLevelsGovernance()` (`module: 'log-levels'`)
+  7. `src/shared/types/wiki.ts`: `auditWikiTypesGovernance()` (`module: 'wiki-types'`)
+  8. `src/shared/ui/ConfirmDialog/confirmService.ts`: `auditConfirmServiceGovernance()` (`module: 'confirm-service'`)
+- **Verification**:
+  - 8 unit test suites under `src/shared/*/__tests__/*.p183.test.ts`.
+  - All 6 repository gates (`npx eslint --max-warnings=0`, `npx vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, `npx tsc --noEmit`) passed across `.worktrees/proj-p112-main` and `.worktrees/proj-p112-win7`.

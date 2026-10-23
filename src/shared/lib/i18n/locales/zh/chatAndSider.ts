@@ -453,4 +453,11 @@ export function formatZhChatAndSiderJson(): string {
     keyCount: keys.length,
   });
 }
+export function auditZhChatAndSiderGovernance(): string {
+  return JSON.stringify({
+    module: 'zh-chat-and-sider',
+    phase: 'P183',
+    audited: true,
+  });
+}
 
