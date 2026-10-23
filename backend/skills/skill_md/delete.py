@@ -174,7 +174,8 @@ class SkillMdDeleter:
             # Windows lacks unlinkat/dir_fd.  Recheck the opened directory's
             # identity immediately before unlinking; if it changed, fail closed.
             before = os.fstat(directory_fd)
-            current = os.lstat(target)  # py3.8: Path.stat(follow_symlinks=) 是 3.10+
+            # py38: Path.stat(follow_symlinks=) 是 3.10+，os.stat 在 3.8 上就支持该参数
+            current = os.stat(target, follow_symlinks=False)  # noqa: PTH116 - Path.stat(follow_symlinks=) 需 3.10+
             if (before.st_dev, before.st_ino) != (current.st_dev, current.st_ino):
                 raise ValueError(f"Refusing to delete replaced skills root {target}")
             skill_file.unlink()

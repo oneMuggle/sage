@@ -69,6 +69,187 @@ def test_detects_pydantic_and_fastapi_runtime_annotations() -> None:
     assert any("FastAPI route `create_item` return annotation" in i for i in issues)
 
 
+
+
+def test_detects_bare_model_rebuild_without_guard() -> None:
+    """裸 `.model_rebuild()` 必须报 —— win7 垫片不注入它，py38 通道导入期就崩。"""
+    gate = _load_gate_module()
+    bad_src = (
+        "from __future__ import annotations\n"
+        "from pydantic import BaseModel\n\n"
+        "class M(BaseModel):\n"
+        "    x: int = 0\n\n"
+        "M.model_rebuild()\n"
+    )
+    issues = gate.check_source(bad_src, filename="sample_rebuild.py")
+    hits = [i for i in issues if "bare `.model_rebuild()`" in i]
+    assert len(hits) == 1, issues
+
+
+def test_allows_guarded_model_rebuild() -> None:
+    """hasattr 双版本守卫必须豁免（project_ai_routes.py / office/models.py 的形态）。"""
+    gate = _load_gate_module()
+    ok_src = (
+        "from __future__ import annotations\n"
+        "from pydantic import BaseModel\n\n"
+        "class M(BaseModel):\n"
+        "    x: int = 0\n\n"
+        'if hasattr(M, "model_rebuild"):\n'
+        "    M.model_rebuild()\n"
+        "else:\n"
+        "    M.update_forward_refs()\n"
+    )
+    assert gate.check_source(ok_src, filename="sample_guarded.py") == []
+
+
+def test_allows_for_loop_rebuild_guard() -> None:
+    """`for _cls in (...)` 循环守卫体必须豁免（office/models.py 末尾的形态）。"""
+    gate = _load_gate_module()
+    ok_src = (
+        "from __future__ import annotations\n"
+        "from pydantic import BaseModel\n\n"
+        "class S(BaseModel):\n"
+        '    x: "T" = None\n\n'
+        "class T(BaseModel):\n"
+        "    y: int = 0\n\n"
+        "for _cls in (S, T):\n"
+        '    if hasattr(_cls, "update_forward_refs"):\n'
+        "        _cls.update_forward_refs()\n"
+        '    elif hasattr(_cls, "model_rebuild"):\n'
+        "        _cls.model_rebuild()\n"
+    )
+    assert gate.check_source(ok_src, filename="sample_loop_guard.py") == []
+
+
+def test_rejects_guard_for_a_different_model() -> None:
+    """守卫对象与调用对象不一致时仍要报 —— 防止「加了个不相干的守卫」蒙混过关。"""
+    gate = _load_gate_module()
+    bad_src = (
+        "from __future__ import annotations\n"
+        "from pydantic import BaseModel\n\n"
+        "class A(BaseModel):\n"
+        "    x: int = 0\n\n"
+        "class B(BaseModel):\n"
+        "    y: int = 0\n\n"
+        'if hasattr(A, "model_rebuild"):\n'
+        "    B.model_rebuild()\n"
+    )
+    issues = gate.check_source(bad_src, filename="sample_mismatch.py")
+    hits = [i for i in issues if "bare `.model_rebuild()`" in i]
+    assert len(hits) == 1, issues
+
+
+def test_detects_pydantic_forward_ref_to_later_class() -> None:
+    """pydantic 字段引用本文件更晚定义的类必须报（v1 创建期解析 → ConfigError）。"""
+    gate = _load_gate_module()
+    bad_src = (
+        "from __future__ import annotations\n"
+        "from pydantic import BaseModel\n\n"
+        "class Outer(BaseModel):\n"
+        '    inner: "Inner"\n\n'
+        "class Inner(BaseModel):\n"
+        "    v: int = 0\n"
+    )
+    issues = gate.check_source(bad_src, filename="sample_fwdref.py")
+    hits = [i for i in issues if "forward-references `Inner`" in i]
+    assert len(hits) == 1, issues
+
+
+def test_allows_forward_ref_when_class_defined_earlier() -> None:
+    """被引用类定义在使用点之前是合法解法（win7 对 WordIndexSpec 用的就是这个）。"""
+    gate = _load_gate_module()
+    ok_src = (
+        "from __future__ import annotations\n"
+        "from pydantic import BaseModel\n\n"
+        "class Early(BaseModel):\n"
+        "    v: int = 0\n\n"
+        "class Uses(BaseModel):\n"
+        "    e: Early\n"
+    )
+    assert gate.check_source(ok_src, filename="sample_earlier.py") == []
+
+
+def test_allows_forward_ref_covered_by_update_forward_refs() -> None:
+    """末尾守卫循环/显式 update_forward_refs() 覆盖的类必须豁免。"""
+    gate = _load_gate_module()
+    ok_src = (
+        "from __future__ import annotations\n"
+        "from pydantic import BaseModel\n\n"
+        "class G(BaseModel):\n"
+        '    late: "Late2"\n\n'
+        "class Late2(BaseModel):\n"
+        "    v: int = 0\n\n"
+        "G.update_forward_refs()\n"
+    )
+    assert gate.check_source(ok_src, filename="sample_guarded_fwd.py") == []
+
+
+def test_ignores_forward_refs_in_non_pydantic_classes() -> None:
+    """普通类 / abc / BaseHTTPRequestHandler 的前向引用不在创建期解析，不该报。
+
+    回归：browser_launcher.py 的 `BrowserCapability.launcher` 与
+    mock_server.py 的 `MockLLMHandler.state` 曾被误报。
+    """
+    gate = _load_gate_module()
+    plain_src = (
+        "from __future__ import annotations\n"
+        "import abc\n\n"
+        "class Capability:\n"
+        "    launcher: Launcher\n\n"
+        "class Launcher(abc.ABC):\n"
+        "    @abc.abstractmethod\n"
+        "    def run(self) -> None: ...\n"
+    )
+    assert gate.check_source(plain_src, filename="sample_plain.py") == []
+
+    handler_src = (
+        "from __future__ import annotations\n"
+        "from http.server import BaseHTTPRequestHandler\n\n"
+        "class Handler(BaseHTTPRequestHandler):\n"
+        "    def do_POST(self) -> None:\n"
+        "        state: Server = self.server.mock_state\n"
+        "        state.record()\n\n"
+        "class Server:\n"
+        "    def record(self) -> None: ...\n"
+    )
+    assert gate.check_source(handler_src, filename="sample_handler.py") == []
+
+
+def test_ignores_method_parameter_annotations() -> None:
+    """方法参数注解不是 pydantic 字段，不该被规则 B 命中。
+
+    回归：download_tool.py 的 `HttpDownloadTool._consume(ctx: _DownloadContext)`
+    曾被误报成字段前向引用。
+    """
+    gate = _load_gate_module()
+    src = (
+        "from __future__ import annotations\n"
+        "from pydantic import BaseModel\n\n"
+        "class Tool(BaseModel):\n"
+        '    name: str = ""\n\n'
+        "    def _consume(self, ctx: Ctx, url: str) -> None:\n"
+        "        return None\n\n"
+        "class Ctx(BaseModel):\n"
+        '    path: str = ""\n'
+    )
+    issues = gate.check_source(src, filename="sample_param.py")
+    assert [i for i in issues if "forward-references" in i] == [], issues
+
+
+def test_ignores_runtime_api_names_inside_docstrings() -> None:
+    """docstring 里讨论 `model_rebuild()` 不该报（_strip_strings 已抹掉字符串）。"""
+    gate = _load_gate_module()
+    src = (
+        "from __future__ import annotations\n\n"
+        "def helper() -> None:\n"
+        '    """Do NOT call M.model_rebuild() directly; use the hasattr guard.\n\n'
+        "    The win7 shim injects model_dump but not model_rebuild().\n"
+        '    """\n'
+        "    return None\n"
+    )
+    assert gate.check_source(src, filename="sample_docstring.py") == []
+
+
 def test_repository_passes_py38_compat_gate() -> None:
     gate = _load_gate_module()
     targets = [REPO_ROOT / "backend", REPO_ROOT / "packages" / "sage-core"]

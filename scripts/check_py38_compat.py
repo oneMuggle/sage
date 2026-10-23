@@ -164,6 +164,8 @@ RUNTIME_SKIP_FRAGMENTS = (
     "scripts/py38_compat_rewrite.py",
     "scripts/check_py38_compat.py",
     "compat/win7/asyncio_compat.py",
+    # 垫片本身就是双版本适配层，里面必然出现 v2 API 名字
+    "compat/win7/pydantic_compat.py",
     # 扫描器的单元测试包含全部地雷字面量（测试样本，非真实代码）
     "tools/test_py38_hazard_scan.py",
     "test_py38_compat_gate.py",
@@ -250,8 +252,221 @@ def check_runtime_apis(path: Path, root: Path) -> list[tuple[int, str]]:
             if multi:
                 out.append((lineno, "py38 runtime: parenthesized `with (a as x, b as y):` is Py3.9+ grammar (SyntaxError on 3.8; run scripts/py38_compat_rewrite.py)"))
         i += 1
+    out.extend(_check_model_rebuild_guards(code_lines, lines))
+    out.extend(check_forward_ref_order(source))
+    out.sort(key=lambda t: t[0])
     return out
 
+
+
+# ── pydantic v1（win7/py38 通道钉 1.10.13）双版本守卫闸门 ────────────────────
+#
+# compat/win7/pydantic_compat.py 的 install() 会给 v1 的 BaseModel 注入
+# model_dump / model_dump_json / model_copy / model_construct / model_validate /
+# model_validate_json / model_json_schema 以及 model_fields property，所以那些
+# v2 写法在 py38 通道是安全的、不需要拦。
+#
+# 但 model_rebuild 不在注入列表里 —— pydantic 1.10.13 的 BaseModel 根本没有这个
+# 属性。裸调它会在「模块导入期」抛 AttributeError；又因为 FastAPI router 模块会被
+# main.py 链式导入，一处裸调就能让整个测试套件在 collection 期全部 E。历史事故：
+# #2290 的 CI 日志因此膨胀到 56 MB（11264 个用例全 E，pytest 为每个 error 打印完整
+# locals），grep FAILED 什么都搜不到。
+#
+# 合法写法是双版本守卫：
+#     if hasattr(Model, "model_rebuild"):
+#         Model.model_rebuild()          # v2
+#     else:
+#         Model.update_forward_refs()    # v1
+MODEL_REBUILD_CALL = re.compile(r"(?<![\w.])(\w+)\.model_rebuild\(\)")
+HASATTR_REBUILD_GUARD = re.compile(
+    r"hasattr\(\s*(\w+)\s*,\s*[\"'](?:model_rebuild|update_forward_refs)[\"']\s*\)"
+)
+FOR_LOOP_GUARD = re.compile(r"^\s*for\s+\w+\s+in\s+\(.*\)\s*:")
+
+
+def _check_model_rebuild_guards(
+    code_lines: list[str], lines: list[str]
+) -> list[tuple[int, str]]:
+    """报出没有双版本守卫的裸 `.model_rebuild()`。
+
+    守卫可以写在调用行上方 6 行内（`if hasattr(M, ...)` 形式），也可以是把调用包在
+    `for _cls in (...)` 循环里（backend/office/models.py 末尾那种）—— 后者的调用
+    对象是循环变量，无法静态关联到具体类名，所以只要该行处在一个含 hasattr 守卫的
+    for 循环体内就豁免。
+
+    关键细节：守卫名本身写在字符串里（hasattr(X, "model_rebuild")），而 code_lines
+    已把字符串抹成空格，所以**守卫必须用原始行 lines 匹配，调用才用 code_lines**。
+    """
+    out: list[tuple[int, str]] = []
+    for i, code in enumerate(code_lines):
+        if ".model_rebuild(" not in code:
+            continue
+        if PY38_GUARD_MARKER in lines[i]:
+            continue
+        lineno = i + 1
+        window = "\n".join(lines[max(0, i - 6):i + 1])
+        guarded = set(HASATTR_REBUILD_GUARD.findall(window))
+        called = set(MODEL_REBUILD_CALL.findall(code))
+        if called and called <= guarded:
+            continue
+        in_guarded_loop = False
+        for j in range(max(0, i - 6), i):
+            if FOR_LOOP_GUARD.match(code_lines[j]):
+                body = "\n".join(lines[j:i + 1])
+                if "hasattr(" in body and (
+                    "update_forward_refs" in body or "model_rebuild" in body
+                ):
+                    in_guarded_loop = True
+                    break
+        if in_guarded_loop:
+            continue
+        out.append((lineno, (
+            "py38 runtime: bare `.model_rebuild()` is pydantic-v2-only and the win7 "
+            "compat shim does NOT inject it (install() covers model_dump/validate/"
+            "copy/construct/json_schema/fields only). On pydantic 1.10.13 this raises "
+            "AttributeError at IMPORT time, which cascades through the FastAPI router "
+            "chain and errors out the entire test suite at collection. Wrap it: "
+            '`if hasattr(M, "model_rebuild"): M.model_rebuild() '
+            "else: M.update_forward_refs()`"
+        )))
+    return out
+
+
+def _annotation_names(node: ast.AST | None) -> set[str]:
+    """收集注解表达式里出现的所有裸名字（含下标/字符串形式的前向引用）。"""
+    names: set[str] = set()
+    if node is None:
+        return names
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Name):
+            names.add(sub.id)
+        elif isinstance(sub, ast.Attribute):
+            pass
+        elif isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+            # 字符串形式的前向引用："WordIndexSpec" / "Optional[X]"
+            for tok in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", sub.value):
+                names.add(tok)
+    return names
+
+
+def _is_pydantic_base(node: ast.ClassDef, pydantic: set[str]) -> bool:
+    """判断 ClassDef 是否（可能）是 pydantic 模型。
+
+    只看基类名字的末段（`pydantic.BaseModel` → `BaseModel`），并认本文件里已判定为
+    pydantic 的类名 —— 这样 `class WordFormatSpec(BaseModel)` 的子类也能识别。
+    不用子串猜测（之前用 "Model"/"Schema" 子串匹配，把 BaseHTTPRequestHandler
+    之类误判成 pydantic 类）。
+    """
+    for b in node.bases:
+        name = None
+        if isinstance(b, ast.Name):
+            name = b.id
+        elif isinstance(b, ast.Attribute):
+            name = b.attr
+        if not name:
+            continue
+        if name in ("BaseModel", "BaseSettings") or name in pydantic:
+            return True
+    return False
+
+
+def check_forward_ref_order(source: str) -> list[tuple[int, str]]:
+    """报出「pydantic 模型的**字段**注解引用了本文件里更晚定义的类、且无守卫」。
+
+    pydantic v1 在类创建期就解析注解；被引用的名字若此刻还没绑定到模块命名空间，
+    就会留下 ForwardRef，首次使用时抛 ConfigError（"field X not yet prepared"）。
+    v2 惰性解析，所以本地 pydantic 2.x 环境完全测不出来 —— 这条规则存在的理由。
+
+    两种合法解法：
+      (a) 把被引用的类定义在使用点之前（win7 对 WordSectionBreakSpec / WordIndexSpec
+          用的就是这个，且 docstring 写明了原因）；
+      (b) 对该类调 update_forward_refs()/model_rebuild() 守卫（win7 对
+          OfficeWordReadResult / ExcelSheetSpec / ExcelPrintSetupSpec 用这个）。
+
+    实现要点（都是踩过的坑）：
+      * 用 ast 而不是正则判「类字段」—— 正则按缩进猜会把**方法体内的局部变量注解**
+        和**方法参数注解**也算成字段（mock_server.py 的 `state: MockLLMServer`、
+        download_tool.py 的 `ctx: _DownloadContext` 就是这样被误报的）。
+      * 只扫 ClassDef.body 里直接的 AnnAssign，不进任何 FunctionDef。
+      * 只对 pydantic 模型生效；普通类 / dataclass / abc.ABC / BaseHTTPRequestHandler
+        的注解不在创建期解析，前向引用完全无害。
+    """
+    lines = source.splitlines()
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+
+    # 1) 所有类定义的行号
+    classdef_line: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            classdef_line.setdefault(node.name, node.lineno)
+
+    # 2) 自底向上两趟，判定哪些类是 pydantic 模型（子类可能引用父类）
+    pydantic: set[str] = set()
+    classes = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+    for _ in range(3):
+        changed = False
+        for node in classes:
+            if node.name in pydantic:
+                continue
+            if _is_pydantic_base(node, pydantic):
+                pydantic.add(node.name)
+                changed = True
+        if not changed:
+            break
+    if not pydantic:
+        return []
+
+    # 3) 守卫集合：从原始行提取（守卫名写在字符串里，_strip_strings 会抹掉）
+    guarded: set[str] = set()
+    for i, line in enumerate(lines):
+        for m in HASATTR_REBUILD_GUARD.finditer(line):
+            guarded.add(m.group(1))
+        for m in re.finditer(
+            r"\b([A-Z][A-Za-z0-9_]*)\.(?:update_forward_refs|model_rebuild)\(\)", line
+        ):
+            guarded.add(m.group(1))
+        if FOR_LOOP_GUARD.match(line) and "(" in line and ")" in line:
+            body = "\n".join(lines[i + 1:i + 6])
+            if "update_forward_refs" in body or "model_rebuild" in body:
+                inner = line[line.index("(") + 1:line.rindex(")")]
+                for nm in re.findall(r"[A-Z][A-Za-z0-9_]*", inner):
+                    guarded.add(nm)
+
+    # 4) 扫 pydantic 类的**直接** AnnAssign 字段
+    out: list[tuple[int, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for node in classes:
+        if node.name not in pydantic or node.name in guarded:
+            continue
+        for stmt in node.body:
+            if not isinstance(stmt, ast.AnnAssign) or not isinstance(stmt.target, ast.Name):
+                continue
+            field = stmt.target.id
+            for ident in _annotation_names(stmt.annotation):
+                defined_at = classdef_line.get(ident)
+                if defined_at is None or defined_at <= stmt.lineno:
+                    continue
+                key = (node.name, field)
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append((stmt.lineno, (
+                    "py38 runtime: `%s.%s` forward-references `%s`, which is only "
+                    "defined at line %d. pydantic v1 resolves annotations at class-"
+                    "creation time, so this stays an unresolved ForwardRef and the "
+                    'first use raises ConfigError ("field %s not yet prepared"). '
+                    "pydantic v2 resolves lazily, so local envs (2.x) do NOT catch "
+                    "this. Fix: move `class %s` above `%s`, or add an "
+                    "update_forward_refs()/model_rebuild() guard for `%s`."
+                    % (node.name, field, ident, defined_at, field, ident,
+                       node.name, node.name)
+                )))
+                break
+    out.sort(key=lambda t: t[0])
+    return out
 
 
 MODEL_SUFFIXES = ("Model", "Schema", "Request", "Response")
@@ -345,6 +560,16 @@ def check_source(source: str, filename: str = "<string>") -> list[str]:
                     problems.append(
                         f"{filename}:{issue} (missing `from __future__ import annotations`)"
                     )
+    # 运行期双版本守卫检查也要走这条通路 —— 否则自测（用 check_source）测不到，
+    # 而 CI 全仓扫描（用 check_runtime_apis）能测到，两条通路结果不一致。
+    _lines = source.splitlines()
+    _code_lines = _strip_strings(source)
+    if len(_code_lines) < len(_lines):
+        _code_lines += [""] * (len(_lines) - len(_code_lines))
+    for _ln, _msg in _check_model_rebuild_guards(_code_lines, _lines):
+        problems.append(f"{filename}:{_ln}: {_msg}")
+    for _ln, _msg in check_forward_ref_order(source):
+        problems.append(f"{filename}:{_ln}: {_msg}")
     return problems
 
 

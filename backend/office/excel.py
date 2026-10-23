@@ -32,6 +32,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import pandas as pd
 from openpyxl import load_workbook
 
 from .errors import OfficeFileNotFoundError, OfficeParseError, OfficeSizeLimitError
@@ -511,7 +512,11 @@ def read_xlsx(
         sheet_count=len(sheets),
     )
 
-    return OfficeExcelReadResult(summary=summary, sheets=sheets)
+    return OfficeExcelReadResult(
+        summary=summary,
+        sheets=sheets,
+        metadata=_read_core_properties_metadata(wb),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -620,7 +625,9 @@ def _apply_sheet_formats(writer, req) -> None:
                 cell.fill = header_fill
                 cell.alignment = center
 
-        if sheet_spec.freeze_header:
+        if getattr(sheet_spec, "freeze_panes", None):
+            ws.freeze_panes = sheet_spec.freeze_panes
+        elif sheet_spec.freeze_header:
             ws.freeze_panes = "A2"
 
         if sheet_spec.autofit_columns:
@@ -803,6 +810,15 @@ def _apply_print_setup(writer, req) -> None:
                 ws.print_area = print_setup.print_area
             if getattr(print_setup, "title_rows", None):
                 ws.print_title_rows = print_setup.title_rows
+            # Round 32：打印页眉/页脚文本（&P 为页码占位；转义 & 为 &&）
+            header_text = getattr(print_setup, "print_header", None)
+            footer_text = getattr(print_setup, "print_footer", None)
+            if header_text is not None or footer_text is not None:
+
+                if header_text is not None:
+                    ws.oddHeader.center.text = header_text
+                if footer_text is not None:
+                    ws.oddFooter.center.text = footer_text
             # Round 31：打印页边距（厘米）——openpyxl 单位为英寸，需换算
             margins = getattr(print_setup, "margins_cm", None)
             if margins is not None:
@@ -823,6 +839,46 @@ def _apply_print_setup(writer, req) -> None:
             logger_.warning("打印设置写入失败，跳过: %s (%s)", exc, sheet_spec.name)
 
 
+def _read_core_properties_metadata(wb):
+    """读 core properties 为 ExcelMetadataSpec（全空返回 None）。"""
+    from .models import ExcelMetadataSpec
+
+    props = wb.properties
+    meta = ExcelMetadataSpec(
+        author=props.creator or None,
+        subject=props.subject or None,
+        keywords=props.keywords or None,
+        comments=props.description or None,
+        category=props.category or None,
+    )
+    fields = ("author", "subject", "keywords", "comments", "category")
+    if all(getattr(meta, f) is None for f in fields):
+        return None
+    return meta
+
+
+def _apply_core_properties(wb, metadata) -> None:
+    """写文档核心属性（Round 50，与 Word R49 对称）。
+
+    仅显式传入才写，不臆造作者；openpyxl 的 author 即 creator，
+    comments 对应 description。
+    """
+    if metadata is None:
+        return
+    meta_map = {
+        "author": "creator",
+        "subject": "subject",
+        "keywords": "keywords",
+        "comments": "description",
+        "category": "category",
+    }
+    props = wb.properties
+    for src, dst in meta_map.items():
+        value = getattr(metadata, src)
+        if value is not None:
+            setattr(props, dst, value)
+
+
 def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """Generate a .xlsx file from structured Pydantic input.
 
@@ -838,13 +894,6 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
     """
     import uuid
 
-    # pandas 是 lazy import：win7 LTS 没有 cp38 wheel（memory:
-    # sage-pr540-bundle-pandas-alpha36-published.md），requirements-py38.txt
-    # 不含 pandas。如果模块顶层 import，bundling 时 ``import backend.main``
-    # 会触发 ``ModuleNotFoundError: No module named 'pandas'``。pandas 仅
-    # generate_xlsx 使用，且 ``from __future__ import annotations`` (PEP 563)
-    # 让 ``pd.DataFrame`` 类型注解保持字符串形式不运行时求值。
-    import pandas as pd
     from openpyxl import Workbook
 
     from .errors import OfficeGenerateError
@@ -937,6 +986,8 @@ def generate_xlsx(req, output_dir: Optional[str] = None) -> Path:
             # Item 1.4: '=' 前缀的字符串单元格统一兜底为真公式
             # （无公式时零改动；见 _mark_formula_cells）。
             _mark_formula_cells(writer.book)
+            # Round 50：文档核心属性（与 Word R49 对称）
+            _apply_core_properties(writer.book, getattr(req, "metadata", None))
             # 批次 2.3：按 sheet 写入可选列宽；批次 2.1：挂载原生图表
             # （必须在 writer 保存前，图表才会随工作簿序列化）。
             _apply_sheet_column_widths(writer, req)

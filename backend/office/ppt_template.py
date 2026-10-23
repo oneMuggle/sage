@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field
 
 from .errors import OfficeError, OfficeParseError
+from .models import _constrained_list
 from .path_safety import resolve_within
 from .storage import validate_workspace
 
@@ -101,8 +102,10 @@ class PptTemplateFillRequest(BaseModel):
         max_length=200,
         description="输出文件名（自动补 .pptx 扩展名；须与模板同目录产出）",
     )
-    # P4-B: min_items/max_items 为 pydantic v1（win7 py38 通道）兼容写法
-    fills: List[PptTemplateFillItem] = Field(min_items=1, max_items=200)
+    # P4-B: 容器长度约束走 _constrained_list（backend/office/models.py:21）——
+    # 裸 Field(min_items=) 在 pydantic v2 下不报错，但 v2 的 Field() 不认这两个
+    # kwarg，会把它们吞进 extra 元数据 → 约束静默失效（fills=[] 能直接过校验）。
+    fills: _constrained_list(PptTemplateFillItem, min_length=1, max_length=200)
 
 
 class PptTemplateFillResult(BaseModel):

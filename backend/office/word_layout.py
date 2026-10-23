@@ -128,6 +128,30 @@ def _apply_page_setup_to_section(section, page: WordPageSetupSpec) -> None:
             section.left_margin = Cm(margins.left)
         if margins.right is not None:
             section.right_margin = Cm(margins.right)
+    # Round 53：节内页码格式/起始号（w:pgNumType）。两者都未指定时
+    # 不触碰（保持既有产物零变化）。
+    if page.page_number_format is not None or page.page_number_start is not None:
+        sect_pr = section._sectPr
+        pg = sect_pr.find(qn("w:pgNumType"))
+        if pg is None:
+            pg = OxmlElement("w:pgNumType")
+            sect_pr.append(pg)
+        if page.page_number_format is not None:
+            pg.set(qn("w:fmt"), page.page_number_format)
+        if page.page_number_start is not None:
+            pg.set(qn("w:start"), str(page.page_number_start))
+    # Round 58：脚注编号每节重排（w:footnotePr/numRestart=eachSect）。
+    if getattr(page, "footnote_restart_each_section", False):
+        sect_pr = section._sectPr
+        fn_pr = sect_pr.find(qn("w:footnotePr"))
+        if fn_pr is None:
+            fn_pr = OxmlElement("w:footnotePr")
+            sect_pr.append(fn_pr)
+        num_restart = fn_pr.find(qn("w:numRestart"))
+        if num_restart is None:
+            num_restart = OxmlElement("w:numRestart")
+            fn_pr.append(num_restart)
+        num_restart.set(qn("w:val"), "eachSect")
 
 
 def _apply_body_style(doc: Document, body: WordBodyStyleSpec) -> None:
@@ -330,8 +354,33 @@ def add_caption(doc: Document, text: str, *, kind: str, number: int) -> None:
     """
     paragraph = doc.add_paragraph()
     paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = paragraph.add_run(f"{'图' if kind == 'figure' else '表'}{number}　{text}")
-    run.font.size = Pt(9)
+    label = "图" if kind == "figure" else "表"
+    # Round 46：题注编号套书签（REF 交叉引用目标）。w:id 分段（图
+    # 100000+、表 200000+）避免与用户书签冲突；编号确定命名可复现。
+    bm_id = (100000 if kind == "figure" else 200000) + number
+    bm_start = OxmlElement("w:bookmarkStart")
+    bm_start.set(qn("w:id"), str(bm_id))
+    bm_start.set(qn("w:name"), f"{'_RefFig' if kind == 'figure' else '_RefTbl'}{number}")
+    paragraph._p.append(bm_start)
+    label_run = paragraph.add_run(label)
+    label_run.font.size = Pt(9)
+    # Round 42：编号以 SEQ 复杂域承载（Word 据此把段落识别为题注条目，
+    # TOC \c 可收录生成图/表目录）；缓存编号保证未更新域时的显示与
+    # python-docx 回读文本同既有字面形态完全一致（lint 零改动通过）。
+    _fld_char(paragraph, "begin")
+    instr_el = OxmlElement("w:instrText")
+    instr_el.set(qn("xml:space"), "preserve")
+    instr_el.text = rf" SEQ {label} \* ARABIC "
+    paragraph._p.append(instr_el)
+    _fld_char(paragraph, "separate")
+    number_run = paragraph.add_run(str(number))
+    number_run.font.size = Pt(9)
+    _fld_char(paragraph, "end")
+    bm_end = OxmlElement("w:bookmarkEnd")
+    bm_end.set(qn("w:id"), str(bm_id))
+    paragraph._p.append(bm_end)
+    text_run = paragraph.add_run("　" + text)
+    text_run.font.size = Pt(9)
 
 
 def heading_number_prefix(counters: Any, level: int) -> str:
@@ -396,6 +445,57 @@ def insert_toc_field(doc: Document, toc: Any, headings: Any = None) -> None:
     doc.add_page_break()
 
 
+def insert_tof_field(doc: Document, spec: Any, label: str, entries: Any) -> None:
+    r"""在文档当前末尾插入图/表目录标题 + TOF 域（``TOC \c``）+ 分页。
+
+    - 标题用加粗居中普通段落（非 Heading 样式）——不被域自我收录、
+      不参与多级标题编号检查（与目录标题同理）；
+    - TOF 域为 fldChar 复杂域：begin + instrText（'TOC \h \z \c "图"'）
+      + separate → 缓存条目行 → end。缓存条目为"图N　标题"（无页码——
+      页码由渲染器/COM 更新域时计算）；entries 为空时退化为占位提示行；
+    - 之后 add_page_break 使正文另起一页（图目录/表目录各自独占页）。
+    """
+    paragraph = doc.add_paragraph()
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = paragraph.add_run(str(spec.heading_text))
+    run.bold = True
+    run.font.size = Pt(16)
+
+    begin_paragraph = doc.add_paragraph()
+    _fld_char(begin_paragraph, "begin")
+    instr_el = OxmlElement("w:instrText")
+    instr_el.set(qn("xml:space"), "preserve")
+    instr_el.text = rf' TOC \h \z \c "{label}" '
+    begin_paragraph._p.append(instr_el)
+    _fld_char(begin_paragraph, "separate")
+
+    if entries:
+        for number, text in entries:
+            doc.add_paragraph(f"{label}{number}　{text}")
+    else:
+        doc.add_paragraph(str(spec.placeholder_text))
+
+    end_paragraph = doc.add_paragraph()
+    _fld_char(end_paragraph, "end")
+
+    doc.add_page_break()
+
+
+def append_ref_field(paragraph, bookmark: str, cached: str) -> None:
+    """向段落追加 REF 交叉引用复杂域（begin+instr+separate+缓存+end）。
+
+    缓存文本保证未更新域时的显示；F9/COM 更新域后随书签处题注重排。
+    """
+    _fld_char(paragraph, "begin")
+    instr_el = OxmlElement("w:instrText")
+    instr_el.set(qn("xml:space"), "preserve")
+    instr_el.text = rf" REF {bookmark} \h "
+    paragraph._p.append(instr_el)
+    _fld_char(paragraph, "separate")
+    paragraph.add_run(cached)
+    _fld_char(paragraph, "end")
+
+
 def _fld_char(paragraph, char_type: str) -> None:
     """向段落追加 w:fldChar（begin/separate/end）。"""
     fld = OxmlElement("w:fldChar")
@@ -403,6 +503,89 @@ def _fld_char(paragraph, char_type: str) -> None:
     run = OxmlElement("w:r")
     run.append(fld)
     paragraph._p.append(run)
+
+
+def _write_hf_text(section, *, kind: str, spec: Any) -> None:
+    """向节的首页页眉/页脚写入 WordHeaderFooterSpec 内容。"""
+    part = section.first_page_header if kind == "header" else section.first_page_footer
+    if part.is_linked_to_previous:
+        part.is_linked_to_previous = False
+    target = part.paragraphs[0] if part.paragraphs else part.add_paragraph()
+    target.text = spec.text or ""
+
+
+def _write_page_number_field(section) -> None:
+    """向首页页脚写 PAGE 域（fldSimple 形态，与主页脚一致）。"""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    footer = section.first_page_footer
+    if footer.is_linked_to_previous:
+        footer.is_linked_to_previous = False
+    paragraph = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
+    fld = OxmlElement("w:fldSimple")
+    fld.set(qn("w:instr"), "PAGE")
+    run = OxmlElement("w:r")
+    text = OxmlElement("w:t")
+    text.text = "1"
+    run.append(text)
+    fld.append(run)
+    paragraph._p.append(fld)
+
+
+def apply_first_page_different(doc: Document, header: Any, footer: Any) -> None:
+    """启用首页不同并为首页写独立页眉/页脚（Round 33）。"""
+    section = doc.sections[0]
+    section.different_first_page_header_footer = True
+    if header is not None:
+        _write_hf_text(section, kind="header", spec=header)
+    if footer is not None:
+        _write_hf_text(section, kind="footer", spec=footer)
+    if footer is not None and getattr(footer, "page_number", False):
+        _write_page_number_field(section)
+
+
+def apply_odd_even_different(doc: Document, even_header: Any, even_footer: Any) -> None:
+    """启用奇偶页不同并为偶数页写独立页眉/页脚（Round 34）。
+
+    settings.odd_and_even_pages_header_footer 为全局开关；偶数页内容
+    写入 section.even_page_header/footer（断开 linked）。
+    """
+    doc.settings.odd_and_even_pages_header_footer = True
+    section = doc.sections[0]
+    if even_header is not None:
+        part = section.even_page_header
+        if part.is_linked_to_previous:
+            part.is_linked_to_previous = False
+        target = part.paragraphs[0] if part.paragraphs else part.add_paragraph()
+        target.text = even_header.text or ""
+    if even_footer is not None:
+        part = section.even_page_footer
+        if part.is_linked_to_previous:
+            part.is_linked_to_previous = False
+        target = part.paragraphs[0] if part.paragraphs else part.add_paragraph()
+        target.text = even_footer.text or ""
+
+
+def apply_table_header_style(table: Any) -> None:
+    """表头行样式（Round 36）：首行加粗 + 浅灰底（D9D9D9）+ 居中。
+
+    与 ExcelSheetSpec.header_style 对称。Word 单元格底纹用 tcPr/w:shd
+    （openpyxl 的 fill 属性不适用于 python-docx 单元格）。数据行不触碰。
+    """
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    for cell in table.rows[0].cells:
+        for paragraph in cell.paragraphs:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            for run in paragraph.runs:
+                run.font.bold = True
+        tc_pr = cell._tc.get_or_add_tcPr()
+        shd = OxmlElement("w:shd")
+        shd.set(qn("w:val"), "clear")
+        shd.set(qn("w:color"), "auto")
+        shd.set(qn("w:fill"), "D9D9D9")
+        tc_pr.append(shd)
 
 
 def apply_section_break(doc: Document, page: WordPageSetupSpec) -> None:

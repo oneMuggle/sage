@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 from pydantic import BaseModel, Field, conlist
 
+# win7 LTS 的 py38 环境钉 pydantic 1.10.13（2.x 要求 py3.9+），v2 专有符号
+# 必须走兼容垫片；pydantic 2.x 下该垫片是 no-op，因此与 main 共享同一份源码。
 from backend.compat.win7.pydantic_compat import ConfigDict, field_validator
 
 logger = logging.getLogger(__name__)
@@ -126,6 +128,23 @@ class PptSlideContent(BaseModel):
     notes: Optional[str] = None
 
 
+class WordMetadataSpec(BaseModel):
+    """文档核心属性（Round 49）——Word「文件 → 信息」面板可见。
+
+    title 恒取请求 title，不在此重复；其余显式传入才写（不臆造作者）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    author: Optional[str] = Field(default=None, max_length=100)
+    subject: Optional[str] = Field(default=None, max_length=200)
+    keywords: Optional[str] = Field(
+        default=None, max_length=200, description="关键词（分号分隔）"
+    )
+    comments: Optional[str] = Field(default=None, max_length=500)
+    category: Optional[str] = Field(default=None, max_length=100)
+
+
 class OfficePptReadResult(BaseModel):
     """Result of POST /api/v1/office/ppt/read."""
 
@@ -133,6 +152,8 @@ class OfficePptReadResult(BaseModel):
 
     summary: OfficeDocumentSummary
     slides: List[PptSlideContent]
+    # Round 52：core properties 回读（文档无属性时为 None）。
+    metadata: Optional[WordMetadataSpec] = None
 
 
 class WordParagraphContent(BaseModel):
@@ -209,9 +230,16 @@ class OfficeWordReadResult(BaseModel):
     # keeps payloads produced before this field existed valid under
     # ``extra="forbid"`` (old consumers may ignore the field entirely).
     comments: List[WordCommentContent] = Field(default_factory=list)
+    # Round 51：core properties 回读（生成器 metadata 的对偶；文档无
+    # 属性时为 None）。
+    metadata: Optional[WordMetadataSpec] = None
     # Round 15：每节的页眉/页脚文本与页码域标记（生成器对偶——
     # format_spec.header/footer 写入的元素读取侧可见）。
     headers_footers: List[WordHeaderFooterContent] = Field(default_factory=list)
+    # Round 57：脚注文本清单（footnotes part 回读；无脚注为空表）。
+    footnotes: List[str] = Field(default_factory=list)
+    # Round 59：尾注文本清单（endnotes part 回读；无尾注为空表）。
+    endnotes: List[str] = Field(default_factory=list)
     # Round 15：文档中的目录域 instr 列表。
     toc_fields: List[str] = Field(default_factory=list)
     # Office display round C (P4)：内嵌图片缩略预览。additive field ——
@@ -277,6 +305,8 @@ class OfficeExcelReadResult(BaseModel):
 
     summary: OfficeDocumentSummary
     sheets: List[ExcelSheetContent]
+    # Round 51：core properties 回读（文档无属性时为 None）。
+    metadata: Optional[WordMetadataSpec] = None
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -369,6 +399,10 @@ class PptSlideSpec(BaseModel):
     image: Optional[ImageSourceSpec] = None
 
 
+#: Round 52：PPT 与 Word/Excel 的核心属性字段同一集合（别名复用）。
+PptMetadataSpec = WordMetadataSpec
+
+
 class OfficePptGenerateRequest(BaseModel):
     """POST /api/v1/office/ppt/generate."""
 
@@ -384,6 +418,11 @@ class OfficePptGenerateRequest(BaseModel):
         description="Output filename (without .pptx extension is OK; we'll add it)",
     )
     slides: _constrained_list(PptSlideSpec, min_length=1, max_length=100)
+    # Round 52：文档核心属性（与 Word/Excel 对称）。
+    metadata: Optional[PptMetadataSpec] = Field(
+        default=None,
+        description="文档核心属性；None 不写（不臆造作者）",
+    )
 
 
 class WordParagraphSpec(BaseModel):
@@ -566,6 +605,10 @@ class WordTableSpec(BaseModel):
         default=None,
         description="各列列宽（厘米）；None 不设置，长度须等于列数",
     )
+    # Round 36：表头行样式（加粗 + 浅灰底 + 居中），与 Excel header_style 对称。
+    header_style: bool = Field(
+        default=False, description="表头行加粗 + 浅灰底(D9D9D9) + 居中"
+    )
     merges: _constrained_list(WordCellMergeSpec, max_length=200) = Field(default_factory=list)
 
 
@@ -601,6 +644,14 @@ class WordPageSetupSpec(BaseModel):
     size: Optional[Literal["A4", "letter"]] = Field(default=None)
     orientation: Optional[Literal["portrait", "landscape"]] = Field(default=None)
     margins_cm: Optional[WordPageMarginsSpec] = Field(default=None)
+    # Round 53：节内页码格式/起始号（w:pgNumType，论文前置罗马页码场景）
+    page_number_format: Optional[
+        Literal["decimal", "upperRoman", "lowerRoman", "upperLetter", "lowerLetter"]
+    ] = Field(default=None)
+    page_number_start: Optional[int] = Field(default=None, ge=0)
+    # Round 58：该节脚注编号每节重排（w:footnotePr/numRestart=eachSect；
+    # 论文/书籍分章脚注场景）。默认 False 零触碰。
+    footnote_restart_each_section: bool = Field(default=False)
 
 
 class WordBodyStyleSpec(BaseModel):
@@ -648,15 +699,36 @@ class WordSectionBreakSpec(BaseModel):
     新节应用 page_setup（横排宽表/财务页场景）。复用 WordPageSetupSpec。
 
     定义位置须在 ``WordFormatSpec`` 之前：pydantic v1 不支持字符串形式的
-    前向引用（`conlist("ClassName", ...)` 在 ``populate_validators`` 时
-    触发 ``issubclass(str, ...)`` 报 ``TypeError``）。win7 LTS bundling
-    使用 pydantic 1.10.13，必须保证引用时类已实际存在。
+    ``conlist`` item_type（会在解析注解时对 str 调 issubclass() → TypeError），
+    因此不能靠前向引用，必须真正先定义。
     """
 
     model_config = ConfigDict(extra="forbid")
 
     start_paragraph: int = Field(ge=0, description="该 0-based 段落下标起进入新节")
     page_setup: WordPageSetupSpec = Field(description="新节的页面设置")
+
+
+class WordIndexSpec(BaseModel):
+    r"""图目录/表目录设置（Round 42）。
+
+    TOF 域（``TOC \h \z \c "<图|表>"``）由 Word 收录 SEQ 题注段；
+    生成器插入域与静态缓存条目（无页码——由渲染器/COM 刷新域计算），
+    与 R13 目录域同一思路。
+
+    定义位置须在 ``WordFormatSpec`` 之前：pydantic v1 下
+    ``figure_index``/``table_index`` 若在此之前声明会留未解析的 ForwardRef，
+    首次使用时抛 ConfigError（“field \"figure_index\" not yet prepared”）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    heading_text: str = Field(default="图目录", max_length=50)
+    placeholder_text: str = Field(
+        default='（图目录：在 Word 中按 F9 或右键"更新域"生成）',
+        max_length=200,
+        description="域未更新时的占位提示",
+    )
 
 
 class WordFormatSpec(BaseModel):
@@ -686,11 +758,28 @@ class WordFormatSpec(BaseModel):
     bibliography: Optional[BibliographySpec] = None
     # Round 13：目录域。None = 不插入目录。
     toc: Optional[WordTocSpec] = None
+    # Round 33：首页不同页眉页脚（封面页场景）。启用后首页用
+    # first_page_header/first_page_footer 的独立内容。
+    first_page_different: bool = Field(
+        default=False, description="启用首页不同的页眉页脚"
+    )
+    first_page_header: Optional[WordHeaderFooterSpec] = None
+    first_page_footer: Optional[WordHeaderFooterSpec] = None
+    # Round 34：奇偶页不同页眉页脚（书籍排版）。启用后偶数页用
+    # even_page_header/even_page_footer 的独立内容。
+    odd_even_pages: bool = Field(
+        default=False, description="启用奇偶页不同的页眉页脚"
+    )
+    even_page_header: Optional[WordHeaderFooterSpec] = None
+    even_page_footer: Optional[WordHeaderFooterSpec] = None
     # Round 26：横排/分节。每个 break 在 start_paragraph（0-based）前
     # 插入 NEW_PAGE 分节并对新节应用 page_setup；按列表顺序依次生效。
     section_breaks: _constrained_list(WordSectionBreakSpec, max_length=20) = Field(
         default_factory=list
     )
+    # Round 42：图目录/表目录（TOC \c 收录 SEQ 题注；None = 不插入）。
+    figure_index: Optional[WordIndexSpec] = None
+    table_index: Optional[WordIndexSpec] = None
 
 
 class OfficeWordGenerateRequest(BaseModel):
@@ -717,6 +806,11 @@ class OfficeWordGenerateRequest(BaseModel):
     format_spec: Optional[WordFormatSpec] = Field(
         default=None,
         description="版式规范；None 保持默认版式（行为与历史版本一致）",
+    )
+    # Round 49：文档核心属性（core properties，期刊/公文归档要求）。
+    metadata: Optional[WordMetadataSpec] = Field(
+        default=None,
+        description="文档核心属性；None 只写 title（取请求 title）",
     )
     # Round 9：结构化参考文献 + 文中引用标记。带 references 时文末自动
     # 生成参考文献节；paragraphs[].citations 按 key 回链，编号=首现顺序。
@@ -759,6 +853,13 @@ class ExcelSheetSpec(BaseModel):
     freeze_header: bool = Field(
         default=False,
         description="冻结首行（滚动长表时表头保持可见）",
+    )
+    # Round 31：冻结窗格参数化（A1 记法）。与 freeze_header 同给时本字段优先。
+    freeze_panes: Optional[str] = Field(
+        default=None,
+        max_length=10,
+        pattern=r"^[A-Za-z]{1,3}[0-9]{1,7}$",
+        description="冻结窗格 A1 记法，如 'B2' 冻结首行+首列；None 不设置",
     )
     autofit_columns: bool = Field(
         default=False,
@@ -884,6 +985,13 @@ class ExcelPrintSetupSpec(BaseModel):
     )
     # Round 31：打印页边距（厘米），全可选；None 用 Excel 默认。
     margins_cm: Optional[ExcelPrintMarginsSpec] = None
+    # Round 32：打印页眉/页脚文本（页码用 &P 占位，Excel HeaderFooter 语法）。
+    print_header: Optional[str] = Field(
+        default=None, max_length=200, description="打印页眉文本"
+    )
+    print_footer: Optional[str] = Field(
+        default=None, max_length=200, description="打印页脚文本（&P = 页码）"
+    )
 
 
 class ExcelPrintMarginsSpec(BaseModel):
@@ -927,6 +1035,11 @@ class ExcelChartSpec(BaseModel):
     title: Optional[str] = Field(default=None, max_length=200)
 
 
+#: Round 50：Excel 与 Word 的核心属性字段同一集合（author→creator 等
+#: 映射是格式差异，模型无差异）——别名复用避免双份定义漂移。
+ExcelMetadataSpec = WordMetadataSpec
+
+
 class OfficeExcelGenerateRequest(BaseModel):
     """POST /api/v1/office/excel/generate."""
 
@@ -940,6 +1053,12 @@ class OfficeExcelGenerateRequest(BaseModel):
     sheets: _constrained_list(ExcelSheetSpec, min_length=1, max_length=50)
     # 批次 2.1：数据写完后统一挂载的原生图表。
     charts: _constrained_list(ExcelChartSpec, max_length=20) = Field(default_factory=list)
+    # Round 50：文档核心属性（与 Word R49 对称；author→creator 等映射
+    # 在生成器内完成）。
+    metadata: Optional[ExcelMetadataSpec] = Field(
+        default=None,
+        description="文档核心属性；None 不写（不臆造作者）",
+    )
 
 
 class ChartSeriesSpec(BaseModel):
@@ -1426,12 +1545,11 @@ class WordRepairRequest(BaseModel):
         default=50 * 1024 * 1024, ge=1024, description="Reject files larger than this"
     )
 
-
 # ── Forward-reference resolution (pydantic v1 + `from __future__ import annotations`) ──
 #
-# ExcelSheetSpec (line 703) references ExcelDataValidationSpec /
+# ExcelSheetSpec (line 820) references ExcelDataValidationSpec /
 # ExcelConditionalFormatSpec / ExcelPrintSetupSpec which are defined AFTER it.
-# ExcelPrintSetupSpec (line 827) references ExcelPrintMarginsSpec (line 854).
+# ExcelPrintSetupSpec (line 951) references ExcelPrintMarginsSpec (line 985).
 #
 # On pydantic v1 these annotations stay as unresolved ForwardRefs at class-
 # creation time → ConfigError on first model use.  v2 resolves lazily so the
