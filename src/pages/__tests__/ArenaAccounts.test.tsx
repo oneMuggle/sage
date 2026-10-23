@@ -209,6 +209,5 @@ describe('ArenaAccounts page', () => {
 
     await renderPage();
     expect(await screen.findByTestId('arena-accounts-copy-audit')).toBeInTheDocument();
-    expect(screen.getByTestId('arena-accounts-copy-json')).toBeInTheDocument();
   });
 });

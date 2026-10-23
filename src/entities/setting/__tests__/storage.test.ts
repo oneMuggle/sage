@@ -11,13 +11,7 @@ vi.mock('../../../shared/api/settingsClient', () => ({
   },
 }));
 
-import {
-  loadSettings,
-  mergeWithDefaults,
-  resetPreferencesToDefaults,
-  resetSettings,
-  saveSettings,
-} from '../storage';
+import { loadSettings, mergeWithDefaults, resetPreferencesToDefaults, resetSettings, saveSettings } from '../storage';
 import type { AppSettings } from '../types';
 import { DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY } from '../types';
 

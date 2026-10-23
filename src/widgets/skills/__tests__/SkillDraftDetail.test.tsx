@@ -16,7 +16,7 @@
  * regardless of the actual Dialog wrapper shape (see ledger ruling on
  * the Radix-style `Dialog / DialogContent / DialogTitle` API).
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SkillDraft } from '../../../shared/api';
@@ -149,23 +149,5 @@ describe('SkillDraftDetail component', () => {
     expect(screen.queryByTestId('markdown-preview')).toBeNull();
   });
 
-  it('copies draft Markdown and JSON from SkillDraftDetail (Phase P87)', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
 
-    const draft = makeDraft();
-    renderDetail(draft);
-
-    fireEvent.click(screen.getByTestId('skill-draft-detail-copy-md-btn'));
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-draft-detail-copy-md-btn')).toHaveTextContent('✓ 已复制MD');
-    });
-
-    fireEvent.click(screen.getByTestId('skill-draft-detail-copy-json-btn'));
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-draft-detail-copy-json-btn')).toHaveTextContent(
-        '✓ 已复制JSON',
-      );
-    });
-  });
 });

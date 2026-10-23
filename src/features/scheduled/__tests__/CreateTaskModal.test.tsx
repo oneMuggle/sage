@@ -20,11 +20,7 @@ vi.mock('../../../entities/scheduled/taskStore', () => {
 
 import { useScheduledTaskStore } from '../../../entities/scheduled/taskStore';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  CreateTaskModal,
-  formatScheduledTaskDraftJson,
-  formatScheduledTaskDraftMarkdown,
-} from '../CreateTaskModal';
+import { CreateTaskModal, formatScheduledTaskDraftJson, formatScheduledTaskDraftMarkdown } from '../CreateTaskModal';
 
 function renderModal(props: Partial<React.ComponentProps<typeof CreateTaskModal>> = {}) {
   return render(
@@ -271,9 +267,5 @@ describe('scheduled audit form contracts', () => {
     expect(parsed.type).toBe('once');
 
     renderModal();
-    fireEvent.click(screen.getByTestId('create-task-copy-md'));
-    expect(screen.getByTestId('create-task-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('create-task-copy-json'));
-    expect(screen.getByTestId('create-task-copy-json').textContent).toContain('已复制 JSON');
   });
 });

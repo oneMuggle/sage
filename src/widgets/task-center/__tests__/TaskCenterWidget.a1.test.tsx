@@ -6,10 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useLaneBoardStore } from '../../../entities/orchestration/laneBoardStore';
-import {
-  useChatStreamStore,
-  type SessionStreamSlots,
-} from '../../../features/send-message/chatStreamStore';
+import { useChatStreamStore, type SessionStreamSlots } from '../../../features/send-message/chatStreamStore';
 import { cancelSessionStream } from '../../../features/send-message/useChat';
 import { useTaskCenterStore } from '../../../features/task-center/taskCenterStore';
 import type { Lane } from '../../../shared/api/types';

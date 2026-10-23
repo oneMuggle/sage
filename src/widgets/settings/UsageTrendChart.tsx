@@ -13,7 +13,7 @@
  * - 桶时间格式按 bucket=hour/day 切: hour → "HH:00", day → "MM-DD"
  * - 错误态 (series 含 error 字段) 由父组件拦截, 这里只画数据
  */
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import type { UsageTrend, UsageTrendPoint } from '../../shared/api/usageApi';
 import { useI18n } from '../../shared/lib/i18n';
@@ -89,8 +89,6 @@ export function formatUsageTrendJson(trend: UsageTrend | null): string {
 
 export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
   const { t } = useI18n();
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const series = useMemo<UsageTrendPoint[]>(() => trend?.series ?? [], [trend?.series]);
   const bucket = trend?.bucket ?? 'day';
 
@@ -141,23 +139,7 @@ export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
   const costPath = buildPath(layout.costPoints);
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    setCopiedMd(true);
-    try {
-      await navigator.clipboard?.writeText(formatUsageTrendMarkdown(trend));
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
 
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    try {
-      await navigator.clipboard?.writeText(formatUsageTrendJson(trend));
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -173,22 +155,6 @@ export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
             <span className="inline-block w-2 h-2 mr-1 align-middle bg-amber-500 rounded-full" />
             {t('settings.usage.trend.legendCost')}
           </span>
-          <button
-            type="button"
-            onClick={() => void handleCopyMd()}
-            data-testid="usage-trend-copy-md"
-            className="px-1.5 py-0.5 rounded border border-border hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCopyJson()}
-            data-testid="usage-trend-copy-json"
-            className="px-1.5 py-0.5 rounded border border-border hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
         </div>
       </div>
       <svg

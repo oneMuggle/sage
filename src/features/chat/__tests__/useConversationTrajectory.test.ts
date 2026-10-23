@@ -9,10 +9,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useStore } from '../../../shared/lib/store';
 import type { Session } from '../../../shared/lib/store';
-import {
-  TRAJECTORY_PREVIEW_MAX_CHARS,
-  useConversationTrajectory,
-} from '../useConversationTrajectory';
+import { TRAJECTORY_PREVIEW_MAX_CHARS, useConversationTrajectory } from '../useConversationTrajectory';
 
 const sid = 's-traj';
 

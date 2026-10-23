@@ -63,8 +63,6 @@ export function AnswerVersionSwitcher({
   const { t } = useI18n();
   const [list, setList] = useState<AnswerVersionList | null>(null);
   const [busy, setBusy] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,25 +100,7 @@ export function AnswerVersionSwitcher({
   const label = fillTemplate(t('chat.version_label'), { current, total: list.total });
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatAnswerVersionsMarkdown(sessionId, list));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatAnswerVersionsJson(sessionId, list));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -154,22 +134,6 @@ export function AnswerVersionSwitcher({
         aria-label={t('chat.version_next')}
       >
         <ChevronRight className="w-3.5 h-3.5" />
-      </button>
-      <button
-        type="button"
-        data-testid="answer-version-copy-md"
-        onClick={() => void handleCopyMarkdown()}
-        className="ml-1 px-1 py-0.5 rounded border border-border text-ui-2xs hover:bg-bg-hover"
-      >
-        {copiedMd ? '已复制 MD' : '复制 MD'}
-      </button>
-      <button
-        type="button"
-        data-testid="answer-version-copy-json"
-        onClick={() => void handleCopyJson()}
-        className="ml-1 px-1 py-0.5 rounded border border-border text-ui-2xs hover:bg-bg-hover"
-      >
-        {copiedJson ? '已复制 JSON' : '复制 JSON'}
       </button>
     </div>
   );

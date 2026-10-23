@@ -1,15 +1,7 @@
 // src/features/artifacts/__tests__/artifactApi.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import {
-  listArtifacts,
-  listArtifactVersions,
-  getArtifactVersion,
-  readArtifactContent,
-  restoreArtifactVersion,
-  revealArtifact,
-  updateArtifactContent,
-} from '../artifactApi';
+import { listArtifacts, listArtifactVersions, getArtifactVersion, readArtifactContent, restoreArtifactVersion, revealArtifact, updateArtifactContent } from '../artifactApi';
 
 describe('artifactApi', () => {
   beforeEach(() => {

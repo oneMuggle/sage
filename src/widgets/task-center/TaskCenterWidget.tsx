@@ -172,9 +172,6 @@ export function TaskCenterWidget() {
   }, [panelMaximized, expanded]);
   const [now, setNow] = useState(() => Date.now());
   const [cancellingIds, setCancellingIds] = useState<ReadonlySet<string>>(new Set());
-  const [copiedCenterMd, setCopiedCenterMd] = useState(false);
-  const [copiedCenterJson, setCopiedCenterJson] = useState(false);
-  const [copiedEntryId, setCopiedEntryId] = useState<string | null>(null);
 
   const registryTasks = useTaskCenterStore((s) => s.tasks);
   const clearFinished = useTaskCenterStore((s) => s.clearFinished);
@@ -267,49 +264,6 @@ export function TaskCenterWidget() {
   const otherCount = entries.filter((e) => e.status === 'queued' || e.status === 'paused').length;
   const finishedCount = entries.filter((e) => TERMINAL_TASK_STATUSES.has(e.status)).length;
 
-  const handleCopyCenterMd = () => {
-    setCopiedCenterMd(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedCenterMd(false), 2000);
-    const lines = [
-      '# 任务中心状态报告',
-      '',
-      `- 运行中: ${runningCount} · 待验收: ${awaitingCount} · 排队/暂停: ${otherCount} · 已完成: ${finishedCount}`,
-      '',
-      ...entries.map((e, idx) => `${idx + 1}. **[${e.status}]** ${e.title} (${e.source})`),
-    ];
-    void navigator.clipboard?.writeText(lines.join('\n'));
-    /* v8 ignore stop */
-  };
-
-  const handleCopyCenterJson = () => {
-    setCopiedCenterJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedCenterJson(false), 2000);
-    const payload = {
-      runningCount,
-      awaitingCount,
-      otherCount,
-      finishedCount,
-      entries,
-      exportedAt: new Date().toISOString(),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
-
-  const handleCopyEntryJson = (entry: Entry) => {
-    setCopiedEntryId(entry.id);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedEntryId(null), 2000);
-    const payload = {
-      ...entry,
-      exportedAt: new Date().toISOString(),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
-
   // Ticking clock while tasks are active (decouples elapsed display); no timer
   // when idle.
   useEffect(() => {
@@ -377,22 +331,6 @@ export function TaskCenterWidget() {
             data-testid="task-center-toolbar"
             className="flex items-center justify-end gap-1 rounded-md border border-border bg-surface shadow-sm px-2 py-1"
           >
-            <button
-              type="button"
-              data-testid="task-center-copy-md-btn"
-              onClick={handleCopyCenterMd}
-              className="px-1.5 py-0.5 rounded text-ui-2xs border border-border text-text-secondary hover:text-text"
-            >
-              {copiedCenterMd ? '已复制MD' : '复制任务MD'}
-            </button>
-            <button
-              type="button"
-              data-testid="task-center-copy-json-btn"
-              onClick={handleCopyCenterJson}
-              className="px-1.5 py-0.5 rounded text-ui-2xs border border-border text-text-secondary hover:text-text"
-            >
-              {copiedCenterJson ? '已复制JSON' : '复制任务JSON'}
-            </button>
           </div>
         <div
           data-testid="task-center-list"
@@ -433,13 +371,6 @@ export function TaskCenterWidget() {
                     </span>
                   ) : null}
                 </button>
-                <span
-                  data-testid={`task-center-item-copy-json-${entry.id}`}
-                  onClick={() => handleCopyEntryJson(entry)}
-                  className="px-1 py-0.5 rounded text-ui-2xs border border-border text-text-secondary hover:text-text cursor-pointer shrink-0"
-                >
-                  {copiedEntryId === entry.id ? '已复制JSON' : '复制JSON'}
-                </span>
                 {entry.cancellable && !terminal ? (
                   <button
                     type="button"

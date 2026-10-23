@@ -40,9 +40,6 @@ export function CommunityColoredGraph({
   const [communities, setCommunities] = useState<CommunityInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCommunity, setSelectedCommunity] = useState<number | null>(null);
-  const [copiedCommMd, setCopiedCommMd] = useState(false);
-  const [copiedCommJson, setCopiedCommJson] = useState(false);
-  const [copiedItemId, setCopiedItemId] = useState<number | null>(null);
 
   // 加载社区数据
   useEffect(() => {
@@ -94,55 +91,8 @@ export function CommunityColoredGraph({
     };
   }, [data, communities, selectedCommunity]);
 
-  const handleCopyCommMd = () => {
-    setCopiedCommMd(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedCommMd(false), 2000);
-    const lines = [
-      '# Wiki 社区图谱报告',
-      '',
-      `- 项目路径: ${projectPath ?? ''}`,
-      `- 社区数量: ${communities.length}`,
-      `- 选中社区: ${selectedCommunity ?? '全部'}`,
-      '',
-      '## 社区列表',
-      ...communities.map(
-        (c) =>
-          `- **社区 ${c.community_id}**: ${c.size} 节点 · 内聚度 ${(c.cohesion * 100).toFixed(0)}% · 成员: ${c.members.join(', ')}`,
-      ),
-    ];
-    void navigator.clipboard?.writeText(lines.join('\n'));
-    /* v8 ignore stop */
-  };
 
-  const handleCopyCommJson = () => {
-    setCopiedCommJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedCommJson(false), 2000);
-    const payload = {
-      projectPath: projectPath ?? null,
-      selectedCommunity,
-      totalCommunities: communities.length,
-      communities,
-      exportedAt: new Date().toISOString(),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
 
-  const handleCopyCommunityItem = (e: React.MouseEvent, c: CommunityInfo) => {
-    e.stopPropagation();
-    setCopiedItemId(c.community_id);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedItemId(null), 2000);
-    const payload = {
-      projectPath: projectPath ?? null,
-      ...c,
-      exportedAt: new Date().toISOString(),
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
 
   // 加载中显示
   if (loading) {
@@ -177,22 +127,6 @@ export function CommunityColoredGraph({
           <div className="mb-2 font-semibold flex items-center justify-between gap-2">
             <span>社区 ({communities.length})</span>
             <div className="flex items-center gap-1">
-              <button
-                type="button"
-                data-testid="wiki-community-copy-md-btn"
-                onClick={handleCopyCommMd}
-                className="px-1.5 py-0.5 text-ui-2xs font-normal rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
-              >
-                {copiedCommMd ? '已复制MD' : '复制社区MD'}
-              </button>
-              <button
-                type="button"
-                data-testid="wiki-community-copy-json-btn"
-                onClick={handleCopyCommJson}
-                className="px-1.5 py-0.5 text-ui-2xs font-normal rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
-              >
-                {copiedCommJson ? '已复制JSON' : '复制社区JSON'}
-              </button>
               {selectedCommunity !== null && (
                 <button
                   className="text-accent hover:underline ml-1"
@@ -227,14 +161,6 @@ export function CommunityColoredGraph({
                       社区 {c.community_id} ({c.size})
                     </span>
                     <span className="text-muted text-ui-xs">{(c.cohesion * 100).toFixed(0)}%</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`wiki-community-item-copy-json-${c.community_id}`}
-                    onClick={(e) => handleCopyCommunityItem(e, c)}
-                    className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
-                  >
-                    {copiedItemId === c.community_id ? '已复制' : '复制JSON'}
                   </button>
                 </div>
               );

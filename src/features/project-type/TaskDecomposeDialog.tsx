@@ -9,7 +9,7 @@
  * 4. 用户确认后点击「采纳」→ 批量创建里程碑
  */
 
-import { Sparkles, Loader2, ChevronRight, ChevronDown, CheckCircle2, Copy, Check } from 'lucide-react';
+import { Sparkles, Loader2, ChevronRight, ChevronDown, CheckCircle2 } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi, type PreviewMilestoneNode, type ProjectType } from '../../shared/api';
@@ -42,38 +42,44 @@ const DECOMPOSE_PRESETS_BY_TYPE: Record<ProjectType, DecomposePreset[]> = {
     },
     {
       label: '新特性全链路交付',
-      requirement: '完成新特性从后端 Schema/API 设计、IPC 桥接路由到前端交互组件与单元测试的全链路交付。',
+      requirement:
+        '完成新特性从后端 Schema/API 设计、IPC 桥接路由到前端交互组件与单元测试的全链路交付。',
       context: '需同步通过 TypeScript 类型检查、ESLint 与 Ruff 静态门禁。',
     },
   ],
   business: [
     {
       label: '重大合同起草与会签归档',
-      requirement: '完成年度采购/合作合同背景资料归集、初稿起草、法务合规与大小写金额双轨核验及签发封卷。',
+      requirement:
+        '完成年度采购/合作合同背景资料归集、初稿起草、法务合规与大小写金额双轨核验及签发封卷。',
       context: '遵循四级立卷目录规范，定稿签发前固化内置版本快照。',
     },
     {
       label: '专项请示公文与汇报编制',
-      requirement: '归集政策依据与业务数据台账，按 GB/T 9704 公文版式完成专项请示工作稿与审校定稿。',
+      requirement:
+        '归集政策依据与业务数据台账，按 GB/T 9704 公文版式完成专项请示工作稿与审校定稿。',
       context: '引用条款须注明原始依据来源，严禁主观臆造数据。',
     },
   ],
   research: [
     {
       label: '课题开题至论文投稿全流程',
-      requirement: '完成核心文献综述与 Citation Key 建库、基线模型复现、消融对比实验与论文手稿撰写审校。',
+      requirement:
+        '完成核心文献综述与 Citation Key 建库、基线模型复现、消融对比实验与论文手稿撰写审校。',
       context: '严格执行零幻觉文献引用铁律，所有主实验须固定随机种子并记录超参数。',
     },
     {
       label: '审稿意见逐条回复与修回',
-      requirement: '拆解审稿人质疑点，补充验证实验与统计显著性分析，完成 Response Letter 与正文中修回高亮。',
+      requirement:
+        '拆解审稿人质疑点，补充验证实验与统计显著性分析，完成 Response Letter 与正文中修回高亮。',
       context: '每条回复须绑定新增实验图表或已入库文献依据。',
     },
   ],
   personal: [
     {
       label: '主题知识图谱与卡片盒构建',
-      requirement: '整理收件箱阅读摘录，提炼原子化永久笔记卡片并建立跨领域 [[双链概念]] 索引与专题综述。',
+      requirement:
+        '整理收件箱阅读摘录，提炼原子化永久笔记卡片并建立跨领域 [[双链概念]] 索引与专题综述。',
       context: '采用 Zettelkasten 卡片盒方法，每周输出可执行下一步行动项 (Next Actions)。',
     },
     {
@@ -113,7 +119,6 @@ export function TaskDecomposeDialog({
   const [reasoning, setReasoning] = useState('');
   const [milestones, setMilestones] = useState<PreviewMilestoneNode[]>([]);
   const [selectedRootIndices, setSelectedRootIndices] = useState<Set<number>>(new Set());
-  const [copiedPlan, setCopiedPlan] = useState(false);
   const [savedReasoning, setSavedReasoning] = useState(false);
   const [stageFilter, setStageFilter] = useState<string>('all');
   const [savedPlanL4, setSavedPlanL4] = useState(false);
@@ -174,7 +179,9 @@ export function TaskDecomposeDialog({
     setPhase('applying');
     try {
       const chosen = milestones.filter((_, idx) => selectedRootIndices.has(idx));
-      await projectApi.decomposeApply(projectId, { milestones: chosen.length > 0 ? chosen : milestones });
+      await projectApi.decomposeApply(projectId, {
+        milestones: chosen.length > 0 ? chosen : milestones,
+      });
       onApplied();
       resetAndClose();
     } catch (err) {
@@ -182,33 +189,6 @@ export function TaskDecomposeDialog({
       setPhase('preview');
     }
   }, [projectId, milestones, selectedRootIndices, onApplied, resetAndClose]);
-
-  const handleCopyPreviewMarkdown = () => {
-    const lines = [
-      `# ${blueprint.label} · AI 任务拆解方案`,
-      `- **需求**: ${requirement.trim()}`,
-      reasoning ? `- **分解思路**: ${reasoning}` : '',
-      '',
-      '## 里程碑树',
-    ].filter(Boolean);
-    const walk = (nodes: PreviewMilestoneNode[], depth: number) => {
-      for (const n of nodes) {
-        const indent = '  '.repeat(depth);
-        const stg = n.stage ? ` [${stageLabelMap.get(n.stage) ?? n.stage}]` : '';
-        const days = n.estimatedDays != null ? ` (${n.estimatedDays}天)` : '';
-        lines.push(`${indent}- **${n.title}**${stg}${days}${n.description ? `：${n.description}` : ''}`);
-        if (n.children?.length) walk(n.children, depth + 1);
-      }
-    };
-    walk(milestones, 0);
-    try {
-      void navigator.clipboard?.writeText(lines.join('\n'));
-      setCopiedPlan(true);
-      setTimeout(() => setCopiedPlan(false), 1800);
-    } catch {
-      // ignore clipboard errors in test/offline mode
-    }
-  };
 
   return (
     <Dialog open={open} onOpenChange={resetAndClose}>
@@ -219,7 +199,8 @@ export function TaskDecomposeDialog({
             AI 智能任务分解
           </DialogTitle>
           <DialogDescription>
-            描述你的需求（或点击下方「{blueprint.label}」快捷模板），AI 将结合项目阶段自动拆解为里程碑树
+            描述你的需求（或点击下方「{blueprint.label}」快捷模板），AI
+            将结合项目阶段自动拆解为里程碑树
           </DialogDescription>
         </DialogHeader>
 
@@ -291,7 +272,9 @@ export function TaskDecomposeDialog({
                       type="button"
                       disabled={phase === 'loading'}
                       data-testid={`decompose-pillar-append-${idx}`}
-                      onClick={() => setContext((prev) => (prev.trim() ? `${prev.trim()}；${pillar}` : pillar))}
+                      onClick={() =>
+                        setContext((prev) => (prev.trim() ? `${prev.trim()}；${pillar}` : pillar))
+                      }
                       className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted disabled:opacity-50"
                     >
                       +支柱 #{idx + 1}
@@ -354,7 +337,8 @@ export function TaskDecomposeDialog({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                     <span>
-                      将创建 {totalCount} 个里程碑（已勾选 {selectedRootIndices.size}/{milestones.length} 个主节点）
+                      将创建 {totalCount} 个里程碑（已勾选 {selectedRootIndices.size}/
+                      {milestones.length} 个主节点）
                     </span>
                     <span
                       className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-normal text-primary"
@@ -466,19 +450,13 @@ export function TaskDecomposeDialog({
                     >
                       {savedPlanL4 ? '已存为 L4' : '方案存为 L4'}
                     </button>
-                    <button
-                      type="button"
-                      data-testid="decompose-copy-md-btn"
-                      onClick={handleCopyPreviewMarkdown}
-                      className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-xs text-foreground hover:bg-muted"
-                    >
-                      {copiedPlan ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
-                      {copiedPlan ? '已复制方案' : '复制方案 Markdown'}
-                    </button>
                   </div>
                 </div>
                 {milestones.some((m) => m.stage) && (
-                  <div className="flex flex-wrap items-center gap-1" data-testid="decompose-stage-filter-bar">
+                  <div
+                    className="flex flex-wrap items-center gap-1"
+                    data-testid="decompose-stage-filter-bar"
+                  >
                     <button
                       type="button"
                       data-testid="decompose-stage-filter-all"
@@ -491,27 +469,31 @@ export function TaskDecomposeDialog({
                     >
                       全部阶段 ({milestones.length})
                     </button>
-                    {Array.from(new Set(milestones.map((m) => m.stage).filter(Boolean))).map((st) => (
-                      <button
-                        key={st}
-                        type="button"
-                        data-testid={`decompose-stage-filter-${st}`}
-                        onClick={() => setStageFilter(st!)}
-                        className={`rounded border px-2 py-0.5 text-ui-2xs ${
-                          stageFilter === st
-                            ? 'border-primary bg-primary text-primary-foreground'
-                            : 'border-border bg-background text-muted-foreground hover:bg-muted'
-                        }`}
-                      >
-                        {stageLabelMap.get(st!) ?? st}
-                      </button>
-                    ))}
+                    {Array.from(new Set(milestones.map((m) => m.stage).filter(Boolean))).map(
+                      (st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          data-testid={`decompose-stage-filter-${st}`}
+                          onClick={() => setStageFilter(st!)}
+                          className={`rounded border px-2 py-0.5 text-ui-2xs ${
+                            stageFilter === st
+                              ? 'border-primary bg-primary text-primary-foreground'
+                              : 'border-border bg-background text-muted-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {stageLabelMap.get(st!) ?? st}
+                        </button>
+                      ),
+                    )}
                     <button
                       type="button"
                       data-testid="decompose-select-stage-btn"
                       onClick={() => {
                         const matched = milestones
-                          .map((m, i) => (stageFilter === 'all' || m.stage === stageFilter ? i : -1))
+                          .map((m, i) =>
+                            stageFilter === 'all' || m.stage === stageFilter ? i : -1,
+                          )
                           .filter((i) => i >= 0);
                         setSelectedRootIndices(new Set(matched));
                       }}
@@ -524,100 +506,97 @@ export function TaskDecomposeDialog({
                 <div className="rounded-lg border p-3 space-y-1">
                   {milestones.map((ms, idx) =>
                     stageFilter !== 'all' && ms.stage !== stageFilter ? null : (
-                    <div key={idx} className="flex items-start gap-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedRootIndices.has(idx)}
-                        data-testid={`decompose-node-checkbox-${idx}`}
-                        onChange={() =>
-                          setSelectedRootIndices((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(idx)) next.delete(idx);
-                            else next.add(idx);
-                            return next;
-                          })
-                        }
-                        className="mt-2 h-3.5 w-3.5 rounded border-border"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <MilestoneTreeItem
-                          node={ms}
-                          depth={0}
-                          stageLabelMap={stageLabelMap}
+                      <div key={idx} className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedRootIndices.has(idx)}
+                          data-testid={`decompose-node-checkbox-${idx}`}
+                          onChange={() =>
+                            setSelectedRootIndices((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(idx)) next.delete(idx);
+                              else next.add(idx);
+                              return next;
+                            })
+                          }
+                          className="mt-2 h-3.5 w-3.5 rounded border-border"
                         />
+                        <div className="flex-1 min-w-0">
+                          <MilestoneTreeItem node={ms} depth={0} stageLabelMap={stageLabelMap} />
+                        </div>
+                        <button
+                          type="button"
+                          data-testid={`decompose-node-to-constraint-${idx}`}
+                          onClick={async () => {
+                            if (constraintNodeIndices.has(idx)) return;
+                            setConstraintNodeIndices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.createConstraint === 'function') {
+                              try {
+                                await projectApi.createConstraint(projectId, {
+                                  category: 'deliverable_guard',
+                                  content: `分解任务验收规范 [${ms.title}]：${ms.description || '完成任务分解节点交付'}`,
+                                  priority: 7,
+                                });
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }
+                          }}
+                          className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
+                        >
+                          {constraintNodeIndices.has(idx) ? '已转 L2' : '+L2 约束'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`decompose-node-to-l3-${idx}`}
+                          onClick={async () => {
+                            if (l3NodeIndices.has(idx)) return;
+                            setL3NodeIndices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.confirmKnowledge === 'function') {
+                              try {
+                                await projectApi.confirmKnowledge(projectId, {
+                                  entries: [
+                                    {
+                                      category: 'goal',
+                                      content: `分解里程碑目标 [${ms.title}]：${ms.description || '阶段核心交付项'}`,
+                                      importance: 7,
+                                      sourceMessageIds: [],
+                                      reasoning: 'M1 任务分解节点同步沉淀至 L3 画像',
+                                    },
+                                  ],
+                                });
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }
+                          }}
+                          className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          {l3NodeIndices.has(idx) ? '已存L3' : '+L3'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`decompose-node-to-l4-${idx}`}
+                          onClick={async () => {
+                            if (l4NodeIndices.has(idx)) return;
+                            setL4NodeIndices((prev) => new Set(prev).add(idx));
+                            if (typeof projectApi?.addMaterial === 'function') {
+                              try {
+                                await projectApi.addMaterial(projectId, {
+                                  content: `# 分解任务档案：${ms.title}\n- 阶段: ${ms.stage || '默认阶段'}\n\n${ms.description || '无详细说明'}`,
+                                });
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }
+                          }}
+                          className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          {l4NodeIndices.has(idx) ? '已存L4' : '+L4'}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        data-testid={`decompose-node-to-constraint-${idx}`}
-                        onClick={async () => {
-                          if (constraintNodeIndices.has(idx)) return;
-                          setConstraintNodeIndices((prev) => new Set(prev).add(idx));
-                          if (typeof projectApi?.createConstraint === 'function') {
-                            try {
-                              await projectApi.createConstraint(projectId, {
-                                category: 'deliverable_guard',
-                                content: `分解任务验收规范 [${ms.title}]：${ms.description || '完成任务分解节点交付'}`,
-                                priority: 7,
-                              });
-                            } catch {
-                              // ignore in test/offline mode
-                            }
-                          }
-                        }}
-                        className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-primary hover:bg-primary/10"
-                      >
-                        {constraintNodeIndices.has(idx) ? '已转 L2' : '+L2 约束'}
-                      </button>
-                      <button
-                        type="button"
-                        data-testid={`decompose-node-to-l3-${idx}`}
-                        onClick={async () => {
-                          if (l3NodeIndices.has(idx)) return;
-                          setL3NodeIndices((prev) => new Set(prev).add(idx));
-                          if (typeof projectApi?.confirmKnowledge === 'function') {
-                            try {
-                              await projectApi.confirmKnowledge(projectId, {
-                                entries: [
-                                  {
-                                    category: 'goal',
-                                    content: `分解里程碑目标 [${ms.title}]：${ms.description || '阶段核心交付项'}`,
-                                    importance: 7,
-                                    sourceMessageIds: [],
-                                    reasoning: 'M1 任务分解节点同步沉淀至 L3 画像',
-                                  },
-                                ],
-                              });
-                            } catch {
-                              // ignore in test/offline mode
-                            }
-                          }
-                        }}
-                        className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        {l3NodeIndices.has(idx) ? '已存L3' : '+L3'}
-                      </button>
-                      <button
-                        type="button"
-                        data-testid={`decompose-node-to-l4-${idx}`}
-                        onClick={async () => {
-                          if (l4NodeIndices.has(idx)) return;
-                          setL4NodeIndices((prev) => new Set(prev).add(idx));
-                          if (typeof projectApi?.addMaterial === 'function') {
-                            try {
-                              await projectApi.addMaterial(projectId, {
-                                content: `# 分解任务档案：${ms.title}\n- 阶段: ${ms.stage || '默认阶段'}\n\n${ms.description || '无详细说明'}`,
-                              });
-                            } catch {
-                              // ignore in test/offline mode
-                            }
-                          }
-                        }}
-                        className="mt-1 shrink-0 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        {l4NodeIndices.has(idx) ? '已存L4' : '+L4'}
-                      </button>
-                    </div>
-                  ))}
+                    ),
+                  )}
                 </div>
               </div>
             </div>

@@ -1,9 +1,26 @@
-import { Check, CheckSquare, Copy, FilePlus2, FileText, History, Plus, Save, Search, ShieldPlus, Sparkles, Square, Trash2 } from 'lucide-react';
+import {
+  CheckSquare,
+  FilePlus2,
+  FileText,
+  History,
+  Plus,
+  Save,
+  Search,
+  ShieldPlus,
+  Sparkles,
+  Square,
+  Trash2,
+} from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { ProjectOverviewWidgets } from '../../../features/project-type/ProjectOverviewWidgets';
-import { projectApi, type ProjectMaterial, type ProjectSummary, type ProjectType } from '../../../shared/api/projectApi';
+import {
+  projectApi,
+  type ProjectMaterial,
+  type ProjectSummary,
+  type ProjectType,
+} from '../../../shared/api/projectApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { formatRelativeTime } from '../../../shared/lib/utils';
 
@@ -41,19 +58,22 @@ const SIDEBAR_L2_PRESETS: Record<
     {
       label: '零幻觉文献与实验复现',
       description: '学术论文撰述、定量对比实验与可复现消融分析',
-      instructions: '采用严谨客观的学术被动语态，所有文献引用必须真实可查，固定并记录全部实验随机种子。',
+      instructions:
+        '采用严谨客观的学术被动语态，所有文献引用必须真实可查，固定并记录全部实验随机种子。',
     },
     {
       label: '审稿回复与图表溯源',
       description: '期刊与顶会审稿意见逐条回复及补充实验验证',
-      instructions: '逐条采用 Point-by-Point 结构礼貌回应审稿人，正文所有修订段落显式标注变更位置。',
+      instructions:
+        '逐条采用 Point-by-Point 结构礼貌回应审稿人，正文所有修订段落显式标注变更位置。',
     },
   ],
   personal: [
     {
       label: '卡片盒笔记与行动提取',
       description: '个人双链知识库沉淀、阅读摘录卡片化与行动清单闭环',
-      instructions: '每张永久笔记仅阐述一个原子概念，使用 [[双链]] 关联已有卡片，并在末尾提炼可执行行动项。',
+      instructions:
+        '每张永久笔记仅阐述一个原子概念，使用 [[双链]] 关联已有卡片，并在末尾提炼可执行行动项。',
     },
     {
       label: '长文创作与风格一致',
@@ -86,7 +106,6 @@ export function ProjectOverviewPanel({
 }: ProjectOverviewPanelProps) {
   const { t } = useI18n();
   const [creatingCheckpoint, setCreatingCheckpoint] = useState(false);
-  const [copiedOverview, setCopiedOverview] = useState(false);
   const [savedOverviewL3, setSavedOverviewL3] = useState(false);
   const [savedOverviewL2, setSavedOverviewL2] = useState(false);
   const archetype: ProjectType = project.projectType ?? project.detectedType ?? 'coding';
@@ -102,27 +121,6 @@ export function ProjectOverviewPanel({
       // ignore in test/offline mode
     } finally {
       setCreatingCheckpoint(false);
-    }
-  };
-
-  const handleCopyL2Markdown = async () => {
-    const desc = draft?.description ?? project.description ?? '';
-    const inst = draft?.instructions ?? project.instructions ?? '';
-    const lines = [
-      `# L2 项目目标与交付指令：${project.name}`,
-      '',
-      '## 项目目标',
-      desc || '（未设置）',
-      '',
-      '## 交付与审校指令',
-      inst || '（未设置）',
-    ];
-    try {
-      await navigator.clipboard?.writeText(lines.join('\n'));
-      setCopiedOverview(true);
-      setTimeout(() => setCopiedOverview(false), 1800);
-    } catch {
-      // ignore in test/offline mode
     }
   };
 
@@ -165,25 +163,6 @@ export function ProjectOverviewPanel({
           {t('sider.project.overview_title')}
         </span>
         <div className="flex items-center gap-1">
-          <button
-            type="button"
-            data-testid="sidebar-overview-copy-md"
-            onClick={() => void handleCopyL2Markdown()}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-ui-2xs text-muted hover:text-text hover:bg-bg-hover"
-            title="复制 L2 目标与指令 Markdown"
-          >
-            {copiedOverview ? (
-              <>
-                <Check className="w-3 h-3 text-emerald-500" aria-hidden="true" />
-                已复制
-              </>
-            ) : (
-              <>
-                <Copy className="w-3 h-3" aria-hidden="true" />
-                复制指令 MD
-              </>
-            )}
-          </button>
           <button
             type="button"
             data-testid="sidebar-overview-save-l3"
@@ -327,11 +306,14 @@ export function ProjectMaterialsPanel({
   const [filePathInput, setFilePathInput] = useState('');
   const [addingFromFile, setAddingFromFile] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [copiedBundle, setCopiedBundle] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
   const [promotedConstraintIds, setPromotedConstraintIds] = useState<Set<string>>(new Set());
-  const [promotedProfileMaterialIds, setPromotedProfileMaterialIds] = useState<Set<string>>(new Set());
-  const [promotedMilestoneMaterialIds, setPromotedMilestoneMaterialIds] = useState<Set<string>>(new Set());
+  const [promotedProfileMaterialIds, setPromotedProfileMaterialIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [promotedMilestoneMaterialIds, setPromotedMilestoneMaterialIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   const handleAddFromFile = async () => {
     const rel = filePathInput.trim();
@@ -398,25 +380,6 @@ export function ProjectMaterialsPanel({
   );
   const usagePct = Math.min(100, Math.round((usedChars / MATERIAL_TOTAL_CAP) * 100));
 
-  const handleCopyActiveMaterialsMarkdown = async () => {
-    if (activeReadyMaterials.length === 0) return;
-    const lines = [
-      `# L4 受控资料合集：${project.name} (${activeReadyMaterials.length} 份启用资料)`,
-      '',
-      ...activeReadyMaterials.map(
-        (m, idx) =>
-          `## 资料 #${idx + 1} (${m.id})\n${m.content ?? ''}`,
-      ),
-    ];
-    try {
-      await navigator.clipboard?.writeText(lines.join('\n\n'));
-      setCopiedBundle(true);
-      setTimeout(() => setCopiedBundle(false), 1800);
-    } catch {
-      // ignore in test/offline mode
-    }
-  };
-
   const q = searchQuery.trim().toLowerCase();
   const filteredList = (list ?? []).filter((m) => {
     const enabled = isMaterialEnabled(m);
@@ -482,29 +445,9 @@ export function ProjectMaterialsPanel({
               >
                 全停
               </button>
-              {activeReadyMaterials.length > 0 && (
-                <button
-                  type="button"
-                  data-testid="sidebar-materials-copy-md"
-                  onClick={() => void handleCopyActiveMaterialsMarkdown()}
-                  className="inline-flex items-center gap-0.5 rounded border border-border/60 bg-bg px-1 py-0.5 text-ui-2xs text-text-secondary hover:text-text"
-                  title="复制启用资料合集 Markdown"
-                >
-                  {copiedBundle ? (
-                    <>
-                      <Check className="w-2.5 h-2.5 text-emerald-500" />
-                      已复制
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-2.5 h-2.5" />
-                      复制资料 MD
-                    </>
-                  )}
-                </button>
-              )}
               <span className="tabular-nums text-muted">
-                {usedChars.toLocaleString()} / {MATERIAL_TOTAL_CAP.toLocaleString()} 字 ({usagePct}%)
+                {usedChars.toLocaleString()} / {MATERIAL_TOTAL_CAP.toLocaleString()} 字 ({usagePct}
+                %)
               </span>
             </div>
           </div>
@@ -545,15 +488,15 @@ export function ProjectMaterialsPanel({
             ))}
           </div>
           <div className="relative">
-          <Search className="w-3 h-3 text-muted absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索侧边栏资料内容或消息来源..."
-            data-testid="sidebar-materials-search-input"
-            className="w-full text-ui-2xs pl-5 pr-1.5 py-0.5 rounded border border-border bg-bg"
-          />
+            <Search className="w-3 h-3 text-muted absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索侧边栏资料内容或消息来源..."
+              data-testid="sidebar-materials-search-input"
+              className="w-full text-ui-2xs pl-5 pr-1.5 py-0.5 rounded border border-border bg-bg"
+            />
           </div>
         </div>
       )}
@@ -598,7 +541,10 @@ export function ProjectMaterialsPanel({
                     <MaterialStatusBadge status={m.status} />
                     <span className="text-muted truncate">
                       {m.sourceMessageId
-                        ? t('sider.project.material_from_message').replace('{id}', m.sourceMessageId)
+                        ? t('sider.project.material_from_message').replace(
+                            '{id}',
+                            m.sourceMessageId,
+                          )
                         : t('sider.project.material_direct')}
                     </span>
                     <span className="text-muted/60 tabular-nums ml-auto">
@@ -770,13 +716,24 @@ export function ProjectMaterialsPanel({
 
 /** 子行前缀圆点：层级指示，弱于图标避免与主行混淆 */
 export function MessageDot() {
-  return <span className="w-1 h-1 rounded-full bg-current opacity-40 shrink-0" aria-hidden="true" />;
+  return (
+    <span className="w-1 h-1 rounded-full bg-current opacity-40 shrink-0" aria-hidden="true" />
+  );
 }
 
 /** 移除按钮图标：与 Folder 语义呼应，弱化"删除文件"的误读 */
 export function FolderMinusIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
       <path d="M9 13h6" />
     </svg>

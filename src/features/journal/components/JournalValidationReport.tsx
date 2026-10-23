@@ -1,5 +1,3 @@
-import { useState } from 'react';
-
 import type { JournalViolation } from '../../../shared/api/types';
 
 const SEVERITY_STYLE: Record<JournalViolation['severity'], string> = {
@@ -39,7 +37,9 @@ export function formatJournalValidationMarkdown(
     lines.push('', '## 违规详情');
     for (const v of violations) {
       const sug = v.suggestion ? ` — 建议: ${v.suggestion}` : '';
-      lines.push(`- **[${SEVERITY_LABEL[v.severity]}] ${v.rule_id}** (${v.location}): ${v.message}${sug}`);
+      lines.push(
+        `- **[${SEVERITY_LABEL[v.severity]}] ${v.rule_id}** (${v.location}): ${v.message}${sug}`,
+      );
     }
   }
   return lines.join('\n');
@@ -69,9 +69,6 @@ export function JournalValidationReport({
   errorCount,
   warningCount,
 }: JournalValidationReportProps) {
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-
   if (violations.length === 0) {
     return (
       <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
@@ -81,29 +78,7 @@ export function JournalValidationReport({
   }
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatJournalValidationMarkdown(violations, errorCount, warningCount),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatJournalValidationJson(violations, errorCount, warningCount),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -115,24 +90,7 @@ export function JournalValidationReport({
         <span className="font-medium">
           {errorCount} 错误 · {warningCount} 警告
         </span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            data-testid="journal-validation-copy-md"
-            onClick={() => void handleCopyMarkdown()}
-            className="rounded border border-slate-200 px-1.5 py-0.5 text-ui-2xs text-slate-600 hover:bg-slate-50"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="journal-validation-copy-json"
-            onClick={() => void handleCopyJson()}
-            className="rounded border border-slate-200 px-1.5 py-0.5 text-ui-2xs text-slate-600 hover:bg-slate-50"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
-        </div>
+        <div className="flex items-center gap-1"></div>
       </div>
       <ul className="space-y-1">
         {violations.map((v, idx) => (

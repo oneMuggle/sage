@@ -46,8 +46,6 @@ export function WorkspaceBindModal({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copiedPath, setCopiedPath] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   const handleBind = useCallback(async () => {
     setError(null);
@@ -119,49 +117,6 @@ export function WorkspaceBindModal({
                 className="px-2 py-0.5 rounded border border-border bg-bg-subtle text-xs text-text-secondary hover:text-text"
               >
                 {copiedPath ? '已复制路径' : '复制路径'}
-              </button>
-              <button
-                type="button"
-                data-testid="workspace-bind-copy-md-btn"
-                onClick={async () => {
-                  setCopiedMd(true);
-                  const md = `# 当前绑定工作区\n- **目录路径**：\`${currentPath}\`\n- **绑定状态**：已绑定`;
-                  /* v8 ignore start */
-                  setTimeout(() => {
-                    if (typeof window !== 'undefined') setCopiedMd(false);
-                  }, 1500);
-                  try {
-                    await navigator.clipboard?.writeText(md);
-                  } catch {
-                    // ignore
-                  }
-                  /* v8 ignore stop */
-                }}
-                className="px-2 py-0.5 rounded border border-border bg-bg-subtle text-xs text-text-secondary hover:text-text"
-              >
-                {copiedMd ? '已复制MD' : '复制绑定MD'}
-              </button>
-              <button
-                type="button"
-                data-testid="workspace-bind-copy-json-btn"
-                onClick={async () => {
-                  setCopiedJson(true);
-                  /* v8 ignore start */
-                  setTimeout(() => {
-                    if (typeof window !== 'undefined') setCopiedJson(false);
-                  }, 1500);
-                  try {
-                    await navigator.clipboard?.writeText(
-                      JSON.stringify({ workspacePath: currentPath, bound: true }, null, 2),
-                    );
-                  } catch {
-                    // ignore
-                  }
-                  /* v8 ignore stop */
-                }}
-                className="px-2 py-0.5 rounded border border-border bg-bg-subtle text-xs text-text-secondary hover:text-text"
-              >
-                {copiedJson ? '已复制JSON' : '复制绑定JSON'}
               </button>
             </div>
           </div>

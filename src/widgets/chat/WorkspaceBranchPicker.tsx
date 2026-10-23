@@ -11,14 +11,7 @@
 // generation 自增，工具面自动落到新目录。
 
 import * as Popover from '@radix-ui/react-popover';
-import {
-  Check,
-  GitBranch,
-  GitMerge,
-  FolderGit2,
-  Loader2,
-  Trash2,
-} from 'lucide-react';
+import { Check, GitBranch, GitMerge, FolderGit2, Loader2, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
@@ -165,7 +158,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
   if (!sessionId || !workspacePath) return null;
 
   const isGit = data?.isGit ?? true;
-  const branchLabel = data?.currentBranch ?? "";
+  const branchLabel = data?.currentBranch ?? '';
   const inWorktree = registered.find((w) => w.worktreePath === workspacePath);
 
   return (
@@ -187,9 +180,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
             {baseName(workspacePath)}
             {branchLabel ? ` · ${branchLabel}` : ''}
           </span>
-          {inWorktree && (
-            <span className="text-ui-xs text-primary shrink-0">worktree</span>
-          )}
+          {inWorktree && <span className="text-ui-xs text-primary shrink-0">worktree</span>}
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -210,9 +201,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                 }
               }}
               placeholder={
-                isGit
-                  ? '输入新分支名回车创建 worktree，或过滤下方列表…'
-                  : '当前目录不是 git 仓库'
+                isGit ? '输入新分支名回车创建 worktree，或过滤下方列表…' : '当前目录不是 git 仓库'
               }
               className="w-full text-xs bg-bg-input border border-border rounded-radius-sm px-2 py-1.5 outline-none focus:border-primary"
             />
@@ -239,14 +228,13 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                       type="button"
                       data-testid="workspace-picker-copy-path-btn"
                       onClick={async () => {
-                        setCopiedPath(true);
-                        setTimeout(() => {
-                          /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedPath(false);
-                        }, 1500);
                         try {
-                          await navigator.clipboard?.writeText(workspacePath);
+                          if (!navigator.clipboard?.writeText) return;
+                          await navigator.clipboard.writeText(workspacePath);
+                          setCopiedPath(true);
+                          setTimeout(() => setCopiedPath(false), 1500);
                         } catch {
-                          // ignore in test/offline mode
+                          setCopiedPath(false);
                         }
                       }}
                       className="rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
@@ -257,10 +245,6 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                       type="button"
                       data-testid="workspace-picker-copy-md-btn"
                       onClick={async () => {
-                        setCopiedMd(true);
-                        setTimeout(() => {
-                          /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedMd(false);
-                        }, 1500);
                         const md = [
                           `# 工作区分支与 Worktree 快照 (${baseName(data.repoRoot)})`,
                           `- **当前工作区**: \`${workspacePath}\``,
@@ -270,9 +254,12 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                           ...localBranches.map((b) => `- \`${b.name}\` (${b.head}) — ${b.subject}`),
                         ].join('\n');
                         try {
-                          await navigator.clipboard?.writeText(md);
+                          if (!navigator.clipboard?.writeText) return;
+                          await navigator.clipboard.writeText(md);
+                          setCopiedMd(true);
+                          setTimeout(() => setCopiedMd(false), 1500);
                         } catch {
-                          // ignore in test/offline mode
+                          setCopiedMd(false);
                         }
                       }}
                       className="rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
@@ -283,12 +270,9 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                       type="button"
                       data-testid="workspace-picker-copy-json-btn"
                       onClick={async () => {
-                        setCopiedJson(true);
-                        setTimeout(() => {
-                          /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedJson(false);
-                        }, 1500);
                         try {
-                          await navigator.clipboard?.writeText(
+                          if (!navigator.clipboard?.writeText) return;
+                          await navigator.clipboard.writeText(
                             JSON.stringify(
                               {
                                 workspacePath,
@@ -301,8 +285,10 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                               2,
                             ),
                           );
+                          setCopiedJson(true);
+                          setTimeout(() => setCopiedJson(false), 1500);
                         } catch {
-                          // ignore in test/offline mode
+                          setCopiedJson(false);
                         }
                       }}
                       className="rounded border border-border bg-surface px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
@@ -340,9 +326,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                   }}
                 />
               )}
-              {registered.length > 0 && (
-                <Section>Worktree</Section>
-              )}
+              {registered.length > 0 && <Section>Worktree</Section>}
               {registered.map((wt) => (
                 <Row
                   key={wt.id}
@@ -392,8 +376,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
               ))}
               <Section>本地分支</Section>
               {localBranches.map((b) => {
-                const occupiedElsewhere =
-                  !!b.worktreePath && b.worktreePath !== workspacePath;
+                const occupiedElsewhere = !!b.worktreePath && b.worktreePath !== workspacePath;
                 const atCurrent =
                   b.worktreePath === workspacePath ||
                   (b.isCurrent && workspacePath === data?.repoRoot);
@@ -405,9 +388,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
                     subtitle={`${b.subject} · ${b.date.slice(0, 10)}`}
                     active={atCurrent}
                     disabled={busy || occupiedElsewhere || b.isCurrent}
-                    titleHint={
-                      occupiedElsewhere ? `已在 ${b.worktreePath} 检出` : b.name
-                    }
+                    titleHint={occupiedElsewhere ? `已在 ${b.worktreePath} 检出` : b.name}
                     onClick={() => void runAction('open', b.name)}
                   />
                 );
@@ -472,11 +453,7 @@ function Row({
         if (e.key === 'Enter' && !disabled) onClick?.();
       }}
       className={`group flex items-center gap-2 px-3 py-1.5 text-xs max-w-full ${
-        disabled
-          ? 'opacity-45 cursor-default'
-          : onClick
-            ? 'cursor-pointer hover:bg-bg-hover'
-            : ''
+        disabled ? 'opacity-45 cursor-default' : onClick ? 'cursor-pointer hover:bg-bg-hover' : ''
       } ${active ? 'bg-bg-hover' : ''}`}
     >
       <span className="shrink-0 text-text-secondary">{icon}</span>

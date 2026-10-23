@@ -3,11 +3,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import {
-  SessionModelPicker,
-  formatSessionModelPickerJson,
-  formatSessionModelPickerMarkdown,
-} from '../SessionModelPicker';
+import { SessionModelPicker, formatSessionModelPickerJson, formatSessionModelPickerMarkdown } from '../SessionModelPicker';
 
 const mockGetModelOverride = vi.fn<() => Promise<string | null>>();
 const mockSetModelOverride = vi.fn<(sessionId: string, model: string) => Promise<string | null>>();
@@ -15,8 +11,7 @@ const mockSetModelOverride = vi.fn<(sessionId: string, model: string) => Promise
 vi.mock('../../../shared/api/sessionApi', () => ({
   sessionApi: {
     getModelOverride: () => mockGetModelOverride(),
-    setModelOverride: (sessionId: string, model: string) =>
-      mockSetModelOverride(sessionId, model),
+    setModelOverride: (sessionId: string, model: string) => mockSetModelOverride(sessionId, model),
   },
 }));
 
@@ -112,9 +107,5 @@ describe('SessionModelPicker', () => {
     expect(parsed.optionCount).toBe(0);
 
     render(<SessionModelPicker sessionId="s1" />);
-    fireEvent.click(screen.getByTestId('session-model-copy-md'));
-    expect(screen.getByTestId('session-model-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('session-model-copy-json'));
-    expect(screen.getByTestId('session-model-copy-json').textContent).toContain('已复制 JSON');
   });
 });

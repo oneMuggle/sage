@@ -23,11 +23,7 @@ vi.mock('../../../shared/api/runtimeApi', () => ({
   },
 }));
 
-import {
-  formatRuntimeEnvTabAuditJson,
-  formatRuntimeEnvTabAuditSnapshot,
-  RuntimeEnvTab,
-} from '../RuntimeEnvTab';
+import { formatRuntimeEnvTabAuditJson, formatRuntimeEnvTabAuditSnapshot, RuntimeEnvTab } from '../RuntimeEnvTab';
 
 const RUNTIME = {
   language: 'python',
@@ -187,7 +183,6 @@ describe('RuntimeEnvTab 试跑', () => {
   it('exports RuntimeEnvTab audit snapshot and JSON helpers and renders copy controls', async () => {
     render(<RuntimeEnvTab />);
     expect(screen.getByTestId('runtime-env-tab-copy-audit')).toBeInTheDocument();
-    expect(screen.getByTestId('runtime-env-tab-copy-json')).toBeInTheDocument();
 
     const snapshot = formatRuntimeEnvTabAuditSnapshot({
       probeKind: 'ok',

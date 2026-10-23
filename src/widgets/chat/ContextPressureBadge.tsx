@@ -4,8 +4,6 @@
  * 默认安静：< 0.6 不渲染；≥ 0.6 琥珀提示；≥ 0.8 红色警示
  * （deepseek-harness Web UI 同款语义：pressure 对用户可见，透明可控）。
  */
-import { useState } from 'react';
-
 import { useStore } from '../../shared/lib/store';
 
 const AMBER_THRESHOLD = 0.6;
@@ -56,8 +54,6 @@ export function formatContextPressureJson(
 
 export function ContextPressureBadge({ sessionId }: { sessionId: string | null }) {
   const contextPressure = useStore((s) => s.contextPressure);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   if (!contextPressure || contextPressure.session_id !== sessionId) return null;
   const { pressure, total_tokens, budget_tokens } = contextPressure;
@@ -70,25 +66,7 @@ export function ContextPressureBadge({ sessionId }: { sessionId: string | null }
     : `${percent}% · ${total_tokens}/${budget_tokens}`;
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatContextPressureMarkdown(contextPressure));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatContextPressureJson(contextPressure));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -103,22 +81,6 @@ export function ContextPressureBadge({ sessionId }: { sessionId: string | null }
     >
       <span className="inline-flex items-center gap-1.5">
         <span>{label}</span>
-        <button
-          type="button"
-          data-testid="context-pressure-copy-md"
-          onClick={() => void handleCopyMarkdown()}
-          className="rounded border border-current/30 px-1 py-0.5 text-ui-2xs hover:bg-black/5"
-        >
-          {copiedMd ? '已复制 MD' : '复制 MD'}
-        </button>
-        <button
-          type="button"
-          data-testid="context-pressure-copy-json"
-          onClick={() => void handleCopyJson()}
-          className="rounded border border-current/30 px-1 py-0.5 text-ui-2xs hover:bg-black/5"
-        >
-          {copiedJson ? '已复制 JSON' : '复制 JSON'}
-        </button>
       </span>
     </div>
   );

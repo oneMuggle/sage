@@ -80,8 +80,6 @@ export function WorkspaceEmptyGuard({ feature, className }: WorkspaceEmptyGuardP
   const ctx = useOptionalWorkspaceContext();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const copy = FEATURE_COPY[feature];
 
   const handleBind = useCallback(async () => {
@@ -108,25 +106,7 @@ export function WorkspaceEmptyGuard({ feature, className }: WorkspaceEmptyGuardP
   }, [ctx]);
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatWorkspaceGuardMarkdown(feature, error));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatWorkspaceGuardJson(feature, error));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -161,20 +141,6 @@ export function WorkspaceEmptyGuard({ feature, className }: WorkspaceEmptyGuardP
         {busy ? '绑定中...' : '选择目录'}
       </button>
       <div className="flex items-center gap-1.5 text-ui-2xs">
-        <span
-          data-testid="workspace-guard-copy-md"
-          onClick={() => void handleCopyMarkdown()}
-          className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedMd ? '已复制 MD' : '复制 MD'}
-        </span>
-        <span
-          data-testid="workspace-guard-copy-json"
-          onClick={() => void handleCopyJson()}
-          className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedJson ? '已复制 JSON' : '复制 JSON'}
-        </span>
       </div>
     </div>
   );

@@ -54,8 +54,6 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
   const [override, setOverride] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   // 会话切换时拉取当前覆盖
   useEffect(() => {
@@ -107,39 +105,7 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
   };
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatSessionModelPickerMarkdown({
-          sessionId,
-          override,
-          globalModelId,
-          optionCount: options.length,
-        }),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatSessionModelPickerJson({
-          sessionId,
-          override,
-          globalModelId,
-          optionCount: options.length,
-        }),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -160,23 +126,7 @@ export function SessionModelPicker({ sessionId }: SessionModelPickerProps) {
           </option>
         ))}
       </select>
-      {override && (
-        <span className="text-ui-xs text-warning shrink-0">覆盖</span>
-      )}
-      <span
-        data-testid="session-model-copy-md"
-        onClick={() => void handleCopyMarkdown()}
-        className="cursor-pointer rounded border border-border px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover shrink-0"
-      >
-        {copiedMd ? '已复制 MD' : '复制 MD'}
-      </span>
-      <span
-        data-testid="session-model-copy-json"
-        onClick={() => void handleCopyJson()}
-        className="cursor-pointer rounded border border-border px-1 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover shrink-0"
-      >
-        {copiedJson ? '已复制 JSON' : '复制 JSON'}
-      </span>
+      {override && <span className="text-ui-xs text-warning shrink-0">覆盖</span>}
     </div>
   );
 }

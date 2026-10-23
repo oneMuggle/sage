@@ -28,7 +28,6 @@ import { Archive, ArchiveRestore, FolderOpen, FileSpreadsheet, FileText, History
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-
 import type { OfficeDocType, OfficeDocumentSummary } from '../../shared/api/types';
 import { useI18n } from '../../shared/lib/i18n';
 import { useTaskCenterStore } from '../task-center/taskCenterStore';
@@ -145,8 +144,6 @@ export function OfficeDocumentList({
   // above the loading/empty early returns (rules-of-hooks).
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [batchBusy, setBatchBusy] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   // Prune ids that left the current slice — the parent refetches after
   // every action, and the live↔archived toggle reuses this component
@@ -281,44 +278,12 @@ export function OfficeDocumentList({
   const batchTestId = variant === 'archived' ? 'office-batch-restore' : 'office-batch-archive';
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatOfficeDocumentListMarkdown(documents, variant));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatOfficeDocumentListJson(documents, variant));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-end gap-1.5 text-ui-2xs">
-        <span
-          data-testid="office-doc-list-copy-md"
-          onClick={() => void handleCopyMarkdown()}
-          className="cursor-pointer rounded border border-border px-2 py-0.5 text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedMd ? '已复制 MD' : '复制 MD'}
-        </span>
-        <span
-          data-testid="office-doc-list-copy-json"
-          onClick={() => void handleCopyJson()}
-          className="cursor-pointer rounded border border-border px-2 py-0.5 text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedJson ? '已复制 JSON' : '复制 JSON'}
-        </span>
       </div>
       {batchAction && (
         <div className="flex items-center gap-3 mb-2" data-testid="office-batch-bar">

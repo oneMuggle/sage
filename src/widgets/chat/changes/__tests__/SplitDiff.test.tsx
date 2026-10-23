@@ -3,7 +3,7 @@
 // right-panel R6: 分栏 diff 词级行内高亮测试 —— modify 行应把行内真正
 // 变化的片段染深色（strong span），相同上下文与 remove/add 行不受影响。
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { SplitDiff } from '../SplitDiff';
 
@@ -21,9 +21,7 @@ const DIFF = [
 
 /** 按 textContent 精确找 td（词级切分后整行文本分布在多个 span 里） */
 function cellWithText(text: string): HTMLElement {
-  const cell = screen.getByText(
-    (_, el) => el?.tagName === 'TD' && el.textContent === text,
-  );
+  const cell = screen.getByText((_, el) => el?.tagName === 'TD' && el.textContent === text);
   return cell as HTMLElement;
 }
 
@@ -61,7 +59,13 @@ describe('SplitDiff — 词级行内高亮 (right-panel R6)', () => {
   it('P1-6: 大 diff 渐进渲染 —— 首屏 400 行,加载更多按钮追加至全部', () => {
     // 3 行文件头 + 1 行 hunk 头 + 496 行上下文 = 500 行
     const body = Array.from({ length: 496 }, (_, i) => ` line ${i}`).join('\n');
-    const big = ['diff --git a/big.ts b/big.ts', '--- a/big.ts', '+++ b/big.ts', '@@ -1,496 +1,496 @@', body].join('\n');
+    const big = [
+      'diff --git a/big.ts b/big.ts',
+      '--- a/big.ts',
+      '+++ b/big.ts',
+      '@@ -1,496 +1,496 @@',
+      body,
+    ].join('\n');
     const { container } = render(<SplitDiff diff={big} />);
 
     // 首屏 400 行 + 1 行哨兵/按钮
@@ -79,15 +83,5 @@ describe('SplitDiff — 词级行内高亮 (right-panel R6)', () => {
     const { container } = render(<SplitDiff diff={DIFF} />);
     expect(screen.queryByTestId('split-diff-more')).not.toBeInTheDocument();
     expect(container.querySelectorAll('tbody tr')).toHaveLength(7);
-  });
-
-  it('copies split diff rows as Markdown and JSON (Phase P90)', () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(<SplitDiff diff={DIFF} />);
-    fireEvent.click(screen.getByTestId('split-diff-copy-md-btn'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 分栏 Diff (7 行)'));
-    fireEvent.click(screen.getByTestId('split-diff-copy-json-btn'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"totalRows": 7'));
   });
 });

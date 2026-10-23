@@ -50,11 +50,8 @@ export function formatOrchestrationPageJson(params: {
 export function Orchestration() {
   const { t } = useI18n();
   const createLane = useLaneBoardStore((s) => s.createLane);
-  const laneCount = useLaneBoardStore((s) => s.lanes.length);
   const [goal, setGoal] = useState('');
   const [creating, setCreating] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   // live-events P2 (2026-09-07): LaneBoard 事件化 —— 订阅活动 run 的
   // canonical 事件流（task.* → lane 卡片投影,applyCanonicalEvent）,
@@ -125,29 +122,7 @@ export function Orchestration() {
   };
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatOrchestrationPageMarkdown({ goalDraft: goal.trim(), creating, laneCount }),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatOrchestrationPageJson({ goalDraft: goal.trim(), creating, laneCount }),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -155,57 +130,39 @@ export function Orchestration() {
       <PageHeader
         title={t('orchestration.title')}
         subtitle={t('orchestration.subtitle')}
-        actions={
-          <div className="flex items-center gap-1.5 text-ui-2xs">
-            <span
-              data-testid="orch-page-copy-md"
-              onClick={() => void handleCopyMarkdown()}
-              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedMd ? '已复制 MD' : '复制 MD'}
-            </span>
-            <span
-              data-testid="orch-page-copy-json"
-              onClick={() => void handleCopyJson()}
-              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedJson ? '已复制 JSON' : '复制 JSON'}
-            </span>
-          </div>
-        }
+        actions={<div className="flex items-center gap-1.5 text-ui-2xs"></div>}
       />
       <div className="flex-1 overflow-auto">
         <div className="max-w-7xl mx-auto px-6 py-6">
-
-        <form
-          data-testid="orch-create"
-          className="flex items-center gap-2 mb-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void handleCreate();
-          }}
-        >
-          <input
-            type="text"
-            data-testid="orch-plan"
-            value={goal}
-            onChange={(e) => setGoal(e.target.value)}
-            placeholder={t('orchestration.goal_placeholder')}
-            aria-label={t('orchestration.goal_placeholder')}
-            className="flex-1 px-3 py-1.5 text-sm bg-bg-surface border border-border rounded-radius-sm focus:outline-none focus:border-primary"
-          />
-          <button
-            type="submit"
-            data-testid="orch-submit"
-            disabled={creating || goal.trim().length === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          <form
+            data-testid="orch-create"
+            className="flex items-center gap-2 mb-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleCreate();
+            }}
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>{creating ? t('orchestration.creating') : t('orchestration.create')}</span>
-          </button>
-        </form>
+            <input
+              type="text"
+              data-testid="orch-plan"
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              placeholder={t('orchestration.goal_placeholder')}
+              aria-label={t('orchestration.goal_placeholder')}
+              className="flex-1 px-3 py-1.5 text-sm bg-bg-surface border border-border rounded-radius-sm focus:outline-none focus:border-primary"
+            />
+            <button
+              type="submit"
+              data-testid="orch-submit"
+              disabled={creating || goal.trim().length === 0}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-primary text-text-inverse rounded-radius-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{creating ? t('orchestration.creating') : t('orchestration.create')}</span>
+            </button>
+          </form>
 
-        <LaneBoard />
+          <LaneBoard />
         </div>
       </div>
     </div>

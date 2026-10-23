@@ -1,6 +1,5 @@
 // src/widgets/chat/progress/ProgressSection.tsx
 // Fix #2 (2026-09-06): PlanCard 已移至 Chat.tsx 主对话区域,此处仅保留状态摘要 + 任务树。
-import { useState } from 'react';
 
 import { useChatStreamStore, selectSessionSlots } from '../../../features/send-message/chatStreamStore';
 import type { TaskBoard } from '../../../features/send-message/useChat';
@@ -106,8 +105,6 @@ export function ProgressSection({
   onRetryTask,
   onSelectRun,
 }: ProgressSectionProps) {
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   // P1 todo 接线: agent 自维护清单快照（组件内直取 store，减少 prop drilling）。
   // S2: 按会话键控 —— 显示的是当前打开会话的清单。
   const todos = useChatStreamStore((s) => selectSessionSlots(s, sessionId).todos);
@@ -125,39 +122,7 @@ export function ProgressSection({
   const inFlight = (progress?.queued ?? 0) + (progress?.running ?? 0);
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    setCopiedMd(true);
-    try {
-      await navigator.clipboard?.writeText(
-        formatProgressSectionMarkdown({
-          iteration,
-          streamingState,
-          isLoading,
-          taskBoard,
-          todosCount: todos.length,
-        }),
-      );
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
 
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    try {
-      await navigator.clipboard?.writeText(
-        formatProgressSectionJson({
-          iteration,
-          streamingState,
-          isLoading,
-          taskBoard,
-          todosCount: todos.length,
-        }),
-      );
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -186,24 +151,6 @@ export function ProgressSection({
           {!hasTaskBoard && !showProgress && !isLoading && !stateLabel && (
             <span className="text-muted">等待输入...</span>
           )}
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => void handleCopyMd()}
-            data-testid="progress-section-copy-md"
-            className="px-1.5 py-0.5 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCopyJson()}
-            data-testid="progress-section-copy-json"
-            className="px-1.5 py-0.5 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
         </div>
       </div>
 

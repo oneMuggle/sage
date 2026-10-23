@@ -56,8 +56,6 @@ export function DrawPanel() {
   const [starting, setStarting] = useState(false);
   const [draws, setDraws] = useState<ArenaDrawRow[]>([]);
   const [drawsLoading, setDrawsLoading] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   const refreshDraws = useCallback(async () => {
     setDrawsLoading(true);
@@ -121,23 +119,7 @@ export function DrawPanel() {
   }
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    setCopiedMd(true);
-    try {
-      await navigator.clipboard?.writeText(formatDrawsMarkdown(draws));
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
 
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    try {
-      await navigator.clipboard?.writeText(formatDrawsJson(draws));
-    } catch {
-      // ignore clipboard errors in non-secure environments
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -253,22 +235,6 @@ export function DrawPanel() {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium">抽卡记录（最近 20 条）</h2>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void handleCopyMd()}
-              data-testid="draws-copy-md"
-              className="text-xs rounded border border-border px-2 py-1 hover:bg-bg-hover"
-            >
-              {copiedMd ? '已复制 MD' : '复制 MD'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleCopyJson()}
-              data-testid="draws-copy-json"
-              className="text-xs rounded border border-border px-2 py-1 hover:bg-bg-hover"
-            >
-              {copiedJson ? '已复制 JSON' : '复制 JSON'}
-            </button>
             <button
               type="button"
               onClick={() => void refreshDraws()}

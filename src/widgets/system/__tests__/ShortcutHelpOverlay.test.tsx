@@ -1,14 +1,10 @@
 // src/widgets/system/__tests__/ShortcutHelpOverlay.test.tsx
 // U18 快捷键帮助覆盖层: open 门控 + Esc 关闭 + 注册表渲染。
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import { SHORTCUT_GROUPS } from '../../../shared/lib/shortcuts';
-import {
-  formatShortcutHelpJson,
-  formatShortcutHelpMarkdown,
-  ShortcutHelpOverlay,
-} from '../ShortcutHelpOverlay';
+import { formatShortcutHelpJson, formatShortcutHelpMarkdown, ShortcutHelpOverlay } from '../ShortcutHelpOverlay';
 
 describe('ShortcutHelpOverlay', () => {
   it('open=false 时不渲染', () => {
@@ -38,22 +34,10 @@ describe('ShortcutHelpOverlay', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
-  it('exports Markdown and JSON and copies via buttons (Phase P91)', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(<ShortcutHelpOverlay open onClose={() => undefined} />);
-
+  it('formats shortcut help as Markdown and JSON', () => {
     const md = formatShortcutHelpMarkdown(SHORTCUT_GROUPS);
     expect(md).toContain('# 键盘快捷键列表');
     const json = JSON.parse(formatShortcutHelpJson(SHORTCUT_GROUPS));
     expect(json.groupCount).toBe(SHORTCUT_GROUPS.length);
-
-    fireEvent.click(screen.getByTestId('shortcut-help-copy-md'));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(md));
-    expect(screen.getByTestId('shortcut-help-copy-md')).toHaveTextContent('已复制 MD');
-
-    fireEvent.click(screen.getByTestId('shortcut-help-copy-json'));
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId('shortcut-help-copy-json')).toHaveTextContent('已复制 JSON');
   });
 });

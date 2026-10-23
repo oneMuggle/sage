@@ -1,11 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  ThemeGallery,
-  formatThemeGalleryJson,
-  formatThemeGalleryMarkdown,
-} from '../ThemeGallery';
+import { ThemeGallery, formatThemeGalleryJson, formatThemeGalleryMarkdown } from '../ThemeGallery';
 
 const mockSetPresetId = vi.fn();
 
@@ -99,9 +95,5 @@ describe('ThemeGallery', () => {
     expect(parsed.basicCount).toBe(6);
 
     render(<ThemeGallery />);
-    fireEvent.click(screen.getByTestId('theme-gallery-copy-md'));
-    expect(screen.getByTestId('theme-gallery-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('theme-gallery-copy-json'));
-    expect(screen.getByTestId('theme-gallery-copy-json').textContent).toContain('已复制 JSON');
   });
 });

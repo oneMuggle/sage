@@ -127,29 +127,4 @@ describe('UsageRequestsTable', () => {
     });
   });
 
-  it('copies usage requests page as Markdown and JSON to clipboard', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    vi.spyOn(usageApi, 'fetchUsageRequests').mockResolvedValueOnce(pageWith([ROW], 1, 0));
-
-    render(
-      <I18nProvider defaultLocale="zh">
-        <UsageRequestsTable />
-      </I18nProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('usage-requests-rows')).toBeDefined();
-    });
-
-    fireEvent.click(screen.getByTestId('usage-requests-copy-md-btn'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 请求明细'));
-    });
-
-    fireEvent.click(screen.getByTestId('usage-requests-copy-json-btn'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"row-1"'));
-    });
-  });
 });

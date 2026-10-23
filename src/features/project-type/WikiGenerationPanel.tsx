@@ -22,7 +22,12 @@ import {
 import { useState, useCallback, useEffect } from 'react';
 
 import { projectApi } from '../../shared/api';
-import type { ScannedFile, ExtractedSymbol, WikiGenerateResult, ProjectType } from '../../shared/api';
+import type {
+  ScannedFile,
+  ExtractedSymbol,
+  WikiGenerateResult,
+  ProjectType,
+} from '../../shared/api';
 import { Badge } from '../../shared/ui/Badge';
 import { Button } from '../../shared/ui/Button';
 
@@ -82,7 +87,7 @@ export function WikiGenerationPanel({
   const [ingestingAll, setIngestingAll] = useState(false);
   const [fileFilter, setFileFilter] = useState('');
   const [symbolKindFilter, setSymbolKindFilter] = useState<string>('all');
-  const [copiedSymbols, setCopiedSymbols] = useState(false);
+
   const [savedSymbolsProfile, setSavedSymbolsProfile] = useState(false);
   const [guardedSymbolIndices, setGuardedSymbolIndices] = useState<Set<number>>(new Set());
   const [milestoneSymbolIndices, setMilestoneSymbolIndices] = useState<Set<number>>(new Set());
@@ -102,7 +107,7 @@ export function WikiGenerationPanel({
     setIngestingAll(false);
     setFileFilter('');
     setSymbolKindFilter('all');
-    setCopiedSymbols(false);
+
     setSavedSymbolsProfile(false);
   }, []);
 
@@ -152,7 +157,8 @@ export function WikiGenerationPanel({
 
   /** M5 -> L4: 将生成的 Wiki 页面纳入 L4 受控资料池 */
   const handleIngestToMaterials = async (wikiPath: string) => {
-    if (typeof projectApi?.addMaterialFromFile !== 'function' || ingestedPaths.has(wikiPath)) return;
+    if (typeof projectApi?.addMaterialFromFile !== 'function' || ingestedPaths.has(wikiPath))
+      return;
     try {
       await projectApi.addMaterialFromFile(projectId, wikiPath);
       setIngestedPaths((prev) => new Set(prev).add(wikiPath));
@@ -344,7 +350,9 @@ export function WikiGenerationPanel({
           </div>
           {result.wikiPaths.length > 0 && (
             <div className="space-y-1">
-              <span className="text-xs text-green-700">生成的文件（可一键纳入 L4 受控资料池）：</span>
+              <span className="text-xs text-green-700">
+                生成的文件（可一键纳入 L4 受控资料池）：
+              </span>
               <div className="max-h-32 overflow-y-auto space-y-1">
                 {result.wikiPaths.map((p, idx) => {
                   const isIngested = ingestedPaths.has(p);
@@ -474,7 +482,10 @@ export function WikiGenerationPanel({
                     data-testid="wiki-save-symbols-profile-btn"
                     disabled={savedSymbolsProfile}
                     onClick={async () => {
-                      if (savedSymbolsProfile || typeof projectApi?.confirmKnowledge !== 'function') {
+                      if (
+                        savedSymbolsProfile ||
+                        typeof projectApi?.confirmKnowledge !== 'function'
+                      ) {
                         return;
                       }
                       const topSyms = symbols
@@ -501,26 +512,6 @@ export function WikiGenerationPanel({
                     className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs text-primary hover:bg-primary/10 disabled:opacity-60"
                   >
                     {savedSymbolsProfile ? '已沉淀符号至 L3' : '沉淀符号摘要至 L3'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="wiki-copy-symbols-btn"
-                    onClick={async () => {
-                      const list = symbols
-                        .filter((s) => symbolKindFilter === 'all' || s.kind === symbolKindFilter)
-                        .map((s) => `- [${KIND_LABELS[s.kind] ?? s.kind}] ${s.name} (${s.filePath}:${s.lineno})`);
-                      try {
-                        await navigator.clipboard?.writeText(list.join('\n'));
-                        setCopiedSymbols(true);
-                        setTimeout(() => setCopiedSymbols(false), 1500);
-                      } catch {
-                        // ignore in test/offline mode
-                      }
-                    }}
-                    className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                  >
-                    <Copy className="h-3 w-3 text-primary" />
-                    {copiedSymbols ? '已复制符号' : '复制符号清单'}
                   </button>
                 </div>
               )}
@@ -565,7 +556,10 @@ export function WikiGenerationPanel({
                   .filter((s) => symbolKindFilter === 'all' || s.kind === symbolKindFilter)
                   .slice(0, 8)
                   .map((s, idx) => (
-                    <div key={`${s.filePath}-${s.name}-${idx}`} className="flex items-center justify-between gap-2">
+                    <div
+                      key={`${s.filePath}-${s.name}-${idx}`}
+                      className="flex items-center justify-between gap-2"
+                    >
                       <span className="truncate text-foreground">
                         [{KIND_LABELS[s.kind] ?? s.kind}] {s.name}
                       </span>
@@ -720,11 +714,7 @@ export function WikiGenerationPanel({
           </div>
 
           <div className="flex gap-2">
-            <Button
-              size="sm"
-              onClick={() => void handleGenerate()}
-              data-testid="wiki-generate-btn"
-            >
+            <Button size="sm" onClick={() => void handleGenerate()} data-testid="wiki-generate-btn">
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
               生成 Wiki
             </Button>
@@ -739,7 +729,11 @@ export function WikiGenerationPanel({
       {(phase === 'previewing' || phase === 'generating') && (
         <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span>{phase === 'previewing' ? '正在扫描文件并提取符号...' : '正在调用 LLM 生成 Wiki 页面...'}</span>
+          <span>
+            {phase === 'previewing'
+              ? '正在扫描文件并提取符号...'
+              : '正在调用 LLM 生成 Wiki 页面...'}
+          </span>
         </div>
       )}
 

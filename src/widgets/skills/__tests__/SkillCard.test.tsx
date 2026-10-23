@@ -4,7 +4,7 @@
  * - 切换开关触发 onToggle(name, enabled)
  * - SKILL.md 适配层 (PR-8): source badge / body 折叠区 / version badge / base_dir
  */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import SkillCard from '../SkillCard';
@@ -348,33 +348,5 @@ describe('SkillCard', () => {
     expect(screen.queryByRole('button', { name: /归档 travel/i })).toBeNull();
   });
 
-  it('copies skill Markdown and JSON from SkillCard (Phase P87)', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
 
-    render(
-      <SkillCard
-        name="code-review"
-        description="Review code"
-        triggers={['review']}
-        enabled
-        usage_count={5}
-        onToggle={() => undefined}
-        source="skillmd"
-        body="# Prompt"
-      />,
-    );
-
-    fireEvent.click(screen.getByTestId('skill-card-copy-md-code-review'));
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-card-copy-md-code-review')).toHaveTextContent('✓ 已复制MD');
-    });
-
-    fireEvent.click(screen.getByTestId('skill-card-copy-json-code-review'));
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-card-copy-json-code-review')).toHaveTextContent(
-        '✓ 已复制JSON',
-      );
-    });
-  });
 });

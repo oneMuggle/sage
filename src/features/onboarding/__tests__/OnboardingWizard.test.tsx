@@ -44,11 +44,7 @@ vi.mock('../../manage-settings/useSettings', () => ({
 }));
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  OnboardingWizard,
-  formatOnboardingWizardJson,
-  formatOnboardingWizardMarkdown,
-} from '../OnboardingWizard';
+import { OnboardingWizard, formatOnboardingWizardJson, formatOnboardingWizardMarkdown } from '../OnboardingWizard';
 
 let currentEndpoints: { baseUrl: string; apiKey: string; protocol: string }[] = [];
 
@@ -250,9 +246,5 @@ describe('OnboardingWizard — R26', () => {
     expect(parsed.saved).toBe(true);
 
     renderWizard();
-    fireEvent.click(screen.getByTestId('wizard-copy-md'));
-    expect(screen.getByTestId('wizard-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('wizard-copy-json'));
-    expect(screen.getByTestId('wizard-copy-json').textContent).toContain('已复制 JSON');
   });
 });

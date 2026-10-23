@@ -54,8 +54,6 @@ export function formatTopicShiftJson(sessionId: string, reason: string): string 
 export function TopicShiftBanner({ sessionId, reason, onRetreat }: TopicShiftBannerProps) {
   const [visible, setVisible] = useState(true);
   const [pending, setPending] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(false), AUTO_DISMISS_MS);
@@ -84,25 +82,7 @@ export function TopicShiftBanner({ sessionId, reason, onRetreat }: TopicShiftBan
   };
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatTopicShiftMarkdown(sessionId, reason));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatTopicShiftJson(sessionId, reason));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -121,22 +101,6 @@ export function TopicShiftBanner({ sessionId, reason, onRetreat }: TopicShiftBan
         className="px-2 py-0.5 border border-border rounded-radius-sm hover:bg-bg-hover transition-colors disabled:opacity-50"
       >
         {pending ? '恢复中…' : '恢复完整上下文'}
-      </button>
-      <button
-        type="button"
-        data-testid="topic-shift-copy-md"
-        onClick={() => void handleCopyMarkdown()}
-        className="px-2 py-0.5 border border-border rounded-radius-sm hover:bg-bg-hover transition-colors"
-      >
-        {copiedMd ? '已复制 MD' : '复制 MD'}
-      </button>
-      <button
-        type="button"
-        data-testid="topic-shift-copy-json"
-        onClick={() => void handleCopyJson()}
-        className="px-2 py-0.5 border border-border rounded-radius-sm hover:bg-bg-hover transition-colors"
-      >
-        {copiedJson ? '已复制 JSON' : '复制 JSON'}
       </button>
       <button
         className="ml-auto text-text-secondary hover:text-text shrink-0"

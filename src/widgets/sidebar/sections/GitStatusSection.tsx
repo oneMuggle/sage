@@ -7,10 +7,14 @@
  * 非 git 目录静默降级（不显示 section 内容）。
  */
 
-import { Check, Copy, GitBranch, RefreshCw } from 'lucide-react';
+import { GitBranch, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { getGitStatus, type GitFileChange, type GitStatusResponse } from '../../../shared/api/gitStatusApi';
+import {
+  getGitStatus,
+  type GitFileChange,
+  type GitStatusResponse,
+} from '../../../shared/api/gitStatusApi';
 import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { SiderSection } from '../SiderSection';
@@ -71,7 +75,6 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<GitFilterCategory>('all');
-  const [copiedMd, setCopiedMd] = useState(false);
   const [savedSiderL4, setSavedSiderL4] = useState(false);
   const [savedSiderL3, setSavedSiderL3] = useState(false);
   const [convertedSiderMilestone, setConvertedSiderMilestone] = useState(false);
@@ -86,8 +89,6 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const [milestonePaths, setMilestonePaths] = useState<Set<string>>(new Set());
   const [savedAllSiderL3, setSavedAllSiderL3] = useState(false);
   const [createdAllSiderMilestones, setCreatedAllSiderMilestones] = useState(false);
-  const [copiedSiderJson, setCopiedSiderJson] = useState(false);
-  const [copiedFileJsonPath, setCopiedFileJsonPath] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 获取第一个项目的路径
@@ -96,9 +97,7 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
       const projects: ProjectSummary[] = await projectApi.list();
       if (projects.length > 0) {
         // 按最近打开排序，取第一个
-        const sorted = [...projects].sort(
-          (a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0),
-        );
+        const sorted = [...projects].sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0));
         setProjectPath(sorted[0].path);
         setProjectId(sorted[0].id);
         return sorted[0].path;
@@ -157,27 +156,6 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
     [fetchStatus],
   );
 
-  const handleCopyChangesMarkdown = useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (!status || status.files.length === 0) return;
-      const lines = [
-        `# 侧边栏 Git 变更清单 (${status.branch || 'HEAD'})`,
-        '',
-        ...status.files.map((f) => `- [${statusBadge(f.status)}] \`${f.path}\``),
-      ];
-      try {
-        void navigator.clipboard?.writeText(lines.join('\n'));
-        setCopiedMd(true);
-        setTimeout(() => setCopiedMd(false), 1800);
-      } catch {
-        // ignore in test/offline mode
-      }
-    },
-    [status],
-  );
-
   // 非 git 仓库或无项目 → 不渲染内容
   if (!loading && status && !status.is_git_repo) {
     return (
@@ -188,9 +166,7 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
         collapsed={collapsed}
         onToggleCollapsed={onToggleCollapsed}
         render={() => (
-          <p className="text-ui-xs text-text-muted px-2 py-1 italic">
-            {t('git.not_a_repo')}
-          </p>
+          <p className="text-ui-xs text-text-muted px-2 py-1 italic">{t('git.not_a_repo')}</p>
         )}
       />
     );
@@ -205,9 +181,7 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
         collapsed={collapsed}
         onToggleCollapsed={onToggleCollapsed}
         render={() => (
-          <p className="text-ui-xs text-text-muted px-2 py-1 italic">
-            {t('git.no_project')}
-          </p>
+          <p className="text-ui-xs text-text-muted px-2 py-1 italic">{t('git.no_project')}</p>
         )}
       />
     );
@@ -250,17 +224,6 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
               {copiedBranch ? '已复制' : status.branch}
             </button>
           )}
-          {fileCount > 0 && (
-            <button
-              type="button"
-              onClick={handleCopyChangesMarkdown}
-              data-testid="git-sider-copy-md-btn"
-              title="复制 Git 变更清单 Markdown"
-              className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text hover:bg-bg-hover"
-            >
-              {copiedMd ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-            </button>
-          )}
           <button
             onClick={handleRefresh}
             title={t('git.refresh')}
@@ -273,31 +236,31 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
       }
       render={() => {
         if (loading && !status) {
-          return (
-            <p className="text-ui-xs text-text-muted px-2 py-1 italic">
-              {t('git.loading')}
-            </p>
-          );
+          return <p className="text-ui-xs text-text-muted px-2 py-1 italic">{t('git.loading')}</p>;
         }
 
         if (!status || status.files.length === 0) {
-          return (
-            <p className="text-ui-xs text-text-muted px-2 py-1 italic">
-              {t('git.clean')}
-            </p>
-          );
+          return <p className="text-ui-xs text-text-muted px-2 py-1 italic">{t('git.clean')}</p>;
         }
 
         const filteredFiles = status.files.filter((f) => {
           if (filterCategory === 'all') return true;
           if (filterCategory === 'staged') return f.status === 'staged';
           if (filterCategory === 'untracked') return f.status === 'untracked';
-          return f.status === 'modified' || f.status === 'deleted' || f.status === 'renamed' || f.status === 'conflicted';
+          return (
+            f.status === 'modified' ||
+            f.status === 'deleted' ||
+            f.status === 'renamed' ||
+            f.status === 'conflicted'
+          );
         });
 
         return (
           <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-1 px-2 pt-0.5" data-testid="git-sider-filter-bar">
+            <div
+              className="flex flex-wrap items-center gap-1 px-2 pt-0.5"
+              data-testid="git-sider-filter-bar"
+            >
               {(
                 [
                   { id: 'all', label: '全部' },
@@ -442,7 +405,9 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                     data-testid="git-sider-copy-paths-btn"
                     onClick={async () => {
                       try {
-                        await navigator.clipboard?.writeText(filteredFiles.map((f) => f.path).join('\n'));
+                        await navigator.clipboard?.writeText(
+                          filteredFiles.map((f) => f.path).join('\n'),
+                        );
                         setCopiedSiderPaths(true);
                         setTimeout(() => setCopiedSiderPaths(false), 1500);
                       } catch {
@@ -452,37 +417,6 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                     className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
                   >
                     {copiedSiderPaths ? '已复制路径' : '复制路径'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="git-sider-copy-json-btn"
-                    onClick={async () => {
-                      setCopiedSiderJson(true);
-                      setTimeout(() => {
-                        /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedSiderJson(false);
-                      }, 1500);
-                      try {
-                        await navigator.clipboard?.writeText(
-                          JSON.stringify(
-                            {
-                              branch: status.branch || 'HEAD',
-                              isGitRepo: status.is_git_repo,
-                              filterCategory,
-                              totalChanges: status.files.length,
-                              filteredCount: filteredFiles.length,
-                              files: filteredFiles.map((f) => ({ path: f.path, status: f.status })),
-                            },
-                            null,
-                            2,
-                          ),
-                        );
-                      } catch {
-                        // ignore in test/offline mode
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {copiedSiderJson ? '已复制JSON' : '复制JSON'}
                   </button>
                   <button
                     type="button"
@@ -496,7 +430,10 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                             entries: [
                               {
                                 category: 'note',
-                                content: `侧边栏批量沉淀 Git 变更 (${status.branch || 'HEAD'} · ${filteredFiles.length} 个文件)：${filteredFiles.slice(0, 12).map((f) => `${f.path}[${f.status}]`).join('、')}`,
+                                content: `侧边栏批量沉淀 Git 变更 (${status.branch || 'HEAD'} · ${filteredFiles.length} 个文件)：${filteredFiles
+                                  .slice(0, 12)
+                                  .map((f) => `${f.path}[${f.status}]`)
+                                  .join('、')}`,
                                 importance: 6,
                                 sourceMessageIds: [],
                                 reasoning: '侧边栏 Git 筛选文件批量沉淀至 L3 画像',
@@ -552,9 +489,7 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                   >
                     {statusBadge(file.status)}
                   </span>
-                  <span className="text-ui-xs text-text truncate flex-1">
-                    {file.path}
-                  </span>
+                  <span className="text-ui-xs text-text truncate flex-1">{file.path}</span>
                   {projectId && (
                     <button
                       type="button"
@@ -669,34 +604,6 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                     className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
                   >
                     {copiedFilePath === file.path ? '已复制' : '复制'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`git-sider-copy-json-${file.path}`}
-                    onClick={async () => {
-                      setCopiedFileJsonPath(file.path);
-                      setTimeout(() => {
-                        /* v8 ignore next */ if (typeof window !== 'undefined') setCopiedFileJsonPath(null);
-                      }, 1500);
-                      try {
-                        await navigator.clipboard?.writeText(
-                          JSON.stringify(
-                            {
-                              path: file.path,
-                              status: file.status,
-                              branch: status.branch || 'HEAD',
-                            },
-                            null,
-                            2,
-                          ),
-                        );
-                      } catch {
-                        // ignore in test/offline mode
-                      }
-                    }}
-                    className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {copiedFileJsonPath === file.path ? '已复制JSON' : '复制JSON'}
                   </button>
                 </li>
               ))}

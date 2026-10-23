@@ -37,8 +37,6 @@ export function ForkTreeModal({
   const { t } = useI18n();
   const [sessions, setSessions] = useState<Session[] | null>(null);
   const [error, setError] = useState('');
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -63,30 +61,7 @@ export function ForkTreeModal({
   }, [sessions, session.id]);
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    if (!family) return;
-    const lines = [
-      '# 会话分叉谱系树',
-      '',
-      `- **节点总数**: ${family.length}`,
-      '',
-      ...family.map(({ session: s, depth }) => {
-        const indent = '  '.repeat(depth);
-        const currentMark = s.id === session.id ? ' [当前]' : '';
-        return `${indent}- **${s.title}** (\`${s.id}\`)${currentMark}`;
-      }),
-    ];
-    setCopiedMd(true);
-    await navigator.clipboard?.writeText(lines.join('\n'));
-    setTimeout(() => setCopiedMd(false), 1800);
-  };
 
-  const handleCopyJson = async () => {
-    if (!family) return;
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(JSON.stringify(family, null, 2));
-    setTimeout(() => setCopiedJson(false), 1800);
-  };
   /* v8 ignore stop */
 
   return (
@@ -94,22 +69,6 @@ export function ForkTreeModal({
       <div className="space-y-1 text-sm min-h-[8rem]" data-testid="fork-tree-modal">
         {!error && family !== null && family.length > 0 && (
           <div className="flex items-center justify-end gap-1.5 pb-1">
-            <button
-              type="button"
-              data-testid="fork-tree-copy-md-btn"
-              onClick={() => void handleCopyMd()}
-              className="px-2 py-0.5 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedMd ? '✓ 已复制MD' : '复制分叉树MD'}
-            </button>
-            <button
-              type="button"
-              data-testid="fork-tree-copy-json-btn"
-              onClick={() => void handleCopyJson()}
-              className="px-2 py-0.5 text-xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedJson ? '✓ 已复制JSON' : '复制分叉树JSON'}
-            </button>
           </div>
         )}
         {error && (

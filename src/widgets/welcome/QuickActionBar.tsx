@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
@@ -17,11 +17,7 @@ interface QuickActionBarProps {
 }
 
 export function formatQuickActionsMarkdown(actions: ReadonlyArray<QuickAction>): string {
-  const lines = [
-    '# 欢迎页快捷操作栏 (Quick Action Bar)',
-    '',
-    `- **操作总数**: ${actions.length}`,
-  ];
+  const lines = ['# 欢迎页快捷操作栏 (Quick Action Bar)', '', `- **操作总数**: ${actions.length}`];
   if (actions.length === 0) {
     lines.push('', '_暂无快捷操作_');
   } else {
@@ -59,29 +55,9 @@ const badgeColorMap: Record<NonNullable<QuickAction['badge']>['variant'], string
 
 export function QuickActionBar({ actions }: QuickActionBarProps) {
   const { t } = useI18n();
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatQuickActionsMarkdown(actions));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatQuickActionsJson(actions));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -113,20 +89,6 @@ export function QuickActionBar({ actions }: QuickActionBarProps) {
           )}
         </button>
       ))}
-      <span
-        data-testid="quick-actions-copy-md"
-        onClick={() => void handleCopyMarkdown()}
-        className="cursor-pointer rounded border border-border bg-surface px-2 py-1 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-      >
-        {copiedMd ? '已复制 MD' : '复制 MD'}
-      </span>
-      <span
-        data-testid="quick-actions-copy-json"
-        onClick={() => void handleCopyJson()}
-        className="cursor-pointer rounded border border-border bg-surface px-2 py-1 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-      >
-        {copiedJson ? '已复制 JSON' : '复制 JSON'}
-      </span>
     </div>
   );
 }

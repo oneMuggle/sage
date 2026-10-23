@@ -4,11 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AnswerVersionList } from '../../../features/chat/answerVersions';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  AnswerVersionSwitcher,
-  formatAnswerVersionsJson,
-  formatAnswerVersionsMarkdown,
-} from '../AnswerVersionSwitcher';
+import { AnswerVersionSwitcher } from '../AnswerVersionSwitcher';
 
 const fetchVersions = vi.fn();
 const activate = vi.fn();
@@ -105,26 +101,5 @@ describe('AnswerVersionSwitcher', () => {
 
     await waitFor(() => expect(toastError).toHaveBeenCalledWith('切换回答版本失败：boom'));
     expect(onChanged).not.toHaveBeenCalled();
-  });
-
-  it('exports answer version list as Markdown and JSON and copies via buttons', async () => {
-    expect(formatAnswerVersionsMarkdown('s1', null)).toContain('_暂无多版本回答_');
-    const sample = versions(2, 3);
-    const md = formatAnswerVersionsMarkdown('s1', sample);
-    expect(md).toContain('# 回答版本列表');
-    expect(md).toContain('(当前)');
-    const parsed = JSON.parse(formatAnswerVersionsJson('s1', sample));
-    expect(parsed.sessionId).toBe('s1');
-    expect(parsed.list.total).toBe(3);
-
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    fetchVersions.mockResolvedValueOnce(sample);
-    renderSwitcher();
-    expect(await screen.findByTestId('answer-version-count')).toHaveTextContent('2/3');
-    fireEvent.click(screen.getByTestId('answer-version-copy-md'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('回答版本列表'));
-    fireEvent.click(screen.getByTestId('answer-version-copy-json'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"sessionId": "s1"'));
   });
 });

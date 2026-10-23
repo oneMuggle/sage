@@ -5,11 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  PermissionModeSwitch,
-  formatPermissionModeJson,
-  formatPermissionModeMarkdown,
-} from '../PermissionModeSwitch';
+import { PermissionModeSwitch, formatPermissionModeJson, formatPermissionModeMarkdown } from '../PermissionModeSwitch';
 
 const getPreset = vi.fn();
 const setPreset = vi.fn();
@@ -39,7 +35,9 @@ const renderSwitch = (sessionId: string | null) =>
   );
 
 beforeEach(() => {
-  getPreset.mockReset().mockResolvedValue({ preset: 'standard', mode: 'workspace_write', custom: false });
+  getPreset
+    .mockReset()
+    .mockResolvedValue({ preset: 'standard', mode: 'workspace_write', custom: false });
   setPreset.mockReset().mockResolvedValue(undefined);
   getSessionAutoApprovals.mockReset().mockResolvedValue({
     session_id: 's1',
@@ -133,12 +131,5 @@ describe('PermissionModeSwitch', () => {
       }),
     );
     expect(parsed.preset).toBe('auto');
-
-    renderSwitch('s1');
-    await waitFor(() => expect(getPreset).toHaveBeenCalled());
-    fireEvent.click(screen.getByTestId('permission-mode-copy-md'));
-    expect(screen.getByTestId('permission-mode-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('permission-mode-copy-json'));
-    expect(screen.getByTestId('permission-mode-copy-json').textContent).toContain('已复制 JSON');
   });
 });
