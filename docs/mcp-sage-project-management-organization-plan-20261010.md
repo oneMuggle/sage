@@ -2413,3 +2413,26 @@
   - `src/features/task-brief/__tests__/modelTaskFit.p168.test.ts`
   - `src/features/task-brief/__tests__/taskBrief.p168.test.ts`
   - `src/features/task-brief/__tests__/taskRecipes.p168.test.ts`
+
+### Phase P169 — Task-Center, Terminal-Panel & Theme Governance Audit Contracts (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/task-center/taskCenterStore.ts` (`auditTaskCenterStoreGovernance`)
+  - `src/features/terminal-panel/terminalPanelStore.ts` (`auditTerminalPanelStoreGovernance`)
+  - `src/features/theme/CodeMirrorThemeEditor.tsx` (`auditCodeMirrorThemeEditorGovernance`)
+  - `src/features/theme/CssThemeModal.tsx` (`auditCssThemeModalGovernance`)
+  - `src/features/theme/ThemeCover.tsx` (`auditThemeCoverGovernance`)
+  - `src/features/theme/ThemeGallery.tsx` (`auditThemeGalleryGovernance`)
+  - `src/features/theme/backgroundInjector.ts` (`auditBackgroundInjectorGovernance`)
+  - `src/features/theme/themeCssTypes.ts` (`auditThemeCssTypesGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/task-center/__tests__/taskCenterStore.p169.test.ts`
+  - `src/features/terminal-panel/__tests__/terminalPanelStore.p169.test.ts`
+  - `src/features/theme/__tests__/CodeMirrorThemeEditor.p169.test.ts`
+  - `src/features/theme/__tests__/CssThemeModal.p169.test.ts`
+  - `src/features/theme/__tests__/ThemeCover.p169.test.ts`
+  - `src/features/theme/__tests__/ThemeGallery.p169.test.ts`
+  - `src/features/theme/__tests__/backgroundInjector.p169.test.ts`
+  - `src/features/theme/__tests__/themeCssTypes.p169.test.ts`
+- **Verification**:
+  - `npx eslint --max-warnings=0`, `npx vitest run`, `node scripts/check-font-scale.mjs`, `node scripts/architecture-check.mjs`, `node scripts/export-ipc-manifest.mjs --check`, and `npx tsc --noEmit` all passed with 0 errors/warnings across both `main` and `release/win7` worktrees.
