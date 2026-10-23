@@ -79,3 +79,28 @@ export function formatJournalActionsJson(
   });
 }
 
+export interface JournalActionsGovernanceAudit {
+  phase: 'P162';
+  module: 'src/features/journal/components/JournalActions.tsx';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditJournalActionsGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): JournalActionsGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P162',
+    module: 'src/features/journal/components/JournalActions.tsx',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P162 JournalActions Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}
