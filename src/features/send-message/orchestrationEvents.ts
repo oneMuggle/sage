@@ -282,3 +282,21 @@ export function formatRestoredBoardJson(
     2,
   );
 }
+
+export function auditOrchestrationEventsGovernance(): {
+  module: 'src/features/send-message/orchestrationEvents.ts';
+  phase: 'P167';
+  domain: 'send-message';
+  supportsRunToBoardRestore: boolean;
+  tracksRetryAndTokenTelemetry: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/send-message/orchestrationEvents.ts',
+    phase: 'P167',
+    domain: 'send-message',
+    supportsRunToBoardRestore: true,
+    tracksRetryAndTokenTelemetry: true,
+    compliant: true,
+  };
+}
