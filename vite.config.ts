@@ -97,7 +97,20 @@ export default defineConfig({
       },
     },
     watch: {
-      ignored: ['**/src-tauri/**', '**/archive/**', '**/dist-electron/**'],
+      // chokidar 默认监听整个项目根（含 .worktrees/ 与 .claude/worktrees/）。
+      // 这些目录是 git worktree 的完整仓库副本，文件数与主目录相当；
+      // 一旦并行开发开了多个 worktree，inotify watch 数轻易突破
+      // max_user_watches(65536)，Vite 进程报
+      // `Error: ENOSPC: System limit for number of file watchers reached`
+      // 后直接崩溃 —— 渲染层随之 502/connection refused，Electron 窗口白屏。
+      // 与 test.exclude / coverage.exclude 已排除的目录保持一致。
+      ignored: [
+        '**/src-tauri/**',
+        '**/archive/**',
+        '**/dist-electron/**',
+        '**/.worktrees/**',
+        '**/.claude/worktrees/**',
+      ],
     },
   },
   preview: {
