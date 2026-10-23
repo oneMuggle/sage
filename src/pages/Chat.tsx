@@ -68,9 +68,9 @@ export function Chat() {
     planApprovalFor, // PM2 (round8): 计划模式待批准的会话 ID
     preflightPhase, // Round 3 (2026-09-19): 编排拆解前置阶段（澄清/侦察指示）
     clearPlanApproval, // PM2: 清除批准状态
-    pendingMessages, // P1-6: 排队待发消息（会自动连发，需可见可撤）
-    cancelPending, // P1-6: 撤回单条排队消息
-    clearPendingForSession, // P1-6: 清空本会话排队消息
+    pendingMessages = [], // P1-6: 排队待发消息（会自动连发，需可见可撤）
+    cancelPending = () => {}, // P1-6: 撤回单条排队消息
+    clearPendingForSession = () => {}, // P1-6: 清空本会话排队消息
   } = useChat();
   // right-panel R1 批次 A: 开合上抬 rightPanelStore（自动唤起/内联卡片需要
   // 跨组件写面板状态）；localStorage 迁移进 store，此处只读订阅。
