@@ -501,6 +501,24 @@ class PluginToolBridge:
         with self._lock:
             return tuple(self._published.keys())
 
+    @staticmethod
+    def _snapshot(record: _PublishedTool) -> PublishedPluginTool:
+        return PublishedPluginTool(
+            plugin_name=record.plugin_name,
+            capability_name=record.capability_name,
+            tool_name=record.tool_name,
+            description=record.tool.schema.description,
+            risk=record.tool.risk,
+            permissions=record.tool.permissions,
+        )
+
+    def published_tool(self, tool_name: str) -> Optional[PublishedPluginTool]:
+        """Return one currently published tool snapshot by exact name."""
+
+        with self._lock:
+            record = self._published.get(tool_name)
+        return self._snapshot(record) if record is not None else None
+
     def published_tools(self) -> Tuple[PublishedPluginTool, ...]:
         """Return a stable, read-only snapshot of published chat tools."""
 
@@ -513,17 +531,7 @@ class PluginToolBridge:
                     record.tool_name,
                 ),
             )
-        return tuple(
-            PublishedPluginTool(
-                plugin_name=record.plugin_name,
-                capability_name=record.capability_name,
-                tool_name=record.tool_name,
-                description=record.tool.schema.description,
-                risk=record.tool.risk,
-                permissions=record.tool.permissions,
-            )
-            for record in records
-        )
+        return tuple(self._snapshot(record) for record in records)
 
     # ---- internals ------------------------------------------------------
 

@@ -23,7 +23,8 @@
 | R86 | 生态（脚手架 / 索引 / 贡献指南） | ✅ #2206 |
 | R90 | 进程外插件 tool → 聊天 `ToolRegistry` 桥 | ✅ #2327 |
 | R92 | 插件工具 profile 受限通配 + Agent 工具白名单编辑 | ✅ #2360 |
-| R94 | 运行中插件工具动态选择器 | #2407（待合并） |
+| R94 | 运行中插件工具动态选择器 | ✅ #2407 |
+| R95 | 插件工具按插件记住审批决定 | #2412（待合并） |
 
 ## 2. 交付总账
 
@@ -40,7 +41,8 @@
 | R86 | `plugins/{scaffold_templates,scaffold,index_catalog}.py` + `cli/plugin.py` + hello-tool 示例/静态索引/开发指南 + 25 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
 | R90 | `plugins/tool_bridge.py` + host publish/unpublish 通知与 running 查询 + `plugins` tool bundle + `input_schema` 契约/权限门/桥接测试与文档 | #2327 | 待对齐 | ✅ 已交付 |
 | R92 | `domain/tool_names.py` 共享 matcher 与前缀单一来源 + registry/agent 三道闸统一 + 启动期校验识别插件引用 + `EditAgentForm` 工具白名单编辑与测试/文档 | #2360 | 待对齐 | ✅ 已交付 |
-| R94 | `PluginToolBridge.published_tools()` 权威快照 + `GET /plugins/runtime/tools` + `pluginClient.runtimeTools()` + Agent 运行中插件工具动态复选框与测试/文档 | #2407（待合并） | 待对齐 | 实施中 |
+| R94 | `PluginToolBridge.published_tools()` 权威快照 + `GET /plugins/runtime/tools` + `pluginClient.runtimeTools()` + Agent 运行中插件工具动态复选框与测试/文档 | #2407 | 待对齐 | ✅ 已交付 |
+| R95 | 审批请求权威 `plugin_name` + `remember_scope=tool|plugin` + 后端派生受限插件规则 + ApprovalDialog 范围选择与 Electron 透传/测试/文档 | #2412（待合并） | 待对齐 | 实施中 |
 
 ## 3. R78 交付边界
 
@@ -284,7 +286,34 @@
   `2026-10-23_plugin-runtime-tool-picker-r94.md`。
 - **本地证据**：桥/路由 37 例与其余插件文件 114 例通过，前端
   定向 18 例通过；Ruff、py38、tsc、ESLint、静默异常 ratchet、
-  architecture-check、diff-check 与 diagnostics 全绿，最终以
-  PR CI 为准。
+  architecture-check、diff-check 与 diagnostics 全绿；PR #2407
+  GitHub CI attempt 2 与 E2E PR Gate 全绿，已 squash 合并为
+  `main` `6e8f626696879d3ad826ddf88a7c0e506612f847`。
+
+## 15. R95 交付边界
+
+> spec：`2026-10-23_plugin-approval-remember-r95.md`。R95 是
+> 本插件账轮次号，与 2026-09 的同号测试计划无关。
+
+- **只扩“记住”的范围，不发明第二套权限系统**：既有审批
+  `remember` 仍写 `settings.permission_rules`，求值仍走
+  `PermissionEnforcer` 的 deny > allow > ask；新增的只有
+  `remember_scope=tool|plugin` 与单个插件的受限 pattern
+  `plugin__<plugin>__*`。
+- **插件名只信服务端权威记录**：审批请求创建时按
+  `PluginToolBridge` 已发布记录注入 `plugin_name`；客户端只
+  传范围枚举，永不传 pattern 或插件名。权威记录缺失或工具名
+  与插件名不匹配时，plugin 范围不落任何规则，当前应答语义
+  不变。
+- **默认仍是精确工具**：未勾选记住、旧客户端、非插件工具与
+  远程审批路径全部保持既有行为；整插件范围会明确提示覆盖
+  该插件未来新增的工具，批准与拒绝共用同一范围语义。
+- **不扩围**：不做全部插件 `plugin__*`、通用 glob、规则管理
+  UI、自动信任升级、profile 白名单改动或 Win7 同步；Win7
+  继续标“待对齐”。
+- **本地证据**：后端核心/相邻 208 例、前端与 Electron
+  137 例通过；tsc（src/Electron）、ESLint、Ruff、py38、
+  architecture、silent-exceptions、diff-check 与 diagnostics
+  全绿，最终以 PR CI 为准。
 
 —— 本账本由插件化循环维护，随轮次追加。

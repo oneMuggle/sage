@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -51,6 +52,60 @@ class TestPreDispatchGate:
         assert "bash" in content
         # 顺序保持：白名单拒绝时 enforcer.check 仍被调用（既有副作用顺序）
         enforcer.check.assert_called_once()
+
+
+class TestBuildApprovalRequestPluginName:
+    def test_published_plugin_tool_carries_authoritative_plugin_name(self):
+        agent = _agent(None)
+        bridge = MagicMock()
+        bridge.published_tool.return_value = SimpleNamespace(plugin_name="demo")
+
+        with patch(
+            "backend.plugins.tool_bridge.get_plugin_tool_bridge",
+            return_value=bridge,
+        ):
+            req = agent._build_approval_request(
+                "plugin__demo__hello",
+                {},
+                _decision(allowed=False, needs_approval=True),
+            )
+
+        bridge.published_tool.assert_called_once_with("plugin__demo__hello")
+        assert req.plugin_name == "demo"
+        assert req.to_dict()["plugin_name"] == "demo"
+
+    def test_unpublished_plugin_tool_has_no_plugin_scope_metadata(self):
+        agent = _agent(None)
+        bridge = MagicMock()
+        bridge.published_tool.return_value = None
+
+        with patch(
+            "backend.plugins.tool_bridge.get_plugin_tool_bridge",
+            return_value=bridge,
+        ):
+            req = agent._build_approval_request(
+                "plugin__demo__hello",
+                {},
+                _decision(allowed=False, needs_approval=True),
+            )
+
+        assert req.plugin_name is None
+        assert "plugin_name" not in req.to_dict()
+
+    def test_non_plugin_tool_does_not_query_bridge(self):
+        agent = _agent(None)
+
+        with patch(
+            "backend.plugins.tool_bridge.get_plugin_tool_bridge"
+        ) as getter:
+            req = agent._build_approval_request(
+                "bash",
+                {"command": "ls"},
+                _decision(allowed=False, needs_approval=True),
+            )
+
+        getter.assert_not_called()
+        assert req.plugin_name is None
 
     def test_plugin_wildcard_passes_profile_gate_r92(self):
         # 通配内工具不被 profile 白名单拒绝；用 needs_approval 决策同时

@@ -248,6 +248,11 @@ export const zhSettingsAndModels = {
   'permission.risk.suspicious': '可疑',
   'permission.risk.destructive': '危险',
   'permission.remember': '记住我的选择',
+  'permission.remember_scope.legend': '记住范围',
+  'permission.remember_scope.tool': '仅此工具',
+  'permission.remember_scope.plugin': '整个插件（包含未来新增工具）',
+  'permission.remember_scope.plugin_warning':
+    '将对该插件的全部工具生效，请确认你信任这个插件。',
   'permission.approve': '允许',
   'permission.deny': '拒绝',
   'permission.deny_confirm': '确认拒绝',

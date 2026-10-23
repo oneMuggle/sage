@@ -316,6 +316,29 @@ def is_plugin_tool_wildcard(entry: Any) -> bool:
     return plugin_tool_wildcard_prefix(entry) is not None
 
 
+def plugin_tool_wildcard_for_plugin(plugin_name: Any) -> Optional[str]:
+    """由权威插件名派生单个插件的受限通配；非法名字返回 ``None``。
+
+    R95 的审批规则持久化只能走这里：调用方提供的是服务端已
+    发布记录中的插件名，不是客户端或 LLM 给出的 pattern。
+    """
+    if not isinstance(plugin_name, str):
+        return None
+    if not _is_valid_plugin_name_chars(plugin_name):
+        return None
+    pattern = f"{PLUGIN_TOOL_PREFIX}{plugin_name}__*"
+    return pattern if is_plugin_tool_wildcard(pattern) else None
+
+
+def plugin_tool_belongs_to_plugin(tool_name: Any, plugin_name: Any) -> bool:
+    """完整工具名是否确实落在指定插件的受限命名空间内。"""
+    pattern = plugin_tool_wildcard_for_plugin(plugin_name)
+    if pattern is None or not is_plugin_tool_name(tool_name):
+        return False
+    prefix = pattern[:-1]
+    return tool_name.startswith(prefix) and len(tool_name) > len(prefix)
+
+
 def is_plugin_tool_reference(entry: Any) -> bool:
     """``entry`` 是否为合法形状的插件工具引用（精确名或受限通配）。"""
     return is_plugin_tool_name(entry) or is_plugin_tool_wildcard(entry)
@@ -379,6 +402,8 @@ __all__ = [
     "is_plugin_tool_name",
     "is_plugin_tool_reference",
     "is_plugin_tool_wildcard",
+    "plugin_tool_belongs_to_plugin",
+    "plugin_tool_wildcard_for_plugin",
     "plugin_tool_wildcard_prefix",
     "tool_name_in_allowlist",
 ]

@@ -2,7 +2,8 @@
 
 - 日期：2026-10-23
 - 基线：`main` `1508168e01251298b42eae19f97ce24bec167c81`
-- 状态：PR #2407（待 CI/合并）
+- 状态：✅ 已交付，PR #2407 已 squash 合并为 `main`
+  `6e8f626696879d3ad826ddf88a7c0e506612f847`
 - 前置：R90 已把显式启动的进程外插件 tool 发布到聊天
   `ToolRegistry`；R92 已提供 profile 受限通配与 Agent 工具白名单
   文本编辑。R93 为 async bridge 超时异常合同（非插件轮），故本
@@ -129,4 +130,6 @@ capability 或工具尚未发布时，文本框不能告诉用户当前实际上
 - 通用：目标 Ruff、py38 compat gate 与 3.8 `py_compile`、
   silent-exception ratchet、architecture-check、
   `git diff --check`、改动范围 diagnostics 0 项均通过。
-- PR CI 仍是最终权威门禁；本地结果不替代 GitHub 全量检查。
+- GitHub 证据：PR #2407 的 CI attempt 2 与 E2E PR Gate 全绿
+  （14 successful、2 skipped），随后 squash 合并为 `main`
+  `6e8f626696879d3ad826ddf88a7c0e506612f847`。

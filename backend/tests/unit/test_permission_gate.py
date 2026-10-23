@@ -328,6 +328,27 @@ def test_approval_request_to_dict_shape_matches_frontend_contract():
     }
 
 
+def test_approval_request_to_dict_includes_authoritative_plugin_name():
+    """R95: 只有带权威插件名的请求才下发 plugin_name。"""
+    req = ApprovalRequest.create(
+        tool_name="plugin__demo__hello",
+        args={},
+        risk="suspicious",
+        message="需要确认",
+        plugin_name="demo",
+    )
+    blank = ApprovalRequest.create(
+        tool_name="plugin__demo__hello",
+        args={},
+        risk="suspicious",
+        message="需要确认",
+        plugin_name="",
+    )
+
+    assert req.to_dict()["plugin_name"] == "demo"
+    assert "plugin_name" not in blank.to_dict()
+
+
 def test_summarize_tool_args_redacts_nested_secret_keys():
     """FIX-5: 脱敏递归进入嵌套 dict/list —— 顶层脱敏挡不住嵌套泄漏。"""
     # Arrange

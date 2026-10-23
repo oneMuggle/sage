@@ -214,6 +214,24 @@ def test_published_tools_snapshot_is_sorted_and_excludes_unpublished_tools() -> 
     ]
 
 
+def test_published_tool_lookup_uses_exact_current_publication() -> None:
+    host = _FakeHost()
+    bridge = PluginToolBridge()
+    tool_name = plugin_tool_name("demo", "hello")
+
+    assert bridge.published_tool(tool_name) is None
+    assert bridge.publish_plugin(host, "demo", [_cap()]) == 1
+
+    found = bridge.published_tool(tool_name)
+    assert found == bridge.published_tools()[0]
+    assert found is not None
+    assert found.plugin_name == "demo"
+    assert bridge.published_tool("plugin__demo__missing") is None
+
+    assert bridge.unpublish_plugin(host, "demo") == 1
+    assert bridge.published_tool(tool_name) is None
+
+
 def test_permission_change_republishes_even_when_risk_is_unchanged() -> None:
     host = _FakeHost()
     bridge = PluginToolBridge()
