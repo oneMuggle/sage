@@ -2521,3 +2521,16 @@
   - `src/shared/logger.ts`: Added `auditLoggerGovernance()` verifying structured logger levels (`debug`, `info`, `warn`, `error`) (`src/shared/__tests__/logger.p174.test.ts`).
   - `src/shared/updateFeatureFlag.ts`: Added `auditUpdateFeatureFlagGovernance()` verifying update providers UI feature flag defaults (`src/shared/__tests__/updateFeatureFlag.p174.test.ts`).
   - `src/shared/api/backendRequest.ts`: Added `auditBackendRequestGovernance()` verifying fail-closed `BACKEND_NOT_AVAILABLE` fallback error handling (`src/shared/api/__tests__/backendRequest.p174.test.ts`).
+
+### Phase P175 — Shared API Clients, Demo Runtime & Desktop IPC Governance Audit Contracts (Completed 2026-10-23)
+
+- **Demo Mode & Desktop IPC Shim Governance Contracts**:
+  - `src/shared/api/demoFlag.ts`: Added `auditDemoFlagGovernance()` verifying runtime override and preload flag support (`src/shared/api/__tests__/demoFlag.p175.test.ts`).
+  - `src/shared/api/demoInterceptors.ts`: Added `auditDemoInterceptorsGovernance()` verifying registered demo handler inventory (`src/shared/api/__tests__/demoInterceptors.p175.test.ts`).
+  - `src/shared/api/demoRuntime.ts`: Added `auditDemoRuntimeGovernance()` verifying demo mode override state helpers (`src/shared/api/__tests__/demoRuntime.p175.test.ts`).
+  - `src/shared/api/desktopEvent.ts`: Added `auditDesktopEventGovernance()` verifying `streamId` unlisten propagation (`src/shared/api/__tests__/desktopEvent.p175.test.ts`).
+  - `src/shared/api/desktopInvoke.ts`: Added `auditDesktopInvokeGovernance()` verifying readiness gate and connection error normalization (`src/shared/api/__tests__/desktopInvoke.p175.test.ts`).
+- **Workspace File Search, Gateway & Git Status API Governance Contracts**:
+  - `src/shared/api/fileSearchClient.ts`: Added `auditFileSearchClientGovernance()` verifying office and workspace file classification (`src/shared/api/__tests__/fileSearchClient.p175.test.ts`).
+  - `src/shared/api/gatewayApi.ts`: Added `auditGatewayApiGovernance()` verifying multi-platform gateway support (`telegram`, `feishu`, `dingtalk`, `wecom`, `qq`) (`src/shared/api/__tests__/gatewayApi.p175.test.ts`).
+  - `src/shared/api/gitStatusApi.ts`: Added `auditGitStatusApiGovernance()` verifying git file change statuses (`modified`, `staged`, `untracked`, `conflicted`, `deleted`, `renamed`) (`src/shared/api/__tests__/gitStatusApi.p175.test.ts`).

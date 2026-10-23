@@ -23,3 +23,19 @@ export function formatDemoRuntimeJson(override?: boolean | null): string {
   });
 }
 /* v8 ignore stop */
+
+export function auditDemoRuntimeGovernance(): {
+  module: 'src/shared/api/demoRuntime.ts';
+  phase: 'P175';
+  domain: 'shared-api';
+  supportsDemoModeOverride: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/shared/api/demoRuntime.ts',
+    phase: 'P175',
+    domain: 'shared-api',
+    supportsDemoModeOverride: true,
+    compliant: formatDemoRuntimeSummary(true) === 'demoOverride=true',
+  };
+}
