@@ -156,3 +156,21 @@ export function formatLLMErrorJson(err: LLMErrorResponse): string {
     2,
   );
 }
+
+export function auditErrorMappingGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.error_mapping.governance.v1',
+      phase: 'P178',
+      runtimeErrorCodes: Object.keys(AGENT_RUNTIME_MESSAGES),
+      sampleLlmSummary: formatLLMErrorSummary({
+        type: 'rate_limited',
+        message: 'Too many requests',
+        status_code: 429,
+        retry_after: 5,
+      }),
+    },
+    null,
+    2,
+  );
+}

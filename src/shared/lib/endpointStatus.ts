@@ -117,3 +117,16 @@ export function formatEndpointIssueJson(issue: EndpointIssue | null, dismissed =
     2,
   );
 }
+
+export function auditEndpointStatusGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.endpoint_status.governance.v1',
+      phase: 'P178',
+      healthySummary: formatEndpointIssueSummary(null),
+      supportsEndpointComparison: isSameEndpoint('https://api.example.com/', 'https://API.example.com'),
+    },
+    null,
+    2,
+  );
+}
