@@ -1083,15 +1083,21 @@ class SageAgent:
         # Reject the whole batch BEFORE any enforcer.check call so a tool
         # outside the profile's whitelist cannot slip through on the strength
         # of an earlier in-whitelist tool passing the enforcer. Membership
-        # uses the shared domain matcher so R92 plugin wildcards behave
-        # identically here, in registry schema filtering, and at dispatch.
+        # uses the shared domain matcher so R92/R98 plugin wildcards
+        # (identity-checked against the bridge's published records)
+        # behave identically here, in registry schema filtering, and
+        # at dispatch.
         allowed_profile_tools = (
             list(self.profile.get("tools") or [])
             if self.profile and self.profile.get("tools") is not None
             else None
         )
         if allowed_profile_tools is not None and any(
-            not tool_name_in_allowlist(tc.name, allowed_profile_tools)
+            not tool_name_in_allowlist(
+                tc.name,
+                allowed_profile_tools,
+                plugin_name=self._authoritative_plugin_name(tc.name),
+            )
             for tc in batch
         ):
             return False
@@ -1131,7 +1137,11 @@ class SageAgent:
             else None
         )
         if allowed_profile_tools is not None and any(
-            not tool_name_in_allowlist(tc.name, allowed_profile_tools)
+            not tool_name_in_allowlist(
+                tc.name,
+                allowed_profile_tools,
+                plugin_name=self._authoritative_plugin_name(tc.name),
+            )
             for tc in batch
         ):
             return [("serial", [tc]) for tc in batch]
@@ -2518,7 +2528,11 @@ class SageAgent:
         )
         profile_denied = (
             allowed_profile_tools is not None
-            and not tool_name_in_allowlist(tc.name, allowed_profile_tools)
+            and not tool_name_in_allowlist(
+                tc.name,
+                allowed_profile_tools,
+                plugin_name=self._authoritative_plugin_name(tc.name),
+            )
         )
         if profile_denied:
             logger.warning(

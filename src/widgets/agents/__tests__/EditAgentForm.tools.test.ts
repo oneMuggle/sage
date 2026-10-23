@@ -38,34 +38,71 @@ describe('EditAgentForm tools text helpers (R92)', () => {
   });
 });
 
-describe('EditAgentForm running plugin tool helpers (R94)', () => {
+describe('EditAgentForm running plugin tool helpers (R94/R98)', () => {
   it('recognizes only the two legal plugin wildcard forms as coverage', () => {
     const toolName = 'plugin__demo__hello';
-    expect(findPluginToolWildcardCover(['plugin__*'], toolName)).toBe('plugin__*');
-    expect(findPluginToolWildcardCover(['plugin__demo__*'], toolName)).toBe(
+    expect(findPluginToolWildcardCover(['plugin__*'], toolName, 'demo')).toBe('plugin__*');
+    expect(findPluginToolWildcardCover(['plugin__demo__*'], toolName, 'demo')).toBe(
       'plugin__demo__*',
     );
-    expect(findPluginToolWildcardCover(['plugin__other__*'], toolName)).toBeUndefined();
-    expect(findPluginToolWildcardCover(['plugin__*'], 'read_file')).toBeUndefined();
-    expect(findPluginToolWildcardCover(['plugin__demo*'], toolName)).toBeUndefined();
-    expect(findPluginToolWildcardCover(['plugin__demo__he*'], toolName)).toBeUndefined();
+    expect(
+      findPluginToolWildcardCover(['plugin__other__*'], toolName, 'demo'),
+    ).toBeUndefined();
+    expect(
+      findPluginToolWildcardCover(['plugin__*'], 'read_file', 'demo'),
+    ).toBeUndefined();
+    expect(
+      findPluginToolWildcardCover(['plugin__demo*'], toolName, 'demo'),
+    ).toBeUndefined();
+    expect(
+      findPluginToolWildcardCover(['plugin__demo__he*'], toolName, 'demo'),
+    ).toBeUndefined();
+    // R98：capability 名或插件名含 __ 时按权威身份精确覆盖（与后端同口径，
+    // 不再像旧字符串镜像那样一律不算覆盖）
     expect(
       findPluginToolWildcardCover(
         ['plugin__demo__*'],
         'plugin__demo__nested__tool',
+        'demo',
       ),
-    ).toBeUndefined();
+    ).toBe('plugin__demo__*');
     expect(
       findPluginToolWildcardCover(
         ['plugin__de__mo__*'],
         'plugin__de__mo__tool',
+        'de__mo',
+      ),
+    ).toBe('plugin__de__mo__*');
+  });
+
+  it('does not cover by string prefix when identity differs or is missing (R98)', () => {
+    // 字符串同前缀但真实插件是 a__b：插件 a 的通配不算覆盖
+    expect(
+      findPluginToolWildcardCover(['plugin__a__*'], 'plugin__a__b__c', 'a__b'),
+    ).toBeUndefined();
+    expect(
+      findPluginToolWildcardCover(['plugin__a__b__*'], 'plugin__a__b__c', 'a__b'),
+    ).toBe('plugin__a__b__*');
+    // 身份缺失时一律不算覆盖（与后端不可见一致），plugin__* 也不行
+    expect(
+      findPluginToolWildcardCover(['plugin__*'], 'plugin__demo__hello'),
+    ).toBeUndefined();
+    expect(
+      findPluginToolWildcardCover(['plugin__demo__*'], 'plugin__demo__hello'),
+    ).toBeUndefined();
+    // 工具名与给定 pluginName 不自洽时不算覆盖
+    expect(
+      findPluginToolWildcardCover(
+        ['plugin__demo__*'],
+        'plugin__other__hello',
+        'demo',
       ),
     ).toBeUndefined();
   });
 
   it('separates exact selection from wildcard-only coverage', () => {
     expect(
-      pluginToolSelectionState(['plugin__demo__*'], 'plugin__demo__hello'),
+      pluginToolSelectionState(['plugin__demo__*'], 'plugin__demo__hello', 'demo'),
     ).toEqual({
       selected: true,
       exact: false,
@@ -75,13 +112,21 @@ describe('EditAgentForm running plugin tool helpers (R94)', () => {
       pluginToolSelectionState(
         ['plugin__demo__hello', 'plugin__demo__*'],
         'plugin__demo__hello',
+        'demo',
       ),
     ).toEqual({
       selected: true,
       exact: true,
       coveredBy: 'plugin__demo__*',
     });
-    expect(pluginToolSelectionState([], 'plugin__demo__hello')).toEqual({
+    expect(pluginToolSelectionState([], 'plugin__demo__hello', 'demo')).toEqual({
+      selected: false,
+      exact: false,
+    });
+    // R98：无发布身份时通配不产生覆盖
+    expect(
+      pluginToolSelectionState(['plugin__demo__*'], 'plugin__demo__hello'),
+    ).toEqual({
       selected: false,
       exact: false,
     });

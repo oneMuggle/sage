@@ -14,10 +14,19 @@ pytestmark = pytest.mark.unit
 class _DummyTool(BaseTool):
     """测试用最小工具"""
 
-    def __init__(self, name: str = "dummy", description: str = "dummy tool"):
+    def __init__(
+        self,
+        name: str = "dummy",
+        description: str = "dummy tool",
+        plugin_name=None,
+    ):
         super().__init__()
         self._n = name
         self._d = description
+        # 镜像桥接 PluginTool 的发布身份属性（R98）；未传时不设属性，
+        # 与内置工具一样按身份未知处理。
+        if plugin_name is not None:
+            self.plugin_name = plugin_name
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
@@ -171,12 +180,16 @@ def test_registry_get_schemas_allowed_tools_empty_returns_empty():
 
 
 def test_registry_get_schemas_plugin_wildcards_r92():
-    """R92：profile 通配只展开插件命名空间，通用 glob 不展开。"""
+    """R92/R98：profile 通配按已注册工具的发布身份展开插件命名空间。
+
+    通用 glob 仍不展开；带权威 plugin_name 的已发布工具才会被
+    对应通配命中。
+    """
     reg = ToolRegistry()
     reg.register(_DummyTool(name="memory_search"))
-    reg.register(_DummyTool(name="plugin__demo__hello"))
-    reg.register(_DummyTool(name="plugin__demo__bye"))
-    reg.register(_DummyTool(name="plugin__other__ping"))
+    reg.register(_DummyTool(name="plugin__demo__hello", plugin_name="demo"))
+    reg.register(_DummyTool(name="plugin__demo__bye", plugin_name="demo"))
+    reg.register(_DummyTool(name="plugin__other__ping", plugin_name="other"))
 
     def names(allowed):
         return {s["name"] for s in reg.get_schemas_for_llm(allowed_tools=allowed)}
@@ -198,6 +211,30 @@ def test_registry_get_schemas_plugin_wildcards_r92():
     assert names(["memory_*"]) == set()
     assert names(["*"]) == set()
     assert names(["plugin__demo*"]) == set()
+
+
+def test_registry_get_schemas_plugin_wildcards_identity_r98():
+    """R98：通配只展开到带发布身份且身份相符的已注册工具。"""
+    reg = ToolRegistry()
+    # 同名前缀但无发布身份的插件形工具：通配不得展开到它
+    reg.register(_DummyTool(name="plugin__demo__forged"))
+    # 字符串以 plugin__demo__ 开头、实际属于插件 demo__sub 的工具
+    reg.register(
+        _DummyTool(name="plugin__demo__sub__hello", plugin_name="demo__sub")
+    )
+    reg.register(_DummyTool(name="plugin__demo__hello", plugin_name="demo"))
+
+    def names(allowed):
+        return {s["name"] for s in reg.get_schemas_for_llm(allowed_tools=allowed)}
+
+    assert names(["plugin__demo__*"]) == {"plugin__demo__hello"}
+    assert names(["plugin__demo__sub__*"]) == {"plugin__demo__sub__hello"}
+    assert names(["plugin__*"]) == {
+        "plugin__demo__hello",
+        "plugin__demo__sub__hello",
+    }
+    # 精确名不依赖身份：身份未知的同名工具仍可被显式列名
+    assert names(["plugin__demo__forged"]) == {"plugin__demo__forged"}
 
 
 # ---------- register_all_tools 集成 ----------

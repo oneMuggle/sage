@@ -131,7 +131,12 @@ class ToolRegistry:
                 entries ``plugin__*`` / ``plugin__<plugin>__*`` wildcard
                 the dynamic plugin-tool namespace (see
                 ``backend.domain.tool_names.tool_name_in_allowlist``);
-                every other entry still matches exactly.
+                every other entry still matches exactly. R98: wildcard
+                expansion is identity-checked -- only a registered tool
+                carrying its published ``plugin_name`` (the bridge's
+                ``PluginTool``) can match a wildcard entry, and only
+                for that plugin; every other tool matches exact
+                entries only.
 
         Returns:
             包含 name, description, parameters 的字典列表
@@ -148,9 +153,14 @@ class ToolRegistry:
             # widens the set, never narrows it.
             if tool.requires_tool_context and effective_context is None:
                 continue
-            # profile.tools 白名单:仅当 allowed_tools 显式给出时才过滤
+            # profile.tools 白名单:仅当 allowed_tools 显式给出时才过滤。
+            # 插件通配按已注册工具对象自带的发布身份核对（R98）：只有
+            # 桥接发布时构造的 PluginTool 带 plugin_name，其余对象按
+            # 身份未知处理，通配不展开、精确名仍可命中。
             if allowed_tools is not None and not tool_name_in_allowlist(
-                tool.schema.name, allowed_tools
+                tool.schema.name,
+                allowed_tools,
+                plugin_name=getattr(tool, "plugin_name", None),
             ):
                 continue
             result.append(
