@@ -114,6 +114,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'llm retry max delay 最大 退避 上限 秒',
   },
   {
+    key: 'llmTotalTimeoutS',
+    tab: 'basic',
+    label: '整轮任务总耗时上限（秒）',
+    labelEn: 'Total task time limit (s)',
+    keywords: 'llmtotaltimeouts llm total timeout 整轮 任务 总耗时 上限 超时 秒 不限',
+  },
+  {
     key: 'timezone',
     tab: 'basic',
     label: 'IANA 时区',

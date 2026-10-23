@@ -19,6 +19,7 @@ export interface BasicTabAuditInput {
   llmRetryMaxAttempts: number;
   llmRetryBaseDelayS: number;
   llmRetryMaxDelayS: number;
+  llmTotalTimeoutS: number;
   timezone: string;
   logTimezone: string;
   demoMode: boolean;
@@ -32,6 +33,7 @@ export function formatBasicTabAuditSnapshot(input: BasicTabAuditInput): string {
     `- LLM 最大重试次数: ${input.llmRetryMaxAttempts}`,
     `- 退避基数(秒): ${input.llmRetryBaseDelayS}`,
     `- 最大退避(秒): ${input.llmRetryMaxDelayS}`,
+    `- LLM 任务上限(秒): ${input.llmTotalTimeoutS === 0 ? '不限' : input.llmTotalTimeoutS}`,
     `- IANA 时区: ${input.timezone || '默认'}`,
     `- 日志时区: ${input.logTimezone || 'UTC'}`,
     `- 演示模式: ${input.demoMode ? '开启' : '关闭'}`,
@@ -46,6 +48,7 @@ export function formatBasicTabAuditJson(input: BasicTabAuditInput): string {
       llmRetryMaxAttempts: input.llmRetryMaxAttempts,
       llmRetryBaseDelayS: input.llmRetryBaseDelayS,
       llmRetryMaxDelayS: input.llmRetryMaxDelayS,
+      llmTotalTimeoutS: input.llmTotalTimeoutS,
       timezone: input.timezone || 'Asia/Shanghai',
       logTimezone: input.logTimezone || 'UTC',
       demoMode: input.demoMode,
@@ -127,6 +130,7 @@ export function BasicTab() {
       llmRetryMaxAttempts: settings.llmRetryMaxAttempts,
       llmRetryBaseDelayS: settings.llmRetryBaseDelayS,
       llmRetryMaxDelayS: settings.llmRetryMaxDelayS,
+      llmTotalTimeoutS: settings.llmTotalTimeoutS,
       timezone: settings.timezone,
       logTimezone: settings.logTimezone,
       demoMode: settings.demoMode,
@@ -229,6 +233,27 @@ export function BasicTab() {
             />
           </SettingRow>
         </AdvancedSection>
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">LLM 任务上限</h3>
+        <SettingRow
+          anchor="llmTotalTimeoutS"
+          label="整轮任务总耗时上限（秒）"
+          desc="单次任务（LLM 调用 + 工具执行 + 子代理）的总耗时上限，超出即终止。0 = 不限上限；设后优先于环境变量 SAGE_LLM_TOTAL_TIMEOUT_S"
+        >
+          <input
+            type="number"
+            data-testid="settings-llm-total-timeout"
+            min={0}
+            step={60}
+            value={settings.llmTotalTimeoutS}
+            onChange={(e) => {
+              const v = Math.max(0, parseInt(e.target.value, 10) || 0);
+              updateSettings({ llmTotalTimeoutS: v });
+            }}
+            className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          />
+        </SettingRow>
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">时区</h3>
