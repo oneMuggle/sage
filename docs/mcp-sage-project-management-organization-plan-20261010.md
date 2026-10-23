@@ -2664,3 +2664,17 @@
 - **Verification**:
   - 8 unit test suites under `src/shared/*/__tests__/*.p183.test.ts`.
   - All 6 repository gates (`npx eslint --max-warnings=0`, `npx vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, `npx tsc --noEmit`) passed across `.worktrees/proj-p112-main` and `.worktrees/proj-p112-win7`.
+### Phase P184 — Shared UI Primitives & Agents Widget Governance Audit Contracts (2026-10-23)
+
+- **Scope (`src/shared/ui/` & `src/widgets/agents/`)**:
+  1. `src/shared/ui/Badge.tsx`: `auditBadgeGovernance()` (`module: 'ui-badge'`)
+  2. `src/shared/ui/Button.tsx`: `auditButtonGovernance()` (`module: 'ui-button'`)
+  3. `src/shared/ui/Card.tsx`: `auditCardGovernance()` (`module: 'ui-card'`)
+  4. `src/shared/ui/Input.tsx`: `auditInputGovernance()` (`module: 'ui-input'`)
+  5. `src/shared/ui/Modal.tsx`: `auditModalGovernance()` (`module: 'ui-modal'`)
+  6. `src/shared/ui/PageHeader.tsx`: `auditPageHeaderGovernance()` (`module: 'ui-page-header'`)
+  7. `src/widgets/agents/AgentCard.tsx`: `auditAgentCardGovernance()` (`module: 'agent-card'`)
+  8. `src/widgets/agents/AgentDetails.tsx`: `auditAgentDetailsGovernance()` (`module: 'agent-details'`)
+- **Verification**:
+  - 8 unit test suites under `src/shared/ui/__tests__/*.p184.test.ts` and `src/widgets/agents/__tests__/*.p184.test.ts`.
+  - All 6 repository gates (`npx eslint --max-warnings=0`, `npx vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, `npx tsc --noEmit`) passed across `.worktrees/proj-p112-main` and `.worktrees/proj-p112-win7`.

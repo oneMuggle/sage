@@ -48,4 +48,12 @@ export function formatBadgeVariantJson(
     pill: true,
   });
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditBadgeGovernance(): string {
+  return JSON.stringify({
+    module: 'ui-badge',
+    phase: 'P184',
+    audited: true,
+  });
+}
 
