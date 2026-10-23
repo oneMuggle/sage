@@ -231,3 +231,20 @@ export function formatAgentEventJson(
     2,
   );
 }
+
+export function auditLlmStreamGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.llm_stream.governance.v1',
+      phase: 'P176',
+      supportsNdjson: true,
+      sampleSummary: formatAgentEventSummary({
+        state: 'thinking',
+        run_id: 'r1',
+        task_id: 't1',
+      }),
+    },
+    null,
+    2,
+  );
+}
