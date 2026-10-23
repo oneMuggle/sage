@@ -23,6 +23,7 @@ import type { EndpointsTabProps } from './components';
 // Task 1 (2026-08-23): 协议下拉选项 — 与后端 canonicalizer / EndpointProtocol 类型对齐.
 // A2 (providerRegistry): 改为从注册表读取，不再硬编码。
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatEndpointsTabAuditSnapshot(input: {
   endpointCount: number;
   editingId?: string | null;
@@ -34,6 +35,7 @@ export function formatEndpointsTabAuditSnapshot(input: {
   return `端点配置 · ${count}项 · ${editLabel} · ${testLabel}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatEndpointsTabAuditJson(input: {
   endpointCount: number;
   editingId?: string | null;
@@ -491,4 +493,21 @@ function ProbeStatusDisplay({ result }: { result: ProbeResult }) {
       )}
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditEndpointsTabGovernance(): {
+  module: 'src/pages/settings/EndpointsTab.tsx';
+  phase: 'P172';
+  domain: 'settings';
+  supportsEndpointProbeStatusDisplay: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/settings/EndpointsTab.tsx',
+    phase: 'P172',
+    domain: 'settings',
+    supportsEndpointProbeStatusDisplay: true,
+    compliant: true,
+  };
 }

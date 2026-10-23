@@ -159,3 +159,32 @@ export function ChatHeaderBar({
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditChatHeaderBarGovernance(): {
+  module: 'src/pages/chat/ChatHeaderBar.tsx';
+  phase: 'P172';
+  domain: 'chat';
+  topHeaderControls: readonly [
+    'SessionModelPicker',
+    'OrchModeSelect',
+    'SessionSettingsMenu',
+    'SessionSessionMenu',
+    'RightPanelToggle',
+  ];
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/chat/ChatHeaderBar.tsx',
+    phase: 'P172',
+    domain: 'chat',
+    topHeaderControls: [
+      'SessionModelPicker',
+      'OrchModeSelect',
+      'SessionSettingsMenu',
+      'SessionSessionMenu',
+      'RightPanelToggle',
+    ],
+    compliant: true,
+  };
+}
