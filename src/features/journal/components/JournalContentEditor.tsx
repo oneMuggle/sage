@@ -66,3 +66,15 @@ export function formatJournalContentDraftJson(
   });
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditJournalContentEditorGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/journal/components/JournalContentEditor.tsx',
+    phase: 'P163',
+    status: 'ready',
+  };
+}

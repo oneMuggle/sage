@@ -113,3 +113,15 @@ export function formatSettingsStoreJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditSettingsStoreGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/manage-settings/settingsStore.ts',
+    phase: 'P163',
+    status: 'ready',
+  };
+}
