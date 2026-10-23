@@ -267,4 +267,11 @@ export function formatWikiProjectJson(
     recentCount: safeRecent,
   });
 }
+export function auditWikiTypesGovernance(): string {
+  return JSON.stringify({
+    module: 'wiki-types',
+    phase: 'P183',
+    audited: true,
+  });
+}
 
