@@ -334,8 +334,16 @@ export const enSettingsAndModels = {
   'settings.permission.mode.full_access': 'Full access',
   'settings.permission.mode.full_access.desc': 'Allow everything, never prompt (use with care)',
   'settings.permission.rules_hint':
-    'Fine-grained rules (permission_rules JSON) are not editable in the UI yet; checking "Remember my choice" appends a rule automatically.',
+    'Fine-grained rules are created by checking "Remember my choice" during approval; remembered rules can be reviewed and deleted below (deleting restores per-call approval).',
   'settings.permission.load_failed': 'Failed to load permission mode',
+  'settings.permission.rules.title': 'Remembered rules',
+  'settings.permission.rules.empty': 'No remembered rules yet',
+  'settings.permission.rules.delete': 'Delete',
+  'settings.permission.rules.decision.allow': 'Allow',
+  'settings.permission.rules.decision.deny': 'Deny',
+  'settings.permission.rules.decision.ask': 'Ask every time',
+  'settings.permission.rules.load_failed': 'Failed to load remembered rules',
+  'settings.permission.rules.delete_failed': 'Failed to delete rule, please retry',
 
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': 'Usage',

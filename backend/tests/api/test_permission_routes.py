@@ -537,3 +537,119 @@ async def test_get_pending_with_file_origin_passes(gate, client):
     # Assert
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+# ---------------------------------------------------------------------------
+# R97 已保存规则的查看与逐条删除
+# ---------------------------------------------------------------------------
+
+
+async def test_list_rules_empty_when_unset(client):
+    """未保存任何规则 → 空列表（不是 404/500）。"""
+    resp = await client.get("/api/v1/permissions/rules")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "rules": []}
+
+
+async def test_list_rules_returns_effective_rules_and_skips_invalid(client):
+    """列表口径与 parse_rules 一致：非法条目不展示、有效条目保序。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES,
+        [
+            {"tool_pattern": "read_file", "decision": "allow"},
+            {"tool_pattern": 123, "decision": "allow"},
+            "junk",
+            {"tool_pattern": "bash", "decision": "bogus"},
+            {"tool_pattern": "plugin__demo__*", "decision": "deny"},
+        ],
+    )
+
+    resp = await client.get("/api/v1/permissions/rules")
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "ok": True,
+        "rules": [
+            {"tool_pattern": "read_file", "decision": "allow"},
+            {"tool_pattern": "plugin__demo__*", "decision": "deny"},
+        ],
+    }
+
+
+async def test_delete_rule_removes_one_and_returns_updated_list(client):
+    """按下标只删一条（重复规则逐条删），写回并返回最新列表。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES,
+        [
+            {"tool_pattern": "bash", "decision": "allow"},
+            {"tool_pattern": "bash", "decision": "allow"},
+            {"tool_pattern": "write_file", "decision": "ask"},
+        ],
+    )
+
+    resp = await client.post("/api/v1/permissions/rules/delete", json={"index": 1})
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "ok": True,
+        "rules": [
+            {"tool_pattern": "bash", "decision": "allow"},
+            {"tool_pattern": "write_file", "decision": "ask"},
+        ],
+    }
+    assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
+        PermissionRule("bash", "allow"),
+        PermissionRule("write_file", "ask"),
+    ]
+
+
+async def test_delete_rule_out_of_range_returns_400_and_keeps_storage(client):
+    """下标越界（含负数）→ 400，存储不被改写。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES, [{"tool_pattern": "bash", "decision": "deny"}]
+    )
+
+    for bad_index in (1, 5, -1):
+        resp = await client.post(
+            "/api/v1/permissions/rules/delete", json={"index": bad_index}
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {"ok": False, "error": "rule index out of range"}
+
+    assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
+        PermissionRule("bash", "deny")
+    ]
+
+
+async def test_delete_rule_rejects_extra_body_fields(client):
+    """删除端点不接受 pattern 等额外字段（extra=forbid → 422）。"""
+    resp = await client.post(
+        "/api/v1/permissions/rules/delete",
+        json={"index": 0, "tool_pattern": "*"},
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_delete_rule_with_evil_origin_returns_403(client):
+    """第三方网页 Origin 删除规则 → 403，存储不变。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES, [{"tool_pattern": "bash", "decision": "allow"}]
+    )
+
+    resp = await client.post(
+        "/api/v1/permissions/rules/delete",
+        json={"index": 0},
+        headers={"Origin": "https://evil.com"},
+    )
+
+    assert resp.status_code == 403
+    assert resp.json() == {"ok": False, "error": "forbidden_origin"}
+    assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
+        PermissionRule("bash", "allow")
+    ]

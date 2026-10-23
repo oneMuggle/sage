@@ -4,7 +4,7 @@
 > 作者：Claude
 > 标签：插件、可扩展性、Pydantic v2
 
-> **当前契约（R82/R83/R86/R90/R92/R94/R95/R96，2026-10-23）**：本文后半部分保留了早期设计示例，
+> **当前契约（R82/R83/R86/R90/R92/R94/R95/R96/R97，2026-10-23）**：本文后半部分保留了早期设计示例，
 > 个别 JSON/API 形态已经过时。现行实现以 `backend/plugins/manifest.py` 的
 > 数组形 `capabilities` 为准：R82 只保存生命周期记录且不执行代码；R83 只显式
 > 托管带 entry_point 的 Python `tool`，子进程不是安全沙箱；R86 提供
@@ -25,7 +25,11 @@
 > `plugin_name`，不再只做字符串前缀 fnmatch，legacy agent 与
 > `InprocToolAdapter` 共用该口径，身份未知或不匹配时该通配不
 > 命中（普通字符串规则与 profile allowlist 的字符串 matcher 不
-> 在本轮变更内）。开发步骤请先看
+> 在本轮变更内）；R97 起 `GET /api/v1/permissions/rules` 与
+> `POST /api/v1/permissions/rules/delete`（仅下标、带 Origin
+> 守卫）让设置页能按 `parse_rules` 口径查看并逐条删除已保存
+> 规则，规则创建仍只能由审批 remember 或服务端派生。开发
+> 步骤请先看
 > [插件开发：30 分钟跑通第一个插件](../user-manual/21-plugin-development.md)。
 
 ## 概述
