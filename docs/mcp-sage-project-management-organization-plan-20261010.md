@@ -2579,3 +2579,22 @@
   - `src/shared/lib/__tests__/fileLang.p178.test.ts`
   - `src/shared/lib/__tests__/fillTemplate.p178.test.ts`
   - `src/shared/lib/__tests__/humanize.p178.test.ts`
+### Phase P179 — Shared Lib LastWorkspace, LocalImageSrc, Logger, MarkdownChunks, ModelWindows, ProductMessages, ReportActionFailure & Shortcuts Governance Audit Contracts (Completed)
+- **8 Shared Lib Modules**:
+  - `src/shared/lib/lastWorkspace.ts` (`auditLastWorkspaceGovernance`)
+  - `src/shared/lib/localImageSrc.ts` (`auditLocalImageSrcGovernance`)
+  - `src/shared/lib/logger.ts` (`auditLoggerGovernance`)
+  - `src/shared/lib/markdownChunks.ts` (`auditMarkdownChunksGovernance`)
+  - `src/shared/lib/modelWindows.ts` (`auditModelWindowsGovernance`)
+  - `src/shared/lib/productMessages.ts` (`auditProductMessagesGovernance`)
+  - `src/shared/lib/reportActionFailure.ts` (`auditReportActionFailureGovernance`)
+  - `src/shared/lib/shortcuts.ts` (`auditShortcutsGovernance`)
+- **8 Unit Test Suites**:
+  - `src/shared/lib/__tests__/lastWorkspace.p179.test.ts`
+  - `src/shared/lib/__tests__/localImageSrc.p179.test.ts`
+  - `src/shared/lib/__tests__/logger.p179.test.ts`
+  - `src/shared/lib/__tests__/markdownChunks.p179.test.ts`
+  - `src/shared/lib/__tests__/modelWindows.p179.test.ts`
+  - `src/shared/lib/__tests__/productMessages.p179.test.ts`
+  - `src/shared/lib/__tests__/reportActionFailure.p179.test.ts`
+  - `src/shared/lib/__tests__/shortcuts.p179.test.ts`
