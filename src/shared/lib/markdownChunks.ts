@@ -84,3 +84,16 @@ export function formatChunkSplitJson(content: string): string {
     2,
   );
 }
+
+export function auditMarkdownChunksGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.markdown_chunks.governance.v1',
+      phase: 'P179',
+      minChunkedLength: MIN_CHUNKED_LENGTH,
+      shortSummary: formatChunkSplitSummary('Hello world'),
+    },
+    null,
+    2,
+  );
+}

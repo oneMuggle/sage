@@ -67,3 +67,16 @@ export function formatLoggerAuditJson(enabled?: boolean | null): string {
   });
 }
 /* v8 ignore stop */
+
+export function auditLoggerGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.logger.governance.v1',
+      phase: 'P179',
+      levels: ['debug', 'info', 'warn', 'error'],
+      sampleSummary: formatLoggerAuditSummary(true),
+    },
+    null,
+    2,
+  );
+}
