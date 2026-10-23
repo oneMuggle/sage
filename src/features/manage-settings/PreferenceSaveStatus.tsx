@@ -45,3 +45,15 @@ export function formatPreferenceSaveStatusJson(
   });
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditPreferenceSaveStatusGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/manage-settings/PreferenceSaveStatus.tsx',
+    phase: 'P163',
+    status: 'ready',
+  };
+}

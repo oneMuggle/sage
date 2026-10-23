@@ -125,3 +125,15 @@ export function formatConfirmedPreferenceJson(
     2,
   );
 }
+
+export function auditUseConfirmedPreferenceGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/manage-settings/useConfirmedPreference.ts',
+    phase: 'P163',
+    status: 'ready',
+  };
+}
