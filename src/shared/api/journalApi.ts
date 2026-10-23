@@ -97,3 +97,16 @@ export function formatJournalFillJson(
     2,
   );
 }
+
+export function auditJournalApiGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.journal_api.governance.v1',
+      phase: 'P176',
+      methods: ['parseTemplate', 'listSpecs', 'getSpec', 'validate', 'fillFromContent'],
+      defaultSummary: formatJournalFillSummary(null),
+    },
+    null,
+    2,
+  );
+}

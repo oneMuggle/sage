@@ -84,3 +84,16 @@ export function formatMediaUrlJson(apiUrl: string, mimeType?: string): string {
     2,
   );
 }
+
+export function auditMediaApiGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.media_api.governance.v1',
+      phase: 'P176',
+      supportsBlobFetch: true,
+      sampleSummary: formatMediaUrlSummary('/api/v1/media/m1', 'image/png'),
+    },
+    null,
+    2,
+  );
+}
