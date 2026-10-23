@@ -34,3 +34,19 @@ export function auditWorkspaceFeatureBarrel(): WorkspaceFeatureBarrelAuditReport
 export function exportWorkspaceFeatureBarrelAuditJson(): string {
   return JSON.stringify(auditWorkspaceFeatureBarrel(), null, 2);
 }
+
+export function auditWorkspaceIndexGovernance(): {
+  module: 'src/features/workspace/index.ts';
+  phase: 'P170';
+  domain: 'workspace';
+  exportedComponents: readonly ['WorkspaceBindModal', 'WorkspaceEmptyGuard'];
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/workspace/index.ts',
+    phase: 'P170',
+    domain: 'workspace',
+    exportedComponents: ['WorkspaceBindModal', 'WorkspaceEmptyGuard'],
+    compliant: true,
+  };
+}
