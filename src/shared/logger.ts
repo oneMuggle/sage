@@ -32,3 +32,20 @@ export function formatLoggerEntryJson(
     2,
   );
 }
+
+export function auditLoggerGovernance(): {
+  module: 'src/shared/logger.ts';
+  phase: 'P174';
+  domain: 'shared';
+  levels: readonly ['debug', 'info', 'warn', 'error'];
+  compliant: boolean;
+} {
+  const summary = formatLoggerEntrySummary('governance', 'info', 'ready');
+  return {
+    module: 'src/shared/logger.ts',
+    phase: 'P174',
+    domain: 'shared',
+    levels: ['debug', 'info', 'warn', 'error'],
+    compliant: summary.includes('[governance] INFO'),
+  };
+}

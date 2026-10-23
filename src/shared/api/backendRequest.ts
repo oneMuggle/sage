@@ -43,3 +43,20 @@ export function formatBackendRequestJson(request: BackendRequest): string {
     2,
   );
 }
+
+export function auditBackendRequestGovernance(): {
+  module: 'src/shared/api/backendRequest.tsx' | 'src/shared/api/backendRequest.ts';
+  phase: 'P174';
+  domain: 'shared-api';
+  failClosedFallbackErrorCode: 'BACKEND_NOT_AVAILABLE';
+  compliant: boolean;
+} {
+  const err = new BackendNotAvailableError();
+  return {
+    module: 'src/shared/api/backendRequest.ts',
+    phase: 'P174',
+    domain: 'shared-api',
+    failClosedFallbackErrorCode: err.code,
+    compliant: err.code === 'BACKEND_NOT_AVAILABLE',
+  };
+}
