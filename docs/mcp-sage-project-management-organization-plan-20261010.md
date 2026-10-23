@@ -2371,3 +2371,45 @@
   - `src/features/project-type/__tests__/projectTypeIndex.p166.test.ts`
   - `src/features/project-type/__tests__/useStudioState.p166.test.ts`
   - `src/features/right-panel/__tests__/rightPanelStore.p166.test.ts`
+
+### Phase P167: Scheduled & Send-Message Modules (CreateTaskModal, CronExpressionPicker, CronValidator, SkillLink, AttachmentUpload, ChatStreamStore, OrchestrationEvents, SessionNotify) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/scheduled/CreateTaskModal.tsx` (`auditCreateTaskModalGovernance`)
+  - `src/features/scheduled/CronExpressionPicker.tsx` (`auditCronExpressionPickerGovernance`)
+  - `src/features/scheduled/cronValidator.ts` (`auditCronValidatorGovernance`)
+  - `src/features/scheduled/skillLink.ts` (`auditSkillLinkGovernance`)
+  - `src/features/send-message/AttachmentUpload.tsx` (`auditAttachmentUploadGovernance`)
+  - `src/features/send-message/chatStreamStore.ts` (`auditChatStreamStoreGovernance`)
+  - `src/features/send-message/orchestrationEvents.ts` (`auditOrchestrationEventsGovernance`)
+  - `src/features/send-message/sessionNotify.ts` (`auditSessionNotifyGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/scheduled/__tests__/CreateTaskModal.p167.test.ts`
+  - `src/features/scheduled/__tests__/CronExpressionPicker.p167.test.ts`
+  - `src/features/scheduled/__tests__/cronValidator.p167.test.ts`
+  - `src/features/scheduled/__tests__/skillLink.p167.test.ts`
+  - `src/features/send-message/__tests__/AttachmentUpload.p167.test.ts`
+  - `src/features/send-message/__tests__/chatStreamStore.p167.test.ts`
+  - `src/features/send-message/__tests__/orchestrationEvents.p167.test.ts`
+  - `src/features/send-message/__tests__/sessionNotify.p167.test.ts`
+
+### Phase P168: Send-Message & Task-Brief Modules (ThinkingPlaceholder, TransparencyPayload, SavedTaskRecipes, TaskBriefDialog, TaskModelAdvisor, ModelTaskFit, TaskBrief, TaskRecipes) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/send-message/thinkingPlaceholder.ts` (`auditThinkingPlaceholderGovernance`)
+  - `src/features/send-message/transparencyPayload.ts` (`auditTransparencyPayloadGovernance`)
+  - `src/features/task-brief/SavedTaskRecipes.tsx` (`auditSavedTaskRecipesGovernance`)
+  - `src/features/task-brief/TaskBriefDialog.tsx` (`auditTaskBriefDialogGovernance`)
+  - `src/features/task-brief/TaskModelAdvisor.tsx` (`auditTaskModelAdvisorGovernance`)
+  - `src/features/task-brief/modelTaskFit.ts` (`auditModelTaskFitGovernance`)
+  - `src/features/task-brief/taskBrief.ts` (`auditTaskBriefGovernance`)
+  - `src/features/task-brief/taskRecipes.ts` (`auditTaskRecipesGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/send-message/__tests__/thinkingPlaceholder.p168.test.ts`
+  - `src/features/send-message/__tests__/transparencyPayload.p168.test.ts`
+  - `src/features/task-brief/__tests__/SavedTaskRecipes.p168.test.ts`
+  - `src/features/task-brief/__tests__/TaskBriefDialog.p168.test.ts`
+  - `src/features/task-brief/__tests__/TaskModelAdvisor.p168.test.ts`
+  - `src/features/task-brief/__tests__/modelTaskFit.p168.test.ts`
+  - `src/features/task-brief/__tests__/taskBrief.p168.test.ts`
+  - `src/features/task-brief/__tests__/taskRecipes.p168.test.ts`

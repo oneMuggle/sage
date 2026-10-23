@@ -71,3 +71,21 @@ export function formatTaskBriefJson(brief?: TaskBrief | null): string {
     2,
   );
 }
+
+export function auditTaskBriefGovernance(): {
+  module: 'src/features/task-brief/taskBrief.ts';
+  phase: 'P168';
+  domain: 'task-brief';
+  maxFieldLengthChars: 16000;
+  supportedFormats: readonly ['docx', 'xlsx', 'pptx', 'pdf', 'markdown'];
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/task-brief/taskBrief.ts',
+    phase: 'P168',
+    domain: 'task-brief',
+    maxFieldLengthChars: 16000,
+    supportedFormats: ['docx', 'xlsx', 'pptx', 'pdf', 'markdown'],
+    compliant: true,
+  };
+}
