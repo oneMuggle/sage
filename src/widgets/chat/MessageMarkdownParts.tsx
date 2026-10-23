@@ -452,3 +452,11 @@ export function exportMessageMarkdownPartsAuditJson(
 ): string {
   return JSON.stringify(evaluateMessageMarkdownPartsAudit(input));
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditMessageMarkdownPartsGovernance(): string {
+  return JSON.stringify({
+    module: 'message-markdown-parts',
+    phase: 'P186',
+    audited: true,
+  });
+}

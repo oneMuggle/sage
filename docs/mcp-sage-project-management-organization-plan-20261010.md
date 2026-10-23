@@ -2698,3 +2698,23 @@
   - `src/widgets/autonomous-goals/__tests__/GoalProgress.p185.test.ts`
   - `src/widgets/chat/__tests__/ActiveAgentIndicator.p185.test.ts`
   - `src/widgets/chat/__tests__/ChatInlineError.p185.test.ts`
+### Phase P186 — Chat Widgets Governance Audit Contracts (2026-10-23)
+
+- **Scope (`src/widgets/chat/`)**:
+  1. `src/widgets/chat/CompactBanner.tsx` -> `auditCompactBannerGovernance()` (`module: 'compact-banner'`)
+  2. `src/widgets/chat/ContextMeter.tsx` -> `auditContextMeterGovernance()` (`module: 'context-meter'`)
+  3. `src/widgets/chat/ConversationOutline.tsx` -> `auditConversationOutlineGovernance()` (`module: 'conversation-outline'`)
+  4. `src/widgets/chat/FileAttachment.tsx` -> `auditFileAttachmentGovernance()` (`module: 'file-attachment'`)
+  5. `src/widgets/chat/HtmlCodeBlock.tsx` -> `auditHtmlCodeBlockGovernance()` (`module: 'html-code-block'`)
+  6. `src/widgets/chat/KnowledgeChip.tsx` -> `auditKnowledgeChipGovernance()` (`module: 'knowledge-chip'`)
+  7. `src/widgets/chat/MemoryWriteHints.tsx` -> `auditMemoryWriteHintsGovernance()` (`module: 'memory-write-hints'`)
+  8. `src/widgets/chat/MessageMarkdownParts.tsx` -> `auditMessageMarkdownPartsGovernance()` (`module: 'message-markdown-parts'`)
+- **Unit Test Suites**:
+  - `src/widgets/chat/__tests__/CompactBanner.p186.test.ts`
+  - `src/widgets/chat/__tests__/ContextMeter.p186.test.ts`
+  - `src/widgets/chat/__tests__/ConversationOutline.p186.test.ts`
+  - `src/widgets/chat/__tests__/FileAttachment.p186.test.ts`
+  - `src/widgets/chat/__tests__/HtmlCodeBlock.p186.test.ts`
+  - `src/widgets/chat/__tests__/KnowledgeChip.p186.test.ts`
+  - `src/widgets/chat/__tests__/MemoryWriteHints.p186.test.ts`
+  - `src/widgets/chat/__tests__/MessageMarkdownParts.p186.test.ts`

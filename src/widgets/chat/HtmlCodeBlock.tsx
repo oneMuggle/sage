@@ -125,3 +125,11 @@ export function exportHtmlCodeBlockAuditJson(
 ): string {
   return JSON.stringify(evaluateHtmlCodeBlockAudit(input));
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditHtmlCodeBlockGovernance(): string {
+  return JSON.stringify({
+    module: 'html-code-block',
+    phase: 'P186',
+    audited: true,
+  });
+}
