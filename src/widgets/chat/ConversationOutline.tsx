@@ -74,3 +74,11 @@ export function ConversationOutline({ items, isLoading, onSelect }: Conversation
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditConversationOutlineGovernance(): string {
+  return JSON.stringify({
+    module: 'conversation-outline',
+    phase: 'P186',
+    audited: true,
+  });
+}

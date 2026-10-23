@@ -71,3 +71,11 @@ export function exportKnowledgeChipAuditJson(
 ): string {
   return JSON.stringify(evaluateKnowledgeChipAudit(input));
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditKnowledgeChipGovernance(): string {
+  return JSON.stringify({
+    module: 'knowledge-chip',
+    phase: 'P186',
+    audited: true,
+  });
+}

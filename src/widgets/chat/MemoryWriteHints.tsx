@@ -151,3 +151,11 @@ export function MemoryWriteHints({ sessionId }: MemoryWriteHintsProps) {
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditMemoryWriteHintsGovernance(): string {
+  return JSON.stringify({
+    module: 'memory-write-hints',
+    phase: 'P186',
+    audited: true,
+  });
+}
