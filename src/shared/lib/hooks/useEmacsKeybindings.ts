@@ -313,3 +313,16 @@ export function formatEmacsKeybindingsJson(
     2,
   );
 }
+
+export function auditUseEmacsKeybindingsGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.hooks.use_emacs_keybindings.governance.v1',
+      phase: 'P181',
+      supportedShortcuts: ['Ctrl+A', 'Ctrl+E', 'Ctrl+K', 'Ctrl+U', 'Ctrl+W', 'Alt+B', 'Alt+F'],
+      sampleSummary: formatEmacsKeybindingsSummary('hello world', 5, true),
+    },
+    null,
+    2,
+  );
+}

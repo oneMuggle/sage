@@ -101,3 +101,16 @@ export function formatSessionDraftJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditUseSessionDraftGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.hooks.use_session_draft.governance.v1',
+      phase: 'P181',
+      storageKey: DRAFTS_KEY,
+      sampleSummary: formatSessionDraftSummary('s1', 'draft text'),
+    },
+    null,
+    2,
+  );
+}
