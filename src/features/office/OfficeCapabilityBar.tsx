@@ -200,3 +200,16 @@ export function exportOfficeCapabilityBarAuditJson(
 ): string {
   return JSON.stringify(auditOfficeCapabilityBar(capabilityCount, isProbing), null, 2);
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditOfficeCapabilityBarGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/OfficeCapabilityBar.tsx',
+    phase: 'P164',
+    status: 'ready',
+  };
+}

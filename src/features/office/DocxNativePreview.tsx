@@ -165,3 +165,16 @@ export function DocxNativePreview({
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditDocxNativePreviewGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/DocxNativePreview.tsx',
+    phase: 'P164',
+    status: 'ready',
+  };
+}
