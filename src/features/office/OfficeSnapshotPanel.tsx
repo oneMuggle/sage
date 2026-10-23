@@ -278,3 +278,16 @@ export function exportOfficeSnapshotPanelAuditJson(
 ): string {
   return JSON.stringify(auditOfficeSnapshotPanel(snapshotCount), null, 2);
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditOfficeSnapshotPanelGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/OfficeSnapshotPanel.tsx',
+    phase: 'P164',
+    status: 'ready',
+  };
+}
