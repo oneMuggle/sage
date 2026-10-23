@@ -33,6 +33,7 @@ def _embed_ok(vectors):
 
 def _seed_index(tmp_path: pathlib.Path, chunks):
     """直接用 r57 库层建索引（http_post fake，dim=4）。"""
+    from backend.mcp.oauth_store import _default_root  # noqa: F401 — 仅占位对齐命名
     from backend.services.attachment_rag import index_attachment
     from backend.wiki.embeddings import EmbeddingConfig
 

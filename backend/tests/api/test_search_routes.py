@@ -176,3 +176,45 @@ async def test_knowledge_project_without_wiki_dir_returns_404(client, tmp_path):
         params={"q": "anything", "knowledge_project": str(plain)},
     )
     assert resp.status_code == 404
+
+
+# ===== P13: 知识范围多根（逗号分隔，跨项目合并）=====
+
+
+@pytest.mark.asyncio()
+async def test_knowledge_project_multi_root_merges_results(client, tmp_path):
+    """P13: 逗号分隔多根 → 跨项目合并搜索（未列入范围的 B 不出现）。"""
+    project_a = tmp_path / "multi-a"
+    project_b = tmp_path / "multi-b"
+    project_c = tmp_path / "multi-c"
+    _seed_wiki_project(project_a, "aaaa")
+    _seed_wiki_project(project_b, "bbbb")
+    _seed_wiki_project(project_c, "cccc")
+
+    resp = await client.get(
+        "/api/v1/search/global",
+        params={"q": "unique-token", "knowledge_project": f"{project_a},{project_c}"},
+    )
+    assert resp.status_code == 200
+    knowledge = resp.json()["knowledge"]
+    paths = [item["path"] for item in knowledge]
+    assert any("note-aaaa" in p for p in paths)
+    assert any("note-cccc" in p for p in paths)
+    assert not any("bbbb" in p for p in paths)
+
+
+@pytest.mark.asyncio()
+async def test_knowledge_project_multi_root_unauthorized_fails_closed(
+    client, tmp_path
+):
+    """多根中任一未授权 → 403（fail-closed，与单根契约一致）。"""
+    project_a = tmp_path / "multi-a"
+    _seed_wiki_project(project_a, "aaaa")
+    rogue = tmp_path / "rogue"
+    (rogue / "wiki").mkdir(parents=True)
+
+    resp = await client.get(
+        "/api/v1/search/global",
+        params={"q": "x", "knowledge_project": f"{project_a},{rogue}"},
+    )
+    assert resp.status_code == 403

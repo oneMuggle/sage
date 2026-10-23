@@ -186,4 +186,21 @@ class TestProfileParallelGuard:
         assert agent._is_parallel_eligible(batch, enforcer, [], 0) is False
         enforcer.check.assert_not_called()
 
+    def test_parallel_batch_plugin_wildcard_scope_r92(self):
+        # 批级预检与执行边界同一口径：demo 通配不能带飞 other 插件工具，
+        # 且越界时在任何 enforcer.check 之前整批拒绝。
+        agent = SageAgent()
+        agent.profile = {"tools": ["plugin__demo__*"]}
+        allowed_tool = MagicMock(risk=RiskClass.READ, is_blocking=False)
+        agent.tool_registry.get = MagicMock(return_value=allowed_tool)
+        enforcer = MagicMock()
+        enforcer.check.return_value = MagicMock(allowed=True, needs_approval=False)
+        batch = [
+            LLMToolCall(id="call_1", name="plugin__demo__hello", arguments="{}"),
+            LLMToolCall(id="call_2", name="plugin__other__hello", arguments="{}"),
+        ]
+
+        assert agent._is_parallel_eligible(batch, enforcer, [], 0) is False
+        enforcer.check.assert_not_called()
+
 

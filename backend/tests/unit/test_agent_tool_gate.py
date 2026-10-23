@@ -107,6 +107,47 @@ class TestBuildApprovalRequestPluginName:
         getter.assert_not_called()
         assert req.plugin_name is None
 
+    def test_pre_dispatch_passes_authoritative_plugin_name_to_enforcer(self):
+        agent = _agent(None)
+        bridge = MagicMock()
+        bridge.published_tool.return_value = SimpleNamespace(plugin_name="demo")
+        enforcer = MagicMock()
+        enforcer.check.return_value = _decision(
+            allowed=False, needs_approval=True
+        )
+
+        with patch(
+            "backend.plugins.tool_bridge.get_plugin_tool_bridge",
+            return_value=bridge,
+        ):
+            agent._pre_dispatch_gate(
+                _tc("plugin__demo__hello"), {}, enforcer, "sess-1"
+            )
+
+        bridge.published_tool.assert_called_once_with("plugin__demo__hello")
+        enforcer.check.assert_called_once_with(
+            "plugin__demo__hello", {}, plugin_name="demo"
+        )
+
+    def test_pre_dispatch_unpublished_plugin_keeps_legacy_check_call(self):
+        agent = _agent(None)
+        bridge = MagicMock()
+        bridge.published_tool.return_value = None
+        enforcer = MagicMock()
+        enforcer.check.return_value = _decision(
+            allowed=False, needs_approval=True
+        )
+
+        with patch(
+            "backend.plugins.tool_bridge.get_plugin_tool_bridge",
+            return_value=bridge,
+        ):
+            agent._pre_dispatch_gate(
+                _tc("plugin__demo__hello"), {}, enforcer, "sess-1"
+            )
+
+        enforcer.check.assert_called_once_with("plugin__demo__hello", {})
+
     def test_plugin_wildcard_passes_profile_gate_r92(self):
         # 通配内工具不被 profile 白名单拒绝；用 needs_approval 决策同时
         # 证明通配不绕过后续审批（拒绝时会覆盖为 allowed=False）。
