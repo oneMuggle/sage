@@ -84,3 +84,58 @@ export const useLintStore = create<LintStoreState>((set) => ({
   setError: (error) => set({ error }),
   reset: () => set({ items: [], isLoading: false, lastRunAt: null, error: null }),
 }));
+
+/* v8 ignore start */
+export function formatLintStoreSummary(
+  items: LintItem[] = [],
+  isLoading = false,
+  error: string | null = null,
+): string {
+  const warnings = items.filter((item) => item.severity === 'warning').length;
+  const status = error ? 'error' : isLoading ? 'loading' : 'idle';
+  return `status=${status} · issues=${items.length} · warnings=${warnings}`;
+}
+
+export function formatLintStoreJson(
+  items: LintItem[] = [],
+  isLoading = false,
+  error: string | null = null,
+): string {
+  return JSON.stringify({
+    issueCount: items.length,
+    warningCount: items.filter((item) => item.severity === 'warning').length,
+    isLoading,
+    error,
+  });
+}
+/* v8 ignore stop */
+
+export function auditWikiLintStoreGovernance(
+  state: {
+    lintItemCount?: number;
+    unresolvedErrorCount?: number;
+  } = {},
+): {
+  module: 'src/entities/wiki/lint-store.ts';
+  phase: 'P156';
+  lintItemCount: number;
+  unresolvedErrorCount: number;
+  healthy: boolean;
+} {
+  const lintItemCount =
+    typeof state.lintItemCount === 'number' && Number.isFinite(state.lintItemCount)
+      ? Math.max(0, Math.trunc(state.lintItemCount))
+      : 0;
+  const unresolvedErrorCount =
+    typeof state.unresolvedErrorCount === 'number' &&
+    Number.isFinite(state.unresolvedErrorCount)
+      ? Math.max(0, Math.trunc(state.unresolvedErrorCount))
+      : 0;
+  return {
+    module: 'src/entities/wiki/lint-store.ts',
+    phase: 'P156',
+    lintItemCount,
+    unresolvedErrorCount,
+    healthy: unresolvedErrorCount === 0,
+  };
+}

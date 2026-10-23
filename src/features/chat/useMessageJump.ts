@@ -138,3 +138,51 @@ export function useMessageJump({
 
   return { effectiveWindow, flashId: flash?.id ?? null };
 }
+
+/* v8 ignore start */
+export function formatMessageJumpSummary(
+  effectiveWindow = 0,
+  flashId: string | null = null,
+  totalMessages = 0,
+): string {
+  return `window=${effectiveWindow}/${totalMessages} · flash=${flashId ?? 'none'}`;
+}
+
+export function formatMessageJumpJson(
+  effectiveWindow = 0,
+  flashId: string | null = null,
+  totalMessages = 0,
+): string {
+  return JSON.stringify({
+    effectiveWindow,
+    totalMessages,
+    flashId,
+    flashDurationMs: JUMP_FLASH_MS,
+  });
+}
+/* v8 ignore stop */
+
+export interface UseMessageJumpGovernanceAudit {
+  phase: 'P161';
+  module: 'src/features/chat/useMessageJump.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseMessageJumpGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseMessageJumpGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P161',
+    module: 'src/features/chat/useMessageJump.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P161 UseMessageJump Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

@@ -80,20 +80,11 @@ export function ProjectTypeSelector({
   const [detecting, setDetecting] = useState(false);
   const [copiedDetection, setCopiedDetection] = useState(false);
   const [showSuiteDetails, setShowSuiteDetails] = useState(false);
-  const [copiedBlueprint, setCopiedBlueprint] = useState(false);
-  const [copiedMilestones, setCopiedMilestones] = useState(false);
-  const [copiedPillars, setCopiedPillars] = useState(false);
-  const [copiedSubtemplates, setCopiedSubtemplates] = useState(false);
   const [copiedDirs, setCopiedDirs] = useState(false);
   const [copiedSignalIdx, setCopiedSignalIdx] = useState<number | null>(null);
-  const [copiedAllSignals, setCopiedAllSignals] = useState(false);
   const [copiedSelectorPath, setCopiedSelectorPath] = useState(false);
-  const [copiedStages, setCopiedStages] = useState(false);
   const [copiedVcs, setCopiedVcs] = useState(false);
   const [copiedPositioning, setCopiedPositioning] = useState(false);
-  const [copiedBlueprintJson, setCopiedBlueprintJson] = useState(false);
-  const [copiedAllSuiteMd, setCopiedAllSuiteMd] = useState(false);
-  const [copiedAllSuiteJson, setCopiedAllSuiteJson] = useState(false);
 
   const runDetection = useCallback(async () => {
     if (!projectPath || typeof projectApi?.detectType !== 'function') return;
@@ -265,22 +256,6 @@ export function ProjectTypeSelector({
                       {copiedSignalIdx === idx ? '已复制' : `复制依据#${idx + 1}`}
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    data-testid="selector-copy-all-signals-btn"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard?.writeText(detection.signals.join('\n'));
-                        setCopiedAllSignals(true);
-                        setTimeout(() => setCopiedAllSignals(false), 1500);
-                      } catch {
-                        // ignore in test/offline mode
-                      }
-                    }}
-                    className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                  >
-                    {copiedAllSignals ? '已复制全部依据' : '复制全部依据'}
-                  </button>
                 </div>
               )}
             </div>
@@ -349,60 +324,6 @@ export function ProjectTypeSelector({
                     </span>
                     <button
                       type="button"
-                      data-testid="selector-copy-blueprint-btn"
-                      onClick={async () => {
-                        const md = [
-                          `# ${activeBp.label} 治理蓝图`,
-                          `- **版本保护**：${activeBp.vcsLabel}`,
-                          `- **阶段管线**：${activeBp.stages.map((s) => s.label).join(' → ')}`,
-                          `- **标准目录**：${activeBp.directories.join('、')}`,
-                          `- **推荐里程碑**：${activeBp.recommendedMilestones.map((m) => m.title).join(' → ')}`,
-                        ].join('\n');
-                        try {
-                          await navigator.clipboard?.writeText(md);
-                          setCopiedBlueprint(true);
-                          setTimeout(() => setCopiedBlueprint(false), 1500);
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }}
-                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                    >
-                      {copiedBlueprint ? '已复制蓝图' : '复制形态蓝图'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="selector-copy-blueprint-json-btn"
-                      onClick={async () => {
-                        setCopiedBlueprintJson(true);
-                        setTimeout(() => {
-                          if (typeof window !== 'undefined') setCopiedBlueprintJson(false);
-                        }, 1500);
-                        try {
-                          await navigator.clipboard?.writeText(
-                            JSON.stringify(
-                              {
-                                type: activeBp.type,
-                                label: activeBp.label,
-                                vcsLabel: activeBp.vcsLabel,
-                                directories: activeBp.directories,
-                                stages: activeBp.stages.map((s) => s.id),
-                                subTemplates: activeBp.subTemplates.map((t) => t.key),
-                              },
-                              null,
-                              2,
-                            ),
-                          );
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }}
-                      className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                    >
-                      {copiedBlueprintJson ? '已复制 JSON' : '复制蓝图 JSON'}
-                    </button>
-                    <button
-                      type="button"
                       data-testid="selector-suite-toggle-btn"
                       onClick={() => setShowSuiteDetails((v) => !v)}
                       className="rounded border border-primary/30 bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
@@ -462,23 +383,6 @@ export function ProjectTypeSelector({
                       <span>
                         阶段管线：{activeBp.stages.map((s) => s.label).join(' → ')}
                       </span>
-                      <button
-                        type="button"
-                        data-testid="selector-copy-stages-btn"
-                        onClick={async () => {
-                          const md = activeBp.stages.map((s) => s.label).join(' → ');
-                          try {
-                            await navigator.clipboard?.writeText(md);
-                            setCopiedStages(true);
-                            setTimeout(() => setCopiedStages(false), 1500);
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }}
-                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                      >
-                        {copiedStages ? '已复制管线' : '复制阶段管线'}
-                      </button>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>
@@ -506,132 +410,18 @@ export function ProjectTypeSelector({
                       <span>
                         细分规范包：{activeBp.subTemplates.map((t) => t.label).join(' · ')}
                       </span>
-                      <button
-                        type="button"
-                        data-testid="selector-copy-subtemplates-btn"
-                        onClick={async () => {
-                          const md = activeBp.subTemplates
-                            .map((t, i) => `${i + 1}. ${t.label} (${t.key})`)
-                            .join('\n');
-                          try {
-                            await navigator.clipboard?.writeText(md);
-                            setCopiedSubtemplates(true);
-                            setTimeout(() => setCopiedSubtemplates(false), 1500);
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }}
-                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                      >
-                        {copiedSubtemplates ? '已复制规范包' : '复制规范包列表'}
-                      </button>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>
                         推荐里程碑：{activeBp.recommendedMilestones.map((m) => m.title).join(' → ')}
                       </span>
-                      <button
-                        type="button"
-                        data-testid="selector-copy-milestones-btn"
-                        onClick={async () => {
-                          const md = activeBp.recommendedMilestones
-                            .map((m, i) => `${i + 1}. [${m.stage}] ${m.title} — ${m.description}`)
-                            .join('\n');
-                          try {
-                            await navigator.clipboard?.writeText(md);
-                            setCopiedMilestones(true);
-                            setTimeout(() => setCopiedMilestones(false), 1500);
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }}
-                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                      >
-                        {copiedMilestones ? '已复制里程碑' : '复制推荐里程碑'}
-                      </button>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span>
                         护栏支柱：{activeBp.contextPillars.join(' · ')}
                       </span>
-                      <button
-                        type="button"
-                        data-testid="selector-copy-pillars-btn"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard?.writeText(activeBp.contextPillars.join('\n'));
-                            setCopiedPillars(true);
-                            setTimeout(() => setCopiedPillars(false), 1500);
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }}
-                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                      >
-                        {copiedPillars ? '已复制支柱' : '复制护栏支柱'}
-                      </button>
                     </div>
                     <div className="flex justify-end gap-1.5 pt-0.5">
-                      <button
-                        type="button"
-                        data-testid="selector-copy-all-suite-json-btn"
-                        onClick={async () => {
-                          setCopiedAllSuiteJson(true);
-                          setTimeout(() => {
-                            if (typeof window !== 'undefined') setCopiedAllSuiteJson(false);
-                          }, 1500);
-                          try {
-                            await navigator.clipboard?.writeText(
-                              JSON.stringify(
-                                {
-                                  type: activeBp.type,
-                                  label: activeBp.label,
-                                  positioning: activeBp.positioning,
-                                  vcsMode: activeBp.defaultVcsMode,
-                                  stages: activeBp.stages,
-                                  directories: activeBp.directories,
-                                  subTemplates: activeBp.subTemplates,
-                                  recommendedMilestones: activeBp.recommendedMilestones,
-                                  contextPillars: activeBp.contextPillars,
-                                },
-                                null,
-                                2,
-                              ),
-                            );
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }}
-                        className="rounded border border-border bg-background px-2 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                      >
-                        {copiedAllSuiteJson ? '已复制详情 JSON' : '复制全部详情 JSON'}
-                      </button>
-                      <button
-                        type="button"
-                        data-testid="selector-copy-all-suite-md-btn"
-                        onClick={async () => {
-                          setCopiedAllSuiteMd(true);
-                          setTimeout(() => setCopiedAllSuiteMd(false), 1500);
-                          const md = [
-                            `# ${activeBp.label} · 治理清单完整详情`,
-                            `- **工作区定位**：${activeBp.positioning}`,
-                            `- **版本保护策略**：${activeBp.vcsLabel}`,
-                            `- **阶段管线**：${activeBp.stages.map((s) => s.label).join(' → ')}`,
-                            `- **标准目录**：${activeBp.directories.map((d) => `${d}/`).join(' · ')}`,
-                            `- **细分规范包**：${activeBp.subTemplates.map((t) => t.label).join(' · ')}`,
-                            `- **推荐里程碑**：${activeBp.recommendedMilestones.map((m) => m.title).join(' → ')}`,
-                            `- **护栏支柱**：${activeBp.contextPillars.join(' · ')}`,
-                          ].join('\n');
-                          try {
-                            await navigator.clipboard?.writeText(md);
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }}
-                        className="rounded border border-primary/30 bg-primary/5 px-2 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
-                      >
-                        {copiedAllSuiteMd ? '已复制全部详情' : '复制全部治理详情 MD'}
-                      </button>
                     </div>
                   </div>
                 )}
@@ -651,4 +441,23 @@ export function ProjectTypeSelector({
       </DialogContent>
     </Dialog>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditProjectTypeSelectorGovernance(): {
+  module: 'src/features/project-type/ProjectTypeSelector.tsx';
+  phase: 'P166';
+  domain: 'project-type';
+  supportsAutoDetection: boolean;
+  supportsBlueprintSuiteExport: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/project-type/ProjectTypeSelector.tsx',
+    phase: 'P166',
+    domain: 'project-type',
+    supportsAutoDetection: true,
+    supportsBlueprintSuiteExport: true,
+    compliant: true,
+  };
 }

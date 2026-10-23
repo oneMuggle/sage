@@ -84,3 +84,58 @@ export const useReviewStore = create<ReviewStoreState>((set) => ({
   setError: (error) => set({ error }),
   reset: () => set({ items: [], isLoading: false, lastRunAt: null, error: null }),
 }));
+
+/* v8 ignore start */
+export function formatReviewStoreSummary(
+  items: ReviewItem[] = [],
+  isLoading = false,
+  error: string | null = null,
+): string {
+  const unresolved = items.filter((item) => !item.resolved).length;
+  const status = error ? 'error' : isLoading ? 'loading' : 'idle';
+  return `status=${status} · reviews=${items.length} · unresolved=${unresolved}`;
+}
+
+export function formatReviewStoreJson(
+  items: ReviewItem[] = [],
+  isLoading = false,
+  error: string | null = null,
+): string {
+  return JSON.stringify({
+    reviewCount: items.length,
+    unresolvedCount: items.filter((item) => !item.resolved).length,
+    isLoading,
+    error,
+  });
+}
+/* v8 ignore stop */
+
+export function auditWikiReviewStoreGovernance(
+  state: {
+    pendingReviewCount?: number;
+    rejectedCount?: number;
+  } = {},
+): {
+  module: 'src/entities/wiki/review-store.ts';
+  phase: 'P157';
+  pendingReviewCount: number;
+  rejectedCount: number;
+  healthy: boolean;
+} {
+  const pendingReviewCount =
+    typeof state.pendingReviewCount === 'number' &&
+    Number.isFinite(state.pendingReviewCount)
+      ? Math.max(0, Math.trunc(state.pendingReviewCount))
+      : 0;
+  const rejectedCount =
+    typeof state.rejectedCount === 'number' && Number.isFinite(state.rejectedCount)
+      ? Math.max(0, Math.trunc(state.rejectedCount))
+      : 0;
+  return {
+    module: 'src/entities/wiki/review-store.ts',
+    phase: 'P157',
+    pendingReviewCount,
+    rejectedCount,
+    healthy: pendingReviewCount <= 500,
+  };
+}

@@ -81,3 +81,34 @@ export const agentsApi = {
     });
   },
 };
+
+export function auditAgentsApiGovernance(
+  state: {
+    endpointCount?: number;
+    timeoutMs?: number;
+    healthy?: boolean;
+  } = {},
+): {
+  module: 'src/shared/api/agentsApi.ts';
+  phase: 'P143';
+  endpointCount: number;
+  timeoutMs: number;
+  healthy: boolean;
+} {
+  const endpointCount =
+    typeof state.endpointCount === 'number' && Number.isFinite(state.endpointCount)
+      ? Math.max(0, Math.trunc(state.endpointCount))
+      : 5;
+  const timeoutMs =
+    typeof state.timeoutMs === 'number' && Number.isFinite(state.timeoutMs)
+      ? Math.max(1000, Math.trunc(state.timeoutMs))
+      : 30000;
+  const healthy = state.healthy !== false && endpointCount > 0 && timeoutMs >= 1000;
+  return {
+    module: 'src/shared/api/agentsApi.ts',
+    phase: 'P143',
+    endpointCount,
+    timeoutMs,
+    healthy,
+  };
+}

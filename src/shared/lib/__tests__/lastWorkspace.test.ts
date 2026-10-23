@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  clearLastWorkspacePath,
-  getLastWorkspacePath,
-  setLastWorkspacePath,
-} from '../lastWorkspace';
+import { clearLastWorkspacePath, getLastWorkspacePath, setLastWorkspacePath } from '../lastWorkspace';
 
 describe('lastWorkspace — localStorage persistence', () => {
   beforeEach(() => {
@@ -54,5 +50,22 @@ describe('lastWorkspace — localStorage persistence', () => {
     });
     expect(() => clearLastWorkspacePath()).not.toThrow();
     spy.mockRestore();
+  });
+});
+
+describe('lastWorkspace diagnostic formatters (Phase P114)', () => {
+  it('formats last workspace summary and JSON payload', async () => {
+    const { formatLastWorkspaceSummary, formatLastWorkspaceJson } = await import(
+      '../lastWorkspace'
+    );
+    expect(formatLastWorkspaceSummary(null)).toBe('none');
+    expect(formatLastWorkspaceSummary('/tmp/ws-1')).toBe('persisted · /tmp/ws-1');
+    const parsed = JSON.parse(formatLastWorkspaceJson('/tmp/ws-1'));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.last_workspace.v1',
+      key: 'sage-last-workspace-path',
+      persisted: true,
+      workspacePath: '/tmp/ws-1',
+    });
   });
 });

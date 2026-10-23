@@ -51,6 +51,7 @@ KEEP_ASYNC_HANDLERS = frozenset(
         "execute_skill",  # L974 — skill 执行,内调 LLM
         "execute_slash_command",  # L1015 — slash 命令,内调 LLM
         "import_skills",  # L1105 — 文件上传,内调 LLM
+        "import_skill_directory",  # T-4b — 目录导入,内调 UploadFile 异步读
         "chat",  # L1284 — 主 chat 端点,内调 LLM 流
         "chat_stream_create",  # L1400 — SSE 流,内调 LLM 流
         "chat_stream_attach",  # L1763 — SSE 续接,内调事件流
@@ -140,10 +141,13 @@ def test_keep_async_handlers_actually_async():
 
 
 def test_async_handler_count_matches_design():
-    """legacy 路由族应有 6 个 async def handler（C1b：3 个技能端点迁至 legacy_skills_routes）。
+    """legacy 路由族应有 7 个 async def handler（C1b：3 个技能端点迁至 legacy_skills_routes）。
 
     Round 5 (+1): scan_skill_consolidation —— LLM 巡检端点,
     async 因为需要 await LLM provider.complete()。
+
+    T-4b (+1): import_skill_directory —— 目录导入端点,
+    async 因为需要 await UploadFile.read()。
     """
     src_path = LEGACY_ROUTES_PATH
     src = src_path.read_text(encoding="utf-8")
@@ -154,13 +158,14 @@ def test_async_handler_count_matches_design():
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
 
-    # 6 个 keep_async (execute_skill, execute_slash_command,
-    # import_skills, chat, chat_stream_create, chat_stream_attach)
+    # 7 个 keep_async：execute_skill、execute_slash_command、
+    # import_skills、import_skill_directory、chat、chat_stream_create、
+    # chat_stream_attach
     # C1b 后 = 4：execute_skill/execute_slash_command/import_skills 迁至 legacy_skills_routes。
     # compact_session 已拆至 legacy_session_routes (L1, P8), 在那里由
     # test_keep_async_handlers_actually_async 的合并扫描覆盖。
-    assert len(async_endpoints) == 6, (
-        f"legacy 路由族应有 6 个 async def handler,实际 {len(async_endpoints)}:\n"
+    assert len(async_endpoints) == 7, (
+        f"legacy 路由族应有 7 个 async def handler,实际 {len(async_endpoints)}:\n"
         + "\n".join(f"  {f.name} (line {f.lineno})" for f in async_endpoints)
     )
 
@@ -180,7 +185,7 @@ def test_async_handlers_count_invariant_against_internal_helpers():
         f for f in funcs if isinstance(f, ast.AsyncFunctionDef) and _is_router_endpoint(f)
     ]
     # 同样 7 个,跟 test_async_handler_count_matches_design 一致
-    assert len(async_endpoints) == 6
+    assert len(async_endpoints) == 7
 
 
 if __name__ == "__main__":

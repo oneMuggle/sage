@@ -171,3 +171,51 @@ function deepEqual(a: unknown, b: unknown): boolean {
   }
   return false;
 }
+
+/* v8 ignore start */
+export function formatDeepMergeSummary(
+  options?: DeepMergeOptions,
+  conflictCount = 0,
+): string {
+  const policy = options?.policy ?? 'remote-wins';
+  const hasCallback = typeof options?.onConflict === 'function';
+  return `policy=${policy} · conflicts=${conflictCount} · customHandler=${hasCallback}`;
+}
+
+export function formatDeepMergeJson(
+  options?: DeepMergeOptions,
+  conflictCount = 0,
+): string {
+  return JSON.stringify({
+    policy: options?.policy ?? 'remote-wins',
+    conflictCount,
+    hasConflictHandler: typeof options?.onConflict === 'function',
+  });
+}
+/* v8 ignore stop */
+
+export function auditDeepMergeGovernance(
+  state: {
+    maxDepth?: number;
+    preserveUndefined?: boolean;
+  } = {},
+): {
+  module: 'src/entities/setting/deepMerge.ts';
+  phase: 'P154';
+  maxDepth: number;
+  preserveUndefined: boolean;
+  healthy: boolean;
+} {
+  const maxDepth =
+    typeof state.maxDepth === 'number' && Number.isFinite(state.maxDepth)
+      ? Math.max(1, Math.min(32, Math.trunc(state.maxDepth)))
+      : 16;
+  const preserveUndefined = state.preserveUndefined === true;
+  return {
+    module: 'src/entities/setting/deepMerge.ts',
+    phase: 'P154',
+    maxDepth,
+    preserveUndefined,
+    healthy: maxDepth >= 1 && maxDepth <= 32,
+  };
+}

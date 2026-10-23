@@ -316,3 +316,20 @@ export function commandToPrompt(cmd: SlashCommand, args: string): string {
       return args || `/${cmd.name}`;
   }
 }
+
+export function formatSlashCommandsSummary(commands: SlashCommand[]): string {
+  const skillCount = commands.filter((c) => c.mode === 'skill').length;
+  return `total=${commands.length} · skills=${skillCount} · names=[${commands.map((c) => c.name).join(',')}]`;
+}
+
+export function formatSlashCommandsJson(commands: SlashCommand[]): string {
+  return JSON.stringify(
+    {
+      totalCount: commands.length,
+      skillCount: commands.filter((c) => c.mode === 'skill').length,
+      names: commands.map((c) => c.name),
+    },
+    null,
+    2,
+  );
+}

@@ -218,10 +218,6 @@ describe('LaneDetailDrawer (A4)', () => {
     );
 
     expect(screen.queryByTestId('decision-zone')).toBeNull();
-    fireEvent.click(screen.getByTestId('lane-drawer-copy-md-btn'));
-    expect(screen.getByTestId('lane-drawer-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('lane-drawer-copy-json-btn'));
-    expect(screen.getByTestId('lane-drawer-copy-json-btn')).toHaveTextContent('已复制JSON');
   });
 
   it('non-succeeded lanes render no decision zone', () => {

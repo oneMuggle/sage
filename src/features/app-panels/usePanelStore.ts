@@ -286,3 +286,32 @@ export function buildPanelStoreAuditJson(
 ): string {
   return JSON.stringify(buildPanelStoreAuditSnapshot(slots), null, 2);
 }
+
+export function auditUsePanelStoreGovernance(
+  state: {
+    stateKey?: string;
+    openSlotCount?: number;
+  } = {},
+): {
+  module: 'src/features/app-panels/usePanelStore.ts';
+  phase: 'P157';
+  stateKey: string;
+  openSlotCount: number;
+  healthy: boolean;
+} {
+  const stateKey =
+    typeof state.stateKey === 'string' && state.stateKey.trim().length > 0
+      ? state.stateKey.trim()
+      : PANEL_STATE_KEY;
+  const openSlotCount =
+    typeof state.openSlotCount === 'number' && Number.isFinite(state.openSlotCount)
+      ? Math.max(0, Math.trunc(state.openSlotCount))
+      : 2;
+  return {
+    module: 'src/features/app-panels/usePanelStore.ts',
+    phase: 'P157',
+    stateKey,
+    openSlotCount,
+    healthy: stateKey === PANEL_STATE_KEY && openSlotCount <= 5,
+  };
+}

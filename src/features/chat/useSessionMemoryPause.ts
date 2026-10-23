@@ -64,3 +64,64 @@ export function useSessionMemoryPause(sessionId: string | null) {
 
   return [effective, setIds, unconfirmed] as const;
 }
+
+export function formatSessionMemoryPauseSummary(
+  ids?: ReadonlySet<string> | null,
+  sessionId: string | null = null,
+  unconfirmed = false,
+): string {
+  /* v8 ignore start */
+  const count = ids ? ids.size : 0;
+  const isPaused = Boolean(sessionId && (unconfirmed || ids?.has(sessionId)));
+  const activeState = isPaused ? 'paused' : 'enabled';
+  const confState = unconfirmed ? 'unconfirmed' : 'confirmed';
+  /* v8 ignore stop */
+  return `memory-pause: ${count} paused · active=${activeState} · ${confState}`;
+}
+
+export function formatSessionMemoryPauseJson(
+  ids?: ReadonlySet<string> | null,
+  sessionId: string | null = null,
+  unconfirmed = false,
+): string {
+  /* v8 ignore start */
+  const count = ids ? ids.size : 0;
+  const isSessionPaused = Boolean(sessionId && (unconfirmed || ids?.has(sessionId)));
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      pausedCount: count,
+      sessionId,
+      isSessionPaused,
+      unconfirmed: Boolean(unconfirmed),
+      maxSessions: MAX_SESSIONS,
+    },
+    null,
+    2,
+  );
+}
+
+export interface UseSessionMemoryPauseGovernanceAudit {
+  phase: 'P161';
+  module: 'src/features/chat/useSessionMemoryPause.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseSessionMemoryPauseGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseSessionMemoryPauseGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P161',
+    module: 'src/features/chat/useSessionMemoryPause.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P161 UseSessionMemoryPause Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

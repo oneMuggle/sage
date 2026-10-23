@@ -423,3 +423,29 @@ export function cleanupExpiredCache(): void {
     }
   }
 }
+
+export function formatStoreSessionSummary(
+  sessions: Session[],
+  currentSessionId: string | null,
+  messageCount: number,
+): string {
+  return `${sessions.length} sessions · current ${currentSessionId ?? 'none'} · ${messageCount} messages`;
+}
+
+export function formatStoreSessionJson(
+  sessions: Session[],
+  currentSessionId: string | null,
+  messageCount: number,
+): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.store_snapshot.v1',
+      sessionCount: sessions.length,
+      currentSessionId,
+      messageCount,
+      pinnedCount: sessions.filter((s) => s.is_pinned).length,
+    },
+    null,
+    2,
+  );
+}

@@ -497,4 +497,21 @@ describe('OfficeEditPreviewDialog — apply loop (round 2, R1)', () => {
       );
     });
   });
+
+  it('formats office diff change summary and JSON (Phase P119)', async () => {
+    const { formatOfficeDiffChangeSummary, formatOfficeDiffChangeJson } = await import(
+      '../OfficeEditPreviewDialog'
+    );
+    const change = { op: 'replace_text', target: 'p1', before: 'old', after: 'new', summary: 'replaced' };
+    expect(formatOfficeDiffChangeSummary(change)).toBe(
+      'replace_text · target=p1 · hasBefore=true · hasAfter=true',
+    );
+    expect(JSON.parse(formatOfficeDiffChangeJson(change))).toEqual({
+      op: 'replace_text',
+      target: 'p1',
+      summary: 'replaced',
+      hasBefore: true,
+      hasAfter: true,
+    });
+  });
 });

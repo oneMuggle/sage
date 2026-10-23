@@ -16,13 +16,17 @@ export type SettingsTabKey =
   | 'memory'
   | 'network'
   | 'mcp'
+  | 'plugins'
   | 'remote-workspaces'
   | 'zotero'
   | 'runtime'
   | 'evolution'
+  | 'harness'
   | 'updates'
   | 'usage-stats'
-  | 'providers';
+  | 'providers'
+  // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
+  | 'skills';
 
 export interface SettingsSearchEntry {
   /** 条目稳定标识 */
@@ -479,6 +483,15 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'mcp server stdio sse oauth 工具 服务器',
   },
 
+  // ── 插件 ──
+  {
+    key: 'plugins',
+    tab: 'plugins',
+    label: '插件生命周期',
+    labelEn: 'Plugin lifecycle',
+    keywords: 'plugin plugins manifest 插件 安装 权限 生命周期 日志',
+  },
+
   // ── Zotero ──
   {
     key: 'zotero',
@@ -560,6 +573,29 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '重置全部设置',
     labelEn: 'Reset all settings',
     keywords: 'reset 重置 恢复默认 清除配置 clear defaults',
+  },
+
+  // ── 技能 (T-3/T-4) ──
+  {
+    key: 'skills',
+    tab: 'skills',
+    label: '技能',
+    labelEn: 'Skills',
+    keywords: 'skill 技能 skill.md 脚本 目录',
+  },
+  {
+    key: 'allow_skill_scripts',
+    tab: 'skills',
+    label: '允许执行技能脚本',
+    labelEn: 'Allow skill script execution',
+    keywords: 'allow_skill_scripts 技能 脚本 执行 开关 bash powershell',
+  },
+  {
+    key: 'skills_dir',
+    tab: 'skills',
+    label: '技能目录',
+    labelEn: 'Skills directory',
+    keywords: 'skills_dir 技能 目录 路径 skill.md',
   },
 ];
 

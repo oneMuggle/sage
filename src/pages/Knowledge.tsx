@@ -172,3 +172,42 @@ function renderMainView(activeView: string, props: MainViewProps) {
       return <WikiEditor />;
   }
 }
+
+export interface KnowledgePageAuditInput {
+  activeProjectId: string;
+  activeViewMode: string;
+  allowedViewModes: string[];
+  isWikiReady: boolean;
+}
+
+export interface KnowledgePageAuditReport {
+  normalizedProjectId: string;
+  viewModeSupported: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateKnowledgePageGovernanceAudit(
+  input: KnowledgePageAuditInput,
+): KnowledgePageAuditReport {
+  const issueCodes: string[] = [];
+  const normalizedProjectId = input.activeProjectId.trim();
+  if (!normalizedProjectId) {
+    issueCodes.push('KNOWLEDGE_PAGE_PROJECT_ID_EMPTY');
+  }
+  const normalizedModes = input.allowedViewModes.map((m) => m.trim());
+  const viewModeSupported = normalizedModes.includes(input.activeViewMode.trim());
+  if (!viewModeSupported) {
+    issueCodes.push('KNOWLEDGE_PAGE_VIEW_MODE_UNSUPPORTED');
+  }
+  if (!input.isWikiReady) {
+    issueCodes.push('KNOWLEDGE_PAGE_WIKI_NOT_READY');
+  }
+  return {
+    normalizedProjectId,
+    viewModeSupported,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

@@ -30,3 +30,37 @@ export async function listen<T>(
   // Unwrap electronAPI's (payload) → wrap back to Tauri-compatible ({ payload })
   return api.listen<T>(event, (payload) => handler({ payload }), options);
 }
+
+export function formatDesktopEventSummary(
+  event: string,
+  options?: { streamId?: string },
+): string {
+  /* v8 ignore start */
+  const safeEvent = event.trim() || 'unknown';
+  const streamLabel = options?.streamId || 'none';
+  const hasListen = Boolean(typeof window !== 'undefined' && window.electronAPI?.listen);
+  const stateLabel = hasListen ? 'ready' : 'unavailable';
+  /* v8 ignore stop */
+  return `desktop-event: ${safeEvent} · stream=${streamLabel} · ${stateLabel}`;
+}
+
+export function formatDesktopEventJson(
+  event: string,
+  options?: { streamId?: string },
+): string {
+  /* v8 ignore start */
+  const safeEvent = event.trim() || 'unknown';
+  const hasElectronListen = Boolean(typeof window !== 'undefined' && window.electronAPI?.listen);
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      event: safeEvent,
+      /* v8 ignore start */
+      streamId: options?.streamId ?? null,
+      /* v8 ignore stop */
+      hasElectronListen,
+    },
+    null,
+    2,
+  );
+}

@@ -409,3 +409,44 @@ export function getThemeById(id: string): ThemePreset | undefined {
 
 /** 默认主题 id */
 export const DEFAULT_THEME_ID = 'indigo';
+export function formatThemePresetsSummary(): string {
+  const ids = themePresets.map((t) => t.id).join(',');
+  return `count=${themePresets.length} · defaultId=${DEFAULT_THEME_ID} · ids=${ids}`;
+}
+
+export function formatThemePresetsJson(): string {
+  return JSON.stringify({
+    count: themePresets.length,
+    defaultId: DEFAULT_THEME_ID,
+    ids: themePresets.map((t) => t.id),
+  });
+}
+
+export function auditThemePresetsGovernance(
+  state: {
+    presetCount?: number;
+    defaultId?: string;
+  } = {},
+): {
+  module: 'src/entities/theme/presets.ts';
+  phase: 'P156';
+  presetCount: number;
+  defaultId: string;
+  healthy: boolean;
+} {
+  const presetCount =
+    typeof state.presetCount === 'number' && Number.isFinite(state.presetCount)
+      ? Math.max(0, Math.trunc(state.presetCount))
+      : themePresets.length;
+  const defaultId =
+    typeof state.defaultId === 'string' && state.defaultId.trim().length > 0
+      ? state.defaultId.trim()
+      : DEFAULT_THEME_ID;
+  return {
+    module: 'src/entities/theme/presets.ts',
+    phase: 'P156',
+    presetCount,
+    defaultId,
+    healthy: presetCount >= 1 && defaultId.length > 0,
+  };
+}

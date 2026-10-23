@@ -23,3 +23,41 @@ export function MaterialStatusBadge({ status }: { status: ProjectMaterial['statu
     </span>
   );
 }
+
+export interface MaterialStatusBadgeAuditInput {
+  status: string;
+  hasLabelText: boolean;
+  hasAccessibleTitle: boolean;
+}
+
+export interface MaterialStatusBadgeAuditReport {
+  recognizedStatus: boolean;
+  status: string;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateMaterialStatusBadgeGovernanceAudit(
+  input: MaterialStatusBadgeAuditInput,
+): MaterialStatusBadgeAuditReport {
+  const issueCodes: string[] = [];
+  const validStatuses = new Set(['indexed', 'indexing', 'failed', 'pending', 'ready', 'stale']);
+  const normalizedStatus = input.status.trim();
+  const recognizedStatus = validStatuses.has(normalizedStatus);
+  if (!recognizedStatus) {
+    issueCodes.push('MATERIAL_STATUS_UNRECOGNIZED');
+  }
+  if (!input.hasLabelText) {
+    issueCodes.push('MATERIAL_STATUS_LABEL_MISSING');
+  }
+  if (!input.hasAccessibleTitle) {
+    issueCodes.push('MATERIAL_STATUS_TITLE_MISSING');
+  }
+  return {
+    recognizedStatus,
+    status: normalizedStatus,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

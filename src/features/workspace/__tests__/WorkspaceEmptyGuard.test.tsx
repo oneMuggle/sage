@@ -1,11 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  WorkspaceEmptyGuard,
-  formatWorkspaceGuardJson,
-  formatWorkspaceGuardMarkdown,
-} from '../WorkspaceEmptyGuard';
+import { WorkspaceEmptyGuard, formatWorkspaceGuardJson, formatWorkspaceGuardMarkdown } from '../WorkspaceEmptyGuard';
 
 interface FakeWindow {
   electronAPI?: { selectDirectory: (opts: { intent: string }) => Promise<string | null> };
@@ -113,9 +109,5 @@ describe('WorkspaceEmptyGuard — bind flow', () => {
     expect(parsed.error).toBe('err-1');
 
     renderGuard();
-    fireEvent.click(screen.getByTestId('workspace-guard-copy-md'));
-    expect(screen.getByTestId('workspace-guard-copy-md').textContent).toContain('已复制 MD');
-    fireEvent.click(screen.getByTestId('workspace-guard-copy-json'));
-    expect(screen.getByTestId('workspace-guard-copy-json').textContent).toContain('已复制 JSON');
   });
 });

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useI18n } from '../../shared/lib/i18n';
 import { useNavigationHistory } from '../../shared/lib/useNavigationHistory';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatTitlebarActionsAuditSnapshot(opts: {
   canBack?: boolean;
   canForward?: boolean;
@@ -11,6 +12,7 @@ export function formatTitlebarActionsAuditSnapshot(opts: {
   return `titlebarActions|back=${opts.canBack ? 1 : 0}|forward=${opts.canForward ? 1 : 0}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatTitlebarActionsAuditJson(opts: {
   canBack?: boolean;
   canForward?: boolean;
@@ -92,4 +94,31 @@ export function TitlebarActions() {
       </span>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditTitlebarActionsGovernance(
+  state: {
+    actionCount?: number;
+    searchAvailable?: boolean;
+  } = {},
+): {
+  module: 'src/widgets/layout/TitlebarActions.tsx';
+  phase: 'P150';
+  actionCount: number;
+  searchAvailable: boolean;
+  healthy: boolean;
+} {
+  const actionCount =
+    typeof state.actionCount === 'number' && Number.isFinite(state.actionCount)
+      ? Math.max(0, Math.trunc(state.actionCount))
+      : 3;
+  const searchAvailable = state.searchAvailable !== false;
+  return {
+    module: 'src/widgets/layout/TitlebarActions.tsx',
+    phase: 'P150',
+    actionCount,
+    searchAvailable,
+    healthy: actionCount >= 1 && searchAvailable,
+  };
 }

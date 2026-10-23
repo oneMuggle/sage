@@ -163,3 +163,50 @@ export function PdfFormFillDialog({
     </div>
   );
 }
+
+export interface PdfFormFillDialogAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/features/office/PdfFormFillDialog.tsx';
+  componentName: 'PdfFormFillDialog';
+  fieldCount: number;
+  isFilling: boolean;
+  hasSubmitButton: boolean;
+  exportedAt: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditPdfFormFillDialog(
+  fieldCount = 0,
+  isFilling = false,
+): PdfFormFillDialogAuditReport {
+  return {
+    schemaVersion: '1.0',
+    module: 'src/features/office/PdfFormFillDialog.tsx',
+    componentName: 'PdfFormFillDialog',
+    fieldCount: Math.max(0, fieldCount),
+    isFilling: Boolean(isFilling),
+    hasSubmitButton: true,
+    exportedAt: '2026-10-22',
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportPdfFormFillDialogAuditJson(
+  fieldCount = 0,
+  isFilling = false,
+): string {
+  return JSON.stringify(auditPdfFormFillDialog(fieldCount, isFilling), null, 2);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditPdfFormFillDialogGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/PdfFormFillDialog.tsx',
+    phase: 'P165',
+    status: 'ready',
+  };
+}

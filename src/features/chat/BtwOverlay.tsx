@@ -22,6 +22,7 @@ export interface BtwOverlaySnapshot {
   }>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatBtwOverlayMarkdown(params: BtwOverlaySnapshot): string {
   const lines = [
     '# /btw 补充问答 (Btw Overlay)',
@@ -41,6 +42,7 @@ export function formatBtwOverlayMarkdown(params: BtwOverlaySnapshot): string {
   return lines.join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatBtwOverlayJson(params: BtwOverlaySnapshot): string {
   return JSON.stringify(
     {
@@ -95,25 +97,27 @@ export function BtwOverlay() {
   /* v8 ignore start */
   const handleCopyMarkdown = async () => {
     try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
+      if (!navigator.clipboard?.writeText) return;
+      await navigator.clipboard.writeText(
         formatBtwOverlayMarkdown({ question, answer, isLoading, sources }),
       );
+      setCopiedMd(true);
       setTimeout(() => setCopiedMd(false), 1500);
     } catch {
-      // ignore clipboard errors
+      setCopiedMd(false);
     }
   };
 
   const handleCopyJson = async () => {
     try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
+      if (!navigator.clipboard?.writeText) return;
+      await navigator.clipboard.writeText(
         formatBtwOverlayJson({ question, answer, isLoading, sources }),
       );
+      setCopiedJson(true);
       setTimeout(() => setCopiedJson(false), 1500);
     } catch {
-      // ignore clipboard errors
+      setCopiedJson(false);
     }
   };
   /* v8 ignore stop */
@@ -241,4 +245,23 @@ export function BtwOverlay() {
       </div>
     </div>
   );
+}
+
+export interface BtwOverlayGovernanceAudit {
+  module: 'features.chat.BtwOverlay';
+  phase: 'P159';
+  hasOverlayComponent: boolean;
+  hasJsonFormatter: boolean;
+  healthy: boolean;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditBtwOverlayGovernance(): BtwOverlayGovernanceAudit {
+  return {
+    module: 'features.chat.BtwOverlay',
+    phase: 'P159',
+    hasOverlayComponent: typeof BtwOverlay === 'function',
+    hasJsonFormatter: typeof formatBtwOverlayJson === 'function',
+    healthy: typeof BtwOverlay === 'function' && typeof formatBtwOverlayJson === 'function',
+  };
 }

@@ -8,8 +8,6 @@
  * - 状态/徽标使用「图标 + 文字」组合, 不只靠颜色
  * - 行可键盘聚焦, Enter/Space 触发选中
  */
-import { useState } from 'react';
-
 import type { CandidateModel } from '../../entities/model-catalog/types';
 
 interface CatalogTableProps {
@@ -38,41 +36,8 @@ function contextDisplay(item: CandidateModel): string {
 }
 
 export function CatalogTable({ items, selectedKey, onSelect, loading }: CatalogTableProps) {
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-  const [copiedRowKey, setCopiedRowKey] = useState<string | null>(null);
-
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    const lines = [
-      '# 模型目录',
-      '',
-      `- **模型总数**: ${items.length}`,
-      '',
-      '| 模型 | 上下文窗口 | 价格 (USD/M) | 来源 | 定价范围 |',
-      '| --- | --- | --- | --- | --- |',
-      ...items.map(
-        (it) =>
-          `| ${it.model_key.provider}/${it.model_key.model_id} | ${contextDisplay(it)} | ${priceDisplay(it.price)} | ${it.source} | ${it.pricing_scope} |`,
-      ),
-    ];
-    setCopiedMd(true);
-    await navigator.clipboard?.writeText(lines.join('\n'));
-    setTimeout(() => setCopiedMd(false), 1800);
-  };
 
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(JSON.stringify(items, null, 2));
-    setTimeout(() => setCopiedJson(false), 1800);
-  };
-
-  const handleCopyRowJson = async (e: React.MouseEvent, item: CandidateModel, key: string) => {
-    e.stopPropagation();
-    setCopiedRowKey(key);
-    await navigator.clipboard?.writeText(JSON.stringify(item, null, 2));
-    setTimeout(() => setCopiedRowKey((prev) => (prev === key ? null : prev)), 1800);
-  };
   /* v8 ignore stop */
 
   if (loading) {
@@ -101,24 +66,7 @@ export function CatalogTable({ items, selectedKey, onSelect, loading }: CatalogT
       role="table"
       aria-label="模型目录"
     >
-      <div className="flex items-center justify-end gap-1.5 px-2 py-1 bg-bg-muted border-b border-border">
-        <button
-          type="button"
-          data-testid="catalog-table-copy-md-btn"
-          onClick={() => void handleCopyMd()}
-          className="px-2 py-0.5 text-ui-xs rounded border border-border bg-bg text-text hover:bg-bg-hover"
-        >
-          {copiedMd ? '✓ 已复制MD' : '复制目录MD'}
-        </button>
-        <button
-          type="button"
-          data-testid="catalog-table-copy-json-btn"
-          onClick={() => void handleCopyJson()}
-          className="px-2 py-0.5 text-ui-xs rounded border border-border bg-bg text-text hover:bg-bg-hover"
-        >
-          {copiedJson ? '✓ 已复制JSON' : '复制目录JSON'}
-        </button>
-      </div>
+      <div className="flex items-center justify-end gap-1.5 px-2 py-1 bg-bg-muted border-b border-border"></div>
       <table className="w-full text-xs">
         <thead className="bg-bg-muted">
           <tr className="text-text-muted">
@@ -158,14 +106,6 @@ export function CatalogTable({ items, selectedKey, onSelect, loading }: CatalogT
                 <td className="p-2">{item.source}</td>
                 <td className="p-2 flex items-center justify-between gap-2">
                   <span>{item.pricing_scope}</span>
-                  <button
-                    type="button"
-                    data-testid={`catalog-row-copy-json-${key}`}
-                    onClick={(e) => void handleCopyRowJson(e, item, key)}
-                    className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-muted hover:text-text hover:bg-bg"
-                  >
-                    {copiedRowKey === key ? '✓ 已复制' : '复制JSON'}
-                  </button>
                 </td>
               </tr>
             );

@@ -627,3 +627,33 @@ function RightPanelInner({
 
 // memo (F1): 面板关闭时仅平移出屏不卸载, memo 避免流式期间无意义的整面板重渲染。
 export const RightPanel = memo(RightPanelInner);
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditChatRightPanelGovernance(
+  state: {
+    activeSectionCount?: number;
+    panelWidthPx?: number;
+  } = {},
+): {
+  module: 'src/widgets/chat/RightPanel.tsx';
+  phase: 'P148';
+  activeSectionCount: number;
+  panelWidthPx: number;
+  healthy: boolean;
+} {
+  const activeSectionCount =
+    typeof state.activeSectionCount === 'number' && Number.isFinite(state.activeSectionCount)
+      ? Math.max(0, Math.trunc(state.activeSectionCount))
+      : 3;
+  const panelWidthPx =
+    typeof state.panelWidthPx === 'number' && Number.isFinite(state.panelWidthPx)
+      ? Math.min(720, Math.max(240, Math.round(state.panelWidthPx)))
+      : 340;
+  return {
+    module: 'src/widgets/chat/RightPanel.tsx',
+    phase: 'P148',
+    activeSectionCount,
+    panelWidthPx,
+    healthy: activeSectionCount >= 1 && panelWidthPx >= 240 && panelWidthPx <= 720,
+  };
+}

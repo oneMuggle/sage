@@ -52,6 +52,34 @@ class TestPreDispatchGate:
         # 顺序保持：白名单拒绝时 enforcer.check 仍被调用（既有副作用顺序）
         enforcer.check.assert_called_once()
 
+    def test_plugin_wildcard_passes_profile_gate_r92(self):
+        # 通配内工具不被 profile 白名单拒绝；用 needs_approval 决策同时
+        # 证明通配不绕过后续审批（拒绝时会覆盖为 allowed=False）。
+        for pattern in ("plugin__demo__*", "plugin__*"):
+            agent = _agent({"tools": [pattern]})
+            enforcer = MagicMock()
+            enforcer.check.return_value = _decision(
+                allowed=True, needs_approval=True
+            )
+            decision, content = agent._pre_dispatch_gate(
+                _tc("plugin__demo__hello"), {}, enforcer, "sess-1"
+            )
+            assert decision.needs_approval is True
+            assert content == ""
+            enforcer.check.assert_called_once()
+
+    def test_plugin_wildcard_other_plugin_still_denied_r92(self):
+        agent = _agent({"tools": ["plugin__demo__*"]})
+        enforcer = MagicMock()
+        enforcer.check.return_value = _decision(allowed=True)
+        decision, content = agent._pre_dispatch_gate(
+            _tc("plugin__other__hello"), {}, enforcer, "sess-1"
+        )
+        assert decision.allowed is False
+        assert decision.needs_approval is False
+        assert "plugin__other__hello" in content
+        enforcer.check.assert_called_once()
+
     def test_whitelist_pass_records_auto_approval(self):
         agent = _agent({"tools": ["list_dir"]})
         enforcer = MagicMock()

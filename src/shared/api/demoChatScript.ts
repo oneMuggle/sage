@@ -322,3 +322,32 @@ export function runDemoChatStream(
     },
   };
 }
+
+export function auditDemoChatScriptGovernance(
+  state: {
+    scriptStepCount?: number;
+    chunkDelayMs?: number;
+  } = {},
+): {
+  module: 'src/shared/api/demoChatScript.ts';
+  phase: 'P144';
+  scriptStepCount: number;
+  chunkDelayMs: number;
+  healthy: boolean;
+} {
+  const scriptStepCount =
+    typeof state.scriptStepCount === 'number' && Number.isFinite(state.scriptStepCount)
+      ? Math.max(0, Math.trunc(state.scriptStepCount))
+      : 6;
+  const chunkDelayMs =
+    typeof state.chunkDelayMs === 'number' && Number.isFinite(state.chunkDelayMs)
+      ? Math.max(0, Math.trunc(state.chunkDelayMs))
+      : 20;
+  return {
+    module: 'src/shared/api/demoChatScript.ts',
+    phase: 'P144',
+    scriptStepCount,
+    chunkDelayMs,
+    healthy: scriptStepCount > 0 && chunkDelayMs >= 0,
+  };
+}

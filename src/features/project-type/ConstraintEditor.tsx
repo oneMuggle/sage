@@ -157,7 +157,6 @@ export function ConstraintEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [samplePath, setSamplePath] = useState('');
-  const [copiedRuleMd, setCopiedRuleMd] = useState(false);
   const [savedRuleL3, setSavedRuleL3] = useState(false);
   const [savedRuleL4, setSavedRuleL4] = useState(false);
   const [convertedMilestone, setConvertedMilestone] = useState(false);
@@ -165,7 +164,6 @@ export function ConstraintEditor({
   const [copiedContent, setCopiedContent] = useState(false);
   const [copiedCategory, setCopiedCategory] = useState(false);
   const [copiedTestPath, setCopiedTestPath] = useState(false);
-  const [copiedRuleJson, setCopiedRuleJson] = useState(false);
 
   // 编辑模式时填充表单
   useEffect(() => {
@@ -554,58 +552,6 @@ export function ConstraintEditor({
         </div>
 
         <DialogFooter>
-          <button
-            type="button"
-            data-testid="constraint-editor-copy-md-btn"
-            onClick={async () => {
-              const md = [
-                `# L2 项目约束规则 (${category || '未分类'})`,
-                `- **优先级**: P${priority}`,
-                `- **触发模式**: \`${triggerPattern.trim() || 'always'}\``,
-                `- **状态**: ${enabled ? '启用' : '禁用'}`,
-                '',
-                content || '（空）',
-              ].join('\n');
-              try {
-                await navigator.clipboard?.writeText(md);
-                setCopiedRuleMd(true);
-                setTimeout(() => setCopiedRuleMd(false), 1500);
-              } catch {
-                // ignore in test/offline mode
-              }
-            }}
-            className="mr-auto rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
-          >
-            {copiedRuleMd ? '已复制规则 MD' : '复制规则 MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="constraint-editor-copy-json-btn"
-            onClick={async () => {
-              setCopiedRuleJson(true);
-              setTimeout(() => setCopiedRuleJson(false), 1500);
-              try {
-                await navigator.clipboard?.writeText(
-                  JSON.stringify(
-                    {
-                      category: category || 'convention',
-                      content: content || '',
-                      triggerPattern: triggerPattern.trim() || 'always',
-                      priority,
-                      enabled,
-                    },
-                    null,
-                    2,
-                  ),
-                );
-              } catch {
-                // ignore in test/offline mode
-              }
-            }}
-            className="rounded border border-border bg-muted/40 px-2.5 py-1.5 text-xs text-foreground hover:bg-muted"
-          >
-            {copiedRuleJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
           <button
             type="button"
             data-testid="constraint-editor-reset-btn"

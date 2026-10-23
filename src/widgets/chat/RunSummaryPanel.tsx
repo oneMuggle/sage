@@ -27,8 +27,6 @@ export function RunSummaryPanel({ sessionId, onRerunFailed }: RunSummaryPanelPro
   const fetchChanges = useChangesListStore((s) => s.fetch);
   const terminalOpen = useTerminalPanelStore((s) => s.open);
   const [collapsed, setCollapsed] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     if (terminalOpen) setCollapsed(true);
@@ -52,54 +50,7 @@ export function RunSummaryPanel({ sessionId, onRerunFailed }: RunSummaryPanelPro
   if (!progress && failedTasks.length === 0 && fileCount === 0 && !changesError) return null;
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    const lines = [
-      '# 本次编排运行摘要',
-      '',
-      ...(progress
-        ? [
-            `- **子任务进度**: 共 ${progress.total} 个 · 完成 ${progress.done} · 失败 ${progress.failed} · 取消 ${progress.cancelled}`,
-          ]
-        : []),
-      `- **未完成任务数**: ${failedTasks.length}`,
-      `- **工作区变更文件数**: ${fileCount}`,
-      ...(failedTasks.length > 0
-        ? [
-            '',
-            '## 未完成的任务',
-            ...failedTasks.map(
-              (t) => `- [${t.agent_id}] ${t.goal}${t.error ? ` (${t.error})` : ''}`,
-            ),
-          ]
-        : []),
-      ...(changes && changes.changes.length > 0
-        ? [
-            '',
-            '## 工作区文件变更',
-            ...changes.changes.map(
-              (c) => `- \`${c.path}\` (+${c.insertions ?? 0} / -${c.deletions ?? 0})`,
-            ),
-          ]
-        : []),
-    ];
-    setCopiedMd(true);
-    await navigator.clipboard?.writeText(lines.join('\n'));
-    setTimeout(() => setCopiedMd(false), 1800);
-  };
 
-  const handleCopyJson = async () => {
-    const payload = {
-      sessionId,
-      runId: taskBoard.runId,
-      progress: progress ?? null,
-      failedTasks,
-      fileCount,
-      changes: changes?.changes ?? [],
-    };
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    setTimeout(() => setCopiedJson(false), 1800);
-  };
   /* v8 ignore stop */
 
   return (
@@ -123,22 +74,6 @@ export function RunSummaryPanel({ sessionId, onRerunFailed }: RunSummaryPanelPro
           </span>
         ) : null}
         <div className="ml-auto flex items-center gap-1">
-          <button
-            type="button"
-            data-testid="run-summary-copy-md-btn"
-            onClick={() => void handleCopyMd()}
-            className="px-1.5 py-0.5 rounded border border-border text-ui-2xs font-normal text-text-tertiary hover:text-text hover:bg-bg-hover transition-colors"
-          >
-            {copiedMd ? '✓ 已复制MD' : '复制摘要MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="run-summary-copy-json-btn"
-            onClick={() => void handleCopyJson()}
-            className="px-1.5 py-0.5 rounded border border-border text-ui-2xs font-normal text-text-tertiary hover:text-text hover:bg-bg-hover transition-colors"
-          >
-            {copiedJson ? '✓ 已复制JSON' : '复制摘要JSON'}
-          </button>
           <button
             type="button"
             data-testid="run-summary-toggle"

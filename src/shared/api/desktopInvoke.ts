@@ -87,3 +87,37 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
     throw err instanceof Error ? err : new Error(raw);
   }
 }
+
+export function formatDesktopInvokeSummary(
+  cmd: string,
+  args?: Record<string, unknown>,
+): string {
+  /* v8 ignore start */
+  const safeCmd = cmd.trim() || 'unknown';
+  const argCount = args ? Object.keys(args).length : 0;
+  const mode = isDemoMode() ? 'demo' : 'ipc';
+  /* v8 ignore stop */
+  return `desktop-invoke: ${safeCmd} · ${argCount} args · mode=${mode}`;
+}
+
+export function formatDesktopInvokeJson(
+  cmd: string,
+  args?: Record<string, unknown>,
+): string {
+  /* v8 ignore start */
+  const safeCmd = cmd.trim() || 'unknown';
+  const argKeys = args ? Object.keys(args).sort() : [];
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      cmd: safeCmd,
+      argKeys,
+      demoMode: isDemoMode(),
+      /* v8 ignore start */
+      hasElectronInvoke: Boolean(typeof window !== 'undefined' && window.electronAPI?.invoke),
+      /* v8 ignore stop */
+    },
+    null,
+    2,
+  );
+}

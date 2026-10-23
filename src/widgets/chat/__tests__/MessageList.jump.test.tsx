@@ -3,11 +3,7 @@
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  MESSAGE_JUMP_TTL_MS,
-  requestMessageJump,
-  useMessageJumpStore,
-} from '../../../features/chat/messageJumpStore';
+import { MESSAGE_JUMP_TTL_MS, requestMessageJump, useMessageJumpStore } from '../../../features/chat/messageJumpStore';
 import { JUMP_FLASH_MS } from '../../../features/chat/useMessageJump';
 import type { Message as MessageType } from '../../../shared/lib/store';
 import { MessageList } from '../MessageList';

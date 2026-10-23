@@ -71,3 +71,57 @@ export function HtmlCodeBlock({ code }: { code: string }) {
     </div>
   );
 }
+
+export interface HtmlCodeBlockAuditInput {
+  codeLength: number;
+  previewEnabled: boolean;
+  sandboxed: boolean;
+  containsScriptTag: boolean;
+}
+
+export interface HtmlCodeBlockAuditReport {
+  codeLength: number;
+  previewEnabled: boolean;
+  sandboxed: boolean;
+  safeToRender: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateHtmlCodeBlockAudit(
+  input: HtmlCodeBlockAuditInput,
+): HtmlCodeBlockAuditReport {
+  const codeLength = Math.max(0, Math.trunc(input.codeLength));
+  const previewEnabled = Boolean(input.previewEnabled);
+  const sandboxed = Boolean(input.sandboxed);
+  const issueCodes: string[] = [];
+
+  if (codeLength === 0) {
+    issueCodes.push('empty_html_code_block');
+  }
+  if (previewEnabled && !sandboxed) {
+    issueCodes.push('unsandboxed_html_preview');
+  }
+  if (previewEnabled && input.containsScriptTag && !sandboxed) {
+    issueCodes.push('unsafe_script_execution_risk');
+  }
+
+  const safeToRender = !previewEnabled || sandboxed;
+
+  return {
+    codeLength,
+    previewEnabled,
+    sandboxed,
+    safeToRender,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportHtmlCodeBlockAuditJson(
+  input: HtmlCodeBlockAuditInput,
+): string {
+  return JSON.stringify(evaluateHtmlCodeBlockAudit(input));
+}

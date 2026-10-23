@@ -37,3 +37,21 @@ describe('reportActionFailure (U4)', () => {
     warnSpy.mockRestore();
   });
 });
+
+describe('reportActionFailure diagnostic formatters (Phase P114)', () => {
+  it('formats action failure summary and JSON payload', async () => {
+    const { formatActionFailureSummary, formatActionFailureJson } = await import(
+      '../reportActionFailure'
+    );
+    expect(formatActionFailureSummary('保存配置', new Error('权限不足'))).toBe(
+      '保存配置 · 权限不足',
+    );
+    const parsed = JSON.parse(formatActionFailureJson('保存配置', new Error('权限不足')));
+    expect(parsed).toEqual({
+      schema: 'sage.shared.action_failure.v1',
+      context: '保存配置',
+      detail: '权限不足',
+      message: '保存配置：权限不足',
+    });
+  });
+});

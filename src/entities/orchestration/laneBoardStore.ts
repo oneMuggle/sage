@@ -300,3 +300,29 @@ export function buildLaneBoardStoreAuditJson(
     snapshot: buildLaneBoardStoreAuditSnapshot(input),
   });
 }
+
+export function auditLaneBoardStoreGovernance(
+  state: {
+    laneCount?: number;
+    hasError?: boolean;
+  } = {},
+): {
+  module: 'src/entities/orchestration/laneBoardStore.ts';
+  phase: 'P154';
+  laneCount: number;
+  hasError: boolean;
+  healthy: boolean;
+} {
+  const laneCount =
+    typeof state.laneCount === 'number' && Number.isFinite(state.laneCount)
+      ? Math.max(0, Math.trunc(state.laneCount))
+      : 0;
+  const hasError = state.hasError === true;
+  return {
+    module: 'src/entities/orchestration/laneBoardStore.ts',
+    phase: 'P154',
+    laneCount,
+    hasError,
+    healthy: !hasError && laneCount <= 100,
+  };
+}

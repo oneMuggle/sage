@@ -1,13 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import {
-  readStoredSiderOrder,
-  writeStoredSiderOrder,
-  reconcileStoredSiderOrder,
-  sortSiderItemsByStoredOrder,
-  areSiderOrdersEqual,
-  reorderSiderIds,
-} from './siderOrder';
+import { readStoredSiderOrder, writeStoredSiderOrder, reconcileStoredSiderOrder, sortSiderItemsByStoredOrder, areSiderOrdersEqual, reorderSiderIds } from './siderOrder';
 
 describe('siderOrder (pure)', () => {
   it('module exports 6 functions', () => {
@@ -157,5 +150,14 @@ describe('reorderSiderIds', () => {
 
   it('throws when toIndex out of bounds', () => {
     expect(() => reorderSiderIds(['a', 'b'], 0, 5)).toThrow('to out of range');
+  });
+
+  it('formats sider order summary and JSON (Phase P118)', async () => {
+    const { formatSiderOrderSummary, formatSiderOrderJson } = await import('./siderOrder');
+    expect(formatSiderOrderSummary(['chat', 'wiki'])).toBe('count=2 · ids=[chat,wiki]');
+    expect(JSON.parse(formatSiderOrderJson(['chat', 'wiki']))).toEqual({
+      count: 2,
+      order: ['chat', 'wiki'],
+    });
   });
 });

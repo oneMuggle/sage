@@ -50,3 +50,50 @@ export function AppProviders({ children }: AppProvidersProps) {
     </ErrorBoundary>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatAppProvidersSummary(hasChildren = true): string {
+  return `stack=ErrorBoundary>Theme>Font>SessionWorkspace>I18n>QueryClient · toast=sibling · children=${Boolean(hasChildren)}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatAppProvidersJson(hasChildren = true): string {
+  return JSON.stringify({
+    stack: [
+      'ErrorBoundary',
+      'ThemeProvider',
+      'FontProvider',
+      'SessionWorkspaceProvider',
+      'I18nProvider',
+      'QueryClientProvider',
+    ],
+    toastPlacement: 'sibling',
+    hasChildren: Boolean(hasChildren),
+  });
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditAppProvidersGovernance(
+  state: {
+    providerLayerCount?: number;
+    hasChildren?: boolean;
+  } = {},
+): {
+  module: 'src/app/providers/AppProviders.tsx';
+  phase: 'P151';
+  providerLayerCount: number;
+  hasChildren: boolean;
+  healthy: boolean;
+} {
+  const providerLayerCount =
+    typeof state.providerLayerCount === 'number' && Number.isFinite(state.providerLayerCount)
+      ? Math.max(0, Math.trunc(state.providerLayerCount))
+      : 5;
+  const hasChildren = state.hasChildren !== false;
+  return {
+    module: 'src/app/providers/AppProviders.tsx',
+    phase: 'P151',
+    providerLayerCount,
+    hasChildren,
+    healthy: providerLayerCount >= 3 && hasChildren,
+  };
+}

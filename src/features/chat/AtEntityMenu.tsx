@@ -51,3 +51,38 @@ export function AtEntityMenu({ query, onSelect }: AtEntityMenuProps) {
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatAtEntityMenuSummary(query: string | null): string {
+  const q = query === null ? 'null' : query.trim() || 'empty';
+  const matches = getEntityKindSuggestions(query).length;
+  return `query=${q} · matches=${matches} · kinds=memory,wiki,skill,agent`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatAtEntityMenuJson(query: string | null): string {
+  const suggestions = getEntityKindSuggestions(query);
+  return JSON.stringify({
+    query,
+    matchCount: suggestions.length,
+    matchedKinds: suggestions.map((s) => s.kind),
+  });
+}
+
+export interface AtEntityMenuGovernanceAudit {
+  module: 'features.chat.AtEntityMenu';
+  phase: 'P159';
+  hasMenuComponent: boolean;
+  hasSummaryFormatter: boolean;
+  healthy: boolean;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditAtEntityMenuGovernance(): AtEntityMenuGovernanceAudit {
+  return {
+    module: 'features.chat.AtEntityMenu',
+    phase: 'P159',
+    hasMenuComponent: typeof AtEntityMenu === 'function',
+    hasSummaryFormatter: typeof formatAtEntityMenuSummary === 'function',
+    healthy: typeof AtEntityMenu === 'function' && typeof formatAtEntityMenuSummary === 'function',
+  };
+}

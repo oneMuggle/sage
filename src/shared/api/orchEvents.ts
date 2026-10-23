@@ -166,3 +166,34 @@ export function isTerminalTaskStatus(status: TaskSummary['status']): boolean {
     status === 'cancelled'
   );
 }
+
+export function auditOrchEventsGovernance(
+  state: {
+    connectionStatus?: ConnectionStatus;
+    activeTaskCount?: number;
+  } = {},
+): {
+  module: 'src/shared/api/orchEvents.ts';
+  phase: 'P145';
+  connectionStatus: ConnectionStatus;
+  activeTaskCount: number;
+  healthy: boolean;
+} {
+  const connectionStatus: ConnectionStatus =
+    state.connectionStatus === 'connecting' ||
+    state.connectionStatus === 'disconnected' ||
+    state.connectionStatus === 'resyncing'
+      ? state.connectionStatus
+      : 'connected';
+  const activeTaskCount =
+    typeof state.activeTaskCount === 'number' && Number.isFinite(state.activeTaskCount)
+      ? Math.max(0, Math.trunc(state.activeTaskCount))
+      : 0;
+  return {
+    module: 'src/shared/api/orchEvents.ts',
+    phase: 'P145',
+    connectionStatus,
+    activeTaskCount,
+    healthy: connectionStatus !== 'disconnected' && activeTaskCount >= 0,
+  };
+}

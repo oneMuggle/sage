@@ -45,12 +45,6 @@ describe('HookHistoryPanel', () => {
     expect(screen.getByText(/security_guard → bash/)).toBeInTheDocument();
     expect(screen.getByText(/危险命令被拦截/)).toBeInTheDocument();
     expect(screen.getByText('13ms')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('hook-history-copy-md-btn'));
-    expect(screen.getByTestId('hook-history-copy-md-btn')).toHaveTextContent('已复制MD');
-    fireEvent.click(screen.getByTestId('hook-history-copy-json-btn'));
-    expect(screen.getByTestId('hook-history-copy-json-btn')).toHaveTextContent('已复制JSON');
-    fireEvent.click(screen.getByTestId('hook-history-copy-record-json-1'));
-    expect(screen.getByTestId('hook-history-copy-record-json-1')).toHaveTextContent('已复制');
   });
 
   it('clears history', async () => {

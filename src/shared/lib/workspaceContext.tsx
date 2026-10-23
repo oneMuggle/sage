@@ -60,3 +60,34 @@ export function useOptionalWorkspaceContext(): WorkspaceContextValue | null {
 // Re-export the value type so consumers do not need to import from
 // SessionWorkspaceProvider directly.
 export type { WorkspaceContextValue } from '../../app/providers/SessionWorkspaceProvider';
+
+export interface WorkspaceBindingAuditInput {
+  sessionId?: string | null;
+  binding?: { workspacePath?: string | null } | null;
+  status?: string;
+  error?: string | null;
+}
+
+export function formatWorkspaceBindingSummary(
+  ctx: WorkspaceBindingAuditInput | null | undefined,
+): string {
+  if (!ctx) {
+    return 'provider=unmounted · status=idle · bound=false';
+  }
+  const bound = Boolean(ctx.binding?.workspacePath);
+  return `provider=mounted · status=${ctx.status ?? 'idle'} · bound=${bound}`;
+}
+
+export function formatWorkspaceBindingJson(
+  ctx: WorkspaceBindingAuditInput | null | undefined,
+): string {
+  return JSON.stringify({
+    providerMounted: Boolean(ctx),
+    sessionId: ctx?.sessionId ?? null,
+    status: ctx?.status ?? 'idle',
+    bound: Boolean(ctx?.binding?.workspacePath),
+    workspacePath: ctx?.binding?.workspacePath ?? null,
+    hasError: Boolean(ctx?.error),
+  });
+}
+

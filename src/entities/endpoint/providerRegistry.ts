@@ -344,3 +344,39 @@ registerProvider({
     }
   },
 });
+export function formatProviderRegistrySummary(): string {
+  const providers = listProviders();
+  const ids = providers.map((p) => p.id).join(',') || 'none';
+  return `providers=${providers.length} · ids=${ids} · proxyBase=${LLM_PROXY_BASE}`;
+}
+
+export function formatProviderRegistryJson(): string {
+  const providers = listProviders();
+  return JSON.stringify({
+    providerCount: providers.length,
+    ids: providers.map((p) => p.id),
+    proxyBase: LLM_PROXY_BASE,
+  });
+}
+
+export function auditProviderRegistryGovernance(
+  state: {
+    providerCount?: number;
+  } = {},
+): {
+  module: 'src/entities/endpoint/providerRegistry.ts';
+  phase: 'P153';
+  providerCount: number;
+  healthy: boolean;
+} {
+  const providerCount =
+    typeof state.providerCount === 'number' && Number.isFinite(state.providerCount)
+      ? Math.max(0, Math.trunc(state.providerCount))
+      : listProviders().length;
+  return {
+    module: 'src/entities/endpoint/providerRegistry.ts',
+    phase: 'P153',
+    providerCount,
+    healthy: providerCount >= 1,
+  };
+}

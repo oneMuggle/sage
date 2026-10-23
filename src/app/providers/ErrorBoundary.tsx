@@ -94,3 +94,48 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return this.props.children;
   }
 }
+export function formatErrorBoundarySummary(
+  error: Error | null,
+  hasCustomFallback = false,
+): string {
+  const caught = error !== null;
+  const msg = error?.message?.trim() || 'none';
+  return `caught=${caught} · message=${msg} · customFallback=${Boolean(hasCustomFallback)}`;
+}
+
+export function formatErrorBoundaryJson(
+  error: Error | null,
+  hasCustomFallback = false,
+): string {
+  return JSON.stringify({
+    caught: error !== null,
+    message: error?.message?.trim() || null,
+    hasCustomFallback: Boolean(hasCustomFallback),
+  });
+}
+
+export function auditErrorBoundaryGovernance(
+  state: {
+    hasError?: boolean;
+    recoveryCount?: number;
+  } = {},
+): {
+  module: 'src/app/providers/ErrorBoundary.tsx';
+  phase: 'P151';
+  hasError: boolean;
+  recoveryCount: number;
+  healthy: boolean;
+} {
+  const hasError = state.hasError === true;
+  const recoveryCount =
+    typeof state.recoveryCount === 'number' && Number.isFinite(state.recoveryCount)
+      ? Math.max(0, Math.trunc(state.recoveryCount))
+      : 0;
+  return {
+    module: 'src/app/providers/ErrorBoundary.tsx',
+    phase: 'P151',
+    hasError,
+    recoveryCount,
+    healthy: !hasError,
+  };
+}

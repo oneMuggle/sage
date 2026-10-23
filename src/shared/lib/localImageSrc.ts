@@ -37,3 +37,24 @@ export function buildLocalImageSrc(src: string, workspacePath?: string): string 
 
   return `sage-file://p/${encodeURIComponent(abs)}`;
 }
+
+export function formatLocalImageSrcSummary(src: string, workspacePath?: string): string {
+  const resolved = buildLocalImageSrc(src, workspacePath);
+  const isSageFile = resolved.startsWith('sage-file://p/');
+  return `${isSageFile ? 'sage-file' : 'passthrough'} · ${resolved || '(empty)'}`;
+}
+
+export function formatLocalImageSrcJson(src: string, workspacePath?: string): string {
+  const resolved = buildLocalImageSrc(src, workspacePath);
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.local_image_src.v1',
+      src,
+      workspacePath: workspacePath ?? null,
+      resolved,
+      isSageFile: resolved.startsWith('sage-file://p/'),
+    },
+    null,
+    2,
+  );
+}

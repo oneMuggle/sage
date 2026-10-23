@@ -90,8 +90,6 @@ export function DocxNativePreview({
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'error'>('loading');
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,50 +146,12 @@ export function DocxNativePreview({
   }
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatDocxPreviewMetaMarkdown({ workspacePath, managedPath, revision, state }),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatDocxPreviewMetaJson({ workspacePath, managedPath, revision, state }),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
     <div className="relative bg-white" data-testid="docx-native-preview" data-state={state}>
       <div className="flex items-center justify-end gap-1 px-3 pt-2 text-ui-2xs">
-        <button
-          type="button"
-          data-testid="docx-preview-copy-md"
-          onClick={() => void handleCopyMarkdown()}
-          className="px-1.5 py-0.5 rounded border border-border text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedMd ? '已复制 MD' : '复制 MD'}
-        </button>
-        <button
-          type="button"
-          data-testid="docx-preview-copy-json"
-          onClick={() => void handleCopyJson()}
-          className="px-1.5 py-0.5 rounded border border-border text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedJson ? '已复制 JSON' : '复制 JSON'}
-        </button>
       </div>
       {state === 'loading' && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/80">
@@ -204,4 +164,17 @@ export function DocxNativePreview({
       <div ref={containerRef} className="min-h-24 p-4" />
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditDocxNativePreviewGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/DocxNativePreview.tsx',
+    phase: 'P164',
+    status: 'ready',
+  };
 }

@@ -36,3 +36,56 @@ export function QueryClientProvider({ children }: QueryClientProviderProps) {
 
   return <TanstackQueryClientProvider client={client}>{children}</TanstackQueryClientProvider>;
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatQueryClientConfigSummary(
+  staleTimeMs = 30_000,
+  retry = 1,
+  refetchOnWindowFocus = false,
+): string {
+  const safeStale = Math.max(0, Math.trunc(staleTimeMs));
+  const safeRetry = Math.max(0, Math.trunc(retry));
+  return `staleTimeMs=${safeStale} · retry=${safeRetry} · refetchOnWindowFocus=${Boolean(refetchOnWindowFocus)}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatQueryClientConfigJson(
+  staleTimeMs = 30_000,
+  retry = 1,
+  refetchOnWindowFocus = false,
+): string {
+  return JSON.stringify({
+    staleTimeMs: Math.max(0, Math.trunc(staleTimeMs)),
+    retry: Math.max(0, Math.trunc(retry)),
+    refetchOnWindowFocus: Boolean(refetchOnWindowFocus),
+  });
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditQueryClientProviderGovernance(
+  state: {
+    staleTimeMs?: number;
+    retryCount?: number;
+  } = {},
+): {
+  module: 'src/app/providers/QueryClientProvider.tsx';
+  phase: 'P151';
+  staleTimeMs: number;
+  retryCount: number;
+  healthy: boolean;
+} {
+  const staleTimeMs =
+    typeof state.staleTimeMs === 'number' && Number.isFinite(state.staleTimeMs)
+      ? Math.max(0, Math.round(state.staleTimeMs))
+      : 60000;
+  const retryCount =
+    typeof state.retryCount === 'number' && Number.isFinite(state.retryCount)
+      ? Math.max(0, Math.min(10, Math.trunc(state.retryCount)))
+      : 1;
+  return {
+    module: 'src/app/providers/QueryClientProvider.tsx',
+    phase: 'P151',
+    staleTimeMs,
+    retryCount,
+    healthy: staleTimeMs >= 1000 && retryCount >= 0 && retryCount <= 10,
+  };
+}

@@ -13,3 +13,55 @@ export function ToastProvider() {
     <SonnerToaster theme={resolved} position="top-right" richColors closeButton duration={4000} />
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatToastProviderSummary(
+  theme: 'light' | 'dark' = 'light',
+  durationMs = 4000,
+): string {
+  const safeDuration = Math.max(0, Math.trunc(durationMs));
+  return `theme=${theme} · position=top-right · durationMs=${safeDuration}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatToastProviderJson(
+  theme: 'light' | 'dark' = 'light',
+  durationMs = 4000,
+): string {
+  return JSON.stringify({
+    theme,
+    position: 'top-right',
+    richColors: true,
+    closeButton: true,
+    durationMs: Math.max(0, Math.trunc(durationMs)),
+  });
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditToastProviderGovernance(
+  state: {
+    maxToasts?: number;
+    durationMs?: number;
+  } = {},
+): {
+  module: 'src/app/providers/ToastProvider.tsx';
+  phase: 'P151';
+  maxToasts: number;
+  durationMs: number;
+  healthy: boolean;
+} {
+  const maxToasts =
+    typeof state.maxToasts === 'number' && Number.isFinite(state.maxToasts)
+      ? Math.max(1, Math.min(20, Math.trunc(state.maxToasts)))
+      : 5;
+  const durationMs =
+    typeof state.durationMs === 'number' && Number.isFinite(state.durationMs)
+      ? Math.max(1000, Math.min(30000, Math.round(state.durationMs)))
+      : 4000;
+  return {
+    module: 'src/app/providers/ToastProvider.tsx',
+    phase: 'P151',
+    maxToasts,
+    durationMs,
+    healthy: maxToasts >= 1 && durationMs >= 1000 && durationMs <= 30000,
+  };
+}

@@ -92,3 +92,43 @@ export function TaskModelAdvisor({
     </details>
   );
 }
+
+export interface TaskModelAdvisorAuditInput {
+  recommendedModelId: string;
+  confidenceScore: number;
+  rationaleText: string;
+}
+
+export interface TaskModelAdvisorAuditReport {
+  normalizedModelId: string;
+  clampedConfidence: number;
+  hasRationale: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateTaskModelAdvisorGovernanceAudit(
+  input: TaskModelAdvisorAuditInput,
+): TaskModelAdvisorAuditReport {
+  const issueCodes: string[] = [];
+  const normalizedModelId = input.recommendedModelId.trim();
+  if (!normalizedModelId) {
+    issueCodes.push('TASK_MODEL_ADVISOR_MODEL_EMPTY');
+  }
+  if (input.confidenceScore < 0 || input.confidenceScore > 1) {
+    issueCodes.push('TASK_MODEL_ADVISOR_CONFIDENCE_OUT_OF_RANGE');
+  }
+  const hasRationale = input.rationaleText.trim().length > 0;
+  if (!hasRationale) {
+    issueCodes.push('TASK_MODEL_ADVISOR_RATIONALE_EMPTY');
+  }
+  const clampedConfidence = Math.min(1, Math.max(0, Number(input.confidenceScore.toFixed(4))));
+  return {
+    normalizedModelId,
+    clampedConfidence,
+    hasRationale,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

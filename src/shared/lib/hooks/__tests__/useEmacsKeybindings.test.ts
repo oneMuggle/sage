@@ -8,6 +8,8 @@ import {
   findWordForward,
   lineEndOf,
   lineStartOf,
+  formatEmacsKeybindingsJson,
+  formatEmacsKeybindingsSummary,
   useEmacsKeybindings,
 } from '../useEmacsKeybindings';
 
@@ -535,5 +537,23 @@ describe('useEmacsKeybindings — controlled component integration', () => {
 
     fireEvent.change(ta, { target: { value: 'hi!' } });
     expect(ta.value).toBe('hi!');
+  });
+});
+
+describe('formatEmacsKeybindingsSummary / formatEmacsKeybindingsJson', () => {
+  it('formats Emacs keybinding state summary and JSON payload', () => {
+    expect(formatEmacsKeybindingsSummary('hello\nworld', 8, true)).toBe(
+      'emacs: enabled · len=11 · cursor=8 · line=[6,11]',
+    );
+    const payload = JSON.parse(formatEmacsKeybindingsJson('hello\nworld', 8, false));
+    expect(payload).toEqual({
+      enabled: false,
+      textLength: 11,
+      cursor: 8,
+      lineStart: 6,
+      lineEnd: 11,
+      wordBackward: 6,
+      wordForward: 11,
+    });
   });
 });

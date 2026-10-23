@@ -45,3 +45,29 @@ export function useCountdown(initialSeconds: number, resetKey?: string | number)
 
   return remaining;
 }
+
+export function formatCountdownSummary(
+  initialSeconds: number,
+  remaining: number,
+  resetKey?: string | number,
+): string {
+  const normalized = normalizeSeconds(initialSeconds);
+  return `${remaining > 0 ? 'ticking' : 'done'} · ${remaining}/${normalized}s · key=${resetKey ?? 'none'}`;
+}
+
+export function formatCountdownJson(
+  initialSeconds: number,
+  remaining: number,
+  resetKey?: string | number,
+): string {
+  return JSON.stringify(
+    {
+      initialSeconds: normalizeSeconds(initialSeconds),
+      remaining,
+      active: remaining > 0,
+      resetKey: resetKey ?? null,
+    },
+    null,
+    2,
+  );
+}

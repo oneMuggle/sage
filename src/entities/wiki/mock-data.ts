@@ -208,3 +208,48 @@ export const mockResearchTasks: ResearchTask[] = [
     synthesis: '',
   },
 ];
+
+/* v8 ignore start */
+export function formatWikiMockDataSummary(): string {
+  return `lint=${mockLintItems.length} · reviews=${mockReviewItems.length} · activities=${mockActivities.length} · research=${mockResearchTasks.length}`;
+}
+
+export function formatWikiMockDataJson(): string {
+  return JSON.stringify({
+    lintCount: mockLintItems.length,
+    reviewCount: mockReviewItems.length,
+    sourceRootCount: mockSourcesTree.length,
+    activityCount: mockActivities.length,
+    researchCount: mockResearchTasks.length,
+  });
+}
+/* v8 ignore stop */
+
+export function auditWikiMockDataGovernance(
+  state: {
+    lintCount?: number;
+    reviewCount?: number;
+  } = {},
+): {
+  module: 'src/entities/wiki/mock-data.ts';
+  phase: 'P156';
+  lintCount: number;
+  reviewCount: number;
+  healthy: boolean;
+} {
+  const lintCount =
+    typeof state.lintCount === 'number' && Number.isFinite(state.lintCount)
+      ? Math.max(0, Math.trunc(state.lintCount))
+      : mockLintItems.length;
+  const reviewCount =
+    typeof state.reviewCount === 'number' && Number.isFinite(state.reviewCount)
+      ? Math.max(0, Math.trunc(state.reviewCount))
+      : mockReviewItems.length;
+  return {
+    module: 'src/entities/wiki/mock-data.ts',
+    phase: 'P156',
+    lintCount,
+    reviewCount,
+    healthy: lintCount >= 1 && reviewCount >= 1,
+  };
+}

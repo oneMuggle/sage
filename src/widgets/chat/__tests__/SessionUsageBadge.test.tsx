@@ -1,15 +1,11 @@
 // src/widgets/chat/__tests__/SessionUsageBadge.test.tsx
 // U14 会话用量徽章测试 — usageApi 全 mock。
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { SessionUsage } from '../../../shared/api/usageApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import {
-  formatSessionUsageJson,
-  formatSessionUsageMarkdown,
-  SessionUsageBadge,
-} from '../SessionUsageBadge';
+import { formatSessionUsageJson, formatSessionUsageMarkdown, SessionUsageBadge } from '../SessionUsageBadge';
 
 const mockFetch = vi.fn<(sessionId: string) => Promise<SessionUsage>>();
 
@@ -104,16 +100,10 @@ describe('SessionUsageBadge', () => {
     const parsed = JSON.parse(formatSessionUsageJson(sample));
     expect(parsed.usage.total_tokens).toBe(1500);
 
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
     mockFetch.mockResolvedValue(sample);
     renderBadge({ sessionId: 's1' });
     await waitFor(() => {
       expect(screen.getByTestId('session-usage-badge')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByTestId('session-usage-copy-md'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('会话累计用量 — s1'));
-    fireEvent.click(screen.getByTestId('session-usage-copy-json'));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"total_tokens": 1500'));
   });
 });

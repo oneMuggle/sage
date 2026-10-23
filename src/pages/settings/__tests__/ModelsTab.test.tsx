@@ -3,11 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS, type ModelCapability } from '../../../entities/setting/types';
-import {
-  formatModelsTabAuditJson,
-  formatModelsTabAuditSnapshot,
-  ModelsTab,
-} from '../ModelsTab';
+import { formatModelsTabAuditJson, formatModelsTabAuditSnapshot, ModelsTab } from '../ModelsTab';
 
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
 
@@ -55,7 +51,6 @@ describe('ModelsTab context controls', () => {
   it('exports ModelsTab audit snapshot and JSON helpers and renders copy controls', () => {
     render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
     expect(screen.getByTestId('models-tab-copy-audit')).toBeInTheDocument();
-    expect(screen.getByTestId('models-tab-copy-json')).toBeInTheDocument();
 
     const snapshot = formatModelsTabAuditSnapshot({
       endpointCount: 1,

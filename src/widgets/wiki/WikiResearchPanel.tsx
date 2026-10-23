@@ -37,8 +37,6 @@ export function WikiResearchPanel({
 }: WikiResearchPanelProps) {
   const [topic, setTopic] = useState('');
   const [autoIngest, setAutoIngest] = useState(true);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const [state, setState] = useState<ResearchState>({
     status: 'idle',
     topic: '',
@@ -88,42 +86,6 @@ export function WikiResearchPanel({
   const reset = () => {
     setTopic('');
     setState({ status: 'idle', topic: '', result: null, error: null });
-  };
-
-  const handleCopyMd = () => {
-    setCopiedMd(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedMd(false), 2000);
-    const lines = [
-      `# Deep Research — ${state.topic}`,
-      '',
-      `- 项目路径: ${projectPath}`,
-      `- 来源数: ${state.result?.web_results_count ?? 0} | 查询数: ${state.result?.queries.length ?? 0}`,
-      ...(state.result?.saved_path ? [`- 已保存路径: ${state.result.saved_path}`] : []),
-      '',
-      '## 综合报告',
-      state.result?.synthesis ?? '',
-      '',
-      '## 参考来源',
-      ...(state.result?.web_results ?? []).map(
-        (r, idx) => `- [${idx + 1}] [${r.title}](${r.url}): ${r.snippet}`,
-      ),
-    ];
-    void navigator.clipboard?.writeText(lines.join('\n'));
-    /* v8 ignore stop */
-  };
-
-  const handleCopyJson = () => {
-    setCopiedJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedJson(false), 2000);
-    const payload = {
-      project: projectPath,
-      topic: state.topic,
-      result: state.result,
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
   };
 
   if (state.status === 'idle' || state.status === 'error') {
@@ -206,22 +168,6 @@ export function WikiResearchPanel({
         </div>
         <div className="flex items-center gap-2">
           <button
-            type="button"
-            data-testid="wiki-research-copy-md-btn"
-            onClick={handleCopyMd}
-            className="px-2.5 py-1 text-xs border border-border rounded-md text-muted hover:text-text hover:bg-muted transition-colors"
-          >
-            {copiedMd ? '已复制MD' : '复制研究MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="wiki-research-copy-json-btn"
-            onClick={handleCopyJson}
-            className="px-2.5 py-1 text-xs border border-border rounded-md text-muted hover:text-text hover:bg-muted transition-colors"
-          >
-            {copiedJson ? '已复制JSON' : '复制研究JSON'}
-          </button>
-          <button
             className="px-3 py-1 text-sm border border-border rounded-md hover:bg-muted"
             onClick={reset}
           >
@@ -259,21 +205,6 @@ export function WikiResearchPanel({
 }
 
 function SourceCard({ index, source }: { index: number; source: WebResultData }) {
-  const [copiedJson, setCopiedJson] = useState(false);
-
-  const handleCopySourceJson = () => {
-    setCopiedJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedJson(false), 2000);
-    const payload = {
-      index,
-      title: source.title,
-      url: source.url,
-      snippet: source.snippet,
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
 
   return (
     <div className="p-3 rounded-md border border-border bg-surface">
@@ -291,14 +222,6 @@ function SourceCard({ index, source }: { index: number; source: WebResultData })
           <p className="text-xs text-muted mt-1 line-clamp-2">{source.snippet}</p>
           <p className="text-xs text-muted mt-1 truncate">{source.url}</p>
         </div>
-        <button
-          type="button"
-          data-testid={`wiki-research-source-copy-json-${index}`}
-          onClick={handleCopySourceJson}
-          className="px-2 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
-        >
-          {copiedJson ? '已复制JSON' : '复制JSON'}
-        </button>
       </div>
     </div>
   );

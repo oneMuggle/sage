@@ -230,3 +230,32 @@ export function formatCatalogSnapshotMetaJson(meta: SnapshotMeta): string {
     2,
   );
 }
+
+export function auditModelCatalogApiGovernance(
+  state: {
+    modelCount?: number;
+    snapshotCount?: number;
+  } = {},
+): {
+  module: 'src/entities/model-catalog/api.ts';
+  phase: 'P153';
+  modelCount: number;
+  snapshotCount: number;
+  healthy: boolean;
+} {
+  const modelCount =
+    typeof state.modelCount === 'number' && Number.isFinite(state.modelCount)
+      ? Math.max(0, Math.trunc(state.modelCount))
+      : 10;
+  const snapshotCount =
+    typeof state.snapshotCount === 'number' && Number.isFinite(state.snapshotCount)
+      ? Math.max(0, Math.trunc(state.snapshotCount))
+      : 1;
+  return {
+    module: 'src/entities/model-catalog/api.ts',
+    phase: 'P153',
+    modelCount,
+    snapshotCount,
+    healthy: modelCount >= 1 && snapshotCount >= 0,
+  };
+}

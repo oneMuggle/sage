@@ -9,10 +9,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { useStore } from '../../../shared/lib/store';
 import type { Session } from '../../../shared/lib/store';
-import {
-  TRAJECTORY_PREVIEW_MAX_CHARS,
-  useConversationTrajectory,
-} from '../useConversationTrajectory';
+import { TRAJECTORY_PREVIEW_MAX_CHARS, useConversationTrajectory } from '../useConversationTrajectory';
 
 const sid = 's-traj';
 
@@ -157,5 +154,23 @@ describe('useConversationTrajectory', () => {
   it('returns empty for null session', () => {
     const { result } = renderHook(() => useConversationTrajectory(null));
     expect(result.current.items).toHaveLength(0);
+  });
+
+  it('formats trajectory summary text and JSON (Phase P118)', async () => {
+    const { formatTrajectorySummaryText, formatTrajectorySummaryJson } = await import(
+      '../useConversationTrajectory'
+    );
+    const summary = {
+      totalEntries: 3,
+      totalToolCalls: 2,
+      totalInputTokens: 120,
+      totalOutputTokens: 240,
+      totalLatencyMs: 1800,
+      maxLatencyMs: 1200,
+    };
+    expect(formatTrajectorySummaryText(summary)).toBe(
+      'entries=3 · tools=2 · in=120 · out=240 · latency=1800ms',
+    );
+    expect(JSON.parse(formatTrajectorySummaryJson(summary))).toEqual(summary);
   });
 });

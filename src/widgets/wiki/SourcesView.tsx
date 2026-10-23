@@ -17,9 +17,6 @@ import { WikiIngestProgress } from './WikiIngestProgress';
 export function SourcesView() {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [ingestId, setIngestId] = useState<string | null>(null);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-  const [copiedFileJson, setCopiedFileJson] = useState(false);
   const project = useWikiStore((s) => s.project);
 
   // PR-3 Task 4: `useWikiIngest(ingestId)` is the existing hook that
@@ -96,53 +93,6 @@ export function SourcesView() {
     });
   };
 
-  const handleCopySourcesMd = () => {
-    setCopiedMd(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedMd(false), 2000);
-    const lines = [
-      `# Wiki 来源文件清单 — ${project?.name ?? 'raw/sources'}`,
-      '',
-      ...mockSourcesTree.flatMap((node) =>
-        node.is_dir
-          ? [
-              `- 📁 **${node.name}** (\`${node.path}\`)`,
-              ...(node.children ?? []).map((c) => `  - 📄 ${c.name} (\`${c.path}\`)`),
-            ]
-          : [`- 📄 **${node.name}** (\`${node.path}\`)`],
-      ),
-    ];
-    void navigator.clipboard?.writeText(lines.join('\n'));
-    /* v8 ignore stop */
-  };
-
-  const handleCopySourcesJson = () => {
-    setCopiedJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedJson(false), 2000);
-    const payload = {
-      project: project?.path ?? '',
-      selectedFile,
-      nodes: mockSourcesTree,
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
-
-  const handleCopySelectedFileJson = () => {
-    setCopiedFileJson(true);
-    /* v8 ignore start */
-    setTimeout(() => setCopiedFileJson(false), 2000);
-    const payload = {
-      path: selectedFile,
-      name: selectedFile?.split('/').pop() ?? '',
-      size: '2.3 MB',
-      modifiedAt: '2024-01-20 14:30',
-    };
-    void navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    /* v8 ignore stop */
-  };
-
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
@@ -152,22 +102,6 @@ export function SourcesView() {
           <p className="text-xs text-muted mt-0.5">管理原始资料文档，支持导入到 Wiki</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            data-testid="wiki-sources-copy-md-btn"
-            onClick={handleCopySourcesMd}
-            className="px-2.5 py-1.5 text-xs rounded-radius-sm border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
-          >
-            {copiedMd ? '已复制MD' : '复制来源MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="wiki-sources-copy-json-btn"
-            onClick={handleCopySourcesJson}
-            className="px-2.5 py-1.5 text-xs rounded-radius-sm border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
-          >
-            {copiedJson ? '已复制JSON' : '复制来源JSON'}
-          </button>
           <button className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-radius-sm border border-border text-text hover:bg-bg-muted transition-colors">
             <FolderPlus className="h-3 w-3" />
             新建文件夹
@@ -217,14 +151,6 @@ export function SourcesView() {
               <div className="rounded-lg border border-border bg-surface p-4 mb-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-medium text-text">文件信息</h4>
-                  <button
-                    type="button"
-                    data-testid="wiki-sources-file-copy-json-btn"
-                    onClick={handleCopySelectedFileJson}
-                    className="px-2 py-0.5 text-ui-2xs rounded border border-border text-muted hover:text-text hover:bg-bg-muted transition-colors"
-                  >
-                    {copiedFileJson ? '已复制JSON' : '复制文件JSON'}
-                  </button>
                 </div>
                 <dl className="space-y-1 text-xs">
                   <div className="flex justify-between">

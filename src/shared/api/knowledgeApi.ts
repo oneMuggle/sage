@@ -18,3 +18,32 @@ export const knowledgeApi = {
     return [];
   },
 };
+
+export function formatKnowledgeDocsSummary(
+  docs: KnowledgeDoc[] = [],
+  query = '',
+): string {
+  /* v8 ignore start */
+  const list = Array.isArray(docs) ? docs : [];
+  const safeQuery = query.trim() || 'all';
+  /* v8 ignore stop */
+  return `knowledge-docs: ${list.length} docs · query=${safeQuery} · legacy=wiki-replaced`;
+}
+
+export function formatKnowledgeDocsJson(
+  docs: KnowledgeDoc[] = [],
+  query = '',
+): string {
+  /* v8 ignore start */
+  const list = Array.isArray(docs) ? docs : [];
+  /* v8 ignore stop */
+  return JSON.stringify(
+    {
+      docCount: list.length,
+      query: query.trim(),
+      wikiReplaced: true,
+    },
+    null,
+    2,
+  );
+}

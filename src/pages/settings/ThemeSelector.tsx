@@ -62,8 +62,6 @@ export function ThemeSelector() {
   const { t } = useI18n();
   const { cssThemes, activeSource, setActiveCssTheme, refreshCssThemes } = useTheme();
   const [modalOpen, setModalOpen] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   function handleNewTheme() {
     setModalOpen(true);
@@ -86,37 +84,7 @@ export function ThemeSelector() {
   }
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatThemeSelectorMarkdown({
-          activeKind: activeSource.kind,
-          activeId: activeSource.id,
-          cssThemes,
-        }),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatThemeSelectorJson({
-          activeKind: activeSource.kind,
-          activeId: activeSource.id,
-          cssThemes,
-        }),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -134,20 +102,6 @@ export function ThemeSelector() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-text-secondary">自定义 CSS 主题</h3>
           <div className="flex items-center gap-1.5">
-            <span
-              data-testid="theme-selector-copy-md"
-              onClick={() => void handleCopyMarkdown()}
-              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedMd ? '已复制 MD' : '复制 MD'}
-            </span>
-            <span
-              data-testid="theme-selector-copy-json"
-              onClick={() => void handleCopyJson()}
-              className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-            >
-              {copiedJson ? '已复制 JSON' : '复制 JSON'}
-            </span>
             <button
               type="button"
               onClick={handleNewTheme}

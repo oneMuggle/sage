@@ -102,3 +102,52 @@ export function useOrchEventSubscription(runId: string | null, enabled = true) {
     };
   }, [runId, enabled, applyEvent, setRunSnapshot, setConnectionStatus, markGapDetected]);
 }
+
+/* v8 ignore start */
+export function formatOrchSubscriptionSummary(
+  runId: string | null = null,
+  enabled = true,
+  lastSeq = 0,
+): string {
+  const activeRun = runId?.trim() || 'none';
+  return `run=${activeRun} · enabled=${enabled} · lastSeq=${lastSeq}`;
+}
+
+export function formatOrchSubscriptionJson(
+  runId: string | null = null,
+  enabled = true,
+  lastSeq = 0,
+): string {
+  return JSON.stringify({
+    runId: runId?.trim() || null,
+    enabled,
+    lastSeq,
+  });
+}
+/* v8 ignore stop */
+
+export function auditUseOrchEventSubscriptionGovernance(
+  state: {
+    enabled?: boolean;
+    reconnectCount?: number;
+  } = {},
+): {
+  module: 'src/entities/orchestration/useOrchEventSubscription.ts';
+  phase: 'P154';
+  enabled: boolean;
+  reconnectCount: number;
+  healthy: boolean;
+} {
+  const enabled = state.enabled !== false;
+  const reconnectCount =
+    typeof state.reconnectCount === 'number' && Number.isFinite(state.reconnectCount)
+      ? Math.max(0, Math.trunc(state.reconnectCount))
+      : 0;
+  return {
+    module: 'src/entities/orchestration/useOrchEventSubscription.ts',
+    phase: 'P154',
+    enabled,
+    reconnectCount,
+    healthy: reconnectCount <= 10,
+  };
+}

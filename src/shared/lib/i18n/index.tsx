@@ -78,3 +78,22 @@ export function useI18n(): I18nContextValue {
   }
   return ctx;
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatI18nProviderSummary(locale: Locale = 'zh'): string {
+  const safeLocale: Locale = locale === 'en' ? 'en' : 'zh';
+  const keyCount = Object.keys(translations[safeLocale]).length;
+  return `locale=${safeLocale} · keys=${keyCount} · storageKey=${LOCALE_STORAGE_KEY}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatI18nProviderJson(locale: Locale = 'zh'): string {
+  const safeLocale: Locale = locale === 'en' ? 'en' : 'zh';
+  const keyCount = Object.keys(translations[safeLocale]).length;
+  return JSON.stringify({
+    locale: safeLocale,
+    keyCount,
+    storageKey: LOCALE_STORAGE_KEY,
+  });
+}
+

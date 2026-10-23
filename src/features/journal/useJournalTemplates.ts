@@ -186,3 +186,28 @@ export function formatJournalTemplateDraftJson(
     2,
   );
 }
+
+export interface UseJournalTemplatesGovernanceAudit {
+  phase: 'P162';
+  module: 'src/features/journal/useJournalTemplates.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseJournalTemplatesGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseJournalTemplatesGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P162',
+    module: 'src/features/journal/useJournalTemplates.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P162 UseJournalTemplates Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

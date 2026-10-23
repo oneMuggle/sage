@@ -166,3 +166,50 @@ export function OfficeCapabilityBar({ onCapabilities }: OfficeCapabilityBarProps
     </div>
   );
 }
+
+export interface OfficeCapabilityBarAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/features/office/OfficeCapabilityBar.tsx';
+  componentName: 'OfficeCapabilityBar';
+  capabilityCount: number;
+  isProbing: boolean;
+  hasRefreshAction: boolean;
+  exportedAt: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditOfficeCapabilityBar(
+  capabilityCount = 3,
+  isProbing = false,
+): OfficeCapabilityBarAuditReport {
+  return {
+    schemaVersion: '1.0',
+    module: 'src/features/office/OfficeCapabilityBar.tsx',
+    componentName: 'OfficeCapabilityBar',
+    capabilityCount: Math.max(0, capabilityCount),
+    isProbing: Boolean(isProbing),
+    hasRefreshAction: true,
+    exportedAt: '2026-10-22',
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportOfficeCapabilityBarAuditJson(
+  capabilityCount = 3,
+  isProbing = false,
+): string {
+  return JSON.stringify(auditOfficeCapabilityBar(capabilityCount, isProbing), null, 2);
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditOfficeCapabilityBarGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/OfficeCapabilityBar.tsx',
+    phase: 'P164',
+    status: 'ready',
+  };
+}

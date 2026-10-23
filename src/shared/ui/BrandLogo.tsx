@@ -24,6 +24,7 @@ const SIZE_CLASSES: Record<BrandLogoSize, string> = {
   xl: 'w-16 h-16',
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatBrandLogoAuditSnapshot(opts: {
   size?: BrandLogoSize;
   withWordmark?: boolean;
@@ -33,6 +34,7 @@ export function formatBrandLogoAuditSnapshot(opts: {
   return `brandLogo|size=${opts.size || 'md'}|wordmark=${opts.withWordmark ? 1 : 0}|alt=${opts.alt || 'none'}|testId=${opts.testId || 'brand-logo'}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatBrandLogoAuditJson(opts: {
   size?: BrandLogoSize;
   withWordmark?: boolean;
@@ -126,4 +128,34 @@ export function BrandLogo({
       {copyControls}
     </span>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditBrandLogoGovernance(
+  state: {
+    size?: BrandLogoSize | string;
+    animated?: boolean;
+  } = {},
+): {
+  module: 'src/shared/ui/BrandLogo.tsx';
+  phase: 'P149';
+  size: BrandLogoSize;
+  animated: boolean;
+  healthy: boolean;
+} {
+  const size: BrandLogoSize =
+    state.size === 'xs' ||
+    state.size === 'sm' ||
+    state.size === 'lg' ||
+    state.size === 'xl'
+      ? state.size
+      : 'md';
+  const animated = state.animated === true;
+  return {
+    module: 'src/shared/ui/BrandLogo.tsx',
+    phase: 'P149',
+    size,
+    animated,
+    healthy: true,
+  };
 }

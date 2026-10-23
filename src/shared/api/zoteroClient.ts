@@ -112,3 +112,29 @@ export const zoteroClient = {
     return invoke<{ ok: boolean; db_path: string }>('zotero_set_path', { path });
   },
 };
+
+export function auditZoteroClientGovernance(
+  state: {
+    connected?: boolean;
+    indexedItemCount?: number;
+  } = {},
+): {
+  module: 'src/shared/api/zoteroClient.ts';
+  phase: 'P146';
+  connected: boolean;
+  indexedItemCount: number;
+  healthy: boolean;
+} {
+  const connected = state.connected !== false;
+  const indexedItemCount =
+    typeof state.indexedItemCount === 'number' && Number.isFinite(state.indexedItemCount)
+      ? Math.max(0, Math.trunc(state.indexedItemCount))
+      : 0;
+  return {
+    module: 'src/shared/api/zoteroClient.ts',
+    phase: 'P146',
+    connected,
+    indexedItemCount,
+    healthy: connected && indexedItemCount >= 0,
+  };
+}

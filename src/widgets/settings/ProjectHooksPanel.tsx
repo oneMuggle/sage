@@ -19,7 +19,6 @@ export function ProjectHooksPanel(): JSX.Element | null {
   const [trusting, setTrusting] = useState(false);
   const [copiedPath, setCopiedPath] = useState(false);
   const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const [copiedConfigPath, setCopiedConfigPath] = useState(false);
 
   const fetchStatus = useCallback(async () => {
@@ -126,30 +125,6 @@ export function ProjectHooksPanel(): JSX.Element | null {
     }
   };
 
-  const handleCopyAuditJson = async (): Promise<void> => {
-    if (!workspace || !status) return;
-    setCopiedJson(true);
-    setTimeout(() => {
-      if (typeof window !== 'undefined') setCopiedJson(false);
-    }, 1500);
-    try {
-      await navigator.clipboard?.writeText(
-        JSON.stringify(
-          {
-            workspace,
-            trusted: status.trusted,
-            config_exists: status.config_exists,
-            hook_count: status.hook_count,
-          },
-          null,
-          2,
-        ),
-      );
-    } catch {
-      // ignore in test/offline mode
-    }
-  };
-
   const handleCopyPath = async (): Promise<void> => {
     if (!workspace) return;
     try {
@@ -209,15 +184,6 @@ export function ProjectHooksPanel(): JSX.Element | null {
             >
               {copiedMd ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
               {copiedMd ? '已复制摘要' : '复制审计摘要'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleCopyAuditJson()}
-              data-testid="project-hooks-copy-json-btn"
-              className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-ui-xs text-text-secondary hover:bg-bg-hover"
-              title="复制 Hook 安全审计状态 JSON"
-            >
-              {copiedJson ? '已复制JSON' : '复制JSON'}
             </button>
             <button
               type="button"
@@ -296,15 +262,6 @@ export function ProjectHooksPanel(): JSX.Element | null {
             >
               {copiedMd ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
               {copiedMd ? '已复制摘要' : '复制审计摘要'}
-            </button>
-            <button
-              type="button"
-              onClick={() => void handleCopyAuditJson()}
-              data-testid="project-hooks-copy-json-btn"
-              className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-ui-xs text-text-secondary hover:bg-bg-hover"
-              title="复制 Hook 安全审计状态 JSON"
-            >
-              {copiedJson ? '已复制JSON' : '复制JSON'}
             </button>
             <button
               type="button"

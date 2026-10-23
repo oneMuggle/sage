@@ -243,4 +243,26 @@ describe('ToolCallResultDefensiveRender', () => {
     } as unknown as MessageType;
     expect(() => renderWithI18n(<Message message={msg} />)).not.toThrow();
   });
+
+  it('formats Message audit summary and JSON (Phase P119)', async () => {
+    const { formatMessageAuditSummary, formatMessageAuditJson } = await import('../Message');
+    const msg: MessageType = {
+      id: 'm1',
+      session_id: 's1',
+      role: 'assistant',
+      content: 'hello world',
+      created_at: 0,
+      tool_calls: [{ name: 'read_file', args: {}, result: 'ok' }],
+    };
+    expect(formatMessageAuditSummary(msg, false)).toBe(
+      'm1 · role=assistant · streaming=false · tools=1 · chars=11',
+    );
+    expect(JSON.parse(formatMessageAuditJson(msg, false))).toEqual({
+      id: 'm1',
+      role: 'assistant',
+      isStreaming: false,
+      toolCallCount: 1,
+      contentLength: 11,
+    });
+  });
 });

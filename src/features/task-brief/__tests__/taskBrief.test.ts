@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { taskBriefPrompt, type TaskBrief } from '../taskBrief';
+import { formatTaskBriefJson, formatTaskBriefSummary, taskBriefPrompt, type TaskBrief } from '../taskBrief';
 const brief: TaskBrief = {
   scenario: 'report',
   goal: 'A report',
@@ -23,5 +23,24 @@ describe('deliverable task brief', () => {
     expect(() => taskBriefPrompt({ ...brief, goal: ' ' })).toThrow();
     expect(() => taskBriefPrompt({ ...brief, sources: 'x'.repeat(16001) })).toThrow();
     expect(() => taskBriefPrompt({ ...brief, format: 'exe' as TaskBrief['format'] })).toThrow();
+  });
+});
+
+describe('formatTaskBriefSummary / formatTaskBriefJson', () => {
+  it('formats task brief summary and JSON payload', () => {
+    expect(formatTaskBriefSummary(null)).toBe('task-brief: empty');
+    expect(formatTaskBriefSummary(brief)).toBe(
+      'task-brief: report -> docx · goal=8 chars · project=none',
+    );
+    const payload = JSON.parse(formatTaskBriefJson(brief));
+    expect(payload).toEqual({
+      scenario: 'report',
+      format: 'docx',
+      goalLength: 8,
+      hasAudience: true,
+      hasSources: true,
+      hasRequirements: true,
+      projectId: null,
+    });
   });
 });

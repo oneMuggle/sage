@@ -226,3 +226,38 @@ function findItemById(items: HelpItem[], id: string): HelpItem | null {
   }
   return null;
 }
+
+export interface HelpTabAuditInput {
+  guideSectionCount: number;
+  shortcutItemCount: number;
+  searchFilterEnabled: boolean;
+}
+
+export interface HelpTabAuditReport {
+  guideSectionCount: number;
+  shortcutItemCount: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateHelpTabGovernanceAudit(
+  input: HelpTabAuditInput,
+): HelpTabAuditReport {
+  const issueCodes: string[] = [];
+  if (input.guideSectionCount <= 0) {
+    issueCodes.push('HELP_TAB_SECTIONS_EMPTY');
+  }
+  if (input.shortcutItemCount < 0) {
+    issueCodes.push('HELP_TAB_SHORTCUTS_NEGATIVE');
+  }
+  if (!input.searchFilterEnabled) {
+    issueCodes.push('HELP_TAB_SEARCH_FILTER_DISABLED');
+  }
+  return {
+    guideSectionCount: Math.max(0, Math.trunc(input.guideSectionCount)),
+    shortcutItemCount: Math.max(0, Math.trunc(input.shortcutItemCount)),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}

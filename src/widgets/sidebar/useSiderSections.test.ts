@@ -130,4 +130,17 @@ describe('useSiderSections — reorderSections', () => {
     const { result } = renderHook(() => useSiderSections(DEFAULT));
     expect(() => result.current.reorderSections(0, 99)).toThrow();
   });
+
+  it('formats SiderSections summary and JSON (Phase P119)', async () => {
+    const { formatSiderSectionsSummary, formatSiderSectionsJson } = await import(
+      './useSiderSections'
+    );
+    expect(formatSiderSectionsSummary(['chat', 'cron'], new Set(['cron']))).toBe(
+      'sections=2 · collapsed=1 · order=[chat,cron]',
+    );
+    expect(JSON.parse(formatSiderSectionsJson(['chat', 'cron'], new Set(['cron'])))).toEqual({
+      order: ['chat', 'cron'],
+      collapsed: ['cron'],
+    });
+  });
 });

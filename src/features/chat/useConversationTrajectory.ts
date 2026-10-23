@@ -151,3 +151,47 @@ export function useConversationTrajectory(sessionId: string | null): {
     };
   }, [messages, sessionId]);
 }
+
+export function formatTrajectorySummaryText(summary: TrajectorySummary): string {
+  return `entries=${summary.totalEntries} · tools=${summary.totalToolCalls} · in=${summary.totalInputTokens} · out=${summary.totalOutputTokens} · latency=${summary.totalLatencyMs}ms`;
+}
+
+export function formatTrajectorySummaryJson(summary: TrajectorySummary): string {
+  return JSON.stringify(
+    {
+      totalEntries: summary.totalEntries,
+      totalToolCalls: summary.totalToolCalls,
+      totalInputTokens: summary.totalInputTokens,
+      totalOutputTokens: summary.totalOutputTokens,
+      totalLatencyMs: summary.totalLatencyMs,
+      maxLatencyMs: summary.maxLatencyMs,
+    },
+    null,
+    2,
+  );
+}
+
+export interface UseConversationTrajectoryGovernanceAudit {
+  phase: 'P161';
+  module: 'src/features/chat/useConversationTrajectory.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseConversationTrajectoryGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseConversationTrajectoryGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P161',
+    module: 'src/features/chat/useConversationTrajectory.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P161 UseConversationTrajectory Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

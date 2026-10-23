@@ -154,3 +154,57 @@ export const useGoalStore = create<GoalState>((set, get) => ({
     set({ error: null });
   },
 }));
+
+export function formatGoalStoreSummary(
+  state: Pick<
+    GoalState,
+    'goals' | 'total' | 'loading' | 'error' | 'statusFilter'
+  > = useGoalStore.getState(),
+): string {
+  return `goals=${state.goals.length}/${state.total} · filter=${state.statusFilter ?? 'all'} · loading=${state.loading} · error=${state.error ?? 'none'}`;
+}
+
+export function formatGoalStoreJson(
+  state: Pick<
+    GoalState,
+    'goals' | 'total' | 'loading' | 'error' | 'statusFilter'
+  > = useGoalStore.getState(),
+): string {
+  return JSON.stringify(
+    {
+      goalCount: state.goals.length,
+      total: state.total,
+      statusFilter: state.statusFilter,
+      loading: state.loading,
+      error: state.error,
+    },
+    null,
+    2,
+  );
+}
+
+export function auditGoalStoreGovernance(
+  state: {
+    goalCount?: number;
+    hasError?: boolean;
+  } = {},
+): {
+  module: 'src/entities/autonomous-goals/goalStore.ts';
+  phase: 'P152';
+  goalCount: number;
+  hasError: boolean;
+  healthy: boolean;
+} {
+  const goalCount =
+    typeof state.goalCount === 'number' && Number.isFinite(state.goalCount)
+      ? Math.max(0, Math.trunc(state.goalCount))
+      : 0;
+  const hasError = state.hasError === true;
+  return {
+    module: 'src/entities/autonomous-goals/goalStore.ts',
+    phase: 'P152',
+    goalCount,
+    hasError,
+    healthy: !hasError,
+  };
+}

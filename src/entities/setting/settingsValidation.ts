@@ -43,3 +43,43 @@ export function validateSettingValue(key: string, value: unknown): string | null
   if (!metadata) return `未知设置项: ${key}`;
   return validateConstraint(metadata, value);
 }
+
+export function formatSettingValidationSummary(key: string, value: unknown): string {
+  const error = validateSettingValue(key, value);
+  return `${key} · ${error === null ? 'valid' : `invalid(${error})`}`;
+}
+
+export function formatSettingValidationJson(key: string, value: unknown): string {
+  const error = validateSettingValue(key, value);
+  return JSON.stringify(
+    {
+      key,
+      valid: error === null,
+      error,
+    },
+    null,
+    2,
+  );
+}
+
+export function auditSettingsValidationGovernance(
+  state: {
+    errorCount?: number;
+  } = {},
+): {
+  module: 'src/entities/setting/settingsValidation.ts';
+  phase: 'P155';
+  errorCount: number;
+  healthy: boolean;
+} {
+  const errorCount =
+    typeof state.errorCount === 'number' && Number.isFinite(state.errorCount)
+      ? Math.max(0, Math.trunc(state.errorCount))
+      : 0;
+  return {
+    module: 'src/entities/setting/settingsValidation.ts',
+    phase: 'P155',
+    errorCount,
+    healthy: errorCount === 0,
+  };
+}

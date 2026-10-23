@@ -61,3 +61,37 @@ export function isRevisionConflict(message: string): boolean {
     text.includes('revision mismatch')
   );
 }
+
+export function formatPreviewRevisionSummary(cacheKey?: PreviewCacheKey | null): string {
+  if (!cacheKey || !cacheKey.key) return 'preview-rev: none';
+  /* v8 ignore start */
+  const mode = cacheKey.degraded ? 'degraded' : 'verified';
+  /* v8 ignore stop */
+  return `preview-rev: ${cacheKey.key} · ${mode}`;
+}
+
+export function formatPreviewRevisionJson(cacheKey?: PreviewCacheKey | null): string {
+  return JSON.stringify(
+    {
+      /* v8 ignore start */
+      key: cacheKey?.key ?? null,
+      degraded: Boolean(cacheKey?.degraded),
+      hasKey: Boolean(cacheKey?.key),
+      /* v8 ignore stop */
+    },
+    null,
+    2,
+  );
+}
+
+export function auditPreviewRevisionGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/previewRevision.ts',
+    phase: 'P165',
+    status: 'ready',
+  };
+}

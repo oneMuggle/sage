@@ -202,7 +202,6 @@ describe('Skills page — auto-refresh toggle', () => {
     await waitFor(() => expect(listMock).toHaveBeenCalledTimes(1));
 
     expect(screen.getByTestId('skills-page-copy-audit')).toBeInTheDocument();
-    expect(screen.getByTestId('skills-page-copy-json')).toBeInTheDocument();
 
     const snapshot = formatSkillsAuditSnapshot({
       activeTab: 'skills',

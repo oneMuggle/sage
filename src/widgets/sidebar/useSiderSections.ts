@@ -111,3 +111,17 @@ export function useSiderSections(
     reorderSections,
   };
 }
+export function formatSiderSectionsSummary(order: SiderOrder, collapsed: Set<string>): string {
+  return `sections=${order.length} · collapsed=${collapsed.size} · order=[${order.join(',')}]`;
+}
+
+export function formatSiderSectionsJson(order: SiderOrder, collapsed: Set<string>): string {
+  return JSON.stringify(
+    {
+      order,
+      collapsed: [...collapsed],
+    },
+    null,
+    2,
+  );
+}

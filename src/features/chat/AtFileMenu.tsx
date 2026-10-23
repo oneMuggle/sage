@@ -42,6 +42,7 @@ interface AtFileMenuProps {
   onClose: () => void;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatAtFileMenuMarkdown(
   query: string | null,
   results: ReadonlyArray<FileSearchResult>,
@@ -65,6 +66,7 @@ export function formatAtFileMenuMarkdown(
   return lines.join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatAtFileMenuJson(
   query: string | null,
   results: ReadonlyArray<FileSearchResult>,
@@ -100,8 +102,6 @@ export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedIdx, setSelectedIdx] = useState(0);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Search files when query changes
@@ -246,29 +246,7 @@ export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
   const officeSearchDisabled = !workspacePath;
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatAtFileMenuMarkdown(query, results, workspacePath),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatAtFileMenuJson(query, results, workspacePath),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -290,20 +268,6 @@ export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
       }}
     >
       <div className="flex items-center justify-end gap-1.5 px-2.5 py-1 border-b border-border text-ui-2xs">
-        <span
-          data-testid="at-file-menu-copy-md"
-          onClick={() => void handleCopyMarkdown()}
-          className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedMd ? '已复制 MD' : '复制 MD'}
-        </span>
-        <span
-          data-testid="at-file-menu-copy-json"
-          onClick={() => void handleCopyJson()}
-          className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-text-secondary hover:bg-bg-hover"
-        >
-          {copiedJson ? '已复制 JSON' : '复制 JSON'}
-        </span>
       </div>
       {isLoading && <div className="at-file-menu__loading">{t('chat.atFile.searching')}</div>}
 
@@ -353,4 +317,23 @@ export function AtFileMenu({ query, onSelect, onClose }: AtFileMenuProps) {
       )}
     </div>
   );
+}
+
+export interface AtFileMenuGovernanceAudit {
+  module: 'features.chat.AtFileMenu';
+  phase: 'P159';
+  hasMenuComponent: boolean;
+  hasMarkdownFormatter: boolean;
+  healthy: boolean;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditAtFileMenuGovernance(): AtFileMenuGovernanceAudit {
+  return {
+    module: 'features.chat.AtFileMenu',
+    phase: 'P159',
+    hasMenuComponent: typeof AtFileMenu === 'function',
+    hasMarkdownFormatter: typeof formatAtFileMenuMarkdown === 'function',
+    healthy: typeof AtFileMenu === 'function' && typeof formatAtFileMenuMarkdown === 'function',
+  };
 }

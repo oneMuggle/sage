@@ -334,3 +334,34 @@ export function MemoryKnowledgeTab() {
     </div>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditMemoryKnowledgeTabGovernance(
+  state: {
+    memoryEnabled?: boolean;
+    knowledgeSourcesCount?: number;
+    autoIndexEnabled?: boolean;
+  } = {},
+): {
+  module: 'src/pages/settings/MemoryKnowledgeTab.tsx';
+  phase: 'P143';
+  memoryEnabled: boolean;
+  knowledgeSourcesCount: number;
+  autoIndexEnabled: boolean;
+  healthy: boolean;
+} {
+  const memoryEnabled = state.memoryEnabled !== false;
+  const knowledgeSourcesCount =
+    typeof state.knowledgeSourcesCount === 'number' && Number.isFinite(state.knowledgeSourcesCount)
+      ? Math.max(0, Math.trunc(state.knowledgeSourcesCount))
+      : 0;
+  const autoIndexEnabled = state.autoIndexEnabled !== false;
+  return {
+    module: 'src/pages/settings/MemoryKnowledgeTab.tsx',
+    phase: 'P143',
+    memoryEnabled,
+    knowledgeSourcesCount,
+    autoIndexEnabled,
+    healthy: knowledgeSourcesCount >= 0,
+  };
+}

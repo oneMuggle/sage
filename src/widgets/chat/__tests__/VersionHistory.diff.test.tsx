@@ -16,12 +16,7 @@ vi.mock('../changes/SplitDiff', () => ({
   SplitDiff: ({ diff }: { diff: string }) => <div data-testid="split-diff">{diff}</div>,
 }));
 
-import {
-  getArtifactVersion,
-  listArtifactVersions,
-  readArtifactContent,
-  type ArtifactVersion,
-} from '../../../features/artifacts/artifactApi';
+import { getArtifactVersion, listArtifactVersions, readArtifactContent, type ArtifactVersion } from '../../../features/artifacts/artifactApi';
 import { VersionHistory } from '../artifacts/VersionHistory';
 
 const mockedList = vi.mocked(listArtifactVersions);
@@ -96,32 +91,6 @@ describe('VersionHistory 版本 diff（right-panel R3 批次 A）', () => {
       target: { value: '1' },
     });
     await waitFor(() => expect(mockedGet).toHaveBeenCalledWith('s1', 'a1', 1));
-    await waitFor(() =>
-      expect(screen.getByTestId('version-diff-view-2')).toBeInTheDocument(),
-    );
-  });
-
-  it('支持复制版本历史 MD/JSON 与单版本 JSON 到剪贴板', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    mockedList.mockResolvedValue(versions);
-    render(<VersionHistory sessionId="s1" artifactId="a1" />);
-    fireEvent.click(screen.getByRole('button', { name: /版本历史/ }));
-    await waitFor(() => expect(screen.getByText('v1')).toBeInTheDocument());
-
-    fireEvent.click(screen.getByTestId('version-history-copy-md-btn'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('# 产物版本历史 (a1)'));
-    });
-
-    fireEvent.click(screen.getByTestId('version-history-copy-json-btn'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"artifactId": "a1"'));
-    });
-
-    fireEvent.click(screen.getByTestId('version-item-copy-json-1'));
-    await waitFor(() => {
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"content_hash": "h1"'));
-    });
+    await waitFor(() => expect(screen.getByTestId('version-diff-view-2')).toBeInTheDocument());
   });
 });

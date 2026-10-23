@@ -12,6 +12,7 @@ agent.run_loop() 状态机测试
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -108,7 +109,8 @@ async def test_run_loop_respects_max_iterations():
 
     failed = [e for e in events if e.state == AgentState.FAILED]
     assert len(failed) == 1
-    assert failed[0].error == "max_iterations_exceeded"
+    # 2026-10-22: 错误串携带生效上限，前端据此提示用户该调到多少
+    assert failed[0].error == "max_iterations_exceeded (limit=2)"
 
 
 @pytest.mark.asyncio()
@@ -117,10 +119,12 @@ async def test_run_loop_respects_max_iterations():
     [(None, "无 profile"), ({}, "profile 缺 max_iterations 键")],
 )
 async def test_run_loop_default_budget_is_10(profile, label):
-    """未显式传 max_iterations 且 profile 无该键 → 兜底 10。
+    """OrchSettings 不可读且 profile 无该键 → 兜底 10。
 
-    此前硬编码 5，与 dataclass 默认（profiles.py）和 DB 列默认
-    （database.py）的 10 不一致，异常降级路径会静默砍半预算。
+    2026-10-20 起 max_iterations 优先级链为：
+    显式参数 > OrchSettings（UI 可配） > AgentProfile > DEFAULT_MAX_ITERATIONS(10)。
+    本测试锁定链尾的异常降级路径 —— OrchSettings 读取失败时仍应兜底 10，
+    而不是静默砍半预算。
     """
     tool_call = LLMToolCall(id="c", name="list_dir", arguments="{}")
     agent = SageAgent()
@@ -132,7 +136,11 @@ async def test_run_loop_default_budget_is_10(profile, label):
     mock_tool.execute = MagicMock(return_value=MagicMock(success=True, content={}, error=None))
     agent.tool_registry.get = MagicMock(return_value=mock_tool)
 
-    events = [evt async for evt in agent.run_loop([{"role": "user", "content": "x"}])]
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        side_effect=RuntimeError("settings unavailable"),
+    ):
+        events = [evt async for evt in agent.run_loop([{"role": "user", "content": "x"}])]
 
     failed = [e for e in events if e.state == AgentState.FAILED]
     assert len(failed) == 1, label
@@ -140,6 +148,36 @@ async def test_run_loop_default_budget_is_10(profile, label):
     assert failed[0].iteration == 10, label
     # LLM 恰好被调用 10 次（每轮一次），证明预算真实生效
     assert agent.llm_client.chat.await_count == 10, label
+
+
+@pytest.mark.asyncio()
+async def test_run_loop_uses_orch_settings_max_iterations():
+    """OrchSettings.max_iterations 生效 → 覆盖 AgentProfile 的值。
+
+    UI 可配旋钮优先于 profile 硬编码：用户在设置页把上限调高后，
+    不应被 profile 里的旧值压回去。
+    """
+    tool_call = LLMToolCall(id="c", name="list_dir", arguments="{}")
+    agent = SageAgent()
+    agent.profile = {"max_iterations": 3}
+    agent.llm_client = MagicMock()
+    agent.llm_client.chat = AsyncMock(return_value=_make_response(tool_calls=[tool_call]))
+
+    mock_tool = MagicMock()
+    mock_tool.execute = MagicMock(return_value=MagicMock(success=True, content={}, error=None))
+    agent.tool_registry.get = MagicMock(return_value=mock_tool)
+
+    settings_stub = SimpleNamespace(max_iterations=7)
+    with patch(
+        "backend.orchestration.orch_settings.load_orch_settings",
+        return_value=settings_stub,
+    ):
+        events = [evt async for evt in agent.run_loop([{"role": "user", "content": "x"}])]
+
+    failed = [e for e in events if e.state == AgentState.FAILED]
+    assert len(failed) == 1
+    assert failed[0].iteration == 7
+    assert agent.llm_client.chat.await_count == 7
 
 
 # =============================================================================
@@ -401,7 +439,7 @@ async def test_run_loop_max_iterations_exceeded_yields_failed_event():
     states = [e.state for e in events]
     assert AgentState.FAILED in states
     failed = next(e for e in events if e.state == AgentState.FAILED)
-    assert failed.error == "max_iterations_exceeded"
+    assert failed.error == "max_iterations_exceeded (limit=1)"
     # FAILED 后不应有 DONE
     failed_idx = states.index(AgentState.FAILED)
     assert AgentState.DONE not in states[failed_idx + 1 :]

@@ -44,3 +44,37 @@ export function JournalContentEditor({ content, onChange, disabled }: JournalCon
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatJournalContentDraftSummary(
+  content: Pick<JournalContentDraft, 'title' | 'abstract'>,
+  disabled = false,
+): string {
+  const titleLen = content.title.trim().length;
+  const abstractLen = content.abstract.trim().length;
+  return `titleLen=${titleLen} · abstractLen=${abstractLen} · disabled=${Boolean(disabled)}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatJournalContentDraftJson(
+  content: Pick<JournalContentDraft, 'title' | 'abstract'>,
+  disabled = false,
+): string {
+  return JSON.stringify({
+    titleLength: content.title.trim().length,
+    abstractLength: content.abstract.trim().length,
+    disabled: Boolean(disabled),
+  });
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditJournalContentEditorGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/journal/components/JournalContentEditor.tsx',
+    phase: 'P163',
+    status: 'ready',
+  };
+}

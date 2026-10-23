@@ -83,3 +83,33 @@ export function buildArtifactListStoreAuditJson(
     snapshot: buildArtifactListStoreAuditSnapshot(input),
   });
 }
+
+export function auditArtifactListStoreGovernance(
+  state: {
+    cachedSessionCount?: number;
+    loadingCount?: number;
+  } = {},
+): {
+  module: 'src/features/artifacts/artifactListStore.ts';
+  phase: 'P157';
+  cachedSessionCount: number;
+  loadingCount: number;
+  healthy: boolean;
+} {
+  const cachedSessionCount =
+    typeof state.cachedSessionCount === 'number' &&
+    Number.isFinite(state.cachedSessionCount)
+      ? Math.max(0, Math.trunc(state.cachedSessionCount))
+      : 0;
+  const loadingCount =
+    typeof state.loadingCount === 'number' && Number.isFinite(state.loadingCount)
+      ? Math.max(0, Math.trunc(state.loadingCount))
+      : 0;
+  return {
+    module: 'src/features/artifacts/artifactListStore.ts',
+    phase: 'P157',
+    cachedSessionCount,
+    loadingCount,
+    healthy: loadingCount <= 10,
+  };
+}

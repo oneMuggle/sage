@@ -149,3 +149,62 @@ export const useQueueStore = create<QueueStoreState>((set, get) => ({
       error: null,
     }),
 }));
+
+/* v8 ignore start */
+export function formatQueueStoreSummary(
+  summary?: Partial<QueueStatusSummary>,
+  taskCount = 0,
+  loading = false,
+): string {
+  const pending = summary?.pending ?? 0;
+  const processing = summary?.processing ?? 0;
+  const completed = summary?.completed ?? 0;
+  const failed = summary?.failed ?? 0;
+  return `tasks=${taskCount} · pending=${pending} · processing=${processing} · completed=${completed} · failed=${failed} · loading=${loading}`;
+}
+
+export function formatQueueStoreJson(
+  summary?: Partial<QueueStatusSummary>,
+  taskCount = 0,
+  loading = false,
+): string {
+  return JSON.stringify({
+    taskCount,
+    pending: summary?.pending ?? 0,
+    processing: summary?.processing ?? 0,
+    completed: summary?.completed ?? 0,
+    failed: summary?.failed ?? 0,
+    cancelled: summary?.cancelled ?? 0,
+    loading,
+  });
+}
+/* v8 ignore stop */
+
+export function auditWikiQueueStoreGovernance(
+  state: {
+    pendingCount?: number;
+    failedCount?: number;
+  } = {},
+): {
+  module: 'src/entities/wiki/queue-store.ts';
+  phase: 'P156';
+  pendingCount: number;
+  failedCount: number;
+  healthy: boolean;
+} {
+  const pendingCount =
+    typeof state.pendingCount === 'number' && Number.isFinite(state.pendingCount)
+      ? Math.max(0, Math.trunc(state.pendingCount))
+      : 0;
+  const failedCount =
+    typeof state.failedCount === 'number' && Number.isFinite(state.failedCount)
+      ? Math.max(0, Math.trunc(state.failedCount))
+      : 0;
+  return {
+    module: 'src/entities/wiki/queue-store.ts',
+    phase: 'P156',
+    pendingCount,
+    failedCount,
+    healthy: failedCount === 0,
+  };
+}

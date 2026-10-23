@@ -79,3 +79,28 @@ export function formatConversationTurnsJson(items: readonly TurnItem[]): string 
     2,
   );
 }
+
+export interface UseConversationTurnsGovernanceAudit {
+  phase: 'P161';
+  module: 'src/features/chat/useConversationTurns.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseConversationTurnsGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseConversationTurnsGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P161',
+    module: 'src/features/chat/useConversationTurns.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P161 UseConversationTurns Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

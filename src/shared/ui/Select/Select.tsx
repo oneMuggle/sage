@@ -31,6 +31,7 @@ import { forwardRef, useState } from 'react';
  * ```
  */
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatSelectAuditSnapshot(opts: {
   position?: string;
   disabled?: boolean;
@@ -39,6 +40,7 @@ export function formatSelectAuditSnapshot(opts: {
   return `select|position=${opts.position || 'popper'}|disabled=${opts.disabled ? 1 : 0}|hasValue=${opts.hasValue ? 1 : 0}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatSelectAuditJson(opts: {
   position?: string;
   disabled?: boolean;
@@ -222,3 +224,30 @@ export const SelectSeparator = forwardRef<
   />
 ));
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName;
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditSelectGovernance(
+  state: {
+    optionCount?: number;
+    disabled?: boolean;
+  } = {},
+): {
+  module: 'src/shared/ui/Select/Select.tsx';
+  phase: 'P149';
+  optionCount: number;
+  disabled: boolean;
+  healthy: boolean;
+} {
+  const optionCount =
+    typeof state.optionCount === 'number' && Number.isFinite(state.optionCount)
+      ? Math.max(0, Math.trunc(state.optionCount))
+      : 5;
+  const disabled = state.disabled === true;
+  return {
+    module: 'src/shared/ui/Select/Select.tsx',
+    phase: 'P149',
+    optionCount,
+    disabled,
+    healthy: optionCount >= 1,
+  };
+}

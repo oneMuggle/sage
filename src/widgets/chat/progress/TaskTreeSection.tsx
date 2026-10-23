@@ -191,8 +191,6 @@ export function TaskTreeSection({
   // 旧计划（无 parent_task_id）全部为根 → 渲染结果与既有平铺一致。
   const treeIndex = useMemo(() => buildTaskTree(board.plan), [board.plan]);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const visibleRows = useMemo(() => {
     const hidden = new Set<string>();
     for (const taskId of collapsed) {
@@ -211,66 +209,6 @@ export function TaskTreeSection({
       else next.add(taskId);
       return next;
     });
-  };
-
-  const handleCopyTaskTreeMd = async () => {
-    /* v8 ignore start */
-    const lines = [
-      `# 编排任务树 — ${board.runId || 'default'} (${doneCount}/${total})`,
-      `- 进行中: ${inFlight} | 失败: ${failed} | 已取消: ${cancelled}`,
-      usedTokens > 0 ? `- 累计消耗: ${usedTokens} tokens` : null,
-      tripReason ? `- 触顶原因: ${tripReason}` : null,
-      board.review
-        ? `- 复核结论: ${board.review.verdict} (${board.review.assertion_count} 项断言) ${board.review.summary ?? ''}`
-        : null,
-      '',
-      ...visibleRows.map(({ item, depth }) => {
-        const st = board.statuses[item.task_id];
-        const status: TaskStatusValue = st?.status ?? 'queued';
-        const indent = '  '.repeat(depth);
-        return `${indent}- [${status}] (${item.agent_id}) ${item.goal}`;
-      }),
-    ].filter((x) => x !== null) as string[];
-    setCopiedMd(true);
-    await navigator.clipboard?.writeText(lines.join('\n'));
-    setTimeout(() => setCopiedMd(false), 1500);
-    /* v8 ignore stop */
-  };
-
-  const handleCopyTaskTreeJson = async () => {
-    /* v8 ignore start */
-    const payload = {
-      runId: board.runId,
-      doneCount,
-      total,
-      inFlight,
-      failed,
-      cancelled,
-      usedTokens,
-      tripReason,
-      review: board.review ?? null,
-      tasks: visibleRows.map(({ item, depth }) => {
-        const st = board.statuses[item.task_id];
-        return {
-          task_id: item.task_id,
-          agent_id: item.agent_id,
-          goal: item.goal,
-          depth,
-          depends_on: item.depends_on ?? [],
-          status: st?.status ?? 'queued',
-          used_tokens: st?.used_tokens ?? null,
-          duration_ms: st?.duration_ms ?? null,
-          retry_count: st?.retry_count ?? 0,
-          adjusted: Boolean(st?.adjusted),
-          error: st?.error ?? null,
-          output_preview: st?.output_preview ?? null,
-        };
-      }),
-    };
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    setTimeout(() => setCopiedJson(false), 1500);
-    /* v8 ignore stop */
   };
 
   return (
@@ -307,22 +245,6 @@ export function TaskTreeSection({
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => void handleCopyTaskTreeMd()}
-            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-            data-testid="task-tree-copy-md-btn"
-          >
-            {copiedMd ? '已复制MD' : '复制任务树MD'}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCopyTaskTreeJson()}
-            className="px-1.5 py-0.5 text-ui-2xs rounded border border-border text-text-secondary hover:bg-bg-hover"
-            data-testid="task-tree-copy-json-btn"
-          >
-            {copiedJson ? '已复制JSON' : '复制任务树JSON'}
-          </button>
         {/* live-events P1 (2026-09-06): run 级子代理审批模式开关 —— auto =
             非危险工具自动批准（破坏性/可疑/边界升级仍弹审批）。仅活动 run
             显示；后端 approval_mode 事件到达后 board.approvalMode 对齐。 */}

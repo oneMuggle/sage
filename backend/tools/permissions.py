@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from backend.domain.tool_names import PLUGIN_TOOL_PREFIX
 from backend.tools.base import _is_safe_path
 from backend.tools.bash_validation import BashRisk, validate_bash
 
@@ -49,6 +50,8 @@ class ToolCapability(str, Enum):
 
 #: 内置工具能力分类表。新增工具时应在此登记；
 #: 未登记工具默认 WRITE（fail-safe：既不静默放行执行，也不过度拦截读）。
+#: R90 的动态插件工具无法逐一枚举，统一以 ``plugin__`` 前缀归 EXECUTE：
+#: 调用 handler 即执行第三方代码，manifest 权限只是声明、不是沙箱。
 TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
     "read_file": ToolCapability.READ,
     "list_dir": ToolCapability.READ,
@@ -92,12 +95,18 @@ TOOL_CAPABILITIES: Dict[str, ToolCapability] = {
 #: 未知工具默认能力（fail-safe）
 DEFAULT_TOOL_CAPABILITY = ToolCapability.WRITE
 
+# R90 进程外插件工具的 LLM 命名空间前缀 PLUGIN_TOOL_PREFIX 单一来源在
+# backend.domain.tool_names；本模块导入后再导出，classify_tool 用它把
+# 全部 plugin__* 动态工具归入 EXECUTE。
+
 #: PermissionRule.decision 合法取值
 _VALID_RULE_DECISIONS = ("allow", "deny", "ask")
 
 
 def classify_tool(tool_name: str) -> ToolCapability:
     """查表返回工具能力；未登记工具回退 ``WRITE``（fail-safe）。"""
+    if tool_name.startswith(PLUGIN_TOOL_PREFIX):
+        return ToolCapability.EXECUTE
     return TOOL_CAPABILITIES.get(tool_name, DEFAULT_TOOL_CAPABILITY)
 
 

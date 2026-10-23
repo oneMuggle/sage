@@ -36,9 +36,6 @@ export function DiagnosticsCard() {
   const [files, setFiles] = useState<LogFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [level, setLevel] = useState<LogLevel>(DEFAULT_LOG_LEVEL);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
-  const [copiedFileKey, setCopiedFileKey] = useState<string | null>(null);
 
   useEffect(() => {
     window.electronAPI
@@ -83,38 +80,7 @@ export function DiagnosticsCard() {
   };
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    const lines = [
-      '# 运行日志诊断摘要',
-      '',
-      `- **当前日志级别**: \`${level}\``,
-      `- **日志文件数**: ${files.length}`,
-      '',
-      '| 文件名 | 大小 | 修改时间 |',
-      '| --- | --- | --- |',
-      ...files.map((f) => `| ${f.name} | ${formatSize(f.sizeBytes)} | ${formatTime(f.mtimeMs)} |`),
-    ];
-    setCopiedMd(true);
-    await navigator.clipboard?.writeText(lines.join('\n'));
-    setTimeout(() => setCopiedMd(false), 1800);
-  };
 
-  const handleCopyJson = async () => {
-    const payload = {
-      level,
-      fileCount: files.length,
-      files,
-    };
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(JSON.stringify(payload, null, 2));
-    setTimeout(() => setCopiedJson(false), 1800);
-  };
-
-  const handleCopyFileJson = async (f: LogFile) => {
-    setCopiedFileKey(f.name);
-    await navigator.clipboard?.writeText(JSON.stringify(f, null, 2));
-    setTimeout(() => setCopiedFileKey((prev) => (prev === f.name ? null : prev)), 1800);
-  };
   /* v8 ignore stop */
 
   return (
@@ -141,22 +107,6 @@ export function DiagnosticsCard() {
           </button>
           <button onClick={refresh} className="px-3 py-1 rounded border" disabled={loading}>
             {loading ? '加载中…' : '刷新'}
-          </button>
-          <button
-            type="button"
-            data-testid="diagnostics-copy-md-btn"
-            onClick={() => void handleCopyMd()}
-            className="px-3 py-1 rounded border"
-          >
-            {copiedMd ? '✓ 已复制MD' : '复制诊断MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="diagnostics-copy-json-btn"
-            onClick={() => void handleCopyJson()}
-            className="px-3 py-1 rounded border"
-          >
-            {copiedJson ? '✓ 已复制JSON' : '复制诊断JSON'}
           </button>
         </div>
       </div>
@@ -194,14 +144,6 @@ export function DiagnosticsCard() {
                   <span>
                     {formatSize(f.sizeBytes)} · {formatTime(f.mtimeMs)}
                   </span>
-                  <button
-                    type="button"
-                    data-testid={`diagnostics-file-copy-json-${f.name}`}
-                    onClick={() => void handleCopyFileJson(f)}
-                    className="px-1.5 py-0.5 rounded border text-xs font-sans"
-                  >
-                    {copiedFileKey === f.name ? '✓ 已复制' : '复制JSON'}
-                  </button>
                 </span>
               </li>
             ))}

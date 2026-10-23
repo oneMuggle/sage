@@ -18,6 +18,7 @@ from collections import deque
 from threading import Lock
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Optional, Tuple
 
+from backend.application.services.harness_recorder import HarnessProbe
 from backend.chat.empty_response_guard import (
     EMPTY_RESPONSE_FALLBACK_TEXT,
     EMPTY_RESPONSE_SYSTEM_PROMPT,
@@ -36,6 +37,7 @@ from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.domain.scheduler import SchedulerServicePort
+from backend.domain.tool_names import tool_name_in_allowlist
 from backend.domain.tool_policy import DEFAULT_MAX_TOOL_CALLS_PER_RUN, ToolPolicy
 
 # ===== M6 HOOKS BEGIN: user-defined hooks around tool execution =====
@@ -1080,14 +1082,17 @@ class SageAgent:
         # Phase 1: profile whitelist pre-pass (batch-level, no side effects).
         # Reject the whole batch BEFORE any enforcer.check call so a tool
         # outside the profile's whitelist cannot slip through on the strength
-        # of an earlier in-whitelist tool passing the enforcer.
+        # of an earlier in-whitelist tool passing the enforcer. Membership
+        # uses the shared domain matcher so R92 plugin wildcards behave
+        # identically here, in registry schema filtering, and at dispatch.
         allowed_profile_tools = (
-            set(self.profile.get("tools") or [])
+            list(self.profile.get("tools") or [])
             if self.profile and self.profile.get("tools") is not None
             else None
         )
         if allowed_profile_tools is not None and any(
-            tc.name not in allowed_profile_tools for tc in batch
+            not tool_name_in_allowlist(tc.name, allowed_profile_tools)
+            for tc in batch
         ):
             return False
         # Phase 2: per-tool invariants + enforcer pre-check.
@@ -1121,12 +1126,13 @@ class SageAgent:
         # profile 白名单批级预检（与 L6 同款：任何越界工具即整批串行，
         # 避免靠前面的白名单工具"带飞"越界工具通过 enforcer）。
         allowed_profile_tools = (
-            set(self.profile.get("tools") or [])
+            list(self.profile.get("tools") or [])
             if self.profile and self.profile.get("tools") is not None
             else None
         )
         if allowed_profile_tools is not None and any(
-            tc.name not in allowed_profile_tools for tc in batch
+            not tool_name_in_allowlist(tc.name, allowed_profile_tools)
+            for tc in batch
         ):
             return [("serial", [tc]) for tc in batch]
 
@@ -1163,6 +1169,30 @@ class SageAgent:
         return groups
 
     async def _await_tool_execution(
+        self,
+        tool: Any,
+        name: str,
+        args: Dict[str, Any],
+        tool_call_id: Optional[str] = None,
+    ) -> Tuple[bool, Any]:
+        """执行工具并与中断事件竞争，附带 harness effectiveness 埋点。
+
+        埋点在 ``finally`` 中 await —— 写事务在返回前完成，
+        杜绝后台线程与测试 teardown 的 use-after-free 竞争；
+        未安装 recorder 时是零开销 no-op。
+        """
+        probe = HarnessProbe("tool", name)
+        try:
+            with probe:
+                cancelled, result = await self._await_tool_execution_inner(
+                    tool, name, args, tool_call_id
+                )
+                probe.result = result
+                return cancelled, result
+        finally:
+            await probe.aemit()
+
+    async def _await_tool_execution_inner(
         self,
         tool: Any,
         name: str,
@@ -1415,16 +1445,29 @@ class SageAgent:
         tool_sig_counts: Dict[str, int] = {}
         repeat_nudged: set = set()
 
-        # 阶段 1: max_iterations 默认从 profile 读, 否则兜底 DEFAULT_MAX_ITERATIONS
-        effective_max_iterations = (
-            max_iterations
-            if max_iterations is not None
-            else (
-                self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
-                if self.profile
-                else DEFAULT_MAX_ITERATIONS
-            )
-        )
+        # 阶段 1: max_iterations 优先级：
+        # 1. 显式传入的 max_iterations 参数（最高优先级）
+        # 2. OrchSettings.max_iterations（UI 可配置，2026-10-20 新增）
+        # 3. AgentProfile.max_iterations（profile 硬编码默认值）
+        # 4. DEFAULT_MAX_ITERATIONS（兜底值 10）
+        if max_iterations is not None:
+            effective_max_iterations = max_iterations
+        else:
+            try:
+                from backend.orchestration.orch_settings import load_orch_settings
+                orch_settings_max = load_orch_settings().max_iterations
+                if orch_settings_max > 0:
+                    effective_max_iterations = orch_settings_max
+                elif self.profile:
+                    effective_max_iterations = self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
+                else:
+                    effective_max_iterations = DEFAULT_MAX_ITERATIONS
+            except Exception:  # noqa: BLE001 — settings 读取失败回落 profile 默认
+                effective_max_iterations = (
+                    self.profile.get("max_iterations", DEFAULT_MAX_ITERATIONS)
+                    if self.profile
+                    else DEFAULT_MAX_ITERATIONS
+                )
 
         # 如果传入了动态 LLM 配置,临时覆盖
         original_llm_client = self.llm_client
@@ -1905,11 +1948,12 @@ class SageAgent:
                         # legacy run_loop 无刹车。超限时终止本次 run（与前端
                         # mapAgentErrorToText 的 "tool_budget_exceeded" 文案对齐）。
                         tool_calls_used += 1
-                        if tool_calls_used > self._effective_max_tool_calls_per_run():
+                        max_tool_calls = self._effective_max_tool_calls_per_run()
+                        if tool_calls_used > max_tool_calls:
                             yield AgentEvent(
                                 state=AgentState.FAILED,
                                 iteration=i,
-                                error="tool_budget_exceeded",
+                                error=f"tool_budget_exceeded (limit={max_tool_calls})",
                                 agent_id=self.agent_id,
                             )
                             return
@@ -2342,7 +2386,7 @@ class SageAgent:
             yield AgentEvent(
                 state=AgentState.FAILED,
                 iteration=effective_max_iterations,
-                error="max_iterations_exceeded",
+                error=f"max_iterations_exceeded (limit={effective_max_iterations})",
                 agent_id=self.agent_id,
             )
         finally:
@@ -2440,12 +2484,13 @@ class SageAgent:
         # 1) profile 白名单：不仅控制 schema 暴露，也必须在执行边界再校验，
         # 防止伪造/异常 tool call 直接从全局 registry 取到未授权工具。
         allowed_profile_tools = (
-            set(self.profile.get("tools") or [])
+            list(self.profile.get("tools") or [])
             if self.profile and self.profile.get("tools") is not None
             else None
         )
         profile_denied = (
-            allowed_profile_tools is not None and tc.name not in allowed_profile_tools
+            allowed_profile_tools is not None
+            and not tool_name_in_allowlist(tc.name, allowed_profile_tools)
         )
         if profile_denied:
             logger.warning(

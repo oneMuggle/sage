@@ -46,3 +46,54 @@ export function JournalPanel({ workspacePath: wsOverride }: JournalPanelProps) {
     </section>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatJournalPanelSummary(
+  workspacePath: string | null | undefined,
+  errorCount = 0,
+  warningCount = 0,
+): string {
+  const bound = Boolean(workspacePath && workspacePath.trim().length > 0);
+  const safeErrors = Math.max(0, Math.trunc(errorCount));
+  const safeWarnings = Math.max(0, Math.trunc(warningCount));
+  return `workspace=${bound ? 'bound' : 'unbound'} · errors=${safeErrors} · warnings=${safeWarnings}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatJournalPanelJson(
+  workspacePath: string | null | undefined,
+  errorCount = 0,
+  warningCount = 0,
+): string {
+  const bound = Boolean(workspacePath && workspacePath.trim().length > 0);
+  return JSON.stringify({
+    workspaceBound: bound,
+    errorCount: Math.max(0, Math.trunc(errorCount)),
+    warningCount: Math.max(0, Math.trunc(warningCount)),
+  });
+}
+
+export interface JournalPanelGovernanceAudit {
+  phase: 'P162';
+  module: 'src/features/journal/JournalPanel.tsx';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditJournalPanelGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): JournalPanelGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P162',
+    module: 'src/features/journal/JournalPanel.tsx',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P162 JournalPanel Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

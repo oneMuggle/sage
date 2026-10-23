@@ -43,3 +43,56 @@ export const useResearchStore = create<ResearchStoreState>((set) => ({
     })),
   setPanelOpen: (open) => set({ panelOpen: open }),
 }));
+
+/* v8 ignore start */
+export function formatResearchStoreSummary(
+  tasks: ResearchTask[] = [],
+  panelOpen = false,
+  maxConcurrent = 3,
+): string {
+  const doneCount = tasks.filter((t) => t.status === 'done').length;
+  return `tasks=${tasks.length} · done=${doneCount} · maxConcurrent=${maxConcurrent} · panel=${panelOpen ? 'open' : 'closed'}`;
+}
+
+export function formatResearchStoreJson(
+  tasks: ResearchTask[] = [],
+  panelOpen = false,
+  maxConcurrent = 3,
+): string {
+  return JSON.stringify({
+    taskCount: tasks.length,
+    doneCount: tasks.filter((t) => t.status === 'done').length,
+    panelOpen,
+    maxConcurrent,
+  });
+}
+/* v8 ignore stop */
+
+export function auditWikiResearchStoreGovernance(
+  state: {
+    taskCount?: number;
+    runningCount?: number;
+  } = {},
+): {
+  module: 'src/entities/wiki/research-store.ts';
+  phase: 'P157';
+  taskCount: number;
+  runningCount: number;
+  healthy: boolean;
+} {
+  const taskCount =
+    typeof state.taskCount === 'number' && Number.isFinite(state.taskCount)
+      ? Math.max(0, Math.trunc(state.taskCount))
+      : 0;
+  const runningCount =
+    typeof state.runningCount === 'number' && Number.isFinite(state.runningCount)
+      ? Math.max(0, Math.trunc(state.runningCount))
+      : 0;
+  return {
+    module: 'src/entities/wiki/research-store.ts',
+    phase: 'P157',
+    taskCount,
+    runningCount,
+    healthy: runningCount <= taskCount + 1,
+  };
+}

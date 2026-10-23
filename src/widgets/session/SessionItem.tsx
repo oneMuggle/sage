@@ -25,6 +25,7 @@ import {
   useChatStreamStore,
 } from '../../features/send-message/chatStreamStore';
 import { downloadHtmlFile, downloadMarkdownFile, sessionApi } from '../../shared/api/sessionApi';
+import { mapAgentErrorToText } from '../../shared/lib/errorMapping';
 import { useI18n } from '../../shared/lib/i18n';
 import { useStore } from '../../shared/lib/store';
 import type { Session } from '../../shared/lib/store';
@@ -89,6 +90,10 @@ export function SessionItem({
   const showCompletedTick = useExpireAfter(completedFresh, session.last_run_at, COMPLETED_FRESH_MS);
   const failed = !isLive && dbStatus === 'failed';
   const suspended = !isLive && dbStatus === 'suspended';
+  // 失败原因渲染成中文提示；未知错误码回退到原始 last_error 文本
+  const failedReason = session.last_error
+    ? (mapAgentErrorToText(session.last_error) ?? session.last_error)
+    : '';
   const hasAttention = hasPendingApproval || hasPendingQuestion;
 
   // S5: mini 进度 —— 编排 5 元组优先，todo 完成度兜底
@@ -279,8 +284,8 @@ export function SessionItem({
               data-testid="session-failed"
               aria-label={t('session.status_failed')}
               title={
-                session.last_error
-                  ? `${t('session.status_failed')}: ${session.last_error}`
+                failedReason
+                  ? `${t('session.status_failed')}: ${failedReason}`
                   : t('session.status_failed')
               }
               className="inline-flex flex-shrink-0 text-error"
@@ -480,4 +485,45 @@ function progressPercent(
   const total = progress != null ? progress.total : todoTotal;
   if (total <= 0) return 0;
   return Math.min(100, Math.round((done / total) * 100));
+}
+
+export interface SessionItemAuditInput {
+  sessionId: string;
+  title: string;
+  messageCount: number;
+  isPinned: boolean;
+  isEditingTitle: boolean;
+}
+
+export interface SessionItemAuditReport {
+  normalizedSessionId: string;
+  normalizedTitle: string;
+  normalizedMessageCount: number;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateSessionItemGovernanceAudit(
+  input: SessionItemAuditInput,
+): SessionItemAuditReport {
+  const issueCodes: string[] = [];
+  const normalizedSessionId = input.sessionId.trim();
+  const normalizedTitle = input.title.trim();
+  if (!normalizedSessionId) {
+    issueCodes.push('SESSION_ITEM_ID_EMPTY');
+  }
+  if (!normalizedTitle && !input.isEditingTitle) {
+    issueCodes.push('SESSION_ITEM_TITLE_EMPTY');
+  }
+  if (input.messageCount < 0) {
+    issueCodes.push('SESSION_ITEM_MESSAGE_COUNT_NEGATIVE');
+  }
+  return {
+    normalizedSessionId,
+    normalizedTitle,
+    normalizedMessageCount: Math.max(0, Math.trunc(input.messageCount)),
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
 }

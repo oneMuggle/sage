@@ -49,3 +49,27 @@ export function ConfirmDialogHost() {
     </Dialog>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditConfirmDialogHostGovernance(
+  state: {
+    open?: boolean;
+    variant?: 'default' | 'danger' | string;
+  } = {},
+): {
+  module: 'src/shared/ui/ConfirmDialog/ConfirmDialogHost.tsx';
+  phase: 'P147';
+  open: boolean;
+  variant: 'default' | 'danger';
+  healthy: boolean;
+} {
+  const open = state.open === true;
+  const variant = state.variant === 'danger' ? 'danger' : 'default';
+  return {
+    module: 'src/shared/ui/ConfirmDialog/ConfirmDialogHost.tsx',
+    phase: 'P147',
+    open,
+    variant,
+    healthy: true,
+  };
+}

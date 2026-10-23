@@ -10,6 +10,7 @@ export interface DiagnosticPreviewSnapshot {
   sampleUrls: string[];
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatDiagnosticPreviewMarkdown(
   data: DiagnosticPreviewSnapshot | null | undefined,
   includePrompts = false,
@@ -35,6 +36,7 @@ export function formatDiagnosticPreviewMarkdown(
   return lines.join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatDiagnosticPreviewJson(
   data: DiagnosticPreviewSnapshot | null | undefined,
   includePrompts = false,
@@ -56,33 +58,9 @@ export function DiagnosticCard() {
   const { data, loading, error, refresh } = useDiagnosticPreview();
   const [includePrompts, setIncludePrompts] = useState(false);
   const [includeHostname, setIncludeHostname] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatDiagnosticPreviewMarkdown(data, includePrompts, includeHostname),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatDiagnosticPreviewJson(data, includePrompts, includeHostname),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -93,22 +71,6 @@ export function DiagnosticCard() {
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">LLM 诊断导出</h2>
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            data-testid="diagnostic-card-copy-md"
-            onClick={() => void handleCopyMarkdown()}
-            className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="diagnostic-card-copy-json"
-            onClick={() => void handleCopyJson()}
-            className="rounded border border-border px-2 py-0.5 text-xs hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </button>
         </div>
       </div>
 
@@ -175,4 +137,30 @@ export function DiagnosticCard() {
       </p>
     </section>
   );
+}
+
+export interface DiagnosticCardGovernanceAudit {
+  phase: 'P162';
+  module: 'src/features/diagnostic/DiagnosticCard.tsx';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditDiagnosticCardGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): DiagnosticCardGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P162',
+    module: 'src/features/diagnostic/DiagnosticCard.tsx',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P162 DiagnosticCard Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
 }

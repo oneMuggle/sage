@@ -11,6 +11,7 @@ export interface RetryButtonProps {
 
 const DEFAULT_BACKOFF = [1000, 2000, 4000] as const;
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatRetryButtonAuditSnapshot(opts: {
   attempts?: number;
   maxAttempts?: number;
@@ -21,6 +22,7 @@ export function formatRetryButtonAuditSnapshot(opts: {
   return `retryButton|attempts=${opts.attempts ?? 0}|max=${opts.maxAttempts ?? 3}|busy=${opts.busy ? 1 : 0}|cooldown=${opts.cooldownMs ?? 1000}|label=${opts.label || '重试'}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatRetryButtonAuditJson(opts: {
   attempts?: number;
   maxAttempts?: number;
@@ -126,4 +128,31 @@ export function RetryButton({
       </span>
     </>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditRetryButtonGovernance(
+  state: {
+    loading?: boolean;
+    cooldownRemainingSec?: number;
+  } = {},
+): {
+  module: 'src/shared/ui/RetryButton/RetryButton.tsx';
+  phase: 'P149';
+  loading: boolean;
+  cooldownRemainingSec: number;
+  healthy: boolean;
+} {
+  const loading = state.loading === true;
+  const cooldownRemainingSec =
+    typeof state.cooldownRemainingSec === 'number' && Number.isFinite(state.cooldownRemainingSec)
+      ? Math.max(0, Math.min(300, Math.trunc(state.cooldownRemainingSec)))
+      : 0;
+  return {
+    module: 'src/shared/ui/RetryButton/RetryButton.tsx',
+    phase: 'P149',
+    loading,
+    cooldownRemainingSec,
+    healthy: cooldownRemainingSec >= 0 && cooldownRemainingSec <= 300,
+  };
 }

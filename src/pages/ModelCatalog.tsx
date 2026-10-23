@@ -84,8 +84,6 @@ export default function ModelCatalog() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [pageStatus, setPageStatus] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
   const reloadGeneration = useRef(0);
   const endpointIdRef = useRef(endpointId);
   endpointIdRef.current = endpointId;
@@ -224,45 +222,7 @@ export default function ModelCatalog() {
   }
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(
-        formatModelCatalogPageMarkdown({
-          endpointId,
-          searchTerm,
-          totalModels: allItems.length,
-          filteredCount: filteredItems.length,
-          snapshotCount: snapshots.length,
-          activeSnapshot,
-          selectedKey,
-        }),
-      );
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(
-        formatModelCatalogPageJson({
-          endpointId,
-          searchTerm,
-          totalModels: allItems.length,
-          filteredCount: filteredItems.length,
-          snapshotCount: snapshots.length,
-          activeSnapshot,
-          selectedKey,
-        }),
-      );
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -327,20 +287,6 @@ export default function ModelCatalog() {
           >
             {busyAction === 'export' ? '导出中…' : '导出当前快照'}
           </button>
-          <span
-            data-testid="model-catalog-page-copy-md"
-            onClick={() => void handleCopyMarkdown()}
-            className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedMd ? '已复制 MD' : '复制 MD'}
-          </span>
-          <span
-            data-testid="model-catalog-page-copy-json"
-            onClick={() => void handleCopyJson()}
-            className="cursor-pointer rounded border border-border px-1.5 py-0.5 text-ui-2xs text-text-secondary hover:bg-bg-hover"
-          >
-            {copiedJson ? '已复制 JSON' : '复制 JSON'}
-          </span>
           {pageStatus && (
             <span
               className="text-xs text-text-muted"

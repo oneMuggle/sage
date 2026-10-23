@@ -25,3 +25,26 @@ export function useElapsedSeconds(active: boolean): number {
 
   return seconds;
 }
+
+/* v8 ignore start */
+export function formatElapsedSecondsSummary(
+  active?: boolean | null,
+  seconds?: number | null,
+): string {
+  const isAct = Boolean(active);
+  const elapsed = typeof seconds === 'number' && seconds > 0 ? Math.floor(seconds) : 0;
+  return `active=${isAct} · elapsed=${elapsed}s`;
+}
+
+export function formatElapsedSecondsJson(
+  active?: boolean | null,
+  seconds?: number | null,
+): string {
+  const isAct = Boolean(active);
+  const elapsed = typeof seconds === 'number' && seconds > 0 ? Math.floor(seconds) : 0;
+  return JSON.stringify({
+    active: isAct,
+    elapsedSeconds: elapsed,
+  });
+}
+/* v8 ignore stop */

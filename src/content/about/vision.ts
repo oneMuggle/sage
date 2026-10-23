@@ -26,3 +26,48 @@ export const PHILOSOPHY = [
     description: '优先选择简单方案,除非复杂性能证明其价值。避免过度工程。',
   },
 ];
+
+export function formatVisionAuditSummary(): string {
+  return `visionChars=${VISION.length} · principles=${PHILOSOPHY.length} · names=[${PHILOSOPHY.map((p) => p.principle).join(',')}]`;
+}
+
+export function formatVisionAuditJson(): string {
+  return JSON.stringify(
+    {
+      visionLength: VISION.length,
+      principleCount: PHILOSOPHY.length,
+      principles: PHILOSOPHY.map((p) => p.principle),
+    },
+    null,
+    2,
+  );
+}
+
+export function auditVisionContentGovernance(
+  state: {
+    pillarCount?: number;
+    hasVisionStatement?: boolean;
+  } = {},
+): {
+  module: 'src/content/about/vision.ts';
+  phase: 'P152';
+  pillarCount: number;
+  hasVisionStatement: boolean;
+  healthy: boolean;
+} {
+  const pillarCount =
+    typeof state.pillarCount === 'number' && Number.isFinite(state.pillarCount)
+      ? Math.max(0, Math.trunc(state.pillarCount))
+      : PHILOSOPHY.length;
+  const hasVisionStatement =
+    state.hasVisionStatement !== undefined
+      ? Boolean(state.hasVisionStatement)
+      : VISION.trim().length > 0;
+  return {
+    module: 'src/content/about/vision.ts',
+    phase: 'P152',
+    pillarCount,
+    hasVisionStatement,
+    healthy: pillarCount >= 1 && hasVisionStatement,
+  };
+}

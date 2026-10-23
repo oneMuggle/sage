@@ -178,3 +178,53 @@ export function CreateGoalModal({ isOpen, onClose }: CreateGoalModalProps) {
     </Modal>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatCreateGoalModalSummary(
+  isOpen: boolean,
+  maxHours = 4,
+  maxTokens = 500_000,
+): string {
+  const safeHours = Math.max(0, Number(maxHours) || 0);
+  const safeTokens = Math.max(0, Math.trunc(maxTokens));
+  return `open=${Boolean(isOpen)} · maxHours=${safeHours} · maxTokens=${safeTokens}`;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function formatCreateGoalModalJson(
+  isOpen: boolean,
+  maxHours = 4,
+  maxTokens = 500_000,
+): string {
+  return JSON.stringify({
+    isOpen: Boolean(isOpen),
+    maxHours: Math.max(0, Number(maxHours) || 0),
+    maxTokens: Math.max(0, Math.trunc(maxTokens)),
+  });
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditCreateGoalModalGovernance(
+  state: {
+    isOpen?: boolean;
+    maxTurns?: number;
+  } = {},
+): {
+  module: 'src/features/autonomous-goals/CreateGoalModal.tsx';
+  phase: 'P158';
+  isOpen: boolean;
+  maxTurns: number;
+  healthy: boolean;
+} {
+  const isOpen = state.isOpen === true;
+  const maxTurns =
+    typeof state.maxTurns === 'number' && Number.isFinite(state.maxTurns)
+      ? Math.max(0, Math.trunc(state.maxTurns))
+      : 10;
+  return {
+    module: 'src/features/autonomous-goals/CreateGoalModal.tsx',
+    phase: 'P158',
+    isOpen,
+    maxTurns,
+    healthy: maxTurns >= 1 && maxTurns <= 100,
+  };
+}

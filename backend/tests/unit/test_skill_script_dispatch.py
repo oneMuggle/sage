@@ -10,6 +10,7 @@
 - 权限闸口：deny 时拒绝执行并打 ``permission_denied`` 标记
 - 权限闸口：allow 时放行
 - 无 ``script=`` 前缀时行为不变（返回 body，且不触发权限检查）
+- T-3 开关关闭时脚本分发 fail-closed（独立于权限闸口）
 """
 
 from __future__ import annotations
@@ -25,6 +26,18 @@ from backend.skills.skill_md.skill import DispatchMode, SkillMdDocument, SkillMd
 from backend.tools.permissions import PermissionDecision
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture(autouse=True)
+def _enable_script_execution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """T-3 开关默认关；本文件测的是「调度语义 + 权限闸口」，开关本身由
+    ``test_skill_script_policy.py`` 覆盖，故此处统一置为开启，
+    让用例真正走到第二道闸口（``_enforce_permission``）。
+    """
+    monkeypatch.setattr(
+        "backend.skills.skill_md.script_policy.is_script_execution_allowed",
+        lambda: True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -245,5 +258,30 @@ async def test_execute_command_without_script_prefix_returns_body(tmp_path):
     # Assert
     assert result.success is True
     assert result.content == "skill body"
+    assert enforcer.calls == []
+    assert runner.calls == []
+
+
+@pytest.mark.asyncio()
+async def test_execute_command_script_prefix_blocked_when_switch_off(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    """T-3 开关关闭 → 脚本分发 fail-closed，且**不进入**权限闸口。"""
+    # Arrange
+    monkeypatch.setattr(
+        "backend.skills.skill_md.script_policy.is_script_execution_allowed",
+        lambda: False,
+    )
+    enforcer = _StubEnforcer(_allow())
+    runner = _StubScriptRunner()
+    adapter = _build_adapter(tmp_path, enforcer, runner)
+
+    # Act
+    result = await adapter.execute_command("/t2-script-skill", ["script=scripts/scan.py"])
+
+    # Assert
+    assert result.success is False
+    assert result.metadata.get("permission_denied") is True
+    assert "未启用" in (result.error or "")
     assert enforcer.calls == []
     assert runner.calls == []

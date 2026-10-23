@@ -325,26 +325,9 @@ describe('ProjectArchetypeStudio', () => {
     // Default tab is coding
     expect(screen.getByTestId('archetype-blueprint-detail-coding')).toBeInTheDocument();
     expect(screen.getByText('src/')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('studio-copy-dirs-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-vcs-btn'));
     fireEvent.click(screen.getByTestId('studio-copy-positioning-btn'));
     expect(screen.getByTestId('studio-copy-positioning-btn')).toHaveTextContent('已复制定位');
-    fireEvent.click(screen.getByTestId('studio-copy-stages-btn'));
-    fireEvent.click(screen.getByTestId('studio-copy-pillars-btn'));
-    fireEvent.click(screen.getByTestId('studio-copy-milestones-btn'));
-    fireEvent.click(screen.getByTestId('studio-copy-subtemplates-btn'));
-    fireEvent.click(screen.getByTestId('studio-copy-blueprint-md-btn'));
-    expect(screen.getByTestId('studio-copy-blueprint-md-btn')).toHaveTextContent(/已复制蓝图 MD|复制当前蓝图 MD/);
-    fireEvent.click(screen.getByTestId('studio-copy-blueprint-json-btn'));
-    expect(screen.getByTestId('studio-copy-blueprint-json-btn')).toHaveTextContent('已复制蓝图 JSON');
-    fireEvent.click(screen.getByTestId('studio-copy-all-blueprints-md-btn'));
-    expect(screen.getByTestId('studio-copy-all-blueprints-md-btn')).toHaveTextContent(
-      /已复制全形态对比|复制四大蓝图对比 MD/,
-    );
-    fireEvent.click(screen.getByTestId('studio-copy-all-blueprints-json-btn'));
-    expect(screen.getByTestId('studio-copy-all-blueprints-json-btn')).toHaveTextContent(
-      '已复制全形态 JSON',
-    );
 
     // Switch to business (general archive)
     fireEvent.click(screen.getByTestId('archetype-tab-business'));
@@ -405,7 +388,6 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('studio-blueprint-to-milestone-btn')).toHaveTextContent('已建蓝图里程碑');
     fireEvent.click(screen.getByTestId('overview-pillars-to-milestone-btn'));
     expect(screen.getByTestId('overview-pillars-to-milestone-btn')).toHaveTextContent('已转支柱里程碑');
-    fireEvent.click(screen.getByTestId('overview-copy-stages-btn'));
     fireEvent.click(screen.getByTestId('overview-stages-to-l3-btn'));
     expect(screen.getByTestId('overview-stages-to-l3-btn')).toHaveTextContent('已存管线L3');
     fireEvent.click(screen.getByTestId('overview-stages-to-l4-btn'));
@@ -413,14 +395,6 @@ describe('ProjectArchetypeStudio', () => {
     fireEvent.click(screen.getByTestId('overview-stages-to-constraint-btn'));
     expect(screen.getByTestId('overview-stages-to-constraint-btn')).toHaveTextContent('已转管线L2');
     fireEvent.click(screen.getByTestId('studio-copy-active-path-btn'));
-    fireEvent.click(screen.getByTestId('studio-copy-active-project-md-btn'));
-    expect(screen.getByTestId('studio-copy-active-project-md-btn')).toHaveTextContent(
-      '已复制项目 MD',
-    );
-    fireEvent.click(screen.getByTestId('studio-copy-active-project-json-btn'));
-    expect(screen.getByTestId('studio-copy-active-project-json-btn')).toHaveTextContent(
-      '已复制项目 JSON',
-    );
     fireEvent.click(screen.getByTestId('studio-save-blueprint-l4-btn'));
     expect(screen.getByTestId('studio-save-blueprint-l4-btn')).toHaveTextContent('已存蓝图 L4');
     fireEvent.click(screen.getByTestId('studio-save-blueprint-l3-btn'));
@@ -472,7 +446,6 @@ describe('ProjectArchetypeStudio', () => {
     // Business document style bar & quick checkpoint presets on the business card
     expect(screen.getByTestId('business-doc-style-bar')).toBeInTheDocument();
     expect(screen.getByTestId('checkpoint-quick-presets')).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('checkpoint-copy-timeline-btn'));
     fireEvent.click(screen.getByTestId('business-save-style-l3-btn'));
     expect(screen.getByTestId('business-style-applied-hint')).toHaveTextContent(
       '已沉淀文书规范至 L3',
@@ -538,7 +511,6 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('semantic-stats-save-l3-btn')).toHaveTextContent('已存统计 L3');
     fireEvent.click(screen.getByTestId('semantic-stats-save-l4-btn'));
     expect(screen.getByTestId('semantic-stats-save-l4-btn')).toHaveTextContent('已存统计 L4');
-    fireEvent.click(screen.getByTestId('semantic-stats-copy-btn'));
 
     fireEvent.click(screen.getByTestId('semantic-pillar-query-0'));
     await waitFor(() => {

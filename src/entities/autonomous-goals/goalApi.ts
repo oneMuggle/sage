@@ -107,3 +107,54 @@ export async function generateCheckpoints(goalId: string): Promise<GenerateCheck
     path: `${BASE}/${goalId}/generate-checkpoints`,
   });
 }
+
+export function formatGoalListQuerySummary(
+  status?: GoalStatus,
+  limit = 50,
+  offset = 0,
+): string {
+  return `path=${BASE} · status=${status ?? 'all'} · limit=${limit} · offset=${offset}`;
+}
+
+export function formatGoalListQueryJson(
+  status?: GoalStatus,
+  limit = 50,
+  offset = 0,
+): string {
+  return JSON.stringify(
+    {
+      basePath: BASE,
+      status: status ?? null,
+      limit,
+      offset,
+    },
+    null,
+    2,
+  );
+}
+
+export function auditGoalApiGovernance(
+  state: {
+    endpointCount?: number;
+    supportsCheckpoints?: boolean;
+  } = {},
+): {
+  module: 'src/entities/autonomous-goals/goalApi.ts';
+  phase: 'P152';
+  endpointCount: number;
+  supportsCheckpoints: boolean;
+  healthy: boolean;
+} {
+  const endpointCount =
+    typeof state.endpointCount === 'number' && Number.isFinite(state.endpointCount)
+      ? Math.max(0, Math.trunc(state.endpointCount))
+      : 10;
+  const supportsCheckpoints = state.supportsCheckpoints !== false;
+  return {
+    module: 'src/entities/autonomous-goals/goalApi.ts',
+    phase: 'P152',
+    endpointCount,
+    supportsCheckpoints,
+    healthy: endpointCount >= 5 && supportsCheckpoints,
+  };
+}

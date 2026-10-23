@@ -4,7 +4,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CHAT_DOCUMENT_EXTENSIONS, useFileUpload } from '../useFileUpload';
+import { CHAT_DOCUMENT_EXTENSIONS, formatFileUploadJson, formatFileUploadSummary, useFileUpload } from '../useFileUpload';
 
 function makeFile(name: string, type: string) {
   return { name, size: 100, type } as File;
@@ -185,5 +185,26 @@ describe('CHAT_DOCUMENT_EXTENSIONS', () => {
     for (const ext of ['png', 'jpg', 'gif', 'webp']) {
       expect(CHAT_DOCUMENT_EXTENSIONS.has(ext)).toBe(false);
     }
+  });
+});
+
+describe('formatFileUploadSummary / formatFileUploadJson', () => {
+  it('formats file upload state summary and JSON payload', () => {
+    expect(formatFileUploadSummary([], [], false)).toBe(
+      'upload: 0 files · 0 images · 0 B · idle',
+    );
+    const files = [{ name: 'doc.md', size: 120, type: 'text/markdown' }];
+    const images = [{ name: 'pic.png', size: 380, type: 'image/png' }];
+    expect(formatFileUploadSummary(files, images, true)).toBe(
+      'upload: 1 files · 1 images · 500 B · drag-over',
+    );
+    const payload = JSON.parse(formatFileUploadJson(files, images, true));
+    expect(payload).toEqual({
+      fileCount: 1,
+      imageCount: 1,
+      totalBytes: 500,
+      isDragOver: true,
+      supportedExtensionCount: CHAT_DOCUMENT_EXTENSIONS.size,
+    });
   });
 });

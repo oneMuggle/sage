@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../../shared/lib/i18n';
 import { ProjectBadge } from '../../widgets/chat/ProjectBadge';
 import { RightPanelToggle } from '../../widgets/chat/RightPanelToggle';
+import { SessionIdBadge } from '../../widgets/chat/SessionIdBadge';
 import { SessionModelPicker } from '../../widgets/chat/SessionModelPicker';
 import { SessionUsageBadge } from '../../widgets/chat/SessionUsageBadge';
 import { WorkspaceBranchPicker } from '../../widgets/chat/WorkspaceBranchPicker';
@@ -56,6 +57,7 @@ export function ChatHeaderBar({
         <ProjectBadge workspacePath={workspacePath} onOpenWorkbench={() => navigate('/projects')} />
         <WorkspaceBranchPicker sessionId={currentSessionId} />
         <SessionUsageBadge sessionId={currentSessionId} />
+        <SessionIdBadge sessionId={currentSessionId} />
       </div>
       <div className="flex items-center gap-1.5 flex-wrap" data-testid="chat-header-controls">
         <SessionModelPicker sessionId={currentSessionId} placement="bottom" />

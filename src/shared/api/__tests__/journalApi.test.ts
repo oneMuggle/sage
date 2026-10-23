@@ -9,7 +9,7 @@ vi.mock('../desktopInvoke', () => ({
   invoke: (...args: unknown[]) => mockInvoke(...args),
 }));
 
-import { journalApi } from '../journalApi';
+import { formatJournalFillJson, formatJournalFillSummary, journalApi } from '../journalApi';
 
 beforeEach(() => {
   mockInvoke.mockReset();
@@ -71,5 +71,26 @@ describe('journalApi', () => {
   it('invoke 拒绝经 handleApiError 包装', async () => {
     mockInvoke.mockRejectedValueOnce({ error: 'NOT_FOUND', message: 'missing' });
     await expect(journalApi.getSpec('nope')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('formatJournalFillSummary / formatJournalFillJson', () => {
+  it('formats journal fill request summary and JSON payload', () => {
+    expect(formatJournalFillSummary(null)).toBe('journal-fill: empty');
+    const req = {
+      spec_id: 'j1',
+      workspace_path: 'C:/ws',
+      content: { title: '周报', abstract: '', sections: { intro: 'a' }, references: ['r1'] },
+      output_filename: 'out.docx',
+    };
+    expect(formatJournalFillSummary(req)).toBe('journal-fill: spec=j1 -> out.docx · 1 sections');
+    const payload = JSON.parse(formatJournalFillJson(req));
+    expect(payload).toEqual({
+      specId: 'j1',
+      workspacePath: 'C:/ws',
+      outputFilename: 'out.docx',
+      sectionCount: 1,
+      referenceCount: 1,
+    });
   });
 });

@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { parseUnifiedDiff } from '../../../widgets/chat/changes/splitDiffParser';
-import { unifiedDiff } from '../unifiedDiff';
+import { formatUnifiedDiffJson, formatUnifiedDiffSummary, unifiedDiff } from '../unifiedDiff';
 
 describe('unifiedDiff', () => {
   it('两文本相同返回空串', () => {
@@ -57,5 +57,22 @@ describe('unifiedDiff', () => {
     const d = unifiedDiff('h\nello', 'hello\nworld');
     const rows = parseUnifiedDiff(d);
     expect(rows.length).toBeGreaterThan(0);
+  });
+});
+
+describe('formatUnifiedDiffSummary / formatUnifiedDiffJson', () => {
+  it('formats unified diff summary and JSON payload', () => {
+    expect(formatUnifiedDiffSummary('', 'A', 'B')).toBe('diff: A -> B · 0 hunks · +0 / -0');
+    const d = unifiedDiff('old line\nkeep', 'new line\nkeep', { oldLabel: 'v1', newLabel: 'v2' });
+    expect(formatUnifiedDiffSummary(d, 'v1', 'v2')).toBe('diff: v1 -> v2 · 1 hunks · +1 / -1');
+    const payload = JSON.parse(formatUnifiedDiffJson(d, 'v1', 'v2'));
+    expect(payload).toEqual({
+      oldLabel: 'v1',
+      newLabel: 'v2',
+      hunkCount: 1,
+      addedLines: 1,
+      removedLines: 1,
+      isEmpty: false,
+    });
   });
 });

@@ -6,11 +6,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { TurnItem } from '../../../features/chat/useConversationTurns';
-import {
-  formatTurnListJson,
-  formatTurnListMarkdown,
-  TurnList,
-} from '../TurnList';
+import { formatTurnListJson, formatTurnListMarkdown, TurnList } from '../TurnList';
 
 const items: TurnItem[] = [
   { index: 1, messageId: 'u1', preview: '第一问' },
@@ -53,11 +49,5 @@ describe('TurnList', () => {
     expect(parsed.total).toBe(2);
 
     render(<TurnList items={items} />);
-    const mdBtn = screen.getByTestId('turn-list-copy-md');
-    const jsonBtn = screen.getByTestId('turn-list-copy-json');
-    fireEvent.click(mdBtn);
-    expect(mdBtn.textContent).toContain('已复制 MD');
-    fireEvent.click(jsonBtn);
-    expect(jsonBtn.textContent).toContain('已复制 JSON');
   });
 });

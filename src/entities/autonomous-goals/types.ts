@@ -107,3 +107,69 @@ export interface UpdateGoalInput {
   budget?: Partial<ExecutionBudget>;
   status?: GoalStatus;
 }
+
+export function formatGoalAuditSummary(
+  goal: Pick<
+    Goal,
+    'id' | 'name' | 'status' | 'completion_percentage' | 'degradation_level' | 'checkpoints'
+  >,
+): string {
+  const verifiedCount = goal.checkpoints.filter((c) => c.verified).length;
+  return `${goal.id} · status=${goal.status} · progress=${goal.completion_percentage}% · checkpoints=${verifiedCount}/${goal.checkpoints.length} · deg=${goal.degradation_level}`;
+}
+
+export function formatGoalAuditJson(
+  goal: Pick<
+    Goal,
+    'id' | 'name' | 'status' | 'completion_percentage' | 'degradation_level' | 'checkpoints'
+  >,
+): string {
+  return JSON.stringify(
+    {
+      id: goal.id,
+      name: goal.name,
+      status: goal.status,
+      completionPercentage: goal.completion_percentage,
+      verifiedCheckpoints: goal.checkpoints.filter((c) => c.verified).length,
+      totalCheckpoints: goal.checkpoints.length,
+      degradationLevel: goal.degradation_level,
+    },
+    null,
+    2,
+  );
+}
+
+export function auditAutonomousGoalsTypesGovernance(
+  state: {
+    status?: GoalStatus | string;
+    degradationLevel?: DegradationLevel | string;
+  } = {},
+): {
+  module: 'src/entities/autonomous-goals/types.ts';
+  phase: 'P153';
+  status: GoalStatus;
+  degradationLevel: DegradationLevel;
+  healthy: boolean;
+} {
+  const status: GoalStatus =
+    state.status === 'pending' ||
+    state.status === 'running' ||
+    state.status === 'paused' ||
+    state.status === 'failed' ||
+    state.status === 'cancelled'
+      ? state.status
+      : 'completed';
+  const degradationLevel: DegradationLevel =
+    state.degradationLevel === 'model_downgrade' ||
+    state.degradationLevel === 'task_simplify' ||
+    state.degradationLevel === 'stopped'
+      ? state.degradationLevel
+      : 'none';
+  return {
+    module: 'src/entities/autonomous-goals/types.ts',
+    phase: 'P153',
+    status,
+    degradationLevel,
+    healthy: status !== 'failed' && degradationLevel !== 'stopped',
+  };
+}

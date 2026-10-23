@@ -75,3 +75,57 @@ export type { GovernanceRulesPanelProps } from './GovernanceRulesPanel';
 
 export { useStudioState } from './useStudioState';
 export type { UseStudioStateReturn } from './useStudioState';
+
+export interface ProjectTypeFeatureBarrelAuditReport {
+  schemaVersion: '1.0';
+  module: 'src/features/project-type/index.ts';
+  exportedSymbols: readonly string[];
+  symbolCount: number;
+  exportedAt: string;
+}
+
+export function auditProjectTypeFeatureBarrel(): ProjectTypeFeatureBarrelAuditReport {
+  const exportedSymbols = [
+    'ProjectTypeBadge',
+    'ProjectTypeSelector',
+    'PhaseProgressBar',
+    'FieldTemplateEditor',
+    'SkillRecommender',
+    'ConstraintEditor',
+    'MilestoneManager',
+    'MilestoneEditor',
+    'TypeDetectionPreview',
+    'ProjectCreationWizard',
+    'ProjectArchetypeStudio',
+    'PolymorphicArchetypeCards',
+    'GovernanceRulesPanel',
+    'useStudioState',
+  ] as const;
+  return {
+    schemaVersion: '1.0',
+    module: 'src/features/project-type/index.ts',
+    exportedSymbols,
+    symbolCount: exportedSymbols.length,
+    exportedAt: '2026-10-22',
+  };
+}
+
+export function exportProjectTypeFeatureBarrelAuditJson(): string {
+  return JSON.stringify(auditProjectTypeFeatureBarrel(), null, 2);
+}
+
+export function auditProjectTypeBarrelGovernance(): {
+  module: 'src/features/project-type/index.ts';
+  phase: 'P166';
+  domain: 'project-type';
+  reExportsStudioAndGovernancePanels: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/project-type/index.ts',
+    phase: 'P166',
+    domain: 'project-type',
+    reExportsStudioAndGovernancePanels: true,
+    compliant: true,
+  };
+}

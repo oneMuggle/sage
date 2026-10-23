@@ -76,3 +76,28 @@ export function clearSessionDraft(sessionId: string): void {
     // privacy mode or quota exceeded — same tolerance as writes
   }
 }
+
+/* v8 ignore start */
+export function formatSessionDraftSummary(
+  sessionId?: string | null,
+  draft?: string | null,
+): string {
+  const sid = sessionId && sessionId.trim().length > 0 ? sessionId.trim() : 'none';
+  const text = typeof draft === 'string' ? draft : '';
+  return `session=${sid} · chars=${text.length} · persisted=${sid !== 'none'}`;
+}
+
+export function formatSessionDraftJson(
+  sessionId?: string | null,
+  draft?: string | null,
+): string {
+  const sid = sessionId && sessionId.trim().length > 0 ? sessionId.trim() : null;
+  const text = typeof draft === 'string' ? draft : '';
+  return JSON.stringify({
+    sessionId: sid,
+    charCount: text.length,
+    persisted: sid !== null,
+    storageKey: DRAFTS_KEY,
+  });
+}
+/* v8 ignore stop */

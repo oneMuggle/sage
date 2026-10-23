@@ -117,7 +117,11 @@ def _build_adapter_from_existing(tmp_path: Path) -> InprocSkillAdapter:  # noqa:
     return adapter
 
 
-def test_script_dispatch_denied_before_sandbox(tmp_path: Path):
+@unittest.mock.patch(
+    "backend.skills.skill_md.script_policy.is_script_execution_allowed",
+    return_value=True,
+)
+def test_script_dispatch_denied_before_sandbox(mock_policy, tmp_path: Path):
     """REST/adapter script dispatch defaults to permission enforcement."""
     from backend.adapters.out.skill import InprocSkillAdapter
     from backend.skills.registry import SkillRegistry
@@ -154,7 +158,11 @@ def test_script_dispatch_denied_before_sandbox(tmp_path: Path):
     assert runner.called is False
 
 
-def test_script_dispatch_check_exception_fails_closed(tmp_path: Path):
+@unittest.mock.patch(
+    "backend.skills.skill_md.script_policy.is_script_execution_allowed",
+    return_value=True,
+)
+def test_script_dispatch_check_exception_fails_closed(mock_policy, tmp_path: Path):
     """A permission backend failure must not become an unhandled REST error."""
     from backend.adapters.out.skill import InprocSkillAdapter
     from backend.skills.registry import SkillRegistry
@@ -189,7 +197,13 @@ def test_script_dispatch_check_exception_fails_closed(tmp_path: Path):
     assert runner.called is False
 
 
-def test_script_dispatch_needs_approval_is_not_auto_approved(tmp_path: Path):
+@unittest.mock.patch(
+    "backend.skills.skill_md.script_policy.is_script_execution_allowed",
+    return_value=True,
+)
+def test_script_dispatch_needs_approval_is_not_auto_approved(
+    mock_policy, tmp_path: Path
+):
     """Approval decisions fail closed because adapter has no approval gate."""
     from backend.adapters.out.skill import InprocSkillAdapter
     from backend.skills.registry import SkillRegistry
@@ -259,6 +273,93 @@ def test_script_dispatch_needs_approval_is_not_auto_approved(tmp_path: Path):
     )
 
     result = asyncio.run(adapter.execute("scripted", "", {"script": "run.py"}))
+
+    assert result.success is True
+    assert runner.called is True
+
+
+# =====================================================================
+# T-3: 技能脚本执行开关（第一道闸口，fail-closed）
+# =====================================================================
+
+
+def test_script_dispatch_blocked_when_switch_off(tmp_path: Path):
+    """开关关闭时脚本分发在任何权限检查之前即被拒绝。"""
+    from backend.adapters.out.skill import InprocSkillAdapter
+    from backend.skills.registry import SkillRegistry
+    from backend.skills.skill_md.skill import SkillMdDocument, SkillMdSkill
+
+    class RecordingRunner:
+        def __init__(self):
+            self.called = False
+
+        async def run_script(self, **kwargs):
+            self.called = True
+            raise AssertionError("sandbox must not be reached")
+
+    class ExplodingEnforcer:
+        def check(self, *_args, **_kwargs):
+            raise AssertionError("permission layer must not be reached")
+
+    runner = RecordingRunner()
+    registry = SkillRegistry()
+    registry.register(
+        SkillMdSkill(
+            SkillMdDocument(name="scripted", description="scripted", base_dir=tmp_path),
+            script_runner=runner,
+        )
+    )
+    adapter = InprocSkillAdapter(registry=registry, enforcer_factory=ExplodingEnforcer)
+
+    with unittest.mock.patch(
+        "backend.skills.skill_md.script_policy.is_script_execution_allowed",
+        return_value=False,
+    ):
+        result = asyncio.run(adapter.execute("scripted", "", {"script": "run.py"}))
+
+    assert result.success is False
+    assert "技能脚本执行未启用" in (result.error or "")
+    assert result.metadata["permission_denied"] is True
+    assert runner.called is False
+
+
+def test_script_dispatch_allowed_when_switch_on(tmp_path: Path):
+    """开关打开后脚本分发继续走权限层（此处 FULL_ACCESS 放行）。"""
+    from backend.adapters.out.skill import InprocSkillAdapter
+    from backend.skills.registry import SkillRegistry
+    from backend.skills.skill_md.skill import SkillMdDocument, SkillMdSkill
+    from backend.tools.permissions import PermissionEnforcer, PermissionMode
+
+    class RecordingRunner:
+        def __init__(self):
+            self.called = False
+
+        async def run_script(self, **kwargs):
+            self.called = True
+            from backend.skills.base import SkillResult
+
+            return SkillResult(success=True, content="ok")
+
+    runner = RecordingRunner()
+    registry = SkillRegistry()
+    registry.register(
+        SkillMdSkill(
+            SkillMdDocument(name="scripted", description="scripted", base_dir=tmp_path),
+            script_runner=runner,
+        )
+    )
+    adapter = InprocSkillAdapter(
+        registry=registry,
+        enforcer_factory=lambda: PermissionEnforcer(
+            mode=PermissionMode.FULL_ACCESS, rules=[]
+        ),
+    )
+
+    with unittest.mock.patch(
+        "backend.skills.skill_md.script_policy.is_script_execution_allowed",
+        return_value=True,
+    ):
+        result = asyncio.run(adapter.execute("scripted", "", {"script": "run.py"}))
 
     assert result.success is True
     assert runner.called is True

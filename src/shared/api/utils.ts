@@ -139,3 +139,33 @@ export function handleApiError(error: unknown): ApiException {
     details: { originalError: String(error) },
   });
 }
+
+export function auditSharedApiUtilsGovernance(
+  state: {
+    sessionId?: string;
+    maxRetries?: number;
+  } = {},
+): {
+  module: 'src/shared/api/utils.ts';
+  phase: 'P148';
+  validSessionId: boolean;
+  maxRetries: number;
+  healthy: boolean;
+} {
+  const sessionId =
+    typeof state.sessionId === 'string' && state.sessionId.trim().length > 0
+      ? state.sessionId.trim()
+      : '00000000-0000-0000-0000-000000000148';
+  const validSessionId = isValidSessionId(sessionId);
+  const maxRetries =
+    typeof state.maxRetries === 'number' && Number.isFinite(state.maxRetries)
+      ? Math.max(0, Math.min(10, Math.trunc(state.maxRetries)))
+      : 3;
+  return {
+    module: 'src/shared/api/utils.ts',
+    phase: 'P148',
+    validSessionId,
+    maxRetries,
+    healthy: validSessionId && maxRetries >= 1 && maxRetries <= 10,
+  };
+}

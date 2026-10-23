@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCountdown } from '../useCountdown';
+import { formatCountdownJson, formatCountdownSummary } from '../useCountdown';
 
 describe('useCountdown', () => {
   beforeEach(() => {
@@ -92,5 +93,16 @@ describe('useCountdown', () => {
 
     const { result: inf } = renderHook(() => useCountdown(Number.POSITIVE_INFINITY));
     expect(inf.current).toBe(0);
+  });
+
+  it('formats countdown summary and JSON (Phase P118)', () => {
+    expect(formatCountdownSummary(5, 3, 2)).toBe('ticking · 3/5s · key=2');
+    expect(formatCountdownSummary(5, 0)).toBe('done · 0/5s · key=none');
+    expect(JSON.parse(formatCountdownJson(5, 3, 2))).toEqual({
+      initialSeconds: 5,
+      remaining: 3,
+      active: true,
+      resetKey: 2,
+    });
   });
 });

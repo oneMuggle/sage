@@ -6,7 +6,7 @@
  * 支持点击改进建议一键唤起 M1 任务分解对话框，或点击风险项一键固化为 AI 行为约束规则。
  */
 
-import { AlertTriangle, Check, Copy, Lightbulb, PlusCircle, RefreshCw, Shield } from 'lucide-react';
+import { AlertTriangle, Check, Lightbulb, PlusCircle, RefreshCw, Shield } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
 import { projectApi, type AdviceResult } from '../../shared/api';
@@ -65,7 +65,6 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const [copiedReport, setCopiedReport] = useState(false);
   const [guardingIdx, setGuardingIdx] = useState<number | null>(null);
   const [guardedRisks, setGuardedRisks] = useState<Set<number>>(new Set());
   const [guardedSuggestions, setGuardedSuggestions] = useState<Set<number>>(new Set());
@@ -73,7 +72,9 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
   const [savedL4Report, setSavedL4Report] = useState(false);
   const [savedL3Report, setSavedL3Report] = useState(false);
   const [milestoneRiskIndices, setMilestoneRiskIndices] = useState<Set<number>>(new Set());
-  const [milestoneSuggestionIndices, setMilestoneSuggestionIndices] = useState<Set<number>>(new Set());
+  const [milestoneSuggestionIndices, setMilestoneSuggestionIndices] = useState<Set<number>>(
+    new Set(),
+  );
   const [l3RiskIndices, setL3RiskIndices] = useState<Set<number>>(new Set());
   const [l3SuggestionIndices, setL3SuggestionIndices] = useState<Set<number>>(new Set());
   const [l4RiskIndices, setL4RiskIndices] = useState<Set<number>>(new Set());
@@ -123,7 +124,11 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
     risk: { severity: string; description: string; suggestion?: string | null },
     idx: number,
   ) => {
-    if (guardingIdx === idx || guardedRisks.has(idx) || typeof projectApi?.createConstraint !== 'function') {
+    if (
+      guardingIdx === idx ||
+      guardedRisks.has(idx) ||
+      typeof projectApi?.createConstraint !== 'function'
+    ) {
       return;
     }
     setGuardingIdx(idx);
@@ -179,33 +184,6 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
 
   const { healthScore, summary, risks, suggestions } = advice;
   const hasDetails = risks.length > 0 || suggestions.length > 0;
-
-  const handleCopyAdvisorMarkdown = () => {
-    const lines = [
-      `# AI 项目健康顾问诊断报告 (健康度: ${healthScore}/100)`,
-      '',
-      `> ${summary}`,
-    ];
-    if (risks.length > 0) {
-      lines.push('', '## 风险项');
-      risks.forEach((r) => {
-        lines.push(`- **[${r.severity}]** ${r.description}${r.suggestion ? ` → 建议: ${r.suggestion}` : ''}`);
-      });
-    }
-    if (suggestions.length > 0) {
-      lines.push('', '## 改进建议');
-      suggestions.forEach((s) => {
-        lines.push(`- **[${s.priority}]** ${s.action}${s.reason ? ` (${s.reason})` : ''}`);
-      });
-    }
-    try {
-      void navigator.clipboard?.writeText(lines.join('\n'));
-      setCopiedReport(true);
-      setTimeout(() => setCopiedReport(false), 1800);
-    } catch {
-      // ignore clipboard errors in test/offline mode
-    }
-  };
 
   return (
     <Card data-testid="project-advisor-card">
@@ -263,16 +241,6 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
               className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover hover:text-text"
             >
               {savedL4Report ? '已存 L4' : '存为 L4 资料'}
-            </button>
-            <button
-              type="button"
-              onClick={handleCopyAdvisorMarkdown}
-              data-testid="advisor-copy-md-btn"
-              className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-muted hover:bg-bg-hover hover:text-text"
-              title="复制 AI 顾问诊断报告 Markdown"
-            >
-              {copiedReport ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-              {copiedReport ? '已复制' : '复制诊断'}
             </button>
             <button
               type="button"
@@ -336,7 +304,9 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       data-testid="advisor-risk-filter-all"
                       onClick={() => setHighRiskOnly(false)}
                       className={`rounded border px-1.5 py-0.5 text-ui-2xs ${
-                        !highRiskOnly ? 'border-primary bg-primary/10 text-primary' : 'border-border/60 text-muted'
+                        !highRiskOnly
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border/60 text-muted'
                       }`}
                     >
                       全部
@@ -346,7 +316,9 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                       data-testid="advisor-risk-filter-high"
                       onClick={() => setHighRiskOnly(true)}
                       className={`rounded border px-1.5 py-0.5 text-ui-2xs ${
-                        highRiskOnly ? 'border-primary bg-primary/10 text-primary' : 'border-border/60 text-muted'
+                        highRiskOnly
+                          ? 'border-primary bg-primary/10 text-primary'
+                          : 'border-border/60 text-muted'
                       }`}
                     >
                       仅高危
@@ -681,7 +653,9 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
                         }}
                         className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-border/60 hover:bg-bg-hover text-ui-2xs text-muted hover:text-primary"
                       >
-                        <span>{milestoneSuggestionIndices.has(idx) ? '已转里程碑' : '+里程碑'}</span>
+                        <span>
+                          {milestoneSuggestionIndices.has(idx) ? '已转里程碑' : '+里程碑'}
+                        </span>
                       </button>
                       <button
                         type="button"

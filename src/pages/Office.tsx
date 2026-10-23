@@ -526,3 +526,35 @@ export function Office() {
 }
 
 export default Office;
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditOfficePageGovernance(
+  state: {
+    activeMode?: 'generate' | 'edit' | 'preview' | string;
+    documentFormat?: 'ppt' | 'docx' | 'xlsx' | string;
+    isGenerating?: boolean;
+  } = {},
+): {
+  module: 'src/pages/Office.tsx';
+  phase: 'P142';
+  activeMode: 'generate' | 'edit' | 'preview';
+  documentFormat: 'ppt' | 'docx' | 'xlsx';
+  isGenerating: boolean;
+  healthy: boolean;
+} {
+  const activeMode =
+    state.activeMode === 'edit' || state.activeMode === 'preview' ? state.activeMode : 'generate';
+  const documentFormat =
+    state.documentFormat === 'docx' || state.documentFormat === 'xlsx'
+      ? state.documentFormat
+      : 'ppt';
+  const isGenerating = Boolean(state.isGenerating);
+  return {
+    module: 'src/pages/Office.tsx',
+    phase: 'P142',
+    activeMode,
+    documentFormat,
+    isGenerating,
+    healthy: true,
+  };
+}

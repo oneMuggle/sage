@@ -52,8 +52,6 @@ export function formatSessionUsageJson(usage: SessionUsage | null): string {
 export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBadgeProps) {
   const { t } = useI18n();
   const [usage, setUsage] = useState<SessionUsage | null>(null);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     if (!sessionId) {
@@ -95,25 +93,7 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
         : 'text-text-muted';
 
   /* v8 ignore start */
-  const handleCopyMarkdown = async () => {
-    try {
-      setCopiedMd(true);
-      await navigator.clipboard?.writeText(formatSessionUsageMarkdown(usage));
-      setTimeout(() => setCopiedMd(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
 
-  const handleCopyJson = async () => {
-    try {
-      setCopiedJson(true);
-      await navigator.clipboard?.writeText(formatSessionUsageJson(usage));
-      setTimeout(() => setCopiedJson(false), 1500);
-    } catch {
-      // ignore clipboard errors
-    }
-  };
   /* v8 ignore stop */
 
   return (
@@ -133,22 +113,6 @@ export function SessionUsageBadge({ sessionId, refreshKey = 0 }: SessionUsageBad
           · 🎯 {hitRatePct}%
         </span>
       )}
-      <button
-        type="button"
-        data-testid="session-usage-copy-md"
-        onClick={() => void handleCopyMarkdown()}
-        className="ml-1 rounded border border-border px-1 py-0.5 text-ui-2xs hover:bg-bg-hover"
-      >
-        {copiedMd ? '已复制 MD' : '复制 MD'}
-      </button>
-      <button
-        type="button"
-        data-testid="session-usage-copy-json"
-        onClick={() => void handleCopyJson()}
-        className="rounded border border-border px-1 py-0.5 text-ui-2xs hover:bg-bg-hover"
-      >
-        {copiedJson ? '已复制 JSON' : '复制 JSON'}
-      </button>
     </span>
   );
 }

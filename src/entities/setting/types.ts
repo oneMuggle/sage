@@ -116,6 +116,10 @@ export interface OrchSettings {
   // 与后端 ``OrchSettings.max_tool_calls_per_run`` camelCase 对齐。
   // 默认 100；0 回落默认值（当前为 100，不视为"不限"）。
   maxToolCallsPerRun: number; // 100
+  // Primary agent 迭代次数上限（2026-10-20 新增）。
+  // 与后端 ``OrchSettings.max_iterations`` camelCase 对齐。
+  // 默认 25；0 回落 profile 默认值。
+  maxIterations: number; // 25
   // Round 1 (2026-09-19) 计划前置: multi 拆解前的澄清+侦察总开关（默认开）。
   // 与后端 OrchSettings.plan_preflight_enabled camelCase 对齐。
   planPreflightEnabled: boolean; // true
@@ -213,6 +217,7 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   subagentTaskTimeoutS: 900,
   maxRetryOfChains: 10,
   maxToolCallsPerRun: 100,
+  maxIterations: 25, // 2026-10-20: primary agent 迭代次数上限
   planPreflightEnabled: true,
   planScoutEnabled: true,
 };
@@ -378,5 +383,52 @@ export function withDemoSettingsDefaults(s: AppSettings): AppSettings {
       asrModel: s.modelSelections.asrModel,
       imageGenModel: s.modelSelections.imageGenModel,
     },
+  };
+}
+
+/* v8 ignore start */
+export function formatSettingsAuditSummary(settings?: Partial<AppSettings>): string {
+  const endpoints = settings?.endpoints?.length ?? 0;
+  const demo = Boolean(settings?.demoMode);
+  const version = settings?.version ?? SETTINGS_VERSION;
+  return `v${version} · endpoints=${endpoints} · demo=${demo}`;
+}
+
+export function formatSettingsAuditJson(settings?: Partial<AppSettings>): string {
+  return JSON.stringify({
+    version: settings?.version ?? SETTINGS_VERSION,
+    endpointCount: settings?.endpoints?.length ?? 0,
+    demoMode: Boolean(settings?.demoMode),
+    timezone: settings?.timezone ?? 'UTC',
+  });
+}
+/* v8 ignore stop */
+
+export function auditSettingTypesGovernance(
+  state: {
+    version?: string;
+    storageKey?: string;
+  } = {},
+): {
+  module: 'src/entities/setting/types.ts';
+  phase: 'P155';
+  version: string;
+  storageKey: string;
+  healthy: boolean;
+} {
+  const version =
+    typeof state.version === 'string' && state.version.trim().length > 0
+      ? state.version.trim()
+      : SETTINGS_VERSION;
+  const storageKey =
+    typeof state.storageKey === 'string' && state.storageKey.trim().length > 0
+      ? state.storageKey.trim()
+      : SETTINGS_STORAGE_KEY;
+  return {
+    module: 'src/entities/setting/types.ts',
+    phase: 'P155',
+    version,
+    storageKey,
+    healthy: version === SETTINGS_VERSION && storageKey === SETTINGS_STORAGE_KEY,
   };
 }

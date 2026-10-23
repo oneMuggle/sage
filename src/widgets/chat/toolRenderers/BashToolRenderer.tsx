@@ -52,3 +52,55 @@ export function BashToolRenderer({ tc }: { tc: ToolCall }) {
     </ToolCallCard>
   );
 }
+
+export interface BashToolRendererAuditInput {
+  commandText: string;
+  exitCode: number | null;
+  outputLineCount: number;
+  timedOut: boolean;
+}
+
+export interface BashToolRendererAuditReport {
+  hasCommand: boolean;
+  exitCode: number | null;
+  outputLineCount: number;
+  timedOut: boolean;
+  healthy: boolean;
+  issueCodes: string[];
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function evaluateBashToolRendererAudit(
+  input: BashToolRendererAuditInput,
+): BashToolRendererAuditReport {
+  const hasCommand = input.commandText.trim().length > 0;
+  const outputLineCount = Math.max(0, Math.trunc(input.outputLineCount));
+  const timedOut = Boolean(input.timedOut);
+  const issueCodes: string[] = [];
+
+  if (!hasCommand) {
+    issueCodes.push('empty_bash_command');
+  }
+  if (timedOut) {
+    issueCodes.push('bash_command_timed_out');
+  }
+  if (input.exitCode !== null && input.exitCode !== 0) {
+    issueCodes.push('non_zero_bash_exit_code');
+  }
+
+  return {
+    hasCommand,
+    exitCode: input.exitCode,
+    outputLineCount,
+    timedOut,
+    healthy: issueCodes.length === 0,
+    issueCodes,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function exportBashToolRendererAuditJson(
+  input: BashToolRendererAuditInput,
+): string {
+  return JSON.stringify(evaluateBashToolRendererAudit(input));
+}

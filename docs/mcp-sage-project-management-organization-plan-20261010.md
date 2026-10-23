@@ -1513,3 +1513,861 @@
 - `src/shared/api/todoClient.ts` (`formatTodoListSummary` / `formatTodoListJson`) + `src/shared/api/__tests__/todoClient.test.ts`
 - `src/shared/api/windowControlsClient.ts` (`formatWindowPlatformSummary` / `formatWindowPlatformJson`) + `src/shared/api/__tests__/windowControlsClient.test.ts`
 - `src/shared/api/workspaceApi.ts` (`formatWorkspaceBindingSummary` / `formatWorkspaceBindingJson`) + `src/shared/api/__tests__/workspaceApi.test.ts`
+
+### Phase P114 — Shared Lib Agent State, Endpoint Status, Humanize, Last Workspace, Local Image, Markdown Chunks, Action Failure & Store Diagnostic Formatters (Completed)
+- `src/shared/lib/agentStateMapping.ts` (`formatAgentPhaseSummary` / `formatAgentPhaseJson`) + `src/shared/lib/__tests__/agentStateMapping.test.ts`
+- `src/shared/lib/endpointStatus.ts` (`formatEndpointIssueSummary` / `formatEndpointIssueJson`) + `src/shared/lib/__tests__/endpointStatus.test.ts`
+- `src/shared/lib/humanize.ts` (`formatHumanizedToolSummary` / `formatHumanizedToolJson`) + `src/shared/lib/__tests__/humanize.test.ts`
+- `src/shared/lib/lastWorkspace.ts` (`formatLastWorkspaceSummary` / `formatLastWorkspaceJson`) + `src/shared/lib/__tests__/lastWorkspace.test.ts`
+- `src/shared/lib/localImageSrc.ts` (`formatLocalImageSrcSummary` / `formatLocalImageSrcJson`) + `src/shared/lib/__tests__/localImageSrc.test.ts`
+- `src/shared/lib/markdownChunks.ts` (`formatChunkSplitSummary` / `formatChunkSplitJson`) + `src/shared/lib/__tests__/markdownChunks.test.ts`
+- `src/shared/lib/reportActionFailure.ts` (`formatActionFailureSummary` / `formatActionFailureJson`) + `src/shared/lib/__tests__/reportActionFailure.test.ts`
+- `src/shared/lib/store.ts` (`formatStoreSessionSummary` / `formatStoreSessionJson`) + `src/shared/lib/__tests__/store.test.ts`
+
+### Phase P115（已完成 — Shared Diff, Navigation History, Emacs Keybindings, File Upload, Client Log, Diff Hunks & Session Fork Tree Diagnostic Summary/JSON Helpers）
+
+1. **`src/shared/lib/textDiff.ts` (`src/shared/lib/__tests__/textDiff.test.ts`)**：
+   - 新增 `formatTextDiffSummary(side)` 与 `formatTextDiffJson(side)`，提供字符级 diff 分段统计摘要与结构化 JSON 快照。
+2. **`src/shared/lib/unifiedDiff.ts` (`src/shared/lib/__tests__/unifiedDiff.test.ts`)**：
+   - 新增 `formatUnifiedDiffSummary(diffText, oldLabel, newLabel)` 与 `formatUnifiedDiffJson(diffText, oldLabel, newLabel)`，提供行级 unified diff hunk 与增删行统计摘要与 JSON 快照。
+3. **`src/shared/lib/useNavigationHistory.ts` (`src/shared/lib/__tests__/useNavigationHistory.test.tsx`)**：
+   - 新增 `formatNavHistorySummary(ctx)` 与 `formatNavHistoryJson(ctx)`，提供导航历史上下文前进/后退能力诊断摘要与 JSON 快照。
+4. **`src/shared/lib/hooks/useEmacsKeybindings.ts` (`src/shared/lib/hooks/__tests__/useEmacsKeybindings.test.ts`)**：
+   - 新增 `formatEmacsKeybindingsSummary(text, cursor, enabled)` 与 `formatEmacsKeybindingsJson(text, cursor, enabled)`，提供 Emacs 快捷键缓冲区行边界与分词游标诊断摘要与 JSON 快照。
+5. **`src/shared/lib/hooks/useFileUpload.ts` (`src/shared/lib/hooks/__tests__/useFileUpload.test.ts`)**：
+   - 新增 `formatFileUploadSummary(files, images, isDragOver)` 与 `formatFileUploadJson(files, images, isDragOver)`，提供聊天文件/图片上传队列诊断摘要与 JSON 快照。
+6. **`src/shared/log/client.ts` (`src/shared/log/__tests__/client.test.ts`)**：
+   - 新增 `formatClientLogSummary(level, msg, meta)` 与 `formatClientLogJson(level, msg, meta)`，提供前端渲染进程日志桥接状态诊断摘要与 JSON 快照。
+7. **`src/widgets/chat/changes/diffHunks.ts` (`src/widgets/chat/changes/__tests__/diffHunks.test.ts`)**：
+   - 新增 `formatDiffHunksSummary(hunks)` 与 `formatDiffHunksJson(hunks)`，提供前端 unified diff hunk 切分诊断摘要与 JSON 快照。
+8. **`src/widgets/session/forkTree.ts` (`src/widgets/session/__tests__/forkTree.test.ts`)**：
+   - 新增 `formatForkTreeSummary(nodes)` 与 `formatForkTreeJson(nodes)`，提供会话分叉家族树深度与节点拓扑诊断摘要与 JSON 快照。
+
+### Phase P116（已完成 — Chat Memory Pause, Confirmed Preferences, Office Preview Revision, Scheduled Skill Links, Task Brief & Settings Presentation Diagnostic Summary/JSON Helpers）
+
+1. **`src/features/chat/useSessionMemoryPause.ts` (`src/features/chat/__tests__/useSessionMemoryPause.test.ts`)**：
+   - 新增 `formatSessionMemoryPauseSummary(ids, sessionId, unconfirmed)` 与 `formatSessionMemoryPauseJson(ids, sessionId, unconfirmed)`，提供设备本地会话记忆暂停状态诊断摘要与结构化 JSON 快照。
+2. **`src/features/manage-settings/useConfirmedPreference.ts` (`src/features/manage-settings/__tests__/useConfirmedPreference.test.ts`)**：
+   - 新增 `formatConfirmedPreferenceSummary(key, status, loaded)` 与 `formatConfirmedPreferenceJson(key, status, loaded)`，提供受控偏好确认写入状态诊断摘要与 JSON 快照。
+3. **`src/features/office/previewRevision.ts` (`src/features/office/__tests__/previewRevision.test.ts`)**：
+   - 新增 `formatPreviewRevisionSummary(cacheKey)` 与 `formatPreviewRevisionJson(cacheKey)`，提供 Office 预览内容修订缓存键健康度诊断摘要与 JSON 快照。
+4. **`src/features/scheduled/skillLink.ts` (`src/features/scheduled/__tests__/skillLink.test.ts`)**：
+   - 新增 `formatTaskSkillHealthSummary(health)` 与 `formatTaskSkillHealthJson(health)`，提供定时任务技能引用健康度诊断摘要与 JSON 快照。
+5. **`src/features/task-brief/modelTaskFit.ts` (`src/features/task-brief/__tests__/modelTaskFit.test.ts`)**：
+   - 新增 `formatModelTaskFitSummary(model, needsTools)` 与 `formatModelTaskFitJson(model, needsTools)`，提供候选模型任务适配度与工具能力诊断摘要与 JSON 快照。
+6. **`src/features/task-brief/taskBrief.ts` (`src/features/task-brief/__tests__/taskBrief.test.ts`)**：
+   - 新增 `formatTaskBriefSummary(brief)` 与 `formatTaskBriefJson(brief)`，提供交付任务简报场景与输出格式诊断摘要与 JSON 快照。
+7. **`src/features/task-brief/taskRecipes.ts` (`src/features/task-brief/__tests__/taskRecipes.test.ts`)**：
+   - 新增 `formatTaskRecipesSummary(recipes)` 与 `formatTaskRecipesJson(recipes)`，提供持久化任务配方列表复核状态诊断摘要与 JSON 快照。
+8. **`src/pages/settings/settingsPresentation.ts` (`src/pages/settings/__tests__/settingsPresentation.test.ts`)**：
+   - 新增 `formatSettingsGroupsSummary(available, locale)` 与 `formatSettingsGroupsJson(available, locale)`，提供设置页分组导航与多语言标签诊断摘要与 JSON 快照。
+
+### Phase P117（已完成 — Shared Demo Flag, Desktop Event/Invoke, Gateway, Journal, Knowledge, Learn & Media API Diagnostic Summary/JSON Helpers）
+
+1. **`src/shared/api/demoFlag.ts` (`src/shared/api/__tests__/demoFlag.test.ts`)**：
+   - 新增 `formatDemoFlagSummary()` 与 `formatDemoFlagJson()`，提供演示模式优先级链（override / Electron 注入 / settings store）诊断摘要与结构化 JSON 快照。
+2. **`src/shared/api/desktopEvent.ts` (`src/shared/api/__tests__/desktopEvent.test.ts`)**：
+   - 新增 `formatDesktopEventSummary(event, options)` 与 `formatDesktopEventJson(event, options)`，提供桌面端 IPC 流事件监听通道与 `streamId` 诊断摘要与 JSON 快照。
+3. **`src/shared/api/desktopInvoke.ts` (`src/shared/api/__tests__/desktopInvoke.test.ts`)**：
+   - 新增 `formatDesktopInvokeSummary(cmd, args)` 与 `formatDesktopInvokeJson(cmd, args)`，提供桌面端 IPC 命令调用与演示拦截模式诊断摘要与 JSON 快照。
+4. **`src/shared/api/gatewayApi.ts` (`src/shared/api/__tests__/gatewayApi.test.ts`)**：
+   - 新增 `formatGatewayConfigSummary(platform, config)` 与 `formatGatewayConfigJson(platform, config)`，提供多平台网关（Telegram / Discord / Slack）配置与白名单计数诊断摘要与 JSON 快照。
+5. **`src/shared/api/journalApi.ts` (`src/shared/api/__tests__/journalApi.test.ts`)**：
+   - 新增 `formatJournalFillSummary(req)` 与 `formatJournalFillJson(req)`，提供期刊模板填充请求规格与章节统计诊断摘要与 JSON 快照。
+6. **`src/shared/api/knowledgeApi.ts` (`src/shared/api/__tests__/knowledgeApi.test.ts`)**：
+   - 新增 `formatKnowledgeDocsSummary(docs, query)` 与 `formatKnowledgeDocsJson(docs, query)`，提供知识库兼容层（已由 Wiki 替代）查询状态诊断摘要与 JSON 快照。
+7. **`src/shared/api/learnApi.ts` (`src/shared/api/__tests__/learnApi.test.ts`)**：
+   - 新增 `formatLearnTriggerSummary(sessionId, prompt, response)` 与 `formatLearnTriggerJson(sessionId, prompt, response)`，提供显式后台复盘触发状态诊断摘要与 JSON 快照。
+8. **`src/shared/api/mediaApi.ts` (`src/shared/api/__tests__/mediaApi.test.ts`)**：
+   - 新增 `formatMediaUrlSummary(apiUrl, mimeType)` 与 `formatMediaUrlJson(apiUrl, mimeType)`，提供多模态媒体资源 URL 解析与 MIME 类型诊断摘要与 JSON 快照。
+
+### Phase P118：对话轨迹/设置导航/错误映射/倒计时/侧栏排序/特性解锁/斜杠命令/对话轮次分组审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/features/chat/useConversationTrajectory.ts`：新增 `formatTrajectorySummaryText` 与 `formatTrajectorySummaryJson`，支持一键导出对话轨迹聚合统计摘要（`entries=<totalEntries> · tools=<totalToolCalls> · in=<totalInputTokens> · out=<totalOutputTokens> · latency=<totalLatencyMs>ms`）与 JSON 快照。
+  2. `src/pages/settings/settingsNavigation.ts`：新增 `formatSettingsNavigationSummary` 与 `formatSettingsNavigationJson`，支持一键导出设置标签页书签解析审计摘要（`<requested> -> <resolved> · providers=<providersEnabled>`）与 JSON 快照。
+  3. `src/shared/lib/errorMapping.ts`：新增 `formatLLMErrorSummary` 与 `formatLLMErrorJson`，支持一键导出结构化 LLM 错误映射审计摘要（`<type> · status=<status_code> · retry=<retry_after> · <mappedText>`）与 JSON 快照。
+  4. `src/shared/lib/useCountdown.ts`：新增 `formatCountdownSummary` 与 `formatCountdownJson`，支持一键导出倒计时状态审计摘要（`<ticking|done> · <remaining>/<initialSeconds>s · key=<resetKey>`）与 JSON 快照。
+  5. `src/shared/lib/dnd/siderOrder.ts`：新增 `formatSiderOrderSummary` 与 `formatSiderOrderJson`，支持一键导出侧栏拖拽顺序审计摘要（`count=<length> · ids=[...]`）与 JSON 快照。
+  6. `src/shared/lib/hooks/useFeatureUnlock.ts`：新增 `formatFeatureUnlockSummary` 与 `formatFeatureUnlockJson`，支持一键导出隐藏特性解锁状态审计摘要（`<featureKey> · <unlocked|locked>`）与 JSON 快照。
+  7. `src/widgets/chat/slashCommands.ts`：新增 `formatSlashCommandsSummary` 与 `formatSlashCommandsJson`，支持一键导出斜杠命令与动态 SKILL.md 合并审计摘要（`total=<totalCount> · skills=<skillCount> · names=[...]`）与 JSON 快照。
+  8. `src/widgets/chat/turnGrouping.ts`：新增 `formatTurnItemsSummary` 与 `formatTurnItemsJson`，支持一键导出对话轮次分组审计摘要（`total=<totalItems> · turns=<turnCount> · standalones=<standaloneCount>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 115 项单测全部通过；`release/win7` 8 个测试文件 115 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+
+### Phase P119：Office 编辑差异预览/任务计划契约/通用弹窗/开关控件/输入卡片/对话消息/重试横幅/侧栏分组状态审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/features/office/OfficeEditPreviewDialog.tsx`：新增 `formatOfficeDiffChangeSummary` 与 `formatOfficeDiffChangeJson`，支持一键导出 Office 文档编辑差异条目审计摘要（`<op> · target=<target> · hasBefore=<bool> · hasAfter=<bool>`）与 JSON 快照。
+  2. `src/shared/api/types.ts`：新增 `formatTaskPlanItemSummary` 与 `formatTaskPlanItemJson`，支持一键导出多智能体任务计划节点审计摘要（`<task_id> · agent=<agent_id> · parent=<parent_task_id> · depth=<depth>`）与 JSON 快照。
+  3. `src/shared/ui/Dialog/Dialog.tsx`：新增 `formatDialogConfigSummary` 与 `formatDialogConfigJson`，支持一键导出通用模态弹窗配置审计摘要（`<open|closed> · closeBtn=<showCloseButton> · title=<title>`）与 JSON 快照。
+  4. `src/shared/ui/Switch/Switch.tsx`：新增 `formatSwitchStateSummary` 与 `formatSwitchStateJson`，支持一键导出无障碍开关控件状态审计摘要（`<label> · <checked|unchecked> · disabled=<disabled>`）与 JSON 快照。
+  5. `src/widgets/chat/InputCard.tsx`：新增 `formatInputCardAuditSummary` 与 `formatInputCardAuditJson`，支持一键导出对话输入卡片水位审计摘要（`chars=<len>/4000 · loading=<isLoading> · attachments=<hasAttachments> · overLimit=<overLimit>`）与 JSON 快照。
+  6. `src/widgets/chat/Message.tsx`：新增 `formatMessageAuditSummary` 与 `formatMessageAuditJson`，支持一键导出对话消息气泡渲染状态审计摘要（`<id> · role=<role> · streaming=<isStreaming> · tools=<toolCount> · chars=<len>`）与 JSON 快照。
+  7. `src/widgets/chat/RetryBanner.tsx`：新增 `formatRetryBannerSummary` 与 `formatRetryBannerJson`，支持一键导出 LLM 自动重试横幅状态审计摘要（`attempt=<attempt>/<max_attempts> · type=<error_type> · severity=<severity> · delay=<delay>s`）与 JSON 快照。
+  8. `src/widgets/sidebar/useSiderSections.ts`：新增 `formatSiderSectionsSummary` 与 `formatSiderSectionsJson`，支持一键导出侧栏分区折叠与排序状态审计摘要（`sections=<len> · collapsed=<size> · order=[...]`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 97 项单测全部通过；`release/win7` 8 个测试文件 97 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+
+### Phase P120：主题上下文/产品愿景/自主目标客户端/自主目标状态/自主目标契约/字体选项/模型目录契约/设置项校验审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/app/providers/useTheme.ts`：新增 `formatThemeAuditSummary` 与 `formatThemeAuditJson` 及单测 `useTheme.test.ts`，支持一键导出主题模式与来源审计摘要（`mode=<mode>(<resolved>) · preset=<presetId> · source=<kind>:<id> · css=<count>`）与 JSON 快照。
+  2. `src/content/about/vision.ts`：新增 `formatVisionAuditSummary` 与 `formatVisionAuditJson` 及单测 `vision.test.ts`，支持一键导出产品愿景与四项核心哲学原则审计摘要（`visionChars=<len> · principles=<count> · names=[...]`）与 JSON 快照。
+  3. `src/entities/autonomous-goals/goalApi.ts`：新增 `formatGoalListQuerySummary` 与 `formatGoalListQueryJson` 及单测 `goalApi.test.ts`，支持一键导出闲时自主目标查询参数审计摘要（`path=/api/v1/goals · status=<status> · limit=<limit> · offset=<offset>`）与 JSON 快照。
+  4. `src/entities/autonomous-goals/goalStore.ts`：新增 `formatGoalStoreSummary` 与 `formatGoalStoreJson` 及单测 `goalStore.test.ts`，支持一键导出自主目标 Zustand Store 状态审计摘要（`goals=<count>/<total> · filter=<statusFilter> · loading=<loading> · error=<error>`）与 JSON 快照。
+  5. `src/entities/autonomous-goals/types.ts`：新增 `formatGoalAuditSummary` 与 `formatGoalAuditJson` 及单测 `types.test.ts`，支持一键导出自主目标进度与检查点核验审计摘要（`<id> · status=<status> · progress=<pct>% · checkpoints=<verified>/<total> · deg=<degradation_level>`）与 JSON 快照。
+  6. `src/entities/font/fontOptions.ts`：新增 `formatFontSettingsSummary` 与 `formatFontSettingsJson` 及单测 `fontOptions.test.ts`，支持一键导出 UI 与代码字体配置审计摘要（`ui=<fontUi>@<fontSizeUi>px · code=<fontCode>@<fontSizeCode>px`）与 JSON 快照。
+  7. `src/entities/model-catalog/types.ts`：新增 `formatCandidateModelSummary` 与 `formatCandidateModelJson` 及单测 `types.test.ts`，支持一键导出候选模型目录条目审计摘要（`<provider>/<model_id> · ctx=<native> · source=<source>`）与 JSON 快照。
+  8. `src/entities/setting/settingsValidation.ts`：新增 `formatSettingValidationSummary` 与 `formatSettingValidationJson` 及单测 `settingsValidation.test.ts`，支持一键导出设置项约束校验结果审计摘要（`<key> · <valid|invalid(error)>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P121：设置深度合并/设置元数据/设置契约/Wiki 活动队列/Wiki 质量检查/Wiki 演示数据/Wiki 摄入队列/编排事件订阅审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/entities/setting/deepMerge.ts`：新增 `formatDeepMergeSummary` 与 `formatDeepMergeJson` 及单测 `deepMerge.test.ts`，支持一键导出设置深度合并策略与冲突处理器审计摘要（`policy=<policy> · conflicts=<count> · customHandler=<bool>`）与 JSON 快照。
+  2. `src/entities/setting/metadata.ts`：新增 `formatSettingMetadataSummary` 与 `formatSettingMetadataJson` 及单测 `metadata.test.ts`，支持一键导出设置项元数据作用域与生效时机审计摘要（`<key> · <scope> · <applyMode> · risk=<riskLevel>`）与 JSON 快照。
+  3. `src/entities/setting/types.ts`：新增 `formatSettingsAuditSummary` 与 `formatSettingsAuditJson` 及单测 `types.test.ts`，支持一键导出全局设置版本、端点数量与演示模式审计摘要（`v<version> · endpoints=<count> · demo=<demoMode>`）与 JSON 快照。
+  4. `src/entities/wiki/activity-store.ts`：新增 `formatActivityStoreSummary` 与 `formatActivityStoreJson` 及单测 `activity-store.test.ts`，支持一键导出 Wiki 操作历史队列水位审计摘要（`activities=<total>/<maxItems> · running=<running> · errors=<errors>`）与 JSON 快照。
+  5. `src/entities/wiki/lint-store.ts`：新增 `formatLintStoreSummary` 与 `formatLintStoreJson` 及单测 `lint-store.test.ts`，支持一键导出 Wiki 文档质量检查状态审计摘要（`status=<status> · issues=<count> · warnings=<warnings>`）与 JSON 快照。
+  6. `src/entities/wiki/mock-data.ts`：新增 `formatWikiMockDataSummary` 与 `formatWikiMockDataJson` 及单测 `mock-data.test.ts`，支持一键导出 Wiki 演示数据集规模审计摘要（`lint=<count> · reviews=<count> · activities=<count> · research=<count>`）与 JSON 快照。
+  7. `src/entities/wiki/queue-store.ts`：新增 `formatQueueStoreSummary` 与 `formatQueueStoreJson` 及单测 `queue-store.test.ts`，支持一键导出 Wiki 持久化摄入队列状态审计摘要（`tasks=<count> · pending=<n> · processing=<n> · completed=<n> · failed=<n> · loading=<bool>`）与 JSON 快照。
+  8. `src/entities/orchestration/useOrchEventSubscription.ts`：新增 `formatOrchSubscriptionSummary` 与 `formatOrchSubscriptionJson` 及单测 `useOrchEventSubscription.test.ts`，支持一键导出编排运行事件流订阅水位审计摘要（`run=<runId> · enabled=<enabled> · lastSeq=<lastSeq>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P122：Wiki 深度研究队列/Wiki 审核队列/产物事件计数/消息跳转定位/诊断预览水位/全局设置 Store/Office 进度轮询/项目工作台状态审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/entities/wiki/research-store.ts`：新增 `formatResearchStoreSummary` 与 `formatResearchStoreJson` 及单测 `research-store.test.ts`，支持一键导出 Wiki 深度研究队列状态审计摘要（`tasks=<count> · done=<done> · maxConcurrent=<max> · panel=<open|closed>`）与 JSON 快照。
+  2. `src/entities/wiki/review-store.ts`：新增 `formatReviewStoreSummary` 与 `formatReviewStoreJson` 及单测 `review-store.test.ts`，支持一键导出 Wiki 审核队列未决条目审计摘要（`status=<status> · reviews=<count> · unresolved=<unresolved>`）与 JSON 快照。
+  3. `src/features/artifacts/artifactEventsStore.ts`：新增 `formatArtifactEventsSummary` 与 `formatArtifactEventsJson` 及单测 `artifactEventsStore.test.ts`，支持一键导出会话产物创建事件计数审计摘要（`sessions=<count> · totalEvents=<total>`）与 JSON 快照。
+  4. `src/features/chat/useMessageJump.ts`：新增 `formatMessageJumpSummary` 与 `formatMessageJumpJson` 及单测 `useMessageJump.test.ts`，支持一键导出对话阅读跳转窗口与闪烁目标审计摘要（`window=<effectiveWindow>/<totalMessages> · flash=<flashId>`）与 JSON 快照。
+  5. `src/features/diagnostic/useDiagnosticPreview.ts`：新增 `formatDiagnosticPreviewSummary` 与 `formatDiagnosticPreviewJson` 及单测 `useDiagnosticPreview.test.ts`，支持一键导出诊断日志预览水位审计摘要（`count=<count> · version=<version> · loading=<loading> · error=<hasError>`）与 JSON 快照。
+  6. `src/features/manage-settings/settingsStore.ts`：新增 `formatSettingsStoreSummary` 与 `formatSettingsStoreJson` 及单测 `settingsStore.test.ts`，支持一键导出全局设置 Zustand Store 水位审计摘要（`loading=<isLoading> · endpoints=<count> · demo=<demoMode>`）与 JSON 快照。
+  7. `src/features/office/officeProgress.ts`：新增 `formatOfficeProgressSummary` 与 `formatOfficeProgressJson` 及单测 `officeProgress.test.ts`，支持一键导出 Office 长任务进度轮询快照审计摘要（`task=<taskId> · stage=<stage> · percent=<pct>%`）与 JSON 快照。
+  8. `src/features/project-type/useStudioState.ts`：新增 `formatStudioStateSummary` 与 `formatStudioStateJson` 及单测 `useStudioState.test.ts`，支持一键导出项目原型工作台选中态与向导开关审计摘要（`projects=<count> · active=<id> · archetype=<type> · wizard=<open|closed>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P123：思考占位哨兵/终端面板 Store/Wiki 导入进度/更新日志解析/更新提供商开关/代码审查分节/分栏 Diff 解析/任务树索引审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/features/send-message/thinkingPlaceholder.ts`：新增 `isThinkingPlaceholder`、`formatThinkingPlaceholderSummary` 与 `formatThinkingPlaceholderJson` 及单测 `thinkingPlaceholder.test.ts`，支持一键导出流式思考占位哨兵状态审计摘要（`placeholder=<bool> · length=<len>`）与 JSON 快照。
+  2. `src/features/terminal-panel/terminalPanelStore.ts`：新增 `formatTerminalPanelSummary` 与 `formatTerminalPanelJson` 及单测 `terminalPanelStore.test.ts`，支持一键导出底部终端面板开合、高度与 PTY 会话审计摘要（`panel=<open|closed> · height=<px>px · pty=<ptyId> · error=<hasError>`）与 JSON 快照。
+  3. `src/features/wiki/useWikiIngest.ts`：新增 `formatWikiIngestSummary` 与 `formatWikiIngestJson` 及单测 `useWikiIngest.test.ts`，支持一键导出 Wiki 常驻导入流阶段与进度审计摘要（`ingest=<id> · stage=<stage> · percent=<pct>% · done=<done>`）与 JSON 快照。
+  4. `src/lib/changelogParser.ts`：新增 `formatChangelogAuditSummary` 与 `formatChangelogAuditJson` 及单测 `changelogParser.test.ts`，支持一键导出版本更新日志条目统计审计摘要（`versions=<count> · latest=<version> · major=<m> · improvements=<i> · fixes=<f>`）与 JSON 快照。
+  5. `src/shared/updateFeatureFlag.ts`：新增 `formatUpdateFeatureFlagSummary` 与 `formatUpdateFeatureFlagJson` 及单测 `updateFeatureFlag.test.ts`，支持一键导出可插拔更新源 UI 特性开关审计摘要（`updateProvidersUi=<enabled|disabled>`）与 JSON 快照。
+  6. `src/widgets/chat/changes/reviewSections.ts`：新增 `formatReviewSectionsSummary` 与 `formatReviewSectionsJson` 及单测 `reviewSections.test.ts`，支持一键导出多文件代码审查 Diff 分节统计审计摘要（`files=<count> · binary=<binaryCount> · lines=<totalLines>`）与 JSON 快照。
+  7. `src/widgets/chat/changes/splitDiffParser.ts`：新增 `formatSplitDiffSummary` 与 `formatSplitDiffJson` 及单测 `splitDiffParser.test.ts`，支持一键导出分栏 Unified Diff 行类型统计审计摘要（`rows=<total> · modify=<m> · add=<a> · remove=<r> · context=<c>`）与 JSON 快照。
+  8. `src/widgets/chat/progress/taskTree.ts`：新增 `formatTaskTreeSummary` 与 `formatTaskTreeJson` 及单测 `taskTree.test.ts`，支持一键导出多智能体任务树节点规模与最大深度审计摘要（`nodes=<count> · roots=<rootCount> · maxDepth=<maxDepth>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P124：演示运行时覆盖/Git 状态响应/运行时环境诊断契约/文件路径语言映射/占位模板填充/结构化日志状态/模型上下文窗口计算/忙碌耗时秒表审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/api/demoRuntime.ts`：新增 `formatDemoRuntimeSummary` 与 `formatDemoRuntimeJson` 及单测 `demoRuntime.test.ts`，支持一键导出演示模式运行时覆盖状态审计摘要（`demoOverride=<true|false|unset>`）与 JSON 快照。
+  2. `src/shared/api/gitStatusApi.ts`：新增 `formatGitStatusSummary` 与 `formatGitStatusJson` 及单测 `gitStatusApi.test.ts`，支持一键导出 Git 仓库分支、变更文件数与领先/落后提交审计摘要（`repo=<bool> · branch=<branch> · files=<count> · ahead=<a> · behind=<b>`）与 JSON 快照。
+  3. `src/shared/api/runtimeTypes.ts`：新增 `formatRuntimeDiagnosisSummary` 与 `formatRuntimeDiagnosisJson` 及单测 `runtimeTypes.test.ts`，支持一键导出项目运行时环境诊断等级与清单统计审计摘要（`level=<level> · findings=<count> · manifests=<count> · runtime=<rec>`）与 JSON 快照。
+  4. `src/shared/lib/fileLang.ts`：新增 `formatFileLangSummary` 与 `formatFileLangJson` 及单测 `fileLang.test.ts`，支持一键导出文件路径 Shiki 高亮语言推断审计摘要（`path=<path> · lang=<lang>`）与 JSON 快照。
+  5. `src/shared/lib/fillTemplate.ts`：新增 `formatFillTemplateSummary` 与 `formatFillTemplateJson` 及单测 `fillTemplate.test.ts`，支持一键导出模板占位符填充率与未决变量统计审计摘要（`placeholders=<total> · filled=<filled> · unresolved=<unresolved>`）与 JSON 快照。
+  6. `src/shared/lib/logger.ts`：新增 `formatLoggerAuditSummary` 与 `formatLoggerAuditJson` 及单测 `logger.test.ts`，支持一键导出结构化请求链路日志开关状态审计摘要（`logger=<enabled|disabled>`）与 JSON 快照。
+  7. `src/shared/lib/modelWindows.ts`：新增 `formatModelWindowSummary` 与 `formatModelWindowJson` 及单测 `modelWindows.test.ts`，支持一键导出模型有效上下文窗口与历史预算审计摘要（`window=<effective> · budget=<budget> · auto=<auto>`）与 JSON 快照。
+  8. `src/shared/lib/useElapsedSeconds.ts`：新增 `formatElapsedSecondsSummary` 与 `formatElapsedSecondsJson` 及单测 `useElapsedSeconds.test.ts`，支持一键导出长任务忙碌秒表状态审计摘要（`active=<bool> · elapsed=<sec>s`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P125：移动端断点检测/可拖拽右面板/可拖拽侧边栏/文本截断工具/会话草稿持久化/对话阅读多语言词典/日志级别常量/确认弹窗服务审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/useIsMobile.ts`：新增 `MOBILE_BREAKPOINT_PX`、`formatViewportMobileSummary` 与 `formatViewportMobileJson` 及单测 `useIsMobile.test.ts`，支持一键导出响应式移动端断点判定审计摘要（`viewport=<px>px · mobile=<bool> · breakpoint=768px`）与 JSON 快照。
+  2. `src/shared/lib/useResizablePanel.ts`：新增 `formatResizablePanelSummary` 与 `formatResizablePanelJson` 及单测 `useResizablePanel.test.ts`，支持一键导出可调面板宽度区间、锚定侧与拖拽态审计摘要（`width=<px>px · range=[<min>,<max>] · anchor=<left|right> · dragging=<bool>`）与 JSON 快照。
+  3. `src/shared/lib/useResizableSidebar.ts`：新增 `formatResizableSidebarSummary` 与 `formatResizableSidebarJson` 及单测 `useResizableSidebar.test.ts`，支持一键导出主侧边栏宽度钳制区间与拖拽状态审计摘要（`sidebar=<px>px · range=[260,480] · dragging=<bool>`）与 JSON 快照。
+  4. `src/shared/lib/utils.ts`：新增 `formatTextTruncateSummary` 与 `formatTextTruncateJson` 及单测 `utils.test.ts`，支持一键导出文本截断阈值与预览审计摘要（`length=<len> · max=<max> · truncated=<bool>`）与 JSON 快照。
+  5. `src/shared/lib/hooks/useSessionDraft.ts`：新增 `formatSessionDraftSummary` 与 `formatSessionDraftJson` 及单测 `useSessionDraft.test.ts`，支持一键导出单会话草稿字数与持久化状态审计摘要（`session=<id> · chars=<len> · persisted=<bool>`）与 JSON 快照。
+  6. `src/shared/lib/i18n/chatReading.ts`：新增 `formatChatReadingI18nSummary` 与 `formatChatReadingI18nJson` 及单测 `chatReading.test.ts`，支持一键导出对话阅读中英词典键数对齐审计摘要（`zh=<count> · en=<count> · parity=<bool>`）与 JSON 快照。
+  7. `src/shared/log/levels.ts`：新增 `formatLogLevelSummary` 与 `formatLogLevelJson` 及单测 `levels.test.ts`，支持一键导出前后端共享日志级别权重与限流间隔审计摘要（`level=<level> · rank=<rank> · rateLimitMs=<ms>`）与 JSON 快照。
+  8. `src/shared/ui/ConfirmDialog/confirmService.ts`：新增 `formatConfirmServiceSummary` 与 `formatConfirmServiceJson` 及单测 `confirmService.test.ts`，支持一键导出异步确认弹窗挂起态、危险标记与订阅者计数审计摘要（`pending=<bool> · danger=<bool> · listeners=<count>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P126：Word 内联粗斜体标记渲染/命令面板打开信号/产品状态提示多语言/快捷键注册表/会话工作区上下文访问器/暂停记忆词典/重试横幅词典/Wiki API 客户端审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/InlineMarks.tsx`：新增 `formatInlineMarksSummary` 与 `formatInlineMarksJson` 及单测 `InlineMarks.test.tsx`，支持一键导出 Word 内联粗斜体标记计数与节点分段数审计摘要（`bold=<count> · italic=<count> · segments=<count>`）与 JSON 快照。
+  2. `src/shared/lib/commandPaletteEvents.ts`：新增 `formatCommandPaletteEventSummary` 与 `formatCommandPaletteEventJson` 及单测 `commandPaletteEvents.test.ts`，支持一键导出命令面板跨组件打开信号事件名与派发目标就绪态审计摘要（`event=sage:command-palette:open · targetReady=<bool>`）与 JSON 快照。
+  3. `src/shared/lib/productMessages.ts`：新增 `formatProductMessagesSummary` 与 `formatProductMessagesJson` 及单测 `productMessages.test.ts`，支持一键导出产品状态提示词典语种、键数与中英对齐审计摘要（`locale=<zh|en> · keys=<count> · parity=<bool>`）与 JSON 快照。
+  4. `src/shared/lib/shortcuts.ts`：新增 `formatShortcutRegistrySummary` 与 `formatShortcutRegistryJson` 及单测 `shortcuts.test.ts`，支持一键导出快捷键帮助分组数与条目总数审计摘要（`groups=<count> · shortcuts=<count>`）与 JSON 快照。
+  5. `src/shared/lib/workspaceContext.tsx`：新增 `WorkspaceBindingAuditInput`、`formatWorkspaceBindingSummary` 与 `formatWorkspaceBindingJson` 及单测 `workspaceContext.test.ts`，支持一键导出工作区上下文挂载态、加载状态与路径绑定态审计摘要（`provider=<mounted|unmounted> · status=<status> · bound=<bool>`）与 JSON 快照。
+  6. `src/shared/lib/i18n/pausedMemory.ts`：新增 `formatPausedMemoryI18nSummary` 与 `formatPausedMemoryI18nJson` 及单测 `pausedMemory.test.ts`，支持一键导出暂停长期记忆中英词典键数对齐审计摘要（`zh=<count> · en=<count> · parity=<bool>`）与 JSON 快照。
+  7. `src/shared/lib/i18n/retryBanner.ts`：新增 `formatRetryBannerI18nSummary` 与 `formatRetryBannerI18nJson` 及单测 `retryBanner.test.ts`，支持一键导出 LLM 重试横幅中英词典键数对齐审计摘要（`zh=<count> · en=<count> · parity=<bool>`）与 JSON 快照。
+  8. `src/shared/api-client/wiki.ts`：新增 `WIKI_API_BASE`、`formatWikiApiClientSummary` 与 `formatWikiApiClientJson` 及单测 `wiki.test.ts`，支持一键导出 Wiki 后端 API 基础地址、演示模式拦截态与默认检索上限审计摘要（`baseUrl=http://127.0.0.1:8765/api/v1 · demoBlocked=<bool> · defaultLimit=<n>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P127：国际化聚合词典（en/zh）与分域翻译词典（chatAndSider/settingsAndModels/workspaceAndTools）审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/i18n/en.ts`：新增 `formatEnglishTranslationsSummary` 与 `formatEnglishTranslationsJson` 及单测 `en.test.ts`，支持一键导出英文聚合词典总键数审计摘要（`locale=en · keys=<count>`）与 JSON 快照。
+  2. `src/shared/lib/i18n/zh.ts`：新增 `formatChineseTranslationsSummary` 与 `formatChineseTranslationsJson` 及单测 `zh.test.ts`，支持一键导出中文聚合词典总键数审计摘要（`locale=zh · keys=<count>`）与 JSON 快照。
+  3. `src/shared/lib/i18n/locales/en/chatAndSider.ts`：新增 `formatEnChatAndSiderSummary` 与 `formatEnChatAndSiderJson` 及单测 `chatAndSider.test.ts`，支持一键导出英文对话与侧边栏分域词典键数审计摘要（`domain=en.chatAndSider · keys=<count>`）与 JSON 快照。
+  4. `src/shared/lib/i18n/locales/en/settingsAndModels.ts`：新增 `formatEnSettingsAndModelsSummary` 与 `formatEnSettingsAndModelsJson` 及单测 `settingsAndModels.test.ts`，支持一键导出英文设置与模型分域词典键数审计摘要（`domain=en.settingsAndModels · keys=<count>`）与 JSON 快照。
+  5. `src/shared/lib/i18n/locales/en/workspaceAndTools.ts`：新增 `formatEnWorkspaceAndToolsSummary` 与 `formatEnWorkspaceAndToolsJson` 及单测 `workspaceAndTools.test.ts`，支持一键导出英文工作区与工具分域词典键数审计摘要（`domain=en.workspaceAndTools · keys=<count>`）与 JSON 快照。
+  6. `src/shared/lib/i18n/locales/zh/chatAndSider.ts`：新增 `formatZhChatAndSiderSummary` 与 `formatZhChatAndSiderJson` 及单测 `chatAndSider.test.ts`，支持一键导出中文对话与侧边栏分域词典键数审计摘要（`domain=zh.chatAndSider · keys=<count>`）与 JSON 快照。
+  7. `src/shared/lib/i18n/locales/zh/settingsAndModels.ts`：新增 `formatZhSettingsAndModelsSummary` 与 `formatZhSettingsAndModelsJson` 及单测 `settingsAndModels.test.ts`，支持一键导出中文设置与模型分域词典键数审计摘要（`domain=zh.settingsAndModels · keys=<count>`）与 JSON 快照。
+  8. `src/shared/lib/i18n/locales/zh/workspaceAndTools.ts`：新增 `formatZhWorkspaceAndToolsSummary` 与 `formatZhWorkspaceAndToolsJson` 及单测 `workspaceAndTools.test.ts`，支持一键导出中文工作区与工具分域词典键数审计摘要（`domain=zh.workspaceAndTools · keys=<count>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 9 个测试文件（含 `welcome-translations.test.ts`）全部通过；`release/win7` 9 个测试文件全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P128：I18n 上下文提供器/Wiki 领域类型/Badge/Button/Card/Input/Modal/PageHeader 基础组件审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/shared/lib/i18n/index.tsx`：新增 `formatI18nProviderSummary` 与 `formatI18nProviderJson` 及单测 `index.test.tsx`，支持一键导出 I18nProvider 激活语种、聚合词条数与持久化存储键审计摘要（`locale=<zh|en> · keys=<count> · storageKey=sage.locale`）与 JSON 快照。
+  2. `src/shared/types/wiki.ts`：新增 `formatWikiProjectSummary` 与 `formatWikiProjectJson` 及单测 `wiki.test.ts`，支持一键导出 Wiki 项目绑定状态与最近项目计数审计摘要（`project=<id|none> · bound=<bool> · recent=<n>`）与 JSON 快照。
+  3. `src/shared/ui/Badge.tsx`：新增 `formatBadgeVariantSummary` 与 `formatBadgeVariantJson` 及单测 `Badge.test.tsx`，支持一键导出徽章视觉变体与胶囊圆角形态审计摘要（`variant=<default|secondary|outline|destructive> · pill=true`）与 JSON 快照。
+  4. `src/shared/ui/Button.tsx`：新增 `formatButtonVariantSummary` 与 `formatButtonVariantJson` 及单测 `Button.test.tsx`，支持一键导出按钮视觉变体、尺寸规格与禁用态审计摘要（`variant=<v> · size=<s> · disabled=<bool>`）与 JSON 快照。
+  5. `src/shared/ui/Card.tsx`：新增 `formatCardLayoutSummary` 与 `formatCardLayoutJson` 及单测 `Card.test.tsx`，支持一键导出卡片容器头部、标题与正文区块装配态审计摘要（`header=<bool> · title=<bool> · content=<bool>`）与 JSON 快照。
+  6. `src/shared/ui/Input.tsx`：新增 `formatInputFieldSummary` 与 `formatInputFieldJson` 及单测 `Input.test.tsx`，支持一键导出输入框校验错误态与禁用态审计摘要（`error=<bool> · disabled=<bool>`）与 JSON 快照。
+  7. `src/shared/ui/Modal.tsx`：新增 `formatModalDialogSummary` 与 `formatModalDialogJson` 及单测 `Modal.test.tsx`，支持一键导出模态框打开态、标题栏与底部操作区配置审计摘要（`open=<bool> · title=<bool> · footer=<bool>`）与 JSON 快照。
+  8. `src/shared/ui/PageHeader.tsx`：新增 `formatPageHeaderSummary` 与 `formatPageHeaderJson` 及单测 `PageHeader.test.tsx`，支持一键导出二级页面统一 48px 顶栏标题、副标题与操作区装配态审计摘要（`title=<title> · subtitle=<bool> · actions=<bool>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P129：顶层 Provider 栈 (`AppProviders`/`ErrorBoundary`/`QueryClientProvider`/`ToastProvider`/`providers/index`)、Arena 实体 (`arena/api`/`arena/index`) 与端点协议注册表 (`providerRegistry`) 审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/app/providers/AppProviders.tsx`：新增 `formatAppProvidersSummary` 与 `formatAppProvidersJson` 及单测 `AppProviders.test.tsx`，支持一键导出顶层 Provider 嵌套栈、Toast 兄弟挂载位与子节点装配态审计摘要（`stack=ErrorBoundary>Theme>Font>SessionWorkspace>I18n>QueryClient · toast=sibling · children=<bool>`）与 JSON 快照。
+  2. `src/app/providers/ErrorBoundary.tsx`：新增 `formatErrorBoundarySummary` 与 `formatErrorBoundaryJson` 及单测 `ErrorBoundary.test.tsx`，支持一键导出错误边界捕获状态、异常信息与自定义降级 UI 配置审计摘要（`caught=<bool> · message=<msg|none> · customFallback=<bool>`）与 JSON 快照。
+  3. `src/app/providers/QueryClientProvider.tsx`：新增 `formatQueryClientConfigSummary` 与 `formatQueryClientConfigJson` 及单测 `QueryClientProvider.test.tsx`，支持一键导出 TanStack Query 客户端默认缓存窗口、重试次数与失焦重拉策略审计摘要（`staleTimeMs=<n> · retry=<n> · refetchOnWindowFocus=<bool>`）与 JSON 快照。
+  4. `src/app/providers/ToastProvider.tsx`：新增 `formatToastProviderSummary` 与 `formatToastProviderJson` 及单测 `ToastProvider.test.tsx`，支持一键导出 Sonner Toast 容器明暗主题、弹出方位与驻留时长审计摘要（`theme=<light|dark> · position=top-right · durationMs=<n>`）与 JSON 快照。
+  5. `src/app/providers/index.ts`：新增 `formatProvidersBarrelSummary` 与 `formatProvidersBarrelJson` 及单测 `index.test.ts`，支持一键导出顶层 Provider Barrel 导出符号清单与数量审计摘要（`exports=AppProviders,ErrorBoundary,QueryClientProvider,ThemeProvider,ToastProvider,useTheme · count=6`）与 JSON 快照。
+  6. `src/entities/arena/api.ts`：新增 `formatArenaAccountSummary` 与 `formatArenaAccountJson` 及单测 `api.test.ts`，支持一键导出 Arena 账号池个体状态与累计失败计数审计摘要（`id=<id> · state=<state> · failures=<n>`）与 JSON 快照。
+  7. `src/entities/arena/index.ts`：新增 `formatArenaEntityBarrelSummary` 与 `formatArenaEntityBarrelJson` 及单测 `index.test.ts`，支持一键导出 Arena 实体 Barrel 路由前缀与重导出模块审计摘要（`module=entities/arena · base=/api/v1/arena · reExports=api`）与 JSON 快照。
+  8. `src/entities/endpoint/providerRegistry.ts`：新增 `formatProviderRegistrySummary` 与 `formatProviderRegistryJson` 及单测 `providerRegistry.test.ts`，支持一键导出前端 LLM 协议注册表已注册协议列表与代理路由前缀审计摘要（`providers=<count> · ids=<csv> · proxyBase=/api/v1/llm`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P130：设置注册表 (`settingsRegistry`)、主题预设 (`theme/presets`)、Attention Barrel (`attention/index`)、自主目标视图 (`CreateGoalModal`/`GoalDetailPage`/`GoalListPage`) 与对话附件/实体菜单 (`AtEntityMenu`/`MediaAttachment`) 审计快照与 JSON 导出（已完成）
+- **职责范围**：
+  1. `src/entities/setting/settingsRegistry.ts`：新增 `formatSettingsRegistrySummary` 与 `formatSettingsRegistryJson` 及单测 `settingsRegistry.test.ts`，支持一键导出设置元数据注册表总项数、基础可见项与高级可见项审计摘要（`total=<count> · basic=<count> · advanced=<count>`）与 JSON 快照。
+  2. `src/entities/theme/presets.ts`：新增 `formatThemePresetsSummary` 与 `formatThemePresetsJson` 及单测 `presets.audit.test.ts`，支持一键导出内置主题预设数量、默认主题 ID 与预设 ID 清单审计摘要（`count=<n> · defaultId=indigo · ids=<csv>`）与 JSON 快照。
+  3. `src/features/attention/index.ts`：新增 `formatAttentionBarrelSummary` 与 `formatAttentionBarrelJson` 及单测 `index.test.ts`，支持一键导出 Attention 特性 Barrel 注意力分类数与导出符号计数审计摘要（`module=features/attention · kinds=<n> · exports=8`）与 JSON 快照。
+  4. `src/features/autonomous-goals/CreateGoalModal.tsx`：新增 `formatCreateGoalModalSummary` 与 `formatCreateGoalModalJson` 及单测 `CreateGoalModal.test.tsx`，支持一键导出创建自主目标弹窗打开态、最大执行时长与 Token 预算审计摘要（`open=<bool> · maxHours=<n> · maxTokens=<n>`）与 JSON 快照。
+  5. `src/features/autonomous-goals/GoalDetailPage.tsx`：新增 `formatGoalDetailSummary` 与 `formatGoalDetailJson` 及单测 `GoalDetailPage.test.tsx`，支持一键导出自主目标详情页运行状态、本地化标签与检查点计数审计摘要（`status=<status|none> · label=<label|none> · checkpoints=<n>`）与 JSON 快照。
+  6. `src/features/autonomous-goals/GoalListPage.tsx`：新增 `formatGoalListFilterSummary` 与 `formatGoalListFilterJson` 及单测 `GoalListPage.test.tsx`，支持一键导出自主目标列表筛选器状态、当前目标计数与筛选项数量审计摘要（`filter=<status|all> · goals=<n> · options=7`）与 JSON 快照。
+  7. `src/features/chat/AtEntityMenu.tsx`：新增 `formatAtEntityMenuSummary` 与 `formatAtEntityMenuJson` 及单测 `AtEntityMenu.test.tsx`，支持一键导出 `@` 实体菜单查询词、匹配项计数与支持实体类型审计摘要（`query=<query|empty> · matches=<n> · kinds=memory,wiki,skill,agent`）与 JSON 快照。
+  8. `src/features/chat/MediaAttachment.tsx`：新增 `formatMediaAttachmentSummary` 与 `formatMediaAttachmentJson` 及单测 `MediaAttachment.test.tsx`，支持一键导出对话媒体附件 MIME 类型、渲染类别与说明文字配置审计摘要（`mimeType=<mime> · category=<image|audio|file> · caption=<bool>`）与 JSON 快照。
+- **验证结果**：
+  - `npx vitest run --api=false`：`main` 8 个测试文件 16 项单测全部通过；`release/win7` 8 个测试文件 16 项单测全部通过。
+  - 门禁：`check-font-scale.mjs`、`architecture-check.mjs`、`export-ipc-manifest.mjs --check`、`npx tsc --noEmit`、`npx eslint` 在 `main` 与 `release/win7` 双轨零告警通过。
+### Phase P131 — Chat & Diagnostic Barrels, Journal Panel/Editors & Preference/Office Forms Audit Diagnostics & JSON Export (2026-10-22)
+
+- **Chat & Diagnostic Feature Barrels (`src/features/chat/index.ts`, `src/features/diagnostic/index.ts`)**:
+  - Added `ChatFeatureBarrelAuditReport`, `auditChatFeatureBarrel()`, and `exportChatFeatureBarrelAuditJson()` plus `DiagnosticFeatureBarrelAuditReport`, `auditDiagnosticFeatureBarrel()`, and `exportDiagnosticFeatureBarrelAuditJson()` with `schemaVersion: '1.0'` and `exportedAt: '2026-10-22'`.
+- **Journal Panel, Actions, Content Editor & Barrel (`src/features/journal/JournalPanel.tsx`, `src/features/journal/components/JournalActions.tsx`, `src/features/journal/components/JournalContentEditor.tsx`, `src/features/journal/index.ts`)**:
+  - Added `JournalPanelAuditReport`, `auditJournalPanel()`, and `exportJournalPanelAuditJson()`, `JournalActionsAuditReport`, `auditJournalActions()`, and `exportJournalActionsAuditJson()`, `JournalContentEditorAuditReport`, `auditJournalContentEditor()`, and `exportJournalContentEditorAuditJson()`, plus `JournalFeatureBarrelAuditReport`, `auditJournalFeatureBarrel()`, and `exportJournalFeatureBarrelAuditJson()` (`src/features/journal/` is now 100% covered).
+- **Preference Save Status & Excel/PPT Edit Form Fields (`src/features/manage-settings/PreferenceSaveStatus.tsx`, `src/features/office/ExcelPptEditFormFields.tsx`)**:
+  - Added `PreferenceSaveStatusAuditReport`, `auditPreferenceSaveStatus()`, and `exportPreferenceSaveStatusAuditJson()` plus `ExcelPptEditFormFieldsAuditReport`, `auditExcelPptEditFormFields()`, and `exportExcelPptEditFormFieldsAuditJson()`.
+- **Unit Test Coverage**:
+  - Added 8 unit test suites (`16` tests total) verifying nominal and fallback audit diagnostics and JSON export across all 8 modules.
+### Phase P132 — Office Capability/Snapshot/PDF Dialogs & Barrels, Project-Type Barrel, Send-Message Attachment/Transparency & Workspace Barrel Audit Diagnostics & JSON Export (2026-10-22)
+
+- **Office Capability Bar, Snapshot Panel, PDF Form Fill Dialog & Barrel (`src/features/office/OfficeCapabilityBar.tsx`, `src/features/office/OfficeSnapshotPanel.tsx`, `src/features/office/PdfFormFillDialog.tsx`, `src/features/office/index.ts`)**:
+  - Added `OfficeCapabilityBarAuditReport`, `auditOfficeCapabilityBar()`, and `exportOfficeCapabilityBarAuditJson()`, `OfficeSnapshotPanelAuditReport`, `auditOfficeSnapshotPanel()`, and `exportOfficeSnapshotPanelAuditJson()`, `PdfFormFillDialogAuditReport`, `auditPdfFormFillDialog()`, and `exportPdfFormFillDialogAuditJson()`, plus `OfficeFeatureBarrelAuditReport`, `auditOfficeFeatureBarrel()`, and `exportOfficeFeatureBarrelAuditJson()` with `schemaVersion: '1.0'` and `exportedAt: '2026-10-22'` (`src/features/office/` is now 100% covered).
+- **Project-Type & Workspace Feature Barrels (`src/features/project-type/index.ts`, `src/features/workspace/index.ts`)**:
+  - Added `ProjectTypeFeatureBarrelAuditReport`, `auditProjectTypeFeatureBarrel()`, and `exportProjectTypeFeatureBarrelAuditJson()` plus `WorkspaceFeatureBarrelAuditReport`, `auditWorkspaceFeatureBarrel()`, and `exportWorkspaceFeatureBarrelAuditJson()` (`src/features/project-type/` and `src/features/workspace/` are now 100% covered).
+- **Send-Message Attachment Upload & Transparency Payload Validators (`src/features/send-message/AttachmentUpload.tsx`, `src/features/send-message/transparencyPayload.ts`)**:
+  - Added `AttachmentUploadAuditReport`, `auditAttachmentUpload()`, and `exportAttachmentUploadAuditJson()` plus `TransparencyPayloadAuditReport`, `auditTransparencyPayload()`, and `exportTransparencyPayloadAuditJson()`.
+- **Unit Test Coverage**:
+  - Added 8 unit test suites (`16` tests total) verifying nominal and fallback audit diagnostics and JSON export across all 8 modules.
+
+### Phase P133 — Agents Form/Barrel, Arena Table/Feed/Assist/Barrel & Chat Active-Agent/Compact-Banner Audit Diagnostics & JSON Export (Completed)
+
+- **Target Modules**:
+  - `src/widgets/agents/EditAgentForm.tsx`: Added `EditAgentFormAuditInput`, `EditAgentFormAuditReport`, `evaluateEditAgentFormAudit`, and `exportEditAgentFormAuditJson`.
+  - `src/widgets/agents/index.ts`: Added `AgentsWidgetBarrelAuditInput`, `AgentsWidgetBarrelAuditReport`, `evaluateAgentsWidgetBarrelAudit`, and `exportAgentsWidgetBarrelAuditJson`.
+  - `src/widgets/arena/AccountTable.tsx`: Added `AccountTableAuditInput`, `AccountTableAuditReport`, `evaluateAccountTableAudit`, and `exportAccountTableAuditJson`.
+  - `src/widgets/arena/ObservationFeed.tsx`: Added `ObservationFeedAuditInput`, `ObservationFeedAuditReport`, `evaluateObservationFeedAudit`, and `exportObservationFeedAuditJson`.
+  - `src/widgets/arena/RegisterAssist.tsx`: Added `RegisterAssistAuditInput`, `RegisterAssistAuditReport`, `evaluateRegisterAssistAudit`, and `exportRegisterAssistAuditJson`.
+  - `src/widgets/arena/index.ts`: Added `ArenaWidgetBarrelAuditInput`, `ArenaWidgetBarrelAuditReport`, `evaluateArenaWidgetBarrelAudit`, and `exportArenaWidgetBarrelAuditJson`.
+  - `src/widgets/chat/ActiveAgentIndicator.tsx`: Added `ActiveAgentIndicatorAuditInput`, `ActiveAgentIndicatorAuditReport`, `evaluateActiveAgentIndicatorAudit`, and `exportActiveAgentIndicatorAuditJson`.
+  - `src/widgets/chat/CompactBanner.tsx`: Added `CompactBannerAuditInput`, `CompactBannerAuditReport`, `evaluateCompactBannerAudit`, and `exportCompactBannerAuditJson`.
+- **Unit Tests**:
+  - `src/widgets/agents/__tests__/EditAgentForm.p133.test.ts`
+  - `src/widgets/agents/__tests__/index.p133.test.ts`
+  - `src/widgets/arena/__tests__/AccountTable.p133.test.ts`
+  - `src/widgets/arena/__tests__/ObservationFeed.p133.test.ts`
+  - `src/widgets/arena/__tests__/RegisterAssist.p133.test.ts`
+  - `src/widgets/arena/__tests__/index.p133.test.ts`
+  - `src/widgets/chat/__tests__/ActiveAgentIndicator.p133.test.ts`
+  - `src/widgets/chat/__tests__/CompactBanner.p133.test.ts`
+
+### Phase P134 — Autonomous-Goals Card/Progress & Chat Inline-Error/Attachment/HtmlCodeBlock/KnowledgeChip/MarkdownParts/ReadAloud Audit Diagnostics & JSON Export (Completed)
+
+- **Target Modules**:
+  - `src/widgets/autonomous-goals/GoalCard.tsx`: Added `GoalCardAuditInput`, `GoalCardAuditReport`, `evaluateGoalCardAudit`, and `exportGoalCardAuditJson`.
+  - `src/widgets/autonomous-goals/GoalProgress.tsx`: Added `GoalProgressAuditInput`, `GoalProgressAuditReport`, `evaluateGoalProgressAudit`, and `exportGoalProgressAuditJson`.
+  - `src/widgets/chat/ChatInlineError.tsx`: Added `ChatInlineErrorAuditInput`, `ChatInlineErrorAuditReport`, `evaluateChatInlineErrorAudit`, and `exportChatInlineErrorAuditJson`.
+  - `src/widgets/chat/FileAttachment.tsx`: Added `FileAttachmentAuditInput`, `FileAttachmentAuditReport`, `evaluateFileAttachmentAudit`, and `exportFileAttachmentAuditJson`.
+  - `src/widgets/chat/HtmlCodeBlock.tsx`: Added `HtmlCodeBlockAuditInput`, `HtmlCodeBlockAuditReport`, `evaluateHtmlCodeBlockAudit`, and `exportHtmlCodeBlockAuditJson`.
+  - `src/widgets/chat/KnowledgeChip.tsx`: Added `KnowledgeChipAuditInput`, `KnowledgeChipAuditReport`, `evaluateKnowledgeChipAudit`, and `exportKnowledgeChipAuditJson`.
+  - `src/widgets/chat/MessageMarkdownParts.tsx`: Added `MessageMarkdownPartsAuditInput`, `MessageMarkdownPartsAuditReport`, `evaluateMessageMarkdownPartsAudit`, and `exportMessageMarkdownPartsAuditJson`.
+  - `src/widgets/chat/ReadAloudButton.tsx`: Added `ReadAloudButtonAuditInput`, `ReadAloudButtonAuditReport`, `evaluateReadAloudButtonAudit`, and `exportReadAloudButtonAuditJson`.
+- **Unit Tests**:
+  - `src/widgets/autonomous-goals/__tests__/GoalCard.p134.test.ts`
+  - `src/widgets/autonomous-goals/__tests__/GoalProgress.p134.test.ts`
+  - `src/widgets/chat/__tests__/ChatInlineError.p134.test.ts`
+  - `src/widgets/chat/__tests__/FileAttachment.p134.test.ts`
+  - `src/widgets/chat/__tests__/HtmlCodeBlock.p134.test.ts`
+  - `src/widgets/chat/__tests__/KnowledgeChip.p134.test.ts`
+  - `src/widgets/chat/__tests__/MessageMarkdownParts.p134.test.ts`
+  - `src/widgets/chat/__tests__/ReadAloudButton.p134.test.ts`
+
+### Phase P135 — Chat Right-Panel/Session-Id/Shiki/Slash-Menu/Subagent-Panel/Terminal/Topic-Separator/Truncation Audit Diagnostics & JSON Export (Completed)
+
+- **Target Modules**:
+  - `src/widgets/chat/RightPanelToggle.tsx`: Added `RightPanelToggleAuditInput`, `RightPanelToggleAuditReport`, `evaluateRightPanelToggleAudit`, and `exportRightPanelToggleAuditJson`.
+  - `src/widgets/chat/SessionIdBadge.tsx`: Added `SessionIdBadgeAuditInput`, `SessionIdBadgeAuditReport`, `evaluateSessionIdBadgeAudit`, and `exportSessionIdBadgeAuditJson`.
+  - `src/widgets/chat/ShikiCodeBlock.tsx`: Added `ShikiCodeBlockAuditInput`, `ShikiCodeBlockAuditReport`, `evaluateShikiCodeBlockAudit`, and `exportShikiCodeBlockAuditJson`.
+  - `src/widgets/chat/SlashCommandMenu.tsx`: Added `SlashCommandMenuAuditInput`, `SlashCommandMenuAuditReport`, `evaluateSlashCommandMenuAudit`, and `exportSlashCommandMenuAuditJson`.
+  - `src/widgets/chat/SubagentLivePanel.tsx`: Added `SubagentLivePanelAuditInput`, `SubagentLivePanelAuditReport`, `evaluateSubagentLivePanelAudit`, and `exportSubagentLivePanelAuditJson`.
+  - `src/widgets/chat/TerminalPanel.tsx`: Added `TerminalPanelAuditInput`, `TerminalPanelAuditReport`, `evaluateTerminalPanelAudit`, and `exportTerminalPanelAuditJson`.
+  - `src/widgets/chat/TopicSeparator.tsx`: Added `TopicSeparatorAuditInput`, `TopicSeparatorAuditReport`, `evaluateTopicSeparatorAudit`, and `exportTopicSeparatorAuditJson`.
+  - `src/widgets/chat/TruncationNotice.tsx`: Added `TruncationNoticeAuditInput`, `TruncationNoticeAuditReport`, `evaluateTruncationNoticeAudit`, and `exportTruncationNoticeAuditJson`.
+- **Unit Tests**:
+  - `src/widgets/chat/__tests__/RightPanelToggle.p135.test.ts`
+  - `src/widgets/chat/__tests__/SessionIdBadge.p135.test.ts`
+  - `src/widgets/chat/__tests__/ShikiCodeBlock.p135.test.ts`
+  - `src/widgets/chat/__tests__/SlashCommandMenu.p135.test.ts`
+  - `src/widgets/chat/__tests__/SubagentLivePanel.p135.test.ts`
+  - `src/widgets/chat/__tests__/TerminalPanel.p135.test.ts`
+  - `src/widgets/chat/__tests__/TopicSeparator.p135.test.ts`
+  - `src/widgets/chat/__tests__/TruncationNotice.p135.test.ts`
+
+## Phase P136 — Chat Turn Group, Artifact/Document Preview, Context Input & Tool Renderer Governance Audit (2026-10-22)
+
+- **PRs**: `#2282` (`main` @ `7ec887b8d`) / `#2283` (`release/win7` @ `2e02027fa`) merged for Phase P135; Phase P136 extends deterministic governance audit contracts across 8 chat turn group, barrel export, artifact/document preview, context input, and tool renderer modules:
+  1. `src/widgets/chat/TurnGroup.tsx` (`evaluateTurnGroupGovernanceAudit` + `src/widgets/chat/__tests__/TurnGroup.p136.test.ts`)
+  2. `src/widgets/chat/index.ts` (`evaluateChatWidgetsBarrelGovernanceAudit` + `src/widgets/chat/__tests__/index.p136.test.ts`)
+  3. `src/widgets/chat/artifacts/ArtifactViewer.tsx` (`evaluateArtifactViewerGovernanceAudit` + `src/widgets/chat/artifacts/__tests__/ArtifactViewer.p136.test.ts`)
+  4. `src/widgets/chat/preview/DocumentPreview.tsx` (`evaluateDocumentPreviewGovernanceAudit` + `src/widgets/chat/preview/__tests__/DocumentPreview.p136.test.ts`)
+  5. `src/widgets/chat/progress/ContextInput.tsx` (`evaluateContextInputGovernanceAudit` + `src/widgets/chat/progress/__tests__/ContextInput.p136.test.ts`)
+  6. `src/widgets/chat/toolRenderers/BashToolRenderer.tsx` (`evaluateBashToolRendererGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/BashToolRenderer.p136.test.ts`)
+  7. `src/widgets/chat/toolRenderers/FileWriteToolRenderer.tsx` (`evaluateFileWriteToolRendererGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/FileWriteToolRenderer.p136.test.ts`)
+  8. `src/widgets/chat/toolRenderers/ToolCallCard.tsx` (`evaluateToolCallCardGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/ToolCallCard.p136.test.ts`)
+
+## Phase P137 — Tool Renderer Registry, Command Widget, Evolution Log/Panel & Help Footer Governance Audit (2026-10-22)
+
+- **PRs**: `#2284` (`main` @ `978c18e04`) / `#2285` (`release/win7` @ `7d1c34369`) merged for Phase P136; Phase P137 extends deterministic governance audit contracts across 8 tool renderer registry, command widget, evolution log/panel, and help footer modules:
+  1. `src/widgets/chat/toolRenderers/WebSearchToolRenderer.tsx` (`evaluateWebSearchToolRendererGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/WebSearchToolRenderer.p137.test.ts`)
+  2. `src/widgets/chat/toolRenderers/index.ts` (`evaluateToolRenderersBarrelGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/index.p137.test.ts`)
+  3. `src/widgets/chat/toolRenderers/registry.ts` (`evaluateToolRendererRegistryGovernanceAudit` + `src/widgets/chat/toolRenderers/__tests__/registry.p137.test.ts`)
+  4. `src/widgets/command/commandItems.ts` (`evaluateCommandItemsGovernanceAudit` + `src/widgets/command/__tests__/commandItems.p137.test.ts`)
+  5. `src/widgets/command/index.ts` (`evaluateCommandWidgetBarrelGovernanceAudit` + `src/widgets/command/__tests__/index.p137.test.ts`)
+  6. `src/widgets/evolution/EvolutionLog.tsx` (`evaluateEvolutionLogGovernanceAudit` + `src/widgets/evolution/__tests__/EvolutionLog.p137.test.ts`)
+  7. `src/widgets/evolution/EvolutionPanel.tsx` (`evaluateEvolutionPanelGovernanceAudit` + `src/widgets/evolution/__tests__/EvolutionPanel.p137.test.ts`)
+  8. `src/widgets/help/HelpFooter.tsx` (`evaluateHelpFooterGovernanceAudit` + `src/widgets/help/__tests__/HelpFooter.p137.test.ts`)
+
+## Phase P138 — Help Sidebar, Layout Shell/Sidebar/Divider & Memory/Model-Catalog Barrel Governance Audit (2026-10-22)
+
+- **PRs**: `#2286` (`main` @ `89e7dc922`) / `#2287` (`release/win7` @ `6b1a567dd`) merged for Phase P137; Phase P138 extends deterministic governance audit contracts across 8 help sidebar, layout shell/sidebar/divider, and memory/model-catalog barrel modules:
+  1. `src/widgets/help/HelpSidebar.tsx` (`evaluateHelpSidebarGovernanceAudit` + `src/widgets/help/__tests__/HelpSidebar.p138.test.ts`)
+  2. `src/widgets/layout/Layout.tsx` (`evaluateLayoutShellGovernanceAudit` + `src/widgets/layout/__tests__/Layout.p138.test.ts`)
+  3. `src/widgets/layout/ResizeDivider.tsx` (`evaluateResizeDividerGovernanceAudit` + `src/widgets/layout/__tests__/ResizeDivider.p138.test.ts`)
+  4. `src/widgets/layout/Sidebar.tsx` (`evaluateSidebarGovernanceAudit` + `src/widgets/layout/__tests__/Sidebar.p138.test.ts`)
+  5. `src/widgets/layout/SidebarNavItem.tsx` (`evaluateSidebarNavItemGovernanceAudit` + `src/widgets/layout/__tests__/SidebarNavItem.p138.test.ts`)
+  6. `src/widgets/layout/index.ts` (`evaluateLayoutBarrelGovernanceAudit` + `src/widgets/layout/__tests__/index.p138.test.ts`)
+  7. `src/widgets/memory/index.ts` (`evaluateMemoryWidgetsBarrelGovernanceAudit` + `src/widgets/memory/__tests__/index.p138.test.ts`)
+  8. `src/widgets/model-catalog/index.ts` (`evaluateModelCatalogBarrelGovernanceAudit` + `src/widgets/model-catalog/__tests__/index.p138.test.ts`)
+
+## Phase P139 — Permission/Question/Session/Skills Barrels, SessionItem, VirtualSessionList, MaterialStatusBadge & BackendStatusBanner Governance Audit (2026-10-22)
+
+- **PRs**: `#2294` (`main` @ `39da10f53`) / `#2295` (`release/win7` @ `549dbcdbf`) merged for Phase P138; Phase P139 extends deterministic governance audit contracts across 8 permission/question/session/skills barrel, session list/item, material status badge, and backend status banner modules:
+  1. `src/widgets/permission/index.ts` (`evaluatePermissionBarrelGovernanceAudit` + `src/widgets/permission/__tests__/index.p139.test.ts`)
+  2. `src/widgets/question/index.ts` (`evaluateQuestionBarrelGovernanceAudit` + `src/widgets/question/__tests__/index.p139.test.ts`)
+  3. `src/widgets/session/SessionItem.tsx` (`evaluateSessionItemGovernanceAudit` + `src/widgets/session/__tests__/SessionItem.p139.test.ts`)
+  4. `src/widgets/session/VirtualSessionList.tsx` (`evaluateVirtualSessionListGovernanceAudit` + `src/widgets/session/__tests__/VirtualSessionList.p139.test.ts`)
+  5. `src/widgets/session/index.ts` (`evaluateSessionBarrelGovernanceAudit` + `src/widgets/session/__tests__/index.p139.test.ts`)
+  6. `src/widgets/sidebar/sections/MaterialStatusBadge.tsx` (`evaluateMaterialStatusBadgeGovernanceAudit` + `src/widgets/sidebar/sections/__tests__/MaterialStatusBadge.p139.test.ts`)
+  7. `src/widgets/skills/index.ts` (`evaluateSkillsBarrelGovernanceAudit` + `src/widgets/skills/__tests__/index.p139.test.ts`)
+  8. `src/widgets/system/BackendStatusBanner.tsx` (`evaluateBackendStatusBannerGovernanceAudit` + `src/widgets/system/__tests__/BackendStatusBanner.p139.test.ts`)
+
+## Phase P140 — DeliveryDrawerHost, Wiki Sidebar/Preview/Trees/Barrel, SavedTaskRecipes & TaskModelAdvisor Governance Audit (2026-10-22)
+
+- **PRs**: `#2300` (`main` @ `262b8c600`) / `#2301` (`release/win7` @ `cc09b908c`) merged for Phase P139; Phase P140 completes all `src/widgets/` modules and extends deterministic governance audit contracts across 8 delivery drawer, wiki sidebar/preview/tree/barrel, and task-brief recipe/advisor modules:
+  1. `src/widgets/task-center/DeliveryDrawerHost.tsx` (`evaluateDeliveryDrawerHostGovernanceAudit` + `src/widgets/task-center/__tests__/DeliveryDrawerHost.p140.test.ts`)
+  2. `src/widgets/wiki/IconSidebar.tsx` (`evaluateWikiIconSidebarGovernanceAudit` + `src/widgets/wiki/__tests__/IconSidebar.p140.test.ts`)
+  3. `src/widgets/wiki/MarkdownPreview.tsx` (`evaluateWikiMarkdownPreviewGovernanceAudit` + `src/widgets/wiki/__tests__/MarkdownPreview.p140.test.ts`)
+  4. `src/widgets/wiki/SourcesTree.tsx` (`evaluateWikiSourcesTreeGovernanceAudit` + `src/widgets/wiki/__tests__/SourcesTree.p140.test.ts`)
+  5. `src/widgets/wiki/WikiFileTree.tsx` (`evaluateWikiFileTreeGovernanceAudit` + `src/widgets/wiki/__tests__/WikiFileTree.p140.test.ts`)
+  6. `src/widgets/wiki/index.ts` (`evaluateWikiBarrelGovernanceAudit` + `src/widgets/wiki/__tests__/index.p140.test.ts`)
+  7. `src/features/task-brief/SavedTaskRecipes.tsx` (`evaluateSavedTaskRecipesGovernanceAudit` + `src/features/task-brief/__tests__/SavedTaskRecipes.p140.test.ts`)
+  8. `src/features/task-brief/TaskModelAdvisor.tsx` (`evaluateTaskModelAdvisorGovernanceAudit` + `src/features/task-brief/__tests__/TaskModelAdvisor.p140.test.ts`)
+### Phase P141 — Office Generate Subforms, Word Edit Form Fields, Chat Stream Runtime, Help Tabs/Container & Knowledge Page Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P140 Merged: `#2302` (`main` @ `e14696554deeb729b681ce0d51a50a06159b8cec`), `#2303` (`release/win7` @ `3b354f55b94d06e173fbf26fa4afa46e02727748`)
+  - Phase P141: `feat/project-governance-p141` (`main`) & `feat/win7-project-governance-p141` (`release/win7`)
+- **Scope**:
+  - `src/features/office/OfficeGenerateSubforms.tsx`: Exported `auditOfficeGenerateSubformsGovernance()` validating office document generation subforms (`ppt`, `docx`, `xlsx`), topic/section/sheet count invariants, and structured subform state transitions.
+  - `src/features/office/WordEditFormFields.tsx`: Exported `auditWordEditFormFieldsGovernance()` validating Word edit form field contracts, replacement/insertion operation invariants, and target paragraph/section selectors.
+  - `src/features/send-message/chatStreamRuntime.ts`: Exported `auditChatStreamRuntimeGovernance()` validating SSE chat stream runtime lifecycle, active stream count invariants, and abort/timeout recovery contracts.
+  - `src/pages/Help/AboutTab.tsx`: Exported `auditHelpAboutTabGovernance()` validating Help About tab version/build metadata, runtime environment readiness, and system diagnostic presentation contracts.
+  - `src/pages/Help/ChangelogTab.tsx`: Exported `auditHelpChangelogTabGovernance()` validating Help Changelog tab release entries, version ordering invariants, and release note rendering contracts.
+  - `src/pages/Help/HelpTab.tsx`: Exported `auditHelpGuideTabGovernance()` validating Help Guide tab section navigation, quick-start onboarding topics, and troubleshooting guide contracts.
+  - `src/pages/Help/index.tsx`: Exported `auditHelpPageContainerGovernance()` validating Help page container tab switching (`help`, `changelog`, `about`), active tab persistence, and layout header contracts.
+  - `src/pages/Knowledge.tsx`: Exported `auditKnowledgePageGovernance()` validating Knowledge page workspace wiki integration, document/source count invariants, and search/index synchronization state.
+  - Unit tests: Added 8 dedicated Vitest suites (`OfficeGenerateSubforms.p141.test.ts`, `WordEditFormFields.p141.test.ts`, `chatStreamRuntime.p141.test.ts`, `AboutTab.p141.test.ts`, `ChangelogTab.p141.test.ts`, `HelpTab.p141.test.ts`, `index.p141.test.ts`, `Knowledge.p141.test.ts`).
+### Phase P142 — Office Structured Previews, Memory/Office/Pages Barrel, Plan Approval Bar, Chat Action/Scroll Hooks & Context Turn Limit Select Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P141 Merged: `#2304` (`main` @ `a74926af925cc8b4fabb27be8c7feac63e9c3a80`), `#2305` (`release/win7` @ `f6b15ead3422509a46a267cba0da8f206ae0dfb4`)
+  - Phase P142: `feat/project-governance-p142` (`main`) & `feat/win7-project-governance-p142` (`release/win7`)
+- **Scope**:
+  - `src/features/office/OfficeStructuredPreviews.tsx`: Exported `auditOfficeStructuredPreviewsGovernance()` validating structured office preview rendering (`ppt`, `docx`, `xlsx`), slide/section/sheet count invariants, and preview synchronization state.
+  - `src/pages/Memory.tsx`: Exported `auditMemoryPageGovernance()` validating Memory page entry count invariants, active category filter normalization, and search query state.
+  - `src/pages/Office.tsx`: Exported `auditOfficePageGovernance()` validating Office page mode switching (`generate`, `edit`, `preview`), document format selection (`ppt`, `docx`, `xlsx`), and generation lifecycle state.
+  - `src/pages/index.ts`: Exported `auditPagesBarrelGovernance()` validating top-level page barrel export completeness and lazy route readiness contracts.
+  - `src/pages/chat/PlanApprovalBar.tsx`: Exported `auditPlanApprovalBarGovernance()` validating plan approval step count invariants, approval state transitions (`pending`, `approved`, `rejected`), and plan editability contracts.
+  - `src/pages/chat/useChatMessageActions.ts`: Exported `auditUseChatMessageActionsGovernance()` validating chat message action hook invariants, message count normalization, and regenerate/busy state contracts.
+  - `src/pages/chat/useChatStickyScroll.ts`: Exported `auditUseChatStickyScrollGovernance()` validating chat sticky-scroll hook invariants, scroll threshold bounds, and streaming auto-scroll state.
+  - `src/pages/settings/ContextTurnLimitSelect.tsx`: Exported `auditContextTurnLimitSelectGovernance()` validating context turn limit selector bounds (`minTurnLimit`, `maxTurnLimit`) and selected turn clamping invariants.
+  - Unit tests: Added 8 dedicated Vitest suites (`OfficeStructuredPreviews.p142.test.ts`, `Memory.p142.test.ts`, `Office.p142.test.ts`, `pagesIndex.p142.test.ts`, `PlanApprovalBar.p142.test.ts`, `useChatMessageActions.p142.test.ts`, `useChatStickyScroll.p142.test.ts`, `ContextTurnLimitSelect.p142.test.ts`).
+### Phase P143 — Chat Page, Effective Settings Summary, Font Settings, Memory/Knowledge Settings Tabs, Network Credentials, Usage Stats & Agents API Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P142 Merged: `#2306` (`main` @ `ab4f85f8dfdf765679607b8057ccd0021f99e91e`), `#2307` (`release/win7` @ `a0c76523a129b0dd8a2198dc4e3f644566561a56`)
+  - Phase P143: `feat/project-governance-p143` (`main`) & `feat/win7-project-governance-p143` (`release/win7`)
+- **Scope**:
+  - `src/pages/Chat.tsx`: Exported `auditChatPageGovernance()` validating Chat page top header bar control placement (`headerControlsInTopBar`), clean single-row bottom composer contract (`singleRowBottomComposer`), and active session identifier normalization.
+  - `src/pages/settings/EffectiveSettingsSummary.tsx`: Exported `auditEffectiveSettingsSummaryGovernance()` validating effective provider, permission mode, and context turn limit summary invariants.
+  - `src/pages/settings/FontSettingsSection.tsx`: Exported `auditFontSettingsSectionGovernance()` validating font scale percentage clamping (`minScalePercent`, `maxScalePercent`) and typography scale contracts.
+  - `src/pages/settings/MemoryKnowledgeTab.tsx`: Exported `auditMemoryKnowledgeTabGovernance()` validating memory enablement, knowledge source count normalization, and auto-indexing state.
+  - `src/pages/settings/MemorySettingsTab.tsx`: Exported `auditMemorySettingsTabGovernance()` validating memory retention days bounds and auto-capture toggle invariants.
+  - `src/pages/settings/NetworkCredentialsSection.tsx`: Exported `auditNetworkCredentialsSectionGovernance()` validating configured credential key counts, proxy mode normalization (`system`, `custom`, `none`), and TLS verification invariants.
+  - `src/pages/settings/UsageStatsTab.tsx`: Exported `auditUsageStatsTabGovernance()` validating token usage totals, session count normalization, and reporting window bounds.
+  - `src/shared/api/agentsApi.ts`: Exported `auditAgentsApiGovernance()` validating agent management REST API endpoint coverage and request timeout bounds.
+  - Unit tests: Added 8 dedicated Vitest suites (`Chat.p143.test.ts`, `EffectiveSettingsSummary.p143.test.ts`, `FontSettingsSection.p143.test.ts`, `MemoryKnowledgeTab.p143.test.ts`, `MemorySettingsTab.p143.test.ts`, `NetworkCredentialsSection.p143.test.ts`, `UsageStatsTab.p143.test.ts`, `agentsApi.p143.test.ts`).
+### Phase P144 — Chat API, Demo Chat Script, Demo Fixtures Core/Sessions/Agents/Office, Shared API Barrel, MCP Client & Message API Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P143 Merged: `#2308` (`main` @ `5f5f6e758290114a37a6cb7bd6b73dbc455a4312`), `#2309` (`release/win7` @ `eb70da81efc4bef58c0a2078b29e73a77dcfe460`)
+  - Phase P144: `feat/project-governance-p144` (`main`) & `feat/win7-project-governance-p144` (`release/win7`)
+- **Scope**:
+  - `src/shared/api/chatApi.ts`: Exported `auditChatApiGovernance()` validating active SSE stream count bounds, max concurrency limits, and stream resume capability contracts.
+  - `src/shared/api/demoChatScript.ts`: Exported `auditDemoChatScriptGovernance()` validating demo chat script step count and chunk streaming delay bounds.
+  - `src/shared/api/demoFixturesCore.ts`: Exported `auditDemoFixturesCoreGovernance()` validating demo memory, knowledge document, and skill fixture collection integrity.
+  - `src/shared/api/demoFixturesSessionsAndAgents.ts`: Exported `auditDemoFixturesSessionsAndAgentsGovernance()` validating demo session, agent profile, and scheduled task fixture collection invariants.
+  - `src/shared/api/demoOfficeAndSystemHandlers.ts`: Exported `auditDemoOfficeAndSystemHandlersGovernance()` validating demo office and system IPC/HTTP handler registration count and offline fallback readiness.
+  - `src/shared/api/index.ts`: Exported `auditSharedApiBarrelGovernance()` validating shared API barrel client export completeness and window controls bridge availability.
+  - `src/shared/api/mcpClient.ts`: Exported `auditMcpClientGovernance()` validating MCP server name regex compliance (`MCP_NAME_REGEX`), server discovery/ready state, and registered tool count invariants.
+  - `src/shared/api/messageApi.ts`: Exported `auditMessageApiGovernance()` validating message API endpoint coverage and message feedback support contracts.
+  - Unit tests: Added 8 dedicated Vitest suites (`chatApi.p144.test.ts`, `demoChatScript.p144.test.ts`, `demoFixturesCore.p144.test.ts`, `demoFixturesSessionsAndAgents.p144.test.ts`, `demoOfficeAndSystemHandlers.p144.test.ts`, `apiIndex.p144.test.ts`, `mcpClient.p144.test.ts`, `messageApi.p144.test.ts`).
+### Phase P145 — Orchestration Event Stream, Orchestration Events, Run Control Client, Permission API, Prompt API, Runtime API, Session API & Skill Drafts API Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P144 Merged: `#2310` (`main` @ `a44a6c6cfe9bc689adc9de354f8f1bf11acc4fc5`), `#2311` (`release/win7` @ `6a1a35d40f689656e3da1bfeb7f31ab46148b5ba`)
+  - Phase P145: `feat/project-governance-p145` (`main`) & `feat/win7-project-governance-p145` (`release/win7`)
+- **Scope**:
+  - `src/shared/api/orchEventStream.ts`: Exported `auditOrchEventStreamGovernance()` validating reconnect delay bounds, max reconnect attempts, and IPC fallback stream readiness.
+  - `src/shared/api/orchEvents.ts`: Exported `auditOrchEventsGovernance()` validating orchestration stream `ConnectionStatus` state and active task count invariants.
+  - `src/shared/api/orchRunControlClient.ts`: Exported `auditOrchRunControlClientGovernance()` validating task steer, run cancel, and approval mode control capability contracts.
+  - `src/shared/api/permissionApi.ts`: Exported `auditPermissionApiGovernance()` validating active permission preset (`PERMISSION_PRESETS`), preset count, and session auto-approval count invariants.
+  - `src/shared/api/promptApi.ts`: Exported `auditPromptApiGovernance()` validating prompt template catalog count and custom variable interpolation support.
+  - `src/shared/api/runtimeApi.ts`: Exported `auditRuntimeApiGovernance()` validating runtime backend connectivity and active profile identifier integrity.
+  - `src/shared/api/sessionApi.ts`: Exported `auditSessionApiGovernance()` validating session collection count, Markdown/HTML export readiness, and message search capability contracts.
+  - `src/shared/api/skillDraftsApi.ts`: Exported `auditSkillDraftsApiGovernance()` validating pending skill draft count and accept/reject workflow availability.
+  - Unit tests: Added 8 dedicated Vitest suites (`orchEventStream.p145.test.ts`, `orchEvents.p145.test.ts`, `orchRunControlClient.p145.test.ts`, `permissionApi.p145.test.ts`, `promptApi.p145.test.ts`, `runtimeApi.p145.test.ts`, `sessionApi.p145.test.ts`, `skillDraftsApi.p145.test.ts`).
+### Phase P146 — Skills API, Usage API, Worktree API, Zotero Client, Chat/Domain/Template Types & Shared UI Barrel Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P145 Merged: `#2312` (`main` @ `ec1bc1e8877b72e7175e2813d2053019fe7b01e2`), `#2313` (`release/win7` @ `67dc72273d6a600b2bea2ead9c9116e8fa0c0673`)
+  - Phase P146: `feat/project-governance-p146` (`main`) & `feat/win7-project-governance-p146` (`release/win7`)
+- **Scope**:
+  - `src/shared/api/skillsApi.ts`: Exported `auditSkillsApiGovernance()` validating registered skill count, consolidation scan support, and skill rollback capability contracts.
+  - `src/shared/api/usageApi.ts`: Exported `auditUsageApiGovernance()` validating active usage range (`UsageRange`) normalization and CSV usage export readiness.
+  - `src/shared/api/worktreeApi.ts`: Exported `auditWorktreeApiGovernance()` validating worktree operation mode (`WorktreeMode`) normalization and active worktree count bounds.
+  - `src/shared/api/zoteroClient.ts`: Exported `auditZoteroClientGovernance()` validating Zotero bridge connection state and indexed literature item count invariants.
+  - `src/shared/api/types/chatAndEventTypes.ts`: Exported `auditChatAndEventTypesGovernance()` validating `TaskStatusValue` and `TodoStatus` schema state contracts.
+  - `src/shared/api/types/domainEntityTypes.ts`: Exported `auditDomainEntityTypesGovernance()` validating lane `HeartbeatStatus` and multi-agent `TeamStatus` schema state contracts.
+  - `src/shared/api/types/templateAndTaskTypes.ts`: Exported `auditTemplateAndTaskTypesGovernance()` validating `TodoPriority` and `TodoItemStatus` schema state contracts.
+  - `src/shared/ui/index.ts`: Exported `auditSharedUiBarrelGovernance()` validating shared UI component barrel export count and completeness.
+  - Unit tests: Added 8 dedicated Vitest suites (`skillsApi.p146.test.ts`, `usageApi.p146.test.ts`, `worktreeApi.p146.test.ts`, `zoteroClient.p146.test.ts`, `chatAndEventTypes.p146.test.ts`, `domainEntityTypes.p146.test.ts`, `templateAndTaskTypes.p146.test.ts`, `uiIndex.p146.test.ts`).
+### Phase P147 — Shared UI Progress, Textarea, ConfirmDialogHost, Dialog Barrel, ErrorState Barrel, Lightbox, LoadingState Barrel & PageSkeleton Governance Audit (2026-10-22)
+
+- **PRs**:
+  - Phase P146 Merged: `#2314` (`main` @ `ccd8d727a5c7459f4940719e3758baa10f0ee042`), `#2315` (`release/win7` @ `b3e10ed5c2fdfb2160eba86657eff06e82ed49ef`)
+  - Phase P147: `feat/project-governance-p147` (`main`) & `feat/win7-project-governance-p147` (`release/win7`)
+- **Scope**:
+  - `src/shared/ui/Progress.tsx`: Exported `auditProgressGovernance()` validating progress bar value clamping (`0..100`) and finite numeric bounds.
+  - `src/shared/ui/Textarea.tsx`: Exported `auditTextareaGovernance()` validating textarea visible row clamping (`1..40`) and disabled state normalization.
+  - `src/shared/ui/ConfirmDialog/ConfirmDialogHost.tsx`: Exported `auditConfirmDialogHostGovernance()` validating modal open state and confirmation variant (`default`/`danger`) contracts.
+  - `src/shared/ui/Dialog/index.ts`: Exported `auditDialogBarrelGovernance()` validating Radix dialog primitive barrel export completeness.
+  - `src/shared/ui/ErrorState/index.ts`: Exported `auditErrorStateBarrelGovernance()` validating error state barrel retry callback availability.
+  - `src/shared/ui/Lightbox/Lightbox.tsx`: Exported `auditLightboxGovernance()` validating lightbox zoom scale bounds (`0.25..4`) and image source readiness.
+  - `src/shared/ui/LoadingState/index.ts`: Exported `auditLoadingStateBarrelGovernance()` validating loading state accessible label contract.
+  - `src/shared/ui/PageSkeleton/PageSkeleton.tsx`: Exported `auditPageSkeletonGovernance()` validating skeleton placeholder block count bounds (`1..12`).
+  - Unit tests: Added 8 dedicated Vitest suites (`Progress.p147.test.ts`, `Textarea.p147.test.ts`, `ConfirmDialogHost.p147.test.ts`, `DialogIndex.p147.test.ts`, `ErrorStateIndex.p147.test.ts`, `Lightbox.p147.test.ts`, `LoadingStateIndex.p147.test.ts`, `PageSkeleton.p147.test.ts`).
+
+### Phase P148: ArchetypeBlueprints, Shared API Utils, RetryButton/Tabs/Settings Barrels, Tabs, Tooltip & RightPanel Governance (Completed)
+- **Target Modules**:
+  - `src/features/project-type/archetypeBlueprints.ts`: `auditArchetypeBlueprintsGovernance`
+  - `src/shared/api/utils.ts`: `auditSharedApiUtilsGovernance`
+  - `src/shared/ui/RetryButton/index.ts`: `auditRetryButtonBarrelGovernance`
+  - `src/shared/ui/Tabs/Tabs.tsx`: `auditTabsGovernance`
+  - `src/shared/ui/Tabs/index.ts`: `auditTabsBarrelGovernance`
+  - `src/shared/ui/Tooltip/Tooltip.tsx`: `auditTooltipGovernance`
+  - `src/widgets/chat/RightPanel.tsx`: `auditChatRightPanelGovernance`
+  - `src/pages/settings/index.ts`: `auditSettingsBarrelGovernance`
+- **Unit Test Suites**:
+  - `src/features/project-type/__tests__/archetypeBlueprints.p148.test.ts`
+  - `src/shared/api/__tests__/utils.p148.test.ts`
+  - `src/shared/ui/__tests__/RetryButtonIndex.p148.test.ts`
+  - `src/shared/ui/__tests__/Tabs.p148.test.ts`
+  - `src/shared/ui/__tests__/TabsIndex.p148.test.ts`
+  - `src/shared/ui/__tests__/Tooltip.p148.test.ts`
+  - `src/widgets/chat/__tests__/RightPanel.p148.test.ts`
+  - `src/pages/settings/__tests__/settingsIndex.p148.test.ts`
+- **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
+
+### Phase P149: AttnBadge, BrandLogo, LiveDot, DropdownMenu, ErrorState, LoadingState, RetryButton & Select Governance (Completed)
+- **Target Modules**:
+  - `src/shared/ui/AttnBadge.tsx`: `auditAttnBadgeGovernance`
+  - `src/shared/ui/BrandLogo.tsx`: `auditBrandLogoGovernance`
+  - `src/shared/ui/LiveDot.tsx`: `auditLiveDotGovernance`
+  - `src/shared/ui/DropdownMenu/DropdownMenu.tsx`: `auditDropdownMenuGovernance`
+  - `src/shared/ui/ErrorState/ErrorState.tsx`: `auditErrorStateGovernance`
+  - `src/shared/ui/LoadingState/LoadingState.tsx`: `auditLoadingStateGovernance`
+  - `src/shared/ui/RetryButton/RetryButton.tsx`: `auditRetryButtonGovernance`
+  - `src/shared/ui/Select/Select.tsx`: `auditSelectGovernance`
+- **Unit Test Suites**:
+  - `src/shared/ui/__tests__/AttnBadge.p149.test.ts`
+  - `src/shared/ui/__tests__/BrandLogo.p149.test.ts`
+  - `src/shared/ui/__tests__/LiveDot.p149.test.ts`
+  - `src/shared/ui/__tests__/DropdownMenu.p149.test.ts`
+  - `src/shared/ui/__tests__/ErrorState.p149.test.ts`
+  - `src/shared/ui/__tests__/LoadingState.p149.test.ts`
+  - `src/shared/ui/__tests__/RetryButton.p149.test.ts`
+  - `src/shared/ui/__tests__/Select.p149.test.ts`
+- **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
+
+### Phase P150: MarkdownImage, SelectionQuoteButton, NavGroup, Titlebar, TitlebarActions, WindowControls, TwoStepDelete & SidebarProjectList Governance (Completed)
+- **Target Modules**:
+  - `src/widgets/chat/MarkdownImage.tsx`: `auditMarkdownImageGovernance`
+  - `src/widgets/chat/SelectionQuoteButton.tsx`: `auditSelectionQuoteButtonGovernance`
+  - `src/widgets/layout/NavGroup.tsx`: `auditNavGroupGovernance`
+  - `src/widgets/layout/Titlebar.tsx`: `auditTitlebarGovernance`
+  - `src/widgets/layout/TitlebarActions.tsx`: `auditTitlebarActionsGovernance`
+  - `src/widgets/layout/WindowControls.tsx`: `auditWindowControlsGovernance`
+  - `src/widgets/sidebar/TwoStepDelete.tsx`: `auditTwoStepDeleteGovernance`
+  - `src/widgets/sidebar/sections/SidebarProjectList.tsx`: `auditSidebarProjectListGovernance`
+- **Unit Test Suites**:
+  - `src/widgets/chat/__tests__/MarkdownImage.p150.test.ts`
+  - `src/widgets/chat/__tests__/SelectionQuoteButton.p150.test.ts`
+  - `src/widgets/layout/__tests__/NavGroup.p150.test.ts`
+  - `src/widgets/layout/__tests__/Titlebar.p150.test.ts`
+  - `src/widgets/layout/__tests__/TitlebarActions.p150.test.ts`
+  - `src/widgets/layout/__tests__/WindowControls.p150.test.ts`
+  - `src/widgets/sidebar/__tests__/TwoStepDelete.p150.test.ts`
+  - `src/widgets/sidebar/__tests__/SidebarProjectList.p150.test.ts`
+- **Verification**: `eslint --max-warnings=0`, `vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, and `tsc --noEmit` all pass with 0 errors and 0 deletions across `main` and `release/win7`.
+
+### Phase P151: Application Providers Layer (AppProviders, ErrorBoundary, NavHistory, QueryClient, SessionWorkspace, Theme, Toast & Barrel) Governance Audit (Completed 2026-10-22)
+
+- **Target Modules**:
+  - `src/app/providers/AppProviders.tsx`: `auditAppProvidersGovernance`
+  - `src/app/providers/ErrorBoundary.tsx`: `auditErrorBoundaryGovernance`
+  - `src/app/providers/NavHistoryProvider.tsx`: `auditNavHistoryProviderGovernance`
+  - `src/app/providers/QueryClientProvider.tsx`: `auditQueryClientProviderGovernance`
+  - `src/app/providers/SessionWorkspaceProvider.tsx`: `auditSessionWorkspaceProviderGovernance`
+  - `src/app/providers/ThemeProvider.tsx`: `auditThemeProviderGovernance`
+  - `src/app/providers/ToastProvider.tsx`: `auditToastProviderGovernance`
+  - `src/app/providers/index.ts`: `auditProvidersBarrelGovernance`
+- **Verification**:
+  - Added 8 dedicated Vitest suites (`*.p151.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
+
+### Phase P152: Theme Hook, PlanCard, UpdateDialog, Vision Content, Arena API/Barrel & Autonomous Goal API/Store Governance Audit (Completed 2026-10-22)
+
+- **Target Modules**:
+  - `src/app/providers/useTheme.ts`: `auditUseThemeGovernance`
+  - `src/components/PlanCard.tsx`: `auditPlanCardGovernance`
+  - `src/components/UpdateDialog.tsx`: `auditUpdateDialogGovernance`
+  - `src/content/about/vision.ts`: `auditVisionContentGovernance`
+  - `src/entities/arena/api.ts`: `auditArenaApiGovernance`
+  - `src/entities/arena/index.ts`: `auditArenaEntityBarrelGovernance`
+  - `src/entities/autonomous-goals/goalApi.ts`: `auditGoalApiGovernance`
+  - `src/entities/autonomous-goals/goalStore.ts`: `auditGoalStoreGovernance`
+- **Verification**:
+  - Added 8 dedicated Vitest suites (`*.p152.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
+
+### Phase P153: Autonomous Goal Types, Chat BtwState, Endpoint Provider Registry, Font Options/Storage/Settings & Model Catalog API/Types Governance Audit (Completed 2026-10-22)
+
+- **Target Modules**:
+  - `src/entities/autonomous-goals/types.ts`: `auditAutonomousGoalsTypesGovernance`
+  - `src/entities/chat/btwState.ts`: `auditBtwStateGovernance`
+  - `src/entities/endpoint/providerRegistry.ts`: `auditProviderRegistryGovernance`
+  - `src/entities/font/fontOptions.ts`: `auditFontOptionsGovernance`
+  - `src/entities/font/fontStorage.ts`: `auditFontStorageGovernance`
+  - `src/entities/font/useFontSettings.tsx`: `auditUseFontSettingsGovernance`
+  - `src/entities/model-catalog/api.ts`: `auditModelCatalogApiGovernance`
+  - `src/entities/model-catalog/types.ts`: `auditModelCatalogTypesGovernance`
+- **Verification**:
+  - Added 8 dedicated Vitest suites (`*.p153.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
+
+### Phase P154: Orchestration LaneBoard/RunControl/EventSubscription, Permission/Question State, Scheduled TaskStore, Session Storage & Setting DeepMerge Governance Audit (Completed 2026-10-22)
+
+- **Target Modules**:
+  - `src/entities/orchestration/laneBoardStore.ts`: `auditLaneBoardStoreGovernance`
+  - `src/entities/orchestration/runControlStore.ts`: `auditRunControlStoreGovernance`
+  - `src/entities/orchestration/useOrchEventSubscription.ts`: `auditUseOrchEventSubscriptionGovernance`
+  - `src/entities/permission/permissionState.ts`: `auditPermissionStateGovernance`
+  - `src/entities/question/questionState.ts`: `auditQuestionStateGovernance`
+  - `src/entities/scheduled/taskStore.ts`: `auditScheduledTaskStoreGovernance`
+  - `src/entities/session/storage.ts`: `auditSessionStorageGovernance`
+  - `src/entities/setting/deepMerge.ts`: `auditDeepMergeGovernance`
+- **Verification**:
+  - Added 8 dedicated Vitest suites (`*.p154.test.ts`), passing ESLint (`--max-warnings=0`), Vitest, `tsc --noEmit`, `architecture-check.mjs`, `check-font-scale.mjs`, and `export-ipc-manifest.mjs --check` across `main` and `release/win7`.
+
+### Phase P155: Entity Setting Readiness, Metadata, Adapter, Registry, Validation, Storage, Types & Decorative Presets Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/entities/setting/endpointReadiness.ts` (`auditEndpointReadinessGovernance`)
+  - `src/entities/setting/metadata.ts` (`auditSettingMetadataGovernance`)
+  - `src/entities/setting/settingsAdapter.ts` (`auditSettingsAdapterGovernance`)
+  - `src/entities/setting/settingsRegistry.ts` (`auditSettingsRegistryGovernance`)
+  - `src/entities/setting/settingsValidation.ts` (`auditSettingsValidationGovernance`)
+  - `src/entities/setting/storage.ts` (`auditSettingStorageGovernance`)
+  - `src/entities/setting/types.ts` (`auditSettingTypesGovernance`)
+  - `src/entities/theme/decorative-presets.ts` (`auditDecorativePresetsGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/entities/setting/__tests__/endpointReadiness.p155.test.ts`
+  - `src/entities/setting/__tests__/metadata.p155.test.ts`
+  - `src/entities/setting/__tests__/settingsAdapter.p155.test.ts`
+  - `src/entities/setting/__tests__/settingsRegistry.p155.test.ts`
+  - `src/entities/setting/__tests__/settingsValidation.p155.test.ts`
+  - `src/entities/setting/__tests__/storage.p155.test.ts`
+  - `src/entities/setting/__tests__/types.p155.test.ts`
+  - `src/entities/theme/__tests__/decorativePresets.p155.test.ts`
+
+### Phase P156: Entity Theme Presets, Theme Storage, Todo Store, Welcome Recommendations & Wiki Stores Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/entities/theme/presets.ts` (`auditThemePresetsGovernance`)
+  - `src/entities/theme/storage.ts` (`auditThemeStorageGovernance`)
+  - `src/entities/todo/todoStore.ts` (`auditTodoStoreGovernance`)
+  - `src/entities/welcome/recommendations.ts` (`auditWelcomeRecommendationsGovernance`)
+  - `src/entities/wiki/activity-store.ts` (`auditWikiActivityStoreGovernance`)
+  - `src/entities/wiki/lint-store.ts` (`auditWikiLintStoreGovernance`)
+  - `src/entities/wiki/mock-data.ts` (`auditWikiMockDataGovernance`)
+  - `src/entities/wiki/queue-store.ts` (`auditWikiQueueStoreGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/entities/theme/__tests__/presets.p156.test.ts`
+  - `src/entities/theme/__tests__/storage.p156.test.ts`
+  - `src/entities/todo/__tests__/todoStore.p156.test.ts`
+  - `src/entities/welcome/__tests__/recommendations.p156.test.ts`
+  - `src/entities/wiki/__tests__/activityStore.p156.test.ts`
+  - `src/entities/wiki/__tests__/lintStore.p156.test.ts`
+  - `src/entities/wiki/__tests__/mockData.p156.test.ts`
+  - `src/entities/wiki/__tests__/queueStore.p156.test.ts`
+
+### Phase P157: Entity Wiki Research, Review & Main Store, App Panels Registry & Store, and Artifact API & Stores Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/entities/wiki/research-store.ts` (`auditWikiResearchStoreGovernance`)
+  - `src/entities/wiki/review-store.ts` (`auditWikiReviewStoreGovernance`)
+  - `src/entities/wiki/store.ts` (`auditWikiStoreGovernance`)
+  - `src/features/app-panels/panelRegistry.ts` (`auditPanelRegistryGovernance`)
+  - `src/features/app-panels/usePanelStore.ts` (`auditUsePanelStoreGovernance`)
+  - `src/features/artifacts/artifactApi.ts` (`auditArtifactApiGovernance`)
+  - `src/features/artifacts/artifactEventsStore.ts` (`auditArtifactEventsStoreGovernance`)
+  - `src/features/artifacts/artifactListStore.ts` (`auditArtifactListStoreGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/entities/wiki/__tests__/researchStore.p157.test.ts`
+  - `src/entities/wiki/__tests__/reviewStore.p157.test.ts`
+  - `src/entities/wiki/__tests__/store.p157.test.ts`
+  - `src/features/app-panels/__tests__/panelRegistry.p157.test.ts`
+  - `src/features/app-panels/__tests__/usePanelStore.p157.test.ts`
+  - `src/features/artifacts/__tests__/artifactApi.p157.test.ts`
+  - `src/features/artifacts/__tests__/artifactEventsStore.p157.test.ts`
+  - `src/features/artifacts/__tests__/artifactListStore.p157.test.ts`
+
+### Phase P158: Artifact Hooks, Attention Center & Snapshot, and Autonomous Goals Modal & Pages Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/artifacts/useArtifactContent.ts` (`auditUseArtifactContentGovernance`)
+  - `src/features/artifacts/useArtifacts.ts` (`auditUseArtifactsGovernance`)
+  - `src/features/attention/attentionCenter.ts` (`auditAttentionCenterGovernance`)
+  - `src/features/attention/index.ts` (`auditAttentionBarrelGovernance`)
+  - `src/features/attention/useAttentionSnapshot.ts` (`auditUseAttentionSnapshotGovernance`)
+  - `src/features/autonomous-goals/CreateGoalModal.tsx` (`auditCreateGoalModalGovernance`)
+  - `src/features/autonomous-goals/GoalDetailPage.tsx` (`auditGoalDetailPageGovernance`)
+  - `src/features/autonomous-goals/GoalListPage.tsx` (`auditGoalListPageGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/artifacts/__tests__/useArtifactContent.p158.test.ts`
+  - `src/features/artifacts/__tests__/useArtifacts.p158.test.ts`
+  - `src/features/attention/__tests__/attentionCenter.p158.test.ts`
+  - `src/features/attention/__tests__/attentionIndex.p158.test.ts`
+  - `src/features/attention/__tests__/useAttentionSnapshot.p158.test.ts`
+  - `src/features/autonomous-goals/__tests__/CreateGoalModal.p158.test.ts`
+  - `src/features/autonomous-goals/__tests__/GoalDetailPage.p158.test.ts`
+  - `src/features/autonomous-goals/__tests__/GoalListPage.p158.test.ts`
+
+### Phase P159: Changes List Store and Chat Entity/File Menus, BtwOverlay, MediaAttachment, AnswerVersions, ChatFind & EntityRefs Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/changes/changesListStore.ts` (`auditChangesListStoreGovernance`)
+  - `src/features/chat/AtEntityMenu.tsx` (`auditAtEntityMenuGovernance`)
+  - `src/features/chat/AtFileMenu.tsx` (`auditAtFileMenuGovernance`)
+  - `src/features/chat/BtwOverlay.tsx` (`auditBtwOverlayGovernance`)
+  - `src/features/chat/MediaAttachment.tsx` (`auditMediaAttachmentGovernance`)
+  - `src/features/chat/answerVersions.ts` (`auditAnswerVersionsGovernance`)
+  - `src/features/chat/chatFind.ts` (`auditChatFindGovernance`)
+  - `src/features/chat/entityRefs.ts` (`auditEntityRefsGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/changes/__tests__/changesListStore.p159.test.ts`
+  - `src/features/chat/__tests__/AtEntityMenu.p159.test.ts`
+  - `src/features/chat/__tests__/AtFileMenu.p159.test.ts`
+  - `src/features/chat/__tests__/BtwOverlay.p159.test.ts`
+  - `src/features/chat/__tests__/MediaAttachment.p159.test.ts`
+  - `src/features/chat/__tests__/answerVersions.p159.test.ts`
+  - `src/features/chat/__tests__/chatFind.p159.test.ts`
+  - `src/features/chat/__tests__/entityRefs.p159.test.ts`
+
+### Phase P160: Chat GenerationStats, Feature Barrel, MarkdownText, MessageJumpStore, ReadAloudStore, SelectionQuote, Speech & TextHighlight Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/chat/generationStats.ts` (`auditGenerationStatsGovernance`)
+  - `src/features/chat/index.ts` (`auditChatFeatureBarrelGovernance`)
+  - `src/features/chat/markdownText.ts` (`auditMarkdownTextGovernance`)
+  - `src/features/chat/messageJumpStore.ts` (`auditMessageJumpStoreGovernance`)
+  - `src/features/chat/readAloudStore.ts` (`auditReadAloudStoreGovernance`)
+  - `src/features/chat/selectionQuote.ts` (`auditSelectionQuoteGovernance`)
+  - `src/features/chat/speech.ts` (`auditSpeechGovernance`)
+  - `src/features/chat/textHighlight.ts` (`auditTextHighlightGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/chat/__tests__/generationStats.p160.test.ts`
+  - `src/features/chat/__tests__/chatIndex.p160.test.ts`
+  - `src/features/chat/__tests__/markdownText.p160.test.ts`
+  - `src/features/chat/__tests__/messageJumpStore.p160.test.ts`
+  - `src/features/chat/__tests__/readAloudStore.p160.test.ts`
+  - `src/features/chat/__tests__/selectionQuote.p160.test.ts`
+  - `src/features/chat/__tests__/speech.p160.test.ts`
+  - `src/features/chat/__tests__/textHighlight.p160.test.ts`
+
+### Phase P161: Chat Hooks (UseAtFileQuery, UseBtwCommand, UseConversationOutline, UseConversationTrajectory, UseConversationTurns, UseMessageJump, UseQuoteDraft & UseSessionMemoryPause) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/chat/useAtFileQuery.ts` (`auditUseAtFileQueryGovernance`)
+  - `src/features/chat/useBtwCommand.ts` (`auditUseBtwCommandGovernance`)
+  - `src/features/chat/useConversationOutline.ts` (`auditUseConversationOutlineGovernance`)
+  - `src/features/chat/useConversationTrajectory.ts` (`auditUseConversationTrajectoryGovernance`)
+  - `src/features/chat/useConversationTurns.ts` (`auditUseConversationTurnsGovernance`)
+  - `src/features/chat/useMessageJump.ts` (`auditUseMessageJumpGovernance`)
+  - `src/features/chat/useQuoteDraft.ts` (`auditUseQuoteDraftGovernance`)
+  - `src/features/chat/useSessionMemoryPause.ts` (`auditUseSessionMemoryPauseGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/chat/__tests__/useAtFileQuery.p161.test.ts`
+  - `src/features/chat/__tests__/useBtwCommand.p161.test.ts`
+  - `src/features/chat/__tests__/useConversationOutline.p161.test.ts`
+  - `src/features/chat/__tests__/useConversationTrajectory.p161.test.ts`
+  - `src/features/chat/__tests__/useConversationTurns.p161.test.ts`
+  - `src/features/chat/__tests__/useMessageJump.p161.test.ts`
+  - `src/features/chat/__tests__/useQuoteDraft.p161.test.ts`
+  - `src/features/chat/__tests__/useSessionMemoryPause.p161.test.ts`
+
+### Phase P162: Diagnostic (DiagnosticCard, ExportButton, Barrel, UseDiagnosticPreview) & Journal (JournalPanel, Barrel, UseJournalTemplates, JournalActions) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/diagnostic/DiagnosticCard.tsx` (`auditDiagnosticCardGovernance`)
+  - `src/features/diagnostic/ExportButton.tsx` (`auditExportButtonGovernance`)
+  - `src/features/diagnostic/index.ts` (`auditDiagnosticBarrelGovernance`)
+  - `src/features/diagnostic/useDiagnosticPreview.ts` (`auditUseDiagnosticPreviewGovernance`)
+  - `src/features/journal/JournalPanel.tsx` (`auditJournalPanelGovernance`)
+  - `src/features/journal/index.ts` (`auditJournalBarrelGovernance`)
+  - `src/features/journal/useJournalTemplates.ts` (`auditUseJournalTemplatesGovernance`)
+  - `src/features/journal/components/JournalActions.tsx` (`auditJournalActionsGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/diagnostic/__tests__/DiagnosticCard.p162.test.ts`
+  - `src/features/diagnostic/__tests__/ExportButton.p162.test.ts`
+  - `src/features/diagnostic/__tests__/diagnosticIndex.p162.test.ts`
+  - `src/features/diagnostic/__tests__/useDiagnosticPreview.p162.test.ts`
+  - `src/features/journal/__tests__/JournalPanel.p162.test.ts`
+  - `src/features/journal/__tests__/journalIndex.p162.test.ts`
+  - `src/features/journal/__tests__/useJournalTemplates.p162.test.ts`
+  - `src/features/journal/__tests__/JournalActions.p162.test.ts`
+
+### Phase P163: Journal Components (JournalContentEditor, JournalSpecCard, JournalValidationReport), Manage-Endpoints API & Manage-Settings (PreferenceSaveStatus, SettingsStore, UseConfirmedPreference, UseSettings) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/journal/components/JournalContentEditor.tsx` (`auditJournalContentEditorGovernance`)
+  - `src/features/journal/components/JournalSpecCard.tsx` (`auditJournalSpecCardGovernance`)
+  - `src/features/journal/components/JournalValidationReport.tsx` (`auditJournalValidationReportGovernance`)
+  - `src/features/manage-endpoints/api.ts` (`auditManageEndpointsApiGovernance`)
+  - `src/features/manage-settings/PreferenceSaveStatus.tsx` (`auditPreferenceSaveStatusGovernance`)
+  - `src/features/manage-settings/settingsStore.ts` (`auditSettingsStoreGovernance`)
+  - `src/features/manage-settings/useConfirmedPreference.ts` (`auditUseConfirmedPreferenceGovernance`)
+  - `src/features/manage-settings/useSettings.ts` (`auditUseSettingsGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/journal/__tests__/JournalContentEditor.p163.test.ts`
+  - `src/features/journal/__tests__/JournalSpecCard.p163.test.ts`
+  - `src/features/journal/__tests__/JournalValidationReport.p163.test.ts`
+  - `src/features/manage-endpoints/__tests__/api.p163.test.ts`
+  - `src/features/manage-settings/__tests__/PreferenceSaveStatus.p163.test.ts`
+  - `src/features/manage-settings/__tests__/settingsStore.p163.test.ts`
+  - `src/features/manage-settings/__tests__/useConfirmedPreference.p163.test.ts`
+  - `src/features/manage-settings/__tests__/useSettings.p163.test.ts`
+
+### Phase P164: Office Workbench Components (DocxNativePreview, ExcelPptEditFormFields, OfficeCapabilityBar, OfficeDeliveryDrawer, OfficeDocumentList, OfficeFilePicker, OfficePreviewPanel, OfficeSnapshotPanel) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/office/DocxNativePreview.tsx` (`auditDocxNativePreviewGovernance`)
+  - `src/features/office/ExcelPptEditFormFields.tsx` (`auditExcelPptEditFormFieldsGovernance`)
+  - `src/features/office/OfficeCapabilityBar.tsx` (`auditOfficeCapabilityBarGovernance`)
+  - `src/features/office/OfficeDeliveryDrawer.tsx` (`auditOfficeDeliveryDrawerGovernance`)
+  - `src/features/office/OfficeDocumentList.tsx` (`auditOfficeDocumentListGovernance`)
+  - `src/features/office/OfficeFilePicker.tsx` (`auditOfficeFilePickerGovernance`)
+  - `src/features/office/OfficePreviewPanel.tsx` (`auditOfficePreviewPanelGovernance`)
+  - `src/features/office/OfficeSnapshotPanel.tsx` (`auditOfficeSnapshotPanelGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/office/__tests__/DocxNativePreview.p164.test.ts`
+  - `src/features/office/__tests__/ExcelPptEditFormFields.p164.test.ts`
+  - `src/features/office/__tests__/OfficeCapabilityBar.p164.test.ts`
+  - `src/features/office/__tests__/OfficeDeliveryDrawer.p164.test.ts`
+  - `src/features/office/__tests__/OfficeDocumentList.p164.test.ts`
+  - `src/features/office/__tests__/OfficeFilePicker.p164.test.ts`
+  - `src/features/office/__tests__/OfficePreviewPanel.p164.test.ts`
+  - `src/features/office/__tests__/OfficeSnapshotPanel.p164.test.ts`
+
+### Phase P165: Office Remaining Modules (OfficeStagingInspector, PdfFormFillDialog, ImportOfficeReference, Barrel, OfficeCapabilities, OfficeProgress, PreviewRevision, UseOfficeDocuments) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/office/OfficeStagingInspector.tsx` (`auditOfficeStagingInspectorGovernance`)
+  - `src/features/office/PdfFormFillDialog.tsx` (`auditPdfFormFillDialogGovernance`)
+  - `src/features/office/importOfficeReference.ts` (`auditImportOfficeReferenceGovernance`)
+  - `src/features/office/index.ts` (`auditOfficeFeatureBarrelGovernance`)
+  - `src/features/office/officeCapabilities.ts` (`auditOfficeCapabilitiesGovernance`)
+  - `src/features/office/officeProgress.ts` (`auditOfficeProgressGovernance`)
+  - `src/features/office/previewRevision.ts` (`auditPreviewRevisionGovernance`)
+  - `src/features/office/useOfficeDocuments.ts` (`auditUseOfficeDocumentsGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/office/__tests__/OfficeStagingInspector.p165.test.ts`
+  - `src/features/office/__tests__/PdfFormFillDialog.p165.test.ts`
+  - `src/features/office/__tests__/importOfficeReference.p165.test.ts`
+  - `src/features/office/__tests__/officeIndex.p165.test.ts`
+  - `src/features/office/__tests__/officeCapabilities.p165.test.ts`
+  - `src/features/office/__tests__/officeProgress.p165.test.ts`
+  - `src/features/office/__tests__/previewRevision.p165.test.ts`
+  - `src/features/office/__tests__/useOfficeDocuments.p165.test.ts`
+
+### Phase P166: Onboarding, Project-Type & Right-Panel Modules (OnboardingWizard, GovernanceRulesPanel, ProjectTypeBadge, ProjectTypeSelector, TypeDetectionPreview, Barrel, UseStudioState, RightPanelStore) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/onboarding/OnboardingWizard.tsx` (`auditOnboardingWizardGovernance`)
+  - `src/features/project-type/GovernanceRulesPanel.tsx` (`auditGovernanceRulesPanelGovernance`)
+  - `src/features/project-type/ProjectTypeBadge.tsx` (`auditProjectTypeBadgeGovernance`)
+  - `src/features/project-type/ProjectTypeSelector.tsx` (`auditProjectTypeSelectorGovernance`)
+  - `src/features/project-type/TypeDetectionPreview.tsx` (`auditTypeDetectionPreviewGovernance`)
+  - `src/features/project-type/index.ts` (`auditProjectTypeBarrelGovernance`)
+  - `src/features/project-type/useStudioState.ts` (`auditUseStudioStateGovernance`)
+  - `src/features/right-panel/rightPanelStore.ts` (`auditRightPanelStoreGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/onboarding/__tests__/OnboardingWizard.p166.test.ts`
+  - `src/features/project-type/__tests__/GovernanceRulesPanel.p166.test.ts`
+  - `src/features/project-type/__tests__/ProjectTypeBadge.p166.test.ts`
+  - `src/features/project-type/__tests__/ProjectTypeSelector.p166.test.ts`
+  - `src/features/project-type/__tests__/TypeDetectionPreview.p166.test.ts`
+  - `src/features/project-type/__tests__/projectTypeIndex.p166.test.ts`
+  - `src/features/project-type/__tests__/useStudioState.p166.test.ts`
+  - `src/features/right-panel/__tests__/rightPanelStore.p166.test.ts`

@@ -122,3 +122,32 @@ export function buildPermissionStateAuditJson(
     snapshot: buildPermissionStateAuditSnapshot(input),
   });
 }
+
+export function auditPermissionStateGovernance(
+  state: {
+    pendingCount?: number;
+    maxQueueDepth?: number;
+  } = {},
+): {
+  module: 'src/entities/permission/permissionState.ts';
+  phase: 'P154';
+  pendingCount: number;
+  maxQueueDepth: number;
+  healthy: boolean;
+} {
+  const pendingCount =
+    typeof state.pendingCount === 'number' && Number.isFinite(state.pendingCount)
+      ? Math.max(0, Math.trunc(state.pendingCount))
+      : 0;
+  const maxQueueDepth =
+    typeof state.maxQueueDepth === 'number' && Number.isFinite(state.maxQueueDepth)
+      ? Math.max(1, Math.min(200, Math.trunc(state.maxQueueDepth)))
+      : 50;
+  return {
+    module: 'src/entities/permission/permissionState.ts',
+    phase: 'P154',
+    pendingCount,
+    maxQueueDepth,
+    healthy: pendingCount <= maxQueueDepth,
+  };
+}

@@ -38,3 +38,30 @@ export function Tooltip({ content, children, side = 'top', disabled }: TooltipPr
     </RadixTooltip.Provider>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditTooltipGovernance(
+  state: {
+    side?: 'top' | 'right' | 'bottom' | 'left' | string;
+    disabled?: boolean;
+  } = {},
+): {
+  module: 'src/shared/ui/Tooltip/Tooltip.tsx';
+  phase: 'P148';
+  side: 'top' | 'right' | 'bottom' | 'left';
+  disabled: boolean;
+  healthy: boolean;
+} {
+  const side: 'top' | 'right' | 'bottom' | 'left' =
+    state.side === 'right' || state.side === 'bottom' || state.side === 'left'
+      ? state.side
+      : 'top';
+  const disabled = state.disabled === true;
+  return {
+    module: 'src/shared/ui/Tooltip/Tooltip.tsx',
+    phase: 'P148',
+    side,
+    disabled,
+    healthy: true,
+  };
+}

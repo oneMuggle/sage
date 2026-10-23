@@ -171,3 +171,29 @@ export function buildFontStorageAuditJson(input: FontStorageAuditInput = {}): st
     snapshot: buildFontStorageAuditSnapshot(input),
   });
 }
+
+export function auditFontStorageGovernance(
+  state: {
+    storageKey?: string;
+    hasPersistedPayload?: boolean;
+  } = {},
+): {
+  module: 'src/entities/font/fontStorage.ts';
+  phase: 'P153';
+  storageKey: string;
+  hasPersistedPayload: boolean;
+  healthy: boolean;
+} {
+  const storageKey =
+    typeof state.storageKey === 'string' && state.storageKey.trim().length > 0
+      ? state.storageKey.trim()
+      : FONT_STORAGE_KEY;
+  const hasPersistedPayload = state.hasPersistedPayload !== false;
+  return {
+    module: 'src/entities/font/fontStorage.ts',
+    phase: 'P153',
+    storageKey,
+    hasPersistedPayload,
+    healthy: storageKey === FONT_STORAGE_KEY && hasPersistedPayload,
+  };
+}

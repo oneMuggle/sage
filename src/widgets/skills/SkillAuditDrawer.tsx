@@ -68,41 +68,9 @@ export function SkillAuditDrawer({
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [rollingBack, setRollingBack] = useState(false);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   /* v8 ignore start */
-  const handleCopyAuditMd = useCallback(async () => {
-    const lines = [
-      `# 技能变更历史 · ${skillName}`,
-      '',
-      `- 记录数: ${entries.length}`,
-      '',
-      ...entries.map(
-        (e) =>
-          `- **${formatTime(e.created_at)}** · ${ACTION_LABELS[e.action] ?? e.action} (${ACTOR_LABELS[e.actor] ?? e.actor})${e.source ? ` · \`${e.source}\`` : ''}`,
-      ),
-    ];
-    setCopiedMd(true);
-    try {
-      await navigator.clipboard?.writeText(lines.join('\n'));
-    } catch {
-      // ignore clipboard errors
-    }
-    setTimeout(() => setCopiedMd(false), 1500);
-  }, [skillName, entries]);
 
-  const handleCopyAuditJson = useCallback(async () => {
-    setCopiedJson(true);
-    try {
-      await navigator.clipboard?.writeText(
-        JSON.stringify({ skill_name: skillName, entries }, null, 2),
-      );
-    } catch {
-      // ignore clipboard errors
-    }
-    setTimeout(() => setCopiedJson(false), 1500);
-  }, [skillName, entries]);
   /* v8 ignore stop */
 
   const load = useCallback(async () => {
@@ -191,24 +159,6 @@ export function SkillAuditDrawer({
         </div>
 
         <DialogFooter>
-          <button
-            type="button"
-            onClick={handleCopyAuditMd}
-            disabled={entries.length === 0 || loading || loadError !== null}
-            data-testid="skill-audit-copy-md-btn"
-            className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-          >
-            {copiedMd ? '✓ 已复制MD' : '复制审计MD'}
-          </button>
-          <button
-            type="button"
-            onClick={handleCopyAuditJson}
-            disabled={entries.length === 0 || loading || loadError !== null}
-            data-testid="skill-audit-copy-json-btn"
-            className="px-2 py-1 text-xs rounded border border-border text-text-secondary hover:bg-bg-subtle disabled:opacity-50"
-          >
-            {copiedJson ? '✓ 已复制JSON' : '复制审计JSON'}
-          </button>
           <button
             type="button"
             onClick={handleRollback}

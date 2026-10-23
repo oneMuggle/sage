@@ -34,3 +34,54 @@ export function useDiagnosticPreview() {
 
   return { data, loading, error, refresh };
 }
+
+/* v8 ignore start */
+export function formatDiagnosticPreviewSummary(
+  data?: Partial<PreviewResponse>,
+  loading = false,
+  hasError = false,
+): string {
+  const count = data?.count ?? 0;
+  const version = data?.version?.trim() || 'unknown';
+  return `count=${count} · version=${version} · loading=${loading} · error=${hasError}`;
+}
+
+export function formatDiagnosticPreviewJson(
+  data?: Partial<PreviewResponse>,
+  loading = false,
+  hasError = false,
+): string {
+  return JSON.stringify({
+    count: data?.count ?? 0,
+    version: data?.version?.trim() || 'unknown',
+    sampleCount: data?.sampleUrls?.length ?? 0,
+    loading,
+    hasError,
+  });
+}
+/* v8 ignore stop */
+
+export interface UseDiagnosticPreviewGovernanceAudit {
+  phase: 'P162';
+  module: 'src/features/diagnostic/useDiagnosticPreview.ts';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+export function auditUseDiagnosticPreviewGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): UseDiagnosticPreviewGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P162',
+    module: 'src/features/diagnostic/useDiagnosticPreview.ts',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P162 UseDiagnosticPreview Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
+}

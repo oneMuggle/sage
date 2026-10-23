@@ -91,3 +91,25 @@ def test_agent_event_to_dict_excludes_reasoning_when_none():
     d = evt.to_dict()
     assert "reasoning" not in d
     assert d["content"] == "Answer"
+
+
+def test_agent_event_step_index_defaults_to_zero():
+    """step_index defaults to 0 for single-step behavior."""
+    evt = AgentEvent(state=AgentState.THINKING, iteration=0)
+    assert evt.step_index == 0
+
+
+def test_agent_event_step_done_carries_step_index():
+    """STEP_DONE events carry the completed step index."""
+    evt = AgentEvent(state=AgentState.STEP_DONE, iteration=2, step_index=2)
+    assert evt.state == AgentState.STEP_DONE
+    assert evt.step_index == 2
+
+
+def test_agent_event_to_dict_includes_step_index():
+    """Serialized events include step_index for persistence at step boundaries."""
+    evt = AgentEvent(state=AgentState.STEP_DONE, iteration=1, step_index=1)
+    d = evt.to_dict()
+    assert d["state"] == "step_done"
+    assert d["iteration"] == 1
+    assert d["step_index"] == 1

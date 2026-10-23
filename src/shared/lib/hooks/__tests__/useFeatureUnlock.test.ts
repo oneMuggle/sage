@@ -1,16 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import {
-  useFeatureUnlock,
-  unlockFeature,
-  lockFeature,
-  isFeatureUnlocked,
-  isFeatureExplicitlyDisabled,
-  FEATURE_UNLOCK_STORAGE_KEY,
-  FEATURE_UNLOCK_EVENT,
-  FEATURE_UNLOCK_LOCK_EVENT,
-} from '../useFeatureUnlock';
+import { useFeatureUnlock, unlockFeature, lockFeature, isFeatureUnlocked, isFeatureExplicitlyDisabled, FEATURE_UNLOCK_STORAGE_KEY, FEATURE_UNLOCK_EVENT, FEATURE_UNLOCK_LOCK_EVENT } from '../useFeatureUnlock';
 
 beforeEach(() => {
   localStorage.clear();
@@ -304,5 +295,17 @@ describe('useFeatureUnlock — lock', () => {
     expect(isFeatureUnlocked('arena-accounts')).toBe(true);
     lockFeature('arena-accounts');
     expect(isFeatureUnlocked('arena-accounts')).toBe(false);
+  });
+
+  it('formats feature unlock summary and JSON (Phase P118)', async () => {
+    const { formatFeatureUnlockSummary, formatFeatureUnlockJson } = await import(
+      '../useFeatureUnlock'
+    );
+    unlockFeature('arena-accounts');
+    expect(formatFeatureUnlockSummary('arena-accounts')).toBe('arena-accounts · unlocked');
+    expect(JSON.parse(formatFeatureUnlockJson('arena-accounts'))).toEqual({
+      featureKey: 'arena-accounts',
+      unlocked: true,
+    });
   });
 });

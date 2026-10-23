@@ -45,8 +45,6 @@ export function UsageRequestsTable() {
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copiedMd, setCopiedMd] = useState(false);
-  const [copiedJson, setCopiedJson] = useState(false);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -82,29 +80,7 @@ export function UsageRequestsTable() {
   const hasNext = offset + items.length < total;
 
   /* v8 ignore start */
-  const handleCopyMd = async () => {
-    const lines = [
-      `# 请求明细 (共 ${total} 条，当前页 ${items.length} 条)`,
-      '',
-      '| 时间 | 模型 | 端点 | Tokens | 缓存读 | 估算成本 |',
-      '| --- | --- | --- | --- | --- | --- |',
-      ...items.map(
-        (row) =>
-          `| ${formatTime(row.created_at_iso, row.created_at_ms)} | ${row.model} | ${row.endpoint_id ?? '-'} | ${row.prompt_tokens + row.completion_tokens} | ${row.cache_read_tokens} | ${formatCost(row.estimated_cost_usd, t('settings.usage.costUnknown'))} |`,
-      ),
-    ];
-    setCopiedMd(true);
-    await navigator.clipboard?.writeText(lines.join('\n'));
-    setTimeout(() => setCopiedMd(false), 1800);
-  };
 
-  const handleCopyJson = async () => {
-    setCopiedJson(true);
-    await navigator.clipboard?.writeText(
-      JSON.stringify({ total, offset, limit: PAGE_SIZE, items }, null, 2),
-    );
-    setTimeout(() => setCopiedJson(false), 1800);
-  };
   /* v8 ignore stop */
 
   return (
@@ -112,24 +88,6 @@ export function UsageRequestsTable() {
       <div className="flex items-center justify-between">
         <h4 className="text-xs font-medium text-text">{t('settings.usage.requestsTable.title')}</h4>
         <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            data-testid="usage-requests-copy-md-btn"
-            onClick={() => void handleCopyMd()}
-            disabled={items.length === 0}
-            className="px-2 py-0.5 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted transition-colors disabled:opacity-50"
-          >
-            {copiedMd ? '✓ 已复制MD' : '复制明细MD'}
-          </button>
-          <button
-            type="button"
-            data-testid="usage-requests-copy-json-btn"
-            onClick={() => void handleCopyJson()}
-            disabled={items.length === 0}
-            className="px-2 py-0.5 text-xs border border-border rounded-radius-sm text-text hover:bg-bg-muted transition-colors disabled:opacity-50"
-          >
-            {copiedJson ? '✓ 已复制JSON' : '复制明细JSON'}
-          </button>
           <button
             type="button"
             data-testid="usage-requests-refresh"
