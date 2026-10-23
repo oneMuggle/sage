@@ -910,12 +910,29 @@ describe('permission IPC routes (M1 tool security hardening)', () => {
   });
 
   // Guard: 后端 ApprovalAnswerBody 是 extra="forbid" — requestId 泄漏进 body
-  // 会触发 422。body selector 必须只保留 approved/remember。
-  it('permissions_answer body selector strips requestId (only approved/remember)', () => {
+  // 会触发 422。body selector 只能保留后端认识的四个字段。
+  it('permissions_answer body selector strips requestId and maps remember scope', () => {
     const r = COMMAND_ROUTES.permissions_answer;
     expect(r.body).toBeDefined();
     expect(r.body!({ requestId: 'r-1', approved: true, remember: false, extraField: 'x' })).toEqual(
-      { approved: true, remember: false },
+      { approved: true, remember: false, remember_scope: 'tool', reason: '' },
+    );
+    expect(
+      r.body!({
+        requestId: 'r-2',
+        approved: false,
+        remember: true,
+        rememberScope: 'plugin',
+        reason: 'not this plugin',
+        tool_pattern: '*',
+      }),
+    ).toEqual(
+      {
+        approved: false,
+        remember: true,
+        remember_scope: 'plugin',
+        reason: 'not this plugin',
+      },
     );
   });
 

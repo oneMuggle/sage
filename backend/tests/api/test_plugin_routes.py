@@ -12,6 +12,7 @@ import pytest
 from backend.plugins.host import PluginHostLimits, PluginHostManager
 from backend.plugins.manifest import EXAMPLE_MANIFEST
 from backend.plugins.registry import CapabilityRegistry
+from backend.plugins.tool_bridge import PluginToolBridge
 
 pytestmark = pytest.mark.unit
 
@@ -319,5 +320,115 @@ def add(a, b):
         assert "runtime_restarted" in events
         assert events.count("runtime_stopped") == 2  # config update, disable
         assert "runtime_failed" in events  # premature start attempt
+    finally:
+        host.shutdown_all()
+
+
+@pytest.mark.asyncio()
+async def test_published_runtime_tools_follow_explicit_start_and_stop(
+    client,
+    tmp_path: Path,
+    monkeypatch,
+):
+    root = tmp_path / "runtime-tools-plugin"
+    root.mkdir()
+    (root / "handlers.py").write_text(
+        """
+def add(a, b):
+    return {"sum": a + b}
+""",
+        encoding="utf-8",
+    )
+    body = _body("runtime-tools-plugin", confirm=True)
+    body["install_path"] = str(root)
+    capability = body["manifest"]["capabilities"][0]
+    capability["entry_point"] = "handlers:add"
+    capability["input_schema"] = {
+        "type": "object",
+        "properties": {
+            "a": {"type": "number"},
+            "b": {"type": "number"},
+        },
+        "required": ["a", "b"],
+        "additionalProperties": False,
+    }
+
+    bridge = PluginToolBridge()
+    host = PluginHostManager(
+        PluginHostLimits(
+            startup_timeout_seconds=5,
+            request_timeout_seconds=2,
+            shutdown_timeout_seconds=1,
+        ),
+        registry=CapabilityRegistry(),
+        tool_bridge=bridge,
+    )
+    monkeypatch.setattr(
+        "backend.api.plugin_routes.get_plugin_host_manager",
+        lambda: host,
+    )
+    monkeypatch.setattr(
+        "backend.api.plugin_routes.get_plugin_tool_bridge",
+        lambda: bridge,
+    )
+
+    try:
+        installed = await client.post("/api/v1/plugins", json=body)
+        assert installed.status_code == 201
+        enabled = await client.post(
+            "/api/v1/plugins/runtime-tools-plugin/enable"
+        )
+        assert enabled.status_code == 200
+
+        before_start = await client.get("/api/v1/plugins/runtime/tools")
+        assert before_start.status_code == 200
+        assert before_start.json() == {"tools": [], "count": 0}
+        runtime = await client.get(
+            "/api/v1/plugins/runtime-tools-plugin/runtime"
+        )
+        assert runtime.json()["runtime"]["running"] is False
+
+        blocked = await client.get(
+            "/api/v1/plugins/runtime/tools",
+            headers={"Origin": "https://evil.example"},
+        )
+        assert blocked.status_code == 403
+        assert blocked.json()["error"] == "forbidden_origin"
+
+        started = await client.post(
+            "/api/v1/plugins/runtime-tools-plugin/runtime/start"
+        )
+        assert started.status_code == 200
+        assert started.json()["runtime"]["running"] is True
+
+        listed = await client.get("/api/v1/plugins/runtime/tools")
+        assert listed.status_code == 200
+        assert listed.json() == {
+            "tools": [
+                {
+                    "plugin_name": "runtime-tools-plugin",
+                    "capability_name": "example-tool",
+                    "tool_name": (
+                        "plugin__runtime-tools-plugin__example-tool"
+                    ),
+                    "description": (
+                        "[Plugin:runtime-tools-plugin] "
+                        "An example tool provided by this plugin"
+                    ),
+                    "risk": "exec",
+                    "permissions": ["file:read"],
+                }
+            ],
+            "count": 1,
+        }
+
+        stopped = await client.post(
+            "/api/v1/plugins/runtime-tools-plugin/runtime/stop"
+        )
+        assert stopped.status_code == 200
+        after_stop = await client.get("/api/v1/plugins/runtime/tools")
+        assert after_stop.status_code == 200
+        assert after_stop.json() == {"tools": [], "count": 0}
+        assert host.tool_bridge is bridge
     finally:
         host.shutdown_all()

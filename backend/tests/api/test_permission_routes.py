@@ -34,12 +34,15 @@ def gate():
     reset_permission_gate()
 
 
-def _pending_request(tool_name: str = "bash") -> ApprovalRequest:
+def _pending_request(
+    tool_name: str = "bash", plugin_name: str | None = None
+) -> ApprovalRequest:
     return ApprovalRequest.create(
         tool_name=tool_name,
         args={"command": "ls"},
         risk="suspicious",
         message="prompt 模式需要确认",
+        plugin_name=plugin_name,
     )
 
 
@@ -329,6 +332,135 @@ async def test_remember_with_exact_tool_name_still_persisted(gate, client):
     assert resp.json() == {"ok": True}
     rules = parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES))
     assert PermissionRule("bash", "allow") in rules
+
+
+# ---------------------------------------------------------------------------
+# R95 按插件记住审批决定
+# ---------------------------------------------------------------------------
+
+
+async def test_remember_plugin_scope_persists_restricted_allow_rule(
+    gate, client
+):
+    """权威 plugin_name + plugin 范围 → 单插件受限 allow 规则。"""
+    req = _pending_request("plugin__demo__hello", plugin_name="demo")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    pending = await client.get("/api/v1/permissions/pending")
+    assert pending.json()[0]["plugin_name"] == "demo"
+
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={
+            "approved": True,
+            "remember": True,
+            "remember_scope": "plugin",
+        },
+    )
+    answer = await holder
+
+    assert resp.json() == {"ok": True}
+    assert answer.approved is True
+    rules = parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES))
+    assert rules == [PermissionRule("plugin__demo__*", "allow")]
+
+
+async def test_remember_plugin_scope_persists_restricted_deny_rule(
+    gate, client
+):
+    """整插件拒绝与批准共用范围语义，落 deny。"""
+    req = _pending_request("plugin__demo__hello", plugin_name="demo")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={
+            "approved": False,
+            "remember": True,
+            "remember_scope": "plugin",
+        },
+    )
+    answer = await holder
+
+    assert resp.json() == {"ok": True}
+    assert answer.approved is False
+    rules = parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES))
+    assert rules == [PermissionRule("plugin__demo__*", "deny")]
+
+
+async def test_remember_tool_scope_keeps_exact_plugin_tool_rule(gate, client):
+    """显式 tool 范围仍只记当前完整插件工具名。"""
+    req = _pending_request("plugin__demo__hello", plugin_name="demo")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={
+            "approved": True,
+            "remember": True,
+            "remember_scope": "tool",
+        },
+    )
+    await holder
+
+    assert resp.json() == {"ok": True}
+    rules = parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES))
+    assert rules == [PermissionRule("plugin__demo__hello", "allow")]
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "plugin_name"),
+    [
+        ("plugin__demo__hello", None),
+        ("plugin__demo__hello", "other"),
+        ("plugin__demo__hello", "de mo"),
+        ("bash", "demo"),
+    ],
+)
+async def test_remember_plugin_scope_without_authoritative_match_not_persisted(
+    gate, client, tool_name, plugin_name
+):
+    """插件名缺失/不匹配时本次应答生效，但不猜测、不落任何规则。"""
+    req = _pending_request(tool_name, plugin_name=plugin_name)
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={
+            "approved": True,
+            "remember": True,
+            "remember_scope": "plugin",
+        },
+    )
+    answer = await holder
+
+    assert resp.json() == {"ok": True}
+    assert answer.approved is True
+    assert parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES) or []) == []
+
+
+async def test_invalid_remember_scope_returns_422(gate, client):
+    """范围是封闭枚举，未知值不能被静默当作精确或整插件。"""
+    req = _pending_request("plugin__demo__hello", plugin_name="demo")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={
+            "approved": True,
+            "remember": True,
+            "remember_scope": "all-plugins",
+        },
+    )
+
+    assert resp.status_code == 422
+    gate.answer(req.request_id, approved=False)
+    await holder
 
 
 # ---------------------------------------------------------------------------

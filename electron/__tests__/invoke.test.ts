@@ -103,12 +103,18 @@ describe('invokeBackend', () => {
 
   // M1 工具审批: requestId 是路径参数,绝不能进 body —
   // 后端 ApprovalAnswerBody extra="forbid",泄漏即 422。
-  it('permissions_answer POSTs {approved, remember} body and keeps requestId in path only', async () => {
+  it('permissions_answer POSTs scoped answer body and keeps requestId in path only', async () => {
     mockedFetch.mockResolvedValueOnce(mockJsonResponse({ ok: true }));
 
     await invokeBackend(
       'permissions_answer',
-      { requestId: 'req-1', approved: true, remember: true },
+      {
+        requestId: 'req-1',
+        approved: true,
+        remember: true,
+        rememberScope: 'plugin',
+        reason: '',
+      },
       'http://x',
     );
 
@@ -117,7 +123,12 @@ describe('invokeBackend', () => {
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ approved: true, remember: true }),
+        body: JSON.stringify({
+          approved: true,
+          remember: true,
+          remember_scope: 'plugin',
+          reason: '',
+        }),
       }),
     );
     const init = mockedFetch.mock.calls[0][1] as RequestInit;

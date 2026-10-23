@@ -3,7 +3,8 @@
  *
  * 当 `usePermissionState.currentRequest` 非空时渲染（由 useChat 消费
  * `state: 'permission_request'` 流事件写入 store）。用户点「允许/拒绝」
- * → `invoke('permissions_answer', {requestId, approved, remember})`
+ * → `invoke('permissions_answer', {requestId, approved, remember,
+ * rememberScope, reason})`
  * → 无论成败都 resolve() 关闭对话框：
  *
  *   - ok=false（unknown_or_expired / permission_gate_not_initialized）
@@ -32,6 +33,8 @@ interface AnswerResponse {
   error?: string;
 }
 
+type RememberScope = 'tool' | 'plugin';
+
 /** 风险分级 → 徽章配色（destructive=red / suspicious=amber / safe=neutral） */
 const RISK_BADGE_CLASSES: Readonly<Record<PermissionRequest['risk'], string>> = {
   safe: 'border-border bg-bg-muted text-text-secondary',
@@ -51,6 +54,7 @@ export function ApprovalDialog() {
   const resolve = usePermissionState((s) => s.resolve);
   const workspacePath = useCurrentWorkspace();
   const [remember, setRemember] = useState(false);
+  const [rememberScope, setRememberScope] = useState<RememberScope>('tool');
   const [submitting, setSubmitting] = useState(false);
   // 对标 ZCode freeText：拒绝反馈——点「拒绝」先展开输入框（可留空直接确认）
   const [denyReason, setDenyReason] = useState('');
@@ -61,6 +65,7 @@ export function ApprovalDialog() {
   const requestId = currentRequest?.request_id ?? null;
   useEffect(() => {
     setRemember(false);
+    setRememberScope('tool');
     setSubmitting(false);
     // 对标 ZCode freeText：拒绝反馈输入态随新请求重置
     setDenyReason('');
@@ -87,12 +92,18 @@ export function ApprovalDialog() {
   if (!currentRequest) return null;
 
   const risk = RISK_BADGE_CLASSES[currentRequest.risk] ? currentRequest.risk : ('safe' as const);
+  const pluginName = currentRequest.plugin_name;
+  const pluginPattern = pluginName ? `plugin__${pluginName}__*` : null;
 
   /* v8 ignore start */
 
   /* v8 ignore stop */
 
-  const answer = async (approved: boolean, reason = ''): Promise<void> => {
+  const answer = async (
+    approved: boolean,
+    reason = '',
+    scope: RememberScope = rememberScope,
+  ): Promise<void> => {
     if (submitting) return;
     setSubmitting(true);
     try {
@@ -100,6 +111,7 @@ export function ApprovalDialog() {
         requestId: currentRequest.request_id,
         approved,
         remember,
+        rememberScope: scope,
         reason,
       });
       if (!resp || resp.ok !== true) {
@@ -139,14 +151,14 @@ export function ApprovalDialog() {
       const existingRules = project.allowedPaths ?? [];
       if (existingRules.includes(rule)) {
         // 已存在，直接批准
-        await answer(true);
+        await answer(true, '', 'tool');
         return;
       }
       const newRules = [...existingRules, rule];
       await projectApi.updateAllowedPaths(project.id, newRules);
       toast.success(t('permission.project_allow.added').replace('{rule}', rule));
       // 批准请求
-      await answer(true);
+      await answer(true, '', 'tool');
     } catch (err) {
       toast.error(
         `${t('permission.project_allow.failed')}: ${err instanceof Error ? err.message : String(err)}`,
@@ -256,6 +268,55 @@ export function ApprovalDialog() {
             />
             {t('permission.remember')}
           </label>
+
+          {remember && pluginName ? (
+            <fieldset
+              data-testid="permission-remember-scope"
+              className="space-y-2 rounded border border-border bg-bg-muted/50 p-2"
+            >
+              <legend className="px-1 text-xs text-text-secondary">
+                {t('permission.remember_scope.legend')}
+              </legend>
+              <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="permission-remember-scope"
+                  data-testid="permission-remember-scope-tool"
+                  checked={rememberScope === 'tool'}
+                  onChange={() => setRememberScope('tool')}
+                  className="w-3.5 h-3.5 accent-primary"
+                />
+                <span>{t('permission.remember_scope.tool')}</span>
+                <code className="font-mono text-text bg-bg px-1.5 py-0.5 rounded text-ui-xs">
+                  {currentRequest.tool_name}
+                </code>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="permission-remember-scope"
+                  data-testid="permission-remember-scope-plugin"
+                  checked={rememberScope === 'plugin'}
+                  onChange={() => setRememberScope('plugin')}
+                  className="w-3.5 h-3.5 accent-primary"
+                />
+                <span>
+                  {t('permission.remember_scope.plugin')}: {pluginName}
+                </span>
+                <code className="font-mono text-text bg-bg px-1.5 py-0.5 rounded text-ui-xs">
+                  {pluginPattern}
+                </code>
+              </label>
+              {rememberScope === 'plugin' ? (
+                <p
+                  data-testid="permission-remember-scope-plugin-warning"
+                  className="text-ui-xs text-warning leading-relaxed"
+                >
+                  {t('permission.remember_scope.plugin_warning')}
+                </p>
+              ) : null}
+            </fieldset>
+          ) : null}
 
           {/* 对标 ZCode freeText：拒绝反馈输入框——点拒绝展开，模型据此调整方案 */}
           {denyExpanded && (

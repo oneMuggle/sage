@@ -155,6 +155,110 @@ def test_register_plugin_tools_syncs_running_tool_and_executes() -> None:
     assert host.calls == [("demo-plugin", "hello", {"name": "Ada"})]
 
 
+def test_published_tools_snapshot_is_sorted_and_excludes_unpublished_tools() -> None:
+    host = _FakeHost()
+    bridge = PluginToolBridge()
+
+    assert bridge.publish_plugin(
+        host,
+        "zeta",
+        [
+            _cap(
+                "beta",
+                description="Beta tool",
+                permissions=["network:write", " network:write ", ""],
+            )
+        ],
+    ) == 1
+    assert bridge.publish_plugin(
+        host,
+        "alpha",
+        [
+            _cap(
+                "hello",
+                description="Alpha tool",
+                permissions=["file:read", "file:write"],
+            )
+        ],
+    ) == 1
+
+    api_only = _cap("hidden")
+    api_only.input_schema = None
+    api_only.config_schema = None
+    assert bridge.publish_plugin(host, "api-only", [api_only]) == 0
+
+    snapshot = bridge.published_tools()
+    assert [tool.to_dict() for tool in snapshot] == [
+        {
+            "plugin_name": "alpha",
+            "capability_name": "hello",
+            "tool_name": "plugin__alpha__hello",
+            "description": "[Plugin:alpha] Alpha tool",
+            "risk": "exec",
+            "permissions": ["file:read", "file:write"],
+        },
+        {
+            "plugin_name": "zeta",
+            "capability_name": "beta",
+            "tool_name": "plugin__zeta__beta",
+            "description": "[Plugin:zeta] Beta tool",
+            "risk": "external",
+            "permissions": ["network:write"],
+        },
+    ]
+    assert host.start_calls == 0
+
+    assert bridge.unpublish_plugin(host, "alpha") == 1
+    assert [tool.tool_name for tool in bridge.published_tools()] == [
+        "plugin__zeta__beta"
+    ]
+
+
+def test_published_tool_lookup_uses_exact_current_publication() -> None:
+    host = _FakeHost()
+    bridge = PluginToolBridge()
+    tool_name = plugin_tool_name("demo", "hello")
+
+    assert bridge.published_tool(tool_name) is None
+    assert bridge.publish_plugin(host, "demo", [_cap()]) == 1
+
+    found = bridge.published_tool(tool_name)
+    assert found == bridge.published_tools()[0]
+    assert found is not None
+    assert found.plugin_name == "demo"
+    assert bridge.published_tool("plugin__demo__missing") is None
+
+    assert bridge.unpublish_plugin(host, "demo") == 1
+    assert bridge.published_tool(tool_name) is None
+
+
+def test_permission_change_republishes_even_when_risk_is_unchanged() -> None:
+    host = _FakeHost()
+    bridge = PluginToolBridge()
+    registry = ToolRegistry()
+    bridge.register_into(registry)
+    tool_name = plugin_tool_name("demo", "hello")
+
+    assert bridge.publish_plugin(
+        host,
+        "demo",
+        [_cap(permissions=["file:read"])],
+    ) == 1
+    old_tool = registry.get(tool_name)
+    assert old_tool is not None
+
+    assert bridge.publish_plugin(
+        host,
+        "demo",
+        [_cap(permissions=["file:write"])],
+    ) == 1
+    new_tool = registry.get(tool_name)
+    assert new_tool is not None
+    assert new_tool is not old_tool
+    assert new_tool.risk is RiskClass.EXEC
+    assert bridge.published_tools()[0].permissions == ("file:write",)
+
+
 def test_input_schema_wins_and_config_schema_is_legacy_fallback() -> None:
     primary = _schema(required=["name"])
     fallback = {
@@ -310,7 +414,7 @@ def test_namespaced_collision_across_plugin_segments_first_wins() -> None:
     assert tool.capability_name == "c"
 
 
-def test_profile_whitelist_requires_exact_plugin_tool_name() -> None:
+def test_profile_whitelist_exact_and_plugin_wildcards_r92() -> None:
     host = _FakeHost(running=[("demo", _cap())])
     bridge = PluginToolBridge()
     registry = ToolRegistry()
@@ -319,7 +423,13 @@ def test_profile_whitelist_requires_exact_plugin_tool_name() -> None:
 
     assert registry.get_schemas_for_llm(allowed_tools=[tool_name])
     assert registry.get_schemas_for_llm(allowed_tools=[]) == []
-    assert registry.get_schemas_for_llm(allowed_tools=["plugin__demo__*"]) == []
+    # R92: per-plugin / global plugin wildcards expose the same tool.
+    for allowed in (["plugin__demo__*"], ["plugin__*"]):
+        schemas = registry.get_schemas_for_llm(allowed_tools=allowed)
+        assert [s["name"] for s in schemas] == [tool_name]
+    # Another plugin's namespace and malformed globs stay fail-closed.
+    assert registry.get_schemas_for_llm(allowed_tools=["plugin__other__*"]) == []
+    assert registry.get_schemas_for_llm(allowed_tools=["plugin__demo*"]) == []
 
 
 def test_overlong_namespaced_name_is_skipped() -> None:
