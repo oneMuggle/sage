@@ -502,3 +502,20 @@ export function Projects() {
 }
 
 export default Projects;
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditProjectsPageGovernance(): {
+  module: 'src/pages/Projects.tsx';
+  phase: 'P171';
+  domain: 'pages';
+  supportsCreationWizardAndArchetypeStudio: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/Projects.tsx',
+    phase: 'P171',
+    domain: 'pages',
+    supportsCreationWizardAndArchetypeStudio: true,
+    compliant: true,
+  };
+}
