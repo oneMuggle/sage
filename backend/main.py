@@ -212,6 +212,16 @@ def _shutdown_repl_cleanups() -> None:
         logger.warning("REPL shutdown failed（异常类型=%s）", type(exc).__name__)
 
 
+def _shutdown_plugin_hosts() -> None:
+    """停止全局插件宿主持有的进程外 worker（R83）。"""
+    try:
+        from backend.plugins.host import shutdown_plugin_hosts
+
+        shutdown_plugin_hosts()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("Plugin host shutdown failed（异常类型=%s）", type(exc).__name__)
+
+
 def _build_compute_adapter():
     """按 ``backend/config/ghm.yaml`` 装配 ComputePort。
 
@@ -1145,6 +1155,7 @@ async def lifespan(app: FastAPI):
     _shutdown_bash_sessions()
     _shutdown_browser_sessions()
     _shutdown_repl_cleanups()
+    _shutdown_plugin_hosts()
     # Arena：停观测泵 + 关账号池 SQLite 连接（best-effort，见 arena_routes）
     try:
         from backend.api.arena_routes import shutdown_arena_services

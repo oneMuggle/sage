@@ -48,11 +48,24 @@ class PluginRecord(BaseModel):
     disabled_at: Optional[float] = Field(default=None, description="禁用时间戳")
     uninstalled_at: Optional[float] = Field(default=None, description="卸载时间戳")
     config: Dict[str, Any] = Field(default_factory=dict, description="用户配置")
+    manifest: Dict[str, Any] = Field(
+        default_factory=dict, description="安装时提交的完整 manifest（R82）"
+    )
 
     class Config:
         """Pydantic v1 compatibility."""
 
         use_enum_values = True
+
+
+class PluginEvent(BaseModel):
+    """Plugin lifecycle audit event stored in the database."""
+
+    id: int = Field(..., description="事件 ID")
+    plugin_name: str = Field(..., description="插件唯一标识符")
+    event: str = Field(..., description="生命周期事件")
+    detail: str = Field(default="", description="事件详情")
+    created_at: float = Field(..., description="事件时间戳（秒）")
 
 
 class PluginLifecycleError(Exception):
@@ -143,6 +156,28 @@ class PluginLifecycleManager:
         )
         conn.commit()
 
+        # R82: older databases do not yet retain the submitted manifest.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(plugins)")}
+        if "manifest" not in columns:
+            conn.execute("ALTER TABLE plugins ADD COLUMN manifest TEXT DEFAULT '{}'")
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS plugin_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plugin_name TEXT NOT NULL,
+                event TEXT NOT NULL,
+                detail TEXT DEFAULT '',
+                created_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_plugin_events_name_time "
+            "ON plugin_events(plugin_name, created_at)"
+        )
+        conn.commit()
+
     def install(
         self, manifest: PluginManifest, install_path: Union[str, Path]
     ) -> PluginRecord:
@@ -170,8 +205,8 @@ class PluginLifecycleManager:
                 """
                 INSERT INTO plugins (
                     name, version, status, plugin_type, install_path,
-                    installed_at, config
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    installed_at, config, manifest
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     manifest.name,
@@ -181,11 +216,13 @@ class PluginLifecycleManager:
                     str(install_path),
                     now,
                     "{}",
+                    manifest.to_json(),
                 ),
             )
             conn.commit()
 
             logger.info(f"插件已安装: {manifest.name} v{manifest.version}")
+            self._record_event(manifest.name, "installed", f"v{manifest.version}")
 
             return self.get_plugin(manifest.name)
 
@@ -231,6 +268,7 @@ class PluginLifecycleManager:
             conn.commit()
 
             logger.info(f"插件已启用: {plugin_name}")
+            self._record_event(plugin_name, "enabled")
 
             return self.get_plugin(plugin_name)
 
@@ -274,6 +312,7 @@ class PluginLifecycleManager:
             conn.commit()
 
             logger.info(f"插件已禁用: {plugin_name}")
+            self._record_event(plugin_name, "disabled")
 
             return self.get_plugin(plugin_name)
 
@@ -312,6 +351,7 @@ class PluginLifecycleManager:
             conn.commit()
 
             logger.info(f"插件已卸载: {plugin_name}")
+            self._record_event(plugin_name, "uninstalled")
 
         except sqlite3.Error as e:
             logger.error(f"插件卸载失败: {e}")
@@ -353,6 +393,7 @@ class PluginLifecycleManager:
             conn.commit()
 
             logger.info(f"插件已恢复: {plugin_name}")
+            self._record_event(plugin_name, "restored")
 
             return self.get_plugin(plugin_name)
 
@@ -449,12 +490,64 @@ class PluginLifecycleManager:
             conn.commit()
 
             logger.info(f"插件配置已更新: {plugin_name}")
+            self._record_event(plugin_name, "config_updated")
 
             return self.get_plugin(plugin_name)
 
         except sqlite3.Error as e:
             logger.error(f"更新配置失败: {e}")
             raise PluginLifecycleError(f"更新失败: {e}") from e
+
+    def record_event(self, plugin_name: str, event: str, detail: str = "") -> None:
+        """Record an audit event from another plugin subsystem component."""
+        self._record_event(plugin_name, event, detail)
+
+    def _record_event(self, plugin_name: str, event: str, detail: str = "") -> None:
+        """记录一条生命周期事件（审计旁路，失败只警告不影响主操作）。"""
+        try:
+            conn = self._get_connection()
+            conn.execute(
+                "INSERT INTO plugin_events (plugin_name, event, detail, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (plugin_name, event, detail, time.time()),
+            )
+            conn.commit()
+        except sqlite3.Error as e:
+            logger.warning(f"插件事件记录失败（已忽略）: {plugin_name} {event}: {e}")
+
+    def list_events(
+        self, plugin_name: Optional[str] = None, limit: int = 100
+    ) -> List[PluginEvent]:
+        """列出生命周期事件（最新在前）。``plugin_name`` 为空时返回全局事件。"""
+        limit = max(1, min(limit, 500))
+        conn = self._get_connection()
+
+        try:
+            if plugin_name is not None:
+                rows = conn.execute(
+                    "SELECT * FROM plugin_events WHERE plugin_name = ? "
+                    "ORDER BY id DESC LIMIT ?",
+                    (plugin_name, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM plugin_events ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+
+            return [
+                PluginEvent(
+                    id=row["id"],
+                    plugin_name=row["plugin_name"],
+                    event=row["event"],
+                    detail=row["detail"] or "",
+                    created_at=row["created_at"],
+                )
+                for row in rows
+            ]
+        except sqlite3.Error as e:
+            logger.error(f"列出插件事件失败: {e}")
+            raise PluginLifecycleError(f"列出事件失败: {e}") from e
 
     def _plugin_exists(self, plugin_name: str) -> bool:
         """Check if plugin exists (any status)."""
@@ -478,6 +571,15 @@ class PluginLifecycleManager:
         except json.JSONDecodeError:
             config = {}
 
+        manifest: Dict[str, Any] = {}
+        if "manifest" in set(row.keys()):
+            try:
+                loaded_manifest = json.loads(row["manifest"] or "{}")
+                if isinstance(loaded_manifest, dict):
+                    manifest = loaded_manifest
+            except json.JSONDecodeError:
+                manifest = {}
+
         return PluginRecord(
             name=row["name"],
             version=row["version"],
@@ -489,6 +591,7 @@ class PluginLifecycleManager:
             disabled_at=row["disabled_at"],
             uninstalled_at=row["uninstalled_at"],
             config=config,
+            manifest=manifest,
         )
 
     def close(self) -> None:

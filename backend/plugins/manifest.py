@@ -24,11 +24,20 @@ try:
     PYDANTIC_V2 = True
 except ImportError:
     # Pydantic v1 fallback
-    from pydantic import (
-        root_validator as model_validator,  # type: ignore
-        validator as field_validator,  # type: ignore
+    from pydantic import (  # type: ignore
+        root_validator as model_validator,
+        validator as field_validator,
     )
     PYDANTIC_V2 = False
+
+
+def _list_length_kwargs(limit: int) -> Dict[str, int]:
+    """列表长度上限：pydantic v1 用 ``max_items``，v2 用 ``max_length``。
+
+    v1 会把 ``max_length`` 施加到列表的每个元素（字符串长度）上，
+    与 v2 的「列表长度」语义不同，因此两个版本必须分开书写。
+    """
+    return {"max_length": limit} if PYDANTIC_V2 else {"max_items": limit}
 
 
 class PluginType(str, Enum):
@@ -64,6 +73,9 @@ class PluginCapability(BaseModel):
     permissions: List[str] = Field(
         default_factory=list, description="所需权限列表（如 file:read, network:write）"
     )
+    input_schema: Optional[Dict[str, Any]] = Field(
+        default=None, description="工具调用参数 JSON Schema（object）"
+    )
     config_schema: Optional[Dict[str, Any]] = Field(
         default=None, description="配置项 JSON Schema"
     )
@@ -78,7 +90,8 @@ class PluginCapability(BaseModel):
             return v
     else:
         @field_validator("name")
-        def validate_name(cls, v: str) -> str:  # noqa: N805
+        @classmethod
+        def validate_name(cls, v: str) -> str:
             """Validate capability name format (Pydantic v1)."""
             if not v.replace("-", "").replace("_", "").isalnum():
                 raise ValueError("能力名称只能包含字母、数字、连字符和下划线")
@@ -102,7 +115,8 @@ class PluginDependency(BaseModel):
             return self
     else:
         @model_validator
-        def validate_version_format(cls, values: Dict[str, Any]) -> Dict[str, Any]:  # noqa: N805
+        @classmethod
+        def validate_version_format(cls, values: Dict[str, Any]) -> Dict[str, Any]:
             """Validate version constraint format (Pydantic v1)."""
             version = values.get("version", "")
             valid = version.replace("^", "").replace("~", "").replace("*", "").replace(">=", "")
@@ -122,14 +136,16 @@ class PluginMetadata(BaseModel):
     repository: Optional[str] = Field(default=None, description="代码仓库 URL")
     license: str = Field(default="MIT", description="许可证")
     categories: List[str] = Field(
-        default_factory=list, description="分类标签", max_length=10
+        default_factory=list, description="分类标签", **_list_length_kwargs(10)
     )
-    tags: List[str] = Field(default_factory=list, description="标签", max_length=20)
+    tags: List[str] = Field(
+        default_factory=list, description="标签", **_list_length_kwargs(20)
+    )
 
     # 商店信息
     hero_image: Optional[str] = Field(default=None, description="商店页 Hero 图")
     example_prompts: List[str] = Field(
-        default_factory=list, description="示例提示词", max_length=5
+        default_factory=list, description="示例提示词", **_list_length_kwargs(5)
     )
 
 
@@ -212,7 +228,8 @@ class PluginManifest(BaseModel):
             return v.lower()
     else:
         @field_validator("name")
-        def validate_plugin_name(cls, v: str) -> str:  # noqa: N805
+        @classmethod
+        def validate_plugin_name(cls, v: str) -> str:
             """Validate plugin name format (Pydantic v1)."""
             if not v.replace("-", "").replace("_", "").isalnum():
                 raise ValueError("插件名称只能包含字母、数字、连字符和下划线")
@@ -238,7 +255,8 @@ class PluginManifest(BaseModel):
             return self
     else:
         @model_validator
-        def validate_capabilities_unique(cls, values: Dict[str, Any]) -> Dict[str, Any]:  # noqa: N805
+        @classmethod
+        def validate_capabilities_unique(cls, values: Dict[str, Any]) -> Dict[str, Any]:
             """Validate that capability names are unique (Pydantic v1)."""
             capabilities = values.get("capabilities", [])
             names = [c.name if hasattr(c, "name") else c.get("name") for c in capabilities]
@@ -247,7 +265,8 @@ class PluginManifest(BaseModel):
             return values
 
         @model_validator
-        def validate_dependencies_no_self(cls, values: Dict[str, Any]) -> Dict[str, Any]:  # noqa: N805
+        @classmethod
+        def validate_dependencies_no_self(cls, values: Dict[str, Any]) -> Dict[str, Any]:
             """Validate that plugin doesn't depend on itself (Pydantic v1)."""
             name = values.get("name", "")
             dependencies = values.get("dependencies", [])
@@ -342,7 +361,7 @@ EXAMPLE_MANIFEST = {
         "author": "Sage Team",
         "homepage": "https://github.com/example/sage-plugin",
         "license": "MIT",
-        "categories": ["product", "tools"],
+        "categories": ["productivity", "tools"],
         "tags": ["example", "demo"],
     },
     "capabilities": [

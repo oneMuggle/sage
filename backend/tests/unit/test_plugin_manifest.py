@@ -69,6 +69,24 @@ class TestPluginCapability:
         assert len(cap.permissions) == 2
         assert "file:read" in cap.permissions
 
+    def test_capability_input_schema_round_trips(self):
+        """R90: tool argument schema is distinct from lifecycle config."""
+        schema = {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+            "additionalProperties": False,
+        }
+        cap = PluginCapability(
+            type=CapabilityType.TOOL,
+            name="greeter",
+            input_schema=schema,
+        )
+
+        assert cap.input_schema == schema
+        restored = PluginCapability.model_validate(cap.model_dump())
+        assert restored.input_schema == schema
+
 
 class TestPluginDependency:
     """Tests for PluginDependency model."""
@@ -112,7 +130,7 @@ class TestPluginMetadata:
         """Test metadata with categories and tags."""
         meta = PluginMetadata(
             display_name="Plugin",
-            categories=["product", "tools"],
+            categories=["productivity", "tools"],
             tags=["test", "demo"],
         )
         assert len(meta.categories) == 2
