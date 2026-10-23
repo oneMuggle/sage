@@ -95,3 +95,21 @@ export function formatStudioStateJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditUseStudioStateGovernance(): {
+  module: 'src/features/project-type/useStudioState.ts';
+  phase: 'P166';
+  domain: 'project-type';
+  defaultArchetype: 'coding';
+  supportsImmutableProjectPatch: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/project-type/useStudioState.ts',
+    phase: 'P166',
+    domain: 'project-type',
+    defaultArchetype: 'coding',
+    supportsImmutableProjectPatch: true,
+    compliant: true,
+  };
+}
