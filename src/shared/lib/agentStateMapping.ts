@@ -166,3 +166,16 @@ export function formatAgentPhaseJson(
     2,
   );
 }
+
+export function auditAgentStateMappingGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.agent_state_mapping.governance.v1',
+      phase: 'P178',
+      thinkingSummary: formatAgentPhaseSummary('thinking'),
+      observingSummary: formatAgentPhaseSummary('observing'),
+    },
+    null,
+    2,
+  );
+}

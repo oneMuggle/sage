@@ -34,3 +34,16 @@ export function formatFillTemplateJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditFillTemplateGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.fill_template.governance.v1',
+      phase: 'P178',
+      sampleResult: fillTemplate('Hello {name}', { name: 'Sage' }),
+      sampleSummary: formatFillTemplateSummary('Hello {name}', { name: 'Sage' }),
+    },
+    null,
+    2,
+  );
+}
