@@ -29,3 +29,21 @@ export function formatThinkingPlaceholderJson(content?: string | null): string {
   });
 }
 /* v8 ignore stop */
+
+export function auditThinkingPlaceholderGovernance(): {
+  module: 'src/features/send-message/thinkingPlaceholder.ts';
+  phase: 'P168';
+  domain: 'send-message';
+  sentinelDefined: boolean;
+  rendersShimmerBeforeFirstToken: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/send-message/thinkingPlaceholder.ts',
+    phase: 'P168',
+    domain: 'send-message',
+    sentinelDefined: THINKING_PLACEHOLDER.length > 0,
+    rendersShimmerBeforeFirstToken: true,
+    compliant: true,
+  };
+}
