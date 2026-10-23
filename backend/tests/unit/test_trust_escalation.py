@@ -276,6 +276,27 @@ def test_mode_and_rules_delegate_to_base(base_enforcer, trust_env):
     assert enforcer.rules == base_enforcer.rules
 
 
+def test_plugin_name_forwarded_to_base(trust_env):
+    class _Recording(PermissionEnforcer):
+        def __init__(self):
+            super().__init__(mode=PermissionMode.WORKSPACE_WRITE, rules=())
+            self.seen = None
+
+        def check(self, tool_name, args=None, plugin_name=None):
+            self.seen = (tool_name, args, plugin_name)
+            return PermissionDecision(
+                allowed=True, needs_approval=False, reason="ok"
+            )
+
+    base = _Recording()
+    enforcer = TrustEscalationEnforcer(base, threshold=3)
+    decision = enforcer.check(
+        "plugin__demo__hello", {}, plugin_name="demo"
+    )
+    assert decision.allowed is True
+    assert base.seen == ("plugin__demo__hello", {}, "demo")
+
+
 def test_tool_capability_classification_is_unchanged():
     """sanity：包装器依赖的分类入口存在且行为稳定。"""
     assert classify_tool("write_file") is ToolCapability.WRITE

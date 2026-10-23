@@ -79,9 +79,17 @@ class TrustEscalationEnforcer:
         return self._base.rules
 
     def check(  # noqa: PLR0911 — 每个提前 return 都是一条独立的安全否决，合并会掩盖哪条网拦住了
-        self, tool_name: str, args: Optional[Dict[str, Any]] = None
+        self,
+        tool_name: str,
+        args: Optional[Dict[str, Any]] = None,
+        plugin_name: Optional[str] = None,
     ) -> PermissionDecision:
-        decision = self._base.check(tool_name, args or {})
+        if plugin_name is None:
+            decision = self._base.check(tool_name, args or {})
+        else:
+            decision = self._base.check(
+                tool_name, args or {}, plugin_name=plugin_name
+            )
         if not decision.needs_approval:
             # allow / deny 原样保留 —— deny 永远胜出。
             return decision

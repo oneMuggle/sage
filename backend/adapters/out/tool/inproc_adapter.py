@@ -39,6 +39,7 @@ from sage_core.repositories import ToolPort  # noqa: F401  (structural typing ta
 
 from backend.application.services.harness_recorder import HarnessProbe
 from backend.domain.scheduler import SchedulerServicePort
+from backend.domain.tool_names import is_plugin_tool_name
 from backend.domain.tool_policy import ToolPolicy
 from backend.services.todo_service import get_todo_service
 from backend.tools.bash_validation import validate_bash
@@ -218,6 +219,20 @@ class InprocToolAdapter:
     # M1 工具安全加固: 权限执行 choke point
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _authoritative_plugin_name(name: str) -> Optional[str]:
+        """从 bridge 当前发布记录取权威插件名；未知身份返回 None。"""
+        if not is_plugin_tool_name(name):
+            return None
+        try:
+            from backend.plugins.tool_bridge import get_plugin_tool_bridge
+
+            published = get_plugin_tool_bridge().published_tool(name)
+        except Exception as exc:  # noqa: BLE001 — 身份未知时由 enforcer fail-closed
+            logger.debug("插件工具权威名查询失败 tool=%s: %s", name, exc)
+            return None
+        return published.plugin_name if published is not None else None
+
     def _enforce_permission(self, name: str, args: Dict[str, Any]) -> Optional[ToolResult]:
         """分发前许可检查；放行返回 ``None``，拒绝返回错误 ``ToolResult``。
 
@@ -236,7 +251,11 @@ class InprocToolAdapter:
             enforcer = PermissionEnforcer(
                 mode=DEFAULT_PERMISSION_MODE, rules=(), bash_validator=validate_bash
             )
-        decision = enforcer.check(name, args)
+        plugin_name = self._authoritative_plugin_name(name)
+        if plugin_name is None:
+            decision = enforcer.check(name, args)
+        else:
+            decision = enforcer.check(name, args, plugin_name=plugin_name)
         if decision.needs_approval or not decision.allowed:
             logger.info(
                 "InprocToolAdapter 权限拒绝: tool=%s reason=%s", name, decision.reason

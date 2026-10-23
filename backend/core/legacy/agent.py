@@ -1052,7 +1052,7 @@ class SageAgent:
             return False
         if not isinstance(args, dict):
             return False
-        decision = enforcer.check(tc.name, args)
+        decision = self._check_permission(enforcer, tc.name, args)
         return not (decision.needs_approval or not decision.allowed)
 
     def _is_parallel_eligible(  # noqa: PLR0911 — 守卫链逐条 return 可读性更好
@@ -2457,6 +2457,34 @@ class SageAgent:
             logger.warning("渐进式授权包装失败，回退逐次审批: %s", exc)
             return base
 
+    def _authoritative_plugin_name(self, tool_name: str) -> Optional[str]:
+        """从 bridge 当前发布记录取插件工具的权威插件名。
+
+        R95/R96 共用同一口径：只有合法插件工具形状才查桥；查
+        不到或桥异常都返回 ``None``，调用方不得按完整工具名
+        切分猜测。权限检查据此 fail-closed，审批请求则不提供
+        整插件记住选项。
+        """
+        if not is_plugin_tool_name(tool_name):
+            return None
+        try:
+            from backend.plugins.tool_bridge import get_plugin_tool_bridge
+
+            published = get_plugin_tool_bridge().published_tool(tool_name)
+        except Exception as exc:  # noqa: BLE001 — 权威名缺失时按未知身份处理
+            logger.debug("插件工具权威名查询失败 tool=%s: %s", tool_name, exc)
+            return None
+        return published.plugin_name if published is not None else None
+
+    def _check_permission(
+        self, enforcer: Any, tool_name: str, args: Dict[str, Any]
+    ) -> PermissionDecision:
+        """调用 enforcer，并为已发布插件工具附带权威插件身份。"""
+        plugin_name = self._authoritative_plugin_name(tool_name)
+        if plugin_name is None:
+            return enforcer.check(tool_name, args)
+        return enforcer.check(tool_name, args, plugin_name=plugin_name)
+
     def _pre_dispatch_gate(
         self,
         tc: Any,
@@ -2501,7 +2529,7 @@ class SageAgent:
 
         # 2) M1 enforcement-before-dispatch。被拒 → 注入错误 ToolResult，
         # 循环正常继续（不抛异常）。
-        decision = enforcer.check(tc.name, args)
+        decision = self._check_permission(enforcer, tc.name, args)
         if profile_denied:
             decision = PermissionDecision(
                 allowed=False,
@@ -2660,21 +2688,10 @@ class SageAgent:
             workspace_root = self._office_boundary_resolver()
         except Exception:  # noqa: BLE001 — 预览是尽力而为
             workspace_root = None
-        # R95: 整插件记住范围只能用 bridge 已发布记录里的权威
-        # 插件名；查不到就保持 None，前端不会提供该选项，路由
-        # 也不会按字符串切分猜测。
-        plugin_name = None
-        if is_plugin_tool_name(tool_name):
-            try:
-                from backend.plugins.tool_bridge import get_plugin_tool_bridge
-
-                published = get_plugin_tool_bridge().published_tool(tool_name)
-                if published is not None:
-                    plugin_name = published.plugin_name
-            except Exception as exc:  # noqa: BLE001 — 权威名只是增强信息
-                logger.debug(
-                    "插件工具权威名查询失败 tool=%s: %s", tool_name, exc
-                )
+        # R95/R96: 整插件记住范围与权限规则身份都只能用 bridge
+        # 已发布记录里的权威插件名；查不到就保持 None，前端不会
+        # 提供整插件选项，路由也不会按字符串切分猜测。
+        plugin_name = self._authoritative_plugin_name(tool_name)
         return ApprovalRequest.create(
             tool_name=tool_name,
             args=args,
@@ -2829,7 +2846,9 @@ class SageAgent:
             工具执行结果
         """
         try:
-            decision = self._build_permission_enforcer().check(tool_name, parameters)
+            decision = self._check_permission(
+                self._build_permission_enforcer(), tool_name, parameters
+            )
             if decision.needs_approval or not decision.allowed:
                 return {
                     "success": False,

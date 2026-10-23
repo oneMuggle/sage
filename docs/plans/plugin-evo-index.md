@@ -24,7 +24,8 @@
 | R90 | 进程外插件 tool → 聊天 `ToolRegistry` 桥 | ✅ #2327 |
 | R92 | 插件工具 profile 受限通配 + Agent 工具白名单编辑 | ✅ #2360 |
 | R94 | 运行中插件工具动态选择器 | ✅ #2407 |
-| R95 | 插件工具按插件记住审批决定 | #2412（待合并） |
+| R95 | 插件工具按插件记住审批决定 | ✅ #2412 |
+| R96 | 插件权限规则结构化身份匹配 | #2413 待合并 |
 
 ## 2. 交付总账
 
@@ -42,7 +43,8 @@
 | R90 | `plugins/tool_bridge.py` + host publish/unpublish 通知与 running 查询 + `plugins` tool bundle + `input_schema` 契约/权限门/桥接测试与文档 | #2327 | 待对齐 | ✅ 已交付 |
 | R92 | `domain/tool_names.py` 共享 matcher 与前缀单一来源 + registry/agent 三道闸统一 + 启动期校验识别插件引用 + `EditAgentForm` 工具白名单编辑与测试/文档 | #2360 | 待对齐 | ✅ 已交付 |
 | R94 | `PluginToolBridge.published_tools()` 权威快照 + `GET /plugins/runtime/tools` + `pluginClient.runtimeTools()` + Agent 运行中插件工具动态复选框与测试/文档 | #2407 | 待对齐 | ✅ 已交付 |
-| R95 | 审批请求权威 `plugin_name` + `remember_scope=tool|plugin` + 后端派生受限插件规则 + ApprovalDialog 范围选择与 Electron 透传/测试/文档 | #2412（待合并） | 待对齐 | 实施中 |
+| R95 | 审批请求权威 `plugin_name` + `remember_scope=tool|plugin` + 后端派生受限插件规则 + ApprovalDialog 范围选择与 Electron 透传/测试/文档 | #2412 | 待对齐 | ✅ 已交付 |
+| R96 | `PermissionRule`/`PermissionEnforcer` 权威 `plugin_name` 结构化匹配 + agent/adapter 身份透传与测试/文档 | #2413 | 待对齐 | 待 CI/合并 |
 
 ## 3. R78 交付边界
 
@@ -314,6 +316,29 @@
 - **本地证据**：后端核心/相邻 208 例、前端与 Electron
   137 例通过；tsc（src/Electron）、ESLint、Ruff、py38、
   architecture、silent-exceptions、diff-check 与 diagnostics
-  全绿，最终以 PR CI 为准。
+  全绿；PR #2412 GitHub CI 与 E2E PR Gate 全绿，已 squash
+  合并为 `main`
+  `7634de8fc68e9064007706385ac433ec6c965d96`。
+
+## 16. R96 交付边界
+
+> spec：`2026-10-23_plugin-permission-identity-r96.md`。
+> R96 是本插件账轮次号，与 2026-09 的同号测试计划无关。
+
+- **只收紧执行期解释，不改已存规则**：`permission_rules`
+  仍保存 R95 的 `plugin__<plugin>__*` 文本；R96 只让
+  `PermissionEnforcer` 用桥接当前发布记录的权威
+  `plugin_name` 核对它，不再把完整工具名字符串前缀当作
+  插件身份。
+- **双下划线不再串扰持久信任**：插件名与 capability 名
+  仍可含 `__`，但 `a` 的整插件规则不能命中插件
+  `a__b`，同字符串工具名也只能按当前发布记录的真实
+  插件解释；无权威身份时受限插件通配不命中。
+- **其它规则口径不变**：精确规则与普通 fnmatch、deny >
+  allow > ask、bash 安全网、profile 白名单和审批弹窗
+  全部保持；本轮不做规则管理 UI、命名禁令或 Win7 同步。
+- **本地证据**：后端定向 134 例与相邻权限/插件回归
+  113 例通过；Ruff、py38、architecture、
+  silent-exceptions、diff-check 与 diagnostics 全绿。
 
 —— 本账本由插件化循环维护，随轮次追加。

@@ -2,7 +2,8 @@
 
 - 日期：2026-10-23
 - 基线：`main` `6e8f626696879d3ad826ddf88a7c0e506612f847`
-- 状态：PR #2412（待 CI/合并）
+- 状态：✅ 已交付，PR #2412 已 squash 合并为 `main`
+  `7634de8fc68e9064007706385ac433ec6c965d96`
 - 编号说明：R95 为 `plugin-evo-index.md` 的插件账轮次号，与
   2026-09 的同号测试收口计划无关。
 - 前置：R90 已让运行中进程外插件 tool 进入聊天执行面并逐次
@@ -162,4 +163,7 @@ architecture-check、`git diff --check` 与改动 diagnostics；
   architecture-check、silent-exceptions、`git diff --check`
   与改动范围 diagnostics 0 项均通过；commands 测试文件按
   ratchet 协议只更新自身 baseline（1166 → 1183）。
-- PR CI 仍是最终权威门禁；本地结果不替代 GitHub 全量检查。
+- GitHub 证据：PR #2412 的 CI run `39911664679` 与 E2E
+  PR Gate run `39911664683` 均 success，随后 squash
+  合并为 `main`
+  `7634de8fc68e9064007706385ac433ec6c965d96`。
