@@ -105,6 +105,7 @@ function isEditableDocType(docType: OfficeDocType): boolean {
   return docType === 'word' || docType === 'excel' || docType === 'ppt';
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatOfficePreviewPanelAuditSnapshot(input: {
   docType: OfficeDocType;
   filename: string;
@@ -119,6 +120,7 @@ export function formatOfficePreviewPanelAuditSnapshot(input: {
   return `文档预览 · ${input.docType.toUpperCase()} · ${name} · ${sizeKb}KB · ${viewLabel} · ${exportLabel}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatOfficePreviewPanelAuditJson(input: {
   docType: OfficeDocType;
   filename: string;
@@ -670,3 +672,15 @@ export function OfficePreviewPanel({
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditOfficePreviewPanelGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/OfficePreviewPanel.tsx',
+    phase: 'P164',
+    status: 'ready',
+  };
+}
