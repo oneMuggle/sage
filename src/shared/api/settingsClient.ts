@@ -178,3 +178,16 @@ export function formatPreferenceSnapshotJson(
     2,
   );
 }
+
+export function auditSettingsClientGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.settings_client.governance.v1',
+      phase: 'P177',
+      loadTimeoutMs: LOAD_TIMEOUT_MS,
+      sampleSummary: formatPreferenceSnapshotSummary('theme_mode', 'dark', 'ui'),
+    },
+    null,
+    2,
+  );
+}

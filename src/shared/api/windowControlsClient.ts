@@ -107,3 +107,16 @@ export function formatWindowPlatformJson(
     2,
   );
 }
+
+export function auditWindowControlsClientGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.window_controls_client.governance.v1',
+      phase: 'P177',
+      supportedPlatforms: ['macos', 'windows', 'linux', 'web'],
+      sampleSummary: formatWindowPlatformSummary('windows', true),
+    },
+    null,
+    2,
+  );
+}
