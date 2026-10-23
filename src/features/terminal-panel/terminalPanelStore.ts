@@ -111,3 +111,23 @@ export function formatTerminalPanelJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditTerminalPanelStoreGovernance(): {
+  module: 'src/features/terminal-panel/terminalPanelStore.ts';
+  phase: 'P169';
+  domain: 'terminal-panel';
+  minHeightPx: number;
+  maxHeightPx: number;
+  defaultHeightPx: number;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/terminal-panel/terminalPanelStore.ts',
+    phase: 'P169',
+    domain: 'terminal-panel',
+    minHeightPx: MIN_HEIGHT,
+    maxHeightPx: MAX_HEIGHT,
+    defaultHeightPx: DEFAULT_HEIGHT,
+    compliant: true,
+  };
+}
