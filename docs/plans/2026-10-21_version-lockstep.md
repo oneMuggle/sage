@@ -5,6 +5,28 @@
 - 上游依据：`docs/technical/30-release-tiers.md` §30.3 / §30.4
 - 关联：`docs/mcp-win7-main-alignment-plan.md` P1 阶段；PR #2232（P0 推送死锁）
 
+## 接管修订（2026-10-23，优先于下文旧口径）
+
+原方案按 2026-10-21 的 `main alpha.63 / win7 alpha.64-win7` 设计。
+2026-10-22 的实际双轨 bump（#2324 / #2325）发布后变为
+`main alpha.64 / win7 alpha.65-win7`，偏移重现；仅把本 PR 更新到新
+main 会让新增闸门立即因当前偏移失败。
+
+本次接管把共同目标从 alpha.64 改为 **alpha.66**：
+
+1. Win7 先由 #2389 把 package/lock bump 到 `0.4.9-alpha.66-win7`。
+2. 本 PR 再把 main package/lock 对齐到 `0.4.9-alpha.66`，并引入
+   `scripts/check_version_lockstep.py` 与 Version Lockstep workflow。
+3. 因 `v0.4.9-alpha.65-win7` 已发布，66 是双线下一个共同可用编号；
+   main 跳过从未发布的 alpha.65。
+4. 删除原方案新增的 alpha.64 CHANGELOG 段：alpha.64 已实际发布，
+   原文「仅版本号对齐，无功能变更」不再属实；本 PR 不再臆造
+   alpha.66 功能列表，发布说明按 Release workflow 的生成说明与
+   tag compare 核验。
+
+下文保留 2026-10-21 的现状与验证作为历史记录；与本节冲突时以本节
+为准。最终验证以更新后的本 PR Version Lockstep job 与完整 CI 为准。
+
 ## 1. 目标
 
 把「main 与 release/win7 版本号强同步」这条**已经写在文档里、但没有被执行**的规则变成

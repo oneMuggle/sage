@@ -20,21 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   并自动重新预览。**边界**：进程内锁不约束外部 Word/WPS（靠版本校验兜底），幂等台账
   不持久化，重启后退化为普通（仍做版本校验的）写入。
 
-## [v0.4.9-alpha.64] - 2026-10-21
-
-### Fixed
-- **发布版本 lockstep 归位**：win7 LTS 已于 2026-10-20 发布 `v0.4.9-alpha.64-win7`，
-  但 main 侧 `package.json` 仍停在 `0.4.9-alpha.63`，违反
-  `docs/technical/30-release-tiers.md` §30.4「MAJOR.MINOR.PATCH 强同步、tier 编号强同步」。
-  本段仅做版本号对齐，**无功能变更**；功能内容见 `[Unreleased]`。
-
-### CI
-- 新增 `scripts/check_version_lockstep.py` 与 `.github/workflows/version-lockstep.yml`：
-  在 PR 与 main push 上校验 main / `release/win7` 的版本配对关系，脱钩即失败。
-  按 §30.3 只做校验，**不自动打 tag**。
-  CHANGELOG 顶端版本不一致目前只出 warning（历史段 62 / 63 待补），
-  待补齐后可切换 `--strict-changelog`。
-
 ## [v0.4.9-alpha.61] - 2026-10-16
 
 ### Added

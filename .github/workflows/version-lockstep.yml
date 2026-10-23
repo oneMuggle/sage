@@ -6,8 +6,9 @@
 #   - tier 编号（alpha.N / beta.N / rc.N）强同步；
 #   - win7 tag = main tag + `-win7` 后缀。
 #
-# 现状（2026-10-21）：win7 已发布 v0.4.9-alpha.64-win7，而 main 的 package.json 停在
-# 0.4.9-alpha.63，脱钩整整一个 tier。本 workflow 把该规则变成可执行检查，避免再次静默漂移。
+# 接管修订（2026-10-23）：2026-10-22 双轨 bump 后，main 为 0.4.9-alpha.64、
+# win7 为 0.4.9-alpha.65-win7，偏移重现。本 PR 与 Win7 alpha.66 bump 配合，
+# 把双线统一到 alpha.66；本 workflow 把该规则变成可执行检查，避免再次静默漂移。
 #
 # 注意：按 §30.3「不在 CI 里自动打 tag（始终人工确认）」，这里**只校验，不打 tag、不改版本**。
 
