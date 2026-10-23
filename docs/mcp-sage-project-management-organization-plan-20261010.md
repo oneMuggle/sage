@@ -2392,3 +2392,24 @@
   - `src/features/send-message/__tests__/chatStreamStore.p167.test.ts`
   - `src/features/send-message/__tests__/orchestrationEvents.p167.test.ts`
   - `src/features/send-message/__tests__/sessionNotify.p167.test.ts`
+
+### Phase P168: Send-Message & Task-Brief Modules (ThinkingPlaceholder, TransparencyPayload, SavedTaskRecipes, TaskBriefDialog, TaskModelAdvisor, ModelTaskFit, TaskBrief, TaskRecipes) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/send-message/thinkingPlaceholder.ts` (`auditThinkingPlaceholderGovernance`)
+  - `src/features/send-message/transparencyPayload.ts` (`auditTransparencyPayloadGovernance`)
+  - `src/features/task-brief/SavedTaskRecipes.tsx` (`auditSavedTaskRecipesGovernance`)
+  - `src/features/task-brief/TaskBriefDialog.tsx` (`auditTaskBriefDialogGovernance`)
+  - `src/features/task-brief/TaskModelAdvisor.tsx` (`auditTaskModelAdvisorGovernance`)
+  - `src/features/task-brief/modelTaskFit.ts` (`auditModelTaskFitGovernance`)
+  - `src/features/task-brief/taskBrief.ts` (`auditTaskBriefGovernance`)
+  - `src/features/task-brief/taskRecipes.ts` (`auditTaskRecipesGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/send-message/__tests__/thinkingPlaceholder.p168.test.ts`
+  - `src/features/send-message/__tests__/transparencyPayload.p168.test.ts`
+  - `src/features/task-brief/__tests__/SavedTaskRecipes.p168.test.ts`
+  - `src/features/task-brief/__tests__/TaskBriefDialog.p168.test.ts`
+  - `src/features/task-brief/__tests__/TaskModelAdvisor.p168.test.ts`
+  - `src/features/task-brief/__tests__/modelTaskFit.p168.test.ts`
+  - `src/features/task-brief/__tests__/taskBrief.p168.test.ts`
+  - `src/features/task-brief/__tests__/taskRecipes.p168.test.ts`

@@ -42,3 +42,19 @@ export function formatModelTaskFitJson(model: CandidateModel, needsTools: boolea
     2,
   );
 }
+
+export function auditModelTaskFitGovernance(): {
+  module: 'src/features/task-brief/modelTaskFit.ts';
+  phase: 'P168';
+  domain: 'task-brief';
+  evaluatesToolCallingAndPricing: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/task-brief/modelTaskFit.ts',
+    phase: 'P168',
+    domain: 'task-brief',
+    evaluatesToolCallingAndPricing: true,
+    compliant: true,
+  };
+}
