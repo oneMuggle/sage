@@ -4,6 +4,9 @@
 提供所有内置工具的注册函数
 """
 
+import logging
+import os
+from pathlib import Path
 from typing import Callable, Optional
 
 from backend.domain.network_policy import NetworkPolicy
@@ -21,6 +24,7 @@ from .browser_tool import (
     BrowserDownloadsTool,
     BrowserInteractTool,
     BrowserLaunchTool,
+    BrowserLoginTool,
     BrowserNavigateTool,
     BrowserScreenshotTool,
     BrowserSnapshotTool,
@@ -140,6 +144,28 @@ def __dir__():
     return sorted({*globals().keys(), "AgentTool"})
 
 
+def _load_harness_safely():
+    """加载 R81 harness 配置；任何未预见异常都回退到全量 bundle。
+
+    ``load_harness_config`` 对坏 YAML 本身已 fail-open；这里再包一层，
+    是为了让配置子系统的导入/路径等异常也不能阻断最基础的工具装配。
+    无任何 ``harness.yaml`` 时结果是 ``standard``，与历史全量顺序一致。
+    """
+    try:
+        from backend.application.kernel.harness_config import load_harness_config
+
+        from .tool_bundles import bundle_names
+
+        workspace = os.environ.get("SAGE_WORKSPACE") or Path.cwd()
+        return load_harness_config(workspace=workspace, known_bundles=bundle_names())
+    except Exception:  # noqa: BLE001 —— 装配配置永远不能拖垮工具注册
+        logging.getLogger(__name__).warning(
+            "harness 配置加载失败，回退 standard 全量装配",
+            exc_info=True,
+        )
+        return None
+
+
 def register_all_tools(
     registry: ToolRegistry,
     policy: Optional[ToolPolicy] = None,
@@ -147,226 +173,42 @@ def register_all_tools(
     scheduler_service_getter: Optional[Callable[[], Optional[SchedulerServicePort]]] = None,
     todo_service_getter: Optional[Callable[[], Optional[TodoService]]] = None,
 ) -> None:
-    """
-    注册所有内置工具到注册表
+    """按 harness 选择结果注册内置工具到注册表。
+
+    R80 把原先 94 条平铺 ``register(...)`` 收编为 31 个具名 bundle；
+    R81 进一步以 ``harness.yaml`` 的四预设/三层合并结果筛选 bundle，
+    并删除仅用于过渡对照的 legacy 平铺实现。没有配置文件时固定为
+    ``standard``，工具集合、顺序、风险声明与 LLM schema 均保持原样。
 
     Args:
         registry:   工具注册表
         policy:     M2 工具策略（缺省 ``ToolPolicy()``）；透传给每个内置工具。
         network_policy: 网络策略；``None`` 时从 settings 读。决定三个出网工具
-            是否注册 —— 内网/气隙模式下不注册比返回错误更省 token，因为 LLM
-            看到工具就会试（与 ``get_schemas_for_llm`` 隐藏 office 工具同理）。
-        scheduler_service_getter:
-            定时任务服务延迟获取器（``ScheduleTaskTool`` 等需要）。``None`` 时
-            三个定时工具仍然注册，但内部 service 为空——调用时返回"未初始化"。
-        todo_service_getter:
-            待办服务延迟获取器（Task 5-13 的 add_todo/list_todos/... 需要）。
-            ``None`` 时五个待办工具仍然注册，但内部 service 为空——调用时返回"未初始化"。
+            是否注册 —— 内网/气隙模式下不注册比返回错误更省 token。
+        scheduler_service_getter: 定时任务服务延迟获取器。
+        todo_service_getter: 待办服务延迟获取器。
     """
     policy = policy or ToolPolicy()
     network_policy = network_policy if network_policy is not None else load_network_policy()
-    registry.register(BashTool(policy=policy))
-    # 后台 shell 生命周期：bash(run_in_background=true) 起的进程由这两个工具
-    # 轮询与终止。bash_output 归 READ（只读已捕获输出），kill_shell 归 WRITE。
-    registry.register(BashOutputTool(policy=policy))
-    registry.register(KillShellTool(policy=policy))
-    registry.register(ReadFileTool(policy=policy))
-    registry.register(WriteFileTool(policy=policy))
-    registry.register(ListDirTool(policy=policy))
-    if network_policy.search_enabled():
-        registry.register(WebSearchTool(policy=policy))
-    if network_policy.fetch_enabled():
-        registry.register(WebFetchTool(policy=policy, network_policy=network_policy))
-        registry.register(HttpDownloadTool(policy=policy, network_policy=network_policy))
-        # DL2 (Round 21): 后台下载任务查询/取消（与 http_download 同权限面）
-        registry.register(DownloadStatusTool())
-        registry.register(DownloadCancelTool())
-    registry.register(MemorySearchTool(policy=policy))
-    # Round 2 (session_search): 跨会话对话原文检索（READ 级）
-    registry.register(SessionSearchTool(policy=policy))
-    # Round 8 (execute_code): 零上下文 RPC 工具调用（EXEC 级，与 bash 同权限面）
-    registry.register(ExecuteCodeTool(registry=registry, policy=policy))
-    registry.register(MemorySaveTool(policy=policy))
-    registry.register(OfficeListTool(policy=policy))
-    registry.register(OfficeReadTool(policy=policy))
-    # T5: office_create —— 任意路径生成 Office 文档，写工作区外由 M1 权限执行器
-    # 的 path_boundary_validator 升级为审批（agent._office_boundary_resolver）。
-    registry.register(OfficeCreateTool(policy=policy))
-    # Office CRUD 补全：office_update（原地编辑）/ office_delete（删除），
-    # doc_id 模式走工作区绑定，file_path 模式越界同样由 path_boundary_validator
-    # 升级为审批（permissions.make_office_path_boundary 覆盖三个工具）。
-    registry.register(OfficeUpdateTool(policy=policy))
-    registry.register(OfficeDeleteTool(policy=policy))
-    # PR-2: office_restore —— 把 archived_at 抹掉的「还原」工具。
-    # requires_tool_context=True (与 office_archive 对称), doc_id 模式唯一。
-    # 与 office_update 配合使用可实现"撤销最近一次编辑"（pre-edit snapshot
-    # 留在 <managed>/.snapshots/，可由 LLM 通过 read_file + write_file 还原）。
-    registry.register(OfficeRestoreTool(policy=policy))
-    # PR-3: office_archive — sets archived_at, paired with office_restore
-    # to undo. Symmetric to OfficeRestoreTool (requires_tool_context=True,
-    # doc_id 模式 only). Service layer (`tool_service.archive`) already
-    # exists from PR-2; this just exposes it as an LLM-callable tool.
-    registry.register(OfficeArchiveTool(policy=policy))
-    # Office Parity Batch-1: PDF 三类能力（读文本 / 生成 / 表单读写）+
-    # Word 模板两件套（分析 / 填充）—— HTTP 端点已验证能力的 LLM 工具面
-    # 镜像。读三件 requires_tool_context=True（无绑定自动隐藏），写三件
-    # False（file_path 模式，越界由 path boundary / _enforce_workspace 把守）。
-    registry.register(OfficeReadPdfTool(policy=policy))
-    registry.register(OfficeGeneratePdfTool(policy=policy))
-    registry.register(OfficeReadPdfFormTool(policy=policy))
-    registry.register(OfficeFillPdfFormTool(policy=policy))
-    registry.register(OfficeAnalyzeWordTemplateTool(policy=policy))
-    registry.register(OfficeFillWordTemplateTool(policy=policy))
-    # PPT 模板两件套（office-p5a 能力的 LLM 工具面镜像）：analyze 枚举母版
-    # 版式/占位符（READ，无绑定隐藏）；fill 以模板副本另存新 .pptx
-    # （WRITE_LOCAL，file_path 模式始终可见）。
-    registry.register(OfficeAnalyzePptTemplateTool(policy=policy))
-    registry.register(OfficeFillPptTemplateTool(policy=policy))
-    # Office Parity Batch-2: office_analyze —— pandas 本地数据分析
-    # （describe/计数/聚合/相关性，可选分析报告 xlsx）。读类工具
-    # requires_tool_context=True（无绑定自动隐藏）；报告只写源文件同目录
-    # 的派生文件名，落点不经 LLM 选择。
-    registry.register(OfficeAnalyzeTool(policy=policy))
-    # 2026-09-10 journal template subsystem: 期刊模板 4 件套
-    # （parse_template / fill_from_content / generate_article / validate）。
-    # parse/validate 是 READ（docx 解析与 6 类规则校验）；fill/generate 是
-    # WRITE_LOCAL（落盘 docx）。全部 requires_tool_context=True。
-    registry.register(OfficeJournalParseTemplateTool(policy=policy))
-    registry.register(OfficeJournalFillFromContentTool(policy=policy))
-    registry.register(OfficeJournalGenerateArticleTool(policy=policy))
-    registry.register(OfficeJournalValidateTool(policy=policy))
-    # Round 9 引用体系: office_parse_bibtex（READ，BibTeX → ReferenceSpec）
-    registry.register(OfficeBibTexTool(policy=policy))
-    # Round 10 格式 Linter: office_lint_word（READ，对照 FormatSpec 校验 docx）
-    registry.register(OfficeLintWordTool(policy=policy))
-    # Round 12 自动修复: office_repair_word（WRITE_LOCAL，lint→修复→复检）
-    registry.register(OfficeRepairWordTool(policy=policy))
-    # Round 39 目录页码: office_refresh_toc（WRITE_LOCAL，Word COM 更新 TOC 域
-    # 为真页码并落盘；COM 不可用时返回降级理由而非假装成功）
-    registry.register(OfficeRefreshTocTool(policy=policy))
-    # M2 agent 工具面扩展（移植 claw-code: edit/glob/grep/todo/structured/repl）
-    registry.register(EditTool(policy=policy))
-    registry.register(GlobSearchTool(policy=policy))
-    registry.register(GrepSearchTool(policy=policy))
-    # F2 (round5 批次 E): 工作区语义检索（embedding 配置就绪时可用）
-    registry.register(CodebaseSearchTool(policy=policy))
-    registry.register(TodoWriteTool(policy=policy))
-    registry.register(StructuredOutputTool(policy=policy))
-    registry.register(ReplTool(policy=policy))
-    # 本地开发环境助手（runtime_probe 只读探测 + project_diagnose 静态分析 +
-    # runtime_exec 经审批后执行本地运行时）。Python 解释器/Node.js 适配器
-    # 由 register_default_adapters() 在进程启动期注入。
-    from backend.tools.adapters import register_default_adapters
 
-    register_default_adapters()
-    registry.register(RuntimeProbeTool(policy=policy))
-    registry.register(ProjectDiagnoseTool(policy=policy))
-    registry.register(RuntimeExecTool(policy=policy))
-    # M2 part B: in-loop 技能调用（EXECUTE，M1 审批闸口按模式矩阵拦截）
-    registry.register(SkillTool(policy=policy))
-    # M2 part B: AskUserQuestion（READ，run_loop 分发前特判 + 提问闸口）
-    registry.register(AskUserQuestionTool(policy=policy))
-    # M5: in-loop sub-agent tool (claw-code execute_agent pattern). The
-    # sub-agent itself only ever gets the read-only whitelist — see
-    # agent_tool.SUBAGENT_TOOL_WHITELIST.
-    # Lazy import here (not at module top) — see __getattr__ docstring
-    # above for the cycle this avoids. Safe at runtime because this
-    # function is only called AFTER backend.tools.__init__ has fully
-    # finished, so the back-edge
-    # `backend.core.legacy.agent -> backend.tools` resolves cleanly.
-    from .agent_tool import AgentTool
+    from .tool_bundles import install_default_bundles
 
-    registry.register(AgentTool(policy=policy))
-    # 2026-08-01: 代码探索工具 - 文件结构摘要（解决大代码库 max_iterations_exceeded）
-    registry.register(FileSummaryTool(policy=policy))
-    # 2026-09-06 对标增强 Phase-1: 一等 git 工具组（读三件免审，commit 走
-    # WRITE_LOCAL 审批；只 commit 不 push）+ 工作区检查点（create 只写
-    # sage 自有数据目录 → READ；restore 覆盖工作区 → WRITE_LOCAL 审批）。
-    registry.register(GitBranchTool(policy=policy))
-    registry.register(GitCheckoutTool(policy=policy))
-    registry.register(GitStashTool(policy=policy))
-    registry.register(GitStatusTool(policy=policy))
-    registry.register(GitDiffTool(policy=policy))
-    registry.register(GitLogTool(policy=policy))
-    # G9: commit message 素材工具（READ）—— diff 摘要 + 既有 message 风格
-    registry.register(GitCommitMessageTool(policy=policy))
-    registry.register(GitCommitTool(policy=policy))
-    registry.register(CheckpointCreateTool(policy=policy))
-    registry.register(CheckpointListTool(policy=policy))
-    registry.register(CheckpointRestoreTool(policy=policy))
-    # 2026-09-06 对标增强 Phase-2: apply_patch —— 多文件原子精确编辑
-    # （Codex apply_patch 对标；先整体校验后落盘，任一失败整批不写）。
-    registry.register(ApplyPatchTool(policy=policy))
-    # G4: symbol_search —— 代码库 Python 符号索引（ast 提取定义处，READ）
-    registry.register(SymbolSearchTool(policy=policy))
-    # G7: 浏览器自动化 —— CDP 驱动本机 Chrome/Edge（launch=EXEC /
-    # navigate=EXTERNAL 逐次审批 / snapshot+screenshot=READ / interact+close=WRITE_LOCAL）
-    registry.register(BrowserLaunchTool(policy=policy))
-    registry.register(BrowserNavigateTool(policy=policy))
-    registry.register(BrowserSnapshotTool(policy=policy))
-    registry.register(BrowserInteractTool(policy=policy))
-    registry.register(BrowserScreenshotTool(policy=policy))
-    # cookie 桥：导出/管理站点 cookie 凭据档案（WRITE_LOCAL，加密落库）
-    registry.register(BrowserCookiesTool(policy=policy))
-    # Round 5 SN3：浏览器内下载跟踪（READ，读事件通道状态表）
-    registry.register(BrowserDownloadsTool(policy=policy))
-    registry.register(BrowserCloseTool(policy=policy))
-    # Academic search skill: 显式触发技能沉淀（WRITE_LOCAL 写本地 SQLite）
-    registry.register(SkillSaveTool(policy=policy))
-
-    # Multimodal tools: TTS / ASR / Image Generation
-    registry.register(TextToSpeechTool(policy=policy))
-    registry.register(SpeechToTextTool(policy=policy))
-    registry.register(ImageGenerationTool(policy=policy))
-
-    # Sage 自省与配置工具：read_sage_config 为 READ，update_sage_config 为 WRITE_LOCAL。
-    registry.register(ReadSageConfigTool(policy=policy))
-    registry.register(UpdateSageConfigTool(policy=policy))
-
-    # 定时任务派发工具（feat/llm-schedule-tool）：把 SchedulerService 暴露给 LLM。
-    # list 为 READ；schedule / cancel 为 WRITE_LOCAL（持久化副作用，走审批）。
-    registry.register(ScheduleTaskTool(policy=policy, service_getter=scheduler_service_getter))
-    registry.register(ListScheduledTasksTool(policy=policy, service_getter=scheduler_service_getter))
-    registry.register(CancelScheduledTaskTool(policy=policy, service_getter=scheduler_service_getter))
-
-    # Register MCP tools (from external MCP servers like draw.io)
-    try:
-        from backend.mcp import register_mcp_tools
-
-        register_mcp_tools(registry)
-    except Exception as exc:
-        import logging
-
-        logging.getLogger(__name__).warning(f"Failed to register MCP tools: {exc}")
-
-    # Todo 持久化管理工具（Task 5-13）：依赖 TodoService（service-getter
-    # 延迟解析）。tools 始终注册（ALL_BUILTIN_TOOL_NAMES 已纳入，与
-    # schedule 工具一致）；``todo_service_getter`` 决定 execute() 时能否
-    # 取到 service —— ``None`` 时返回 NO_SERVICE_ERROR，不静默缺工具。
-    # 直接 import 而非延迟：register_all_tools 是启动期单次调用，且
-    # todo_mgmt_tool 依赖 TodoService（已被 todo_service_getter 调用方
-    # 拉起），不存在循环。
-    from backend.tools.todo_mgmt_tool import (
-        AddTodoTool,
-        CompleteTodoTool,
-        DeleteTodoTool,
-        ListTodosTool,
-        UpdateTodoTool,
+    harness = _load_harness_safely()
+    report = install_default_bundles(
+        registry,
+        policy,
+        network_policy,
+        scheduler_service_getter,
+        todo_service_getter,
+        harness=harness,
     )
-
-    registry.register(AddTodoTool(todo_service_getter=todo_service_getter, policy=policy))
-    registry.register(ListTodosTool(todo_service_getter=todo_service_getter, policy=policy))
-    registry.register(CompleteTodoTool(todo_service_getter=todo_service_getter, policy=policy))
-    registry.register(UpdateTodoTool(todo_service_getter=todo_service_getter, policy=policy))
-    registry.register(DeleteTodoTool(todo_service_getter=todo_service_getter, policy=policy))
-
-    # Design Studio tools (Task 13): 5 tools for HTML/CSS prototype and presentation generation.
-    # list_systems/list_templates are READ; generate/iterate/export are WRITE_LOCAL.
-    registry.register(DesignListSystemsTool(policy=policy))
-    registry.register(DesignListTemplatesTool(policy=policy))
-    registry.register(DesignGenerateTool(policy=policy))
-    registry.register(DesignIterateTool(policy=policy))
-    registry.register(DesignExportTool(policy=policy))
+    logging.getLogger(__name__).info(
+        "bundle 装配完成（preset=%s）：已注册 %d 个工具，跳过 %d 个 bundle，失败 %d 个",
+        getattr(harness, "preset", "standard"),
+        len(report.installed),
+        len(report.skipped),
+        len(report.failed),
+    )
 
 
 __all__ = [
@@ -445,6 +287,7 @@ __all__ = [
     "BrowserScreenshotTool",
     "BrowserDownloadsTool",
     "BrowserCloseTool",
+    "BrowserLoginTool",
     "SkillHotLoader",
     "SkillSaveTool",
     "TextToSpeechTool",
