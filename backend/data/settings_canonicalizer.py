@@ -95,6 +95,9 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "llmRetryMaxAttempts",
         "llmRetryBaseDelayS",
         "llmRetryMaxDelayS",
+        # 2026-10-22: 整轮任务 wall-clock 上限（秒）— 0 = 不限；函数式读取
+        # 立即生效，无须重启后端。前端 DEFAULT_SETTINGS = 1800。
+        "llmTotalTimeoutS",
     }
 )
 LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(

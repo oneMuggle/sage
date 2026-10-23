@@ -24,13 +24,6 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Set
 
-from backend.ports.llm import ModelCapabilities
-
-# LLM 调用总 wall-clock 超时（秒）。默认 600（10 分钟）。
-# httpx.Timeout(60) 只是 chunk 间读超时，慢连接持续有小数据块就永不触发。
-# 此超时包裹整个 agent.run_loop()，防止 LLM API hang 住导致 session 永远 running。
-_SAGE_LLM_TOTAL_TIMEOUT_S = float(os.environ.get("SAGE_LLM_TOTAL_TIMEOUT_S", "600"))
-
 from fastapi import APIRouter, HTTPException, Request
 
 from backend.api.chat_request_policy import (  # C2b: 唯一实现，原五份逐字重复收编
@@ -52,6 +45,7 @@ from backend.chat.history_context import (
 from backend.chat.sources_extractor import extract_sources_from_tool, merge_sources
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
+from backend.core.legacy.llm_total_timeout import llm_total_timeout_or_none
 from backend.data import answer_version_repo as answer_versions
 from backend.data.database import get_database
 from backend.data.session_repo import (
@@ -69,6 +63,7 @@ from backend.office.workspace_errors import (
 from backend.orchestration.chat_dispatcher import (
     _classify_orchestration_mode,
 )
+from backend.ports.llm import ModelCapabilities
 from backend.services.scheduler import get_scheduler_service
 
 logger = logging.getLogger(__name__)
@@ -2056,28 +2051,41 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     else:
                         await entry.queue.put(evt.to_dict())
 
+            # 整轮任务 wall-clock 上限（函数式读取：app_settings > env > 默认 1800s；
+            # UI 改后立即生效，无须重启后端）。0 → None = 不限。
+            _timeout_s = llm_total_timeout_or_none()
             try:
                 await asyncio.wait_for(
                     _consume_run_loop(),
-                    timeout=_SAGE_LLM_TOTAL_TIMEOUT_S,
+                    timeout=_timeout_s,
                 )
             except asyncio.TimeoutError:  # noqa: UP041 — py3.8 兼容显式标注
+                # _timeout_s 为 None 时 wait_for 永不抛 TimeoutError；此处必为正值
                 _wall = time.monotonic() - _producer_started_at
-                _producer_error = (
-                    f"LLM 调用总耗时 {_wall:.1f}s 超过上限 "
-                    f"{_SAGE_LLM_TOTAL_TIMEOUT_S:.0f}s，已强制终止。"
-                    f"session_id={data.session_id}, stream_id={stream_id}"
+                _limit_s = _timeout_s if _timeout_s is not None else 0.0
+                # wire 形式进 sessions.last_error（侧栏 tooltip），
+                # 与 feat/agent-limit-error-details 的 "<code> (limit=<N>)" 格式一致，
+                # 复用前端现成的 parseAgentErrorLimit + mapAgentErrorToText 链路。
+                _producer_error = f"llm_total_timeout (limit={_limit_s:.0f})"
+                logger.error(
+                    f"[REQ {request_id}] 整轮任务总耗时 {_wall:.1f}s "
+                    f"超出上限 {_limit_s:.0f}s，已强制终止。"
+                    f" session_id={data.session_id}, stream_id={stream_id}"
                 )
-                logger.error(f"[REQ {request_id}] {_producer_error}")
                 await entry.queue.put(
                     {
                         "state": "failed",
                         "error": {
                             "type": "llm_total_timeout",
+                            # 展示文案进流式 error envelope（聊天横幅）。
+                            # 明确"整轮任务总耗时上限"、排除网络语义、指路设置入口，
+                            # 与"请求超时"/"模型端点响应超时"彻底区分。
                             "message": (
-                                f"LLM 调用超时（已耗时 {_wall:.0f}s，"
-                                f"上限 {_SAGE_LLM_TOTAL_TIMEOUT_S:.0f}s），"
-                                "请重试或缩短输入。"
+                                f"整轮任务总耗时超出上限（{_wall:.0f}s，"
+                                f"上限 {_limit_s:.0f}s）。"
+                                f"这是 LLM 调用 + 工具执行 + 子代理的累计耗时，"
+                                f"与网络或端点连通性无关。"
+                                f"可在「设置 → 基础 → LLM 任务上限」调高后重试。"
                             ),
                         },
                     }
