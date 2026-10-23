@@ -85,3 +85,16 @@ export function formatModelWindowJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditModelWindowsGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.model_windows.governance.v1',
+      phase: 'P179',
+      defaultContextWindowTokens: DEFAULT_CONTEXT_WINDOW_TOKENS,
+      sampleSummary: formatModelWindowSummary(128000, null, true, 16384),
+    },
+    null,
+    2,
+  );
+}

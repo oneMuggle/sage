@@ -82,3 +82,15 @@ export function formatShortcutRegistryJson(
   });
 }
 
+export function auditShortcutsGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.shortcuts.governance.v1',
+      phase: 'P179',
+      groupCount: SHORTCUT_GROUPS.length,
+      summary: formatShortcutRegistrySummary(SHORTCUT_GROUPS),
+    },
+    null,
+    2,
+  );
+}
