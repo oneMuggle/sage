@@ -143,3 +143,16 @@ export function formatTextDiffJson(side?: DiffSide | null): string {
     2,
   );
 }
+
+export function auditTextDiffGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.text_diff.governance.v1',
+      phase: 'P180',
+      maxInputChars: MAX_DIFF_INPUT_CHARS,
+      sampleSummary: formatTextDiffSummary(null),
+    },
+    null,
+    2,
+  );
+}

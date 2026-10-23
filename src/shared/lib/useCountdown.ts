@@ -71,3 +71,16 @@ export function formatCountdownJson(
     2,
   );
 }
+
+export function auditUseCountdownGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.use_countdown.governance.v1',
+      phase: 'P180',
+      tickingSummary: formatCountdownSummary(5, 3, 1),
+      doneSummary: formatCountdownSummary(5, 0, 1),
+    },
+    null,
+    2,
+  );
+}

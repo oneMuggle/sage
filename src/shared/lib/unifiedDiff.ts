@@ -219,3 +219,15 @@ export function formatUnifiedDiffJson(
     2,
   );
 }
+
+export function auditUnifiedDiffGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.unified_diff.governance.v1',
+      phase: 'P180',
+      sampleSummary: formatUnifiedDiffSummary('@@ -1 +1 @@\n-old\n+new'),
+    },
+    null,
+    2,
+  );
+}
