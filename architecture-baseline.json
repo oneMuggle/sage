@@ -47,7 +47,7 @@
     "backend/wiki/files.py": 927,
     "backend/zotero/client.py": 818,
     "electron/__tests__/commands.test.ts": 1140,
-    "electron/main.ts": 2926,
+    "electron/main.ts": 2927,
     "electron/tests/updateIntegration.test.ts": 869,
     "electron/tests/updateManager.test.ts": 1813,
     "electron/updateManager.ts": 1498,
