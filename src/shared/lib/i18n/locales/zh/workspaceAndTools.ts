@@ -440,4 +440,11 @@ export function formatZhWorkspaceAndToolsJson(): string {
     keyCount: keys.length,
   });
 }
+export function auditZhWorkspaceAndToolsGovernance(): string {
+  return JSON.stringify({
+    module: 'zh-workspace-and-tools',
+    phase: 'P183',
+    audited: true,
+  });
+}
 

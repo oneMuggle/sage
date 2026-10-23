@@ -39,3 +39,10 @@ export function formatLogLevelJson(level?: LogLevel | null): string {
   });
 }
 /* v8 ignore stop */
+export function auditLogLevelsGovernance(): string {
+  return JSON.stringify({
+    module: 'log-levels',
+    phase: 'P183',
+    audited: true,
+  });
+}

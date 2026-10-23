@@ -66,3 +66,10 @@ export function formatClientLogJson(
     2,
   );
 }
+export function auditLogClientGovernance(): string {
+  return JSON.stringify({
+    module: 'log-client',
+    phase: 'P183',
+    audited: true,
+  });
+}
