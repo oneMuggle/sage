@@ -2508,3 +2508,16 @@
   - `src/pages/settings/ThemeSelector.tsx`: Added `auditThemeSelectorGovernance()` verifying custom CSS themes and modal support (`src/pages/settings/__tests__/ThemeSelector.p173.test.ts`).
   - `src/pages/settings/UpdatesTab.tsx`: Added `auditUpdatesTabGovernance()` verifying manual update check and cache retention configuration (`src/pages/settings/__tests__/UpdatesTab.p173.test.ts`).
   - `src/pages/settings/ZoteroTab.tsx`: Added `auditZoteroTabGovernance()` verifying Zotero item search and annotations preview (`src/pages/settings/__tests__/ZoteroTab.p173.test.ts`).
+
+### Phase P174 — Settings Helpers & Shared Utility/API Governance Audit Contracts (Completed 2026-10-23)
+
+- **Settings Helpers & Search Index Governance Contracts**:
+  - `src/pages/settings/components.tsx`: Added `auditSettingsComponentsGovernance()` verifying `AdvancedSection` and `SettingRow` shared components (`src/pages/settings/__tests__/components.p174.test.ts`).
+  - `src/pages/settings/credentialCookieParser.ts`: Added `auditCredentialCookieParserGovernance()` verifying cookie header parsing and summary formatting (`src/pages/settings/__tests__/credentialCookieParser.p174.test.ts`).
+  - `src/pages/settings/settingsNavigation.ts`: Added `auditSettingsNavigationGovernance()` verifying legacy bookmark aliases (`general->basic`, `memory-knowledge->memory`) (`src/pages/settings/__tests__/settingsNavigation.p174.test.ts`).
+  - `src/pages/settings/settingsPresentation.ts`: Added `auditSettingsPresentationGovernance()` verifying grouped navigation and row focus helpers (`src/pages/settings/__tests__/settingsPresentation.p174.test.ts`).
+  - `src/pages/settings/settingsSearchIndex.ts`: Added `auditSettingsSearchIndexGovernance()` verifying settings search index coverage (`src/pages/settings/__tests__/settingsSearchIndex.p174.test.ts`).
+- **Shared Logger, Feature Flag & Backend Request Governance Contracts**:
+  - `src/shared/logger.ts`: Added `auditLoggerGovernance()` verifying structured logger levels (`debug`, `info`, `warn`, `error`) (`src/shared/__tests__/logger.p174.test.ts`).
+  - `src/shared/updateFeatureFlag.ts`: Added `auditUpdateFeatureFlagGovernance()` verifying update providers UI feature flag defaults (`src/shared/__tests__/updateFeatureFlag.p174.test.ts`).
+  - `src/shared/api/backendRequest.ts`: Added `auditBackendRequestGovernance()` verifying fail-closed `BACKEND_NOT_AVAILABLE` fallback error handling (`src/shared/api/__tests__/backendRequest.p174.test.ts`).

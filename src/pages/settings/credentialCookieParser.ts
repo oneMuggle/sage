@@ -36,3 +36,20 @@ export function formatCookieHeaderJson(items: CookieImportItem[]): string {
     2,
   );
 }
+
+export function auditCredentialCookieParserGovernance(): {
+  module: 'src/pages/settings/credentialCookieParser.ts';
+  phase: 'P174';
+  domain: 'settings';
+  sampleCookieCount: number;
+  compliant: boolean;
+} {
+  const items = parseCookieHeader('sid=abc123; theme=dark');
+  return {
+    module: 'src/pages/settings/credentialCookieParser.ts',
+    phase: 'P174',
+    domain: 'settings',
+    sampleCookieCount: items.length,
+    compliant: items.length === 2,
+  };
+}

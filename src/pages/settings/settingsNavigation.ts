@@ -51,3 +51,21 @@ export function formatSettingsNavigationJson(
     2,
   );
 }
+
+export function auditSettingsNavigationGovernance(): {
+  module: 'src/pages/settings/settingsNavigation.ts';
+  phase: 'P174';
+  domain: 'settings';
+  legacyAliases: readonly ['general->basic', 'memory-knowledge->memory'];
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/settings/settingsNavigation.ts',
+    phase: 'P174',
+    domain: 'settings',
+    legacyAliases: ['general->basic', 'memory-knowledge->memory'],
+    compliant:
+      initialSettingsTab('general') === 'basic' &&
+      initialSettingsTab('memory-knowledge') === 'memory',
+  };
+}

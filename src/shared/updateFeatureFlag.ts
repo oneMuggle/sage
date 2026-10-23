@@ -32,3 +32,19 @@ export function formatUpdateFeatureFlagJson(enabled?: boolean | null): string {
   });
 }
 /* v8 ignore stop */
+
+export function auditUpdateFeatureFlagGovernance(): {
+  module: 'src/shared/updateFeatureFlag.ts';
+  phase: 'P174';
+  domain: 'shared';
+  defaultEnabled: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/shared/updateFeatureFlag.ts',
+    phase: 'P174',
+    domain: 'shared',
+    defaultEnabled: true,
+    compliant: formatUpdateFeatureFlagSummary(true) === 'updateProvidersUi=enabled',
+  };
+}
