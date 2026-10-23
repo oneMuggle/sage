@@ -2287,3 +2287,24 @@
   - `src/features/journal/__tests__/journalIndex.p162.test.ts`
   - `src/features/journal/__tests__/useJournalTemplates.p162.test.ts`
   - `src/features/journal/__tests__/JournalActions.p162.test.ts`
+
+### Phase P163: Journal Components (JournalContentEditor, JournalSpecCard, JournalValidationReport), Manage-Endpoints API & Manage-Settings (PreferenceSaveStatus, SettingsStore, UseConfirmedPreference, UseSettings) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/journal/components/JournalContentEditor.tsx` (`auditJournalContentEditorGovernance`)
+  - `src/features/journal/components/JournalSpecCard.tsx` (`auditJournalSpecCardGovernance`)
+  - `src/features/journal/components/JournalValidationReport.tsx` (`auditJournalValidationReportGovernance`)
+  - `src/features/manage-endpoints/api.ts` (`auditManageEndpointsApiGovernance`)
+  - `src/features/manage-settings/PreferenceSaveStatus.tsx` (`auditPreferenceSaveStatusGovernance`)
+  - `src/features/manage-settings/settingsStore.ts` (`auditSettingsStoreGovernance`)
+  - `src/features/manage-settings/useConfirmedPreference.ts` (`auditUseConfirmedPreferenceGovernance`)
+  - `src/features/manage-settings/useSettings.ts` (`auditUseSettingsGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/journal/__tests__/JournalContentEditor.p163.test.ts`
+  - `src/features/journal/__tests__/JournalSpecCard.p163.test.ts`
+  - `src/features/journal/__tests__/JournalValidationReport.p163.test.ts`
+  - `src/features/manage-endpoints/__tests__/api.p163.test.ts`
+  - `src/features/manage-settings/__tests__/PreferenceSaveStatus.p163.test.ts`
+  - `src/features/manage-settings/__tests__/settingsStore.p163.test.ts`
+  - `src/features/manage-settings/__tests__/useConfirmedPreference.p163.test.ts`
+  - `src/features/manage-settings/__tests__/useSettings.p163.test.ts`

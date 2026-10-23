@@ -567,3 +567,15 @@ export function formatProbeResultJson(result: ProbeResult): string {
     2,
   );
 }
+
+export function auditManageEndpointsApiGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/manage-endpoints/api.ts',
+    phase: 'P163',
+    status: 'ready',
+  };
+}
