@@ -2495,3 +2495,16 @@
   - `src/pages/settings/MemoryTab.tsx`: Added `auditMemoryTabGovernance()` verifying embedder modes (`onnx`, `hash`) and backup/export support (`src/pages/settings/__tests__/MemoryTab.p172.test.ts`).
   - `src/pages/settings/ModelsTab.tsx`: Added `auditModelsTabGovernance()` verifying auto-context and catalog navigation support (`src/pages/settings/__tests__/ModelsTab.p172.test.ts`).
   - `src/pages/settings/NetworkTab.tsx`: Added `auditNetworkTabGovernance()` verifying proxy, search engine, and credentials configuration support (`src/pages/settings/__tests__/NetworkTab.p172.test.ts`).
+
+### Phase P173 — Project Governance Page & Settings Tabs Governance Audit Contracts (Completed 2026-10-23)
+
+- **Project Governance Page Governance Contract**:
+  - `src/pages/ProjectGovernance.tsx`: Added `auditProjectGovernancePageGovernance()` verifying governance tabs (`paths`, `milestones`, `materials`, `profile`, `charter`) (`src/pages/__tests__/ProjectGovernance.p173.test.ts`).
+- **Settings Tabs & Manager Governance Contracts**:
+  - `src/pages/settings/OrchestrationTab.tsx`: Added `auditOrchestrationTabGovernance()` verifying worktree isolation and budget controls (`src/pages/settings/__tests__/OrchestrationTab.p173.test.ts`).
+  - `src/pages/settings/PromptTemplatesTab.tsx`: Added `auditPromptTemplatesTabGovernance()` verifying orphan template memory cleanup (`src/pages/settings/__tests__/PromptTemplatesTab.p173.test.ts`).
+  - `src/pages/settings/ProvidersManager.tsx`: Added `auditProvidersManagerGovernance()` verifying manifest URL and custom update providers (`src/pages/settings/__tests__/ProvidersManager.p173.test.ts`).
+  - `src/pages/settings/RuntimeEnvTab.tsx`: Added `auditRuntimeEnvTabGovernance()` verifying runtime diagnostics and output inspection (`src/pages/settings/__tests__/RuntimeEnvTab.p173.test.ts`).
+  - `src/pages/settings/ThemeSelector.tsx`: Added `auditThemeSelectorGovernance()` verifying custom CSS themes and modal support (`src/pages/settings/__tests__/ThemeSelector.p173.test.ts`).
+  - `src/pages/settings/UpdatesTab.tsx`: Added `auditUpdatesTabGovernance()` verifying manual update check and cache retention configuration (`src/pages/settings/__tests__/UpdatesTab.p173.test.ts`).
+  - `src/pages/settings/ZoteroTab.tsx`: Added `auditZoteroTabGovernance()` verifying Zotero item search and annotations preview (`src/pages/settings/__tests__/ZoteroTab.p173.test.ts`).

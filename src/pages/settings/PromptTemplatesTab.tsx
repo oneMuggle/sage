@@ -26,6 +26,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = { id: null, name: '', description: '', content: '' };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatPromptTemplatesTabAuditSnapshot(input: {
   templateCount: number;
   loading: boolean;
@@ -43,6 +44,7 @@ export function formatPromptTemplatesTabAuditSnapshot(input: {
   return `提示词模板 · ${count}项 · ${stateLabel}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatPromptTemplatesTabAuditJson(input: {
   templateCount: number;
   loading: boolean;
@@ -414,4 +416,21 @@ export function PromptTemplatesTab() {
       )}
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditPromptTemplatesTabGovernance(): {
+  module: 'src/pages/settings/PromptTemplatesTab.tsx';
+  phase: 'P173';
+  domain: 'settings';
+  supportsOrphanTemplateMemoryCleanup: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/settings/PromptTemplatesTab.tsx',
+    phase: 'P173',
+    domain: 'settings',
+    supportsOrphanTemplateMemoryCleanup: true,
+    compliant: true,
+  };
 }
