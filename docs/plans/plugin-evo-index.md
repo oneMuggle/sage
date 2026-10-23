@@ -25,7 +25,8 @@
 | R92 | 插件工具 profile 受限通配 + Agent 工具白名单编辑 | ✅ #2360 |
 | R94 | 运行中插件工具动态选择器 | ✅ #2407 |
 | R95 | 插件工具按插件记住审批决定 | ✅ #2412 |
-| R96 | 插件权限规则结构化身份匹配 | #2413 待合并 |
+| R96 | 插件权限规则结构化身份匹配 | ✅ #2413 |
+| R97 | 已记住权限规则管理（查看/删除） | #2418 待合并 |
 
 ## 2. 交付总账
 
@@ -44,7 +45,8 @@
 | R92 | `domain/tool_names.py` 共享 matcher 与前缀单一来源 + registry/agent 三道闸统一 + 启动期校验识别插件引用 + `EditAgentForm` 工具白名单编辑与测试/文档 | #2360 | 待对齐 | ✅ 已交付 |
 | R94 | `PluginToolBridge.published_tools()` 权威快照 + `GET /plugins/runtime/tools` + `pluginClient.runtimeTools()` + Agent 运行中插件工具动态复选框与测试/文档 | #2407 | 待对齐 | ✅ 已交付 |
 | R95 | 审批请求权威 `plugin_name` + `remember_scope=tool|plugin` + 后端派生受限插件规则 + ApprovalDialog 范围选择与 Electron 透传/测试/文档 | #2412 | 待对齐 | ✅ 已交付 |
-| R96 | `PermissionRule`/`PermissionEnforcer` 权威 `plugin_name` 结构化匹配 + agent/adapter 身份透传与测试/文档 | #2413 | 待对齐 | 待 CI/合并 |
+| R96 | `PermissionRule`/`PermissionEnforcer` 权威 `plugin_name` 结构化匹配 + agent/adapter 身份透传与测试/文档 | #2413 | 待对齐 | ✅ 已交付 |
+| R97 | `GET /permissions/rules` + 删除端点 + Electron 命令 + 设置页已记住规则列表/删除与测试/文档 | #2418 | 待对齐 | 待 CI/合并 |
 
 ## 3. R78 交付边界
 
@@ -339,6 +341,31 @@
   全部保持；本轮不做规则管理 UI、命名禁令或 Win7 同步。
 - **本地证据**：后端定向 134 例与相邻权限/插件回归
   113 例通过；Ruff、py38、architecture、
-  silent-exceptions、diff-check 与 diagnostics 全绿。
+  silent-exceptions、diff-check 与 diagnostics 全绿；
+  PR #2413 GitHub All checks successful，已 squash
+  合并为 `main`
+  `56b005127a7f83f48086460fdce3192484c18717`。
+
+## 17. R97 交付边界
+
+> spec：`2026-10-23_permission-rules-manager-r97.md`。
+> R97 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **只补可见与可撤销，不开新的规则写面**：已保存规则
+  仍只能由审批 remember（精确工具）或服务端权威派生
+  （整插件）生成；设置页只列出 `parse_rules` 口径下
+  实际生效的规则并支持逐条删除，不提供新增/编辑
+  pattern 的入口。
+- **删除走后端校验，不整表回写**：删除端点带 Origin
+  守卫与下标范围校验，写回规范化后的有效列表并返回
+  最新列表；前端不直接拼写 `permission_rules` 原始
+  JSON。重复规则逐条删，误删后果只是恢复逐次审批。
+- **其它口径不变**：存储结构、remember 追加策略、
+  R96 身份匹配、审批弹窗与远程渠道全部保持；本轮
+  不做批量清空、分组/搜索或 Win7 同步。
+- **本地证据**：后端定向 37 例与相邻 77 例、前端定向
+  26 例与相邻 33 例通过；tsc、ESLint（0 errors）、
+  Ruff、py38、architecture、silent-exceptions、
+  ipc-manifest、diff-check 与 diagnostics 全绿。
 
 —— 本账本由插件化循环维护，随轮次追加。

@@ -17,8 +17,10 @@ export const LOAD_TIMEOUT_MS = 5000;
  * 合法 preference key — 与后端 SettingsRepository.KEYS 白名单对齐
  * （backend/data/settings_repo.py）。白名单外的 key → 后端 400。
  *
- * permission_mode / permission_rules: M1 工具安全加固（注意 rules 只能
- * 由后端审批应答 remember=true 追加，前端只读 mode）。
+ * permission_mode / permission_rules: M1 工具安全加固。rules 只能由
+ * 后端审批应答 remember=true 生成；R97 起设置页经后端
+ * /permissions/rules 端点查看并逐条删除，不走本 KV 整表回写
+ * （本 key 仅供 reset 等既有路径按名引用）。
  */
 export type PreferenceKey =
   | 'app_settings'

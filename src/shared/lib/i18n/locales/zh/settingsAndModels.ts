@@ -317,8 +317,16 @@ export const zhSettingsAndModels = {
   'settings.permission.mode.full_access': '完全访问',
   'settings.permission.mode.full_access.desc': '允许所有操作，不再弹出审批（谨慎）',
   'settings.permission.rules_hint':
-    '细粒度规则（permission_rules JSON）暂不支持界面编辑；审批时勾选"记住我的选择"会自动追加规则。',
+    '细粒度规则由审批时勾选"记住我的选择"生成；已记住的规则可在下方查看并逐条删除（删除后恢复逐次审批）。',
   'settings.permission.load_failed': '读取权限模式失败',
+  'settings.permission.rules.title': '已记住的规则',
+  'settings.permission.rules.empty': '暂无已记住的规则',
+  'settings.permission.rules.delete': '删除',
+  'settings.permission.rules.decision.allow': '允许',
+  'settings.permission.rules.decision.deny': '拒绝',
+  'settings.permission.rules.decision.ask': '每次询问',
+  'settings.permission.rules.load_failed': '读取已记住规则失败',
+  'settings.permission.rules.delete_failed': '删除规则失败，请重试',
 
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': '用量统计',

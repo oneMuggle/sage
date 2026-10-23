@@ -2,7 +2,8 @@
 
 - 日期：2026-10-23
 - 基线：`main` `7634de8fc68e9064007706385ac433ec6c965d96`
-- 状态：PR #2413 待 CI 与合并
+- 状态：已交付（PR #2413，squash 合并为 `main`
+  `56b005127a7f83f48086460fdce3192484c18717`）
 - 编号说明：R96 为 `plugin-evo-index.md` 的插件账轮次号，
   与 2026-09 的同号测试收口计划无关。
 - 前置：R92 已定义两种受限插件通配；R94 已提供桥接权威
@@ -155,6 +156,10 @@ R95 创建整插件规则时已经不按字符串猜插件名，而是使用
 - architecture-check、silent-exceptions、
   `git diff --check` 通过；backend 与 docs 改动范围
   diagnostics 均为 0 项。
+- GitHub PR #2413：All checks successful（14 successful、
+  2 skipped、0 failing），已 squash 合并为 `main`
+  `56b005127a7f83f48086460fdce3192484c18717`；合并后
+  tree 与 PR head 逐文件一致，分支与 worktree 已清理。
 
 ## 7. 影响与回滚
 

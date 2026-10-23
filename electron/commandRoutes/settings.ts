@@ -70,6 +70,15 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/permissions/trust-policy',
     body: (a) => ({ enabled: a.enabled, threshold: a.threshold }),
   },
+  // R97 已记住权限规则管理：只查看与逐条删除。删除 body 只透传
+  // index（后端 PermissionRuleDeleteBody 是 extra="forbid"），
+  // 规则本体仍只能由后端审批 remember 生成，前端传不了 pattern。
+  permissions_list_rules: { method: 'GET', path: () => '/api/v1/permissions/rules' },
+  permissions_delete_rule: {
+    method: 'POST',
+    path: () => '/api/v1/permissions/rules/delete',
+    body: (a) => ({ index: a.index }),
+  },
   permissions_answer: {
     method: 'POST',
     path: (a) => `/api/v1/permissions/${encodeURIComponent(String(a.requestId))}/answer`,

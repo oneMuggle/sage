@@ -23,6 +23,7 @@ import { UsagePanel } from '../../widgets/settings/UsagePanel';
 import { ArenaAccountsToggle } from './ArenaAccountsToggle';
 import { ContextTurnLimitSelect } from './ContextTurnLimitSelect';
 import { FontSettingsSection } from './FontSettingsSection';
+import { PermissionRulesManager } from './PermissionRulesManager';
 import { ThemeSelector } from './ThemeSelector';
 import { SettingRow, Toggle } from './components';
 
@@ -631,6 +632,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => Promise<voi
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">{t('settings.section.permission')}</h3>
         <PermissionModeSelector />
+        <PermissionRulesManager />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">模型降级</h3>
