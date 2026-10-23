@@ -54,3 +54,17 @@ export function formatLastWorkspaceJson(
     2,
   );
 }
+
+export function auditLastWorkspaceGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.last_workspace.governance.v1',
+      phase: 'P179',
+      storageKey: LAST_WORKSPACE_KEY,
+      emptySummary: formatLastWorkspaceSummary(null),
+      persistedSummary: formatLastWorkspaceSummary('/workspace/sage'),
+    },
+    null,
+    2,
+  );
+}

@@ -62,3 +62,16 @@ export function formatActionFailureJson(
     2,
   );
 }
+
+export function auditReportActionFailureGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.report_action_failure.governance.v1',
+      phase: 'P179',
+      defaultFallback: '操作失败',
+      sampleSummary: formatActionFailureSummary('保存设置', new Error('网络超时')),
+    },
+    null,
+    2,
+  );
+}

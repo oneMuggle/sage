@@ -46,3 +46,16 @@ export function formatProductMessagesJson(locale?: string): string {
   });
 }
 
+export function auditProductMessagesGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.product_messages.governance.v1',
+      phase: 'P179',
+      locales: ['zh', 'en'],
+      zhSummary: formatProductMessagesSummary('zh'),
+      enSummary: formatProductMessagesSummary('en'),
+    },
+    null,
+    2,
+  );
+}

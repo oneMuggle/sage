@@ -58,3 +58,16 @@ export function formatLocalImageSrcJson(src: string, workspacePath?: string): st
     2,
   );
 }
+
+export function auditLocalImageSrcGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.local_image_src.governance.v1',
+      phase: 'P179',
+      protocolPrefix: 'sage-file://p/',
+      sampleSummary: formatLocalImageSrcSummary('assets/logo.png', '/workspace'),
+    },
+    null,
+    2,
+  );
+}
