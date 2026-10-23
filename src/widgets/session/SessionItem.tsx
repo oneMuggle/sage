@@ -95,10 +95,6 @@ export function SessionItem({
     ? (mapAgentErrorToText(session.last_error) ?? session.last_error)
     : '';
   const suspended = !isLive && dbStatus === 'suspended';
-  // 失败原因渲染成中文提示；未知错误码回退到原始 last_error 文本
-  const failedReason = session.last_error
-    ? (mapAgentErrorToText(session.last_error) ?? session.last_error)
-    : '';
   const hasAttention = hasPendingApproval || hasPendingQuestion;
 
   // S5: mini 进度 —— 编排 5 元组优先，todo 完成度兜底
