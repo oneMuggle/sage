@@ -55,3 +55,17 @@ export function formatViewportMobileJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditUseIsMobileGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.use_is_mobile.governance.v1',
+      phase: 'P180',
+      breakpointPx: MOBILE_BREAKPOINT_PX,
+      mobileSummary: formatViewportMobileSummary(375, true),
+      desktopSummary: formatViewportMobileSummary(1280, false),
+    },
+    null,
+    2,
+  );
+}

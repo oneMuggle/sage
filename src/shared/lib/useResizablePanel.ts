@@ -135,3 +135,15 @@ export function formatResizablePanelJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditUseResizablePanelGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.use_resizable_panel.governance.v1',
+      phase: 'P180',
+      sampleSummary: formatResizablePanelSummary(360, 240, 640, 'right', false),
+    },
+    null,
+    2,
+  );
+}

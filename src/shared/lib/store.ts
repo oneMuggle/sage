@@ -449,3 +449,15 @@ export function formatStoreSessionJson(
     2,
   );
 }
+
+export function auditStoreGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.store.governance.v1',
+      phase: 'P180',
+      emptySummary: formatStoreSessionSummary([], null, 0),
+    },
+    null,
+    2,
+  );
+}
