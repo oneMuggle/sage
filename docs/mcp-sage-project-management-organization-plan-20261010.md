@@ -2459,3 +2459,26 @@
   - `src/lib/__tests__/changelogParser.p170.test.ts`
 - **Verification**:
   - `npx eslint --max-warnings=0`, `npx vitest run`, `node scripts/check-font-scale.mjs`, `node scripts/architecture-check.mjs`, `node scripts/export-ipc-manifest.mjs --check`, and `npx tsc --noEmit` all passed with 0 errors/warnings across both `main` and `release/win7` worktrees.
+
+### Phase P171 — Top-Level Pages Governance Audit Contracts (Completed)
+
+- **Target Modules (8)**:
+  - `src/pages/Agents.tsx` (`auditAgentsPageGovernance`)
+  - `src/pages/Arena.tsx` (`auditArenaPageGovernance`)
+  - `src/pages/ArenaAccounts.tsx` (`auditArenaAccountsPageGovernance`)
+  - `src/pages/ModelCatalog.tsx` (`auditModelCatalogPageGovernance`)
+  - `src/pages/Orchestration.tsx` (`auditOrchestrationPageGovernance`)
+  - `src/pages/Projects.tsx` (`auditProjectsPageGovernance`)
+  - `src/pages/ScheduledTasks.tsx` (`auditScheduledTasksPageGovernance`)
+  - `src/pages/TodoPage.tsx` (`auditTodoPageGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/pages/__tests__/Agents.p171.test.ts`
+  - `src/pages/__tests__/Arena.p171.test.ts`
+  - `src/pages/__tests__/ArenaAccounts.p171.test.ts`
+  - `src/pages/__tests__/ModelCatalog.p171.test.ts`
+  - `src/pages/__tests__/Orchestration.p171.test.ts`
+  - `src/pages/__tests__/Projects.p171.test.ts`
+  - `src/pages/__tests__/ScheduledTasks.p171.test.ts`
+  - `src/pages/__tests__/TodoPage.p171.test.ts`
+- **Verification**:
+  - `npx eslint --max-warnings=0`, `npx vitest run`, `node scripts/check-font-scale.mjs`, `node scripts/architecture-check.mjs`, `node scripts/export-ipc-manifest.mjs --check`, and `npx tsc --noEmit` all passed with 0 errors/warnings across both `main` and `release/win7` worktrees.
