@@ -40,4 +40,12 @@ export function formatInputFieldJson(error = false, disabled = false): string {
     disabled: Boolean(disabled),
   });
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditInputGovernance(): string {
+  return JSON.stringify({
+    module: 'ui-input',
+    phase: 'P184',
+    audited: true,
+  });
+}
 

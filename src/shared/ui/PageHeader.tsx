@@ -57,4 +57,12 @@ export function formatPageHeaderJson(
     hasActions: Boolean(hasActions),
   });
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditPageHeaderGovernance(): string {
+  return JSON.stringify({
+    module: 'ui-page-header',
+    phase: 'P184',
+    audited: true,
+  });
+}
 

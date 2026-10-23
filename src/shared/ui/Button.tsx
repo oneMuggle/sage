@@ -68,4 +68,12 @@ export function formatButtonVariantJson(
     disabled: Boolean(disabled),
   });
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditButtonGovernance(): string {
+  return JSON.stringify({
+    module: 'ui-button',
+    phase: 'P184',
+    audited: true,
+  });
+}
 

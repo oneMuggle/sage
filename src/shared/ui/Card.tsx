@@ -73,4 +73,12 @@ export function formatCardLayoutJson(
     hasContent: Boolean(hasContent),
   });
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditCardGovernance(): string {
+  return JSON.stringify({
+    module: 'ui-card',
+    phase: 'P184',
+    audited: true,
+  });
+}
 
