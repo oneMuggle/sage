@@ -2560,3 +2560,22 @@
   - `src/shared/api/windowControlsClient.ts`: Added `auditWindowControlsClientGovernance()` verifying desktop/web platform detection and bridge fallback (`src/shared/api/__tests__/windowControlsClient.p177.test.ts`).
   - `src/shared/api/workspaceApi.ts`: Added `auditWorkspaceApiGovernance()` verifying workspace checkpoints and binding formatters (`src/shared/api/__tests__/workspaceApi.p177.test.ts`).
   - `src/shared/api-client/wiki.ts`: Added `auditWikiApiClientGovernance()` verifying `WIKI_API_BASE` and demo mode guard (`src/shared/api-client/__tests__/wiki.p177.test.ts`).
+### Phase P178 — Shared Lib InlineMarks, AgentStateMapping, CommandPaletteEvents, EndpointStatus, ErrorMapping, FileLang, FillTemplate & Humanize Governance Audit Contracts (Completed)
+- **8 Shared Lib Modules**:
+  - `src/shared/lib/InlineMarks.tsx` (`auditInlineMarksGovernance`)
+  - `src/shared/lib/agentStateMapping.ts` (`auditAgentStateMappingGovernance`)
+  - `src/shared/lib/commandPaletteEvents.ts` (`auditCommandPaletteEventsGovernance`)
+  - `src/shared/lib/endpointStatus.ts` (`auditEndpointStatusGovernance`)
+  - `src/shared/lib/errorMapping.ts` (`auditErrorMappingGovernance`)
+  - `src/shared/lib/fileLang.ts` (`auditFileLangGovernance`)
+  - `src/shared/lib/fillTemplate.ts` (`auditFillTemplateGovernance`)
+  - `src/shared/lib/humanize.ts` (`auditHumanizeGovernance`)
+- **8 Unit Test Suites**:
+  - `src/shared/lib/__tests__/InlineMarks.p178.test.tsx`
+  - `src/shared/lib/__tests__/agentStateMapping.p178.test.ts`
+  - `src/shared/lib/__tests__/commandPaletteEvents.p178.test.ts`
+  - `src/shared/lib/__tests__/endpointStatus.p178.test.ts`
+  - `src/shared/lib/__tests__/errorMapping.p178.test.ts`
+  - `src/shared/lib/__tests__/fileLang.p178.test.ts`
+  - `src/shared/lib/__tests__/fillTemplate.p178.test.ts`
+  - `src/shared/lib/__tests__/humanize.p178.test.ts`
