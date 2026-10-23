@@ -29,8 +29,9 @@ class SessionUpdate(BaseModel):
 class ChatRequest(BaseModel):
     session_id: str
     message: str
-    # client_message_id (2026-09, 同步 #1155): 前端乐观 user 消息 id 与服务端
-    # 落库 id 对齐的根方案。传入时 user 消息落库 id = f"u-{client_message_id}"。
+    # client_message_id (2026-09, docs/plans/2026-09-18_client-message-id-r1-plan):
+    # 前端乐观 user 消息 id 与服务端落库 id 对齐的根方案。传入时 user 消息
+    # 落库 id = f"u-{client_message_id}" (确定性); 未传 = 服务端 UUID (兼容)。
     client_message_id: Optional[str] = Field(
         default=None,
         pattern=r"^[0-9a-f-]{8,64}$",
@@ -85,6 +86,11 @@ class ChatRequest(BaseModel):
     # R37: 聊天文本文档附件 —— 已上传媒体 id 列表（POST /chat/attachments
     # 返回的 media_ref.id）。producer 按 id 读全文，注入上下文附件块。
     attachment_media_ids: List[str] = Field(default_factory=list)
+
+    # r66（RAG 切片 4a）：附件检索注入配置（opt-in）。超长文档（>100k
+    # 字符）改走「嵌入 query → 附件 chunk 检索 → top_k 注入」；缺省 =
+    # 现状全文截断注入。embed 配置与 wiki ingest / r58 同口径。
+    attachment_rag: Optional[Dict[str, Any]] = None
 
     # G6 (2026-09-06): 聊天图片输入 —— base64 data URL 列表（data:image/png;base64,...）。
     # 非空时 user 消息转 OpenAI 多模态 content（text + image_url 分段），
@@ -203,10 +209,9 @@ class AgentUpdate(BaseModel):
     走 Pydantic 校验, 非法值 422 (由 FastAPI 自动处理)。
     """
 
-    # 注: Pydantic 默认对 "model_" 前缀的字段名有保留命名空间保护.
-    # win7 (Pydantic 1/2 双兼容): 用 ``class Config`` 关掉该保护.
-    class Config:
-        protected_namespaces = ()
+    # 注: Pydantic v2 默认对 "model_" 前缀的字段名有保留命名空间保护.
+    # 我们在类内用 model_config 字段, 通过 ConfigDict 关掉该保护.
+    model_config = {"protected_namespaces": ()}
 
     name: Optional[str] = None
 

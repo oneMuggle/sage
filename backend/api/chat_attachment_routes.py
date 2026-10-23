@@ -17,8 +17,9 @@ import pymupdf
 from docx import Document as _Docx
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, conlist
+from pydantic import BaseModel, Field
 
+from backend.office.models import _constrained_list
 from backend.services.attachment_rag import (
     AttachmentRagError,
     attachment_vector_store_path,
@@ -204,8 +205,15 @@ class AttachmentIndexIn(BaseModel):
 class AttachmentSearchIn(BaseModel):
     """查询向量由调用方嵌入后传入——路由自身不做嵌入网络调用。"""
 
-    # conlist 而非 Field(min_length=)：pydantic v1（win7 py38 通道）只认 min_items
-    query_vector: conlist(float, min_items=1)
+    # _constrained_list 是仓库既有的双版本安全范式（backend/office/models.py:21）：
+    # 先试 v2 的 min_length，TypeError 时回退 v1 的 min_items。
+    # 裸 conlist(float, min_items=1) 在 v2 下会 TypeError（本文件有
+    # `from __future__ import annotations`，注解延后到 pydantic 解析时才 eval）；
+    # 而 List[float] = Field(min_items=1) 在 v2 下会被当 extra 元数据吞掉、
+    # 约束静默失效。另外 conftest 的 setup_test_db 是 autouse fixture、
+    # 会拉起 backend.main，所以这一处在 v2 环境下会让整个
+    # backend 测试套件都起不来。
+    query_vector: _constrained_list(float, min_length=1)
     dim: int = Field(ge=1, le=4096)
     media_ids: Optional[List[str]] = None
     limit: int = Field(default=5, ge=1, le=50)

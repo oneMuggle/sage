@@ -25,6 +25,7 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+# win7 LTS py38 环境钉 pydantic 1.10.13，ConfigDict 是 v2 专有 → 走兼容垫片（v2 下为 no-op）。
 from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.session_workspace import (
@@ -72,6 +73,15 @@ class BranchModel(BaseModel):
     worktree_path: Optional[str]  # 非空 = 该分支已在某 worktree 检出
 
 
+class BranchesResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    repo_root: str
+    current_branch: str
+    is_git: bool
+    branches: List[BranchModel]
+    worktrees: List[WorktreeModel]
+
+
 class WorktreeModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: str
@@ -84,15 +94,6 @@ class WorktreeModel(BaseModel):
     created_at: int
     updated_at: int
     is_current: bool  # 会话当前绑定就工作在这个目录
-
-
-class BranchesResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    repo_root: str
-    current_branch: str
-    is_git: bool
-    branches: List[BranchModel]
-    worktrees: List[WorktreeModel]
 
 
 class WorktreeListResponse(BaseModel):
@@ -132,6 +133,13 @@ class WorktreeDeleteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     worktree_id: str = Field(min_length=1, max_length=64)
     delete_branch: bool = False
+
+
+# 解决自引用 (pydantic v1/v2 兼容)
+if hasattr(BranchesResponse, "model_rebuild"):
+    BranchesResponse.model_rebuild()
+else:
+    BranchesResponse.update_forward_refs()
 
 
 def _connection() -> sqlite3.Connection:

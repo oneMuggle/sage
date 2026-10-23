@@ -140,7 +140,9 @@ def _resolve_source_file(project_path: str, source_file: str) -> Tuple[Path, Pat
             try:
                 lexical.relative_to(root)
             except ValueError as containment_exc:
-                raise HTTPException(status_code=400, detail="源文件必须位于项目目录内") from containment_exc
+                raise HTTPException(
+                    status_code=400, detail="源文件必须位于项目目录内"
+                ) from containment_exc
             raise HTTPException(status_code=404, detail="源文件不存在") from exc
         raise HTTPException(status_code=400, detail="源文件必须位于项目目录内") from exc
     return root, resolved
@@ -200,11 +202,7 @@ def _create_wiki_structure(project_path: Path) -> None:
     Args:
         project_path: 项目根目录
     """
-    # 确保项目目录存在（旧代码兼容，py3.8 cherry-pick 适配）
-    from backend.wiki.files import secure_ensure_directory
     from backend.wiki.wiki_templates import create_wiki_structure as _create_from_template
-
-    secure_ensure_directory(project_path.parent, project_path)
 
     # 尝试从项目注册表获取项目类型
     project_type: Optional[str] = None
@@ -327,7 +325,7 @@ async def list_projects(base_path: str = "") -> List[ProjectInfo]:
         base_path: 父目录路径（可选）
 
     Returns:
-        list[ProjectInfo]: 项目列表
+        List[ProjectInfo]: 项目列表
     """
     import uuid
     from datetime import datetime
@@ -491,7 +489,7 @@ async def list_directory(path: str, project_path: str) -> List[dict]:
         project_path: 项目根目录
 
     Returns:
-        list[dict]: 文件节点列表
+        List[dict]: 文件节点列表
 
     Raises:
         HTTPException: 如果目标路径不存在
@@ -879,6 +877,7 @@ async def queue_status(project_path: str):
 
 
 @router.get("/ingest/queue/tasks")
+# noqa py38: FastAPI 在装饰期求值路由签名，``str | None`` 会让 win7/py3.8 导入即崩
 async def queue_tasks(project_path: str, status: Optional[str] = None):
     """获取队列中的任务列表。
 
@@ -951,7 +950,9 @@ async def queue_retry(task_id: str, project_path: str):
     success = queue.retry(task_id)
 
     if not success:
-        raise HTTPException(status_code=400, detail="无法重试任务（任务不存在、非失败状态或已达最大重试次数）")
+        raise HTTPException(
+            status_code=400, detail="无法重试任务（任务不存在、非失败状态或已达最大重试次数）"
+        )
 
     return {"success": True}
 
@@ -1522,6 +1523,7 @@ from backend.storage.recent_projects import (  # noqa: E402
 
 
 class ProjectCheckResponse(BaseModel):
+    # noqa py38: pydantic 在类创建期求值字段注解，win7/py3.8 需 Optional
     exists: bool
     writable: bool
     is_project: bool

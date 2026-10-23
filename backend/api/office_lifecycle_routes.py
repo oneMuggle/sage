@@ -15,7 +15,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict
 
 from backend.data.database import Database, get_database
-from backend.office import progress as office_progress
+from backend.office import progress as office_progress, read_cache
 from backend.office.apply_update import (
     OfficeDocUpdateRequest,
     OfficeDocUpdateResult,
@@ -173,6 +173,8 @@ def restore_snapshot_endpoint(doc_id: str, snapshot_id: str) -> OfficeDocumentAc
     conn = _db().get_connection()
     doc = _require_document(conn, doc_id)
     updated = restore_from_snapshot(conn, doc, snapshot_id)
+    # Round D P8: 同 update —— 恢复覆写了主文件字节。
+    read_cache.invalidate(document_path(updated))
     return OfficeDocumentActionResponse(ok=True, summary=updated)
 
 
@@ -469,13 +471,17 @@ def update_document_endpoint(
     """
     conn = _db().get_connection()
     doc = _require_document(conn, doc_id)
-    return apply_doc_update(
+    result = apply_doc_update(
         conn,
         doc,
         req.ops,
         expected_revision=req.expected_revision,
         idempotency_key=req.idempotency_key,
     )
+    # Round D P8: 写后显式失效读缓存（mtime 指纹本会自动失效，这里只为
+    # 同秒写读的极端时序兜底）。
+    read_cache.invalidate(document_path(doc))
+    return result
 
 
 @router.get("/doc/{doc_id}/revision")

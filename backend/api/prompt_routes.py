@@ -58,7 +58,13 @@ def _save(templates: List[Dict[str, Any]]) -> None:
 
 @router.get("/templates")
 def list_templates() -> Dict[str, Any]:
-    """列出全部模板（按更新时间新→旧）。"""
+    """列出全部模板（按更新时间新→旧）。
+
+    win7 行为基线：main 侧为存储序 + reorder 端点（R42 拖拽排序），
+    但 win7 前端无拖拽排序 UI，因此保持 updated_at 排序，
+    不引入 reorder 端点。由
+    tests/unit/api/test_prompt_routes.py::test_list_sorts_by_updated_at_desc 锁定。
+    """
     templates = sorted(_load(), key=lambda t: t.get("updated_at", 0), reverse=True)
     return {"templates": templates}
 

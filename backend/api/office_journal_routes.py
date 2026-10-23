@@ -1,4 +1,4 @@
-# ruff: noqa: UP006, UP007, UP035, UP045 — release/win7 Python 3.8 兼容，保留 typing 注解
+# ruff: noqa: UP006, UP007, UP035 — release/win7 Python 3.8 兼容，保留 typing 注解
 """Office Journal Template HTTP routes (extracted from office_routes.py for L5).
 
 Covers 5 endpoints:

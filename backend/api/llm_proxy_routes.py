@@ -47,11 +47,10 @@ import socket
 import ssl
 import time as _time
 import uuid as _uuid
-from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from ipaddress import ip_address
-from typing import Dict, FrozenSet, List, Optional, Set
+from typing import AsyncIterator, Dict, FrozenSet, List, Optional, Set
 from urllib.parse import urlparse
 
 import httpcore
@@ -681,6 +680,9 @@ async def proxy_to_llm(path: str, request: Request) -> Response:
     # 触发条件(任一):
     #   1. Accept 头含 text/event-stream (SSE 标准)
     #   2. query string `stream=true` (OpenAI 流式 chat completion 约定)
+    #   3. JSON body 里 "stream": true —— v3 修复: LLMClient.chat_stream 只把
+    #      stream 标记放在 body 里, 不设 Accept 头也不带 query; 旧判定两者都
+    #      看唯独不看 body, 导致生产链路所有流式请求被静默降级为整包缓冲。
     accept = request.headers.get("accept", "")
     body_wants_stream = False
     if body:

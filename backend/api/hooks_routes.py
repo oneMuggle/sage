@@ -113,7 +113,7 @@ class WorkspaceBody(BaseModel):
     workspace: str
 
 
-def _validated_workspace(raw: str) -> Optional[str]:
+def _validated_workspace(raw: str) -> Optional[str]:  # noqa: UP007 — 保持与仓库既有 py3.10 写法一致
     """校验 workspace 为已存在的绝对路径目录; 非法返回 None。"""
     if not raw or not isinstance(raw, str):
         return None

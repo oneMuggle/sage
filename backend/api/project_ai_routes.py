@@ -400,7 +400,7 @@ def confirm_knowledge(
         return ConfirmKnowledgeResponse(created=0, skipped=0, ids=[])
 
     extractor = ProjectKnowledgeExtractor()
-    entry_dicts = [e.dict() for e in request.entries]
+    entry_dicts = [e.model_dump() for e in request.entries]
     result = extractor.confirm(project_key=project_key, entries=entry_dicts)
 
     return ConfirmKnowledgeResponse(

@@ -11,6 +11,7 @@ from typing import List, Optional, Set
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+# win7 LTS py38 环境钉 pydantic 1.10.13，ConfigDict 是 v2 专有 → 走兼容垫片（v2 下为 no-op）。
 from backend.compat.win7.pydantic_compat import ConfigDict
 from backend.data.database import get_database
 from backend.office.errors import OfficePathError
@@ -454,7 +455,9 @@ def get_workspace_change_file(
 
 class WorkspaceRevertRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    paths: _constrained_list(str, min_length=1, max_length=50) = Field(...)
+    # _constrained_list：win7 既有的双版本安全范式（backend/office/models.py:21）。
+    # 裸 Field(min_items=) 在 pydantic v2 下会被当 extra 元数据吞掉、约束静默失效。
+    paths: _constrained_list(str, min_length=1, max_length=50)
     delete_untracked: bool = False
 
 
@@ -612,7 +615,7 @@ def restore_workspace_checkpoint(
 class WorkspaceRevertHunksRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     path: str = Field(min_length=1, max_length=1024)
-    hunk_indices: _constrained_list(int, min_length=1, max_length=200) = Field(...)
+    hunk_indices: _constrained_list(int, min_length=1, max_length=200)
 
 
 class WorkspaceRevertHunksResponse(BaseModel):

@@ -26,7 +26,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from backend.data.database import Database, get_database
-from backend.office import progress as office_progress
+from backend.office import progress as office_progress, read_cache
 from backend.office.bibtex import parse_bibtex
 from backend.office.errors import (
     OfficeError,
@@ -323,11 +323,18 @@ def read_ppt_endpoint(req: OfficeReadRequest) -> OfficePptReadResult:
     # Canonicalize workspace_path so the row's ``workspace_path`` matches
     # the same canonical form used by list_documents() and the generators.
     canonical_workspace = str(Path(req.workspace_path).resolve())
-    result = read_ppt(
-        file_path=file_path,
-        workspace_path=canonical_workspace,
-        generated_filename=file_path.name,
-        original_filename=req.original_filename,
+    # Round D P8: (path, mtime, size) 缓存 —— 预览/列表/编辑的同文档三连
+    # 读只解析一次。options_key 覆盖影响 summary 的所有请求参数。
+    result = read_cache.get_or_read(
+        "ppt",
+        file_path,
+        f"{canonical_workspace}|{req.original_filename or ''}",
+        lambda: read_ppt(
+            file_path=file_path,
+            workspace_path=canonical_workspace,
+            generated_filename=file_path.name,
+            original_filename=req.original_filename,
+        ),
     )
     _persist_read_summary(
         result,
@@ -345,11 +352,16 @@ def read_word_endpoint(req: OfficeReadRequest) -> OfficeWordReadResult:
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     _check_size_limit(file_path, req.max_size_bytes)
     canonical_workspace = str(Path(req.workspace_path).resolve())
-    result = read_docx(
-        file_path=file_path,
-        workspace_path=canonical_workspace,
-        generated_filename=file_path.name,
-        original_filename=req.original_filename,
+    result = read_cache.get_or_read(
+        "word",
+        file_path,
+        f"{canonical_workspace}|{req.original_filename or ''}",
+        lambda: read_docx(
+            file_path=file_path,
+            workspace_path=canonical_workspace,
+            generated_filename=file_path.name,
+            original_filename=req.original_filename,
+        ),
     )
     _persist_read_summary(
         result,
@@ -367,11 +379,16 @@ def read_excel_endpoint(req: OfficeReadRequest) -> OfficeExcelReadResult:
     file_path = _validate_file_in_workspace(req.file_path, req.workspace_path)
     _check_size_limit(file_path, req.max_size_bytes)
     canonical_workspace = str(Path(req.workspace_path).resolve())
-    result = read_xlsx(
-        file_path=file_path,
-        workspace_path=canonical_workspace,
-        generated_filename=file_path.name,
-        original_filename=req.original_filename,
+    result = read_cache.get_or_read(
+        "excel",
+        file_path,
+        f"{canonical_workspace}|{req.original_filename or ''}",
+        lambda: read_xlsx(
+            file_path=file_path,
+            workspace_path=canonical_workspace,
+            generated_filename=file_path.name,
+            original_filename=req.original_filename,
+        ),
     )
     _persist_read_summary(
         result,
