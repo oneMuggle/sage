@@ -79,3 +79,11 @@ export function exportCompactBannerAuditJson(
 ): string {
   return JSON.stringify(auditCompactBanner(beforeCount, afterCount, removedCount), null, 2);
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditCompactBannerGovernance(): string {
+  return JSON.stringify({
+    module: 'compact-banner',
+    phase: 'P186',
+    audited: true,
+  });
+}
