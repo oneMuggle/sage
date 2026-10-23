@@ -1,6 +1,13 @@
 import type { CommandRoute } from '../commands';
 
 export const promptRoutes: Record<string, CommandRoute> = {
+  // R42: drag-to-sort — template ids in their new order (ReorderIn.ordered_ids must be non-empty).
+  prompts_reorder: {
+    method: 'PUT',
+    path: () => '/api/v1/prompts/templates/reorder',
+    body: (a) => ({ ordered_ids: a.orderedIds ?? a.ordered_ids }),
+  },
+
   prompts_list: {
     method: 'GET',
     path: () => '/api/v1/prompts/templates',
