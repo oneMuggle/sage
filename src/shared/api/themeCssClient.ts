@@ -67,3 +67,21 @@ export function formatThemeCssJson(
     2,
   );
 }
+
+export function auditThemeCssClientGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.theme_css_client.governance.v1',
+      phase: 'P177',
+      methods: ['save', 'list', 'delete', 'get'],
+      sampleSummary: formatThemeCssSummary({
+        id: 'custom-1',
+        name: 'Custom Theme',
+        appearance: 'dark',
+        css: ':root {}',
+      }),
+    },
+    null,
+    2,
+  );
+}

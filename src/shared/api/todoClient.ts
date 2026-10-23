@@ -85,3 +85,26 @@ export function formatTodoListJson(
     2,
   );
 }
+
+export function auditTodoClientGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.todo_client.governance.v1',
+      phase: 'P177',
+      methods: [
+        'list',
+        'create',
+        'get',
+        'update',
+        'delete',
+        'complete',
+        'cancel',
+        'summary',
+        'stats',
+      ],
+      sampleSummary: formatTodoListSummary({ items: [], total: 0, limit: 20, offset: 0 }),
+    },
+    null,
+    2,
+  );
+}
