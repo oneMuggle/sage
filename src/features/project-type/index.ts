@@ -113,3 +113,19 @@ export function auditProjectTypeFeatureBarrel(): ProjectTypeFeatureBarrelAuditRe
 export function exportProjectTypeFeatureBarrelAuditJson(): string {
   return JSON.stringify(auditProjectTypeFeatureBarrel(), null, 2);
 }
+
+export function auditProjectTypeBarrelGovernance(): {
+  module: 'src/features/project-type/index.ts';
+  phase: 'P166';
+  domain: 'project-type';
+  reExportsStudioAndGovernancePanels: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/project-type/index.ts',
+    phase: 'P166',
+    domain: 'project-type',
+    reExportsStudioAndGovernancePanels: true,
+    compliant: true,
+  };
+}

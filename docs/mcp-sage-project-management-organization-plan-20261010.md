@@ -2350,3 +2350,24 @@
   - `src/features/office/__tests__/officeProgress.p165.test.ts`
   - `src/features/office/__tests__/previewRevision.p165.test.ts`
   - `src/features/office/__tests__/useOfficeDocuments.p165.test.ts`
+
+### Phase P166: Onboarding, Project-Type & Right-Panel Modules (OnboardingWizard, GovernanceRulesPanel, ProjectTypeBadge, ProjectTypeSelector, TypeDetectionPreview, Barrel, UseStudioState, RightPanelStore) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/onboarding/OnboardingWizard.tsx` (`auditOnboardingWizardGovernance`)
+  - `src/features/project-type/GovernanceRulesPanel.tsx` (`auditGovernanceRulesPanelGovernance`)
+  - `src/features/project-type/ProjectTypeBadge.tsx` (`auditProjectTypeBadgeGovernance`)
+  - `src/features/project-type/ProjectTypeSelector.tsx` (`auditProjectTypeSelectorGovernance`)
+  - `src/features/project-type/TypeDetectionPreview.tsx` (`auditTypeDetectionPreviewGovernance`)
+  - `src/features/project-type/index.ts` (`auditProjectTypeBarrelGovernance`)
+  - `src/features/project-type/useStudioState.ts` (`auditUseStudioStateGovernance`)
+  - `src/features/right-panel/rightPanelStore.ts` (`auditRightPanelStoreGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/onboarding/__tests__/OnboardingWizard.p166.test.ts`
+  - `src/features/project-type/__tests__/GovernanceRulesPanel.p166.test.ts`
+  - `src/features/project-type/__tests__/ProjectTypeBadge.p166.test.ts`
+  - `src/features/project-type/__tests__/ProjectTypeSelector.p166.test.ts`
+  - `src/features/project-type/__tests__/TypeDetectionPreview.p166.test.ts`
+  - `src/features/project-type/__tests__/projectTypeIndex.p166.test.ts`
+  - `src/features/project-type/__tests__/useStudioState.p166.test.ts`
+  - `src/features/right-panel/__tests__/rightPanelStore.p166.test.ts`
