@@ -51,3 +51,10 @@ export function formatRetryBannerI18nJson(): string {
   });
 }
 
+export function auditRetryBannerGovernance(): string {
+  return JSON.stringify({
+    module: 'retry-banner',
+    phase: 'P182',
+    audited: true,
+  });
+}

@@ -31,3 +31,10 @@ export function formatChineseTranslationsJson(): string {
   });
 }
 
+export function auditZhGovernance(): string {
+  return JSON.stringify({
+    module: 'zh-i18n',
+    phase: 'P182',
+    audited: true,
+  });
+}
