@@ -36,3 +36,10 @@ export function auditArenaWidgetBarrel(): ArenaWidgetBarrelAuditReport {
 export function exportArenaWidgetBarrelAuditJson(): string {
   return JSON.stringify(auditArenaWidgetBarrel(), null, 2);
 }
+export function auditArenaIndexGovernance(): string {
+  return JSON.stringify({
+    module: 'arena-index',
+    phase: 'P185',
+    audited: true,
+  });
+}

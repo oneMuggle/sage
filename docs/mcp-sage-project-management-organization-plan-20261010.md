@@ -2678,3 +2678,23 @@
 - **Verification**:
   - 8 unit test suites under `src/shared/ui/__tests__/*.p184.test.ts` and `src/widgets/agents/__tests__/*.p184.test.ts`.
   - All 6 repository gates (`npx eslint --max-warnings=0`, `npx vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, `npx tsc --noEmit`) passed across `.worktrees/proj-p112-main` and `.worktrees/proj-p112-win7`.
+### Phase P185 — Arena, Autonomous Goals & Chat Widgets Governance Audit Contracts (2026-10-23)
+
+- **Scope (`src/widgets/arena/`, `src/widgets/autonomous-goals/`, & `src/widgets/chat/`)**:
+  1. `src/widgets/arena/AccountTable.tsx` -> `auditAccountTableGovernance()` (`module: 'account-table'`)
+  2. `src/widgets/arena/ObservationFeed.tsx` -> `auditObservationFeedGovernance()` (`module: 'observation-feed'`)
+  3. `src/widgets/arena/RegisterAssist.tsx` -> `auditRegisterAssistGovernance()` (`module: 'register-assist'`)
+  4. `src/widgets/arena/index.ts` -> `auditArenaIndexGovernance()` (`module: 'arena-index'`)
+  5. `src/widgets/autonomous-goals/GoalCard.tsx` -> `auditGoalCardGovernance()` (`module: 'goal-card'`)
+  6. `src/widgets/autonomous-goals/GoalProgress.tsx` -> `auditGoalProgressGovernance()` (`module: 'goal-progress'`)
+  7. `src/widgets/chat/ActiveAgentIndicator.tsx` -> `auditActiveAgentIndicatorGovernance()` (`module: 'active-agent-indicator'`)
+  8. `src/widgets/chat/ChatInlineError.tsx` -> `auditChatInlineErrorGovernance()` (`module: 'chat-inline-error'`)
+- **Unit Test Suites**:
+  - `src/widgets/arena/__tests__/AccountTable.p185.test.ts`
+  - `src/widgets/arena/__tests__/ObservationFeed.p185.test.ts`
+  - `src/widgets/arena/__tests__/RegisterAssist.p185.test.ts`
+  - `src/widgets/arena/__tests__/index.p185.test.ts`
+  - `src/widgets/autonomous-goals/__tests__/GoalCard.p185.test.ts`
+  - `src/widgets/autonomous-goals/__tests__/GoalProgress.p185.test.ts`
+  - `src/widgets/chat/__tests__/ActiveAgentIndicator.p185.test.ts`
+  - `src/widgets/chat/__tests__/ChatInlineError.p185.test.ts`
