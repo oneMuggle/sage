@@ -80,3 +80,16 @@ export function formatTextTruncateJson(text?: string | null, maxLength = 50): st
   });
 }
 /* v8 ignore stop */
+
+export function auditUtilsGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.utils.governance.v1',
+      phase: 'P181',
+      sampleTruncate: truncate('Hello World', 5),
+      sampleSummary: formatTextTruncateSummary('Hello World', 5),
+    },
+    null,
+    2,
+  );
+}

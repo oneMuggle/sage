@@ -89,3 +89,19 @@ export function formatResizableSidebarJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditUseResizableSidebarGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.use_resizable_sidebar.governance.v1',
+      phase: 'P181',
+      minWidth: SIDEBAR_MIN,
+      maxWidth: SIDEBAR_MAX,
+      defaultWidth: SIDEBAR_DEFAULT,
+      storageKey: STORAGE_KEY,
+      sampleSummary: formatResizableSidebarSummary(300, false),
+    },
+    null,
+    2,
+  );
+}
