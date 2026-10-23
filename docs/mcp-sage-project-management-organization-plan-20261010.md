@@ -2547,3 +2547,16 @@
   - `src/shared/api/memoryApi.ts`: Added `auditMemoryApiGovernance()` verifying multi-layer memory list envelope (`episodic`, `semantic`, `working`, `session_summary`, `all`) (`src/shared/api/__tests__/memoryApi.p176.test.ts`).
   - `src/shared/api/orchRunClient.ts`: Added `auditOrchRunClientGovernance()` verifying orchestration run lifecycle methods (`src/shared/api/__tests__/orchRunClient.p176.test.ts`).
   - `src/shared/api/orchestrationClient.ts`: Added `auditOrchestrationClientGovernance()` verifying lane board views (`ops_full`, `ui_minimal`) and decision contracts (`src/shared/api/__tests__/orchestrationClient.p176.test.ts`).
+
+### Phase P177 — Shared Runtime, Scheduled Tasks, Settings, Theme CSS, Todo, Window Controls, Workspace & Wiki API Governance Audit Contracts (Completed 2026-10-23)
+
+- **Runtime, Scheduled Tasks, Settings & Theme CSS IPC Governance Contracts**:
+  - `src/shared/api/runtimeTypes.ts`: Added `auditRuntimeTypesGovernance()` verifying diagnosis levels (`satisfied`, `degraded`, `unsatisfied`) (`src/shared/api/__tests__/runtimeTypes.p177.test.ts`).
+  - `src/shared/api/scheduledClient.ts`: Added `auditScheduledClientGovernance()` verifying scheduled task lifecycle methods (`src/shared/api/__tests__/scheduledClient.p177.test.ts`).
+  - `src/shared/api/settingsClient.ts`: Added `auditSettingsClientGovernance()` verifying `LOAD_TIMEOUT_MS` and preference snapshot formatters (`src/shared/api/__tests__/settingsClient.p177.test.ts`).
+  - `src/shared/api/themeCssClient.ts`: Added `auditThemeCssClientGovernance()` verifying custom CSS theme CRUD methods (`src/shared/api/__tests__/themeCssClient.p177.test.ts`).
+- **Todo, Window Controls, Workspace & Wiki API Client Governance Contracts**:
+  - `src/shared/api/todoClient.ts`: Added `auditTodoClientGovernance()` verifying personal todolist IPC methods (`src/shared/api/__tests__/todoClient.p177.test.ts`).
+  - `src/shared/api/windowControlsClient.ts`: Added `auditWindowControlsClientGovernance()` verifying desktop/web platform detection and bridge fallback (`src/shared/api/__tests__/windowControlsClient.p177.test.ts`).
+  - `src/shared/api/workspaceApi.ts`: Added `auditWorkspaceApiGovernance()` verifying workspace checkpoints and binding formatters (`src/shared/api/__tests__/workspaceApi.p177.test.ts`).
+  - `src/shared/api-client/wiki.ts`: Added `auditWikiApiClientGovernance()` verifying `WIKI_API_BASE` and demo mode guard (`src/shared/api-client/__tests__/wiki.p177.test.ts`).

@@ -58,3 +58,21 @@ export function formatScheduledTaskJson(
     2,
   );
 }
+
+export function auditScheduledClientGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.scheduled_client.governance.v1',
+      phase: 'P177',
+      methods: ['list', 'create', 'update', 'delete', 'runNow'],
+      sampleSummary: formatScheduledTaskSummary({
+        id: 't1',
+        name: 'Daily Digest',
+        type: 'recurring',
+        enabled: true,
+      }),
+    },
+    null,
+    2,
+  );
+}

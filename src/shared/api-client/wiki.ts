@@ -563,3 +563,15 @@ export function formatWikiApiClientJson(
   });
 }
 
+export function auditWikiApiClientGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api_client.wiki.governance.v1',
+      phase: 'P177',
+      baseUrl: WIKI_API_BASE,
+      defaultSummary: formatWikiApiClientSummary(false, 20),
+    },
+    null,
+    2,
+  );
+}
