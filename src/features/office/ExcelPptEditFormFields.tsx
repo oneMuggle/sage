@@ -518,3 +518,15 @@ export function formatExcelPptEditFormJson(
   });
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditExcelPptEditFormFieldsGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/ExcelPptEditFormFields.tsx',
+    phase: 'P164',
+    status: 'ready',
+  };
+}
