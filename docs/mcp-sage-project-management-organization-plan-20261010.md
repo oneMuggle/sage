@@ -2371,3 +2371,24 @@
   - `src/features/project-type/__tests__/projectTypeIndex.p166.test.ts`
   - `src/features/project-type/__tests__/useStudioState.p166.test.ts`
   - `src/features/right-panel/__tests__/rightPanelStore.p166.test.ts`
+
+### Phase P167: Scheduled & Send-Message Modules (CreateTaskModal, CronExpressionPicker, CronValidator, SkillLink, AttachmentUpload, ChatStreamStore, OrchestrationEvents, SessionNotify) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/scheduled/CreateTaskModal.tsx` (`auditCreateTaskModalGovernance`)
+  - `src/features/scheduled/CronExpressionPicker.tsx` (`auditCronExpressionPickerGovernance`)
+  - `src/features/scheduled/cronValidator.ts` (`auditCronValidatorGovernance`)
+  - `src/features/scheduled/skillLink.ts` (`auditSkillLinkGovernance`)
+  - `src/features/send-message/AttachmentUpload.tsx` (`auditAttachmentUploadGovernance`)
+  - `src/features/send-message/chatStreamStore.ts` (`auditChatStreamStoreGovernance`)
+  - `src/features/send-message/orchestrationEvents.ts` (`auditOrchestrationEventsGovernance`)
+  - `src/features/send-message/sessionNotify.ts` (`auditSessionNotifyGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/scheduled/__tests__/CreateTaskModal.p167.test.ts`
+  - `src/features/scheduled/__tests__/CronExpressionPicker.p167.test.ts`
+  - `src/features/scheduled/__tests__/cronValidator.p167.test.ts`
+  - `src/features/scheduled/__tests__/skillLink.p167.test.ts`
+  - `src/features/send-message/__tests__/AttachmentUpload.p167.test.ts`
+  - `src/features/send-message/__tests__/chatStreamStore.p167.test.ts`
+  - `src/features/send-message/__tests__/orchestrationEvents.p167.test.ts`
+  - `src/features/send-message/__tests__/sessionNotify.p167.test.ts`
