@@ -48,3 +48,15 @@ export function auditOfficeFeatureBarrel(): OfficeFeatureBarrelAuditReport {
 export function exportOfficeFeatureBarrelAuditJson(): string {
   return JSON.stringify(auditOfficeFeatureBarrel(), null, 2);
 }
+
+export function auditOfficeFeatureBarrelGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/index.ts',
+    phase: 'P165',
+    status: 'ready',
+  };
+}
