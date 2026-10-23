@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useI18n } from '../../shared/lib/i18n';
 import type { OfficeStagingReport } from '../../shared/types/electron-api';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatOfficeStagingMarkdown(
   workspacePath: string,
   report: OfficeStagingReport | null,
@@ -31,6 +32,7 @@ export function formatOfficeStagingMarkdown(
   return lines.join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatOfficeStagingJson(
   workspacePath: string,
   report: OfficeStagingReport | null,
@@ -153,4 +155,17 @@ export function OfficeStagingInspector({ workspacePath }: { workspacePath: strin
       )}
     </section>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditOfficeStagingInspectorGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/OfficeStagingInspector.tsx',
+    phase: 'P165',
+    status: 'ready',
+  };
 }

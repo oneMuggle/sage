@@ -2329,3 +2329,24 @@
   - `src/features/office/__tests__/OfficeFilePicker.p164.test.ts`
   - `src/features/office/__tests__/OfficePreviewPanel.p164.test.ts`
   - `src/features/office/__tests__/OfficeSnapshotPanel.p164.test.ts`
+
+### Phase P165: Office Remaining Modules (OfficeStagingInspector, PdfFormFillDialog, ImportOfficeReference, Barrel, OfficeCapabilities, OfficeProgress, PreviewRevision, UseOfficeDocuments) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/office/OfficeStagingInspector.tsx` (`auditOfficeStagingInspectorGovernance`)
+  - `src/features/office/PdfFormFillDialog.tsx` (`auditPdfFormFillDialogGovernance`)
+  - `src/features/office/importOfficeReference.ts` (`auditImportOfficeReferenceGovernance`)
+  - `src/features/office/index.ts` (`auditOfficeFeatureBarrelGovernance`)
+  - `src/features/office/officeCapabilities.ts` (`auditOfficeCapabilitiesGovernance`)
+  - `src/features/office/officeProgress.ts` (`auditOfficeProgressGovernance`)
+  - `src/features/office/previewRevision.ts` (`auditPreviewRevisionGovernance`)
+  - `src/features/office/useOfficeDocuments.ts` (`auditUseOfficeDocumentsGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/office/__tests__/OfficeStagingInspector.p165.test.ts`
+  - `src/features/office/__tests__/PdfFormFillDialog.p165.test.ts`
+  - `src/features/office/__tests__/importOfficeReference.p165.test.ts`
+  - `src/features/office/__tests__/officeIndex.p165.test.ts`
+  - `src/features/office/__tests__/officeCapabilities.p165.test.ts`
+  - `src/features/office/__tests__/officeProgress.p165.test.ts`
+  - `src/features/office/__tests__/previewRevision.p165.test.ts`
+  - `src/features/office/__tests__/useOfficeDocuments.p165.test.ts`

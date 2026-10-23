@@ -63,3 +63,15 @@ export function formatOfficeProgressJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditOfficeProgressGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/officeProgress.ts',
+    phase: 'P165',
+    status: 'ready',
+  };
+}

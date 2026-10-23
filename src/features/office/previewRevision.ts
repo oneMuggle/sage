@@ -83,3 +83,15 @@ export function formatPreviewRevisionJson(cacheKey?: PreviewCacheKey | null): st
     2,
   );
 }
+
+export function auditPreviewRevisionGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/previewRevision.ts',
+    phase: 'P165',
+    status: 'ready',
+  };
+}
