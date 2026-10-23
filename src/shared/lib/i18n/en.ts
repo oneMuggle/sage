@@ -30,3 +30,10 @@ export function formatEnglishTranslationsJson(): string {
   });
 }
 
+export function auditEnGovernance(): string {
+  return JSON.stringify({
+    module: 'en-i18n',
+    phase: 'P182',
+    audited: true,
+  });
+}

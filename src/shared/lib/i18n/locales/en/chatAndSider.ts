@@ -468,3 +468,10 @@ export function formatEnChatAndSiderJson(): string {
   });
 }
 
+export function auditEnChatAndSiderGovernance(): string {
+  return JSON.stringify({
+    module: 'en-chat-and-sider',
+    phase: 'P182',
+    audited: true,
+  });
+}

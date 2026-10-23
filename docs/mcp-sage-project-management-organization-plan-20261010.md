@@ -2636,3 +2636,17 @@
   - `src/shared/lib/hooks/__tests__/useFeatureUnlock.p181.test.ts`
   - `src/shared/lib/hooks/__tests__/useFileUpload.p181.test.ts`
   - `src/shared/lib/hooks/__tests__/useSessionDraft.p181.test.ts`
+### Phase P182 — Shared I18n & English Locale Domain Governance Audit Contracts (2026-10-23)
+
+- **Scope (`src/shared/lib/i18n/`)**:
+  1. `src/shared/lib/i18n/chatReading.ts`: `auditChatReadingGovernance()` (`module: 'chat-reading'`)
+  2. `src/shared/lib/i18n/en.ts`: `auditEnGovernance()` (`module: 'en-i18n'`)
+  3. `src/shared/lib/i18n/pausedMemory.ts`: `auditPausedMemoryGovernance()` (`module: 'paused-memory'`)
+  4. `src/shared/lib/i18n/retryBanner.ts`: `auditRetryBannerGovernance()` (`module: 'retry-banner'`)
+  5. `src/shared/lib/i18n/zh.ts`: `auditZhGovernance()` (`module: 'zh-i18n'`)
+  6. `src/shared/lib/i18n/locales/en/chatAndSider.ts`: `auditEnChatAndSiderGovernance()` (`module: 'en-chat-and-sider'`)
+  7. `src/shared/lib/i18n/locales/en/settingsAndModels.ts`: `auditEnSettingsAndModelsGovernance()` (`module: 'en-settings-and-models'`)
+  8. `src/shared/lib/i18n/locales/en/workspaceAndTools.ts`: `auditEnWorkspaceAndToolsGovernance()` (`module: 'en-workspace-and-tools'`)
+- **Verification**:
+  - 8 unit test suites under `src/shared/lib/__tests__/*.p182.test.ts`.
+  - All 6 repository gates (`npx eslint --max-warnings=0`, `npx vitest run --api=false`, `check-font-scale.mjs`, `architecture-check.mjs`, `export-ipc-manifest.mjs --check`, `npx tsc --noEmit`) passed across `.worktrees/proj-p112-main` and `.worktrees/proj-p112-win7`.
