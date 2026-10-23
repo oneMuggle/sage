@@ -46,23 +46,98 @@ export function mapLLMErrorToText(err: LLMErrorResponse): string {
  * 注意：必须是独立表而非 ``STATIC_MESSAGES`` 的扩展——
  * ``STATIC_MESSAGES`` 的键受 ``LLMErrorTypeFE`` 字面量联合约束，
  * 加入非 LLM 码会破坏 ``mapLLMErrorToText`` 的类型契约。
+ *
+ * ``{limit}`` 占位符由 ``mapAgentErrorToText`` 在解析出上限值时替换成
+ * "数值 + 单位"；裸码（无上限装饰）时该占位符会被移除。
  */
 export const AGENT_RUNTIME_MESSAGES: Record<string, string> = {
-  max_iterations_exceeded: '任务复杂度超出当前迭代上限，可在「设置 → 通用 → 编排」调高「Lane 迭代上限」或「子代理迭代上限」后重试',
-  tool_budget_exceeded: '工具调用次数超出单轮预算，请拆分任务后重试',
+  max_iterations_exceeded:
+    '任务复杂度超出迭代上限{limit}，可在「设置 → 通用 → 编排」调高「Lane 迭代上限」后重试',
+  tool_budget_exceeded:
+    '工具调用次数超出单轮预算{limit}，可在「设置 → 通用 → 编排」调高「工具调用预算」或拆分任务后重试',
   prompt_blocked_by_hook: '消息被用户自定义钩子拦截（可在 设置 → 通用 → 钩子 管理）',
   spend_limit_exceeded:
     '已达到今日花费限额（可在 设置 → 通用 调整），为控制成本本次请求未发送',
   subagent_loop_failed: '子代理执行未完成，请重试或简化子任务',
-  subagent_exhausted_iterations: '子代理未在迭代预算内收敛，请拆分任务后重试',
+  subagent_exhausted_iterations:
+    '子代理未在迭代预算内收敛{limit}，可在「设置 → 通用 → 编排」调高「子代理迭代上限」或拆分任务后重试',
 };
 
+/**
+ * 上限值的中文单位。按错误码区分，裸码路径不查此表。
+ */
+const AGENT_RUNTIME_LIMIT_UNITS: Record<string, string> = {
+  max_iterations_exceeded: '次',
+  tool_budget_exceeded: '次',
+  subagent_exhausted_iterations: '次',
+};
+
+/**
+ * 后端下发的错误串格式：``<code> (limit=<数值>)``。
+ *
+ * 后缀追加在末尾而非替换错误码，保证 ``<code>`` 仍是前缀，
+ * 任何按前缀/startsWith 判断的消费方都保持兼容。
+ */
+const AGENT_ERROR_LIMIT_RE = /^([a-z][a-z0-9_]*)\s*\(limit=(\d+(?:\.\d+)?)\)$/;
+
+export interface AgentErrorLimit {
+  /** 不含上限装饰的错误码 */
+  code: string;
+  /** 上限数值（程序判断用） */
+  value: number;
+  /** 上限原始文本（保留 "50.00" 的精度，避免金额被截成 50） */
+  text: string;
+}
+
+/**
+ * 解析 ``"<code> (limit=N)"`` 形式的上限装饰。
+ *
+ * 非该格式（含裸码、中文文案、空串）返回 null，调用方走原有的
+ * "整串当作错误码" 分支。
+ */
+export function parseAgentErrorLimit(raw: string): AgentErrorLimit | null {
+  if (typeof raw !== 'string' || !raw) return null;
+  const matched = AGENT_ERROR_LIMIT_RE.exec(raw);
+  if (!matched) return null;
+  const text = matched[2];
+  return { code: matched[1], value: Number(text), text };
+}
+
+/**
+ * 把 agent 运行时错误码/错误串映射为中文化提示。
+ *
+ * 入参既可以是裸码（``"max_iterations_exceeded"``），也可以是带上限装饰的
+ * 完整错误串（``"max_iterations_exceeded (limit=25)"``）。后一种会渲染出
+ * 具体上限值，方便用户知道该把设置调到多少。
+ *
+ * 未知错误码返回 null，由调用方回退到原始文本。
+ */
 export function mapAgentErrorToText(code: string): string | null {
   if (typeof code !== 'string' || !code) return null;
+
+  const parsed = parseAgentErrorLimit(code);
+  const bare = parsed ? parsed.code : code;
+
   // hasOwnProperty 防御原型链：'constructor'/'toString' 不是合法错误码
-  return Object.prototype.hasOwnProperty.call(AGENT_RUNTIME_MESSAGES, code)
-    ? AGENT_RUNTIME_MESSAGES[code]
-    : null;
+  if (!Object.prototype.hasOwnProperty.call(AGENT_RUNTIME_MESSAGES, bare)) return null;
+
+  const template = AGENT_RUNTIME_MESSAGES[bare];
+
+  if (!parsed) {
+    // 裸码：模板含 {limit} 时不能把占位符漏给用户
+    return template.replace(/\{limit\}/g, '');
+  }
+
+  const unit = Object.prototype.hasOwnProperty.call(AGENT_RUNTIME_LIMIT_UNITS, bare)
+    ? AGENT_RUNTIME_LIMIT_UNITS[bare]
+    : '';
+  const rendered = unit ? `${parsed.text} ${unit}` : parsed.text;
+
+  if (!template.includes('{limit}')) {
+    // 模板未声明 {limit}：仍把上限值附在末尾，避免信息丢失
+    return `${template}（上限 ${rendered}）`;
+  }
+  return template.replace(/\{limit\}/g, rendered);
 }
 
 export function formatLLMErrorSummary(err: LLMErrorResponse): string {

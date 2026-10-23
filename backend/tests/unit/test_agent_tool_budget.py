@@ -45,7 +45,8 @@ async def test_run_loop_aborts_when_tool_budget_exceeded(monkeypatch):
         events.append(evt)
 
     assert events[-1].state.value == "failed"
-    assert events[-1].error == "tool_budget_exceeded"
+    # 2026-10-22: 错误串携带生效预算上限，前端据此提示用户该调到多少
+    assert events[-1].error == "tool_budget_exceeded (limit=2)"
     # LLM 只被调用 2 次（第 2 轮工具执行超限即终止,不再进第 3 轮）
     assert llm.chat.await_count == 2
 

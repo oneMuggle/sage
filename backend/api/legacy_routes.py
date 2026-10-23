@@ -593,7 +593,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         _spend_limit,
                     )
                     # S1: finally 落库 failed + 原因
-                    _producer_error = "今日花费已达限额（spend_limit_exceeded）"
+                    # 2026-10-22: 带出具体上限数值，用户才知道该调到多少
+                    _producer_error = (
+                        f"今日花费已达限额（今日 {_today_cost:.2f} USD，"
+                        f"上限 {_spend_limit:.2f} USD），"
+                        "为控制成本本次请求未发送（可在 设置 → 通用 调整）"
+                    )
                     # 2026-09 修复: 失败信封统一为 dict {type, message} ——
                     # 与 _run_producer 的 LLMError.to_dict() 同构, 前端已双态兼容。
                     await entry.queue.put(
@@ -1829,6 +1834,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 nonlocal r38_memory_refs_written, r81_rag_citations_written
                 nonlocal r81_pushed_sources_len
                 nonlocal steps_completed, last_evt
+                # 2026-10-22: _producer_error 在 _consume_run_loop 内赋值,
+                # 缺 nonlocal 会创建函数局部变量,外层 finally 读到的仍是 None →
+                # sessions.last_error 降级为 "运行失败" 而非真实原因。
+                nonlocal _producer_error
 
                 async for evt in agent.run_loop(
                     messages, llm_config=llm_config, session_id=data.session_id,
@@ -2035,7 +2044,11 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         "state": "failed",
                         "error": {
                             "type": "llm_total_timeout",
-                            "message": f"LLM 调用超时（{_wall:.0f}s），请重试或缩短输入。",
+                            "message": (
+                                f"LLM 调用超时（已耗时 {_wall:.0f}s，"
+                                f"上限 {_SAGE_LLM_TOTAL_TIMEOUT_S:.0f}s），"
+                                "请重试或缩短输入。"
+                            ),
                         },
                     }
                 )
