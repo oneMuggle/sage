@@ -2266,3 +2266,24 @@
   - `src/features/chat/__tests__/useMessageJump.p161.test.ts`
   - `src/features/chat/__tests__/useQuoteDraft.p161.test.ts`
   - `src/features/chat/__tests__/useSessionMemoryPause.p161.test.ts`
+
+### Phase P162: Diagnostic (DiagnosticCard, ExportButton, Barrel, UseDiagnosticPreview) & Journal (JournalPanel, Barrel, UseJournalTemplates, JournalActions) Governance Audit (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/diagnostic/DiagnosticCard.tsx` (`auditDiagnosticCardGovernance`)
+  - `src/features/diagnostic/ExportButton.tsx` (`auditExportButtonGovernance`)
+  - `src/features/diagnostic/index.ts` (`auditDiagnosticBarrelGovernance`)
+  - `src/features/diagnostic/useDiagnosticPreview.ts` (`auditUseDiagnosticPreviewGovernance`)
+  - `src/features/journal/JournalPanel.tsx` (`auditJournalPanelGovernance`)
+  - `src/features/journal/index.ts` (`auditJournalBarrelGovernance`)
+  - `src/features/journal/useJournalTemplates.ts` (`auditUseJournalTemplatesGovernance`)
+  - `src/features/journal/components/JournalActions.tsx` (`auditJournalActionsGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/diagnostic/__tests__/DiagnosticCard.p162.test.ts`
+  - `src/features/diagnostic/__tests__/ExportButton.p162.test.ts`
+  - `src/features/diagnostic/__tests__/diagnosticIndex.p162.test.ts`
+  - `src/features/diagnostic/__tests__/useDiagnosticPreview.p162.test.ts`
+  - `src/features/journal/__tests__/JournalPanel.p162.test.ts`
+  - `src/features/journal/__tests__/journalIndex.p162.test.ts`
+  - `src/features/journal/__tests__/useJournalTemplates.p162.test.ts`
+  - `src/features/journal/__tests__/JournalActions.p162.test.ts`

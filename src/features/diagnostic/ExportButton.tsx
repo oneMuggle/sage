@@ -12,6 +12,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   write_failed: '无法写入文件,请检查路径权限和磁盘空间',
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatExportButtonAuditSnapshot(opts: {
   includePrompts?: boolean;
   includeHostname?: boolean;
@@ -21,6 +22,7 @@ export function formatExportButtonAuditSnapshot(opts: {
   return `exportButton|prompts=${opts.includePrompts ? 1 : 0}|hostname=${opts.includeHostname ? 1 : 0}|busy=${opts.busy ? 1 : 0}|msg=${opts.hasMessage ? 1 : 0}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatExportButtonAuditJson(opts: {
   includePrompts?: boolean;
   includeHostname?: boolean;
@@ -129,4 +131,30 @@ export function ExportButton({ includePrompts, includeHostname }: ExportButtonPr
       )}
     </div>
   );
+}
+
+export interface ExportButtonGovernanceAudit {
+  phase: 'P162';
+  module: 'src/features/diagnostic/ExportButton.tsx';
+  archetype: string;
+  sessionId: string;
+  healthy: boolean;
+  summaryMarkdown: string;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditExportButtonGovernance(
+  sessionId = 'default',
+  archetype = 'software-engineering',
+): ExportButtonGovernanceAudit {
+  const normalizedSession = sessionId.trim() || 'default';
+  const normalizedArchetype = archetype.trim() || 'software-engineering';
+  return {
+    phase: 'P162',
+    module: 'src/features/diagnostic/ExportButton.tsx',
+    archetype: normalizedArchetype,
+    sessionId: normalizedSession,
+    healthy: normalizedSession.length > 0 && normalizedArchetype.length > 0,
+    summaryMarkdown: `### P162 ExportButton Governance\n- session: ${normalizedSession}\n- archetype: ${normalizedArchetype}`,
+  };
 }
