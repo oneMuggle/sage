@@ -35,7 +35,11 @@ from typing import Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
-# win7 LTS py38 环境钉 pydantic 1.10.13，ConfigDict 是 v2 专有 → 走兼容垫片（v2 下为 no-op）。
+# ConfigDict 其实不是 v2 专有（pydantic 1.10.13 的 __init__.py 就有，自 v1.10.0 起），
+# 但本模块同时需要 field_validator（那个才是 v2 专有，v1 只有 validator /
+# root_validator），所以两者一起从垫片拿，跟仓库既有约定保持一致。
+# 垫片的 ConfigDict 在 v2 下直接 re-export pydantic 的，在 v1 下返回普通 dict
+# 配合 install() 的 metaclass hook 转成 class Config。
 from backend.compat.win7.pydantic_compat import ConfigDict
 
 from .errors import OfficeError
