@@ -39,6 +39,7 @@ Why this module exists
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import threading
 from typing import Awaitable, Optional, TypeVar
 
@@ -81,10 +82,16 @@ async def _run_with_timeout(coro: Awaitable, timeout: Optional[float]) -> T:
     """Wrap *coro* with ``asyncio.wait_for`` when a timeout is given.
 
     ``asyncio.wait_for`` **cancels** the inner coroutine on timeout, which
-    prevents ghost artifact writes after the caller has given up.
+    prevents ghost artifact writes after the caller has given up.  Python 3.8
+    reports that timeout as ``asyncio.TimeoutError``, while ``run_sync``
+    promises ``concurrent.futures.TimeoutError``; normalize the exception at
+    this boundary so callers see one contract on every supported version.
     """
     if timeout is not None:
-        return await asyncio.wait_for(coro, timeout=timeout)
+        try:
+            return await asyncio.wait_for(coro, timeout=timeout)
+        except asyncio.TimeoutError as exc:  # noqa: UP041 — py38 class differs
+            raise concurrent.futures.TimeoutError(*exc.args) from exc
     return await coro
 
 
