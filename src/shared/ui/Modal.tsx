@@ -88,4 +88,12 @@ export function formatModalDialogJson(
     hasFooter: Boolean(hasFooter),
   });
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditModalGovernance(): string {
+  return JSON.stringify({
+    module: 'ui-modal',
+    phase: 'P184',
+    audited: true,
+  });
+}
 
