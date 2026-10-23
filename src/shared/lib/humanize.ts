@@ -246,3 +246,16 @@ export function formatHumanizedToolJson(tool: string, args?: ToolArgs | null): s
     2,
   );
 }
+
+export function auditHumanizeGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.humanize.governance.v1',
+      phase: 'P178',
+      mcpSample: formatHumanizedToolSummary('mcp__github__list_prs', {}),
+      localSample: formatHumanizedToolSummary('runtime_exec', { language: 'python' }),
+    },
+    null,
+    2,
+  );
+}

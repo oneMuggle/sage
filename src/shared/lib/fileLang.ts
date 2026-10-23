@@ -68,3 +68,16 @@ export function formatFileLangJson(path?: string | null): string {
   });
 }
 /* v8 ignore stop */
+
+export function auditFileLangGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.file_lang.governance.v1',
+      phase: 'P178',
+      supportedExtensionsCount: Object.keys(EXT_LANG).length,
+      sampleSummary: formatFileLangSummary('src/App.tsx'),
+    },
+    null,
+    2,
+  );
+}

@@ -64,3 +64,15 @@ export function formatInlineMarksJson(text: string): string {
   });
 }
 
+export function auditInlineMarksGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.inline_marks.governance.v1',
+      phase: 'P178',
+      supportedMarks: ['**bold**', '*italic*'],
+      sampleSummary: formatInlineMarksSummary('Hello **bold** and *italic*'),
+    },
+    null,
+    2,
+  );
+}

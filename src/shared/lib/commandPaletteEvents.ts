@@ -25,3 +25,15 @@ export function formatCommandPaletteEventJson(
   });
 }
 
+export function auditCommandPaletteEventsGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.command_palette_events.governance.v1',
+      phase: 'P178',
+      eventName: OPEN_COMMAND_PALETTE_EVENT,
+      sampleSummary: formatCommandPaletteEventSummary(true),
+    },
+    null,
+    2,
+  );
+}
