@@ -377,3 +377,16 @@ export function formatWorkspaceBindingJson(binding: SessionWorkspaceBinding | nu
     2,
   );
 }
+
+export function auditWorkspaceApiGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.workspace_api.governance.v1',
+      phase: 'P177',
+      supportsCheckpoints: true,
+      unboundSummary: formatWorkspaceBindingSummary(null),
+    },
+    null,
+    2,
+  );
+}

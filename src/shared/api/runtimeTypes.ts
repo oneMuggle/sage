@@ -177,3 +177,16 @@ export function formatRuntimeDiagnosisJson(diag?: Partial<ProjectDiagnosis> | nu
   });
 }
 /* v8 ignore stop */
+
+export function auditRuntimeTypesGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.runtime_types.governance.v1',
+      phase: 'P177',
+      diagnosisLevels: ['satisfied', 'degraded', 'unsatisfied'],
+      defaultSummary: formatRuntimeDiagnosisSummary(null),
+    },
+    null,
+    2,
+  );
+}
