@@ -31,6 +31,7 @@ from backend.domain.tool_names import (
     SYMBOL_TOOLS,
     TODO_TOOLS,
     WEB_FETCH_TOOLS,
+    is_plugin_tool_reference,
 )
 
 logger = logging.getLogger(__name__)
@@ -796,7 +797,7 @@ def validate_profile_tools(repo: Optional[Any] = None) -> int:
     known = set(ALL_BUILTIN_TOOL_NAMES)
     warned = 0
     for profile in repo.list_all():
-        unknown = [t for t in (profile.get("tools") or []) if t not in known]
+        unknown = [t for t in (profile.get("tools") or []) if t not in known and not is_plugin_tool_reference(t)]
         if unknown:
             warned += 1
             logger.warning(

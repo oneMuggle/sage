@@ -14,6 +14,11 @@ from backend.domain.network_policy import NetworkPolicy
 from backend.domain.tool_names import (
     ALL_BUILTIN_TOOL_NAMES,
     EXEC_TOOLS,
+    PLUGIN_TOOL_PREFIX,
+    is_plugin_tool_name,
+    is_plugin_tool_reference,
+    is_plugin_tool_wildcard,
+    tool_name_in_allowlist,
 )
 from backend.domain.tool_policy import ToolPolicy
 from backend.tools import ToolRegistry, register_all_tools
@@ -47,6 +52,88 @@ def test_profile_seeds_within_known_names():
         assert not unknown, f"{agent.id} 引用未注册名: {unknown}"
 
 
+_PLUGIN_TOOL = "plugin__demo__hello"
+
+
+def test_builtin_names_never_use_plugin_namespace():
+    """动态插件命名空间不得混进静态内置清单（R92 通配只匹配插件面）。"""
+    assert not any(
+        name.startswith(PLUGIN_TOOL_PREFIX) for name in ALL_BUILTIN_TOOL_NAMES
+    )
+
+
+def test_plugin_tool_reference_shapes():
+    """R92 只承认精确插件名与两种受限通配形状。"""
+    assert is_plugin_tool_name(_PLUGIN_TOOL) is True
+    assert is_plugin_tool_name("plugin__demo__*") is False
+    assert is_plugin_tool_wildcard("plugin__*") is True
+    assert is_plugin_tool_wildcard("plugin__demo__*") is True
+    assert is_plugin_tool_reference(_PLUGIN_TOOL) is True
+    assert is_plugin_tool_reference("plugin__demo__*") is True
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        "plugin__demo",
+        "plugin__demo__",
+        "plugin____hello",
+        "plugin__demo*",
+        "plugin__demo__**",
+        "plugin__*__hello",
+        "plugin__de mo__*",
+        "*",
+        "memory_*",
+        "mcp__server__*",
+        None,
+        123,
+    ],
+)
+def test_plugin_tool_reference_rejects_other_shapes(entry):
+    assert is_plugin_tool_reference(entry) is False
+
+
+def test_allowlist_matcher_exact_and_legacy_semantics():
+    assert tool_name_in_allowlist("bash", None) is True  # None = 无白名单
+    assert tool_name_in_allowlist("bash", []) is False  # [] = 不暴露任何工具
+    assert tool_name_in_allowlist("bash", ["bash"]) is True
+    assert tool_name_in_allowlist(_PLUGIN_TOOL, [_PLUGIN_TOOL]) is True
+    assert tool_name_in_allowlist("bash", ["read_file"]) is False
+    # 坏条目不崩溃、不放宽，其后的合法条目仍生效
+    assert tool_name_in_allowlist("bash", [None, 123, "bash"]) is True
+    assert tool_name_in_allowlist("bash", [None, 123]) is False
+    assert tool_name_in_allowlist(None, ["bash"]) is False
+
+
+def test_allowlist_matcher_plugin_wildcards():
+    assert tool_name_in_allowlist(_PLUGIN_TOOL, ["plugin__*"]) is True
+    assert tool_name_in_allowlist(_PLUGIN_TOOL, ["plugin__demo__*"]) is True
+    assert (
+        tool_name_in_allowlist("plugin__demo__a__b", ["plugin__demo__*"]) is True
+    )
+    assert tool_name_in_allowlist(_PLUGIN_TOOL, ["plugin__other__*"]) is False
+    assert (
+        tool_name_in_allowlist("plugin__demo2__hello", ["plugin__demo__*"])
+        is False
+    )
+    # 通配只匹配合法插件工具形状，不匹配残缺名/内置/MCP
+    assert tool_name_in_allowlist("plugin__demo", ["plugin__*"]) is False
+    assert tool_name_in_allowlist("memory_search", ["plugin__*"]) is False
+    assert tool_name_in_allowlist("mcp__server__tool", ["plugin__*"]) is False
+    # 插件名含 __ 的既有拼接歧义：按命名空间前缀做文本匹配（如实记录）
+    assert (
+        tool_name_in_allowlist("plugin__a__b__c", ["plugin__a__*"]) is True
+    )
+
+
+@pytest.mark.parametrize(
+    "pattern", ["*", "memory_*", "mcp__*", "plugin__demo*", "plugin__*__hello"]
+)
+def test_allowlist_matcher_never_expands_generic_globs(pattern):
+    assert tool_name_in_allowlist("memory_search", [pattern]) is False
+    assert tool_name_in_allowlist(_PLUGIN_TOOL, [pattern]) is False
+
+
 def test_validate_profile_tools_warns_on_unknown(monkeypatch):
     """validate_profile_tools 对未注册名告警并计数，合法白名单零告警。"""
 
@@ -62,6 +149,13 @@ def test_validate_profile_tools_warns_on_unknown(monkeypatch):
             {"id": "legacy", "tools": ["terminal", "read_file"]},  # 旧名 terminal
             {"id": "ok", "tools": ["bash", "list_dir"]},
             {"id": "empty", "tools": []},
+            # R92：合法插件精确名/通配是已知动态引用，不告警
+            {
+                "id": "plugin-ok",
+                "tools": ["plugin__demo__hello", "plugin__demo__*", "plugin__*"],
+            },
+            # 无效通配写法仍按未注册名告警，帮助发现拼写错误
+            {"id": "plugin-bad", "tools": ["plugin__demo*"]},
         ]
     )
-    assert validate_profile_tools(repo) == 1
+    assert validate_profile_tools(repo) == 2

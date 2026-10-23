@@ -16,6 +16,7 @@ export type SettingsTabKey =
   | 'memory'
   | 'network'
   | 'mcp'
+  | 'plugins'
   | 'zotero'
   | 'runtime'
   | 'evolution'

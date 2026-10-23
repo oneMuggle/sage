@@ -216,6 +216,7 @@ export const zhChatAndSider = {
   'settings.tab.memory': '记忆',
   'settings.tab.network': '网络',
   'settings.tab.mcp': 'MCP',
+  'settings.tab.plugins': '插件',
   'settings.tab.zotero': '文献库',
   'settings.tab.runtime': '开发环境',
   'settings.tab.providers': '更新源',

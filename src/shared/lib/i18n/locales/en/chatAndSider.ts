@@ -223,6 +223,7 @@ export const enChatAndSider = {
   'settings.tab.memory': 'Memory',
   'settings.tab.network': 'Network',
   'settings.tab.mcp': 'MCP',
+  'settings.tab.plugins': 'Plugins',
   'settings.tab.zotero': 'Library',
   'settings.tab.runtime': 'Dev Environment',
   'settings.tab.providers': 'Update Sources',
