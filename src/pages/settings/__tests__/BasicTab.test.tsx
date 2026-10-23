@@ -209,6 +209,7 @@ describe('BasicTab — LLM 重试 section', () => {
       llmRetryMaxAttempts: 3,
       llmRetryBaseDelayS: 1,
       llmRetryMaxDelayS: 30,
+      llmTotalTimeoutS: 1800,
       timezone: 'Asia/Shanghai',
       logTimezone: 'UTC',
       demoMode: false,
@@ -216,6 +217,7 @@ describe('BasicTab — LLM 重试 section', () => {
     expect(snapshot).toContain('# 基础设置审计快照');
     expect(snapshot).toContain('流式输出: 开启');
     expect(snapshot).toContain('IANA 时区: Asia/Shanghai');
+    expect(snapshot).toContain('LLM 任务上限(秒): 1800');
 
     const json = JSON.parse(
       formatBasicTabAuditJson({
@@ -223,6 +225,7 @@ describe('BasicTab — LLM 重试 section', () => {
         llmRetryMaxAttempts: 0,
         llmRetryBaseDelayS: 2,
         llmRetryMaxDelayS: 60,
+        llmTotalTimeoutS: 0,
         timezone: '',
         logTimezone: '',
         demoMode: true,
@@ -233,9 +236,73 @@ describe('BasicTab — LLM 重试 section', () => {
       llmRetryMaxAttempts: 0,
       llmRetryBaseDelayS: 2,
       llmRetryMaxDelayS: 60,
+      llmTotalTimeoutS: 0,
       timezone: 'Asia/Shanghai',
       logTimezone: 'UTC',
       demoMode: true,
     });
+  });
+});
+
+describe('BasicTab — LLM 任务上限 section', () => {
+  it('渲染「LLM 任务上限」区块及默认 1800 秒', () => {
+    renderTab();
+
+    expect(screen.getByText('LLM 任务上限')).toBeTruthy();
+
+    const input = screen.getByTestId('settings-llm-total-timeout');
+    expect(input).toBeTruthy();
+    expect((input as HTMLInputElement).value).toBe('1800');
+
+    // 描述必须点明 0 = 不限 + 环境变量优先级，避免用户误以为是网络超时
+    expect(screen.getByText(/0 = 不限上限/)).toBeTruthy();
+    expect(screen.getByText(/SAGE_LLM_TOTAL_TIMEOUT_S/)).toBeTruthy();
+  });
+
+  it('修改总耗时上限触发 updateSettings', async () => {
+    renderTab();
+
+    const input = screen.getByTestId('settings-llm-total-timeout');
+    fireEvent.change(input, { target: { value: '3600' } });
+
+    await waitFor(() => {
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmTotalTimeoutS: 3600 });
+    });
+  });
+
+  it('设为 0 表示不限上限', async () => {
+    renderTab();
+
+    const input = screen.getByTestId('settings-llm-total-timeout');
+    fireEvent.change(input, { target: { value: '0' } });
+
+    await waitFor(() => {
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmTotalTimeoutS: 0 });
+    });
+  });
+
+  it('输入负数被 clamp 到 0', async () => {
+    renderTab();
+
+    const input = screen.getByTestId('settings-llm-total-timeout');
+    fireEvent.change(input, { target: { value: '-30' } });
+
+    await waitFor(() => {
+      expect(mocks.updateSettings).toHaveBeenCalledWith({ llmTotalTimeoutS: 0 });
+    });
+  });
+
+  it('审计快照把 0 渲染成「不限」', () => {
+    const snapshot = formatBasicTabAuditSnapshot({
+      streaming: true,
+      llmRetryMaxAttempts: 3,
+      llmRetryBaseDelayS: 1,
+      llmRetryMaxDelayS: 30,
+      llmTotalTimeoutS: 0,
+      timezone: 'Asia/Shanghai',
+      logTimezone: 'UTC',
+      demoMode: false,
+    });
+    expect(snapshot).toContain('LLM 任务上限(秒): 不限');
   });
 });

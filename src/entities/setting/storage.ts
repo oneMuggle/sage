@@ -48,6 +48,8 @@ const TOP_KEYS: ReadonlySet<keyof AppSettings> = new Set([
   'llmRetryMaxAttempts',
   'llmRetryBaseDelayS',
   'llmRetryMaxDelayS',
+  // 2026-10-22: 整轮任务 wall-clock 上限（秒）— 漏了会被 sanitizeForBackend 静默丢弃。
+  'llmTotalTimeoutS',
   // 'memoryServerSync' 不在此白名单内 — 后端已下线该字段, 前端发出去会 400.
 ]);
 const ENDPOINT_KEYS: ReadonlySet<keyof EndpointConfig> = new Set([

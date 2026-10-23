@@ -149,6 +149,10 @@ class SettingsPayload(BaseModel):
     # 最大退避时间（秒）：单次等待上限
     llmRetryMaxDelayS: Optional[float] = None  # noqa: N815
 
+    # ----- 整轮任务 wall-clock 上限 (2026-10-22) -----
+    # 0 = 不限；正值单位秒；UI 改后立即生效（函数式读取）
+    llmTotalTimeoutS: Optional[int] = None  # noqa: N815
+
     # ----- Legacy fields (兼容旧客户端, 不写入存储) -----
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None  # noqa: S105 — 字段名占位; 不存储
@@ -200,6 +204,10 @@ class LegacySettingsPayload(BaseModel):
     llmRetryBaseDelayS: Optional[float] = None  # noqa: N815
     # 最大退避时间（秒）：单次等待上限
     llmRetryMaxDelayS: Optional[float] = None  # noqa: N815
+
+    # ----- 整轮任务 wall-clock 上限 (2026-10-22) -----
+    # 0 = 不限；正值单位秒；UI 改后立即生效（函数式读取）
+    llmTotalTimeoutS: Optional[int] = None  # noqa: N815
 
     # ----- Legacy fields (deprecated, 兼容旧客户端, 不写入存储) -----
     api_base_url: Optional[str] = None
