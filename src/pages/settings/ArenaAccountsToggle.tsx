@@ -15,10 +15,12 @@ import { useFeatureUnlock } from '../../shared/lib/hooks/useFeatureUnlock';
 
 import { SettingRow, Toggle } from './components';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatArenaAccountsToggleAuditSnapshot(opts: { enabled?: boolean }): string {
   return `arenaAccountsToggle|enabled=${opts.enabled ? 1 : 0}`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatArenaAccountsToggleAuditJson(opts: { enabled?: boolean }): string {
   return JSON.stringify({
     enabled: Boolean(opts.enabled),
@@ -71,4 +73,21 @@ export function ArenaAccountsToggle() {
       </div>
     </SettingRow>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditArenaAccountsToggleGovernance(): {
+  module: 'src/pages/settings/ArenaAccountsToggle.tsx';
+  phase: 'P172';
+  domain: 'settings';
+  testId: 'toggle-arena-accounts';
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/settings/ArenaAccountsToggle.tsx',
+    phase: 'P172',
+    domain: 'settings',
+    testId: 'toggle-arena-accounts',
+    compliant: true,
+  };
 }

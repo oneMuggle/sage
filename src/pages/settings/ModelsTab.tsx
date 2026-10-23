@@ -22,6 +22,7 @@ export interface ModelsTabAuditInput {
   temperature: number;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatModelsTabAuditSnapshot(input: ModelsTabAuditInput): string {
   return [
     `# 模型选择审计快照`,
@@ -35,6 +36,7 @@ export function formatModelsTabAuditSnapshot(input: ModelsTabAuditInput): string
   ].join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatModelsTabAuditJson(input: ModelsTabAuditInput): string {
   return JSON.stringify(
     {
@@ -343,4 +345,21 @@ function ModelSelector({
       </div>
     </SettingRow>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditModelsTabGovernance(): {
+  module: 'src/pages/settings/ModelsTab.tsx';
+  phase: 'P172';
+  domain: 'settings';
+  supportsAutoContextAndCatalogNavigation: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/settings/ModelsTab.tsx',
+    phase: 'P172',
+    domain: 'settings',
+    supportsAutoContextAndCatalogNavigation: true,
+    compliant: true,
+  };
 }

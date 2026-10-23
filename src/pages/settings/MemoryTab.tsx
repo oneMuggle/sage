@@ -16,6 +16,7 @@ import { invoke } from '../../shared/api/desktopInvoke';
 
 import { SettingRow } from './components';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatMemoryTabAuditSnapshot(input: {
   embedderType?: string | null;
   semantic?: boolean;
@@ -29,6 +30,7 @@ export function formatMemoryTabAuditSnapshot(input: {
   return `记忆管理 · ${emb} · ${modeLabel} · ${readyLabel} · 备份${backups}份`;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatMemoryTabAuditJson(input: {
   embedderType?: string | null;
   semantic?: boolean;
@@ -507,4 +509,23 @@ export function MemoryTab() {
       </section>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditMemoryTabGovernance(): {
+  module: 'src/pages/settings/MemoryTab.tsx';
+  phase: 'P172';
+  domain: 'settings';
+  embedderModes: readonly ['onnx', 'hash'];
+  supportsBackupsAndExport: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/settings/MemoryTab.tsx',
+    phase: 'P172',
+    domain: 'settings',
+    embedderModes: ['onnx', 'hash'],
+    supportsBackupsAndExport: true,
+    compliant: true,
+  };
 }

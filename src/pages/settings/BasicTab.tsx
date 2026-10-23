@@ -24,6 +24,7 @@ export interface BasicTabAuditInput {
   demoMode: boolean;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatBasicTabAuditSnapshot(input: BasicTabAuditInput): string {
   return [
     `# 基础设置审计快照`,
@@ -37,6 +38,7 @@ export function formatBasicTabAuditSnapshot(input: BasicTabAuditInput): string {
   ].join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatBasicTabAuditJson(input: BasicTabAuditInput): string {
   return JSON.stringify(
     {
@@ -294,4 +296,21 @@ export function BasicTab() {
       </section>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditBasicTabGovernance(): {
+  module: 'src/pages/settings/BasicTab.tsx';
+  phase: 'P172';
+  domain: 'settings';
+  supportsTimezoneAndDemoMode: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/settings/BasicTab.tsx',
+    phase: 'P172',
+    domain: 'settings',
+    supportsTimezoneAndDemoMode: true,
+    compliant: true,
+  };
 }

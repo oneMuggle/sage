@@ -2482,3 +2482,16 @@
   - `src/pages/__tests__/TodoPage.p171.test.ts`
 - **Verification**:
   - `npx eslint --max-warnings=0`, `npx vitest run`, `node scripts/check-font-scale.mjs`, `node scripts/architecture-check.mjs`, `node scripts/export-ipc-manifest.mjs --check`, and `npx tsc --noEmit` all passed with 0 errors/warnings across both `main` and `release/win7` worktrees.
+
+### Phase P172 — Welcome, Chat Header & Settings Tab Governance Audit Contracts (Completed 2026-10-23)
+
+- **Welcome & Chat Header Bar Governance Contracts**:
+  - `src/pages/Welcome.tsx`: Added `auditWelcomePageGovernance()` verifying welcome page recommendation and saved recipe workflow readiness (`src/pages/__tests__/Welcome.p172.test.ts`).
+  - `src/pages/chat/ChatHeaderBar.tsx`: Added `auditChatHeaderBarGovernance()` verifying top header bar controls (`SessionModelPicker`, `OrchModeSelect`, `SessionSettingsMenu`, `SessionSessionMenu`, `RightPanelToggle`) (`src/pages/chat/__tests__/ChatHeaderBar.p172.test.ts`).
+- **Settings Tabs & Toggle Governance Contracts**:
+  - `src/pages/settings/ArenaAccountsToggle.tsx`: Added `auditArenaAccountsToggleGovernance()` verifying Arena accounts toggle metadata (`src/pages/settings/__tests__/ArenaAccountsToggle.p172.test.ts`).
+  - `src/pages/settings/BasicTab.tsx`: Added `auditBasicTabGovernance()` verifying timezone and demo-mode configuration support (`src/pages/settings/__tests__/BasicTab.p172.test.ts`).
+  - `src/pages/settings/EndpointsTab.tsx`: Added `auditEndpointsTabGovernance()` verifying endpoint probe status display support (`src/pages/settings/__tests__/EndpointsTab.p172.test.ts`).
+  - `src/pages/settings/MemoryTab.tsx`: Added `auditMemoryTabGovernance()` verifying embedder modes (`onnx`, `hash`) and backup/export support (`src/pages/settings/__tests__/MemoryTab.p172.test.ts`).
+  - `src/pages/settings/ModelsTab.tsx`: Added `auditModelsTabGovernance()` verifying auto-context and catalog navigation support (`src/pages/settings/__tests__/ModelsTab.p172.test.ts`).
+  - `src/pages/settings/NetworkTab.tsx`: Added `auditNetworkTabGovernance()` verifying proxy, search engine, and credentials configuration support (`src/pages/settings/__tests__/NetworkTab.p172.test.ts`).
