@@ -30,6 +30,7 @@ import { NetworkTab } from './NetworkTab';
 import { OrchestrationTab } from './OrchestrationTab';
 import { PluginsTab } from './PluginsTab';
 import { ProvidersManager } from './ProvidersManager';
+import { RemoteWorkspacesTab } from './RemoteWorkspacesTab';
 import { RuntimeEnvTab } from './RuntimeEnvTab';
 import { SkillsTab } from './SkillsTab';
 import { ToolsConnectionsTab } from './ToolsConnectionsTab';
@@ -103,6 +104,7 @@ export function Settings() {
     { key: 'network', label: t('settings.tab.network') },
     { key: 'mcp', label: t('settings.tab.mcp') },
     { key: 'plugins', label: t('settings.tab.plugins') },
+    { key: 'remote-workspaces', label: t('settings.tab.remote-workspaces' as TranslationKey) },
     { key: 'zotero', label: t('settings.tab.zotero') },
     { key: 'runtime', label: t('settings.tab.runtime') },
     { key: 'evolution', label: t('settings.tab.evolution') },
@@ -278,6 +280,7 @@ export function Settings() {
             {activeTab === 'network' && <NetworkTab />}
             {activeTab === 'mcp' && <McpTab />}
             {activeTab === 'plugins' && <PluginsTab />}
+            {activeTab === 'remote-workspaces' && <RemoteWorkspacesTab />}
             {activeTab === 'zotero' && <ZoteroTab />}
             {activeTab === 'runtime' && <RuntimeEnvTab />}
             {activeTab === 'evolution' && (

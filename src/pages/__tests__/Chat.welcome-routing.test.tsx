@@ -152,8 +152,10 @@ describe('Chat — top-bar "新对话" must go to /welcome', () => {
     expect(screen.getByText('对话')).toBeInTheDocument();
     expect(screen.getByTestId('current-path').textContent).toBe('/chat');
 
-    // 点击顶部 "+ 新对话"
-    fireEvent.click(screen.getByRole('button', { name: /新对话/ }));
+    // 点击顶部 "+ 新对话"（SessionSessionMenu 下拉菜单中）
+    // Batch 4 (2026-10-23): "新对话" 从顶栏内联按钮移入 SessionSessionMenu 下拉菜单
+    fireEvent.click(screen.getByTestId('session-session-menu-toggle'));
+    fireEvent.click(screen.getByTestId('session-menu-new-session'));
 
     // 跳到 /welcome
     expect(screen.getByTestId('current-path').textContent).toBe('/welcome');
@@ -172,7 +174,9 @@ describe('Chat — top-bar "新对话" must go to /welcome', () => {
     const headerControls = await screen.findByTestId('chat-header-controls');
     expect(headerControls).toBeInTheDocument();
     expect(screen.getAllByTestId('orch-mode-select')).toHaveLength(1);
-    expect(screen.getAllByTestId('chat-new-topic')).toHaveLength(1);
+    // Batch 4 (2026-10-23): "新话题" 从独立按钮移入 SessionSessionMenu 下拉菜单,
+    // 断言目标改为菜单 toggle 按钮（始终可见,无需展开下拉）
+    expect(screen.getByTestId('session-session-menu-toggle')).toBeInTheDocument();
     expect(screen.queryByTestId('composer-controls')).not.toBeInTheDocument();
   });
 });

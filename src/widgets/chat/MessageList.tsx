@@ -1,11 +1,11 @@
-import { ChevronUp } from 'lucide-react';
+import { ChevronUp, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Artifact } from '../../features/artifacts/artifactApi';
 import { useArtifacts } from '../../features/artifacts/useArtifacts';
 import { BtwOverlay } from '../../features/chat';
 import { useMessageJump } from '../../features/chat/useMessageJump';
-import type { Message as MessageType } from '../../shared/lib/store';
+import type { BlockedAction, Message as MessageType } from '../../shared/lib/store';
 
 import { ChatFindBar } from './ChatFindBar';
 import { Message } from './Message';
@@ -67,6 +67,12 @@ interface MessageListProps {
   onQuoteSelection?: (text: string) => void;
   /** P0-1: 保存此条消息到长期记忆（提供时 user/assistant 消息显示"保存到记忆"） */
   onSaveToMemory?: (message: MessageType) => void;
+  /** P0-6: 打开记忆浏览器并定位到该条记忆 */
+  onOpenMemory?: (memoryId: string) => void;
+  /** R44: 空态建议提示词点击回调 */
+  onSuggestionClick?: (prompt: string) => void;
+  /** R19-W1: 网页访问拦截卡片动作回调（透传给 Message → BlockedCard） */
+  onBlockedAction?: (action: BlockedAction) => void;
   /** 第二轮 B2: 继续生成（只传给最后一条消息，且仅在没有流式输出时） */
   onContinue?: () => void;
   /** 第二轮 C2: 回答版本切换后的回调（同上，只传给最后一条消息） */
@@ -87,6 +93,9 @@ export function MessageList({
   onQuote,
   onQuoteSelection,
   onSaveToMemory,
+  onOpenMemory,
+  onSuggestionClick,
+  onBlockedAction,
   onContinue,
   onAnswerVersionChange,
 }: MessageListProps) {
@@ -201,8 +210,29 @@ export function MessageList({
         className="flex flex-col items-center justify-center h-full text-muted"
       >
         {auditControls}
-        <p className="text-lg mb-2">欢迎使用 Sage</p>
-        <p className="text-sm">开始一段新对话吧</p>
+        <Sparkles className="w-8 h-8 mb-3 text-primary/40" />
+        <p className="text-lg mb-1">欢迎使用 Sage</p>
+        <p className="text-sm mb-4">开始一段新对话吧</p>
+        {onSuggestionClick && (
+          <div
+            className="flex flex-col gap-2 w-full max-w-xs px-4"
+            data-testid="chat-empty-suggestions"
+          >
+            {['帮我写一段代码', '帮我搜索最新资讯', '帮我整理一份笔记', '帮我分析一个问题'].map(
+              (prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  data-testid={`chat-suggestion-${prompt.slice(2, 4)}`}
+                  onClick={() => onSuggestionClick(prompt)}
+                  className="px-3 py-2 text-xs text-left rounded-radius-sm border border-border bg-surface hover:bg-bg-hover transition-colors"
+                >
+                  {prompt}
+                </button>
+              ),
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -211,7 +241,7 @@ export function MessageList({
     <>
       {/* 第二轮 B4: 会话内查找栏（Ctrl/Cmd+F），在列表根节点之外，自身文字不参与匹配 */}
       <ChatFindBar messages={messages} />
-      <div ref={rootRef} data-message-list-audit={auditSnapshot} className="p-4 space-y-[var(--density-msg-gap)]">
+      <div ref={rootRef} data-message-list-audit={auditSnapshot} className="p-4 space-y-4">
         {auditControls}
         {hiddenCount > 0 && (
           <button
@@ -248,7 +278,9 @@ export function MessageList({
                     onDelete={onDelete}
                     onQuote={onQuote}
                     onSaveToMemory={onSaveToMemory}
+                    onOpenMemory={onOpenMemory}
                     artifactsByToolCall={artifactsByToolCall}
+                    onBlockedAction={onBlockedAction}
                     onContinue={
                       message.id === lastId && !streamingMessageId ? onContinue : undefined
                     }
@@ -281,6 +313,8 @@ export function MessageList({
                 onDelete={onDelete}
                 onQuote={onQuote}
                 onSaveToMemory={onSaveToMemory}
+                onOpenMemory={onOpenMemory}
+                onBlockedAction={onBlockedAction}
                 onContinue={
                   item.messages[item.messages.length - 1]?.id === lastId && !streamingMessageId
                     ? onContinue

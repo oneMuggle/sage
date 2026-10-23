@@ -86,6 +86,8 @@ describe('chatApi.chatStream (PR-6)', () => {
       images: [],
       // R37: 文本文档附件 id, 缺省空数组
       attachment_media_ids: [],
+      // Batch 4 (2026-10-23): 附件 RAG 配置, 缺省 null
+      attachment_rag: null,
       // client_message_id 协议 (同步 #1155): 未传 → null (兼容旧客户端)
       clientMessageId: null,
       // Task 5 (2026-09-15): context window resolver toggle, 缺省 null

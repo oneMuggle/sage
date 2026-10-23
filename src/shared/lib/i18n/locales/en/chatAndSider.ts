@@ -64,6 +64,7 @@ export const enChatAndSider = {
   'chat.sources_group_wiki': 'Knowledge base',
   'chat.sources_group_web': 'Web',
   'chat.sources_group_tool': 'Tools',
+  'chat.sources_open_memory': 'View this memory in the memory browser',
   // R38: Skill activation display
   'chat.skills_activated': 'skills activated',
   'chat.skills_toggle': 'View activated skills',
@@ -143,6 +144,24 @@ export const enChatAndSider = {
     'Current chat model does not support vision. Please configure a vision model or switch to a vision-capable model',
   'chat.vision_fallback_info':
     'Images will be recognized by the vision model and converted to text descriptions',
+
+  // ─── Blocked web access card (BlockedCard) ───
+  'chat.blocked.title': 'Web access blocked',
+  'chat.blocked.target': 'Target',
+  'chat.blocked.suggestions': 'Suggested actions',
+  'chat.blocked.reason.antibot_cf': 'Cloudflare anti-bot verification',
+  'chat.blocked.reason.antibot_other': 'Anti-bot protection',
+  'chat.blocked.reason.login_wall': 'Login required',
+  'chat.blocked.reason.http_4xx': 'Request denied',
+  'chat.blocked.reason.http_5xx': 'Server error',
+  'chat.blocked.reason.timeout': 'Request timed out',
+  'chat.blocked.reason.dns': 'DNS resolution failed',
+  'chat.blocked.reason.render': 'Dynamic render failed',
+  'chat.blocked.reason.generic': 'Access failed',
+  'chat.blocked.action.open_browser': 'Open in browser',
+  'chat.blocked.action.configure_credentials': 'Configure login credentials',
+  'chat.blocked.action.configure_proxy': 'Configure proxy',
+  'chat.blocked.action.view_docs': 'View documentation',
 
   // ─── M4 session compact / fork ────
   // LOW-1: unified phrasing — "before → after messages (removed merged into summary)"
@@ -224,6 +243,7 @@ export const enChatAndSider = {
   'settings.tab.network': 'Network',
   'settings.tab.mcp': 'MCP',
   'settings.tab.plugins': 'Plugins',
+  'settings.tab.remote-workspaces': 'Remote workspaces',
   'settings.tab.zotero': 'Library',
   'settings.tab.runtime': 'Dev Environment',
   'settings.tab.providers': 'Update Sources',

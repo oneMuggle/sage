@@ -17,6 +17,7 @@ export type SettingsTabKey =
   | 'network'
   | 'mcp'
   | 'plugins'
+  | 'remote-workspaces'
   | 'zotero'
   | 'runtime'
   | 'evolution'

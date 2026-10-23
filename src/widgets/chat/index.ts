@@ -14,6 +14,7 @@ export { TopicSeparator } from './TopicSeparator';
 export { ActiveAgentIndicator } from './ActiveAgentIndicator';
 export { SubagentLivePanel } from './SubagentLivePanel';
 export { RunSummaryPanel } from './RunSummaryPanel';
+export { PendingQueueStrip } from './PendingQueueStrip';
 
 export interface ChatWidgetBarrelAuditInput {
   exportedComponentCount: number;

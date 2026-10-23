@@ -41,6 +41,17 @@ export interface Session {
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）
+export interface BlockedAction {
+  /** 动作标识: open_browser | configure_credentials | configure_proxy | view_docs */
+  action: string;
+  /** 按钮文案（后端已本地化） */
+  label: string;
+  /** 可选图标（emoji） */
+  icon?: string;
+  /** 动作参数（如 url / domain / topic） */
+  params?: Record<string, unknown>;
+}
+
 export interface ToolCall {
   /** 后端 tool_call.id, 用于 observing 事件精确匹配 (HIGH-3 修复) */
   id?: string;
@@ -61,6 +72,10 @@ export interface ToolCall {
     apiUrls?: string[];
     /** 工具调用被拦截时的原因（拦截式 hook 触发时填充） */
     blockReason?: string;
+    /** 拦截式工具调用时的目标 URL（BlockedCard 渲染用） */
+    blockedUrl?: string;
+    /** 拦截式工具调用的建议动作列表（BlockedCard 渲染用） */
+    suggestedActions?: BlockedAction[];
   };
 }
 

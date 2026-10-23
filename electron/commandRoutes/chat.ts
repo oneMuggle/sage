@@ -71,4 +71,25 @@ export const chatRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/messages/${encodeURIComponent(String(a.id))}/delete`,
   },
+
+  // Batch 4 (2026-10-23): attachment RAG commands.
+  // Backend: backend/api/chat_attachment_routes.py
+  attachment_rag_index: {
+    method: 'POST',
+    path: (a) => `/api/v1/chat/attachments/${encodeURIComponent(String(a.mediaId))}/index`,
+    body: (a) => {
+      const body: Record<string, unknown> = { embed: a.embed };
+      if (a.target_chunk_size !== undefined) body.target_chunk_size = a.target_chunk_size;
+      return body;
+    },
+  },
+  attachment_rag_search: {
+    method: 'POST',
+    path: () => '/api/v1/chat/attachments/search',
+    rawBody: true,
+  },
+  attachment_rag_delete_index: {
+    method: 'DELETE',
+    path: (a) => `/api/v1/chat/attachments/${encodeURIComponent(String(a.mediaId))}/index`,
+  },
 };
