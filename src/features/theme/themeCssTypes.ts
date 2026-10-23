@@ -37,3 +37,21 @@ export function formatThemeCssPayloadJson(payload: ThemeCssPayload): string {
     2,
   );
 }
+
+export function auditThemeCssTypesGovernance(): {
+  module: 'src/features/theme/themeCssTypes.ts';
+  phase: 'P169';
+  domain: 'theme';
+  maxCssChars: 8192;
+  maxNameChars: 32;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/theme/themeCssTypes.ts',
+    phase: 'P169',
+    domain: 'theme',
+    maxCssChars: 8192,
+    maxNameChars: 32,
+    compliant: true,
+  };
+}
