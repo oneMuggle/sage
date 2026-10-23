@@ -70,3 +70,19 @@ export function formatLearnTriggerJson(
     2,
   );
 }
+
+export function auditLearnApiGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.learn_api.governance.v1',
+      phase: 'P176',
+      ipcCommand: 'trigger_learn',
+      defaultSummary: formatLearnTriggerSummary('sess-1', 'review', {
+        status: 'queued',
+        message: 'ok',
+      }),
+    },
+    null,
+    2,
+  );
+}

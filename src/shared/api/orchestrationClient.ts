@@ -116,3 +116,24 @@ export function formatLaneDecisionJson(res: LaneDecisionResult): string {
     2,
   );
 }
+
+export function auditOrchestrationClientGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.orchestration_client.governance.v1',
+      phase: 'P176',
+      views: ['ops_full', 'ui_minimal'],
+      methods: [
+        'listLanes',
+        'createLane',
+        'getLane',
+        'listLaneEvents',
+        'cancelLane',
+        'decideLane',
+        'getBoard',
+      ],
+    },
+    null,
+    2,
+  );
+}
