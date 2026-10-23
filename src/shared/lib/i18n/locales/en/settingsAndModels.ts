@@ -446,3 +446,10 @@ export function formatEnSettingsAndModelsJson(): string {
   });
 }
 
+export function auditEnSettingsAndModelsGovernance(): string {
+  return JSON.stringify({
+    module: 'en-settings-and-models',
+    phase: 'P182',
+    audited: true,
+  });
+}
