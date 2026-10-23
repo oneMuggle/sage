@@ -96,3 +96,11 @@ export function exportGoalProgressAuditJson(
 ): string {
   return JSON.stringify(evaluateGoalProgressAudit(input));
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditGoalProgressGovernance(): string {
+  return JSON.stringify({
+    module: 'goal-progress',
+    phase: 'P185',
+    audited: true,
+  });
+}

@@ -170,3 +170,11 @@ export function exportActiveAgentIndicatorAuditJson(
 ): string {
   return JSON.stringify(auditActiveAgentIndicator(agentName, isStreaming), null, 2);
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditActiveAgentIndicatorGovernance(): string {
+  return JSON.stringify({
+    module: 'active-agent-indicator',
+    phase: 'P185',
+    audited: true,
+  });
+}

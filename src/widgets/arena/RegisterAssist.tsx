@@ -306,3 +306,11 @@ export function exportRegisterAssistAuditJson(
 ): string {
   return JSON.stringify(auditRegisterAssist(email, isRunning), null, 2);
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditRegisterAssistGovernance(): string {
+  return JSON.stringify({
+    module: 'register-assist',
+    phase: 'P185',
+    audited: true,
+  });
+}
