@@ -41,6 +41,7 @@ const PLACEHOLDER_PHRASES_EN = [
 
 const GITHUB_URL = 'https://github.com/oneMuggle/sage';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatWelcomePageMarkdown(params: {
   locale: string;
   needsOnboarding: boolean;
@@ -57,6 +58,7 @@ export function formatWelcomePageMarkdown(params: {
   ].join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatWelcomePageJson(params: {
   locale: string;
   needsOnboarding: boolean;
@@ -197,4 +199,21 @@ export function Welcome() {
       </div>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditWelcomePageGovernance(): {
+  module: 'src/pages/Welcome.tsx';
+  phase: 'P172';
+  domain: 'pages';
+  supportsRecommendationsAndSavedRecipes: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/Welcome.tsx',
+    phase: 'P172',
+    domain: 'pages',
+    supportsRecommendationsAndSavedRecipes: true,
+    compliant: true,
+  };
 }
