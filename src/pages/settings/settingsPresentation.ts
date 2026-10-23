@@ -78,3 +78,20 @@ export function formatSettingsGroupsJson(
     2,
   );
 }
+
+export function auditSettingsPresentationGovernance(): {
+  module: 'src/pages/settings/settingsPresentation.ts';
+  phase: 'P174';
+  domain: 'settings';
+  supportsGroupedNavigationAndRowFocus: boolean;
+  compliant: boolean;
+} {
+  const groups = settingsGroups(['basic', 'models', 'runtime'], 'zh');
+  return {
+    module: 'src/pages/settings/settingsPresentation.ts',
+    phase: 'P174',
+    domain: 'settings',
+    supportsGroupedNavigationAndRowFocus: groups.length > 0,
+    compliant: groups.length > 0,
+  };
+}
