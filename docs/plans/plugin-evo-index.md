@@ -22,7 +22,8 @@
 | R85 | 提案引擎（Propose–Probe–Compose + 证据锚定） | ✅ #2206 |
 | R86 | 生态（脚手架 / 索引 / 贡献指南） | ✅ #2206 |
 | R90 | 进程外插件 tool → 聊天 `ToolRegistry` 桥 | ✅ #2327 |
-| R92 | 插件工具 profile 受限通配 + Agent 工具白名单编辑 | #2360（待合并） |
+| R92 | 插件工具 profile 受限通配 + Agent 工具白名单编辑 | ✅ #2360 |
+| R94 | 运行中插件工具动态选择器 | 实施中 |
 
 ## 2. 交付总账
 
@@ -38,7 +39,8 @@
 | R85 | `application/kernel/{harness_evidence,harness_proposals,harness_proposal_engine}.py` + SkillDraft 审批桥 + `proposals` CLI + 17 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
 | R86 | `plugins/{scaffold_templates,scaffold,index_catalog}.py` + `cli/plugin.py` + hello-tool 示例/静态索引/开发指南 + 25 例新增测试 | #2206 | 待对齐 | ✅ 已交付 |
 | R90 | `plugins/tool_bridge.py` + host publish/unpublish 通知与 running 查询 + `plugins` tool bundle + `input_schema` 契约/权限门/桥接测试与文档 | #2327 | 待对齐 | ✅ 已交付 |
-| R92 | `domain/tool_names.py` 共享 matcher 与前缀单一来源 + registry/agent 三道闸统一 + 启动期校验识别插件引用 + `EditAgentForm` 工具白名单编辑与测试/文档 | #2360（待合并） | 待对齐 | 实施中 |
+| R92 | `domain/tool_names.py` 共享 matcher 与前缀单一来源 + registry/agent 三道闸统一 + 启动期校验识别插件引用 + `EditAgentForm` 工具白名单编辑与测试/文档 | #2360 | 待对齐 | ✅ 已交付 |
+| R94 | `PluginToolBridge.published_tools()` 权威快照 + `GET /plugins/runtime/tools` + `pluginClient.runtimeTools()` + Agent 运行中插件工具动态复选框与测试/文档 | 实施中 | 待对齐 | 实施中 |
 
 ## 3. R78 交付边界
 
@@ -255,6 +257,34 @@
   通配不再误告警，无效写法仍告警。完整语义与验收见
   `2026-10-22_plugin-profile-wildcard-r92.md`。
 - **不扩围**：不做通用 glob、不做运行中工具动态复选框、不做「按插件
-  记住放行」；Win7 继续标“待对齐”。
+  记住放行」；动态复选框留给后续运行中工具清单接口，Win7 继续标
+  “待对齐”。
+
+## 14. R94 交付边界
+
+> R93 是 async bridge 超时异常合同（非插件轮次），故本账由 R92
+> 续 R94。
+
+- **清单以桥接发布面为准**：`GET /api/v1/plugins/runtime/tools`
+  只返回 `PluginToolBridge` 已向聊天发布的工具，字段为插件名、
+  capability 名、完整工具名、描述、派生风险与规范化声明权限。
+  读取前只 attach/refresh 已运行 session，不启动插件；未运行、
+  无可用 schema 或冲突落败的工具不出现在选择器里。
+- **动态复选框不发明新权限语义**：Agent 编辑页勾选只把完整名
+  写进现有 `tools` 文本草稿，保存后才对 profile 生效，调用仍走
+  逐次审批。被 R92 的 `plugin__*` / `plugin__<plugin>__*` 覆盖
+  但未单独列名的工具显示为已选且禁用，取消须改通配条目；刷新
+  快照不会删除已保存的未运行工具名或通配条目。
+- **权限快照不陈旧**：`PluginTool` 保留去空、去重、保序的声明
+  权限，权限进入发布 fingerprint；同风险下只改权限也会重发布，
+  选择器不会继续展示旧权限摘要。
+- **不扩围**：不自动启动、不做「按插件记住放行」、通用 glob、
+  内置/MCP 工具动态目录或其它 capability 托管；Win7 继续标
+  “待对齐”。完整语义与验收见
+  `2026-10-23_plugin-runtime-tool-picker-r94.md`。
+- **本地证据**：桥/路由 37 例与其余插件文件 114 例通过，前端
+  定向 18 例通过；Ruff、py38、tsc、ESLint、静默异常 ratchet、
+  architecture-check、diff-check 与 diagnostics 全绿，最终以
+  PR CI 为准。
 
 —— 本账本由插件化循环维护，随轮次追加。

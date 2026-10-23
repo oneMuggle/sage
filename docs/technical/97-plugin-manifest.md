@@ -4,7 +4,7 @@
 > 作者：Claude
 > 标签：插件、可扩展性、Pydantic v2
 
-> **当前契约（R82/R83/R86/R90/R92，2026-10-22）**：本文后半部分保留了早期设计示例，
+> **当前契约（R82/R83/R86/R90/R92/R94，2026-10-23）**：本文后半部分保留了早期设计示例，
 > 个别 JSON/API 形态已经过时。现行实现以 `backend/plugins/manifest.py` 的
 > 数组形 `capabilities` 为准：R82 只保存生命周期记录且不执行代码；R83 只显式
 > 托管带 entry_point 的 Python `tool`，子进程不是安全沙箱；R86 提供
@@ -14,7 +14,10 @@
 > stop/fail 时同步注销；R92 起 agent profile 工具白名单除完整名外还承认
 > `plugin__*` / `plugin__<plugin>__*` 两种受限通配（schema 过滤、并行
 > 预检与执行边界共用 `domain/tool_names.py` 的 matcher，调用仍逐次
-> 审批）。开发步骤请先看
+> 审批）；R94 起 `GET /api/v1/plugins/runtime/tools` 返回桥接已发布
+> 工具的只读快照（完整名、描述、风险与规范化权限），且只刷新已运行
+> session、不启动插件，Agent 编辑页据此生成完整名复选框（通配覆盖
+> 项禁用）。开发步骤请先看
 > [插件开发：30 分钟跑通第一个插件](../user-manual/21-plugin-development.md)。
 
 ## 概述

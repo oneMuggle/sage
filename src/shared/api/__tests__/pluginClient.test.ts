@@ -205,6 +205,25 @@ describe('pluginClient', () => {
       },
     ]);
   });
+
+  it('runtimeTools loads the published-tool snapshot from the global endpoint', async () => {
+    const tools = [
+      {
+        plugin_name: 'alpha',
+        capability_name: 'reader',
+        tool_name: 'plugin__alpha__reader',
+        description: '[Plugin:alpha] Read a file',
+        risk: 'exec',
+        permissions: ['file:read'],
+      },
+    ];
+    backendRequest.mockResolvedValueOnce({ tools, count: 1 });
+
+    await expect(pluginClient.runtimeTools()).resolves.toEqual(tools);
+    expect(backendRequest.mock.calls.map(([request]) => request)).toEqual([
+      { method: 'GET', path: '/api/v1/plugins/runtime/tools' },
+    ]);
+  });
 });
 
 describe('plugin permission helpers', () => {

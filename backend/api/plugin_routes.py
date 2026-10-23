@@ -1,9 +1,10 @@
 # ruff: noqa: UP006, UP007, UP035
-"""插件生命周期与进程外 runtime REST 路由（R82/R83）。
+"""插件生命周期与进程外 runtime REST 路由（R82/R83/R94）。
 
 R82 把既有的 :class:`PluginLifecycleManager` 记录面接出来；R83 在同一
-router 上增加显式 runtime start/stop/restart/invoke。安装与启用记录都
-不会自动执行插件代码，子进程只由 runtime start 显式拉起。
+router 上增加显式 runtime start/stop/restart/invoke；R94 增加只读的
+已发布聊天工具快照。安装与启用记录都不会自动执行插件代码，子进程
+只由 runtime start 显式拉起。
 
 安全约束沿用高权限路由的既有做法：
 
@@ -41,6 +42,7 @@ from backend.plugins.lifecycle import (
     PluginStatus,
 )
 from backend.plugins.manifest import PluginManifest
+from backend.plugins.tool_bridge import get_plugin_tool_bridge
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +91,19 @@ async def _run_host(function: Callable[..., Any], *args: Any) -> Any:
 
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, functools.partial(function, *args))
+
+
+def _published_runtime_tools() -> List[Dict[str, Any]]:
+    """Refresh the host bridge and return only tools published to chat.
+
+    Attaching/refreshing reconciles already-running sessions with the
+    bridge; it never starts a plugin process.
+    """
+
+    host = _host_manager()
+    bridge = getattr(host, "tool_bridge", None) or get_plugin_tool_bridge()
+    bridge.attach_host(host)
+    return [tool.to_dict() for tool in bridge.published_tools()]
 
 
 def _normalize_name(name: str) -> str:
@@ -285,6 +300,18 @@ async def list_all_plugin_logs(request: Request, limit: int = 100):
         return _lifecycle_error_response(exc)
 
     return {"logs": [_model_to_dict(event) for event in events]}
+
+
+@router.get("/runtime/tools")
+async def list_published_plugin_runtime_tools(request: Request):
+    """列出当前已发布到聊天工具面的运行中插件工具。"""
+
+    blocked = _blocked_origin(request)
+    if blocked is not None:
+        return blocked
+
+    tools = await _run_host(_published_runtime_tools)
+    return {"tools": tools, "count": len(tools)}
 
 
 @router.post("", status_code=201)

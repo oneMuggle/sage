@@ -172,6 +172,20 @@ def _render_result(result: Any) -> str:
         return str(result)
 
 
+def _normalize_permissions(permissions: Optional[Sequence[Any]]) -> Tuple[str, ...]:
+    """Normalize declared permissions without changing their order."""
+
+    normalized: List[str] = []
+    seen = set()
+    for raw_permission in permissions or []:
+        permission = str(raw_permission).strip()
+        if not permission or permission in seen:
+            continue
+        seen.add(permission)
+        normalized.append(permission)
+    return tuple(normalized)
+
+
 class PluginTool(BaseTool):
     """A ToolRegistry adapter for one running out-of-process plugin tool."""
 
@@ -193,7 +207,10 @@ class PluginTool(BaseTool):
         self._description = _format_description(plugin_name, capability)
         self._parameters = copy.deepcopy(parameters)
         self._invoke = invoke
-        self.risk = risk_for_permissions(getattr(capability, "permissions", []))
+        self._permissions = _normalize_permissions(
+            getattr(capability, "permissions", [])
+        )
+        self.risk = risk_for_permissions(self._permissions)
         super().__init__()
 
     @property
@@ -203,6 +220,10 @@ class PluginTool(BaseTool):
     @property
     def capability_name(self) -> str:
         return self._capability_name
+
+    @property
+    def permissions(self) -> Tuple[str, ...]:
+        return self._permissions
 
     def _build_schema(self) -> ToolSchema:
         return ToolSchema(
@@ -242,6 +263,28 @@ class PluginTool(BaseTool):
         )
 
 
+@dataclass(frozen=True)
+class PublishedPluginTool:
+    """Read-only snapshot of one tool currently published to chat."""
+
+    plugin_name: str
+    capability_name: str
+    tool_name: str
+    description: str
+    risk: RiskClass
+    permissions: Tuple[str, ...] = ()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "plugin_name": self.plugin_name,
+            "capability_name": self.capability_name,
+            "tool_name": self.tool_name,
+            "description": self.description,
+            "risk": self.risk.value,
+            "permissions": list(self.permissions),
+        }
+
+
 @dataclass
 class _PublishedTool:
     tool_name: str
@@ -259,6 +302,7 @@ def _fingerprint(tool: PluginTool) -> str:
         "description": schema.description,
         "parameters": schema.parameters,
         "risk": tool.risk.value,
+        "permissions": list(tool.permissions),
     }
     return json.dumps(
         payload,
@@ -456,6 +500,30 @@ class PluginToolBridge:
     def published_tool_names(self) -> Tuple[str, ...]:
         with self._lock:
             return tuple(self._published.keys())
+
+    def published_tools(self) -> Tuple[PublishedPluginTool, ...]:
+        """Return a stable, read-only snapshot of published chat tools."""
+
+        with self._lock:
+            records = sorted(
+                self._published.values(),
+                key=lambda record: (
+                    record.plugin_name,
+                    record.capability_name,
+                    record.tool_name,
+                ),
+            )
+        return tuple(
+            PublishedPluginTool(
+                plugin_name=record.plugin_name,
+                capability_name=record.capability_name,
+                tool_name=record.tool_name,
+                description=record.tool.schema.description,
+                risk=record.tool.risk,
+                permissions=record.tool.permissions,
+            )
+            for record in records
+        )
 
     # ---- internals ------------------------------------------------------
 
@@ -671,6 +739,7 @@ __all__ = [
     "PLUGIN_TOOL_PREFIX",
     "PluginTool",
     "PluginToolBridge",
+    "PublishedPluginTool",
     "get_plugin_tool_bridge",
     "normalize_input_schema",
     "plugin_tool_name",
