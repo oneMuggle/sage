@@ -11,7 +11,9 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sage_core import ToolResult, ToolSpec
@@ -429,6 +431,81 @@ async def test_adapter_destructive_command_denied_under_read_only() -> None:
     assert result.error is not None
     assert result.error.startswith("权限拒绝")
     assert "破坏性命令" in result.error
+    assert executed == []
+
+
+async def test_adapter_plugin_wildcard_allow_uses_authoritative_identity() -> None:
+    """R96: 已发布插件的权威名能让对应的整插件 allow 在 adapter 生效。"""
+    tool = "plugin__demo__hello"
+    registry, executed = _fake_registry_with(tool)
+    adapter = InprocToolAdapter(
+        registry=registry,
+        enforcer_factory=lambda: _enforcer_for(
+            PermissionMode.READ_ONLY,
+            rules=(PermissionRule("plugin__demo__*", "allow"),),
+        ),
+    )
+    bridge = MagicMock()
+    bridge.published_tool.return_value = SimpleNamespace(plugin_name="demo")
+
+    with patch(
+        "backend.plugins.tool_bridge.get_plugin_tool_bridge",
+        return_value=bridge,
+    ):
+        result = await adapter.execute(tool, {})
+
+    bridge.published_tool.assert_called_once_with(tool)
+    assert result.success is True
+    assert executed == [{"name": tool, "args": {}}]
+
+
+async def test_adapter_plugin_wildcard_allow_rejects_namespace_squatter() -> None:
+    """插件 demo 的 allow 不得命中权威身份为 demo__x 的同前缀工具。"""
+    tool = "plugin__demo__x__hello"
+    registry, executed = _fake_registry_with(tool)
+    adapter = InprocToolAdapter(
+        registry=registry,
+        enforcer_factory=lambda: _enforcer_for(
+            PermissionMode.READ_ONLY,
+            rules=(PermissionRule("plugin__demo__*", "allow"),),
+        ),
+    )
+    bridge = MagicMock()
+    bridge.published_tool.return_value = SimpleNamespace(plugin_name="demo__x")
+
+    with patch(
+        "backend.plugins.tool_bridge.get_plugin_tool_bridge",
+        return_value=bridge,
+    ):
+        result = await adapter.execute(tool, {})
+
+    assert result.success is False
+    assert result.error is not None
+    assert result.error.startswith("权限拒绝")
+    assert executed == []
+
+
+async def test_adapter_unpublished_plugin_tool_gets_no_wildcard_allow() -> None:
+    """桥上无当前发布记录时，整插件 allow 不得只凭工具名生效。"""
+    tool = "plugin__demo__hello"
+    registry, executed = _fake_registry_with(tool)
+    adapter = InprocToolAdapter(
+        registry=registry,
+        enforcer_factory=lambda: _enforcer_for(
+            PermissionMode.READ_ONLY,
+            rules=(PermissionRule("plugin__demo__*", "allow"),),
+        ),
+    )
+    bridge = MagicMock()
+    bridge.published_tool.return_value = None
+
+    with patch(
+        "backend.plugins.tool_bridge.get_plugin_tool_bridge",
+        return_value=bridge,
+    ):
+        result = await adapter.execute(tool, {})
+
+    assert result.success is False
     assert executed == []
 
 

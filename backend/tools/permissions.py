@@ -24,7 +24,12 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from backend.domain.tool_names import PLUGIN_TOOL_PREFIX
+from backend.domain.tool_names import (
+    PLUGIN_TOOL_PREFIX,
+    is_plugin_tool_wildcard,
+    plugin_tool_belongs_to_plugin,
+    plugin_tool_wildcard_for_plugin,
+)
 from backend.tools.base import _is_safe_path
 from backend.tools.bash_validation import BashRisk, validate_bash
 
@@ -150,8 +155,24 @@ class PermissionRule:
         if not self.tool_pattern:
             raise ValueError("PermissionRule.tool_pattern must be non-empty")
 
-    def matches(self, tool_name: str) -> bool:
-        """fnmatch 大小写敏感匹配工具名。"""
+    def matches(self, tool_name: str, plugin_name: Optional[str] = None) -> bool:
+        """匹配工具名；受限插件通配只按权威插件身份匹配。
+
+        普通 pattern 保持大小写敏感 fnmatch。`plugin__*` 与
+        `plugin__<plugin>__*` 是 R92/R95 的持久信任边界，不能
+        只凭完整工具名字符串前缀判断归属：插件名与 capability
+        名都可含 `__`，同一字符串可能对应不同结构化身份。
+        因此这类 pattern 必须同时满足：调用方提供了桥接当前
+        发布记录中的 `plugin_name`、完整工具名确实属于该
+        插件，且单插件 pattern 与由该权威名重新派生的通配
+        完全一致。身份缺失或不一致时不命中（fail-closed）。
+        """
+        if is_plugin_tool_wildcard(self.tool_pattern):
+            if not plugin_tool_belongs_to_plugin(tool_name, plugin_name):
+                return False
+            if self.tool_pattern == PLUGIN_TOOL_PREFIX + "*":
+                return True
+            return plugin_tool_wildcard_for_plugin(plugin_name) == self.tool_pattern
         return fnmatch.fnmatchcase(tool_name, self.tool_pattern)
 
     def to_dict(self) -> Dict[str, str]:
@@ -221,13 +242,21 @@ class PermissionEnforcer:
     def rules(self) -> Tuple[PermissionRule, ...]:
         return self._rules
 
-    def check(self, tool_name: str, args: Optional[Dict[str, Any]] = None) -> PermissionDecision:
+    def check(
+        self,
+        tool_name: str,
+        args: Optional[Dict[str, Any]] = None,
+        plugin_name: Optional[str] = None,
+    ) -> PermissionDecision:
         """工具分发前的许可检查（同步、无副作用）。
 
         Args:
             tool_name: 工具名（如 ``"bash"``）。
             args:      工具参数字典；EXECUTE 工具读 ``args["command"]`` 做
                        bash 风险校验。
+            plugin_name: 桥接当前发布记录中的权威插件名；只供受限
+                       插件通配规则做结构化身份匹配。缺失时这类
+                       规则不命中，绝不由工具名字符串反推。
 
         Returns:
             ``PermissionDecision``——每个分支都带人类可读 reason。
@@ -237,7 +266,7 @@ class PermissionEnforcer:
         bash_result = self._validate_execute_command(capability, args)
 
         # --- 1. 规则层：deny 永远胜出 ----------------------------------------
-        matched = self._match_rules(tool_name)
+        matched = self._match_rules(tool_name, plugin_name=plugin_name)
         if matched["deny"] is not None:
             return _deny(f"规则 deny '{matched['deny']}' 命中工具 {tool_name}")
 
@@ -276,11 +305,13 @@ class PermissionEnforcer:
             return self._bash_validator(command)
         return None
 
-    def _match_rules(self, tool_name: str) -> Dict[str, Optional[str]]:
+    def _match_rules(
+        self, tool_name: str, plugin_name: Optional[str] = None
+    ) -> Dict[str, Optional[str]]:
         """按优先级收集首个命中的 deny / allow / ask 规则 pattern。"""
         matched: Dict[str, Optional[str]] = {"deny": None, "allow": None, "ask": None}
         for rule in self._rules:
-            if not rule.matches(tool_name):
+            if not rule.matches(tool_name, plugin_name=plugin_name):
                 continue
             if matched[rule.decision] is None:
                 matched[rule.decision] = rule.tool_pattern

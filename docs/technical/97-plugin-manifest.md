@@ -4,7 +4,7 @@
 > 作者：Claude
 > 标签：插件、可扩展性、Pydantic v2
 
-> **当前契约（R82/R83/R86/R90/R92/R94/R95，2026-10-23）**：本文后半部分保留了早期设计示例，
+> **当前契约（R82/R83/R86/R90/R92/R94/R95/R96，2026-10-23）**：本文后半部分保留了早期设计示例，
 > 个别 JSON/API 形态已经过时。现行实现以 `backend/plugins/manifest.py` 的
 > 数组形 `capabilities` 为准：R82 只保存生命周期记录且不执行代码；R83 只显式
 > 托管带 entry_point 的 Python `tool`，子进程不是安全沙箱；R86 提供
@@ -20,7 +20,12 @@
 > 项禁用）；R95 起审批「记住我的选择」可显式选精确工具或整个
 > 插件，待审批请求的 `plugin_name` 只来自桥接已发布记录，客户
 > 端只传 `remember_scope`，`plugin__<plugin>__*` 权限规则只能
-> 由服务端校验归属后派生。开发步骤请先看
+> 由服务端校验归属后派生；R96 起 `PermissionEnforcer` 匹配这
+> 两种受限插件通配时改用执行边界从桥接当前发布记录得到的权威
+> `plugin_name`，不再只做字符串前缀 fnmatch，legacy agent 与
+> `InprocToolAdapter` 共用该口径，身份未知或不匹配时该通配不
+> 命中（普通字符串规则与 profile allowlist 的字符串 matcher 不
+> 在本轮变更内）。开发步骤请先看
 > [插件开发：30 分钟跑通第一个插件](../user-manual/21-plugin-development.md)。
 
 ## 概述
