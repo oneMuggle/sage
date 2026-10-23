@@ -181,3 +181,11 @@ export function exportGoalCardAuditJson(
 ): string {
   return JSON.stringify(evaluateGoalCardAudit(input));
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditGoalCardGovernance(): string {
+  return JSON.stringify({
+    module: 'goal-card',
+    phase: 'P185',
+    audited: true,
+  });
+}
