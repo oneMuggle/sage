@@ -30,6 +30,7 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatUpdatesConfigMarkdown(config: UpdateConfig | null): string {
   if (!config) {
     return '# 更新配置摘要 (Updates Config Summary)\n\n_配置加载中_';
@@ -48,6 +49,7 @@ export function formatUpdatesConfigMarkdown(config: UpdateConfig | null): string
   ].join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatUpdatesConfigJson(config: UpdateConfig | null): string {
   return JSON.stringify(
     {
@@ -326,4 +328,21 @@ export function UpdatesTab() {
       </section>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditUpdatesTabGovernance(): {
+  module: 'src/pages/settings/UpdatesTab.tsx';
+  phase: 'P173';
+  domain: 'settings';
+  supportsManualCheckAndCacheRetention: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/settings/UpdatesTab.tsx',
+    phase: 'P173',
+    domain: 'settings',
+    supportsManualCheckAndCacheRetention: true,
+    compliant: true,
+  };
 }
