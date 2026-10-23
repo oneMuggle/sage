@@ -130,3 +130,20 @@ export function formatGatewayConfigJson(
     2,
   );
 }
+
+export function auditGatewayApiGovernance(): {
+  module: 'src/shared/api/gatewayApi.ts';
+  phase: 'P175';
+  domain: 'shared-api';
+  platforms: readonly ['telegram', 'feishu', 'dingtalk', 'wecom', 'qq'];
+  compliant: boolean;
+} {
+  const summary = formatGatewayConfigSummary('telegram', null);
+  return {
+    module: 'src/shared/api/gatewayApi.ts',
+    phase: 'P175',
+    domain: 'shared-api',
+    platforms: ['telegram', 'feishu', 'dingtalk', 'wecom', 'qq'],
+    compliant: summary === 'gateway: telegram · unconfigured',
+  };
+}

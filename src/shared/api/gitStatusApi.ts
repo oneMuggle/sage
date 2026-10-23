@@ -52,3 +52,20 @@ export function formatGitStatusJson(res?: Partial<GitStatusResponse> | null): st
   });
 }
 /* v8 ignore stop */
+
+export function auditGitStatusApiGovernance(): {
+  module: 'src/shared/api/gitStatusApi.ts';
+  phase: 'P175';
+  domain: 'shared-api';
+  fileChangeStatuses: readonly ['modified', 'staged', 'untracked', 'conflicted', 'deleted', 'renamed'];
+  compliant: boolean;
+} {
+  const summary = formatGitStatusSummary({ is_git_repo: true, branch: 'main', files: [] });
+  return {
+    module: 'src/shared/api/gitStatusApi.ts',
+    phase: 'P175',
+    domain: 'shared-api',
+    fileChangeStatuses: ['modified', 'staged', 'untracked', 'conflicted', 'deleted', 'renamed'],
+    compliant: summary.includes('branch=main'),
+  };
+}

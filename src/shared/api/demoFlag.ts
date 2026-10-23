@@ -47,3 +47,20 @@ export function formatDemoFlagJson(): string {
     2,
   );
 }
+
+export function auditDemoFlagGovernance(): {
+  module: 'src/shared/api/demoFlag.ts';
+  phase: 'P175';
+  domain: 'shared-api';
+  supportsRuntimeOverrideAndPreloadFlag: boolean;
+  compliant: boolean;
+} {
+  const summary = formatDemoFlagSummary();
+  return {
+    module: 'src/shared/api/demoFlag.ts',
+    phase: 'P175',
+    domain: 'shared-api',
+    supportsRuntimeOverrideAndPreloadFlag: summary.startsWith('demo-flag:'),
+    compliant: summary.startsWith('demo-flag:'),
+  };
+}

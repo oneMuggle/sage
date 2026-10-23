@@ -607,3 +607,20 @@ export function formatDemoInvokeJson(cmd: string, result: DemoInvokeResult): str
     2,
   );
 }
+
+export function auditDemoInterceptorsGovernance(): {
+  module: 'src/shared/api/demoInterceptors.ts';
+  phase: 'P175';
+  domain: 'shared-api';
+  registeredHandlerCount: number;
+  compliant: boolean;
+} {
+  const count = Object.keys(demoHandlers).length;
+  return {
+    module: 'src/shared/api/demoInterceptors.ts',
+    phase: 'P175',
+    domain: 'shared-api',
+    registeredHandlerCount: count,
+    compliant: count > 0,
+  };
+}

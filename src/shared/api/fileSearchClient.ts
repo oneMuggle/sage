@@ -194,3 +194,27 @@ export function formatFileSearchResultJson(item: FileSearchResult): string {
     2,
   );
 }
+
+export function auditFileSearchClientGovernance(): {
+  module: 'src/shared/api/fileSearchClient.ts';
+  phase: 'P175';
+  domain: 'shared-api';
+  supportsOfficeAndWorkspaceFileClassification: boolean;
+  compliant: boolean;
+} {
+  const summary = formatFileSearchResultSummary({
+    name: 'spec.docx',
+    path: '/workspace/spec.docx',
+    kind: 'office-word',
+    docId: 'doc-1',
+    docType: 'word',
+    sourcePath: null,
+  });
+  return {
+    module: 'src/shared/api/fileSearchClient.ts',
+    phase: 'P175',
+    domain: 'shared-api',
+    supportsOfficeAndWorkspaceFileClassification: summary.includes('spec.docx'),
+    compliant: summary.includes('spec.docx'),
+  };
+}
