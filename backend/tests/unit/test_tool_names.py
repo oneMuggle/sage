@@ -18,6 +18,8 @@ from backend.domain.tool_names import (
     is_plugin_tool_name,
     is_plugin_tool_reference,
     is_plugin_tool_wildcard,
+    plugin_tool_belongs_to_plugin,
+    plugin_tool_wildcard_for_plugin,
     tool_name_in_allowlist,
 )
 from backend.domain.tool_policy import ToolPolicy
@@ -70,6 +72,27 @@ def test_plugin_tool_reference_shapes():
     assert is_plugin_tool_wildcard("plugin__demo__*") is True
     assert is_plugin_tool_reference(_PLUGIN_TOOL) is True
     assert is_plugin_tool_reference("plugin__demo__*") is True
+
+
+def test_plugin_wildcard_derivation_from_authoritative_name():
+    """R95 只能由合法插件名派生单个插件的受限通配。"""
+    assert plugin_tool_wildcard_for_plugin("demo") == "plugin__demo__*"
+    assert (
+        plugin_tool_wildcard_for_plugin("demo-plugin")
+        == "plugin__demo-plugin__*"
+    )
+    assert plugin_tool_belongs_to_plugin(_PLUGIN_TOOL, "demo") is True
+    assert plugin_tool_belongs_to_plugin(_PLUGIN_TOOL, "other") is False
+    assert plugin_tool_belongs_to_plugin("plugin__demo__*", "demo") is False
+    assert plugin_tool_belongs_to_plugin("bash", "demo") is False
+
+
+@pytest.mark.parametrize(
+    "plugin_name", ["", "*", "de mo", "demo?", "demo[1]", None, 123]
+)
+def test_plugin_wildcard_derivation_rejects_unsafe_names(plugin_name):
+    assert plugin_tool_wildcard_for_plugin(plugin_name) is None
+    assert plugin_tool_belongs_to_plugin(_PLUGIN_TOOL, plugin_name) is False
 
 
 @pytest.mark.parametrize(

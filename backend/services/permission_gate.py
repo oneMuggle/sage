@@ -287,6 +287,9 @@ class ApprovalRequest:
         created_at:   创建时间（epoch 秒）。
         diff_preview: 写类工具的将写入内容 unified diff（U15）；
                       None = 无法生成（非写类工具 / 读取失败），回退 args_summary。
+        plugin_name:  R95 插件工具的权威插件名（来自 bridge 已发布
+                      记录）；None = 非插件工具或无法权威反查，
+                      前端不提供整插件记住范围。
     """
 
     request_id: str
@@ -297,6 +300,7 @@ class ApprovalRequest:
     created_at: float
     diff_preview: Optional[str] = None
     target_path: Optional[str] = None
+    plugin_name: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """流事件 / REST 响应共用的 JSON 形态。"""
@@ -312,6 +316,8 @@ class ApprovalRequest:
             payload["diff_preview"] = self.diff_preview
         if self.target_path:
             payload["target_path"] = self.target_path
+        if self.plugin_name:
+            payload["plugin_name"] = self.plugin_name
         return payload
 
     @classmethod
@@ -322,6 +328,7 @@ class ApprovalRequest:
         risk: str,
         message: str,
         workspace_root: Optional[str] = None,
+        plugin_name: Optional[str] = None,
     ) -> ApprovalRequest:
         """工厂：生成 UUID + 时间戳 + 脱敏参数摘要 + 写类工具 diff 预览。"""
         return cls(
@@ -333,6 +340,7 @@ class ApprovalRequest:
             created_at=time.time(),
             diff_preview=build_diff_preview(tool_name, args, workspace_root),
             target_path=extract_target_path(args),
+            plugin_name=plugin_name or None,
         )
 
 
