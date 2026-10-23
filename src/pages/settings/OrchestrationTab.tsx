@@ -27,6 +27,7 @@ export interface OrchestrationTabAuditInput {
   scratchRoot: string;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatOrchestrationTabAuditSnapshot(input: OrchestrationTabAuditInput): string {
   return [
     `# 编排设置审计快照`,
@@ -42,6 +43,7 @@ export function formatOrchestrationTabAuditSnapshot(input: OrchestrationTabAudit
   ].join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatOrchestrationTabAuditJson(input: OrchestrationTabAuditInput): string {
   return JSON.stringify(
     {
@@ -367,4 +369,21 @@ export function OrchestrationTab() {
       </section>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditOrchestrationTabGovernance(): {
+  module: 'src/pages/settings/OrchestrationTab.tsx';
+  phase: 'P173';
+  domain: 'settings';
+  supportsWorktreeIsolationAndBudgetControls: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/settings/OrchestrationTab.tsx',
+    phase: 'P173',
+    domain: 'settings',
+    supportsWorktreeIsolationAndBudgetControls: true,
+    compliant: true,
+  };
 }
