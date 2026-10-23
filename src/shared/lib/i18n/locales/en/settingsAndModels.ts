@@ -261,6 +261,8 @@ export const enSettingsAndModels = {
   'permission.toast.failed': 'Failed to submit approval answer',
   'permission.subagent_context': 'Orchestration subagent requests approval',
   'permission.diff': 'Proposed changes',
+  'permission.remote_resolved': 'Approval left the pending queue',
+  'permission.remote_resolved.desc': '{tool} · risk {risk} · waited {wait} · likely handled remotely or timed out',
   'permission.project_allow.button': 'Allow for project',
   'permission.project_allow.tooltip': 'Add this path to the current project allowed paths',
   'permission.project_allow.added': 'Rule {rule} added',

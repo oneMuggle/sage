@@ -8,6 +8,7 @@ import type { AgentEvent, ChatConfig } from '../../shared/api';
 import { clearSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { logger } from '../../shared/lib/logger';
 import { chatApi, type Message, useStore } from '../../shared/lib/store';
+import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 
 import { selectSessionSlots, type TaskBoardState, useChatStreamStore } from './chatStreamStore';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
@@ -59,8 +60,10 @@ export interface ActiveStreamHandle {
 }
 
 /**
- * U5: 入队等待发送的消息 —— 当前会话流式中用户继续发送时暂存,
- * 当前回复结束后自动发送。按会话隔离。
+ * P1-6: 排队待发的一条消息。
+ *
+ * `id` 是 P1-6 新增的 —— 撤回操作需要稳定标识，不能用数组下标：
+ * 队列在自动 flush 与用户撤回之间并发变化，下标会指向错误的条目。
  */
 export interface PendingChatMessage {
   id: string;
@@ -84,9 +87,11 @@ export const activeStreamRegistry = new Map<string, ActiveStreamHandle>();
  * the backend and returns false. Never throws.
  */
 /**
- * 2026-09 修复 (同步 #957): 删除会话的级联清理 —— 先取消活跃流(后端不再
- * 白白消耗 token), 再清空 chatStreamStore 槽位(clearSession 此前零调用,
- * 迟到事件可能复活死会话), 最后删会话记录。
+ * 2026-09 修复: 删除会话的级联清理 —— 旧路径只删 store 里的会话与消息:
+ * 1) 后端 agent 流继续跑, 白白消耗 token; 2) chatStreamStore 的会话槽位
+ * (streaming/toolCalls/taskBoard/todos)永久残留, 迟到事件可能复活死会话
+ * (clearSession 此前全仓库零调用)。顺序: 先取消流(防迟到事件重填),
+ * 再清槽位, 最后删会话记录。
  */
 export async function deleteSessionCascade(sid: string): Promise<void> {
   try {
@@ -197,7 +202,6 @@ export function applyTransparencyAndToolEvents(
   // r71: 附件检索注入溯源 → 引用明细随消息落库（气泡内展示）。
   // R81 修复: 多附件各推一个事件, 按 media_id 合并而非整体替换
   // （updateMessage 是浅合并, 直接赋值会丢掉前一个附件的引用）。
-  // win7 后端暂无 r71 事件源, 处理器先行铺路, 空转无害。
   // R97: 载荷校验对齐重接路径（每项须有字符串 media_id）。
   if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
     if (isValidCitationsPayload(evt.citations)) {
@@ -298,11 +302,14 @@ export function applyTransparencyAndToolEvents(
       // React 渲染对象时触发 "Objects are not valid as a React child"。
       const safeResult =
         typeof tr.content === 'string' ? tr.content : JSON.stringify(tr.content ?? '');
-      useChatStreamStore.getState().appendOrUpdateToolCall(sid, {
-        ...targetTc,
-        result: safeResult,
-        metadata,
-      });
+      // R19-W1: 拦截信封归一化（提取可读 content + 提升 metadata 到
+      // ToolCall.metadata），与 Message 历史回读路径共用同一实现
+      useChatStreamStore
+        .getState()
+        .appendOrUpdateToolCall(
+          sid,
+          normalizeToolCallEnvelope({ ...targetTc, result: safeResult, metadata }),
+        );
     }
   }
 }
@@ -429,7 +436,7 @@ export function useChatReattachAndBtw(params: {
               return;
             }
             if (evt.state === 'failed') {
-              // 2026-09 修复 (同步 #971): error 信封 dict | string 双态归一化
+              // 2026-09 修复: error 信封统一为 dict | string 双态, 提取 message
               const raw = evt.error;
               const errText = typeof raw === 'string' ? raw : (raw?.message ?? '流式失败');
               finishReattach(null, errText);

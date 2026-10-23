@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import {
   HashRouter,
   Routes,
@@ -10,6 +10,7 @@ import {
 } from 'react-router-dom';
 
 import { NavHistoryProvider } from './app/providers/NavHistoryProvider';
+import { useTheme } from './app/providers/useTheme';
 import { UpdateDialog } from './components/UpdateDialog';
 import { loadCurrentSessionId } from './entities/session/storage';
 import { useSettingsStore } from './features/manage-settings/settingsStore';
@@ -20,7 +21,7 @@ import { OPEN_COMMAND_PALETTE_EVENT } from './shared/lib/commandPaletteEvents';
 import { useStore } from './shared/lib/store';
 import { CommandPalette } from './widgets/command';
 import { Layout } from './widgets/layout';
-import { ApprovalDialog } from './widgets/permission';
+import { ApprovalDialog, RemoteApprovalBridge } from './widgets/permission';
 import { QuestionDialog } from './widgets/question';
 import { BackendStatusBanner } from './widgets/system/BackendStatusBanner';
 import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
@@ -29,7 +30,7 @@ import { ShortcutHelpOverlay } from './widgets/system/ShortcutHelpOverlay';
 // (设置/记忆/智能体/技能/Office/知识库/编排/定时任务) 按需加载。
 // Electron file:// 下同样减少首屏解析/执行量。
 const Projects = lazy(() => import('./pages/Projects').then((m) => ({ default: m.Projects })));
-const Settings = lazy(() => import('./pages').then((m) => ({ default: m.Settings })));
+const Settings = lazy(() => import('./pages/settings').then((m) => ({ default: m.Settings })));
 const Agents = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })));
 const Knowledge = lazy(() => import('./pages/Knowledge').then((m) => ({ default: m.Knowledge })));
 const Memory = lazy(() => import('./pages/Memory').then((m) => ({ default: m.Memory })));
@@ -177,6 +178,25 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // R47: Ctrl+Shift+D 切换暗色/亮色主题。
+  // 2026-09 修复: 旧实现手写 DOM/localStorage —— 只切 .dark 不设 data-theme
+  // (暗色变量组不生效)、存储 key 写成 sage:theme-mode 而读取方是 sage-theme
+  // (重启后主题回滚)、且绕过 ThemeProvider 使其内部 resolved 变陈旧
+  // (之后用设置页/命令面板切主题方向反转)。改走 useTheme().setMode 单一来源。
+  const { resolved, setMode } = useTheme();
+  const themeToggleRef = useRef({ resolved });
+  themeToggleRef.current = { resolved };
+  useEffect(() => {
+    const onThemeToggle = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        setMode(themeToggleRef.current.resolved === 'dark' ? 'light' : 'dark');
+      }
+    };
+    window.addEventListener('keydown', onThemeToggle);
+    return () => window.removeEventListener('keydown', onThemeToggle);
+  }, [setMode]);
+
   return (
     <HashRouter>
       <NavHistoryProvider>
@@ -229,6 +249,7 @@ function App() {
         <ShortcutHelpOverlay open={shortcutHelpOpen} onClose={() => setShortcutHelpOpen(false)} />
         {/* M1: 全局工具审批模态框 — 由 permission_request 流事件驱动 */}
         <ApprovalDialog />
+        <RemoteApprovalBridge />
         {/* M2 part B: 全局提问模态框 — 由 ask_user_question 流事件驱动 */}
         <QuestionDialog />
         {/* Task 11: 全局更新对话框 — 由 update:state-changed 事件驱动 */}

@@ -247,6 +247,8 @@ export const zhSettingsAndModels = {
   'permission.toast.failed': '审批应答失败',
   'permission.subagent_context': '编排子任务请求审批',
   'permission.diff': '将写入的变更',
+  'permission.remote_resolved': '该审批已离开待批队列',
+  'permission.remote_resolved.desc': '{tool} · 风险 {risk} · 已等待 {wait} · 可能已在远程渠道处理或已超时',
   'permission.project_allow.button': '项目级允许',
   'permission.project_allow.tooltip': '将此路径加入当前项目的允许访问列表',
   'permission.project_allow.added': '已添加规则 {rule}',

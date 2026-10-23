@@ -64,6 +64,7 @@ export const zhChatAndSider = {
   'chat.sources_group_wiki': '知识库',
   'chat.sources_group_web': '网页',
   'chat.sources_group_tool': '工具',
+  'chat.sources_open_memory': '在记忆库中查看这条记忆',
   // R38: 技能激活展示
   'chat.skills_activated': '个技能已激活',
   'chat.skills_toggle': '查看激活的技能',
@@ -138,6 +139,24 @@ export const zhChatAndSider = {
   'chat.vision_not_available':
     '当前对话模型不支持视觉识别，请配置视觉理解模型或更换支持视觉的对话模型',
   'chat.vision_fallback_info': '图片将通过视觉理解模型识别后转为文本描述',
+
+  // ─── 网页拦截卡片 (BlockedCard) ───
+  'chat.blocked.title': '网页访问被拦截',
+  'chat.blocked.target': '目标',
+  'chat.blocked.suggestions': '建议操作',
+  'chat.blocked.reason.antibot_cf': 'Cloudflare 反爬验证',
+  'chat.blocked.reason.antibot_other': '反爬风控拦截',
+  'chat.blocked.reason.login_wall': '需要登录',
+  'chat.blocked.reason.http_4xx': '请求被拒绝',
+  'chat.blocked.reason.http_5xx': '服务端错误',
+  'chat.blocked.reason.timeout': '请求超时',
+  'chat.blocked.reason.dns': '域名解析失败',
+  'chat.blocked.reason.render': '动态渲染失败',
+  'chat.blocked.reason.generic': '访问失败',
+  'chat.blocked.action.open_browser': '用浏览器打开',
+  'chat.blocked.action.configure_credentials': '配置登录凭据',
+  'chat.blocked.action.configure_proxy': '配置代理',
+  'chat.blocked.action.view_docs': '查看文档',
 
   // ─── M4 会话压缩 / 分叉 ───────────
   // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"
@@ -217,6 +236,7 @@ export const zhChatAndSider = {
   'settings.tab.network': '网络',
   'settings.tab.mcp': 'MCP',
   'settings.tab.plugins': '插件',
+  'settings.tab.remote-workspaces': '远程工作区',
   'settings.tab.zotero': '文献库',
   'settings.tab.runtime': '开发环境',
   'settings.tab.providers': '更新源',
