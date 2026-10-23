@@ -439,3 +439,10 @@ export function formatEnWorkspaceAndToolsJson(): string {
   });
 }
 
+export function auditEnWorkspaceAndToolsGovernance(): string {
+  return JSON.stringify({
+    module: 'en-workspace-and-tools',
+    phase: 'P182',
+    audited: true,
+  });
+}

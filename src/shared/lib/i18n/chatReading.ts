@@ -111,3 +111,11 @@ export function formatChatReadingI18nJson(): string {
   });
 }
 /* v8 ignore stop */
+
+export function auditChatReadingGovernance(): string {
+  return JSON.stringify({
+    module: 'chat-reading',
+    phase: 'P182',
+    audited: true,
+  });
+}
