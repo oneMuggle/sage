@@ -1,0 +1,384 @@
+# B4b — `backend/tests` 的 96 个 `real` 差异归因
+
+**日期**：2026-10-23　**性质**：只分析，不改任何代码
+**口径**：`origin/main` `7634de8fc` ↔ B4 分支 `e7bf8b99a`（`release/win7` 基线 `82ff6bdc0` + B4 的 88 个纯新增测试文件）
+**数据源**：`parity_report.py --base origin/main --head HEAD --json`
+
+> ⚠️ **写作过程中两侧基线都移动了**，本文结论已按最新状态复核：
+> - `origin/main`：勘察期 `1508168e0` → 本文 `7634de8fc`（real 计数两版都是 96）
+> - `release/win7`：B4 开工基线 `82ff6bdc0` → **`67c257773`**（前进 5 个提交）
+>
+> **新基线的 5 个提交里有一个直接影响本文**：
+> `65d7907a4 sync(win7): 批次 3e — plugin routes + frontend + R92 allowlist helpers (#2410)`
+> 已把**整个插件 REST 子系统**带入 win7（`api/plugin_routes.py`、`ports/plugin.py`、
+> `plugins/{manifest,registry,tool_bridge}.py`，并在 `main.py:115` import、`:1512`
+> `include_router`），同时带入了 B4 曾排除的 `tests/api/test_plugin_routes.py`
+> —— 在新基线上实跑 **11 passed**，说明子系统完整可用。
+> 另 `67c257773 (#2414)` 修改了 `tests/unit/test_tool_names.py`，新基线上 **25 passed**。
+>
+> **与 B4（PR #2411）的文件交集 = 0**，故 #2411 不受这 5 个提交影响。
+>
+> 本文 §5.1 / §5.2 / §5.4 的三处源码缺口**在新基线上经 `git diff --numstat` 复核依然成立**：
+> `office_create_tool.py` **+2 −285**、`office_lint_tool.py` **+0 −18**、
+> `model_catalog/schemas.py` **+172 −27**（win7 侧多 172 行，印证它是刻意的 py3.8 重写）。
+> 只有 §5.3（插件 REST）已被 #2410 解决。
+
+---
+
+## 0. 结论速览
+
+```
+96 real
+ ├─ 1  假差异（path move）      → 无需动作
+ └─ 95 genuine
+      ├─ 15 PURE-LAG            → 可安全整替对齐（合计落后 514 行，win7 零独有内容）
+      ├─ 11 WIN7-TEST           → 不该动（main 完全没有这些内容）
+      ├─  9 COMMENT/MARKER-ONLY → 无害（仅注释或 pytest 标记差异）
+      ├─  6 LAYOUT-ONLY         → 无害（同一批语句换行方式不同）
+      ├─  3 ADAPT-ONLY(py38/typing) → 须保留（v1 typing 写法）
+      ├─  3 ADAPT-ONLY(mixed)   → 须保留
+      ├─  1 ADAPT-ONLY(net/win) → 须保留
+      └─ 47 NEEDS-REVIEW        → 规则无法判定，已抽查 8 个（见 §4）
+```
+
+**规则可解释 48/95 = 51%**。剩下 47 个抽查后的主导模式是：
+**「win7 独有安全/平台测试」+「同时落后 main 数十行」的双向分叉** ⇒
+**对齐必须做行级合并，绝不能整替**（整替会删掉 win7 的独有加固测试）。
+
+这与本项目已付出代价确立的原则一致：#2274 / #2275 / #2292 三个 PR 都因未先归因而白做。
+
+---
+
+## 1. 方法
+
+四个只读脚本，逐步收紧（每一步都由抽查驱动修正，不是一次写成）：
+
+1. **启发式分类**（按 win7 独有行的关键词）→ 得到初步 5 类，但抽查发现误判。
+2. **假差异检测**：
+   - *path move* — win7 内容（EOL 归一化后）与 main 某**不同路径**的文件逐字节相同；
+   - *layout-only* — 同路径，去空白后的行多重集相同。
+   第一版用 **blob hash** 比对，**必然失败**：main 存 LF、win7 存 CRLF，字节级 hash 恒不同；
+   且对「main 上该路径不存在」的情况 `git show` 返回空，被静默当成「138 行 win7 独有内容」。
+   改为 EOL 归一化内容比对 + 按 basename 在 main 全树找对应文件后，才正确识别出那 1 个假差异。
+3. **win7 独有行聚合**：对所有 genuine 文件取「去空白行多重集」的差集（win7 − main），
+   按出现频次找共同模式 ⇒ 815 行 / 610 distinct，重复模式覆盖 21%。
+4. **逐行 kind 分类 + 文件级归桶**：只有当文件仍含**无法解释的 CODE 行**时才判 NEEDS-REVIEW。
+
+### 1.1 规则演进中修掉的四个 bug（都是「看起来跑通了」的假绿）
+
+| # | bug | 后果 | 修法 |
+|---|---|---|---|
+| 1 | 用 blob hash 判 path move | main=LF / win7=CRLF ⇒ hash 恒不同，**0 命中**（实际有 1 个） | 比对 EOL 归一化后的内容 |
+| 2 | 行归一化去掉所有空白，但模式写成 `^fromtyping import`（含空格） | 该模式**永不匹配**，`from typing import List, Optional` 全落到 CODE | 模式改为 `^fromtypingimport` |
+| 3 | `RE_COMMENT` 写成 `^#\|^"""\|^'''`，最后一个 alternative 退化成裸 `^` | 裸 `^` 匹配任意行的空位置 ⇒ **所有行都被判成 COMMENT** | 显式写三种注释前缀，并用探针逐条验证 |
+| 4 | 用 `W=$(git rev-parse <rev>:<path> 2>/dev/null \|\| echo ABSENT)` 判文件是否存在 | `git rev-parse` 对**不存在**的路径会把**参数本身**打到 stdout 再返回非零，于是 `W` 变成两行（参数 + `ABSENT`），`[ "$W" = "ABSENT" ]` 判 false ⇒ **把 3 个不存在的文件误报成 PRESENT** | 一律用 `git ls-tree --name-only <rev> -- <path>` 判存在性（空输出 = 不存在） |
+
+bug 4 的代价是实质性的：它一度让我以为「B4 排除的 4 个测试文件已被新基线全部带入」，
+而真相是只有 `api/test_plugin_routes.py` 被 #2410 带入，其余 3 个
+（`test_office_create_schema_contract.py`、`test_model_catalog_snapshots.py`、
+`test_tool_policy.py`）**仍然缺失**。若非紧接着在新基线 worktree 里实跑 pytest
+（直接报 `file or directory not found`），这个错误结论就会写进交接文档。
+
+⇒ **存在性判断只用 `ls-tree`；任何「文件已存在」的结论都要用实跑或 `ls` 二次确认。**
+
+另有两处边界：括号类模式用 `$` 锚定，会漏掉带尾随 `#noqa: SIM117` 的重排续行
+（改为先剥离尾部注释再判）；`monkeypatch.setattr(` 这类裸调用开头未纳入 BRACKET。
+
+**教训**：分类脚本本身必须用**探针表**验证（本文 §1.2），否则会得到一份看起来整齐、
+实则全错的归因。这与「静态检查器本身会假绿」是同一类问题。
+
+### 1.2 探针表（round-3 规则，全部通过）
+
+| 输入（归一化后） | 判定 |
+|---|---|
+| `fromtypingimportList,Optional` | TYPING |
+| `withpatch.object(#noqa:SIM117` | BRACKET |
+| `monkeypatch.setattr(` | BRACKET |
+| `time.sleep(0.02)` | WIN |
+| `)` | BRACKET |
+| `return_value=service,` | ARG |
+| `assertvalidate_profile_tools(repo)==1` | CODE |
+| `#py3.8:noPath.is_relative_to` | COMMENT |
+| `pytestmark=pytest.mark.unit` | MARKER |
+| `"""docstring` | COMMENT |
+| `class_Ref:` / `defderive(client_message_id):` | CODE |
+
+---
+
+## 2. 假差异（1 个）：parity 的路径重构盲区
+
+```
+win7  backend/tests/unit/test_memory_manager_coordination.py
+main  backend/tests/unit/memory/test_memory_manager_coordination.py
+      → EOL 归一化后逐字节相同（diff 0 行）
+```
+
+main 把 memory 测试收进了 `unit/memory/`，win7 未跟随该目录重构。parity 按路径比较，
+于是把这个文件报成 `real`（win7 侧 138 行「独有」+ main 侧 138 行「缺失」），
+**实际语义差异为零**。
+
+顺带确认一个反面结论：B4 切片 3 带入 `unit/memory/` 6 个文件时**没有**造成重复测试 ——
+`git diff --name-status` 报的是
+`R100 unit/memory/test_memory_manager_coordination.py → unit/test_memory_manager_coordination.py`，
+正说明 HEAD 上 `unit/memory/` 那份不存在（parity 已把它识别为「内容已存在于别处」而未列入
+main-only 清单，切片脚本因此正确地跳过了它）。
+
+**可选动作**：跟随 main 的目录重构（把文件移到 `unit/memory/` 并删根下副本）。
+但这会**修改 win7 原有文件**，与 B4「纯新增」的纪律不同，建议单独一个 chore 批次，
+或直接登记为可接受差异。
+
+---
+
+## 3. 规则可解释的 48 个
+
+### 3.1 PURE-LAG（15 个，合计落后 514 行）— 可安全整替
+
+win7 侧**零独有内容**（归一化后差集为空），对齐到 main 不可能破坏任何 win7 修复。
+这是 B4b 里**最安全、收益最大**的一批，建议作为第一个实施批次。
+
+| 落后行数 | 文件 |
+|---:|---|
+| 135 | `integration/test_approval_api.py` |
+| 114 | `unit/tools/test_office_update_tool.py` |
+| 71 | `unit/test_agent_tool_gate.py` |
+| 46 | `unit/test_llm_factory.py` |
+| 34 | `api/test_search_routes.py` |
+| 32 | `integration/test_office_word_inline_tables.py` |
+| 26 | `unit/test_tools_registry.py` |
+| 15 | `unit/test_agent_loop_guards.py` |
+| 13 | `unit/test_profiles_default_tools.py` |
+| 8 | `unit/test_permissions_enforcer.py` |
+| 7 | `unit/test_allowed_paths_integration.py` |
+| 6 | `unit/test_shipped_writing_skills.py` |
+| 3 | `unit/office/test_word_template.py` |
+| 3 | `unit/test_file_tool_safepath.py` |
+| 1 | `unit/test_attachment_context.py` |
+
+> 注：整替前仍须逐个确认「win7 零独有」是由**内容真的落后**造成，而不是由
+> 行尾/编码归一化把差异抹平。做法与 B3 一致：`git diff --ignore-all-space` 看 71 行差异里
+> 有无 win7 独有论点（B3 的 `test_office_word_lint.py` 就是这样确认为零独有后整替的，
+> 15 → 18 passed）。
+
+### 3.2 WIN7-TEST（11 个）— 不该动
+
+`behind == 0`：main 完全没有这些内容，是 win7 独立演进的测试。
+
+| win7 独有行 | 文件 | 备注 |
+|---:|---|---|
+| 156 | `unit/test_py38_compat_gate.py` | py38 兼容闸门自测（#2288 引入，证明该闸门生效） |
+| 109 | `unit/test_mcp_oauth.py` | #2343 的 MCP OAuth（win7 已做 py3.8 适配） |
+| 32 | `unit/test_remote_mcp_server.py` | #2343 remote_mcp 子系统 |
+| 25 | `unit/test_mcp_oauth_loopback.py` | **安全加固**：`test_callback_prefix_path_404`（`/callback-evil` 前缀扩展必须 404 且不捕获）、`test_second_callback_404_keeps_first`（一次性回调） |
+| 15 | `unit/test_replan_tool.py` | autouse fixture |
+| 9 | `unit/test_browser_temp_lifecycle.py` | |
+| 5 | `conftest.py` | **注意**：conftest 有 5 行 win7 独有，任何对齐都要格外小心（`setup_test_db` 是 autouse，导入期错误会让整套件 collection 崩） |
+| 5 | `unit/test_review_stamp.py` | |
+| 1 | `integration/test_sources_stream_persist.py` | STEP_DONE 边界注释（R83） |
+| 1 | `unit/test_mcp_oauth_store.py` | `assert store.path.stat().st_mode & 0o777 == 0o600`（token 文件权限） |
+| 1 | `unit/test_risk.py` | `_online_network_settings` 标记 |
+
+### 3.3 无害差异（19 个）
+
+**COMMENT/MARKER-ONLY（9）** — 仅注释或 pytest 标记：
+`unit/test_browser_tool.py`(+1 −28)、`unit/test_hooks_builtin.py`(+1 −5)、
+`unit/test_hooks_feedback.py`(+1 −5)、`unit/test_hooks_lifecycle.py`(+1 −4)、
+`unit/test_env_memory.py`(+2 −2)、`integration/test_web_access_journey.py`(+1 −1)、
+`unit/data_repo/test_session_and_settings_repo_r188.py`(+1 −1)、
+`unit/test_schema_migrations.py`(+1 −1)、`unit/test_wiki_insights.py`(+1 −1)
+
+**LAYOUT-ONLY（6）** — 同一批语句换行方式不同（win7 把 `with patch(...)` 拆成多行）：
+`unit/test_skill_save_tool.py`(+40 −10，BRACKET 20 + ARG 20)、
+`unit/test_project_knowledge_extractor.py`(+8 −19)、
+`unit/test_project_task_decomposer.py`(+6 −14)、`unit/test_adapter_tag_graph.py`(+4 −10)、
+`unit/test_project_advisor.py`(+2 −6)、`unit/wiki/test_ingest_queue.py`(+1 −2)
+
+> LAYOUT-ONLY 虽无语义差异，但会让 parity 永久报 `real`。若想让计数收敛，
+> 需要统一换行风格 —— 但那会与「逐字节对齐 main」冲突，且 `ruff format` 在本仓
+> **不是闸门**（CI 只跑 `ruff check backend/`），win7 原有测试 831/846 都不符合
+> `ruff format`。**建议不动**，改为在 parity 侧考虑「layout-only 降级」（未实现）。
+
+**ADAPT-ONLY（7）** — 必须保留的 win7 适配：
+- py38/typing（3）：`unit/test_memory_storage_adapter.py`(TYPING 6)、
+  `api/test_runtime_routes.py`(TYPING 6)、`unit/office/test_session_workspace.py`(TYPING 2)
+  —— 都是 `from typing import List, Optional` 这类 v1 写法
+- net/win（1）：`unit/test_worktree.py`（WIN 2 + MARKER 3）
+- mixed（3）：`unit/test_web_tool.py`(+3 −23)、
+  `contract/test_settings_schema_parity.py`(+8 −1)、
+  `unit/tools/test_office_journal_tool.py`(+2 −2)
+
+### 3.4 行类型统计（815 个 win7 独有行）
+
+| kind | 行数 | 含义 |
+|---|---:|---|
+| CODE | 341 | 无法用规则解释，需人工 |
+| ARG | 162 | 续行参数（字符串字面量 / `kw=value,`） |
+| BRACKET | 102 | 括号、`with patch(` 开头等重排碎片 |
+| COMMENT | 67 | 注释 / docstring |
+| PY38 | 58 | py3.8 双版本习语 |
+| NET | 32 | 网络模式 fixture / offline 断言 / proxy |
+| TYPING | 21 | v1 typing 写法 |
+| MARKER | 21 | `pytestmark` / `@pytest.mark.*` |
+| WIN | 11 | Windows 平台适配（时钟粒度、`newline=`、`os.name`） |
+
+---
+
+## 4. NEEDS-REVIEW 47 个：抽查 8 个的结论
+
+按「win7 独有行数」与「落后行数」挑信息量最大的 8 个逐行读。
+
+| 文件 | +/− | win7 独有内容（实读） | 判定 |
+|---|---|---|---|
+| `unit/test_local_auth.py` | +55 −1 | `LocalAuthMiddleware` / `initialize_local_auth_token` / `require_local_auth`；`def _app_with_routes(*paths: str) -> FastAPI: """Build an app whose routes are guarded by the real middleware."""` | **win7 独有安全加固**（真中间件而非 mock），behind 仅 1 行 ⇒ 基本不该动 |
+| `unit/test_network_config.py` | +37 −18 | `配置异常必须 fail-closed 到 OFFLINE；合法显式 ONLINE 保留`，多条 `assert policy.mode is NetworkMode.OFFLINE`，`def test_missing_key_returns_offline_default()` | **双向分叉**：win7 的 fail-closed 语义必须保留，同时补 main 的 18 行 |
+| `unit/api/test_search_routes.py` | +21 −22 | `test_global_search_knowledge_project_single_root`、`test_search_knowledge_explicit_scope_passthrough`、`assert out["knowledge"][0]["scope"] == "/p/alpha"`、`assert str(project_root) == "/w/a"` | **双向分叉**：win7 独有 knowledge scope 测试 + 落后 22 行 |
+| `unit/test_todo_service.py` | +17 −22 | `time.sleep(0.02)  # 见 test_update_todo：Windows 时钟粒度`、`assert completed.updated_at != created.updated_at`、`test_get_startup_summary_buckets`（Overdue / Today 分桶） | **Windows 时钟粒度适配 + win7 独有测试**，同时落后 22 行 |
+| `unit/test_chat_attachment_text.py` | +25 −34 | 手写 `class _Ref:` stub（`ref.id = mid`、`ref.mime_type = "text/plain" if kind.value == "document" else "audio/mpeg"`、`ref.file_path = f"fake/{mid}"`） | 疑似 **pydantic v1 适配**（用 stub 替代真实模型），需进一步确认是否可换成 main 的写法 |
+| `unit/test_tool_names.py` | +1 −100 | 仅 `assert validate_profile_tools(repo) == 1` | **1 行断言差异 vs 落后 100 行**：需比对 main 侧同一断言的期望值（可能是 profile 工具数量口径不同） |
+| `unit/tools/test_office_create_tool.py` | +1 −102 | `assert set(props.keys()) == {"doc_type","output_dir","filename","content","font_family"}` | **与 B4 排除的契约测试同源**：win7 的 office_create schema 只有 5 个属性，main 已扩到含 `toc`/`section_breaks`/`first_page_*`/`even_page_footer` 等 ⇒ 见 §5.1 |
+| `unit/test_plugin_tool_bridge.py` | +2 −97 | `def test_profile_whitelist_requires_exact_plugin_tool_name() -> None:`、`assert registry.get_schemas_for_llm(allowed_tools=["plugin__demo__*"]) == []` | **win7 独有安全测试**（插件白名单要求精确名、拒绝通配）+ 与 plugin REST 子系统缺失同源 ⇒ 见 §5.3 |
+
+### 4.1 从抽查外推的主导模式
+
+47 个 NEEDS-REVIEW 里，`win7_only` ≤ 2 而 `behind` ≥ 20 的有 4 个
+（`test_office_create_tool` +1 −102、`test_tool_names` +1 −100、
+`test_plugin_tool_bridge` +2 −97、`test_credential_vault` +5 −45），
+这类**接近纯落后**，只需判定那 1–5 行是什么；
+其余多为 `+N −M` 两侧都有实质内容 ⇒ **必须行级合并**。
+
+**因此 B4b 的实施纪律应当是**：
+1. 先做 15 个 PURE-LAG（整替，逐个复核零独有）；
+2. 再做「win7 独有 ≤ 2 行」的近似纯落后项（判定那几行后整替或行级补）；
+3. 最后做真正的双向分叉（行级合并，保留 win7 独有测试）；
+4. 全程**不整替** WIN7-TEST / ADAPT-ONLY / conftest.py。
+
+---
+
+## 5. B4 排除项指向的 4 处源码缺口
+
+B4（PR #2411）刻意排除了 4 个测试文件，它们精确指出了 win7 落后于 main 的源码位置。
+本节把「测试的失败」翻译成「源码要改什么」。
+
+### 5.1 `backend/tools/office_create_tool.py` — 落后 285 行（+285 / −2）
+
+- **缺失能力**：交叉引用占位符（`{{fig:caption}}` / `{{tbl:caption}}` 写成 Word `REF` 域，
+  以及 `{{fn:}}` / `{{en:}}` 行内脚注尾注）与 `do_refresh` TOC 刷新路径
+  （`_attach_toc_refresh_local` / `_attach_toc_refresh_managed`）。
+- **归因**：win7 独有的那 2 行经查都是 main 重写前的旧形态（一处是缺新占位符文档的
+  schema 描述字符串，一处是 main 加 `do_refresh` 分支之前的裸
+  `return self._generate_document(...)`）⇒ **零 win7 独有修复，纯落后**。
+- **牵连**：B3 已把 `WordFormatSpec` 对齐 main，于是 model 现在声明了手写 JSON schema
+  从未获得的字段 ⇒ `unit/tools/test_office_create_schema_contract.py` 的
+  `set(schema_props) == set(WordFormatSpec.model_fields)` 断言失败，
+  缺 `toc` / `section_breaks` / `first_page_header` / `first_page_footer` /
+  `first_page_different` / `even_page_footer` 等 11 项；
+  同时 `unit/tools/test_office_create_tool.py`(+1 −102) 的
+  `assert set(props.keys()) == {5 项}` 也是同一根因。
+- **属功能级改动**：牵连 tool schema、tool 注册、前端 `src/shared` 的 `types.ts` 与文档，
+  因此不属 tests-only 批次。
+
+### 5.2 `backend/tools/office_lint_tool.py` — 落后 18 行（+18 / −0）
+
+checkable 白名单缺 `figure_index` / `table_index` / `toc`。
+**win7 独有行为零**（该文件无任何 win7 独有行）⇒ 最安全的一处，可与 5.1 同批。
+
+### 5.3 插件 REST 子系统 — ~~win7 完全缺失~~ **已由 #2410 解决**
+
+**B4 归因时的状态**（基线 `82ff6bdc0`）：
+
+- `backend/api/plugin_routes.py` = main-only，win7 无
+- `backend/ports/plugin.py` = main-only，win7 无
+- win7 的 `backend/main.py` **既没 import 也没 include_router**；
+  main 在 `:110` import、`:1143` `app.include_router(plugin_router, prefix="/api/v1")`
+  （注释「R82 插件生命周期记录 REST」）
+- 直接后果：`api/test_plugin_routes.py` 的 11 个测试全部 404
+
+**现状**（基线 `67c257773`，经 `65d7907a4` / #2410「批次 3e — plugin routes + frontend +
+R92 allowlist helpers」带入）：
+
+| 文件 | 状态 |
+|---|---|
+| `backend/api/plugin_routes.py` | 已存在（与 main 仍有差异） |
+| `backend/ports/plugin.py` | 已存在（与 main 仍有差异） |
+| `backend/plugins/{manifest,registry,tool_bridge}.py` | 已存在（与 main 仍有差异） |
+| `backend/main.py` | `:115` import + `:1512` `app.include_router(plugin_router, prefix="/api/v1")` |
+| `backend/tests/api/test_plugin_routes.py` | 已存在，**实跑 11 passed** |
+
+⇒ **本项从 B4b 移除**。B4 当时排除该测试文件的判断在当时的基线上是正确的
+（子系统确实完全不存在，带入测试只会得到 11 个 404），只是这个缺口后来被
+他人的并行批次填上了。这也再次印证「**每阶段开工前必须重跑 parity，不可假设基线不动**」：
+本轮内 `release/win7` 已移动 7 次。
+
+**仍需注意**：`unit/test_plugin_tool_bridge.py`(+2 −97) 依然落后 97 行，
+其 win7 独有的 2 行是安全测试
+（`test_profile_whitelist_requires_exact_plugin_tool_name`、
+`assert registry.get_schemas_for_llm(allowed_tools=["plugin__demo__*"]) == []`
+—— 插件白名单要求精确名、拒绝通配）。现在 `plugins/registry.py` 已在 win7 存在，
+这个文件转入 §4.1 的「近似纯落后」处理路径：判定那 2 行后做行级合并，
+**保留 win7 的白名单精确匹配断言**。
+
+### 5.4 `backend/model_catalog/schemas.py` — v2 侧 immutability 缺口
+
+- **现象**：`unit/api/test_model_catalog_snapshots.py` 的 18 个测试里 17 个通过，
+  唯一失败的 `test_merge_output_is_frozen_value` 断言 `merged.native = 1` 应抛
+  `ValidationError`，实得 `DID NOT RAISE`。
+- **根因**：win7 的 `CatalogValue` **只用 pydantic v1 的方式声明不可变性**
+  （`class Config: allow_mutation = False`），而 v2 忽略该键。其自带注释已承认
+  `v2 honors only extra`，且显式的 `__hash__` / `__eq__` 覆盖的是 v2 的 **hashability**
+  ⇒ **immutability 从未被覆盖**，测试所说的「快照审计完整性前提」在 v2 下不成立。
+- **修法**：补 v2 形式（`frozen=True`）。
+- **约束**：该文件是 win7 **刻意的 172 行 py3.8 重写**（用 plain types +
+  `@field_validator` 取代 main 的 `Annotated[..., AfterValidator(...)]`，
+  因为 v1 下 `Annotated` 不在 `typing`、`AfterValidator` 不存在），
+  **绝不能整替**；且任何改动的 v1 那一半**本地无法验证**
+  （两个 conda 环境都是 pydantic 2.5.0，只有 CI 装 1.10.13）
+  ⇒ 必须作为独立的、由 CI 验证的小改动。
+
+---
+
+## 6. 建议的 B4b 批次划分
+
+| 批次 | 内容 | 风险 | 前置 |
+|---|---|---|---|
+| **B4b-1** | 15 个 PURE-LAG 整替（514 行） | 低（win7 零独有内容） | 逐个复核零独有 |
+| **B4b-2** | `office_lint_tool.py` +18 行白名单（`figure_index`/`table_index`/`toc`） | 低（`git diff --numstat` 复核为 **+0 −18**，零 win7 独有行） | — |
+| **B4b-3** | `model_catalog/schemas.py` 补 v2 `frozen=True` | 中（双版本，v1 侧只能靠 CI） | 独立 PR，便于 CI 单独验证 |
+| **B4b-4** | `office_create_tool.py` +285 行（占位符 + TOC 刷新）+ `types.ts` | **高**（功能级，牵连注册/前端/文档） | 需要产品侧确认；`types.ts` 属 B5 |
+| **B4b-5** | 47 个 NEEDS-REVIEW 里「win7 独有 ≤ 2 行」的近似纯落后项（含 `test_tool_names.py` +1 −100、`test_office_create_tool.py` +1 −124、`test_plugin_tool_bridge.py` +2 −97、`test_credential_vault.py` +5 −45） | 中 | 逐个判定那几行 |
+| **B4b-6** | 真正的双向分叉（行级合并，保留 win7 独有测试） | **高** | 每个文件单独 review |
+| ~~B4b-7~~ | ~~插件 REST 子系统~~ | — | **已由 #2410 (`65d7907a4`) 解决，从 B4b 移除**；新基线上 `test_plugin_routes.py` 实跑 11 passed |
+| （可选） | `test_memory_manager_coordination.py` 跟随 main 目录重构 | 低但会改 win7 原有文件 | 建议单独 chore 或登记为可接受差异 |
+
+**开工前必做**：重跑 parity。本文写作期间 `release/win7` 就从 `82ff6bdc0` 前进到
+`67c257773`（5 个提交，其中 #2410 直接消掉了本表一整行），本轮内该基线共移动 7 次。
+
+**不该动的**：11 个 WIN7-TEST、7 个 ADAPT-ONLY、9 个 COMMENT/MARKER-ONLY、
+以及 `backend/tests/conftest.py`（5 行 win7 独有 + autouse fixture 的脆弱性）。
+
+---
+
+## 7. 复现
+
+```bash
+cd <worktree>            # 基于 release/win7，且已含 B4 的 88 个新增测试文件
+PY=<conda>/envs/sage-backend/python.exe
+
+# 1) real 清单（JSON）
+$PY scripts/win7/parity_report.py --base origin/main --head HEAD --json <out.json>
+
+# 2) 假差异检测（path move / layout-only）
+#    关键：比对 EOL 归一化后的内容，不要用 blob hash（main=LF / win7=CRLF）
+git show origin/main:<path> | tr -d '\r' > /tmp/a
+git show HEAD:<path>        | tr -d '\r' > /tmp/b
+cmp /tmp/a /tmp/b
+#    path move：在 main 全树找同 basename 的文件再比
+git ls-tree -r --name-only origin/main | grep "/$(basename <path>)$"
+
+# 3) win7 独有行（去空白后的多重集差集，避免换行重排虚增计数）
+#    win7-only = HEAD 有而 main 无；behind = main 有而 HEAD 无
+
+# 4) 单文件精读
+git diff --ignore-all-space -U1 origin/main HEAD -- <path>
+```
+
+**注意**：`--ignore-all-space` **不能**识别「同一语句换行方式不同」
+（行集合真的变了），所以 LAYOUT-ONLY 必须靠「去空白后按行取多重集差集」来判。
