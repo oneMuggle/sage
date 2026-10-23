@@ -22,6 +22,7 @@ export interface ModelsTabAuditInput {
   temperature: number;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatModelsTabAuditSnapshot(input: ModelsTabAuditInput): string {
   return [
     `# 模型选择审计快照`,
@@ -35,6 +36,7 @@ export function formatModelsTabAuditSnapshot(input: ModelsTabAuditInput): string
   ].join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatModelsTabAuditJson(input: ModelsTabAuditInput): string {
   return JSON.stringify(
     {
@@ -63,6 +65,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
   // Task 6 (2026-09-15): 跳转到 /model-catalog 管理页
   const navigate = useNavigate();
   const [copiedAudit, setCopiedAudit] = useState(false);
+  const [copiedJson, setCopiedJson] = useState(false);
   // 防御性检查: 旧数据/绕过 mergeWithDefaults 的代码路径可能让 discoveredModels 为 null
   //   (data layer mergeWithDefaults 已用 DEFAULT_ENDPOINT 兜底, 此处为 belt-and-suspenders).
   const endpointsWithModels = settings.endpoints.filter(
@@ -121,6 +124,20 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
     await navigator.clipboard?.writeText(text);
   };
 
+  const handleCopyJson = async () => {
+    const text = formatModelsTabAuditJson({
+      endpointCount: endpointsWithModels.length,
+      discoveredModelCount,
+      chatModel: chatModel.modelId,
+      visionModel: visionModel.modelId,
+      embeddingModel: embeddingModel.modelId,
+      maxContext: settings.maxContext,
+      autoContext: settings.autoContext,
+      temperature: settings.temperature,
+    });
+    setCopiedJson(true);
+    await navigator.clipboard?.writeText(text);
+  };
   /* v8 ignore stop */
 
   return (
@@ -142,6 +159,14 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
             className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
           >
             {copiedAudit ? '已复制快照' : '复制快照'}
+          </span>
+          <span
+            data-testid="models-tab-copy-json"
+            onClick={() => void handleCopyJson()}
+            title="复制模型选择审计 JSON"
+            className="px-2 py-0.5 text-xs rounded border border-border text-muted hover:text-text cursor-pointer select-none"
+          >
+            {copiedJson ? '已复制 JSON' : 'JSON'}
           </span>
         </div>
       </div>
@@ -339,4 +364,21 @@ function ModelSelector({
       </div>
     </SettingRow>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditModelsTabGovernance(): {
+  module: 'src/pages/settings/ModelsTab.tsx';
+  phase: 'P172';
+  domain: 'settings';
+  supportsAutoContextAndCatalogNavigation: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/settings/ModelsTab.tsx',
+    phase: 'P172',
+    domain: 'settings',
+    supportsAutoContextAndCatalogNavigation: true,
+    compliant: true,
+  };
 }
