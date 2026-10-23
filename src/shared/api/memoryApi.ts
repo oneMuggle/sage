@@ -716,3 +716,23 @@ export function formatMemoryListJson(res: MemoryListResponse): string {
     2,
   );
 }
+
+export function auditMemoryApiGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.memory_api.governance.v1',
+      phase: 'P176',
+      supportedLayers: MEMORY_LAYERS,
+      sampleSummary: formatMemoryListSummary({
+        items: [],
+        total: 0,
+        page: 1,
+        page_size: 20,
+        layer: 'all',
+        source_breakdown: { working: 0, session_summary: 0, episodic: 0, semantic: 0 },
+      }),
+    },
+    null,
+    2,
+  );
+}

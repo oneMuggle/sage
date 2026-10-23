@@ -47,3 +47,16 @@ export function formatKnowledgeDocsJson(
     2,
   );
 }
+
+export function auditKnowledgeApiGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.knowledge_api.governance.v1',
+      phase: 'P176',
+      wikiReplaced: true,
+      defaultSummary: formatKnowledgeDocsSummary([], 'governance'),
+    },
+    null,
+    2,
+  );
+}

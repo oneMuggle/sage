@@ -2534,3 +2534,16 @@
   - `src/shared/api/fileSearchClient.ts`: Added `auditFileSearchClientGovernance()` verifying office and workspace file classification (`src/shared/api/__tests__/fileSearchClient.p175.test.ts`).
   - `src/shared/api/gatewayApi.ts`: Added `auditGatewayApiGovernance()` verifying multi-platform gateway support (`telegram`, `feishu`, `dingtalk`, `wecom`, `qq`) (`src/shared/api/__tests__/gatewayApi.p175.test.ts`).
   - `src/shared/api/gitStatusApi.ts`: Added `auditGitStatusApiGovernance()` verifying git file change statuses (`modified`, `staged`, `untracked`, `conflicted`, `deleted`, `renamed`) (`src/shared/api/__tests__/gitStatusApi.p175.test.ts`).
+
+### Phase P176 — Shared Journal, Knowledge, Learn, LLM Stream, Media, Memory & Orchestration API Governance Audit Contracts (Completed 2026-10-23)
+
+- **Journal, Knowledge, Learn & LLM Stream API Governance Contracts**:
+  - `src/shared/api/journalApi.ts`: Added `auditJournalApiGovernance()` verifying journal template parsing, validation, and fill endpoints (`src/shared/api/__tests__/journalApi.p176.test.ts`).
+  - `src/shared/api/knowledgeApi.ts`: Added `auditKnowledgeApiGovernance()` verifying legacy knowledge API fallback to wiki subsystem (`src/shared/api/__tests__/knowledgeApi.p176.test.ts`).
+  - `src/shared/api/learnApi.ts`: Added `auditLearnApiGovernance()` verifying background review `trigger_learn` IPC contract (`src/shared/api/__tests__/learnApi.p176.test.ts`).
+  - `src/shared/api/llmStream.ts`: Added `auditLlmStreamGovernance()` verifying NDJSON stream parsing and agent event formatters (`src/shared/api/__tests__/llmStream.p176.test.ts`).
+- **Media, Memory & Multi-Agent Orchestration API Governance Contracts**:
+  - `src/shared/api/mediaApi.ts`: Added `auditMediaApiGovernance()` verifying multimodal blob URL resolution and cleanup (`src/shared/api/__tests__/mediaApi.p176.test.ts`).
+  - `src/shared/api/memoryApi.ts`: Added `auditMemoryApiGovernance()` verifying multi-layer memory list envelope (`episodic`, `semantic`, `working`, `session_summary`, `all`) (`src/shared/api/__tests__/memoryApi.p176.test.ts`).
+  - `src/shared/api/orchRunClient.ts`: Added `auditOrchRunClientGovernance()` verifying orchestration run lifecycle methods (`src/shared/api/__tests__/orchRunClient.p176.test.ts`).
+  - `src/shared/api/orchestrationClient.ts`: Added `auditOrchestrationClientGovernance()` verifying lane board views (`ops_full`, `ui_minimal`) and decision contracts (`src/shared/api/__tests__/orchestrationClient.p176.test.ts`).

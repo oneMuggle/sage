@@ -94,3 +94,32 @@ export function formatOrchRunDetailJson(detail: OrchRunDetail): string {
     2,
   );
 }
+
+export function auditOrchRunClientGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.api.orch_run_client.governance.v1',
+      phase: 'P176',
+      methods: [
+        'cancelRun',
+        'updatePlan',
+        'getRun',
+        'listSessionRuns',
+        'cancelTask',
+        'confirmRun',
+        'rerunFailed',
+        'planItemsFromText',
+      ],
+      sampleSummary: formatOrchRunDetailSummary({
+        run_id: 'r1',
+        session_id: 's1',
+        status: 'running',
+        created_at: 1000,
+        plan: [],
+        tasks: [],
+      }),
+    },
+    null,
+    2,
+  );
+}
