@@ -123,6 +123,7 @@ def test_default_seed_coder_uses_current_tool_names():
         "browser_cookies",
         "browser_downloads",
         "browser_close",
+        "browser_login",
         # alpha.36 (Bug #5): 沙箱代码执行
         "repl",
         "execute_code",
