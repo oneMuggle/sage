@@ -121,3 +121,20 @@ export function formatDesktopInvokeJson(
     2,
   );
 }
+
+export function auditDesktopInvokeGovernance(): {
+  module: 'src/shared/api/desktopInvoke.ts';
+  phase: 'P175';
+  domain: 'shared-api';
+  supportsReadinessGateAndConnectionNormalization: boolean;
+  compliant: boolean;
+} {
+  const summary = formatDesktopInvokeSummary('get_sessions', { limit: 10 });
+  return {
+    module: 'src/shared/api/desktopInvoke.ts',
+    phase: 'P175',
+    domain: 'shared-api',
+    supportsReadinessGateAndConnectionNormalization: summary.includes('desktop-invoke: get_sessions'),
+    compliant: summary.includes('1 args'),
+  };
+}

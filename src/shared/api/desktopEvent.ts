@@ -64,3 +64,20 @@ export function formatDesktopEventJson(
     2,
   );
 }
+
+export function auditDesktopEventGovernance(): {
+  module: 'src/shared/api/desktopEvent.ts';
+  phase: 'P175';
+  domain: 'shared-api';
+  supportsStreamIdUnlistenPropagation: boolean;
+  compliant: boolean;
+} {
+  const summary = formatDesktopEventSummary('chat-stream', { streamId: 's-1' });
+  return {
+    module: 'src/shared/api/desktopEvent.ts',
+    phase: 'P175',
+    domain: 'shared-api',
+    supportsStreamIdUnlistenPropagation: summary.includes('stream=s-1'),
+    compliant: summary.includes('stream=s-1'),
+  };
+}
