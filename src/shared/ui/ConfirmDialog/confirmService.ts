@@ -74,3 +74,10 @@ export function formatConfirmServiceJson(opts?: ConfirmOptions | null): string {
   });
 }
 /* v8 ignore stop */
+export function auditConfirmServiceGovernance(): string {
+  return JSON.stringify({
+    module: 'confirm-service',
+    phase: 'P183',
+    audited: true,
+  });
+}

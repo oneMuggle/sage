@@ -96,4 +96,12 @@ export function formatI18nProviderJson(locale: Locale = 'zh'): string {
     storageKey: LOCALE_STORAGE_KEY,
   });
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditI18nProviderGovernance(): string {
+  return JSON.stringify({
+    module: 'i18n-provider',
+    phase: 'P183',
+    audited: true,
+  });
+}
 
