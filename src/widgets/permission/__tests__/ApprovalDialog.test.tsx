@@ -111,6 +111,7 @@ describe('ApprovalDialog', () => {
         requestId: 'req-approve',
         approved: true,
         remember: false,
+        rememberScope: 'tool',
         reason: '',
       });
     });
@@ -133,6 +134,51 @@ describe('ApprovalDialog', () => {
         requestId: 'req-remember',
         approved: true,
         remember: true,
+        rememberScope: 'tool',
+        reason: '',
+      });
+    });
+  });
+
+  it('does not show remember scope choices for non-plugin requests', () => {
+    seedRequest({ request_id: 'req-non-plugin' });
+    renderDialog();
+
+    fireEvent.click(screen.getByTestId('permission-remember'));
+
+    expect(screen.queryByTestId('permission-remember-scope')).toBeNull();
+  });
+
+  it('plugin request can explicitly remember the whole plugin', async () => {
+    seedRequest({
+      request_id: 'req-plugin-scope',
+      tool_name: 'plugin__demo__hello',
+      plugin_name: 'demo',
+    });
+    renderDialog();
+
+    expect(screen.queryByTestId('permission-remember-scope')).toBeNull();
+    fireEvent.click(screen.getByTestId('permission-remember'));
+
+    const scope = screen.getByTestId('permission-remember-scope');
+    expect(scope).toHaveTextContent('plugin__demo__hello');
+    expect(scope).toHaveTextContent('plugin__demo__*');
+    expect(
+      (screen.getByTestId('permission-remember-scope-tool') as HTMLInputElement).checked,
+    ).toBe(true);
+
+    fireEvent.click(screen.getByTestId('permission-remember-scope-plugin'));
+    expect(
+      screen.getByTestId('permission-remember-scope-plugin-warning'),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('permission-approve'));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('permissions_answer', {
+        requestId: 'req-plugin-scope',
+        approved: true,
+        remember: true,
+        rememberScope: 'plugin',
         reason: '',
       });
     });
@@ -154,6 +200,7 @@ describe('ApprovalDialog', () => {
         requestId: 'req-deny',
         approved: false,
         remember: false,
+        rememberScope: 'tool',
         reason: '',
       });
     });
@@ -177,6 +224,7 @@ describe('ApprovalDialog', () => {
         requestId: 'req-feedback',
         approved: false,
         remember: false,
+        rememberScope: 'tool',
         reason: '路径不对，应该写到 docs/ 目录',
       });
     });
@@ -238,6 +286,49 @@ describe('ApprovalDialog', () => {
     await waitFor(() => {
       expect((screen.getByTestId('permission-remember') as HTMLInputElement).checked).toBe(false);
     });
+  });
+
+  it('resets plugin remember scope when a new request arrives', async () => {
+    seedRequest({
+      request_id: 'req-plugin-a',
+      tool_name: 'plugin__demo__hello',
+      plugin_name: 'demo',
+    });
+    const { rerender } = render(
+      <I18nProvider>
+        <ApprovalDialog />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('permission-remember'));
+    fireEvent.click(screen.getByTestId('permission-remember-scope-plugin'));
+    expect(
+      (screen.getByTestId('permission-remember-scope-plugin') as HTMLInputElement).checked,
+    ).toBe(true);
+
+    usePermissionState.getState().setFromEvent(
+      makeRequest({
+        request_id: 'req-plugin-b',
+        tool_name: 'plugin__demo__hello',
+        plugin_name: 'demo',
+      }),
+    );
+    rerender(
+      <I18nProvider>
+        <ApprovalDialog />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect((screen.getByTestId('permission-remember') as HTMLInputElement).checked).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId('permission-remember'));
+    expect(
+      (screen.getByTestId('permission-remember-scope-tool') as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(
+      (screen.getByTestId('permission-remember-scope-plugin') as HTMLInputElement).checked,
+    ).toBe(false);
   });
 
   // U15: 写类工具 diff 预览 — 有 diff_preview 时展示, 用户不再"盲批"

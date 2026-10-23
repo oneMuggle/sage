@@ -314,6 +314,12 @@ export interface PermissionRequest {
    * 无路径参数时缺省。
    */
   target_path?: string;
+  /**
+   * R95: 后端从 PluginToolBridge 已发布记录注入的权威插件名。
+   * 只有携带此字段的插件工具审批才提供“整个插件”记住范围；
+   * 前端不按工具名字符串自行猜测插件名。
+   */
+  plugin_name?: string;
 }
 
 /** 问题选项 — QuestionDialog 渲染为可选卡片 */

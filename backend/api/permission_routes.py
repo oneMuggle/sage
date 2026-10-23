@@ -7,17 +7,22 @@
     ``permission_request`` 字段；断线重连后用来补拉挂起对话框）。
 
 - ``POST /api/v1/permissions/{request_id}/answer``
-    body ``{"approved": bool, "remember": bool}``
+    body ``{"approved": bool, "remember": bool,
+    "remember_scope": "tool"|"plugin"}``
     → ``{"ok": true}`` 或 ``{"ok": false, "error": "<reason>"}``
 
-``remember=true`` 时把 ``PermissionRule(tool_pattern=<精确工具名>,
-decision=allow|deny)`` 追加进 settings ``permission_rules``，下次 agent
-运行构造 enforcer 时生效。
+``remember=true`` 时把决定追加进 settings ``permission_rules``，
+下次 agent 运行构造 enforcer 时生效。默认 ``tool`` 范围仍落
+精确工具名；R95 的 ``plugin`` 范围只把服务端待审批请求中的
+权威插件名派生为 ``plugin__<plugin>__*``，客户端不能提交
+pattern 或插件名。
 
 安全加固（安全评审 FIX-3 / FIX-4）:
 
 - remember 持久化拒绝含 fnmatch 元字符（``* ? [ ]``）的工具名——工具名
   来自 LLM 工具调用，若把 ``"*"`` 落成规则等于永久 allow-all。
+  整插件范围是唯一例外，但其 ``*`` 只能由服务端在校验权威
+  插件名与完整工具名归属后生成；校验失败不落任何规则。
 - 两个端点自带定向 Origin 守卫：带 ``Origin`` 头且不在白名单 → 403。
   背景：后端既有 CORS 配置是 ``allow_origins=["*"]``（全局问题，不在本
   里程碑内改），因此审批这种高权限端点必须自己挡住第三方网页的
@@ -29,6 +34,7 @@ from __future__ import annotations
 
 import logging
 import re
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request
@@ -36,6 +42,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from backend.data.settings_repo import SettingsRepository
+from backend.domain.tool_names import (
+    plugin_tool_belongs_to_plugin,
+    plugin_tool_wildcard_for_plugin,
+)
 from backend.services.permission_gate import get_permission_gate
 from backend.tools.permissions import SETTINGS_KEY_RULES, parse_rules
 
@@ -62,11 +72,19 @@ _ALLOWED_ORIGINS = frozenset(
 )
 
 
+class RememberScope(str, Enum):
+    """remember=true 时持久规则的覆盖范围。"""
+
+    TOOL = "tool"
+    PLUGIN = "plugin"
+
+
 class ApprovalAnswerBody(BaseModel):
     """POST answer 请求体。"""
 
     approved: bool
     remember: bool = False
+    remember_scope: RememberScope = RememberScope.TOOL
     # 对标 ZCode freeText：拒绝时用户附带的文字反馈（≤500 字符），
     # 经 gate → agent 拼进拒绝 reason，模型据此调整方案。批准时可留空。
     reason: str = Field(default="", max_length=500)
@@ -240,7 +258,13 @@ def forbidden_origin_response(request: Request) -> JSONResponse | None:
     return None
 
 
-def _persist_remembered_rule(tool_name: str, approved: bool) -> None:
+def _persist_remembered_rule(
+    tool_name: str,
+    approved: bool,
+    *,
+    remember_scope: RememberScope = RememberScope.TOOL,
+    plugin_name: Optional[str] = None,
+) -> None:
     """remember=true 时把决定追加为持久化规则。
 
     安全闸（FIX-3）: ``tool_name`` 含 fnmatch 元字符（``* ? [ ]``）时
@@ -248,30 +272,49 @@ def _persist_remembered_rule(tool_name: str, approved: bool) -> None:
     会让 ``"*"`` 变成永久 allow-all 规则。本次应答照常成功（approved 已
     作用于当次请求），只是不持久化，并记 warning。
 
+    R95 整插件范围不接受任何客户端 pattern：只有待审批请求
+    自带的服务端 ``plugin_name`` 能派生受限通配，且完整工具
+    名必须确实属于该插件；否则同样只记 warning、不落规则。
+
     其它失败也只记 warning——规则持久化失败不应让"已批准"的应答对前端
     变失败（本次执行已经放行了）。
     """
-    if _FNMATCH_METACHAR_RE.search(tool_name):
+    if remember_scope is RememberScope.PLUGIN:
+        pattern = plugin_tool_wildcard_for_plugin(plugin_name)
+        if pattern is None or not plugin_tool_belongs_to_plugin(
+            tool_name, plugin_name
+        ):
+            logger.warning(
+                "拒绝持久化整插件审批规则（权威插件名缺失或不匹配）: "
+                "tool_name=%r plugin_name=%r",
+                tool_name,
+                plugin_name,
+            )
+            return
+    elif _FNMATCH_METACHAR_RE.search(tool_name):
         logger.warning(
             "拒绝持久化含 fnmatch 元字符的审批规则（降级为不记住）: tool_name=%r",
             tool_name,
         )
         return
+    else:
+        pattern = tool_name
     try:
         repo = SettingsRepository()
         existing = parse_rules(repo.get_json(SETTINGS_KEY_RULES))
         rules_payload: List[Dict[str, Any]] = [r.to_dict() for r in existing]
         rules_payload.append(
             {
-                "tool_pattern": tool_name,
+                "tool_pattern": pattern,
                 "decision": "allow" if approved else "deny",
             }
         )
         repo.set_json(SETTINGS_KEY_RULES, rules_payload, category="permissions")
         logger.info(
-            "已持久化审批规则: tool=%s decision=%s (共 %d 条)",
-            tool_name,
+            "已持久化审批规则: pattern=%s decision=%s scope=%s (共 %d 条)",
+            pattern,
             "allow" if approved else "deny",
+            remember_scope.value,
             len(rules_payload),
         )
     except Exception as exc:  # noqa: BLE001 — 持久化失败不阻塞应答
@@ -320,7 +363,12 @@ async def answer_approval(
         return {"ok": False, "error": "unknown_or_expired"}
 
     if body.remember:
-        _persist_remembered_rule(req.tool_name, body.approved)
+        _persist_remembered_rule(
+            req.tool_name,
+            body.approved,
+            remember_scope=body.remember_scope,
+            plugin_name=req.plugin_name,
+        )
 
     # live-events P1: 子代理审批回填 —— 命中编排 run 时回发
     # ``task.approval_resolved``（canonical）+ ``subagent_event`` 镜像

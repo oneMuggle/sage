@@ -259,6 +259,11 @@ export const enSettingsAndModels = {
   'permission.risk.suspicious': 'Suspicious',
   'permission.risk.destructive': 'Destructive',
   'permission.remember': 'Remember my choice',
+  'permission.remember_scope.legend': 'Remember for',
+  'permission.remember_scope.tool': 'Only this tool',
+  'permission.remember_scope.plugin': 'Whole plugin (including future tools)',
+  'permission.remember_scope.plugin_warning':
+    'This applies to every tool from this plugin. Only continue if you trust the plugin.',
   'permission.approve': 'Allow',
   'permission.deny': 'Deny',
   'permission.deny_confirm': 'Confirm deny',

@@ -37,7 +37,7 @@ from backend.core.legacy.llm_client import LLMClient, LLMConfig, LLMResponse
 from backend.data.database import get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.domain.scheduler import SchedulerServicePort
-from backend.domain.tool_names import tool_name_in_allowlist
+from backend.domain.tool_names import is_plugin_tool_name, tool_name_in_allowlist
 from backend.domain.tool_policy import DEFAULT_MAX_TOOL_CALLS_PER_RUN, ToolPolicy
 
 # ===== M6 HOOKS BEGIN: user-defined hooks around tool execution =====
@@ -2660,12 +2660,28 @@ class SageAgent:
             workspace_root = self._office_boundary_resolver()
         except Exception:  # noqa: BLE001 — 预览是尽力而为
             workspace_root = None
+        # R95: 整插件记住范围只能用 bridge 已发布记录里的权威
+        # 插件名；查不到就保持 None，前端不会提供该选项，路由
+        # 也不会按字符串切分猜测。
+        plugin_name = None
+        if is_plugin_tool_name(tool_name):
+            try:
+                from backend.plugins.tool_bridge import get_plugin_tool_bridge
+
+                published = get_plugin_tool_bridge().published_tool(tool_name)
+                if published is not None:
+                    plugin_name = published.plugin_name
+            except Exception as exc:  # noqa: BLE001 — 权威名只是增强信息
+                logger.debug(
+                    "插件工具权威名查询失败 tool=%s: %s", tool_name, exc
+                )
         return ApprovalRequest.create(
             tool_name=tool_name,
             args=args,
             risk=risk,
             message=decision.reason,
             workspace_root=workspace_root,
+            plugin_name=plugin_name,
         )
 
     async def _await_approval_answer(self, req: ApprovalRequest) -> ApprovalAnswer:
