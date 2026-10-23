@@ -2,11 +2,13 @@
  * IPC client for MCP multi-server management (M3).
  *
  * Translates to backend HTTP via Electron preload:
- *   mcp_status        → GET    /api/v1/mcp/status
- *   mcp_servers       → GET    /api/v1/mcp/servers
- *   mcp_server_add    → POST   /api/v1/mcp/servers        (rawBody)
- *   mcp_server_update → PATCH  /api/v1/mcp/servers/{name}
- *   mcp_server_delete → DELETE /api/v1/mcp/servers/{name}
+ *   mcp_status           → GET    /api/v1/mcp/status
+ *   mcp_servers          → GET    /api/v1/mcp/servers
+ *   mcp_server_add       → POST   /api/v1/mcp/servers        (rawBody)
+ *   mcp_server_update    → PATCH  /api/v1/mcp/servers/{name}
+ *   mcp_server_tools     → GET    /api/v1/mcp/servers/{name}/tools      (r53-B)
+ *   mcp_server_authorize → POST   /api/v1/mcp/servers/{name}/authorize  (r64)
+ *   mcp_server_delete    → DELETE /api/v1/mcp/servers/{name}
  *
  * Responses arrive snake_case (backend contract). Add/update inputs are
  * snake_case by construction: mcp_server_add is a rawBody route, so env
@@ -26,6 +28,10 @@ export interface McpServerStatusEntry {
   last_error: string | null;
   since: number;
   required: boolean;
+  /** R53: 已禁用的工具 id 列表 */
+  disabled_tools?: string[];
+  /** r65: 是否已 OAuth 授权（不透出 token 本体） */
+  has_oauth_token?: boolean;
 }
 
 export interface McpStatusReport {
@@ -46,6 +52,8 @@ export interface McpServerConfig {
   enabled: boolean;
   required: boolean;
   timeout_seconds: number;
+  /** R53: 已禁用的工具 id 列表 */
+  disabled_tools?: string[];
   builtin: boolean;
 }
 
@@ -61,6 +69,21 @@ export interface AddMcpServerInput {
 export interface UpdateMcpServerChanges {
   enabled?: boolean;
   timeoutSeconds?: number;
+  /** R53: 工具禁用列表（全量替换语义） */
+  disabledTools?: string[];
+}
+
+/** r53-B: per-tool 开关面板的只读载荷 */
+export interface McpToolSpec {
+  name: string;
+  description: string;
+}
+
+export interface McpServerToolsReport {
+  server: string;
+  state: McpServerState;
+  tools: McpToolSpec[];
+  disabled_tools: string[];
 }
 
 export const MCP_NAME_REGEX = /^[a-z0-9_-]{1,64}$/;
@@ -100,7 +123,21 @@ export const mcpClient = {
       name,
       enabled: changes.enabled,
       timeout_seconds: changes.timeoutSeconds,
+      disabled_tools: changes.disabledTools,
     });
+  },
+
+  async serverTools(name: string): Promise<McpServerToolsReport> {
+    return invoke<McpServerToolsReport>('mcp_server_tools', { name });
+  },
+
+  async authorizeServer(name: string): Promise<{
+    ok: boolean;
+    server: string;
+    token_type: string;
+    expires_at: number;
+  }> {
+    return invoke('mcp_server_authorize', { name });
   },
 
   async deleteServer(name: string): Promise<{ ok: boolean; name: string }> {

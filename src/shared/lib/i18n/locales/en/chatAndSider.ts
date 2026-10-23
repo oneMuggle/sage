@@ -397,6 +397,14 @@ export const enChatAndSider = {
   'settings.mcp.tools.error': 'Failed to load tool list',
   'settings.mcp.tools.hint': 'Uncheck a tool to disable it; check to re-enable.',
   'settings.mcp.tools.disabled_tag': 'Disabled',
+  'settings.mcp.authorize.button': 'Authorize',
+  'settings.mcp.authorize.authorizing': 'Authorizing…',
+  'settings.mcp.authorize.success':
+    'OAuth authorization complete; tool calls will carry the new credentials.',
+  'settings.mcp.authorize.failed_prefix': 'Authorization failed: ',
+  'settings.mcp.authorize.hint': 'Open the browser to finish OAuth login (HTTP transport only)',
+  'settings.mcp.authorize.badge': 'OAuth authorized',
+  'settings.mcp.authorize.reauthorize': 'Re-authorize',
 
   // ─── Settings · Zotero Library ────────────────
   'settings.zotero.title': 'Zotero Library',

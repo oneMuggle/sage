@@ -2,11 +2,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  McpTab,
-  formatMcpTabAuditJson,
-  formatMcpTabAuditSnapshot,
-} from '../McpTab';
+import { McpTab, formatMcpTabAuditJson, formatMcpTabAuditSnapshot } from '../McpTab';
 
 const mocks = vi.hoisted(() => ({
   status: vi.fn(),
@@ -14,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   addServer: vi.fn(),
   updateServer: vi.fn(),
   deleteServer: vi.fn(),
+  serverTools: vi.fn(),
+  authorizeServer: vi.fn(),
 }));
 
 vi.mock('../../../shared/api/mcpClient', () => ({
@@ -24,6 +22,8 @@ vi.mock('../../../shared/api/mcpClient', () => ({
     addServer: (...args: unknown[]) => mocks.addServer(...args),
     updateServer: (...args: unknown[]) => mocks.updateServer(...args),
     deleteServer: (...args: unknown[]) => mocks.deleteServer(...args),
+    serverTools: (...args: unknown[]) => mocks.serverTools(...args),
+    authorizeServer: (...args: unknown[]) => mocks.authorizeServer(...args),
   },
 }));
 
@@ -99,6 +99,13 @@ describe('McpTab', () => {
     mocks.addServer.mockResolvedValue({ ok: true, name: 'new', state: 'ready' });
     mocks.updateServer.mockResolvedValue({ ok: true, name: 'alpha', state: 'disabled' });
     mocks.deleteServer.mockResolvedValue({ ok: true, name: 'alpha' });
+    mocks.serverTools.mockResolvedValue({
+      server: 'alpha',
+      state: 'ready',
+      tools: [],
+      disabled_tools: [],
+    });
+    mocks.authorizeServer.mockReset();
   });
 
   it('renders one badge per server with the right state', async () => {
@@ -127,7 +134,8 @@ describe('McpTab', () => {
     await waitFor(() => expect(mocks.listServers).toHaveBeenCalledTimes(1));
 
     const row = screen.getByText('alpha').closest('tr')!;
-    const toggle = row.querySelectorAll('button')[0];
+    // td[4] is the enabled-toggle cell (td[2] now holds the tools expand button)
+    const toggle = row.querySelectorAll('td')[4]!.querySelector('button')!;
     fireEvent.click(toggle);
 
     await waitFor(() =>
@@ -190,12 +198,14 @@ describe('McpTab', () => {
     await waitFor(() => expect(mocks.status).toHaveBeenCalled());
 
     const drawioRow = screen.getByText('drawio').closest('tr')!;
-    const drawioDelete = drawioRow.querySelectorAll('button')[1] as HTMLButtonElement;
+    // delete button is the third in a row (tools expand, enabled toggle, delete)
+    const drawioDelete = drawioRow.querySelectorAll('button')[2] as HTMLButtonElement;
     expect(drawioDelete.disabled).toBe(true);
     expect(drawioDelete.title).toBe('settings.mcp.builtin_hint');
 
     const alphaRow = screen.getByText('alpha').closest('tr')!;
-    const alphaDelete = alphaRow.querySelectorAll('button')[1];
+    // buttons in a row: tools expand (td[2]), enabled toggle (td[4]), delete (td[5])
+    const alphaDelete = alphaRow.querySelectorAll('button')[2];
     fireEvent.click(alphaDelete);
     await waitFor(() => expect(mocks.deleteServer).toHaveBeenCalledWith('alpha'));
   });
@@ -207,6 +217,161 @@ describe('McpTab', () => {
     fireEvent.click(screen.getByText('settings.mcp.refresh'));
     await waitFor(() => expect(mocks.status).toHaveBeenCalledTimes(2));
     expect(mocks.listServers).toHaveBeenCalledTimes(2);
+  });
+
+  it('expands the tool panel, loads tools and re-enables a disabled one', async () => {
+    mocks.serverTools.mockResolvedValue({
+      server: 'alpha',
+      state: 'ready',
+      tools: [
+        { name: 'echo', description: 'echo tool' },
+        { name: 'search', description: '' },
+      ],
+      disabled_tools: ['search'],
+    });
+    render(<McpTab />);
+    await waitFor(() => expect(mocks.listServers).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByTestId('mcp-tools-toggle-alpha'));
+    await waitFor(() => expect(screen.getByTestId('mcp-tools-panel-alpha')).toBeTruthy());
+    expect(mocks.serverTools).toHaveBeenCalledWith('alpha');
+    // checked = enabled, unchecked = disabled (matches disabled_tools)
+    expect((screen.getByTestId('mcp-tool-check-alpha-echo') as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect((screen.getByTestId('mcp-tool-check-alpha-search') as HTMLInputElement).checked).toBe(
+      false,
+    );
+
+    // re-enable search → full replacement PATCH with the empty list
+    fireEvent.click(screen.getByTestId('mcp-tool-check-alpha-search'));
+    await waitFor(() =>
+      expect(mocks.updateServer).toHaveBeenCalledWith('alpha', { disabledTools: [] }),
+    );
+    await waitFor(() => expect(mocks.serverTools).toHaveBeenCalledTimes(2));
+  });
+
+  it('disabling a tool PATCHes the sorted full replacement list', async () => {
+    mocks.serverTools.mockResolvedValue({
+      server: 'alpha',
+      state: 'ready',
+      tools: [
+        { name: 'echo', description: '' },
+        { name: 'search', description: '' },
+      ],
+      disabled_tools: ['search'],
+    });
+    render(<McpTab />);
+    await waitFor(() => expect(mocks.listServers).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByTestId('mcp-tools-toggle-alpha'));
+    await waitFor(() => expect(screen.getByTestId('mcp-tool-check-alpha-echo')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('mcp-tool-check-alpha-echo'));
+    await waitFor(() =>
+      expect(mocks.updateServer).toHaveBeenCalledWith('alpha', {
+        disabledTools: ['echo', 'search'],
+      }),
+    );
+  });
+
+  it('shows an inline error when the tool list fails to load', async () => {
+    mocks.serverTools.mockRejectedValue(new Error('ipc down'));
+    render(<McpTab />);
+    await waitFor(() => expect(mocks.listServers).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByTestId('mcp-tools-toggle-alpha'));
+    await waitFor(() => expect(screen.getByTestId('mcp-tools-error-alpha')).toBeTruthy());
+  });
+
+  it('r64: HTTP 服务器展示授权按钮；成功后显示完成提示', async () => {
+    mocks.listServers.mockResolvedValue([
+      {
+        name: 'remote',
+        command: '',
+        url: 'https://mcp.example.com/rpc',
+        args: [],
+        env: {},
+        enabled: true,
+        required: false,
+        timeout_seconds: 30,
+        builtin: false,
+      },
+    ]);
+    mocks.status.mockResolvedValue({
+      ...STATUS,
+      servers: [
+        {
+          name: 'remote',
+          state: 'ready',
+          tool_count: 1,
+          last_error: null,
+          since: 1,
+          required: false,
+        },
+      ],
+    });
+    mocks.authorizeServer.mockResolvedValue({
+      ok: true,
+      server: 'remote',
+      token_type: 'Bearer',
+      expires_at: 123,
+    });
+    render(<McpTab />);
+    await waitFor(() => expect(screen.getByTestId('mcp-authorize-remote')).toBeTruthy());
+
+    fireEvent.click(screen.getByTestId('mcp-authorize-remote'));
+    await waitFor(() => expect(mocks.authorizeServer).toHaveBeenCalledWith('remote'));
+    await waitFor(() =>
+      expect(screen.getByTestId('mcp-authorize-message').textContent).toBe(
+        'settings.mcp.authorize.success',
+      ),
+    );
+  });
+
+  it('r64: stdio 服务器不展示授权按钮', async () => {
+    render(<McpTab />);
+    await waitFor(() => expect(screen.getByTestId('state-badge-alpha')).toBeTruthy());
+    expect(screen.queryByTestId('mcp-authorize-alpha')).toBeNull();
+  });
+
+  it('r65: has_oauth_token 服务器渲染钥匙角标 + 重新授权文案', async () => {
+    mocks.listServers.mockResolvedValue([
+      {
+        name: 'remote',
+        command: '',
+        url: 'https://mcp.example.com/rpc',
+        args: [],
+        env: {},
+        enabled: true,
+        required: false,
+        timeout_seconds: 30,
+        builtin: false,
+      },
+    ]);
+    mocks.status.mockResolvedValue({
+      ...STATUS,
+      servers: [
+        {
+          name: 'remote',
+          state: 'ready',
+          tool_count: 1,
+          last_error: null,
+          since: 1,
+          required: false,
+          has_oauth_token: true,
+        },
+      ],
+    });
+    render(<McpTab />);
+    await waitFor(() => expect(screen.getByTestId('mcp-oauth-badge-remote')).toBeTruthy());
+    const btn = screen.getByTestId('mcp-authorize-remote');
+    await waitFor(() => expect(btn.textContent).toBe('settings.mcp.authorize.reauthorize'));
+  });
+
+  it('r65: 无 has_oauth_token 时不渲染角标，文案保持授权', async () => {
+    render(<McpTab />);
+    await waitFor(() => expect(screen.getByTestId('state-badge-alpha')).toBeTruthy());
+    expect(screen.queryByTestId('mcp-oauth-badge-alpha')).toBeNull();
   });
   it('submits an HTTP URL and headers without requiring a command', async () => {
     render(<McpTab />);
