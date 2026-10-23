@@ -629,3 +629,19 @@ export function formatSettingsSearchJson(query: string): string {
     2,
   );
 }
+
+export function auditSettingsSearchIndexGovernance(): {
+  module: 'src/pages/settings/settingsSearchIndex.ts';
+  phase: 'P174';
+  domain: 'settings';
+  indexSize: number;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/pages/settings/settingsSearchIndex.ts',
+    phase: 'P174',
+    domain: 'settings',
+    indexSize: SETTINGS_SEARCH_INDEX.length,
+    compliant: SETTINGS_SEARCH_INDEX.length > 0,
+  };
+}
