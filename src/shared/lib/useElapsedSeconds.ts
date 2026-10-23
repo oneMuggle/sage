@@ -48,3 +48,16 @@ export function formatElapsedSecondsJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditUseElapsedSecondsGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.use_elapsed_seconds.governance.v1',
+      phase: 'P180',
+      activeSummary: formatElapsedSecondsSummary(true, 12),
+      idleSummary: formatElapsedSecondsSummary(false, 0),
+    },
+    null,
+    2,
+  );
+}

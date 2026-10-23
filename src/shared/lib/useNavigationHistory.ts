@@ -32,3 +32,15 @@ export function formatNavHistoryJson(ctx?: NavHistoryContextValue | null): strin
     2,
   );
 }
+
+export function auditUseNavigationHistoryGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.use_navigation_history.governance.v1',
+      phase: 'P180',
+      unavailableSummary: formatNavHistorySummary(null),
+    },
+    null,
+    2,
+  );
+}
