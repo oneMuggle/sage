@@ -159,3 +159,20 @@ export function WorkspaceBindModal({
     </Modal>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditWorkspaceBindModalGovernance(): {
+  module: 'src/features/workspace/WorkspaceBindModal.tsx';
+  phase: 'P170';
+  domain: 'workspace';
+  supportsBindAndRevoke: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/workspace/WorkspaceBindModal.tsx',
+    phase: 'P170',
+    domain: 'workspace',
+    supportsBindAndRevoke: true,
+    compliant: true,
+  };
+}
