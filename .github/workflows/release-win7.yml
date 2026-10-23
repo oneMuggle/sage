@@ -49,11 +49,15 @@ jobs:
 
       - name: Sync version from git tag to package.json
         # electron-builder reads version from package.json, but git tag is the source of truth.
-        # Tag format: v0.4.9-alpha.62-win7 → package.json version: 0.4.9-alpha.62
+        # Tag format: v0.4.9-alpha.62-win7 → package.json version: 0.4.9-alpha.62-win7
+        # The '-win7' suffix is a valid semver prerelease identifier and is intentionally
+        # preserved so electron-builder's artifactName expands to Sage-Setup-*-win7.exe
+        # (matching the release notes documentation).
         run: |
           $tagVersion = "${{ github.ref_name }}"
-          # Remove 'v' prefix and '-win7' suffix: v0.4.9-alpha.62-win7 → 0.4.9-alpha.62
-          $pkgVersion = $tagVersion -replace '^v', '' -replace '-win7$', ''
+          # Remove 'v' prefix only; keep '-win7' as valid semver prerelease:
+          # v0.4.9-alpha.62-win7 → 0.4.9-alpha.62-win7
+          $pkgVersion = $tagVersion -replace '^v', ''
           Write-Host "Syncing package.json version to $pkgVersion (from tag $tagVersion)"
           npm version $pkgVersion --no-git-tag-version --allow-same-version
           # Verify
