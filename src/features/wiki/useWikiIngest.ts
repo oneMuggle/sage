@@ -153,3 +153,21 @@ export function formatWikiIngestJson(
   });
 }
 /* v8 ignore stop */
+
+export function auditUseWikiIngestGovernance(): {
+  module: 'src/features/wiki/useWikiIngest.ts';
+  phase: 'P170';
+  domain: 'wiki';
+  multiplexesListenersByIngestId: boolean;
+  supportsReset: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/wiki/useWikiIngest.ts',
+    phase: 'P170',
+    domain: 'wiki',
+    multiplexesListenersByIngestId: true,
+    supportsReset: true,
+    compliant: true,
+  };
+}

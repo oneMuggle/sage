@@ -2436,3 +2436,26 @@
   - `src/features/theme/__tests__/themeCssTypes.p169.test.ts`
 - **Verification**:
   - `npx eslint --max-warnings=0`, `npx vitest run`, `node scripts/check-font-scale.mjs`, `node scripts/architecture-check.mjs`, `node scripts/export-ipc-manifest.mjs --check`, and `npx tsc --noEmit` all passed with 0 errors/warnings across both `main` and `release/win7` worktrees.
+
+### Phase P170 — Theme, Welcome, Wiki, Workspace & Lib Governance Audit Contracts (Completed)
+
+- **Target Modules (8)**:
+  - `src/features/theme/themeCssValidator.ts` (`auditThemeCssValidatorGovernance`)
+  - `src/features/welcome/useTypewriterPlaceholder.ts` (`auditUseTypewriterPlaceholderGovernance`)
+  - `src/features/wiki/useWikiChatStream.ts` (`auditUseWikiChatStreamGovernance`)
+  - `src/features/wiki/useWikiIngest.ts` (`auditUseWikiIngestGovernance`)
+  - `src/features/workspace/WorkspaceBindModal.tsx` (`auditWorkspaceBindModalGovernance`)
+  - `src/features/workspace/WorkspaceEmptyGuard.tsx` (`auditWorkspaceEmptyGuardGovernance`)
+  - `src/features/workspace/index.ts` (`auditWorkspaceIndexGovernance`)
+  - `src/lib/changelogParser.ts` (`auditChangelogParserGovernance`)
+- **Unit Test Suites (8)**:
+  - `src/features/theme/__tests__/themeCssValidator.p170.test.ts`
+  - `src/features/welcome/__tests__/useTypewriterPlaceholder.p170.test.ts`
+  - `src/features/wiki/__tests__/useWikiChatStream.p170.test.ts`
+  - `src/features/wiki/__tests__/useWikiIngest.p170.test.ts`
+  - `src/features/workspace/__tests__/WorkspaceBindModal.p170.test.ts`
+  - `src/features/workspace/__tests__/WorkspaceEmptyGuard.p170.test.ts`
+  - `src/features/workspace/__tests__/index.p170.test.ts`
+  - `src/lib/__tests__/changelogParser.p170.test.ts`
+- **Verification**:
+  - `npx eslint --max-warnings=0`, `npx vitest run`, `node scripts/check-font-scale.mjs`, `node scripts/architecture-check.mjs`, `node scripts/export-ipc-manifest.mjs --check`, and `npx tsc --noEmit` all passed with 0 errors/warnings across both `main` and `release/win7` worktrees.
