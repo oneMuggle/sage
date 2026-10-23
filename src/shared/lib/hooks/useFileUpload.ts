@@ -253,3 +253,16 @@ export function formatFileUploadJson(
     2,
   );
 }
+
+export function auditUseFileUploadGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.hooks.use_file_upload.governance.v1',
+      phase: 'P181',
+      supportedExtensionCount: CHAT_DOCUMENT_EXTENSIONS.size,
+      idleSummary: formatFileUploadSummary([], [], false),
+    },
+    null,
+    2,
+  );
+}

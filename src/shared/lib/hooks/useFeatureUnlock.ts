@@ -162,3 +162,18 @@ export function formatFeatureUnlockJson(featureKey: string): string {
     2,
   );
 }
+
+export function auditUseFeatureUnlockGovernance(): string {
+  return JSON.stringify(
+    {
+      schema: 'sage.shared.lib.hooks.use_feature_unlock.governance.v1',
+      phase: 'P181',
+      storageKey: FEATURE_UNLOCK_STORAGE_KEY,
+      unlockEvent: FEATURE_UNLOCK_EVENT,
+      lockEvent: FEATURE_UNLOCK_LOCK_EVENT,
+      sampleSummary: formatFeatureUnlockSummary('p181.probe'),
+    },
+    null,
+    2,
+  );
+}
