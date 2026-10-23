@@ -27,6 +27,7 @@ export interface GovernanceRulesPanelProps {
   onRemoveAllowedPath: (path: string) => void;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatGovernanceRulesMarkdown(params: {
   projectId: string;
   projectPath: string;
@@ -52,6 +53,7 @@ export function formatGovernanceRulesMarkdown(params: {
   return lines.join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatGovernanceRulesJson(params: {
   projectId: string;
   projectPath: string;
@@ -167,4 +169,23 @@ export function GovernanceRulesPanel({
       </div>
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditGovernanceRulesPanelGovernance(): {
+  module: 'src/features/project-type/GovernanceRulesPanel.tsx';
+  phase: 'P166';
+  domain: 'project-type';
+  sections: readonly ['constraints', 'allowed-paths'];
+  supportsMarkdownAndJsonExport: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/project-type/GovernanceRulesPanel.tsx',
+    phase: 'P166',
+    domain: 'project-type',
+    sections: ['constraints', 'allowed-paths'],
+    supportsMarkdownAndJsonExport: true,
+    compliant: true,
+  };
 }

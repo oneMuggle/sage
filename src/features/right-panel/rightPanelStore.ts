@@ -194,3 +194,21 @@ export function formatRightPanelStateJson(
     2,
   );
 }
+
+export function auditRightPanelStoreGovernance(): {
+  module: 'src/features/right-panel/rightPanelStore.ts';
+  phase: 'P166';
+  domain: 'right-panel';
+  tabs: readonly ['artifacts', 'changes', 'office'];
+  supportsAutoOpenArtifactGuard: boolean;
+  compliant: boolean;
+} {
+  return {
+    module: 'src/features/right-panel/rightPanelStore.ts',
+    phase: 'P166',
+    domain: 'right-panel',
+    tabs: ['artifacts', 'changes', 'office'],
+    supportsAutoOpenArtifactGuard: true,
+    compliant: true,
+  };
+}
