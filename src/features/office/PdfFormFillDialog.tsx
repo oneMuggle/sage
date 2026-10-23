@@ -197,3 +197,16 @@ export function exportPdfFormFillDialogAuditJson(
 ): string {
   return JSON.stringify(auditPdfFormFillDialog(fieldCount, isFilling), null, 2);
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditPdfFormFillDialogGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/PdfFormFillDialog.tsx',
+    phase: 'P165',
+    status: 'ready',
+  };
+}

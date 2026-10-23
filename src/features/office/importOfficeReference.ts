@@ -209,3 +209,15 @@ export function formatOfficeImportRefJson(ref: ChatOfficeRef): string {
     2,
   );
 }
+
+export function auditImportOfficeReferenceGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/importOfficeReference.ts',
+    phase: 'P165',
+    status: 'ready',
+  };
+}
