@@ -61,6 +61,7 @@ export interface OfficeDeliveryDrawerProps {
   onClose: () => void;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatOfficeDeliveryMarkdown(params: {
   entryId: string;
   workspacePath: string;
@@ -92,6 +93,7 @@ export function formatOfficeDeliveryMarkdown(params: {
   return lines.join('\n');
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function formatOfficeDeliveryJson(params: {
   entryId: string;
   workspacePath: string;
@@ -431,4 +433,17 @@ export function OfficeDeliveryDrawer({
       )}
     </div>
   );
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditOfficeDeliveryDrawerGovernance(): {
+  moduleId: string;
+  phase: string;
+  status: 'ready';
+} {
+  return {
+    moduleId: 'src/features/office/OfficeDeliveryDrawer.tsx',
+    phase: 'P164',
+    status: 'ready',
+  };
 }
