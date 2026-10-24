@@ -59,7 +59,7 @@
     "backend/api/project_ai_routes.py": 862,
     "src/shared/api/projectApi.ts": 1031,
     "src/shared/api/projectApiTypes.ts": 944,
-    "src/widgets/chat/ChatInput.tsx": 838,
+    "src/widgets/chat/ChatInput.tsx": 844,
     "src/features/send-message/useChat.ts": 831,
     "backend/tests/unit/test_design_routes.py": 975,
     "backend/adapters/out/skill/inproc.py": 848
