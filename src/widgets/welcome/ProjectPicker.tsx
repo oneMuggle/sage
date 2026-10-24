@@ -7,7 +7,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../shared/ui/Select';
+} from '../../shared/ui/Select/Select';
 import { Input } from '../../shared/ui/Input';
 
 export interface ProjectOption {
@@ -37,7 +37,7 @@ export function ProjectPicker({ value, onChange, projects }: ProjectPickerProps)
   const selectedProject = projects.find((p) => p.id === value);
 
   return (
-    <Select value={value ?? 'none'} onValueChange={(val) => onChange(val === 'none' ? null : val)}>
+    <Select value={value ?? 'none'} onValueChange={(val: string) => onChange(val === 'none' ? null : val)}>
       <SelectTrigger aria-label="选择项目" className="w-48">
         <SelectValue placeholder="选择项目">
           {selectedProject ? selectedProject.name : '选择项目'}

@@ -140,7 +140,7 @@ export function Welcome() {
       if (endpoint.discoveredModels) {
         for (const model of endpoint.discoveredModels) {
           result.push({
-            modelId: model.modelId,
+            modelId: model.id,
             endpointName: endpoint.name,
           });
         }

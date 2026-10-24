@@ -4,7 +4,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../shared/ui/Select';
+} from '../../shared/ui/Select/Select';
 
 export interface ModelOption {
   modelId: string;
@@ -24,7 +24,7 @@ export function ModelPicker({ value, onChange, models, globalModelId }: ModelPic
   return (
     <Select
       value={value ?? 'global'}
-      onValueChange={(val) => onChange(val === 'global' ? null : val)}
+      onValueChange={(val: string) => onChange(val === 'global' ? null : val)}
     >
       <SelectTrigger aria-label="选择模型" className="w-56">
         <SelectValue placeholder="选择模型">
