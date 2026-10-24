@@ -12,8 +12,20 @@
  * Created 2026-10-18 as part of Scheme 3 (ProjectSection split).
  */
 
-import { AlertTriangle, ChevronDown, ChevronRight, Folder, Plus } from 'lucide-react';
-import { useState } from 'react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Folder,
+  FolderOpen,
+  MoreHorizontal,
+  Play,
+  Plus,
+} from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { ProjectTypeBadge } from '../../../features/project-type/ProjectTypeBadge';
 import { getArchetypeBlueprint } from '../../../features/project-type/archetypeBlueprints';
@@ -37,13 +49,11 @@ interface WorkbenchProjectListProps {
 
 export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProps) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const currentSessionId = useStore((s) => s.currentSessionId);
   const [copiedPathId, setCopiedPathId] = useState<string | null>(null);
-  const [savedL3Ids, setSavedL3Ids] = useState<Set<string>>(new Set());
-  const [savedL4Ids, setSavedL4Ids] = useState<Set<string>>(new Set());
-  const [createdMsIds, setCreatedMsIds] = useState<Set<string>>(new Set());
-  const [createdL2Ids, setCreatedL2Ids] = useState<Set<string>>(new Set());
-  const [scaffoldedIds, setScaffoldedIds] = useState<Set<string>>(new Set());
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const data = useProjectSectionData({ onOpenSession });
 
   const {
@@ -260,169 +270,153 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                     {project.sessionCount}
                   </span>
                 )}
-                <div className="hidden group-hover:flex items-center gap-0.5">
+                <div className="hidden group-hover:flex items-center gap-1">
+                  {/* Primary action: start or create session */}
                   <button
                     type="button"
-                    data-testid={`workbench-row-to-milestone-${project.id}`}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (createdMsIds.has(project.id)) return;
-                      setCreatedMsIds((prev) => new Set(prev).add(project.id));
-                      if (typeof projectApi?.createMilestone === 'function') {
-                        try {
-                          await projectApi.createMilestone(project.id, {
-                            title: `[项目治理复核] ${project.name}`,
-                            description: `工作区路径：${project.path}`,
-                            status: 'pending',
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {createdMsIds.has(project.id) ? '已建里程碑' : '+里程碑'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`workbench-row-to-constraint-${project.id}`}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (createdL2Ids.has(project.id)) return;
-                      setCreatedL2Ids((prev) => new Set(prev).add(project.id));
-                      if (typeof projectApi?.createConstraint === 'function') {
-                        try {
-                          await projectApi.createConstraint(project.id, {
-                            category: 'workspace_guard',
-                            content: `[项目边界核查] 变更 [${project.name}] (${project.path}) 时严格遵守形态护栏`,
-                            triggerPattern: 'always',
-                            priority: 8,
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {createdL2Ids.has(project.id) ? '已转L2' : '+L2'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`workbench-row-scaffold-${project.id}`}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (scaffoldedIds.has(project.id)) return;
-                      setScaffoldedIds((prev) => new Set(prev).add(project.id));
-                      if (typeof projectApi?.scaffold === 'function') {
-                        try {
-                          await projectApi.scaffold(project.id, {
-                            projectType: (project.projectType ?? project.detectedType ?? 'coding') as ProjectType,
-                            createDirectories: true,
-                            createSageMd: true,
-                            importDefaultConstraints: true,
-                            seedDefaultMilestones: true,
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {scaffoldedIds.has(project.id) ? '已脚手架' : '+脚手架'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`workbench-row-to-l3-${project.id}`}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (savedL3Ids.has(project.id)) return;
-                      setSavedL3Ids((prev) => new Set(prev).add(project.id));
-                      if (typeof projectApi?.confirmKnowledge === 'function') {
-                        try {
-                          await projectApi.confirmKnowledge(project.id, {
-                            entries: [
-                              {
-                                category: 'architecture',
-                                content: `工作台项目档案 [${project.name}] (${project.path}) · 形态=${project.projectType ?? 'coding'}`,
-                                importance: 7,
-                                sourceMessageIds: [],
-                                reasoning: '工作台项目行一键沉淀至 L3 画像',
-                              },
-                            ],
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {savedL3Ids.has(project.id) ? '已存L3' : '+L3'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`workbench-row-to-l4-${project.id}`}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      if (savedL4Ids.has(project.id)) return;
-                      setSavedL4Ids((prev) => new Set(prev).add(project.id));
-                      if (typeof projectApi?.addMaterial === 'function') {
-                        try {
-                          await projectApi.addMaterial(project.id, {
-                            content: `# 工作台项目档案：${project.name}\n- 路径：${project.path}\n- 形态：${project.projectType ?? 'coding'}`,
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {savedL4Ids.has(project.id) ? '已存L4' : '+L4'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`workbench-row-copy-path-${project.id}`}
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      try {
-                        await navigator.clipboard?.writeText(project.path);
-                        setCopiedPathId(project.id);
-                        setTimeout(() => setCopiedPathId(null), 1500);
-                      } catch {
-                        // ignore in test/offline mode
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {copiedPathId === project.id ? '已复制' : '复制路径'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="project-new-chat"
-                    aria-label={t('sider.project.new_chat')}
-                    title={t('sider.project.new_chat')}
+                    data-testid="project-primary-action"
+                    aria-label={
+                      project.sessionCount > 0
+                        ? t('sider.project.new_chat')
+                        : t('sider.project.new_chat')
+                    }
+                    title={project.sessionCount > 0 ? '开始会话' : '新建会话'}
                     disabled={busy}
                     onClick={(e) => {
                       e.stopPropagation();
-                      void handleNewChatInProject(project);
+                      if (project.sessionCount > 0) {
+                        // Open most recent session
+                        const sessions = subSessions[project.id];
+                        if (sessions && sessions.length > 0) {
+                          onOpenSession(sessions[0].id);
+                        } else {
+                          void handleNewChatInProject(project);
+                        }
+                      } else {
+                        void handleNewChatInProject(project);
+                      }
                     }}
-                    className="inline-flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded bg-primary/10 border border-primary/30 px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/15 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Play className="w-3 h-3" />
+                    {project.sessionCount > 0 ? '会话' : '新建'}
                   </button>
-                  <TwoStepDelete
-                    data-testid="project-remove"
-                    label={t('sider.project.remove')}
-                    armedLabel={t('sider.project.remove_confirm')}
-                    disabled={busy}
-                    icon={<FolderMinusIcon />}
-                    onConfirm={() => void handleRemoveProject(project)}
-                    className="!h-5 !w-5 !px-1 [&>svg]:!h-3 [&>svg]:!w-3"
-                  />
+
+                  {/* ··· More actions menu */}
+                  <div className="relative" ref={menuOpenId === project.id ? menuRef : null}>
+                    <button
+                      type="button"
+                      data-testid={`workbench-row-menu-${project.id}`}
+                      aria-label="更多操作"
+                      aria-expanded={menuOpenId === project.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpenId((prev) => (prev === project.id ? null : project.id));
+                      }}
+                      className="inline-flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text hover:bg-bg-hover transition-colors"
+                    >
+                      <MoreHorizontal className="w-3.5 h-3.5" />
+                    </button>
+                    {menuOpenId === project.id && (
+                      <>
+                        {/* Backdrop to close menu on outside click */}
+                        <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)} />
+                        <div
+                          className="absolute right-0 top-full mt-0.5 z-20 min-w-[160px] rounded-md border border-border bg-card shadow-lg py-1"
+                          data-testid={`workbench-row-menu-dropdown-${project.id}`}
+                        >
+                          <MenuItem
+                            icon={<FolderOpen className="w-3.5 h-3.5" />}
+                            label="项目设置"
+                            onClick={() => {
+                              setMenuOpenId(null);
+                              navigate(`/projects/governance/${project.id}`);
+                            }}
+                          />
+                          <MenuItem
+                            label="添加里程碑"
+                            onClick={async () => {
+                              setMenuOpenId(null);
+                              if (typeof projectApi?.createMilestone === 'function') {
+                                try {
+                                  await projectApi.createMilestone(project.id, {
+                                    title: `[项目复核] ${project.name}`,
+                                    description: `工作区路径：${project.path}`,
+                                    status: 'pending',
+                                  });
+                                } catch {
+                                  // ignore in test/offline mode
+                                }
+                              }
+                            }}
+                          />
+                          <MenuItem
+                            label="添加项目规则"
+                            onClick={async () => {
+                              setMenuOpenId(null);
+                              if (typeof projectApi?.createConstraint === 'function') {
+                                try {
+                                  await projectApi.createConstraint(project.id, {
+                                    category: 'workspace_guard',
+                                    content: `[项目边界] ${project.name} (${project.path})`,
+                                    triggerPattern: 'always',
+                                    priority: 8,
+                                  });
+                                } catch {
+                                  // ignore in test/offline mode
+                                }
+                              }
+                            }}
+                          />
+                          <MenuItem
+                            label="初始化项目目录"
+                            onClick={async () => {
+                              setMenuOpenId(null);
+                              if (typeof projectApi?.scaffold === 'function') {
+                                try {
+                                  await projectApi.scaffold(project.id, {
+                                    projectType: (project.projectType ??
+                                      project.detectedType ??
+                                      'coding') as ProjectType,
+                                    createDirectories: true,
+                                    createSageMd: true,
+                                    importDefaultConstraints: true,
+                                    seedDefaultMilestones: true,
+                                  });
+                                } catch {
+                                  // ignore in test/offline mode
+                                }
+                              }
+                            }}
+                          />
+                          <MenuItem
+                            icon={<Copy className="w-3.5 h-3.5" />}
+                            label={copiedPathId === project.id ? '已复制' : '复制路径'}
+                            onClick={async () => {
+                              setMenuOpenId(null);
+                              try {
+                                await navigator.clipboard?.writeText(project.path);
+                                setCopiedPathId(project.id);
+                                setTimeout(() => setCopiedPathId(null), 1500);
+                              } catch {
+                                // ignore in test/offline mode
+                              }
+                            }}
+                          />
+                          <div className="border-t border-border my-1" />
+                          <MenuItem
+                            icon={<FolderMinusIcon />}
+                            label="移除项目"
+                            destructive
+                            onClick={async () => {
+                              setMenuOpenId(null);
+                              await handleRemoveProject(project);
+                            }}
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
               {renderSubSessions(project)}
@@ -458,5 +452,29 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
         })
       )}
     </div>
+  );
+}
+
+/* ── MenuItem helper ─────────────────────────────────────────────── */
+
+interface MenuItemProps {
+  label: string;
+  icon?: ReactNode;
+  destructive?: boolean;
+  onClick: () => void;
+}
+
+function MenuItem({ label, icon, destructive, onClick }: MenuItemProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-ui-2xs transition-colors ${
+        destructive ? 'text-destructive hover:bg-destructive/10' : 'text-foreground hover:bg-muted'
+      }`}
+    >
+      {icon && <span className="shrink-0">{icon}</span>}
+      {label}
+    </button>
   );
 }
