@@ -20,7 +20,12 @@
 > 项禁用）；R95 起审批「记住我的选择」可显式选精确工具或整个
 > 插件，待审批请求的 `plugin_name` 只来自桥接已发布记录，客户
 > 端只传 `remember_scope`，`plugin__<plugin>__*` 权限规则只能
-> 由服务端校验归属后派生。开发步骤请先看
+> 由服务端校验归属后派生；R96 起 `PermissionEnforcer` 匹配这
+> 两种受限插件通配时改用执行边界从桥接当前发布记录得到的权威
+> `plugin_name`，不再只做字符串前缀 fnmatch，legacy agent 与
+> `InprocToolAdapter` 共用该口径，身份未知或不匹配时该通配不
+> 命中（普通字符串规则与 profile allowlist 的字符串 matcher 不
+> 在本轮变更内）。开发步骤请先看
 > [插件开发：30 分钟跑通第一个插件](../user-manual/21-plugin-development.md)。
 
 ## 概述
