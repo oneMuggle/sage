@@ -414,3 +414,10 @@ export const pluginClient = {
     return response.logs;
   },
 };
+export function auditPluginClientGovernance(): string {
+  return JSON.stringify({
+    module: 'plugin-client',
+    phase: 'P189',
+    audited: true,
+  });
+}

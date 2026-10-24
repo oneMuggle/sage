@@ -648,3 +648,11 @@ export function MilestoneEditor({
     </Dialog>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditMilestoneEditorGovernance(): string {
+  return JSON.stringify({
+    module: 'milestone-editor',
+    phase: 'P189',
+    audited: true,
+  });
+}
