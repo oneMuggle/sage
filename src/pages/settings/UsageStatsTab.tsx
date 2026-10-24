@@ -18,6 +18,7 @@ import {
   type UsageTrend,
 } from '../../shared/api/usageApi';
 import { Card } from '../../shared/ui';
+import { monotoneAreaPath } from '../../widgets/settings/chartUtils';
 
 const RANGE_OPTIONS: { value: UsageRange; label: string }[] = [
   { value: 'today', label: '今天' },
@@ -202,16 +203,14 @@ function TrendChart({ trend }: { trend: UsageTrend }) {
   const chartH = height - padY * 2;
 
   const xStep = series.length > 1 ? chartW / (series.length - 1) : chartW;
+  const baselineY = padY + chartH;
 
   const makeArea = (getter: (p: (typeof series)[0]) => number) => {
-    const points = series.map((p, i) => {
-      const x = padX + i * xStep;
-      const y = padY + chartH - (getter(p) / maxTokens) * chartH;
-      return `${x},${y}`;
-    });
-    const first = `${padX},${padY + chartH}`;
-    const last = `${padX + (series.length - 1) * xStep},${padY + chartH}`;
-    return `M${first} L${points.join(' L')} L${last} Z`;
+    const points = series.map((p, i) => ({
+      x: padX + i * xStep,
+      y: padY + chartH - (getter(p) / maxTokens) * chartH,
+    }));
+    return monotoneAreaPath(points, baselineY);
   };
 
   const promptArea = makeArea((p) => p.prompt_tokens);

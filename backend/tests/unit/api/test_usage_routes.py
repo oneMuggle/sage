@@ -260,7 +260,7 @@ async def test_trend_day_bucket_and_hit_rate(monkeypatch):
     assert out["bucket"] == "day"
     assert len(out["series"]) == 1
     point = out["series"][0]
-    assert point["ts"].endswith("T00:00:00Z")
+    assert point["ts"].endswith("T00:00:00")
     assert point["requests"] == 1
     assert point["prompt_tokens"] == 100
     assert point["completion_tokens"] == 50

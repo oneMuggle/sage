@@ -17,6 +17,7 @@ import { useMemo } from 'react';
 
 import type { UsageTrend, UsageTrendPoint } from '../../shared/api/usageApi';
 import { useI18n } from '../../shared/lib/i18n';
+import { monotonePath } from './chartUtils';
 
 const SVG_W = 600;
 const SVG_H = 180;
@@ -28,12 +29,12 @@ const PAD_B = 28;
 function formatTick(ts: string, bucket: 'hour' | 'day', idx: number, total: number): string {
   if (!ts) return '';
   if (bucket === 'hour') {
-    // "2026-09-09T07:00:00Z" → "07:00"
+    // "2026-09-09T07:00:00" → "07:00" (本地 ISO, 无 Z 后缀)
     const t = ts.indexOf('T');
     if (t < 0) return '';
     return ts.slice(t + 1, t + 6);
   }
-  // day: "2026-09-09T00:00:00Z" → "09-09"
+  // day: "2026-09-09T00:00:00" → "09-09" (本地 ISO)
   if (idx === 0 || idx === total - 1) {
     // day bucket ISO 格式固定 10 字符宽 ("YYYY-MM-DD"), 直接 slice 5..10
     return ts.length >= 10 ? ts.slice(5, 10) : '';
@@ -47,11 +48,6 @@ function safeMax(values: number[]): number {
     if (v > m) m = v;
   }
   return m === 0 ? 1 : m;
-}
-
-function buildPath(points: Array<{ x: number; y: number }>): string {
-  if (points.length === 0) return '';
-  return points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ');
 }
 
 interface UsageTrendChartProps {
@@ -135,8 +131,8 @@ export function UsageTrendChart({ trend, loading }: UsageTrendChartProps) {
     );
   }
 
-  const reqPath = buildPath(layout.reqPoints);
-  const costPath = buildPath(layout.costPoints);
+  const reqPath = monotonePath(layout.reqPoints);
+  const costPath = monotonePath(layout.costPoints);
 
   /* v8 ignore start */
 
