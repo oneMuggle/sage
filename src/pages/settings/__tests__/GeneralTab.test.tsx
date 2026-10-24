@@ -248,6 +248,42 @@ describe('GeneralTab remembered rules manager (R97)', () => {
     expect(screen.getByTestId('permission-rule-delete-1')).toBeInTheDocument();
   });
 
+  it('badges rules whose plugin was uninstalled or has no record', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__demo__*',
+        decision: 'deny',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'ask',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+      {
+        tool_pattern: 'plugin__live__*',
+        decision: 'allow',
+        plugin_name: 'live',
+        plugin_status: 'enabled',
+      },
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rule-plugin-status-0')).toHaveTextContent(
+        '插件已卸载',
+      );
+    });
+    expect(screen.getByTestId('permission-rule-plugin-status-1')).toHaveTextContent(
+      '插件无记录',
+    );
+    expect(screen.queryByTestId('permission-rule-plugin-status-2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('permission-rule-plugin-status-3')).not.toBeInTheDocument();
+  });
+
   it('deletes a rule and adopts the server-returned list', async () => {
     mocks.listRules.mockResolvedValue([
       { tool_pattern: 'bash', decision: 'deny' },
