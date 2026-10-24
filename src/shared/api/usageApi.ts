@@ -175,7 +175,8 @@ export async function fetchSessionUsage(sessionId: string): Promise<SessionUsage
 
 /** L8 PR-C (2026-09-09): 趋势图时序点 (单桶聚合) */
 export interface UsageTrendPoint {
-  /** 桶起始 UTC ISO8601, 形如 "2026-09-09T07:00:00Z" (hour) 或 "2026-09-09T00:00:00Z" (day) */
+  /** 桶起始本地 ISO8601 (无时区后缀), 形如 "2026-09-09T07:00:00" (hour) 或 "2026-09-09T00:00:00" (day).
+   *  JS Date.parse 对无时区 ISO 按 local 解析, 与后端 strftime(..., 'localtime') 一致. */
   ts: string;
   requests: number;
   prompt_tokens: number;

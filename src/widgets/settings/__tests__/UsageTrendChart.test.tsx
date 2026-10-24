@@ -26,7 +26,7 @@ const SAMPLE_TREND: UsageTrend = {
   bucket: 'hour',
   series: [
     {
-      ts: '2026-09-09T00:00:00Z',
+      ts: '2026-09-09T00:00:00',
       requests: 1,
       prompt_tokens: 100,
       completion_tokens: 20,
@@ -34,7 +34,7 @@ const SAMPLE_TREND: UsageTrend = {
       cache_hit_rate: 0.4,
     },
     {
-      ts: '2026-09-09T06:00:00Z',
+      ts: '2026-09-09T06:00:00',
       requests: 5,
       prompt_tokens: 500,
       completion_tokens: 100,
@@ -42,7 +42,7 @@ const SAMPLE_TREND: UsageTrend = {
       cache_hit_rate: 0.5,
     },
     {
-      ts: '2026-09-09T12:00:00Z',
+      ts: '2026-09-09T12:00:00',
       requests: 12,
       prompt_tokens: 1200,
       completion_tokens: 240,
@@ -50,7 +50,7 @@ const SAMPLE_TREND: UsageTrend = {
       cache_hit_rate: 0.6,
     },
     {
-      ts: '2026-09-09T18:00:00Z',
+      ts: '2026-09-09T18:00:00',
       requests: 8,
       prompt_tokens: 800,
       completion_tokens: 160,
@@ -112,7 +112,7 @@ describe('UsageTrendChart', () => {
       bucket: 'day',
       series: [
         {
-          ts: '2026-08-10T00:00:00Z',
+          ts: '2026-08-10T00:00:00',
           requests: 2,
           prompt_tokens: 200,
           completion_tokens: 40,
@@ -120,7 +120,7 @@ describe('UsageTrendChart', () => {
           cache_hit_rate: 0.3,
         },
         {
-          ts: '2026-08-25T00:00:00Z',
+          ts: '2026-08-25T00:00:00',
           requests: 4,
           prompt_tokens: 400,
           completion_tokens: 80,
@@ -128,7 +128,7 @@ describe('UsageTrendChart', () => {
           cache_hit_rate: 0.35,
         },
         {
-          ts: '2026-09-09T00:00:00Z',
+          ts: '2026-09-09T00:00:00',
           requests: 6,
           prompt_tokens: 600,
           completion_tokens: 120,
