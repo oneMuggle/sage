@@ -51,6 +51,12 @@ _ALLOWED_GENERAL_FIELDS = {
     "logTimezone",
     "maxContext",
     "autoContext",
+    # P119 Config Advisor (Phase 1.2): LLM 重试 / 超时字段 ——
+    # 让 LLM 能基于诊断数据调整自身可靠性相关参数
+    "llmRetryMaxAttempts",
+    "llmRetryBaseDelayS",
+    "llmRetryMaxDelayS",
+    "llmTotalTimeoutS",
 }
 
 _VALID_READ_SECTIONS = {"all", "orch", "agents", "general", "model_selections"}
@@ -117,6 +123,24 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
         value = updates[key]
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 10_000_000:
             return f"{key} 必须是 1 到 10000000 之间的整数，收到: {value!r}"
+    # P119 Config Advisor (Phase 1.2): LLM 重试 / 超时字段类型与范围校验
+    if "llmRetryMaxAttempts" in updates:
+        v = updates["llmRetryMaxAttempts"]
+        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 20:
+            return "llmRetryMaxAttempts 必须是 0 到 20 之间的整数，收到: {!r}".format(v)
+    for k in ("llmRetryBaseDelayS", "llmRetryMaxDelayS"):
+        if k in updates:
+            v = updates[k]
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 < v <= 600:  # noqa: UP038
+                return "{} 必须是大于 0 且不超过 600 的数字，收到: {!r}".format(k, v)
+    if "llmTotalTimeoutS" in updates:
+        v = updates["llmTotalTimeoutS"]
+        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 86400:
+            return "llmTotalTimeoutS 必须是 0 到 86400 之间的整数（0=不限），收到: {!r}".format(v)
+    # 跨字段一致性：baseDelayS 不能大于 maxDelayS
+    if "llmRetryBaseDelayS" in updates and "llmRetryMaxDelayS" in updates:
+        if updates["llmRetryBaseDelayS"] > updates["llmRetryMaxDelayS"]:
+            return "llmRetryBaseDelayS 不能大于 llmRetryMaxDelayS"
     return None
 
 

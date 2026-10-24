@@ -9,7 +9,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from backend.chat.env_context import build_environment_block, build_skills_block
+from backend.chat.env_context import (
+    build_configuration_summary_block,
+    build_environment_block,
+    build_skills_block,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -111,3 +115,121 @@ def test_skills_block_truncates_at_char_budget(monkeypatch):
     block = build_skills_block()
     assert len(block) < 4000
     assert "其余技能已省略" in block
+
+
+# ---- build_configuration_summary_block (P119 Config Advisor) ----
+
+
+def _patch_settings_repo(monkeypatch, payload):
+    """Helper: monkeypatch SettingsRepository().get_json("app_settings") 返回 payload."""
+
+    class _FakeRepo:
+        def get_json(self, key):
+            assert key == "app_settings"
+            return payload
+
+    import backend.chat.env_context as env_mod
+
+    # 拦截 env_context 内部的延迟 import: SettingsRepository 是在函数体内
+    # from backend.data.settings_repo import SettingsRepository，因此直接 patch
+    # 源模块的类即可。
+    import backend.data.settings_repo as settings_mod
+
+    monkeypatch.setattr(settings_mod, "SettingsRepository", _FakeRepo)
+    # 让 env_mod 的延迟 import 走到被 monkeypatch 的源模块
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "backend.data.settings_repo",
+        settings_mod,
+    )
+
+
+def test_configuration_block_full_shape(monkeypatch):
+    _patch_settings_repo(
+        monkeypatch,
+        {
+            "orch": {
+                "maxLaneIterations": 25,
+                "maxSubagentIterations": 6,
+                "maxConcurrentSubagents": 4,
+                "maxRetries": 3,
+            },
+            "temperature": 0.7,
+            "streaming": True,
+            "autoMemory": True,
+            "timezone": "Asia/Shanghai",
+            "modelSelections": {
+                "chat": {
+                    "modelId": "claude-sonnet-4-6",
+                    "providerId": "anthropic",
+                },
+            },
+            # 故意放敏感字段，验证不会出现在输出里
+            "endpoints": [
+                {"id": "e1", "apiKey": "sk-SECRET-1234567890", "provider": "anthropic"},
+            ],
+        },
+    )
+
+    block = build_configuration_summary_block()
+    assert block.startswith("<current-configuration>")
+    assert block.endswith("</current-configuration>")
+    # orch section
+    assert "## Orchestration" in block
+    assert "maxLaneIterations: 25" in block
+    assert "maxRetries: 3" in block
+    # general section
+    assert "## General Settings" in block
+    assert "temperature: 0.7" in block
+    assert "timezone: Asia/Shanghai" in block
+    # model selections
+    assert "## Model Selections" in block
+    assert "chat: claude-sonnet-4-6 (via anthropic)" in block
+    # 脱敏验证：apiKey 绝对不能出现
+    assert "sk-SECRET" not in block
+    assert "apiKey" not in block
+    assert "endpoints" not in block.lower() or "endpoints" not in block
+    # 末尾提示语
+    assert "仅在用户主动询问" in block
+
+
+def test_configuration_block_omits_empty_sections(monkeypatch):
+    # 只有 general 字段，没有 orch 也没有 modelSelections
+    _patch_settings_repo(monkeypatch, {"temperature": 0.5, "streaming": False})
+    block = build_configuration_summary_block()
+    assert "## Orchestration" not in block
+    assert "## Model Selections" not in block
+    assert "## General Settings" in block
+    assert "temperature: 0.5" in block
+
+
+def test_configuration_block_empty_payload_returns_empty(monkeypatch):
+    _patch_settings_repo(monkeypatch, {})
+    assert build_configuration_summary_block() == ""
+
+
+def test_configuration_block_non_dict_returns_empty(monkeypatch):
+    _patch_settings_repo(monkeypatch, None)
+    assert build_configuration_summary_block() == ""
+
+
+def test_configuration_block_fail_safe_on_repo_error(monkeypatch):
+    class _BoomRepo:
+        def get_json(self, key):
+            raise RuntimeError("database locked")
+
+    import backend.data.settings_repo as settings_mod
+
+    monkeypatch.setattr(settings_mod, "SettingsRepository", _BoomRepo)
+    # fail-safe: 异常被捕获，返回空串，不抛
+    assert build_configuration_summary_block() == ""
+
+
+def test_configuration_block_model_selections_string_form(monkeypatch):
+    # modelSelections 的 value 也可能是纯字符串（旧格式兼容）
+    _patch_settings_repo(
+        monkeypatch,
+        {"modelSelections": {"chat": "gpt-4o"}},
+    )
+    block = build_configuration_summary_block()
+    assert "chat: gpt-4o" in block

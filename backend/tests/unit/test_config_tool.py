@@ -208,3 +208,99 @@ def test_update_sage_config_rejects_forbidden_fields():
     )
     assert res2.success is False
     assert "apiKey" in res2.error
+
+
+# ---- P119 Config Advisor (Phase 1.2): LLM 重试 / 超时字段 ----
+
+
+def _fake_repo_for_general_updates(initial=None):
+    """返回一个 FakeSettingsRepo 类 + saved_settings 收集器。"""
+    initial = initial or {}
+    saved = {}
+
+    class FakeRepo:
+        def get_json(self, key):
+            if key == "app_settings":
+                return dict(initial)
+            return None
+
+        def set_json(self, key, value):
+            saved[key] = value
+
+    return FakeRepo, saved
+
+
+def test_update_general_accepts_llm_retry_fields(monkeypatch):
+    tool = UpdateSageConfigTool()
+    FakeRepo, saved = _fake_repo_for_general_updates()
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeRepo)
+
+    res = tool.execute(
+        target="general",
+        updates={
+            "llmRetryMaxAttempts": 5,
+            "llmRetryBaseDelayS": 1.5,
+            "llmRetryMaxDelayS": 30.0,
+            "llmTotalTimeoutS": 600,
+        },
+    )
+    assert res.success is True, res.error
+    persisted = saved["app_settings"]
+    assert persisted["llmRetryMaxAttempts"] == 5
+    assert persisted["llmRetryBaseDelayS"] == 1.5
+    assert persisted["llmRetryMaxDelayS"] == 30.0
+    assert persisted["llmTotalTimeoutS"] == 600
+
+
+def test_update_general_rejects_out_of_range_llm_retry(monkeypatch):
+    tool = UpdateSageConfigTool()
+    FakeRepo, _ = _fake_repo_for_general_updates()
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeRepo)
+
+    # llmRetryMaxAttempts 上限 20
+    res = tool.execute(target="general", updates={"llmRetryMaxAttempts": 100})
+    assert res.success is False
+    assert "llmRetryMaxAttempts" in res.error
+
+    # llmRetryBaseDelayS 必须 > 0
+    res2 = tool.execute(target="general", updates={"llmRetryBaseDelayS": 0})
+    assert res2.success is False
+    assert "llmRetryBaseDelayS" in res2.error
+
+    # llmTotalTimeoutS 上限 86400
+    res3 = tool.execute(target="general", updates={"llmTotalTimeoutS": 100000})
+    assert res3.success is False
+    assert "llmTotalTimeoutS" in res3.error
+
+
+def test_update_general_rejects_wrong_type_llm_retry(monkeypatch):
+    tool = UpdateSageConfigTool()
+    FakeRepo, _ = _fake_repo_for_general_updates()
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeRepo)
+
+    # llmRetryMaxAttempts 必须 int，不接受 float
+    res = tool.execute(target="general", updates={"llmRetryMaxAttempts": 3.5})
+    assert res.success is False
+    assert "llmRetryMaxAttempts" in res.error
+
+    # llmTotalTimeoutS 必须 int
+    res2 = tool.execute(target="general", updates={"llmTotalTimeoutS": True})
+    assert res2.success is False
+    assert "llmTotalTimeoutS" in res2.error
+
+
+def test_update_general_rejects_base_delay_exceeds_max_delay(monkeypatch):
+    tool = UpdateSageConfigTool()
+    FakeRepo, _ = _fake_repo_for_general_updates()
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeRepo)
+
+    # 同时传 base > max -> 一致性校验拦截
+    res = tool.execute(
+        target="general",
+        updates={
+            "llmRetryBaseDelayS": 60.0,
+            "llmRetryMaxDelayS": 10.0,
+        },
+    )
+    assert res.success is False
+    assert "llmRetryBaseDelayS" in res.error and "llmRetryMaxDelayS" in res.error
