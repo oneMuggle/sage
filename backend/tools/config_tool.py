@@ -124,7 +124,7 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 10_000_000:
             return f"{key} 必须是 1 到 10000000 之间的整数，收到: {value!r}"
     # P119 Config Advisor (Phase 1.2): LLM 重试 / 超时字段类型与范围校验
-    _llm_retry_field_errors: list[str] = []
+    _llm_retry_field_errors: List[str] = []
     if "llmRetryMaxAttempts" in updates:
         v = updates["llmRetryMaxAttempts"]
         if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 20:
