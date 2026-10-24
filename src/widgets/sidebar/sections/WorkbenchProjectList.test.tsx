@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectMaterial, ProjectSummary } from '../../../shared/api/projectApi';
@@ -101,7 +102,12 @@ const materialsFixture: ProjectMaterial[] = [
 
 /* ── Helpers ──────────────────────────────────────────────────────── */
 
-const renderWithI18n = (ui: React.ReactNode) => render(<I18nProvider>{ui}</I18nProvider>);
+const renderWithI18n = (ui: React.ReactNode) =>
+  render(
+    <MemoryRouter>
+      <I18nProvider>{ui}</I18nProvider>
+    </MemoryRouter>,
+  );
 
 const onOpenSession = vi.fn();
 
@@ -173,13 +179,13 @@ describe('WorkbenchProjectList', () => {
 
   /* ── Hover "+" creates session ────────────────────────────────── */
 
-  it('hover "+" creates a new bound session in the project', async () => {
+  it('hover primary action creates a new bound session in the project', async () => {
     listMock.mockResolvedValue(projects);
     createSessionMock.mockResolvedValue({ project: projects[0], session });
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
     await waitFor(() => screen.getAllByTestId('project-row'));
-    fireEvent.click(screen.getAllByTestId('project-new-chat')[0]);
+    fireEvent.click(screen.getAllByTestId('project-primary-action')[0]);
 
     await waitFor(() => {
       expect(createSessionMock).toHaveBeenCalledWith('p1');
@@ -187,18 +193,22 @@ describe('WorkbenchProjectList', () => {
     });
   });
 
-  /* ── TwoStepDelete ────────────────────────────────────────────── */
+  /* ── Remove via menu ────────────────────────────────────────────── */
 
-  it('TwoStepDelete: second click removes the project from the list', async () => {
+  it('opens menu and removes project via "移除项目" menu item', async () => {
     listMock.mockResolvedValue(projects);
     removeMock.mockResolvedValue(true);
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
     await waitFor(() => screen.getAllByTestId('project-row'));
-    const removeBtn = screen.getAllByTestId('project-remove')[0];
-    fireEvent.click(removeBtn);
-    expect(removeMock).not.toHaveBeenCalled();
-    fireEvent.click(removeBtn);
+    // Hover to show menu button
+    fireEvent.mouseEnter(screen.getAllByTestId('project-row')[0]);
+    // Open menu
+    const menuBtn = screen.getByTestId('workbench-row-menu-p1');
+    fireEvent.click(menuBtn);
+    // Click "移除项目"
+    const removeItem = screen.getByText('移除项目');
+    fireEvent.click(removeItem);
     await waitFor(() => {
       expect(removeMock).toHaveBeenCalledWith('p1');
     });
@@ -234,8 +244,8 @@ describe('WorkbenchProjectList', () => {
     renderWithI18n(<WorkbenchProjectList onOpenSession={onOpenSession} />);
 
     await waitFor(() => screen.getAllByTestId('project-row'));
-    // In workbench: "new chat" calls handleNewChatInProject → createSession
-    fireEvent.click(screen.getAllByTestId('project-new-chat')[0]);
+    // In workbench: primary action calls handleNewChatInProject → createSession
+    fireEvent.click(screen.getAllByTestId('project-primary-action')[0]);
 
     await waitFor(() => {
       expect(screen.getByTestId('project-missing-badge')).toBeInTheDocument();

@@ -29,6 +29,7 @@ import {
   ARCHETYPE_BLUEPRINTS,
 } from '../features/project-type/archetypeBlueprints';
 import { getArchetypeBlueprint } from '../features/project-type/archetypeBlueprints';
+import { useI18n } from '../shared/lib/i18n';
 import {
   memoryApi,
   projectApi,
@@ -81,6 +82,7 @@ export function formatProjectGovernanceAuditJson(opts: {
 export function ProjectGovernance() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const { locale } = useI18n();
 
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [activeTab, setActiveTab] = useState<GovernanceTab>('overview');
@@ -501,15 +503,17 @@ export function ProjectGovernance() {
       {/* Tab navigation */}
       <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
         {[
-          { id: 'overview' as GovernanceTab, label: '态势卡片' },
-          { id: 'charter' as GovernanceTab, label: 'L1 项目总纲' },
-          { id: 'materials' as GovernanceTab, label: 'L4 受控资料' },
+          { id: 'overview' as GovernanceTab, label: locale === 'en' ? 'Overview' : '概览' },
+          { id: 'charter' as GovernanceTab, label: locale === 'en' ? 'Basic info' : '基本信息' },
+          { id: 'materials' as GovernanceTab, label: locale === 'en' ? 'Materials' : '项目资料' },
           {
             id: 'rules' as GovernanceTab,
-            label: `治理规则 (${project.allowedPaths?.length ?? 0})`,
+            label: locale === 'en'
+              ? `Rules (${project.allowedPaths?.length ?? 0})`
+              : `规则与约束 (${project.allowedPaths?.length ?? 0})`,
           },
-          { id: 'milestones' as GovernanceTab, label: '里程碑' },
-          { id: 'profile' as GovernanceTab, label: `L3 画像 (${profileEntries.length})` },
+          { id: 'milestones' as GovernanceTab, label: locale === 'en' ? 'Milestones' : '里程碑' },
+          { id: 'profile' as GovernanceTab, label: locale === 'en' ? `AI context (${profileEntries.length})` : `AI 认知 (${profileEntries.length})` },
         ].map((tab) => (
           <button
             key={tab.id}

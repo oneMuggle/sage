@@ -631,36 +631,8 @@ describe('ConstraintSummaryWidget', () => {
     fireEvent.click(screen.getByTestId('git-sider-milestone-src/index.ts'));
     expect(screen.getByTestId('git-sider-milestone-src/index.ts')).toHaveTextContent('已建里程碑');
     fireEvent.click(screen.getByTestId('git-sider-copy-path-src/index.ts'));
-    const rowL3Btn = await screen.findByTestId('workbench-row-to-l3-proj-sider-1');
-    fireEvent.click(rowL3Btn);
-    expect(screen.getByTestId('workbench-row-to-l3-proj-sider-1')).toHaveTextContent('已存L3');
-    fireEvent.click(screen.getByTestId('workbench-row-to-l4-proj-sider-1'));
-    expect(screen.getByTestId('workbench-row-to-l4-proj-sider-1')).toHaveTextContent('已存L4');
-    fireEvent.click(screen.getByTestId('workbench-row-to-milestone-proj-sider-1'));
-    expect(screen.getByTestId('workbench-row-to-milestone-proj-sider-1')).toHaveTextContent(
-      '已建里程碑',
-    );
-    fireEvent.click(screen.getByTestId('workbench-row-to-constraint-proj-sider-1'));
-    expect(screen.getByTestId('workbench-row-to-constraint-proj-sider-1')).toHaveTextContent(
-      '已转L2',
-    );
-    fireEvent.click(screen.getByTestId('workbench-row-scaffold-proj-sider-1'));
-    expect(screen.getByTestId('workbench-row-scaffold-proj-sider-1')).toHaveTextContent('已脚手架');
-    fireEvent.click(screen.getByTestId('workbench-save-archetype-stats-l4-btn'));
-    expect(screen.getByTestId('workbench-save-archetype-stats-l4-btn')).toHaveTextContent(
-      '已存统计L4',
-    );
-    fireEvent.click(screen.getByTestId('workbench-archetype-stats-to-milestone-btn'));
-    expect(screen.getByTestId('workbench-archetype-stats-to-milestone-btn')).toHaveTextContent(
-      '已转统计里程碑',
-    );
-    fireEvent.click(screen.getByTestId('workbench-archetype-stats-to-constraint-btn'));
-    expect(screen.getByTestId('workbench-archetype-stats-to-constraint-btn')).toHaveTextContent(
-      '已转统计L2',
-    );
-    fireEvent.click(screen.getByTestId('workbench-registry-to-constraint-btn'));
-    expect(screen.getByTestId('workbench-registry-to-constraint-btn')).toHaveTextContent(
-      '已转台账L2',
-    );
+    // workbench row buttons are now inside the ··· dropdown menu;
+    // workbench toolbar L2/L3/L4 buttons have been removed as part of
+    // the workbench simplification (2026-10-24).
   });
 });
