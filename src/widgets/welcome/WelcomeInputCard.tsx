@@ -91,9 +91,7 @@ export function WelcomeInputCard({
           autoFocus
         />
       </div>
-      {toolbar && (
-        <div className="mt-1">{toolbar}</div>
-      )}
+      {toolbar && <div className="mt-1">{toolbar}</div>}
     </div>
   );
 }

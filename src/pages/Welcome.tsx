@@ -26,7 +26,10 @@ import { QuickActionBar, type QuickAction } from '../widgets/welcome/QuickAction
 import { WelcomeHero } from '../widgets/welcome/WelcomeHero';
 import { WelcomeInputCard } from '../widgets/welcome/WelcomeInputCard';
 import { WelcomeToolbar } from '../widgets/welcome/WelcomeToolbar';
-import type { WorktreeMode as WorktreeModeType, WorktreePickerValue } from '../widgets/welcome/WorktreePicker';
+import type {
+  WorktreeMode as WorktreeModeType,
+  WorktreePickerValue,
+} from '../widgets/welcome/WorktreePicker';
 
 const PLACEHOLDER_PHRASES_ZH = [
   '根据资料写一份可交付的报告…',
@@ -150,30 +153,36 @@ export function Welcome() {
 
   // Load projects
   useEffect(() => {
-    projectApi.list().then((list) => {
-      setProjects(
-        list.map((p) => ({
-          id: p.id,
-          name: p.name,
-          path: p.path,
-          sessionId: p.lastSessionId,
-        })),
-      );
-    }).catch(() => {
-      // Silently fail - user can still work without projects
-    });
+    projectApi
+      .list()
+      .then((list) => {
+        setProjects(
+          list.map((p) => ({
+            id: p.id,
+            name: p.name,
+            path: p.path,
+            sessionId: p.lastSessionId,
+          })),
+        );
+      })
+      .catch(() => {
+        // Silently fail - user can still work without projects
+      });
   }, []);
 
   // Load branches and worktrees (need a session ID, use current or temp)
   useEffect(() => {
     // Use a temporary session ID for loading branches/worktrees
     // This is safe because we only read git state, not session state
-    worktreeApi.branches('temp').then((res) => {
-      setBranches(res.branches);
-      setWorktrees(res.worktrees);
-    }).catch(() => {
-      // Silently fail - user can still work without worktree options
-    });
+    worktreeApi
+      .branches('temp')
+      .then((res) => {
+        setBranches(res.branches);
+        setWorktrees(res.worktrees);
+      })
+      .catch(() => {
+        // Silently fail - user can still work without worktree options
+      });
   }, []);
 
   // Persist toolbar state to localStorage
@@ -229,7 +238,11 @@ export function Welcome() {
   }, []);
 
   const handleSubmit = useCallback(
-    async (value: string, dialogProjectId?: string | null, dialogModelId?: string): Promise<boolean> => {
+    async (
+      value: string,
+      dialogProjectId?: string | null,
+      dialogModelId?: string,
+    ): Promise<boolean> => {
       setSubmitting(true);
       try {
         // Use dialog values if provided, otherwise use toolbar state
@@ -274,7 +287,16 @@ export function Welcome() {
         return false;
       }
     },
-    [createSession, setCurrentSessionId, navigate, projectId, modelId, worktreeMode, worktreeBranch, worktreeId],
+    [
+      createSession,
+      setCurrentSessionId,
+      navigate,
+      projectId,
+      modelId,
+      worktreeMode,
+      worktreeBranch,
+      worktreeId,
+    ],
   );
 
   const quickActions: QuickAction[] = [
@@ -301,9 +323,7 @@ export function Welcome() {
             key={briefRecommendation.id}
             recommendation={briefRecommendation}
             initialBrief={reusedBrief}
-            disabled={
-              submitting || needsOnboarding || !settings.modelSelections.chatModel.modelId
-            }
+            disabled={submitting || needsOnboarding || !settings.modelSelections.chatModel.modelId}
             onClose={() => setBriefRecommendation(null)}
             onSubmit={handleSubmit}
           />
