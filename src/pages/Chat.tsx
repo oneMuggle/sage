@@ -468,6 +468,7 @@ export function Chat() {
               <MessageList
                 messages={messages}
                 sessionId={currentSessionId}
+                runStatus={currentSession?.run_status}
                 streamingMessageId={streamingMessageId}
                 onFork={handleFork}
                 onRewind={handleRewind}
