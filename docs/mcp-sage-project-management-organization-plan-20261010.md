@@ -2739,3 +2739,4 @@
   - `src/widgets/chat/__tests__/turnGrouping.p187.test.ts`
   - `src/widgets/session/__tests__/forkTree.p187.test.ts`
   - `src/shared/lib/__tests__/toolCallEnvelope.p187.test.ts`
+- **CI unblock (2026-10-24)**: `pillow` `GHSA-5x8w-8jj5-q52h`（10.4.0，py38 ceiling）追加入 `.github/dependency-audit-policy.json` 例外，解除 `release/win7` 的 `Backend (Python 3.8, Win7 LTS)` dependency audit 门禁；main 轨 `Backend (Python)`（ruff 未钉版本）与 `Dependency audit`（zod / undici / electron）缺口记录为独立 pipeline 修复项，不阻塞本相位。
