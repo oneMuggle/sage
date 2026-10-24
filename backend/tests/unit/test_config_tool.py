@@ -208,3 +208,236 @@ def test_update_sage_config_rejects_forbidden_fields():
     )
     assert res2.success is False
     assert "apiKey" in res2.error
+
+
+# ---- P119 Config Advisor (Phase 1.2): LLM 重试 / 超时字段 ----
+
+
+def _fake_repo_for_general_updates(initial=None):
+    """返回一个 FakeSettingsRepo 类 + saved_settings 收集器。"""
+    initial = initial or {}
+    saved = {}
+
+    class FakeRepo:
+        def get_json(self, key):
+            if key == "app_settings":
+                return dict(initial)
+            return None
+
+        def set_json(self, key, value):
+            saved[key] = value
+
+    return FakeRepo, saved
+
+
+def test_update_general_accepts_llm_retry_fields(monkeypatch):
+    tool = UpdateSageConfigTool()
+    FakeRepo, saved = _fake_repo_for_general_updates()
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeRepo)
+
+    res = tool.execute(
+        target="general",
+        updates={
+            "llmRetryMaxAttempts": 5,
+            "llmRetryBaseDelayS": 1.5,
+            "llmRetryMaxDelayS": 30.0,
+            "llmTotalTimeoutS": 600,
+        },
+    )
+    assert res.success is True, res.error
+    persisted = saved["app_settings"]
+    assert persisted["llmRetryMaxAttempts"] == 5
+    assert persisted["llmRetryBaseDelayS"] == 1.5
+    assert persisted["llmRetryMaxDelayS"] == 30.0
+    assert persisted["llmTotalTimeoutS"] == 600
+
+
+def test_update_general_rejects_out_of_range_llm_retry(monkeypatch):
+    tool = UpdateSageConfigTool()
+    FakeRepo, _ = _fake_repo_for_general_updates()
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeRepo)
+
+    # llmRetryMaxAttempts 上限 20
+    res = tool.execute(target="general", updates={"llmRetryMaxAttempts": 100})
+    assert res.success is False
+    assert "llmRetryMaxAttempts" in res.error
+
+    # llmRetryBaseDelayS 必须 > 0
+    res2 = tool.execute(target="general", updates={"llmRetryBaseDelayS": 0})
+    assert res2.success is False
+    assert "llmRetryBaseDelayS" in res2.error
+
+    # llmTotalTimeoutS 上限 86400
+    res3 = tool.execute(target="general", updates={"llmTotalTimeoutS": 100000})
+    assert res3.success is False
+    assert "llmTotalTimeoutS" in res3.error
+
+
+def test_update_general_rejects_wrong_type_llm_retry(monkeypatch):
+    tool = UpdateSageConfigTool()
+    FakeRepo, _ = _fake_repo_for_general_updates()
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeRepo)
+
+    # llmRetryMaxAttempts 必须 int，不接受 float
+    res = tool.execute(target="general", updates={"llmRetryMaxAttempts": 3.5})
+    assert res.success is False
+    assert "llmRetryMaxAttempts" in res.error
+
+    # llmTotalTimeoutS 必须 int
+    res2 = tool.execute(target="general", updates={"llmTotalTimeoutS": True})
+    assert res2.success is False
+    assert "llmTotalTimeoutS" in res2.error
+
+
+def test_update_general_rejects_base_delay_exceeds_max_delay(monkeypatch):
+    tool = UpdateSageConfigTool()
+    FakeRepo, _ = _fake_repo_for_general_updates()
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeRepo)
+
+    # 同时传 base > max -> 一致性校验拦截
+    res = tool.execute(
+        target="general",
+        updates={
+            "llmRetryBaseDelayS": 60.0,
+            "llmRetryMaxDelayS": 10.0,
+        },
+    )
+    assert res.success is False
+    assert "llmRetryBaseDelayS" in res.error
+    assert "llmRetryMaxDelayS" in res.error
+
+
+# ---- P119 Config Advisor (Phase 2.2): DiagnoseSageConfigTool ----
+
+
+def _install_diagnose_imports():
+    """Lazily import DiagnoseSageConfigTool + helpers。"""
+    from backend.tools.config_tool import DiagnoseSageConfigTool, _build_diagnosis_summary
+    return DiagnoseSageConfigTool, _build_diagnosis_summary
+
+
+def _empty_metrics():
+    return {
+        "window": {"from": None, "to": None, "run_count": 0},
+        "completion": {"success": 0, "failed": 0, "cancelled": 0, "other": 0},
+        "failure_kind": {},
+        "tokens": {"mean_per_task": 0, "total": 0, "task_count_with_tokens": 0},
+        "latency_ms": {"mean": 0, "p50": 0, "p95": 0},
+        "retries": {"mean_per_task": 0.0, "tasks_with_retry_pct": 0.0},
+    }
+
+
+def test_diagnose_tool_risk_class_is_read():
+    DiagnoseSageConfigTool, _ = _install_diagnose_imports()
+    tool = DiagnoseSageConfigTool()
+    assert tool.risk == RiskClass.READ
+
+
+def test_diagnose_tool_returns_config_and_metrics(monkeypatch):
+    DiagnoseSageConfigTool, _ = _install_diagnose_imports()
+    tool = DiagnoseSageConfigTool()
+
+    fake_settings = {
+        "temperature": 0.7,
+        "orch": {"maxLaneIterations": 25},
+    }
+
+    class FakeSettingsRepo:
+        def get_json(self, key):
+            if key == "app_settings":
+                return fake_settings
+            return None
+
+    fake_metrics = {
+        "window": {"from": "2026-10-20T00:00:00", "to": "2026-10-24T12:00:00", "run_count": 5},
+        "completion": {"success": 3, "failed": 1, "cancelled": 1, "other": 0},
+        "failure_kind": {"max_iterations_exceeded": 1},
+        "tokens": {"mean_per_task": 1000, "total": 5000, "task_count_with_tokens": 5},
+        "latency_ms": {"mean": 500, "p50": 400, "p95": 1200},
+        "retries": {"mean_per_task": 0.2, "tasks_with_retry_pct": 10.0},
+    }
+
+    class FakeOrchRunMetrics:
+        @staticmethod
+        def aggregate_recent(limit=20):
+            assert limit == 20  # default
+            return fake_metrics
+
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", FakeSettingsRepo)
+    # Patch the lazy import: import inside execute() looks up
+    # backend.data.orch_run_metrics module then accesses OrchRunMetrics attr.
+    import backend.data.orch_run_metrics as metrics_mod
+
+    monkeypatch.setattr(metrics_mod, "OrchRunMetrics", FakeOrchRunMetrics)
+
+    res = tool.execute()
+    assert res.success is True, res.error
+    assert res.content["configuration"]["temperature"] == 0.7
+    assert res.content["recent_metrics"]["window"]["run_count"] == 5
+    assert "诊断摘要" in res.output
+    assert "成功率" in res.output
+
+
+def test_diagnose_tool_rejects_invalid_window_runs():
+    DiagnoseSageConfigTool, _ = _install_diagnose_imports()
+    tool = DiagnoseSageConfigTool()
+
+    # 非整数
+    res = tool.execute(window_runs=3.5)
+    assert res.success is False
+    assert "正整数" in res.error
+
+    # 越界（太大）
+    res2 = tool.execute(window_runs=500)
+    assert res2.success is False
+    assert "1 到 200" in res2.error
+
+    # 越界（太小）
+    res3 = tool.execute(window_runs=0)
+    assert res3.success is False
+    assert "1 到 200" in res3.error
+
+    # bool 不接受（bool 是 int 子类）
+    res4 = tool.execute(window_runs=True)
+    assert res4.success is False
+
+
+def test_diagnose_tool_config_read_failure_returns_error(monkeypatch):
+    DiagnoseSageConfigTool, _ = _install_diagnose_imports()
+    tool = DiagnoseSageConfigTool()
+
+    class BoomRepo:
+        def get_json(self, key):
+            raise RuntimeError("db locked")
+
+    monkeypatch.setattr("backend.tools.config_tool.SettingsRepository", BoomRepo)
+
+    res = tool.execute()
+    assert res.success is False
+    assert "读取配置失败" in res.error
+
+
+def test_build_diagnosis_summary_empty_metrics():
+    _, _build_diagnosis_summary = _install_diagnose_imports()
+    summary = _build_diagnosis_summary({}, _empty_metrics())
+    assert "诊断摘要" in summary
+    assert "近期无 run 记录" in summary
+
+
+def test_build_diagnosis_summary_with_data():
+    _, _build_diagnosis_summary = _install_diagnose_imports()
+    metrics = {
+        "window": {"from": "2026-10-20", "to": "2026-10-24", "run_count": 10},
+        "completion": {"success": 7, "failed": 2, "cancelled": 1, "other": 0},
+        "failure_kind": {"max_iterations_exceeded": 1, "timeout": 1},
+        "tokens": {"mean_per_task": 2000, "total": 20000, "task_count_with_tokens": 10},
+        "latency_ms": {"mean": 800, "p50": 700, "p95": 3000},
+        "retries": {"mean_per_task": 0.5, "tasks_with_retry_pct": 25.0},
+    }
+    summary = _build_diagnosis_summary({}, metrics)
+    assert "10 次 run" in summary
+    assert "成功率: 70%" in summary
+    assert "max_iterations_exceeded=1" in summary
+    assert "平均 0.50/任务" in summary
+    assert "平均 800ms" in summary
+    assert "2000/任务" in summary

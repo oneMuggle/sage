@@ -44,7 +44,7 @@ from .browser_tool import (
 from .checkpoint_tool import CheckpointCreateTool, CheckpointListTool, CheckpointRestoreTool
 from .codebase_search_tool import CodebaseSearchTool
 from .commit_message_tool import GitCommitMessageTool
-from .config_tool import ReadSageConfigTool, UpdateSageConfigTool
+from .config_tool import DiagnoseSageConfigTool, ReadSageConfigTool, UpdateSageConfigTool
 from .design_export_tool import DesignExportTool
 from .design_generate_tool import DesignGenerateTool
 from .design_iterate_tool import DesignIterateTool
@@ -338,10 +338,12 @@ def _install_multimodal(ctx: ToolInstallContext) -> None:
 
 
 def _install_sage_config(ctx: ToolInstallContext) -> None:
-    # read_sage_config 为 READ，update_sage_config 为 WRITE_LOCAL。
+    # read_sage_config 为 READ，update_sage_config 为 WRITE_LOCAL，
+    # diagnose_sage_config 为 READ（P119 Config Advisor Phase 2.2）。
     policy = ctx.policy
     ctx.registry.register(ReadSageConfigTool(policy=policy))
     ctx.registry.register(UpdateSageConfigTool(policy=policy))
+    ctx.registry.register(DiagnoseSageConfigTool(policy=policy))
 
 
 def _install_schedule(ctx: ToolInstallContext) -> None:
