@@ -1,8 +1,8 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { WorktreePicker } from '../WorktreePicker';
 import type { BranchEntry, SessionWorktree } from '../../../shared/api/worktreeApi';
+import { WorktreePicker } from '../WorktreePicker';
 
 const mockBranches: BranchEntry[] = [
   {

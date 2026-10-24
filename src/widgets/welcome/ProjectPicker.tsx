@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
+import { useState, useMemo } from 'react';
 
+import { Input } from '../../shared/ui/Input';
 import {
   Select,
   SelectContent,
@@ -8,7 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../shared/ui/Select/Select';
-import { Input } from '../../shared/ui/Input';
 
 export interface ProjectOption {
   id: string;

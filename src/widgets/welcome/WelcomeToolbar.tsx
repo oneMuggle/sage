@@ -1,4 +1,5 @@
 import type { BranchEntry, SessionWorktree } from '../../shared/api/worktreeApi';
+
 import { ModelPicker, type ModelOption } from './ModelPicker';
 import { ProjectPicker, type ProjectOption } from './ProjectPicker';
 import { WorktreePicker, type WorktreeMode, type WorktreePickerValue } from './WorktreePicker';

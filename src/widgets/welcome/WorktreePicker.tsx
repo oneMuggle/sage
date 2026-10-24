@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 
+import type { BranchEntry, SessionWorktree } from '../../shared/api/worktreeApi';
 import {
   Select,
   SelectContent,
@@ -7,7 +8,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../shared/ui/Select/Select';
-import type { BranchEntry, SessionWorktree } from '../../shared/api/worktreeApi';
 
 export type WorktreeMode = 'none' | 'new' | 'open';
 
