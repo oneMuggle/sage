@@ -29,7 +29,6 @@ import {
   ARCHETYPE_BLUEPRINTS,
 } from '../features/project-type/archetypeBlueprints';
 import { getArchetypeBlueprint } from '../features/project-type/archetypeBlueprints';
-import { useI18n } from '../shared/lib/i18n';
 import {
   memoryApi,
   projectApi,
@@ -39,6 +38,7 @@ import {
   type ProjectScaffoldResult,
 } from '../shared/api';
 import type { ProjectProfileEntry } from '../shared/api/types';
+import { useI18n } from '../shared/lib/i18n';
 import { Button } from '../shared/ui/Button';
 import { Card } from '../shared/ui/Card';
 
