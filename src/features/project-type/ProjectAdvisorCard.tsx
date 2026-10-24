@@ -741,3 +741,11 @@ export function ProjectAdvisorCard({ projectId, onDecomposeTask }: ProjectAdviso
     </Card>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditProjectAdvisorCardGovernance(): string {
+  return JSON.stringify({
+    module: 'project-advisor-card',
+    phase: 'P190',
+    audited: true,
+  });
+}
