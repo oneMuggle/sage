@@ -251,10 +251,13 @@ def set_trust_policy(body: TrustPolicyBody) -> Dict[str, Any]:
 
 
 class PermissionRuleDeleteBody(BaseModel):
-    """删除一条已保存规则的请求体。"""
+    """删除一条已保存规则的请求体（R99 改按内容定位）。"""
 
-    #: 下标指 GET /rules 返回的已解析规则列表。
-    index: int
+    #: 要撤销规则的 tool_pattern。它只是「删哪一条」的选择子：
+    #: 服务端只删存储中已存在且与请求体完全一致的一条，
+    #: 永不据此新建或改写任何规则。
+    tool_pattern: str
+    decision: str
 
     class Config:
         extra = "forbid"
@@ -276,22 +279,26 @@ def list_permission_rules() -> Dict[str, Any]:
 
 @router.post("/rules/delete")
 def delete_permission_rule(body: PermissionRuleDeleteBody, request: Request):
-    """按下标删除一条已保存规则，返回删除后的最新列表。
+    """按内容删除一条已保存规则，返回删除后的最新列表。
 
-    服务端重新读取并校验下标，越界 → 400 且不写存储；重复规则只
-    删被指中的一条。删除是撤销持久信任的写操作，与 preset 写入
+    服务端以 parse_rules 口径重新读取生效列表，删除第一条与请求体
+    完全一致的 (tool_pattern, decision)；无匹配 → 400 且不写存储。
+    相比 R97 的列表下标，内容定位不受期间 remember 追加引起的
+    位置漂移影响，不会删到界面上选中的那条之外的规则；重复规则
+    每次仍只删一条。删除是撤销持久信任的写操作，与 preset 写入
     共用 Origin 守卫。
     """
     forbidden = forbidden_origin_response(request)
     if forbidden is not None:
         return forbidden
     rules = _load_saved_rules()
-    if body.index < 0 or body.index >= len(rules):
+    target = {"tool_pattern": body.tool_pattern, "decision": body.decision}
+    if target not in rules:
         return JSONResponse(
             status_code=400,
-            content={"ok": False, "error": "rule index out of range"},
+            content={"ok": False, "error": "rule not found"},
         )
-    removed = rules.pop(body.index)
+    removed = rules.pop(rules.index(target))
     SettingsRepository().set_json(SETTINGS_KEY_RULES, rules, category="permissions")
     logger.info(
         "已删除已保存审批规则: pattern=%s decision=%s (剩余 %d 条)",
@@ -341,6 +348,11 @@ def _persist_remembered_rule(
     自带的服务端 ``plugin_name`` 能派生受限通配，且完整工具
     名必须确实属于该插件；否则同样只记 warning、不落规则。
 
+    R99 去重：完全相同的 (tool_pattern, decision) 已在存储中时
+    不再重复落一条（只记 info、不写存储）；同 pattern 不同
+    decision 照常追加，冲突仍由 enforcer 的 deny > allow > ask
+    裁决，不借去重静默推翻先前落定的决定。
+
     其它失败也只记 warning——规则持久化失败不应让"已批准"的应答对前端
     变失败（本次执行已经放行了）。
     """
@@ -364,21 +376,26 @@ def _persist_remembered_rule(
         return
     else:
         pattern = tool_name
+    decision = "allow" if approved else "deny"
     try:
         repo = SettingsRepository()
         existing = parse_rules(repo.get_json(SETTINGS_KEY_RULES))
         rules_payload: List[Dict[str, Any]] = [r.to_dict() for r in existing]
-        rules_payload.append(
-            {
-                "tool_pattern": pattern,
-                "decision": "allow" if approved else "deny",
-            }
-        )
+        new_rule = {"tool_pattern": pattern, "decision": decision}
+        if new_rule in rules_payload:
+            logger.info(
+                "审批规则已存在，跳过重复持久化: pattern=%s decision=%s scope=%s",
+                pattern,
+                decision,
+                remember_scope.value,
+            )
+            return
+        rules_payload.append(new_rule)
         repo.set_json(SETTINGS_KEY_RULES, rules_payload, category="permissions")
         logger.info(
             "已持久化审批规则: pattern=%s decision=%s scope=%s (共 %d 条)",
             pattern,
-            "allow" if approved else "deny",
+            decision,
             remember_scope.value,
             len(rules_payload),
         )

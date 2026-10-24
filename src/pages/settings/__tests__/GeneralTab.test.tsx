@@ -12,7 +12,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DensityProvider } from '../../../entities/density/useDensity';
 import { FontProvider } from '../../../entities/font/useFontSettings';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
@@ -101,9 +100,7 @@ function renderTab(resetSettings = vi.fn()): void {
   render(
     <I18nProvider>
       <FontProvider>
-        <DensityProvider>
-          <GeneralTab resetSettings={resetSettings} />
-        </DensityProvider>
+        <GeneralTab resetSettings={resetSettings} />
       </FontProvider>
     </I18nProvider>,
   );
@@ -212,9 +209,83 @@ describe('GeneralTab permission mode selector (M1)', () => {
     expect(screen.getByText('所有写入与执行操作都需要手动批准')).toBeInTheDocument();
   });
 
-  it('shows the JSON-only rules hint', () => {
+  it('shows the remembered-rules hint and empty state', async () => {
     renderTab();
-    expect(screen.getByText(/permission_rules JSON/)).toBeInTheDocument();
+    expect(screen.getByText(/已记住的规则可在下方查看并逐条删除/)).toBeInTheDocument();
+    expect(screen.getByText('已记住的规则')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('暂无已记住的规则')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('GeneralTab remembered rules manager (R97)', () => {
+  it('renders saved rules with decision labels', async () => {
+    mocks.listRules.mockResolvedValue([
+      { tool_pattern: 'bash', decision: 'deny' },
+      { tool_pattern: 'plugin__demo__*', decision: 'allow' },
+    ]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    expect(screen.getByText('plugin__demo__*')).toBeInTheDocument();
+    expect(screen.getByText('拒绝')).toBeInTheDocument();
+    expect(screen.getByText('允许')).toBeInTheDocument();
+    expect(screen.getByTestId('permission-rule-delete-0')).toBeInTheDocument();
+    expect(screen.getByTestId('permission-rule-delete-1')).toBeInTheDocument();
+  });
+
+  it('deletes a rule and adopts the server-returned list', async () => {
+    mocks.listRules.mockResolvedValue([
+      { tool_pattern: 'bash', decision: 'deny' },
+      { tool_pattern: 'write_file', decision: 'ask' },
+    ]);
+    mocks.deleteRule.mockResolvedValue([{ tool_pattern: 'write_file', decision: 'ask' }]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rule-delete-0'));
+
+    await waitFor(() => {
+      expect(mocks.deleteRule).toHaveBeenCalledWith({ tool_pattern: 'bash', decision: 'deny' });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('bash')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('write_file')).toBeInTheDocument();
+  });
+
+  it('shows a load failure message when listing rules fails', async () => {
+    mocks.listRules.mockRejectedValue(new Error('backend down'));
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-load-failed')).toHaveTextContent(
+        '读取已记住规则失败',
+      );
+    });
+  });
+
+  it('keeps the list and shows an error when delete fails', async () => {
+    mocks.listRules.mockResolvedValue([{ tool_pattern: 'bash', decision: 'deny' }]);
+    mocks.deleteRule.mockRejectedValue(new Error('backend down'));
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rule-delete-0'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-failed')).toHaveTextContent(
+        '删除规则失败',
+      );
+    });
+    expect(screen.getByText('bash')).toBeInTheDocument();
   });
 });
 
@@ -359,75 +430,5 @@ describe('GeneralTab auto checkpoint (B-2, 默认开)', () => {
     expect(summaryBtn.textContent).toBe('已复制');
     fireEvent.click(jsonBtn);
     expect(jsonBtn.textContent).toBe('已复制');
-  });
-});
-
-describe('GeneralTab remembered rules manager (R97)', () => {
-  it('renders saved rules with decision labels', async () => {
-    mocks.listRules.mockResolvedValue([
-      { tool_pattern: 'bash', decision: 'deny' },
-      { tool_pattern: 'plugin__demo__*', decision: 'allow' },
-    ]);
-    renderTab();
-
-    await waitFor(() => {
-      expect(screen.getByText('bash')).toBeInTheDocument();
-    });
-    expect(screen.getByText('plugin__demo__*')).toBeInTheDocument();
-    expect(screen.getByText('拒绝')).toBeInTheDocument();
-    expect(screen.getByText('允许')).toBeInTheDocument();
-    expect(screen.getByTestId('permission-rule-delete-0')).toBeInTheDocument();
-    expect(screen.getByTestId('permission-rule-delete-1')).toBeInTheDocument();
-  });
-
-  it('deletes a rule and adopts the server-returned list', async () => {
-    mocks.listRules.mockResolvedValue([
-      { tool_pattern: 'bash', decision: 'deny' },
-      { tool_pattern: 'write_file', decision: 'ask' },
-    ]);
-    mocks.deleteRule.mockResolvedValue([{ tool_pattern: 'write_file', decision: 'ask' }]);
-    renderTab();
-
-    await waitFor(() => {
-      expect(screen.getByText('bash')).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByTestId('permission-rule-delete-0'));
-
-    await waitFor(() => {
-      expect(mocks.deleteRule).toHaveBeenCalledWith(0);
-    });
-    await waitFor(() => {
-      expect(screen.queryByText('bash')).not.toBeInTheDocument();
-    });
-    expect(screen.getByText('write_file')).toBeInTheDocument();
-  });
-
-  it('shows a load failure message when listing rules fails', async () => {
-    mocks.listRules.mockRejectedValue(new Error('backend down'));
-    renderTab();
-
-    await waitFor(() => {
-      expect(screen.getByTestId('permission-rules-load-failed')).toHaveTextContent(
-        '读取已记住规则失败',
-      );
-    });
-  });
-
-  it('keeps the list and shows an error when delete fails', async () => {
-    mocks.listRules.mockResolvedValue([{ tool_pattern: 'bash', decision: 'deny' }]);
-    mocks.deleteRule.mockRejectedValue(new Error('backend down'));
-    renderTab();
-
-    await waitFor(() => {
-      expect(screen.getByText('bash')).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByTestId('permission-rule-delete-0'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('permission-rules-delete-failed')).toHaveTextContent(
-        '删除规则失败',
-      );
-    });
-    expect(screen.getByText('bash')).toBeInTheDocument();
   });
 });

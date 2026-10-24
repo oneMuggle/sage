@@ -324,7 +324,7 @@ export const enSettingsAndModels = {
   'settings.permission.mode.full_access': 'Full access',
   'settings.permission.mode.full_access.desc': 'Allow everything, never prompt (use with care)',
   'settings.permission.rules_hint':
-    'Fine-grained rules (permission_rules JSON) are not editable in the UI yet; checking "Remember my choice" appends a rule automatically.',
+    'Fine-grained rules are created by checking "Remember my choice" during approval; remembered rules can be reviewed and deleted below (deleting restores per-call approval).',
   'settings.permission.load_failed': 'Failed to load permission mode',
 
   // R97 remembered rules manager

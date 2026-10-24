@@ -78,13 +78,18 @@ describe('permissionApi', () => {
       ok: true,
       rules: [{ tool_pattern: 'write_file', decision: 'ask' }],
     });
-    const rules = await permissionApi.deleteRule(0);
-    expect(mockInvoke).toHaveBeenCalledWith('permissions_delete_rule', { index: 0 });
+    const rules = await permissionApi.deleteRule({ tool_pattern: 'bash', decision: 'deny' });
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_delete_rule', {
+      toolPattern: 'bash',
+      decision: 'deny',
+    });
     expect(rules).toEqual([{ tool_pattern: 'write_file', decision: 'ask' }]);
   });
 
   it('deleteRule() propagates invoke errors', async () => {
     mockInvoke.mockRejectedValueOnce(new Error('backend down'));
-    await expect(permissionApi.deleteRule(0)).rejects.toThrow('backend down');
+    await expect(
+      permissionApi.deleteRule({ tool_pattern: 'bash', decision: 'deny' }),
+    ).rejects.toThrow('backend down');
   });
 });

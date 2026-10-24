@@ -306,7 +306,7 @@ export const zhSettingsAndModels = {
   'settings.permission.mode.full_access': '完全访问',
   'settings.permission.mode.full_access.desc': '允许所有操作，不再弹出审批（谨慎）',
   'settings.permission.rules_hint':
-    '细粒度规则（permission_rules JSON）暂不支持界面编辑；审批时勾选"记住我的选择"会自动追加规则。',
+    '细粒度规则由审批时勾选"记住我的选择"生成；已记住的规则可在下方查看并逐条删除（删除后恢复逐次审批）。',
   'settings.permission.load_failed': '读取权限模式失败',
 
   // R97 已记住规则管理
