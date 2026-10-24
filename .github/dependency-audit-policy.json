@@ -312,6 +312,18 @@
     {
       "owner": "Sage maintainers",
       "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "electron",
+      "package_version": "21.4.4",
+      "advisory": "GHSA-jr5w-w6x2-84p9",
+      "advisory_url": "https://github.com/advisories/GHSA-jr5w-w6x2-84p9",
+      "affected_path": "node_modules/electron",
+      "actual_reachability": "conditionally reachable: exploitation needs an active network MITM presenting a certificate chained to the compromised eMudhra intermediates against a TLS connection made by Electron's Chromium/Node network stack; accepted residual risk",
+      "controls": "compromised eMudhra intermediate certificates not blocklisted: pinned Electron 21 exposes no app-layer intermediate blocklist API, and the upstream blocklist ships only in >=42.11.16 (no Win7 support); primary LLM/API HTTPS traffic terminates in the Python backend TLS stack while the renderer talks to the loopback backend, so the Electron network stack is not on the main API path; navigation/popup guards limit embedded web sessions; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); quarterly npm audit review"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
       "source": "pip",
       "package": "python-multipart",
       "package_version": "0.0.20",
