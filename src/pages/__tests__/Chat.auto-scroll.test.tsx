@@ -12,7 +12,7 @@
  * Task 2 (Win7 parity) 起新增 sticky-bottom UX:
  *   - 只在用户**之前**在底部时跟随新消息
  *   - 用户离开底部后不再强制跳到 scrollHeight
- *   - 离开底部 + 流式进行中显示"跳到最新"按钮(aria-label="跳到最新")
+ *   - 离开底部 + 流式进行中显示"滚动到最新消息"按钮(aria-label="滚动到最新消息")
  *   - 发送新消息时强制一次 scroll 到底
  *
  * 不发起任何真实 IPC/localStorage;useSettings 与 useChat 都被 mock。
@@ -304,7 +304,7 @@ describe('Chat — auto-scroll to bottom on new message', () => {
 //   - wasAtBottomRef tracks whether scroll position is within threshold
 //   - Only auto-scroll if wasAtBottom was true before the update
 //   - When user scrolls away from bottom during stream → show
-//     "跳到最新" button (aria-label), don't yank focus
+//     "滚动到最新消息" button (aria-label), don't yank focus
 //   - On sending new message → force one explicit scroll to bottom
 //     regardless of prior state
 
@@ -479,7 +479,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
     });
   });
 
-  it('shows "跳到最新" button when user scrolls up during stream', async () => {
+  it('shows "滚动到最新消息" button when user scrolls up during stream', async () => {
     const messagesV1 = [baseMsg('1', 'assistant', 'hel')];
     useChatMock.mockReturnValue({
       messages: messagesV1,
@@ -531,8 +531,8 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       </MemoryRouter>,
     );
 
-    // "跳到最新" 按钮存在且 a11y 标签正确
-    const jumpBtn = await waitFor(() => screen.getByRole('button', { name: '跳到最新' }));
+    // "滚动到最新消息" 按钮存在且 a11y 标签正确
+    const jumpBtn = await waitFor(() => screen.getByRole('button', { name: '滚动到最新消息' }));
     expect(jumpBtn).toBeTruthy();
   });
 
@@ -561,11 +561,11 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
     const scrollEl = setupScrollEl(container, 1000, 400, 200);
     fireEvent.scroll(scrollEl);
 
-    const jumpBtn = await waitFor(() => screen.getByRole('button', { name: '跳到最新' }));
+    const jumpBtn = await waitFor(() => screen.getByRole('button', { name: '滚动到最新消息' }));
     fireEvent.click(jumpBtn);
 
     expect(scrollEl.scrollTop).toBe(1000);
-    expect(screen.queryByRole('button', { name: '跳到最新' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '滚动到最新消息' })).toBeNull();
   });
 
   it('resets sticky-bottom state when switching sessions', async () => {
@@ -592,7 +592,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
     );
     const scrollEl = setupScrollEl(container, 1000, 400, 200);
     fireEvent.scroll(scrollEl);
-    await waitFor(() => screen.getByRole('button', { name: '跳到最新' }));
+    await waitFor(() => screen.getByRole('button', { name: '滚动到最新消息' }));
 
     useStore.setState({ currentSessionId: 'session-2' });
     rerender(
@@ -603,7 +603,7 @@ describe('Chat — sticky-bottom streaming UX (Task 2)', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.queryByRole('button', { name: '跳到最新' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '滚动到最新消息' })).toBeNull();
   });
 
   it('sending a new message forces scroll to bottom regardless of prior state', async () => {
@@ -764,11 +764,11 @@ describe('Chat — 抖动回归 (P0-2)', () => {
     const scrollEl = setupScrollEl(container, 1000, 400, 540);
     fireEvent.scroll(scrollEl);
 
-    expect(screen.queryByRole('button', { name: '跳到最新' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '滚动到最新消息' })).toBeNull();
 
     pushDelta('hello world', rerender);
 
     await waitFor(() => expect(scrollEl.scrollTop).toBe(1000));
-    expect(screen.queryByRole('button', { name: '跳到最新' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '滚动到最新消息' })).toBeNull();
   });
 });

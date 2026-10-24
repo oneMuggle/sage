@@ -29,7 +29,9 @@ const PHASE_ICON: Record<PhaseIconName, React.ComponentType<{ className?: string
  *
  * - agentId 变化时淡入显示 "第 N 轮 · agent · 阶段"
  * - agentId 变为 null 后延迟 3 秒淡出
- * - 始终占据固定高度 (避免聊天内容抖动)
+ * - 淡出结束后不再占位（卸载，归还 24px 给消息滚动区）
+ *   —— 原「始终占固定高度」策略被用户反馈「遮挡会话信息」推翻
+ *   (2026-10-24)。淡出期间 (300ms) 保留 h-6 以支持 opacity 过渡。
  */
 export function ActiveAgentIndicator({
   agentId,
@@ -37,6 +39,7 @@ export function ActiveAgentIndicator({
   streamingState = null,
 }: ActiveAgentIndicatorProps) {
   const [visible, setVisible] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [displayedAgentId, setDisplayedAgentId] = useState<string | null>(null);
   // P2 修复: 跟踪所有 setTimeout 句柄,在 effect cleanup 中一并清除
   // (之前只清 outer 3s timer,inner 300ms timer 会泄漏,导致新 stream
@@ -50,6 +53,7 @@ export function ActiveAgentIndicator({
       // LOW fix: 仅当 agentId 实际变化时才 setState,避免每个 content_delta 触发浪费渲染
       setDisplayedAgentId((prev) => (agentId && agentId !== prev ? agentId : prev));
       setVisible(true);
+      setMounted(true);
     } else {
       // 延迟 3 秒后淡出
       // capture ref locally (lint: react-hooks/exhaustive-deps)
@@ -57,10 +61,11 @@ export function ActiveAgentIndicator({
       const outer = setTimeout(() => {
         timers.delete(outer);
         setVisible(false);
-        // 再延迟 300ms (淡出动画时长) 后清空显示
+        // 再延迟 300ms (淡出动画时长) 后卸载 —— 归还 24px 给消息区
         const inner = setTimeout(() => {
           timers.delete(inner);
           setDisplayedAgentId(null);
+          setMounted(false);
         }, 300);
         timers.add(inner);
       }, 3000);
@@ -91,6 +96,9 @@ export function ActiveAgentIndicator({
   // LOW-2: 单轮 LLM 调用显示 '第 1 轮' 是噪音,只在有 ReAct 循环(iteration > 0)
   // 或多轮的情况下才显示迭代轮次
   const showIteration = iteration > 0;
+
+  // 淡出动画结束后不再占位 —— 归还 24px 给消息滚动区
+  if (!mounted) return null;
 
   return (
     <div

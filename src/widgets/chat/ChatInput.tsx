@@ -18,6 +18,7 @@ import type { ChatOfficeRef } from '../../shared/api/types';
 import { worktreeApi } from '../../shared/api/worktreeApi';
 import { useFileUpload } from '../../shared/lib/hooks/useFileUpload';
 import { CHAT_DOCUMENT_EXTENSIONS } from '../../shared/lib/hooks/useFileUpload';
+import { useInputHistory } from '../../shared/lib/hooks/useInputHistory';
 import { useSessionDraft } from '../../shared/lib/hooks/useSessionDraft';
 import { useI18n } from '../../shared/lib/i18n';
 import { useOptionalWorkspaceContext } from '../../shared/lib/workspaceContext';
@@ -138,6 +139,8 @@ function ChatInputInner({
 
   // Per-session draft persistence (U13 from OpenWorker)
   const [value, setValue] = useSessionDraft(effectiveSessionId);
+  // 输入历史（上下键导航）
+  const { history: inputHistory, addToHistory } = useInputHistory(effectiveSessionId);
   // 对话阅读导航 A5: 引用追加后请求 InputCard 聚焦输入框（递增即触发）
   const [focusRequest, setFocusRequest] = useState(0);
 
@@ -384,6 +387,8 @@ function ChatInputInner({
       // force_multi / template:<id> 显式透传。
       ...(orchMode !== 'auto' ? { orchestrationMode: orchMode } : {}),
     });
+    // 记录到输入历史（用于上下键导航）
+    addToHistory(value.trim());
     setValue('');
     setKnowledgeRefs([]);
     setOfficeRefs([]);
@@ -778,6 +783,7 @@ function ChatInputInner({
         onSlashHighlight={setSlashSelectedIndex}
         onSlashClose={() => setSlashMenuOpen(false)}
         focusRequest={focusRequest}
+        inputHistory={inputHistory}
         atFileMenu={
           atQuery.query !== null &&
           entityRef === null && (
