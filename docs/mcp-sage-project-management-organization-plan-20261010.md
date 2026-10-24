@@ -2739,4 +2739,4 @@
   - `src/widgets/chat/__tests__/turnGrouping.p187.test.ts`
   - `src/widgets/session/__tests__/forkTree.p187.test.ts`
   - `src/shared/lib/__tests__/toolCallEnvelope.p187.test.ts`
-- **CI unblock (2026-10-24)**: `pillow` `GHSA-5x8w-8jj5-q52h`（10.4.0，py38 ceiling）追加入 `.github/dependency-audit-policy.json` 例外，解除 `release/win7` 的 `Backend (Python 3.8, Win7 LTS)` dependency audit 门禁；main 轨 `Backend (Python)`（ruff 未钉版本）与 `Dependency audit`（zod / undici / electron）缺口记录为独立 pipeline 修复项，不阻塞本相位。
+- **CI unblock (2026-10-24)**: 解除 dependency-audit 门禁阻塞 —— `pillow` `GHSA-5x8w-8jj5-q52h`（10.4.0，py38 ceiling）与 `electron` `GHSA-jr5w-w6x2-84p9`（21.4.4，Win7 LTS 钉版本）加入 `.github/dependency-audit-policy.json` 例外（pip 条目 `advisory_url` 统一为 `osv.dev` 口径）；`package-lock.json` 定向升级 `zod` 4.4.3→4.6.7、`undici` 7.29.1→7.30.1、`node-gyp` 内嵌 `undici` 6.28.1→6.29.1；`ci.yml` 将 `ruff` 安装钉到 `0.4.4`（与 `requirements-dev.txt` / `requirements-py38.txt` 一致），消除未钉版本导致的 `Backend (Python)` 漂移。
