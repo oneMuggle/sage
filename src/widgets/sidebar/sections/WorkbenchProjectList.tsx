@@ -12,7 +12,17 @@
  * Created 2026-10-18 as part of Scheme 3 (ProjectSection split).
  */
 
-import { AlertTriangle, ChevronDown, ChevronRight, Copy, Folder, FolderOpen, MoreHorizontal, Play, Plus } from 'lucide-react';
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Folder,
+  FolderOpen,
+  MoreHorizontal,
+  Play,
+  Plus,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -265,7 +275,11 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                   <button
                     type="button"
                     data-testid="project-primary-action"
-                    aria-label={project.sessionCount > 0 ? t('sider.project.new_chat') : t('sider.project.new_chat')}
+                    aria-label={
+                      project.sessionCount > 0
+                        ? t('sider.project.new_chat')
+                        : t('sider.project.new_chat')
+                    }
                     title={project.sessionCount > 0 ? '开始会话' : '新建会话'}
                     disabled={busy}
                     onClick={(e) => {
@@ -306,10 +320,7 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                     {menuOpenId === project.id && (
                       <>
                         {/* Backdrop to close menu on outside click */}
-                        <div
-                          className="fixed inset-0 z-10"
-                          onClick={() => setMenuOpenId(null)}
-                        />
+                        <div className="fixed inset-0 z-10" onClick={() => setMenuOpenId(null)} />
                         <div
                           className="absolute right-0 top-full mt-0.5 z-20 min-w-[160px] rounded-md border border-border bg-card shadow-lg py-1"
                           data-testid={`workbench-row-menu-dropdown-${project.id}`}
@@ -364,7 +375,9 @@ export function WorkbenchProjectList({ onOpenSession }: WorkbenchProjectListProp
                               if (typeof projectApi?.scaffold === 'function') {
                                 try {
                                   await projectApi.scaffold(project.id, {
-                                    projectType: (project.projectType ?? project.detectedType ?? 'coding') as ProjectType,
+                                    projectType: (project.projectType ??
+                                      project.detectedType ??
+                                      'coding') as ProjectType,
                                     createDirectories: true,
                                     createSageMd: true,
                                     importDefaultConstraints: true,
@@ -457,9 +470,7 @@ function MenuItem({ label, icon, destructive, onClick }: MenuItemProps) {
       type="button"
       onClick={onClick}
       className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-ui-2xs transition-colors ${
-        destructive
-          ? 'text-destructive hover:bg-destructive/10'
-          : 'text-foreground hover:bg-muted'
+        destructive ? 'text-destructive hover:bg-destructive/10' : 'text-foreground hover:bg-muted'
       }`}
     >
       {icon && <span className="shrink-0">{icon}</span>}

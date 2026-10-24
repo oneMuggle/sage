@@ -78,6 +78,8 @@ vi.mock('../features/project-type/archetypeBlueprints', () => ({
   },
 }));
 
+import { I18nProvider } from '../shared/lib/i18n';
+
 /* ── Import SUT after mocks ──────────────────────────────────────── */
 
 import {
@@ -107,11 +109,13 @@ const testProject: ProjectSummary = {
 
 function renderAt(projectId: string) {
   return render(
-    <MemoryRouter initialEntries={[`/projects/governance/${projectId}`]}>
-      <Routes>
-        <Route path="/projects/governance/:projectId" element={<ProjectGovernance />} />
-      </Routes>
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter initialEntries={[`/projects/governance/${projectId}`]}>
+        <Routes>
+          <Route path="/projects/governance/:projectId" element={<ProjectGovernance />} />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 
@@ -203,7 +207,7 @@ describe('ProjectGovernance', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
-    expect(screen.getByTestId('governance-tab-rules')).toHaveTextContent('治理规则 (1)');
+    expect(screen.getByTestId('governance-tab-rules')).toHaveTextContent('规则与约束 (1)');
   });
 
   it('type selector calls projectApi.update on change', async () => {

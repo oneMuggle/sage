@@ -42,7 +42,6 @@ import { useI18n } from '../shared/lib/i18n';
 import { Button } from '../shared/ui/Button';
 import { Card } from '../shared/ui/Card';
 
-
 type GovernanceTab = 'overview' | 'charter' | 'materials' | 'rules' | 'milestones' | 'profile';
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -508,12 +507,19 @@ export function ProjectGovernance() {
           { id: 'materials' as GovernanceTab, label: locale === 'en' ? 'Materials' : '项目资料' },
           {
             id: 'rules' as GovernanceTab,
-            label: locale === 'en'
-              ? `Rules (${project.allowedPaths?.length ?? 0})`
-              : `规则与约束 (${project.allowedPaths?.length ?? 0})`,
+            label:
+              locale === 'en'
+                ? `Rules (${project.allowedPaths?.length ?? 0})`
+                : `规则与约束 (${project.allowedPaths?.length ?? 0})`,
           },
           { id: 'milestones' as GovernanceTab, label: locale === 'en' ? 'Milestones' : '里程碑' },
-          { id: 'profile' as GovernanceTab, label: locale === 'en' ? `AI context (${profileEntries.length})` : `AI 认知 (${profileEntries.length})` },
+          {
+            id: 'profile' as GovernanceTab,
+            label:
+              locale === 'en'
+                ? `AI context (${profileEntries.length})`
+                : `AI 认知 (${profileEntries.length})`,
+          },
         ].map((tab) => (
           <button
             key={tab.id}

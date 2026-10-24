@@ -75,7 +75,6 @@ export function Projects() {
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
         <div className="max-w-3xl mx-auto space-y-4">
-
           {/* ── Section 1: Quick start ─────────────────────────────── */}
           <div
             className="rounded-xl border border-border bg-card p-4 space-y-3"
@@ -144,7 +143,10 @@ export function Projects() {
 
           {/* ── Section 3: Advanced (collapsed by default) ─────────── */}
           {projects.length > 0 && (
-            <div className="rounded-lg border border-border/60 bg-card/50" data-testid="workbench-advanced">
+            <div
+              className="rounded-lg border border-border/60 bg-card/50"
+              data-testid="workbench-advanced"
+            >
               <button
                 type="button"
                 onClick={() => setAdvancedOpen((v) => !v)}
@@ -167,8 +169,12 @@ export function Projects() {
                     className="inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-ui-2xs font-medium text-foreground hover:bg-muted transition-colors"
                   >
                     {copiedPaths
-                      ? (locale === 'en' ? 'Copied!' : '已复制')
-                      : (locale === 'en' ? 'Copy all paths' : '复制所有路径')}
+                      ? locale === 'en'
+                        ? 'Copied!'
+                        : '已复制'
+                      : locale === 'en'
+                        ? 'Copy all paths'
+                        : '复制所有路径'}
                   </button>
                   <button
                     type="button"
@@ -192,7 +198,6 @@ export function Projects() {
               )}
             </div>
           )}
-
         </div>
       </div>
 
