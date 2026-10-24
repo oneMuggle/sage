@@ -248,7 +248,9 @@ ALL_BUILTIN_TOOL_NAMES = tuple(
 # tools/permissions 各有一份字面量；R92 起收敛到本模块单一来源，
 # profile 白名单的三道判定（registry schema 过滤、agent 并行预检、
 # agent 执行边界）也统一走 ``tool_name_in_allowlist()``，防止各写一份
-# 精确判定导致口径漂移。
+# 精确判定导致口径漂移。R98 起该 matcher 的受限通配分支与权限
+# 规则（R96）同口径：只按调用方传入的权威 ``plugin_name`` 结构化
+# 命中，不再按完整工具名字符串前缀判断插件归属。
 # ---------------------------------------------------------------------------
 
 #: 进程外插件工具的 LLM 命名空间前缀（单一来源）。
@@ -345,14 +347,25 @@ def is_plugin_tool_reference(entry: Any) -> bool:
 
 
 def tool_name_in_allowlist(
-    tool_name: Any, allowed_tools: Optional[Iterable[Any]]
+    tool_name: Any,
+    allowed_tools: Optional[Iterable[Any]],
+    plugin_name: Optional[str] = None,
 ) -> bool:
     """profile 白名单单一匹配口径（精确名 + R92 插件受限通配）。
 
     - ``allowed_tools is None``：无白名单限制（保持既有语义）；
     - 空可迭代对象：不放行任何工具（保持既有语义）；
-    - 普通条目精确匹配；仅 ``plugin__*`` 与 ``plugin__<plugin>__*``
-      做命名空间通配，其余含 ``*`` 的条目不展开；
+    - 普通条目精确匹配，不要求插件身份；仅 ``plugin__*`` 与
+      ``plugin__<plugin>__*`` 做通配，其余含 ``*`` 的条目不展开；
+    - R98：受限通配不再按完整工具名字符串前缀命中。插件名与
+      capability 名都可含 ``__``，同一字符串可能对应不同
+      结构化身份（``plugin__a__b__c`` 可能是插件 ``a__b`` 的
+      工具）；通配命中以调用方给出的权威 ``plugin_name``
+      （桥接发布记录）为准——完整工具名确实属于该插件，且
+      单插件通配与由权威名重新派生的通配完全一致，与 R96
+      ``PermissionRule.matches`` 同口径。身份缺失、非法或
+      不匹配时通配不命中（fail-closed），调用方不得按完整
+      工具名切分猜测插件名；
     - 显式白名单下非字符串工具名不放行，坏条目不能放宽整个白名单。
     """
     if allowed_tools is None:
@@ -362,12 +375,13 @@ def tool_name_in_allowlist(
     for entry in allowed_tools:
         if entry == tool_name:
             return True
-        prefix = plugin_tool_wildcard_prefix(entry)
-        if prefix is None or not is_plugin_tool_name(tool_name):
+        if not is_plugin_tool_wildcard(entry):
             continue
-        if prefix == PLUGIN_TOOL_PREFIX:
+        if not plugin_tool_belongs_to_plugin(tool_name, plugin_name):
+            continue
+        if entry == PLUGIN_TOOL_PREFIX + "*":
             return True
-        if tool_name.startswith(prefix) and len(tool_name) > len(prefix):
+        if plugin_tool_wildcard_for_plugin(plugin_name) == entry:
             return True
     return False
 
