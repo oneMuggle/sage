@@ -576,8 +576,8 @@ def test_get_usage_trend_groups_by_hour(monkeypatch: pytest.MonkeyPatch):
     point = data["series"][-1]
     assert point["requests"] >= 2
     assert point["prompt_tokens"] >= 300
-    # ts 形如 2026-09-09T07:00:00Z
-    assert point["ts"].endswith(":00:00Z")
+    # ts 形如 2026-09-09T07:00:00 (本地 ISO, 无 Z 后缀)
+    assert point["ts"].endswith(":00:00")
     # cache_hit_rate: prompt=300, creation=0, read=60 → 60/300 = 0.2
     assert point["cache_hit_rate"] == pytest.approx(0.2)
 

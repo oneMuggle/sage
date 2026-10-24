@@ -17,6 +17,7 @@ import { useMemo } from 'react';
 
 import type { UsageTrend, UsageTrendPoint } from '../../shared/api/usageApi';
 import { useI18n } from '../../shared/lib/i18n';
+
 import { monotonePath } from './chartUtils';
 
 const SVG_W = 600;
