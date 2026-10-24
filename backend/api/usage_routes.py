@@ -163,8 +163,9 @@ async def get_usage_trend(
     """L8 PR-C (2026-09-09): 时间序列, 按桶聚合。
 
     返回 ``{range, bucket, series: [{ts, requests, prompt_tokens,
-    completion_tokens, cost_usd, cache_hit_rate}]}``, ts 是桶起始 UTC
-    ISO8601。bucket=today → hour (24 桶); 7d/30d/total → day。
+    completion_tokens, cost_usd, cache_hit_rate}]}``, ts 是桶起始**本地**
+    ISO8601 (无时区后缀, 形如 "2026-09-09T07:00:00").
+    bucket=today → hour (24 桶); 7d/30d/total → day.
     """
     try:
         from backend.data.database import _SQLITE_LOCK, get_database
@@ -182,13 +183,13 @@ async def get_usage_trend(
                 where_session = " AND session_id = ?"
                 params.append(session_id)
             if bucket == "hour":
-                # strftime %Y-%m-%dT%H:00:00Z, 取 created_at 的整点起始
-                fmt = "%Y-%m-%dT%H:00:00Z"
-                trunc_expr = "strftime(?, created_at / 1000, 'unixepoch')"
+                # strftime %Y-%m-%dT%H:00:00, 取 created_at 的本地整点起始 (localtime)
+                fmt = "%Y-%m-%dT%H:00:00"
+                trunc_expr = "strftime(?, created_at / 1000, 'unixepoch', 'localtime')"
                 fmt_params: List[Any] = [fmt]
             else:
-                fmt = "%Y-%m-%dT00:00:00Z"
-                trunc_expr = "strftime(?, created_at / 1000, 'unixepoch')"
+                fmt = "%Y-%m-%dT00:00:00"
+                trunc_expr = "strftime(?, created_at / 1000, 'unixepoch', 'localtime')"
                 fmt_params = [fmt]
             sql = (
                 f"SELECT {trunc_expr} AS ts,"
