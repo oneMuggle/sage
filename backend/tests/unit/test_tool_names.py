@@ -128,25 +128,110 @@ def test_allowlist_matcher_exact_and_legacy_semantics():
     assert tool_name_in_allowlist(None, ["bash"]) is False
 
 
-def test_allowlist_matcher_plugin_wildcards():
-    assert tool_name_in_allowlist(_PLUGIN_TOOL, ["plugin__*"]) is True
-    assert tool_name_in_allowlist(_PLUGIN_TOOL, ["plugin__demo__*"]) is True
+def test_allowlist_matcher_plugin_wildcards_require_identity():
+    """R98：受限通配只按权威 plugin_name 结构化命中，不看字符串前缀。"""
+    # 身份缺失时两种通配都不命中（fail-closed），精确名不受影响
+    assert tool_name_in_allowlist(_PLUGIN_TOOL, ["plugin__*"]) is False
+    assert tool_name_in_allowlist(_PLUGIN_TOOL, ["plugin__demo__*"]) is False
+    assert tool_name_in_allowlist(_PLUGIN_TOOL, [_PLUGIN_TOOL]) is True
+    # 权威身份正确时命中；capability 名含 __ 仍属该插件命名空间
     assert (
-        tool_name_in_allowlist("plugin__demo__a__b", ["plugin__demo__*"]) is True
+        tool_name_in_allowlist(_PLUGIN_TOOL, ["plugin__*"], plugin_name="demo")
+        is True
     )
-    assert tool_name_in_allowlist(_PLUGIN_TOOL, ["plugin__other__*"]) is False
     assert (
-        tool_name_in_allowlist("plugin__demo2__hello", ["plugin__demo__*"])
+        tool_name_in_allowlist(
+            _PLUGIN_TOOL, ["plugin__demo__*"], plugin_name="demo"
+        )
+        is True
+    )
+    assert (
+        tool_name_in_allowlist(
+            "plugin__demo__a__b", ["plugin__demo__*"], plugin_name="demo"
+        )
+        is True
+    )
+    # 身份是别的插件时，单插件通配不命中
+    assert (
+        tool_name_in_allowlist(
+            _PLUGIN_TOOL, ["plugin__demo__*"], plugin_name="other"
+        )
         is False
     )
-    # 通配只匹配合法插件工具形状，不匹配残缺名/内置/MCP
-    assert tool_name_in_allowlist("plugin__demo", ["plugin__*"]) is False
-    assert tool_name_in_allowlist("memory_search", ["plugin__*"]) is False
-    assert tool_name_in_allowlist("mcp__server__tool", ["plugin__*"]) is False
-    # 插件名含 __ 的既有拼接歧义：按命名空间前缀做文本匹配（如实记录）
     assert (
-        tool_name_in_allowlist("plugin__a__b__c", ["plugin__a__*"]) is True
+        tool_name_in_allowlist(
+            _PLUGIN_TOOL, ["plugin__other__*"], plugin_name="demo"
+        )
+        is False
     )
+    # 通配只匹配合法插件工具形状，不匹配残缺名/内置/MCP（身份在场也不行）
+    assert (
+        tool_name_in_allowlist("plugin__demo", ["plugin__*"], plugin_name="demo")
+        is False
+    )
+    assert (
+        tool_name_in_allowlist(
+            "memory_search", ["plugin__*"], plugin_name="demo"
+        )
+        is False
+    )
+    assert (
+        tool_name_in_allowlist(
+            "mcp__server__tool", ["plugin__*"], plugin_name="demo"
+        )
+        is False
+    )
+
+
+def test_allowlist_matcher_plugin_wildcards_structured_identity():
+    """插件名含 __ 时按真实身份判定，不再按完整工具名切分（R98）。"""
+    # plugin__a__b__c 实际属于插件 a__b 时，插件 a 的通配不得带飞
+    assert (
+        tool_name_in_allowlist(
+            "plugin__a__b__c", ["plugin__a__*"], plugin_name="a__b"
+        )
+        is False
+    )
+    assert (
+        tool_name_in_allowlist(
+            "plugin__a__b__c", ["plugin__a__b__*"], plugin_name="a__b"
+        )
+        is True
+    )
+    assert (
+        tool_name_in_allowlist(
+            "plugin__a__b__c", ["plugin__*"], plugin_name="a__b"
+        )
+        is True
+    )
+    # 同一字符串若权威身份是插件 a（capability 为 b__c），口径随之翻转
+    assert (
+        tool_name_in_allowlist(
+            "plugin__a__b__c", ["plugin__a__*"], plugin_name="a"
+        )
+        is True
+    )
+    assert (
+        tool_name_in_allowlist(
+            "plugin__a__b__c", ["plugin__a__b__*"], plugin_name="a"
+        )
+        is False
+    )
+    # 身份与完整工具名不自洽（工具名不在该插件命名空间）时不命中
+    assert (
+        tool_name_in_allowlist(
+            "plugin__demo2__hello", ["plugin__demo__*"], plugin_name="demo"
+        )
+        is False
+    )
+    # 非法身份一律不命中
+    for bad_name in ("", "de mo", "demo*"):
+        assert (
+            tool_name_in_allowlist(
+                _PLUGIN_TOOL, ["plugin__*"], plugin_name=bad_name
+            )
+            is False
+        )
 
 
 @pytest.mark.parametrize(
