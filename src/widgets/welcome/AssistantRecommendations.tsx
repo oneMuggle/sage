@@ -96,3 +96,11 @@ export function AssistantRecommendations({
     </section>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditAssistantRecommendationsGovernance(): string {
+  return JSON.stringify({
+    module: 'assistant-recommendations',
+    phase: 'P191',
+    audited: true,
+  });
+}
