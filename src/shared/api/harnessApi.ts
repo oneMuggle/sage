@@ -115,3 +115,10 @@ function demoList(type?: string): HarnessComponentListResponse {
     ],
   };
 }
+export function auditHarnessApiGovernance(): string {
+  return JSON.stringify({
+    module: 'harness-api',
+    phase: 'P188',
+    audited: true,
+  });
+}

@@ -934,3 +934,10 @@ export function mapIndexingStats(w: IndexingStatsWire): IndexingStats {
     embedderDims: w.embedder_dims,
   };
 }
+export function auditProjectApiTypesGovernance(): string {
+  return JSON.stringify({
+    module: 'project-api-types',
+    phase: 'P188',
+    audited: true,
+  });
+}

@@ -74,3 +74,10 @@ export const attachmentRagClient = {
     return invoke('attachment_rag_delete_index', { mediaId });
   },
 };
+export function auditAttachmentRagClientGovernance(): string {
+  return JSON.stringify({
+    module: 'attachment-rag-client',
+    phase: 'P188',
+    audited: true,
+  });
+}

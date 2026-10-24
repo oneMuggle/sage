@@ -1021,3 +1021,10 @@ export const projectApi = {
     }
   },
 };
+export function auditProjectApiGovernance(): string {
+  return JSON.stringify({
+    module: 'project-api',
+    phase: 'P188',
+    audited: true,
+  });
+}

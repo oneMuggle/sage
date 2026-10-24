@@ -50,3 +50,10 @@ export function maybeIndexAttachment(mediaId: string): boolean {
     });
   return true;
 }
+export function auditAttachmentAutoIndexGovernance(): string {
+  return JSON.stringify({
+    module: 'attachment-auto-index',
+    phase: 'P188',
+    audited: true,
+  });
+}

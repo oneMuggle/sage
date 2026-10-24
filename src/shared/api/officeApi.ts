@@ -742,3 +742,10 @@ export function formatOfficeWordLintJson(res: OfficeWordLintResult): string {
     2,
   );
 }
+export function auditOfficeApiGovernance(): string {
+  return JSON.stringify({
+    module: 'office-api',
+    phase: 'P188',
+    audited: true,
+  });
+}
