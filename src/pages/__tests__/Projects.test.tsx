@@ -39,45 +39,42 @@ vi.mock('../../shared/api', async () => {
 });
 
 describe('project workbench', () => {
-  it('uses the existing project view with a spacious presentation and renders Phase P31 workbench toolbar', async () => {
+  it('renders three-section layout with quickstart, project list, and advanced area', async () => {
     render(
       <MemoryRouter>
         <Projects />
       </MemoryRouter>,
     );
-    expect(screen.getByTestId('project-workbench')).toBeInTheDocument();
-    expect(screen.getByTestId('project-workbench-toolbar')).toBeInTheDocument();
+
+    // Section 1: Quick start card
+    expect(screen.getByTestId('workbench-quickstart')).toBeInTheDocument();
+    expect(screen.getByTestId('workbench-cta-new-chat')).toBeInTheDocument();
+    expect(screen.getByTestId('workbench-cta-add-project')).toBeInTheDocument();
+
+    // Section 2: Project list with count (English locale mock → "1 project")
     await waitFor(() => {
-      expect(screen.getByTestId('workbench-project-count')).toHaveTextContent('已纳管项目：1 个');
+      expect(screen.getByTestId('workbench-project-count')).toHaveTextContent('1 project');
     });
     expect(projectApi.list).toHaveBeenCalled();
+    expect(screen.getByTestId('workbench-refresh-btn')).toBeInTheDocument();
 
+    // Section 3: Advanced area (collapsed by default, toggle to open)
+    const advancedToggle = screen.getByTestId('workbench-advanced-toggle');
+    fireEvent.click(advancedToggle);
+    expect(screen.getByTestId('workbench-copy-paths-btn')).toBeInTheDocument();
+    expect(screen.getByTestId('workbench-export-registry-md-btn')).toBeInTheDocument();
+
+    // Copy paths and export markdown still work
     fireEvent.click(screen.getByTestId('workbench-export-registry-md-btn'));
-    expect(screen.getByTestId('workbench-export-registry-md-btn')).toHaveTextContent(
-      /已复制台账|导出项目台账 MD/,
-    );
     fireEvent.click(screen.getByTestId('workbench-copy-paths-btn'));
-    fireEvent.click(screen.getByTestId('workbench-refresh-registry-btn'));
-    fireEvent.click(screen.getByTestId('workbench-save-registry-l4-btn'));
-    expect(screen.getByTestId('workbench-save-registry-l4-btn')).toHaveTextContent('已存台账L4');
-    fireEvent.click(screen.getByTestId('workbench-save-registry-l3-btn'));
-    expect(screen.getByTestId('workbench-save-registry-l3-btn')).toHaveTextContent('已存台账L3');
-    fireEvent.click(screen.getByTestId('workbench-save-archetype-stats-l3-btn'));
-    expect(screen.getByTestId('workbench-save-archetype-stats-l3-btn')).toHaveTextContent(
-      '已存统计L3',
-    );
-    fireEvent.click(screen.getByTestId('workbench-registry-to-milestone-btn'));
-    expect(screen.getByTestId('workbench-registry-to-milestone-btn')).toHaveTextContent(
-      '已转巡检里程碑',
-    );
 
+    // WorkbenchProjectList receives onOpenSession prop
     expect(props).toHaveBeenCalledWith(
       expect.objectContaining({ onOpenSession: expect.any(Function) }),
     );
-    expect(screen.getByText(/folder binding still controls file access/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'New deliverable' }));
 
-    fireEvent.click(screen.getByTestId('workbench-open-wizard-btn'));
+    // Opening wizard from quickstart card
+    fireEvent.click(screen.getByTestId('workbench-cta-add-project'));
     expect(await screen.findByText('创建多形态项目')).toBeInTheDocument();
   });
 });

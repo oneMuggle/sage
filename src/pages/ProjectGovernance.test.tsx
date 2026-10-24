@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectSummary } from '../shared/api';
+import { I18nProvider } from '../shared/lib/i18n';
 
 /* ── Mock API ─────────────────────────────────────────────────────── */
 
@@ -107,11 +108,13 @@ const testProject: ProjectSummary = {
 
 function renderAt(projectId: string) {
   return render(
-    <MemoryRouter initialEntries={[`/projects/governance/${projectId}`]}>
-      <Routes>
-        <Route path="/projects/governance/:projectId" element={<ProjectGovernance />} />
-      </Routes>
-    </MemoryRouter>,
+    <I18nProvider>
+      <MemoryRouter initialEntries={[`/projects/governance/${projectId}`]}>
+        <Routes>
+          <Route path="/projects/governance/:projectId" element={<ProjectGovernance />} />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>,
   );
 }
 
@@ -203,7 +206,7 @@ describe('ProjectGovernance', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-governance-page')).toBeInTheDocument();
     });
-    expect(screen.getByTestId('governance-tab-rules')).toHaveTextContent('治理规则 (1)');
+    expect(screen.getByTestId('governance-tab-rules')).toHaveTextContent('规则与约束 (1)');
   });
 
   it('type selector calls projectApi.update on change', async () => {
