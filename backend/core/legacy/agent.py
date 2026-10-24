@@ -1690,11 +1690,13 @@ class SageAgent:
                 # 提示后重试（最多 empty_response_max 次, <=0 = 关闭保持旧行为）;
                 # 耗尽后 DONE + 兜底文案（不 FAILED, 前端有可见反馈而非报错）。
                 # 流式路径安全: 空响应本就无 CONTENT_DELTA 下发, 重试不会重复输出。
-                if (
-                    not response.tool_calls
-                    and empty_response_max > 0
-                    and not (response.content or "").strip()
-                ):
+                # 2026-10-23 修复: 有效响应（有 tool_calls 或 content）时重置计数器,
+                # 只统计连续空响应次数, 避免间歇性空响应误触发兜底。
+                if response.tool_calls or (response.content or "").strip():
+                    # 有效响应: 重置空响应计数器
+                    empty_response_retries = 0
+                elif empty_response_max > 0:
+                    # 空响应: 递增计数器并重试
                     if empty_response_retries < empty_response_max:
                         empty_response_retries += 1
                         logger.warning(
