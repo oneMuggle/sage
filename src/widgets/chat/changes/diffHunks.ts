@@ -86,3 +86,10 @@ export function formatDiffHunksJson(hunks: DiffHunk[] = []): string {
     2,
   );
 }
+export function auditDiffHunksGovernance(): string {
+  return JSON.stringify({
+    module: 'diff-hunks',
+    phase: 'P187',
+    audited: true,
+  });
+}

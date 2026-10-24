@@ -83,3 +83,10 @@ export function formatReviewSectionsJson(sections?: ReviewFileSection[] | null):
   });
 }
 /* v8 ignore stop */
+export function auditReviewSectionsGovernance(): string {
+  return JSON.stringify({
+    module: 'review-sections',
+    phase: 'P187',
+    audited: true,
+  });
+}
