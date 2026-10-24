@@ -61,6 +61,156 @@ def _make_draft(
     )
 
 
+def _make_harness_proposal_setup(tmp_path, proposal_id: str):
+    """Create a real pending harness proposal + SkillDraft mirror."""
+    import sqlite3
+
+    from backend.application.kernel.harness_evidence import create_harness_evidence
+    from backend.application.kernel.harness_files import HarnessFileSpec
+    from backend.application.kernel.harness_proposal_engine import (
+        compose_harness_proposal,
+        record_harness_probe,
+    )
+    from backend.application.kernel.harness_proposals import create_harness_proposal
+    from backend.application.kernel.harness_snapshots import write_harness_files
+    from backend.skills.draft_store import SkillDraftStore
+    from backend.skills.harness_proposal_bridge import submit_harness_proposal
+
+    root = tmp_path / "harness"
+    write_harness_files(
+        root,
+        [
+            HarnessFileSpec("system.md", "be helpful\n", component="system"),
+            HarnessFileSpec(
+                "plugins.yaml",
+                "harness_config:\n  preset: standard\n",
+                component="plugins",
+                authority="configuration",
+            ),
+        ],
+        generated_at="2026-10-21T00:00:00Z",
+    )
+    create_harness_evidence(
+        root,
+        "ev-api-001",
+        "tool_trajectory",
+        {"session_id": "session-api", "tool": "bash"},
+        excerpt="cwd drift caused a repeated bash failure.",
+        created_at="2026-10-21T00:00:00Z",
+    )
+    create_harness_proposal(
+        root,
+        title="Verify cwd through API approval",
+        summary="API approval should adopt the composed harness edit.",
+        candidates=[
+            {
+                "id": "invariant",
+                "lane": "invariant",
+                "edits": [
+                    {
+                        "path": "system.md",
+                        "content": "be helpful\nverify cwd first\n",
+                        "evidence_ids": ["ev-api-001"],
+                    }
+                ],
+            }
+        ],
+        proposal_id=proposal_id,
+        created_at="2026-10-21T00:00:00Z",
+    )
+    record_harness_probe(
+        root,
+        proposal_id,
+        {
+            "dataset": {"id": "replay-api", "evidence_ids": ["ev-api-001"]},
+            "base_metrics": {"tool_error_rate": 0.2, "success_rate": 0.7},
+            "candidates": {
+                "invariant": {
+                    "metrics": {"tool_error_rate": 0.1, "success_rate": 0.8},
+                    "edits": {
+                        "system.md": {
+                            "supported": True,
+                            "evidence_ids": ["ev-api-001"],
+                        }
+                    },
+                }
+            },
+        },
+    )
+    compose_harness_proposal(root, proposal_id)
+    db_path = tmp_path / "drafts.db"
+    with sqlite3.connect(str(db_path)) as conn:
+        conn.execute(
+            """
+            CREATE TABLE skill_drafts (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL,
+                when_to_use TEXT NOT NULL, content TEXT NOT NULL,
+                trigger_type TEXT NOT NULL, source_session_id TEXT,
+                source_context TEXT, status TEXT NOT NULL DEFAULT 'pending',
+                created_at INTEGER NOT NULL, reviewed_at INTEGER,
+                reviewed_by_user_id TEXT
+            )
+            """
+        )
+    store = SkillDraftStore(str(db_path))
+    draft = submit_harness_proposal(root, proposal_id, draft_store=store)
+    return root, store, draft
+
+
+class TestHarnessProposalDraftApproval:
+    """R85: harness mirrors reuse the existing approval endpoints."""
+
+    def test_approve_adopts_without_skill_writer(self, client, tmp_path):
+        root, store, draft = _make_harness_proposal_setup(tmp_path, "prop-api-adopt")
+        mock_loader = MagicMock()
+
+        with patch(
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
+            return_value=store,
+        ), patch(
+            "backend.api.legacy_skill_draft_routes.get_skill_loader",
+            return_value=mock_loader,
+        ):
+            response = client.post(f"/skill-drafts/{draft.id}/approve")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["kind"] == "harness_proposal"
+        assert data["proposal_id"] == "prop-api-adopt"
+        assert data["changed_files"] == ["system.md"]
+        assert "verify cwd first" in (root / "system.md").read_text(encoding="utf-8")
+        assert store.get(draft.id).status == "approved"
+        mock_loader.write.assert_not_called()
+
+    def test_reject_marks_proposal_without_mutation(self, client, tmp_path):
+        root, store, draft = _make_harness_proposal_setup(tmp_path, "prop-api-reject")
+
+        with patch(
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
+            return_value=store,
+        ):
+            response = client.post(f"/skill-drafts/{draft.id}/reject")
+
+        assert response.status_code == 200
+        assert response.json()["kind"] == "harness_proposal"
+        assert (root / "system.md").read_text(encoding="utf-8") == "be helpful\n"
+        assert store.get(draft.id).status == "rejected"
+
+    def test_stale_approve_returns_409_and_keeps_draft_pending(self, client, tmp_path):
+        root, store, draft = _make_harness_proposal_setup(tmp_path, "prop-api-stale")
+        (root / "system.md").write_text("drifted\n", encoding="utf-8")
+
+        with patch(
+            "backend.api.legacy_skill_draft_routes.get_skill_draft_store",
+            return_value=store,
+        ):
+            response = client.post(f"/skill-drafts/{draft.id}/approve")
+
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "harness_proposal_not_adoptable"
+        assert store.get(draft.id).status == "pending"
+
+
 # ------------------------------------------------------------------ #
 # GET /skill-drafts
 # ------------------------------------------------------------------ #

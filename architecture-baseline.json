@@ -1,7 +1,7 @@
 {
   "version": 1,
   "files": {
-    "backend/agents/profiles.py": 1021,
+    "backend/agents/profiles.py": 1033,
     "backend/api/legacy_routes.py": 2433,
     "backend/api/llm_proxy_routes.py": 1171,
     "backend/api/orchestration_router.py": 807,
