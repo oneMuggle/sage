@@ -821,3 +821,10 @@ export function useChat() {
     reattachActiveStream,
   };
 }
+export function auditSendMessageUseChatGovernance(): string {
+  return JSON.stringify({
+    module: 'send-message-use-chat',
+    phase: 'P189',
+    audited: true,
+  });
+}

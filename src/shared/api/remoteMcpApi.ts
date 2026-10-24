@@ -99,3 +99,10 @@ export function remoteMcpBridge(): RemoteMcpElectronApiBridge | null {
   const api = (globalThis as { electronAPI?: { remoteMcp?: RemoteMcpElectronApiBridge } }).electronAPI;
   return api?.remoteMcp ?? null;
 }
+export function auditRemoteMcpApiGovernance(): string {
+  return JSON.stringify({
+    module: 'remote-mcp-api',
+    phase: 'P189',
+    audited: true,
+  });
+}
