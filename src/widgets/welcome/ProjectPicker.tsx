@@ -30,19 +30,14 @@ export function ProjectPicker({ value, onChange, projects }: ProjectPickerProps)
     if (!searchQuery.trim()) return projects;
     const query = searchQuery.toLowerCase();
     return projects.filter(
-      (p) =>
-        p.name.toLowerCase().includes(query) ||
-        p.path.toLowerCase().includes(query),
+      (p) => p.name.toLowerCase().includes(query) || p.path.toLowerCase().includes(query),
     );
   }, [projects, searchQuery]);
 
   const selectedProject = projects.find((p) => p.id === value);
 
   return (
-    <Select
-      value={value ?? 'none'}
-      onValueChange={(val) => onChange(val === 'none' ? null : val)}
-    >
+    <Select value={value ?? 'none'} onValueChange={(val) => onChange(val === 'none' ? null : val)}>
       <SelectTrigger aria-label="选择项目" className="w-48">
         <SelectValue placeholder="选择项目">
           {selectedProject ? selectedProject.name : '选择项目'}
