@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { ChevronDown } from 'lucide-react';
 
 import { resolveEndpoint } from '../entities/setting/types';
 import { useArtifactEventsStore } from '../features/artifacts/artifactEventsStore';
@@ -156,7 +157,7 @@ export function Chat() {
   const workspacePath = useCurrentWorkspace();
   const pendingSentRef = useRef(false);
   const [archivesOpen, setArchivesOpen] = useState(false);
-  const { scrollRef, showJumpToLatest, scrollToLatest } = useChatStickyScroll({
+  const { scrollRef, showScrollToBottom, scrollToLatest } = useChatStickyScroll({
     currentSessionId,
     messages,
     streamingMessageId,
@@ -496,19 +497,6 @@ export function Chat() {
               taskBoard={taskBoard ?? null}
               onCancelRun={handleCancelRun}
             />
-            {/* Task 2: sticky-bottom "跳到最新" 按钮 — 用户离开底部 + 流式进行中显示,
-            固定右下角,a11y ``aria-label="跳到最新"``。点击后 scrollTop=scrollHeight
-            并把 wasAtBottomRef 重置。 */}
-            {showJumpToLatest && (
-              <button
-                type="button"
-                onClick={scrollToLatest}
-                aria-label="跳到最新"
-                className="absolute bottom-4 right-4 px-3 py-1.5 bg-primary text-text-inverse text-xs rounded-radius-sm shadow-md hover:bg-primary-hover transition-colors z-10"
-              >
-                跳到最新
-              </button>
-            )}
           </div>
 
           {/* 阶段 4 + P2: 流式处理时显示当前活跃 agent + 迭代轮次 + 阶段 */}
@@ -564,6 +552,19 @@ export function Chat() {
               if (currentSessionId) clearPendingForSession(currentSessionId);
             }}
           />
+          {/* 滚动到底部按钮：居中显示在输入框上方，用户离开底部时显示 */}
+          {showScrollToBottom && (
+            <div className="flex justify-center py-1">
+              <button
+                type="button"
+                onClick={scrollToLatest}
+                aria-label="滚动到最新消息"
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-bg-elevated border border-border shadow-md hover:bg-bg-hover transition-colors"
+              >
+                <ChevronDown className="w-4 h-4 text-text-secondary" />
+              </button>
+            </div>
+          )}
           <ChatInput
             onSend={handleSendMessageWithEditResend}
             onInterrupt={interrupt}

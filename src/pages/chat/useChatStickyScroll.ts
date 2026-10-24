@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-import { useChatStreamStore, type TaskBoardState } from '../../features/send-message/chatStreamStore';
+import {
+  useChatStreamStore,
+  type TaskBoardState,
+} from '../../features/send-message/chatStreamStore';
 import { restoreRunToBoard } from '../../features/send-message/orchestrationEvents';
 import { orchRunClient } from '../../shared/api/orchRunClient';
 import type { Message as MessageType } from '../../shared/lib/store';
@@ -23,7 +26,7 @@ export function useChatStickyScroll({
   const lastMsgLengthRef = useRef(0);
   const scrollRafRef = useRef<number | null>(null);
   const programmaticTopRef = useRef<number | null>(null);
-  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const lastMsg = messages[messages.length - 1];
   const previousMessagesRef = useRef<typeof messages>([]);
 
@@ -31,7 +34,7 @@ export function useChatStickyScroll({
     wasAtBottomRef.current = true;
     lastMsgLengthRef.current = 0;
     previousMessagesRef.current = [];
-    setShowJumpToLatest(false);
+    setShowScrollToBottom(false);
   }, [currentSessionId]);
 
   useLayoutEffect(() => {
@@ -89,7 +92,7 @@ export function useChatStickyScroll({
       const distance = el.scrollHeight - el.clientHeight - el.scrollTop;
       const atBottom = distance <= BOTTOM_THRESHOLD_PX;
       wasAtBottomRef.current = atBottom;
-      setShowJumpToLatest(!atBottom && Boolean(streamingMessageId));
+      setShowScrollToBottom(!atBottom);
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
@@ -143,12 +146,12 @@ export function useChatStickyScroll({
     if (!el) return;
     el.scrollTop = el.scrollHeight;
     wasAtBottomRef.current = true;
-    setShowJumpToLatest(false);
+    setShowScrollToBottom(false);
   };
 
   return {
     scrollRef,
-    showJumpToLatest,
+    showScrollToBottom,
     scrollToLatest,
   };
 }
