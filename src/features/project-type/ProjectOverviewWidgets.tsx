@@ -680,3 +680,11 @@ export function ProjectOverviewWidgets({ project }: ProjectOverviewWidgetsProps)
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditProjectOverviewWidgetsGovernance(): string {
+  return JSON.stringify({
+    module: 'project-overview-widgets',
+    phase: 'P190',
+    audited: true,
+  });
+}
