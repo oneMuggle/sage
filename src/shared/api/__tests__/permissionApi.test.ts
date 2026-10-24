@@ -18,7 +18,9 @@ vi.mock('../utils', async (importOriginal) => {
 
 import { permissionApi } from '../permissionApi';
 
-beforeEach(() => { mockInvoke.mockReset(); });
+beforeEach(() => {
+  mockInvoke.mockReset();
+});
 
 describe('permissionApi', () => {
   it('getPreset() returns parsed preset state', async () => {
@@ -44,5 +46,45 @@ describe('permissionApi', () => {
   it('propagates invoke errors', async () => {
     mockInvoke.mockRejectedValueOnce(new Error('backend down'));
     await expect(permissionApi.getPreset()).rejects.toThrow('backend down');
+  });
+
+  it('listRules() parses rules and drops invalid entries', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      rules: [
+        { tool_pattern: 'bash', decision: 'deny' },
+        { tool_pattern: 'plugin__demo__*', decision: 'allow' },
+        { tool_pattern: '', decision: 'allow' },
+        { tool_pattern: 'write_file', decision: 'bogus' },
+        'junk',
+        { decision: 'ask' },
+      ],
+    });
+    const rules = await permissionApi.listRules();
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_list_rules', {});
+    expect(rules).toEqual([
+      { tool_pattern: 'bash', decision: 'deny' },
+      { tool_pattern: 'plugin__demo__*', decision: 'allow' },
+    ]);
+  });
+
+  it('listRules() returns [] on malformed payload', async () => {
+    mockInvoke.mockResolvedValueOnce(null);
+    await expect(permissionApi.listRules()).resolves.toEqual([]);
+  });
+
+  it('deleteRule() invokes permissions_delete_rule and returns updated list', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      rules: [{ tool_pattern: 'write_file', decision: 'ask' }],
+    });
+    const rules = await permissionApi.deleteRule(0);
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_delete_rule', { index: 0 });
+    expect(rules).toEqual([{ tool_pattern: 'write_file', decision: 'ask' }]);
+  });
+
+  it('deleteRule() propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('backend down'));
+    await expect(permissionApi.deleteRule(0)).rejects.toThrow('backend down');
   });
 });

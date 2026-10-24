@@ -237,6 +237,66 @@ def set_trust_policy(body: TrustPolicyBody) -> Dict[str, Any]:
     return {"ok": True, "enabled": body.enabled, "threshold": threshold}
 
 
+# ---- R97：已保存权限规则的查看 / 逐条删除 -----------------------------------
+#
+# 规则只能由审批 remember 生成（精确工具名，或服务端按权威插件名派生
+# 的整插件受限通配）；这里只补「看得见、删得掉」，不提供新增/编辑
+# pattern 的入口。列表口径与求值同源：同一个 parse_rules()，存储里的
+# 非法条目本来就不参与求值，UI 也不展示；删除写回时顺带规范化清理。
+
+
+class PermissionRuleDeleteBody(BaseModel):
+    """删除一条已保存规则的请求体。"""
+
+    #: 下标指 GET /rules 返回的已解析规则列表。
+    index: int
+
+    class Config:
+        extra = "forbid"
+
+
+def _load_saved_rules() -> List[Dict[str, str]]:
+    """读取当前生效的已保存规则（与 enforcer 构造口径一致）。"""
+    return [
+        rule.to_dict()
+        for rule in parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES))
+    ]
+
+
+@router.get("/rules")
+def list_permission_rules() -> Dict[str, Any]:
+    """列出已保存且生效的权限规则（设置页「已记住的规则」数据源）。"""
+    return {"ok": True, "rules": _load_saved_rules()}
+
+
+@router.post("/rules/delete")
+def delete_permission_rule(body: PermissionRuleDeleteBody, request: Request):
+    """按下标删除一条已保存规则，返回删除后的最新列表。
+
+    服务端重新读取并校验下标，越界 → 400 且不写存储；重复规则只
+    删被指中的一条。删除是撤销持久信任的写操作，与 preset 写入
+    共用 Origin 守卫。
+    """
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    rules = _load_saved_rules()
+    if body.index < 0 or body.index >= len(rules):
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "rule index out of range"},
+        )
+    removed = rules.pop(body.index)
+    SettingsRepository().set_json(SETTINGS_KEY_RULES, rules, category="permissions")
+    logger.info(
+        "已删除已保存审批规则: pattern=%s decision=%s (剩余 %d 条)",
+        removed["tool_pattern"],
+        removed["decision"],
+        len(rules),
+    )
+    return {"ok": True, "rules": rules}
+
+
 def forbidden_origin_response(request: Request) -> Optional[JSONResponse]:
     """Origin 守卫：带 Origin 头且不在白名单 → 403 响应；否则 None（放行）。
 

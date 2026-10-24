@@ -182,6 +182,86 @@ def test_enforcer_fnmatch_pattern_matches_tool_family():
     assert enforcer.check("read_file", {}).allowed is True
 
 
+def test_permission_rule_plugin_wildcard_requires_authoritative_identity():
+    """R96: 受限插件通配只按权威插件名匹配，不按字符串前缀猜。"""
+    allow_a = PermissionRule("plugin__a__*", "allow")
+    allow_ab = PermissionRule("plugin__a__b__*", "allow")
+    allow_all = PermissionRule("plugin__*", "allow")
+    ambiguous_tool = "plugin__a__b__c"
+
+    assert allow_a.matches("plugin__a__run", plugin_name="a") is True
+    assert allow_a.matches("plugin__a__run") is False
+    assert allow_a.matches(ambiguous_tool, plugin_name="a") is True
+    assert allow_a.matches(ambiguous_tool, plugin_name="a__b") is False
+    assert allow_ab.matches(ambiguous_tool, plugin_name="a__b") is True
+    assert allow_ab.matches(ambiguous_tool, plugin_name="a") is False
+    assert allow_all.matches(ambiguous_tool, plugin_name="a__b") is True
+    assert allow_all.matches(ambiguous_tool) is False
+    assert allow_all.matches("bash", plugin_name="demo") is False
+
+    # 精确规则与普通 fnmatch 保持既有字符串语义，不因 plugin_name 改变。
+    assert PermissionRule(ambiguous_tool, "deny").matches(ambiguous_tool) is True
+    assert PermissionRule("office_*", "deny").matches("office_read") is True
+
+
+def test_enforcer_plugin_wildcard_allow_requires_identity():
+    """无权威身份时整插件 allow 不再靠字符串前缀放行。"""
+    enforcer = _enforcer(
+        PermissionMode.READ_ONLY,
+        [PermissionRule("plugin__demo__*", "allow")],
+    )
+
+    unknown = enforcer.check("plugin__demo__x__run", {})
+    wrong = enforcer.check(
+        "plugin__demo__x__run", {}, plugin_name="demo__x"
+    )
+    right = enforcer.check("plugin__demo__x__run", {}, plugin_name="demo")
+
+    assert unknown.allowed is False
+    assert "read_only" in unknown.reason
+    assert wrong.allowed is False
+    assert "read_only" in wrong.reason
+    assert right.allowed is True
+    assert "allow" in right.reason
+
+
+def test_enforcer_plugin_wildcard_deny_and_ask_do_not_misfire_on_other_plugin():
+    """身份不符时 deny/ask 也不得误伤同字符串命名空间内的另一插件。"""
+    tool = "plugin__demo__x__run"
+
+    deny_enforcer = _enforcer(
+        PermissionMode.FULL_ACCESS,
+        [PermissionRule("plugin__demo__*", "deny")],
+    )
+    assert deny_enforcer.check(tool, {}, plugin_name="demo__x").allowed is True
+    denied = deny_enforcer.check(tool, {}, plugin_name="demo")
+    assert denied.allowed is False
+    assert "deny" in denied.reason
+
+    ask_enforcer = _enforcer(
+        PermissionMode.FULL_ACCESS,
+        [PermissionRule("plugin__demo__*", "ask")],
+    )
+    assert ask_enforcer.check(tool, {}, plugin_name="demo__x").allowed is True
+    asked = ask_enforcer.check(tool, {}, plugin_name="demo")
+    assert asked.allowed is False
+    assert asked.needs_approval is True
+
+
+def test_enforcer_all_plugins_wildcard_still_requires_published_identity():
+    """`plugin__*` 也只能命中带权威发布身份的当前插件工具。"""
+    enforcer = _enforcer(
+        PermissionMode.READ_ONLY,
+        [PermissionRule("plugin__*", "allow")],
+    )
+
+    assert enforcer.check("plugin__demo__run", {}).allowed is False
+    assert (
+        enforcer.check("plugin__demo__run", {}, plugin_name="demo").allowed
+        is True
+    )
+
+
 # ---------------------------------------------------------------------------
 # bash 破坏性命令升级 (安全网)
 # ---------------------------------------------------------------------------

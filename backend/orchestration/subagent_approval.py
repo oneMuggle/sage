@@ -59,8 +59,18 @@ class AutoApproveEnforcer:
     def rules(self):  # noqa: ANN201 — 与 base 同型
         return self._base.rules
 
-    def check(self, tool_name: str, args: Optional[Dict[str, Any]] = None) -> PermissionDecision:
-        decision = self._base.check(tool_name, args or {})
+    def check(
+        self,
+        tool_name: str,
+        args: Optional[Dict[str, Any]] = None,
+        plugin_name: Optional[str] = None,
+    ) -> PermissionDecision:
+        if plugin_name is None:
+            decision = self._base.check(tool_name, args or {})
+        else:
+            decision = self._base.check(
+                tool_name, args or {}, plugin_name=plugin_name
+            )
         if not decision.needs_approval:
             # allow / deny 原样保留 —— deny 永远胜出。
             return decision

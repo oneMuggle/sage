@@ -267,7 +267,8 @@ export const enSettingsAndModels = {
   'permission.subagent_context': 'Orchestration subagent requests approval',
   'permission.diff': 'Proposed changes',
   'permission.remote_resolved': 'Approval left the pending queue',
-  'permission.remote_resolved.desc': '{tool} · risk {risk} · waited {wait} · likely handled remotely or timed out',
+  'permission.remote_resolved.desc':
+    '{tool} · risk {risk} · waited {wait} · likely handled remotely or timed out',
   'permission.project_allow.button': 'Allow for project',
   'permission.project_allow.tooltip': 'Add this path to the current project allowed paths',
   'permission.project_allow.added': 'Rule {rule} added',
@@ -325,6 +326,16 @@ export const enSettingsAndModels = {
   'settings.permission.rules_hint':
     'Fine-grained rules (permission_rules JSON) are not editable in the UI yet; checking "Remember my choice" appends a rule automatically.',
   'settings.permission.load_failed': 'Failed to load permission mode',
+
+  // R97 remembered rules manager
+  'settings.permission.rules.title': 'Remembered rules',
+  'settings.permission.rules.empty': 'No remembered rules yet',
+  'settings.permission.rules.delete': 'Delete',
+  'settings.permission.rules.decision.allow': 'Allow',
+  'settings.permission.rules.decision.deny': 'Deny',
+  'settings.permission.rules.decision.ask': 'Ask every time',
+  'settings.permission.rules.load_failed': 'Failed to load remembered rules',
+  'settings.permission.rules.delete_failed': 'Failed to delete rule, please retry',
 
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': 'Usage',
