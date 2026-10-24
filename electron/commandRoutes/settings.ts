@@ -81,6 +81,13 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/permissions/rules/delete',
     body: (a) => ({ tool_pattern: a.toolPattern, decision: a.decision }),
   },
+  // R100 一键清空已记住规则：无 body、无筛选参数，只能整体撤销
+  // 全部持久信任（后端写空列表），不存在按条件删除的写面。
+  permissions_clear_rules: {
+    method: 'POST',
+    path: () => '/api/v1/permissions/rules/clear',
+    body: () => ({}),
+  },
   permissions_answer: {
     method: 'POST',
     path: (a) => `/api/v1/permissions/${encodeURIComponent(String(a.requestId))}/answer`,

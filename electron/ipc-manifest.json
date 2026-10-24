@@ -110,6 +110,7 @@
     "orchestration_steer_task": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/tasks/{task_id}/steer" },
     "orchestration_update_plan": { "method": "POST", "path": "/api/v1/orch/runs/{run_id}/plan" },
     "permissions_answer": { "method": "POST", "path": "/api/v1/permissions/{requestId}/answer" },
+    "permissions_clear_rules": { "method": "POST", "path": "/api/v1/permissions/rules/clear" },
     "permissions_delete_rule": { "method": "POST", "path": "/api/v1/permissions/rules/delete" },
     "permissions_get_preset": { "method": "GET", "path": "/api/v1/permissions/preset" },
     "permissions_get_trust_policy": { "method": "GET", "path": "/api/v1/permissions/trust-policy" },
