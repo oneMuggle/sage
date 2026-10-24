@@ -8,8 +8,8 @@
 import { useEffect, useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
-import { useI18n } from '../../shared/lib/i18n';
 import { getInputHistorySize, setInputHistorySize } from '../../shared/lib/hooks/useInputHistory';
+import { useI18n } from '../../shared/lib/i18n';
 
 import { FontSettingsSection } from './FontSettingsSection';
 import { ThemeSelector } from './ThemeSelector';
