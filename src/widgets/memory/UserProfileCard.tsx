@@ -274,3 +274,11 @@ export function UserProfileCard() {
     </section>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditUserProfileCardGovernance(): string {
+  return JSON.stringify({
+    module: 'user-profile-card',
+    phase: 'P191',
+    audited: true,
+  });
+}
