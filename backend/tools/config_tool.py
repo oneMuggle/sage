@@ -51,6 +51,12 @@ _ALLOWED_GENERAL_FIELDS = {
     "logTimezone",
     "maxContext",
     "autoContext",
+    # P119 Config Advisor (Phase 1.2): LLM 重试 / 超时字段 ——
+    # 让 LLM 能基于诊断数据调整自身可靠性相关参数
+    "llmRetryMaxAttempts",
+    "llmRetryBaseDelayS",
+    "llmRetryMaxDelayS",
+    "llmTotalTimeoutS",
 }
 
 _VALID_READ_SECTIONS = {"all", "orch", "agents", "general", "model_selections"}
@@ -117,6 +123,38 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
         value = updates[key]
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 10_000_000:
             return f"{key} 必须是 1 到 10000000 之间的整数，收到: {value!r}"
+    # P119 Config Advisor (Phase 1.2): LLM 重试 / 超时字段类型与范围校验
+    _llm_retry_field_errors: list[str] = []
+    if "llmRetryMaxAttempts" in updates:
+        v = updates["llmRetryMaxAttempts"]
+        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 20:
+            _llm_retry_field_errors.append(
+                f"llmRetryMaxAttempts 必须是 0 到 20 之间的整数，收到: {v!r}"
+            )
+    for k in ("llmRetryBaseDelayS", "llmRetryMaxDelayS"):
+        if k in updates:
+            v = updates[k]
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 < v <= 600:  # noqa: UP038
+                _llm_retry_field_errors.append(
+                    f"{k} 必须是大于 0 且不超过 600 的数字，收到: {v!r}"
+                )
+    if "llmTotalTimeoutS" in updates:
+        v = updates["llmTotalTimeoutS"]
+        if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 86400:
+            _llm_retry_field_errors.append(
+                f"llmTotalTimeoutS 必须是 0 到 86400 之间的整数（0=不限），收到: {v!r}"
+            )
+    # 跨字段一致性：baseDelayS 不能大于 maxDelayS
+    if (
+        "llmRetryBaseDelayS" in updates
+        and "llmRetryMaxDelayS" in updates
+        and updates["llmRetryBaseDelayS"] > updates["llmRetryMaxDelayS"]
+    ):
+        _llm_retry_field_errors.append(
+            "llmRetryBaseDelayS 不能大于 llmRetryMaxDelayS"
+        )
+    if _llm_retry_field_errors:
+        return "; ".join(_llm_retry_field_errors)
     return None
 
 
@@ -419,3 +457,140 @@ class UpdateSageConfigTool(BaseTool):
         except Exception as exc:
             logger.exception("update_sage_config 执行异常: %s", exc)
             return ToolResult(success=False, error=f"修改配置失败: {exc}")
+
+
+def _build_diagnosis_summary(
+    config: Dict[str, Any],
+    metrics: Dict[str, Any],
+) -> str:
+    """基于配置 + 指标生成人类可读的诊断摘要（注入 ``ToolResult.output``）。
+
+    不做建议性判断 —— 建议交给 LLM 结合用户上下文生成。这里只汇总客观数据，
+    避免规则硬编码误导（如"成功率<80% 就提示调 maxRetries" 不一定对）。
+    """
+    lines: List[str] = ["【诊断摘要】"]
+    window = metrics.get("window", {})
+    run_count = window.get("run_count", 0)
+    if run_count == 0:
+        lines.append("  - 近期无 run 记录，无法生成诊断")
+        return "\n".join(lines)
+
+    from_iso = window.get("from", "?")
+    to_iso = window.get("to", "?")
+    lines.append(f"  - 最近 {run_count} 次 run: {from_iso} ~ {to_iso}")
+
+    c = metrics["completion"]
+    total = c["success"] + c["failed"] + c["cancelled"] + c["other"]
+    success_rate = (c["success"] / total * 100) if total else 0
+    lines.append(
+        "  - 成功率: {:.0f}% ({} success / {} failed / {} cancelled)".format(
+            success_rate, c["success"], c["failed"], c["cancelled"]
+        )
+    )
+
+    fk = metrics["failure_kind"]
+    if fk:
+        fk_str = ", ".join(f"{k}={v}" for k, v in fk.items())
+        lines.append(f"  - 失败分类: {fk_str}")
+
+    retries = metrics["retries"]
+    lines.append(
+        f"  - 重试: 平均 {retries['mean_per_task']:.2f}/任务, "
+        f"含重试任务 {retries['tasks_with_retry_pct']:.1f}%"
+    )
+
+    tokens = metrics["tokens"]
+    if tokens["task_count_with_tokens"] > 0:
+        lines.append(
+            f"  - Token: 平均 {tokens['mean_per_task']}/任务, "
+            f"总计 {tokens['total']} "
+            f"(基于 {tokens['task_count_with_tokens']} 个有数据的任务)"
+        )
+
+    latency = metrics["latency_ms"]
+    if latency["mean"] > 0:
+        lines.append(
+            f"  - 延迟: 平均 {latency['mean']}ms, "
+            f"p50={latency['p50']}ms, p95={latency['p95']}ms"
+        )
+
+    return "\n".join(lines)
+
+
+class DiagnoseSageConfigTool(BaseTool):
+    """诊断 Sage 配置 + 运行指标工具（P119 Config Advisor Phase 2.2）。
+
+    合并"当前配置"与"最近 N 次 run 的运行指标"，作为 LLM 给出配置优化建议
+    的完整数据基础。声明为 ``RiskClass.READ``（纯只读，无需用户审批）。
+
+    输出包括：
+    - ``configuration``: 脱敏后的 ``app_settings`` 全量（与 ``read_sage_config``
+      ``section='all'`` 等价）
+    - ``recent_metrics``: ``OrchRunMetrics.aggregate_recent()`` 返回的指标结构
+    - ``summary``: 人类可读的诊断摘要（注入 ``ToolResult.output``）
+    """
+
+    risk: RiskClass = RiskClass.READ
+
+    def __init__(self, policy: Optional[ToolPolicy] = None) -> None:
+        super().__init__(policy=policy)
+
+    def _build_schema(self) -> ToolSchema:
+        return ToolSchema(
+            name="diagnose_sage_config",
+            description=(
+                "返回当前配置 + 最近 N 次 run 的运行指标聚合（completion、failure_kind、"
+                "tokens、latency、retries），用于诊断性能或失败原因。基于数据给出配置"
+                "优化建议（如'你最近 10 次 run 有 4 次因 max_iterations=10 截断，"
+                "建议调到 25'）。只读，无需用户审批。"
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "window_runs": {
+                        "type": "integer",
+                        "description": (
+                            "聚合最近多少次 run 的指标（默认 20，范围 1-200）。"
+                            "窗口过小统计意义不足；过大则响应慢"
+                        ),
+                    }
+                },
+                "required": [],
+            },
+        )
+
+    def execute(self, window_runs: int = 20, **kwargs: Any) -> ToolResult:
+        if isinstance(window_runs, bool) or not isinstance(window_runs, int):
+            return ToolResult(success=False, error="window_runs 必须为正整数")
+        if not 1 <= window_runs <= 200:
+            return ToolResult(
+                success=False, error="window_runs 必须在 1 到 200 之间"
+            )
+
+        # 1. 读配置（复用 _redact_settings，与 ReadSageConfigTool 脱敏一致）
+        try:
+            raw_settings = SettingsRepository().get_json("app_settings") or {}
+            config = _redact_settings(copy.deepcopy(raw_settings))
+        except Exception as exc:  # noqa: BLE001 — 配置读取失败即终止
+            logger.exception("diagnose_sage_config: 读取配置失败: %s", exc)
+            return ToolResult(success=False, error=f"读取配置失败: {exc}")
+
+        # 2. 取运行指标（OrchRunMetrics 内部 fail-safe，不会抛）
+        try:
+            from backend.data.orch_run_metrics import OrchRunMetrics
+
+            recent_metrics = OrchRunMetrics.aggregate_recent(limit=window_runs)
+        except Exception as exc:  # noqa: BLE001 — 兜底防御，不应触发
+            logger.exception("diagnose_sage_config: 获取运行指标失败: %s", exc)
+            return ToolResult(success=False, error=f"获取运行指标失败: {exc}")
+
+        summary = _build_diagnosis_summary(config, recent_metrics)
+        return ToolResult(
+            success=True,
+            content={
+                "configuration": config,
+                "recent_metrics": recent_metrics,
+                "summary": summary,
+            },
+            output=summary,
+        )

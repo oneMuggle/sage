@@ -174,7 +174,7 @@ SANDBOX_TOOLS = ("repl", "execute_code")
 # ``read_sage_config`` READ 自动放行，``update_sage_config`` WRITE_LOCAL 走权限审批。
 # 仅赋给 primary 主助手；子代理白名单严禁纳入，防止自我提权或篡改凭证。
 # 字段白名单由工具实现内部维护，这里只登记名称。
-CONFIG_TOOLS = ("read_sage_config", "update_sage_config")
+CONFIG_TOOLS = ("read_sage_config", "update_sage_config", "diagnose_sage_config")
 
 # 定时任务派发（2026-09-19 feat/llm-schedule-tool）：把既有的 SchedulerService
 # （APScheduler + JSON 持久化）暴露给 LLM —— 此前只能经 REST API 由前端 UI 创建。
