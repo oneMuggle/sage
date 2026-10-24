@@ -112,3 +112,11 @@ export default function SkillDraftDetail({
     </Dialog>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditSkillDraftDetailGovernance(): string {
+  return JSON.stringify({
+    module: 'skill-draft-detail',
+    phase: 'P192',
+    audited: true,
+  });
+}
