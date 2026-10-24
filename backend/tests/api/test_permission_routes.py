@@ -645,8 +645,8 @@ async def test_list_rules_returns_effective_rules_and_skips_invalid(client):
     assert resp.json() == {
         "ok": True,
         "rules": [
-            {"tool_pattern": "read_file", "decision": "allow"},
-            {"tool_pattern": "plugin__demo__*", "decision": "deny"},
+            {"tool_pattern": "read_file", "decision": "allow", "plugin_name": None, "plugin_status": None},
+            {"tool_pattern": "plugin__demo__*", "decision": "deny", "plugin_name": None, "plugin_status": "missing"},
         ],
     }
 
@@ -672,8 +672,8 @@ async def test_delete_rule_removes_one_and_returns_updated_list(client):
     assert resp.json() == {
         "ok": True,
         "rules": [
-            {"tool_pattern": "bash", "decision": "allow"},
-            {"tool_pattern": "write_file", "decision": "ask"},
+            {"tool_pattern": "bash", "decision": "allow", "plugin_name": None, "plugin_status": None},
+            {"tool_pattern": "write_file", "decision": "ask", "plugin_name": None, "plugin_status": None},
         ],
     }
     assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
@@ -703,8 +703,8 @@ async def test_delete_rule_targets_content_not_list_position(client):
     assert resp.json() == {
         "ok": True,
         "rules": [
-            {"tool_pattern": "bash", "decision": "deny"},
-            {"tool_pattern": "read_file", "decision": "allow"},
+            {"tool_pattern": "bash", "decision": "deny", "plugin_name": None, "plugin_status": None},
+            {"tool_pattern": "read_file", "decision": "allow", "plugin_name": None, "plugin_status": None},
         ],
     }
     assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
