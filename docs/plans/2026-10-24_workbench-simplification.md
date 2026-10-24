@@ -2,7 +2,7 @@
 
 > 日期：2026-10-24
 > 分支：feat/workbench-simplification
-> 状态：进行中
+> 状态：✅ 已完成（PR #2453 已创建）
 
 ---
 
@@ -94,10 +94,10 @@
 
 - [x] 1. 建立 feature 分支（已在 worktree）
 - [x] 2. 写计划文档
-- [ ] 3. 重写 `Projects.tsx`：三段式布局 + 删减 toolbar
-- [ ] 4. 重构 `WorkbenchProjectList`：hover 简化为 主按钮 + `···` 菜单
-- [ ] 5. 重构 `ProjectGovernance` Tab 标签（去术语）
-- [ ] 6. 移除首页 `ProjectArchetypeStudio` 调用
-- [ ] 7. 同步测试
-- [ ] 8. 运行 CI
-- [ ] 9. 提交 PR
+- [x] 3. 重写 `Projects.tsx`：三段式布局 + 删减 toolbar
+- [x] 4. 重构 `WorkbenchProjectList`：hover 简化为 主按钮 + `···` 菜单
+- [x] 5. 重构 `ProjectGovernance` Tab 标签（去术语）
+- [x] 6. 移除首页 `ProjectArchetypeStudio` 调用
+- [x] 7. 同步测试
+- [x] 8. 运行 CI
+- [x] 9. 提交 PR
