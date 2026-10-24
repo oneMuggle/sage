@@ -224,13 +224,18 @@ export const permissionApi = {
   },
 
   /**
-   * R97 按 listRules() 列表下标逐条删除一条规则，返回服务端删除后
+   * R99 按内容逐条删除一条规则，返回服务端删除后
    * 的最新列表（UI 直接采用，不在前端自行 splice 后假定成功）。
+   * 传入的是 listRules() 返回的行对象，其 tool_pattern/decision
+   * 只是「删哪一条」的选择子，不是用户手输的新 pattern。
    */
-  async deleteRule(index: number): Promise<PermissionRuleItem[]> {
+  async deleteRule(rule: PermissionRuleItem): Promise<PermissionRuleItem[]> {
     if (isDemoMode()) return [];
     try {
-      const raw = await invoke<unknown>('permissions_delete_rule', { index });
+      const raw = await invoke<unknown>('permissions_delete_rule', {
+        toolPattern: rule.tool_pattern,
+        decision: rule.decision,
+      });
       return parseRuleItems(raw);
     } catch (error) {
       throw handleApiError(error);

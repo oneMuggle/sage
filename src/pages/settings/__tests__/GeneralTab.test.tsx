@@ -251,7 +251,7 @@ describe('GeneralTab remembered rules manager (R97)', () => {
     fireEvent.click(screen.getByTestId('permission-rule-delete-0'));
 
     await waitFor(() => {
-      expect(mocks.deleteRule).toHaveBeenCalledWith(0);
+      expect(mocks.deleteRule).toHaveBeenCalledWith({ tool_pattern: 'bash', decision: 'deny' });
     });
     await waitFor(() => {
       expect(screen.queryByText('bash')).not.toBeInTheDocument();

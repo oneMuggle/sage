@@ -27,7 +27,8 @@
 | R95 | 插件工具按插件记住审批决定 | ✅ #2412 |
 | R96 | 插件权限规则结构化身份匹配 | ✅ #2413 |
 | R97 | 已记住权限规则管理（查看/删除） | ✅ #2418 |
-| R98 | 插件 profile 白名单结构化身份匹配 | #2440 待合并 |
+| R98 | 插件 profile 白名单结构化身份匹配 | ✅ #2440 |
+| R99 | 已保存权限规则写入完整性（记住去重 + 按内容删除） | #2452 待合并 |
 
 ## 2. 交付总账
 
@@ -48,7 +49,8 @@
 | R95 | 审批请求权威 `plugin_name` + `remember_scope=tool|plugin` + 后端派生受限插件规则 + ApprovalDialog 范围选择与 Electron 透传/测试/文档 | #2412 | 待对齐 | ✅ 已交付 |
 | R96 | `PermissionRule`/`PermissionEnforcer` 权威 `plugin_name` 结构化匹配 + agent/adapter 身份透传与测试/文档 | #2413 | 待对齐 | ✅ 已交付 |
 | R97 | `GET /permissions/rules` + 删除端点 + Electron 命令 + 设置页已记住规则列表/删除与测试/文档 | #2418 | 待对齐 | ✅ 已交付 |
-| R98 | `tool_name_in_allowlist` 权威 `plugin_name` 结构化匹配 + registry/agent 三道闸与前端覆盖镜像透传与测试/文档 | #2440 | 待对齐 | 待 CI/合并 |
+| R98 | `tool_name_in_allowlist` 权威 `plugin_name` 结构化匹配 + registry/agent 三道闸与前端覆盖镜像透传与测试/文档 | #2440 | 待对齐 | ✅ 已交付 |
+| R99 | remember 追加去重 + 删除端点按内容定位 + Electron/设置页传参切换与测试/文档 | #2452 | 待对齐 | 待 CI/合并 |
 
 ## 3. R78 交付边界
 
@@ -392,6 +394,29 @@
   pattern 写面。
 - **本地证据**：后端定向 70 例与相邻 93 例、前端
   定向 10 例通过；tsc、ESLint（0 errors）、Ruff、
+  py38、architecture、silent-exceptions、
+  diff-check 与 diagnostics 全绿；PR #2440 GitHub
+  All checks successful，已 squash 合并为 `main`
+  `905bb49638a555668f64740290dd91c9bf378107`。
+
+## 19. R99 交付边界
+
+> spec：`2026-10-24_permission-rules-integrity-r99.md`。
+> R99 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **只收口规则列表写入卫生，不开新写面**：remember
+  仍是唯一规则来源；本轮仅让重复 remember 不再攒
+  完全相同条目，并让删除按 `(tool_pattern, decision)`
+  内容定位，消除 R97 下标漂移删错规则的窗口。
+- **删除选择子不等于规则写面**：删除体携带的 pattern
+  只用于指出撤销存储中已存在且完全一致的一条，
+  无法创建或放宽规则；UI 只回传列表行自带字段，
+  没有 pattern 输入入口。
+- **冲突语义不动**：同 pattern 不同 decision 不去重、
+  不自动清理存量重复；deny > allow > ask 与存储
+  格式、远程网关口径保持，Win7 继续标待对齐。
+- **本地证据**：后端定向 42 例与相邻 83 例、前端
+  定向 28 例通过；tsc、ESLint（0 errors）、Ruff、
   py38、architecture、silent-exceptions、
   diff-check 与 diagnostics 全绿。
 

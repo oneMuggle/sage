@@ -4,7 +4,7 @@
 > 作者：Claude
 > 标签：插件、可扩展性、Pydantic v2
 
-> **当前契约（R82/R83/R86/R90/R92/R94/R95/R96/R97/R98，2026-10-23）**：本文后半部分保留了早期设计示例，
+> **当前契约（R82/R83/R86/R90/R92/R94/R95/R96/R97/R98/R99，2026-10-24）**：本文后半部分保留了早期设计示例，
 > 个别 JSON/API 形态已经过时。现行实现以 `backend/plugins/manifest.py` 的
 > 数组形 `capabilities` 为准：R82 只保存生命周期记录且不执行代码；R83 只显式
 > 托管带 entry_point 的 Python `tool`，子进程不是安全沙箱；R86 提供
@@ -26,13 +26,18 @@
 > `InprocToolAdapter` 共用该口径，身份未知或不匹配时该通配不
 > 命中（普通字符串规则不在本轮变更内）；R97 起
 > `GET /api/v1/permissions/rules` 与
-> `POST /api/v1/permissions/rules/delete`（仅下标、带 Origin
+> `POST /api/v1/permissions/rules/delete`（带 Origin
 > 守卫）让设置页能按 `parse_rules` 口径查看并逐条删除已保存
 > 规则，规则创建仍只能由审批 remember 或服务端派生；R98 起
 > profile 白名单的受限插件通配同步改结构化：registry 用已
 > 注册 `PluginTool` 自带的发布身份、agent 三道闸查桥接当前
 > 发布记录、前端覆盖镜像用已发布快照的 `plugin_name`，身份
-> 缺失或不匹配时通配不命中，精确条目不变。开发
+> 缺失或不匹配时通配不命中，精确条目不变；R99 起 remember
+> 落规则时对完全相同的 `(tool_pattern, decision)` 去重
+> （同 pattern 不同 decision 照常追加），删除端点改按内容
+> 定位第一条完全一致的规则而非列表下标，期间新记规则不会
+> 让删除删错行，删除体中的 pattern 只作撤销选择子、不能
+> 创建或放宽任何规则。开发
 > 步骤请先看
 > [插件开发：30 分钟跑通第一个插件](../user-manual/21-plugin-development.md)。
 
