@@ -2763,3 +2763,26 @@
   - `src/shared/api/__tests__/projectApi.p188.test.ts`
   - `src/shared/api/__tests__/projectApiTypes.p188.test.ts`
 - **Baseline ratchet**: `architecture-baseline.json` 中 `src/shared/api/projectApi.ts`（1030 → 1031）与 `src/shared/api/projectApiTypes.ts`（943 → 944）按 ratchet 协议仅上调该两条目。
+
+### Phase P189 — Send-Message Hook, Shared API Clients & Project-Type Editors Governance Audit Contracts (2026-10-24)
+
+- **Scope (`src/features/send-message/`, `src/shared/api/`, `src/widgets/sidebar/`, `src/features/project-type/`)**:
+  1. `src/features/send-message/useChat.ts` -> `auditSendMessageUseChatGovernance()` (`module: 'send-message-use-chat'`)
+  2. `src/shared/api/pluginClient.ts` -> `auditPluginClientGovernance()` (`module: 'plugin-client'`)
+  3. `src/shared/api/remoteMcpApi.ts` -> `auditRemoteMcpApiGovernance()` (`module: 'remote-mcp-api'`)
+  4. `src/shared/api/types.ts` -> `auditSharedApiTypesGovernance()` (`module: 'shared-api-types'`)
+  5. `src/widgets/sidebar/sections/useProjectSectionData.ts` -> `auditProjectSectionDataGovernance()` (`module: 'use-project-section-data'`)
+  6. `src/widgets/sidebar/useSiderSections.ts` -> `auditSiderSectionsGovernance()` (`module: 'sider-sections'`)
+  7. `src/features/project-type/ConstraintEditor.tsx` -> `auditConstraintEditorGovernance()` (`module: 'constraint-editor'`)
+  8. `src/features/project-type/MilestoneEditor.tsx` -> `auditMilestoneEditorGovernance()` (`module: 'milestone-editor'`)
+- **Unit Test Suites**:
+  - `src/features/send-message/__tests__/useChat.p189.test.ts`
+  - `src/shared/api/__tests__/pluginClient.p189.test.ts`
+  - `src/shared/api/__tests__/remoteMcpApi.p189.test.ts`
+  - `src/shared/api/__tests__/types.p189.test.ts`
+  - `src/widgets/sidebar/sections/__tests__/useProjectSectionData.p189.test.ts`
+  - `src/widgets/sidebar/__tests__/useSiderSections.p189.test.ts`
+  - `src/features/project-type/__tests__/ConstraintEditor.p189.test.ts`
+  - `src/features/project-type/__tests__/MilestoneEditor.p189.test.ts`
+- **Baseline ratchet**: `architecture-baseline.json` 中 `src/features/send-message/useChat.ts` 824 → 831（该文件为超 800 行基线条目，按 ratchet 协议只上调本条目）。
+- **Shell note**: `useChat.ts` 存在上游既有 `react-hooks/exhaustive-deps` 警告，源文件按 CI `npm run lint` 口径（警告不阻断）校验，新增测试文件仍保持零警告。

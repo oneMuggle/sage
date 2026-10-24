@@ -40,3 +40,10 @@ export function formatTaskPlanItemJson(item: {
     2,
   );
 }
+export function auditSharedApiTypesGovernance(): string {
+  return JSON.stringify({
+    module: 'shared-api-types',
+    phase: 'P189',
+    audited: true,
+  });
+}

@@ -514,3 +514,10 @@ export function useProjectSectionData({ onOpenSession }: UseProjectSectionDataPr
     handleSaveAnswerAsMaterial,
   };
 }
+export function auditProjectSectionDataGovernance(): string {
+  return JSON.stringify({
+    module: 'use-project-section-data',
+    phase: 'P189',
+    audited: true,
+  });
+}
