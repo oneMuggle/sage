@@ -66,7 +66,7 @@ function flushFrame() {
 
 describe('MessageList jump-to-message (A1)', () => {
   it('expands the tail window to reach an older message, scrolls and flashes it', () => {
-    render(<MessageList messages={makeMessages(150)} />);
+    render(<MessageList messages={makeMessages(150)} runStatus="running" />);
     expect(screen.queryByTestId('msg-m5')).toBeNull();
 
     act(() => {
