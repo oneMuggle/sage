@@ -125,3 +125,10 @@ export function formatSiderSectionsJson(order: SiderOrder, collapsed: Set<string
     2,
   );
 }
+export function auditSiderSectionsGovernance(): string {
+  return JSON.stringify({
+    module: 'sider-sections',
+    phase: 'P189',
+    audited: true,
+  });
+}
