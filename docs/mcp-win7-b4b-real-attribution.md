@@ -489,6 +489,215 @@ B4 勘察时的「可执行性分级」只检查了**模块存在性**
 
 ---
 
+## 6.2 B4b-0 实施结果（2026-10-24，PR #2454）与 R98 新发现
+
+### 6.2.1 起因：一个可达的、未捕获的运行时 TypeError
+
+`#2428`（`13cb21f48`，标题「R95 plugin_name 传播到 enforcer.check — 与 main 对齐」）
+**只改了调用方，没改被调用方**：
+
+```python
+# backend/core/legacy/agent.py::_check_permission（2 个真实调用点：:1058、:2661）
+plugin_name = self._authoritative_plugin_name(tool_name)
+if plugin_name is None:
+    return enforcer.check(tool_name, args)
+return enforcer.check(tool_name, args, plugin_name=plugin_name)   # ← TypeError
+```
+
+而当时 win7 侧三个 callable 都不接受该形参：
+
+| | win7（修复前） | main |
+|---|---|---|
+| `PermissionEnforcer.check` | `(self, tool_name, args=None)` | 含 `plugin_name` |
+| `PermissionRule.matches` | `(self, tool_name)` | `(self, tool_name, plugin_name=None)` |
+| `TrustEscalationEnforcer.check` | `(self, tool_name, args=None)`，文件内 `plugin_name` **0 次** | `plugin_name=None` + 传递 |
+
+⇒ 调用**任何已发布的插件工具**（`plugin__<name>__<tool>`，`_authoritative_plugin_name`
+返回非 None）都抛未捕获的 `TypeError`。
+
+**CI 全绿也发现不了**：`check(...plugin_name=)` 在 `backend/tests` 里出现 **0 次**，
+修复前 `test_permissions_enforcer.py` 是 **51 passed**。最小复现：
+
+```python
+e = PermissionEnforcer(mode=PermissionMode.WORKSPACE_WRITE, rules=[])
+e.check("bash", {})                                   # 两版都 OK
+e.check("plugin__demo__run", {}, plugin_name="demo")
+#   修复前: TypeError: ... unexpected keyword argument 'plugin_name'
+#   修复后: PermissionDecision(allowed=False, needs_approval=True,
+#           reason='workspace_write 模式下 execute 类工具 plugin__demo__run 需要用户审批确认')
+```
+
+### 6.2.2 五处源码缺口的处置各不相同
+
+| 文件 | 行数 | 做法 | 依据 |
+|---|---|---|---|
+| `tools/permissions.py` | 453 → 493 | **整替** | 先扫描：main 版 **0 PEP604 / 0 PEP585 / 0 `zip(strict=)` / 0 `datetime.UTC` / 0 `match`**，本身 py3.8 干净；win7 那 6 行「独有」只是被取代的旧签名与其调用点 |
+| `services/trust_escalation.py` | 209 → 217 | 整替 + **splice 回 win7 的 py38 注释**（main 28–30 行 → win7 28–35 行） | main 的措辞在注释里**字面写出** `` ``zip(strict=)`` ``、`` ``datetime.UTC`` ``，而 win7 自己的 `scripts/check_py38_compat.py` 按字面量扫描、不区分注释与代码 ⇒ 直接用 main 措辞会**把闸门弄红** |
+| `api/permission_routes.py` | 389 → 454 | 整替 + **改 1 行** | main 只有 1 处 PEP604（`-> JSONResponse \| None`），而这恰是 win7 在本文件唯一的独有内容（win7 写 `-> Optional[JSONResponse]`）；main 已 import Optional |
+| `agents/profiles.py` | 1020 → 1032 | 整替 + **4 处保留** | main **根本没 import Optional**；3 处 PEP604 改写；**保留 win7 的 researcher `memory_save` 及两行理由**（main 版整段删除），写入前对 win7 blob 逐字断言 |
+| `api/legacy_skill_draft_routes.py` | 513 → 570 | **整替** | `+0 −57` 纯落后、py38 扫描干净；正是 `TestHarnessProposalDraftApproval` 3 个失败需要的 harness proposal adopt/reject 路径 |
+
+外加棘轮基线**只改一条**（`profiles.py` 1021 → 1033）。
+
+win7 那段被保留的注释原文（它解释了自己为什么必须存在）：
+
+```
+注意：这段说明本身会被 ``scripts/check_py38_compat.py`` 的正则文本扫描
+命中 —— 该脚本按字面量找禁用写法，不区分代码与注释。所以这里刻意不写出
+那些符号本身，改用 PEP 编号与自然语言指代。
+```
+
+### 6.2.3 并行工作导致 PR 自动缩小（他人独立修了同一处）
+
+PR 开出后基线继续前进，到 `55e874fb2`（#2469）时**他人已独立完成了同一段对齐**：
+
+| 文件 | 新基线状态 |
+|---|---|
+| `tools/permissions.py` | **IDENTICAL-to-main**（`plugin_name` 出现 9 次） |
+| `tests/unit/test_trust_escalation.py` | **IDENTICAL-to-main** |
+| `services/trust_escalation.py` | DIFFERS，但差异**正是同一段 win7 py38 注释** ⇒ 他人与我收敛到同一处理 |
+| `api/permission_routes.py` | `plugin_name` 出现 7 次 |
+
+于是 #2454 的 diff 自动从 11 files / +589 −11 缩到 **7 files / +256 −3**，
+剩余 7 个文件经 `git rev-parse` 逐个比对确认**仍与新基线不同（仍需要）**。
+
+### 6.2.4 CI 红的归因：与改动无关，是 pillow 新通告
+
+`Backend (Python 3.8, Win7 LTS)` 一度 failure，**pytest 步骤全被 skipped**，
+挂在 step 8「Enforce Win7 dependency audit gate」：
+
+```
+pip findings=71
+##[error]pip pillow GHSA-5x8w-8jj5-q52h package_version=10.4.0
+        affected_path=Win7 LTS Python 3.8 production path: not covered by policy
+```
+
+判定为 **pre-existing** 的证据链：
+
+1. 我的 11 个改动文件里 **policy 0 个、requirements 0 个**
+2. **我的分支基点 `7740c6187` 的同一 job 也是 failure**（在我动手之前就红）
+3. 他人提交 `a442c159b` 的同一 job 也是 failure
+4. 时间线：较早的 `a243282ac` success → 较晚的 `7740c6187`/`9348fc991` failure
+   ⇒ 通告在这两个时间点之间披露
+
+他人随后加了豁免但**加了两次**，闸门改报
+`policy exception 107: duplicate ('pip','pillow','10.4.0','GHSA-5x8w-8jj5-q52h',...)`，
+由 **#2456（`1359e5923`）** 修掉重复。
+
+### 6.2.5 pillow 豁免记录的三处失真（PR #2458，+3 −3）
+
+豁免条目本身保留，但其内容是**照通用 pillow 模板填的**，与本通告不符。实测事实：
+
+| 字段 | 原记录 | 实测 |
+|---|---|---|
+| `actual_reachability` | 「reachable via user file uploads; conditional based on input format」 | **不可达**：漏洞在 FlashPix(FPX) JPEG-tile 解码器，代码位于 `PIL.FpxImagePlugin`，该插件 import **可选依赖 `olefile`**；两条依赖轨都没装 ⇒ `from PIL import FpxImagePlugin` 直接 `ModuleNotFoundError`、`'FPX' in Image.OPEN` 为 **False** ⇒ 即使上传按内容（OLE2 magic，不看扩展名）构造的文件也到不了解码器 |
+| `controls` | 修复需 `>=11/12 on Python >=3.9` | `first_patched_version = 13.0.0`，其 `pyproject.toml` 声明 **`requires-python = ">=3.11"`** ⇒ 比其余 47 条 pillow 豁免**更够不着** |
+| `notes` | 「修复需要 >=12.1.1」 | 同上，应为 13.0.0 / Python 3.11 |
+
+实测数据：
+
+```
+pillow (py38 轨) 10.4.0    olefile 可导入: False
+pillow (v2  轨)  12.3.0    olefile 可导入: False
+from PIL import FpxImagePlugin -> ModuleNotFoundError: No module named 'olefile'
+'FPX' in Image.OPEN -> False
+pillow 13.0.0 的 pyproject.toml -> requires-python = ">=3.11"
+```
+
+并补上真正让本条保持关闭的**硬约束**：`olefile` 不得进入任一 requirements ——
+否则将来一次加依赖就会静默把已关闭路径变成可触达 RCE，而记录仍声称「已缓解」。
+
+改法：模板文字被约 **32 条** pillow 豁免共用（实测 `needle` 命中 32 次），
+全局文本替换有歧义 ⇒ 先定位条目行区间（1407–1420），**只在区间内整行替换**。
+改后重校验：合法 JSON、`exceptions` **108 条不变**、**恰好 1 条变更**（index 103）、
+变更字段 == `[actual_reachability, controls, notes]`、五元组 **0 重复**
+（不重演 #2456 之前的 `duplicate` 失败）、LF 保持。
+
+### 6.2.6 新发现：R98（main 在 R95 之后又演进了插件通配语义）
+
+合并 #2433 后 `test_agent_tool_gate.py` **又落后 61 行**，新增 2 个失败：
+
+```
+test_plugin_wildcard_unpublished_tool_denied_by_profile_r98
+test_plugin_wildcard_uses_published_identity_not_prefix_r98
+```
+
+R98 的语义（引自 main 的测试注释）：
+
+```python
+def test_plugin_wildcard_uses_published_identity_not_prefix_r98(self):
+    # 工具名字符串以 plugin__demo__ 开头、但权威身份是 demo__sub
+    # 时，demo 的单插件通配不得带飞，demo__sub 的通配才命中。
+    bridge = MagicMock()
+    bridge.published_tool.return_value = SimpleNamespace(plugin_name="demo__sub")
+```
+
+即**通配匹配必须按权威身份而非名称前缀** —— 这是 R95「传播 plugin_name」之后的下一步：
+光有权威身份还不够，匹配逻辑本身也要改用它。win7 尚未跟进。
+
+### 6.2.7 B4b-5 已空（重要结论）
+
+按 §6 的定义重跑归因后（基线 `55e874fb2` ↔ main `7c38c4113`，real **87** =
+1 假差异 + 86 genuine），**PURE-LAG 只剩 5 个**（从 17 降），
+而「NEEDS-REVIEW 里 win7 独有 ≤2 行且落后 ≥10」的 B4b-5 候选**只剩 1 个**：
+`unit/tools/test_office_create_tool.py` `+1 −102`，其唯一 win7 独有行是
+
+```python
+assert set(props.keys()) == {"doc_type","output_dir","filename","content","font_family"}
+```
+
+这正是 §5.1 的同源项（office schema 落后 285 行），**单独带入必然失败**。
+
+而那 5 个 PURE-LAG 经双维度复核后的归属是：
+
+| 文件 | 落后 | 归属 |
+|---|---|---|
+| `integration/test_approval_api.py` | −135 | **已被 #2454 覆盖** |
+| `unit/test_agent_tool_gate.py` | −61 | **需要新的 R98 对齐** |
+| `unit/test_profiles_default_tools.py` | −13 | **已被 #2454 覆盖** |
+| `unit/test_permissions_enforcer.py` | −8 | **已被 #2454 覆盖** |
+| `unit/test_shipped_writing_skills.py` | −6 | **被 B4b-4 阻塞**（需 `office_refresh_toc`） |
+
+实跑印证：整替这 5 个后 py38 compile rc=0、collect **111 tests / 0 errors**，
+但 v2 pytest **7 failed / 104 passed**，7 个失败正好落在上表后三类
+（3 个 HarnessProposalDraftApproval + 2 个 R98 + 1 个 browser_login + 1 个 office_refresh_toc）。
+
+⇒ **B4b-5 无独立工作可做，应从批次表中移除**；后续只有 R98 与 B4b-4 两条线。
+
+---
+
+## 6.3 通道故障与两个 API 推送陷阱
+
+`github.com:443` 在本轮内多次完全不通（`curl` 返回 000 / 12–21s 超时），
+而 `api.github.com:443` 稳定（200 / 0.4s）⇒ 推送改走 **Git Data API**
+（blobs → tree → commit → ref），且**在主机侧用 `gh api` 执行，token 不出主机、不进日志**。
+
+途中踩到两个陷阱，都会产生「看起来成功」的错误结果：
+
+1. **上传了工作区字节而非 git 存储字节**。`core.autocrlf=true` 下工作区是 CRLF、
+   blob 对象是 LF，直接 `open(path,'rb')` 上传会重写每一处行尾，
+   产生的 commit tree 与本地不一致（stats **+2872 −2501** 而不是 **+373 −2**）。
+   修法：blob 内容一律取 `git cat-file blob HEAD:<path>`。
+   第二次推送后 **TREE IDENTICAL**（`3464ce8ca…`，两侧 stats 一致）。
+
+2. **新分支取不到远程 tip 时回退用了本地陈旧 parent**。第一次推送
+   policy 修正时，脚本查「远程分支 HEAD」当 parent，但那是**新建分支**（远程不存在），
+   于是回退到本地 `HEAD^` = `7740c6187`（陈旧），产出 `+26 −0`「新增整条豁免」的 diff ——
+   若合并到已含该豁免的 `1359e5923`，就会**重演 #2456 刚修掉的 `duplicate` 闸门失败**。
+   修法：删除该远程分支，改为显式取 `branches/release/win7` 的 sha 当 parent 与
+   `base_tree`，重建后核验 **parent=`1359e5923`、files=1、`+3 −3`、status=modified**。
+
+另两个小陷阱：`git rev-parse <rev>:<path>` 对**不存在**的路径会把参数本身打到 stdout
+再返回非零，`W=$(... || echo ABSENT)` 于是得到两行、比较失败 ⇒ **误报 PRESENT**
+（一度让我以为 4 个文件已被带入，实际只有 1 个）；`--force-with-lease=<branch>:<sha>`
+要求 **40 字符完整 sha**，缩写会报 `cannot parse expected object name`。
+
+force push 前先证明安全：`git merge-base --is-ancestor 1359e5923 origin/release/win7`
+为真 ⇒ 被覆盖的 `4f6ed4fdb`（GitHub `update-branch` 造的 merge commit）内容
+已被我的 merge 完整包含，不丢任何代码改动。
+
+---
+
 ## 7. 复现
 
 ```bash
