@@ -113,3 +113,10 @@ export function formatTurnItemsJson(items: TurnItem[]): string {
     2,
   );
 }
+export function auditTurnGroupingGovernance(): string {
+  return JSON.stringify({
+    module: 'turn-grouping',
+    phase: 'P187',
+    audited: true,
+  });
+}

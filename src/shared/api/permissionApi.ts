@@ -55,12 +55,39 @@ export interface TrustPolicyState {
   consecutive: Record<string, number>;
 }
 
+export type PermissionRuleDecision = 'allow' | 'deny' | 'ask';
+
+/** 一条已保存（且生效）的权限规则，与后端 PermissionRule.to_dict() 同形。 */
+export interface PermissionRuleItem {
+  tool_pattern: string;
+  decision: PermissionRuleDecision;
+}
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
 function asPreset(v: unknown): PermissionPreset {
   return v === 'careful' || v === 'standard' || v === 'auto' ? v : 'standard';
+}
+
+/**
+ * 解析后端规则列表：只保留 tool_pattern 非空且 decision 合法的条目。
+ * 后端 parse_rules 已按下同口径过滤，这里再做一层宽容解析，避免
+ * 旧后端/异常响应把坏条目带进 UI。
+ */
+function parseRuleItems(raw: unknown): PermissionRuleItem[] {
+  if (!isRecord(raw) || !Array.isArray(raw.rules)) return [];
+  const items: PermissionRuleItem[] = [];
+  for (const entry of raw.rules as unknown[]) {
+    if (!isRecord(entry)) continue;
+    const pattern = entry.tool_pattern;
+    const decision = entry.decision;
+    if (typeof pattern !== 'string' || pattern.length === 0) continue;
+    if (decision !== 'allow' && decision !== 'deny' && decision !== 'ask') continue;
+    items.push({ tool_pattern: pattern, decision });
+  }
+  return items;
 }
 
 export const permissionApi = {
@@ -181,6 +208,34 @@ export const permissionApi = {
         default_threshold: fallback.default_threshold,
         consecutive: {},
       };
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * R97 读取已保存且生效的权限规则（设置页「已记住的规则」）。
+   * demo 模式返回空列表——演示环境没有真实的已记住规则。
+   */
+  async listRules(): Promise<PermissionRuleItem[]> {
+    if (isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_list_rules', {});
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * R97 按 listRules() 列表下标逐条删除一条规则，返回服务端删除后
+   * 的最新列表（UI 直接采用，不在前端自行 splice 后假定成功）。
+   */
+  async deleteRule(index: number): Promise<PermissionRuleItem[]> {
+    if (isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_delete_rule', { index });
+      return parseRuleItems(raw);
     } catch (error) {
       throw handleApiError(error);
     }

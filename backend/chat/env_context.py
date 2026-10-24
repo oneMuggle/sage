@@ -100,6 +100,102 @@ def build_skills_block() -> str:
     ).format("\n".join(lines))
 
 
+def build_configuration_summary_block() -> str:
+    """构造 ``<current-configuration>`` 块，注入到 system prompt。
+
+    告知 LLM 当前关键配置（orch 编排参数 / general 通用设置 / model
+    selections），让 LLM 能在对话中自然引用配置值，无须主动调用
+    ``read_sage_config`` 工具。
+
+    仅暴露非敏感字段（API key / secret 等不在此出现，``app_settings``
+    中的 ``endpoints`` 整块跳过）。任何失败返回空串（不注入块）。
+
+    块末尾带一句"仅在用户主动询问或报告问题时才基于配置给出调整
+    建议"，避免 LLM 看到配置后过度主动建议。
+    """
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get_json("app_settings") or {}
+    except Exception as exc:  # noqa: BLE001 — 配置摘要失败绝不影响聊天
+        logger.debug("配置摘要注入跳过 (读取失败): %s", exc)
+        return ""
+
+    if not isinstance(raw, dict):
+        return ""
+
+    orch = raw.get("orch", {}) if isinstance(raw.get("orch"), dict) else {}
+    model_selections = (
+        raw.get("modelSelections", {})
+        if isinstance(raw.get("modelSelections"), dict)
+        else {}
+    )
+
+    # 通用设置：只取白名单内的非敏感顶层字段
+    _GENERAL_KEYS = (
+        "temperature",
+        "streaming",
+        "autoMemory",
+        "confirmDelete",
+        "timezone",
+        "logTimezone",
+        "maxContext",
+        "autoContext",
+    )
+    general = {k: raw.get(k) for k in _GENERAL_KEYS if k in raw}
+
+    # 编排参数：全量白名单
+    _ORCH_KEYS = (
+        "maxLaneIterations",
+        "maxSubagentIterations",
+        "maxConcurrentSubagents",
+        "maxRetries",
+        "maxAggregateChars",
+        "maxSubagentResultChars",
+        "runTokenBudget",
+        "subagentApprovalMode",
+    )
+
+    sections: List[str] = []
+
+    if any(k in orch for k in _ORCH_KEYS):
+        orch_lines = ["## Orchestration"]
+        for k in _ORCH_KEYS:
+            if k in orch:
+                orch_lines.append(f"- {k}: {orch[k]}")
+        sections.append("\n".join(orch_lines))
+
+    if general:
+        gen_lines = ["## General Settings"]
+        for k, v in general.items():
+            gen_lines.append(f"- {k}: {v}")
+        sections.append("\n".join(gen_lines))
+
+    if model_selections:
+        model_lines = ["## Model Selections"]
+        for task, cfg in model_selections.items():
+            if isinstance(cfg, dict):
+                model_id = cfg.get("modelId") or cfg.get("model") or "?"
+                provider = cfg.get("providerId") or cfg.get("provider") or ""
+                suffix = f" (via {provider})" if provider else ""
+                model_lines.append(f"- {task}: {model_id}{suffix}")
+            elif isinstance(cfg, str):
+                model_lines.append(f"- {task}: {cfg}")
+        sections.append("\n".join(model_lines))
+
+    if not sections:
+        return ""
+
+    sections.append(
+        "（仅在用户主动询问或报告问题时才基于以上配置给出调整建议，"
+        "否则不要主动提示配置修改。）"
+    )
+
+    return "<current-configuration>\n{}\n</current-configuration>".format(
+        "\n".join(sections)
+    )
+
+
 def _git_summary(workspace_path: Optional[str]) -> str:
     """git 分支 + 未提交变更数摘要；任何失败返回空串。"""
     if not workspace_path:
@@ -128,4 +224,8 @@ def _git_summary(workspace_path: Optional[str]) -> str:
     return f"分支 {branch}（{count} 个未提交变更{more}: {preview}）"
 
 
-__all__ = ["build_environment_block", "build_skills_block"]
+__all__ = [
+    "build_environment_block",
+    "build_skills_block",
+    "build_configuration_summary_block",
+]

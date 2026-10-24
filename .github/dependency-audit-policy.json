@@ -1408,6 +1408,20 @@
       "owner": "Sage maintainers",
       "review_by": "2027-01-01",
       "source": "pip",
+      "package": "pillow",
+      "package_version": "10.4.0",
+      "advisory": "GHSA-5x8w-8jj5-q52h",
+      "advisory_url": "https://osv.dev/vulnerability/GHSA-5x8w-8jj5-q52h",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "image decode/encode reachable via user file uploads (attachment pipeline); conditional based on input format",
+      "controls": "Pillow 10.4.0 is the last Python 3.8-compatible release on PyPI; fixes require Pillow >=11/12 on Python >=3.9; upload size limits, MIME type validation, image dimension caps, sandboxing, quarterly review through Win7 LTS EOL 2027-12-13",
+      "exception": "temporary exception pending Win7 LTS EOL or upstream backport to a Py3.8-compatible release",
+      "notes": "py38-ceiling: pillow 修复需要 >=12.1.1，而 10.4.0 是最后一个声明 requires_python 允许 3.8 的版本。release/win7 的依赖契约锁 Python 3.8（Win7 LTS，EOL 2027-12-13），本轨不存在可用的修复版本。待 Win7 LTS EOL 后随 Python 3.10+ 切换一并修复。"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "pip",
       "package": "opentelemetry-api",
       "package_version": "1.27.0",
       "advisory": "GHSA-xcq7-p3pf-p88h",
@@ -1445,6 +1459,18 @@
         "controls": "strict Electron CSP, contextIsolation=true, sandboxed iframe preview without network/Node access, and scheduled lockfile bump when patched dompurify is released",
         "exception": "temporary exception pending upstream dompurify patch release and package-lock.json bump",
         "notes": "npm-dompurify: newly published GHSA-mrv2-3pqr-j5jr on dompurify 3.4.15."
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "electron",
+      "package_version": "21.4.4",
+      "advisory": "GHSA-jr5w-w6x2-84p9",
+      "advisory_url": "https://github.com/advisories/GHSA-jr5w-w6x2-84p9",
+      "affected_path": "node_modules/electron",
+      "actual_reachability": "reachable; accepted risk",
+      "controls": "Electron main-process isolation, contextIsolation, sandboxing, IPC validation, no arbitrary cwd execution; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); quarterly npm audit review"
     }
   ]
 }

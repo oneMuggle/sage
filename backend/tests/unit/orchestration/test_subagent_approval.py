@@ -33,8 +33,8 @@ class _FakeBase:
         self.rules = {"r": 1}
         self.check_calls = []
 
-    def check(self, tool_name, args=None):
-        self.check_calls.append((tool_name, args))
+    def check(self, tool_name, args=None, plugin_name=None):
+        self.check_calls.append((tool_name, args, plugin_name))
         return self._decision
 
 
@@ -65,6 +65,14 @@ def test_allow_passthrough_untouched(monkeypatch):
     wrapper = AutoApproveEnforcer(base)
     out = wrapper.check("read_file", {})
     assert out is base._decision  # 原样透传，不加 auto 后缀
+
+
+def test_plugin_name_forwarded_to_base():
+    base = _FakeBase(_decision(allowed=True, needs_approval=False, reason="ok"))
+    wrapper = AutoApproveEnforcer(base)
+    out = wrapper.check("plugin__demo__hello", {}, plugin_name="demo")
+    assert out is base._decision
+    assert base.check_calls == [("plugin__demo__hello", {}, "demo")]
 
 
 def test_deny_always_wins(monkeypatch):

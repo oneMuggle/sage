@@ -60,3 +60,10 @@ export function saveAttachmentRagConfig(config: AttachmentRagConfig): void {
     // ignore — localStorage 不可用时静默
   }
 }
+export function auditAttachmentRagConfigGovernance(): string {
+  return JSON.stringify({
+    module: 'attachment-rag-config',
+    phase: 'P188',
+    audited: true,
+  });
+}

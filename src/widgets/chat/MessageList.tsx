@@ -47,6 +47,8 @@ interface MessageListProps {
   /** right-panel R1 批次 B: 当前会话 ID —— 拉取产物列表建立
    * tool_call_id → 产物[] 映射，供消息内联产物 chip 点击直达预览 */
   sessionId?: string | null;
+  /** R96: 当前会话运行状态 —— 非 running 时切换会话自动展开全部消息 */
+  runStatus?: string;
   knowledgeRefs?: Record<string, { id: string; title: string }[]>;
   attachments?: Record<string, { name: string; size: number; type: string; dataUrl?: string }[]>;
   /** P1: 当前正在流式输出的消息 ID (用于 ThinkingPanel 自动展开) */
@@ -82,6 +84,7 @@ interface MessageListProps {
 export function MessageList({
   messages,
   sessionId,
+  runStatus,
   knowledgeRefs,
   attachments,
   streamingMessageId,
@@ -116,10 +119,21 @@ export function MessageList({
     return map;
   }, [artifacts]);
 
-  // 切会话时重置窗口
+  // R96: 切会话时按运行状态决定初始窗口 —— 非 running 展开全部消息，
+  // running 保持 WINDOW_STEP 避免流式更新频繁重渲染
   useEffect(() => {
-    setWindowSize(WINDOW_STEP);
+    const shouldExpandAll = runStatus !== 'running';
+    setWindowSize(shouldExpandAll ? Math.max(messages.length, WINDOW_STEP) : WINDOW_STEP);
+    // 只在切换会话(firstId 变化)时重置, messages.length 变化不重置
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstId]);
+
+  // R96: running → completed/failed 时自动展开全部消息
+  useEffect(() => {
+    if (runStatus !== 'running') {
+      setWindowSize((prev) => Math.max(prev, messages.length));
+    }
+  }, [runStatus, messages.length]);
 
   // 对话阅读导航 A1: 消费"定位到消息"请求 —— 目标在尾窗外时临时扩窗，
   // 定位后高亮并把窗口固化为扩大后的大小。
@@ -306,6 +320,7 @@ export function MessageList({
                 knowledgeRefs={knowledgeRefs}
                 attachments={attachments}
                 artifactsByToolCall={artifactsByToolCall}
+                defaultExpanded={runStatus !== 'running'}
                 onFork={onFork}
                 onRewind={onRewind}
                 onEditResend={onEditResend}

@@ -242,8 +242,7 @@ export const zhSettingsAndModels = {
   'permission.remember_scope.legend': '记住范围',
   'permission.remember_scope.tool': '仅此工具',
   'permission.remember_scope.plugin': '整个插件（包含未来新增工具）',
-  'permission.remember_scope.plugin_warning':
-    '将对该插件的全部工具生效，请确认你信任这个插件。',
+  'permission.remember_scope.plugin_warning': '将对该插件的全部工具生效，请确认你信任这个插件。',
   'permission.approve': '允许',
   'permission.deny': '拒绝',
   'permission.deny_confirm': '确认拒绝',
@@ -253,7 +252,8 @@ export const zhSettingsAndModels = {
   'permission.subagent_context': '编排子任务请求审批',
   'permission.diff': '将写入的变更',
   'permission.remote_resolved': '该审批已离开待批队列',
-  'permission.remote_resolved.desc': '{tool} · 风险 {risk} · 已等待 {wait} · 可能已在远程渠道处理或已超时',
+  'permission.remote_resolved.desc':
+    '{tool} · 风险 {risk} · 已等待 {wait} · 可能已在远程渠道处理或已超时',
   'permission.project_allow.button': '项目级允许',
   'permission.project_allow.tooltip': '将此路径加入当前项目的允许访问列表',
   'permission.project_allow.added': '已添加规则 {rule}',
@@ -308,6 +308,16 @@ export const zhSettingsAndModels = {
   'settings.permission.rules_hint':
     '细粒度规则（permission_rules JSON）暂不支持界面编辑；审批时勾选"记住我的选择"会自动追加规则。',
   'settings.permission.load_failed': '读取权限模式失败',
+
+  // R97 已记住规则管理
+  'settings.permission.rules.title': '已记住的规则',
+  'settings.permission.rules.empty': '暂无已记住的规则',
+  'settings.permission.rules.delete': '删除',
+  'settings.permission.rules.decision.allow': '允许',
+  'settings.permission.rules.decision.deny': '拒绝',
+  'settings.permission.rules.decision.ask': '每次询问',
+  'settings.permission.rules.load_failed': '读取已记住规则失败',
+  'settings.permission.rules.delete_failed': '删除规则失败，请重试',
 
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': '用量统计',
