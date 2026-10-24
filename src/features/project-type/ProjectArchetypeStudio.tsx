@@ -17,7 +17,7 @@ import {
   FolderPlus,
   ArrowRight,
 } from 'lucide-react';
-import { type ComponentType, useState } from 'react';
+import { type ComponentType, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { projectApi, type ProjectType } from '../../shared/api';
@@ -55,6 +55,18 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const [copiedVcs, setCopiedVcs] = useState(false);
   const [createdBlueprintMs, setCreatedBlueprintMs] = useState(false);
   const [copiedPositioning, setCopiedPositioning] = useState(false);
+
+  // Track pending setTimeout timers so they are cleared on unmount,
+  // preventing "setState on unmounted component" errors that Vitest
+  // treats as fatal (uncaught exception after test cleanup).
+  const _timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(
+    () => () => {
+      _timers.current.forEach(clearTimeout);
+      _timers.current = [];
+    },
+    [],
+  );
 
   const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
 
@@ -139,7 +151,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                     try {
                       await navigator.clipboard?.writeText(blueprint.vcsLabel);
                       setCopiedVcs(true);
-                      setTimeout(() => setCopiedVcs(false), 1500);
+                      _timers.current.push(setTimeout(() => setCopiedVcs(false), 1500));
                     } catch {
                       // ignore in test/offline mode
                     }
@@ -153,7 +165,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                   data-testid="studio-copy-positioning-btn"
                   onClick={async () => {
                     setCopiedPositioning(true);
-                    setTimeout(() => setCopiedPositioning(false), 1500);
+                    _timers.current.push(setTimeout(() => setCopiedPositioning(false), 1500));
                     try {
                       await navigator.clipboard?.writeText(blueprint.positioning);
                     } catch {
@@ -257,7 +269,7 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                   try {
                     await navigator.clipboard?.writeText(activeProject.path);
                     setCopiedActivePath(true);
-                    setTimeout(() => setCopiedActivePath(false), 1500);
+                    _timers.current.push(setTimeout(() => setCopiedActivePath(false), 1500));
                   } catch {
                     // ignore in test/offline mode
                   }
