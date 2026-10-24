@@ -2718,3 +2718,25 @@
   - `src/widgets/chat/__tests__/KnowledgeChip.p186.test.ts`
   - `src/widgets/chat/__tests__/MemoryWriteHints.p186.test.ts`
   - `src/widgets/chat/__tests__/MessageMarkdownParts.p186.test.ts`
+
+### Phase P187 — Chat Diff Review, Progress Tree & Session Fork Governance Audit Contracts (2026-10-24)
+
+- **Scope (`src/widgets/chat/changes/`, `src/widgets/chat/progress/`, `src/widgets/chat/`, `src/widgets/session/` & `src/shared/lib/`)**:
+  1. `src/widgets/chat/changes/diffHunks.ts` -> `auditDiffHunksGovernance()` (`module: 'diff-hunks'`)
+  2. `src/widgets/chat/changes/reviewSections.ts` -> `auditReviewSectionsGovernance()` (`module: 'review-sections'`)
+  3. `src/widgets/chat/changes/splitDiffParser.ts` -> `auditSplitDiffParserGovernance()` (`module: 'split-diff-parser'`)
+  4. `src/widgets/chat/progress/taskTree.ts` -> `auditTaskTreeGovernance()` (`module: 'task-tree'`)
+  5. `src/widgets/chat/slashCommands.ts` -> `auditSlashCommandsGovernance()` (`module: 'slash-commands'`)
+  6. `src/widgets/chat/turnGrouping.ts` -> `auditTurnGroupingGovernance()` (`module: 'turn-grouping'`)
+  7. `src/widgets/session/forkTree.ts` -> `auditForkTreeGovernance()` (`module: 'fork-tree'`)
+  8. `src/shared/lib/toolCallEnvelope.ts` -> `auditToolCallEnvelopeGovernance()` (`module: 'tool-call-envelope'`)
+- **Unit Test Suites**:
+  - `src/widgets/chat/changes/__tests__/diffHunks.p187.test.ts`
+  - `src/widgets/chat/changes/__tests__/reviewSections.p187.test.ts`
+  - `src/widgets/chat/changes/__tests__/splitDiffParser.p187.test.ts`
+  - `src/widgets/chat/progress/__tests__/taskTree.p187.test.ts`
+  - `src/widgets/chat/__tests__/slashCommands.p187.test.ts`
+  - `src/widgets/chat/__tests__/turnGrouping.p187.test.ts`
+  - `src/widgets/session/__tests__/forkTree.p187.test.ts`
+  - `src/shared/lib/__tests__/toolCallEnvelope.p187.test.ts`
+- **CI unblock (2026-10-24)**: 解除 dependency-audit 门禁阻塞 —— `pillow` `GHSA-5x8w-8jj5-q52h`（10.4.0，py38 ceiling）与 `electron` `GHSA-jr5w-w6x2-84p9`（21.4.4，Win7 LTS 钉版本）加入 `.github/dependency-audit-policy.json` 例外（pip 条目 `advisory_url` 统一为 `osv.dev` 口径）；`package-lock.json` 定向升级 `zod` 4.4.3→4.6.7、`undici` 7.29.1→7.30.1、`node-gyp` 内嵌 `undici` 6.28.1→6.29.1；`ci.yml` 将 `ruff` 安装钉到 `0.4.4`（与 `requirements-dev.txt` / `requirements-py38.txt` 一致），消除未钉版本导致的 `Backend (Python)` 漂移。

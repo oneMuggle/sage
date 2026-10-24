@@ -188,7 +188,7 @@ jobs:
           # 从仓库根运行: requirements.txt 中 -e ./packages/sage-core 路径
           # 相对于仓库根 (packages/sage-core 不在 backend/ 下)
           conda run -n sage-backend pip install -r backend/requirements.txt
-          conda run -n sage-backend pip install ruff mypy import-linter
+          conda run -n sage-backend pip install ruff==0.4.4 mypy import-linter
 
       - name: Ruff check
         shell: bash -el {0}
