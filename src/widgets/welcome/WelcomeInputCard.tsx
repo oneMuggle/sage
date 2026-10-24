@@ -9,6 +9,7 @@ interface WelcomeInputCardProps {
   onSend?: (value: string) => void;
   disabled?: boolean;
   initialValue?: string;
+  toolbar?: React.ReactNode;
 }
 
 export function formatWelcomeInputMarkdown(params: {
@@ -50,6 +51,7 @@ export function WelcomeInputCard({
   onSend,
   disabled = false,
   initialValue = '',
+  toolbar,
 }: WelcomeInputCardProps) {
   const [value, setValue] = useState(initialValue);
 
@@ -89,8 +91,9 @@ export function WelcomeInputCard({
           autoFocus
         />
       </div>
-      <div className="mt-1 flex items-center justify-end gap-1.5 text-ui-2xs">
-      </div>
+      {toolbar && (
+        <div className="mt-1">{toolbar}</div>
+      )}
     </div>
   );
 }
