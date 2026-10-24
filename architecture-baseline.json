@@ -23,6 +23,7 @@
     "backend/orchestration/chat_dispatcher.py": 2258,
     "backend/scheduler/evolution.py": 1693,
     "backend/services/usage_tracker.py": 902,
+    "backend/tests/api/test_permission_routes.py": 831,
     "backend/tests/integration/test_llm_proxy_routes.py": 1154,
     "backend/tests/unit/test_chat_dispatcher_budget.py": 969,
     "backend/tests/integration/test_model_catalog_routes.py": 835,

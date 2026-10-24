@@ -90,4 +90,16 @@ describe('permissionApi', () => {
       permissionApi.deleteRule({ tool_pattern: 'bash', decision: 'deny' }),
     ).rejects.toThrow('backend down');
   });
+
+  it('clearRules() invokes permissions_clear_rules and returns updated list', async () => {
+    mockInvoke.mockResolvedValueOnce({ ok: true, rules: [] });
+    const rules = await permissionApi.clearRules();
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_clear_rules', {});
+    expect(rules).toEqual([]);
+  });
+
+  it('clearRules() propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('backend down'));
+    await expect(permissionApi.clearRules()).rejects.toThrow('backend down');
+  });
 });

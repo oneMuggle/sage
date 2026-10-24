@@ -28,7 +28,8 @@
 | R96 | 插件权限规则结构化身份匹配 | ✅ #2413 |
 | R97 | 已记住权限规则管理（查看/删除） | ✅ #2418 |
 | R98 | 插件 profile 白名单结构化身份匹配 | ✅ #2440 |
-| R99 | 已保存权限规则写入完整性（记住去重 + 按内容删除） | #2452 待合并 |
+| R99 | 已保存权限规则写入完整性（记住去重 + 按内容删除） | ✅ #2452 |
+| R100 | 已保存权限规则一键清空（撤销全部持久信任） | 🔄 #2474 |
 
 ## 2. 交付总账
 
@@ -50,7 +51,8 @@
 | R96 | `PermissionRule`/`PermissionEnforcer` 权威 `plugin_name` 结构化匹配 + agent/adapter 身份透传与测试/文档 | #2413 | 待对齐 | ✅ 已交付 |
 | R97 | `GET /permissions/rules` + 删除端点 + Electron 命令 + 设置页已记住规则列表/删除与测试/文档 | #2418 | 待对齐 | ✅ 已交付 |
 | R98 | `tool_name_in_allowlist` 权威 `plugin_name` 结构化匹配 + registry/agent 三道闸与前端覆盖镜像透传与测试/文档 | #2440 | 待对齐 | ✅ 已交付 |
-| R99 | remember 追加去重 + 删除端点按内容定位 + Electron/设置页传参切换与测试/文档 | #2452 | 待对齐 | 待 CI/合并 |
+| R99 | remember 追加去重 + 删除端点按内容定位 + Electron/设置页传参切换与测试/文档 | #2452 | 待对齐 | ✅ 已交付 |
+| R100 | `POST /permissions/rules/clear` + Electron 命令 + 设置页全部删除（确认后）与测试/文档 | #2474 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -418,6 +420,24 @@
 - **本地证据**：后端定向 42 例与相邻 83 例、前端
   定向 28 例通过；tsc、ESLint（0 errors）、Ruff、
   py38、architecture、silent-exceptions、
-  diff-check 与 diagnostics 全绿。
+  diff-check 与 diagnostics 全绿；PR #2452 GitHub
+  All Checks pass，已 squash 合并为 `main`
+  `b2ba86e312345d854fb2a35760fc4d6388a0ea9a`。
+
+## 20. R100 交付边界（PR #2474 待合并）
+
+> spec：`2026-10-24_permission-rules-clear-r100.md`。
+> R100 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **只补「全部撤销」，不开规则写面**：清空端点无请求体、
+  不带任何筛选参数，永远只能把规则列表写空；规则生成、
+  逐条删除与求值语义全部保持，UI 无 pattern 输入入口。
+- **破坏性操作先确认**：设置页「全部删除」先走项目内
+  confirmDialog（danger）才发请求；清空后果是全部恢复
+  逐次审批（fail-safe），不做 undo 或备份导出。
+- **本地证据**：后端定向 45 例与相邻 83 例、前端定向
+  36 例通过；ipc-manifest（264 commands）、tsc、
+  ESLint（0 errors）、Ruff、py38、architecture、
+  silent-exceptions、diff-check 与 diagnostics 全绿。
 
 —— 本账本由插件化循环维护，随轮次追加。
