@@ -16,6 +16,8 @@ interface TurnGroupProps {
   knowledgeRefs?: Record<string, { id: string; title: string }[]>;
   attachments?: Record<string, { name: string; size: number; type: string; dataUrl?: string }[]>;
   artifactsByToolCall?: Record<string, Artifact[]>;
+  /** R96: 非 running 会话切换时回合默认展开 */
+  defaultExpanded?: boolean;
   onFork?: (messageId: string) => void;
   onRewind?: (messageId: string) => void;
   onEditResend?: (messageId: string) => void;
@@ -49,9 +51,10 @@ function TurnGroupComponent({
   onBlockedAction,
   onContinue,
   onAnswerVersionChange,
+  defaultExpanded,
 }: TurnGroupProps) {
   const collapsible = isTurnCollapsible(messages);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded ?? false);
 
   // 流式消息始终展开
   const isStreaming = messages.some((m) => m.id === streamingMessageId);
