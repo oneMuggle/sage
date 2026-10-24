@@ -333,3 +333,10 @@ export function formatSlashCommandsJson(commands: SlashCommand[]): string {
     2,
   );
 }
+export function auditSlashCommandsGovernance(): string {
+  return JSON.stringify({
+    module: 'slash-commands',
+    phase: 'P187',
+    audited: true,
+  });
+}

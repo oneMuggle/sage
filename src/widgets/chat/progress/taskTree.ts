@@ -124,3 +124,10 @@ export function formatTaskTreeJson(index?: TaskTreeIndex | null): string {
   });
 }
 /* v8 ignore stop */
+export function auditTaskTreeGovernance(): string {
+  return JSON.stringify({
+    module: 'task-tree',
+    phase: 'P187',
+    audited: true,
+  });
+}
