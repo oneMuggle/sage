@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react';
 
 import { useSettings } from '../../features/manage-settings/useSettings';
+import { getInputHistorySize, setInputHistorySize } from '../../shared/lib/hooks/useInputHistory';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { FontSettingsSection } from './FontSettingsSection';
@@ -123,6 +124,7 @@ function CloseToTrayCard(): JSX.Element {
 export function BasicTab() {
   const { settings, updateSettings } = useSettings();
   const [copiedAudit, setCopiedAudit] = useState(false);
+  const [inputHistorySize, setInputHistorySizeState] = useState(getInputHistorySize());
 
   /* v8 ignore start */
   const handleCopyAudit = async () => {
@@ -175,6 +177,29 @@ export function BasicTab() {
           desc="逐字显示 AI 回复，而非等待全部生成完成"
         >
           <Toggle value={settings.streaming} onChange={(v) => updateSettings({ streaming: v })} />
+        </SettingRow>
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">输入历史</h3>
+        <SettingRow
+          anchor="inputHistorySize"
+          label="历史条数上限"
+          desc="输入框按上下键可调出的最近发送记录数量（每会话独立，1–200）"
+        >
+          <input
+            type="number"
+            data-testid="settings-input-history-size"
+            min={1}
+            max={200}
+            value={inputHistorySize}
+            onChange={(e) => {
+              const raw = parseInt(e.target.value, 10);
+              const v = Number.isFinite(raw) ? Math.max(1, Math.min(200, raw)) : 50;
+              setInputHistorySize(v);
+              setInputHistorySizeState(v);
+            }}
+            className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          />
         </SettingRow>
       </section>
       <section>
