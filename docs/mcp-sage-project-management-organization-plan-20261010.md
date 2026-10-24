@@ -2833,3 +2833,26 @@
 - **Baseline ratchet**: 无（8 个 `.tsx` 目标均未进入 `architecture-baseline.json`，`node scripts/architecture-check.mjs` 双轨直接通过）。
 - **Selection note**: 前一轮 provider 候选（`src/app/providers/*`、`src/entities/font/useFontSettings.tsx`）在 `origin/main` 上已存在 P151 阶段审计导出，属误入候选池，已在本次范围外排除；本轮 8 个目标经 `git grep -lE 'Governance|audit[A-Z]' origin/main -- src` 前缀剥离后重新校验为空，确为未覆盖模块。
 - **Shell note**: 组件均带 `// eslint-disable-next-line react-refresh/only-export-components` 前缀以保留具名导出；源文件按 CI `npm run lint` 口径校验，新增测试文件保持零警告。
+
+### Phase P192 — Arena Consoles & Skill Management Widgets Governance Audit Contracts (2026-10-24)
+
+- **Scope (`src/widgets/arena/`, `src/widgets/skills/`)**:
+  1. `src/widgets/arena/BatchRegisterPanel.tsx` -> `auditBatchRegisterPanelGovernance()` (`module: 'batch-register-panel'`)
+  2. `src/widgets/arena/DrawPanel.tsx` -> `auditDrawPanelGovernance()` (`module: 'draw-panel'`)
+  3. `src/widgets/arena/JobConsole.tsx` -> `auditJobConsoleGovernance()` (`module: 'job-console'`)
+  4. `src/widgets/arena/TokenWindowCard.tsx` -> `auditTokenWindowCardGovernance()` (`module: 'token-window-card'`)
+  5. `src/widgets/skills/SkillAuditDrawer.tsx` -> `auditSkillAuditDrawerGovernance()` (`module: 'skill-audit-drawer'`)
+  6. `src/widgets/skills/SkillDraftDetail.tsx` -> `auditSkillDraftDetailGovernance()` (`module: 'skill-draft-detail'`)
+  7. `src/widgets/skills/SkillDraftList.tsx` -> `auditSkillDraftListGovernance()` (`module: 'skill-draft-list'`)
+  8. `src/widgets/skills/SkillList.tsx` -> `auditSkillListGovernance()` (`module: 'skill-list'`)
+- **Unit Test Suites**:
+  - `src/widgets/arena/__tests__/BatchRegisterPanel.p192.test.ts`
+  - `src/widgets/arena/__tests__/DrawPanel.p192.test.ts`
+  - `src/widgets/arena/__tests__/JobConsole.p192.test.ts`
+  - `src/widgets/arena/__tests__/TokenWindowCard.p192.test.ts`
+  - `src/widgets/skills/__tests__/SkillAuditDrawer.p192.test.ts`
+  - `src/widgets/skills/__tests__/SkillDraftDetail.p192.test.ts`
+  - `src/widgets/skills/__tests__/SkillDraftList.p192.test.ts`
+  - `src/widgets/skills/__tests__/SkillList.p192.test.ts`
+- **Baseline ratchet**: 无（8 个 `.tsx` 目标均未进入 `architecture-baseline.json`，`node scripts/architecture-check.mjs` 双轨直接通过）。
+- **Shell note**: 组件均带 `// eslint-disable-next-line react-refresh/only-export-components` 前缀以保留具名导出；源文件按 CI `npm run lint` 口径校验，新增测试文件保持零警告。

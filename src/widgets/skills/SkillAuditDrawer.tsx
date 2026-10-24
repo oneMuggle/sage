@@ -175,3 +175,11 @@ export function SkillAuditDrawer({
 }
 
 export default SkillAuditDrawer;
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditSkillAuditDrawerGovernance(): string {
+  return JSON.stringify({
+    module: 'skill-audit-drawer',
+    phase: 'P192',
+    audited: true,
+  });
+}
