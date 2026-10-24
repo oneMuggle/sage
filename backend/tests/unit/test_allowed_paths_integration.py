@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import tempfile
@@ -120,11 +121,17 @@ class TestFileToolAllowedPathsIntegration:
         test_db.init_db()
         self._original_db = db_module._db
         db_module._db = test_db
+        self._test_db = test_db
 
     def teardown_method(self):
         """清理：恢复原始数据库 + 删除临时文件。"""
         import backend.data.database as db_module
         db_module._db = self._original_db
+        # Windows：SQLite 连接未关闭时 unlink 报 WinError 32
+        db = getattr(self, "_test_db", None)
+        if db is not None:
+            with contextlib.suppress(Exception):
+                db.close()
         if os.path.exists(self._tmp_db.name):
             os.unlink(self._tmp_db.name)
 

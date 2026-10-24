@@ -142,6 +142,54 @@ class TestLoadLLMConfig:
         # 解析结果为模型名 (不再构造客户端实例)。
         assert resolve_model_from_settings() == "llama3"
 
+    def test_openai_compatible_allows_empty_api_key_in_config(self):
+        """openai-compatible 协议允许空 apiKey，应返回有效配置而非 None。"""
+        _seed_settings(
+            {
+                "endpoints": [
+                    {
+                        "id": "proxy",
+                        "protocol": "openai-compatible",
+                        "baseUrl": "http://internal-proxy.local/v1",
+                        "apiKey": "",  # 空字符串 - 内网代理不需要密钥
+                        "discoveredModels": [{"id": "internal-model"}],
+                    }
+                ],
+                "modelSelections": {
+                    "chatModel": {"endpointId": "proxy", "modelId": "internal-model"}
+                },
+            }
+        )
+        cfg = load_llm_config_from_settings()
+        assert cfg is not None, "openai-compatible 协议应允许空 apiKey"
+        assert cfg["api_key"] == ""
+        assert cfg["base_url"] == "http://internal-proxy.local/v1"
+        assert cfg["model"] == "internal-model"
+
+    def test_ollama_allows_empty_api_key_in_config(self):
+        """ollama 协议允许空 apiKey，应返回有效配置而非 None。"""
+        _seed_settings(
+            {
+                "endpoints": [
+                    {
+                        "id": "local",
+                        "protocol": "ollama",
+                        "baseUrl": "http://localhost:11434/v1",
+                        "apiKey": "",
+                        "discoveredModels": [{"id": "llama3"}],
+                    }
+                ],
+                "modelSelections": {
+                    "chatModel": {"endpointId": "local", "modelId": "llama3"}
+                },
+            }
+        )
+        cfg = load_llm_config_from_settings()
+        assert cfg is not None, "ollama 协议应允许空 apiKey"
+        assert cfg["api_key"] == ""
+        assert cfg["base_url"] == "http://localhost:11434/v1"
+        assert cfg["model"] == "llama3"
+
     def test_selected_openai_compatible_endpoint_allows_empty_api_key(self):
         _seed_settings(
             {

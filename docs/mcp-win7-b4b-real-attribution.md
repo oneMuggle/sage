@@ -1,4 +1,14 @@
-# B4b — `backend/tests` 的 96 个 `real` 差异归因
+# B4b — `backend/tests` 的 `real` 差异归因
+
+> **本文的数字有两个时点，不要混用。**
+> §1–§5 的归因是在 `origin/main` `7634de8fc` ↔ `release/win7` `82ff6bdc0`（+B4）上做的，
+> 当时 `real` = 96。§6.1 记录的**实施**发生在两次基线前进之后
+> （`a181f29e4` → `13cb21f48`，其间 #2410/#2414/#2416/#2420/#2425/#2428 落地），
+> 届时 `real` = 97、`PURE-LAG` = 17。**以 §6.1 的数字为准做实施决策**；
+> §1–§5 的价值在方法与分类结构，具体计数会随基线漂移。
+> 本轮内 `release/win7` 共移动 **11 次**，`origin/main` 也在移动 ——
+> 任何清单在开工前都必须重跑 parity 刷新。
+
 
 **日期**：2026-10-23　**性质**：只分析，不改任何代码
 **口径**：`origin/main` `7634de8fc` ↔ B4 分支 `e7bf8b99a`（`release/win7` 基线 `82ff6bdc0` + B4 的 88 个纯新增测试文件）
@@ -353,6 +363,129 @@ R92 allowlist helpers」带入）：
 
 **不该动的**：11 个 WIN7-TEST、7 个 ADAPT-ONLY、9 个 COMMENT/MARKER-ONLY、
 以及 `backend/tests/conftest.py`（5 行 win7 独有 + autouse fixture 的脆弱性）。
+
+---
+
+## 6.1 B4b-1 实施结果（2026-10-23，PR #2433）：PURE-LAG ≠ 可执行
+
+B4b-1 经历**两次尝试**，因为 `release/win7` 在中间又前进了。两次合起来才是完整的结论。
+
+### 6.1.1 第一次尝试（基线 `a181f29e4`）：19 个 PURE-LAG → 只留 10 个
+
+整替前逐个复核通过（`git diff --ignore-all-space -U0` 的 `+` 行全为 0、两侧 blob 严格
+UTF-8 可解码、无 U+FFFD）⇒「需人工确认的：0」，合计落后 770 行。
+
+```
+整替 19 个 → py38 collect 报 1 error
+             ImportError: cannot import name 'plugin_tool_belongs_to_plugin'
+                          from 'backend.domain.tool_names'
+  ↓ 顺带对齐 backend/domain/tool_names.py（numstat 0 added / 29 deleted，纯落后）
+重跑 → 19 failed, 311 passed, 2 skipped
+  ↓ 回退 9 个受阻文件
+重跑 → 148 passed, 2 skipped（10 个文件 + tool_names.py），ruff clean
+```
+
+### 6.1.2 基线前进到 `13cb21f48`：2 个改动变成冗余，6 个受阻项被解锁一半
+
+`a181f29e4..13cb21f48` 的 6 个提交里有两个正中要害：
+
+```
+13cb21f48 fix(win7): R95 plugin_name 传播到 enforcer.check — 与 main 对齐 (#2428)
+78a8f1237 feat(win7): sync R94 plugin runtime tool picker + R95 remember approvals (#2425)
+```
+
+后果：
+
+- `backend/domain/tool_names.py` 与 `backend/tests/unit/test_tool_names.py`
+  **numstat 变为空（已与 main 完全一致）** ⇒ 我第一次尝试里那 +29 行源码改动
+  和 +23 行测试改动**全部冗余，作为冗余丢弃**。
+- `test_permission_gate.py`、`api/test_plugin_routes.py` **变为 IDENTICAL** ⇒ 从清单消失。
+- `test_agent_tool_gate.py` 落后从 −124 缩到 −41、`test_tools_registry.py` −30 ⇒
+  **这两个在第二次尝试中通过了**，是 R95 落地的直接收益。
+
+重跑 parity + 归因（`13cb21f48` ↔ main `2099292ef`）：
+`backend/tests` 的 `real` 从 101 降到 **97**，`PURE-LAG` 从 19 变为 **17**（合计落后 652 行）。
+
+### 6.1.3 第二次尝试（基线 `13cb21f48`）：17 个 → 留 11 个，回退 6 个
+
+```
+整替 17 个 → py38 collect 306 tests / 0 errors（import 问题已消失）
+           → v2 pytest 18 failed, 286 passed, 2 skipped
+  ↓ 回退 6 个受阻文件
+重跑 → 148 passed, 2 skipped（11 个文件），ruff clean，CRLF i/lf w/crlf
+```
+
+**本批次最终不含任何源码改动**（tests-only），提交 `edcef646d`，
+经 Git Data API 推送为远程 `ec764a91c`（**tree 字节级一致** `3464ce8ca…`，
+stats +373 −2 / 11 files 两侧相同）⇒ **PR #2433**。
+
+留下的 11 个：
+
+| 文件 | 行数变化 |
+|---|---|
+| `unit/tools/test_office_update_tool.py` | 279 → 420（+141） |
+| `unit/test_llm_factory.py` | 199 → 247（+48） |
+| `api/test_search_routes.py` | +42 |
+| `unit/test_agent_tool_gate.py` | 215 → 256（+41）**← R95 解锁** |
+| `integration/test_office_word_inline_tables.py` | +38 |
+| `unit/test_tools_registry.py` | 239 → 269（+30）**← R95 解锁** |
+| `unit/test_agent_loop_guards.py` | +17 |
+| `unit/test_allowed_paths_integration.py` | +7 |
+| `unit/office/test_word_template.py` | +4 −1 |
+| `unit/test_file_tool_safepath.py` | +4 −1 |
+| `unit/test_attachment_context.py` | +1 |
+
+### 6.1.4 方法论盲区（本文 §3.1 的判定不完整）
+
+§3.1 说 PURE-LAG「可安全整替」，这个结论**只对了一半**：
+
+- ✅ **成立的部分**：win7 零独有内容 ⇒ 整替不会摧毁任何 win7 修复。复核是充分的。
+- ❌ **不成立的部分**：它**不保证 main 的新测试能在 win7 上跑起来**。测试文件本身没有
+  win7 独有内容，不等于它依赖的**被测源码**在 win7 已就位。
+
+正确的判定需要两个独立维度（B4 勘察时只做了第一个的一部分）：
+
+| 维度 | 判据 | 结果 |
+|---|---|---|
+| **安全性**：整替会不会丢 win7 的东西 | win7-only 行数 = 0（忽略空白 + 编码校验） | ✅ 17/17 通过 |
+| **可执行性**：main 的新测试能否在 win7 跑通 | 被测模块**存在** + 所需**符号/行为就位** | ❌ 6/17 不满足，只能靠实跑发现 |
+
+B4 勘察时的「可执行性分级」只检查了**模块存在性**
+（`git ls-tree origin/release/win7 -- backend/<mod>/__init__.py`），
+而这里缺的是**模块内部的符号与语义**：模块存在，但少了 main 后来加的
+`plugin_name` 形参、缺失的 REST 路由、缺失的 profile 工具项、SKILL.md 里缺失的工具名。
+
+⇒ **后续任何「可安全整替」的判定，都必须同时给出安全性与可执行性两个证据。**
+
+### 6.1.5 受阻的 6 个文件与 5 处源码缺口（建议编为 B4b-0）
+
+18 个失败全部指向源码缺口，且**5 处缺口全是双向分叉**（win7 持有独有行）
+⇒ 需要行级合并而非整替，属源码级批次：
+
+| 测试文件 | 失败数 | 根因（实读断言/异常） | 源码缺口 |
+|---|---|---|---|
+| `api/test_permission_routes.py` | 6 | `assert 404 == 200`，路由不存在（list/delete rules、`test_delete_rule_with_evil_origin_returns_403`） | `backend/api/permission_routes.py` **+1 −66** |
+| `unit/test_permissions_enforcer.py` | 6 | `TypeError: PermissionRule.matches() got an unexpected keyword argument 'plugin_name'`；`PermissionEnforcer.check()` 同 | `backend/tools/permissions.py` **+6 −46**；main 签名 `matches(self, tool_name, plugin_name: Optional[str] = None)`，docstring「受限插件通配只按权威插件身份匹配」 |
+| `integration/test_approval_api.py` | 3 | `TestHarnessProposalDraftApproval`：approve adopts without skill writer / reject marks proposal without mutation / stale approve returns 409 | harness proposal draft 审批链 |
+| `unit/test_trust_escalation.py` | 1 | `TypeError: TrustEscalationEnforcer.check() got an unexpected keyword argument 'plugin_name'` | `backend/services/trust_escalation.py` **+9 −12** |
+| `unit/test_profiles_default_tools.py` | 1 | `assert 'browser_login' in _PRIMARY_SEED_TOOLS` 失败 | `backend/agents/profiles.py` **+9 −18** |
+| `unit/test_shipped_writing_skills.py` | 1 | `assert 'office_refresh_toc' in report.body` 失败 | `backend/skills/skill_md/shipped/report-writing/SKILL.md` **+7 −36**（main 含 `office_refresh_toc` **3 次**，win7 **0 次**）—— 与 §5.1 `office_create_tool.py` 落后 285 行**同源** |
+
+**注意 #2428 的标题是「R95 plugin_name 传播到 enforcer.check — 与 main 对齐」，
+但 `PermissionEnforcer.check()` / `PermissionRule.matches()` /
+`TrustEscalationEnforcer.check()` 仍不接受 `plugin_name=`** ⇒ R95 只落地了一部分
+（足以解锁 `test_agent_tool_gate.py` 与 `test_tools_registry.py`，不足以解锁 enforcer 组）。
+
+### 6.1.6 对 §6 批次表的修正
+
+- **B4b-1 已实施**（PR #2433）：实际收益 **11 个文件 / +373 −2**，不是 19 个。
+- **新增 B4b-0（应排在最前）**：对齐 R95 enforcer 的 `plugin_name` 形参链
+  （`tools/permissions.py`、`services/trust_escalation.py`）+ `api/permission_routes.py`
+  的路由 + `agents/profiles.py` 的 `browser_login`。全部双向分叉 ⇒ **行级合并，源码级，
+  风险高于本表其他各项**；完成后上表 6 个测试文件可一并带入（`test_approval_api.py` 的
+  3 个 harness proposal 失败需单独看）。
+- `report-writing/SKILL.md` 的 `office_refresh_toc` 与 §5.1 的 `office_create_tool.py`
+  （B4b-4）**必须同批**，否则技能文档会引导用户调用一个 win7 尚不具备的能力。
 
 ---
 
