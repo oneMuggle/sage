@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 
 import chat from '../../content/help/chat.md?raw';
 import faq from '../../content/help/faq.md?raw';
@@ -140,7 +141,7 @@ export function HelpTab() {
     }
     return (
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
         components={{
           h1: ({ children }) => <h1 className="text-2xl font-bold mb-4 text-text">{children}</h1>,
