@@ -1140,6 +1140,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             memory_off = (data.memory_mode or "on") == "off"
             try:
                 from backend.chat.env_context import (
+                    build_configuration_summary_block,
                     build_environment_block,
                     build_skills_block,
                 )
@@ -1154,6 +1155,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                     )
                 )
+                # P119 Config Advisor (Phase 1.1): 当前配置摘要注入
+                # 让 LLM 自然看到关键配置（orch/general/model_selections），
+                # 无须主动调用 read_sage_config 工具。fail-safe: 任何失败
+                # 静默省略，绝不阻断聊天。受 apply_context_budget 裁剪。
+                config_block = build_configuration_summary_block()
+                if config_block:
+                    dynamic_context_parts.append(config_block)
                 skills_block = build_skills_block()
                 if skills_block:
                     # 技能清单仅在注册表变化时变 —— 相对稳定,留头部前缀。
