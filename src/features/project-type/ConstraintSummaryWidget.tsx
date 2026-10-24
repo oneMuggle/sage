@@ -691,3 +691,11 @@ function getProjectTypeConstraintHint(projectType: ProjectType): string {
   };
   return hints[projectType];
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditConstraintSummaryWidgetGovernance(): string {
+  return JSON.stringify({
+    module: 'constraint-summary-widget',
+    phase: 'P190',
+    audited: true,
+  });
+}

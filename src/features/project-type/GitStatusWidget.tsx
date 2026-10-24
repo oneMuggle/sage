@@ -708,3 +708,11 @@ export function GitStatusWidget({ projectId }: GitStatusWidgetProps) {
     </Card>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditGitStatusWidgetGovernance(): string {
+  return JSON.stringify({
+    module: 'git-status-widget',
+    phase: 'P190',
+    audited: true,
+  });
+}

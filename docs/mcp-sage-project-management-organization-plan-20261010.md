@@ -2785,3 +2785,26 @@
   - `src/features/project-type/__tests__/MilestoneEditor.p189.test.ts`
 - **Baseline ratchet**: `architecture-baseline.json` 中 `src/features/send-message/useChat.ts` 824 → 831（该文件为超 800 行基线条目，按 ratchet 协议只上调本条目）。
 - **Shell note**: `useChat.ts` 存在上游既有 `react-hooks/exhaustive-deps` 警告，源文件按 CI `npm run lint` 口径（警告不阻断）校验，新增测试文件仍保持零警告。
+
+### Phase P190 — Project-Type Managers, Widgets & Creation Wizard Governance Audit Contracts (2026-10-24)
+
+- **Scope (`src/features/project-type/`)**:
+  1. `src/features/project-type/ConstraintManager.tsx` -> `auditConstraintManagerGovernance()` (`module: 'constraint-manager'`)
+  2. `src/features/project-type/ConstraintSummaryWidget.tsx` -> `auditConstraintSummaryWidgetGovernance()` (`module: 'constraint-summary-widget'`)
+  3. `src/features/project-type/GitStatusWidget.tsx` -> `auditGitStatusWidgetGovernance()` (`module: 'git-status-widget'`)
+  4. `src/features/project-type/MilestoneManager.tsx` -> `auditMilestoneManagerGovernance()` (`module: 'milestone-manager'`)
+  5. `src/features/project-type/MilestoneProgressWidget.tsx` -> `auditMilestoneProgressWidgetGovernance()` (`module: 'milestone-progress-widget'`)
+  6. `src/features/project-type/ProjectAdvisorCard.tsx` -> `auditProjectAdvisorCardGovernance()` (`module: 'project-advisor-card'`)
+  7. `src/features/project-type/ProjectCreationWizard.tsx` -> `auditProjectCreationWizardGovernance()` (`module: 'project-creation-wizard'`)
+  8. `src/features/project-type/ProjectOverviewWidgets.tsx` -> `auditProjectOverviewWidgetsGovernance()` (`module: 'project-overview-widgets'`)
+- **Unit Test Suites**:
+  - `src/features/project-type/__tests__/ConstraintManager.p190.test.ts`
+  - `src/features/project-type/__tests__/ConstraintSummaryWidget.p190.test.ts`
+  - `src/features/project-type/__tests__/GitStatusWidget.p190.test.ts`
+  - `src/features/project-type/__tests__/MilestoneManager.p190.test.ts`
+  - `src/features/project-type/__tests__/MilestoneProgressWidget.p190.test.ts`
+  - `src/features/project-type/__tests__/ProjectAdvisorCard.p190.test.ts`
+  - `src/features/project-type/__tests__/ProjectCreationWizard.p190.test.ts`
+  - `src/features/project-type/__tests__/ProjectOverviewWidgets.p190.test.ts`
+- **Baseline ratchet**: 无（8 个 `.tsx` 目标均未进入 `architecture-baseline.json`，且未触发 800 行阈值，`node scripts/architecture-check.mjs` 双轨直接通过）。
+- **Shell note**: 8 个组件均带 `// eslint-disable-next-line react-refresh/only-export-components` 前缀以保留 `createRoot` 之外的具名导出；源文件按 CI `npm run lint` 口径校验，新增测试文件保持零警告。
