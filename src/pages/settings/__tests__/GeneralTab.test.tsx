@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => ({
   updateSettings: vi.fn(),
   listRules: vi.fn(),
   deleteRule: vi.fn(),
+  clearRules: vi.fn(),
+  confirmDialog: vi.fn(),
 }));
 
 vi.mock('../../../shared/api/settingsClient', () => ({
@@ -66,7 +68,12 @@ vi.mock('../../../shared/api/permissionApi', () => ({
     }),
     listRules: (...args: unknown[]) => mocks.listRules(...args),
     deleteRule: (...args: unknown[]) => mocks.deleteRule(...args),
+    clearRules: (...args: unknown[]) => mocks.clearRules(...args),
   },
+}));
+
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
+  confirmDialog: (...args: unknown[]) => mocks.confirmDialog(...args),
 }));
 
 vi.mock('../../../features/manage-settings/useSettings', () => ({
@@ -113,8 +120,12 @@ beforeEach(() => {
   mocks.setPreference.mockResolvedValue(undefined);
   mocks.listRules.mockReset();
   mocks.deleteRule.mockReset();
+  mocks.clearRules.mockReset();
+  mocks.confirmDialog.mockReset();
   mocks.listRules.mockResolvedValue([]);
   mocks.deleteRule.mockResolvedValue([]);
+  mocks.clearRules.mockResolvedValue([]);
+  mocks.confirmDialog.mockResolvedValue(true);
 });
 
 describe('GeneralTab font controls', () => {
@@ -283,6 +294,75 @@ describe('GeneralTab remembered rules manager (R97)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('permission-rules-delete-failed')).toHaveTextContent(
         '删除规则失败',
+      );
+    });
+    expect(screen.getByText('bash')).toBeInTheDocument();
+  });
+
+  it('hides the clear-all button when there are no rules', async () => {
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('暂无已记住的规则')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('permission-rules-clear')).not.toBeInTheDocument();
+  });
+
+  it('clears all rules after confirmation and adopts the server list', async () => {
+    mocks.listRules.mockResolvedValue([
+      { tool_pattern: 'bash', decision: 'deny' },
+      { tool_pattern: 'write_file', decision: 'ask' },
+    ]);
+    mocks.clearRules.mockResolvedValue([]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-clear'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ danger: true }),
+      );
+      expect(mocks.clearRules).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('暂无已记住的规则')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('bash')).not.toBeInTheDocument();
+  });
+
+  it('does not clear when the confirmation is cancelled', async () => {
+    mocks.listRules.mockResolvedValue([{ tool_pattern: 'bash', decision: 'deny' }]);
+    mocks.confirmDialog.mockResolvedValue(false);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-clear'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalled();
+    });
+    expect(mocks.clearRules).not.toHaveBeenCalled();
+    expect(screen.getByText('bash')).toBeInTheDocument();
+  });
+
+  it('keeps the list and shows an error when clearing fails', async () => {
+    mocks.listRules.mockResolvedValue([{ tool_pattern: 'bash', decision: 'deny' }]);
+    mocks.clearRules.mockRejectedValue(new Error('backend down'));
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-clear'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-clear-failed')).toHaveTextContent(
+        '全部删除失败',
       );
     });
     expect(screen.getByText('bash')).toBeInTheDocument();

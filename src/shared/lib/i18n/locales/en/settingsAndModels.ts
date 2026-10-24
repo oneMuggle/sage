@@ -337,6 +337,12 @@ export const enSettingsAndModels = {
   'settings.permission.rules.load_failed': 'Failed to load remembered rules',
   'settings.permission.rules.delete_failed': 'Failed to delete rule, please retry',
 
+  'settings.permission.rules.clear_all': 'Delete all',
+  'settings.permission.rules.clear_confirm_title': 'Delete all remembered rules?',
+  'settings.permission.rules.clear_confirm_message':
+    'Every rule saved via "Remember my choice" will be deleted and all tool calls will ask for approval again. This cannot be undone.',
+  'settings.permission.rules.clear_failed': 'Failed to delete all rules, please retry',
+
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': 'Usage',
   'settings.usage.requests': 'Requests',

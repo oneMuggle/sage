@@ -319,6 +319,12 @@ export const zhSettingsAndModels = {
   'settings.permission.rules.load_failed': '读取已记住规则失败',
   'settings.permission.rules.delete_failed': '删除规则失败，请重试',
 
+  'settings.permission.rules.clear_all': '全部删除',
+  'settings.permission.rules.clear_confirm_title': '删除全部已记住规则？',
+  'settings.permission.rules.clear_confirm_message':
+    '所有通过「记住我的选择」保存的规则都会被删除，之后全部工具调用将恢复逐次询问。此操作不可撤销。',
+  'settings.permission.rules.clear_failed': '全部删除失败，请重试',
+
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': '用量统计',
   'settings.usage.requests': '请求数',

@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import List
+from typing import List, Optional
 
 import pytest
 
@@ -35,7 +35,7 @@ def gate():
 
 
 def _pending_request(
-    tool_name: str = "bash", plugin_name: str | None = None
+    tool_name: str = "bash", plugin_name: Optional[str] = None
 ) -> ApprovalRequest:
     return ApprovalRequest.create(
         tool_name=tool_name,
@@ -766,6 +766,60 @@ async def test_delete_rule_with_evil_origin_returns_403(client):
     resp = await client.post(
         "/api/v1/permissions/rules/delete",
         json={"tool_pattern": "bash", "decision": "allow"},
+        headers={"Origin": "https://evil.com"},
+    )
+
+    assert resp.status_code == 403
+    assert resp.json() == {"ok": False, "error": "forbidden_origin"}
+    assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
+        PermissionRule("bash", "allow")
+    ]
+
+
+# ---------------------------------------------------------------------------
+# R100 已保存规则一键清空
+# ---------------------------------------------------------------------------
+
+
+async def test_clear_rules_empties_storage_and_returns_empty_list(client):
+    """R100: 清空写入空列表并返回空 rules；无效存量条目随之一并消失。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES,
+        [
+            {"tool_pattern": "bash", "decision": "deny"},
+            {"tool_pattern": 123, "decision": "allow"},
+            {"tool_pattern": "plugin__demo__*", "decision": "allow"},
+        ],
+    )
+
+    resp = await client.post("/api/v1/permissions/rules/clear")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "rules": []}
+    assert repo.get_json(SETTINGS_KEY_RULES) == []
+    listed = await client.get("/api/v1/permissions/rules")
+    assert listed.json() == {"ok": True, "rules": []}
+
+
+async def test_clear_rules_is_idempotent_when_empty(client):
+    """R100: 本无规则时清空仍返回 ok，不报错。"""
+    resp = await client.post("/api/v1/permissions/rules/clear")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "rules": []}
+    assert SettingsRepository().get_json(SETTINGS_KEY_RULES) == []
+
+
+async def test_clear_rules_with_evil_origin_returns_403(client):
+    """第三方网页 Origin 清空规则 → 403，存储不变。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES, [{"tool_pattern": "bash", "decision": "allow"}]
+    )
+
+    resp = await client.post(
+        "/api/v1/permissions/rules/clear",
         headers={"Origin": "https://evil.com"},
     )
 

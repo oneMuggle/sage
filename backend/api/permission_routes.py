@@ -309,6 +309,25 @@ def delete_permission_rule(body: PermissionRuleDeleteBody, request: Request):
     return {"ok": True, "rules": rules}
 
 
+@router.post("/rules/clear")
+def clear_permission_rules(request: Request):
+    """清空全部已保存规则（撤销全部持久信任），返回空列表（R100）。
+
+    无请求体、不接受任何筛选参数：语义只有「全部」一种，
+    永远只能把列表写空，不能借此按条件删除或改写规则。
+    幂等：本无规则时仍返回 ok。存储里的无效条目随写回
+    空列表一并消失，与逐条删除的规范化写回同性质。清空
+    是撤销持久信任的写操作，与逐条删除共用 Origin 守卫。
+    """
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    removed_count = len(_load_saved_rules())
+    SettingsRepository().set_json(SETTINGS_KEY_RULES, [], category="permissions")
+    logger.info("已清空全部已保存审批规则（清空前共 %d 条生效规则）", removed_count)
+    return {"ok": True, "rules": []}
+
+
 def forbidden_origin_response(request: Request) -> Optional[JSONResponse]:
     """Origin 守卫：带 Origin 头且不在白名单 → 403 响应；否则 None（放行）。
 

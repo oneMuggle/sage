@@ -12,13 +12,16 @@ import { useEffect, useState } from 'react';
 
 import { permissionApi, type PermissionRuleItem } from '../../shared/api/permissionApi';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 export function PermissionRulesManager() {
   const { t } = useI18n();
   const [rules, setRules] = useState<PermissionRuleItem[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
+  const [clearFailed, setClearFailed] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,9 +51,46 @@ export function PermissionRulesManager() {
     }
   };
 
+  // R100 一键清空：破坏性操作（撤销全部持久信任）先走项目内
+  // confirmDialog 确认，取消即无事发生、不发请求。
+  const handleClear = async (): Promise<void> => {
+    const ok = await confirmDialog({
+      title: t('settings.permission.rules.clear_confirm_title'),
+      message: t('settings.permission.rules.clear_confirm_message'),
+      confirmLabel: t('settings.permission.rules.clear_all'),
+      danger: true,
+    });
+    if (!ok) return;
+    setClearFailed(false);
+    setClearing(true);
+    try {
+      const next = await permissionApi.clearRules();
+      setRules(next);
+    } catch {
+      setClearFailed(true);
+    } finally {
+      setClearing(false);
+    }
+  };
+
   return (
     <div className="mt-3" data-testid="permission-rules-manager">
-      <p className="text-xs font-medium text-text">{t('settings.permission.rules.title')}</p>
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-medium text-text flex-1">
+          {t('settings.permission.rules.title')}
+        </p>
+        {rules.length > 0 && !loadFailed && (
+          <button
+            type="button"
+            data-testid="permission-rules-clear"
+            disabled={deletingIndex !== null || clearing}
+            onClick={() => void handleClear()}
+            className="px-2 py-0.5 text-xs border border-border rounded-radius-sm bg-bg text-text hover:border-primary disabled:opacity-50"
+          >
+            {t('settings.permission.rules.clear_all')}
+          </button>
+        )}
+      </div>
       {loadFailed ? (
         <p className="text-xs text-error mt-1" data-testid="permission-rules-load-failed">
           {t('settings.permission.rules.load_failed')}
@@ -72,7 +112,7 @@ export function PermissionRulesManager() {
                 type="button"
                 data-testid={`permission-rule-delete-${index}`}
                 aria-label={`${t('settings.permission.rules.delete')} ${rule.tool_pattern}`}
-                disabled={deletingIndex !== null}
+                disabled={deletingIndex !== null || clearing}
                 onClick={() => void handleDelete(rule, index)}
                 className="px-2 py-0.5 text-xs border border-border rounded-radius-sm bg-bg text-text hover:border-primary disabled:opacity-50"
               >
@@ -85,6 +125,11 @@ export function PermissionRulesManager() {
       {deleteFailed && (
         <p className="text-xs text-error mt-1" data-testid="permission-rules-delete-failed">
           {t('settings.permission.rules.delete_failed')}
+        </p>
+      )}
+      {clearFailed && (
+        <p className="text-xs text-error mt-1" data-testid="permission-rules-clear-failed">
+          {t('settings.permission.rules.clear_failed')}
         </p>
       )}
     </div>

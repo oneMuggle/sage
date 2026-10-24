@@ -245,6 +245,20 @@ export const permissionApi = {
       throw handleApiError(error);
     }
   },
+
+  /**
+   * R100 清空全部已记住规则（撤销全部持久信任），返回服务端
+   * 清空后的最新列表（应为空）。无筛选参数：语义只有「全部」。
+   */
+  async clearRules(): Promise<PermissionRuleItem[]> {
+    if (isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_clear_rules', {});
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
 };
 
 export function auditPermissionApiGovernance(
