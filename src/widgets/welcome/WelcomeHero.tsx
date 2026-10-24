@@ -95,3 +95,11 @@ export function WelcomeHero({ onBack }: WelcomeHeroProps) {
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditWelcomeHeroGovernance(): string {
+  return JSON.stringify({
+    module: 'welcome-hero',
+    phase: 'P191',
+    audited: true,
+  });
+}

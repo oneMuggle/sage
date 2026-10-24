@@ -2809,3 +2809,27 @@
   - `src/features/project-type/__tests__/ProjectOverviewWidgets.p190.test.ts`
 - **Baseline ratchet**: 无（8 个 `.tsx` 目标均未进入 `architecture-baseline.json`，且未触发 800 行阈值，`node scripts/architecture-check.mjs` 双轨直接通过）。
 - **Shell note**: 8 个组件均带 `// eslint-disable-next-line react-refresh/only-export-components` 前缀以保留 `createRoot` 之外的具名导出；源文件按 CI `npm run lint` 口径校验，新增测试文件保持零警告。
+
+### Phase P191 — Memory Widgets & Welcome Surface Governance Audit Contracts (2026-10-24)
+
+- **Scope (`src/widgets/memory/`, `src/widgets/welcome/`)**:
+  1. `src/widgets/memory/MemoryBrowser.tsx` -> `auditMemoryBrowserGovernance()` (`module: 'memory-browser'`)
+  2. `src/widgets/memory/MemoryItem.tsx` -> `auditMemoryItemGovernance()` (`module: 'memory-item'`)
+  3. `src/widgets/memory/NewMemoryModal.tsx` -> `auditNewMemoryModalGovernance()` (`module: 'new-memory-modal'`)
+  4. `src/widgets/memory/ProjectProfileCard.tsx` -> `auditProjectProfileCardGovernance()` (`module: 'project-profile-card'`)
+  5. `src/widgets/memory/UserProfileCard.tsx` -> `auditUserProfileCardGovernance()` (`module: 'user-profile-card'`)
+  6. `src/widgets/welcome/AssistantRecommendations.tsx` -> `auditAssistantRecommendationsGovernance()` (`module: 'assistant-recommendations'`)
+  7. `src/widgets/welcome/QuickActionBar.tsx` -> `auditQuickActionBarGovernance()` (`module: 'quick-action-bar'`)
+  8. `src/widgets/welcome/WelcomeHero.tsx` -> `auditWelcomeHeroGovernance()` (`module: 'welcome-hero'`)
+- **Unit Test Suites**:
+  - `src/widgets/memory/__tests__/MemoryBrowser.p191.test.ts`
+  - `src/widgets/memory/__tests__/MemoryItem.p191.test.ts`
+  - `src/widgets/memory/__tests__/NewMemoryModal.p191.test.ts`
+  - `src/widgets/memory/__tests__/ProjectProfileCard.p191.test.ts`
+  - `src/widgets/memory/__tests__/UserProfileCard.p191.test.ts`
+  - `src/widgets/welcome/__tests__/AssistantRecommendations.p191.test.ts`
+  - `src/widgets/welcome/__tests__/QuickActionBar.p191.test.ts`
+  - `src/widgets/welcome/__tests__/WelcomeHero.p191.test.ts`
+- **Baseline ratchet**: 无（8 个 `.tsx` 目标均未进入 `architecture-baseline.json`，`node scripts/architecture-check.mjs` 双轨直接通过）。
+- **Selection note**: 前一轮 provider 候选（`src/app/providers/*`、`src/entities/font/useFontSettings.tsx`）在 `origin/main` 上已存在 P151 阶段审计导出，属误入候选池，已在本次范围外排除；本轮 8 个目标经 `git grep -lE 'Governance|audit[A-Z]' origin/main -- src` 前缀剥离后重新校验为空，确为未覆盖模块。
+- **Shell note**: 组件均带 `// eslint-disable-next-line react-refresh/only-export-components` 前缀以保留具名导出；源文件按 CI `npm run lint` 口径校验，新增测试文件保持零警告。

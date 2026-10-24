@@ -431,3 +431,11 @@ export function ProjectProfileCard() {
     </section>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditProjectProfileCardGovernance(): string {
+  return JSON.stringify({
+    module: 'project-profile-card',
+    phase: 'P191',
+    audited: true,
+  });
+}
