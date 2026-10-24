@@ -303,7 +303,8 @@ def test_update_general_rejects_base_delay_exceeds_max_delay(monkeypatch):
         },
     )
     assert res.success is False
-    assert "llmRetryBaseDelayS" in res.error and "llmRetryMaxDelayS" in res.error
+    assert "llmRetryBaseDelayS" in res.error
+    assert "llmRetryMaxDelayS" in res.error
 
 
 # ---- P119 Config Advisor (Phase 2.2): DiagnoseSageConfigTool ----

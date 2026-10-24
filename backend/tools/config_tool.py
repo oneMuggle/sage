@@ -124,23 +124,37 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 10_000_000:
             return f"{key} 必须是 1 到 10000000 之间的整数，收到: {value!r}"
     # P119 Config Advisor (Phase 1.2): LLM 重试 / 超时字段类型与范围校验
+    _llm_retry_field_errors: list[str] = []
     if "llmRetryMaxAttempts" in updates:
         v = updates["llmRetryMaxAttempts"]
         if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 20:
-            return "llmRetryMaxAttempts 必须是 0 到 20 之间的整数，收到: {!r}".format(v)
+            _llm_retry_field_errors.append(
+                f"llmRetryMaxAttempts 必须是 0 到 20 之间的整数，收到: {v!r}"
+            )
     for k in ("llmRetryBaseDelayS", "llmRetryMaxDelayS"):
         if k in updates:
             v = updates[k]
             if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 < v <= 600:  # noqa: UP038
-                return "{} 必须是大于 0 且不超过 600 的数字，收到: {!r}".format(k, v)
+                _llm_retry_field_errors.append(
+                    f"{k} 必须是大于 0 且不超过 600 的数字，收到: {v!r}"
+                )
     if "llmTotalTimeoutS" in updates:
         v = updates["llmTotalTimeoutS"]
         if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 86400:
-            return "llmTotalTimeoutS 必须是 0 到 86400 之间的整数（0=不限），收到: {!r}".format(v)
+            _llm_retry_field_errors.append(
+                f"llmTotalTimeoutS 必须是 0 到 86400 之间的整数（0=不限），收到: {v!r}"
+            )
     # 跨字段一致性：baseDelayS 不能大于 maxDelayS
-    if "llmRetryBaseDelayS" in updates and "llmRetryMaxDelayS" in updates:
-        if updates["llmRetryBaseDelayS"] > updates["llmRetryMaxDelayS"]:
-            return "llmRetryBaseDelayS 不能大于 llmRetryMaxDelayS"
+    if (
+        "llmRetryBaseDelayS" in updates
+        and "llmRetryMaxDelayS" in updates
+        and updates["llmRetryBaseDelayS"] > updates["llmRetryMaxDelayS"]
+    ):
+        _llm_retry_field_errors.append(
+            "llmRetryBaseDelayS 不能大于 llmRetryMaxDelayS"
+        )
+    if _llm_retry_field_errors:
+        return "; ".join(_llm_retry_field_errors)
     return None
 
 
@@ -476,30 +490,28 @@ def _build_diagnosis_summary(
 
     fk = metrics["failure_kind"]
     if fk:
-        fk_str = ", ".join("{}={}".format(k, v) for k, v in fk.items())
+        fk_str = ", ".join(f"{k}={v}" for k, v in fk.items())
         lines.append(f"  - 失败分类: {fk_str}")
 
     retries = metrics["retries"]
     lines.append(
-        "  - 重试: 平均 {:.2f}/任务, 含重试任务 {:.1f}%".format(
-            retries["mean_per_task"], retries["tasks_with_retry_pct"]
-        )
+        f"  - 重试: 平均 {retries['mean_per_task']:.2f}/任务, "
+        f"含重试任务 {retries['tasks_with_retry_pct']:.1f}%"
     )
 
     tokens = metrics["tokens"]
     if tokens["task_count_with_tokens"] > 0:
         lines.append(
-            "  - Token: 平均 {}/任务, 总计 {} (基于 {} 个有数据的任务)".format(
-                tokens["mean_per_task"], tokens["total"], tokens["task_count_with_tokens"]
-            )
+            f"  - Token: 平均 {tokens['mean_per_task']}/任务, "
+            f"总计 {tokens['total']} "
+            f"(基于 {tokens['task_count_with_tokens']} 个有数据的任务)"
         )
 
     latency = metrics["latency_ms"]
     if latency["mean"] > 0:
         lines.append(
-            "  - 延迟: 平均 {}ms, p50={}ms, p95={}ms".format(
-                latency["mean"], latency["p50"], latency["p95"]
-            )
+            f"  - 延迟: 平均 {latency['mean']}ms, "
+            f"p50={latency['p50']}ms, p95={latency['p95']}ms"
         )
 
     return "\n".join(lines)
@@ -561,7 +573,7 @@ class DiagnoseSageConfigTool(BaseTool):
             config = _redact_settings(copy.deepcopy(raw_settings))
         except Exception as exc:  # noqa: BLE001 — 配置读取失败即终止
             logger.exception("diagnose_sage_config: 读取配置失败: %s", exc)
-            return ToolResult(success=False, error="读取配置失败: {}".format(exc))
+            return ToolResult(success=False, error=f"读取配置失败: {exc}")
 
         # 2. 取运行指标（OrchRunMetrics 内部 fail-safe，不会抛）
         try:
@@ -570,7 +582,7 @@ class DiagnoseSageConfigTool(BaseTool):
             recent_metrics = OrchRunMetrics.aggregate_recent(limit=window_runs)
         except Exception as exc:  # noqa: BLE001 — 兜底防御，不应触发
             logger.exception("diagnose_sage_config: 获取运行指标失败: %s", exc)
-            return ToolResult(success=False, error="获取运行指标失败: {}".format(exc))
+            return ToolResult(success=False, error=f"获取运行指标失败: {exc}")
 
         summary = _build_diagnosis_summary(config, recent_metrics)
         return ToolResult(

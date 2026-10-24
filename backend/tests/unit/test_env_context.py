@@ -128,8 +128,6 @@ def _patch_settings_repo(monkeypatch, payload):
             assert key == "app_settings"
             return payload
 
-    import backend.chat.env_context as env_mod
-
     # 拦截 env_context 内部的延迟 import: SettingsRepository 是在函数体内
     # from backend.data.settings_repo import SettingsRepository，因此直接 patch
     # 源模块的类即可。
