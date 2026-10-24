@@ -109,6 +109,10 @@ _PRIMARY_CORE_TOOLS = (
 _PRIMARY_SEED_TOOLS = (
     *_PRIMARY_CORE_TOOLS,
     *WEB_FETCH_TOOLS,
+    # 2026-09-23 feat/simplified-browser-login: 一键登录站点工具。primary 作为
+    # 用户交互入口，在网页被拦截（login_wall）时直接调用 browser_login 弹出浏览器
+    # 辅助用户登录并保存 cookie。EXTERNAL 风险分级受权限审批守护。
+    "browser_login",
     # PR-1 (office CRUD 闭环接线) + PR-2 (archive/restore): primary 代用户
     # 执行增/改/删/还原。office_* doc_id 模式走 session binding 守护。
     *OFFICE_TOOLS,
@@ -327,6 +331,7 @@ def create_default_agents() -> List[AgentProfile]:
                 "browser_interact",
                 "browser_cookies",
                 "browser_close",
+                "browser_login",
                 # win7 保留 memory_save —— researcher 查到资料后必须能落地为记忆,
                 # 否则下次 session 找不到（PR #396 knowledge persistence 闭环）。
                 "memory_save",
@@ -787,7 +792,10 @@ def validate_profile_tools(repo: Optional[Any] = None) -> int:
     未注册名对 LLM 本就不可见（``get_schemas_for_llm`` 只遍历已注册工具），
     所以只 warning 不改库 —— 剔除会误伤引用 MCP 等动态工具的自定义
     profile。MCP / ``dispatch_subagents`` / ``wiki_*`` 等动态名字会产生
-    告警噪音，属预期（见 domain/tool_names.py 模块注释）。
+    告警噪音，属预期（见 domain/tool_names.py 模块注释）。R92 起合法
+    形状的插件引用（``plugin__<plugin>__<capability>`` 精确名与
+    ``plugin__*`` / ``plugin__<plugin>__*`` 通配）视为已知动态引用
+    不告警；无效通配写法仍按未注册名告警。
 
     Returns:
         告警的 profile 数（测试断言用）。
@@ -797,7 +805,11 @@ def validate_profile_tools(repo: Optional[Any] = None) -> int:
     known = set(ALL_BUILTIN_TOOL_NAMES)
     warned = 0
     for profile in repo.list_all():
-        unknown = [t for t in (profile.get("tools") or []) if t not in known and not is_plugin_tool_reference(t)]
+        unknown = [
+            t
+            for t in (profile.get("tools") or [])
+            if t not in known and not is_plugin_tool_reference(t)
+        ]
         if unknown:
             warned += 1
             logger.warning(

@@ -11,6 +11,11 @@
     "remember_scope": "tool"|"plugin"}``
     → ``{"ok": true}`` 或 ``{"ok": false, "error": "<reason>"}``
 
+- ``GET /api/v1/permissions/rules`` → 当前生效的已保存规则列表
+  （R97 设置页查看）；``POST /api/v1/permissions/rules/delete``
+  body ``{"index": int}`` 逐条删除并返回最新列表。规则仍只能
+  由审批 remember 生成，管理端点不接受任何 pattern 写入。
+
 ``remember=true`` 时把决定追加进 settings ``permission_rules``，
 下次 agent 运行构造 enforcer 时生效。默认 ``tool`` 范围仍落
 精确工具名；R95 的 ``plugin`` 范围只把服务端待审批请求中的
