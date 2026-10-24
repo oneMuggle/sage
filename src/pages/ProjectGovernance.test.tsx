@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ProjectSummary } from '../shared/api';
+import { I18nProvider } from '../shared/lib/i18n';
 
 /* ── Mock API ─────────────────────────────────────────────────────── */
 
@@ -77,8 +78,6 @@ vi.mock('../features/project-type/archetypeBlueprints', () => ({
     return map[type] ?? map.coding;
   },
 }));
-
-import { I18nProvider } from '../shared/lib/i18n';
 
 /* ── Import SUT after mocks ──────────────────────────────────────── */
 
