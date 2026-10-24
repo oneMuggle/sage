@@ -3,7 +3,8 @@
  * 生效的规则，并支持逐条删除（撤销持久信任）。
  *
  * 列表与删除都走 permissionApi → 后端 /permissions/rules 端点；
- * 后端以 parse_rules() 口径返回生效规则，删除后返回最新列表，
+ * 后端以 parse_rules() 口径返回生效规则，删除按规则内容定位
+ * （R99，期间新记规则也不会删错行），删除后返回最新列表，
  * 前端直接采用，不自行 splice 假定成功。失败时保留原列表并
  * 显示失败文案。规则新增仍只能由审批记住生成，这里没有写入口。
  */
@@ -34,11 +35,11 @@ export function PermissionRulesManager() {
     };
   }, []);
 
-  const handleDelete = async (index: number): Promise<void> => {
+  const handleDelete = async (rule: PermissionRuleItem, index: number): Promise<void> => {
     setDeleteFailed(false);
     setDeletingIndex(index);
     try {
-      const next = await permissionApi.deleteRule(index);
+      const next = await permissionApi.deleteRule(rule);
       setRules(next);
     } catch {
       setDeleteFailed(true);
@@ -72,7 +73,7 @@ export function PermissionRulesManager() {
                 data-testid={`permission-rule-delete-${index}`}
                 aria-label={`${t('settings.permission.rules.delete')} ${rule.tool_pattern}`}
                 disabled={deletingIndex !== null}
-                onClick={() => void handleDelete(index)}
+                onClick={() => void handleDelete(rule, index)}
                 className="px-2 py-0.5 text-xs border border-border rounded-radius-sm bg-bg text-text hover:border-primary disabled:opacity-50"
               >
                 {t('settings.permission.rules.delete')}
