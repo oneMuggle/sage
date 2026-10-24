@@ -1692,10 +1692,10 @@ class SageAgent:
                 # 2026-10-23 修复: 有效响应（有 tool_calls 或 content）时重置计数器,
                 # 只统计连续空响应次数, 避免间歇性空响应误触发兜底。
                 if response.tool_calls or (response.content or "").strip():
-                    # 有效响应 —— 重置空响应计数器
+                    # 有效响应 — 重置空响应计数器
                     empty_response_retries = 0
                 elif empty_response_max > 0:
-                    # 空响应 —— 递增计数器并重试
+                    # 空响应 — 递增计数器并重试
                     if empty_response_retries < empty_response_max:
                         empty_response_retries += 1
                         logger.warning(
