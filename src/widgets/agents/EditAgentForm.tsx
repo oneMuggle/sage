@@ -34,7 +34,6 @@ export function formatAgentToolsInput(tools: readonly string[] | undefined): str
 }
 
 const PLUGIN_TOOL_PREFIX = 'plugin__';
-const PLUGIN_WILDCARD_SUFFIX = '__*';
 
 export interface PluginToolSelectionState {
   selected: boolean;
@@ -43,33 +42,35 @@ export interface PluginToolSelectionState {
 }
 
 /**
- * 返回覆盖某插件工具的合法插件通配条目（R92/R94）。
+ * 返回覆盖某插件工具的合法插件通配条目（R92/R94，R98 结构化）。
  *
- * 这里只为 UI 状态镜像后端 `tool_name_allowed` 的两个插件通配：
- * `plugin__*` 与 `plugin__<plugin>__*`。插件段包含 `__`、剩余
- * capability 段继续包含 `__` 或其它任意 glob 均不算覆盖。
+ * 这里只为 UI 状态镜像后端 `tool_name_in_allowlist` 的两个插件
+ * 通配：`plugin__*` 与 `plugin__<plugin>__*`。覆盖不再按完整
+ * 工具名字符串前缀猜测归属（插件名与 capability 名都可含
+ * `__`，同一字符串可能对应不同插件），必须以已发布快照的
+ * 权威 `pluginName` 为准：工具名确实落在
+ * `plugin__<pluginName>__` 命名空间内，且单插件通配与由该
+ * 权威名派生的通配完全一致。缺少 `pluginName` 时不算覆盖
+ * （fail-closed），与后端可见性/执行边界同口径。
  */
 // eslint-disable-next-line react-refresh/only-export-components
 export function findPluginToolWildcardCover(
   entries: readonly string[],
   toolName: string,
+  pluginName?: string,
 ): string | undefined {
-  if (!toolName.startsWith(PLUGIN_TOOL_PREFIX)) return undefined;
+  if (!pluginName) return undefined;
+  const ownNamespace = `${PLUGIN_TOOL_PREFIX}${pluginName}__`;
+  if (
+    !toolName.startsWith(ownNamespace) ||
+    toolName.length <= ownNamespace.length
+  ) {
+    return undefined;
+  }
 
   for (const entry of entries) {
     if (entry === `${PLUGIN_TOOL_PREFIX}*`) return entry;
-    if (!entry.startsWith(PLUGIN_TOOL_PREFIX) || !entry.endsWith(PLUGIN_WILDCARD_SUFFIX)) {
-      continue;
-    }
-    const pluginSegment = entry.slice(
-      PLUGIN_TOOL_PREFIX.length,
-      -PLUGIN_WILDCARD_SUFFIX.length,
-    );
-    if (!pluginSegment || pluginSegment.includes('__')) continue;
-    const coveredPrefix = entry.slice(0, -1);
-    if (!toolName.startsWith(coveredPrefix)) continue;
-    const capabilitySegment = toolName.slice(coveredPrefix.length);
-    if (capabilitySegment && !capabilitySegment.includes('__')) return entry;
+    if (entry === `${ownNamespace}*`) return entry;
   }
   return undefined;
 }
@@ -79,9 +80,10 @@ export function findPluginToolWildcardCover(
 export function pluginToolSelectionState(
   entries: readonly string[],
   toolName: string,
+  pluginName?: string,
 ): PluginToolSelectionState {
   const exact = entries.includes(toolName);
-  const coveredBy = findPluginToolWildcardCover(entries, toolName);
+  const coveredBy = findPluginToolWildcardCover(entries, toolName, pluginName);
   return { selected: exact || coveredBy !== undefined, exact, coveredBy };
 }
 
@@ -253,7 +255,11 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
           ) : (
             <div className="mt-3 space-y-3">
               {publishedPluginTools.map((tool) => {
-                const selection = pluginToolSelectionState(selectedTools, tool.tool_name);
+                const selection = pluginToolSelectionState(
+                  selectedTools,
+                  tool.tool_name,
+                  tool.plugin_name,
+                );
                 const coveredOnly = !selection.exact && selection.coveredBy !== undefined;
                 const checkboxId = `agent-plugin-tool-${tool.tool_name}`;
                 const descriptionPrefix = `[Plugin:${tool.plugin_name}] `;

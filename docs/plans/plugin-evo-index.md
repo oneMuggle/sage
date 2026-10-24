@@ -26,7 +26,8 @@
 | R94 | 运行中插件工具动态选择器 | ✅ #2407 |
 | R95 | 插件工具按插件记住审批决定 | ✅ #2412 |
 | R96 | 插件权限规则结构化身份匹配 | ✅ #2413 |
-| R97 | 已记住权限规则管理（查看/删除） | #2418 待合并 |
+| R97 | 已记住权限规则管理（查看/删除） | ✅ #2418 |
+| R98 | 插件 profile 白名单结构化身份匹配 | #2440 待合并 |
 
 ## 2. 交付总账
 
@@ -46,7 +47,8 @@
 | R94 | `PluginToolBridge.published_tools()` 权威快照 + `GET /plugins/runtime/tools` + `pluginClient.runtimeTools()` + Agent 运行中插件工具动态复选框与测试/文档 | #2407 | 待对齐 | ✅ 已交付 |
 | R95 | 审批请求权威 `plugin_name` + `remember_scope=tool|plugin` + 后端派生受限插件规则 + ApprovalDialog 范围选择与 Electron 透传/测试/文档 | #2412 | 待对齐 | ✅ 已交付 |
 | R96 | `PermissionRule`/`PermissionEnforcer` 权威 `plugin_name` 结构化匹配 + agent/adapter 身份透传与测试/文档 | #2413 | 待对齐 | ✅ 已交付 |
-| R97 | `GET /permissions/rules` + 删除端点 + Electron 命令 + 设置页已记住规则列表/删除与测试/文档 | #2418 | 待对齐 | 待 CI/合并 |
+| R97 | `GET /permissions/rules` + 删除端点 + Electron 命令 + 设置页已记住规则列表/删除与测试/文档 | #2418 | 待对齐 | ✅ 已交付 |
+| R98 | `tool_name_in_allowlist` 权威 `plugin_name` 结构化匹配 + registry/agent 三道闸与前端覆盖镜像透传与测试/文档 | #2440 | 待对齐 | 待 CI/合并 |
 
 ## 3. R78 交付边界
 
@@ -366,6 +368,31 @@
 - **本地证据**：后端定向 37 例与相邻 77 例、前端定向
   26 例与相邻 33 例通过；tsc、ESLint（0 errors）、
   Ruff、py38、architecture、silent-exceptions、
-  ipc-manifest、diff-check 与 diagnostics 全绿。
+  ipc-manifest、diff-check 与 diagnostics 全绿；
+  PR #2418 GitHub All checks successful，已 squash
+  合并为 `main`
+  `a29e95ab70dc590d6469fe7c0f867e50f106f756`。
+
+## 18. R98 交付边界
+
+> spec：`2026-10-23_plugin-profile-allowlist-identity-r98.md`。
+> R98 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **只收紧 profile 通配解释，不改已存 profile**：
+  白名单条目文本与存储不变；本轮只让三道判定在
+  命中受限插件通配前先核对桥接发布身份，不再把
+  完整工具名字符串前缀当作插件身份。
+- **与 R96 同一口径**：`plugin__a__*` 不能再带飞
+  实际属于插件 `a__b` 的工具；身份缺失、非法或
+  不匹配时通配不命中。精确条目、通用 glob 不
+  展开、逐次审批与权限规则全部保持。
+- **前端镜像同口径**：运行中插件工具复选框的通配
+  覆盖改用已发布快照的 `plugin_name`，消除旧字符串
+  镜像对含 `__` 名字的双向漂移；UI 不新增任何
+  pattern 写面。
+- **本地证据**：后端定向 70 例与相邻 93 例、前端
+  定向 10 例通过；tsc、ESLint（0 errors）、Ruff、
+  py38、architecture、silent-exceptions、
+  diff-check 与 diagnostics 全绿。
 
 —— 本账本由插件化循环维护，随轮次追加。

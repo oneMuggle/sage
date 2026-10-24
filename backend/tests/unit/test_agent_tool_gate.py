@@ -151,15 +151,24 @@ class TestBuildApprovalRequestPluginName:
     def test_plugin_wildcard_passes_profile_gate_r92(self):
         # 通配内工具不被 profile 白名单拒绝；用 needs_approval 决策同时
         # 证明通配不绕过后续审批（拒绝时会覆盖为 allowed=False）。
+        # R98：通配命中以桥接发布身份为准，本工具已发布为 demo。
         for pattern in ("plugin__demo__*", "plugin__*"):
             agent = _agent({"tools": [pattern]})
+            bridge = MagicMock()
+            bridge.published_tool.return_value = SimpleNamespace(
+                plugin_name="demo"
+            )
             enforcer = MagicMock()
             enforcer.check.return_value = _decision(
                 allowed=True, needs_approval=True
             )
-            decision, content = agent._pre_dispatch_gate(
-                _tc("plugin__demo__hello"), {}, enforcer, "sess-1"
-            )
+            with patch(
+                "backend.plugins.tool_bridge.get_plugin_tool_bridge",
+                return_value=bridge,
+            ):
+                decision, content = agent._pre_dispatch_gate(
+                    _tc("plugin__demo__hello"), {}, enforcer, "sess-1"
+                )
             assert decision.needs_approval is True
             assert content == ""
             enforcer.check.assert_called_once()
@@ -175,6 +184,62 @@ class TestBuildApprovalRequestPluginName:
         assert decision.needs_approval is False
         assert "plugin__other__hello" in content
         enforcer.check.assert_called_once()
+
+    def test_plugin_wildcard_unpublished_tool_denied_by_profile_r98(self):
+        # 未发布（无权威身份）的插件形工具名不得靠字符串前缀命中
+        # 通配；enforcer 即使放行，执行边界仍按 profile 拒绝覆盖。
+        agent = _agent({"tools": ["plugin__demo__*"]})
+        bridge = MagicMock()
+        bridge.published_tool.return_value = None
+        enforcer = MagicMock()
+        enforcer.check.return_value = _decision(allowed=True)
+        with patch(
+            "backend.plugins.tool_bridge.get_plugin_tool_bridge",
+            return_value=bridge,
+        ):
+            decision, content = agent._pre_dispatch_gate(
+                _tc("plugin__demo__hello"), {}, enforcer, "sess-1"
+            )
+        assert decision.allowed is False
+        assert decision.needs_approval is False
+        assert "plugin__demo__hello" in content
+        enforcer.check.assert_called_once()
+
+    def test_plugin_wildcard_uses_published_identity_not_prefix_r98(self):
+        # 工具名字符串以 plugin__demo__ 开头、但权威身份是 demo__sub
+        # 时，demo 的单插件通配不得带飞，demo__sub 的通配才命中。
+        bridge = MagicMock()
+        bridge.published_tool.return_value = SimpleNamespace(
+            plugin_name="demo__sub"
+        )
+
+        denied_agent = _agent({"tools": ["plugin__demo__*"]})
+        enforcer = MagicMock()
+        enforcer.check.return_value = _decision(allowed=True)
+        with patch(
+            "backend.plugins.tool_bridge.get_plugin_tool_bridge",
+            return_value=bridge,
+        ):
+            decision, content = denied_agent._pre_dispatch_gate(
+                _tc("plugin__demo__sub__hello"), {}, enforcer, "sess-1"
+            )
+        assert decision.allowed is False
+        assert "plugin__demo__sub__hello" in content
+
+        allowed_agent = _agent({"tools": ["plugin__demo__sub__*"]})
+        enforcer2 = MagicMock()
+        enforcer2.check.return_value = _decision(
+            allowed=True, needs_approval=True
+        )
+        with patch(
+            "backend.plugins.tool_bridge.get_plugin_tool_bridge",
+            return_value=bridge,
+        ):
+            decision2, content2 = allowed_agent._pre_dispatch_gate(
+                _tc("plugin__demo__sub__hello"), {}, enforcer2, "sess-1"
+            )
+        assert decision2.needs_approval is True
+        assert content2 == ""
 
     def test_whitelist_pass_records_auto_approval(self):
         agent = _agent({"tools": ["list_dir"]})

@@ -2,7 +2,8 @@
 
 - 日期：2026-10-23
 - 基线：`main` `56b005127a7f83f48086460fdce3192484c18717`
-- 状态：PR #2418 待 CI 与合并
+- 状态：已交付（PR #2418，squash 合并为 `main`
+  `a29e95ab70dc590d6469fe7c0f867e50f106f756`）
 - 编号说明：R97 为 `plugin-evo-index.md` 的插件账轮次号，
   与其它账本的同号计划无关。
 - 前置：R95 已让审批「记住我的选择」把精确工具或整插件
@@ -127,6 +128,9 @@
   架构门曾报 GeneralTab 超 800 行，已把规则管理组件
   抽为独立 `PermissionRulesManager.tsx` 后转绿，未抬
   baseline。
+- PR #2418 GitHub CI 全绿（14 successful / 2 known
+  skipped / 0 failing），已 squash 合并为 `main`
+  `a29e95ab70dc590d6469fe7c0f867e50f106f756`。
 
 ## 7. 影响与回滚
 
