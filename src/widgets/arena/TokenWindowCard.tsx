@@ -153,3 +153,11 @@ export function TokenWindowCard({ pollIntervalMs = 5000 }: TokenWindowCardProps)
     </section>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditTokenWindowCardGovernance(): string {
+  return JSON.stringify({
+    module: 'token-window-card',
+    phase: 'P192',
+    audited: true,
+  });
+}

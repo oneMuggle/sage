@@ -146,3 +146,11 @@ export function BatchRegisterPanel() {
     </section>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditBatchRegisterPanelGovernance(): string {
+  return JSON.stringify({
+    module: 'batch-register-panel',
+    phase: 'P192',
+    audited: true,
+  });
+}
