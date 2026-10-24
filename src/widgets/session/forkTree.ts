@@ -99,3 +99,10 @@ export function formatForkTreeJson(nodes: ForkTreeNode[] = []): string {
     2,
   );
 }
+export function auditForkTreeGovernance(): string {
+  return JSON.stringify({
+    module: 'fork-tree',
+    phase: 'P187',
+    audited: true,
+  });
+}

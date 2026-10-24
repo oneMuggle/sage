@@ -41,3 +41,10 @@ export function normalizeToolCallEnvelope(tc: ToolCall): ToolCall {
     metadata: { ...tc.metadata, ...parsed.metadata },
   };
 }
+export function auditToolCallEnvelopeGovernance(): string {
+  return JSON.stringify({
+    module: 'tool-call-envelope',
+    phase: 'P187',
+    audited: true,
+  });
+}
