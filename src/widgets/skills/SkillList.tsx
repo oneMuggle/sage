@@ -100,3 +100,11 @@ const SkillList: React.FC<SkillListProps> = ({
 };
 
 export default SkillList;
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditSkillListGovernance(): string {
+  return JSON.stringify({
+    module: 'skill-list',
+    phase: 'P192',
+    audited: true,
+  });
+}

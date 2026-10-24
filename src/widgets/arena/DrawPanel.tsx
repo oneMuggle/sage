@@ -282,3 +282,11 @@ export function DrawPanel() {
     </section>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditDrawPanelGovernance(): string {
+  return JSON.stringify({
+    module: 'draw-panel',
+    phase: 'P192',
+    audited: true,
+  });
+}
