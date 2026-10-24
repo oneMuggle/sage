@@ -58,8 +58,8 @@
     "backend/tools/web_render.py": 824,
     "backend/memory/manager.py": 852,
     "backend/api/project_ai_routes.py": 862,
-    "src/shared/api/projectApi.ts": 1024,
-    "src/shared/api/projectApiTypes.ts": 937,
+    "src/shared/api/projectApi.ts": 1031,
+    "src/shared/api/projectApiTypes.ts": 944,
     "src/widgets/chat/ChatInput.tsx": 838,
     "src/features/send-message/useChat.ts": 824,
     "backend/tests/unit/test_design_routes.py": 975

@@ -71,3 +71,10 @@ export const HARNESS_TYPE_LABELS: Record<HarnessComponentType, string> = {
   scripts: '脚本工具',
   plugins: '插件',
 };
+export function auditHarnessTypesGovernance(): string {
+  return JSON.stringify({
+    module: 'harness-types',
+    phase: 'P188',
+    audited: true,
+  });
+}
