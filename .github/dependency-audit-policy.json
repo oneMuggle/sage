@@ -1463,20 +1463,6 @@
     {
       "owner": "Sage maintainers",
       "review_by": "2027-01-01",
-      "source": "pip",
-      "package": "pillow",
-      "package_version": "10.4.0",
-      "advisory": "GHSA-5x8w-8jj5-q52h",
-      "advisory_url": "https://osv.dev/vulnerability/GHSA-5x8w-8jj5-q52h",
-      "affected_path": "Win7 LTS Python 3.8 production path",
-      "actual_reachability": "image decode/encode reachable via user file uploads (attachment pipeline); conditional based on input format",
-      "controls": "Pillow 10.4.0 is the last Python 3.8-compatible release on PyPI; the fix requires Pillow 11.x+ (Python >=3.9); upload size limits, MIME type validation (no untrusted image types), sandboxed raw decode, image dimension caps, and quarterly review through Win7 LTS EOL 2027-12-13",
-      "exception": "temporary exception pending Win7 LTS EOL or upstream backport to a Py3.8-compatible release",
-      "notes": "py38-ceiling: pillow 修复需要 Py3.9+ 版本，10.4.0 是最后一个声明 requires_python 允许 3.8 的版本。release/win7 的依赖契约锁 Python 3.8（Win7 LTS，EOL 2027-12-13），本轨不存在可用的修复版本——不是未做，是无解。待 Win7 LTS EOL 后随 Python 3.10+ 切换一并修复。"
-    },
-    {
-      "owner": "Sage maintainers",
-      "review_by": "2027-01-01",
       "source": "npm",
       "package": "electron",
       "package_version": "21.4.4",
