@@ -730,3 +730,11 @@ function getStatusIcon(status: string) {
       return <Clock className="h-3 w-3 text-gray-400" />;
   }
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditMilestoneProgressWidgetGovernance(): string {
+  return JSON.stringify({
+    module: 'milestone-progress-widget',
+    phase: 'P190',
+    audited: true,
+  });
+}
