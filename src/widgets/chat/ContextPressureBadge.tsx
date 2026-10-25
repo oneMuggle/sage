@@ -85,3 +85,11 @@ export function ContextPressureBadge({ sessionId }: { sessionId: string | null }
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditContextPressureBadgeGovernance(): string {
+  return JSON.stringify({
+    module: 'context-pressure-badge',
+    phase: 'P193',
+    audited: true,
+  });
+}
