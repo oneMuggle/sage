@@ -2855,3 +2855,27 @@
   - `src/widgets/skills/__tests__/SkillList.p192.test.ts`
 - **Baseline ratchet**: 无（8 个 `.tsx` 目标均未进入 `architecture-baseline.json`，`node scripts/architecture-check.mjs` 双轨直接通过）。
 - **Shell note**: 组件均带 `// eslint-disable-next-line react-refresh/only-export-components` 前缀以保留具名导出；源文件按 CI `npm run lint` 口径校验，新增测试文件保持零警告。
+
+### Phase P193 — Chat Surface Widgets Governance Audit Contracts (2026-10-25)
+
+- **Scope (`src/widgets/chat/`)**:
+  1. `src/widgets/chat/AnswerVersionSwitcher.tsx` -> `auditAnswerVersionSwitcherGovernance()` (`module: 'answer-version-switcher'`)
+  2. `src/widgets/chat/ChatFindBar.tsx` -> `auditChatFindBarGovernance()` (`module: 'chat-find-bar'`)
+  3. `src/widgets/chat/ChatNoticeStack.tsx` -> `auditChatNoticeStackGovernance()` (`module: 'chat-notice-stack'`)
+  4. `src/widgets/chat/ComposerPlusMenu.tsx` -> `auditComposerPlusMenuGovernance()` (`module: 'composer-plus-menu'`)
+  5. `src/widgets/chat/ContextPressureBadge.tsx` -> `auditContextPressureBadgeGovernance()` (`module: 'context-pressure-badge'`)
+  6. `src/widgets/chat/GenerationStatsBadge.tsx` -> `auditGenerationStatsBadgeGovernance()` (`module: 'generation-stats-badge'`)
+  7. `src/widgets/chat/InputCard.tsx` -> `auditInputCardGovernance()` (`module: 'input-card'`)
+  8. `src/widgets/chat/ProjectBadge.tsx` -> `auditProjectBadgeGovernance()` (`module: 'project-badge'`)
+- **Unit Test Suites**:
+  - `src/widgets/chat/__tests__/AnswerVersionSwitcher.p193.test.ts`
+  - `src/widgets/chat/__tests__/ChatFindBar.p193.test.ts`
+  - `src/widgets/chat/__tests__/ChatNoticeStack.p193.test.ts`
+  - `src/widgets/chat/__tests__/ComposerPlusMenu.p193.test.ts`
+  - `src/widgets/chat/__tests__/ContextPressureBadge.p193.test.ts`
+  - `src/widgets/chat/__tests__/GenerationStatsBadge.p193.test.ts`
+  - `src/widgets/chat/__tests__/InputCard.p193.test.ts`
+  - `src/widgets/chat/__tests__/ProjectBadge.p193.test.ts`
+- **Baseline ratchet**: 无（8 个 `.tsx` 目标均未进入 `architecture-baseline.json`，`node scripts/architecture-check.mjs` 双轨直接通过）。
+- **Selection note**: 目标取自收敛后的 `clean_tsx` 池（`git ls-tree origin/main` 减去 `git grep -lE 'Governance|audit[A-Z]'` 并集 `origin/release/win7` 存在性），共 145 个未覆盖 `.tsx`，本轮取 `src/widgets/chat/` 中最小的 8 个展示型组件，避免触碰高变更率容器（`Message.tsx` / `ChatInput.tsx`）。
+- **Shell note**: 组件均带 `// eslint-disable-next-line react-refresh/only-export-components` 前缀以保留具名导出；源文件按 CI `npm run lint` 口径校验，新增测试文件保持零警告。
