@@ -123,7 +123,7 @@ def test_exec_exposes_structured_content_and_string_output():
 
     assert result.success is True, f"exec 失败: {result.error}"
     payload = _assert_tool_result_contract(result)
-    assert payload["stdout"] == "contract\n"
+    assert payload["stdout"].replace("\r\n", "\n") == "contract\n"
     assert payload["exit_code"] == 0
     # ExecutionResult.to_dict() 的字段集合（前端 ExecutionResult 镜像这些字段）
     assert set(payload) == {
