@@ -50,4 +50,8 @@ BU16 恢复态显示原始总时长而非"从恢复时刻起算"），映射逻�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1376（squash `ed3d546d`，2026-09-20 merge，CI 12 项全绿）。
+- **win7 对齐**：PR #1379（squash `a7124d15`，2026-09-20 merge，win7 必过项
+  全绿）。Chat.tsx 导入冲突按 HEAD 侧落位（win7 无
+  useFileUpload/CHAT_DOCUMENT_EXTENSIONS）；win7 基底 vitest 37 例本地全绿。
+- **回填分支**：`docs/r43-parity-backfill`（本提交）。

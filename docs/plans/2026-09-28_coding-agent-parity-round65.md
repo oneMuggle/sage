@@ -33,8 +33,8 @@ r168 runtime_routes 分派层 / r169 Node.js 运行时适配器）+ 1 个 DSH �
 ## 3. 实施与验证记录
 
 - 三连 cherry-pick 全部干净落地（新文件无冲突）。
-- 本地验证：扫描 0 命中；477 例（三新套件 + hooks + scanner）全绿
-  （本地 3.12）；全量 collect 0 错误。
+- 本地验证：扫描 0 命中；66 例（三新套件 + hooks + scanner）全绿
+  （本地 3.12）；全量 collect 10309 例 0 错误。
 
 ## 4. 批次 B
 
@@ -42,4 +42,8 @@ r168 runtime_routes 分派层 / r169 Node.js 运行时适配器）+ 1 个 DSH �
 
 ## 5. 交付记录
 
-（交付后回填）
+- **批次（win7，本轮唯一交付面）**：#1756 `f87a1fdf`
+  - 内容：#1746（ALG-9）+ #1749（ALG-10）+ #1751（ALG-11）三连
+    cherry-pick + 本文档；CI 一次全绿（11 checks 0 failure，
+    含 Win7 LTS py38 job）
+- **总账回填**：即本提交。

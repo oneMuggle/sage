@@ -42,17 +42,6 @@ win7 对齐（#1821）并回填 gap-analysis（#1824）；DSH-R32 C2g 自对齐
   py38_hazard_scan 0 命中；全量 collect 11700 例（8 个 mcp 收集错误
   为已知本地环境伪影）。
 
-### win7 侧适配（对齐批次差异）
-
-- 首验发现 win7 的 search_routes 为 **P9 版本**：`_search_knowledge`
-  单值 `project_root`（无 P13 多根拆分/`_Path` 包装/`{root}::{path}`
-  去重循环）；global_search 对 knowledge_project 单值整串授权。
-- 处置：**不做行为搬运**（P13 多根属 main 侧功能演进，配套前端未上
-  win7），测试适配——P13 三例（多根合并去重/不同根保留/多根授权）
-  替换为 P9 行为基线三例（单值授权透传、显式 scope 透传 + 截断映射、
-  空 project_root 空集守卫），其余 11 例与 main 一致。
-- 适配后：14 例全绿；ruff 0 命中（PT018 拆分）。
-
 ## 4. 批次 B
 
 （剩余候选：project/web_access/wiki/zotero/gateway 等路由，后续轮次
@@ -60,4 +49,12 @@ win7 对齐（#1821）并回填 gap-analysis（#1824）；DSH-R32 C2g 自对齐
 
 ## 5. 交付记录
 
-（交付后回填）
+- **批次 A（main）**：#1829 `ae5d5282`
+  - 内容：test_search_routes.py（14 例）+ 本文档。CI 一次全绿
+    （16 checks 0 failure，含 Dependency audit——R74 治理后持续绿）。
+- **批次 B（win7 对齐）**：#1831 `859b3ad7`
+  - 首验发现 win7 的 search_routes 为 **P9 版本**（无 P13 多根拆分/
+    `_Path` 包装/`{root}::{path}` 去重循环）。处置：**不做行为搬运**
+    （P13 配套前端未上 win7），测试适配——P13 三例替换为 P9 行为
+    基线三例，其余 11 例一致；适配后 14 例全绿，CI 一次通过。
+- **总账回填**：即本提交。

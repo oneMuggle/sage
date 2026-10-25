@@ -46,4 +46,10 @@ web_metrics / tls_transport 全 monkeypatch；Query/Body 默认参数显式传�
 
 ## 5. 交付记录
 
-（交付后回填）
+- **批次 A（main）**：#1833 `5ca40474`
+  - 内容：test_web_access_routes.py（16 例）+ 本文档。CI 一次全绿
+    （16 checks 0 failure，含 Dependency audit）。
+- **批次 B（win7 对齐）**：#1834 `dacf1da0`
+  - 测试文件 + 文档同步至 win7（模块与传递依赖同源，无适配差异）；
+    CI 一次全绿（Win7 LTS py38 job 过）。
+- **总账回填**：即本提交。

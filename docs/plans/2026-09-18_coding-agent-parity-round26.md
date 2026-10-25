@@ -54,4 +54,7 @@ worktree.py 提供临时 detached worktree 副本）与 `scratchRoot`
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1113（squash `04b9f3c7`，2026-09-18 merge，CI 12 项全绿）。
+- **win7 对齐**：PR #1117（squash `f1d91758`，2026-09-18 merge，py38 Win7 LTS
+  16m 必过项全绿）。cherry-pick 干净落位，win7 基底 vitest 11 例本地全绿。
+- **回填分支**：`docs/r26-backfill`（本提交）。

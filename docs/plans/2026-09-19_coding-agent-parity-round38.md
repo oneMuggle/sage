@@ -39,4 +39,7 @@
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1287（squash `4ea6258a`，2026-09-19 merge，CI 12 项全绿）。
+- **win7 对齐**：PR #1289（squash `7811674f`，2026-09-19 merge，win7 必过项
+  全绿）。cherry-pick 干净落位，win7 基底 25 例本地全绿。
+- **回填分支**：`docs/r38-parity-backfill`（本提交）。

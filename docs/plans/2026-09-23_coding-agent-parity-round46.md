@@ -44,4 +44,7 @@ usage_events 仅有 `(session_id, created_at)` 与 `(created_at)` 两个索引
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1409（squash `6a177ae3`，2026-09-23 merge，CI 12 项全绿）。
+- **win7 对齐**：PR #1413（squash `0738247d`，2026-09-23 merge，win7 必过项
+  全绿）。cherry-pick 干净落位，win7 基底 26 例本地全绿。
+- **回填分支**：`docs/r46-parity-backfill`（本提交）。

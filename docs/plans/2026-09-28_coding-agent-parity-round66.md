@@ -50,4 +50,11 @@ legacy_* 组随 DSH 迁移节奏跟进。）
 
 ## 5. 交付记录
 
-（交付后回填）
+- **批次 A（main）**：#1760 `d5df5590`
+  - 内容：test_usage_routes.py 18 例 + 本文档。
+  - 一轮 CI 红：ruff PT018（复合 assert 未拆分）——修复后终跑全绿
+    （16 checks 0 failure）。PT018 已列入后续测试编写自查项。
+- **批次 B（win7 对齐）**：#1761 `8abaf25f`
+  - cherry-pick 测试提交（py38 安全写法直接适用）；同样经历
+    PT018 修复 cherry-pick 后全绿（Win7 LTS py38 job 过）。
+- **总账回填**：即本提交。

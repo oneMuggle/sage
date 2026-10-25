@@ -45,4 +45,7 @@ RD13+ 的 `retry_of`（重派来源）仅存在于内存 ChatTaskState——orch
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1488（squash `bcdc77ef`，2026-09-24 merge，CI 12 项全绿）。
+- **win7 对齐**：PR #1489（squash `54c97be6`，2026-09-24 merge，win7 必过项
+  全绿）。cherry-pick 干净落位，win7 基底 27 例本地全绿。
+- **回填分支**：`docs/r49-parity-backfill`（本提交）。

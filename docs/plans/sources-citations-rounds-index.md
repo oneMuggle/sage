@@ -146,4 +146,94 @@ main `612579e7`（SRC-1 后，含并行会话 DSH-R2 / web-access R23 / zotero �
 - **前端全量（vitest run，串行执行）**：335 个测试文件全部 ✓，零失败条目。
 - 来源专项域零失败。
 
+
+## 6.3 回归记录（R113，2026-09-25）
+
+main `2a26696c`（R33 后，含并行会话 web-access R27-R33 / DSH-R11 / r116-r117 合入）：
+
+- **后端 unit（xdist loadfile，串行执行）**：7884 passed / 0 failed /
+  549 skipped（11min）—— 完全绿（较 R100 的 7700 净增 184 例）。
+- **前端全量（vitest run，串行执行）**：3109 passed / 4 failed /
+  3 skipped。4 个失败全部集中在 `ArenaAccounts.test.tsx`（arena 域，
+  并行会话在途工作）：纯净 origin/main 上即确定性复现（等待超时类），
+  与本专项零交集 —— 已知会 arena 域 owner，不在本专项代修。
+- 来源专项域零失败。
+
+
+## 6.4 回归记录（R114，2026-09-25）
+
+main 最新（R112 后，含并行会话 r118/r119/R34/RD22 合入）串行全量回归：
+
+- **后端 unit（xdist loadfile）**：7929 passed / 1 failed（并行负载
+  flake，串行复跑通过）/ 558 skipped（19min）。
+- **前端全量（vitest run，串行执行）**：3113 passed / 3 failed（
+  backend auto-restart / logIpc 限速 / ArenaAccounts——全部并行负载
+  flake，三个文件串行复跑 13/13 全过）。
+- **结论：零真实失败**。两套件在负载下暴露的 flake 均为时间敏感
+  测试（限速窗口/自动重启/异步等待超时），已记录待域 owner 加固。
+
+
+## 6.5 定向域回归（R125，2026-09-26）
+
+main `82fbb9938`（r136 后，含并行会话 r130-r136 / DSH-R15 拆分合入）定向域回归：
+
+- **双分支差异扫描**：`release/win7..main` 461 提交为双分支正常节奏
+  （win7-sync 按轮处理）；近 30 条 fix/security 类逐项核对，本专项
+  已交付修复（R95 竞态 / DNS 逃逸 / l13_hits 前置 / R120 失败路径）
+  **全部已在 win7 落位**，无对齐缺口。
+- **定向域回归**：后端 memory/sources/chat/todo/wiki-mcp 135 例全过；
+  前端 BtwOverlay/useChat/Message 62 例全过。
+- 结论：专项域在最新 main 上健康，双分支对齐无缺口。
+
+
+## 8. 拍板大项可行性深化（R126，2026-09-26，为 owner 决策供依据）
+
+### 8.1 STEP_DONE 事件流同步 win7 —— 建议分两期，一期收益显著
+- **影响面实测**：生产代码 30 行（agent_state 枚举+字段 3 处 / agent.py
+  产出 2 处 / producer 计数与落库 4 处 / 前端 chatStreamStore+useChat
+  分桶机制 ~50 行）。win7 agent.py（2522 行）与 main（2429 行）已深度
+  分叉，直接 cherry 不可行，需手工移植。
+- **一期（低风险）**：仅同步 agent_state 枚举+字段+producer 计数，
+  run_loop 暂不产出 step_done 事件（R83 增量推送为沉睡代码的现状
+  不变，但 sources/落库计数与 main 对齐）。~60 行，1 个 PR。
+- **二期（需产品拍板）**：run_loop 产出端 + 前端分桶 UI（多步消息
+  分桶是用户可见行为变化）。
+### 8.2 内联 [S1] 引用 —— 基建完备度 90%，剩 prompt 设计
+- wiki/chat.py 已有 citation 编号/S1 回链/内容哈希校验全套（19 处）。
+  剩余工作仅是 system prompt 注入编号约定 + 降级策略（LLM 未标时不
+  内联）。建议与 wiki-chat 现有 [S1] 渲染组件（WikiChat.tsx:25-92）
+  复用合并，~80 行。
+### 8.3 loadMessages 分页 —— 需先定对账语义
+- mergeLoadedMessages 的 (role,content) 计数对账 + compact_info 深度
+  去重是分页的正确性根基。分页后"本地乐观副本"与"服务端页"的认领
+  关系需重定义（当前全量加载使对账退化为 id 集合差）。建议设计先行：
+  按 id 游标分页 + hasMore 标记 + 追加加载，对账逻辑仅作用于当前页。
+  规模 ~150 行 + 回归测试，但正确性风险集中在边界场景。
+### 8.4 mcp 入 CI env —— 已有安全路径，风险可控
+- requirements-optional.txt 已文档化 starlette 0.41 + httpx 0.27 兼容
+  升级路径（A 方案）；win7 侧 optional 文件已含 mcp 段。CI 可用
+  "安装 mcp 但不升锁版本"的 try-install + skip-if-fail 模式试探，
+  不动生产锁。规模 ~20 行 workflow 改动。
+
+
+## 9. 双循环交汇确认（R129，2026-09-27）
+
+本专项（sources-citations）与并行会话对标循环（rounds-index 系列）
+在 R128/R50 双方独立扫描后覆盖已交汇：
+
+- **并行会话 R50 结论**（web-access 域）：28 轮交付后无过价值线的
+  未决优化项，§3 建议清单 6 项全关，chrome 残留待观察项收口关闭，
+  "本周期收敛"；
+- **本专项结论**（memory/sources/chat 透明度域）：专项修复双侧
+  落位完好（§6.5 扫描），ZCode 差距分析 L1 已对齐（R127），剩余
+  L4/L5 需单独立项，拍板大项可行性依据已备（§8）；
+- **环境 flake 收口**：todo 时钟（R39）/ wiki 路径（R41）/ perf 预算
+  （R48，win7 对齐 #1712）/ logIpc 限速（R115）/ artifact loop
+  （SRC-1 跟进）五类全部治理完毕，两循环各自验证 0 专项回归。
+
+**结论：双循环进入健康间歇。** 后续触发条件：新功能增量合入
+（重复 R113 式覆盖核查）、owner 拍板 §8 任一大项（按拆分路径实施）、
+或新回归证据出现（按既有循环另开轮次）。
+
+
 —— 本账本由参考来源专项循环维护，随轮次追加。

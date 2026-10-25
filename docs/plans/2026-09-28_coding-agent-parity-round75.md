@@ -47,4 +47,10 @@ R74 收口后复扫：main 零新增提交；DSH-R31 的 win7 cherry-pick 尚未
 
 ## 5. 交付记录
 
-（交付后回填）
+- **批次 A（main）**：#1815 `a2f823ab`
+  - 内容：test_todo_router.py（18 例）+ 本文档。CI 一次全绿
+    （16 checks 0 failure，含 Dependency audit）。
+- **批次 B（win7 对齐）**：#1818 `23495ebc`
+  - 测试文件 + 文档同步至 win7（模块逐行同源）；CI 一次全绿
+    （Win7 LTS py38 job 过）。
+- **总账回填**：即本提交。
