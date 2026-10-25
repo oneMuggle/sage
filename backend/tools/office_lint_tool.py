@@ -97,6 +97,24 @@ class OfficeLintWordTool(BaseTool):
                                 "properties": {"page_number": {"type": "boolean"}},
                             },
                             "numbering": {"type": "boolean"},
+                            "toc": {
+                                "type": "object",
+                                "description": "校验目录域在位（toc/presence）",
+                            },
+                            "figure_index": {
+                                "type": "object",
+                                "description": (
+                                    '校验插图目录域在位（figure_index/presence，'
+                                    r'TOC \c "图"）'
+                                ),
+                            },
+                            "table_index": {
+                                "type": "object",
+                                "description": (
+                                    '校验表格目录域在位（table_index/presence，'
+                                    r'TOC \c "表"）'
+                                ),
+                            },
                         },
                         "required": ["format_spec"],
                     },

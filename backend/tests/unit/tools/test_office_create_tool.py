@@ -31,7 +31,9 @@ def test_schema_requires_no_tool_context_and_exposes_fields():
     tool = _tool()
     assert tool.requires_tool_context is False
     props = tool.schema.parameters["properties"]
-    assert set(props.keys()) == {"doc_type", "output_dir", "filename", "content", "font_family"}
+    assert set(props.keys()) == {
+        "doc_type", "output_dir", "filename", "content", "font_family", "refresh_toc",
+    }
     # doc_type 合法取值必须与 models.OfficeDocType 枚举一致（单一事实来源）
     assert props["doc_type"]["enum"] == [t.value for t in OfficeDocType]
 
@@ -410,3 +412,124 @@ def test_normalize_content_excel_string_still_rejected() -> None:
     out = OfficeCreateTool._normalize_content(OfficeDocType.EXCEL, "book.xlsx", "data")
     assert out is None
 
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Round 40: refresh_toc 一步到位刷新目录域
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_refresh_toc_rejects_non_word(tmp_path):
+    """refresh_toc 仅支持 word——非 word 显式报错（strict，不静默忽略）。"""
+    result = _tool().execute(
+        doc_type="excel",
+        output_dir=str(tmp_path),
+        filename="data.xlsx",
+        content={"sheets": [{"name": "S1", "headers": ["A"], "rows": [["1"]]}]},
+        refresh_toc=True,
+    )
+    assert result.success is False
+    assert "refresh_toc_only_supported_for_word" in (result.error or "")
+
+
+def test_refresh_toc_word_success_attaches_summary(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    """word + refresh_toc=True：刷新成功 → 附加 toc_refresh 摘要，path 不变。"""
+    from backend.office.toc_refresh import TocRefreshResult
+
+    calls = []
+
+    def fake_refresh(path, workspace):
+        calls.append((path, workspace))
+        return TocRefreshResult(ok=True, toc_count=3)
+
+    monkeypatch.setattr(
+        "backend.office.toc_refresh.refresh_toc_page_numbers", fake_refresh
+    )
+    out_dir = tmp_path / "desktop"
+    out_dir.mkdir()
+    result = _tool().execute(**_word_args(str(out_dir)), refresh_toc=True)
+
+    assert result.success is True
+    assert result.content["toc_refresh"] == {"ok": True, "toc_count": 3}
+    assert len(calls) == 1
+    assert calls[0][0] == out_dir / "天气.docx"
+
+
+def test_refresh_toc_word_degrades_without_breaking_create(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    """COM 不可用 → 生成结果保持 success=True，附加降级 error 说明。"""
+    from backend.office.toc_refresh import TocRefreshResult
+
+    monkeypatch.setattr(
+        "backend.office.toc_refresh.refresh_toc_page_numbers",
+        lambda path, workspace: TocRefreshResult(
+            ok=False, toc_count=0, error="Word COM 不可用（未安装 pywin32）"
+        ),
+    )
+    out_dir = tmp_path / "desktop"
+    out_dir.mkdir()
+    result = _tool().execute(**_word_args(str(out_dir)), refresh_toc=True)
+
+    assert result.success is True
+    assert (out_dir / "天气.docx").exists()
+    assert result.content["toc_refresh"]["ok"] is False
+    assert "pywin32" in result.content["toc_refresh"]["error"]
+
+
+def test_refresh_toc_managed_path_attaches_summary_without_path_leak(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+):
+    """受管路径：doc_id 定位刷新，附加摘要且不回显受管绝对路径。"""
+    from types import SimpleNamespace
+
+    from backend.office.toc_refresh import TocRefreshResult
+    from backend.tools import office_create_tool as oct_mod
+    from backend.tools.base import ToolResult
+
+    managed_file = tmp_path / "managed.docx"
+
+    fake_ctx = SimpleNamespace(
+        session_id="sess-r40", binding_generation=1
+    )
+    fake_binding = SimpleNamespace(workspace_path=str(tmp_path))
+    fake_doc = SimpleNamespace(filename="managed.docx")
+
+    monkeypatch.setattr(oct_mod, "current_tool_context", lambda: fake_ctx)
+    monkeypatch.setattr(
+        oct_mod, "get_database", lambda: SimpleNamespace(
+            get_connection=lambda: object()
+        )
+    )
+    monkeypatch.setattr(
+        oct_mod, "get_active_workspace",
+        lambda conn, session_id, expected_generation: fake_binding,
+    )
+    monkeypatch.setattr(
+        oct_mod, "get_document_in_workspace",
+        lambda conn, doc_id, workspace_path: fake_doc,
+    )
+    monkeypatch.setattr(oct_mod, "document_path", lambda doc: managed_file)
+    monkeypatch.setattr(
+        "backend.office.toc_refresh.refresh_toc_page_numbers",
+        lambda path, workspace: TocRefreshResult(ok=True, toc_count=2),
+    )
+
+    tool = _tool()
+    result = oct_mod.OfficeCreateTool._attach_toc_refresh_managed(
+        tool,
+        ToolResult(
+            success=True,
+            content={
+                "document_id": "doc-1",
+                "doc_type": "word",
+                "filename": "managed.docx",
+            },
+        ),
+    )
+
+    assert result.success is True
+    assert result.content["toc_refresh"] == {"ok": True, "toc_count": 2}
+    assert "path" not in result.content  # 不回显受管绝对路径
