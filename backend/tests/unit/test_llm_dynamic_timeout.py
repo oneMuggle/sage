@@ -83,10 +83,8 @@ class TestComputeDynamicTimeout:
         config = LLMConfig(model="gpt-3.5-turbo")
         messages = [{"role": "user", "content": "x" * 40000}]
 
-        with (
-            patch("backend.chat.compaction.estimate_messages_tokens", return_value=10000),
-            patch("backend.data.settings_repo.SettingsRepository") as mock_repo,
-        ):
+        with patch("backend.chat.compaction.estimate_messages_tokens", return_value=10000), \
+             patch("backend.data.settings_repo.SettingsRepository") as mock_repo:
             mock_repo.return_value.get_json.return_value = {"llmTotalTimeoutS": 120}
             timeout = config.compute_dynamic_timeout(messages)
 
@@ -124,10 +122,8 @@ class TestComputeDynamicTimeout:
         config = LLMConfig(model="gpt-3.5-turbo")
         messages = [{"role": "user", "content": "x" * 40000}]
 
-        with (
-            patch("backend.chat.compaction.estimate_messages_tokens", return_value=10000),
-            patch("backend.data.settings_repo.SettingsRepository") as mock_repo,
-        ):
+        with patch("backend.chat.compaction.estimate_messages_tokens", return_value=10000), \
+             patch("backend.data.settings_repo.SettingsRepository") as mock_repo:
             mock_repo.return_value.get_json.side_effect = Exception("mock DB 错误")
             timeout = config.compute_dynamic_timeout(messages)
 
