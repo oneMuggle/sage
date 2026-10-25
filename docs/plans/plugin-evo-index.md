@@ -33,7 +33,8 @@
 | R101 | 已保存权限规则插件归属标注（孤儿规则可见化） | ✅ #2484 |
 | R102 | 按插件删除其全部已保存规则（按归属撤销持久信任） | ✅ #2493 |
 | R103 | 已卸载插件孤儿规则在插件页提示并可就地清理（纯前端复用 R101/R102） | ✅ #2500 |
-| R104 | 无归属（missing）孤儿规则整组清理（标注矩阵补完） | 🔄 #2504 |
+| R104 | 无归属（missing）孤儿规则整组清理（标注矩阵补完） | ✅ #2504 |
+| R105 | 仅本次会话记住（session 级 remember，会话规则存储 + gate 会话捕获） | 🔄 #2511 |
 
 ## 2. 交付总账
 
@@ -60,7 +61,8 @@
 | R101 | 规则列表响应只读归属标注（plugin_name/plugin_status）+ 设置页孤儿规则徽标与测试/文档 | #2484 | 待对齐 | ✅ 已交付 |
 | R102 | `POST /permissions/rules/delete-by-plugin`（权威插件名选择子）+ Electron 命令 + 设置页按归属删除与测试/文档 | #2493 | 待对齐 | ✅ 已交付 |
 | R103 | 插件页已卸载卡片的孤儿规则计数提示 + 就地按归属清理按钮（纯前端）与测试/文档 | #2500 | 待对齐 | ✅ 已交付 |
-| R104 | `POST /permissions/rules/delete-orphans`（服务端按 missing 类选集）+ Electron 命令 + 管理器孤儿清理行与测试/文档 | #2504 | 待对齐 | 🔄 |
+| R104 | `POST /permissions/rules/delete-orphans`（服务端按 missing 类选集）+ Electron 命令 + 管理器孤儿清理行与测试/文档 | #2504 | 待对齐 | ✅ 已交付 |
+| R105 | 会话规则存储（进程内）+ enforcer 合并求值 + 应答 `remember_duration` + 对话框时长选择与测试/文档 | #2511 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -515,7 +517,7 @@
   Checks pass，已 squash 合并为 `main`
   `58afc32d329b40371be8c1a6051b555ac4a15d0c`。
 
-## 24. R104 交付边界（PR #2504 待合并）
+## 24. R104 交付边界（已合并）
 
 > spec：`2026-10-25_permission-rules-orphans-r104.md`。
 > R104 是本插件账轮次号，与其它账本的同号计划无关。
@@ -533,5 +535,26 @@
   503/403）、前端 58 例通过；Ruff 全库、py38、
   ipc-manifest（266）、tsc、ESLint、architecture、
   silent-exceptions、diff-check、diagnostics 全绿。
+  PR #2504 GitHub All Checks pass，已 squash 合
+  并为 `main` `1708e1efe6fadb39084b9ee534ceb3a7157d753a`。
+
+## 25. R105 交付边界（PR #2511 待合并）
+
+> spec：`2026-10-25_session-remember-r105.md`。
+> R105 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **记住分时长**：审批记住新增 `session` 时长（默认
+  permanent 与从前一致）；会话规则只存进程内存、按
+  chat 会话隔离，重启即失，不再为「这次先放行」被
+  迫攒永久规则。
+- **求值安全位不变**：会话规则与持久规则同按 deny >
+  allow > ask 合并，持久 deny 不可被会话授权绕开；
+  会话归属由服务端从 ToolExecutionContext 捕获，客
+  户端不可指定；无归属时降级不记、绝不转永久。
+- **本地证据**：后端新增 15 例（单测 9 + API 6）
+  与相邻/集成共 235 例、前端 96 例（ApprovalDialog
+  新增 4 例）通过；Ruff 全库、py38、tsc、ESLint、
+  architecture、silent-exceptions、diff-check、
+  diagnostics 全绿，manifest 仍 266。
 
 —— 本账本由插件化循环维护，随轮次追加。

@@ -264,6 +264,9 @@ export const enSettingsAndModels = {
   'permission.remember_scope.plugin': 'Whole plugin (including future tools)',
   'permission.remember_scope.plugin_warning':
     'This applies to every tool from this plugin. Only continue if you trust the plugin.',
+  'permission.remember_duration.legend': 'Remember how long',
+  'permission.remember_duration.permanent': 'Permanently',
+  'permission.remember_duration.session': 'Only this session',
   'permission.approve': 'Allow',
   'permission.deny': 'Deny',
   'permission.deny_confirm': 'Confirm deny',

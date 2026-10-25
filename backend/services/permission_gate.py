@@ -301,6 +301,11 @@ class ApprovalRequest:
     diff_preview: Optional[str] = None
     target_path: Optional[str] = None
     plugin_name: Optional[str] = None
+    #: R105：create() 时从 ToolExecutionContext 捕获的会话 id。
+    #: 服务端内部字段（不进 to_dict）：应答侧 HTTP 任务没有工具
+    #: 执行上下文，「仅本次会话记住」靠它定位会话规则存储；
+    #: 捕获不到时为 None，会话记住随之降级为不记住。
+    session_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """流事件 / REST 响应共用的 JSON 形态。"""
@@ -341,6 +346,7 @@ class ApprovalRequest:
             diff_preview=build_diff_preview(tool_name, args, workspace_root),
             target_path=extract_target_path(args),
             plugin_name=plugin_name or None,
+            session_id=_current_session_id(),
         )
 
 
@@ -356,6 +362,22 @@ def set_approval_context_resolver(resolver: ApprovalContextResolver) -> None:
     """注册 run/task 归属解析器（backend.main 启动时调用一次）。"""
     global _approval_context_resolver
     _approval_context_resolver = resolver
+
+
+def _current_session_id() -> Optional[str]:
+    """当前工具执行上下文的 chat session id；无上下文返回 None。
+
+    惰性导入 context 模块并全吞异常：会话归因是增强信息
+    （审计落库与 R105 会话规则都用它），绝不因上下文读
+    取失败阻塞审批流。
+    """
+    try:
+        from backend.tools.context import current_tool_context
+
+        ctx = current_tool_context()
+        return ctx.session_id if ctx is not None else None
+    except Exception:  # noqa: BLE001 — 上下文缺失降级
+        return None
 
 
 class ApprovalGate:
@@ -406,13 +428,9 @@ class ApprovalGate:
             session_id: Optional[str] = None
             run_id: Optional[str] = None
             task_id: Optional[str] = None
-            try:
-                from backend.tools.context import current_tool_context
-
-                ctx = current_tool_context()
-                session_id = ctx.session_id if ctx is not None else None
-            except Exception:  # noqa: BLE001 — 上下文缺失降级
-                session_id = None
+            # R105：优先用请求创建时捕获的会话归属（应答落库时点
+            # 的上下文未必还是原会话），捕获不到才现查兜底。
+            session_id = req.session_id or _current_session_id()
             resolver = _approval_context_resolver
             if resolver is not None:
                 try:

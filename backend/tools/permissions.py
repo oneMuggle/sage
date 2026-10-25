@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -32,6 +34,7 @@ from backend.domain.tool_names import (
 )
 from backend.tools.base import _is_safe_path
 from backend.tools.bash_validation import BashRisk, validate_bash
+from backend.tools.context import current_tool_context
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +191,64 @@ class PermissionRule:
         return cls(tool_pattern=pattern, decision=decision)
 
 
+# 会话级规则（R105）：仅存进程内存，按 chat session 隔离 ------------
+#
+# 「仅本次会话记住」把决定写进这里而不是 settings：enforcer
+# 在 check 时按当前 ToolExecutionContext 的 session_id 查本
+# 存储，与持久规则同口径（deny > allow > ask）合并裁决。
+# 进程重启即全部消失（fail-safe 回到逐次询问）；会话数与每
+# 会话规则数都有上限，超限按最久未用淘汰，避免长驻进程无
+# 界增长。写入只发生在审批应答（见 permission_routes），且
+# pattern 派生与持久化共用同一道安全闸——本存储不做校验。
+_SESSION_RULES_MAX_SESSIONS = 64
+_SESSION_RULES_MAX_PER_SESSION = 200
+_session_rules: OrderedDict[str, List[PermissionRule]] = OrderedDict()
+_session_rules_lock = threading.Lock()
+
+
+def remember_session_rule(session_id: str, rule: PermissionRule) -> bool:
+    """把一条规则记入指定会话（R105）；完全重复的规则不重记。
+
+    Returns:
+        True 表示新增；False 表示已存在同一条规则而跳过。
+        ``session_id`` 为空时不落任何规则并返回 False。
+    """
+    if not session_id:
+        return False
+    with _session_rules_lock:
+        rules = _session_rules.get(session_id)
+        if rules is None:
+            rules = []
+            _session_rules[session_id] = rules
+            while len(_session_rules) > _SESSION_RULES_MAX_SESSIONS:
+                _session_rules.popitem(last=False)
+        else:
+            _session_rules.move_to_end(session_id)
+        if rule in rules:
+            return False
+        if len(rules) >= _SESSION_RULES_MAX_PER_SESSION:
+            del rules[0]
+        rules.append(rule)
+        return True
+
+
+def session_rules_for(session_id: Optional[str]) -> Tuple[PermissionRule, ...]:
+    """读取某会话的全部会话规则快照；无会话时为空元组。"""
+    if not session_id:
+        return ()
+    with _session_rules_lock:
+        return tuple(_session_rules.get(session_id, ()))
+
+
+def clear_session_rules(session_id: Optional[str] = None) -> None:
+    """清空会话规则：指定 ``session_id`` 只清该会话，None 清全部。"""
+    with _session_rules_lock:
+        if session_id is None:
+            _session_rules.clear()
+        else:
+            _session_rules.pop(session_id, None)
+
+
 # 便捷构造器 ---------------------------------------------------------------
 
 
@@ -308,9 +369,18 @@ class PermissionEnforcer:
     def _match_rules(
         self, tool_name: str, plugin_name: Optional[str] = None
     ) -> Dict[str, Optional[str]]:
-        """按优先级收集首个命中的 deny / allow / ask 规则 pattern。"""
+        """按优先级收集首个命中的 deny / allow / ask 规则 pattern。
+
+        R105：当前存在工具执行上下文时，该会话的会话规则
+        追加在持久规则之后一并匹配（整体仍是 deny >
+        allow > ask，持久 deny 不会被会话 allow 绕开）。
+        无上下文（后台任务/单测）时不查会话存储，行为
+        与从前完全一致。
+        """
         matched: Dict[str, Optional[str]] = {"deny": None, "allow": None, "ask": None}
-        for rule in self._rules:
+        ctx = current_tool_context()
+        effective = self._rules + (session_rules_for(ctx.session_id) if ctx else ())
+        for rule in effective:
             if not rule.matches(tool_name, plugin_name=plugin_name):
                 continue
             if matched[rule.decision] is None:
@@ -488,6 +558,9 @@ __all__ = [
     "DEFAULT_PERMISSION_MODE",
     "classify_tool",
     "parse_rules",
+    "remember_session_rule",
+    "session_rules_for",
+    "clear_session_rules",
     "make_office_path_boundary",
     "load_enforcer_from_settings",
 ]
