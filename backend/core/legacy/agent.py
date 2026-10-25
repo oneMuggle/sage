@@ -1092,7 +1092,12 @@ class SageAgent:
             else None
         )
         if allowed_profile_tools is not None and any(
-            not tool_name_in_allowlist(tc.name, allowed_profile_tools) for tc in batch
+            not tool_name_in_allowlist(
+                tc.name,
+                allowed_profile_tools,
+                plugin_name=self._authoritative_plugin_name(tc.name),
+            )
+            for tc in batch
         ):
             return False
         # Phase 2: per-tool invariants + enforcer pre-check.
@@ -1131,7 +1136,12 @@ class SageAgent:
             else None
         )
         if allowed_profile_tools is not None and any(
-            not tool_name_in_allowlist(tc.name, allowed_profile_tools) for tc in batch
+            not tool_name_in_allowlist(
+                tc.name,
+                allowed_profile_tools,
+                plugin_name=self._authoritative_plugin_name(tc.name),
+            )
+            for tc in batch
         ):
             return [("serial", [tc]) for tc in batch]
 
@@ -2644,12 +2654,17 @@ class SageAgent:
         # 1) profile 白名单：不仅控制 schema 暴露，也必须在执行边界再校验，
         # 防止伪造/异常 tool call 直接从全局 registry 取到未授权工具。
         allowed_profile_tools = (
-            set(self.profile.get("tools") or [])
+            list(self.profile.get("tools") or [])
             if self.profile and self.profile.get("tools") is not None
             else None
         )
         profile_denied = (
-            allowed_profile_tools is not None and not tool_name_in_allowlist(tc.name, allowed_profile_tools)
+            allowed_profile_tools is not None
+            and not tool_name_in_allowlist(
+                tc.name,
+                allowed_profile_tools,
+                plugin_name=self._authoritative_plugin_name(tc.name),
+            )
         )
         if profile_denied:
             logger.warning(
