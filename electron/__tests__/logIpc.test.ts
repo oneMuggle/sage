@@ -65,11 +65,19 @@ describe('logIpc', () => {
     const handler = handlers.get('sage:log:write')!;
     const fakeEvt = { sender: { id: 999 } } as unknown;
 
-    const promises: Promise<unknown>[] = [];
-    for (let i = 0; i < 150; i++) {
-      promises.push(handler(fakeEvt, { level: 'info', msg: `burst-${i}` }));
+    // R115: 冻结时钟 —— 150 连发在同一时刻入窗，限速窗口判定不受测试机
+    // 负载/时钟粒度影响（真实时钟下连发跨越 1s 窗口边界时 ≤100 断言会
+    // 误判，R114 全量回归已实证）。
+    vi.useFakeTimers({ now: new Date('2026-01-15T10:00:00Z') });
+    try {
+      const promises: Promise<unknown>[] = [];
+      for (let i = 0; i < 150; i++) {
+        promises.push(handler(fakeEvt, { level: 'info', msg: `burst-${i}` }));
+      }
+      await Promise.all(promises);
+    } finally {
+      vi.useRealTimers();
     }
-    await Promise.all(promises);
 
     const today = new Date().toISOString().slice(0, 10);
     const file = join(tmpDir, 'logs', `sage-${today}.ndjson`);

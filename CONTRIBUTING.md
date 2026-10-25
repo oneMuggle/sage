@@ -39,6 +39,31 @@ Sage 遵循 4 个核心设计原则：
 
 ---
 
+## 按层贡献（先选层，再选文件）
+
+多数贡献不需要改内核。先选最浅的一层；只有现有契约确实装不下时才往下走。
+
+### L1 内容：skill / prompt / harness 预设
+
+- 写 `SKILL.md`：先看 [SKILL.md 编写指南](./docs/user-manual/04-skill-md-authoring.md)，提交前跑 `python -m backend.cli.skills lint <skill-root>`。
+- 改 harness 预设或提示面：先用 `python -m backend.cli.harness dump-config` 看最终合并结果，再跑 `python -m backend.cli.harness check`。
+- L1 不新增 Python 入口、不改默认工具装配；内容变化也要带最小可复现样例或快照测试。
+
+### L2 插件：tool / hook / MCP / skill 包
+
+- 先看 [插件开发：30 分钟跑通第一个插件](./docs/user-manual/21-plugin-development.md)，用 `python -m backend.cli.plugin init <name>` 生成独立包。
+- 当前只有 Python `tool` 会被进程外宿主执行；`hook` / `mcp` / `skill` 模板是 contract preview，不要把“manifest 能登记”写成“宿主已运行”。
+- 提交前至少跑插件自带测试、`python -m backend.cli.plugin validate <plugin>` 与 `python -m backend.cli.plugin dev <plugin>`（tool 模板）；权限从空开始逐项加。
+- 登记静态索引时跑 `index build` 与 `index validate --check-local`。索引不是市场或信任背书，没有实测就不要把兼容性写满。
+
+### L3 内核：新 capability / provider / 宿主语义
+
+- 新 capability 类型、UI 插件槽位、权限强制、工具自动暴露或生命周期语义都属于 L3。
+- 先在 `docs/plans/` 写 spec，说明触发证据、兼容/回滚和安全边界，再写代码；涉及跨层契约时同步更新总账与用户文档。
+- 不要在 L2 插件 PR 里顺手改内核默认行为。拆成独立轮次，方便回滚和审查。
+
+---
+
 ## 如何贡献
 
 ### 1. 报告 Bug

@@ -1,9 +1,14 @@
 {
-  "entry": ["src/main.tsx", "electron/main.ts"],
-  "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts"],
-  "ignoreBinaries": ["eslint"],
-  "rules": {
-    "exports": "warn",
-    "dependencies": "warn"
-  }
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "index.html",
+    "electron/main.ts",
+    "electron/preload.ts",
+    "scripts/clean.mjs",
+    "scripts/dep-refs.mjs",
+    "scripts/architecture-context.mjs"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "electron/**/*.ts", "scripts/*.mjs"],
+  "ignoreDependencies": ["katex", "lefthook"],
+  "ignoreBinaries": ["reg"]
 }

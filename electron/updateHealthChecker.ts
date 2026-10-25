@@ -55,14 +55,7 @@ export class LauncherHealthChecker {
   }
 
   private async checkMainWindowLoaded(): Promise<void> {
-    // Win7 with --disable-gpu uses software compositing which is slower.
-    // Give it more time to avoid false-positive health check failures.
-    const isWin7 =
-      process.platform === 'win32' &&
-      typeof process.getSystemVersion === 'function' &&
-      process.getSystemVersion().startsWith('6.1');
-    const timeout = isWin7 ? 15_000 : 3000;
-    const timeoutSeconds = timeout / 1000;
+    const timeout = 3000;
     const pollInterval = 100;
     const start = Date.now();
 
@@ -74,7 +67,7 @@ export class LauncherHealthChecker {
       await this.sleep(pollInterval);
     }
 
-    throw new Error(`Main window not visible within ${timeoutSeconds} seconds`);
+    throw new Error('Main window not visible within 3 seconds');
   }
 
   private async checkPythonBackendHealthy(): Promise<void> {

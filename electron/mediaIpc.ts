@@ -11,9 +11,8 @@
  *   - Follows officeIpc.ts pattern: register function injected by main.ts.
  */
 
-import { randomBytes } from 'node:crypto';
-
 import fetch from 'node-fetch';
+import { FormData, Blob } from 'formdata-node';
 
 import { logger } from './logger';
 
@@ -51,29 +50,19 @@ export function registerMediaIpc(
       throw new Error('media:upload-attachment: missing required payload fields');
     }
 
-    // node-fetch 2 does not serialize WHATWG FormData. Encode exact bytes;
-    // no ReadableStream/global fetch APIs absent in Electron 21 are required.
-    if (typeof payload.filename !== 'string' || /[\r\n\0]/.test(payload.filename)) {
-      throw new Error('Invalid attachment filename');
-    }
-    const filename = payload.filename.replace(/\\/g, '%5C').replace(/"/g, '%22');
-    const contentType = payload.contentType || 'application/octet-stream';
-    if (typeof contentType !== 'string' || !/^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+(?:;[ \t\x21-\x7e]*)?$/.test(contentType)) {
-      throw new Error('Invalid attachment content type');
-    }
-    const boundary = 'sage-' + randomBytes(24).toString('hex');
-    const body = Buffer.concat([
-      Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`, 'utf8'),
-      Buffer.from(payload.buffer),
-      Buffer.from(`\r\n--${boundary}--\r\n`),
-    ]);
+    // Construct FormData with the file buffer
+    const formData = new FormData();
+    const blob = new Blob([payload.buffer], {
+      type: payload.contentType || 'application/octet-stream',
+    });
+    formData.append('file', blob, payload.filename);
 
     // Build headers (auth token if available)
-    const headers: Record<string, string> = { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': String(body.length) };
+    const headers: Record<string, string> = {};
     if (authToken) {
       headers['X-Sage-Local-Authorization'] = `Bearer ${authToken}`;
     }
-    // Boundary and Content-Length correspond to the actual Buffer body.
+    // Don't set Content-Type — let FormData set multipart boundary
 
     const url = `${backendUrl}/api/v1/chat/attachments`;
     logger.info('media:upload-attachment', {
@@ -85,7 +74,7 @@ export function registerMediaIpc(
     const resp = await fetch(url, {
       method: 'POST',
       headers,
-      body,
+      body: formData as unknown as import('node-fetch').BodyInit,
     });
 
     if (!resp.ok) {

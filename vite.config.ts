@@ -142,6 +142,7 @@ export default defineConfig({
           'vendor-markdown': ['react-markdown', 'remark-gfm'],
           'vendor-state': ['zustand'],
           'vendor-motion': ['framer-motion'],
+          'vendor-xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-web-links'],
         },
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',
@@ -163,16 +164,18 @@ export default defineConfig({
   },
   test: {
     // Vitest UI/API is a separate server from Vite's dev server.
-    api: {
-      host: '127.0.0.1',
-    },
+    // R121 (2026-09-25): CLI 运行不需要 API server（仅 --ui 使用）。禁用后
+    // 消除崩溃/中断运行在 51204 端口残留僵尸进程、阻断后续运行的故障模式
+    // （Windows 本机已三次发生，PID 需手动 taskkill）。
+    api: false,
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     css: false,
-    // 覆盖率棘轮门禁（win7 2026-09-28 随 main #1784 引入）：阈值只防"大幅
-    // 回退"，不为凑数写浅测试；后续覆盖率提升时同步上调基线。
-    // 本分支此前**完全没有** coverage 块，阈值直接按本分支实测定（见下）。
+    // 覆盖率棘轮门禁（2026-09-23）：基线为当日全量实测
+    // (stmts 61.81 / branch 80.6 / funcs 67.09 / lines 61.81)。
+    // 阈值留 ~2pt 余量，只防"大幅回退"，不为凑数写浅测试；
+    // 后续覆盖率提升时同步上调基线。
     //
     // 2026-09-28 (P0-3) 口径修正：此前**没有** coverage.exclude，vendored
     // 第三方代码与独立 package 全部计入分母 —— 实测 5267 条语句（占 6.9%）
@@ -198,19 +201,13 @@ export default defineConfig({
         'packages/**',
       ],
       thresholds: {
-        // 2026-09-28 排除 vendored 后**本分支**实测（426 文件 / 3102 例）：
-        // stmts 68.32 / branch 80.72 / funcs 65.61 / lines 68.32。
-        //
-        // 数值与 main 的 69.79/81.07/67.33/69.79 不同：win7 前端套件比 main
-        // 少 256 例（3102 vs 3358），functions 尤其低。阈值必须按本分支实测
-        // 定 —— funcs 若照抄 main 的 65，本分支只剩 0.61pt 余量，一次与代码
-        // 无关的性能波动就会红 CI。
-        //
-        // 定 67/79/64/67，各自留 1.3 / 1.7 / 1.6 / 1.3pt 余量，与 main
-        // 「留 ~2pt、只防大幅回退」的棘轮意图一致。
+        // 2026-09-28 排除 vendored 后实测：
+        // stmts 69.79 / branch 81.07 / funcs 67.33 / lines 69.79。
+        // branch 几乎没涨（vendored 是语句多、分支少的纯 JS），故维持 79；
+        // stmts/lines 水位真实上移，棘轮 60 → 67，仍留 ~2.7pt 余量。
         statements: 67,
         branches: 79,
-        functions: 64,
+        functions: 65,
         lines: 67,
       },
     },
@@ -228,6 +225,10 @@ export default defineConfig({
       '**/.worktrees/**',
       '**/dist/**',
       '**/dist-electron/**',
+      // 2026-09-28 (W5): gitignore 的 reference/ 借鉴代码（如 LocalBridge-Share）
+      // 其自带 *.test.cjs 依赖自身 deps（express 等），本仓库从未安装——
+      // 不排除会让本地全量运行常驻 8 个幻影失败（CI 干净检出不受影响）。
+      'reference/**',
       'tests/electron/**',
       'tests/e2e/**',
       'e2e/**',
