@@ -57,10 +57,18 @@ export interface TrustPolicyState {
 
 export type PermissionRuleDecision = 'allow' | 'deny' | 'ask';
 
-/** 一条已保存（且生效）的权限规则，与后端 PermissionRule.to_dict() 同形。 */
+/**
+ * 一条已保存（且生效）的权限规则，与后端规则列表响应同形。
+ *
+ * `plugin_name` / `plugin_status` 是 R101 的只读派生标注（插件
+ * 归属与生命周期状态，另含派生值 `missing` / `all`），只供
+ * 设置页提示「这条规则属于已卸载/无记录插件」；删除时不发送。
+ */
 export interface PermissionRuleItem {
   tool_pattern: string;
   decision: PermissionRuleDecision;
+  plugin_name?: string | null;
+  plugin_status?: string | null;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -85,7 +93,12 @@ function parseRuleItems(raw: unknown): PermissionRuleItem[] {
     const decision = entry.decision;
     if (typeof pattern !== 'string' || pattern.length === 0) continue;
     if (decision !== 'allow' && decision !== 'deny' && decision !== 'ask') continue;
-    items.push({ tool_pattern: pattern, decision });
+    items.push({
+      tool_pattern: pattern,
+      decision,
+      plugin_name: typeof entry.plugin_name === 'string' ? entry.plugin_name : null,
+      plugin_status: typeof entry.plugin_status === 'string' ? entry.plugin_status : null,
+    });
   }
   return items;
 }

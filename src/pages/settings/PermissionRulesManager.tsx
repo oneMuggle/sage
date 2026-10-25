@@ -7,6 +7,10 @@
  * （R99，期间新记规则也不会删错行），删除后返回最新列表，
  * 前端直接采用，不自行 splice 假定成功。失败时保留原列表并
  * 显示失败文案。规则新增仍只能由审批记住生成，这里没有写入口。
+ *
+ * R101 起后端为每条规则附带插件归属只读标注；属于已卸载或
+ * 无生命周期记录插件的「孤儿规则」在行内以徽标提示，方便
+ * 用户辨认后自行决定删留（仍走逐条删除/一键清空）。
  */
 import { useEffect, useState } from 'react';
 
@@ -108,6 +112,18 @@ export function PermissionRulesManager() {
               <span className="text-muted">
                 {t(`settings.permission.rules.decision.${rule.decision}` as TranslationKey)}
               </span>
+              {(rule.plugin_status === 'uninstalled' || rule.plugin_status === 'missing') && (
+                <span
+                  className="px-1 border border-border rounded-radius-sm text-muted shrink-0"
+                  data-testid={`permission-rule-plugin-status-${index}`}
+                >
+                  {t(
+                    rule.plugin_status === 'uninstalled'
+                      ? 'settings.permission.rules.plugin_uninstalled'
+                      : 'settings.permission.rules.plugin_missing',
+                  )}
+                </span>
+              )}
               <button
                 type="button"
                 data-testid={`permission-rule-delete-${index}`}

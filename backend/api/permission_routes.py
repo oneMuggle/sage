@@ -48,6 +48,8 @@ from pydantic import BaseModel, Field
 
 from backend.data.settings_repo import SettingsRepository
 from backend.domain.tool_names import (
+    PLUGIN_TOOL_PREFIX,
+    is_plugin_tool_reference,
     plugin_tool_belongs_to_plugin,
     plugin_tool_wildcard_for_plugin,
 )
@@ -271,10 +273,74 @@ def _load_saved_rules() -> List[Dict[str, str]]:
     ]
 
 
+def _plugin_status_index() -> Optional[Dict[str, str]]:
+    """生命周期记录 {插件名: 状态} 索引；失败返回 None（R101）。
+
+    标注是纯增强信息：插件库不可用时返回 None，上层据此
+    整体跳过标注（归属全 null），不把「读不到」误报成
+    「插件无记录」。管理器按请求构造，与 plugin_routes
+    同口径，不缓存连接；索引成功但无插件时返回空 dict。
+    """
+    try:
+        from backend.plugins.lifecycle import PluginLifecycleManager
+
+        index: Dict[str, str] = {}
+        for record in PluginLifecycleManager().list_plugins():
+            status = record.status
+            index[record.name] = (
+                status.value if isinstance(status, Enum) else str(status)
+            )
+        return index
+    except Exception as exc:  # noqa: BLE001 — 标注降级不阻塞规则管理
+        logger.warning("插件状态读取失败，规则归属标注降级为空: %s", exc)
+        return None
+
+
+def _annotate_rules_with_plugin_status(
+    rules: List[Dict[str, str]],
+) -> List[Dict[str, Any]]:
+    """为响应视图逐条附带插件归属标注（R101 只读派生，永不落盘）。
+
+    归属只认生命周期权威名单 + 结构化命名空间 helper，
+    不按工具名字符串切分猜插件名。``plugin_status`` 除
+    生命周期状态外有派生值：``all``（全局插件通配）、
+    ``missing``（插件形状但无记录，此时 plugin_name
+    恒 null —— 无权威记录不报名字）。
+    """
+    index = _plugin_status_index()
+    # 长名字先试：`a` 与 `a__b` 共存时 `plugin__a__b__run`
+    # 的命名空间归属取更具体的那个插件；索引不可用时无候选。
+    names = [] if index is None else sorted(index, key=len, reverse=True)
+    annotated: List[Dict[str, Any]] = []
+    for rule in rules:
+        pattern = rule["tool_pattern"]
+        plugin_name: Optional[str] = None
+        plugin_status: Optional[str] = None
+        for name in names:
+            if pattern == plugin_tool_wildcard_for_plugin(
+                name
+            ) or plugin_tool_belongs_to_plugin(pattern, name):
+                plugin_name = name
+                plugin_status = index[name]
+                break
+        if plugin_name is None and index is not None:
+            if pattern == PLUGIN_TOOL_PREFIX + "*":
+                plugin_status = "all"
+            elif is_plugin_tool_reference(pattern):
+                plugin_status = "missing"
+        annotated.append(
+            {**rule, "plugin_name": plugin_name, "plugin_status": plugin_status}
+        )
+    return annotated
+
+
 @router.get("/rules")
 def list_permission_rules() -> Dict[str, Any]:
     """列出已保存且生效的权限规则（设置页「已记住的规则」数据源）。"""
-    return {"ok": True, "rules": _load_saved_rules()}
+    return {
+        "ok": True,
+        "rules": _annotate_rules_with_plugin_status(_load_saved_rules()),
+    }
 
 
 @router.post("/rules/delete")
@@ -306,7 +372,7 @@ def delete_permission_rule(body: PermissionRuleDeleteBody, request: Request):
         removed["decision"],
         len(rules),
     )
-    return {"ok": True, "rules": rules}
+    return {"ok": True, "rules": _annotate_rules_with_plugin_status(rules)}
 
 
 @router.post("/rules/clear")

@@ -63,8 +63,43 @@ describe('permissionApi', () => {
     const rules = await permissionApi.listRules();
     expect(mockInvoke).toHaveBeenCalledWith('permissions_list_rules', {});
     expect(rules).toEqual([
-      { tool_pattern: 'bash', decision: 'deny' },
-      { tool_pattern: 'plugin__demo__*', decision: 'allow' },
+      { tool_pattern: 'bash', decision: 'deny', plugin_name: null, plugin_status: null },
+      { tool_pattern: 'plugin__demo__*', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+  });
+
+  it('listRules() carries plugin attribution and nulls bad types', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      rules: [
+        {
+          tool_pattern: 'plugin__demo__*',
+          decision: 'deny',
+          plugin_name: 'demo',
+          plugin_status: 'uninstalled',
+        },
+        {
+          tool_pattern: 'plugin__ghost__*',
+          decision: 'ask',
+          plugin_name: 42,
+          plugin_status: 'missing',
+        },
+      ],
+    });
+    const rules = await permissionApi.listRules();
+    expect(rules).toEqual([
+      {
+        tool_pattern: 'plugin__demo__*',
+        decision: 'deny',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'ask',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
     ]);
   });
 
@@ -83,7 +118,9 @@ describe('permissionApi', () => {
       toolPattern: 'bash',
       decision: 'deny',
     });
-    expect(rules).toEqual([{ tool_pattern: 'write_file', decision: 'ask' }]);
+    expect(rules).toEqual([
+      { tool_pattern: 'write_file', decision: 'ask', plugin_name: null, plugin_status: null },
+    ]);
   });
 
   it('deleteRule() propagates invoke errors', async () => {

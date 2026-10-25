@@ -324,6 +324,8 @@ export const zhSettingsAndModels = {
   'settings.permission.rules.clear_confirm_message':
     '所有通过「记住我的选择」保存的规则都会被删除，之后全部工具调用将恢复逐次询问。此操作不可撤销。',
   'settings.permission.rules.clear_failed': '全部删除失败，请重试',
+  'settings.permission.rules.plugin_uninstalled': '插件已卸载',
+  'settings.permission.rules.plugin_missing': '插件无记录',
 
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': '用量统计',
