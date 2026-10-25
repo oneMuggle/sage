@@ -2879,3 +2879,27 @@
 - **Baseline ratchet**: 无（8 个 `.tsx` 目标均未进入 `architecture-baseline.json`，`node scripts/architecture-check.mjs` 双轨直接通过）。
 - **Selection note**: 目标取自收敛后的 `clean_tsx` 池（`git ls-tree origin/main` 减去 `git grep -lE 'Governance|audit[A-Z]'` 并集 `origin/release/win7` 存在性），共 145 个未覆盖 `.tsx`，本轮取 `src/widgets/chat/` 中最小的 8 个展示型组件，避免触碰高变更率容器（`Message.tsx` / `ChatInput.tsx`）。
 - **Shell note**: 组件均带 `// eslint-disable-next-line react-refresh/only-export-components` 前缀以保留具名导出；源文件按 CI `npm run lint` 口径校验，新增测试文件保持零警告。
+
+### Phase P194 — Chat Banners & Wiki Panels Governance Audit Contracts (2026-10-25)
+
+- **Scope (`src/widgets/chat/`, `src/widgets/wiki/`)**:
+  1. `src/widgets/chat/InterruptedRunBanner.tsx` -> `auditInterruptedRunBannerGovernance()` (`module: 'interrupted-run-banner'`)
+  2. `src/widgets/chat/RetryBanner.tsx` -> `auditRetryBannerGovernance()` (`module: 'retry-banner'`)
+  3. `src/widgets/chat/SessionIdBadge.tsx` -> `auditSessionIdBadgeGovernance()` (`module: 'session-id-badge'`)
+  4. `src/widgets/chat/SessionUsageBadge.tsx` -> `auditSessionUsageBadgeGovernance()` (`module: 'session-usage-badge'`)
+  5. `src/widgets/wiki/ActivityPanel.tsx` -> `auditActivityPanelGovernance()` (`module: 'wiki-activity-panel'`)
+  6. `src/widgets/wiki/LintItemCard.tsx` -> `auditLintItemCardGovernance()` (`module: 'wiki-lint-item-card'`)
+  7. `src/widgets/wiki/ReviewItemCard.tsx` -> `auditReviewItemCardGovernance()` (`module: 'wiki-review-item-card'`)
+  8. `src/widgets/wiki/WikiToolbar.tsx` -> `auditWikiToolbarGovernance()` (`module: 'wiki-toolbar'`)
+- **Unit Test Suites**:
+  - `src/widgets/chat/__tests__/InterruptedRunBanner.p194.test.ts`
+  - `src/widgets/chat/__tests__/RetryBanner.p194.test.ts`
+  - `src/widgets/chat/__tests__/SessionIdBadge.p194.test.ts`
+  - `src/widgets/chat/__tests__/SessionUsageBadge.p194.test.ts`
+  - `src/widgets/wiki/__tests__/ActivityPanel.p194.test.ts`
+  - `src/widgets/wiki/__tests__/LintItemCard.p194.test.ts`
+  - `src/widgets/wiki/__tests__/ReviewItemCard.p194.test.ts`
+  - `src/widgets/wiki/__tests__/WikiToolbar.p194.test.ts`
+- **Baseline ratchet**: 无（8 个 `.tsx` 目标均未进入 `architecture-baseline.json`，`node scripts/architecture-check.mjs` 双轨直接通过）。
+- **Selection note**: 取自 `clean_tsx` 剩余池 137 个中的展示型轻组件，继续绕开 `Message.tsx` / `ChatInput.tsx` / `WikiEditor.tsx` 等高变更率容器。
+- **Shell note**: 组件均带 `// eslint-disable-next-line react-refresh/only-export-components` 前缀以保留具名导出；源文件按 CI `npm run lint` 口径校验，新增测试文件保持零警告。

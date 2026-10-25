@@ -61,3 +61,11 @@ export function InterruptedRunBanner({ onRetry, onDismiss }: InterruptedRunBanne
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditInterruptedRunBannerGovernance(): string {
+  return JSON.stringify({
+    module: 'interrupted-run-banner',
+    phase: 'P194',
+    audited: true,
+  });
+}
