@@ -725,3 +725,11 @@ export function formatInputCardAuditJson(
     2,
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditInputCardGovernance(): string {
+  return JSON.stringify({
+    module: 'input-card',
+    phase: 'P193',
+    audited: true,
+  });
+}
