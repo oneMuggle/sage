@@ -242,7 +242,7 @@ def get_git_diff(
         rc2, head_content = _run_git(str(workspace), ["show", f"HEAD:{file}"], timeout=10.0)
         if rc2 == 0:
             lines = head_content.splitlines()
-            diff_lines = [f"diff --git a/{file} b/{file}", f"deleted file mode 100644", f"--- a/{file}", f"+++ /dev/null"]
+            diff_lines = [f"diff --git a/{file} b/{file}", "deleted file mode 100644", f"--- a/{file}", "+++ /dev/null"]
             if lines:
                 diff_lines.append(f"@@ -1,{len(lines)} +0,0 @@")
                 diff_lines.extend(f"-{line}" for line in lines)
