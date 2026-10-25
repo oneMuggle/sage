@@ -13,7 +13,8 @@ export function Agents() {
   const [editing, setEditing] = useState(false);
   // 用 Partial<AgentUpdate> 而非 Partial<AgentProfile> — 避免 id/updated_at
   // 等不允许更新的字段悄悄随 PATCH body 一起送出 (Pydantic 不会接, 但
-  // 类型层面应当先拦)。EditAgentForm 实际只动 name/description/system_prompt/model_config。
+  // 类型层面应当先拦)。EditAgentForm 动 name/description/system_prompt/
+  // tools/model_config/max_iterations。
   const [editForm, setEditForm] = useState<Partial<AgentUpdate>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

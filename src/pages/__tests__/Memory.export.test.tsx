@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getMemoriesMock = vi.fn();
@@ -28,6 +29,15 @@ vi.mock('../../shared/ui/ErrorState', () => ({
 }));
 
 import { Memory } from '../Memory';
+
+// P0-6: Memory 页读取 /memory?focus=<id> 深链参数，需在 Router 内渲染。
+function renderMemory() {
+  return render(
+    <MemoryRouter initialEntries={['/memory']}>
+      <Memory />
+    </MemoryRouter>,
+  );
+}
 
 function response(
   items: Array<{ id: string }>,
@@ -69,7 +79,7 @@ describe('Memory export pagination', () => {
       .mockResolvedValueOnce(response([{ id: 'first' }], 1, 2))
       .mockResolvedValueOnce(response([{ id: 'second' }], 2, 2));
 
-    render(<Memory />);
+    renderMemory();
     await screen.findByRole('button', { name: '导出' });
     screen.getByRole('button', { name: '导出' }).click();
 
@@ -82,7 +92,7 @@ describe('Memory export pagination', () => {
   it('reports a page mismatch without downloading', async () => {
     getMemoriesMock.mockResolvedValue(response([{ id: 'first' }], 2, 1));
 
-    render(<Memory />);
+    renderMemory();
     screen.getByRole('button', { name: '导出' }).click();
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('超过当前导出上限'));
@@ -92,7 +102,7 @@ describe('Memory export pagination', () => {
   it('rejects a response whose declared total exceeds the export cap', async () => {
     getMemoriesMock.mockResolvedValue(response([{ id: 'first' }], 1, 1001));
 
-    render(<Memory />);
+    renderMemory();
     screen.getByRole('button', { name: '导出' }).click();
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('超过当前导出上限'));
@@ -106,7 +116,7 @@ describe('Memory export pagination', () => {
     const firstPage = Array.from({ length: 100 }, (_, index) => ({ id: `m-${index}` }));
     getMemoriesMock.mockResolvedValue(response(firstPage, 1, 1500));
 
-    render(<Memory />);
+    renderMemory();
     screen.getByRole('button', { name: '导出' }).click();
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('超过当前导出上限'));
@@ -118,7 +128,7 @@ describe('Memory export pagination', () => {
     const items = Array.from({ length: 1001 }, (_, index) => ({ id: `m-${index}` }));
     getMemoriesMock.mockResolvedValue(response(items, 1, 1000));
 
-    render(<Memory />);
+    renderMemory();
     screen.getByRole('button', { name: '导出' }).click();
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('超过当前导出上限'));
@@ -130,7 +140,7 @@ describe('Memory export pagination', () => {
       .mockResolvedValueOnce(response([{ id: 'first' }], 1, 3))
       .mockResolvedValueOnce(response([], 2, 3));
 
-    render(<Memory />);
+    renderMemory();
     screen.getByRole('button', { name: '导出' }).click();
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('分页不完整'));
