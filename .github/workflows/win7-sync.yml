@@ -86,7 +86,7 @@ jobs:
        (github.event_name == 'workflow_dispatch' && inputs.do_sync))
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ secrets.WIN7_SYNC_TOKEN || github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -123,6 +123,13 @@ jobs:
         if: steps.sync.outputs.rc == '0'
         run: |
           BR="${{ steps.sync.outputs.branch }}"
+          # GITHUB_TOKEN 无权推送 .github/workflows/**（缺 workflows 权限）：
+          # 推送前把 workflow 文件回退到 release/win7 版本，改动留待人工同步。
+          if [ -d .github/workflows ]; then
+            git checkout -q origin/release/win7 -- .github/workflows 2>/dev/null || true
+            git add -A .github/workflows 2>/dev/null || true
+            git -c core.autocrlf=false commit -q --amend --no-edit 2>/dev/null || true
+          fi
           git push -f origin "HEAD:$BR"
           if gh pr view "$BR" --json number >/dev/null 2>&1; then
             gh pr edit "$BR" --body-file sync-report.md
@@ -139,6 +146,13 @@ jobs:
           BR="${{ steps.sync.outputs.branch }}"
           git add -A
           git -c core.autocrlf=false commit -q -m "WIP(win7-sync): 冲突现场，待人工解决（勿合并）" || true
+          # GITHUB_TOKEN 无权推送 .github/workflows/**（缺 workflows 权限）：
+          # 推送前把 workflow 文件回退到 release/win7 版本，改动留待人工同步。
+          if [ -d .github/workflows ]; then
+            git checkout -q origin/release/win7 -- .github/workflows 2>/dev/null || true
+            git add -A .github/workflows 2>/dev/null || true
+            git -c core.autocrlf=false commit -q --amend --no-edit 2>/dev/null || true
+          fi
           git push -f origin "HEAD:$BR"
           if ! gh pr view "$BR" --json number >/dev/null 2>&1; then
             gh pr create --draft --base release/win7 --head "$BR" \
