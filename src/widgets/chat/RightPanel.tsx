@@ -14,7 +14,9 @@ import {
 import { useConversationTurns, type TurnItem } from '../../features/chat/useConversationTurns';
 import {
   isArtifactAutoOpenEnabled,
+  isAutoCollapseSidebarEnabled,
   setArtifactAutoOpenEnabled,
+  setAutoCollapseSidebarEnabled,
   useRightPanelStore,
   type RightPanelTab,
 } from '../../features/right-panel/rightPanelStore';
@@ -78,18 +80,18 @@ const TAB_LABELS: Record<RightPanelTab, string> = {
  * 只剩 ~30px，「产物 (12)」放不下。档位整体上移到 360/520/720，
  * L 档才有足够宽度铺开变更/预览这类宽内容。
  */
+/** 默认宽度（= S 档；双击拖拽手柄复位也用它） */
+const DEFAULT_PANEL_WIDTH = 360;
+
+/** 拖拽宽度的上下限（放宽后能容纳变更/预览等宽内容，且不会把聊天区挤没） */
+const MIN_PANEL_WIDTH = 280;
+const MAX_PANEL_WIDTH = 900;
+
 const WIDTH_PRESETS = [
   { label: 'S', width: 360 },
   { label: 'M', width: 520 },
   { label: 'L', width: 720 },
 ] as const;
-
-/** 面板默认宽度（= S 档；拖拽手柄双击复位也回落至此） */
-const DEFAULT_PANEL_WIDTH = 360;
-
-/** 拖拽宽度上下限（下限留给三档操作区，上限放开以容纳宽内容） */
-const MIN_PANEL_WIDTH = 280;
-const MAX_PANEL_WIDTH = 900;
 
 interface PanelHeaderProps {
   tab?: RightPanelTab;
@@ -103,6 +105,8 @@ interface PanelHeaderProps {
   onApplyPreset?: (width: number) => void;
   /** 当前 Tab 是否为产物（决定是否显示自动唤起开关） */
   showAutoOpenToggle?: boolean;
+  /** UI 优化 2026-10-14: 显示「右栏打开时折叠左栏」开关 */
+  showAutoCollapseToggle?: boolean;
   /** R2 批次 C: 产物计数徽标（>0 时产物 Tab 显示 "产物 (N)"） */
   artifactCount?: number;
   /** R3 批次 C: 变更计数徽标（>0 时变更 Tab 显示 "变更 (N)"） */
@@ -111,7 +115,6 @@ interface PanelHeaderProps {
 
 /**
  * 产物自动唤起开关（就地读写 localStorage；事件侧 isArtifactAutoOpenEnabled 同源）。
- *
  * 2026-09-29 由顶栏铃铛图标按钮改为「选项」浮层内的一行 —— 铃铛独占
  * 32px 顶栏空间，而它只服务于产物 Tab，常态展示属于空间浪费。
  */
@@ -135,10 +138,35 @@ function AutoOpenToggleRow() {
   );
 }
 
+/**
+ * UI 优化 2026-10-14: 右栏打开时自动折叠左栏开关。
+ * 默认关闭。右栏最大化时始终折叠（不受此开关影响）。
+ */
+function AutoCollapseSidebarToggleRow() {
+  const [enabled, setEnabled] = useState(() => isAutoCollapseSidebarEnabled());
+  return (
+    <button
+      aria-pressed={enabled}
+      className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-hover hover:text-text"
+      onClick={() => {
+        const next = !enabled;
+        setAutoCollapseSidebarEnabled(next);
+        setEnabled(next);
+      }}
+      title={enabled ? '右栏打开时自动折叠左栏：开' : '右栏打开时自动折叠左栏：关'}
+      data-testid="right-panel-auto-collapse-sidebar-toggle"
+    >
+      <span className="flex-1 text-left">右栏打开时折叠左栏</span>
+    </button>
+  );
+}
+
 interface PanelOptionsMenuProps {
   activePreset?: string | null;
   onApplyPreset?: (width: number) => void;
   showAutoOpenToggle?: boolean;
+  /** UI 优化 2026-10-14: 显示「右栏打开时折叠左栏」开关 */
+  showAutoCollapseToggle?: boolean;
 }
 
 /**
@@ -152,8 +180,10 @@ function PanelOptionsMenu({
   activePreset,
   onApplyPreset,
   showAutoOpenToggle,
+  showAutoCollapseToggle,
 }: PanelOptionsMenuProps) {
-  const hasItems = Boolean(onApplyPreset) || Boolean(showAutoOpenToggle);
+  const hasItems =
+    Boolean(onApplyPreset) || Boolean(showAutoOpenToggle) || Boolean(showAutoCollapseToggle);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -228,6 +258,14 @@ function PanelOptionsMenu({
               <AutoOpenToggleRow />
             </>
           )}
+          {showAutoCollapseToggle && (
+            <>
+              {(onApplyPreset || showAutoOpenToggle) && (
+                <div className="my-1 border-t border-border" aria-hidden />
+              )}
+              <AutoCollapseSidebarToggleRow />
+            </>
+          )}
         </div>
       )}
     </div>
@@ -243,6 +281,7 @@ export function PanelHeader({
   activePreset,
   onApplyPreset,
   showAutoOpenToggle,
+  showAutoCollapseToggle,
   artifactCount = 0,
   changesCount = 0,
 }: PanelHeaderProps) {
@@ -269,43 +308,47 @@ export function PanelHeader({
     </button>
   );
 
-  // list 视图:Progress / Artifacts tabs + 选项/最大化/× 按钮
+  // list 视图:Progress / Artifacts tabs + 档位/最大化/× 按钮
   if (tab !== undefined && onTabChange) {
     const countOf = (t: RightPanelTab) =>
       t === 'artifacts' ? artifactCount : t === 'changes' ? changesCount : 0;
     return (
-      <div className="h-12 flex border-b border-border items-center pr-1 min-w-0" data-testid="right-panel-header">
+      <div
+        className="h-12 flex border-b border-border items-center pr-1 min-w-0"
+        data-testid="right-panel-header"
+      >
         <div className="flex-1 min-w-0 flex items-center overflow-x-auto no-scrollbar">
-        {RIGHT_PANEL_TABS.map((t) => {
-          const count = countOf(t);
-          return (
-            <button
-              key={t}
-              // 计数压成小号数字而非「(N)」后缀：Tab 行在 S 档下每个 Tab
-              // 只有 ~50px，带括号的形式会截断。aria-label 保留「产物 (N)」
-              // 完整读法，屏幕阅读器与既有测试断言不受影响。
-              aria-label={count > 0 ? `${TAB_LABELS[t]} (${count})` : TAB_LABELS[t]}
-              className={
-                'shrink-0 whitespace-nowrap px-2 py-2 text-xs font-medium transition-colors ' +
-                (tab === t
-                  ? 'text-primary border-b-2 border-primary'
-                  : 'text-text-secondary hover:text-text')
-              }
-              onClick={() => onTabChange(t)}
-            >
-              {TAB_LABELS[t]}
-              {count > 0 && (
-                <span className="ml-0.5 text-ui-xs tabular-nums opacity-70">{count}</span>
-              )}
-            </button>
-          );
-        })}
+          {RIGHT_PANEL_TABS.map((t) => {
+            const count = countOf(t);
+            return (
+              <button
+                key={t}
+                // 计数压成小号数字而非「(N)」后缀：Tab 行在 S 档下每个 Tab
+                // 只有 ~50px，带括号的形式会截断。aria-label 保留「产物 (N)」
+                // 完整读法，屏幕阅读器与既有测试断言不受影响。
+                aria-label={count > 0 ? `${TAB_LABELS[t]} (${count})` : TAB_LABELS[t]}
+                className={
+                  'shrink-0 whitespace-nowrap px-2 py-2 text-xs font-medium transition-colors ' +
+                  (tab === t
+                    ? 'text-primary border-b-2 border-primary'
+                    : 'text-text-secondary hover:text-text')
+                }
+                onClick={() => onTabChange(t)}
+              >
+                {TAB_LABELS[t]}
+                {count > 0 && (
+                  <span className="ml-0.5 text-ui-xs tabular-nums opacity-70">{count}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
         <div className="flex items-center gap-0.5 ml-1 shrink-0">
           <PanelOptionsMenu
             activePreset={activePreset}
             onApplyPreset={onApplyPreset}
             showAutoOpenToggle={showAutoOpenToggle}
+            showAutoCollapseToggle={showAutoCollapseToggle}
           />
           {maximizeButton}
           {closeButton}
@@ -316,7 +359,10 @@ export function PanelHeader({
 
   // ArtifactViewer 视图:最大化/× 按钮
   return (
-    <div className="flex justify-end border-b border-border items-center h-12 px-2 gap-0.5" data-testid="right-panel-header">
+    <div
+      className="flex justify-end border-b border-border items-center h-12 px-2 gap-0.5"
+      data-testid="right-panel-header"
+    >
       {maximizeButton}
       {closeButton}
     </div>
@@ -356,9 +402,8 @@ function RightPanelInner({
     return c && !c.clean ? c.changes.length : 0;
   });
   // P0-3 (UI 优化方案 2026-09-12): 面板宽度可调 —— 拖拽左边缘手柄，
-  // 持久化到 localStorage。
-  // 批次 D: applyWidth 供选项浮层档位/双击重置/键盘调整（clamp + 立即持久化）。
-  // 2026-09-29: 范围放宽到 280~900、默认 360（5 个 Tab 不再挤在 320px 里）。
+  // 持久化到 localStorage（范围 280~600，默认 320）。
+  // 批次 D: applyWidth 供档位按钮/双击重置/键盘调整（clamp + 立即持久化）。
   const {
     width,
     isDragging,
@@ -459,7 +504,7 @@ function RightPanelInner({
         <div
           className="absolute top-0 left-0 h-full w-1.5 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors z-10"
           onMouseDown={onResizeMouseDown}
-          onDoubleClick={() => applyWidth(DEFAULT_PANEL_WIDTH)}
+          onDoubleClick={() => applyWidth(320)}
           onKeyDown={(e) => {
             if (e.key === 'ArrowLeft') {
               e.preventDefault();
@@ -485,6 +530,7 @@ function RightPanelInner({
         activePreset={activePreset}
         onApplyPreset={applyWidth}
         showAutoOpenToggle={activeTab === 'artifacts'}
+        showAutoCollapseToggle
         artifactCount={sessionId ? artifacts.length : 0}
         changesCount={changesCount}
       />
