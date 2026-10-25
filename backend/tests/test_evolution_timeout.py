@@ -30,9 +30,8 @@ def test_evolution_task_timeout():
     task = SlowTask()
 
     # Use a short timeout for testing
-    with patch("backend.scheduler.evolution._EVOLUTION_TASK_TIMEOUT_S", 0.1):
-        with pytest.raises(asyncio.TimeoutError):
-            task.run()
+    with patch("backend.scheduler.evolution._EVOLUTION_TASK_TIMEOUT_S", 0.1), pytest.raises(asyncio.TimeoutError):
+        task.run()
 
 
 def test_evolution_task_completes_before_timeout():
