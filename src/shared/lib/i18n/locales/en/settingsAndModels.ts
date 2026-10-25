@@ -344,6 +344,11 @@ export const enSettingsAndModels = {
   'settings.permission.rules.clear_failed': 'Failed to delete all rules, please retry',
   'settings.permission.rules.plugin_uninstalled': 'Plugin uninstalled',
   'settings.permission.rules.plugin_missing': 'Plugin not found',
+  'settings.permission.rules.by_plugin': 'Delete by plugin:',
+  'settings.permission.rules.delete_plugin_confirm_title':
+    'Delete all remembered rules for this plugin?',
+  'settings.permission.rules.delete_plugin_failed':
+    'Failed to delete rules for this plugin, please retry',
 
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': 'Usage',

@@ -30,7 +30,8 @@
 | R98 | 插件 profile 白名单结构化身份匹配 | ✅ #2440 |
 | R99 | 已保存权限规则写入完整性（记住去重 + 按内容删除） | ✅ #2452 |
 | R100 | 已保存权限规则一键清空（撤销全部持久信任） | ✅ #2474 |
-| R101 | 已保存权限规则插件归属标注（孤儿规则可见化） | 🔄 #2484 |
+| R101 | 已保存权限规则插件归属标注（孤儿规则可见化） | ✅ #2484 |
+| R102 | 按插件删除其全部已保存规则（按归属撤销持久信任） | 🔄 #2493 |
 
 ## 2. 交付总账
 
@@ -54,7 +55,8 @@
 | R98 | `tool_name_in_allowlist` 权威 `plugin_name` 结构化匹配 + registry/agent 三道闸与前端覆盖镜像透传与测试/文档 | #2440 | 待对齐 | ✅ 已交付 |
 | R99 | remember 追加去重 + 删除端点按内容定位 + Electron/设置页传参切换与测试/文档 | #2452 | 待对齐 | ✅ 已交付 |
 | R100 | `POST /permissions/rules/clear` + Electron 命令 + 设置页全部删除（确认后）与测试/文档 | #2474 | 待对齐 | ✅ 已交付 |
-| R101 | 规则列表响应只读归属标注（plugin_name/plugin_status）+ 设置页孤儿规则徽标与测试/文档 | #2484 | 待对齐 | 🔄 |
+| R101 | 规则列表响应只读归属标注（plugin_name/plugin_status）+ 设置页孤儿规则徽标与测试/文档 | #2484 | 待对齐 | ✅ 已交付 |
+| R102 | `POST /permissions/rules/delete-by-plugin`（权威插件名选择子）+ Electron 命令 + 设置页按归属删除与测试/文档 | #2493 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -444,7 +446,7 @@
   PR #2474 GitHub All Checks pass，已 squash 合并为
   `main` `3d0b6a3a7e7d68e61156d686842f4c090a0b2d43`。
 
-## 21. R101 交付边界（PR #2484 待合并）
+## 21. R101 交付边界（已合并）
 
 > spec：`2026-10-24_permission-rules-plugin-status-r101.md`。
 > R101 是本插件账轮次号，与其它账本的同号计划无关。
@@ -462,6 +464,28 @@
 - **本地证据**：后端新文件 5 例 + 既有 45 例、相邻
   95 例，前端定向 38 例通过；tsc、ESLint（0 errors）、
   Ruff 全库、py38、architecture、silent-exceptions、
+  diff-check 与 diagnostics 全绿；PR #2484 GitHub
+  All Checks pass，已 squash 合并为 `main`
+  `556cf0858b0f2e01b5f69b8515ea098abf9b00f5`。
+
+## 22. R102 交付边界（PR #2493 待合并）
+
+> spec：`2026-10-25_permission-rules-by-plugin-r102.md`。
+> R102 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **按身份撤销，只减不增**：delete-by-plugin 的唯一
+  选择子是生命周期记录中的权威插件名，删除集合由
+  服务端用 R101 同款结构化归属（含长名字消歧）选出，
+  客户端不传 pattern、无条件表达能力；与 R100 的
+  「清空不带筛选参数」不冲突——那是对全清端点的约束，
+  本轮是独立的按身份撤销端点。
+- **校验不了身份就不用写**：名字不在册 400 不写，
+  插件索引不可读 503 不写；无规则时幂等 ok 且不写
+  存储。missing 孤儿无权威名字，不在此端点范围。
+- **本地证据**：后端新文件 7 例 + 既有 50 例、相邻
+  95 例，前端定向 43 例通过；ipc-manifest
+  （265 commands）、tsc、ESLint（0 errors）、Ruff
+  全库、py38、architecture、silent-exceptions、
   diff-check 与 diagnostics 全绿。
 
 —— 本账本由插件化循环维护，随轮次追加。

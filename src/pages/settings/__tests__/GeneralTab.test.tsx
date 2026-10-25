@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   listRules: vi.fn(),
   deleteRule: vi.fn(),
   clearRules: vi.fn(),
+  deleteRulesByPlugin: vi.fn(),
   confirmDialog: vi.fn(),
 }));
 
@@ -69,6 +70,7 @@ vi.mock('../../../shared/api/permissionApi', () => ({
     listRules: (...args: unknown[]) => mocks.listRules(...args),
     deleteRule: (...args: unknown[]) => mocks.deleteRule(...args),
     clearRules: (...args: unknown[]) => mocks.clearRules(...args),
+    deleteRulesByPlugin: (...args: unknown[]) => mocks.deleteRulesByPlugin(...args),
   },
 }));
 
@@ -125,6 +127,8 @@ beforeEach(() => {
   mocks.listRules.mockResolvedValue([]);
   mocks.deleteRule.mockResolvedValue([]);
   mocks.clearRules.mockResolvedValue([]);
+  mocks.deleteRulesByPlugin.mockReset();
+  mocks.deleteRulesByPlugin.mockResolvedValue([]);
   mocks.confirmDialog.mockResolvedValue(true);
 });
 
@@ -282,6 +286,95 @@ describe('GeneralTab remembered rules manager (R97)', () => {
     );
     expect(screen.queryByTestId('permission-rule-plugin-status-2')).not.toBeInTheDocument();
     expect(screen.queryByTestId('permission-rule-plugin-status-3')).not.toBeInTheDocument();
+  });
+
+  it('deletes all rules of a plugin after confirmation', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__demo__*',
+        decision: 'deny',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+      {
+        tool_pattern: 'plugin__demo__run',
+        decision: 'allow',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+    mocks.deleteRulesByPlugin.mockResolvedValue([
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-by-plugin-demo')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-by-plugin-demo'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ danger: true, message: 'demo' }),
+      );
+      expect(mocks.deleteRulesByPlugin).toHaveBeenCalledWith('demo');
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('plugin__demo__*')).not.toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId('permission-rules-delete-by-plugin-demo'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not delete by plugin when the confirmation is cancelled', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__demo__*',
+        decision: 'deny',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+    ]);
+    mocks.confirmDialog.mockResolvedValue(false);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-by-plugin-demo')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-by-plugin-demo'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalled();
+    });
+    expect(mocks.deleteRulesByPlugin).not.toHaveBeenCalled();
+    expect(screen.getByText('plugin__demo__*')).toBeInTheDocument();
+  });
+
+  it('keeps the list and shows an error when deleting by plugin fails', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__demo__*',
+        decision: 'deny',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+    ]);
+    mocks.deleteRulesByPlugin.mockRejectedValue(new Error('backend down'));
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-by-plugin-demo')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-by-plugin-demo'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('permission-rules-delete-by-plugin-failed'),
+      ).toHaveTextContent('按插件删除规则失败');
+    });
+    expect(screen.getByText('plugin__demo__*')).toBeInTheDocument();
   });
 
   it('deletes a rule and adopts the server-returned list', async () => {
