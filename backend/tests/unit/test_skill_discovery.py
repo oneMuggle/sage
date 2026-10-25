@@ -256,8 +256,8 @@ Second paragraph.
     def test_default_skills_dir(self):
         """Test default skills directory."""
         service = SkillDiscoveryService()
-        # Should be ~/.sage/skills
-        assert str(service.skills_dir).endswith(".sage/skills")
+        # Should be ~/.sage/skills (compare path parts: str() uses "\\" on Windows)
+        assert service.skills_dir.parts[-2:] == (".sage", "skills")
 
     def test_custom_skills_dir(self, tmp_path):
         """Test custom skills directory."""
