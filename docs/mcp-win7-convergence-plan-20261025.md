@@ -154,3 +154,73 @@
 `backend 199` / `src 162` / `backend/tests 150` / `docs 72` / `electron 47` / `scripts 23` / `.github 7` / 其余 15。
 
 其中真正可再自动化的部分已基本榨干：本轮实测「safe-take-main + 三方干净合并」的命中率约 **12%~25%**，且每批都需要 `tsc` / `vitest` / `pytest` / `ruff` 四道闸逐一把不合格文件剔除。**剩余主体是 168 个 both-changed 冲突文件与 161 个 no-base 文件，只能人工 3-way。**
+
+## 9. 批次 5：src 冲突文件机械解冲突（2026-10-25）
+
+67 个三方冲突文件按**冲突块形态**分型处理，只有三类可机械判定：
+
+| 形态 | 判定依据 | 处置 |
+|---|---|---|
+| 纯顺序差异 | 两侧行集合相同、顺序不同 | 取 main 顺序 |
+| 子集包含 | 一侧是另一侧超集 | 取超集 |
+| 注释标记差异 | 仅差 `（同步 #NNN）` 标记 | 取 main 干净版 |
+| 其余 | 语义分叉 | **保留冲突，不动** |
+
+结果：**27 个文件机械解冲突成功** → 以 `tsc` 为唯一判据迭代剔除后保留 **16 个**（#2507 → `b43e3765`）。
+
+### 淘汰的 11 个及原因（全部有实测证据）
+
+| 文件 | 原因 |
+|---|---|
+| `AtFileMenu.tsx` | 用了 `'allowed-file'`，但 `FileSearchKind` 仍是 win7 版（`fileSearchClient.ts` 在冲突集） |
+| `chatStreamStore.ts` | 「取超集」产生重复方法 `addCompletedStep` / `finalizeStep` |
+| `shared/ui/index.ts` | 「取超集」产生重复导出 `Card` / `PanelShell` |
+| `OfficeDeliveryDrawer.tsx` + 其 test | 依赖 office repair API（未合） |
+| `GeneralTab.tsx` + 其 test | 依赖 permissionApi 插件状态（未合） |
+| `PromptTemplatesTab.test.tsx` | 被测组件 `PromptTemplatesTab.tsx` 仍在冲突集 |
+| `fileSearchClient.test.ts` | 被测 `fileSearchClient.ts` 仍在冲突集 |
+| `orchRunClient.test.ts` | 被测 `orchRunClient.ts` 因 IPC 未注册已延后 |
+| `SessionModelPicker.test.tsx` | 被测 `SessionModelPicker.tsx` 仍在冲突集 |
+
+**新教训：`subset`/`order` 启发式会制造重复声明。** 必须以 `tsc` 为唯一判据迭代剔除——我的静态重复声明检测既有误报（局部变量 `next`/`slots`）又有漏报（`export { Card } from` 形式）。
+
+### 剩余 40 个冲突文件分诊
+
+| 类别 | 数量 | 含义 |
+|---|---:|---|
+| `NEW-SYMBOL` | 6 | main 侧依赖 win7 尚不存在的符号，须先移植依赖 |
+| `TEXTUAL` | 34 | 纯语义分叉，需人读代码决定 |
+
+**`NEW-SYMBOL` 明细**：
+
+| 块数 | 文件 | 缺失符号 |
+|---:|---|---|
+| 1 | `src/shared/lib/hooks/useFeatureUnlock.ts` | `useFeatureExplicitlyDisabled` |
+| 2 | `src/shared/lib/hooks/__tests__/useFeatureUnlock.test.ts` | 同上 |
+| 2 | `src/widgets/layout/Layout.tsx` | `useRightPanelStore` |
+| 3 | `src/widgets/chat/progress/ProgressSection.tsx` | `useState` |
+| 3 | `src/widgets/memory/MemoryBrowser.tsx` | `handleDeleteMemory` |
+| 12 | `src/widgets/layout/Sidebar.tsx` | `useCallback`、`useFeatureExplicitlyDisabled` |
+
+**需要产品决策的两个文件**（不是技术冲突）：
+
+- `src/widgets/layout/Sidebar.tsx`（12 块）：win7 有 UX-IA R3 的「56px rail + 分组侧栏 + 可折叠」重设计；main 有 P1-7「锁定功能可见化」+ `/office` 注册 + `useFeatureExplicitlyDisabled`。二者是两套导航语义，合谁都得先定产品口径。
+- `src/widgets/chat/RightPanel.tsx`（12 块）：win7 右栏布局与 main 的变更互相覆盖。
+
+**这两项建议登记为「待产品裁决」，不纳入机械收敛。**
+
+## 10. 收敛总账（截至批次 5）
+
+| 时点 | 异动文件 | main-only | real | 需动作 |
+|---|---:|---:|---:|---:|
+| 起点 | 983 | 233 | 421 | 714 |
+| 批次 1（docs） | 706 | 29 | 348 | 437 |
+| 批次 3（src 三方合并） | 683 | 30 | 323 | 414 |
+| 批次 4（backend/tests） | 676 | 32 | 314 | 407 |
+| 批次 5（src 冲突机械解） | **666** | **34** | **306** | **401** |
+
+五批合计收敛 **313 个文件**（714 → 401）。剩余 401 中：`backend 199`、`src 155`、`backend/tests 146`、`docs 73`、`electron 47`、`scripts 23`。
+
+### 结论：src 的机械收敛已到极限
+
+`src` 从 178 → 155，剩下的 40 个冲突文件里 34 个是纯语义分叉。机械手段（顺序/子集/注释）已全部用尽，继续自动化只会制造重复声明或半迁移状态。**后续 src 只能按 feature 逐个读代码人工 3-way，单文件成本约 10~30 分钟。**
