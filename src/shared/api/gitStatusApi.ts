@@ -20,6 +20,14 @@ export interface GitStatusResponse {
   is_git_repo: boolean;
 }
 
+export interface GitDiffResponse {
+  file: string;
+  status: GitFileChange['status'];
+  diff_text: string;
+  is_new_file: boolean;
+  is_deleted: boolean;
+}
+
 /**
  * 获取指定目录的 git status。
  * 非 git 目录返回 is_git_repo=false。
@@ -28,6 +36,18 @@ export interface GitStatusResponse {
 export async function getGitStatus(path: string): Promise<GitStatusResponse> {
   return backendRequest<GitStatusResponse>({
     path: `/api/v1/git/status?path=${encodeURIComponent(path)}`,
+  });
+}
+
+/**
+ * 获取指定文件相对于 HEAD 的 unified diff。
+ */
+export async function getGitDiff(
+  path: string,
+  file: string,
+): Promise<GitDiffResponse> {
+  return backendRequest<GitDiffResponse>({
+    path: `/api/v1/git/diff?path=${encodeURIComponent(path)}&file=${encodeURIComponent(file)}`,
   });
 }
 

@@ -438,6 +438,22 @@ export const enWorkspaceAndTools = {
   'git.refresh': 'Refresh',
   'git.loading': 'Loading…',
   'git.clean': 'Working tree clean',
+  'git.diff_loading': 'Loading diff…',
+  'git.diff_load_error': 'Failed to load diff',
+  'git.diff_empty_new': 'New file, no diff',
+  'git.diff_empty_deleted': 'File deleted',
+  'git.diff_no_changes': 'No changes',
+  'git.close': 'Close',
+  'git.copy_branch': 'Copy current branch name',
+  'git.copy_path': 'Copy path',
+  'git.copied': 'Copied',
+  'git.filter_all': 'All',
+  'git.filter_staged': 'Staged',
+  'git.filter_modified': 'Modified',
+  'git.filter_untracked': 'Untracked',
+  'git.more_actions': 'More actions',
+  'git.copy_all_paths': 'Copy all paths',
+  'git.copy_markdown': 'Copy Markdown summary',
 };
 
 export function formatEnWorkspaceAndToolsSummary(): string {

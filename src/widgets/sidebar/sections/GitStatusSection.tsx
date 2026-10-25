@@ -1,13 +1,13 @@
 /**
- * GitStatusSection — ZCode-inspired 侧边栏 Git 状态面板 (Phase P31 变更状态筛选与 Markdown 复制)。
+ * GitStatusSection — 侧边栏 Git 状态面板（VSCode 风格）。
  *
- * 显示当前工作区的分支 + 变更文件列表，支持按状态（全部/暂存/修改/未跟踪）过滤及一键复制变更清单。
+ * 显示当前分支 + 变更文件列表，支持按状态过滤，点击文件打开 diff 视图。
  * 数据来源: projectApi.list() 第一个（最近打开的）项目的 path。
  * 自动刷新: 30 秒轮询（组件可见时）。
  * 非 git 目录静默降级（不显示 section 内容）。
  */
 
-import { GitBranch, RefreshCw } from 'lucide-react';
+import { GitBranch, MoreVertical, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
@@ -18,6 +18,7 @@ import {
 import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { SiderSection } from '../SiderSection';
+import { GitDiffDrawer } from './GitDiffDrawer';
 
 interface GitStatusSectionProps {
   collapsed: boolean;
@@ -68,27 +69,30 @@ function statusBadge(status: GitFileChange['status']): string {
   }
 }
 
+interface FilterItem {
+  id: GitFilterCategory;
+  labelKey: string;
+}
+
+const FILTER_ITEMS: FilterItem[] = [
+  { id: 'all', labelKey: 'git.filter_all' },
+  { id: 'staged', labelKey: 'git.filter_staged' },
+  { id: 'modified', labelKey: 'git.filter_modified' },
+  { id: 'untracked', labelKey: 'git.filter_untracked' },
+];
+
 export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSectionProps) {
   const { t } = useI18n();
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [projectPath, setProjectPath] = useState<string | null>(null);
-  const [projectId, setProjectId] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<GitFilterCategory>('all');
-  const [savedSiderL4, setSavedSiderL4] = useState(false);
-  const [savedSiderL3, setSavedSiderL3] = useState(false);
-  const [convertedSiderMilestone, setConvertedSiderMilestone] = useState(false);
-  const [ingestedPaths, setIngestedPaths] = useState<Set<string>>(new Set());
-  const [guardedPaths, setGuardedPaths] = useState<Set<string>>(new Set());
-  const [l3Paths, setL3Paths] = useState<Set<string>>(new Set());
-  const [copiedFilePath, setCopiedFilePath] = useState<string | null>(null);
   const [copiedBranch, setCopiedBranch] = useState(false);
-  const [guardedAllSider, setGuardedAllSider] = useState(false);
-  const [ingestedAllSider, setIngestedAllSider] = useState(false);
-  const [copiedSiderPaths, setCopiedSiderPaths] = useState(false);
-  const [milestonePaths, setMilestonePaths] = useState<Set<string>>(new Set());
-  const [savedAllSiderL3, setSavedAllSiderL3] = useState(false);
-  const [createdAllSiderMilestones, setCreatedAllSiderMilestones] = useState(false);
+  const [copiedFilePath, setCopiedFilePath] = useState<string | null>(null);
+  const [copiedAllPaths, setCopiedAllPaths] = useState(false);
+  const [copiedMarkdown, setCopiedMarkdown] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const [diffTarget, setDiffTarget] = useState<{ path: string; status: string } | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 获取第一个项目的路径
@@ -96,17 +100,14 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
     try {
       const projects: ProjectSummary[] = await projectApi.list();
       if (projects.length > 0) {
-        // 按最近打开排序，取第一个
         const sorted = [...projects].sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0));
         setProjectPath(sorted[0].path);
-        setProjectId(sorted[0].id);
         return sorted[0].path;
       }
     } catch {
       // 静默降级
     }
     setProjectPath(null);
-    setProjectId(null);
     return null;
   }, []);
 
@@ -123,7 +124,6 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
       const result = await getGitStatus(path);
       setStatus(result);
     } catch {
-      // 后端不可用 — 静默降级
       setStatus(null);
     } finally {
       setLoading(false);
@@ -155,6 +155,57 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
     },
     [fetchStatus],
   );
+
+  // 复制分支名
+  const handleCopyBranch = useCallback(async (e: React.MouseEvent, branch: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard?.writeText(branch || 'HEAD');
+      setCopiedBranch(true);
+      setTimeout(() => setCopiedBranch(false), 1500);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // 复制单文件路径
+  const handleCopyPath = useCallback(async (e: React.MouseEvent, filePath: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await navigator.clipboard?.writeText(filePath);
+      setCopiedFilePath(filePath);
+      setTimeout(() => setCopiedFilePath(null), 1500);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // 复制全部路径
+  const handleCopyAllPaths = useCallback(async (files: GitFileChange[]) => {
+    try {
+      await navigator.clipboard?.writeText(files.map((f) => f.path).join('\n'));
+      setCopiedAllPaths(true);
+      setTimeout(() => setCopiedAllPaths(false), 1500);
+    } catch {
+      // ignore
+    }
+    setMoreMenuOpen(false);
+  }, []);
+
+  // 复制 Markdown 清单
+  const handleCopyMarkdown = useCallback(async (files: GitFileChange[], branch: string | null) => {
+    const md = `# Git Changes (${branch || 'HEAD'})\n${files.map((f) => `- [${statusBadge(f.status)}] \`${f.path}\``).join('\n')}`;
+    try {
+      await navigator.clipboard?.writeText(md);
+      setCopiedMarkdown(true);
+      setTimeout(() => setCopiedMarkdown(false), 1500);
+    } catch {
+      // ignore
+    }
+    setMoreMenuOpen(false);
+  }, []);
 
   // 非 git 仓库或无项目 → 不渲染内容
   if (!loading && status && !status.is_git_repo) {
@@ -190,432 +241,157 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
   const fileCount = status?.files.length ?? 0;
 
   return (
-    <SiderSection
-      sectionKey="git"
-      label={t('git.title')}
-      icon={GitBranch}
-      collapsed={collapsed}
-      onToggleCollapsed={onToggleCollapsed}
-      trailing={
-        <div className="flex items-center gap-1">
-          {fileCount > 0 && (
-            <span className="text-ui-xs bg-warning/10 text-warning px-1 rounded-full">
-              {fileCount}
-            </span>
-          )}
-          {status?.branch && (
+    <>
+      <SiderSection
+        sectionKey="git"
+        label={t('git.title')}
+        icon={GitBranch}
+        collapsed={collapsed}
+        onToggleCollapsed={onToggleCollapsed}
+        trailing={
+          <div className="flex items-center gap-1">
+            {fileCount > 0 && (
+              <span className="text-ui-xs bg-warning/10 text-warning px-1 rounded-full">
+                {fileCount}
+              </span>
+            )}
+            {status?.branch && (
+              <button
+                type="button"
+                onClick={(e) => handleCopyBranch(e, status.branch ?? '')}
+                className="text-ui-xs text-text-muted max-w-[68px] truncate hover:text-text"
+                title={t('git.copy_branch')}
+              >
+                {copiedBranch ? t('git.copied') : status.branch}
+              </button>
+            )}
             <button
-              type="button"
-              data-testid="git-sider-copy-branch-btn"
-              onClick={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                try {
-                  await navigator.clipboard?.writeText(status.branch || 'HEAD');
-                  setCopiedBranch(true);
-                  setTimeout(() => setCopiedBranch(false), 1500);
-                } catch {
-                  // ignore in test/offline mode
-                }
-              }}
-              className="text-ui-xs text-text-muted max-w-[68px] truncate hover:text-text"
-              title="复制当前分支名称"
+              onClick={handleRefresh}
+              title={t('git.refresh')}
+              aria-label={t('git.refresh')}
+              className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text hover:bg-bg-hover"
             >
-              {copiedBranch ? '已复制' : status.branch}
+              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
             </button>
-          )}
-          <button
-            onClick={handleRefresh}
-            title={t('git.refresh')}
-            aria-label={t('git.refresh')}
-            className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text hover:bg-bg-hover"
-          >
-            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      }
-      render={() => {
-        if (loading && !status) {
-          return <p className="text-ui-xs text-text-muted px-2 py-1 italic">{t('git.loading')}</p>;
-        }
-
-        if (!status || status.files.length === 0) {
-          return <p className="text-ui-xs text-text-muted px-2 py-1 italic">{t('git.clean')}</p>;
-        }
-
-        const filteredFiles = status.files.filter((f) => {
-          if (filterCategory === 'all') return true;
-          if (filterCategory === 'staged') return f.status === 'staged';
-          if (filterCategory === 'untracked') return f.status === 'untracked';
-          return (
-            f.status === 'modified' ||
-            f.status === 'deleted' ||
-            f.status === 'renamed' ||
-            f.status === 'conflicted'
-          );
-        });
-
-        return (
-          <div className="space-y-1">
-            <div
-              className="flex flex-wrap items-center gap-1 px-2 pt-0.5"
-              data-testid="git-sider-filter-bar"
-            >
-              {(
-                [
-                  { id: 'all', label: '全部' },
-                  { id: 'staged', label: '暂存' },
-                  { id: 'modified', label: '修改' },
-                  { id: 'untracked', label: '未跟踪' },
-                ] as const
-              ).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setFilterCategory(item.id)}
-                  data-testid={`git-sider-filter-${item.id}`}
-                  className={`rounded px-1.5 py-0.5 text-ui-2xs transition-colors ${
-                    filterCategory === item.id
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-bg-secondary text-text-muted hover:text-text'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-              {projectId && (
-                <>
-                  <button
-                    type="button"
-                    data-testid="git-sider-save-l4-btn"
-                    onClick={async () => {
-                      if (savedSiderL4) return;
-                      setSavedSiderL4(true);
-                      if (typeof projectApi?.addMaterial === 'function') {
-                        try {
-                          await projectApi.addMaterial(projectId, {
-                            content: `# 侧边栏 Git 变更快照 (${status.branch || 'HEAD'})\n${status.files.map((f) => `- [${statusBadge(f.status)}] \`${f.path}\``).join('\n')}`,
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {savedSiderL4 ? '已存L4' : '存L4'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="git-sider-save-l3-btn"
-                    onClick={async () => {
-                      if (savedSiderL3) return;
-                      setSavedSiderL3(true);
-                      if (typeof projectApi?.confirmKnowledge === 'function') {
-                        try {
-                          await projectApi.confirmKnowledge(projectId, {
-                            entries: [
-                              {
-                                category: 'note',
-                                content: `侧边栏 Git 变更快照 (${status.branch || 'HEAD'})：共 ${status.files.length} 个变更文件`,
-                                importance: 6,
-                                sourceMessageIds: [],
-                                reasoning: '侧边栏 Git 变更状态沉淀至 L3 画像',
-                              },
-                            ],
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {savedSiderL3 ? '已存L3' : '存L3'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="git-sider-to-milestone-btn"
-                    onClick={async () => {
-                      if (convertedSiderMilestone) return;
-                      setConvertedSiderMilestone(true);
-                      if (typeof projectApi?.createMilestone === 'function') {
-                        try {
-                          await projectApi.createMilestone(projectId, {
-                            title: `[Git 变更审校] ${status.branch || 'HEAD'} (${filteredFiles.length} 个文件)`,
-                            description: filteredFiles.map((f) => f.path).join('、'),
-                            status: 'in_progress',
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {convertedSiderMilestone ? '已转里程碑' : '转里程碑'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="git-sider-guard-all-btn"
-                    onClick={async () => {
-                      if (guardedAllSider) return;
-                      setGuardedAllSider(true);
-                      if (typeof projectApi?.createConstraint === 'function') {
-                        for (const f of filteredFiles) {
-                          try {
-                            await projectApi.createConstraint(projectId, {
-                              category: 'file_change_guard',
-                              content: `侧边栏 Git 变更护栏：修改 ${f.path} 须通过契约与单测核验`,
-                              triggerPattern: f.path,
-                              priority: 8,
-                            });
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {guardedAllSider ? '已全护栏' : '全护栏L2'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="git-sider-ingest-all-btn"
-                    onClick={async () => {
-                      if (ingestedAllSider) return;
-                      setIngestedAllSider(true);
-                      if (typeof projectApi?.addMaterialFromFile === 'function') {
-                        for (const f of filteredFiles.slice(0, 12)) {
-                          try {
-                            await projectApi.addMaterialFromFile(projectId, f.path);
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {ingestedAllSider ? '已全入库' : '全入库L4'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="git-sider-copy-paths-btn"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard?.writeText(
-                          filteredFiles.map((f) => f.path).join('\n'),
-                        );
-                        setCopiedSiderPaths(true);
-                        setTimeout(() => setCopiedSiderPaths(false), 1500);
-                      } catch {
-                        // ignore in test/offline mode
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {copiedSiderPaths ? '已复制路径' : '复制路径'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="git-sider-all-to-l3-btn"
-                    onClick={async () => {
-                      if (savedAllSiderL3) return;
-                      setSavedAllSiderL3(true);
-                      if (typeof projectApi?.confirmKnowledge === 'function') {
-                        try {
-                          await projectApi.confirmKnowledge(projectId, {
-                            entries: [
-                              {
-                                category: 'note',
-                                content: `侧边栏批量沉淀 Git 变更 (${status.branch || 'HEAD'} · ${filteredFiles.length} 个文件)：${filteredFiles
-                                  .slice(0, 12)
-                                  .map((f) => `${f.path}[${f.status}]`)
-                                  .join('、')}`,
-                                importance: 6,
-                                sourceMessageIds: [],
-                                reasoning: '侧边栏 Git 筛选文件批量沉淀至 L3 画像',
-                              },
-                            ],
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {savedAllSiderL3 ? '已全存L3' : '全存L3'}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="git-sider-all-to-milestone-btn"
-                    onClick={async () => {
-                      if (createdAllSiderMilestones) return;
-                      setCreatedAllSiderMilestones(true);
-                      if (typeof projectApi?.createMilestone === 'function') {
-                        try {
-                          await projectApi.createMilestone(projectId, {
-                            title: `[Git 批量变更复核] ${status.branch || 'HEAD'} (${filteredFiles.length} 个文件)`,
-                            description: filteredFiles
-                              .slice(0, 12)
-                              .map((f) => `${f.path} [${f.status}]`)
-                              .join(' · '),
-                            status: 'pending',
-                          });
-                        } catch {
-                          // ignore in test/offline mode
-                        }
-                      }
-                    }}
-                    className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {createdAllSiderMilestones ? '已全建里程碑' : '全建里程碑'}
-                  </button>
-                </>
-              )}
-            </div>
-            <ul className="flex flex-col" data-testid="git-status-list">
-              {filteredFiles.slice(0, 12).map((file) => (
-                <li
-                  key={`${file.status}-${file.path}`}
-                  className="group flex items-center gap-1.5 px-2 py-1 rounded-radius-sm hover:bg-bg-hover"
-                  title={file.path}
-                >
-                  <span
-                    className={`text-ui-xs font-mono w-3 text-center flex-shrink-0 ${statusColor(file.status)}`}
-                  >
-                    {statusBadge(file.status)}
-                  </span>
-                  <span className="text-ui-xs text-text truncate flex-1">{file.path}</span>
-                  {projectId && (
-                    <button
-                      type="button"
-                      data-testid={`git-sider-ingest-${file.path}`}
-                      onClick={async () => {
-                        if (ingestedPaths.has(file.path)) return;
-                        setIngestedPaths((prev) => new Set(prev).add(file.path));
-                        if (typeof projectApi?.addMaterialFromFile === 'function') {
-                          try {
-                            await projectApi.addMaterialFromFile(projectId, file.path);
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }
-                      }}
-                      className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                    >
-                      {ingestedPaths.has(file.path) ? '已存L4' : '+L4'}
-                    </button>
-                  )}
-                  {projectId && (
-                    <button
-                      type="button"
-                      data-testid={`git-sider-guard-${file.path}`}
-                      onClick={async () => {
-                        if (guardedPaths.has(file.path)) return;
-                        setGuardedPaths((prev) => new Set(prev).add(file.path));
-                        if (typeof projectApi?.createConstraint === 'function') {
-                          try {
-                            await projectApi.createConstraint(projectId, {
-                              category: 'file_change_guard',
-                              content: `关键变更文件保护规范：${file.path}`,
-                              triggerPattern: file.path,
-                              priority: 8,
-                            });
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }
-                      }}
-                      className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                    >
-                      {guardedPaths.has(file.path) ? '已护栏' : '+L2'}
-                    </button>
-                  )}
-                  {projectId && (
-                    <button
-                      type="button"
-                      data-testid={`git-sider-l3-${file.path}`}
-                      onClick={async () => {
-                        if (l3Paths.has(file.path)) return;
-                        setL3Paths((prev) => new Set(prev).add(file.path));
-                        if (typeof projectApi?.confirmKnowledge === 'function') {
-                          try {
-                            await projectApi.confirmKnowledge(projectId, {
-                              entries: [
-                                {
-                                  category: 'note',
-                                  content: `侧边栏 Git 变更文件 [${file.status}]：${file.path}`,
-                                  importance: 6,
-                                  sourceMessageIds: [],
-                                  reasoning: '侧边栏 Git 变更单文件沉淀至 L3 画像',
-                                },
-                              ],
-                            });
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }
-                      }}
-                      className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                    >
-                      {l3Paths.has(file.path) ? '已存L3' : '+L3'}
-                    </button>
-                  )}
-                  {projectId && (
-                    <button
-                      type="button"
-                      data-testid={`git-sider-milestone-${file.path}`}
-                      onClick={async () => {
-                        if (milestonePaths.has(file.path)) return;
-                        setMilestonePaths((prev) => new Set(prev).add(file.path));
-                        if (typeof projectApi?.createMilestone === 'function') {
-                          try {
-                            await projectApi.createMilestone(projectId, {
-                              title: `[Git 变更跟进] ${file.path}`,
-                              description: `侧边栏状态 [${file.status}] (${status.branch || 'HEAD'})`,
-                              status: 'pending',
-                            });
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }
-                      }}
-                      className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                    >
-                      {milestonePaths.has(file.path) ? '已建里程碑' : '+里程碑'}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    data-testid={`git-sider-copy-path-${file.path}`}
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard?.writeText(file.path);
-                        setCopiedFilePath(file.path);
-                        setTimeout(() => setCopiedFilePath(null), 1500);
-                      } catch {
-                        // ignore in test/offline mode
-                      }
-                    }}
-                    className="shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text"
-                  >
-                    {copiedFilePath === file.path ? '已复制' : '复制'}
-                  </button>
-                </li>
-              ))}
-              {filteredFiles.length > 12 && (
-                <li className="text-ui-xs text-text-muted px-2 py-0.5 italic">
-                  +{filteredFiles.length - 12} more
-                </li>
-              )}
-            </ul>
           </div>
-        );
-      }}
-    />
+        }
+        render={() => {
+          if (loading && !status) {
+            return <p className="text-ui-xs text-text-muted px-2 py-1 italic">{t('git.loading')}</p>;
+          }
+
+          if (!status || status.files.length === 0) {
+            return <p className="text-ui-xs text-text-muted px-2 py-1 italic">{t('git.clean')}</p>;
+          }
+
+          const filteredFiles = status.files.filter((f) => {
+            if (filterCategory === 'all') return true;
+            if (filterCategory === 'staged') return f.status === 'staged';
+            if (filterCategory === 'untracked') return f.status === 'untracked';
+            return (
+              f.status === 'modified' ||
+              f.status === 'deleted' ||
+              f.status === 'renamed' ||
+              f.status === 'conflicted'
+            );
+          });
+
+          return (
+            <div className="space-y-1">
+              {/* Filter bar */}
+              <div className="flex items-center gap-1 px-2 pt-0.5">
+                {FILTER_ITEMS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    data-testid={`git-filter-${item.id}`}
+                    onClick={() => setFilterCategory(item.id)}
+                    className={`rounded px-1.5 py-0.5 text-ui-2xs transition-colors ${
+                      filterCategory === item.id
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-bg-secondary text-text-muted hover:text-text'
+                    }`}
+                  >
+                    {t(item.labelKey)}
+                  </button>
+                ))}
+                {/* "..." more menu */}
+                <div className="relative ml-auto">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setMoreMenuOpen((prev) => !prev);
+                    }}
+                    className="w-5 h-5 flex items-center justify-center rounded text-text-muted hover:text-text hover:bg-bg-hover"
+                    title={t('git.more_actions')}
+                    aria-label={t('git.more_actions')}
+                  >
+                    <MoreVertical className="w-3 h-3" />
+                  </button>
+                  {moreMenuOpen && (
+                    <div className="absolute right-0 top-full mt-1 z-10 min-w-[120px] rounded-md border border-border bg-surface-elevated dark:bg-surface shadow-lg py-1">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyAllPaths(filteredFiles)}
+                        className="w-full text-left px-3 py-1.5 text-ui-xs text-text hover:bg-bg-hover"
+                      >
+                        {copiedAllPaths ? t('git.copied') : t('git.copy_all_paths')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyMarkdown(filteredFiles, status.branch)}
+                        className="w-full text-left px-3 py-1.5 text-ui-xs text-text hover:bg-bg-hover"
+                      >
+                        {copiedMarkdown ? t('git.copied') : t('git.copy_markdown')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* File list */}
+              <ul className="flex flex-col" data-testid="git-status-list">
+                {filteredFiles.map((file) => (
+                  <li
+                    key={`${file.status}-${file.path}`}
+                    className="group flex items-center gap-1.5 px-2 py-1 rounded-radius-sm hover:bg-bg-hover cursor-pointer"
+                    title={file.path}
+                    onClick={() => setDiffTarget({ path: file.path, status: file.status })}
+                  >
+                    <span
+                      className={`text-ui-xs font-mono w-3 text-center flex-shrink-0 ${statusColor(file.status)}`}
+                    >
+                      {statusBadge(file.status)}
+                    </span>
+                    <span className="text-ui-xs text-text truncate flex-1">{file.path}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => handleCopyPath(e, file.path)}
+                      className="shrink-0 opacity-0 group-hover:opacity-100 rounded px-1 py-0.5 text-ui-2xs text-text-muted hover:text-text transition-opacity"
+                      title={t('git.copy_path')}
+                    >
+                      {copiedFilePath === file.path ? t('git.copied') : t('git.copy_path')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        }}
+      />
+
+      {/* Diff drawer */}
+      {projectPath && diffTarget && (
+        <GitDiffDrawer
+          isOpen={Boolean(diffTarget)}
+          onClose={() => setDiffTarget(null)}
+          projectPath={projectPath}
+          filePath={diffTarget.path}
+          fileStatus={diffTarget.status}
+        />
+      )}
+    </>
   );
 }
