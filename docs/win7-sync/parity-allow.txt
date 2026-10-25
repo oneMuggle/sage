@@ -72,7 +72,6 @@ backend/tests/unit/test_memory_profile_routes.py
 backend/tests/unit/test_memory_vector.py
 backend/tests/unit/test_memory_working.py
 backend/tests/unit/test_workspace_pydantic_v1_compat.py
-chg.txt
 docs/plans/2026-07-04_chat-tool-path-hardening-from-claw-code.md
 docs/plans/2026-07-28_claw-code-feature-completion.md
 docs/plans/2026-08-01_code-exploration-tools.md
