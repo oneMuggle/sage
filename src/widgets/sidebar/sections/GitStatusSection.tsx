@@ -18,6 +18,7 @@ import {
 import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
 import { type TranslationKey, useI18n } from '../../../shared/lib/i18n';
 import { SiderSection } from '../SiderSection';
+
 import { GitDiffDrawer } from './GitDiffDrawer';
 
 interface GitStatusSectionProps {
