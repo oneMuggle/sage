@@ -157,6 +157,26 @@ describe('permissionApi', () => {
     ]);
   });
 
+  it('deleteOrphanRules() invokes with no selector and returns updated list', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      removed: 1,
+      rules: [{ tool_pattern: 'bash', decision: 'allow' }],
+    });
+    const rules = await permissionApi.deleteOrphanRules();
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_delete_orphan_rules', {});
+    expect(rules).toEqual([
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+  });
+
+  it('deleteOrphanRules() propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('plugin index unavailable'));
+    await expect(permissionApi.deleteOrphanRules()).rejects.toThrow(
+      'plugin index unavailable',
+    );
+  });
+
   it('deleteRulesByPlugin() propagates invoke errors', async () => {
     mockInvoke.mockRejectedValueOnce(new Error('plugin not found'));
     await expect(permissionApi.deleteRulesByPlugin('ghost')).rejects.toThrow(

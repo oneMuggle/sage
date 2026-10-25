@@ -40,7 +40,7 @@ from __future__ import annotations
 import logging
 import re
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -313,6 +313,25 @@ def _rule_plugin_owner(pattern: str, index: Dict[str, str]) -> Optional[str]:
     return None
 
 
+def _rule_plugin_status(
+    pattern: str, index: Dict[str, str]
+) -> Tuple[Optional[str], Optional[str]]:
+    """``(归属插件名, 标注状态)``——R101 标注与 R104 选集共用分类。
+
+    有生命周期归属时状态取记录状态；无归属时全局插件
+    通配记 ``all``、插件形状记 ``missing``，其余（内置
+    工具等）返回 ``(None, None)``。
+    """
+    owner = _rule_plugin_owner(pattern, index)
+    if owner is not None:
+        return owner, index[owner]
+    if pattern == PLUGIN_TOOL_PREFIX + "*":
+        return None, "all"
+    if is_plugin_tool_reference(pattern):
+        return None, "missing"
+    return None, None
+
+
 def _annotate_rules_with_plugin_status(
     rules: List[Dict[str, str]],
 ) -> List[Dict[str, Any]]:
@@ -327,18 +346,12 @@ def _annotate_rules_with_plugin_status(
     index = _plugin_status_index()
     annotated: List[Dict[str, Any]] = []
     for rule in rules:
-        pattern = rule["tool_pattern"]
-        plugin_name: Optional[str] = None
-        plugin_status: Optional[str] = None
-        if index is not None:
-            plugin_name = _rule_plugin_owner(pattern, index)
-            if plugin_name is not None:
-                plugin_status = index[plugin_name]
-        if plugin_name is None and index is not None:
-            if pattern == PLUGIN_TOOL_PREFIX + "*":
-                plugin_status = "all"
-            elif is_plugin_tool_reference(pattern):
-                plugin_status = "missing"
+        if index is None:
+            plugin_name, plugin_status = None, None
+        else:
+            plugin_name, plugin_status = _rule_plugin_status(
+                rule["tool_pattern"], index
+            )
         annotated.append(
             {**rule, "plugin_name": plugin_name, "plugin_status": plugin_status}
         )
@@ -459,6 +472,52 @@ def delete_permission_rules_by_plugin(
     logger.info(
         "已删除插件 %s 的已保存审批规则 %d 条 (剩余 %d 条)",
         body.plugin_name,
+        removed_count,
+        len(kept),
+    )
+    return {
+        "ok": True,
+        "removed": removed_count,
+        "rules": _annotate_rules_with_plugin_status(kept),
+    }
+
+
+@router.post("/rules/delete-orphans")
+def delete_permission_orphan_rules(request: Request):
+    """删除全部无生命周期归属的插件形规则，返回最新列表（R104）。
+
+    与 delete-by-plugin 对称的另一半：missing 孤儿没有
+    在册名字可做选择子，删除集合由服务端用与 R101 标注
+    同一个分类口径（``_rule_plugin_status`` 的 missing
+    类）选出，无请求体、不接受任何筛选参数，语义只有
+    「全部 missing」一种。索引不可读 → 503 不写：分不
+    清「无归属」与「读不到」时不删，避免把在册插件的
+    规则误判为孤儿。全局插件通配与内置工具规则永远不
+    在删除集合内。幂等：无孤儿时 removed=0 返回 ok 且
+    不写存储。与其它规则写操作共用 Origin 守卫。
+    """
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    index = _plugin_status_index()
+    if index is None:
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "error": "plugin index unavailable"},
+        )
+    rules = _load_saved_rules()
+    kept = [
+        rule
+        for rule in rules
+        if _rule_plugin_status(rule["tool_pattern"], index)[1] != "missing"
+    ]
+    removed_count = len(rules) - len(kept)
+    if removed_count:
+        SettingsRepository().set_json(
+            SETTINGS_KEY_RULES, kept, category="permissions"
+        )
+    logger.info(
+        "已删除无归属插件孤儿审批规则 %d 条 (剩余 %d 条)",
         removed_count,
         len(kept),
     )

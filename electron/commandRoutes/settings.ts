@@ -80,6 +80,13 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/permissions/rules/delete-by-plugin',
     body: (a) => ({ plugin_name: a.pluginName }),
   },
+  // R104 清理全部无归属孤儿规则：无请求体，删除集合由
+  // 后端按生命周期名单与 R101 分类口径（missing 类）选出。
+  permissions_delete_orphan_rules: {
+    method: 'POST',
+    path: () => '/api/v1/permissions/rules/delete-orphans',
+    body: () => ({}),
+  },
   permissions_answer: {
     method: 'POST',
     path: (a) => `/api/v1/permissions/${encodeURIComponent(String(a.requestId))}/answer`,

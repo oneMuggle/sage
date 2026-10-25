@@ -13,6 +13,11 @@
  * 用户辨认后自行决定删留。R102 起可按归属整组撤销：列表
  * 后按插件名汇总出删除操作（confirmDialog 确认后调用后
  * 端 delete-by-plugin，选择子只有插件名）。
+ *
+ * R104 起 missing 一类（无生命周期记录、无名字可做选择
+ * 子）可一键整组清理：列表后出汇总行，confirmDialog 确
+ * 认后调用 delete-orphans；删除集合由后端同口径选出，
+ * 前端只负责计数显示。
  */
 import { useEffect, useState } from 'react';
 
@@ -30,6 +35,8 @@ export function PermissionRulesManager() {
   const [clearing, setClearing] = useState(false);
   const [deletingPlugin, setDeletingPlugin] = useState<string | null>(null);
   const [pluginDeleteFailed, setPluginDeleteFailed] = useState(false);
+  const [deletingOrphans, setDeletingOrphans] = useState(false);
+  const [orphanDeleteFailed, setOrphanDeleteFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +96,10 @@ export function PermissionRulesManager() {
     ownerCounts.set(rule.plugin_name, (ownerCounts.get(rule.plugin_name) ?? 0) + 1);
   }
   const pluginOwners = [...ownerCounts.entries()];
-  const busy = deletingIndex !== null || clearing || deletingPlugin !== null;
+  // R104 孤儿计数同样只读标注：plugin_status=missing 的条数。
+  const orphanCount = rules.filter((rule) => rule.plugin_status === 'missing').length;
+  const busy =
+    deletingIndex !== null || clearing || deletingPlugin !== null || deletingOrphans;
 
   const handleDeleteByPlugin = async (pluginName: string): Promise<void> => {
     const ok = await confirmDialog({
@@ -108,6 +118,26 @@ export function PermissionRulesManager() {
       setPluginDeleteFailed(true);
     } finally {
       setDeletingPlugin(null);
+    }
+  };
+
+  const handleDeleteOrphans = async (): Promise<void> => {
+    const ok = await confirmDialog({
+      title: t('settings.permission.rules.delete_orphans_confirm_title'),
+      message: t('settings.permission.rules.delete_orphans_confirm_message'),
+      confirmLabel: t('settings.permission.rules.delete'),
+      danger: true,
+    });
+    if (!ok) return;
+    setOrphanDeleteFailed(false);
+    setDeletingOrphans(true);
+    try {
+      const next = await permissionApi.deleteOrphanRules();
+      setRules(next);
+    } catch {
+      setOrphanDeleteFailed(true);
+    } finally {
+      setDeletingOrphans(false);
     }
   };
 
@@ -194,6 +224,22 @@ export function PermissionRulesManager() {
           ))}
         </ul>
       )}
+      {!loadFailed && orphanCount > 0 && (
+        <div className="mt-1 flex items-center gap-2 text-xs">
+          <span className="flex-1 text-muted">
+            {`${t('settings.permission.rules.orphans')} · ${orphanCount}`}
+          </span>
+          <button
+            type="button"
+            data-testid="permission-rules-delete-orphans"
+            disabled={busy}
+            onClick={() => void handleDeleteOrphans()}
+            className="px-2 py-0.5 text-xs border border-border rounded-radius-sm bg-bg text-text hover:border-primary disabled:opacity-50"
+          >
+            {t('settings.permission.rules.delete')}
+          </button>
+        </div>
+      )}
       {deleteFailed && (
         <p className="text-xs text-error mt-1" data-testid="permission-rules-delete-failed">
           {t('settings.permission.rules.delete_failed')}
@@ -210,6 +256,14 @@ export function PermissionRulesManager() {
           data-testid="permission-rules-delete-by-plugin-failed"
         >
           {t('settings.permission.rules.delete_plugin_failed')}
+        </p>
+      )}
+      {orphanDeleteFailed && (
+        <p
+          className="text-xs text-error mt-1"
+          data-testid="permission-rules-delete-orphans-failed"
+        >
+          {t('settings.permission.rules.delete_orphans_failed')}
         </p>
       )}
     </div>

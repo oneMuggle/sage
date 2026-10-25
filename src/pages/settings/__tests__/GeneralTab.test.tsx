@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   deleteRule: vi.fn(),
   clearRules: vi.fn(),
   deleteRulesByPlugin: vi.fn(),
+  deleteOrphanRules: vi.fn(),
   confirmDialog: vi.fn(),
 }));
 
@@ -71,6 +72,7 @@ vi.mock('../../../shared/api/permissionApi', () => ({
     deleteRule: (...args: unknown[]) => mocks.deleteRule(...args),
     clearRules: (...args: unknown[]) => mocks.clearRules(...args),
     deleteRulesByPlugin: (...args: unknown[]) => mocks.deleteRulesByPlugin(...args),
+    deleteOrphanRules: (...args: unknown[]) => mocks.deleteOrphanRules(...args),
   },
 }));
 
@@ -129,6 +131,8 @@ beforeEach(() => {
   mocks.clearRules.mockResolvedValue([]);
   mocks.deleteRulesByPlugin.mockReset();
   mocks.deleteRulesByPlugin.mockResolvedValue([]);
+  mocks.deleteOrphanRules.mockReset();
+  mocks.deleteOrphanRules.mockResolvedValue([]);
   mocks.confirmDialog.mockResolvedValue(true);
 });
 
@@ -326,6 +330,91 @@ describe('GeneralTab remembered rules manager (R97)', () => {
     expect(
       screen.queryByTestId('permission-rules-delete-by-plugin-demo'),
     ).not.toBeInTheDocument();
+  });
+
+  it('shows an orphan cleanup row and deletes orphans after confirmation', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'deny',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+      {
+        tool_pattern: 'plugin__ghost__run',
+        decision: 'allow',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+    mocks.deleteOrphanRules.mockResolvedValue([
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-orphans')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-orphans'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ danger: true }),
+      );
+      expect(mocks.deleteOrphanRules).toHaveBeenCalledWith();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('plugin__ghost__*')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('permission-rules-delete-orphans')).not.toBeInTheDocument();
+  });
+
+  it('does not delete orphans when the confirmation is cancelled', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'deny',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+    ]);
+    mocks.confirmDialog.mockResolvedValue(false);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-orphans')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-orphans'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalled();
+    });
+    expect(mocks.deleteOrphanRules).not.toHaveBeenCalled();
+    expect(screen.getByText('plugin__ghost__*')).toBeInTheDocument();
+  });
+
+  it('keeps the list and shows an error when deleting orphans fails', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'deny',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+    ]);
+    mocks.deleteOrphanRules.mockRejectedValue(new Error('backend down'));
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-orphans')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-orphans'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-orphans-failed')).toBeInTheDocument();
+    });
+    expect(screen.getByText('plugin__ghost__*')).toBeInTheDocument();
   });
 
   it('does not delete by plugin when the confirmation is cancelled', async () => {

@@ -329,6 +329,11 @@ export const zhSettingsAndModels = {
   'settings.permission.rules.by_plugin': '按插件删除：',
   'settings.permission.rules.delete_plugin_confirm_title': '删除该插件的全部已记住规则？',
   'settings.permission.rules.delete_plugin_failed': '按插件删除规则失败，请重试',
+  'settings.permission.rules.orphans': '无归属插件规则',
+  'settings.permission.rules.delete_orphans_confirm_title': '删除全部无归属插件规则？',
+  'settings.permission.rules.delete_orphans_confirm_message':
+    '所属插件已无生命周期记录的已记住规则都会被删除；有归属的规则与内置工具规则不受影响。此操作不可撤销。',
+  'settings.permission.rules.delete_orphans_failed': '清理无归属规则失败，请重试',
 
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': '用量统计',
