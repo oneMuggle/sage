@@ -256,6 +256,23 @@ export const permissionApi = {
   },
 
   /**
+   * R102 删除某个插件名下的全部已保存规则（按归属撤销持久信任）。
+   * 只传插件名；删哪几条由后端按生命周期名单与结构化归属决定，
+   * 返回删除后的最新列表，前端直接采用。
+   */
+  async deleteRulesByPlugin(pluginName: string): Promise<PermissionRuleItem[]> {
+    if (isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_delete_rules_by_plugin', {
+        pluginName,
+      });
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
    * R100 清空全部已记住规则（撤销全部持久信任），返回服务端
    * 清空后的最新列表（应为空）。无筛选参数：语义只有「全部」。
    */

@@ -296,6 +296,23 @@ def _plugin_status_index() -> Optional[Dict[str, str]]:
         return None
 
 
+def _rule_plugin_owner(pattern: str, index: Dict[str, str]) -> Optional[str]:
+    """pattern 在生命周期名单中的权威归属插件名（R101/R102 共用）。
+
+    判定只用结构化命名空间：等于该插件的受限通配，或完整
+    工具名落在该插件命名空间内。长名字先试：``a`` 与
+    ``a__b`` 共存时 ``plugin__a__b__run`` 归更具体的
+    ``a__b``，保证标注（R101）与按插件删除（R102）选出
+    的集合严格一致。
+    """
+    for name in sorted(index, key=len, reverse=True):
+        if pattern == plugin_tool_wildcard_for_plugin(
+            name
+        ) or plugin_tool_belongs_to_plugin(pattern, name):
+            return name
+    return None
+
+
 def _annotate_rules_with_plugin_status(
     rules: List[Dict[str, str]],
 ) -> List[Dict[str, Any]]:
@@ -308,21 +325,15 @@ def _annotate_rules_with_plugin_status(
     恒 null —— 无权威记录不报名字）。
     """
     index = _plugin_status_index()
-    # 长名字先试：`a` 与 `a__b` 共存时 `plugin__a__b__run`
-    # 的命名空间归属取更具体的那个插件；索引不可用时无候选。
-    names = [] if index is None else sorted(index, key=len, reverse=True)
     annotated: List[Dict[str, Any]] = []
     for rule in rules:
         pattern = rule["tool_pattern"]
         plugin_name: Optional[str] = None
         plugin_status: Optional[str] = None
-        for name in names:
-            if pattern == plugin_tool_wildcard_for_plugin(
-                name
-            ) or plugin_tool_belongs_to_plugin(pattern, name):
-                plugin_name = name
-                plugin_status = index[name]
-                break
+        if index is not None:
+            plugin_name = _rule_plugin_owner(pattern, index)
+            if plugin_name is not None:
+                plugin_status = index[plugin_name]
         if plugin_name is None and index is not None:
             if pattern == PLUGIN_TOOL_PREFIX + "*":
                 plugin_status = "all"
@@ -392,6 +403,70 @@ def clear_permission_rules(request: Request):
     SettingsRepository().set_json(SETTINGS_KEY_RULES, [], category="permissions")
     logger.info("已清空全部已保存审批规则（清空前共 %d 条生效规则）", removed_count)
     return {"ok": True, "rules": []}
+
+
+class PermissionRulesDeleteByPluginBody(BaseModel):
+    """按插件删除其全部已保存规则的请求体（R102）。"""
+
+    #: 权威插件名（必须命中生命周期记录）。只是「删谁的
+    #: 规则」的身份选择子：删除集合由服务端按结构化归属
+    #: 选出，客户端不传任何 pattern，永不新建或放宽规则。
+    plugin_name: str
+
+    class Config:
+        extra = "forbid"
+
+
+@router.post("/rules/delete-by-plugin")
+def delete_permission_rules_by_plugin(
+    body: PermissionRulesDeleteByPluginBody, request: Request
+):
+    """删除某个插件名下的全部已保存规则，返回最新列表（R102）。
+
+    选择子是插件身份而非 pattern：名字不在册 → 400 不写
+    （含已卸载记录——清理孤儿规则正是主场景）；索引不可
+    读 → 503 不写（校验不了身份就不做写操作）。删除集合
+    与 R101 标注同源（``_rule_plugin_owner``，长名字消歧），
+    只可能删掉该插件的现存规则。幂等：该插件本无规则时
+    removed=0 返回 ok 且不写存储。与其它规则写操作共用
+    Origin 守卫。
+    """
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    index = _plugin_status_index()
+    if index is None:
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "error": "plugin index unavailable"},
+        )
+    if body.plugin_name not in index:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "plugin not found"},
+        )
+    rules = _load_saved_rules()
+    kept = [
+        rule
+        for rule in rules
+        if _rule_plugin_owner(rule["tool_pattern"], index) != body.plugin_name
+    ]
+    removed_count = len(rules) - len(kept)
+    if removed_count:
+        SettingsRepository().set_json(
+            SETTINGS_KEY_RULES, kept, category="permissions"
+        )
+    logger.info(
+        "已删除插件 %s 的已保存审批规则 %d 条 (剩余 %d 条)",
+        body.plugin_name,
+        removed_count,
+        len(kept),
+    )
+    return {
+        "ok": True,
+        "removed": removed_count,
+        "rules": _annotate_rules_with_plugin_status(kept),
+    }
 
 
 def forbidden_origin_response(request: Request) -> JSONResponse | None:

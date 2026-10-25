@@ -139,4 +139,26 @@ describe('permissionApi', () => {
     mockInvoke.mockRejectedValueOnce(new Error('backend down'));
     await expect(permissionApi.clearRules()).rejects.toThrow('backend down');
   });
+
+  it('deleteRulesByPlugin() invokes with pluginName only and returns updated list', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      removed: 2,
+      rules: [{ tool_pattern: 'bash', decision: 'allow' }],
+    });
+    const rules = await permissionApi.deleteRulesByPlugin('demo');
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_delete_rules_by_plugin', {
+      pluginName: 'demo',
+    });
+    expect(rules).toEqual([
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+  });
+
+  it('deleteRulesByPlugin() propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('plugin not found'));
+    await expect(permissionApi.deleteRulesByPlugin('ghost')).rejects.toThrow(
+      'plugin not found',
+    );
+  });
 });

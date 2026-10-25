@@ -112,6 +112,7 @@
     "permissions_answer": { "method": "POST", "path": "/api/v1/permissions/{requestId}/answer" },
     "permissions_clear_rules": { "method": "POST", "path": "/api/v1/permissions/rules/clear" },
     "permissions_delete_rule": { "method": "POST", "path": "/api/v1/permissions/rules/delete" },
+    "permissions_delete_rules_by_plugin": { "method": "POST", "path": "/api/v1/permissions/rules/delete-by-plugin" },
     "permissions_get_preset": { "method": "GET", "path": "/api/v1/permissions/preset" },
     "permissions_get_trust_policy": { "method": "GET", "path": "/api/v1/permissions/trust-policy" },
     "permissions_list_rules": { "method": "GET", "path": "/api/v1/permissions/rules" },

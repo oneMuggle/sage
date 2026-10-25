@@ -10,7 +10,9 @@
  *
  * R101 起后端为每条规则附带插件归属只读标注；属于已卸载或
  * 无生命周期记录插件的「孤儿规则」在行内以徽标提示，方便
- * 用户辨认后自行决定删留（仍走逐条删除/一键清空）。
+ * 用户辨认后自行决定删留。R102 起可按归属整组撤销：列表
+ * 后按插件名汇总出删除操作（confirmDialog 确认后调用后
+ * 端 delete-by-plugin，选择子只有插件名）。
  */
 import { useEffect, useState } from 'react';
 
@@ -26,6 +28,8 @@ export function PermissionRulesManager() {
   const [clearFailed, setClearFailed] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [deletingPlugin, setDeletingPlugin] = useState<string | null>(null);
+  const [pluginDeleteFailed, setPluginDeleteFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +81,36 @@ export function PermissionRulesManager() {
     }
   };
 
+  // R102 按归属汇总：plugin_name 来自后端 R101 标注，这里
+  // 只数每个插件名下有几条；无归属（内置工具/missing）不出现。
+  const ownerCounts = new Map<string, number>();
+  for (const rule of rules) {
+    if (!rule.plugin_name) continue;
+    ownerCounts.set(rule.plugin_name, (ownerCounts.get(rule.plugin_name) ?? 0) + 1);
+  }
+  const pluginOwners = [...ownerCounts.entries()];
+  const busy = deletingIndex !== null || clearing || deletingPlugin !== null;
+
+  const handleDeleteByPlugin = async (pluginName: string): Promise<void> => {
+    const ok = await confirmDialog({
+      title: t('settings.permission.rules.delete_plugin_confirm_title'),
+      message: pluginName,
+      confirmLabel: t('settings.permission.rules.delete'),
+      danger: true,
+    });
+    if (!ok) return;
+    setPluginDeleteFailed(false);
+    setDeletingPlugin(pluginName);
+    try {
+      const next = await permissionApi.deleteRulesByPlugin(pluginName);
+      setRules(next);
+    } catch {
+      setPluginDeleteFailed(true);
+    } finally {
+      setDeletingPlugin(null);
+    }
+  };
+
   return (
     <div className="mt-3" data-testid="permission-rules-manager">
       <div className="flex items-center gap-2">
@@ -87,7 +121,7 @@ export function PermissionRulesManager() {
           <button
             type="button"
             data-testid="permission-rules-clear"
-            disabled={deletingIndex !== null || clearing}
+            disabled={busy}
             onClick={() => void handleClear()}
             className="px-2 py-0.5 text-xs border border-border rounded-radius-sm bg-bg text-text hover:border-primary disabled:opacity-50"
           >
@@ -128,8 +162,30 @@ export function PermissionRulesManager() {
                 type="button"
                 data-testid={`permission-rule-delete-${index}`}
                 aria-label={`${t('settings.permission.rules.delete')} ${rule.tool_pattern}`}
-                disabled={deletingIndex !== null || clearing}
+                disabled={busy}
                 onClick={() => void handleDelete(rule, index)}
+                className="px-2 py-0.5 text-xs border border-border rounded-radius-sm bg-bg text-text hover:border-primary disabled:opacity-50"
+              >
+                {t('settings.permission.rules.delete')}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!loadFailed && pluginOwners.length > 0 && (
+        <ul className="mt-1 space-y-1">
+          {pluginOwners.map(([name, count]) => (
+            <li key={name} className="flex items-center gap-2 text-xs">
+              <span className="flex-1 text-muted">
+                {`${t('settings.permission.rules.by_plugin')} `}
+                <code className="break-all">{name}</code>
+                {` · ${count}`}
+              </span>
+              <button
+                type="button"
+                data-testid={`permission-rules-delete-by-plugin-${name}`}
+                disabled={busy}
+                onClick={() => void handleDeleteByPlugin(name)}
                 className="px-2 py-0.5 text-xs border border-border rounded-radius-sm bg-bg text-text hover:border-primary disabled:opacity-50"
               >
                 {t('settings.permission.rules.delete')}
@@ -146,6 +202,14 @@ export function PermissionRulesManager() {
       {clearFailed && (
         <p className="text-xs text-error mt-1" data-testid="permission-rules-clear-failed">
           {t('settings.permission.rules.clear_failed')}
+        </p>
+      )}
+      {pluginDeleteFailed && (
+        <p
+          className="text-xs text-error mt-1"
+          data-testid="permission-rules-delete-by-plugin-failed"
+        >
+          {t('settings.permission.rules.delete_plugin_failed')}
         </p>
       )}
     </div>

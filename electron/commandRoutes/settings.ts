@@ -88,6 +88,13 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/permissions/rules/clear',
     body: () => ({}),
   },
+  // R102 按插件删除其全部已记住规则：选择子只有权威插件名，
+  // 删除集合由后端按生命周期名单与结构化归属选出。
+  permissions_delete_rules_by_plugin: {
+    method: 'POST',
+    path: () => '/api/v1/permissions/rules/delete-by-plugin',
+    body: (a) => ({ plugin_name: a.pluginName }),
+  },
   permissions_answer: {
     method: 'POST',
     path: (a) => `/api/v1/permissions/${encodeURIComponent(String(a.requestId))}/answer`,
