@@ -29,7 +29,8 @@
 | R97 | 已记住权限规则管理（查看/删除） | ✅ #2418 |
 | R98 | 插件 profile 白名单结构化身份匹配 | ✅ #2440 |
 | R99 | 已保存权限规则写入完整性（记住去重 + 按内容删除） | ✅ #2452 |
-| R100 | 已保存权限规则一键清空（撤销全部持久信任） | 🔄 #2474 |
+| R100 | 已保存权限规则一键清空（撤销全部持久信任） | ✅ #2474 |
+| R101 | 已保存权限规则插件归属标注（孤儿规则可见化） | 🔄 #2484 |
 
 ## 2. 交付总账
 
@@ -52,7 +53,8 @@
 | R97 | `GET /permissions/rules` + 删除端点 + Electron 命令 + 设置页已记住规则列表/删除与测试/文档 | #2418 | 待对齐 | ✅ 已交付 |
 | R98 | `tool_name_in_allowlist` 权威 `plugin_name` 结构化匹配 + registry/agent 三道闸与前端覆盖镜像透传与测试/文档 | #2440 | 待对齐 | ✅ 已交付 |
 | R99 | remember 追加去重 + 删除端点按内容定位 + Electron/设置页传参切换与测试/文档 | #2452 | 待对齐 | ✅ 已交付 |
-| R100 | `POST /permissions/rules/clear` + Electron 命令 + 设置页全部删除（确认后）与测试/文档 | #2474 | 待对齐 | 🔄 |
+| R100 | `POST /permissions/rules/clear` + Electron 命令 + 设置页全部删除（确认后）与测试/文档 | #2474 | 待对齐 | ✅ 已交付 |
+| R101 | 规则列表响应只读归属标注（plugin_name/plugin_status）+ 设置页孤儿规则徽标与测试/文档 | #2484 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -424,7 +426,7 @@
   All Checks pass，已 squash 合并为 `main`
   `b2ba86e312345d854fb2a35760fc4d6388a0ea9a`。
 
-## 20. R100 交付边界（PR #2474 待合并）
+## 20. R100 交付边界（已合并）
 
 > spec：`2026-10-24_permission-rules-clear-r100.md`。
 > R100 是本插件账轮次号，与其它账本的同号计划无关。
@@ -438,6 +440,28 @@
 - **本地证据**：后端定向 45 例与相邻 83 例、前端定向
   36 例通过；ipc-manifest（264 commands）、tsc、
   ESLint（0 errors）、Ruff、py38、architecture、
-  silent-exceptions、diff-check 与 diagnostics 全绿。
+  silent-exceptions、diff-check 与 diagnostics 全绿；
+  PR #2474 GitHub All Checks pass，已 squash 合并为
+  `main` `3d0b6a3a7e7d68e61156d686842f4c090a0b2d43`。
+
+## 21. R101 交付边界（PR #2484 待合并）
+
+> spec：`2026-10-24_permission-rules-plugin-status-r101.md`。
+> R101 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **只补可见性，不动写面与求值**：规则列表响应附带
+  服务端派生的 `plugin_name`/`plugin_status` 只读标注，
+  设置页对插件已卸载/无记录的规则显示徽标；标注永不
+  落盘，删除写回仍是纯 `(tool_pattern, decision)`。
+- **归属只认权威名单**：用生命周期记录集合 + 结构化
+  命名空间 helper 判定归属，不按工具名字符串切分猜
+  插件名；无记录命中时只报形状（missing/all）不报名字。
+- **卸载联动删规则明确不做**：卸载是可 restore 的软
+  删除，清规则会破坏恢复预期；本轮只让孤儿规则可见，
+  删留仍由用户在规则管理界面决定。
+- **本地证据**：后端新文件 5 例 + 既有 45 例、相邻
+  95 例，前端定向 38 例通过；tsc、ESLint（0 errors）、
+  Ruff 全库、py38、architecture、silent-exceptions、
+  diff-check 与 diagnostics 全绿。
 
 —— 本账本由插件化循环维护，随轮次追加。
