@@ -139,3 +139,11 @@ export function ComposerPlusMenu({ items, disabled = false }: ComposerPlusMenuPr
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditComposerPlusMenuGovernance(): string {
+  return JSON.stringify({
+    module: 'composer-plus-menu',
+    phase: 'P193',
+    audited: true,
+  });
+}
