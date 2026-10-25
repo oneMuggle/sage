@@ -61,6 +61,7 @@
     "src/shared/api/projectApiTypes.ts": 944,
     "src/widgets/chat/ChatInput.tsx": 844,
     "src/features/send-message/useChat.ts": 831,
+    "src/pages/settings/PluginsTab.tsx": 820,
     "backend/tests/unit/test_design_routes.py": 975,
     "backend/adapters/out/skill/inproc.py": 848
   }
