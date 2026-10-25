@@ -312,6 +312,7 @@ export function Welcome() {
   ];
 
   /* v8 ignore start */
+
   /* v8 ignore stop */
 
   return (

@@ -26,9 +26,9 @@ const slot = (messageId: string, streaming: boolean): SessionStreamSlots => ({
   streamingToolCalls: [],
   taskBoard: null,
   todos: [],
-  shiftInfo: null,
-  preflightPhase: null,
   completedSteps: [],
+  shiftInfo: null,
+      preflightPhase: null,
 });
 
 function seed(opts: {

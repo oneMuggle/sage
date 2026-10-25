@@ -278,6 +278,115 @@ describe('ChangesSection', () => {
       diff: '--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
       truncated: false,
     });
+    const { useRightPanelStore } = await import('../../../features/right-panel/rightPanelStore');
+    act(() => {
+      useRightPanelStore.getState().selectChange('src/app.ts');
+    });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    // 直达 diff 视图（跳过列表点击）
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+    expect(mockGetChangeDiff).toHaveBeenCalledWith('s1', 'src/app.ts');
+    // 一次性消费:选中路径被清除,避免切会话串台
+    expect(useRightPanelStore.getState().selectedChangePath).toBeNull();
+  });
+
+  it('right-panel R6: 切换预览视图懒加载文件全文', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({
+      diff: '--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
+      truncated: false,
+    });
+    mockGetChangeFile.mockResolvedValue({
+      path: 'src/app.ts',
+      content: "print('v2')\n",
+      truncated: false,
+    });
+    const { container } = render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText('src/app.ts'));
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+
+    // 切到预览:懒加载文件内容并渲染全文
+    fireEvent.click(screen.getByTestId('view-mode-preview'));
+    await waitFor(() => {
+      expect(mockGetChangeFile).toHaveBeenCalledWith('s1', 'src/app.ts');
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain("print('v2')");
+    });
+
+    // 切回 diff 视图
+    fireEvent.click(screen.getByTestId('view-mode-diff'));
+    await waitFor(() => {
+      expect(screen.getByText('+new')).toBeInTheDocument();
+    });
+  });
+
+  it('right-panel R6: 全部审查按钮进入汇总视图', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({
+      diff: 'diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
+      truncated: false,
+    });
+    render(
+      <I18nProvider>
+        <ChangesSection sessionId="s1" />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+    // 无变更时按钮不渲染
+    expect(screen.getByTestId('review-all-button')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('review-all-button'));
+    // 进入汇总视图:返回按钮 + 文件小节（diff 内容经真实 Shiki 异步渲染）
+    await waitFor(() => {
+      expect(screen.getByTestId('review-all-back')).toBeInTheDocument();
+    });
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
+
+    // 返回列表
+    fireEvent.click(screen.getByTestId('review-all-back'));
+    await waitFor(() => {
+      expect(screen.getByText('src/app.ts')).toBeInTheDocument();
+    });
+  });
+
+  it('opens diff view on file click and goes back', async () => {
+    mockGetChanges.mockResolvedValue(sampleChanges);
+    mockGetChangeDiff.mockResolvedValue({
+      diff: '--- a/src/app.ts\n+++ b/src/app.ts\n-old\n+new',
+      truncated: false,
+    });
     render(
       <I18nProvider>
         <ChangesSection sessionId="s1" />
@@ -289,11 +398,16 @@ describe('ChangesSection', () => {
     });
     fireEvent.click(screen.getByText('src/app.ts'));
 
-    // diff 视图:文件名标题 + diff 内容经 ShikiCodeBlock 渲染(高亮异步,
-    // 断言返回的原始 diff 行)
-    await waitFor(() => {
-      expect(screen.getByText('+new')).toBeInTheDocument();
-    });
+    // diff 视图:文件名标题 + diff 内容经 ShikiCodeBlock 异步高亮渲染。
+    // 全量并行跑时 worker CPU 争抢会拖慢 Shiki 高亮,默认 1s 超时不够,
+    // 显式放宽到 10s;离开 diff 视图时 onFileClick 可能再次触发加载,
+    // 因此用 findBy 轮询而非同步断言。
+    await waitFor(
+      () => {
+        expect(screen.getByText('+new')).toBeInTheDocument();
+      },
+      { timeout: 10_000 },
+    );
     expect(mockGetChangeDiff).toHaveBeenCalledWith('s1', 'src/app.ts');
 
     // 返回列表
