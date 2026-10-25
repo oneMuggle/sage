@@ -16,7 +16,8 @@ import {
   type GitStatusResponse,
 } from '../../../shared/api/gitStatusApi';
 import { projectApi, type ProjectSummary } from '../../../shared/api/projectApi';
-import { useI18n } from '../../../shared/lib/i18n';
+import { type TranslationKey, useI18n } from '../../../shared/lib/i18n';
+
 import { SiderSection } from '../SiderSection';
 import { GitDiffDrawer } from './GitDiffDrawer';
 
@@ -71,7 +72,7 @@ function statusBadge(status: GitFileChange['status']): string {
 
 interface FilterItem {
   id: GitFilterCategory;
-  labelKey: string;
+  labelKey: TranslationKey;
 }
 
 const FILTER_ITEMS: FilterItem[] = [
@@ -277,7 +278,9 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
         }
         render={() => {
           if (loading && !status) {
-            return <p className="text-ui-xs text-text-muted px-2 py-1 italic">{t('git.loading')}</p>;
+            return (
+              <p className="text-ui-xs text-text-muted px-2 py-1 italic">{t('git.loading')}</p>
+            );
           }
 
           if (!status || status.files.length === 0) {

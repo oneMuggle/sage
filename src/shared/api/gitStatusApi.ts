@@ -42,10 +42,7 @@ export async function getGitStatus(path: string): Promise<GitStatusResponse> {
 /**
  * 获取指定文件相对于 HEAD 的 unified diff。
  */
-export async function getGitDiff(
-  path: string,
-  file: string,
-): Promise<GitDiffResponse> {
+export async function getGitDiff(path: string, file: string): Promise<GitDiffResponse> {
   return backendRequest<GitDiffResponse>({
     path: `/api/v1/git/diff?path=${encodeURIComponent(path)}&file=${encodeURIComponent(file)}`,
   });
@@ -77,7 +74,14 @@ export function auditGitStatusApiGovernance(): {
   module: 'src/shared/api/gitStatusApi.ts';
   phase: 'P175';
   domain: 'shared-api';
-  fileChangeStatuses: readonly ['modified', 'staged', 'untracked', 'conflicted', 'deleted', 'renamed'];
+  fileChangeStatuses: readonly [
+    'modified',
+    'staged',
+    'untracked',
+    'conflicted',
+    'deleted',
+    'renamed',
+  ];
   compliant: boolean;
 } {
   const summary = formatGitStatusSummary({ is_git_repo: true, branch: 'main', files: [] });

@@ -10,10 +10,7 @@ import { Dialog, Transition } from '@headlessui/react';
 import { X } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 
-import {
-  getGitDiff,
-  type GitDiffResponse,
-} from '../../../shared/api/gitStatusApi';
+import { getGitDiff, type GitDiffResponse } from '../../../shared/api/gitStatusApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import { SplitDiff } from '../../chat/changes/SplitDiff';
 
@@ -113,9 +110,7 @@ export function GitDiffDrawer({
                     {t('git.diff_loading')}
                   </p>
                 )}
-                {error && (
-                  <p className="text-ui-xs text-error px-4 py-8 text-center">{error}</p>
-                )}
+                {error && <p className="text-ui-xs text-error px-4 py-8 text-center">{error}</p>}
                 {diff && !diff.diff_text && (
                   <p className="text-ui-xs text-text-muted px-4 py-8 text-center italic">
                     {diff.is_new_file
