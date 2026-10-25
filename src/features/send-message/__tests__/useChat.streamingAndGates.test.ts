@@ -626,8 +626,108 @@ describe('useChat M2 ask_user_question wiring', () => {
 
 describe('useChat LLM 重试事件', () => {
   it('retry 事件写入 store.retryInfo，且不再污染气泡纯文本', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      seedActiveEndpoint();
+      invokeMock.mockResolvedValueOnce({ streamId: 'stream-retry' });
+
+      const retryPayload = {
+        attempt: 1,
+        max_attempts: 3,
+        error_type: 'timeout',
+        error_message: '请求 LLM 超时',
+        delay: 2,
+      };
+      let capturedCb:
+        | ((e: {
+            payload: {
+              state: string;
+              iteration: number;
+              content?: string;
+              retry_info?: typeof retryPayload;
+            };
+          }) => void)
+        | null = null;
+      listenMock.mockImplementationOnce(
+        async (
+          _name: string,
+          cb: (e: {
+            payload: {
+              state: string;
+              iteration: number;
+              content?: string;
+              retry_info?: typeof retryPayload;
+            };
+          }) => void,
+        ) => {
+          capturedCb = cb;
+          return vi.fn();
+        },
+      );
+
+      const { result } = renderHook(() => useChat());
+      await waitForSettingsLoaded();
+
+      let sendPromise: Promise<void>;
+      await act(async () => {
+        sendPromise = result.current.sendMessage('hi') as unknown as Promise<void>;
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(capturedCb).not.toBeNull();
+
+      act(() => {
+        capturedCb!({ payload: { state: 'thinking', iteration: 0 } });
+      });
+      act(() => {
+        capturedCb!({ payload: { state: 'retry', iteration: 0, retry_info: retryPayload } });
+      });
+
+      // 重试信息落到流式槽位，供 Message.tsx 渲染 RetryBanner
+      const slot = useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming;
+      expect(slot?.retryInfo).toEqual(retryPayload);
+
+      // 旧实现会把 "🔄 重试中 ..." 纯文本塞进气泡内容 —— 新实现不应再污染正文
+      const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
+      expect(assistantMsg?.content ?? '').not.toContain('🔄');
+
+      // 非 retry 状态到达 → retryInfo 延迟 3 秒后清空。
+      // 必须在流仍然存活时断言：done 之后 clearStream 会把整个 streaming 槽位置空，
+      // 此时 `streaming?.retryInfo` 恒为 undefined，是空断言。
+      act(() => {
+        capturedCb!({ payload: { state: 'content_delta', iteration: 0, content: 'partial' } });
+      });
+      const liveSlot = useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming;
+      expect(liveSlot?.messageId).toBeTruthy();
+      // 3 秒内 retryInfo 仍然保留（延迟隐藏，让用户能看见重试发生过）
+      expect(liveSlot?.retryInfo).toEqual(retryPayload);
+
+      // 推进 3 秒后定时器触发，retryInfo 被清 null
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      const clearedSlot = useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming;
+      expect(clearedSlot?.retryInfo).toBeNull();
+
+      act(() => {
+        capturedCb!({ payload: { state: 'done', iteration: 1, content: 'ok' } });
+      });
+      await act(async () => {
+        await sendPromise!;
+      });
+
+      // done 到达 → 整个流式槽位被 clearStream 清空
+      expect(
+        useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming ?? null,
+      ).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('重试发生后流结束不再误报"模型未返回任何内容"', async () => {
     seedActiveEndpoint();
-    invokeMock.mockResolvedValueOnce({ streamId: 'stream-retry' });
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-retry-noerr' });
 
     const retryPayload = {
       attempt: 1,
@@ -672,42 +772,69 @@ describe('useChat LLM 重试事件', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(capturedCb).not.toBeNull();
 
+    // thinking → streaming.content = THINKING_PLACEHOLDER
     act(() => {
       capturedCb!({ payload: { state: 'thinking', iteration: 0 } });
     });
+    // retry → retryInfo 写入（重试已发生）
     act(() => {
       capturedCb!({ payload: { state: 'retry', iteration: 0, retry_info: retryPayload } });
     });
-
-    // 重试信息落到流式槽位，供 Message.tsx 渲染 RetryBanner
-    const slot = useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming;
-    expect(slot?.retryInfo).toEqual(retryPayload);
-
-    // 旧实现会把 "🔄 重试中 ..." 纯文本塞进气泡内容 —— 新实现不应再污染正文
-    const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
-    expect(assistantMsg?.content ?? '').not.toContain('🔄');
-
-    // 非 retry 状态到达 → retryInfo 自动清空。
-    // 必须在流仍然存活时断言：done 之后 clearStream 会把整个 streaming 槽位置空，
-    // 此时 `streaming?.retryInfo` 恒为 undefined，是空断言。
+    // done 无 content（模拟流式路径 done 不带 content，旧实现会误报错误）
     act(() => {
-      capturedCb!({ payload: { state: 'content_delta', iteration: 0, content: 'partial' } });
-    });
-    const liveSlot = useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming;
-    expect(liveSlot?.messageId).toBeTruthy();
-    expect(liveSlot?.retryInfo).toBeNull();
-
-    act(() => {
-      capturedCb!({ payload: { state: 'done', iteration: 1, content: 'ok' } });
+      capturedCb!({ payload: { state: 'done', iteration: 1 } });
     });
     await act(async () => {
       await sendPromise!;
     });
 
-    // done 到达 → 整个流式槽位被 clearStream 清空
-    expect(useChatStreamStore.getState().sessions[VALID_SESSION_ID]?.streaming ?? null).toBeNull();
+    // 关键断言：重试已发生过，不应出现"模型未返回任何内容"误报
+    const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
+    expect(assistantMsg?.content ?? '').not.toContain('模型未返回任何内容');
+  });
+
+  it('多步 run 最后一步无 content 时不误报"模型未返回任何内容"', async () => {
+    seedActiveEndpoint();
+    invokeMock.mockResolvedValueOnce({ streamId: 'stream-multistep-noerr' });
+
+    let capturedCb: ((e: { payload: Record<string, unknown> }) => void) | null = null;
+    listenMock.mockImplementationOnce(
+      async (_name: string, cb: (e: { payload: Record<string, unknown> }) => void) => {
+        capturedCb = cb;
+        return vi.fn();
+      },
+    );
+
+    const { result } = renderHook(() => useChat());
+    await waitForSettingsLoaded();
+
+    let sendPromise: Promise<void>;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('hi') as unknown as Promise<void>;
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Step 1: content_delta → streaming 累积
+    act(() => {
+      capturedCb!({ payload: { state: 'content_delta', iteration: 1, content: '第一步回答' } });
+    });
+    // Step 1 完成 → addCompletedStep + finalizeStep（streaming 重置为占位）
+    act(() => {
+      capturedCb!({ payload: { state: 'step_done', iteration: 1, step_index: 0 } });
+    });
+    // Step 2: done 无 content → lastDoneContent 为 null，streaming 仍是占位
+    act(() => {
+      capturedCb!({ payload: { state: 'done', iteration: 2 } });
+    });
+    await act(async () => {
+      await sendPromise!;
+    });
+
+    // 关键断言：completedSteps 有内容，最后一步的空占位不应误报错误
+    const assistantMsg = result.current.messages.find((m) => m.role === 'assistant');
+    expect(assistantMsg?.content ?? '').not.toContain('模型未返回任何内容');
   });
 });
 

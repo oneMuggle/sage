@@ -75,6 +75,12 @@ ALIASES: Dict[str, str] = {
     "max_coder_iterations": "maxCoderIterations",
     "max_reviewer_iterations": "maxReviewerIterations",
     "max_writer_iterations": "maxWriterIterations",
+    # 2026-10-25: LLM 重试参数 — 前端发送 camelCase，但某些中间层可能转成 snake_case，
+    # 需要 ALIASES 映射回 camelCase 以通过白名单校验。
+    "llm_retry_max_attempts": "llmRetryMaxAttempts",
+    "llm_retry_base_delay_s": "llmRetryBaseDelayS",
+    "llm_retry_max_delay_s": "llmRetryMaxDelayS",
+    "llm_total_timeout_s": "llmTotalTimeoutS",
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单

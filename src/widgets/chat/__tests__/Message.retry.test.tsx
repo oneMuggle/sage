@@ -1,9 +1,9 @@
 // src/widgets/chat/__tests__/Message.retry.test.tsx
 // 2026-10-20: LLM 重试可视化 —— store → Message.tsx → RetryBanner 的集成链路。
-// 覆盖「retry 事件到达时显示横幅」「非 retry 状态到达时自动消失」
+// 覆盖「retry 事件到达时显示横幅」「非 retry 状态到达时延迟 3 秒后自动消失」
 // 「只挂在正在流式的那条消息上」「重试期间抑制 shimmer 占位」。
 import { act, cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useChatStreamStore } from '../../../features/send-message/chatStreamStore';
 import { THINKING_PLACEHOLDER } from '../../../features/send-message/thinkingPlaceholder';
@@ -90,28 +90,45 @@ describe('Message — LLM 重试横幅集成', () => {
     expect(screen.queryByTestId('retry-banner')).toBeNull();
   });
 
-  it('drops the banner once a non-retry state arrives', () => {
-    act(() => {
-      const store = useChatStreamStore.getState();
-      store.startStream(SESSION, 'm1');
-      store.setRetryInfo(SESSION, 'm1', retryInfo);
-      store.setStreamingMeta(SESSION, 'm1', { state: 'retry' });
-    });
+  it('drops the banner 3 seconds after a non-retry state arrives', () => {
+    vi.useFakeTimers();
+    try {
+      act(() => {
+        const store = useChatStreamStore.getState();
+        store.startStream(SESSION, 'm1');
+        store.setRetryInfo(SESSION, 'm1', retryInfo);
+        store.setStreamingMeta(SESSION, 'm1', { state: 'retry' });
+      });
 
-    const { rerender } = renderAssistant(THINKING_PLACEHOLDER);
-    expect(screen.getByTestId('retry-banner')).toBeInTheDocument();
+      const { rerender } = renderAssistant(THINKING_PLACEHOLDER);
+      expect(screen.getByTestId('retry-banner')).toBeInTheDocument();
 
-    // content_delta 到达 → setStreamingMeta 自动清 retryInfo
-    act(() => {
-      useChatStreamStore.getState().setStreamingMeta(SESSION, 'm1', { state: 'acting' });
-    });
-    rerender(
-      <I18nProvider defaultLocale="zh">
-        <Message message={{ ...base, content: '恢复后的回答' }} isStreaming={true} />
-      </I18nProvider>,
-    );
+      // content_delta 到达 → setStreamingMeta 触发 3 秒延迟隐藏
+      act(() => {
+        useChatStreamStore.getState().setStreamingMeta(SESSION, 'm1', { state: 'acting' });
+      });
+      rerender(
+        <I18nProvider defaultLocale="zh">
+          <Message message={{ ...base, content: '恢复后的回答' }} isStreaming={true} />
+        </I18nProvider>,
+      );
 
-    expect(screen.queryByTestId('retry-banner')).toBeNull();
+      // 3 秒内横幅仍然可见
+      expect(screen.getByTestId('retry-banner')).toBeInTheDocument();
+
+      // 推进 3 秒后定时器触发，retryInfo 清 null，横幅消失
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      rerender(
+        <I18nProvider defaultLocale="zh">
+          <Message message={{ ...base, content: '恢复后的回答' }} isStreaming={true} />
+        </I18nProvider>,
+      );
+      expect(screen.queryByTestId('retry-banner')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('renders no banner for a non-streaming assistant message', () => {
