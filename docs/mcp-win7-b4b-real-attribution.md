@@ -764,6 +764,103 @@ architecture-check EXIT=0（62 baselined）。
 改用 **GraphQL `mergePullRequest`** 一次成功。REST 合并端点在权限面不足时会返回 404 而非 403，
 排查时容易被误导成「PR 不存在」。
 
+
+## 6.5 no-base 78 个的完整归因：可自动收敛数为 0，以及全仓 EOL 口径盲区（2026-10-25）
+
+#2503 把 `no-base` 与 `both-changed` 一并归入「只能人工 3-way」。本轮把 `backend/tests` 的
+78 个 no-base 逐个查完，结论是**这里面一个都不能自动收敛**，但顺带查出了 parity 口径的一个
+全仓级盲区，值得单列。
+
+### 6.5.1 no-base 78 个的三分
+
+| 类别 | 数量 | 处置 |
+|---|---|---|
+| A 两侧都有（base 之后各自新增同名文件） | 44 | 见 6.5.2 |
+| B 仅 win7 有 | 34 | **win7 独有测试，必须保留** |
+| C 仅 main 有（win7 缺失） | **0** | 不存在「实现已在但测试缺失」的高价值缺口 |
+
+C=0 是个有用的负面结论：no-base 里**没有**类似 B4b-0 那种「实现已落地、调用点零测试覆盖」
+的 P0 型缺口，不必按那个方向再投入。
+
+B 类 34 个与本文档 §4/§6.1 的 win7-only 归因完全吻合，含 `test_browser_diagnostics`、
+`test_browser_launcher`、`test_diagnostics_routes`、`test_firefox_cookie_compat`、
+`test_inproc_adapter_required_validation`、`test_legacy_routes_toolcalls_persistence`、
+`test_py38_gate_docstring`、`test_py38_rewrite_drift_gate`、`test_upgrade_backup`、
+`test_user_manual_web_access`，以及 `memory/`、`scheduler/`、`api/test_memory_*` 等整组
+win7 侧特性测试。
+
+### 6.5.2 A 类 44 个：no-base 没有 base 版本，merge-file 不可用
+
+`git merge-file` 需要 base 版本，no-base 恰恰没有，所以批次 3/4 的三方合并手法在这里**完全不适用**。
+改用双向超集判定（EOL 归一 + 去空白后按行取多重集差集）：
+
+| 判定 | 数量 | 结论 |
+|---|---|---|
+| win7only=0（疑似 main 超集） | 8 | **实为 EOL-ONLY 假差异**，见 6.5.3 |
+| mainonly=0（win7 是超集） | 8 | parity 假 actionable，不该动 |
+| 剥注释后等价（COMMENT-ONLY） | 4 | **注释与实现/ruff 押注绑定**，不该动 |
+| 真双向分叉 | 24 | 需人工 |
+
+**win7 是超集的 8 个**（数字为 win7 独有行数）：`test_py38_compat_gate` 106、
+`test_mcp_oauth` 74、`test_remote_mcp_server` 30、`test_mcp_oauth_loopback` 22（含
+`/callback-evil` 前缀 404 加固）、`test_replan_tool` 14、`test_browser_temp_lifecycle` 8、
+`test_sources_stream_persist` 1、`test_mcp_oauth_store` 1 —— 与 §6.1 的 WIN7-TEST 清单一致。
+
+**COMMENT-ONLY 的 4 个为什么仍不该动**：差异虽只在注释，但注释内容是有信息量的押注，取 main
+会让注释与 win7 侧代码或工具链脱节。
+
+- `unit/data_repo/test_session_and_settings_repo_r188.py`：win7 的 `# ruff: noqa` 带 `UP045`、main 不带。
+- `unit/test_schema_migrations.py`：方向相反，main 带 `UP045`、win7 不带。
+- 实测 ruff **0.4.4**（CI py38 通道钉版）下两者都 `All checks passed`，全仓 `UP045` warning 数为 **0**，
+  且两个文件都没有 `Optional[`/`Union[`（UP045 管辖的语法）⇒ **UP045 在 0.4.4 里是无效规则码**，
+  两侧只是对新版本 ruff 的不同押注，谁都不是纯改进。
+- `unit/test_env_memory.py`：win7 注释描述的是 win7 侧 extractor 的新分类
+  （`user_pref`/`project_fact` 经 remap 路由到画像库），main 注释描述的是 `category="fact"` remap
+  为 `"preference"` ⇒ **注释与各自实现绑定**，取 main 会造成注释与代码不符。
+- `unit/test_wiki_insights.py`：win7 写「py38 的 `Path.write_text` 无 newline 形参」、main 写
+  「`newline` 形参是 3.10+」，语义等价但 win7 表述更贴本分支视角。
+
+### 6.5.3 全仓 EOL 口径盲区：483 个 blob 差异里 15 个是纯行尾符
+
+上面那 8 个「win7only=0」最初被当成「main 是超集、可取 main」，逐个查 EOL 后发现**归一化后
+两侧逐字节相同**——它们进 actionable 只是因为 blob sha 不同，而 sha 不同的唯一原因是行尾符。
+把这个检测推到全仓：win7 与 main 共有 4714 个路径，其中 **483 个 blob 不同**；对这 483 个做
+EOL 归一化比较，**15 个（3.1%）是 EOL-ONLY**，真差异 468 个。
+
+方向分布很关键：**win7=LF/main=CRLF 10 个、win7=CRLF/main=LF 5 个**。双向都有 ⇒ 这不是
+「两个分支各有行尾约定」的系统性差异，而是**零散的行尾污染**。因此正确的修法是给 parity 口径
+加一层 EOL 归一化（或对这 15 个路径单独加 `.gitattributes` 钉住），**不是**批量转换行尾——
+批量转换会在 468 个真差异文件上制造巨量噪音 diff。
+
+按区域分布：`backend/tests` 8、`src` 6、`scripts` 1。
+
+**其中 `scripts/architecture-check.mjs` 值得单独警示**：#2495 的计划明令
+「`architecture-baseline.json`、`scripts/`、`.github/workflows/` 不得被 main 覆盖」，而这个文件
+正顶着一个 EOL-ONLY 假差异出现在 actionable 列表里。它既是最容易被误当成收敛目标的一类
+（「差异只在行尾，取 main 应该无害」），又恰好落在红线路径上——一旦取 main，除了把 LF 换成
+CRLF 之外没有任何收益，却会破坏红线路径的完整性。批次 2/2b 双红关闭的直接原因正是覆盖了
+棘轮与 `scripts/`，这 15 个假差异是同一种失误的隐蔽入口。
+
+完整清单（15 个，均可直接从 actionable 扣除）：
+
+- `backend/tests/unit/mcp/test_oauth_loopback.py`
+- `backend/tests/unit/model_catalog/test_sources.py`
+- `backend/tests/unit/ports/test_memory_port.py`
+- `backend/tests/unit/services/middleware/test_circuit_breaker.py`
+- `backend/tests/unit/skills/test_builtin_writer.py`
+- `backend/tests/unit/test_zotero_routes.py`
+- `backend/tests/unit/tools/test_codebase_search_tool.py`
+- `backend/tests/unit/tools/test_search_config.py`
+- `scripts/architecture-check.mjs`
+- `src/features/project-type/TypeDetectionPreview.tsx`
+- `src/pages/Agents.tsx`
+- `src/widgets/chat/WorkspaceBranchPicker.tsx`
+- `src/widgets/settings/HookHistoryPanel.tsx`
+- `src/widgets/settings/ProjectHooksPanel.tsx`
+- `src/widgets/sidebar/sections/GitStatusSection.tsx`
+
+扣除后各区域 actionable 的修正值：`backend/tests` 152 → **144**；全仓 blob 差异 483 → **468**。
+
 ## 7. 复现
 
 ```bash
