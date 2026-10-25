@@ -1,3 +1,5 @@
+from typing import List
+
 """Tests for background-review storage schema (review_events + skill_drafts).
 
 Task 4 of 2026-08-02-background-review: verify both tables are created by
@@ -7,7 +9,6 @@ import contextlib
 import os
 import sqlite3
 import tempfile
-from typing import List
 
 from backend.data.database import Database
 

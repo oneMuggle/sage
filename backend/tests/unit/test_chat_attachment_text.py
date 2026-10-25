@@ -8,6 +8,8 @@ fake MediaStore（类级共享存储，同 R27/R30 测试口径）覆盖：
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pytest
 
 pytest.importorskip(
@@ -31,6 +33,20 @@ except ImportError:
 _no_multipart = pytest.mark.skipif(not _HAS_MULTIPART, reason="python-multipart not installed")
 
 
+@dataclass
+class _Ref:
+    """Pydantic-serializable mirror of backend.services.multimodal.media_store.MediaRef"""
+    id: str = ""
+    kind: object = None
+    mime_type: str = ""
+    file_path: str = ""
+    file_size: int = 0
+    created_at: str = ""
+    source: str = ""
+    metadata: dict = None
+    api_url: str = ""
+
+
 class _FakeStore:
     saved: dict = {}
 
@@ -44,41 +60,33 @@ class _FakeStore:
             "kind": kind,
             "ext": ext,
         }
-
-        class _Ref:
-            pass
-
-        ref = _Ref()
-        ref.id = mid
-        ref.kind = kind
-        ref.mime_type = "text/plain" if kind.value == "document" else "audio/mpeg"
-        ref.file_path = f"fake/{mid}"
-        ref.file_size = len(content)
-        ref.created_at = "2026-09-15T00:00:00"
-        ref.source = source
-        ref.metadata = metadata or {}
-        ref.api_url = f"/api/v1/media/{mid}"
-        return ref
+        return _Ref(
+            id=mid,
+            kind=kind,
+            mime_type="text/plain" if kind.value == "document" else "audio/mpeg",
+            file_path=f"fake/{mid}",
+            file_size=len(content),
+            created_at="2026-09-15T00:00:00",
+            source=source,
+            metadata=metadata or {},
+            api_url=f"/api/v1/media/{mid}",
+        )
 
     def load(self, media_id: str):
         item = _FakeStore.saved.get(media_id)
         if item is None:
             return None
-
-        class _Ref:
-            pass
-
-        ref = _Ref()
-        ref.id = media_id
-        ref.kind = item["kind"]
-        ref.mime_type = "text/plain"
-        ref.file_path = f"fake/{media_id}"
-        ref.file_size = len(item["content"])
-        ref.created_at = ""
-        ref.source = "chat_upload"
-        ref.metadata = {}
-        ref.api_url = f"/api/v1/media/{media_id}"
-        return ref, item["content"]
+        return _Ref(
+            id=media_id,
+            kind=item["kind"],
+            mime_type="text/plain",
+            file_path=f"fake/{media_id}",
+            file_size=len(item["content"]),
+            created_at="",
+            source="chat_upload",
+            metadata={},
+            api_url=f"/api/v1/media/{media_id}",
+        ), item["content"]
 
 
 @pytest.fixture()

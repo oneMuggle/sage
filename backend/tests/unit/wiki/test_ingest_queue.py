@@ -68,7 +68,8 @@ class TestIngestQueuePersistence:
         queue_file = project_root / ".llm-wiki" / "ingest-queue.json"
         assert queue_file.exists()
 
-        data = json.loads(queue_file.read_text())
+        # 生产侧以 utf-8 写盘；测试读盘须显式 utf-8，否则中文 Windows 默认 gbk 解码失败。
+        data = json.loads(queue_file.read_text(encoding="utf-8"))
         assert "version" in data
         assert "tasks" in data
         assert len(data["tasks"]) == 1
