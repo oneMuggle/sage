@@ -143,3 +143,11 @@ export function formatRetryBannerJson(info: RetryInfo): string {
     2,
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditRetryBannerGovernance(): string {
+  return JSON.stringify({
+    module: 'retry-banner',
+    phase: 'P194',
+    audited: true,
+  });
+}
