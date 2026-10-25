@@ -55,10 +55,15 @@ export interface StreamingState {
   rag_citations?: { media_id: string; mode: string }[];
   /**
    * 2026-10-20: LLM 重试可视化。state === 'retry' 时由 setRetryInfo 写入,
-   * Message.tsx 读此字段渲染 RetryBanner（带倒计时）。非 retry 状态到达时
-   * setStreamingMeta 自动清 null。
+   * Message.tsx 读此字段渲染 RetryBanner（带倒计时）。
+   * 2026-10-25: 非 retry 状态到达时不再立即清 null，而是延迟 3 秒隐藏
+   * （通过 _retryHideTimer 调度），让用户能看见发生了什么。
    */
   retryInfo?: RetryInfo | null;
+  /** 2026-10-25: retryInfo 逻辑上被清除的时间戳（用于延迟隐藏） */
+  retryInfoClearedAt?: number | null;
+  /** 内部：延迟清除 retryInfo 的 setTimeout ID */
+  _retryHideTimer?: number;
 }
 
 /** 进度可视化 5 元组（与 useChat 内 TaskBoard 同字段，提取独立文件便于 store 引用） */
@@ -285,6 +290,7 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
           currentAgentId: opts?.agentId ?? null,
           iteration: 0,
           retryInfo: null,
+          retryInfoClearedAt: null,
         },
         streamingToolCalls: [],
         taskBoard: null,
@@ -350,35 +356,88 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
       const slots = selectSessionSlots(prev, sessionId);
       if (!slots.streaming || slots.streaming.messageId !== messageId) return prev;
       // 2026-10-20: 非 retry 状态到达时自动清 retryInfo —— Banner 随之消失
+      // 2026-10-25: 改为延迟 3 秒隐藏，让用户能看见重试发生过。
+      // 保留 retryInfo 数据，仅记录 clearedAt 时间戳；3 秒后 setTimeout
+      // 才真正将 retryInfo 置 null。
       const autoClearRetry =
         patch.state !== undefined && patch.state !== 'retry' && slots.streaming.retryInfo != null;
-      const nextStreaming = autoClearRetry
-        ? { ...slots.streaming, ...patch, retryInfo: null }
-        : { ...slots.streaming, ...patch };
+      if (autoClearRetry) {
+        // 清除旧的定时器（如有）
+        if (slots.streaming._retryHideTimer) {
+          clearTimeout(slots.streaming._retryHideTimer);
+        }
+        const clearedAt = Date.now();
+        const nextStreaming = {
+          ...slots.streaming,
+          ...patch,
+          retryInfoClearedAt: clearedAt,
+          // 暂不清 retryInfo，保留给 selector 用
+        };
+        // 3 秒后真正清除 retryInfo
+        const timer = window.setTimeout(() => {
+          useChatStreamStore.setState((state) => {
+            const currentSlots = selectSessionSlots(state, sessionId);
+            if (
+              !currentSlots.streaming ||
+              currentSlots.streaming.messageId !== messageId ||
+              currentSlots.streaming.retryInfoClearedAt !== clearedAt
+            )
+              return state;
+            return {
+              sessions: writeSlots(state.sessions, sessionId, {
+                streaming: {
+                  ...currentSlots.streaming,
+                  retryInfo: null,
+                  retryInfoClearedAt: null,
+                  _retryHideTimer: undefined,
+                },
+              }),
+            };
+          });
+        }, 3000);
+        return {
+          sessions: writeSlots(prev.sessions, sessionId, {
+            streaming: { ...nextStreaming, _retryHideTimer: timer },
+          }),
+        };
+      }
+      const nextStreaming = { ...slots.streaming, ...patch };
       return {
         sessions: writeSlots(prev.sessions, sessionId, { streaming: nextStreaming }),
       };
     }),
 
   // 2026-10-20: LLM 重试可视化 —— 写入 retryInfo 供 Message.tsx 渲染 RetryBanner
+  // 2026-10-25: 同时取消旧隐藏定时器，重置 retryInfoClearedAt，让新重试立刻可见。
   setRetryInfo: (sessionId, messageId, info) =>
     set((prev) => {
       const slots = selectSessionSlots(prev, sessionId);
-      return slots.streaming && slots.streaming.messageId === messageId
-        ? {
-            sessions: writeSlots(prev.sessions, sessionId, {
-              streaming: { ...slots.streaming, retryInfo: info },
-            }),
-          }
-        : prev;
+      if (!slots.streaming || slots.streaming.messageId !== messageId) return prev;
+      // 取消旧的 3 秒隐藏定时器（上次重试成功后的延迟隐藏）
+      if (slots.streaming._retryHideTimer) {
+        clearTimeout(slots.streaming._retryHideTimer);
+      }
+      return {
+        sessions: writeSlots(prev.sessions, sessionId, {
+          streaming: {
+            ...slots.streaming,
+            retryInfo: info,
+            retryInfoClearedAt: null,
+            _retryHideTimer: undefined,
+          },
+        }),
+      };
     }),
 
   clearStream: (sessionId, messageId) =>
     set((prev) => {
       const slots = selectSessionSlots(prev, sessionId);
-      return slots.streaming && slots.streaming.messageId === messageId
-        ? { sessions: writeSlots(prev.sessions, sessionId, { streaming: null }) }
-        : prev;
+      if (!(slots.streaming && slots.streaming.messageId === messageId)) return prev;
+      // 2026-10-25: 流结束时取消任何待执行的延迟隐藏定时器
+      if (slots.streaming._retryHideTimer) {
+        clearTimeout(slots.streaming._retryHideTimer);
+      }
+      return { sessions: writeSlots(prev.sessions, sessionId, { streaming: null }) };
     }),
 
   resetToolCalls: (sessionId) =>
@@ -419,6 +478,10 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
     set((prev) => {
       const slots = selectSessionSlots(prev, sessionId);
       if (!slots.streaming || slots.streaming.messageId !== oldMessageId) return prev;
+      // 2026-10-25: 步骤切换时取消任何待执行的延迟隐藏定时器
+      if (slots.streaming._retryHideTimer) {
+        clearTimeout(slots.streaming._retryHideTimer);
+      }
       return {
         sessions: writeSlots(prev.sessions, sessionId, {
           streaming: {
@@ -429,6 +492,7 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
             currentAgentId: slots.streaming.currentAgentId,
             iteration: slots.streaming.iteration,
             retryInfo: null,
+            retryInfoClearedAt: null,
           },
           streamingToolCalls: [],
         }),
