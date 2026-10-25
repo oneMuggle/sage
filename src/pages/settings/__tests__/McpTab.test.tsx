@@ -2,7 +2,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { McpTab, formatMcpTabAuditJson, formatMcpTabAuditSnapshot } from '../McpTab';
+import {
+  McpTab,
+  formatMcpTabAuditJson,
+  formatMcpTabAuditSnapshot,
+} from '../McpTab';
 
 const mocks = vi.hoisted(() => ({
   status: vi.fn(),
@@ -300,14 +304,7 @@ describe('McpTab', () => {
     mocks.status.mockResolvedValue({
       ...STATUS,
       servers: [
-        {
-          name: 'remote',
-          state: 'ready',
-          tool_count: 1,
-          last_error: null,
-          since: 1,
-          required: false,
-        },
+        { name: 'remote', state: 'ready', tool_count: 1, last_error: null, since: 1, required: false },
       ],
     });
     mocks.authorizeServer.mockResolvedValue({
@@ -320,7 +317,9 @@ describe('McpTab', () => {
     await waitFor(() => expect(screen.getByTestId('mcp-authorize-remote')).toBeTruthy());
 
     fireEvent.click(screen.getByTestId('mcp-authorize-remote'));
-    await waitFor(() => expect(mocks.authorizeServer).toHaveBeenCalledWith('remote'));
+    await waitFor(() =>
+      expect(mocks.authorizeServer).toHaveBeenCalledWith('remote'),
+    );
     await waitFor(() =>
       expect(screen.getByTestId('mcp-authorize-message').textContent).toBe(
         'settings.mcp.authorize.success',

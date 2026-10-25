@@ -356,7 +356,10 @@ export function McpTab() {
           </div>
         )}
         {authorizeMessage && (
-          <div data-testid="mcp-authorize-message" className="text-xs text-success mb-3">
+          <div
+            data-testid="mcp-authorize-message"
+            className="text-xs text-success mb-3"
+          >
             {authorizeMessage}
           </div>
         )}
@@ -383,167 +386,162 @@ export function McpTab() {
                 const disabledSet = new Set(toolsReport?.disabled_tools ?? []);
                 return (
                   <Fragment key={srv.name}>
-                    <tr className="border-b border-border">
-                      <td className="py-2 text-text font-mono">
-                        {srv.name}
-                        {srv.required && (
-                          <span className="ml-1 text-warning" title={t('settings.mcp.required')}>
-                            *
-                          </span>
+                  <tr className="border-b border-border">
+                    <td className="py-2 text-text font-mono">
+                      {srv.name}
+                      {srv.required && (
+                        <span className="ml-1 text-warning" title={t('settings.mcp.required')}>
+                          *
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2">
+                      <span
+                        data-testid={`state-badge-${srv.name}`}
+                        className={clsx(
+                          'px-2 py-0.5 rounded-full text-ui-2xs font-medium',
+                          STATE_BADGE_CLASSES[state],
                         )}
-                      </td>
-                      <td className="py-2">
-                        <span
-                          data-testid={`state-badge-${srv.name}`}
-                          className={clsx(
-                            'px-2 py-0.5 rounded-full text-ui-2xs font-medium',
-                            STATE_BADGE_CLASSES[state],
-                          )}
-                        >
-                          {t(STATE_LABEL_KEYS[state])}
-                        </span>
-                      </td>
-                      <td className="py-2">
-                        <button
-                          type="button"
-                          data-testid={`mcp-tools-toggle-${srv.name}`}
-                          onClick={() => void handleExpand(srv.name)}
-                          className={clsx(
-                            'px-1.5 py-0.5 rounded-radius-sm border text-xs',
-                            isExpanded
-                              ? 'border-primary text-text'
-                              : 'border-transparent text-muted hover:text-text hover:border-border',
-                          )}
-                          title={
-                            isExpanded
-                              ? t('settings.mcp.tools.collapse')
-                              : t('settings.mcp.tools.expand')
-                          }
-                        >
-                          {entry?.tool_count ?? 0}
-                        </button>
-                      </td>
-                      <td className="py-2 text-muted max-w-[240px]">
-                        <span className="block truncate" title={entry?.last_error ?? ''}>
-                          {entry?.last_error ?? ''}
-                        </span>
-                      </td>
-                      <td className="py-2">
-                        <Toggle
-                          value={srv.enabled}
-                          onChange={(v) => void handleToggle(srv.name, v)}
-                        />
-                      </td>
-                      <td className="py-2">
-                        <button
-                          className={clsx(
-                            'px-2 py-0.5 text-xs rounded-radius-sm border',
-                            srv.builtin
-                              ? 'border-border text-muted opacity-50 cursor-not-allowed'
-                              : 'border-error/40 text-error hover:bg-error/10',
-                          )}
-                          disabled={srv.builtin}
-                          title={srv.builtin ? t('settings.mcp.builtin_hint') : t('common.delete')}
-                          onClick={() => void handleDelete(srv.name)}
-                        >
-                          {t('settings.mcp.delete')}
-                        </button>
-                        {srv.url && (
-                          <>
-                            {(stateByKey.get(srv.name)?.has_oauth_token ?? false) && (
-                              <span
-                                data-testid={`mcp-oauth-badge-${srv.name}`}
-                                title={t('settings.mcp.authorize.badge')}
-                                className="ml-1.5 text-warning"
-                              >
-                                🔑
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              data-testid={`mcp-authorize-${srv.name}`}
-                              className="ml-1.5 px-2 py-0.5 text-xs rounded-radius-sm border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50"
-                              disabled={authorizing !== null}
-                              title={t('settings.mcp.authorize.hint')}
-                              onClick={() => void handleAuthorize(srv.name)}
+                      >
+                        {t(STATE_LABEL_KEYS[state])}
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      <button
+                        type="button"
+                        data-testid={`mcp-tools-toggle-${srv.name}`}
+                        onClick={() => void handleExpand(srv.name)}
+                        className={clsx(
+                          'px-1.5 py-0.5 rounded-radius-sm border text-xs',
+                          isExpanded
+                            ? 'border-primary text-text'
+                            : 'border-transparent text-muted hover:text-text hover:border-border',
+                        )}
+                        title={isExpanded ? t('settings.mcp.tools.collapse') : t('settings.mcp.tools.expand')}
+                      >
+                        {entry?.tool_count ?? 0}
+                      </button>
+                    </td>
+                    <td className="py-2 text-muted max-w-[240px]">
+                      <span className="block truncate" title={entry?.last_error ?? ''}>
+                        {entry?.last_error ?? ''}
+                      </span>
+                    </td>
+                    <td className="py-2">
+                      <Toggle
+                        value={srv.enabled}
+                        onChange={(v) => void handleToggle(srv.name, v)}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <button
+                        className={clsx(
+                          'px-2 py-0.5 text-xs rounded-radius-sm border',
+                          srv.builtin
+                            ? 'border-border text-muted opacity-50 cursor-not-allowed'
+                            : 'border-error/40 text-error hover:bg-error/10',
+                        )}
+                        disabled={srv.builtin}
+                        title={srv.builtin ? t('settings.mcp.builtin_hint') : t('common.delete')}
+                        onClick={() => void handleDelete(srv.name)}
+                      >
+                        {t('settings.mcp.delete')}
+                      </button>
+                      {srv.url && (
+                        <>
+                          {(stateByKey.get(srv.name)?.has_oauth_token ?? false) && (
+                            <span
+                              data-testid={`mcp-oauth-badge-${srv.name}`}
+                              title={t('settings.mcp.authorize.badge')}
+                              className="ml-1.5 text-warning"
                             >
-                              {authorizing === srv.name
-                                ? t('settings.mcp.authorize.authorizing')
-                                : (stateByKey.get(srv.name)?.has_oauth_token ?? false)
-                                  ? t('settings.mcp.authorize.reauthorize')
-                                  : t('settings.mcp.authorize.button')}
-                            </button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                    {isExpanded && (
-                      <tr className="border-b border-border">
-                        <td colSpan={6} className="py-2 px-2 bg-faint/5">
-                          <div data-testid={`mcp-tools-panel-${srv.name}`} className="space-y-1.5">
-                            <p className="text-ui-2xs text-muted">{t('settings.mcp.tools.hint')}</p>
-                            {toolsLoading && (
-                              <p className="text-xs text-muted">
-                                {t('settings.mcp.tools.loading')}
-                              </p>
-                            )}
-                            {toolsError && (
-                              <p
-                                role="alert"
-                                data-testid={`mcp-tools-error-${srv.name}`}
-                                className="text-xs text-error"
-                              >
-                                {toolsError || t('settings.mcp.tools.error')}
-                              </p>
-                            )}
-                            {!toolsLoading &&
-                              !toolsError &&
-                              toolsReport &&
-                              toolsReport.tools.length === 0 && (
-                                <p className="text-xs text-muted">{t('settings.mcp.tools.none')}</p>
-                              )}
-                            {!toolsLoading &&
-                              !toolsError &&
-                              toolsReport &&
-                              toolsReport.tools.map((tool) => {
-                                const enabled = !disabledSet.has(tool.name);
-                                return (
-                                  <label
-                                    key={tool.name}
-                                    className="flex items-start gap-2 py-0.5 cursor-pointer"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      data-testid={`mcp-tool-check-${srv.name}-${tool.name}`}
-                                      className="mt-0.5"
-                                      checked={enabled}
-                                      disabled={toolBusy === tool.name}
-                                      onChange={(e) =>
-                                        void handleToolToggle(srv.name, tool.name, e.target.checked)
-                                      }
-                                    />
-                                    <span className="min-w-0">
-                                      <span className="text-xs font-mono text-text">
-                                        {tool.name}
-                                        {!enabled && (
-                                          <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-ui-xs bg-error/15 text-error font-sans">
-                                            {t('settings.mcp.tools.disabled_tag')}
-                                          </span>
-                                        )}
-                                      </span>
-                                      {tool.description && (
-                                        <span className="block text-ui-2xs text-muted truncate">
-                                          {tool.description}
+                              🔑
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            data-testid={`mcp-authorize-${srv.name}`}
+                            className="ml-1.5 px-2 py-0.5 text-xs rounded-radius-sm border border-primary/40 text-primary hover:bg-primary/10 disabled:opacity-50"
+                            disabled={authorizing !== null}
+                            title={t('settings.mcp.authorize.hint')}
+                            onClick={() => void handleAuthorize(srv.name)}
+                          >
+                            {authorizing === srv.name
+                              ? t('settings.mcp.authorize.authorizing')
+                              : (stateByKey.get(srv.name)?.has_oauth_token ?? false)
+                                ? t('settings.mcp.authorize.reauthorize')
+                                : t('settings.mcp.authorize.button')}
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr className="border-b border-border">
+                      <td colSpan={6} className="py-2 px-2 bg-faint/5">
+                        <div data-testid={`mcp-tools-panel-${srv.name}`} className="space-y-1.5">
+                          <p className="text-ui-2xs text-muted">
+                            {t('settings.mcp.tools.hint')}
+                          </p>
+                          {toolsLoading && (
+                            <p className="text-xs text-muted">
+                              {t('settings.mcp.tools.loading')}
+                            </p>
+                          )}
+                          {toolsError && (
+                            <p
+                              role="alert"
+                              data-testid={`mcp-tools-error-${srv.name}`}
+                              className="text-xs text-error"
+                            >
+                              {toolsError || t('settings.mcp.tools.error')}
+                            </p>
+                          )}
+                          {!toolsLoading && !toolsError && toolsReport && toolsReport.tools.length === 0 && (
+                            <p className="text-xs text-muted">{t('settings.mcp.tools.none')}</p>
+                          )}
+                          {!toolsLoading &&
+                            !toolsError &&
+                            toolsReport &&
+                            toolsReport.tools.map((tool) => {
+                              const enabled = !disabledSet.has(tool.name);
+                              return (
+                                <label
+                                  key={tool.name}
+                                  className="flex items-start gap-2 py-0.5 cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    data-testid={`mcp-tool-check-${srv.name}-${tool.name}`}
+                                    className="mt-0.5"
+                                    checked={enabled}
+                                    disabled={toolBusy === tool.name}
+                                    onChange={(e) =>
+                                      void handleToolToggle(srv.name, tool.name, e.target.checked)
+                                    }
+                                  />
+                                  <span className="min-w-0">
+                                    <span className="text-xs font-mono text-text">
+                                      {tool.name}
+                                      {!enabled && (
+                                        <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-ui-xs bg-error/15 text-error font-sans">
+                                          {t('settings.mcp.tools.disabled_tag')}
                                         </span>
                                       )}
                                     </span>
-                                  </label>
-                                );
-                              })}
-                          </div>
-                        </td>
-                      </tr>
-                    )}
+                                    {tool.description && (
+                                      <span className="block text-ui-2xs text-muted truncate">
+                                        {tool.description}
+                                      </span>
+                                    )}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   </Fragment>
                 );
               })}
