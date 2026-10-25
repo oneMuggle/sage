@@ -10,8 +10,9 @@
 6. 设置读取失败 → 使用默认上限 300s
 """
 
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import Mock, patch
 
 from backend.core.legacy.llm_client import LLMConfig
 
@@ -82,10 +83,12 @@ class TestComputeDynamicTimeout:
         config = LLMConfig(model="gpt-3.5-turbo")
         messages = [{"role": "user", "content": "x" * 40000}]
 
-        with patch("backend.chat.compaction.estimate_messages_tokens", return_value=10000):
-            with patch("backend.data.settings_repo.SettingsRepository") as mock_repo:
-                mock_repo.return_value.get_json.return_value = {"llmTotalTimeoutS": 120}
-                timeout = config.compute_dynamic_timeout(messages)
+        with (
+            patch("backend.chat.compaction.estimate_messages_tokens", return_value=10000),
+            patch("backend.data.settings_repo.SettingsRepository") as mock_repo,
+        ):
+            mock_repo.return_value.get_json.return_value = {"llmTotalTimeoutS": 120}
+            timeout = config.compute_dynamic_timeout(messages)
 
         # 计算值 660s > max 120s → 截断
         assert timeout == 120, f"应截断到用户配置的 max_timeout 120s，实际 {timeout}"
@@ -121,10 +124,12 @@ class TestComputeDynamicTimeout:
         config = LLMConfig(model="gpt-3.5-turbo")
         messages = [{"role": "user", "content": "x" * 40000}]
 
-        with patch("backend.chat.compaction.estimate_messages_tokens", return_value=10000):
-            with patch("backend.data.settings_repo.SettingsRepository") as mock_repo:
-                mock_repo.return_value.get_json.side_effect = Exception("mock DB 错误")
-                timeout = config.compute_dynamic_timeout(messages)
+        with (
+            patch("backend.chat.compaction.estimate_messages_tokens", return_value=10000),
+            patch("backend.data.settings_repo.SettingsRepository") as mock_repo,
+        ):
+            mock_repo.return_value.get_json.side_effect = Exception("mock DB 错误")
+            timeout = config.compute_dynamic_timeout(messages)
 
         # 计算值 660s > 默认上限 300s → 截断
         assert timeout == 300, f"设置读取失败应使用默认上限 300s，实际 {timeout}"
