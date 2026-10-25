@@ -4,6 +4,10 @@ import { Outlet, useLocation } from 'react-router-dom';
 
 import { ErrorBoundary } from '../../app/providers/ErrorBoundary';
 import { dispatchFindShortcut } from '../../features/chat/chatFind';
+import {
+  isAutoCollapseSidebarEnabled,
+  useRightPanelStore,
+} from '../../features/right-panel/rightPanelStore';
 import { useResizableSidebar } from '../../shared/lib/useResizableSidebar';
 import { PageSkeleton } from '../../shared/ui';
 import { EndpointStatusBanner } from '../system/EndpointStatusBanner';
@@ -22,6 +26,27 @@ export function Layout() {
   );
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+
+  // UI 优化 2026-10-14: 左右面板联动。
+  // 右栏打开 + autoCollapse 设置开启 → 自动折叠左栏。
+  // 右栏关闭时不自动恢复（用户可手动 Ctrl+B 展开）。
+  // 右栏最大化时始终折叠左栏（不受设置开关影响）。
+  const rightPanelOpen = useRightPanelStore((s) => s.open);
+  const rightPanelMaximized = useRightPanelStore((s) => s.maximized);
+
+  // 右栏打开 → 自动折叠（设置控制）
+  useEffect(() => {
+    if (rightPanelOpen && isAutoCollapseSidebarEnabled()) {
+      setCollapsed(true);
+    }
+  }, [rightPanelOpen]);
+
+  // 右栏最大化 → 始终折叠（不受设置影响）
+  useEffect(() => {
+    if (rightPanelMaximized) {
+      setCollapsed(true);
+    }
+  }, [rightPanelMaximized]);
 
   // 监听窗口大小变化
   // 路由切换时自动收起窄屏侧边栏抽屉
@@ -127,7 +152,11 @@ export function Layout() {
                 </div>
               )}
             >
-              <Sidebar width={collapsed ? 56 : width} collapsed={collapsed} onToggleCollapse={() => setCollapsed((prev) => !prev)} />
+              <Sidebar
+                width={collapsed ? 56 : width}
+                collapsed={collapsed}
+                onToggleCollapse={() => setCollapsed((prev) => !prev)}
+              />
             </ErrorBoundary>
           </div>
 

@@ -52,6 +52,26 @@ export function setArtifactAutoOpenEnabled(enabled: boolean): void {
   }
 }
 
+/**
+ * UI 优化 2026-10-14: 右栏打开时是否自动折叠左栏（Layout.tsx 消费）。
+ * 默认关闭 —— 用户可手动开启。右栏最大化时始终折叠（不受此开关影响）。
+ */
+export function isAutoCollapseSidebarEnabled(): boolean {
+  try {
+    return localStorage.getItem('right-panel-auto-collapse-sidebar') === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setAutoCollapseSidebarEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem('right-panel-auto-collapse-sidebar', enabled ? '1' : '0');
+  } catch {
+    // localStorage 不可用
+  }
+}
+
 function loadInitialOpen(): boolean {
   try {
     return localStorage.getItem(OPEN_KEY) === '1';
