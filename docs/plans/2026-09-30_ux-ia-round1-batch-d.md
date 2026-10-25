@@ -20,5 +20,5 @@
 - 新增 `InputCard.composerControls.test.tsx`（3 例）；`src/widgets/chat` 与 `src/pages` 下 803 个测试全部通过。
 
 ## 5. PR
-- main：待回填
-- win7：待回填
+- main：#1850（`f1b1bc3d4`）
+- win7（release/win7）：#1851

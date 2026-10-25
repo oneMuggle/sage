@@ -35,4 +35,6 @@ used_tokens 之和）与已完成进度。
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1604（squash `2d35a77d`，CI 14 项全绿）。
+- **win7 对齐**：PR #1607（squash `783f4a66`，win7 必过项全绿）。
+- **回填分支**：`docs/r54-parity-backfill`（本提交）。

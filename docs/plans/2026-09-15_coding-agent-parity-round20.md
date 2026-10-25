@@ -33,4 +33,8 @@
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+| 批次 | main | win7 |
+| --- | --- | --- |
+| A（任务树消耗可见性） | PR #840（squash 6d3c18d9） | PR #869（cherry-win7-r20，squash 6fb1f36d） |
+
+win7 对齐说明：零冲突落位；纯前端 + docs 改动（tsc 全过），CI 全绿后 squash merge（#869）。

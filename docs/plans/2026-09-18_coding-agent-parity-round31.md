@@ -44,4 +44,7 @@ run 内 memoize，预算关闭也可用，查询 fail-open 跳过）。
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1188（squash `9ae4c6db`，2026-09-19 merge，CI 12 项全绿）。
+- **win7 对齐**：随四轮合并 PR #1186（squash `ee61fbb1`，2026-09-19 merge，
+  真 py38 必过项全绿；win7 基底 budget+partial 20 例本地全绿）。
+- **回填分支**：`docs/r28-31-backfill`（本提交）。

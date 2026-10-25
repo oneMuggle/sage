@@ -41,16 +41,6 @@ SettingsRepository 打桩为内存 KV，沿用 r166/R66 惯例）：
 - 18 例全绿（本地 3.12）；ruff 本地预检通过；py38_hazard_scan 0 命中；
   全量 collect 11463 例（8 个 mcp 收集错误为已知本地环境伪影）。
 
-### win7 侧适配（对齐批次差异）
-
-- 首验发现 win7 的 prompt_routes 为 R42 之前的版本：无 reorder 端点，
-  `list_templates` 按 updated_at 新→旧排序（main 已改存储序 + reorder
-  端点，配套前端拖拽 UI 未上 win7）。
-- 处置：**不做行为搬运**（仅搬后端会让 win7 用户模板列表乱序而无可视
-  排序手段），改为测试适配——reorder 两例替换为 win7 行为基线一例
-  （list 按 updated_at DESC），其余 16 例与 main 完全一致。
-- 适配后：17 例全绿；ruff 0 命中。
-
 ## 4. 批次 B
 
 （剩余候选：artifact/search/project/web_access/wiki/zotero/gateway/todo
@@ -58,4 +48,12 @@ SettingsRepository 打桩为内存 KV，沿用 r166/R66 惯例）：
 
 ## 5. 交付记录
 
-（交付后回填）
+- **批次 A（main）**：#1794 `b5ac8c91`
+  - 内容：test_prompt_routes.py（18 例）+ 本文档。CI 一次全绿
+    （16 checks 0 failure）。
+- **批次 B（win7 对齐）**：#1796 `52040c1d`
+  - 首验发现 win7 的 prompt_routes 为 R42 前版本（无 reorder 端点、
+    list 按 updated_at 排序且前端无拖拽 UI）。处置：**不做行为搬运**，
+    测试适配——reorder 两例替换为 win7 行为基线一例（list 按
+    updated_at DESC），其余 16 例一致；适配后 17 例全绿，CI 一次通过。
+- **总账回填**：即本提交。

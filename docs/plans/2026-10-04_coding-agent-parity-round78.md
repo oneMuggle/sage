@@ -79,7 +79,7 @@ win7 线 `backend/api/zotero_routes.py` 与 `backend/zotero/*` 同源存在
 
 - **批次 A（main）**：#1900 `86004d2d3`。
   - 内容：`backend/tests/unit/api/test_zotero_routes.py`（18 例）+ 本文档。
-- **批次 B（win7 对齐）**：本 PR（`feat-parity-r78-win7`）：r94 修复移植
+- **批次 B（win7 对齐）**：`feat-parity-r78-win7`：r94 修复移植
   （`backend/api/zotero_routes.py`、`backend/data/settings_repo.py`）+ 18 例
   测试 + 文档同步；本地 18 例全绿、ruff 无新增、py38 危险扫描 0 命中。
 - **总账回填**：`docs/plans/parity-rounds-index.md` R78 行待批次 A/B 合并后回填。

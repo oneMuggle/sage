@@ -280,7 +280,7 @@ CI 状态复查因此改走 REST + `Invoke-RestMethod`，不再依赖 `gh`。
 
 #### 事实零（根因）：`release/win7` 的 `ci.yml` 在 `pull_request` 上挂了 `paths-ignore`
 
-本轮前四条 win7 轨文档 PR（#1875 / #1885 / #1886 等）表现为「开了 PR 之后零
+本轮多条 win7 轨文档 PR（#1875 / #1885 / #1886 等）表现为「开了 PR 之后零
 workflow run、head SHA 上零 check-run、`mergeable_state` 永远是 `blocked`」。
 我当时的判断是「GitHub 把 `pull_request` 事件静默丢弃了」，并据此尝试了
 close+reopen、换新分支重开、推新提交触发 `synchronize`、`ci-rerun.yml` 补跑
@@ -327,10 +327,11 @@ Electron build (ubuntu-latest)
    `pull_request` 的 `paths-ignore`，所以 main 轨的文档 PR 从来没出过这个问题；
    只有 win7 基的文档 PR 全军覆没。这个反差一开始就该指向分支配置而不是平台。
 
-修复（见 #1886）：**只从 `pull_request` 移除 `paths-ignore`，`push` 上的保留**
-（push 侧省几分钟是真实收益，且不影响合并）。移除后纯文档 PR 会跑全量 CI，
-这是「可合并」必须付的代价；若要省这几分钟，正确做法是另建一个廉价的 docs-only
-check 去满足分支保护，而不是让整条 workflow 消失。
+修复走 #1886（win7 轨）：**只从 `pull_request` 移除 `paths-ignore`，`push` 上的
+保留**（push 侧省几分钟是真实收益，且不影响合并）。移除后纯文档 PR 会跑全量
+CI，这是「可合并」必须付的代价；若要省这几分钟，正确做法是另建一个廉价的
+docs-only check 去满足分支保护，而不是让整条 workflow 消失。
+**`main` / `develop` 的 `ci.yml` 本就没有 `pull_request` 路径过滤，无需改动。**
 
 #### 事实一：`workflow_dispatch` 的 check-run 不参与 PR 的分支保护判定
 

@@ -37,4 +37,8 @@ BU17 给聚合块标题加了任务级 token 消耗，但没有时长——condu
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1276（squash `a9d06741`，2026-09-19 merge，CI 12 项全绿）。
+- **win7 对齐**：PR #1277（squash `f5477f33`，2026-09-19 merge，win7 必过项
+  全绿）。cherry-pick 干净落位，win7 基底 24 例本地全绿。
+- **回填分支**：`docs/r36-parity-backfill`（本提交；原 `docs/r36-backfill`
+  命名与并行会话冲突，已归还）。

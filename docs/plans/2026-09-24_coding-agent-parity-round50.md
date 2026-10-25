@@ -34,4 +34,7 @@ EventTimeline 事件时间线仅有绝对时间戳（HH:MM:SS），用户需心�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1540（squash `f377e1cf`，CI 14 项全绿）。
+- **win7 对齐**：PR #1545（squash `8339a897`，win7 必过项全绿）。
+  cherry-pick 干净落位，win7 基底 vitest 2 例本地全绿。
+- **回填分支**：`docs/r50-parity-backfill`（本提交）。

@@ -24,7 +24,13 @@
 | R90 | 进程外插件 tool → 聊天 `ToolRegistry` 桥 | ✅ #2327 |
 | R92 | 插件工具 profile 受限通配 + Agent 工具白名单编辑 | ✅ #2360 |
 | R94 | 运行中插件工具动态选择器 | ✅ #2407 |
-| R95 | 插件工具按插件记住审批决定 | #2412（待合并） |
+| R95 | 插件工具按插件记住审批决定 | ✅ #2412 |
+| R96 | 插件权限规则结构化身份匹配 | ✅ #2413 |
+| R97 | 已记住权限规则管理（查看/删除） | ✅ #2418 |
+| R98 | 插件 profile 白名单结构化身份匹配 | ✅ #2440 |
+| R99 | 已保存权限规则写入完整性（记住去重 + 按内容删除） | ✅ #2452 |
+| R100 | 已保存权限规则一键清空（撤销全部持久信任） | ✅ #2474 |
+| R101 | 已保存权限规则插件归属标注（孤儿规则可见化） | 🔄 #2484 |
 
 ## 2. 交付总账
 
@@ -42,7 +48,13 @@
 | R90 | `plugins/tool_bridge.py` + host publish/unpublish 通知与 running 查询 + `plugins` tool bundle + `input_schema` 契约/权限门/桥接测试与文档 | #2327 | 待对齐 | ✅ 已交付 |
 | R92 | `domain/tool_names.py` 共享 matcher 与前缀单一来源 + registry/agent 三道闸统一 + 启动期校验识别插件引用 + `EditAgentForm` 工具白名单编辑与测试/文档 | #2360 | 待对齐 | ✅ 已交付 |
 | R94 | `PluginToolBridge.published_tools()` 权威快照 + `GET /plugins/runtime/tools` + `pluginClient.runtimeTools()` + Agent 运行中插件工具动态复选框与测试/文档 | #2407 | 待对齐 | ✅ 已交付 |
-| R95 | 审批请求权威 `plugin_name` + `remember_scope=tool|plugin` + 后端派生受限插件规则 + ApprovalDialog 范围选择与 Electron 透传/测试/文档 | #2412（待合并） | 待对齐 | 实施中 |
+| R95 | 审批请求权威 `plugin_name` + `remember_scope=tool|plugin` + 后端派生受限插件规则 + ApprovalDialog 范围选择与 Electron 透传/测试/文档 | #2412 | 待对齐 | ✅ 已交付 |
+| R96 | `PermissionRule`/`PermissionEnforcer` 权威 `plugin_name` 结构化匹配 + agent/adapter 身份透传与测试/文档 | #2413 | 待对齐 | ✅ 已交付 |
+| R97 | `GET /permissions/rules` + 删除端点 + Electron 命令 + 设置页已记住规则列表/删除与测试/文档 | #2418 | 待对齐 | ✅ 已交付 |
+| R98 | `tool_name_in_allowlist` 权威 `plugin_name` 结构化匹配 + registry/agent 三道闸与前端覆盖镜像透传与测试/文档 | #2440 | 待对齐 | ✅ 已交付 |
+| R99 | remember 追加去重 + 删除端点按内容定位 + Electron/设置页传参切换与测试/文档 | #2452 | 待对齐 | ✅ 已交付 |
+| R100 | `POST /permissions/rules/clear` + Electron 命令 + 设置页全部删除（确认后）与测试/文档 | #2474 | 待对齐 | ✅ 已交付 |
+| R101 | 规则列表响应只读归属标注（plugin_name/plugin_status）+ 设置页孤儿规则徽标与测试/文档 | #2484 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -314,6 +326,142 @@
 - **本地证据**：后端核心/相邻 208 例、前端与 Electron
   137 例通过；tsc（src/Electron）、ESLint、Ruff、py38、
   architecture、silent-exceptions、diff-check 与 diagnostics
-  全绿，最终以 PR CI 为准。
+  全绿；PR #2412 GitHub CI 与 E2E PR Gate 全绿，已 squash
+  合并为 `main`
+  `7634de8fc68e9064007706385ac433ec6c965d96`。
+
+## 16. R96 交付边界
+
+> spec：`2026-10-23_plugin-permission-identity-r96.md`。
+> R96 是本插件账轮次号，与 2026-09 的同号测试计划无关。
+
+- **只收紧执行期解释，不改已存规则**：`permission_rules`
+  仍保存 R95 的 `plugin__<plugin>__*` 文本；R96 只让
+  `PermissionEnforcer` 用桥接当前发布记录的权威
+  `plugin_name` 核对它，不再把完整工具名字符串前缀当作
+  插件身份。
+- **双下划线不再串扰持久信任**：插件名与 capability 名
+  仍可含 `__`，但 `a` 的整插件规则不能命中插件
+  `a__b`，同字符串工具名也只能按当前发布记录的真实
+  插件解释；无权威身份时受限插件通配不命中。
+- **其它规则口径不变**：精确规则与普通 fnmatch、deny >
+  allow > ask、bash 安全网、profile 白名单和审批弹窗
+  全部保持；本轮不做规则管理 UI、命名禁令或 Win7 同步。
+- **本地证据**：后端定向 134 例与相邻权限/插件回归
+  113 例通过；Ruff、py38、architecture、
+  silent-exceptions、diff-check 与 diagnostics 全绿；
+  PR #2413 GitHub All checks successful，已 squash
+  合并为 `main`
+  `56b005127a7f83f48086460fdce3192484c18717`。
+
+## 17. R97 交付边界
+
+> spec：`2026-10-23_permission-rules-manager-r97.md`。
+> R97 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **只补可见与可撤销，不开新的规则写面**：已保存规则
+  仍只能由审批 remember（精确工具）或服务端权威派生
+  （整插件）生成；设置页只列出 `parse_rules` 口径下
+  实际生效的规则并支持逐条删除，不提供新增/编辑
+  pattern 的入口。
+- **删除走后端校验，不整表回写**：删除端点带 Origin
+  守卫与下标范围校验，写回规范化后的有效列表并返回
+  最新列表；前端不直接拼写 `permission_rules` 原始
+  JSON。重复规则逐条删，误删后果只是恢复逐次审批。
+- **其它口径不变**：存储结构、remember 追加策略、
+  R96 身份匹配、审批弹窗与远程渠道全部保持；本轮
+  不做批量清空、分组/搜索或 Win7 同步。
+- **本地证据**：后端定向 37 例与相邻 77 例、前端定向
+  26 例与相邻 33 例通过；tsc、ESLint（0 errors）、
+  Ruff、py38、architecture、silent-exceptions、
+  ipc-manifest、diff-check 与 diagnostics 全绿；
+  PR #2418 GitHub All checks successful，已 squash
+  合并为 `main`
+  `a29e95ab70dc590d6469fe7c0f867e50f106f756`。
+
+## 18. R98 交付边界
+
+> spec：`2026-10-23_plugin-profile-allowlist-identity-r98.md`。
+> R98 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **只收紧 profile 通配解释，不改已存 profile**：
+  白名单条目文本与存储不变；本轮只让三道判定在
+  命中受限插件通配前先核对桥接发布身份，不再把
+  完整工具名字符串前缀当作插件身份。
+- **与 R96 同一口径**：`plugin__a__*` 不能再带飞
+  实际属于插件 `a__b` 的工具；身份缺失、非法或
+  不匹配时通配不命中。精确条目、通用 glob 不
+  展开、逐次审批与权限规则全部保持。
+- **前端镜像同口径**：运行中插件工具复选框的通配
+  覆盖改用已发布快照的 `plugin_name`，消除旧字符串
+  镜像对含 `__` 名字的双向漂移；UI 不新增任何
+  pattern 写面。
+- **本地证据**：后端定向 70 例与相邻 93 例、前端
+  定向 10 例通过；tsc、ESLint（0 errors）、Ruff、
+  py38、architecture、silent-exceptions、
+  diff-check 与 diagnostics 全绿；PR #2440 GitHub
+  All checks successful，已 squash 合并为 `main`
+  `905bb49638a555668f64740290dd91c9bf378107`。
+
+## 19. R99 交付边界
+
+> spec：`2026-10-24_permission-rules-integrity-r99.md`。
+> R99 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **只收口规则列表写入卫生，不开新写面**：remember
+  仍是唯一规则来源；本轮仅让重复 remember 不再攒
+  完全相同条目，并让删除按 `(tool_pattern, decision)`
+  内容定位，消除 R97 下标漂移删错规则的窗口。
+- **删除选择子不等于规则写面**：删除体携带的 pattern
+  只用于指出撤销存储中已存在且完全一致的一条，
+  无法创建或放宽规则；UI 只回传列表行自带字段，
+  没有 pattern 输入入口。
+- **冲突语义不动**：同 pattern 不同 decision 不去重、
+  不自动清理存量重复；deny > allow > ask 与存储
+  格式、远程网关口径保持，Win7 继续标待对齐。
+- **本地证据**：后端定向 42 例与相邻 83 例、前端
+  定向 28 例通过；tsc、ESLint（0 errors）、Ruff、
+  py38、architecture、silent-exceptions、
+  diff-check 与 diagnostics 全绿；PR #2452 GitHub
+  All Checks pass，已 squash 合并为 `main`
+  `b2ba86e312345d854fb2a35760fc4d6388a0ea9a`。
+
+## 20. R100 交付边界（已合并）
+
+> spec：`2026-10-24_permission-rules-clear-r100.md`。
+> R100 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **只补「全部撤销」，不开规则写面**：清空端点无请求体、
+  不带任何筛选参数，永远只能把规则列表写空；规则生成、
+  逐条删除与求值语义全部保持，UI 无 pattern 输入入口。
+- **破坏性操作先确认**：设置页「全部删除」先走项目内
+  confirmDialog（danger）才发请求；清空后果是全部恢复
+  逐次审批（fail-safe），不做 undo 或备份导出。
+- **本地证据**：后端定向 45 例与相邻 83 例、前端定向
+  36 例通过；ipc-manifest（264 commands）、tsc、
+  ESLint（0 errors）、Ruff、py38、architecture、
+  silent-exceptions、diff-check 与 diagnostics 全绿；
+  PR #2474 GitHub All Checks pass，已 squash 合并为
+  `main` `3d0b6a3a7e7d68e61156d686842f4c090a0b2d43`。
+
+## 21. R101 交付边界（PR #2484 待合并）
+
+> spec：`2026-10-24_permission-rules-plugin-status-r101.md`。
+> R101 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **只补可见性，不动写面与求值**：规则列表响应附带
+  服务端派生的 `plugin_name`/`plugin_status` 只读标注，
+  设置页对插件已卸载/无记录的规则显示徽标；标注永不
+  落盘，删除写回仍是纯 `(tool_pattern, decision)`。
+- **归属只认权威名单**：用生命周期记录集合 + 结构化
+  命名空间 helper 判定归属，不按工具名字符串切分猜
+  插件名；无记录命中时只报形状（missing/all）不报名字。
+- **卸载联动删规则明确不做**：卸载是可 restore 的软
+  删除，清规则会破坏恢复预期；本轮只让孤儿规则可见，
+  删留仍由用户在规则管理界面决定。
+- **本地证据**：后端新文件 5 例 + 既有 45 例、相邻
+  95 例，前端定向 38 例通过；tsc、ESLint（0 errors）、
+  Ruff 全库、py38、architecture、silent-exceptions、
+  diff-check 与 diagnostics 全绿。
 
 —— 本账本由插件化循环维护，随轮次追加。

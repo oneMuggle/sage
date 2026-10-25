@@ -49,4 +49,10 @@ BD7 快照带 `budget_exceeded` 但缺 `wall_clock_exceeded`；BD6 collect 超�
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1160（squash `f4548baf`，2026-09-18 merge，CI 12 项全绿）。
+- **win7 对齐**：随四轮合并 PR #1186（squash `ee61fbb1`，2026-09-19 merge，
+  真 py38 Win7 LTS 18m 必过项全绿；同 PR 附 anyio 3.7.1 两条公告审计策略
+  豁免，解除 win7 审计门对全线 win7 PR 的阻塞）。
+- **过程备注**：win7 PR push 事件一度被 GitHub 丢弃（约 2 小时），期间以
+  workflow_dispatch 完成分支验证（35401397713 / 35402587015 均 success），
+  push 事件恢复后真 pull_request CI 全绿。

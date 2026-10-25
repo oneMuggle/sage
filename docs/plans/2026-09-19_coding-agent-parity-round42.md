@@ -42,4 +42,7 @@
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1306（squash `58d7b19e`，2026-09-19 merge，CI 12 项全绿）。
+- **win7 对齐**：PR #1312（squash `ce086aff`，2026-09-19 merge，win7 必过项
+  全绿）。含与并行 RD18 测试同文件的合并解决；win7 基底 vitest 19 例本地全绿。
+- **回填分支**：`docs/r42-parity-backfill`（本提交）。

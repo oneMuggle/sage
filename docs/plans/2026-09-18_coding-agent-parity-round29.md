@@ -49,4 +49,7 @@ BU13 让终态任务带 `duration_ms`，但 running 任务行只有 "◐" 图标
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1169（squash `ce5df32c`，2026-09-19 merge，CI 12 项全绿）。
+- **win7 对齐**：随四轮合并 PR #1186（squash `ee61fbb1`，2026-09-19 merge，
+  真 py38 必过项全绿；win7 基底 vitest 12 例本地全绿）。
+- **回填分支**：`docs/r28-31-backfill`（本提交）。

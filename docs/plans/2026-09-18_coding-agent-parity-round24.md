@@ -57,4 +57,8 @@ RT23 打通了 usage_events.task_id 归因管道并新增 `task_usage_since()` �
 
 ## 5. 交付记录
 
-（各批次 PR 号与双分支交付号于交付后回填）
+- **main**：PR #1088（squash `76311cc5`，2026-09-18 merge，CI 12 项全绿）。
+- **win7 对齐**：PR #1094（squash `3d88507e`，2026-09-18 merge，py38 必过项
+  全绿）。本轮 cherry-pick 直接干净落位（无冲突）；database.py 身份绑定
+  （win7-only）未被波及，evolution hooks 7 例本地复验全绿。
+- **回填分支**：`docs/r24-backfill`（本提交）。

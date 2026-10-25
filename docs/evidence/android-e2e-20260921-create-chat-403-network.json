@@ -1,0 +1,20 @@
+[
+  {
+    "url": "https://www.google.com/recaptcha/enterprise/reload?k=<redacted>",
+    "method": "POST",
+    "t": "14:19:25",
+    "status": 200,
+    "mime": "application/json",
+    "bodyBytes": 1500,
+    "bodyHead": "<redacted google recaptcha payload>"
+  },
+  {
+    "url": "/nextjs-api/stream/create-chat",
+    "method": "POST",
+    "t": "14:19:25",
+    "status": 403,
+    "mime": "application/json",
+    "bodyBytes": 39,
+    "bodyHead": "{\"error\":\"recaptcha validation failed\"}"
+  }
+]

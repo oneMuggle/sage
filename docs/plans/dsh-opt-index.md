@@ -40,5 +40,19 @@
 | R16 | C1c Skill Draft/Audit/Rollback/Consolidation 路由组拆分 | #1611（`af319496`） | #1660（`e2af8068`） | ✅ 双分支已合 |
 | R17 | 稳定化 + 总账收敛 | #1664（`edcc3e17`） | #1670（`3144a482`） | ✅ 双分支已合 |
 | R18 | D1c 性能预算扩展（回填/迁移/双写/压缩四路径） | #1672（`2f60985e`） | #1675（`e296aab5`） | ✅ 双分支已合 |
+| R19 | TM3 键盘快捷键帮助面板 | #1684（`2c627e8b`） | #1692（`b852b2ea`） | ✅ 双分支已合 |
+| R20 | C3b 收编 ALTER 防御块进迁移框架（v1 基线 + 框架完善） | #1698（`53dce7f9`） | #1702（`6ecd9a39`） | ✅ 双分支已合 |
+| R21 | C3b v2 messages 表 ALTER 收编 | #1708（`4aeddfc8`） | #1709（`90041bc5`） | ✅ 双分支已合 |
+| R22 | C3b v3 sessions 表 ALTER 收编 | #1711（`ceac2052`） | #1719（`23634dce`） | ✅ 双分支已合 |
+| R23 | C3b v4 memories_episodic 表 ALTER 收编 | #1734（`663f8e6c`） | #1737（`28fe8b58`） | ✅ 双分支已合 |
+| R24 | C2a chat_stream 四路事件推送闭包收敛为 StreamEventSink | #1744（`8141f88c`） | #1747（`1abe24d6`） | ✅ 双分支已合 |
+| R25 | C1d settings/preferences 路由组迁出（legacy_routes 3977→3699） | #1750（`0b06eb12`） | #1752（`743579cc`） | ✅ 双分支已合 |
+| R26 | C2b 请求窗口策略五份重复收敛为 chat_request_policy（净 -684 行） | #1757（`62d3d6eb`） | #1759（`2b162513`） | ✅ 双分支已合 |
+| R27 | C1e legacy 13 个请求/响应模型归位 legacy_models.py（legacy_routes 3977→3327） | #1763（`0f756f22`） | #1767（`e73cd600`） | ✅ 双分支已合 |
+| R28 | C2c 流状态注册表与中断函数迁出 chat_stream_state（legacy_routes→3270） | #1774（`2e040f50`） | #1777（`51f9471f`） | ✅ 双分支已合 |
+| R29 | C2d 会话压缩/记忆提取装配迁出 chat_session_lifecycle（legacy_routes→2956） | #1782（`4985a218`） | #1790（`371166cb`） | ✅ 双分支已合 |
+| R30 | C2e Agent API 路由组迁出 legacy_agent_routes（legacy_routes→2748，C 系列 5463→2748） | #1792（`7b6c50cf`） | #1795（`3ea442c7`） | ✅ 双分支已合 |
+| R31 | C2f 聊天流支撑函数迁出 chat_stream_support（legacy_routes→2619） | #1800（`2961a9b1`） | #1801（`855f51e5`） | ✅ 双分支已合 |
+| R32 | C2g 非流式聊天/attach/interrupt/steer/进化/learn 迁出 legacy_chat_routes（legacy_routes→2359） | #1808（`cec72b08`） | #1822（待合） | 交付中 |
 
 —— 本账本由对标循环维护，随轮次追加。

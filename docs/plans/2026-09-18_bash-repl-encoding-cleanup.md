@@ -38,12 +38,12 @@ bash 工具和 repl 工具存在两个缺陷：
 
 ## 实施步骤
 
-- [ ] 步骤 1：`subprocess_util.py` — `spawn_verified()` 增加 `extra_env`；`read_capped_output()` fallback 解码
-- [ ] 步骤 2：`bash_tool.py` — `_spawn()` 注入编码环境变量
-- [ ] 步骤 3：`repl_tool.py` — finally 不 raise + 定时清理线程
-- [ ] 步骤 4：`shell_resolver.py` — PowerShell 执行命令注入 UTF-8 前缀
-- [ ] 步骤 5：补充单元测试
-- [ ] 步骤 6：cherry-pick 到 release/win7 分支对齐
+- [x] 步骤 1：`subprocess_util.py` — `spawn_verified()` 增加 `extra_env`；`read_capped_output()` fallback 解码
+- [x] 步骤 2：`bash_tool.py` — `_spawn()` 注入编码环境变量
+- [x] 步骤 3：`repl_tool.py` — finally 不 raise + 定时清理线程
+- [x] 步骤 4：PowerShell 路径在 `bash_tool._spawn()` 注入 UTF-8 前缀（而非 resolver）
+- [x] 步骤 5：补充单元测试（共新增 7 个测试类/函数，172 个测试全绿）
+- [x] 步骤 6：cherry-pick 到 release/win7 分支对齐（PR #1119 已开，py38 测试 253 个全绿）
 
 ## 风险评估
 
