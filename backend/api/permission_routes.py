@@ -54,7 +54,12 @@ from backend.domain.tool_names import (
     plugin_tool_wildcard_for_plugin,
 )
 from backend.services.permission_gate import get_permission_gate
-from backend.tools.permissions import SETTINGS_KEY_RULES, parse_rules
+from backend.tools.permissions import (
+    SETTINGS_KEY_RULES,
+    PermissionRule,
+    parse_rules,
+    remember_session_rule,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,12 +91,23 @@ class RememberScope(str, Enum):
     PLUGIN = "plugin"
 
 
+class RememberDuration(str, Enum):
+    """remember=true 时规则的存续范围（R105，与范围正交）。"""
+
+    PERMANENT = "permanent"
+    SESSION = "session"
+
+
 class ApprovalAnswerBody(BaseModel):
     """POST answer 请求体。"""
 
     approved: bool
     remember: bool = False
     remember_scope: RememberScope = RememberScope.TOOL
+    # R105：存续范围与覆盖范围正交——permanent（默认）写
+    # settings 持久规则；session 只写进程内会话规则存储，
+    # 永不落盘。老客户端不带此字段即默认 permanent。
+    remember_duration: RememberDuration = RememberDuration.PERMANENT
     # 对标 ZCode freeText：拒绝时用户附带的文字反馈（≤500 字符），
     # 经 gate → agent 拼进拒绝 reason，模型据此调整方案。批准时可留空。
     reason: str = Field(default="", max_length=500)
@@ -549,6 +565,41 @@ def forbidden_origin_response(request: Request) -> JSONResponse | None:
     return None
 
 
+def _derive_remembered_pattern(
+    tool_name: str,
+    remember_scope: RememberScope,
+    plugin_name: Optional[str],
+) -> Optional[str]:
+    """remember 时的 pattern 安全派生（持久化/会话共用）。
+
+    派生失败返回 None（只记 warning，调用方一律降级为不
+    记住）：工具范围含 fnmatch 元字符（FIX-3，防 ``*``
+    落成永久 allow-all），或整插件范围拿不到待审批请求
+    自带的服务端权威插件名 / 工具不属于该插件（R95）。
+    客户端在两种范围下都没有 pattern 表达能力。
+    """
+    if remember_scope is RememberScope.PLUGIN:
+        pattern = plugin_tool_wildcard_for_plugin(plugin_name)
+        if pattern is None or not plugin_tool_belongs_to_plugin(
+            tool_name, plugin_name
+        ):
+            logger.warning(
+                "拒绝持久化整插件审批规则（权威插件名缺失或不匹配）: "
+                "tool_name=%r plugin_name=%r",
+                tool_name,
+                plugin_name,
+            )
+            return None
+        return pattern
+    if _FNMATCH_METACHAR_RE.search(tool_name):
+        logger.warning(
+            "拒绝持久化含 fnmatch 元字符的审批规则（降级为不记住）: tool_name=%r",
+            tool_name,
+        )
+        return None
+    return tool_name
+
+
 def _persist_remembered_rule(
     tool_name: str,
     approved: bool,
@@ -575,26 +626,9 @@ def _persist_remembered_rule(
     其它失败也只记 warning——规则持久化失败不应让"已批准"的应答对前端
     变失败（本次执行已经放行了）。
     """
-    if remember_scope is RememberScope.PLUGIN:
-        pattern = plugin_tool_wildcard_for_plugin(plugin_name)
-        if pattern is None or not plugin_tool_belongs_to_plugin(
-            tool_name, plugin_name
-        ):
-            logger.warning(
-                "拒绝持久化整插件审批规则（权威插件名缺失或不匹配）: "
-                "tool_name=%r plugin_name=%r",
-                tool_name,
-                plugin_name,
-            )
-            return
-    elif _FNMATCH_METACHAR_RE.search(tool_name):
-        logger.warning(
-            "拒绝持久化含 fnmatch 元字符的审批规则（降级为不记住）: tool_name=%r",
-            tool_name,
-        )
+    pattern = _derive_remembered_pattern(tool_name, remember_scope, plugin_name)
+    if pattern is None:
         return
-    else:
-        pattern = tool_name
     decision = "allow" if approved else "deny"
     try:
         repo = SettingsRepository()
@@ -620,6 +654,43 @@ def _persist_remembered_rule(
         )
     except Exception as exc:  # noqa: BLE001 — 持久化失败不阻塞应答
         logger.warning("持久化审批规则失败: %s", exc)
+
+
+def _store_session_remembered_rule(
+    tool_name: str,
+    approved: bool,
+    *,
+    remember_scope: RememberScope,
+    plugin_name: Optional[str],
+    session_id: Optional[str],
+) -> None:
+    """remember=true（仅本次会话）时把决定写进会话规则存储（R105）。
+
+    与持久化共用同一 pattern 安全闸（``_derive_remembered_pattern``），
+    从不写 settings。审批请求没有捕获到会话归属时降级为不
+    记住（只记 warning）：用户选了「仅本次会话」就绝不能悄
+    悄变成永久规则。``session_id`` 来自请求创建时的服务端
+    上下文捕获，客户端不可指定。
+    """
+    if not session_id:
+        logger.warning(
+            "拒绝会话记住（审批请求无会话归属，降级为不记住）: tool_name=%r",
+            tool_name,
+        )
+        return
+    pattern = _derive_remembered_pattern(tool_name, remember_scope, plugin_name)
+    if pattern is None:
+        return
+    decision = "allow" if approved else "deny"
+    added = remember_session_rule(session_id, PermissionRule(pattern, decision))
+    logger.info(
+        "会话审批规则%s: session=%s pattern=%s decision=%s scope=%s",
+        "已记录" if added else "已存在（跳过）",
+        session_id,
+        pattern,
+        decision,
+        remember_scope.value,
+    )
 
 
 @router.get("/pending")
@@ -664,12 +735,21 @@ async def answer_approval(
         return {"ok": False, "error": "unknown_or_expired"}
 
     if body.remember:
-        _persist_remembered_rule(
-            req.tool_name,
-            body.approved,
-            remember_scope=body.remember_scope,
-            plugin_name=req.plugin_name,
-        )
+        if body.remember_duration is RememberDuration.SESSION:
+            _store_session_remembered_rule(
+                req.tool_name,
+                body.approved,
+                remember_scope=body.remember_scope,
+                plugin_name=req.plugin_name,
+                session_id=req.session_id,
+            )
+        else:
+            _persist_remembered_rule(
+                req.tool_name,
+                body.approved,
+                remember_scope=body.remember_scope,
+                plugin_name=req.plugin_name,
+            )
 
     # live-events P1: 子代理审批回填 —— 命中编排 run 时回发
     # ``task.approval_resolved``（canonical）+ ``subagent_event`` 镜像

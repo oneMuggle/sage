@@ -106,13 +106,15 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/permissions/${encodeURIComponent(String(a.requestId))}/answer`,
     // 后端 ApprovalAnswerBody 是 extra="forbid" — body 里只允许
-    // approved/remember/remember_scope/reason;requestId 是路径参数,
+    // approved/remember/remember_scope/remember_duration/reason;
+    // requestId 是路径参数,
     // 必须从 body 剥掉,否则 422。
     // (与 workspace_bind 剥 sessionId 同理)
     body: (a) => ({
       approved: a.approved,
       remember: a.remember,
       remember_scope: a.rememberScope ?? 'tool',
+      remember_duration: a.rememberDuration ?? 'permanent',
       reason: a.reason ?? '',
     }),
   },
