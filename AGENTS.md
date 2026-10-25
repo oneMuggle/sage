@@ -66,6 +66,13 @@
 - todo 分桶测试每日 UTC 23 点定时红（R97 冻结时钟方案修复）
 - ci-rerun 不可 dispatch / 永远验证 main（#1507/#1511 修复）
 - win7 `ci.yml` 的 `pull_request` paths-ignore 致纯文档 PR 永不建 run（#1886 修复）
+- 会话持久 cwd 指向已删除的 worktree → 一切命令 spawn ENOENT，极易误判为
+  杀软拦截（R41 期实证：重建同名空目录即恢复）。规程：清理 worktree 前，
+  先把 shell 持久 cwd 移回主检出
+- Windows 时钟粒度 ~15.6ms：测试内 `sleep(0.01)` 不足以隔开先后时间戳
+  （todo 测试 R39/#1597 对齐 0.02；同族用例新增时直接用 ≥0.02）
+- 新合入的"分支新鲜度门禁"：落后 main 较多的分支 CI 不触发——把最新 main
+  merge 进分支再推即恢复（R42 期实证）
 
 ## 指针
 
