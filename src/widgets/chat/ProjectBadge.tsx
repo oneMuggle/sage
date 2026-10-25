@@ -64,7 +64,7 @@ export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgePro
 
   const handleCopyWorkspacePath = async () => {
     setCopiedPath(true);
-    /* v8 ignore start */
+    /* v8 ignore next */
     setTimeout(() => {
       if (typeof window !== 'undefined') setCopiedPath(false);
     }, 1800);
@@ -73,7 +73,6 @@ export function ProjectBadge({ workspacePath, onOpenWorkbench }: ProjectBadgePro
     } catch {
       // ignore in test/offline mode
     }
-    /* v8 ignore stop */
   };
 
   return (
