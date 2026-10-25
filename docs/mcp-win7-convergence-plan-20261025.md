@@ -122,3 +122,35 @@
 3. `src` 剩余 159 ——67 个冲突文件需逐个 3-way，建议按 feature 目录切分
 4. `electron` 47 ——最后做，构建面差异最大
 5. `architecture-baseline.json` ——等 `src`/`backend` 收敛到位后再对齐
+
+## 8. 批次 4 与最终进度（2026-10-25 收尾）
+
+| 批次 | 范围 | 结果 |
+|---|---|---|
+| 4 | `backend/tests/` | ✅ #2502 → `961d2b85`（14 文件：三方合并 10 / 直接取 main 4） |
+
+### 批次 4 踩到的坑：合并产物可能语法/风格坏
+
+`backend/tests/unit/test_storage_schema.py` 的三方合并返回 rc=0（"零冲突"），但把 win7 新增的 `from typing import List` 和 main 改写的模块 docstring 粘在了同一行，导致 ruff `F811` 失败、py38 job 变红。
+
+**因此验证链再补两道**（现已强制）：
+
+3. Python 侧：对每个合并后的 `.py` 执行 `compile()` 语法校验 + `ruff check --fix --select F,E9`
+4. 修复后必须**重新上传 blob**——PR 分支里的旧 blob 不会自动跟着工作区变
+
+### 最终进度
+
+| 时点 | 异动文件 | main-only | real | 需动作 |
+|---|---:|---:|---:|---:|
+| 起点 | 983 | 233 | 421 | 714 |
+| 批次 1（docs） | 706 | 29 | 348 | 437 |
+| 批次 3（src） | 683 | 30 | 323 | 414 |
+| 批次 4（backend/tests） | **676** | **32** | **314** | **407** |
+
+> `main` 在本轮期间被其他人推了多次（`0d687001` → `58afc32d`），所以 `main-only` 会小幅回升，这是活性而非倒退。
+
+### 剩余 407 个需动作文件的分布
+
+`backend 199` / `src 162` / `backend/tests 150` / `docs 72` / `electron 47` / `scripts 23` / `.github 7` / 其余 15。
+
+其中真正可再自动化的部分已基本榨干：本轮实测「safe-take-main + 三方干净合并」的命中率约 **12%~25%**，且每批都需要 `tsc` / `vitest` / `pytest` / `ruff` 四道闸逐一把不合格文件剔除。**剩余主体是 168 个 both-changed 冲突文件与 161 个 no-base 文件，只能人工 3-way。**
