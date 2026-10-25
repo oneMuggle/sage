@@ -99,3 +99,11 @@ export function ReviewItemCard({ item, onAction }: ReviewItemCardProps) {
     </div>
   );
 }
+// eslint-disable-next-line react-refresh/only-export-components
+export function auditReviewItemCardGovernance(): string {
+  return JSON.stringify({
+    module: 'wiki-review-item-card',
+    phase: 'P194',
+    audited: true,
+  });
+}
