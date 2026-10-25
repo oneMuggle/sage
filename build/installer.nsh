@@ -3,27 +3,13 @@
 ; Custom NSIS macros for Sage installer.
 ; Wired in via electron-builder.yml: nsis.include = "build/installer.nsh"
 ;
-; customInit:
-;   1. Kill orphaned Python backend from previous install (path-scoped).
-;      - On Win7 the Electron main process may crash or be force-killed,
-;        leaving the Python backend (python.exe) still running as an orphan.
-;        The default CHECK_APP_RUNNING only kills Sage.exe; if python.exe is
-;        still bound to files under $INSTDIR, the file replacement in
-;        installApplicationFiles will fail with "file in use" errors.
-;      - We kill python.exe whose ExecutablePath starts with $INSTDIR\python\
-;        via PowerShell Get-WmiObject (PS 2.0+, works on bare Win7 SP1).
-;        Path-scoped so we don't kill user's other Python processes
-;        (Anaconda, Jupyter, etc.). Get-CimInstance is NOT used because it
-;        requires PS 3.0+ (absent on bare Win7 SP1).
-;      - Sage.exe is handled by the default CHECK_APP_RUNNING macro which
-;        shows a proper UI dialog and tries graceful close before force kill.
-;   2. Cover-upgrade rollback staging.
-;      - The running app writes `.prepare-rollback.bat` to the install's
-;        parent directory before handing off to the installer. The batch
-;        moves the current install to `.prev` so the NEW files land in a
-;        clean directory and the OLD files remain available for `rollback()`.
-;      - We execute the batch synchronously and wait for completion. If the
-;        batch is missing (fresh install, no prior version) this is a no-op.
+; customInit: cover-upgrade rollback staging.
+;   - The running app writes `.prepare-rollback.bat` to the install's parent
+;     directory before handing off to the installer. The batch moves the
+;     current install to `.prev` so the NEW files land in a clean directory
+;     and the OLD files remain available for `rollback()`.
+;   - We execute the batch synchronously and wait for completion. If the
+;     batch is missing (fresh install, no prior version) this is a no-op.
 ;
 ; customInstall: silently install VC++ 2015-2022 Redistributable (x64).
 ;   - vc_redist.x64.exe is loaded from BUILD_RESOURCES_DIR (= ./resources)
@@ -37,44 +23,7 @@
 
 !macro customInit
   ; $INSTDIR is the target install directory (e.g. C:\Users\x\AppData\Local\Programs\Sage).
-  ; For upgrades, this is populated from the registry before onInit runs.
-
-  ; ── Kill orphaned Python backend (path-scoped) ────────────────────────────
-  ; The previous install's Python backend may still be running if Electron
-  ; crashed or was force-killed without running shutdownBackend(). Kill it
-  ; here before the install starts, so file replacement won't fail with
-  ; "file in use" errors on python.exe / backend DLLs.
-  ;
-  ; IMPORTANT: Path-scoped kill to avoid killing user's other Python processes
-  ; (Anaconda, Jupyter, etc.). Uses Get-WmiObject (PS 2.0+ on bare Win7 SP1).
-  ; Get-CimInstance requires PS 3.0+ (not on bare Win7); wmic.exe was removed
-  ; in Win11 24H2+. If PowerShell is absent, skip silently — file-replacement
-  ; will fail visibly if python.exe is actually holding files.
-  ;
-  ; NOTE: Sage.exe cleanup is intentionally NOT done here. The default
-  ; CHECK_APP_RUNNING macro (from electron-builder's ALLOW_ONLY_ONE_INSTALLER_INSTANCE)
-  ; already handles Sage.exe with a proper UI dialog and graceful-close attempt.
-  DetailPrint "Cleaning up orphaned Python backend..."
-  IfFileExists "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" 0 kill_python_done
-    GetTempFileName $R0
-    FileOpen $R1 $R0 w
-    ; NSIS double-quote escaping: $\" → literal ", $$ → literal $, $INSTDIR/$R0 → expanded
-    ; Resulting PS1 script:
-    ;   Get-WmiObject Win32_Process -Filter "Name='python.exe'" |
-    ;     Where-Object { $_.ExecutablePath -like '$INSTDIR\python\*' } |
-    ;     ForEach-Object { $_.Terminate() } | Out-Null
-    FileWrite $R1 "Get-WmiObject Win32_Process -Filter $\"Name='python.exe'$\" | Where-Object { $$_.ExecutablePath -like '$INSTDIR\python\*' } | ForEach-Object { $$_.Terminate() } | Out-Null$\r$\n"
-    FileClose $R1
-    nsExec::ExecToLog "powershell.exe -NoProfile -ExecutionPolicy Bypass -File $\"$R0$\""
-    Pop $0
-    Delete $R0
-  kill_python_done:
-
-  ; Brief pause to let the OS release file handles from killed processes.
-  Sleep 500
-
-  ; ── Rollback staging ──────────────────────────────────────────────────────
-  ; The prepare-rollback batch lives in $INSTDIR's parent.
+  ; The prepare-rollback batch lives in its parent.
   StrCpy $0 "$INSTDIR\.."
   StrCpy $1 "$0\.prepare-rollback.bat"
   IfFileExists "$1" 0 rollback_staging_done

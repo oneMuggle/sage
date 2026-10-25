@@ -489,8 +489,6 @@ describe('Update System Integration', () => {
   // ─────────────────────────────────────────────────────────────────────────
   describe('Scenario 4: Auto-rollback after health check failures', () => {
     it('triggers rollback after 3 consecutive failures', async () => {
-      const configManager = new ConfigManager();
-      await configManager.setConfig({ ...(await configManager.getConfig()), enableTelemetry: true });
       // Set up install directories for rollback (prepareForUpgrade + rollback)
       const { installDir, prevDir } = useTempInstallDir();
       await fs.mkdir(installDir, { recursive: true });
@@ -680,7 +678,6 @@ describe('Update System Integration', () => {
 
       expect(fetch).toHaveBeenCalledWith(
         'https://updates.sage.app/api/v1/updates/latest?channel=beta',
-        expect.objectContaining({ signal: expect.anything() }),
       );
 
       // Verify beta updater channel
@@ -707,7 +704,6 @@ describe('Update System Integration', () => {
 
       expect(fetch).toHaveBeenCalledWith(
         'https://updates.sage.app/api/v1/updates/latest?channel=alpha',
-        expect.objectContaining({ signal: expect.anything() }),
       );
 
       await updateManager.downloadUpdate();
