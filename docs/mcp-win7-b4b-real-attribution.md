@@ -698,6 +698,72 @@ force push 前先证明安全：`git merge-base --is-ancestor 1359e5923 origin/r
 
 ---
 
+## 6.4 backend/tests both-changed 的第二层复核法（#2505，2026-10-25）
+
+批次 4（#2502）与 #2503 的收尾结论是「可自动化的部分已基本榨干，`merge-file` 三方干净合并
+命中率约 12%~25%，剩余 both-changed 只能人工 3-way」。本轮在 `backend/tests` 41 个
+both-changed 上实测发现：`merge-file -p --diff3` 的 rc=0 只是**第一层**信号，后面还有两层
+可以机械化判定，能把「需人工」的量再压掉一截，且零改写风险。
+
+**第一层（他们已做）**：`git merge-file -p --diff3 ours base theirs`，rc=0 即无冲突标记。
+41 个里命中 11 个。
+
+**第二层：merge 结果与 win7 逐字节比较。** 11 个零冲突文件里，有 **6 个的 merge 产物与
+win7 当前 blob 完全相同**（`conftest.py`、`test_chat_orchestration_stream`、`test_chat_stream`、
+`test_settings_route_legacy`、`test_agent_state`、`test_agent_tool`、`test_chat_dispatcher_topology`、
+`test_memory_manager`、`test_risk`、`test_skill_auto_activation` 中除下节 5 个外的部分）。
+含义是 **win7 侧已经包含了 main 的全部改动（win7 是超集）**，parity 仍报 actionable 属假阳性，
+无需任何动作。这类文件不该进任何批次，而应从 actionable 里扣除（本轮 152 → 141）。
+判定成本极低：一次 `merge-file` + 一次字节比较。
+
+**第三层：去行尾注释后按行取多重集差集。** 剩下的零冲突文件里，有 **5 个的 win7-only 与
+main-only 行在剥掉 `# ...` 注释后差集为空**，即**纯注释差异**——两侧代码逐行等价，只是 main
+侧多了 ruff 的 noqa 标注：
+
+| 文件 | 差异性质 |
+|---|---|
+| `integration/test_event_loop_blocking.py` | `# noqa: UP038`（isinstance 用元组而非 `\|`） |
+| `unit/test_entity_refs.py` | `# noqa: SIM117`（嵌套 with 而非括号多上下文） |
+| `unit/test_http_factory.py` | `# noqa: SIM117`（同上） |
+| `unit/test_memory_vector.py` | `# noqa: B905`（zip 无 `strict=`） |
+| `unit/test_file_tool_policy.py` | `Path.open` vs 内建 `open`（语义等价） |
+
+这 5 个直接**取 main blob、零文本改写**，diff 恰好 +8 -8。注意做法与批次 4 不同：
+批次 4 是把 merge 产物写回文件，结果 `test_storage_schema.py` 出现 rc=0 但把 win7 的
+`from typing import List` 与 main 改写的 docstring 粘在同一行、触发 ruff F811 让 py38 job 变红。
+**「取 main blob」从结构上不可能产生粘连**，因为它根本不经过文本合并；代价是必须先证明
+两侧代码等价（即第三层的差集为空），否则就是覆盖 win7 独有内容。
+
+**反例：看似对齐、实则降低 py38 覆盖的 3 个文件。** `test_safe_writer`、
+`test_vision_ingest_security`、`test_wiki_path_security` 的冲突都是硬链接原语：
+main 改用 `Path.hardlink_to(...)` + `except (OSError, NotImplementedError, AttributeError)`，
+win7 用 `os.link(...)`。`Path.hardlink_to` 是 3.10+ 方法，**在 py38 下会抛 AttributeError
+被那个 except 吞掉、测试走 skip 分支**；win7 的 `os.link` 全版本可用，py38 下真的建出硬链接、
+测试真的执行断言。取 main 会让 py38 通道的覆盖面静默缩小，而 CI 依然全绿（skip 不算失败）。
+⇒ **判定「可取 main」不能只看语法兼容，还要看 py38 下的实际执行路径是否等价。**
+
+**其余 6 个单冲突文件属真语义差异，不得机械处理**：`test_chat_dispatcher`（main 是
+`list[dict]`，PEP 585 在 py38 直接炸）、`test_memory_adapter`（win7 独有 traceability 字段
+`source_turn_id`/`source_message_id`/`memory_category`）、`test_shell_resolver`（win7 独有
+358 行 Win7 PowerShell 2.0 兼容性测试）、`test_browser_tool`（win7 独有 246 行
+browser_downloads 测试）、`test_inproc_tool_adapter`、`test_evolution_scheduler_runs`
+（win7 用 `memory_reflection` 替掉 `skill_consolidation`，main 两者都留）。
+
+**win7-deleted 的 2 个 permission 测试属依赖未合实现**：`api/test_permission_rule_plugin_status.py`
+（R101，193 行）与 `api/test_permission_rules_delete_by_plugin.py`（R102，205 行）在 win7 侧
+`plugin_status`/`delete_by_plugin` 命中数均为 0，`permission_routes.py` 的 router 里也没有对应端点，
+临时放入实跑 12 个用例全 FAILED。要带入必须先合 R101/R102 的实现（属 `backend` 批次）。
+
+**验证口径（本批）**：5 个文件 `git hash-object == origin/main` blob；pytest 双通道各 73 passed；
+collect 全目录 v2 13504 / py38 13501 均 0 errors；`check_py38_compat.py` 1838 files / 0 violations；
+ruff All checks passed（noqa 均被认，无 unused-noqa）；合并后在真结果 `ee453c8b1` 上复测
+architecture-check EXIT=0（62 baselined）。
+
+**通道备注**：本轮 `PUT /repos/{o}/{r}/pulls/{n}/merges` 对 #2505 持续返回 **404**（同一 token
+`admin/push` 均为 true、`mergeable=true`、`mergeable_state=clean`、squash 已启用），
+改用 **GraphQL `mergePullRequest`** 一次成功。REST 合并端点在权限面不足时会返回 404 而非 403，
+排查时容易被误导成「PR 不存在」。
+
 ## 7. 复现
 
 ```bash
