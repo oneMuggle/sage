@@ -452,25 +452,28 @@ export function useChat() {
         useChatStreamStore.getState().setPreflightPhase(sid, null);
         // 2026-08-19: 从 store 读最新流式内容(跨路由保留,finishStream 内
         // 不再持有 ref — store 是单一数据源)。S2: 读本会话槽位。
-        const streamSnapshot = selectSessionSlots(useChatStreamStore.getState(), sid).streaming;
+        const streamSlots = selectSessionSlots(useChatStreamStore.getState(), sid);
+        const streamSnapshot = streamSlots.streaming;
         // 优先用 done 事件自带的完整 content (避免混入 thinking 占位符)
         // 退回到 store streaming.content (向后兼容旧的非流式 done 事件)
         let finalContent = lastDoneContent ?? streamSnapshot?.content ?? '';
         const finalReasoning = streamSnapshot?.reasoning ?? '';
-        const finalToolCalls = selectSessionSlots(
-          useChatStreamStore.getState(),
-          sid,
-        ).streamingToolCalls;
-        // MEDIUM-2: 若 LLM 没返回任何 content (后端只发 thinking 但没 done.content),
-        // 占位符 '🤔 思考中…' 会留在 store。fallback 到错误文案让用户看到明确失败
-        if (!finalContent && !finalReasoning && finalToolCalls.length === 0) {
-          finalContent = '[错误: 模型未返回任何内容]';
-        } else if (
-          finalContent === THINKING_PLACEHOLDER &&
+        const finalToolCalls = streamSlots.streamingToolCalls;
+        // 2026-10-25: 多步 run 的最后一步无 content_delta 时,streaming.content
+        // 仍是 finalizeStep 重置的 THINKING_PLACEHOLDER —— 真实内容已在
+        // completedSteps 中,不应误报"模型未返回任何内容"。重试成功同理:
+        // retryInfo/retryInfoClearedAt 有值说明失败已被重试覆盖。
+        const hadRetry =
+          streamSnapshot?.retryInfo != null || streamSnapshot?.retryInfoClearedAt != null;
+        const isBlank =
+          (!finalContent || finalContent === THINKING_PLACEHOLDER) &&
           !finalReasoning &&
-          finalToolCalls.length === 0
-        ) {
-          finalContent = '[错误: 模型未返回任何内容]';
+          finalToolCalls.length === 0;
+        if (isBlank) {
+          finalContent =
+            streamSlots.completedSteps.length === 0 && !hadRetry
+              ? '[错误: 模型未返回任何内容]'
+              : '';
         }
         if (finalContent || finalReasoning || finalToolCalls.length > 0) {
           updateMessage(assistantId, {
