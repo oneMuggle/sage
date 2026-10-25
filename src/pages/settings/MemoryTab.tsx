@@ -95,7 +95,9 @@ export function MemoryTab() {
 
   // P8 (2026-09-14): 语义模型下载 —— 订阅 models:embedder:progress
   // （#755 已修 sage:event: 前缀），完成/失败即刷新嵌入器状态。
-  const [modelDownload, setModelDownload] = useState<{ stage: string; file?: string } | null>(null);
+  const [modelDownload, setModelDownload] = useState<{ stage: string; file?: string } | null>(
+    null,
+  );
   const [downloadingModel, setDownloadingModel] = useState(false);
   useEffect(() => {
     if (!window.electronAPI) return;
@@ -169,9 +171,9 @@ export function MemoryTab() {
 
   const loadBackups = useCallback(async () => {
     try {
-      const res = await invoke<{
-        backups: { name: string; size_bytes: number; created_at: number }[];
-      }>('system_backups_list');
+      const res = await invoke<{ backups: { name: string; size_bytes: number; created_at: number }[] }>(
+        'system_backups_list',
+      );
       setBackups(res.backups ?? []);
     } catch {
       setBackups([]);
@@ -232,9 +234,7 @@ export function MemoryTab() {
         'memory_import',
         { payload },
       );
-      toast.success(
-        `导入完成：新增 ${res.imported} 条，跳过重复 ${res.skipped} 条，失败 ${res.failed} 条`,
-      );
+      toast.success(`导入完成：新增 ${res.imported} 条，跳过重复 ${res.skipped} 条，失败 ${res.failed} 条`);
     } catch {
       toast.error('导入失败：文件格式需为 Sage 导出的记忆 JSON');
     } finally {
@@ -314,7 +314,8 @@ export function MemoryTab() {
           <div className="space-y-2 text-xs text-text-secondary">
             <p>
               当前嵌入器: {embedderStatus.type} · {embedderStatus.dimensions} 维 ·{' '}
-              {embedderStatus.semantic ? '语义匹配' : '字面匹配'} · 表 {embedderStatus.table ?? '-'}
+              {embedderStatus.semantic ? '语义匹配' : '字面匹配'} · 表{' '}
+              {embedderStatus.table ?? '-'}
             </p>
             <p>
               模型目录: {embedderStatus.model_dir} · 模型文件:
@@ -377,10 +378,13 @@ export function MemoryTab() {
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">记忆固化</h3>
         <p className="text-xs text-text-secondary mb-2">
-          每周日 04:30
-          自动执行：把访问频繁的短期记忆晋升为语义记忆，并衰减长期未访问的记忆。也可手动立即执行。
+          每周日 04:30 自动执行：把访问频繁的短期记忆晋升为语义记忆，并衰减长期未访问的记忆。也可手动立即执行。
         </p>
-        <SettingRow label="手动固化" desc="立即运行一次记忆固化任务（通常无需手动触发）">
+        <SettingRow
+          anchor="memory_consolidation"
+          label="手动固化"
+          desc="立即运行一次记忆固化任务（通常无需手动触发）"
+        >
           <button
             type="button"
             data-testid="memory-consolidation-run"
@@ -410,8 +414,8 @@ export function MemoryTab() {
         </SettingRow>
         {consolidationResult && (
           <p className="text-xs text-text-secondary mt-2" data-testid="memory-consolidation-result">
-            上次手动固化：晋升 {consolidationResult.promoted} 条 · 衰减{' '}
-            {consolidationResult.decayed} 条 · 处理 {consolidationResult.total} 条
+            上次手动固化：晋升 {consolidationResult.promoted} 条 · 衰减 {consolidationResult.decayed}{' '}
+            条 · 处理 {consolidationResult.total} 条
           </p>
         )}
       </section>
@@ -421,6 +425,7 @@ export function MemoryTab() {
             数据存在哪，与「记忆管理」不是一回事。 */}
         <h3 className="text-sm font-semibold text-text mb-3">存储位置</h3>
         <SettingRow
+          anchor="memory_backup"
           label="本地存储"
           desc="记忆数据存储在本地 SQLite 数据库中，具体路径由 SAGE_DB_PATH 环境变量与运行模式决定"
         >

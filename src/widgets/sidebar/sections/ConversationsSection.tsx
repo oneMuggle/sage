@@ -5,6 +5,7 @@ import { requestMessageJump } from '../../../features/chat/messageJumpStore';
 import { sessionApi } from '../../../shared/api/sessionApi';
 import { useI18n } from '../../../shared/lib/i18n';
 import type { Session } from '../../../shared/lib/store';
+import { confirmDialog } from '../../../shared/ui/ConfirmDialog/confirmService';
 import { SessionList } from '../../session/SessionList';
 import { VirtualSessionList } from '../../session/VirtualSessionList';
 import { SiderSection } from '../SiderSection';
@@ -175,8 +176,13 @@ export function ConversationsSection({
     sweep(autoArchiveDays);
   }, [autoArchiveDays, sweep]);
 
-  const handlePurgeArchived = useCallback(() => {
-    if (!window.confirm('永久删除全部归档会话（含消息）？此操作不可撤销。')) return;
+  const handlePurgeArchived = useCallback(async () => {
+    // P1-8: 用项目内 confirmDialog 服务取代 window.confirm。
+    const ok = await confirmDialog({
+      title: '永久删除全部归档会话（含消息）？此操作不可撤销。',
+      danger: true,
+    });
+    if (!ok) return;
     setPurging(true);
     void sessionApi
       .purgeArchived()
@@ -187,8 +193,10 @@ export function ConversationsSection({
       .finally(() => setPurging(false));
   }, [onRefreshSessions]);
 
-  const archivedCount = useMemo(() => sessions.filter((s) => s.is_archived).length, [sessions]);
-
+  const archivedCount = useMemo(
+    () => sessions.filter((s) => s.is_archived).length,
+    [sessions],
+  );
   const [copiedSnapshot, setCopiedSnapshot] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const auditInput: ConversationsSectionAuditInput = {
@@ -334,10 +342,7 @@ export function ConversationsSection({
             </div>
           )}
           {sessions.length === 0 ? (
-            <div
-              className="px-3 py-6 text-ui-sm text-text-muted text-center space-y-2"
-              data-testid="sessions-empty"
-            >
+            <div className="px-3 py-6 text-ui-sm text-text-muted text-center space-y-2" data-testid="sessions-empty">
               <p>尚无会话</p>
               <button
                 type="button"

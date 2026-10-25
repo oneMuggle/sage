@@ -90,8 +90,9 @@ export async function* subscribeOrchEvents(
     const eventQueue: RunEvent[] = [];
     let resolveNext: (() => void) | null = null;
     let done = false;
-    // 2026-09 修复 (同步 #957): error 此前从未被赋值(死代码) —— 主进程
-    // relay 失败时生成器永远 await resolveNext, 连接状态卡 connecting。
+    // 2026-09 修复: error 此前从未被赋值(死代码) —— 主进程 relay 失败时
+    // 生成器永远 await resolveNext, 连接状态卡 connecting, 重连/gap 检测
+    // 全不触发。现在监听主进程的 {eventName}-error 通道并真正终结生成器。
     let error: Error | null = null;
 
     const wakeup = () => {
