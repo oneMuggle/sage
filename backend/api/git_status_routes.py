@@ -232,7 +232,7 @@ def get_git_diff(
         except OSError:
             content = ""
         lines = content.splitlines()
-        diff_lines = [f"diff --git a/{file} b/{file}", f"new file mode 100644", f"--- /dev/null", f"+++ b/{file}"]
+        diff_lines = [f"diff --git a/{file} b/{file}", "new file mode 100644", "--- /dev/null", f"+++ b/{file}"]
         if lines:
             diff_lines.append(f"@@ -0,0 +1,{len(lines)} @@")
             diff_lines.extend(f"+{line}" for line in lines)
