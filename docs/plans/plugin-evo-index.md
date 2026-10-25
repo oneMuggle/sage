@@ -31,7 +31,8 @@
 | R99 | 已保存权限规则写入完整性（记住去重 + 按内容删除） | ✅ #2452 |
 | R100 | 已保存权限规则一键清空（撤销全部持久信任） | ✅ #2474 |
 | R101 | 已保存权限规则插件归属标注（孤儿规则可见化） | ✅ #2484 |
-| R102 | 按插件删除其全部已保存规则（按归属撤销持久信任） | 🔄 #2493 |
+| R102 | 按插件删除其全部已保存规则（按归属撤销持久信任） | ✅ #2493 |
+| R103 | 已卸载插件孤儿规则在插件页提示并可就地清理（纯前端复用 R101/R102） | 🔄 #2500 |
 
 ## 2. 交付总账
 
@@ -56,7 +57,8 @@
 | R99 | remember 追加去重 + 删除端点按内容定位 + Electron/设置页传参切换与测试/文档 | #2452 | 待对齐 | ✅ 已交付 |
 | R100 | `POST /permissions/rules/clear` + Electron 命令 + 设置页全部删除（确认后）与测试/文档 | #2474 | 待对齐 | ✅ 已交付 |
 | R101 | 规则列表响应只读归属标注（plugin_name/plugin_status）+ 设置页孤儿规则徽标与测试/文档 | #2484 | 待对齐 | ✅ 已交付 |
-| R102 | `POST /permissions/rules/delete-by-plugin`（权威插件名选择子）+ Electron 命令 + 设置页按归属删除与测试/文档 | #2493 | 待对齐 | 🔄 |
+| R102 | `POST /permissions/rules/delete-by-plugin`（权威插件名选择子）+ Electron 命令 + 设置页按归属删除与测试/文档 | #2493 | 待对齐 | ✅ 已交付 |
+| R103 | 插件页已卸载卡片的孤儿规则计数提示 + 就地按归属清理按钮（纯前端）与测试/文档 | #2500 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -468,7 +470,7 @@
   All Checks pass，已 squash 合并为 `main`
   `556cf0858b0f2e01b5f69b8515ea098abf9b00f5`。
 
-## 22. R102 交付边界（PR #2493 待合并）
+## 22. R102 交付边界（已合并）
 
 > spec：`2026-10-25_permission-rules-by-plugin-r102.md`。
 > R102 是本插件账轮次号，与其它账本的同号计划无关。
@@ -486,6 +488,27 @@
   95 例，前端定向 43 例通过；ipc-manifest
   （265 commands）、tsc、ESLint（0 errors）、Ruff
   全库、py38、architecture、silent-exceptions、
-  diff-check 与 diagnostics 全绿。
+  diff-check 与 diagnostics 全绿；PR #2493 GitHub
+  All Checks pass，已 squash 合并为 `main`
+  `3e89943ae1e8e8b99e09d904d02a9779f624204b`。
+
+## 23. R103 交付边界（PR #2500 待合并）
+
+> spec：`2026-10-25_plugin-orphan-rules-r103.md`。
+> R103 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **把孤儿提示送到产生孤儿的地方**：插件页 best-effort
+  拉 R101 标注规则并按归属计数，已卸载且仍有规则的
+  卡片就地提示并可一键走 R102 按插件删除；卸载本身
+  不自动删规则（restore 语义不变）。
+- **纯前端复用**：零新后端端点/Electron 命令/全局
+  i18n 键；计数拉取失败静默降级不显提示，插件页主
+  功能不受影响。在册插件与 missing 孤儿仍在通用
+  设置页管理，插件页只管「自己刚卸掉的」这一面。
+- **本地证据**：前端定向 53 例通过（新增 PluginsTab
+  5 例覆盖计数提示/确认删除/取消/失败保提示/降级）；
+  tsc/ESLint/architecture/diff-check/diagnostics
+  全绿；交互抽为 `PluginOrphanRules` 组件，PluginsTab
+  仅 +21 行登记 baseline 820。
 
 —— 本账本由插件化循环维护，随轮次追加。
