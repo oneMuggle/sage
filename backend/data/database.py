@@ -1113,9 +1113,47 @@ class Database:
                 status TEXT DEFAULT 'pending',
                 error_message TEXT,
                 tokens_used INTEGER,
+                duration_ms INTEGER,
+                metrics_json TEXT,
                 created_at INTEGER NOT NULL,
                 completed_at INTEGER
             )
+        """)
+        # P0-1 进化日志结构化: 老库补两列。duration_ms 是任务耗时,
+        # metrics_json 是该次执行的量化指标(JSON 文本)。新装库建表已含。
+        # 同款双进程防御: try/except 包住 ALTER(两个 worktree 共用同一
+        # data/sage.db 时可能同时执行 ALTER)。
+        cursor.execute("PRAGMA table_info(evolution_log)")
+        _evo_cols = [row["name"] for row in cursor.fetchall()]
+        for _evo_col, _evo_type in (
+            ("duration_ms", "INTEGER"),
+            ("metrics_json", "TEXT"),
+        ):
+            if _evo_col not in _evo_cols:
+                try:
+                    cursor.execute(f"ALTER TABLE evolution_log ADD COLUMN {_evo_col} {_evo_type}")
+                    conn.commit()
+                except sqlite3.OperationalError:
+                    pass
+
+        # P0-3 召回事件流: 每次检索落一行(变体 / 权重 / 结果数 / 反馈)。
+        # query_hash 与 adapter 选 A/B 变体同口径(md5(query)), 否则变体
+        # 与 hash 对不上, 实验无法复现。user_feedback 由前端回填。
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS memory_recall_log (
+                id TEXT PRIMARY KEY,
+                query_hash TEXT NOT NULL,
+                session_id TEXT,
+                variant TEXT,
+                weights_json TEXT,
+                result_count INTEGER,
+                user_feedback TEXT,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_memory_recall_log_created
+            ON memory_recall_log(created_at)
         """)
 
         # 工具使用记录表

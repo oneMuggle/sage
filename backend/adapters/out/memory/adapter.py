@@ -107,6 +107,21 @@ class MemoryAdapter:
         if self.vector_store is None:
             logger.debug("VectorStore 未初始化：无可用 Database 实例")
 
+    def _recall_db(self):
+        """取召回事件落库用的 Database 实例。
+
+        MemoryManager 的 episodic 层持有 db 引用（与 __init__ 里建 VectorStore
+        同源）。取不到时返回 None —— 召回事件落库是 best-effort，没有库就
+        只留内存日志。
+        """
+        try:
+            db = getattr(self.memory_manager.episodic, "db", None)
+        except AttributeError:
+            return None
+        if db is None or not hasattr(db, "get_connection"):
+            return None
+        return db
+
     def reconfigure(self, embedder) -> None:
         """B1 (P11): 热重载嵌入器并按新维度重建向量虚拟表。
 
@@ -366,10 +381,13 @@ class MemoryAdapter:
         )
 
         # Phase 2: recall_eval 在线日志（无 feedback 信号时仅记录检索事件）
+        # P0-3: 同时把 variant / weights 落库 —— 让这个早已存在、却从未被
+        # 分别度量过的 A/B 权重实验第一次可比较。
         try:
             from backend.memory.recall_eval import get_recall_evaluator
 
-            evaluator = get_recall_evaluator()
+            recall_db = self._recall_db()
+            evaluator = get_recall_evaluator(db=recall_db)
             all_results = (
                 list(core[: _CORE_PROFILE_LIMIT + _CORE_PROJECT_LIMIT + _CORE_RETRIEVED_LIMIT])
                 + list(episodic[:limit])
@@ -379,6 +397,9 @@ class MemoryAdapter:
                 query=query,
                 results=all_results,
                 session_id=session_id,
+                variant=variant,
+                weights=weights,
+                db=recall_db,
             )
         except Exception as exc:  # noqa: BLE001 — 日志失败不阻塞返回
             logger.debug("[recall_eval] 日志记录失败: %s", exc)

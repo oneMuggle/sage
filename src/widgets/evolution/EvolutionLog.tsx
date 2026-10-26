@@ -18,8 +18,31 @@ interface EvolutionLog {
   status: string;
   error_message: string | null;
   tokens_used: number | null;
+  // P0-1: 结构化指标 —— duration_ms 是本次执行的耗时，metrics_json 是
+  // 任务自己算出来但以前算完即丢的统计量（对象序列化后的字符串）。
+  duration_ms: number | null;
+  metrics_json: string | null;
   created_at: number;
   completed_at: number | null;
+}
+
+/**
+ * 把 metrics_json 解析成可展示的键值对。
+ * 后端写的是 `json.dumps(..., ensure_ascii=False)` 的对象字符串；
+ * 解析失败（历史数据 / 手改过的库）时返回空数组，不抛。
+ */
+export function parseEvolutionMetrics(metricsJson: string | null | undefined): [string, string][] {
+  if (!metricsJson) return [];
+  try {
+    const parsed: unknown = JSON.parse(metricsJson);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
+    return Object.entries(parsed as Record<string, unknown>).map(([key, value]) => [
+      key,
+      typeof value === 'string' ? value : JSON.stringify(value),
+    ]);
+  } catch {
+    return [];
+  }
 }
 
 // 日志类型配置
@@ -72,6 +95,16 @@ export const EvolutionLog: React.FC = () => {
     } catch {
       return String(timestamp);
     }
+  };
+
+  // 格式化执行耗时（P0-1：duration_ms）
+  const formatDuration = (ms: number): string => {
+    if (!Number.isFinite(ms) || ms < 0) return String(ms);
+    if (ms < 1000) return `${Math.round(ms)}ms`;
+    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+    const minutes = Math.floor(ms / 60_000);
+    const seconds = Math.round((ms % 60_000) / 1000);
+    return `${minutes}m${seconds}s`;
   };
 
   // 获取状态显示
@@ -135,6 +168,7 @@ export const EvolutionLog: React.FC = () => {
             color: 'bg-bg-subtle text-text-secondary',
           };
           const statusDisplay = getStatusDisplay(log.status);
+          const metrics = parseEvolutionMetrics(log.metrics_json);
 
           return (
             <div key={log.id} className="bg-surface rounded-lg shadow-sm p-4 border border-border">
@@ -168,7 +202,24 @@ export const EvolutionLog: React.FC = () => {
                     <span>创建: {formatTime(log.created_at)}</span>
                     {log.completed_at && <span>完成: {formatTime(log.completed_at)}</span>}
                     {log.tokens_used && <span>消耗 Token: {log.tokens_used}</span>}
+                    {log.duration_ms != null && (
+                      <span>耗时: {formatDuration(log.duration_ms)}</span>
+                    )}
                   </div>
+
+                  {/* 结构化指标（P0-1） */}
+                  {metrics.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      {metrics.map(([key, value]) => (
+                        <span
+                          key={key}
+                          className="px-2 py-0.5 rounded bg-bg-subtle text-text-secondary"
+                        >
+                          {key}: {value}
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   {/* 状态变化 */}
                   {(log.before_state || log.after_state) && (

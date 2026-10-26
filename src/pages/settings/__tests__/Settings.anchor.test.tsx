@@ -62,6 +62,12 @@ vi.mock('../UsageStatsTab', () => ({ UsageStatsTab: () => <div data-testid="tab-
 vi.mock('../ZoteroTab', () => ({ ZoteroTab: () => <div data-testid="tab-zotero" /> }));
 vi.mock('../../../widgets/evolution/EvolutionPanel', () => ({ EvolutionPanel: () => <div /> }));
 vi.mock('../../../widgets/evolution/EvolutionLog', () => ({ EvolutionLog: () => <div /> }));
+vi.mock('../../../widgets/evolution/LearnedPreferences', () => ({
+  LearnedPreferences: () => <div data-testid="tab-learned-preferences" />,
+}));
+vi.mock('../../../widgets/evolution/RecallMetrics', () => ({
+  RecallMetrics: () => <div data-testid="tab-recall-metrics" />,
+}));
 vi.mock('../../../shared/updateFeatureFlag', () => ({ ENABLE_UPDATE_PROVIDERS_UI: () => true }));
 
 function renderSettings() {

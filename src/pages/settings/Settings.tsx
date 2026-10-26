@@ -17,6 +17,8 @@ import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 import { ENABLE_UPDATE_PROVIDERS_UI } from '../../shared/updateFeatureFlag';
 import { EvolutionLog } from '../../widgets/evolution/EvolutionLog';
 import { EvolutionPanel } from '../../widgets/evolution/EvolutionPanel';
+import { LearnedPreferences } from '../../widgets/evolution/LearnedPreferences';
+import { RecallMetrics } from '../../widgets/evolution/RecallMetrics';
 import { HarnessDashboard } from '../../widgets/harness/HarnessDashboard';
 
 import { BasicTab } from './BasicTab';
@@ -326,6 +328,8 @@ export function Settings() {
             {activeTab === 'evolution' && (
               <div className="space-y-6">
                 <EvolutionPanel />
+                <LearnedPreferences />
+                <RecallMetrics />
                 <EvolutionLog />
               </div>
             )}
