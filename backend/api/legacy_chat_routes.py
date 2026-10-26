@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from typing import List, Optional
 
@@ -35,7 +36,7 @@ from backend.api.legacy_models import (
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database, make_with_db_lock
-from backend.data.session_repo import SessionRepository
+from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
 from backend.orchestration.llm_factory import load_llm_config_for_chat
 from backend.scheduler import get_evolution_logs
 from backend.services.scheduler import get_scheduler_service
@@ -246,6 +247,23 @@ def steer_agent(data: SteerRequest):
     agent_obj: SageAgent = entry["agent"]
     if not agent_obj.inject_user_message(text):
         raise HTTPException(status_code=409, detail={"code": "not_running"})
+    # P1 插话落库：写一行 subtype='steering' 供流末对账。
+    # 落库失败不回滚已生效的注入（agent 内存已排队，下一迭代边界消费）。
+    session_id = entry.get("session_id")
+    if session_id:
+        try:
+            MessageRepository().save(
+                DbMessage(
+                    id=str(uuid.uuid4()),
+                    session_id=session_id,
+                    role="user",
+                    content=text,
+                    subtype="steering",
+                    created_at=int(time.time()),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 — 落库失败不阻塞注入
+            logging.getLogger(__name__).warning("steering 落库失败（注入仍生效）: %s", exc)
     return {"ok": True}
 
 # ==================== 进化系统 API ====================
