@@ -36,7 +36,8 @@
 | R104 | 无归属（missing）孤儿规则整组清理（标注矩阵补完） | ✅ #2504 |
 | R105 | 仅本次会话记住（session 级 remember，会话规则存储 + gate 会话捕获） | ✅ #2511 |
 | R106 | 会话级规则查看与撤销（聊天顶栏就地管理） | ✅ #2530 |
-| R107 | Agent 白名单未发布插件条目标注与就地移除（纯前端） | 🔄 |
+| R107 | Agent 白名单未发布插件条目标注与就地移除（纯前端） | ✅ #2545 |
+| R108 | 审批弹窗插件归属可见化（决策时刻横幅 + OS 通知归属，纯前端） | 🔄 |
 
 ## 2. 交付总账
 
@@ -66,7 +67,8 @@
 | R104 | `POST /permissions/rules/delete-orphans`（服务端按 missing 类选集）+ Electron 命令 + 管理器孤儿清理行与测试/文档 | #2504 | 待对齐 | ✅ 已交付 |
 | R105 | 会话规则存储（进程内）+ enforcer 合并求值 + 应答 `remember_duration` + 对话框时长选择与测试/文档 | #2511 | 待对齐 | ✅ 已交付 |
 | R106 | 会话规则按会话读/删/清端点 + 顶栏徽记与审计弹层会话规则区与测试/文档 | #2530 | 待对齐 | ✅ 已交付 |
-| R107 | EditAgentForm 未发布插件条目分类标注（发布快照+生命周期名单前端镜像 R101）+ 就地移除与测试/文档 | #2545 | 待对齐 | 🔄 |
+| R107 | EditAgentForm 未发布插件条目分类标注（发布快照+生命周期名单前端镜像 R101）+ 就地移除与测试/文档 | #2545 | 待对齐 | ✅ 已交付 |
+| R108 | ApprovalDialog 所属插件横幅 + OS 通知归属后缀（复用 R95 权威 plugin_name）与测试/文档 | #2552 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -581,7 +583,7 @@
   permission_routes.py（855 行）按 ratchet 登记
   baseline。
 
-## 27. R107 交付边界（PR #2545 待合并）
+## 27. R107 交付边界（已合并）
 
 > spec：`2026-10-26_profile-stale-plugin-entries-r107.md`。
 > R107 是本插件账轮次号，与其它账本的同号计划无关。
@@ -597,6 +599,25 @@
 - **本地证据**：前端新增 9 例（分类 6 + 组件 3），
   与 agents 及 Agents 页/PluginsTab/pluginClient 相
   邻套件共 10 文件 53 例通过；tsc、ESLint、
+  architecture、diff-check、diagnostics 全绿，
+  manifest 仍 269，后端零改动。
+
+## 28. R108 交付边界（PR #2552 待合并）
+
+> spec：`2026-10-26_approval-plugin-badge-r108.md`。
+> R108 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **决策时刻归属可见**：ApprovalDialog 工具行下
+  新增「所属插件」横幅、OS 通知 body 追加插件归
+  属后缀，均只读后端注入的权威 `plugin_name`
+  （R95）；归属可见化弧（事后规则 R101/插件页
+  R103/白名单 R107）至决策时刻闭合。
+- **纯展示零语义**：不切分工具名猜插件、非插件
+  工具逐字不变；应答/记住/远程渠道零改动，
+  无新端点/命令（manifest 仍 269）。
+- **本地证据**：前端新增 4 例（横幅 2 + 通知 2），
+  与 permission 及 permissionState/permissionApi/
+  i18n 相邻套件共 21 文件 94 例通过；tsc、ESLint、
   architecture、diff-check、diagnostics 全绿，
   manifest 仍 269，后端零改动。
 

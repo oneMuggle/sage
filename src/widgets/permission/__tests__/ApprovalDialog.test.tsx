@@ -78,6 +78,21 @@ describe('ApprovalDialog', () => {
     expect(screen.getByTestId('permission-args')).toHaveTextContent('rm -rf /tmp/x');
   });
 
+  it('shows the owning plugin banner when backend injected plugin_name (R108)', () => {
+    seedRequest({ tool_name: 'plugin__demo__echo', plugin_name: 'demo' });
+    renderDialog();
+
+    expect(screen.getByTestId('permission-tool-name')).toHaveTextContent('plugin__demo__echo');
+    expect(screen.getByTestId('permission-plugin-context')).toHaveTextContent('所属插件: demo');
+  });
+
+  it('omits the plugin banner for non-plugin tools (R108)', () => {
+    seedRequest();
+    renderDialog();
+
+    expect(screen.queryByTestId('permission-plugin-context')).toBeNull();
+  });
+
   it('renders neutral/amber badges for safe/suspicious risk levels', () => {
     seedRequest({ risk: 'suspicious' });
     const { unmount } = render(

@@ -243,6 +243,7 @@ export const zhSettingsAndModels = {
   // ─── M1 工具审批 ──────────────────
   'permission.title': '工具执行审批',
   'permission.tool': '工具',
+  'permission.from_plugin': '所属插件',
   'permission.args': '参数',
   'permission.risk.safe': '安全',
   'permission.risk.suspicious': '可疑',

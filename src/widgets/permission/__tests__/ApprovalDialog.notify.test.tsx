@@ -92,6 +92,40 @@ describe('ApprovalDialog OS notification', () => {
     });
   });
 
+  it('includes plugin attribution in the payload (R108)', async () => {
+    renderDialog();
+    usePermissionState.getState().setFromEvent(
+      makeRequest({ tool_name: 'plugin__demo__echo', plugin_name: 'demo' }),
+    );
+
+    await vi.waitFor(() => {
+      expect(notifyMock).toHaveBeenCalledTimes(1);
+    });
+    expect(notifyMock).toHaveBeenCalledWith({
+      title: 'Sage 需要你的审批',
+      body: 'plugin__demo__echo · 插件 demo',
+    });
+  });
+
+  it('stacks subagent context and plugin attribution (R108)', async () => {
+    renderDialog();
+    usePermissionState.getState().setFromEvent(
+      makeRequest({
+        tool_name: 'plugin__demo__echo',
+        plugin_name: 'demo',
+        subagent: { run_id: 'orch-x', task_id: 't2', agent_id: 'researcher', goal: '调研' },
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(notifyMock).toHaveBeenCalledTimes(1);
+    });
+    expect(notifyMock).toHaveBeenCalledWith({
+      title: 'Sage 需要你的审批',
+      body: 'plugin__demo__echo · 子任务 t2（researcher） · 插件 demo',
+    });
+  });
+
   it('is a no-op without the electron bridge', async () => {
     delete (window as unknown as { electronAPI?: unknown }).electronAPI;
     renderDialog();
