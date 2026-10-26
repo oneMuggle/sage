@@ -6,6 +6,9 @@
 // 三档映射到后端既有 permission_mode（见 permissionApi），切换即写设置，
 // 下一次工具调用起生效（enforcer 在每次 run 起点构造）。
 // 计数来源: GET /permissions/session/{id}/auto-approvals，流结束跳变 + 30s 轮询。
+// R106: 同一徽记/弹层可查看并撤销本会话「仅本次会话记住」的规则
+// (GET/POST /permissions/session/{id}/remembered-rules*)，刷新节奏与审计一致；
+// 徽记在自动批准 0 次但存在会话规则时也出现（会话 deny 不产生放行记录）。
 
 import { ChevronDown, ShieldAlert, ShieldCheck, ShieldHalf, Zap } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -17,8 +20,10 @@ import {
   permissionApi,
   type AutoApprovalRecord,
   type PermissionPreset,
+  type PermissionRuleItem,
 } from '../../shared/api/permissionApi';
-import { useI18n } from '../../shared/lib/i18n';
+import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 const PRESET_ICON = {
   careful: ShieldAlert,
@@ -90,6 +95,9 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
   const [auditOpen, setAuditOpen] = useState(false);
   const [count, setCount] = useState(0);
   const [items, setItems] = useState<AutoApprovalRecord[]>([]);
+  const [sessionRules, setSessionRules] = useState<PermissionRuleItem[]>([]);
+  const [sessionRulesFailed, setSessionRulesFailed] = useState(false);
+  const [sessionRulesBusy, setSessionRulesBusy] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const streamingMessageId = useChatStreamStore((s) =>
@@ -119,18 +127,40 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
     });
   }, []);
 
+  const loadSessionRules = useCallback((sid: string | null) => {
+    if (!sid) {
+      setSessionRules([]);
+      setSessionRulesFailed(false);
+      return;
+    }
+    permissionApi
+      .listSessionRememberedRules(sid)
+      .then((rules) => {
+        setSessionRules(rules);
+        setSessionRulesFailed(false);
+      })
+      .catch(() => setSessionRulesFailed(true));
+  }, []);
+
   useEffect(() => {
     loadAudit(sessionId);
+    loadSessionRules(sessionId);
     if (!sessionId) return;
-    const timer = window.setInterval(() => loadAudit(sessionId), 30_000);
+    const timer = window.setInterval(() => {
+      loadAudit(sessionId);
+      loadSessionRules(sessionId);
+    }, 30_000);
     return () => window.clearInterval(timer);
-  }, [sessionId, loadAudit]);
+  }, [sessionId, loadAudit, loadSessionRules]);
 
   useEffect(() => {
     const prev = prevStreamingIdRef.current;
     prevStreamingIdRef.current = streamingMessageId;
-    if (prev !== null && streamingMessageId === null && sessionId) loadAudit(sessionId);
-  }, [streamingMessageId, sessionId, loadAudit]);
+    if (prev !== null && streamingMessageId === null && sessionId) {
+      loadAudit(sessionId);
+      loadSessionRules(sessionId);
+    }
+  }, [streamingMessageId, sessionId, loadAudit, loadSessionRules]);
 
   // 点击外部关闭
   useEffect(() => {
@@ -160,6 +190,40 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
     }
   };
 
+  // R106 撤销一条本会话记住的决定：采用后端返回的最新列表，
+  // 不在前端自行删除后假定成功；失败保留原列表并提示。
+  const revokeSessionRule = async (rule: PermissionRuleItem) => {
+    if (!sessionId || sessionRulesBusy) return;
+    setSessionRulesBusy(true);
+    try {
+      setSessionRules(await permissionApi.deleteSessionRememberedRule(sessionId, rule));
+    } catch {
+      toast.error(t('chat.perm.session_rules.revoke_failed'));
+    } finally {
+      setSessionRulesBusy(false);
+    }
+  };
+
+  // R106 清空本会话已记住决定：先 confirmDialog 确认，取消即不发请求。
+  const clearSessionRules = async () => {
+    if (!sessionId || sessionRulesBusy) return;
+    const ok = await confirmDialog({
+      title: t('chat.perm.session_rules.clear_confirm_title'),
+      message: t('chat.perm.session_rules.clear_confirm_message'),
+      confirmLabel: t('chat.perm.session_rules.clear_all'),
+      danger: true,
+    });
+    if (!ok) return;
+    setSessionRulesBusy(true);
+    try {
+      setSessionRules(await permissionApi.clearSessionRememberedRules(sessionId));
+    } catch {
+      toast.error(t('chat.perm.session_rules.revoke_failed'));
+    } finally {
+      setSessionRulesBusy(false);
+    }
+  };
+
   const Icon = PRESET_ICON[preset];
 
   /* v8 ignore start */
@@ -186,7 +250,7 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
         <ChevronDown className="w-3 h-3 opacity-60" aria-hidden />
       </button>
 
-      {sessionId && count > 0 && (
+      {sessionId && (count > 0 || sessionRules.length > 0) && (
         <button
           type="button"
           onClick={() => {
@@ -198,7 +262,9 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
           className="flex items-center gap-1 px-1.5 py-1 text-ui-2xs rounded-radius-sm border border-border text-text-secondary hover:bg-bg-hover"
         >
           <ShieldCheck className="w-3 h-3 text-accent" aria-hidden />
-          {t('chat.perm.auto_count').replace('{n}', String(count))}
+          {count > 0
+            ? t('chat.perm.auto_count').replace('{n}', String(count))
+            : t('chat.perm.session_rules.badge').replace('{n}', String(sessionRules.length))}
         </button>
       )}
 
@@ -242,6 +308,70 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
           data-testid="auto-approval-audit"
           className={`absolute right-0 ${popupPos} z-30 w-80 max-h-72 overflow-y-auto rounded border border-border bg-surface shadow-lg p-2`}
         >
+          {(sessionRules.length > 0 || sessionRulesFailed) && (
+            <div className="mb-2" data-testid="session-rules-section">
+              <div className="flex items-center gap-2 mb-1">
+                <p className="text-xs font-semibold text-text flex-1">
+                  {t('chat.perm.session_rules.title')}
+                </p>
+                {sessionRules.length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="session-rules-clear"
+                    disabled={sessionRulesBusy}
+                    onClick={() => void clearSessionRules()}
+                    className="px-1.5 py-0.5 text-ui-2xs border border-border rounded-radius-sm text-text hover:bg-bg-hover disabled:opacity-50"
+                  >
+                    {t('chat.perm.session_rules.clear_all')}
+                  </button>
+                )}
+              </div>
+              {sessionRulesFailed ? (
+                <p className="text-xs text-error" data-testid="session-rules-load-failed">
+                  {t('chat.perm.session_rules.load_failed')}
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {sessionRules.map((rule, index) => (
+                    <li
+                      key={`${index}-${rule.tool_pattern}-${rule.decision}`}
+                      className="flex items-center gap-2 text-xs"
+                      data-testid="session-rule-item"
+                    >
+                      <code className="flex-1 break-all font-mono text-text">
+                        {rule.tool_pattern}
+                      </code>
+                      <span className="text-text-secondary shrink-0">
+                        {t(
+                          `settings.permission.rules.decision.${rule.decision}` as TranslationKey,
+                        )}
+                      </span>
+                      {(rule.plugin_status === 'uninstalled' ||
+                        rule.plugin_status === 'missing') && (
+                        <span className="px-1 rounded bg-bg-hover text-ui-xs text-text-secondary shrink-0">
+                          {t(
+                            rule.plugin_status === 'uninstalled'
+                              ? 'settings.permission.rules.plugin_uninstalled'
+                              : 'settings.permission.rules.plugin_missing',
+                          )}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        data-testid={`session-rule-revoke-${index}`}
+                        aria-label={`${t('chat.perm.session_rules.revoke')} ${rule.tool_pattern}`}
+                        disabled={sessionRulesBusy}
+                        onClick={() => void revokeSessionRule(rule)}
+                        className="px-1.5 py-0.5 text-ui-2xs border border-border rounded-radius-sm text-text hover:bg-bg-hover disabled:opacity-50 shrink-0"
+                      >
+                        {t('chat.perm.session_rules.revoke')}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           <p className="text-xs font-semibold text-text mb-1">{t('chat.perm.audit_title')}</p>
           {items.length === 0 ? (
             <p className="text-xs text-text-secondary">{t('chat.perm.audit_empty')}</p>

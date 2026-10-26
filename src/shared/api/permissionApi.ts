@@ -300,6 +300,57 @@ export const permissionApi = {
       throw handleApiError(error);
     }
   },
+
+  /**
+   * R106 读取某会话「仅本次会话记住」的规则（聊天顶栏数据源）。
+   * 形态与 listRules 同形（含 R101 归属标注），共用宽容解析；
+   * demo 模式返回空列表（演示环境没有真实会话规则）。
+   */
+  async listSessionRememberedRules(sessionId: string): Promise<PermissionRuleItem[]> {
+    if (!sessionId || isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_list_session_rules', { sessionId });
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * R106 按内容撤销一条会话规则，返回服务端删除后的最新列表
+   * （UI 直接采用）。传入的行对象来自 listSessionRememberedRules，
+   * 其 tool_pattern/decision 只是删除选择子，不能创建任何规则。
+   */
+  async deleteSessionRememberedRule(
+    sessionId: string,
+    rule: PermissionRuleItem,
+  ): Promise<PermissionRuleItem[]> {
+    if (!sessionId || isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_delete_session_rule', {
+        sessionId,
+        toolPattern: rule.tool_pattern,
+        decision: rule.decision,
+      });
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * R106 清空某会话的全部会话规则，返回服务端清空后的最新
+   * 列表（应为空）。只传会话 ID、无筛选参数，持久规则不受影响。
+   */
+  async clearSessionRememberedRules(sessionId: string): Promise<PermissionRuleItem[]> {
+    if (!sessionId || isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_clear_session_rules', { sessionId });
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
 };
 
 export function auditPermissionApiGovernance(

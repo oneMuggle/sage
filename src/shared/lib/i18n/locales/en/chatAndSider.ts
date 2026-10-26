@@ -105,6 +105,15 @@ export const enChatAndSider = {
   'chat.perm.auto_count': '{n} auto-approved',
   'chat.perm.audit_title': 'Auto-approved actions in this session',
   'chat.perm.audit_empty': 'No auto-approved write/execute actions in this session yet',
+  'chat.perm.session_rules.badge': '{n} remembered this session',
+  'chat.perm.session_rules.title': 'Remembered for this session (cleared on restart)',
+  'chat.perm.session_rules.load_failed': 'Failed to load session rules',
+  'chat.perm.session_rules.revoke': 'Revoke',
+  'chat.perm.session_rules.revoke_failed': 'Revoke failed; session rules unchanged',
+  'chat.perm.session_rules.clear_all': 'Clear this session',
+  'chat.perm.session_rules.clear_confirm_title': 'Clear decisions remembered for this session?',
+  'chat.perm.session_rules.clear_confirm_message':
+    'These tools will ask again in this session. Permanently remembered rules are unaffected.',
   'chat.perm.destructive_note':
     'Destructive commands (rm -rf, forced overwrite) always ask, in every mode.',
   'chat.nav.opened': 'Opened {page}',
