@@ -242,17 +242,67 @@ export const MarkdownChunk = memo(
   (prev, next) => prev.md === next.md && prev.plainFences === next.plainFences,
 );
 
-/** ThinkingShimmer — 等待首 token 的 shimmer 占位（替代 "🤔 思考中…" 静态文本）。
- *  两根相位错开的扫光条，animate-shimmer 见 index.css；reduced-motion 下
- *  全局 media query 会把动画压到 0.01ms，自然退化为静态骨架。 */
-export function ThinkingShimmer() {
+/** ThinkingShimmer — 等待首 token 的占位 UI。
+ *  2026-10-26: 方案 D+C（混合+品牌化）— 图标 + 文字 + 计时器 + 品牌化脉冲动画。
+ *  替代原有的 shimmer 条，提供更有"生命感"和明确语义的等待体验。
+ *  - 大脑图标 + 品牌色光环：强化品牌识别
+ *  - 渐变背景 + 脉冲动画：品牌化视觉效果
+ *  - "正在思考..."文字：明确告知状态，消除不确定性
+ *  - 计时器紧贴文字：提供进度感，降低焦虑
+ *  - reduced-motion 下动画退化为静态，保持可读性 */
+export function ThinkingShimmer({ startTime }: { startTime?: number }) {
+  const [elapsed, setElapsed] = useState(0);
+  const [dots, setDots] = useState('');
+
+  useEffect(() => {
+    if (!startTime) return;
+
+    // 立即计算一次
+    setElapsed(Math.floor((Date.now() - startTime) / 1000));
+
+    // 每秒更新计时器
+    const timer = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [startTime]);
+
+  // 省略号动画：. → .. → ... → 循环
+  useEffect(() => {
+    const dotsTimer = setInterval(() => {
+      setDots((prev) => (prev.length >= 3 ? '' : prev + '.'));
+    }, 500);
+
+    return () => clearInterval(dotsTimer);
+  }, []);
+
   return (
-    <div className="flex items-center gap-2 py-1" data-testid="thinking-shimmer">
-      <span className="h-2.5 w-44 rounded-full animate-shimmer" />
-      <span
-        className="h-2.5 w-24 rounded-full animate-shimmer"
-        style={{ animationDelay: '-0.8s' }}
-      />
+    <div
+      className="inline-flex items-center gap-2 py-1.5 px-3 rounded-full bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20"
+      data-testid="thinking-shimmer"
+    >
+      {/* 大脑图标 + 品牌色光环 */}
+      <div className="relative">
+        <Brain className="w-4 h-4 text-primary animate-pulse" />
+        {/* 光环效果 */}
+        <div className="absolute inset-0 w-4 h-4 rounded-full bg-primary/30 animate-ping" />
+      </div>
+
+      {/* 文字 + 省略号动画 */}
+      <span className="text-ui-sm text-text font-medium">
+        正在思考
+        <span className="inline-block w-4 text-left" data-testid="thinking-dots">
+          {dots}
+        </span>
+      </span>
+
+      {/* 计时器（紧贴文字） */}
+      {startTime && elapsed > 0 && (
+        <span className="text-ui-xs text-muted font-mono" data-testid="thinking-timer">
+          {elapsed}s
+        </span>
+      )}
     </div>
   );
 }
@@ -260,7 +310,13 @@ export function ThinkingShimmer() {
 /** ThinkingPanel - 可折叠的 LLM 思考过程展示面板
  *  P1: 流式 reasoning 时自动展开 (isStreaming=true)
  */
-export function ThinkingPanel({ reasoning, isStreaming }: { reasoning: string; isStreaming?: boolean }) {
+export function ThinkingPanel({
+  reasoning,
+  isStreaming,
+}: {
+  reasoning: string;
+  isStreaming?: boolean;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
   // P21: 流式期间自动滚动到底部，显示最新思考内容
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -446,9 +502,7 @@ export function evaluateMessageMarkdownPartsAudit(
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function exportMessageMarkdownPartsAuditJson(
-  input: MessageMarkdownPartsAuditInput,
-): string {
+export function exportMessageMarkdownPartsAuditJson(input: MessageMarkdownPartsAuditInput): string {
   return JSON.stringify(evaluateMessageMarkdownPartsAudit(input));
 }
 // eslint-disable-next-line react-refresh/only-export-components
