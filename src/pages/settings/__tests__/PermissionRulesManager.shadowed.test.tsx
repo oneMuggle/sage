@@ -9,7 +9,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PermissionRuleDecision, PermissionRuleItem } from '../../../shared/api/permissionApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { findShadowedRules, PermissionRulesManager } from '../PermissionRulesManager';
+import { findShadowedRules } from '../../../shared/lib/permissionInsights';
+import { PermissionRulesManager } from '../PermissionRulesManager';
 
 const listRulesMock = vi.fn();
 vi.mock('../../../shared/api/permissionApi', () => ({
