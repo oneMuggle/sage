@@ -185,15 +185,19 @@ class ProjectWikiGenerator:
                 abs_path = Path(dirpath) / filename
                 rel_path = abs_path.relative_to(root)
 
+                # SourceFile.path 是项目相对逻辑标识（供 wiki/依赖分析/前端展示），
+                # 统一 POSIX 分隔符，避免 Windows 反斜杠污染序列化结果。
+                rel_posix = rel_path.as_posix()
+
                 # 检查 allowed_paths
-                if path_filter and not path_filter(str(rel_path)):
+                if path_filter and not path_filter(rel_posix):
                     continue
 
                 try:
                     content = abs_path.read_bytes()
                     content_hash = hashlib.md5(content).hexdigest()
                     files.append(SourceFile(
-                        path=str(rel_path),
+                        path=rel_posix,
                         absolute_path=str(abs_path),
                         language=self._detect_language(ext),
                         size_bytes=len(content),
