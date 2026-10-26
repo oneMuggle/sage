@@ -87,6 +87,29 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/permissions/rules/delete-orphans',
     body: () => ({}),
   },
+  // R106 会话级规则查看与撤销：sessionId 只进路径并
+  // url-encode（与 auto-approvals 同约定）；delete 的 body
+  // 与持久删除同形只留 tool_pattern/decision（后端
+  // PermissionRuleDeleteBody 是 extra="forbid"，sessionId
+  // 泄漏进 body 即 422），clear 无 body。三者只读/只删，
+  // 会话规则仍只能由审批应答在后端生成。
+  permissions_list_session_rules: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/permissions/session/${encodeURIComponent(String(a?.sessionId ?? ''))}/remembered-rules`,
+  },
+  permissions_delete_session_rule: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/permissions/session/${encodeURIComponent(String(a?.sessionId ?? ''))}/remembered-rules/delete`,
+    body: (a) => ({ tool_pattern: a.toolPattern, decision: a.decision }),
+  },
+  permissions_clear_session_rules: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/permissions/session/${encodeURIComponent(String(a?.sessionId ?? ''))}/remembered-rules/clear`,
+    body: () => ({}),
+  },
   permissions_answer: {
     method: 'POST',
     path: (a) => `/api/v1/permissions/${encodeURIComponent(String(a.requestId))}/answer`,

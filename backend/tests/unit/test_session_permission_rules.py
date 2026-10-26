@@ -17,6 +17,7 @@ from backend.tools.permissions import (
     PermissionMode,
     PermissionRule,
     clear_session_rules,
+    forget_session_rule,
     remember_session_rule,
     session_rules_for,
 )
@@ -146,3 +147,46 @@ def test_session_plugin_wildcard_requires_authoritative_identity() -> None:
     assert (denied.allowed, denied.needs_approval) == (False, False)
     assert (anonymous.allowed, anonymous.needs_approval) != (False, False)
     assert (other.allowed, other.needs_approval) != (False, False)
+
+
+def test_forget_session_rule_by_content() -> None:
+    """R106 撤销：按内容只删等值的那一条，其余与异会话不受影响。"""
+    remember_session_rule("s1", PermissionRule("bash", "allow"))
+    remember_session_rule("s1", PermissionRule("bash", "deny"))
+    remember_session_rule("s2", PermissionRule("bash", "allow"))
+
+    assert forget_session_rule("s1", PermissionRule("bash", "allow")) is True
+    assert session_rules_for("s1") == (PermissionRule("bash", "deny"),)
+    assert session_rules_for("s2") == (PermissionRule("bash", "allow"),)
+
+
+def test_forget_session_rule_missing_is_false_noop() -> None:
+    remember_session_rule("s1", PermissionRule("bash", "allow"))
+
+    assert forget_session_rule("s1", PermissionRule("bash", "deny")) is False
+    assert forget_session_rule("ghost", PermissionRule("bash", "allow")) is False
+    assert forget_session_rule("", PermissionRule("bash", "allow")) is False
+    assert session_rules_for("s1") == (PermissionRule("bash", "allow"),)
+
+
+def test_forget_last_session_rule_removes_session_entry() -> None:
+    """删空即移除会话条目：撤销后再记视为全新会话从头计数。"""
+    remember_session_rule("s1", PermissionRule("bash", "allow"))
+    assert forget_session_rule("s1", PermissionRule("bash", "allow")) is True
+    assert session_rules_for("s1") == ()
+
+    assert remember_session_rule("s1", PermissionRule("bash", "deny")) is True
+    assert session_rules_for("s1") == (PermissionRule("bash", "deny"),)
+
+
+def test_forgotten_session_rule_stops_matching() -> None:
+    """撤销后 enforcer 不再命中该规则，回到逐次询问。"""
+    remember_session_rule("s1", PermissionRule("bash", "deny"))
+    enforcer = _enforcer([])
+    with _session("s1"):
+        assert enforcer.check("bash").allowed is False
+        assert enforcer.check("bash").needs_approval is False
+    assert forget_session_rule("s1", PermissionRule("bash", "deny")) is True
+    with _session("s1"):
+        decision = enforcer.check("bash")
+    assert decision.needs_approval is True

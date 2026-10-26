@@ -5,6 +5,7 @@
     "backend/api/legacy_routes.py": 2453,
     "backend/api/llm_proxy_routes.py": 1171,
     "backend/api/orchestration_router.py": 807,
+    "backend/api/permission_routes.py": 855,
     "backend/api/wiki_routes.py": 1656,
     "backend/application/services/chat_service.py": 1233,
     "backend/core/legacy/agent.py": 3013,

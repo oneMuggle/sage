@@ -57,8 +57,11 @@ from backend.services.permission_gate import get_permission_gate
 from backend.tools.permissions import (
     SETTINGS_KEY_RULES,
     PermissionRule,
+    clear_session_rules,
+    forget_session_rule,
     parse_rules,
     remember_session_rule,
+    session_rules_for,
 )
 
 logger = logging.getLogger(__name__)
@@ -542,6 +545,87 @@ def delete_permission_orphan_rules(request: Request):
         "removed": removed_count,
         "rules": _annotate_rules_with_plugin_status(kept),
     }
+
+
+def _session_rules_view(session_id: str) -> List[Dict[str, Any]]:
+    """某会话的会话规则响应视图（R106，R101 同口径标注）。"""
+    return _annotate_rules_with_plugin_status(
+        [rule.to_dict() for rule in session_rules_for(session_id)]
+    )
+
+
+@router.get("/session/{session_id}/remembered-rules")
+def list_session_remembered_rules(session_id: str) -> Dict[str, Any]:
+    """列出本会话「仅本次会话记住」的规则（R106 聊天顶栏数据源）。
+
+    会话规则只存进程内存（R105）；这里按与持久规则列表
+    相同的标注口径返回，让用户在本会话内看得见这批自动
+    决定的出处。未知/无规则会话返回空列表。
+    """
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "rules": _session_rules_view(session_id),
+    }
+
+
+@router.post("/session/{session_id}/remembered-rules/delete")
+def delete_session_remembered_rule(
+    session_id: str, body: PermissionRuleDeleteBody, request: Request
+):
+    """按内容撤销一条会话规则，返回最新列表（R106）。
+
+    与持久规则删除（R99）同形：pattern 只是「删哪一条」
+    的选择子，未命中（含非法 decision）→ 400 不写存储。
+    删除只可能让后续调用回到逐次询问，不构成放行面；
+    规则创建仍只经审批应答。与其它规则写操作共用
+    Origin 守卫。
+    """
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    try:
+        target: Optional[PermissionRule] = PermissionRule(
+            tool_pattern=body.tool_pattern, decision=body.decision
+        )
+    except ValueError:
+        target = None
+    if target is None or not forget_session_rule(session_id, target):
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "rule not found"},
+        )
+    rules = _session_rules_view(session_id)
+    logger.info(
+        "已撤销会话审批规则: session=%s pattern=%s decision=%s (剩余 %d 条)",
+        session_id,
+        body.tool_pattern,
+        body.decision,
+        len(rules),
+    )
+    return {"ok": True, "session_id": session_id, "rules": rules}
+
+
+@router.post("/session/{session_id}/remembered-rules/clear")
+def clear_session_remembered_rules(session_id: str, request: Request):
+    """清空某会话的全部会话规则，返回空列表（R106）。
+
+    无请求体、不接受筛选参数，语义只有「清空该会话
+    全部」；其它会话与持久规则不受影响。幂等：本无
+    规则时仍返回 ok。与其它规则写操作共用 Origin
+    守卫。
+    """
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    removed_count = len(session_rules_for(session_id))
+    clear_session_rules(session_id)
+    logger.info(
+        "已清空会话审批规则: session=%s（清空前共 %d 条）",
+        session_id,
+        removed_count,
+    )
+    return {"ok": True, "session_id": session_id, "rules": []}
 
 
 def forbidden_origin_response(request: Request) -> Optional[JSONResponse]:

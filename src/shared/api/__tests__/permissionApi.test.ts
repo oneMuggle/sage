@@ -183,4 +183,89 @@ describe('permissionApi', () => {
       'plugin not found',
     );
   });
+
+  it('listSessionRememberedRules() invokes permissions_list_session_rules and parses rules', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      session_id: 's1',
+      rules: [
+        { tool_pattern: 'bash', decision: 'allow' },
+        {
+          tool_pattern: 'plugin__ghost__*',
+          decision: 'deny',
+          plugin_name: null,
+          plugin_status: 'missing',
+        },
+      ],
+    });
+    const rules = await permissionApi.listSessionRememberedRules('s1');
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_list_session_rules', {
+      sessionId: 's1',
+    });
+    expect(rules).toEqual([
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'deny',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+    ]);
+  });
+
+  it('listSessionRememberedRules() skips invoke without a session id', async () => {
+    await expect(permissionApi.listSessionRememberedRules('')).resolves.toEqual([]);
+    expect(mockInvoke).not.toHaveBeenCalled();
+  });
+
+  it('deleteSessionRememberedRule() passes session id + content selector and returns updated list', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      session_id: 's1',
+      rules: [{ tool_pattern: 'plugin__ghost__*', decision: 'deny' }],
+    });
+    const rules = await permissionApi.deleteSessionRememberedRule('s1', {
+      tool_pattern: 'bash',
+      decision: 'allow',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_delete_session_rule', {
+      sessionId: 's1',
+      toolPattern: 'bash',
+      decision: 'allow',
+    });
+    expect(rules).toEqual([
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'deny',
+        plugin_name: null,
+        plugin_status: null,
+      },
+    ]);
+  });
+
+  it('deleteSessionRememberedRule() propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('rule not found'));
+    await expect(
+      permissionApi.deleteSessionRememberedRule('s1', {
+        tool_pattern: 'bash',
+        decision: 'allow',
+      }),
+    ).rejects.toThrow('rule not found');
+  });
+
+  it('clearSessionRememberedRules() invokes permissions_clear_session_rules', async () => {
+    mockInvoke.mockResolvedValueOnce({ ok: true, session_id: 's1', rules: [] });
+    const rules = await permissionApi.clearSessionRememberedRules('s1');
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_clear_session_rules', {
+      sessionId: 's1',
+    });
+    expect(rules).toEqual([]);
+  });
+
+  it('clearSessionRememberedRules() propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('backend down'));
+    await expect(permissionApi.clearSessionRememberedRules('s1')).rejects.toThrow(
+      'backend down',
+    );
+  });
 });
