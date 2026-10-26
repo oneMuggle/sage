@@ -55,26 +55,74 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/permissions/trust-policy',
     body: (a) => ({ enabled: a.enabled, threshold: a.threshold }),
   },
-  // R97 已记住权限规则管理：只查看与逐条删除。删除 body 只透传
-  // index（后端 PermissionRuleDeleteBody 是 extra="forbid"），
-  // 规则本体仍只能由后端审批 remember 生成，前端传不了 pattern。
+  // R97 已记住权限规则管理：只查看与逐条删除。R99 删除改为按内容
+  // 定位：body 只透传目标规则的 tool_pattern/decision（后端
+  // PermissionRuleDeleteBody 是 extra="forbid"），后端只删存储中
+  // 已存在且完全一致的一条；规则本体仍只能由后端审批 remember
+  // 生成，删除选择子不能创建或放宽任何规则。
   permissions_list_rules: { method: 'GET', path: () => '/api/v1/permissions/rules' },
   permissions_delete_rule: {
     method: 'POST',
     path: () => '/api/v1/permissions/rules/delete',
-    body: (a) => ({ index: a.index }),
+    body: (a) => ({ tool_pattern: a.toolPattern, decision: a.decision }),
+  },
+  // R100 一键清空已记住规则：无 body、无筛选参数，只能整体撤销
+  // 全部持久信任（后端写空列表），不存在按条件删除的写面。
+  permissions_clear_rules: {
+    method: 'POST',
+    path: () => '/api/v1/permissions/rules/clear',
+    body: () => ({}),
+  },
+  // R102 按插件删除其全部已记住规则：选择子只有权威插件名，
+  // 删除集合由后端按生命周期名单与结构化归属选出。
+  permissions_delete_rules_by_plugin: {
+    method: 'POST',
+    path: () => '/api/v1/permissions/rules/delete-by-plugin',
+    body: (a) => ({ plugin_name: a.pluginName }),
+  },
+  // R104 清理全部无归属孤儿规则：无请求体，删除集合由
+  // 后端按生命周期名单与 R101 分类口径（missing 类）选出。
+  permissions_delete_orphan_rules: {
+    method: 'POST',
+    path: () => '/api/v1/permissions/rules/delete-orphans',
+    body: () => ({}),
+  },
+  // R106 会话级规则查看与撤销：sessionId 只进路径并
+  // url-encode（与 auto-approvals 同约定）；delete 的 body
+  // 与持久删除同形只留 tool_pattern/decision（后端
+  // PermissionRuleDeleteBody 是 extra="forbid"，sessionId
+  // 泄漏进 body 即 422），clear 无 body。三者只读/只删，
+  // 会话规则仍只能由审批应答在后端生成。
+  permissions_list_session_rules: {
+    method: 'GET',
+    path: (a) =>
+      `/api/v1/permissions/session/${encodeURIComponent(String(a?.sessionId ?? ''))}/remembered-rules`,
+  },
+  permissions_delete_session_rule: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/permissions/session/${encodeURIComponent(String(a?.sessionId ?? ''))}/remembered-rules/delete`,
+    body: (a) => ({ tool_pattern: a.toolPattern, decision: a.decision }),
+  },
+  permissions_clear_session_rules: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/permissions/session/${encodeURIComponent(String(a?.sessionId ?? ''))}/remembered-rules/clear`,
+    body: () => ({}),
   },
   permissions_answer: {
     method: 'POST',
     path: (a) => `/api/v1/permissions/${encodeURIComponent(String(a.requestId))}/answer`,
     // 后端 ApprovalAnswerBody 是 extra="forbid" — body 里只允许
-    // approved/remember/remember_scope/reason;requestId 是路径参数,
+    // approved/remember/remember_scope/remember_duration/reason;
+    // requestId 是路径参数,
     // 必须从 body 剥掉,否则 422。
     // (与 workspace_bind 剥 sessionId 同理)
     body: (a) => ({
       approved: a.approved,
       remember: a.remember,
       remember_scope: a.rememberScope ?? 'tool',
+      remember_duration: a.rememberDuration ?? 'permanent',
       reason: a.reason ?? '',
     }),
   },

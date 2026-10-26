@@ -57,10 +57,18 @@ export interface TrustPolicyState {
 
 export type PermissionRuleDecision = 'allow' | 'deny' | 'ask';
 
-/** 一条已保存（且生效）的权限规则，与后端 PermissionRule.to_dict() 同形。 */
+/**
+ * 一条已保存（且生效）的权限规则，与后端规则列表响应同形。
+ *
+ * `plugin_name` / `plugin_status` 是 R101 的只读派生标注（插件
+ * 归属与生命周期状态，另含派生值 `missing` / `all`），只供
+ * 设置页提示「这条规则属于已卸载/无记录插件」；删除时不发送。
+ */
 export interface PermissionRuleItem {
   tool_pattern: string;
   decision: PermissionRuleDecision;
+  plugin_name?: string | null;
+  plugin_status?: string | null;
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -85,7 +93,12 @@ function parseRuleItems(raw: unknown): PermissionRuleItem[] {
     const decision = entry.decision;
     if (typeof pattern !== 'string' || pattern.length === 0) continue;
     if (decision !== 'allow' && decision !== 'deny' && decision !== 'ask') continue;
-    items.push({ tool_pattern: pattern, decision });
+    items.push({
+      tool_pattern: pattern,
+      decision,
+      plugin_name: typeof entry.plugin_name === 'string' ? entry.plugin_name : null,
+      plugin_status: typeof entry.plugin_status === 'string' ? entry.plugin_status : null,
+    });
   }
   return items;
 }
@@ -228,13 +241,115 @@ export const permissionApi = {
   },
 
   /**
-   * R97 按 listRules() 列表下标逐条删除一条规则，返回服务端删除后
+   * R99 按内容逐条删除一条规则，返回服务端删除后
    * 的最新列表（UI 直接采用，不在前端自行 splice 后假定成功）。
+   * 传入的是 listRules() 返回的行对象，其 tool_pattern/decision
+   * 只是「删哪一条」的选择子，不是用户手输的新 pattern。
    */
-  async deleteRule(index: number): Promise<PermissionRuleItem[]> {
+  async deleteRule(rule: PermissionRuleItem): Promise<PermissionRuleItem[]> {
     if (isDemoMode()) return [];
     try {
-      const raw = await invoke<unknown>('permissions_delete_rule', { index });
+      const raw = await invoke<unknown>('permissions_delete_rule', {
+        toolPattern: rule.tool_pattern,
+        decision: rule.decision,
+      });
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * R102 删除某个插件名下的全部已保存规则（按归属撤销持久信任）。
+   * 只传插件名；删哪几条由后端按生命周期名单与结构化归属决定，
+   * 返回删除后的最新列表，前端直接采用。
+   */
+  async deleteRulesByPlugin(pluginName: string): Promise<PermissionRuleItem[]> {
+    if (isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_delete_rules_by_plugin', {
+        pluginName,
+      });
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * R104 清理全部无归属插件孤儿规则（后端按 missing 类
+   * 选集），返回删除后的最新列表。无参数：语义只有
+   * 「全部孤儿」，客户端不传任何选择子。
+   */
+  async deleteOrphanRules(): Promise<PermissionRuleItem[]> {
+    if (isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_delete_orphan_rules', {});
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * R100 清空全部已记住规则（撤销全部持久信任），返回服务端
+   * 清空后的最新列表（应为空）。无筛选参数：语义只有「全部」。
+   */
+  async clearRules(): Promise<PermissionRuleItem[]> {
+    if (isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_clear_rules', {});
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * R106 读取某会话「仅本次会话记住」的规则（聊天顶栏数据源）。
+   * 形态与 listRules 同形（含 R101 归属标注），共用宽容解析；
+   * demo 模式返回空列表（演示环境没有真实会话规则）。
+   */
+  async listSessionRememberedRules(sessionId: string): Promise<PermissionRuleItem[]> {
+    if (!sessionId || isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_list_session_rules', { sessionId });
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * R106 按内容撤销一条会话规则，返回服务端删除后的最新列表
+   * （UI 直接采用）。传入的行对象来自 listSessionRememberedRules，
+   * 其 tool_pattern/decision 只是删除选择子，不能创建任何规则。
+   */
+  async deleteSessionRememberedRule(
+    sessionId: string,
+    rule: PermissionRuleItem,
+  ): Promise<PermissionRuleItem[]> {
+    if (!sessionId || isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_delete_session_rule', {
+        sessionId,
+        toolPattern: rule.tool_pattern,
+        decision: rule.decision,
+      });
+      return parseRuleItems(raw);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * R106 清空某会话的全部会话规则，返回服务端清空后的最新
+   * 列表（应为空）。只传会话 ID、无筛选参数，持久规则不受影响。
+   */
+  async clearSessionRememberedRules(sessionId: string): Promise<PermissionRuleItem[]> {
+    if (!sessionId || isDemoMode()) return [];
+    try {
+      const raw = await invoke<unknown>('permissions_clear_session_rules', { sessionId });
       return parseRuleItems(raw);
     } catch (error) {
       throw handleApiError(error);

@@ -63,8 +63,43 @@ describe('permissionApi', () => {
     const rules = await permissionApi.listRules();
     expect(mockInvoke).toHaveBeenCalledWith('permissions_list_rules', {});
     expect(rules).toEqual([
-      { tool_pattern: 'bash', decision: 'deny' },
-      { tool_pattern: 'plugin__demo__*', decision: 'allow' },
+      { tool_pattern: 'bash', decision: 'deny', plugin_name: null, plugin_status: null },
+      { tool_pattern: 'plugin__demo__*', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+  });
+
+  it('listRules() carries plugin attribution and nulls bad types', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      rules: [
+        {
+          tool_pattern: 'plugin__demo__*',
+          decision: 'deny',
+          plugin_name: 'demo',
+          plugin_status: 'uninstalled',
+        },
+        {
+          tool_pattern: 'plugin__ghost__*',
+          decision: 'ask',
+          plugin_name: 42,
+          plugin_status: 'missing',
+        },
+      ],
+    });
+    const rules = await permissionApi.listRules();
+    expect(rules).toEqual([
+      {
+        tool_pattern: 'plugin__demo__*',
+        decision: 'deny',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'ask',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
     ]);
   });
 
@@ -78,13 +113,159 @@ describe('permissionApi', () => {
       ok: true,
       rules: [{ tool_pattern: 'write_file', decision: 'ask' }],
     });
-    const rules = await permissionApi.deleteRule(0);
-    expect(mockInvoke).toHaveBeenCalledWith('permissions_delete_rule', { index: 0 });
-    expect(rules).toEqual([{ tool_pattern: 'write_file', decision: 'ask' }]);
+    const rules = await permissionApi.deleteRule({ tool_pattern: 'bash', decision: 'deny' });
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_delete_rule', {
+      toolPattern: 'bash',
+      decision: 'deny',
+    });
+    expect(rules).toEqual([
+      { tool_pattern: 'write_file', decision: 'ask', plugin_name: null, plugin_status: null },
+    ]);
   });
 
   it('deleteRule() propagates invoke errors', async () => {
     mockInvoke.mockRejectedValueOnce(new Error('backend down'));
-    await expect(permissionApi.deleteRule(0)).rejects.toThrow('backend down');
+    await expect(
+      permissionApi.deleteRule({ tool_pattern: 'bash', decision: 'deny' }),
+    ).rejects.toThrow('backend down');
+  });
+
+  it('clearRules() invokes permissions_clear_rules and returns updated list', async () => {
+    mockInvoke.mockResolvedValueOnce({ ok: true, rules: [] });
+    const rules = await permissionApi.clearRules();
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_clear_rules', {});
+    expect(rules).toEqual([]);
+  });
+
+  it('clearRules() propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('backend down'));
+    await expect(permissionApi.clearRules()).rejects.toThrow('backend down');
+  });
+
+  it('deleteRulesByPlugin() invokes with pluginName only and returns updated list', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      removed: 2,
+      rules: [{ tool_pattern: 'bash', decision: 'allow' }],
+    });
+    const rules = await permissionApi.deleteRulesByPlugin('demo');
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_delete_rules_by_plugin', {
+      pluginName: 'demo',
+    });
+    expect(rules).toEqual([
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+  });
+
+  it('deleteOrphanRules() invokes with no selector and returns updated list', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      removed: 1,
+      rules: [{ tool_pattern: 'bash', decision: 'allow' }],
+    });
+    const rules = await permissionApi.deleteOrphanRules();
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_delete_orphan_rules', {});
+    expect(rules).toEqual([
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+  });
+
+  it('deleteOrphanRules() propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('plugin index unavailable'));
+    await expect(permissionApi.deleteOrphanRules()).rejects.toThrow(
+      'plugin index unavailable',
+    );
+  });
+
+  it('deleteRulesByPlugin() propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('plugin not found'));
+    await expect(permissionApi.deleteRulesByPlugin('ghost')).rejects.toThrow(
+      'plugin not found',
+    );
+  });
+
+  it('listSessionRememberedRules() invokes permissions_list_session_rules and parses rules', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      session_id: 's1',
+      rules: [
+        { tool_pattern: 'bash', decision: 'allow' },
+        {
+          tool_pattern: 'plugin__ghost__*',
+          decision: 'deny',
+          plugin_name: null,
+          plugin_status: 'missing',
+        },
+      ],
+    });
+    const rules = await permissionApi.listSessionRememberedRules('s1');
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_list_session_rules', {
+      sessionId: 's1',
+    });
+    expect(rules).toEqual([
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'deny',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+    ]);
+  });
+
+  it('listSessionRememberedRules() skips invoke without a session id', async () => {
+    await expect(permissionApi.listSessionRememberedRules('')).resolves.toEqual([]);
+    expect(mockInvoke).not.toHaveBeenCalled();
+  });
+
+  it('deleteSessionRememberedRule() passes session id + content selector and returns updated list', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      ok: true,
+      session_id: 's1',
+      rules: [{ tool_pattern: 'plugin__ghost__*', decision: 'deny' }],
+    });
+    const rules = await permissionApi.deleteSessionRememberedRule('s1', {
+      tool_pattern: 'bash',
+      decision: 'allow',
+    });
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_delete_session_rule', {
+      sessionId: 's1',
+      toolPattern: 'bash',
+      decision: 'allow',
+    });
+    expect(rules).toEqual([
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'deny',
+        plugin_name: null,
+        plugin_status: null,
+      },
+    ]);
+  });
+
+  it('deleteSessionRememberedRule() propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('rule not found'));
+    await expect(
+      permissionApi.deleteSessionRememberedRule('s1', {
+        tool_pattern: 'bash',
+        decision: 'allow',
+      }),
+    ).rejects.toThrow('rule not found');
+  });
+
+  it('clearSessionRememberedRules() invokes permissions_clear_session_rules', async () => {
+    mockInvoke.mockResolvedValueOnce({ ok: true, session_id: 's1', rules: [] });
+    const rules = await permissionApi.clearSessionRememberedRules('s1');
+    expect(mockInvoke).toHaveBeenCalledWith('permissions_clear_session_rules', {
+      sessionId: 's1',
+    });
+    expect(rules).toEqual([]);
+  });
+
+  it('clearSessionRememberedRules() propagates invoke errors', async () => {
+    mockInvoke.mockRejectedValueOnce(new Error('backend down'));
+    await expect(permissionApi.clearSessionRememberedRules('s1')).rejects.toThrow(
+      'backend down',
+    );
   });
 });

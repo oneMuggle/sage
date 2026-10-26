@@ -910,12 +910,18 @@ describe('permission IPC routes (M1 tool security hardening)', () => {
   });
 
   // Guard: 后端 ApprovalAnswerBody 是 extra="forbid" — requestId 泄漏进 body
-  // 会触发 422。body selector 只能保留后端认识的四个字段。
-  it('permissions_answer body selector strips requestId and maps remember scope', () => {
+  // 会触发 422。body selector 只能保留后端认识的字段（R105 起含 remember_duration）。
+  it('permissions_answer body selector strips requestId and maps remember scope/duration', () => {
     const r = COMMAND_ROUTES.permissions_answer;
     expect(r.body).toBeDefined();
     expect(r.body!({ requestId: 'r-1', approved: true, remember: false, extraField: 'x' })).toEqual(
-      { approved: true, remember: false, remember_scope: 'tool', reason: '' },
+      {
+        approved: true,
+        remember: false,
+        remember_scope: 'tool',
+        remember_duration: 'permanent',
+        reason: '',
+      },
     );
     expect(
       r.body!({
@@ -923,6 +929,7 @@ describe('permission IPC routes (M1 tool security hardening)', () => {
         approved: false,
         remember: true,
         rememberScope: 'plugin',
+        rememberDuration: 'session',
         reason: 'not this plugin',
         tool_pattern: '*',
       }),
@@ -931,6 +938,7 @@ describe('permission IPC routes (M1 tool security hardening)', () => {
         approved: false,
         remember: true,
         remember_scope: 'plugin',
+        remember_duration: 'session',
         reason: 'not this plugin',
       },
     );

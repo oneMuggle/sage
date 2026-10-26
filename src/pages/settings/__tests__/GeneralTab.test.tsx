@@ -28,6 +28,10 @@ const mocks = vi.hoisted(() => ({
   updateSettings: vi.fn(),
   listRules: vi.fn(),
   deleteRule: vi.fn(),
+  clearRules: vi.fn(),
+  deleteRulesByPlugin: vi.fn(),
+  deleteOrphanRules: vi.fn(),
+  confirmDialog: vi.fn(),
 }));
 
 vi.mock('../../../shared/api/settingsClient', () => ({
@@ -67,7 +71,14 @@ vi.mock('../../../shared/api/permissionApi', () => ({
     }),
     listRules: (...args: unknown[]) => mocks.listRules(...args),
     deleteRule: (...args: unknown[]) => mocks.deleteRule(...args),
+    clearRules: (...args: unknown[]) => mocks.clearRules(...args),
+    deleteRulesByPlugin: (...args: unknown[]) => mocks.deleteRulesByPlugin(...args),
+    deleteOrphanRules: (...args: unknown[]) => mocks.deleteOrphanRules(...args),
   },
+}));
+
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
+  confirmDialog: (...args: unknown[]) => mocks.confirmDialog(...args),
 }));
 
 vi.mock('../../../features/manage-settings/useSettings', () => ({
@@ -100,11 +111,11 @@ vi.mock('../../../entities/font/fontStorage', () => ({
 function renderTab(resetSettings = vi.fn()): void {
   render(
     <I18nProvider>
-      <FontProvider>
-        <DensityProvider>
+      <DensityProvider>
+        <FontProvider>
           <GeneralTab resetSettings={resetSettings} />
-        </DensityProvider>
-      </FontProvider>
+        </FontProvider>
+      </DensityProvider>
     </I18nProvider>,
   );
 }
@@ -116,8 +127,16 @@ beforeEach(() => {
   mocks.setPreference.mockResolvedValue(undefined);
   mocks.listRules.mockReset();
   mocks.deleteRule.mockReset();
+  mocks.clearRules.mockReset();
+  mocks.confirmDialog.mockReset();
   mocks.listRules.mockResolvedValue([]);
   mocks.deleteRule.mockResolvedValue([]);
+  mocks.clearRules.mockResolvedValue([]);
+  mocks.deleteRulesByPlugin.mockReset();
+  mocks.deleteRulesByPlugin.mockResolvedValue([]);
+  mocks.deleteOrphanRules.mockReset();
+  mocks.deleteOrphanRules.mockResolvedValue([]);
+  mocks.confirmDialog.mockResolvedValue(true);
 });
 
 describe('GeneralTab font controls', () => {
@@ -212,9 +231,362 @@ describe('GeneralTab permission mode selector (M1)', () => {
     expect(screen.getByText('所有写入与执行操作都需要手动批准')).toBeInTheDocument();
   });
 
-  it('shows the JSON-only rules hint', () => {
+  it('shows the remembered-rules hint and empty state', async () => {
     renderTab();
-    expect(screen.getByText(/permission_rules JSON/)).toBeInTheDocument();
+    expect(screen.getByText(/已记住的规则可在下方查看并逐条删除/)).toBeInTheDocument();
+    expect(screen.getByText('已记住的规则')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('暂无已记住的规则')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('GeneralTab remembered rules manager (R97)', () => {
+  it('renders saved rules with decision labels', async () => {
+    mocks.listRules.mockResolvedValue([
+      { tool_pattern: 'bash', decision: 'deny' },
+      { tool_pattern: 'plugin__demo__*', decision: 'allow' },
+    ]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    expect(screen.getByText('plugin__demo__*')).toBeInTheDocument();
+    expect(screen.getByText('拒绝')).toBeInTheDocument();
+    expect(screen.getByText('允许')).toBeInTheDocument();
+    expect(screen.getByTestId('permission-rule-delete-0')).toBeInTheDocument();
+    expect(screen.getByTestId('permission-rule-delete-1')).toBeInTheDocument();
+  });
+
+  it('badges rules whose plugin was uninstalled or has no record', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__demo__*',
+        decision: 'deny',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'ask',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+      {
+        tool_pattern: 'plugin__live__*',
+        decision: 'allow',
+        plugin_name: 'live',
+        plugin_status: 'enabled',
+      },
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rule-plugin-status-0')).toHaveTextContent(
+        '插件已卸载',
+      );
+    });
+    expect(screen.getByTestId('permission-rule-plugin-status-1')).toHaveTextContent(
+      '插件无记录',
+    );
+    expect(screen.queryByTestId('permission-rule-plugin-status-2')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('permission-rule-plugin-status-3')).not.toBeInTheDocument();
+  });
+
+  it('deletes all rules of a plugin after confirmation', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__demo__*',
+        decision: 'deny',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+      {
+        tool_pattern: 'plugin__demo__run',
+        decision: 'allow',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+    mocks.deleteRulesByPlugin.mockResolvedValue([
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-by-plugin-demo')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-by-plugin-demo'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ danger: true, message: 'demo' }),
+      );
+      expect(mocks.deleteRulesByPlugin).toHaveBeenCalledWith('demo');
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('plugin__demo__*')).not.toBeInTheDocument();
+    });
+    expect(
+      screen.queryByTestId('permission-rules-delete-by-plugin-demo'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows an orphan cleanup row and deletes orphans after confirmation', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'deny',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+      {
+        tool_pattern: 'plugin__ghost__run',
+        decision: 'allow',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+    mocks.deleteOrphanRules.mockResolvedValue([
+      { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    ]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-orphans')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-orphans'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ danger: true }),
+      );
+      expect(mocks.deleteOrphanRules).toHaveBeenCalledWith();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('plugin__ghost__*')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('permission-rules-delete-orphans')).not.toBeInTheDocument();
+  });
+
+  it('does not delete orphans when the confirmation is cancelled', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'deny',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+    ]);
+    mocks.confirmDialog.mockResolvedValue(false);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-orphans')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-orphans'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalled();
+    });
+    expect(mocks.deleteOrphanRules).not.toHaveBeenCalled();
+    expect(screen.getByText('plugin__ghost__*')).toBeInTheDocument();
+  });
+
+  it('keeps the list and shows an error when deleting orphans fails', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__ghost__*',
+        decision: 'deny',
+        plugin_name: null,
+        plugin_status: 'missing',
+      },
+    ]);
+    mocks.deleteOrphanRules.mockRejectedValue(new Error('backend down'));
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-orphans')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-orphans'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-orphans-failed')).toBeInTheDocument();
+    });
+    expect(screen.getByText('plugin__ghost__*')).toBeInTheDocument();
+  });
+
+  it('does not delete by plugin when the confirmation is cancelled', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__demo__*',
+        decision: 'deny',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+    ]);
+    mocks.confirmDialog.mockResolvedValue(false);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-by-plugin-demo')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-by-plugin-demo'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalled();
+    });
+    expect(mocks.deleteRulesByPlugin).not.toHaveBeenCalled();
+    expect(screen.getByText('plugin__demo__*')).toBeInTheDocument();
+  });
+
+  it('keeps the list and shows an error when deleting by plugin fails', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__demo__*',
+        decision: 'deny',
+        plugin_name: 'demo',
+        plugin_status: 'uninstalled',
+      },
+    ]);
+    mocks.deleteRulesByPlugin.mockRejectedValue(new Error('backend down'));
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-by-plugin-demo')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-delete-by-plugin-demo'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('permission-rules-delete-by-plugin-failed'),
+      ).toHaveTextContent('按插件删除规则失败');
+    });
+    expect(screen.getByText('plugin__demo__*')).toBeInTheDocument();
+  });
+
+  it('deletes a rule and adopts the server-returned list', async () => {
+    mocks.listRules.mockResolvedValue([
+      { tool_pattern: 'bash', decision: 'deny' },
+      { tool_pattern: 'write_file', decision: 'ask' },
+    ]);
+    mocks.deleteRule.mockResolvedValue([{ tool_pattern: 'write_file', decision: 'ask' }]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rule-delete-0'));
+
+    await waitFor(() => {
+      expect(mocks.deleteRule).toHaveBeenCalledWith({ tool_pattern: 'bash', decision: 'deny' });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('bash')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('write_file')).toBeInTheDocument();
+  });
+
+  it('shows a load failure message when listing rules fails', async () => {
+    mocks.listRules.mockRejectedValue(new Error('backend down'));
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-load-failed')).toHaveTextContent(
+        '读取已记住规则失败',
+      );
+    });
+  });
+
+  it('keeps the list and shows an error when delete fails', async () => {
+    mocks.listRules.mockResolvedValue([{ tool_pattern: 'bash', decision: 'deny' }]);
+    mocks.deleteRule.mockRejectedValue(new Error('backend down'));
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rule-delete-0'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-delete-failed')).toHaveTextContent(
+        '删除规则失败',
+      );
+    });
+    expect(screen.getByText('bash')).toBeInTheDocument();
+  });
+
+  it('hides the clear-all button when there are no rules', async () => {
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('暂无已记住的规则')).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('permission-rules-clear')).not.toBeInTheDocument();
+  });
+
+  it('clears all rules after confirmation and adopts the server list', async () => {
+    mocks.listRules.mockResolvedValue([
+      { tool_pattern: 'bash', decision: 'deny' },
+      { tool_pattern: 'write_file', decision: 'ask' },
+    ]);
+    mocks.clearRules.mockResolvedValue([]);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-clear'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ danger: true }),
+      );
+      expect(mocks.clearRules).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(screen.getByText('暂无已记住的规则')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('bash')).not.toBeInTheDocument();
+  });
+
+  it('does not clear when the confirmation is cancelled', async () => {
+    mocks.listRules.mockResolvedValue([{ tool_pattern: 'bash', decision: 'deny' }]);
+    mocks.confirmDialog.mockResolvedValue(false);
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-clear'));
+
+    await waitFor(() => {
+      expect(mocks.confirmDialog).toHaveBeenCalled();
+    });
+    expect(mocks.clearRules).not.toHaveBeenCalled();
+    expect(screen.getByText('bash')).toBeInTheDocument();
+  });
+
+  it('keeps the list and shows an error when clearing fails', async () => {
+    mocks.listRules.mockResolvedValue([{ tool_pattern: 'bash', decision: 'deny' }]);
+    mocks.clearRules.mockRejectedValue(new Error('backend down'));
+    renderTab();
+
+    await waitFor(() => {
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('permission-rules-clear'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('permission-rules-clear-failed')).toHaveTextContent(
+        '全部删除失败',
+      );
+    });
+    expect(screen.getByText('bash')).toBeInTheDocument();
   });
 });
 
@@ -359,75 +731,5 @@ describe('GeneralTab auto checkpoint (B-2, 默认开)', () => {
     expect(summaryBtn.textContent).toBe('已复制');
     fireEvent.click(jsonBtn);
     expect(jsonBtn.textContent).toBe('已复制');
-  });
-});
-
-describe('GeneralTab remembered rules manager (R97)', () => {
-  it('renders saved rules with decision labels', async () => {
-    mocks.listRules.mockResolvedValue([
-      { tool_pattern: 'bash', decision: 'deny' },
-      { tool_pattern: 'plugin__demo__*', decision: 'allow' },
-    ]);
-    renderTab();
-
-    await waitFor(() => {
-      expect(screen.getByText('bash')).toBeInTheDocument();
-    });
-    expect(screen.getByText('plugin__demo__*')).toBeInTheDocument();
-    expect(screen.getByText('拒绝')).toBeInTheDocument();
-    expect(screen.getByText('允许')).toBeInTheDocument();
-    expect(screen.getByTestId('permission-rule-delete-0')).toBeInTheDocument();
-    expect(screen.getByTestId('permission-rule-delete-1')).toBeInTheDocument();
-  });
-
-  it('deletes a rule and adopts the server-returned list', async () => {
-    mocks.listRules.mockResolvedValue([
-      { tool_pattern: 'bash', decision: 'deny' },
-      { tool_pattern: 'write_file', decision: 'ask' },
-    ]);
-    mocks.deleteRule.mockResolvedValue([{ tool_pattern: 'write_file', decision: 'ask' }]);
-    renderTab();
-
-    await waitFor(() => {
-      expect(screen.getByText('bash')).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByTestId('permission-rule-delete-0'));
-
-    await waitFor(() => {
-      expect(mocks.deleteRule).toHaveBeenCalledWith(0);
-    });
-    await waitFor(() => {
-      expect(screen.queryByText('bash')).not.toBeInTheDocument();
-    });
-    expect(screen.getByText('write_file')).toBeInTheDocument();
-  });
-
-  it('shows a load failure message when listing rules fails', async () => {
-    mocks.listRules.mockRejectedValue(new Error('backend down'));
-    renderTab();
-
-    await waitFor(() => {
-      expect(screen.getByTestId('permission-rules-load-failed')).toHaveTextContent(
-        '读取已记住规则失败',
-      );
-    });
-  });
-
-  it('keeps the list and shows an error when delete fails', async () => {
-    mocks.listRules.mockResolvedValue([{ tool_pattern: 'bash', decision: 'deny' }]);
-    mocks.deleteRule.mockRejectedValue(new Error('backend down'));
-    renderTab();
-
-    await waitFor(() => {
-      expect(screen.getByText('bash')).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByTestId('permission-rule-delete-0'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('permission-rules-delete-failed')).toHaveTextContent(
-        '删除规则失败',
-      );
-    });
-    expect(screen.getByText('bash')).toBeInTheDocument();
   });
 });

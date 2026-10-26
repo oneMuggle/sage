@@ -257,6 +257,9 @@ export const enSettingsAndModels = {
   'permission.remember_scope.plugin': 'Whole plugin (including future tools)',
   'permission.remember_scope.plugin_warning':
     'This applies to every tool from this plugin. Only continue if you trust the plugin.',
+  'permission.remember_duration.legend': 'Remember how long',
+  'permission.remember_duration.permanent': 'Permanently',
+  'permission.remember_duration.session': 'Only this session',
   'permission.approve': 'Allow',
   'permission.deny': 'Deny',
   'permission.deny_confirm': 'Confirm deny',
@@ -324,7 +327,7 @@ export const enSettingsAndModels = {
   'settings.permission.mode.full_access': 'Full access',
   'settings.permission.mode.full_access.desc': 'Allow everything, never prompt (use with care)',
   'settings.permission.rules_hint':
-    'Fine-grained rules (permission_rules JSON) are not editable in the UI yet; checking "Remember my choice" appends a rule automatically.',
+    'Fine-grained rules are created by checking "Remember my choice" during approval; remembered rules can be reviewed and deleted below (deleting restores per-call approval).',
   'settings.permission.load_failed': 'Failed to load permission mode',
 
   // R97 remembered rules manager
@@ -336,6 +339,26 @@ export const enSettingsAndModels = {
   'settings.permission.rules.decision.ask': 'Ask every time',
   'settings.permission.rules.load_failed': 'Failed to load remembered rules',
   'settings.permission.rules.delete_failed': 'Failed to delete rule, please retry',
+
+  'settings.permission.rules.clear_all': 'Delete all',
+  'settings.permission.rules.clear_confirm_title': 'Delete all remembered rules?',
+  'settings.permission.rules.clear_confirm_message':
+    'Every rule saved via "Remember my choice" will be deleted and all tool calls will ask for approval again. This cannot be undone.',
+  'settings.permission.rules.clear_failed': 'Failed to delete all rules, please retry',
+  'settings.permission.rules.plugin_uninstalled': 'Plugin uninstalled',
+  'settings.permission.rules.plugin_missing': 'Plugin not found',
+  'settings.permission.rules.by_plugin': 'Delete by plugin:',
+  'settings.permission.rules.delete_plugin_confirm_title':
+    'Delete all remembered rules for this plugin?',
+  'settings.permission.rules.delete_plugin_failed':
+    'Failed to delete rules for this plugin, please retry',
+  'settings.permission.rules.orphans': 'Rules with no plugin record',
+  'settings.permission.rules.delete_orphans_confirm_title':
+    'Delete all rules with no plugin record?',
+  'settings.permission.rules.delete_orphans_confirm_message':
+    'Every remembered rule whose plugin has no lifecycle record will be deleted. Rules owned by known plugins and built-in tools are unaffected. This cannot be undone.',
+  'settings.permission.rules.delete_orphans_failed':
+    'Failed to delete orphan rules, please retry',
 
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': 'Usage',

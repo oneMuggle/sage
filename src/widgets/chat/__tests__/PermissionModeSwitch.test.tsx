@@ -10,6 +10,12 @@ import { PermissionModeSwitch, formatPermissionModeJson, formatPermissionModeMar
 const getPreset = vi.fn();
 const setPreset = vi.fn();
 const getSessionAutoApprovals = vi.fn();
+const listSessionRememberedRules = vi.fn();
+const deleteSessionRememberedRule = vi.fn();
+const clearSessionRememberedRules = vi.fn();
+const confirmDialogMock = vi.fn();
+const toastSuccess = vi.fn();
+const toastError = vi.fn();
 
 vi.mock('../../../shared/api/permissionApi', async () => {
   const actual = await vi.importActual<typeof import('../../../shared/api/permissionApi')>(
@@ -21,11 +27,23 @@ vi.mock('../../../shared/api/permissionApi', async () => {
       getPreset: (...a: unknown[]) => getPreset(...a),
       setPreset: (...a: unknown[]) => setPreset(...a),
       getSessionAutoApprovals: (...a: unknown[]) => getSessionAutoApprovals(...a),
+      listSessionRememberedRules: (...a: unknown[]) => listSessionRememberedRules(...a),
+      deleteSessionRememberedRule: (...a: unknown[]) => deleteSessionRememberedRule(...a),
+      clearSessionRememberedRules: (...a: unknown[]) => clearSessionRememberedRules(...a),
     },
   };
 });
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
+  confirmDialog: (...a: unknown[]) => confirmDialogMock(...a),
+}));
+
+vi.mock('sonner', () => ({
+  toast: {
+    success: (...a: unknown[]) => toastSuccess(...a),
+    error: (...a: unknown[]) => toastError(...a),
+  },
+}));
 
 const renderSwitch = (sessionId: string | null) =>
   render(
@@ -39,6 +57,12 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue({ preset: 'standard', mode: 'workspace_write', custom: false });
   setPreset.mockReset().mockResolvedValue(undefined);
+  listSessionRememberedRules.mockReset().mockResolvedValue([]);
+  deleteSessionRememberedRule.mockReset().mockResolvedValue([]);
+  clearSessionRememberedRules.mockReset().mockResolvedValue([]);
+  confirmDialogMock.mockReset().mockResolvedValue(true);
+  toastSuccess.mockReset();
+  toastError.mockReset();
   getSessionAutoApprovals.mockReset().mockResolvedValue({
     session_id: 's1',
     count: 3,
@@ -88,6 +112,84 @@ describe('PermissionModeSwitch', () => {
     await waitFor(() => expect(getPreset).toHaveBeenCalled());
     expect(screen.queryByTestId('auto-approval-badge')).not.toBeInTheDocument();
     expect(getSessionAutoApprovals).not.toHaveBeenCalled();
+    expect(listSessionRememberedRules).not.toHaveBeenCalled();
+  });
+
+  const SESSION_RULES = [
+    { tool_pattern: 'bash', decision: 'allow', plugin_name: null, plugin_status: null },
+    {
+      tool_pattern: 'plugin__ghost__*',
+      decision: 'deny',
+      plugin_name: null,
+      plugin_status: 'missing',
+    },
+  ];
+
+  const openAuditWithSessionRules = async () => {
+    getSessionAutoApprovals.mockResolvedValue({
+      session_id: 's1',
+      count: 0,
+      total: 0,
+      items: [],
+    });
+    listSessionRememberedRules.mockResolvedValue(SESSION_RULES);
+    renderSwitch('s1');
+    const badge = await screen.findByTestId('auto-approval-badge');
+    await act(async () => {
+      fireEvent.click(badge);
+    });
+    return badge;
+  };
+
+  it('shows the badge for session rules at zero auto-approvals and lists them', async () => {
+    const badge = await openAuditWithSessionRules();
+    expect(badge.textContent).toContain('本会话已记住 2');
+    expect(screen.getByTestId('session-rules-section')).toBeInTheDocument();
+    expect(screen.getAllByTestId('session-rule-item')).toHaveLength(2);
+    expect(screen.getByText('bash')).toBeInTheDocument();
+    expect(screen.getByText('plugin__ghost__*')).toBeInTheDocument();
+    expect(screen.getByText('允许')).toBeInTheDocument();
+    expect(screen.getByText('拒绝')).toBeInTheDocument();
+    expect(screen.getByText('插件无记录')).toBeInTheDocument();
+  });
+
+  it('revokes a session rule and adopts the returned list', async () => {
+    await openAuditWithSessionRules();
+    deleteSessionRememberedRule.mockResolvedValue([SESSION_RULES[1]]);
+
+    fireEvent.click(screen.getByTestId('session-rule-revoke-0'));
+
+    await waitFor(() =>
+      expect(deleteSessionRememberedRule).toHaveBeenCalledWith('s1', SESSION_RULES[0]),
+    );
+    await waitFor(() => expect(screen.getAllByTestId('session-rule-item')).toHaveLength(1));
+    expect(screen.queryByText('bash')).not.toBeInTheDocument();
+  });
+
+  it('keeps session rules and toasts when revoke fails', async () => {
+    await openAuditWithSessionRules();
+    deleteSessionRememberedRule.mockRejectedValue(new Error('backend down'));
+
+    fireEvent.click(screen.getByTestId('session-rule-revoke-0'));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(screen.getAllByTestId('session-rule-item')).toHaveLength(2);
+  });
+
+  it('clears session rules only after confirm', async () => {
+    await openAuditWithSessionRules();
+    confirmDialogMock.mockResolvedValue(false);
+    fireEvent.click(screen.getByTestId('session-rules-clear'));
+    await waitFor(() => expect(confirmDialogMock).toHaveBeenCalled());
+    expect(clearSessionRememberedRules).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId('session-rule-item')).toHaveLength(2);
+
+    confirmDialogMock.mockResolvedValue(true);
+    fireEvent.click(screen.getByTestId('session-rules-clear'));
+    await waitFor(() => expect(clearSessionRememberedRules).toHaveBeenCalledWith('s1'));
+    await waitFor(() =>
+      expect(screen.queryByTestId('session-rules-section')).not.toBeInTheDocument(),
+    );
   });
 
   it('formats and copies permission mode summary as Markdown and JSON', async () => {

@@ -40,7 +40,7 @@ from __future__ import annotations
 import logging
 import re
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -48,11 +48,21 @@ from pydantic import BaseModel, Field
 
 from backend.data.settings_repo import SettingsRepository
 from backend.domain.tool_names import (
+    PLUGIN_TOOL_PREFIX,
+    is_plugin_tool_reference,
     plugin_tool_belongs_to_plugin,
     plugin_tool_wildcard_for_plugin,
 )
 from backend.services.permission_gate import get_permission_gate
-from backend.tools.permissions import SETTINGS_KEY_RULES, parse_rules
+from backend.tools.permissions import (
+    SETTINGS_KEY_RULES,
+    PermissionRule,
+    clear_session_rules,
+    forget_session_rule,
+    parse_rules,
+    remember_session_rule,
+    session_rules_for,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -84,12 +94,23 @@ class RememberScope(str, Enum):
     PLUGIN = "plugin"
 
 
+class RememberDuration(str, Enum):
+    """remember=true 时规则的存续范围（R105，与范围正交）。"""
+
+    PERMANENT = "permanent"
+    SESSION = "session"
+
+
 class ApprovalAnswerBody(BaseModel):
     """POST answer 请求体。"""
 
     approved: bool
     remember: bool = False
     remember_scope: RememberScope = RememberScope.TOOL
+    # R105：存续范围与覆盖范围正交——permanent（默认）写
+    # settings 持久规则；session 只写进程内会话规则存储，
+    # 永不落盘。老客户端不带此字段即默认 permanent。
+    remember_duration: RememberDuration = RememberDuration.PERMANENT
     # 对标 ZCode freeText：拒绝时用户附带的文字反馈（≤500 字符），
     # 经 gate → agent 拼进拒绝 reason，模型据此调整方案。批准时可留空。
     reason: str = Field(default="", max_length=500)
@@ -251,10 +272,13 @@ def set_trust_policy(body: TrustPolicyBody) -> Dict[str, Any]:
 
 
 class PermissionRuleDeleteBody(BaseModel):
-    """删除一条已保存规则的请求体。"""
+    """删除一条已保存规则的请求体（R99 改按内容定位）。"""
 
-    #: 下标指 GET /rules 返回的已解析规则列表。
-    index: int
+    #: 要撤销规则的 tool_pattern。它只是「删哪一条」的选择子：
+    #: 服务端只删存储中已存在且与请求体完全一致的一条，
+    #: 永不据此新建或改写任何规则。
+    tool_pattern: str
+    decision: str
 
     class Config:
         extra = "forbid"
@@ -268,30 +292,122 @@ def _load_saved_rules() -> List[Dict[str, str]]:
     ]
 
 
+def _plugin_status_index() -> Optional[Dict[str, str]]:
+    """生命周期记录 {插件名: 状态} 索引；失败返回 None（R101）。
+
+    标注是纯增强信息：插件库不可用时返回 None，上层据此
+    整体跳过标注（归属全 null），不把「读不到」误报成
+    「插件无记录」。管理器按请求构造，与 plugin_routes
+    同口径，不缓存连接；索引成功但无插件时返回空 dict。
+    """
+    try:
+        from backend.plugins.lifecycle import PluginLifecycleManager
+
+        index: Dict[str, str] = {}
+        for record in PluginLifecycleManager().list_plugins():
+            status = record.status
+            index[record.name] = (
+                status.value if isinstance(status, Enum) else str(status)
+            )
+        return index
+    except Exception as exc:  # noqa: BLE001 — 标注降级不阻塞规则管理
+        logger.warning("插件状态读取失败，规则归属标注降级为空: %s", exc)
+        return None
+
+
+def _rule_plugin_owner(pattern: str, index: Dict[str, str]) -> Optional[str]:
+    """pattern 在生命周期名单中的权威归属插件名（R101/R102 共用）。
+
+    判定只用结构化命名空间：等于该插件的受限通配，或完整
+    工具名落在该插件命名空间内。长名字先试：``a`` 与
+    ``a__b`` 共存时 ``plugin__a__b__run`` 归更具体的
+    ``a__b``，保证标注（R101）与按插件删除（R102）选出
+    的集合严格一致。
+    """
+    for name in sorted(index, key=len, reverse=True):
+        if pattern == plugin_tool_wildcard_for_plugin(
+            name
+        ) or plugin_tool_belongs_to_plugin(pattern, name):
+            return name
+    return None
+
+
+def _rule_plugin_status(
+    pattern: str, index: Dict[str, str]
+) -> Tuple[Optional[str], Optional[str]]:
+    """``(归属插件名, 标注状态)``——R101 标注与 R104 选集共用分类。
+
+    有生命周期归属时状态取记录状态；无归属时全局插件
+    通配记 ``all``、插件形状记 ``missing``，其余（内置
+    工具等）返回 ``(None, None)``。
+    """
+    owner = _rule_plugin_owner(pattern, index)
+    if owner is not None:
+        return owner, index[owner]
+    if pattern == PLUGIN_TOOL_PREFIX + "*":
+        return None, "all"
+    if is_plugin_tool_reference(pattern):
+        return None, "missing"
+    return None, None
+
+
+def _annotate_rules_with_plugin_status(
+    rules: List[Dict[str, str]],
+) -> List[Dict[str, Any]]:
+    """为响应视图逐条附带插件归属标注（R101 只读派生，永不落盘）。
+
+    归属只认生命周期权威名单 + 结构化命名空间 helper，
+    不按工具名字符串切分猜插件名。``plugin_status`` 除
+    生命周期状态外有派生值：``all``（全局插件通配）、
+    ``missing``（插件形状但无记录，此时 plugin_name
+    恒 null —— 无权威记录不报名字）。
+    """
+    index = _plugin_status_index()
+    annotated: List[Dict[str, Any]] = []
+    for rule in rules:
+        if index is None:
+            plugin_name, plugin_status = None, None
+        else:
+            plugin_name, plugin_status = _rule_plugin_status(
+                rule["tool_pattern"], index
+            )
+        annotated.append(
+            {**rule, "plugin_name": plugin_name, "plugin_status": plugin_status}
+        )
+    return annotated
+
+
 @router.get("/rules")
 def list_permission_rules() -> Dict[str, Any]:
     """列出已保存且生效的权限规则（设置页「已记住的规则」数据源）。"""
-    return {"ok": True, "rules": _load_saved_rules()}
+    return {
+        "ok": True,
+        "rules": _annotate_rules_with_plugin_status(_load_saved_rules()),
+    }
 
 
 @router.post("/rules/delete")
 def delete_permission_rule(body: PermissionRuleDeleteBody, request: Request):
-    """按下标删除一条已保存规则，返回删除后的最新列表。
+    """按内容删除一条已保存规则，返回删除后的最新列表。
 
-    服务端重新读取并校验下标，越界 → 400 且不写存储；重复规则只
-    删被指中的一条。删除是撤销持久信任的写操作，与 preset 写入
+    服务端以 parse_rules 口径重新读取生效列表，删除第一条与请求体
+    完全一致的 (tool_pattern, decision)；无匹配 → 400 且不写存储。
+    相比 R97 的列表下标，内容定位不受期间 remember 追加引起的
+    位置漂移影响，不会删到界面上选中的那条之外的规则；重复规则
+    每次仍只删一条。删除是撤销持久信任的写操作，与 preset 写入
     共用 Origin 守卫。
     """
     forbidden = forbidden_origin_response(request)
     if forbidden is not None:
         return forbidden
     rules = _load_saved_rules()
-    if body.index < 0 or body.index >= len(rules):
+    target = {"tool_pattern": body.tool_pattern, "decision": body.decision}
+    if target not in rules:
         return JSONResponse(
             status_code=400,
-            content={"ok": False, "error": "rule index out of range"},
+            content={"ok": False, "error": "rule not found"},
         )
-    removed = rules.pop(body.index)
+    removed = rules.pop(rules.index(target))
     SettingsRepository().set_json(SETTINGS_KEY_RULES, rules, category="permissions")
     logger.info(
         "已删除已保存审批规则: pattern=%s decision=%s (剩余 %d 条)",
@@ -299,7 +415,217 @@ def delete_permission_rule(body: PermissionRuleDeleteBody, request: Request):
         removed["decision"],
         len(rules),
     )
-    return {"ok": True, "rules": rules}
+    return {"ok": True, "rules": _annotate_rules_with_plugin_status(rules)}
+
+
+@router.post("/rules/clear")
+def clear_permission_rules(request: Request):
+    """清空全部已保存规则（撤销全部持久信任），返回空列表（R100）。
+
+    无请求体、不接受任何筛选参数：语义只有「全部」一种，
+    永远只能把列表写空，不能借此按条件删除或改写规则。
+    幂等：本无规则时仍返回 ok。存储里的无效条目随写回
+    空列表一并消失，与逐条删除的规范化写回同性质。清空
+    是撤销持久信任的写操作，与逐条删除共用 Origin 守卫。
+    """
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    removed_count = len(_load_saved_rules())
+    SettingsRepository().set_json(SETTINGS_KEY_RULES, [], category="permissions")
+    logger.info("已清空全部已保存审批规则（清空前共 %d 条生效规则）", removed_count)
+    return {"ok": True, "rules": []}
+
+
+class PermissionRulesDeleteByPluginBody(BaseModel):
+    """按插件删除其全部已保存规则的请求体（R102）。"""
+
+    #: 权威插件名（必须命中生命周期记录）。只是「删谁的
+    #: 规则」的身份选择子：删除集合由服务端按结构化归属
+    #: 选出，客户端不传任何 pattern，永不新建或放宽规则。
+    plugin_name: str
+
+    class Config:
+        extra = "forbid"
+
+
+@router.post("/rules/delete-by-plugin")
+def delete_permission_rules_by_plugin(
+    body: PermissionRulesDeleteByPluginBody, request: Request
+):
+    """删除某个插件名下的全部已保存规则，返回最新列表（R102）。
+
+    选择子是插件身份而非 pattern：名字不在册 → 400 不写
+    （含已卸载记录——清理孤儿规则正是主场景）；索引不可
+    读 → 503 不写（校验不了身份就不做写操作）。删除集合
+    与 R101 标注同源（``_rule_plugin_owner``，长名字消歧），
+    只可能删掉该插件的现存规则。幂等：该插件本无规则时
+    removed=0 返回 ok 且不写存储。与其它规则写操作共用
+    Origin 守卫。
+    """
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    index = _plugin_status_index()
+    if index is None:
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "error": "plugin index unavailable"},
+        )
+    if body.plugin_name not in index:
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "plugin not found"},
+        )
+    rules = _load_saved_rules()
+    kept = [
+        rule
+        for rule in rules
+        if _rule_plugin_owner(rule["tool_pattern"], index) != body.plugin_name
+    ]
+    removed_count = len(rules) - len(kept)
+    if removed_count:
+        SettingsRepository().set_json(
+            SETTINGS_KEY_RULES, kept, category="permissions"
+        )
+    logger.info(
+        "已删除插件 %s 的已保存审批规则 %d 条 (剩余 %d 条)",
+        body.plugin_name,
+        removed_count,
+        len(kept),
+    )
+    return {
+        "ok": True,
+        "removed": removed_count,
+        "rules": _annotate_rules_with_plugin_status(kept),
+    }
+
+
+@router.post("/rules/delete-orphans")
+def delete_permission_orphan_rules(request: Request):
+    """删除全部无生命周期归属的插件形规则，返回最新列表（R104）。
+
+    与 delete-by-plugin 对称的另一半：missing 孤儿没有
+    在册名字可做选择子，删除集合由服务端用与 R101 标注
+    同一个分类口径（``_rule_plugin_status`` 的 missing
+    类）选出，无请求体、不接受任何筛选参数，语义只有
+    「全部 missing」一种。索引不可读 → 503 不写：分不
+    清「无归属」与「读不到」时不删，避免把在册插件的
+    规则误判为孤儿。全局插件通配与内置工具规则永远不
+    在删除集合内。幂等：无孤儿时 removed=0 返回 ok 且
+    不写存储。与其它规则写操作共用 Origin 守卫。
+    """
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    index = _plugin_status_index()
+    if index is None:
+        return JSONResponse(
+            status_code=503,
+            content={"ok": False, "error": "plugin index unavailable"},
+        )
+    rules = _load_saved_rules()
+    kept = [
+        rule
+        for rule in rules
+        if _rule_plugin_status(rule["tool_pattern"], index)[1] != "missing"
+    ]
+    removed_count = len(rules) - len(kept)
+    if removed_count:
+        SettingsRepository().set_json(
+            SETTINGS_KEY_RULES, kept, category="permissions"
+        )
+    logger.info(
+        "已删除无归属插件孤儿审批规则 %d 条 (剩余 %d 条)",
+        removed_count,
+        len(kept),
+    )
+    return {
+        "ok": True,
+        "removed": removed_count,
+        "rules": _annotate_rules_with_plugin_status(kept),
+    }
+
+
+def _session_rules_view(session_id: str) -> List[Dict[str, Any]]:
+    """某会话的会话规则响应视图（R106，R101 同口径标注）。"""
+    return _annotate_rules_with_plugin_status(
+        [rule.to_dict() for rule in session_rules_for(session_id)]
+    )
+
+
+@router.get("/session/{session_id}/remembered-rules")
+def list_session_remembered_rules(session_id: str) -> Dict[str, Any]:
+    """列出本会话「仅本次会话记住」的规则（R106 聊天顶栏数据源）。
+
+    会话规则只存进程内存（R105）；这里按与持久规则列表
+    相同的标注口径返回，让用户在本会话内看得见这批自动
+    决定的出处。未知/无规则会话返回空列表。
+    """
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "rules": _session_rules_view(session_id),
+    }
+
+
+@router.post("/session/{session_id}/remembered-rules/delete")
+def delete_session_remembered_rule(
+    session_id: str, body: PermissionRuleDeleteBody, request: Request
+):
+    """按内容撤销一条会话规则，返回最新列表（R106）。
+
+    与持久规则删除（R99）同形：pattern 只是「删哪一条」
+    的选择子，未命中（含非法 decision）→ 400 不写存储。
+    删除只可能让后续调用回到逐次询问，不构成放行面；
+    规则创建仍只经审批应答。与其它规则写操作共用
+    Origin 守卫。
+    """
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    try:
+        target: Optional[PermissionRule] = PermissionRule(
+            tool_pattern=body.tool_pattern, decision=body.decision
+        )
+    except ValueError:
+        target = None
+    if target is None or not forget_session_rule(session_id, target):
+        return JSONResponse(
+            status_code=400,
+            content={"ok": False, "error": "rule not found"},
+        )
+    rules = _session_rules_view(session_id)
+    logger.info(
+        "已撤销会话审批规则: session=%s pattern=%s decision=%s (剩余 %d 条)",
+        session_id,
+        body.tool_pattern,
+        body.decision,
+        len(rules),
+    )
+    return {"ok": True, "session_id": session_id, "rules": rules}
+
+
+@router.post("/session/{session_id}/remembered-rules/clear")
+def clear_session_remembered_rules(session_id: str, request: Request):
+    """清空某会话的全部会话规则，返回空列表（R106）。
+
+    无请求体、不接受筛选参数，语义只有「清空该会话
+    全部」；其它会话与持久规则不受影响。幂等：本无
+    规则时仍返回 ok。与其它规则写操作共用 Origin
+    守卫。
+    """
+    forbidden = forbidden_origin_response(request)
+    if forbidden is not None:
+        return forbidden
+    removed_count = len(session_rules_for(session_id))
+    clear_session_rules(session_id)
+    logger.info(
+        "已清空会话审批规则: session=%s（清空前共 %d 条）",
+        session_id,
+        removed_count,
+    )
+    return {"ok": True, "session_id": session_id, "rules": []}
 
 
 def forbidden_origin_response(request: Request) -> Optional[JSONResponse]:
@@ -323,6 +649,41 @@ def forbidden_origin_response(request: Request) -> Optional[JSONResponse]:
     return None
 
 
+def _derive_remembered_pattern(
+    tool_name: str,
+    remember_scope: RememberScope,
+    plugin_name: Optional[str],
+) -> Optional[str]:
+    """remember 时的 pattern 安全派生（持久化/会话共用）。
+
+    派生失败返回 None（只记 warning，调用方一律降级为不
+    记住）：工具范围含 fnmatch 元字符（FIX-3，防 ``*``
+    落成永久 allow-all），或整插件范围拿不到待审批请求
+    自带的服务端权威插件名 / 工具不属于该插件（R95）。
+    客户端在两种范围下都没有 pattern 表达能力。
+    """
+    if remember_scope is RememberScope.PLUGIN:
+        pattern = plugin_tool_wildcard_for_plugin(plugin_name)
+        if pattern is None or not plugin_tool_belongs_to_plugin(
+            tool_name, plugin_name
+        ):
+            logger.warning(
+                "拒绝持久化整插件审批规则（权威插件名缺失或不匹配）: "
+                "tool_name=%r plugin_name=%r",
+                tool_name,
+                plugin_name,
+            )
+            return None
+        return pattern
+    if _FNMATCH_METACHAR_RE.search(tool_name):
+        logger.warning(
+            "拒绝持久化含 fnmatch 元字符的审批规则（降级为不记住）: tool_name=%r",
+            tool_name,
+        )
+        return None
+    return tool_name
+
+
 def _persist_remembered_rule(
     tool_name: str,
     approved: bool,
@@ -341,49 +702,79 @@ def _persist_remembered_rule(
     自带的服务端 ``plugin_name`` 能派生受限通配，且完整工具
     名必须确实属于该插件；否则同样只记 warning、不落规则。
 
+    R99 去重：完全相同的 (tool_pattern, decision) 已在存储中时
+    不再重复落一条（只记 info、不写存储）；同 pattern 不同
+    decision 照常追加，冲突仍由 enforcer 的 deny > allow > ask
+    裁决，不借去重静默推翻先前落定的决定。
+
     其它失败也只记 warning——规则持久化失败不应让"已批准"的应答对前端
     变失败（本次执行已经放行了）。
     """
-    if remember_scope is RememberScope.PLUGIN:
-        pattern = plugin_tool_wildcard_for_plugin(plugin_name)
-        if pattern is None or not plugin_tool_belongs_to_plugin(
-            tool_name, plugin_name
-        ):
-            logger.warning(
-                "拒绝持久化整插件审批规则（权威插件名缺失或不匹配）: "
-                "tool_name=%r plugin_name=%r",
-                tool_name,
-                plugin_name,
-            )
-            return
-    elif _FNMATCH_METACHAR_RE.search(tool_name):
-        logger.warning(
-            "拒绝持久化含 fnmatch 元字符的审批规则（降级为不记住）: tool_name=%r",
-            tool_name,
-        )
+    pattern = _derive_remembered_pattern(tool_name, remember_scope, plugin_name)
+    if pattern is None:
         return
-    else:
-        pattern = tool_name
+    decision = "allow" if approved else "deny"
     try:
         repo = SettingsRepository()
         existing = parse_rules(repo.get_json(SETTINGS_KEY_RULES))
         rules_payload: List[Dict[str, Any]] = [r.to_dict() for r in existing]
-        rules_payload.append(
-            {
-                "tool_pattern": pattern,
-                "decision": "allow" if approved else "deny",
-            }
-        )
+        new_rule = {"tool_pattern": pattern, "decision": decision}
+        if new_rule in rules_payload:
+            logger.info(
+                "审批规则已存在，跳过重复持久化: pattern=%s decision=%s scope=%s",
+                pattern,
+                decision,
+                remember_scope.value,
+            )
+            return
+        rules_payload.append(new_rule)
         repo.set_json(SETTINGS_KEY_RULES, rules_payload, category="permissions")
         logger.info(
             "已持久化审批规则: pattern=%s decision=%s scope=%s (共 %d 条)",
             pattern,
-            "allow" if approved else "deny",
+            decision,
             remember_scope.value,
             len(rules_payload),
         )
     except Exception as exc:  # noqa: BLE001 — 持久化失败不阻塞应答
         logger.warning("持久化审批规则失败: %s", exc)
+
+
+def _store_session_remembered_rule(
+    tool_name: str,
+    approved: bool,
+    *,
+    remember_scope: RememberScope,
+    plugin_name: Optional[str],
+    session_id: Optional[str],
+) -> None:
+    """remember=true（仅本次会话）时把决定写进会话规则存储（R105）。
+
+    与持久化共用同一 pattern 安全闸（``_derive_remembered_pattern``），
+    从不写 settings。审批请求没有捕获到会话归属时降级为不
+    记住（只记 warning）：用户选了「仅本次会话」就绝不能悄
+    悄变成永久规则。``session_id`` 来自请求创建时的服务端
+    上下文捕获，客户端不可指定。
+    """
+    if not session_id:
+        logger.warning(
+            "拒绝会话记住（审批请求无会话归属，降级为不记住）: tool_name=%r",
+            tool_name,
+        )
+        return
+    pattern = _derive_remembered_pattern(tool_name, remember_scope, plugin_name)
+    if pattern is None:
+        return
+    decision = "allow" if approved else "deny"
+    added = remember_session_rule(session_id, PermissionRule(pattern, decision))
+    logger.info(
+        "会话审批规则%s: session=%s pattern=%s decision=%s scope=%s",
+        "已记录" if added else "已存在（跳过）",
+        session_id,
+        pattern,
+        decision,
+        remember_scope.value,
+    )
 
 
 @router.get("/pending")
@@ -428,12 +819,21 @@ async def answer_approval(
         return {"ok": False, "error": "unknown_or_expired"}
 
     if body.remember:
-        _persist_remembered_rule(
-            req.tool_name,
-            body.approved,
-            remember_scope=body.remember_scope,
-            plugin_name=req.plugin_name,
-        )
+        if body.remember_duration is RememberDuration.SESSION:
+            _store_session_remembered_rule(
+                req.tool_name,
+                body.approved,
+                remember_scope=body.remember_scope,
+                plugin_name=req.plugin_name,
+                session_id=req.session_id,
+            )
+        else:
+            _persist_remembered_rule(
+                req.tool_name,
+                body.approved,
+                remember_scope=body.remember_scope,
+                plugin_name=req.plugin_name,
+            )
 
     # live-events P1: 子代理审批回填 —— 命中编排 run 时回发
     # ``task.approval_resolved``（canonical）+ ``subagent_event`` 镜像

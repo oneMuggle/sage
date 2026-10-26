@@ -243,6 +243,9 @@ export const zhSettingsAndModels = {
   'permission.remember_scope.tool': '仅此工具',
   'permission.remember_scope.plugin': '整个插件（包含未来新增工具）',
   'permission.remember_scope.plugin_warning': '将对该插件的全部工具生效，请确认你信任这个插件。',
+  'permission.remember_duration.legend': '记住时长',
+  'permission.remember_duration.permanent': '永久记住',
+  'permission.remember_duration.session': '仅本次会话',
   'permission.approve': '允许',
   'permission.deny': '拒绝',
   'permission.deny_confirm': '确认拒绝',
@@ -306,7 +309,7 @@ export const zhSettingsAndModels = {
   'settings.permission.mode.full_access': '完全访问',
   'settings.permission.mode.full_access.desc': '允许所有操作，不再弹出审批（谨慎）',
   'settings.permission.rules_hint':
-    '细粒度规则（permission_rules JSON）暂不支持界面编辑；审批时勾选"记住我的选择"会自动追加规则。',
+    '细粒度规则由审批时勾选"记住我的选择"生成；已记住的规则可在下方查看并逐条删除（删除后恢复逐次审批）。',
   'settings.permission.load_failed': '读取权限模式失败',
 
   // R97 已记住规则管理
@@ -318,6 +321,22 @@ export const zhSettingsAndModels = {
   'settings.permission.rules.decision.ask': '每次询问',
   'settings.permission.rules.load_failed': '读取已记住规则失败',
   'settings.permission.rules.delete_failed': '删除规则失败，请重试',
+
+  'settings.permission.rules.clear_all': '全部删除',
+  'settings.permission.rules.clear_confirm_title': '删除全部已记住规则？',
+  'settings.permission.rules.clear_confirm_message':
+    '所有通过「记住我的选择」保存的规则都会被删除，之后全部工具调用将恢复逐次询问。此操作不可撤销。',
+  'settings.permission.rules.clear_failed': '全部删除失败，请重试',
+  'settings.permission.rules.plugin_uninstalled': '插件已卸载',
+  'settings.permission.rules.plugin_missing': '插件无记录',
+  'settings.permission.rules.by_plugin': '按插件删除：',
+  'settings.permission.rules.delete_plugin_confirm_title': '删除该插件的全部已记住规则？',
+  'settings.permission.rules.delete_plugin_failed': '按插件删除规则失败，请重试',
+  'settings.permission.rules.orphans': '无归属插件规则',
+  'settings.permission.rules.delete_orphans_confirm_title': '删除全部无归属插件规则？',
+  'settings.permission.rules.delete_orphans_confirm_message':
+    '所属插件已无生命周期记录的已记住规则都会被删除；有归属的规则与内置工具规则不受影响。此操作不可撤销。',
+  'settings.permission.rules.delete_orphans_failed': '清理无归属规则失败，请重试',
 
   // ─── M6 生态扩展: 用量/成本面板 ─────
   'settings.section.usage': '用量统计',

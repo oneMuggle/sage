@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => ({
   stopRuntime: vi.fn(),
   restartRuntime: vi.fn(),
   invokeRuntime: vi.fn(),
+  listRules: vi.fn(),
+  deleteRulesByPlugin: vi.fn(),
+  confirmDialog: vi.fn(),
 }));
 
 vi.mock('../../../shared/api/pluginClient', async () => {
@@ -55,6 +58,17 @@ vi.mock('../../../shared/api/pluginClient', async () => {
 
 vi.mock('../../../shared/lib/i18n', () => ({
   useI18n: () => ({ t: (key: string) => key, locale: 'zh', setLocale: vi.fn() }),
+}));
+
+vi.mock('../../../shared/api/permissionApi', () => ({
+  permissionApi: {
+    listRules: (...args: unknown[]) => mocks.listRules(...args),
+    deleteRulesByPlugin: (...args: unknown[]) => mocks.deleteRulesByPlugin(...args),
+  },
+}));
+
+vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
+  confirmDialog: (...args: unknown[]) => mocks.confirmDialog(...args),
 }));
 
 const pendingRuntime: PluginRuntimeStatus = {
@@ -178,6 +192,9 @@ describe('PluginsTab', () => {
       result: { content: 'hello' },
       runtime: activeRuntime,
     });
+    mocks.listRules.mockResolvedValue([]);
+    mocks.deleteRulesByPlugin.mockResolvedValue([]);
+    mocks.confirmDialog.mockResolvedValue(true);
   });
 
   it('renders records, explicit runtime boundary, human permissions, and recent logs', async () => {
@@ -248,6 +265,108 @@ describe('PluginsTab', () => {
 
     fireEvent.click(screen.getByTestId('plugin-restore-retired'));
     await waitFor(() => expect(mocks.restore).toHaveBeenCalledWith('retired'));
+  });
+
+  it('shows orphan rule counts only on uninstalled plugins', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__retired__*',
+        decision: 'deny',
+        plugin_name: 'retired',
+        plugin_status: 'uninstalled',
+      },
+      {
+        tool_pattern: 'plugin__retired__old',
+        decision: 'allow',
+        plugin_name: 'retired',
+        plugin_status: 'uninstalled',
+      },
+      {
+        tool_pattern: 'plugin__alpha__reader',
+        decision: 'allow',
+        plugin_name: 'alpha',
+        plugin_status: 'installed',
+      },
+    ]);
+    render(<PluginsTab />);
+
+    const hint = await screen.findByTestId('plugin-orphan-rules-retired');
+    expect(hint.textContent).toContain('2');
+    expect(screen.queryByTestId('plugin-orphan-rules-alpha')).toBeNull();
+  });
+
+  it('deletes orphan rules after confirmation and hides the hint', async () => {
+    mocks.listRules
+      .mockResolvedValueOnce([
+        {
+          tool_pattern: 'plugin__retired__*',
+          decision: 'deny',
+          plugin_name: 'retired',
+          plugin_status: 'uninstalled',
+        },
+      ])
+      .mockResolvedValue([]);
+    render(<PluginsTab />);
+    await screen.findByTestId('plugin-orphan-rules-retired');
+
+    fireEvent.click(screen.getByTestId('plugin-delete-rules-retired'));
+
+    await waitFor(() =>
+      expect(mocks.confirmDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ danger: true, message: 'retired' }),
+      ),
+    );
+    await waitFor(() => expect(mocks.deleteRulesByPlugin).toHaveBeenCalledWith('retired'));
+    await waitFor(() => expect(screen.queryByTestId('plugin-orphan-rules-retired')).toBeNull());
+    expect(screen.getByText('该插件的已记住规则已删除。')).toBeTruthy();
+  });
+
+  it('does not delete orphan rules when the confirmation is cancelled', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__retired__*',
+        decision: 'deny',
+        plugin_name: 'retired',
+        plugin_status: 'uninstalled',
+      },
+    ]);
+    mocks.confirmDialog.mockResolvedValue(false);
+    render(<PluginsTab />);
+    await screen.findByTestId('plugin-orphan-rules-retired');
+
+    fireEvent.click(screen.getByTestId('plugin-delete-rules-retired'));
+
+    await waitFor(() => expect(mocks.confirmDialog).toHaveBeenCalled());
+    expect(mocks.deleteRulesByPlugin).not.toHaveBeenCalled();
+    expect(screen.getByTestId('plugin-orphan-rules-retired')).toBeTruthy();
+  });
+
+  it('shows an error and keeps the hint when deleting orphan rules fails', async () => {
+    mocks.listRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__retired__*',
+        decision: 'deny',
+        plugin_name: 'retired',
+        plugin_status: 'uninstalled',
+      },
+    ]);
+    mocks.deleteRulesByPlugin.mockRejectedValue(new Error('rules delete failed'));
+    render(<PluginsTab />);
+    await screen.findByTestId('plugin-orphan-rules-retired');
+
+    fireEvent.click(screen.getByTestId('plugin-delete-rules-retired'));
+
+    expect(await screen.findByText('rules delete failed')).toBeTruthy();
+    expect(screen.getByTestId('plugin-orphan-rules-retired')).toBeTruthy();
+  });
+
+  it('keeps working when the rules lookup fails', async () => {
+    mocks.listRules.mockRejectedValue(new Error('rules offline'));
+    render(<PluginsTab />);
+
+    await screen.findByTestId('plugin-card-retired');
+    expect(screen.queryByTestId('plugin-orphan-rules-retired')).toBeNull();
+    expect(screen.queryByText('rules offline')).toBeNull();
   });
 
   it('backend 409 opens a per-permission confirmation flow before retrying', async () => {

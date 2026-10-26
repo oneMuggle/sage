@@ -127,6 +127,7 @@ describe('invokeBackend', () => {
           approved: true,
           remember: true,
           remember_scope: 'plugin',
+          remember_duration: 'permanent',
           reason: '',
         }),
       }),

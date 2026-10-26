@@ -8,6 +8,7 @@
 import { clsx } from 'clsx';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { permissionApi } from '../../shared/api/permissionApi';
 import {
   describePermission,
   extractManifestPermissions,
@@ -21,6 +22,7 @@ import {
 } from '../../shared/api/pluginClient';
 import { useI18n } from '../../shared/lib/i18n';
 
+import { PluginOrphanRules } from './PluginOrphanRules';
 import {
   PluginRuntimeControls,
   PluginRuntimePanel,
@@ -191,6 +193,7 @@ export function PluginsTab() {
   const [busyName, setBusyName] = useState<string | null>(null);
   const [runtimeBusyName, setRuntimeBusyName] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
+  const [ruleCounts, setRuleCounts] = useState<Record<string, number>>({});
 
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [pluginLogs, setPluginLogs] = useState<PluginEvent[]>([]);
@@ -228,12 +231,21 @@ export function PluginsTab() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [list, events] = await Promise.all([
+      const [list, events, rules] = await Promise.all([
         pluginClient.list(statusFilter || undefined),
         pluginClient.logs(undefined, 20),
+        // R103 孤儿规则计数是增强信息：拉不到就不显提示，
+        // 绝不让规则接口的失败拖垮插件页主刷新。
+        permissionApi.listRules().catch(() => []),
       ]);
       setPlugins(list);
       setRecentLogs(events);
+      const counts: Record<string, number> = {};
+      for (const rule of rules) {
+        if (!rule.plugin_name) continue;
+        counts[rule.plugin_name] = (counts[rule.plugin_name] ?? 0) + 1;
+      }
+      setRuleCounts(counts);
       setSelectedName((current) =>
         current && list.some((item) => item.name === current) ? current : null,
       );
@@ -575,6 +587,21 @@ export function PluginsTab() {
                       <dd>{renderPermissions(plugin.permissions)}</dd>
                     </div>
                   </dl>
+
+                  {plugin.status === 'uninstalled' && (ruleCounts[plugin.name] ?? 0) > 0 && (
+                    <PluginOrphanRules
+                      pluginName={plugin.name}
+                      count={ruleCounts[plugin.name]}
+                      en={en}
+                      disabled={busy}
+                      onDeleted={(notice) => {
+                        setNotice(notice);
+                        setActionError(null);
+                        void refresh();
+                      }}
+                      onError={setActionError}
+                    />
+                  )}
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     {plugin.status !== 'uninstalled' && (

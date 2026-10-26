@@ -112,6 +112,7 @@ describe('ApprovalDialog', () => {
         approved: true,
         remember: false,
         rememberScope: 'tool',
+        rememberDuration: 'permanent',
         reason: '',
       });
     });
@@ -135,6 +136,7 @@ describe('ApprovalDialog', () => {
         approved: true,
         remember: true,
         rememberScope: 'tool',
+        rememberDuration: 'permanent',
         reason: '',
       });
     });
@@ -179,9 +181,101 @@ describe('ApprovalDialog', () => {
         approved: true,
         remember: true,
         rememberScope: 'plugin',
+        rememberDuration: 'permanent',
         reason: '',
       });
     });
+  });
+
+  it('shows duration choices only when remember is checked, permanent by default', () => {
+    seedRequest({ request_id: 'req-duration-visibility' });
+    renderDialog();
+
+    expect(screen.queryByTestId('permission-remember-duration')).toBeNull();
+    fireEvent.click(screen.getByTestId('permission-remember'));
+
+    expect(screen.getByTestId('permission-remember-duration')).toBeInTheDocument();
+    expect(
+      (screen.getByTestId('permission-remember-duration-permanent') as HTMLInputElement).checked,
+    ).toBe(true);
+    expect(
+      (screen.getByTestId('permission-remember-duration-session') as HTMLInputElement).checked,
+    ).toBe(false);
+  });
+
+  it('forwards rememberDuration=session when session-only is chosen', async () => {
+    seedRequest({ request_id: 'req-duration-session' });
+    renderDialog();
+
+    fireEvent.click(screen.getByTestId('permission-remember'));
+    fireEvent.click(screen.getByTestId('permission-remember-duration-session'));
+    fireEvent.click(screen.getByTestId('permission-approve'));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('permissions_answer', {
+        requestId: 'req-duration-session',
+        approved: true,
+        remember: true,
+        rememberScope: 'tool',
+        rememberDuration: 'session',
+        reason: '',
+      });
+    });
+  });
+
+  it('combines whole-plugin scope with session duration', async () => {
+    seedRequest({
+      request_id: 'req-duration-plugin-session',
+      tool_name: 'plugin__demo__hello',
+      plugin_name: 'demo',
+    });
+    renderDialog();
+
+    fireEvent.click(screen.getByTestId('permission-remember'));
+    fireEvent.click(screen.getByTestId('permission-remember-scope-plugin'));
+    fireEvent.click(screen.getByTestId('permission-remember-duration-session'));
+    fireEvent.click(screen.getByTestId('permission-approve'));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('permissions_answer', {
+        requestId: 'req-duration-plugin-session',
+        approved: true,
+        remember: true,
+        rememberScope: 'plugin',
+        rememberDuration: 'session',
+        reason: '',
+      });
+    });
+  });
+
+  it('resets remember duration to permanent when a new request arrives', async () => {
+    seedRequest({ request_id: 'req-duration-a' });
+    const { rerender } = render(
+      <I18nProvider>
+        <ApprovalDialog />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('permission-remember'));
+    fireEvent.click(screen.getByTestId('permission-remember-duration-session'));
+    expect(
+      (screen.getByTestId('permission-remember-duration-session') as HTMLInputElement).checked,
+    ).toBe(true);
+
+    usePermissionState.getState().setFromEvent(makeRequest({ request_id: 'req-duration-b' }));
+    rerender(
+      <I18nProvider>
+        <ApprovalDialog />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect((screen.getByTestId('permission-remember') as HTMLInputElement).checked).toBe(false);
+    });
+    fireEvent.click(screen.getByTestId('permission-remember'));
+    expect(
+      (screen.getByTestId('permission-remember-duration-permanent') as HTMLInputElement).checked,
+    ).toBe(true);
   });
 
   it('deny click expands feedback input first, second click submits with empty reason', async () => {
@@ -201,6 +295,7 @@ describe('ApprovalDialog', () => {
         approved: false,
         remember: false,
         rememberScope: 'tool',
+        rememberDuration: 'permanent',
         reason: '',
       });
     });
@@ -225,6 +320,7 @@ describe('ApprovalDialog', () => {
         approved: false,
         remember: false,
         rememberScope: 'tool',
+        rememberDuration: 'permanent',
         reason: '路径不对，应该写到 docs/ 目录',
       });
     });

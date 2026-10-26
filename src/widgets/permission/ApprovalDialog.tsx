@@ -4,7 +4,7 @@
  * 当 `usePermissionState.currentRequest` 非空时渲染（由 useChat 消费
  * `state: 'permission_request'` 流事件写入 store）。用户点「允许/拒绝」
  * → `invoke('permissions_answer', {requestId, approved, remember,
- * rememberScope, reason})`
+ * rememberScope, rememberDuration, reason})`
  * → 无论成败都 resolve() 关闭对话框：
  *
  *   - ok=false（unknown_or_expired / permission_gate_not_initialized）
@@ -34,6 +34,7 @@ interface AnswerResponse {
 }
 
 type RememberScope = 'tool' | 'plugin';
+type RememberDuration = 'permanent' | 'session';
 
 /** 风险分级 → 徽章配色（destructive=red / suspicious=amber / safe=neutral） */
 const RISK_BADGE_CLASSES: Readonly<Record<PermissionRequest['risk'], string>> = {
@@ -55,6 +56,7 @@ export function ApprovalDialog() {
   const workspacePath = useCurrentWorkspace();
   const [remember, setRemember] = useState(false);
   const [rememberScope, setRememberScope] = useState<RememberScope>('tool');
+  const [rememberDuration, setRememberDuration] = useState<RememberDuration>('permanent');
   const [submitting, setSubmitting] = useState(false);
   // 对标 ZCode freeText：拒绝反馈——点「拒绝」先展开输入框（可留空直接确认）
   const [denyReason, setDenyReason] = useState('');
@@ -66,6 +68,7 @@ export function ApprovalDialog() {
   useEffect(() => {
     setRemember(false);
     setRememberScope('tool');
+    setRememberDuration('permanent');
     setSubmitting(false);
     // 对标 ZCode freeText：拒绝反馈输入态随新请求重置
     setDenyReason('');
@@ -112,6 +115,7 @@ export function ApprovalDialog() {
         approved,
         remember,
         rememberScope: scope,
+        rememberDuration,
         reason,
       });
       if (!resp || resp.ok !== true) {
@@ -315,6 +319,39 @@ export function ApprovalDialog() {
                   {t('permission.remember_scope.plugin_warning')}
                 </p>
               ) : null}
+            </fieldset>
+          ) : null}
+
+          {remember ? (
+            <fieldset
+              data-testid="permission-remember-duration"
+              className="space-y-2 rounded border border-border bg-bg-muted/50 p-2"
+            >
+              <legend className="px-1 text-xs text-text-secondary">
+                {t('permission.remember_duration.legend')}
+              </legend>
+              <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="permission-remember-duration"
+                  data-testid="permission-remember-duration-permanent"
+                  checked={rememberDuration === 'permanent'}
+                  onChange={() => setRememberDuration('permanent')}
+                  className="w-3.5 h-3.5 accent-primary"
+                />
+                <span>{t('permission.remember_duration.permanent')}</span>
+              </label>
+              <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+                <input
+                  type="radio"
+                  name="permission-remember-duration"
+                  data-testid="permission-remember-duration-session"
+                  checked={rememberDuration === 'session'}
+                  onChange={() => setRememberDuration('session')}
+                  className="w-3.5 h-3.5 accent-primary"
+                />
+                <span>{t('permission.remember_duration.session')}</span>
+              </label>
             </fieldset>
           ) : null}
 
