@@ -24,8 +24,8 @@ pytestmark = pytest.mark.unit
 
 
 def test_agent_state_enum_has_twelve_states():
-    """状态机应有 12 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
-    CONTENT_DELTA/RETRY/PERMISSION_REQUEST/ASK_USER_QUESTION/STEP_DONE/DONE/FAILED。
+    """状态机应有 13 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
+    CONTENT_DELTA/RETRY/HEARTBEAT/PERMISSION_REQUEST/ASK_USER_QUESTION/STEP_DONE/DONE/FAILED。
 
     CONTENT_DELTA 由 I4 引入,用于流式 LLM 响应 — 每个 token chunk 推一个
     CONTENT_DELTA 事件,前端 appendContent 累积实现逐字渲染。
@@ -38,8 +38,10 @@ def test_agent_state_enum_has_twelve_states():
     前端据此快照当前步骤为独立气泡。
     RETRY 由 LLM 重试可见性引入 — LLM 请求失败触发自动重试时推送,
     前端渲染"重试中"提示。
+    HEARTBEAT 由重试退避心跳引入 (2026-10-26) — 退避等待期间每 5s 推送,
+    只喂前端 watchdog 防止长退避期间误杀流,不渲染 UI。
     """
-    assert len(AgentState) == 12
+    assert len(AgentState) == 13
 
 
 def test_agent_state_enum_string_inheritance():
@@ -80,6 +82,7 @@ def test_agent_state_iteration_order():
         "observing",
         "content_delta",
         "retry",  # 2026-10-13: LLM 重试可见性
+        "heartbeat",  # 2026-10-26: 重试退避心跳(只喂 watchdog,不渲染 UI)
         "permission_request",  # M1 工具安全加固
         "ask_user_question",  # M2 part B: AskUserQuestion
         "step_done",  # step-by-step ReAct: 每步完成信号

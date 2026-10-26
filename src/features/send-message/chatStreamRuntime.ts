@@ -400,103 +400,115 @@ export function useChatReattachAndBtw(params: {
           created_at: Date.now(),
         });
         useChatStreamStore.getState().startStream(sid, messageId, { initialContent: '' });
-        const { cancel } = await chatApi.listenStream(streamId, {
-          onEvent: (evt) => {
-            if (finished) return;
-            if (evt.type === 'session_updated') {
-              void useStore.getState().loadSessions();
-              return;
-            }
-            if (evt.state === 'content_delta' && evt.content) {
-              acc += evt.content;
-              useChatStreamStore.getState().replaceContent(sid, messageId, acc);
-              return;
-            }
-            if ((evt.state === 'reasoning_delta' || evt.state === 'reasoning') && evt.reasoning) {
-              accReasoning += evt.reasoning;
-              useChatStreamStore.getState().replaceReasoning(sid, messageId, accReasoning);
-              return;
-            }
-            if (evt.state === 'reasoning_final') {
-              accReasoning = evt.reasoning ?? accReasoning;
-              useChatStreamStore.getState().replaceReasoning(sid, messageId, accReasoning);
-              return;
-            }
-            if (evt.state === 'permission_request' && evt.permission_request) {
-              usePermissionState.getState().setFromEvent(evt.permission_request, sid);
-              return;
-            }
-            if (evt.state === 'ask_user_question' && evt.user_question) {
-              useQuestionState.getState().setFromEvent(evt.user_question, sid);
-              return;
-            }
-            if (evt.state === 'done') {
-              const finalContent = evt.content ?? acc;
-              finishReattach(finalContent);
-              return;
-            }
-            if (evt.state === 'failed') {
-              // 2026-09 修复: error 信封统一为 dict | string 双态, 提取 message
-              const raw = evt.error;
-              const errText = typeof raw === 'string' ? raw : (raw?.message ?? '流式失败');
-              finishReattach(null, errText);
-              return;
-            }
-            // R35: 编排/任务板事件走共享应用器 —— 重放时任务板/live 态
-            // 完整重建（与主路径同一套 store 写入）。
-            if (applyOrchestrationEventToBoard(evt, sid)) {
-              return;
-            }
-            // 2026-10-13: 重接路径同步处理 LLM 重试事件 — 在消息气泡内
-            // 显示动态重试提示（与主路径 useChat.ts 同格式）。
-            // 2026-10-20: 改为结构化写入 store，由 Message.tsx 渲染 RetryBanner
-            // （带倒计时、颜色编码、进度点），替代纯文本 replaceContent。
-            // 错误类型标签 + 严重程度配色在 RetryBanner.tsx 的 RETRY_ERROR_META
-            // 单源维护；标签文本走 i18n/retryBanner.ts。
-            if (evt.state === 'retry' && evt.retry_info) {
-              useChatStreamStore.getState().setRetryInfo(sid, messageId, evt.retry_info);
-              useChatStreamStore.getState().setStreamingMeta(sid, messageId, { state: evt.state });
-              return;
-            }
-            // r77: 重接路径补 memory_used —— 重放时 memory_refs 不丢失（与主路径同口径）
-            // R87/R97: 载荷校验走共享 helper（transparencyPayload.ts）
-            if (evt.state === 'memory_used' && evt.memories) {
-              if (isValidMemoriesPayload(evt.memories) && evt.memories.length > 0) {
-                updateMessage(messageId, {
-                  memory_refs: evt.memories,
-                  memory_applied: evt.memories.length,
-                });
+        const { cancel } = await chatApi.listenStream(
+          streamId,
+          {
+            onEvent: (evt) => {
+              if (finished) return;
+              if (evt.type === 'session_updated') {
+                void useStore.getState().loadSessions();
+                return;
               }
-            }
-            // r71: 重接路径同主路径 —— 检索引用明细随消息落库
-            // R87/R97: 载荷校验走共享 helper（每项须有字符串 media_id）
-            if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
-              if (isValidCitationsPayload(evt.citations)) {
-                const existing = useStore
+              // 2026-10-26: heartbeat 只喂 watchdog（feedWatchdog 在 chatApi 层
+              // 每次 onEvent 前已自动触发），不更新 UI。
+              if (evt.state === 'heartbeat') {
+                return;
+              }
+              if (evt.state === 'content_delta' && evt.content) {
+                acc += evt.content;
+                useChatStreamStore.getState().replaceContent(sid, messageId, acc);
+                return;
+              }
+              if ((evt.state === 'reasoning_delta' || evt.state === 'reasoning') && evt.reasoning) {
+                accReasoning += evt.reasoning;
+                useChatStreamStore.getState().replaceReasoning(sid, messageId, accReasoning);
+                return;
+              }
+              if (evt.state === 'reasoning_final') {
+                accReasoning = evt.reasoning ?? accReasoning;
+                useChatStreamStore.getState().replaceReasoning(sid, messageId, accReasoning);
+                return;
+              }
+              if (evt.state === 'permission_request' && evt.permission_request) {
+                usePermissionState.getState().setFromEvent(evt.permission_request, sid);
+                return;
+              }
+              if (evt.state === 'ask_user_question' && evt.user_question) {
+                useQuestionState.getState().setFromEvent(evt.user_question, sid);
+                return;
+              }
+              if (evt.state === 'done') {
+                const finalContent = evt.content ?? acc;
+                finishReattach(finalContent);
+                return;
+              }
+              if (evt.state === 'failed') {
+                // 2026-09 修复: error 信封统一为 dict | string 双态, 提取 message
+                const raw = evt.error;
+                const errText = typeof raw === 'string' ? raw : (raw?.message ?? '流式失败');
+                finishReattach(null, errText);
+                return;
+              }
+              // R35: 编排/任务板事件走共享应用器 —— 重放时任务板/live 态
+              // 完整重建（与主路径同一套 store 写入）。
+              if (applyOrchestrationEventToBoard(evt, sid)) {
+                return;
+              }
+              // 2026-10-13: 重接路径同步处理 LLM 重试事件 — 在消息气泡内
+              // 显示动态重试提示（与主路径 useChat.ts 同格式）。
+              // 2026-10-20: 改为结构化写入 store，由 Message.tsx 渲染 RetryBanner
+              // （带倒计时、颜色编码、进度点），替代纯文本 replaceContent。
+              // 错误类型标签 + 严重程度配色在 RetryBanner.tsx 的 RETRY_ERROR_META
+              // 单源维护；标签文本走 i18n/retryBanner.ts。
+              if (evt.state === 'retry' && evt.retry_info) {
+                useChatStreamStore.getState().setRetryInfo(sid, messageId, evt.retry_info);
+                useChatStreamStore
                   .getState()
-                  .messages.find((m) => m.id === messageId)?.rag_citations;
-                const merged = [...(existing ?? [])];
-                for (const c of evt.citations) {
-                  const idx = merged.findIndex((x) => x.media_id === c.media_id);
-                  if (idx >= 0) merged[idx] = c;
-                  else merged.push(c);
-                }
-                updateMessage(messageId, { rag_citations: merged });
+                  .setStreamingMeta(sid, messageId, { state: evt.state });
+                return;
               }
-            }
-            // R81: 重接路径同主路径 —— 统一参考来源回放
-            // R85: 载荷校验对齐主路径 MEDIUM-2 口径（R92 收敛到共享 helper）。
-            if (evt.state === 'sources_used' && isValidSourcesPayload(evt.sources)) {
-              updateMessage(messageId, { sources: evt.sources });
-            }
-            // 其余事件（工具 acting/observing 等）降级为 streaming meta 文案
-            useChatStreamStore.getState().setStreamingMeta(sid, messageId, {
-              state: evt.state,
-            });
+              // r77: 重接路径补 memory_used —— 重放时 memory_refs 不丢失（与主路径同口径）
+              // R87/R97: 载荷校验走共享 helper（transparencyPayload.ts）
+              if (evt.state === 'memory_used' && evt.memories) {
+                if (isValidMemoriesPayload(evt.memories) && evt.memories.length > 0) {
+                  updateMessage(messageId, {
+                    memory_refs: evt.memories,
+                    memory_applied: evt.memories.length,
+                  });
+                }
+              }
+              // r71: 重接路径同主路径 —— 检索引用明细随消息落库
+              // R87/R97: 载荷校验走共享 helper（每项须有字符串 media_id）
+              if (evt.state === 'attachment_rag_used' && evt.citations?.length) {
+                if (isValidCitationsPayload(evt.citations)) {
+                  const existing = useStore
+                    .getState()
+                    .messages.find((m) => m.id === messageId)?.rag_citations;
+                  const merged = [...(existing ?? [])];
+                  for (const c of evt.citations) {
+                    const idx = merged.findIndex((x) => x.media_id === c.media_id);
+                    if (idx >= 0) merged[idx] = c;
+                    else merged.push(c);
+                  }
+                  updateMessage(messageId, { rag_citations: merged });
+                }
+              }
+              // R81: 重接路径同主路径 —— 统一参考来源回放
+              // R85: 载荷校验对齐主路径 MEDIUM-2 口径（R92 收敛到共享 helper）。
+              if (evt.state === 'sources_used' && isValidSourcesPayload(evt.sources)) {
+                updateMessage(messageId, { sources: evt.sources });
+              }
+              // 其余事件（工具 acting/observing 等）降级为 streaming meta 文案
+              useChatStreamStore.getState().setStreamingMeta(sid, messageId, {
+                state: evt.state,
+              });
+            },
+            onError: (err) => finishReattach(null, err.message),
+            onDone: () => finishReattach(acc || null),
           },
-          onError: (err) => finishReattach(null, err.message),
-          onDone: () => finishReattach(acc || null),
-        });
+          // 2026-10-26: 把 settings.llmTotalTimeoutS 传入，与主 chatStream 对齐。
+          { watchdogSilenceMs: (settings.llmTotalTimeoutS || 1800) * 1000 },
+        );
         if (finished || activeStreamRegistry.get(sid) !== handle) cancel();
         else handle.cancel = cancel;
       } catch {

@@ -75,6 +75,7 @@ export function agentStateToText(state: AgentState, toolName?: string): string |
     case 'topic_shifted': // Task 10 (2026-09-17): 自动话题切换事件,segment 边界进 store,不进消息气泡占位
     case 'orch_preflight': // Round 3 (2026-09-19): 前置阶段由任务板区域指示条展示,不进消息气泡占位
     case 'retry': // 2026-10-20: LLM 重试事件 — 提示由 Message.tsx 的 RetryBanner 承载,不进气泡占位文本
+    case 'heartbeat': // 2026-10-26: 重试退避心跳 — 只喂前端 watchdog,不渲染任何 UI
       return null;
     default:
       return assertNever(state);
@@ -133,6 +134,7 @@ export function agentStateToPhase(state: AgentState | null | undefined): PhaseDi
     case 'context_pressure': // TM2 (DSH 对标 R11): 水位徽章自渲染,无独立 UI 阶段
     case 'orch_preflight': // Round 3 (2026-09-19): 前置阶段由任务板区域指示条展示
     case 'retry': // 2026-10-20: LLM 重试 — 指示器显示"重试中"+ 旋转图标
+    case 'heartbeat': // 2026-10-26: 退避心跳 — 指示器复用"重试中"(后端仍在重试退避等待)
       return { iconName: 'RefreshCw', label: '重试中' };
     default:
       return assertNever(state);
