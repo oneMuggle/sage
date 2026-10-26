@@ -53,17 +53,27 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
 
   // Multi-Agent Orchestration: task_plan → 初始化编排任务板。
   if (evt.state === 'task_plan' && evt.run_id && evt.plan) {
+    const runId = evt.run_id;
+    const plan = evt.plan;
     // 前置阶段结束（进入确认/执行阶段）——清掉指示。
     board.setPreflightPhase(sid, null);
-    board.setTaskBoard(sid, {
-      runId: evt.run_id,
-      plan: evt.plan,
-      statuses: {},
-      live: {},
-    });
+    // NDJSON 重放（reattachActiveStream / 切会话切回）会把同一个 run 的
+    // task_plan 再推一遍，且每次都是新数组引用。此时用户可能已经在计划卡里
+    // 编辑过 goal 或做过自然语言修订（store 里的才是权威计划），无条件重建
+    // 会把这些改动冲掉 —— 同一 run 的重复事件不再覆盖已有任务板。
+    board.updateTaskBoard(sid, runId, (prev) =>
+      prev && prev.runId === runId
+        ? prev
+        : {
+            runId,
+            plan,
+            reasoning: evt.reasoning,
+            statuses: {},
+            live: {},
+          },
+    );
     return true;
   }
-
 
   // task_status → 按 run_id 匹配合并 + 重算 progress 5 元组。
   if (evt.state === 'task_status' && evt.run_id && evt.task_id) {
@@ -77,9 +87,7 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
       const nextStatuses = {
         ...prev.statuses,
         [taskId]:
-          incoming.status === 'running'
-            ? { ...incoming, runningSince: Date.now() }
-            : incoming,
+          incoming.status === 'running' ? { ...incoming, runningSince: Date.now() } : incoming,
       };
       const counts = { done: 0, running: 0, queued: 0, failed: 0, cancelled: 0 };
       for (const st of Object.values(nextStatuses)) {
@@ -198,13 +206,10 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
   return false;
 }
 
-
 // RD20 (round43): 历史编排 run → 任务板恢复（纯函数，供 Chat 会话切换时
 // 调用）。RT24 字段 used_tokens/duration_ms 一并映射；endedAt 取任务最大
 // finished_at（无终态任务时为 null）。无任务返回 null。
-export function restoreRunToBoard(
-  run: OrchRunDetail,
-): {
+export function restoreRunToBoard(run: OrchRunDetail): {
   plan: TaskBoardState['plan'];
   statuses: TaskBoardState['statuses'];
   progress: TaskBoardState['progress'];
@@ -259,17 +264,13 @@ export function restoreRunToBoard(
   };
 }
 
-export function formatRestoredBoardSummary(
-  restored: ReturnType<typeof restoreRunToBoard>,
-): string {
+export function formatRestoredBoardSummary(restored: ReturnType<typeof restoreRunToBoard>): string {
   if (!restored) return 'empty';
   const p = restored.progress;
   return `plan=${restored.plan.length} · total=${p?.total ?? 0} · done=${p?.done ?? 0} · failed=${p?.failed ?? 0}`;
 }
 
-export function formatRestoredBoardJson(
-  restored: ReturnType<typeof restoreRunToBoard>,
-): string {
+export function formatRestoredBoardJson(restored: ReturnType<typeof restoreRunToBoard>): string {
   return JSON.stringify(
     {
       active: restored !== null,

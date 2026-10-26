@@ -389,6 +389,10 @@ export interface TaskPlanEvent {
   state: 'task_plan';
   run_id: string;
   plan: TaskPlanItem[];
+  // 编排计划卡片 UX (2026-10-26): 规划思路（为什么这样拆解）—— 后端
+  // task_plan 事件透传 Planner.reasoning，前端 PlanCard 折叠展示，
+  // 让用户看到 LLM 的决策过程而不是只有干巴巴的任务清单。
+  reasoning?: string;
 }
 
 export type TaskStatusValue = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';

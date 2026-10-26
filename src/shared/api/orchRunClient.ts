@@ -35,8 +35,18 @@ export const orchRunClient = {
   cancelRun(runId: string): Promise<CancelRunResponse> {
     return invoke<CancelRunResponse>('orchestration_cancel_run', { run_id: runId });
   },
-  updatePlan(runId: string, plan: TaskPlanItem[]): Promise<{ ok: boolean }> {
-    return invoke<{ ok: boolean }>('orchestration_update_plan', { run_id: runId, plan });
+  updatePlan(
+    runId: string,
+    plan: TaskPlanItem[],
+    // 编排计划卡片 UX (2026-10-26): 修订通道拿到的新规划思路随计划落库；
+    // 缺省时后端沿用库里的旧值，纯 goal 编辑不会把 reasoning 清空。
+    reasoning?: string,
+  ): Promise<{ ok: boolean }> {
+    return invoke<{ ok: boolean }>('orchestration_update_plan', {
+      run_id: runId,
+      plan,
+      reasoning,
+    });
   },
   // R55 (round55): 单 run 详情（含 RT24/RT26 字段）。
   getRun(
@@ -53,7 +63,10 @@ export const orchRunClient = {
   },
   // B3 (2026-09-09): 单任务跳过 —— queued 短路 / running 软中断，其余子任务不受影响。
   // 409 = 任务不在本批或已终态；404 = run 不在活动注册表。
-  cancelTask(runId: string, taskId: string): Promise<{ ok: boolean; task_id: string; status: string }> {
+  cancelTask(
+    runId: string,
+    taskId: string,
+  ): Promise<{ ok: boolean; task_id: string; status: string }> {
     return invoke('orchestration_cancel_run_task', { run_id: runId, task_id: taskId });
   },
   // Fix #3 (2026-09-06): 用户确认 → 唤醒 producer 启动 conductor 执行。
@@ -77,8 +90,13 @@ export const orchRunClient = {
   // Round 2 (2026-09-19): 计划模式 × 编排打通 —— 已批准计划文本 → 结构化
   // 任务项（plan_override 形状）。503 = 未配置 LLM；502 = 解析失败（前端
   // toast 引导回落单 agent 执行按钮）。
-  planItemsFromText(text: string): Promise<{ items: TaskPlanItem[]; reasoning: string }> {
-    return invoke('orchestration_plan_items', { text });
+  // 编排计划卡片 UX (2026-10-26): currentPlan 非空 = 确认窗口内的自然语言
+  // 修订 —— 后端走修订 prompt，只改用户提到的任务，其余逐字保留。
+  planItemsFromText(
+    text: string,
+    currentPlan?: TaskPlanItem[],
+  ): Promise<{ items: TaskPlanItem[]; reasoning: string }> {
+    return invoke('orchestration_plan_items', { text, current_plan: currentPlan });
   },
 };
 
