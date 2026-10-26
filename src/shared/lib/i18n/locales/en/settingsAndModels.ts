@@ -246,6 +246,7 @@ export const enSettingsAndModels = {
 
   // ─── M1 tool approval ─────────────
   'permission.title': 'Tool approval required',
+  'permission.from_plugin': 'From plugin',
   'permission.tool': 'Tool',
   'permission.args': 'Arguments',
   'permission.risk.safe': 'Safe',
@@ -451,6 +452,10 @@ export const enSettingsAndModels = {
   'office.generate.filenamePlaceholder': 'my-document',
   'office.generate.pptTitle': 'Title (single slide only)',
   'office.generate.pptBullets': 'Bullet points (one per line)',
+  'office.generate.pptLayout': 'Layout',
+  'office.generate.layoutTitleContent': 'Title + content',
+  'office.generate.layoutTitle': 'Title only',
+  'office.generate.layoutBlank': 'Blank',
   'office.generate.wordTitle': 'Document title',
   'office.generate.wordBody': 'Body',
   'office.generate.sheetName': 'Sheet name',

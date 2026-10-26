@@ -81,6 +81,9 @@ export const officeRoutes: Record<string, CommandRoute> = {
   // Generate endpoints (ppt_generate, word_generate, excel_generate)
   // deferred to Phase 1.4 follow-up PR.
   office_ppt_read: { method: 'POST', path: () => '/api/v1/office/ppt/read' },
+  // P0-2 (2026-10-01): 一键修复 —— 对应 backend POST /office/word/repair。
+  // 默认写 <stem>-repaired.docx，overwrite=true 时原子替换原文件并带回 remaining。
+  office_word_repair: { method: 'POST', path: () => '/api/v1/office/word/repair' },
   office_word_read: { method: 'POST', path: () => '/api/v1/office/word/read' },
   office_excel_read: { method: 'POST', path: () => '/api/v1/office/excel/read' },
   // A4b: Word 交付包格式校验 —— POST /office/word/lint。

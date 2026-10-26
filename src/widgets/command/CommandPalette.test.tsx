@@ -479,3 +479,93 @@ describe('CommandPalette 知识范围多根 (P13)', () => {
     expect(copyJson).toHaveTextContent('已复制 JSON');
   });
 });
+
+describe('CommandPalette 知识范围多根 (P13)', () => {
+  beforeEach(() => {
+    useStore.setState({ sessions: [], currentSessionId: null });
+    mockBackendRequest.mockReset();
+    mockBackendRequest.mockResolvedValue({ sessions: [] });
+    getRecentWikiProjectsMock.mockReset();
+    getRecentWikiProjectsMock.mockResolvedValue([
+      { path: 'C:/work/wikia', name: 'wikia', opened_at: 1, intent: 'open' },
+      { path: 'C:/work/wikib', name: 'wikib', opened_at: 2, intent: 'open' },
+    ]);
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('P13: 两个以上最近项目时渲染"全部最近 wiki 项目"选项', async () => {
+    renderPalette();
+
+    await waitFor(() => {
+      expect(screen.getByText('全部最近 wiki 项目')).toBeInTheDocument();
+      expect(screen.getByText('跨项目合并搜索（2 个）')).toBeInTheDocument();
+    });
+  });
+
+  it('P13: 选择"全部"后持久化逗号拼接范围，搜索请求携带多根参数', async () => {
+    renderPalette();
+
+    await waitFor(() => screen.getByText('全部最近 wiki 项目'));
+    fireEvent.click(screen.getByText('全部最近 wiki 项目'));
+    await waitFor(() => {
+      expect(localStorage.getItem('sage:knowledge-scope:v1')).toBe('C:/work/wikia,C:/work/wikib');
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('输入命令或搜索...'), {
+      target: { value: 'zz' },
+    });
+    await waitFor(() => {
+      expect(mockBackendRequest).toHaveBeenCalledWith({
+        path: expect.stringContaining(
+          'knowledge_project=C%3A%2Fwork%2Fwikia%2CC%3A%2Fwork%2Fwikib',
+        ),
+      });
+    });
+  });
+
+  it('exports CommandPalette audit snapshot/JSON helpers and supports copy controls', () => {
+    expect(buildCommandPaletteAuditSnapshot()).toBe(
+      'open:no|qLen:0|searching:no|projects:0|wiki:0|skills:0|scope:default',
+    );
+    expect(
+      buildCommandPaletteAuditSnapshot({
+        open: true,
+        searchLength: 4,
+        searching: true,
+        projectCount: 3,
+        wikiRecentCount: 2,
+        skillCount: 5,
+        knowledgeScope: 'C:/work/wikia',
+      }),
+    ).toBe('open:yes|qLen:4|searching:yes|projects:3|wiki:2|skills:5|scope:C:/work/wikia');
+
+    const parsed = JSON.parse(
+      buildCommandPaletteAuditJson({
+        open: true,
+        projectCount: 1,
+      }),
+    );
+    expect(parsed).toEqual({
+      open: true,
+      searchLength: 0,
+      searching: false,
+      projectCount: 1,
+      wikiRecentCount: 0,
+      skillCount: 0,
+      knowledgeScope: 'default',
+      snapshot: 'open:yes|qLen:0|searching:no|projects:1|wiki:0|skills:0|scope:default',
+    });
+
+    renderPalette();
+    const copyAudit = screen.getByTestId('command-palette-copy-audit');
+    const copyJson = screen.getByTestId('command-palette-copy-audit-json');
+    fireEvent.click(copyAudit);
+    expect(copyAudit).toHaveTextContent('已复制快照');
+    fireEvent.click(copyJson);
+    expect(copyJson).toHaveTextContent('已复制 JSON');
+  });
+});
