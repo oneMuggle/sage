@@ -159,4 +159,34 @@ export const memoryRoutes: Record<string, CommandRoute> = {
       ...(a.sessionId ? { session_id: a.sessionId } : {}),
     }),
   },
+  // P0-2: 进化任务学到的偏好（preferences 表 pref_* 键）+ 画像快照刷新
+  get_learned_preferences: {
+    method: 'GET',
+    path: () => '/api/v1/memory/preferences/learned',
+  },
+  update_learned_preference: {
+    method: 'PUT',
+    path: () => '/api/v1/memory/preferences/learned',
+    body: (a) => ({ key: a.key, value: a.value }),
+  },
+  // 显式刷新 user_profile 冻结快照 —— 进化任务写入偏好时故意不 invalidate
+  // (hermes 语义,保 prefix cache), 何时生效由用户决定。
+  refresh_user_profile: {
+    method: 'POST',
+    path: () => '/api/v1/memory/profile/refresh',
+    body: () => ({}),
+  },
+  // P0-3: 召回指标（含按 A/B 变体分组的对比）与用户反馈回填
+  get_recall_metrics: {
+    method: 'GET',
+    path: (a) => {
+      const limit = (a?.limit as number) ?? 20;
+      return `/api/v1/memory/recall/metrics?limit=${limit}`;
+    },
+  },
+  submit_recall_feedback: {
+    method: 'POST',
+    path: () => '/api/v1/memory/recall/feedback',
+    body: (a) => ({ log_id: a.logId, feedback: a.feedback }),
+  },
 };

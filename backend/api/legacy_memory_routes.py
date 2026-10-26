@@ -22,7 +22,7 @@ import os
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.data.database import get_database
 from backend.memory import get_memory_manager
@@ -251,6 +251,185 @@ def delete_user_profile(profile_id: str):
         if not get_user_profile().delete(profile_id):
             raise HTTPException(status_code=404, detail="画像条目不存在")
         return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---- P0-2 已学偏好与画像刷新 -------------------------------------------
+
+
+@router.get("/memory/preferences/learned")
+def list_learned_preferences():
+    """列出进化任务学到的偏好（preferences 表 pref_* 键）。
+
+    这些是 ``PreferenceLearningTask`` 通过关键词 / LLM 双路分析得出的稳定
+    偏好；每次进化执行会同步写入 user_profile（category=preference），
+    从而进入 system prompt 冻结快照。
+    """
+    try:
+        db = get_database()
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT key, value, value_type, category, updated_at "
+            "FROM preferences WHERE key LIKE 'pref_%' "
+            "ORDER BY updated_at DESC"
+        )
+        rows = cursor.fetchall()
+        return {
+            "items": [
+                {
+                    "key": row["key"],
+                    "value": row["value"],
+                    "value_type": row["value_type"],
+                    "category": row["category"],
+                    "updated_at": row["updated_at"],
+                }
+                for row in rows
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class LearnedPreferenceUpdate(BaseModel):
+    """手动纠正已学偏好的请求体。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=1)
+    value: str = Field(min_length=1)
+
+
+@router.put("/memory/preferences/learned")
+@with_db_lock
+def update_learned_preference(data: LearnedPreferenceUpdate):
+    """手动纠正某条已学偏好。body: ``{key, value}``, key 必须以 ``pref_`` 开头。
+
+    同时更新 ``preferences`` 表与 ``user_profile``（category=preference）——
+    让手动纠正立即进冻结快照候选集；用户若需立即生效可再调
+    POST /memory/profile/refresh。
+
+    为避免反复纠正同一偏好时 ``user_profile`` 累积冲突条目
+    （同一 key 多条不同 value 同时出现在快照里），写之前先用
+    ``list()`` + ``delete(id)`` 清理同 key 旧条目。
+    """
+    key = data.key.strip()
+    value = data.value.strip()
+    if not key.startswith("pref_"):
+        raise HTTPException(status_code=422, detail="key 必须以 'pref_' 开头")
+    if not value:
+        raise HTTPException(status_code=422, detail="value 不能为空")
+    try:
+        import time as _t
+
+        from backend.memory.user_profile import get_user_profile
+
+        db = get_database()
+        now_ts = int(_t.time())
+        conn = db.get_connection()
+        conn.execute(
+            "INSERT INTO preferences (key, value, value_type, category, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at",
+            (key, value, "string", "preference", now_ts, now_ts),
+        )
+        conn.commit()
+        short_key = key[len("pref_") :]
+        prefix = f"用户偏好 {short_key}:"
+        profile = get_user_profile()
+        # 清理同 key 旧条目 —— 避免 user_profile 里堆积相互冲突的偏好
+        for item in profile.list():
+            content = item.get("content") or ""
+            if content.startswith(prefix):
+                profile.delete(item["id"])
+        profile.add(
+            content=f"用户偏好 {short_key}: {value}",
+            category="preference",
+            importance=6,
+        )
+        return {"status": "ok", "key": key, "value": value}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/memory/profile/refresh")
+@with_db_lock
+def refresh_user_profile():
+    """显式刷新 user_profile 冻结快照。
+
+    进化任务（``PreferenceLearningTask``）写 user_profile 时故意不调
+    ``invalidate()`` —— 保 prefix cache（hermes 语义）。用户若希望学到的
+    偏好立即进 system prompt（不等下次会话），调本端点手动刷新。
+    """
+    try:
+        from backend.memory.user_profile import get_user_profile
+
+        store = get_user_profile()
+        store.invalidate()
+        store.load()
+        return {
+            "status": "ok",
+            "items_count": len(store.list()),
+            "snapshot_chars": len(store.get_snapshot()),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---- P0-3 召回指标与反馈 ---------------------------------------------------
+
+
+class RecallFeedbackRequest(BaseModel):
+    """召回反馈上报体。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    log_id: str = Field(min_length=1)
+    feedback: str = Field(pattern="^(up|down)$")
+
+
+@router.get("/memory/recall/metrics")
+def get_recall_metrics(limit: int = 20):
+    """召回指标：总体 + **按 A/B 变体分组**的对比。
+
+    ``by_variant`` 是本轮改造的核心产出 —— 让 ``adapter.py`` 里那个早已
+    存在、却从未被分别度量过的 A/B 权重实验（A=[0.2,0.8] / B=[0.5,0.5]）
+    第一次可比较。
+    """
+    try:
+        from backend.memory.recall_log_store import aggregate_metrics, list_recent
+
+        db = get_database()
+        metrics = aggregate_metrics(db)
+        recent = list_recent(db, limit=max(1, min(limit, 100)))
+        return {
+            "metrics": metrics,
+            "recent": recent,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/memory/recall/feedback")
+@with_db_lock
+def submit_recall_feedback(data: RecallFeedbackRequest):
+    """上报一次召回的用户反馈（up / down）。
+
+    回填 ``memory_recall_log.user_feedback`` —— 落库后正反馈计数不再恒为 0，
+    A/B 变体的满意度才可比。
+    """
+    try:
+        from backend.memory.recall_log_store import set_feedback
+
+        db = get_database()
+        if not set_feedback(db, data.log_id, data.feedback):
+            raise HTTPException(status_code=404, detail="召回记录不存在")
+        return {"status": "ok", "log_id": data.log_id, "feedback": data.feedback}
     except HTTPException:
         raise
     except Exception as e:
