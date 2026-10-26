@@ -339,6 +339,9 @@ export const zhSettingsAndModels = {
   'settings.permission.rules.clear_failed': '全部删除失败，请重试',
   'settings.permission.rules.plugin_uninstalled': '插件已卸载',
   'settings.permission.rules.plugin_missing': '插件无记录',
+  'settings.permission.rules.shadowed': '被遮蔽',
+  'settings.permission.rules.shadowed_title':
+    '被规则 {pattern} 遮蔽：裁决优先级为拒绝 > 放行 > 询问，此条不会生效',
   'settings.permission.rules.by_plugin': '按插件删除：',
   'settings.permission.rules.delete_plugin_confirm_title': '删除该插件的全部已记住规则？',
   'settings.permission.rules.delete_plugin_failed': '按插件删除规则失败，请重试',
