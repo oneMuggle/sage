@@ -23,14 +23,13 @@ pytestmark = pytest.mark.unit
 # ---------------------- 枚举值 & 字符串继承 ----------------------
 
 
-def test_agent_state_enum_has_fourteen_states():
-    """状态机应有 14 个状态:IDLE/THINKING/REASONING/REASONING_FINAL/ACTING/OBSERVING/
+def test_agent_state_enum_has_thirteen_states():
+    """状态机应有 13 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
     CONTENT_DELTA/RETRY/HEARTBEAT/PERMISSION_REQUEST/ASK_USER_QUESTION/STEP_DONE/DONE/FAILED。
 
     CONTENT_DELTA 由 I4 引入,用于流式 LLM 响应 — 每个 token chunk 推一个
     CONTENT_DELTA 事件,前端 appendContent 累积实现逐字渲染。
     REASONING 用于携带 LLM 思考/推理过程内容（reasoning_content）。
-    REASONING_FINAL 用于携带累计完整 reasoning,前端整体替换而非追加。
     PERMISSION_REQUEST 由 M1 工具安全加固引入 — 工具调用需要用户审批时
     携带 permission_request 字段,前端渲染审批对话框。
     ASK_USER_QUESTION 由 M2 part B 引入 — ask_user_question 工具向用户
@@ -42,7 +41,7 @@ def test_agent_state_enum_has_fourteen_states():
     HEARTBEAT 由重试退避心跳引入 (2026-10-26) — 退避等待期间每 5s 推送,
     只喂前端 watchdog 防止长退避期间误杀流,不渲染 UI。
     """
-    assert len(AgentState) == 14
+    assert len(AgentState) == 13
 
 
 def test_agent_state_enum_string_inheritance():
@@ -79,7 +78,6 @@ def test_agent_state_iteration_order():
         "idle",
         "thinking",
         "reasoning",
-        "reasoning_final",
         "acting",
         "observing",
         "content_delta",
