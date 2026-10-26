@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 from backend.data.database import get_database
 from backend.memory.episodic import sync_fts_row_for_id
 from backend.memory.vector_store import prune_orphan_vectors
+from backend.scheduler.evolution_log import elapsed_ms, record_evolution_log
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,7 @@ class DailySummaryTask(BaseEvolutionTask):
         """执行每日摘要"""
         start = time.monotonic()
         logger.info("开始执行每日摘要任务...")
+        _started = time.monotonic()
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -277,10 +279,16 @@ class DailySummaryTask(BaseEvolutionTask):
         logger.info(f"每日摘要完成，处理了 {processed} 个会话")
 
         # 记录进化日志
-        await self._log_evolution(
+        record_evolution_log(
+            self.db,
             evolution_type="daily_summary",
             description=f"每日摘要完成，处理了 {processed} 个会话",
             status="success",
+            duration_ms=elapsed_ms(_started),
+            metrics={
+                "sessions_scanned": len(sessions),
+                "sessions_summarized": processed,
+            },
         )
 
         await self._emit_evolution_completed(
@@ -334,42 +342,6 @@ class DailySummaryTask(BaseEvolutionTask):
 
         return None
 
-    async def _log_evolution(
-        self,
-        evolution_type: str,
-        description: str,
-        status: str,
-        error_message: str = None,
-        before_state: str = None,
-        after_state: str = None,
-    ):
-        """记录进化日志"""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO evolution_log
-            (id, evolution_type, description, status, error_message, before_state, after_state,
-             trigger_type, created_at, completed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                str(uuid.uuid4()),
-                evolution_type,
-                description,
-                status,
-                error_message,
-                before_state,
-                after_state,
-                "scheduled",
-                int(time.time()),
-                int(time.time()) if status == "success" else None,
-            ),
-        )
-
-        conn.commit()
-
 
 class MemoryPruningTask(BaseEvolutionTask):
     """
@@ -396,6 +368,7 @@ class MemoryPruningTask(BaseEvolutionTask):
         """执行记忆修剪"""
         start = time.monotonic()
         logger.info("开始执行记忆修剪任务...")
+        _started = time.monotonic()
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -515,7 +488,8 @@ class MemoryPruningTask(BaseEvolutionTask):
         logger.info(f"记忆修剪完成，共删除 {total_deleted} 条记忆")
 
         # 记录进化日志
-        await self._log_evolution(
+        record_evolution_log(
+            self.db,
             evolution_type="memory_pruning",
             description=(
                 f"记忆修剪完成，删除了 {total_deleted} 条记忆，"
@@ -523,6 +497,12 @@ class MemoryPruningTask(BaseEvolutionTask):
                 f"清理孤儿向量: {orphan_vectors} 条"
             ),
             status="success",
+            duration_ms=elapsed_ms(_started),
+            metrics={
+                "memories_deleted": total_deleted,
+                "memories_remaining": current_count - total_deleted,
+                "orphan_vectors_cleaned": orphan_vectors,
+            },
         )
 
         await self._emit_evolution_completed(
@@ -530,33 +510,6 @@ class MemoryPruningTask(BaseEvolutionTask):
             duration_ms=int((time.monotonic() - start) * 1000),
         )
         return total_deleted
-
-    async def _log_evolution(
-        self, evolution_type: str, description: str, status: str, error_message: str = None
-    ):
-        """记录进化日志"""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO evolution_log
-            (id, evolution_type, description, status, error_message, trigger_type, created_at, completed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                str(uuid.uuid4()),
-                evolution_type,
-                description,
-                status,
-                error_message,
-                "scheduled",
-                int(time.time()),
-                int(time.time()) if status == "success" else None,
-            ),
-        )
-
-        conn.commit()
 
 
 class PreferenceLearningTask(BaseEvolutionTask):
@@ -592,6 +545,7 @@ class PreferenceLearningTask(BaseEvolutionTask):
         """
         start = time.monotonic()
         logger.info("开始执行偏好学习任务...")
+        _started = time.monotonic()
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -690,14 +644,35 @@ class PreferenceLearningTask(BaseEvolutionTask):
             )
 
         conn.commit()
+
+        # P0-2：同步写入 user_profile，让学到的偏好真正进 system prompt
+        # （hermes 冻结语义：add() 只更新 DB + 内存 _entries，不调 invalidate()，
+        # 下次会话启动才刷新快照 —— 保 prefix cache）
+        try:
+            from backend.memory.user_profile import UserProfileStore
+
+            profile_store = UserProfileStore(self.db)
+            profile_store.load()
+            for key, value in preferences.items():
+                profile_store.add(
+                    content=f"用户偏好 {key}: {value}",
+                    category="preference",
+                    importance=6,
+                )
+        except Exception as exc:  # noqa: BLE001 — 偏好写 user_profile 是旁路，不阻断主流程
+            logger.warning(f"偏好写入 user_profile 失败（旁路）: {exc}")
+
         logger.info(f"偏好学习完成: {preferences}")
 
         # 记录进化日志
-        await self._log_evolution(
+        record_evolution_log(
+            self.db,
             evolution_type="preference_learning",
             description=f"偏好学习完成，分析出 {len(preferences)} 个偏好维度",
             status="success",
             after_state=profile_text,
+            duration_ms=elapsed_ms(_started),
+            metrics={"preferences_learned": len(preferences)},
         )
 
         return len(preferences)
@@ -880,42 +855,6 @@ class PreferenceLearningTask(BaseEvolutionTask):
                 result[key] = value.lower()
         return result
 
-    async def _log_evolution(
-        self,
-        evolution_type: str,
-        description: str,
-        status: str,
-        error_message: str = None,
-        before_state: str = None,
-        after_state: str = None,
-    ):
-        """记录进化日志"""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO evolution_log
-            (id, evolution_type, description, status, error_message, before_state, after_state,
-             trigger_type, created_at, completed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                str(uuid.uuid4()),
-                evolution_type,
-                description,
-                status,
-                error_message,
-                before_state,
-                after_state,
-                "scheduled",
-                int(time.time()),
-                int(time.time()) if status == "success" else None,
-            ),
-        )
-
-        conn.commit()
-
 
 class ImportanceReevaluationTask(BaseEvolutionTask):
     """
@@ -940,6 +879,7 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
         """执行重要性重评估"""
         start = time.monotonic()
         logger.info("开始执行重要性重评估任务...")
+        _started = time.monotonic()
 
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -1036,10 +976,13 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
         logger.info(f"重要性重评估完成，调整了 {total_adjusted} 条记忆")
 
         # 记录进化日志
-        await self._log_evolution(
+        record_evolution_log(
+            self.db,
             evolution_type="importance_reevaluation",
             description=f"重要性重评估完成，调整了 {total_adjusted} 条记忆",
             status="success",
+            duration_ms=elapsed_ms(_started),
+            metrics={"memories_adjusted": total_adjusted},
         )
 
         await self._emit_evolution_completed(
@@ -1047,33 +990,6 @@ class ImportanceReevaluationTask(BaseEvolutionTask):
             duration_ms=int((time.monotonic() - start) * 1000),
         )
         return total_adjusted
-
-    async def _log_evolution(
-        self, evolution_type: str, description: str, status: str, error_message: str = None
-    ):
-        """记录进化日志"""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO evolution_log
-            (id, evolution_type, description, status, error_message, trigger_type, created_at, completed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                str(uuid.uuid4()),
-                evolution_type,
-                description,
-                status,
-                error_message,
-                "scheduled",
-                int(time.time()),
-                int(time.time()) if status == "success" else None,
-            ),
-        )
-
-        conn.commit()
 
 
 class MemoryConsolidationTask(BaseEvolutionTask):
@@ -1261,6 +1177,7 @@ class SkillConsolidationTask(BaseEvolutionTask):
     async def run_async(self):
         start = time.monotonic()
         logger.info("开始执行技能巡检任务...")
+        _started = time.monotonic()
         try:
             from backend.skills.consolidator import (
                 collect_active_skills,
@@ -1326,10 +1243,17 @@ class SkillConsolidationTask(BaseEvolutionTask):
         except Exception as exc:  # noqa: BLE001 — 草稿生成失败不影响台账记录
             logger.warning("巡检草稿生成失败: %s", exc)
 
-        await self._log_evolution(
+        record_evolution_log(
+            self.db,
             evolution_type="skill_consolidation",
             description=f"技能巡检完成: {len(skills)} 个技能, {recorded} 条建议",
             status="success",
+            duration_ms=elapsed_ms(_started),
+            metrics={
+                "skills_scanned": len(skills),
+                "suggestions_recorded": recorded,
+                "drafts_created": drafts_created,
+            },
         )
         logger.info(f"技能巡检完成: {recorded} 条建议, {drafts_created} 个草稿")
         await self._emit_evolution_completed(
@@ -1337,33 +1261,6 @@ class SkillConsolidationTask(BaseEvolutionTask):
             duration_ms=int((time.monotonic() - start) * 1000),
         )
         return recorded + drafts_created
-
-    async def _log_evolution(
-        self, evolution_type: str, description: str, status: str, error_message: str = None
-    ):
-        """记录进化日志（与其他任务类同构）"""
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
-            """
-            INSERT INTO evolution_log
-            (id, evolution_type, description, status, error_message, trigger_type, created_at, completed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                str(uuid.uuid4()),
-                evolution_type,
-                description,
-                status,
-                error_message,
-                "scheduled",
-                int(time.time()),
-                int(time.time()) if status == "success" else None,
-            ),
-        )
-
-        conn.commit()
 
     def _pinned_names(self):
         try:
@@ -1674,11 +1571,19 @@ class MemoryReflectionTask(BaseEvolutionTask):
 
     async def run_async(self) -> Dict[str, int]:
         logger.info("开始执行记忆反思任务...")
+        _started = time.monotonic()
         stats = {"scanned": 0, "deduped": 0, "merged": 0, "invalidated": 0}
         try:
             if self.memory_manager is None:
                 logger.info("记忆反思缺少 memory_manager，跳过")
-                await self._log_evolution("跳过: 无 memory_manager", "skipped")
+                record_evolution_log(
+                    self.db,
+                    evolution_type="memory_reflection",
+                    description="跳过: 无 memory_manager",
+                    status="skipped",
+                    duration_ms=elapsed_ms(_started),
+                    metrics=stats,
+                )
                 return stats
 
             rows = self._collect_recent()
@@ -1701,39 +1606,27 @@ class MemoryReflectionTask(BaseEvolutionTask):
                 f"记忆反思完成: 扫描 {stats['scanned']}, 去重 {stats['deduped']}, "
                 f"合并 {stats['merged']}, 失效 {stats['invalidated']}"
             )
-            await self._log_evolution(description, "success")
+            record_evolution_log(
+                self.db,
+                evolution_type="memory_reflection",
+                description=description,
+                status="success",
+                duration_ms=elapsed_ms(_started),
+                metrics=stats,
+            )
             logger.info(description)
         except Exception as exc:  # noqa: BLE001 — 定时任务兜底
             logger.warning(f"记忆反思任务失败: {exc}")
-            await self._log_evolution(f"记忆反思失败: {exc}", "failed", str(exc))
-        return stats
-
-    async def _log_evolution(
-        self, description: str, status: str, error_message: str = None
-    ):
-        """记录进化日志（与其他任务类同构）。"""
-        try:
-            conn = self.db.get_connection()
-            conn.execute(
-                """
-                INSERT INTO evolution_log
-                (id, evolution_type, description, status, error_message,
-                 trigger_type, created_at, completed_at)
-                VALUES (?, 'memory_reflection', ?, ?, ?, 'scheduled', ?, ?)
-                """,
-                (
-                    str(uuid.uuid4()),
-                    description,
-                    status,
-                    error_message,
-                    int(time.time()),
-                    int(time.time()) if status == "success" else None,
-                ),
+            record_evolution_log(
+                self.db,
+                evolution_type="memory_reflection",
+                description=f"记忆反思失败: {exc}",
+                status="failed",
+                error_message=str(exc),
+                duration_ms=elapsed_ms(_started),
+                metrics=stats,
             )
-            conn.commit()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"反思进化日志写入失败: {exc}")
-
+        return stats
 
 
 def create_evolution_tasks(
@@ -1832,7 +1725,8 @@ def get_evolution_logs(db, limit: int = 50, offset: int = 0) -> List[dict]:
         """
         SELECT id, evolution_type, description, before_state, after_state,
                trigger_type, trigger_condition, status, error_message,
-               tokens_used, created_at, completed_at
+               tokens_used, duration_ms, metrics_json,
+               created_at, completed_at
         FROM evolution_log
         ORDER BY created_at DESC
         LIMIT ? OFFSET ?

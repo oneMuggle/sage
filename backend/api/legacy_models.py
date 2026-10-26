@@ -183,6 +183,9 @@ class EvolutionLogResponse(BaseModel):
 
     tokens_used: Optional[int] = None
 
+    duration_ms: Optional[int] = None
+    metrics_json: Optional[str] = None
+
     created_at: int
     completed_at: Optional[int] = None
 

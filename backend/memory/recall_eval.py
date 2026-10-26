@@ -39,6 +39,37 @@ from typing import Any, Callable, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
+#: 记忆库里的反馈取值 → ``memory_recall_log.user_feedback`` 的归一化映射。
+#: 内存路径历史上用 "clicked" / "helpful" / "ignored" / "not_helpful"，
+#: 库里统一存 "up" / "down"（前端两个按钮的语义）。
+_FEEDBACK_ALIASES = {
+    "clicked": "up",
+    "helpful": "up",
+    "up": "up",
+    "ignored": "down",
+    "not_helpful": "down",
+    "down": "down",
+}
+
+
+def _normalize_feedback(user_feedback: Optional[str]) -> Optional[str]:
+    """把历史反馈取值归一化成 ``up`` / ``down``；无法识别时返回 None。"""
+    if not user_feedback:
+        return None
+    return _FEEDBACK_ALIASES.get(str(user_feedback).strip().lower())
+
+
+def _looks_like_database(db: Any) -> bool:
+    """鸭子类型判定：只接受真实的 Database 实例。
+
+    ``Database.db_path`` 恒为 str（``database.py:360``），而测试里的
+    ``Mock()`` 的 ``db_path`` 是 Mock 对象 —— 用它把假 db 挡在全局单例
+    之外，避免测试污染进程内的 evaluator 状态。
+    """
+    if db is None or not hasattr(db, "get_connection"):
+        return False
+    return isinstance(getattr(db, "db_path", None), str)
+
 
 class RecallEvaluator:
     """记忆召回质量评估器
@@ -49,13 +80,30 @@ class RecallEvaluator:
         retrieval_logs: 检索日志（用于在线评估）
     """
 
-    def __init__(self) -> None:
-        """初始化评估器"""
+    def __init__(self, db: Any = None) -> None:
+        """初始化评估器
+
+        Args:
+            db: 可选的 Database 实例。给了之后 ``log_retrieval`` 会把每次召回
+                持久化到 ``memory_recall_log``（P0-3），``get_online_metrics``
+                改为从库聚合而非只读内存。
+        """
         self.offline_metrics: Dict[str, float] = {}
         self.online_metrics: Dict[str, float] = {}
         self.retrieval_logs: List[Dict[str, Any]] = []
         self._online_positive_count = 0
         self._online_total_count = 0
+        self._db = db if _looks_like_database(db) else None
+
+    @property
+    def db(self) -> Any:
+        """当前绑定的 Database（未绑定时为 None）。"""
+        return self._db
+
+    def attach_db(self, db: Any) -> None:
+        """绑定 Database（已绑定时忽略 —— 保持单例的库归属稳定）。"""
+        if self._db is None and _looks_like_database(db):
+            self._db = db
 
     def evaluate_offline(
         self,
@@ -224,7 +272,10 @@ class RecallEvaluator:
         results: List[Dict[str, Any]],
         user_feedback: Optional[str] = None,
         session_id: Optional[str] = None,
-    ) -> None:
+        variant: Optional[str] = None,
+        weights: Optional[List[float]] = None,
+        db: Any = None,
+    ) -> Optional[str]:
         """记录检索日志（用于在线评估）
 
         Args:
@@ -232,6 +283,13 @@ class RecallEvaluator:
             results: 检索结果列表
             user_feedback: 用户反馈（"clicked", "ignored", "helpful", "not_helpful"）
             session_id: 会话 ID
+            variant: 本次召回使用的融合权重变体（A / B / "skip-vector"）
+            weights: 本次实际使用的融合权重
+            db: 本次调用用的 Database（缺省用实例上绑定的那个）
+
+        Returns:
+            持久化成功时返回 ``memory_recall_log.id``（供事后回填反馈），
+            未绑定 db 或写入失败时返回 None。
         """
         log_entry = {
             "timestamp": time.time(),
@@ -240,6 +298,7 @@ class RecallEvaluator:
             "result_ids": [r.get("id") for r in results if r.get("id")],
             "user_feedback": user_feedback,
             "session_id": session_id,
+            "variant": variant,
         }
         self.retrieval_logs.append(log_entry)
 
@@ -248,9 +307,60 @@ class RecallEvaluator:
         if user_feedback in ("clicked", "helpful"):
             self._online_positive_count += 1
 
+        # P0-3：持久化到 memory_recall_log（best-effort，失败不阻塞召回）
+        log_id = self._persist(
+            query=query,
+            result_count=len(results),
+            session_id=session_id,
+            variant=variant,
+            weights=weights,
+            user_feedback=user_feedback,
+            db=db,
+        )
+
         # 定期计算在线指标
         if self._online_total_count % 10 == 0:
             self._update_online_metrics()
+
+        return log_id
+
+    def _persist(
+        self,
+        *,
+        query: str,
+        result_count: int,
+        session_id: Optional[str],
+        variant: Optional[str],
+        weights: Optional[List[float]],
+        user_feedback: Optional[str],
+        db: Any = None,
+    ) -> Optional[str]:
+        """把一次召回落到 ``memory_recall_log``。写库失败只记日志。"""
+        target = db if db is not None else self._db
+        if not _looks_like_database(target):
+            return None
+        try:
+            from backend.memory.recall_log_store import (
+                record_recall,
+                set_feedback,
+            )
+
+            log_id = record_recall(
+                target,
+                query=query,
+                variant=variant,
+                weights=weights,
+                result_count=result_count,
+                session_id=session_id,
+            )
+            if log_id and user_feedback:
+                normalized = _normalize_feedback(user_feedback)
+                if normalized:
+                    set_feedback(target, log_id, normalized)
+            return log_id
+        except Exception as exc:  # noqa: BLE001 — 召回是热路径，写库失败不阻塞
+            logger.debug("[recall_eval] 召回事件落库失败: %s", exc)
+            return None
 
     def _update_online_metrics(self) -> None:
         """更新在线评估指标"""
@@ -276,15 +386,44 @@ class RecallEvaluator:
 
         logger.info(f"[recall_eval] 在线指标更新: {self.online_metrics}")
 
-    def get_online_metrics(self) -> Dict[str, float]:
+    def get_online_metrics(self) -> Dict[str, Any]:
         """获取在线评估指标
+
+        绑定了 Database 时从 ``memory_recall_log`` 聚合（跨进程/跨重启可见），
+        否则退回内存累计值。两条路径的 key 名保持一致。
 
         Returns:
             在线指标字典
         """
+        if self._db is not None:
+            metrics = self._metrics_from_db()
+            if metrics is not None:
+                return metrics
         if not self.online_metrics:
             self._update_online_metrics()
         return self.online_metrics
+
+    def _metrics_from_db(self) -> Optional[Dict[str, Any]]:
+        """从 ``memory_recall_log`` 聚合在线指标。库不可用时返回 None。"""
+        try:
+            from backend.memory.recall_log_store import aggregate_metrics
+
+            agg = aggregate_metrics(self._db)
+        except Exception as exc:  # noqa: BLE001 — best-effort
+            logger.debug("[recall_eval] 在线指标聚合失败: %s", exc)
+            return None
+        if not agg.get("total_recalls"):
+            return None
+        return {
+            "satisfaction_rate": agg["satisfaction_rate"],
+            "feedback_satisfaction_rate": agg["feedback_satisfaction_rate"],
+            "avg_result_count": agg["avg_result_count"],
+            "total_queries": agg["total_recalls"],
+            "positive_feedback": agg["positive_count"],
+            "negative_feedback": agg["negative_count"],
+            "feedback_count": agg["feedback_count"],
+            "by_variant": agg["by_variant"],
+        }
 
     def export_report(self, filepath: str) -> None:
         """导出评估报告到 JSON 文件
@@ -359,16 +498,22 @@ _evaluator: Optional[RecallEvaluator] = None
 _evaluator_lock = threading.Lock()
 
 
-def get_recall_evaluator() -> RecallEvaluator:
+def get_recall_evaluator(db: Any = None) -> RecallEvaluator:
     """懒加载单例。双检锁确保只初始化一次。
 
     与 ``get_tag_graph()`` 同模式：首次调用创建空评估器，
     后续调用复用同一实例。所有 ``log_retrieval()`` 调用共享
     同一份 ``retrieval_logs`` / ``online_metrics``。
+
+    Args:
+        db: 可选的 Database 实例。给了之后单例会把召回事件持久化到
+            ``memory_recall_log``（P0-3）。
     """
     global _evaluator
     if _evaluator is None:
         with _evaluator_lock:
             if _evaluator is None:
-                _evaluator = RecallEvaluator()
+                _evaluator = RecallEvaluator(db=db)
+    elif db is not None:
+        _evaluator.attach_db(db)
     return _evaluator
