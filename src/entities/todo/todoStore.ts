@@ -1,14 +1,22 @@
 import { create } from 'zustand';
 
 import { todoClient } from '../../shared/api/todoClient';
-import type { CreateTodoInput, Todo, TodoSummary, UpdateTodoInput } from '../../shared/api/types';
+import type {
+  CreateTodoInput,
+  Todo,
+  TodoListParams,
+  TodoSummary,
+  UpdateTodoInput,
+} from '../../shared/api/types';
 
 interface TodoState {
   todos: Todo[];
   loading: boolean;
   error: string | null;
   summary: TodoSummary | null;
-  load: () => Promise<void>;
+  params: TodoListParams;
+  load: (params?: TodoListParams) => Promise<void>;
+  setParams: (params: TodoListParams) => Promise<void>;
   create: (input: CreateTodoInput) => Promise<Todo>;
   update: (id: number, changes: UpdateTodoInput) => Promise<Todo>;
   delete: (id: number) => Promise<void>;
@@ -27,15 +35,21 @@ export const useTodoStore = create<TodoState>((set, get) => ({
   loading: false,
   error: null,
   summary: null,
+  params: {},
 
-  async load() {
+  async load(params?: TodoListParams) {
     set({ loading: true, error: null });
     try {
-      const response = await todoClient.list();
-      set({ todos: response.items, loading: false });
+      const response = await todoClient.list(params);
+      set({ todos: response.items, loading: false, params: params ?? get().params });
     } catch (error: unknown) {
       set({ todos: [], loading: false, error: getErrorMessage(error) });
     }
+  },
+
+  async setParams(params: TodoListParams) {
+    set({ params });
+    await get().load(params);
   },
 
   async create(input: CreateTodoInput) {
@@ -86,9 +100,7 @@ export interface TodoStoreAuditInput {
   hasSummary?: boolean;
 }
 
-export function buildTodoStoreAuditSnapshot(
-  input: TodoStoreAuditInput = {},
-): string {
+export function buildTodoStoreAuditSnapshot(input: TodoStoreAuditInput = {}): string {
   const todoCount = Math.max(0, input.todoCount ?? 0);
   const pendingCount = Math.max(0, input.pendingCount ?? 0);
   const loading = Boolean(input.loading);
@@ -97,9 +109,7 @@ export function buildTodoStoreAuditSnapshot(
   return `todos:${todoCount}|pending:${pendingCount}|loading:${loading ? 'yes' : 'no'}|err:${hasError ? 'yes' : 'no'}|summary:${hasSummary ? 'yes' : 'no'}`;
 }
 
-export function buildTodoStoreAuditJson(
-  input: TodoStoreAuditInput = {},
-): string {
+export function buildTodoStoreAuditJson(input: TodoStoreAuditInput = {}): string {
   const todoCount = Math.max(0, input.todoCount ?? 0);
   const pendingCount = Math.max(0, input.pendingCount ?? 0);
   const loading = Boolean(input.loading);

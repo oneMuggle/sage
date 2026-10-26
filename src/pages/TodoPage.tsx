@@ -1,201 +1,296 @@
 /**
- * TodoPage - 待办管理页（Task 12 - 2026-09-21 todolist subsystem）。
+ * TodoPage — Full-featured todo management page.
  *
- * 与侧边栏 TodoSection 的"预览前 5 条 + 链接"互补：这里是完整的待办
- * 管理面板 —— 列表 / 新建 / 完成 / 取消 / 删除。状态走 zustand
- * ``entities/todo/todoStore``，IPC 走 ``shared/api/todoClient``，
- * 组件无业务逻辑副作用，所有副作用委托给 store。
+ * Notion-inspired design with:
+ * - Enhanced creation form (description, priority, due date, project tag)
+ * - Filter / Sort / Search toolbar
+ * - Inline editing (title, priority, due date)
+ * - Hierarchical subtask rendering with progress bars
+ * - Batch operations (select all, batch complete, batch delete)
  *
- * 设计取舍：
- * - 不重写表单为受控重组件 —— 输入框仅受控 title，提交后清空；其余
- *   字段（优先级 / 截止时间 / 项目标签）保留后续任务扩展。
- * - 完成 / 取消 / 删除走按钮 + 确认对话框（window.confirm），与
- *   ``Chat`` / ``Memory`` 的删除流一致；调用 store 后 store 自动
- *   重新拉列表。
- * - "暂无待办" 空状态、"加载中" 占位符与 ``Memory.tsx`` 同形态。
+ * State flows through zustand `entities/todo/todoStore`, IPC through
+ * `shared/api/todoClient`. All CRUD delegated to store.
  */
-import { Check, Loader2, Plus, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Check, Loader2, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useTodoStore } from '../entities/todo/todoStore';
-import type { Todo } from '../shared/api/types';
+import type { Todo, TodoListParams, UpdateTodoInput } from '../shared/api/types';
 import { useI18n } from '../shared/lib/i18n';
 import { PageHeader } from '../shared/ui';
-import { TwoStepDelete } from '../widgets/sidebar/TwoStepDelete';
+
+import { TodoCreateForm } from './todo/TodoCreateForm';
+import { TodoRowEditor } from './todo/TodoRowEditor';
+import { TodoSubtaskTree } from './todo/TodoSubtaskTree';
+import { TodoToolbar } from './todo/TodoToolbar';
 
 export function TodoPage() {
   const { t } = useI18n();
   const todos = useTodoStore((s) => s.todos);
   const loading = useTodoStore((s) => s.loading);
   const error = useTodoStore((s) => s.error);
+  const params = useTodoStore((s) => s.params);
   const load = useTodoStore((s) => s.load);
+  const setParams = useTodoStore((s) => s.setParams);
   const create = useTodoStore((s) => s.create);
+  const update = useTodoStore((s) => s.update);
   const complete = useTodoStore((s) => s.complete);
   const cancel = useTodoStore((s) => s.cancel);
   const remove = useTodoStore((s) => s.delete);
 
-  const [title, setTitle] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [createBusy, setCreateBusy] = useState(false);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = title.trim();
-    if (!trimmed) return;
-    setBusy(true);
-    try {
-      await create({ title: trimmed });
-      setTitle('');
-    } finally {
-      setBusy(false);
+  // Client-side search filter (backend doesn't support text search yet)
+  const filteredTodos = useMemo(() => {
+    if (!searchQuery.trim()) return todos;
+    const q = searchQuery.toLowerCase();
+    return todos.filter(
+      (todo) =>
+        todo.title.toLowerCase().includes(q) ||
+        (todo.description?.toLowerCase().includes(q) ?? false) ||
+        (todo.project_tag?.toLowerCase().includes(q) ?? false),
+    );
+  }, [todos, searchQuery]);
+
+  // Check if any subtasks exist to decide rendering mode
+  const hasSubtasks = useMemo(
+    () => filteredTodos.some((t) => t.parent_id != null),
+    [filteredTodos],
+  );
+
+  const handleParamsChange = useCallback(
+    (newParams: TodoListParams) => {
+      void setParams(newParams);
+    },
+    [setParams],
+  );
+
+  const handleCreate = useCallback(
+    async (input: {
+      title: string;
+      description?: string;
+      priority?: 'high' | 'medium' | 'low';
+      due_at?: string;
+      project_tag?: string;
+    }) => {
+      setCreateBusy(true);
+      try {
+        await create(input);
+      } finally {
+        setCreateBusy(false);
+      }
+    },
+    [create],
+  );
+
+  const handleUpdate = useCallback(
+    async (id: number, changes: UpdateTodoInput) => {
+      await update(id, changes);
+    },
+    [update],
+  );
+
+  const handleComplete = useCallback(
+    async (id: number) => {
+      await complete(id);
+    },
+    [complete],
+  );
+
+  const handleCancel = useCallback(
+    async (id: number) => {
+      await cancel(id);
+    },
+    [cancel],
+  );
+
+  const handleDelete = useCallback(
+    async (id: number) => {
+      await remove(id);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    },
+    [remove],
+  );
+
+  // Batch operations
+  const handleSelect = useCallback((id: number, selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (selected) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
+    if (selectedIds.size === filteredTodos.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredTodos.map((t) => t.id)));
     }
-  };
+  }, [filteredTodos, selectedIds.size]);
+
+  const handleBatchComplete = useCallback(async () => {
+    const ids = [...selectedIds];
+    for (const id of ids) {
+      const todo = filteredTodos.find((t) => t.id === id);
+      if (todo && todo.status !== 'completed') {
+        await complete(id);
+      }
+    }
+    setSelectedIds(new Set());
+  }, [selectedIds, filteredTodos, complete]);
+
+  const handleBatchDelete = useCallback(async () => {
+    const ids = [...selectedIds];
+    for (const id of ids) {
+      await remove(id);
+    }
+    setSelectedIds(new Set());
+  }, [selectedIds, remove]);
+
+  const allSelected = filteredTodos.length > 0 && selectedIds.size === filteredTodos.length;
+  const someSelected = selectedIds.size > 0;
+
+  // Render function for TodoSubtaskTree
+  const renderTodo = useCallback(
+    (todo: Todo, _depth: number) => (
+      <TodoRowEditor
+        key={todo.id}
+        todo={todo}
+        selected={selectedIds.has(todo.id)}
+        onSelect={handleSelect}
+        onUpdate={handleUpdate}
+        onComplete={handleComplete}
+        onCancel={handleCancel}
+        onDelete={handleDelete}
+      />
+    ),
+    [selectedIds, handleSelect, handleUpdate, handleComplete, handleCancel, handleDelete],
+  );
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <PageHeader
         title={t('todos.title')}
         actions={
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 text-ui-xs text-text-muted">
+            {filteredTodos.length > 0 && (
+              <span>
+                {filteredTodos.filter((t) => t.status === 'completed').length}/
+                {filteredTodos.length} 已完成
+              </span>
+            )}
           </div>
         }
       />
+
       <div className="flex-1 overflow-y-auto p-6 max-w-3xl mx-auto w-full">
+        {/* Enhanced creation form */}
+        <TodoCreateForm onCreate={handleCreate} busy={createBusy} />
 
-      <form
-        onSubmit={(e) => {
-          void handleSubmit(e);
-        }}
-        className="flex gap-2 mb-4"
-        aria-label="新建待办"
-      >
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="待办标题..."
-          aria-label="待办标题"
-          className="flex-1 border border-border rounded-radius-sm px-3 py-2 text-sm bg-surface focus:outline-none focus:border-primary"
+        {/* Filter / Sort toolbar */}
+        <TodoToolbar
+          params={params}
+          searchQuery={searchQuery}
+          onParamsChange={handleParamsChange}
+          onSearchChange={setSearchQuery}
         />
-        <button
-          type="submit"
-          disabled={busy || !title.trim()}
-          data-testid="todo-submit"
-          className="flex items-center gap-1.5 px-3 py-2 bg-primary text-text-inverse text-xs rounded-radius-sm hover:bg-primary-hover disabled:opacity-50"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          添加
-        </button>
-      </form>
 
-      {error && (
-        <div className="mb-4 px-3 py-2 bg-red-50 text-red-700 text-sm rounded" role="alert">
-          {error}
-        </div>
-      )}
-
-      {loading && (
-        <div className="flex items-center gap-2 text-text-muted text-sm py-4" role="status">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          加载中...
-        </div>
-      )}
-
-      {!loading && todos.length === 0 && (
-        <p className="text-text-muted text-center py-8" data-testid="todo-empty">
-          {t('todos.empty')}
-        </p>
-      )}
-
-      {!loading && todos.length > 0 && (
-        <ul className="flex flex-col gap-1.5" data-testid="todo-page-list">
-          {todos.map((todo) => (
-            <TodoRow
-              key={todo.id}
-              todo={todo}
-              onComplete={() => {
-                void complete(todo.id);
-              }}
-              onCancel={() => {
-                void cancel(todo.id);
-              }}
-              onDelete={() => {
-                // P1-8: 两步确认下沉到 TodoRow，不再使用 window.confirm
-                // （与项目内 SessionItem / MemoryItem 的两步确认惯例一致）。
-                void remove(todo.id);
-              }}
-            />
-          ))}
-        </ul>
-      )}
-      </div>
-    </div>
-  );
-}
-
-interface TodoRowProps {
-  todo: Todo;
-  onComplete: () => void;
-  onCancel: () => void;
-  onDelete: () => void;
-}
-
-function TodoRow({ todo, onComplete, onCancel, onDelete }: TodoRowProps) {
-  const isDone = todo.status === 'completed';
-  const isCancelled = todo.status === 'cancelled';
-
-  return (
-    <li className="flex items-center justify-between gap-2 px-3 py-2 bg-surface border border-border rounded-radius-sm">
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        <span
-          className={[
-            'text-sm truncate',
-            isDone || isCancelled ? 'line-through text-text-muted' : 'text-text',
-          ].join(' ')}
-        >
-          {todo.title}
-        </span>
-        {todo.priority && todo.priority !== 'medium' && (
-          <span className="text-ui-xs px-1.5 py-0.5 rounded-full bg-bg-muted/20 text-text-muted">
-            {todo.priority}
-          </span>
+        {/* Batch operations bar */}
+        {someSelected && (
+          <div className="flex items-center gap-2 mb-2 px-3 py-1.5 bg-primary/5 border border-primary/20 rounded-radius-sm">
+            <span className="text-ui-xs text-text-muted">已选择 {selectedIds.size} 项</span>
+            <button
+              type="button"
+              onClick={() => void handleBatchComplete()}
+              className="flex items-center gap-1 px-2 py-0.5 text-ui-xs text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+            >
+              <Check className="w-3 h-3" />
+              批量完成
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBatchDelete()}
+              className="flex items-center gap-1 px-2 py-0.5 text-ui-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+            >
+              <Trash2 className="w-3 h-3" />
+              批量删除
+            </button>
+          </div>
         )}
-      </div>
-      <div className="flex items-center gap-1">
-        {!isDone && !isCancelled && (
+
+        {error && (
+          <div className="mb-4 px-3 py-2 bg-red-50 text-red-700 text-sm rounded" role="alert">
+            {error}
+          </div>
+        )}
+
+        {loading && (
+          <div className="flex items-center gap-2 text-text-muted text-sm py-4" role="status">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            加载中...
+          </div>
+        )}
+
+        {!loading && filteredTodos.length === 0 && (
+          <p className="text-text-muted text-center py-8" data-testid="todo-empty">
+            {searchQuery ? '没有匹配的待办' : t('todos.empty')}
+          </p>
+        )}
+
+        {!loading && filteredTodos.length > 0 && (
           <>
-            <button
-              type="button"
-              onClick={onComplete}
-              title="完成"
-              aria-label={`完成 ${todo.title}`}
-              className="w-6 h-6 flex items-center justify-center text-text-muted hover:text-green-600 hover:bg-bg-hover rounded"
-            >
-              <Check className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={onCancel}
-              title="取消"
-              aria-label={`取消 ${todo.title}`}
-              className="w-6 h-6 flex items-center justify-center text-text-muted hover:text-orange-600 hover:bg-bg-hover rounded"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+            {/* Select all checkbox */}
+            <div className="flex items-center gap-2 mb-1.5 px-1">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={handleSelectAll}
+                className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer"
+                aria-label={allSelected ? '取消全选' : '全选'}
+              />
+              <span className="text-ui-xs text-text-muted">
+                {allSelected ? '取消全选' : '全选'}
+              </span>
+            </div>
+
+            {/* Todo list — hierarchical if subtasks exist, flat otherwise */}
+            {hasSubtasks ? (
+              <TodoSubtaskTree todos={filteredTodos} renderTodo={renderTodo} />
+            ) : (
+              <ul className="flex flex-col gap-1.5" data-testid="todo-page-list">
+                {filteredTodos.map((todo) => (
+                  <TodoRowEditor
+                    key={todo.id}
+                    todo={todo}
+                    selected={selectedIds.has(todo.id)}
+                    onSelect={handleSelect}
+                    onUpdate={handleUpdate}
+                    onComplete={handleComplete}
+                    onCancel={handleCancel}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </ul>
+            )}
           </>
         )}
-        <TwoStepDelete
-          onConfirm={onDelete}
-          label={`删除 ${todo.title}`}
-          armedLabel="确认删除?"
-          data-testid={`todo-delete-${todo.id}`}
-          className="w-6 h-6 justify-center"
-        />
       </div>
-    </li>
+    </div>
   );
 }
 
