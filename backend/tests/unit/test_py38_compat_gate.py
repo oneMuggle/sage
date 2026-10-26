@@ -250,6 +250,80 @@ def test_ignores_runtime_api_names_inside_docstrings() -> None:
     assert gate.check_source(src, filename="sample_docstring.py") == []
 
 
+def test_detects_removed_pydantic_field_kwargs() -> None:
+    """pydantic v2 已移除的 Field kwargs 必须报。
+
+    回归背景：#2550 在 legacy_memory_routes.py 写了
+    ``Field(regex="^(up|down)$")``，使 ``backend.main`` 在 pydantic 2.x 下
+    导入期就抛 ``PydanticUserError``；又因 setup_test_db 是 autouse，整个套件在
+    setup 期全 E。而 py38 通道钉 pydantic 1.10.13（regex= 合法）、唯一能跑 v2 的
+    job 是 SKIPPED —— 两个 CI 通道都看不见，只能靠这条静态规则兜底。
+    """
+    gate = _load_gate_module()
+    cases = (
+        ("regex", "pattern"),
+        ("min_items", "min_length"),
+        ("max_items", "max_length"),
+        ("unique_items", "field_validator"),
+        ("allow_mutation", "frozen"),
+        ("const", "Literal"),
+    )
+    for kwarg, replacement in cases:
+        src = (
+            "from __future__ import annotations\n"
+            "from pydantic import Field\n\n"
+            "class M(BaseModel):\n"
+            "    f: str = Field(" + kwarg + '="x")\n'
+        )
+        issues = [i for i in gate.check_source(src, filename="t.py") if "pydantic v2 removed" in i]
+        assert len(issues) == 1, (kwarg, issues)
+        assert "Field(" + kwarg + "=...)" in issues[0]
+        assert replacement in issues[0]
+
+
+def test_detects_removed_field_kwargs_across_lines() -> None:
+    """跨行写法也要抓到 —— 这正是用 AST 而非正则的理由。"""
+    gate = _load_gate_module()
+    src = (
+        "from __future__ import annotations\n"
+        "from pydantic import Field\n\n"
+        "class M(BaseModel):\n"
+        "    f: str = Field(\n"
+        "        " + "regex" + '="x",\n'
+        "    )\n"
+    )
+    issues = [i for i in gate.check_source(src, filename="t.py") if "pydantic v2 removed" in i]
+    assert len(issues) == 1, issues
+
+
+def test_allows_v2_style_field_kwargs() -> None:
+    """修复后的正确写法（pattern= / min_length= / max_length=）不得误报。"""
+    gate = _load_gate_module()
+    src = (
+        "from __future__ import annotations\n"
+        "from pydantic import Field\n\n"
+        "class M(BaseModel):\n"
+        '    a: str = Field(pattern="^(up|down)$")\n'
+        "    b: str = Field(min_length=1)\n"
+        "    c: str = Field(max_length=10)\n"
+    )
+    assert [i for i in gate.check_source(src, filename="t.py") if "pydantic v2 removed" in i] == []
+
+
+def test_ignores_removed_kwarg_names_outside_field_calls() -> None:
+    """dict 键 / 普通函数 kwarg / **kwargs 展开都不算 Field 参数，不该误报。"""
+    gate = _load_gate_module()
+    samples = (
+        'CFG = {"min_items": 1, "regex": "x"}\n',
+        "def g(regex=None, min_items=1):\n    return regex\n",
+        "from pydantic import Field\n\n"
+        "class M(BaseModel):\n"
+        '    f: str = Field(**{"regex": "x"})\n',
+    )
+    for src in samples:
+        hits = [i for i in gate.check_source(src, filename="t.py") if "pydantic v2 removed" in i]
+        assert hits == [], (src, hits)
+
 def test_repository_passes_py38_compat_gate() -> None:
     gate = _load_gate_module()
     targets = [REPO_ROOT / "backend", REPO_ROOT / "packages" / "sage-core"]

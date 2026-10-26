@@ -254,6 +254,7 @@ def check_runtime_apis(path: Path, root: Path) -> list[tuple[int, str]]:
         i += 1
     out.extend(_check_model_rebuild_guards(code_lines, lines))
     out.extend(check_forward_ref_order(source))
+    out.extend(_check_pydantic_field_kwargs(source))
     out.sort(key=lambda t: t[0])
     return out
 
@@ -329,6 +330,69 @@ def _check_model_rebuild_guards(
             '`if hasattr(M, "model_rebuild"): M.model_rebuild() '
             "else: M.update_forward_refs()`"
         )))
+    return out
+
+
+# ── pydantic v2 已移除的 Field kwargs 守卫 ───────────────────────────────────
+#
+# pydantic v2 移除了 Field() 的若干关键字参数, 失败形态有两种:
+#   - ``regex=``      v2 直接抛 PydanticUserError(removed-kwargs) —— 模块**导入期**就炸;
+#   - ``min_items=``  v2 静默收进 json_schema_extra, 约束**静默失效**(比报错更危险)。
+#
+# 两个 CI 通道都看不见这类问题:
+#   - py38 通道钉 pydantic 1.10.13, 上述 kwargs 在 v1 全部合法 ⇒ 该通道必然绿;
+#   - 唯一能跑 pydantic 2.5 的 job「Backend (Python)」在本仓配置里是 SKIPPED。
+#
+# 历史事故 (#2550 → #2555): legacy_memory_routes.py 写了
+# ``feedback: str = Field(regex="^(up|down)$")``, 使 backend.main 在 pydantic 2.x
+# 下无法导入; 又因 conftest 的 setup_test_db 是 autouse, 整个套件在 setup 期全 E。
+# 该端点本来有 19 个测试用例, 但模块导入期就炸, 连 collection 都过不去 ——
+# 覆盖存在却完全不可见, 所以静态守卫是这里唯一的兜底。
+#
+# 仓库约定: 业务代码写 v2 风格 ``pattern=``, v1 通道由
+# backend/compat/win7/pydantic_compat.py 的 install() 把 pattern 转译成 regex。
+REMOVED_FIELD_KWARGS = {
+    "regex": "pattern",
+    "min_items": "min_length",
+    "max_items": "max_length",
+    "unique_items": "(v2 无直接替代: 去掉约束或改用 field_validator)",
+    "allow_mutation": "frozen",
+    "const": "Literal",
+}
+
+
+def _check_pydantic_field_kwargs(source: str) -> list[tuple[int, str]]:
+    """报出 ``Field(...)`` 上用到的 pydantic v2 已移除关键字参数。
+
+    只认 callee 末段为 ``Field`` 的调用 (``Field`` / ``pydantic.Field``), 因此
+    JSON schema 字典里的同名键、或普通函数同名的参数不会被误报。用 AST 判定而非
+    正则, 是为了正确处理跨行的 ``Field(\n    regex=...\n)``。
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    out: list[tuple[int, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        callee = getattr(func, "id", None) or getattr(func, "attr", None)
+        if callee != "Field":
+            continue
+        for kw in node.keywords:
+            if kw.arg is None:
+                continue
+            replacement = REMOVED_FIELD_KWARGS.get(kw.arg)
+            if replacement is None:
+                continue
+            out.append(
+                (
+                    node.lineno,
+                    "pydantic v2 removed `Field(%s=...)` (use %s)" % (kw.arg, replacement),
+                )
+            )
+    out.sort(key=lambda t: t[0])
     return out
 
 
@@ -569,6 +633,8 @@ def check_source(source: str, filename: str = "<string>") -> list[str]:
     for _ln, _msg in _check_model_rebuild_guards(_code_lines, _lines):
         problems.append(f"{filename}:{_ln}: {_msg}")
     for _ln, _msg in check_forward_ref_order(source):
+        problems.append(f"{filename}:{_ln}: {_msg}")
+    for _ln, _msg in _check_pydantic_field_kwargs(source):
         problems.append(f"{filename}:{_ln}: {_msg}")
     return problems
 
