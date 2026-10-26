@@ -30,7 +30,7 @@ import os
 import signal
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from fnmatch import fnmatch
+from fnmatch import fnmatchcase
 from typing import Any, Callable, Dict, List, Optional
 
 from backend.hooks.config import HookConfig
@@ -74,12 +74,19 @@ def matches_tool(matcher: str, tool_name: str) -> bool:
 
     - ``*`` / 空 matcher 匹配全部工具;
     - ``|`` 分隔多个备选模式 (如 ``"write_file|edit_file"``), 任一命中即匹配。
-      不含 ``|`` 的模式行为与纯 fnmatch 完全一致 (向后兼容)。
+      不含 ``|`` 的模式行为与纯 glob 匹配完全一致 (向后兼容)。
+
+    大小写敏感性: 用 ``fnmatchcase`` 而非 ``fnmatch``。后者会对两个参数做
+    ``os.path.normcase`` —— Windows 上转小写 (大小写不敏感)、POSIX 上敏感,
+    于是同一份钩子配置在两个平台的匹配结果不同: matcher 写成 Claude Code
+    风格的 ``Bash`` 时, Linux 上不触发钩子而 Windows 上触发。工具名不是文件
+    路径, 不应继承文件系统的大小写规则; 权限层 ``PermissionRule.matches``
+    同样选用 ``fnmatchcase`` (backend/tools/permissions.py), 此处与其对齐。
     """
     pattern = (matcher or "*").strip()
     if not pattern:
         return True
-    return any(fnmatch(tool_name, part.strip()) for part in pattern.split("|") if part.strip())
+    return any(fnmatchcase(tool_name, part.strip()) for part in pattern.split("|") if part.strip())
 
 
 #: post_tool_use payload 中 tool_output 的截断上限 (审查加固: 工具结果
