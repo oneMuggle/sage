@@ -23,7 +23,7 @@ pytestmark = pytest.mark.unit
 # ---------------------- 枚举值 & 字符串继承 ----------------------
 
 
-def test_agent_state_enum_has_twelve_states():
+def test_agent_state_enum_has_thirteen_states():
     """状态机应有 13 个状态:IDLE/THINKING/REASONING/ACTING/OBSERVING/
     CONTENT_DELTA/RETRY/HEARTBEAT/PERMISSION_REQUEST/ASK_USER_QUESTION/STEP_DONE/DONE/FAILED。
 

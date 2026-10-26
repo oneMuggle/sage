@@ -18,6 +18,7 @@ def test_agent_state_enum_values():
     assert AgentState.OBSERVING.value == "observing"
     assert AgentState.DONE.value == "done"
     assert AgentState.FAILED.value == "failed"
+    assert AgentState.STEP_DONE.value == "step_done"
 
 
 def test_agent_event_thinking_creation():
