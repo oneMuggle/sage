@@ -23,14 +23,7 @@ import asyncio
 import contextlib
 import time
 from dataclasses import dataclass, field
-from typing import (
-    # noqa: UP035 — typing.Callable 兼容 Python 3.8 subscript
-    Any,
-    Callable,
-    Dict,
-    List,
-    Optional,
-)
+from typing import Any, Callable, Dict, List, Optional
 
 
 class BroadcastQueue(asyncio.Queue):
