@@ -224,3 +224,55 @@
 ### 结论：src 的机械收敛已到极限
 
 `src` 从 178 → 155，剩下的 40 个冲突文件里 34 个是纯语义分叉。机械手段（顺序/子集/注释）已全部用尽，继续自动化只会制造重复声明或半迁移状态。**后续 src 只能按 feature 逐个读代码人工 3-way，单文件成本约 10~30 分钟。**
+
+## 11. 批次 6–15：src 冲突文件人工 3-way（2026-10-26）
+
+批次 5 之后剩余的 40 个手工冲突文件，按「产品口径先定、再技术落地」推进，共 15 个 PR。
+
+### 两次产品裁决
+
+1. **Sidebar（12 块）→ 以 win7 的 rail 为基座 + 移植 main 的 P1-7。**
+   实测发现 **win7 本来就有 rail**（`sidebar-rail-nav` / `NavGroup` / `variant="rail"`），与 main 是同一套实现；
+   197 行 diff 全部是 main 侧新增或格式化，即 **main ⊃ win7**。所以「rail 为基座 + 移植 P1-7」的落地方式就是取 main，再补齐依赖链。
+2. **RightPanel（12 块）→ 并集。**
+   两侧架构相同（都有 `PanelOptionsMenu` 浮层），差异只在取舍：win7 有 `trajectory`/`preview` 两个 Tab 与 360/520/720 宽档位，
+   main 有左栏联动自动折叠。→ 6 Tab + 宽档位取 win7，自折叠取 main。
+
+随后用户指示 **「跟着对齐」**：`trajectory`/`preview` 一律按**顶层 Tab** 模型，于是把 `ProgressSection`（main 的 sub-tab）与
+`ChangesSection`（main 的 `autoPreviewMode`）都回退到 win7 口径，避免「Tab 是顶层的、组件却按 sub-tab 渲染」的半迁移状态。
+
+### PR 台账（批次 6–15）
+
+| PR | 内容 | 文件数 |
+|---|---|---:|
+| #2513 | Sidebar 取 main + `SidebarNavItem` / `useFeatureUnlock` / 两个 locale 手术式插入 5 键 / `ArenaAccountsToggle.test` 契约同步 | 8 |
+| #2514 | RightPanel 并集 + store + Layout | 4 |
+| #2517 | 顶层 Tab 对齐（`store.ts` 取 main 仅注释差异；`ChangesSection` / `ProgressSection` 取 win7） | 3 |
+| #2518 | 设置页 P1-4 锚点 / P0-5 补 `general` tab、P1-8 `confirmDialog`、两个仅注释差异 | 6 |
+| #2519 | 插件通配 R98 fail-closed、CodeMirror 懒加载、NetworkTab 并集（保留 `BrowserEnvironmentSection`）、v8 注释 | 5+1 |
+| #2520 | Layout 左右栏联动 + 编排配置类型取 win7 超集 | 5 |
+| #2521 | `allowed_paths` 搜索种类 + **恢复批次 5 剔除的 `AtFileMenu`** | 4 |
+| #2522 | 密度 token 保留 + 设置锚点动画并集、会话模型切换风险提示 | 4 |
+| #2523 | McpTab 纯格式化收敛到 main | 2 |
+| #2524 | 记忆搜索/删除（P0-1/P0-6）+ 提示词模板条目级导入（r55） | 4 |
+
+### 三条可复用的判断法则（本轮新增）
+
+1. **「超集」判定要看导出集合，不能看行数。** `Chat.tsx` 673 vs 673、`McpTab.tsx` 651 vs 649 这类「等长」文件里藏着方向相反的差异。
+2. **格式化分叉必须单向收敛。** 保留 win7 的格式化等于放弃合并——下次 merge 还冲突。McpTab 这类只能整体接受一侧。
+3. **取 main 前先查它引用的依赖是否在 win7 缺失。** `ShikiCodeBlock`（需 `@shikijs/langs|themes`）与 `permissionApi`（需 R99-R102 后端）都是因此推迟。
+
+### 推迟的 4 项（各有明确原因）
+
+| 文件 | 原因 |
+|---|---|
+| `src/widgets/chat/ShikiCodeBlock.tsx` | 依赖新增 npm 包 `@shikijs/langs`/`@shikijs/themes`，牵动 `package.json` + lockfile，须单独立项 |
+| `src/shared/api/permissionApi.ts` + `PermissionRulesManager.tsx` | main 侧是 R99–R102 功能移植（插件归属徽标、按插件整组撤销、一键清空），需后端端点配合 |
+| `src/shared/api/types.ts` | main-only 570 行新增类型，牵涉面广，须先确认引用方是否都已在 win7 |
+| `src/pages/settings/McpTab.tsx` 之外的 MCP 工具面板 | 依赖 win7 独有的 `mcp_server_tools` / `authorizeServer`，两侧 API 面不同 |
+
+### 一个必须记住的流程教训
+
+**推送内容只能取自内存快照（`C:/temp/conv/pr_*.json`），绝不能读 worktree。**
+#2513 第二次提交时脚本从被 `git reset --hard` 回退过的 worktree 读文件，把 7 个文件覆盖回 win7 旧版，
+CI 立刻报 `FEATURE_DISABLE_STORAGE_KEY` 缺失。修正后已补一条远端校验（直接按文件路径 + ref 拉回内容做符号断言）。
