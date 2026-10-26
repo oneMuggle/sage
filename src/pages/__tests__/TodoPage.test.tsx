@@ -26,11 +26,13 @@ const mocks = vi.hoisted(() => ({
   complete: vi.fn(),
   cancel: vi.fn(),
   loadSummary: vi.fn(),
+  setParams: vi.fn(),
   state: {
     todos: [] as Todo[],
     loading: false,
     error: null as string | null,
     summary: null,
+    params: {} as Record<string, unknown>,
   },
 }));
 
@@ -49,6 +51,7 @@ vi.mock('../../entities/todo/todoStore', () => ({
       complete: mocks.complete,
       cancel: mocks.cancel,
       loadSummary: mocks.loadSummary,
+      setParams: mocks.setParams,
     };
     return selector(merged);
   },
@@ -59,6 +62,7 @@ beforeEach(() => {
   mocks.state.loading = false;
   mocks.state.error = null;
   mocks.state.summary = null;
+  mocks.state.params = {};
   mocks.load.mockResolvedValue(undefined);
   mocks.create.mockResolvedValue({} as Todo);
   mocks.update.mockResolvedValue({} as Todo);
@@ -66,6 +70,7 @@ beforeEach(() => {
   mocks.complete.mockResolvedValue({} as Todo);
   mocks.cancel.mockResolvedValue({} as Todo);
   mocks.loadSummary.mockResolvedValue(undefined);
+  mocks.setParams.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
