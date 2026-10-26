@@ -42,6 +42,8 @@ const cases: Array<[AgentState, string | null, string?]> = [
   ['step_done', null],
   ['topic_shifted', null],
   ['orch_preflight', null],
+  ['retry', null],
+  ['heartbeat', null], // 2026-10-26: 重试退避心跳 — 不渲染气泡占位文本
 ];
 
 describe('agentStateToText', () => {
@@ -53,6 +55,11 @@ describe('agentStateToText', () => {
 describe('agentStateToPhase', () => {
   it('retry → RefreshCw + 重试中', () => {
     expect(agentStateToPhase('retry')).toEqual({ iconName: 'RefreshCw', label: '重试中' });
+  });
+
+  // 2026-10-26: 重试退避心跳复用 retry 的展示(后端仍在重试退避等待)
+  it('heartbeat → RefreshCw + 重试中 (复用 retry 展示)', () => {
+    expect(agentStateToPhase('heartbeat')).toEqual({ iconName: 'RefreshCw', label: '重试中' });
   });
 
   it('null / undefined → null', () => {

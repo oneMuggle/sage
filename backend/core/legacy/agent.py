@@ -1619,6 +1619,15 @@ class SageAgent:
                                             },
                                             agent_id=self.agent_id,
                                         )
+                                    elif evt_kind == "heartbeat":
+                                        # 2026-10-26: 重试退避等待期间 llm_client
+                                        # 每 5s 发一次心跳。转发给前端喂 watchdog,
+                                        # 防止长退避(30s)期间 watchdog 误杀流。
+                                        yield AgentEvent(
+                                            state=AgentState.HEARTBEAT,
+                                            iteration=i,
+                                            agent_id=self.agent_id,
+                                        )
                                     elif evt_kind == "response":
                                         response = payload
                             except LLMError as stream_err:

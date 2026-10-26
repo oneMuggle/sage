@@ -1165,7 +1165,14 @@ class LLMClient:
                     reasoning_parts = []
                     finish_reason = None
                     stream_usage = None
-                    await asyncio.sleep(delay)
+                    # 2026-10-26: 退避等待期间每 5s 发一次 heartbeat 事件,
+                    # 喂前端 watchdog 防止误杀流。delay <= 0 时不 sleep。
+                    _hb_interval = 5.0
+                    _hb_elapsed = 0.0
+                    while _hb_elapsed < delay:
+                        await asyncio.sleep(min(_hb_interval, delay - _hb_elapsed))
+                        _hb_elapsed += _hb_interval
+                        yield ("heartbeat", None)
 
         raw_content = "".join(content_parts)
         reasoning_content = "".join(reasoning_parts) or None
