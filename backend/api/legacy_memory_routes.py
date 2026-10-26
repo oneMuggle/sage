@@ -401,7 +401,7 @@ class RecallFeedbackRequest(BaseModel):
         extra = "forbid"
 
     log_id: str = Field(min_length=1)
-    feedback: str = Field(regex="^(up|down)$")
+    feedback: str = Field(pattern="^(up|down)$")
 
 
 @router.get("/memory/recall/metrics")
