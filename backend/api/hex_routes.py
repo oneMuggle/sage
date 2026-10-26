@@ -1,6 +1,6 @@
 # ruff: noqa: UP006, UP007, UP035 — pydantic v1 + Python 3.8 兼容：
 # pydantic v1 resolve_annotations 用 eval() 处理 forward refs，
-# eval 在 Python 3.8 上无法解析 PEP 585 (list[X]) 和 PEP 604 (X | Y)，
+# eval 在 Python 3.8 上无法解析 PEP 585 (List[X]) 和 PEP 604 (X | Y)，
 # 所以本文件保留 typing.List/Optional/Union 写法
 """新六边形 API 路由 — 调用 ChatService。
 

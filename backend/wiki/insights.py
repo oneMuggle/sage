@@ -93,7 +93,7 @@ def _find_surprising_connections(
         communities: 社区信息列表
 
     Returns:
-        list[SurprisingConnection]: 惊人联系列表
+        List[SurprisingConnection]: 惊人联系列表
     """
     surprising = []
 
@@ -196,7 +196,7 @@ def _find_knowledge_gaps(
         communities: 社区信息列表
 
     Returns:
-        list[KnowledgeGap]: 知识缺口列表
+        List[KnowledgeGap]: 知识缺口列表
     """
     gaps = []
 

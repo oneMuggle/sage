@@ -3,7 +3,7 @@
 
 设计要点：
 
-- **引擎协议**：``name`` + ``search(query, limit, client) -> list[dict]``，
+- **引擎协议**：``name`` + ``search(query, limit, client) -> List[dict]``，
   结果条目与 web_search schema 同构（title / url / snippet）。引擎只做
   "请求 + 解析"，失败抛异常、空结果返回 ``[]``，fallback 决策在调用方
   （``WebSearchTool`` 沿链遍历）。

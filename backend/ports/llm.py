@@ -27,9 +27,8 @@ A2（Provider 抽象 + Token 归一化，借鉴 OpenWorker ``coworker/providers`
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Protocol, Union
+from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, Union
 
 from sage_core import Message, Role, ToolCall
 
