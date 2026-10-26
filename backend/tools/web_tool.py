@@ -2,7 +2,7 @@
 Web 工具 - 网络搜索和网页获取
 """
 
-# win7 py3.8: PEP 604 (X | Y) / PEP 585 (set[...]) 注解惰性化，避免 def 定义时报错
+# win7 py3.8: PEP 604 (X | Y) / PEP 585 (Set[...]) 注解惰性化，避免 def 定义时报错
 from __future__ import annotations
 
 import contextlib
@@ -44,6 +44,140 @@ _ANTIBOT_GUIDANCE = (
 
 #: 触发 G1 指引的拒绝状态码
 _ANTIBOT_STATUS_CODES = frozenset({403, 429, 503})
+
+# ── R19-W1：block_reason 枚举（前端拦截可视化卡片用） ─────────────────────
+#: 拦截原因枚举（字符串常量，便于 JSON 序列化）
+BLOCK_REASON_ANTIBOT_CF = "antibot_cf"  # Cloudflare 反爬
+BLOCK_REASON_ANTIBOT_OTHER = "antibot_other"  # 其他反爬（Akamai/Incapsula/通用验证码）
+BLOCK_REASON_LOGIN_WALL = "login_wall"  # 登录墙
+BLOCK_REASON_HTTP_4XX = "http_4xx"  # 4xx 错误（非 403）
+BLOCK_REASON_HTTP_5XX = "http_5xx"  # 5xx 错误（非 503）
+BLOCK_REASON_TIMEOUT = "timeout"  # 超时
+BLOCK_REASON_DNS = "dns"  # DNS 解析失败
+BLOCK_REASON_RENDER = "render"  # 渲染失败
+BLOCK_REASON_GENERIC = "generic"  # 未知错误
+
+#: Cloudflare 盾页特征（_classify_antibot_reason 用）
+_CF_MARKERS = (
+    "cf-browser-verification",
+    "cf_chl_",
+    "__cf_chl",
+    "challenge-platform",
+    "just a moment...",
+    "checking your browser",
+    "attention required! | cloudflare",
+)
+
+
+def _classify_antibot_reason(html: str = "", status: int = 0) -> str:
+    """根据反爬页面内容分类拦截原因（R19-W1）。"""
+    html_lower = (html or "").lower()
+    if any(marker in html_lower for marker in _CF_MARKERS):
+        return BLOCK_REASON_ANTIBOT_CF
+    return BLOCK_REASON_ANTIBOT_OTHER
+
+
+def _build_suggested_actions(block_reason: str, url: str) -> List[Dict[str, Any]]:
+    """根据拦截原因构建建议操作列表（R19-W1 前端卡片按钮）。"""
+    actions: List[Dict[str, Any]] = []
+    # 反爬 / 登录墙 → 真浏览器通道是首要出路
+    if block_reason in (
+        BLOCK_REASON_ANTIBOT_CF,
+        BLOCK_REASON_ANTIBOT_OTHER,
+        BLOCK_REASON_LOGIN_WALL,
+    ):
+        actions.append({
+            "action": "open_browser",
+            "label": "用浏览器打开",
+            "icon": "🌐",
+            "params": {"url": url},
+        })
+    # 登录墙 → 引导到既有凭据管理入口（设置 → 网络）
+    if block_reason == BLOCK_REASON_LOGIN_WALL:
+        # 首选：一键登录（browser_login 工具 —— 用户只需在弹出浏览器中完成登录）
+        actions.insert(
+            0,
+            {
+                "action": "login_to_site",
+                "label": "登录此站点",
+                "icon": "🔐",
+                "params": {"url": url},
+            },
+        )
+        actions.append({
+            "action": "configure_credentials",
+            "label": "配置登录凭据",
+            "icon": "🔑",
+            "params": {"domain": urlparse(url).hostname or ""},
+        })
+    # 反爬 / 4xx / 5xx → 代理可改变出口 IP，常能绕过风控
+    if block_reason in (
+        BLOCK_REASON_ANTIBOT_CF,
+        BLOCK_REASON_ANTIBOT_OTHER,
+        BLOCK_REASON_HTTP_4XX,
+        BLOCK_REASON_HTTP_5XX,
+    ):
+        actions.append({
+            "action": "configure_proxy",
+            "label": "配置代理",
+            "icon": "⚙️",
+            "params": {},
+        })
+    actions.append({
+        "action": "view_docs",
+        "label": "查看文档",
+        "icon": "📖",
+        "params": {"topic": "web-access-troubleshooting"},
+    })
+    return actions
+
+
+def _blocked_result(
+    block_reason: str,
+    url: str,
+    error: str,
+    *,
+    html: str = "",
+    status: int = 0,
+) -> ToolResult:
+    """构建带 block_reason + suggested_actions 的结构化失败结果（R19-W1）。
+
+    ``block_reason="antibot"`` 为哨兵值，由 ``_classify_antibot_reason`` 细分为
+    ``antibot_cf`` / ``antibot_other``；其余值原样透传。
+    """
+    if block_reason == "antibot":
+        block_reason = _classify_antibot_reason(html, status)
+    return ToolResult(
+        success=False,
+        error=error,
+        # content 在失败路径不参与 LLM 上下文（agent 主循环失败分支只取 error），
+        # 仅供 UI 侧提取 block_reason / suggested_actions 渲染拦截卡片。
+        content={
+            "block_reason": block_reason,
+            "blocked_url": url,
+            "suggested_actions": _build_suggested_actions(block_reason, url),
+        },
+    )
+
+
+def _classify_http_error(exc: Exception) -> str:
+    """HTTP/网络异常 → block_reason（R19-W1）。"""
+    if isinstance(exc, httpx.TimeoutException):
+        return BLOCK_REASON_TIMEOUT
+    # DNS 解析失败 / 连接不可达（Py3.8 的 isinstance 不支持 X | Y，保留 tuple 形式）
+    if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):  # noqa: UP038
+        return BLOCK_REASON_DNS
+    return BLOCK_REASON_GENERIC
+
+
+def _response_text_safe(response: Optional[httpx.Response]) -> str:
+    """读取响应正文供反爬分类；读取失败返回空串（R19-W1）。"""
+    if response is None:
+        return ""
+    try:
+        return (response.text or "")[:20_000]
+    except Exception:  # noqa: BLE001 — 正文读取失败不应影响错误分类兜底
+        return ""
 
 #: 反爬盾 / 验证码页特征（AB1，Round 5）：HTML 原文或抽取正文命中任一即视为"盾页"。
 #: 覆盖 Cloudflare / Akamai / Imperva(Incapsula) / 阿里云 WAF / 腾讯云 WAF / 百度云加速 /
@@ -109,10 +243,12 @@ _TAG_RE = re.compile(r"<script\b.*?</script>|<style\b.*?</style>|<[^>]+>", re.I 
 class _AntibotBlocked(Exception):  # noqa: N818 — internal signal
     """内部信号：静态通道被反爬拦截（状态码或盾页），可尝试升级到渲染通道。"""
 
-    def __init__(self, reason: str, status: int = 0) -> None:
+    def __init__(self, reason: str, status: int = 0, html: str = "") -> None:
         super().__init__(reason)
         self.reason = reason
         self.status = status
+        # R19-W1：盾页原文/抽取正文，供 _classify_antibot_reason 区分 Cloudflare 与其他反爬
+        self.html = html
 
 
 class _RetryingClient(httpx.Client):
@@ -450,14 +586,16 @@ class WebFetchTool(BaseTool):
                 "raw 返回未处理的原始 HTML。"
                 "SPA/JS 动态页自动经受控 headless 浏览器渲染后取正文"
                 "（render=auto 默认；always 强制渲染；never 仅静态 HTML）。"
+                "**首次访问需要登录的站点时，请使用 browser_login 工具完成登录，"
+                "后续 web_fetch 会自动使用已保存的登录态**。"
                 "credential_domain 可携带 browser_cookies 导出的登录态"
                 "（仅附加到同域请求，跨域重定向自动剥离）。"
                 "静态请求被反爬拦截时默认自动升级到真浏览器通道重放（escalate）。"
                 "渲染分支内部会启动受控 headless 浏览器，不单独走启动审批。"
                 "失败结果仅在 web_fetch 返回 success=False 且结果 JSON 含 metadata.blockReason 时才按路由处理："
                 "反爬具体值为 antibot_cf 或 antibot_other（generic antibot 仅作统称），登录墙具体值为 login_wall；"
-                "命中这些值后用 browser_navigate 打开页面并用 browser_snapshot 读取，必要时通过 "
-                "credential_domain 提供登录态；不要反复重试 web_fetch。"
+                "命中这些值后用 browser_login 登录（首次）或 browser_navigate + browser_snapshot 读取页面，"
+                "必要时通过 credential_domain 提供登录态；不要反复重试 web_fetch。"
             ),
             parameters={
                 "type": "object",
@@ -552,6 +690,21 @@ class WebFetchTool(BaseTool):
         if not url.startswith(("http://", "https://")):
             return ToolResult(success=False, error="无效的 URL，必须以 http:// 或 https:// 开头")
 
+        # 自动推断凭据域（browser_login 登录后 web_fetch 自动带态）：
+        # 用户/LLM 未显式传 credential_domain 时，从 URL hostname 在凭据档案中
+        # 查找最匹配的 domain。这样 browser_login 导出的 cookie 无需再手动
+        # 传参即可生效 —— 用户登录后再次访问同一站点"直接能用"。
+        if not credential_domain.strip():
+            from .credential_vault import find_credential_for_host
+
+            try:
+                _hostname = urlparse(url).hostname or ""
+            except ValueError:
+                _hostname = ""
+            _inferred = find_credential_for_host(_hostname)
+            if _inferred:
+                credential_domain = _inferred
+
         # C1：TTL 缓存。credential_domain（登录态时效）与 raw（原始 HTML）
         # 不参与缓存；命中即返回，cached 标记明示。
         use_cache = not refresh and mode != "raw" and not credential_domain.strip()
@@ -638,14 +791,18 @@ class WebFetchTool(BaseTool):
                 )
                 status = response.status_code
                 if login_error:
-                    return ToolResult(success=False, error=login_error)
+                    return _blocked_result(BLOCK_REASON_LOGIN_WALL, url, login_error)
                 # C1：以 uncapped 抽取（缓存存全文，返回前统一裁剪）——
                 # 不同 max_length 的请求可共享同一份缓存
                 content = self._render(final_url, response, mode, self._UNCAPPED_LENGTH)
                 if credential_note:
                     content["note"] = credential_note
                 if content.get("kind") != "binary" and self._is_antibot_page(response, content):
-                    raise _AntibotBlocked("antibot_page: 静态响应是反爬验证 / 拦截页", status)
+                    raise _AntibotBlocked(
+                        "antibot_page: 静态响应是反爬验证 / 拦截页",
+                        status,
+                        str(content.get("content", ""))[:20_000],
+                    )
                 if self._should_render(render, response, content, max_length):
                     content = self._render_dynamic(
                         final_url,
@@ -658,7 +815,13 @@ class WebFetchTool(BaseTool):
                     )
             except _AntibotBlocked as blocked:
                 if not can_escalate:
-                    return ToolResult(success=False, error=f"{blocked.reason}{_ANTIBOT_GUIDANCE}")
+                    return _blocked_result(
+                        "antibot",
+                        url,
+                        f"{blocked.reason}{_ANTIBOT_GUIDANCE}",
+                        html=blocked.html,
+                        status=blocked.status,
+                    )
                 # AB1：静态通道被拦 → 经渲染池（真 Chrome 指纹 + 代理 + 可选持久
                 # profile）重放一次；仍被拦才返回指引。
                 content = self._escalate(
@@ -702,30 +865,46 @@ class WebFetchTool(BaseTool):
             status = e.response.status_code if e.response is not None else 0
             if status in _ANTIBOT_STATUS_CODES:
                 # G1：反爬拒绝 → 明示出路（browser 通道 / 代理 / 换源），不吞成通用失败
-                return ToolResult(
-                    success=False,
-                    error=f"http_{status}: 站点拒绝访问（状态码 {status}）{_ANTIBOT_GUIDANCE}",
+                return _blocked_result(
+                    "antibot",
+                    url,
+                    f"http_{status}: 站点拒绝访问（状态码 {status}）{_ANTIBOT_GUIDANCE}",
+                    html=_response_text_safe(e.response),
+                    status=status,
                 )
-            return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
+            # R19-W1：其余 4xx/5xx 分类（前端卡片区分「请求被拒绝」与「服务端错误」）
+            if 400 <= status < 500:
+                reason = BLOCK_REASON_HTTP_4XX
+            elif status >= 500:
+                reason = BLOCK_REASON_HTTP_5XX
+            else:
+                reason = BLOCK_REASON_GENERIC
+            return _blocked_result(
+                reason, url, f"HTTP 请求失败: {str(e)}", status=status
+            )
         except httpx.HTTPError as e:
             from . import web_metrics
             from .web_metrics import host_from_url
 
             web_metrics.record(host_from_url(url), False, int((time.monotonic() - _t0) * 1000))
-            return ToolResult(success=False, error=f"HTTP 请求失败: {str(e)}")
+            return _blocked_result(_classify_http_error(e), url, f"HTTP 请求失败: {str(e)}")
         except RenderError as e:
             from . import web_metrics
             from .web_metrics import host_from_url
 
             web_metrics.record(host_from_url(url), False, int((time.monotonic() - _t0) * 1000))
-            # 渲染失败单独语义：明确指引手动路径，不吞成"获取网页失败"
-            return ToolResult(success=False, error=str(e))
+            # 渲染失败区分语义：登录相关 → login_wall（触发前端"登录此站点"按钮），
+            # 其他 → render（通用渲染失败指引）
+            err_msg = str(e)
+            if err_msg.startswith("login_required:") or err_msg.startswith("rendered_empty_shell:"):
+                return _blocked_result(BLOCK_REASON_LOGIN_WALL, url, err_msg)
+            return _blocked_result(BLOCK_REASON_RENDER, url, err_msg)
         except Exception as e:
             from . import web_metrics
             from .web_metrics import host_from_url
 
             web_metrics.record(host_from_url(url), False, int((time.monotonic() - _t0) * 1000))
-            return ToolResult(success=False, error=f"获取网页失败: {str(e)}")
+            return _blocked_result(BLOCK_REASON_GENERIC, url, f"获取网页失败: {str(e)}")
 
     @staticmethod
     def _validate_target_url(url: str) -> Optional[str]:
@@ -1289,7 +1468,7 @@ class WebFetchTool(BaseTool):
         if rendered.get("login_wall"):
             raise RenderError(
                 "login_required: 渲染通道访问被要求登录（凭据可能已失效）。"
-                "请重新登录后 browser_cookies action=export 再试；"
+                "请使用 browser_login 工具重新完成登录；"
                 "或开启 web_access_config.auto_refresh_credentials 用持久 profile 静默续期"
             )
         refreshed = rendered.pop("credential_refreshed", None)
@@ -1306,6 +1485,19 @@ class WebFetchTool(BaseTool):
             )
             content["note"] = f"{content['note']}；{note}" if content.get("note") else note
         content["content"] = str(rendered.get("content", ""))[:max_length]
+        # Post-render shell check: 渲染后仍是壳（SPA "Loading..." 等）→ 可能需要登录
+        # 首次访问无凭据时 login_wall 不会被设置（credential_cookies 为空），
+        # 但渲染后内容仍为空壳说明页面未正常加载，提示 browser_login。
+        rendered_text = str(rendered.get("content", "")).strip()
+        rendered_html = str(rendered.get("html", ""))
+        if (
+            len(rendered_text) < web_render.SHELL_TEXT_MIN_CHARS
+            and web_render.looks_like_js_shell(rendered_html, rendered_text)
+        ):
+            raise RenderError(
+                "rendered_empty_shell: 渲染后页面仍为空壳（可能是 SPA 需要登录）。"
+                "请使用 browser_login 工具完成登录后重试。"
+            )
         if mode == "links":
             content["links"] = list(rendered.get("links") or [])[: self._policy.max_result_items]
         elif mode == "tables":
