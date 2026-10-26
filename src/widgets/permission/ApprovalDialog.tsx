@@ -83,9 +83,14 @@ export function ApprovalDialog() {
     const bridge = window.electronAPI?.notifyApproval;
     if (typeof bridge !== 'function') return;
     const sub = currentRequest.subagent;
-    const body = sub
-      ? `${currentRequest.tool_name} · 子任务 ${sub.task_id}（${sub.agent_id}）`
-      : currentRequest.tool_name;
+    // R108: plugin_name 是后端注入的权威归属 (R95),只拼它,不从工具名猜
+    const pluginSuffix = currentRequest.plugin_name
+      ? ` · 插件 ${currentRequest.plugin_name}`
+      : '';
+    const body =
+      (sub
+        ? `${currentRequest.tool_name} · 子任务 ${sub.task_id}（${sub.agent_id}）`
+        : currentRequest.tool_name) + pluginSuffix;
     bridge({ title: 'Sage 需要你的审批', body }).catch(() => {
       // 通知失败不影响审批流程
     });
@@ -230,6 +235,17 @@ export function ApprovalDialog() {
               {currentRequest.tool_name}
             </code>
           </div>
+
+          {/* R108: 插件归属上下文 —— 决策前就该看见这个工具属于哪个插件,
+              只读后端注入的权威 plugin_name (R95),不按工具名猜。 */}
+          {pluginName ? (
+            <div
+              data-testid="permission-plugin-context"
+              className="px-2 py-1.5 rounded bg-primary/10 text-xs text-primary leading-relaxed"
+            >
+              {t('permission.from_plugin')}: {pluginName}
+            </div>
+          ) : null}
 
           <p
             data-testid="permission-message"

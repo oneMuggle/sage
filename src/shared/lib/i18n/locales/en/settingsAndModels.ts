@@ -254,6 +254,7 @@ export const enSettingsAndModels = {
   // ─── M1 tool approval ─────────────
   'permission.title': 'Tool approval required',
   'permission.tool': 'Tool',
+  'permission.from_plugin': 'From plugin',
   'permission.args': 'Arguments',
   'permission.risk.safe': 'Safe',
   'permission.risk.suspicious': 'Suspicious',
