@@ -160,9 +160,10 @@ export const chatApi = {
 
     // R1: 流式看门狗 —— 后端 hang (done/failed 永不到达) 时, 前端此前会
     // 永远停在"思考中"且输入框锁死。任一事件喂狗; 连续静默超过阈值视为
-    // 流已死, 以 onError+onDone 终态化, 用户可重发。默认 180s: 正常长工具
-    // 执行 / 长 LLM 思考期间 reasoning/tool 事件持续流出, 不会误伤。
-    const STREAM_WATCHDOG_SILENCE_MS = 180_000;
+    // 流已死, 以 onError+onDone 终态化, 用户可重发。
+    // 2026-10-26: 超时值优先取 config.watchdogSilenceMs（由 useChat 从用户
+    // 设置 llmTotalTimeoutS 秒转毫秒传入），与后端动态超时对齐；未传则回退 180s。
+    const STREAM_WATCHDOG_SILENCE_MS = config?.watchdogSilenceMs ?? 180_000;
     // 追踪变量：watchdog 超时时输出详细诊断信息
     const _wd_streamStartedAt = Date.now();
     let _wd_lastEventAt = Date.now();
@@ -328,12 +329,16 @@ export const chatApi = {
       onError?: (error: Error) => void;
       onDone?: () => void;
     },
+    // 2026-10-26: 可选 watchdog 超时，与 chatStream 对齐。
+    config?: { watchdogSilenceMs?: number },
   ): Promise<{ cancel: () => void }> {
     const eventName = `chat-stream-${streamId}`;
     let unlisten: UnlistenFn | null = null;
     let settled = false;
 
-    const STREAM_WATCHDOG_SILENCE_MS = 180_000;
+    // 2026-10-26: 优先取 config.watchdogSilenceMs（由 useChatReattachAndBtw
+    // 从 settings.llmTotalTimeoutS 秒转毫秒传入），未传则回退 180s。
+    const STREAM_WATCHDOG_SILENCE_MS = config?.watchdogSilenceMs ?? 180_000;
     // 追踪变量：watchdog 超时时输出详细诊断信息
     const _wd_streamStartedAt = Date.now();
     let _wd_lastEventAt = Date.now();

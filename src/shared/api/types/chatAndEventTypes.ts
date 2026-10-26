@@ -206,6 +206,9 @@ export type AgentState =
   // 2026-10-13: LLM 请求失败触发自动重试时推送,携带 retry_info 载荷,
   // 前端渲染"重试中 (2/3) | 原因: 请求超时 | 等待 2秒"提示。
   | 'retry'
+  // 2026-10-26: 重试退避等待期间后端每 5s 发一次心跳,只喂前端 watchdog,
+  // 前端不渲染 UI。防止长退避(30s)期间 watchdog 误杀流。
+  | 'heartbeat'
   | 'done'
   | 'failed'
   // 2026-09 step-by-step: 每次 ReAct 迭代结束（OBSERVING 之后）由后端产出,
@@ -681,6 +684,12 @@ export interface ChatConfig {
   contextReset?: boolean;
   /** 第二轮 C2: 原位重新生成 —— 锚点 user 消息 id（后端不再落 user 消息） */
   regenerateOf?: string;
+  /**
+   * 2026-10-26: 前端流式 watchdog 静默超时（毫秒）。连续 N 毫秒无任何事件到达
+   * 则视为流已死并中断。默认 180_000。useChat 从用户设置 llmTotalTimeoutS
+   * （秒）读取后传入，保证与后端动态超时对齐，避免后端还在重试前端已放弃。
+   */
+  watchdogSilenceMs?: number;
 }
 
 export function auditChatAndEventTypesGovernance(
