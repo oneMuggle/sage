@@ -34,7 +34,8 @@
 | R102 | 按插件删除其全部已保存规则（按归属撤销持久信任） | ✅ #2493 |
 | R103 | 已卸载插件孤儿规则在插件页提示并可就地清理（纯前端复用 R101/R102） | ✅ #2500 |
 | R104 | 无归属（missing）孤儿规则整组清理（标注矩阵补完） | ✅ #2504 |
-| R105 | 仅本次会话记住（session 级 remember，会话规则存储 + gate 会话捕获） | 🔄 #2511 |
+| R105 | 仅本次会话记住（session 级 remember，会话规则存储 + gate 会话捕获） | ✅ #2511 |
+| R106 | 会话级规则查看与撤销（聊天顶栏就地管理） | 🔄 #2530 |
 
 ## 2. 交付总账
 
@@ -62,7 +63,8 @@
 | R102 | `POST /permissions/rules/delete-by-plugin`（权威插件名选择子）+ Electron 命令 + 设置页按归属删除与测试/文档 | #2493 | 待对齐 | ✅ 已交付 |
 | R103 | 插件页已卸载卡片的孤儿规则计数提示 + 就地按归属清理按钮（纯前端）与测试/文档 | #2500 | 待对齐 | ✅ 已交付 |
 | R104 | `POST /permissions/rules/delete-orphans`（服务端按 missing 类选集）+ Electron 命令 + 管理器孤儿清理行与测试/文档 | #2504 | 待对齐 | ✅ 已交付 |
-| R105 | 会话规则存储（进程内）+ enforcer 合并求值 + 应答 `remember_duration` + 对话框时长选择与测试/文档 | #2511 | 待对齐 | 🔄 |
+| R105 | 会话规则存储（进程内）+ enforcer 合并求值 + 应答 `remember_duration` + 对话框时长选择与测试/文档 | #2511 | 待对齐 | ✅ 已交付 |
+| R106 | 会话规则按会话读/删/清端点 + 顶栏徽记与审计弹层会话规则区与测试/文档 | #2530 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -538,7 +540,7 @@
   PR #2504 GitHub All Checks pass，已 squash 合
   并为 `main` `1708e1efe6fadb39084b9ee534ceb3a7157d753a`。
 
-## 25. R105 交付边界（PR #2511 待合并）
+## 25. R105 交付边界（已合并）
 
 > spec：`2026-10-25_session-remember-r105.md`。
 > R105 是本插件账轮次号，与其它账本的同号计划无关。
@@ -556,5 +558,25 @@
   新增 4 例）通过；Ruff 全库、py38、tsc、ESLint、
   architecture、silent-exceptions、diff-check、
   diagnostics 全绿，manifest 仍 266。
+
+## 26. R106 交付边界（PR #2530 待合并）
+
+> spec：`2026-10-26_session-rules-manage-r106.md`。
+> R106 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **会话规则可管可撤**：聊天顶栏可查看本会话已记
+  住的决定并逐条撤销或整会话清空，记错的整插件
+  deny 不再只能靠结束会话/重启挽回；设置页仍只管
+  持久规则。
+- **写面不扩大**：端点只读/只删，创建仍只经审批应
+  答由服务端捕获会话归属；删除按内容定位、清空无
+  筛选，方向恒为回到逐次询问。
+- **本地证据**：后端新增 13 例（单测 4 + API 9）
+  与相邻/集成共 262 例、前端与 Electron 相邻套件共
+  286 例通过；Ruff 全库、py38、tsc、ESLint、
+  architecture、silent-exceptions、diff-check、
+  diagnostics 全绿，manifest 266 → 269；
+  permission_routes.py（855 行）按 ratchet 登记
+  baseline。
 
 —— 本账本由插件化循环维护，随轮次追加。

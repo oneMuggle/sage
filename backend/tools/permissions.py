@@ -240,6 +240,29 @@ def session_rules_for(session_id: Optional[str]) -> Tuple[PermissionRule, ...]:
         return tuple(_session_rules.get(session_id, ()))
 
 
+def forget_session_rule(session_id: str, rule: PermissionRule) -> bool:
+    """从指定会话按内容删除一条会话规则（R106 撤销）。
+
+    只删第一条与 ``rule`` 完全一致的规则（R105 写入时
+    已去重，至多一条）；会话删空后移除其条目，避免
+    LRU 里留空壳占位。
+
+    Returns:
+        True 表示确有删除；会话不存在、规则未命中或
+        ``session_id`` 为空时返回 False（不改存储）。
+    """
+    if not session_id:
+        return False
+    with _session_rules_lock:
+        rules = _session_rules.get(session_id)
+        if not rules or rule not in rules:
+            return False
+        rules.remove(rule)
+        if not rules:
+            _session_rules.pop(session_id, None)
+        return True
+
+
 def clear_session_rules(session_id: Optional[str] = None) -> None:
     """清空会话规则：指定 ``session_id`` 只清该会话，None 清全部。"""
     with _session_rules_lock:
@@ -560,6 +583,7 @@ __all__ = [
     "parse_rules",
     "remember_session_rule",
     "session_rules_for",
+    "forget_session_rule",
     "clear_session_rules",
     "make_office_path_boundary",
     "load_enforcer_from_settings",
