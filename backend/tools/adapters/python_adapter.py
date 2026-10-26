@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Iterable, List, Optional, Set, Tuple
 
@@ -62,6 +63,22 @@ CANDIDATE_NAMES: Tuple[str, ...] = (
     "python3",
     "python",
 )
+
+def _conda_base_dirs() -> Tuple[str, ...]:
+    """conda base 安装根候选（固定清单 + 从当前解释器推导）。
+
+    ``DEFAULT_CONDA_BASE_DIRS`` 是固定清单，覆盖不到自定义安装位置（例如
+    ``D:\\programmingSoftware\\Anaconda3``）。在 conda env 内运行时
+    ``sys.base_prefix`` 指向 base 安装根、``sys.prefix`` 指向当前 env，两者
+    都能补上这个缺口；非 conda 环境下它们只是普通 prefix，调用方靠
+    ``isdir(<base>/envs)`` 过滤，无副作用。
+    """
+    extra: List[str] = []
+    for prefix in (getattr(sys, "base_prefix", None), sys.prefix):
+        if prefix and prefix not in extra:
+            extra.append(prefix)
+    return tuple(extra) + DEFAULT_CONDA_BASE_DIRS
+
 
 _VERSION_RE = re.compile(r"Python\s+(\d+\.\d+(?:\.\d+)?)")
 
@@ -118,30 +135,51 @@ class PythonAdapter:
         return enriched
 
     def _candidate_paths(self, include_paths: Tuple[str, ...]) -> Iterable[str]:
+        # 当前解释器必然可用（probe / doctor 自身就跑在它上面）。若 PATH 与
+        # conda / venv 扫描都一无所获又不纳入它，doctor 的 runtime_env 会报
+        # 「Python ×0 -> CRITICAL」，与「本进程正在 Python 里运行」自相矛盾。
+        if sys.executable and Path(sys.executable).is_file():
+            yield sys.executable
+
         path_env = os.environ.get("PATH", "")
         for directory in path_env.split(os.pathsep):
             if not directory:
                 continue
             for name in CANDIDATE_NAMES:
-                candidate = os.path.join(directory, name)
-                if Path(candidate).is_file():
-                    yield candidate
+                # Windows 上可执行文件带 .exe 后缀，拼出的无扩展名路径
+                # is_file() 恒 False —— 缺这一层时 PATH 扫描在 Windows 上
+                # 一无所获。与 node_adapter._candidate_paths 同款 suffix 循环。
+                for suffix in ("", ".exe"):
+                    candidate = os.path.join(directory, name + suffix)
+                    if Path(candidate).is_file():
+                        yield candidate
 
         for extra in include_paths:
             if Path(extra).is_file():
                 yield extra
 
-        for base in DEFAULT_CONDA_BASE_DIRS:
+        for base in _conda_base_dirs():
             if not os.path.isdir(base):
                 continue
             envs_dir = os.path.join(base, "envs")
             if os.path.isdir(envs_dir):
-                yield os.path.join(base, "bin", "python3")
+                # base env：POSIX 是 <base>/bin/python3，Windows 是 <base>/python.exe。
+                # 原实现只 yield 前者且不做存在性检查，在 Windows 上永远落空。
+                for cand in (
+                    os.path.join(base, "bin", "python3"),
+                    os.path.join(base, "python.exe"),
+                ):
+                    if Path(cand).is_file():
+                        yield cand
                 try:
                     for entry in sorted(os.listdir(envs_dir)):
-                        sub = os.path.join(envs_dir, entry, "bin", "python3")
-                        if Path(sub).is_file():
-                            yield sub
+                        # 子 env 同样双布局：POSIX bin/python3、Windows python.exe。
+                        for cand in (
+                            os.path.join(envs_dir, entry, "bin", "python3"),
+                            os.path.join(envs_dir, entry, "python.exe"),
+                        ):
+                            if Path(cand).is_file():
+                                yield cand
                 except OSError:
                     continue
 

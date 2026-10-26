@@ -2,11 +2,13 @@
 
 覆盖：build_command（argv + stdin_payload）、discover_manifests
 （pyproject requires_python / requirements 注释过滤 / Pipfile /
-environment.yml）、diagnose 版本约束匹配、_parse_json_line。
+environment.yml）、diagnose 版本约束匹配、_parse_json_line、
+_candidate_paths 的 Windows / conda 发现路径。
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,7 @@ from backend.domain.runtime import (
     RuntimeInfo,
     RuntimeSource,
 )
+from backend.tools.adapters import python_adapter as pa
 from backend.tools.adapters.python_adapter import PythonAdapter
 
 pytestmark = pytest.mark.unit
@@ -141,3 +144,72 @@ def test_diagnose_recommended_runtime(adapter):
     r2 = _make_runtime("3.12.0")
     diagnosis = adapter.diagnose(Path(), runtimes=[r1, r2], ctx=None)
     assert diagnosis.recommended_runtime is not None
+
+
+# ---------------------------------------------------------------------------
+# _candidate_paths — Windows / conda 运行时发现
+#
+# 回归背景：原实现在 Windows 上一无所获（PATH 分支拼无扩展名路径、conda 分支
+# 只认 POSIX 的 bin/python3、固定清单覆盖不到自定义安装位置），导致 doctor 的
+# runtime_env 报「Python x0 -> CRITICAL」，而 doctor 自身正跑在 Python 里。
+# ---------------------------------------------------------------------------
+
+
+def test_candidate_paths_always_includes_sys_executable(adapter, monkeypatch):
+    """PATH 全空时当前解释器仍在候选里。
+
+    probe / doctor 自身就跑在 sys.executable 上，它必然可用；不纳入就会出现
+    「本进程正在 Python 里运行，却报 Python 不可用」的自相矛盾误报。
+    """
+    monkeypatch.setenv("PATH", "")
+    paths = list(adapter._candidate_paths(()))
+    assert sys.executable in paths
+
+
+def test_candidate_paths_finds_windows_exe_on_path(adapter, tmp_path, monkeypatch):
+    """PATH 目录里的 python.exe 必须被发现（缺 .exe suffix 时恒落空）。"""
+    fake = tmp_path / "python.exe"
+    fake.write_bytes(b"")
+    monkeypatch.setenv("PATH", str(tmp_path))
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "absent.exe"))
+    monkeypatch.setattr(pa, "DEFAULT_CONDA_BASE_DIRS", ())
+    paths = list(adapter._candidate_paths(()))
+    assert str(fake) in paths
+
+
+def test_candidate_paths_finds_conda_windows_layout(adapter, tmp_path, monkeypatch):
+    """conda 的 Windows 布局：base 是 <base>/python.exe、子 env 是
+    <base>/envs/<name>/python.exe，都不在 bin/ 下。"""
+    base = tmp_path / "Anaconda3"
+    base.mkdir()
+    (base / "python.exe").write_bytes(b"")
+    env = base / "envs" / "sage-backend"
+    env.mkdir(parents=True)
+    (env / "python.exe").write_bytes(b"")
+
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "absent.exe"))
+    monkeypatch.setattr(sys, "prefix", str(tmp_path / "absent-prefix"))
+    monkeypatch.setattr(sys, "base_prefix", str(tmp_path / "absent-base"))
+    monkeypatch.setattr(pa, "DEFAULT_CONDA_BASE_DIRS", (str(base),))
+
+    paths = list(adapter._candidate_paths(()))
+    assert str(base / "python.exe") in paths
+    assert str(env / "python.exe") in paths
+
+
+def test_candidate_paths_finds_conda_base_outside_default_list(adapter, tmp_path, monkeypatch):
+    """自定义安装位置（不在 DEFAULT_CONDA_BASE_DIRS 里）靠 sys.base_prefix 补上。"""
+    base = tmp_path / "programmingSoftware" / "Anaconda3"
+    env = base / "envs" / "sage-backend"
+    env.mkdir(parents=True)
+    (env / "python.exe").write_bytes(b"")
+
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "absent.exe"))
+    monkeypatch.setattr(pa, "DEFAULT_CONDA_BASE_DIRS", ())
+    monkeypatch.setattr(sys, "base_prefix", str(base))
+    monkeypatch.setattr(sys, "prefix", str(env))
+
+    paths = list(adapter._candidate_paths(()))
+    assert str(env / "python.exe") in paths
