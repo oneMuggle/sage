@@ -110,7 +110,7 @@ def _is_safe_root_placeholder_boundary(character: str, following: str = "") -> b
 class ResourceIndex:
     """skill 目录下的资源清单（v2）。
 
-    字段全部为 ``tuple[Path, ...]``，按文件名字典序排列，确保测试可重现。
+    字段全部为 ``Tuple[Path, ...]``，按文件名字典序排列，确保测试可重现。
     """
 
     scripts: Tuple[Path, ...] = ()

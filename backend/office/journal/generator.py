@@ -7,7 +7,7 @@
 - 调用 record_generation 登记 SQLite。
 
 设计要点：
-- PEP 604/585 全部禁用（X | None / list[int]）；
+- PEP 604/585 全部禁用（X | None / List[int]）；
 - output_filename 是用户输入，必须经 resolve_within 围栏验证不能逃出 generated/；
 - 清空 body 时保留 <w:sectPr>（页面尺寸/边距信息）；
 - 缓存未命中时从空白 Document 重建是防御性代码（正常流程 parse_journal_spec
