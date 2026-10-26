@@ -107,6 +107,7 @@ _RAPID_REFILL_RATIO = 0.9
 #: 开新池组——避免一次超大 READ 批把 executor 线程池占满（默认池仅
 #: min(32, cpu+4) 个 worker）。
 _PARALLEL_POOL_SIZE = 8
+
 from backend.tools.bash_validation import validate_bash
 from backend.tools.context import current_tool_context
 from backend.tools.permissions import (
@@ -540,9 +541,9 @@ class SageAgent:
                 "model": self.llm_config.model if self.llm_config else "local",
             }
 
-            # 2026-09 修复 (同步 #1100): LLM 未配置时的模拟响应只用于本轮
-            # UI 反馈, 不落库、不进工作记忆/长期记忆提取 —— 避免 mock 文案
-            # 进入真实会话历史, 污染续聊上下文、全文检索与记忆提取。
+            # 2026-09 修复: LLM 未配置时的模拟响应只用于本轮 UI 反馈,
+            # 不落库、不进工作记忆/长期记忆 —— 避免 mock 文案进入真实会话
+            # 历史, 污染续聊上下文、全文检索与记忆提取。
             if self.llm_client:
                 # 持久化助手消息
                 try:
@@ -1085,9 +1086,13 @@ class SageAgent:
         # Phase 1: profile whitelist pre-pass (batch-level, no side effects).
         # Reject the whole batch BEFORE any enforcer.check call so a tool
         # outside the profile's whitelist cannot slip through on the strength
-        # of an earlier in-whitelist tool passing the enforcer.
+        # of an earlier in-whitelist tool passing the enforcer. Membership
+        # uses the shared domain matcher so R92/R98 plugin wildcards
+        # (identity-checked against the bridge's published records)
+        # behave identically here, in registry schema filtering, and
+        # at dispatch.
         allowed_profile_tools = (
-            set(self.profile.get("tools") or [])
+            list(self.profile.get("tools") or [])
             if self.profile and self.profile.get("tools") is not None
             else None
         )
@@ -1131,7 +1136,7 @@ class SageAgent:
         # profile 白名单批级预检（与 L6 同款：任何越界工具即整批串行，
         # 避免靠前面的白名单工具"带飞"越界工具通过 enforcer）。
         allowed_profile_tools = (
-            set(self.profile.get("tools") or [])
+            list(self.profile.get("tools") or [])
             if self.profile and self.profile.get("tools") is not None
             else None
         )
@@ -1807,174 +1812,16 @@ class SageAgent:
                 # tool call 都读一次 settings + 校验, 并行工具批次下 N 倍浪费)
                 m6_hooks = self._load_m6_hooks()
 
-                # ===== L6 并行只读批次 BEGIN (批次 C-3) =====
-                # 全只读/免审/无钩子的批次并发执行 —— 多文件读/多搜索场景
-                # 耗时从串行叠加降为最慢单工具。事件与消息仍按原顺序产出,
-                # 对 LLM 与前端完全透明。不满足严格条件即回退串行。
-                if self._is_parallel_eligible(
-                    response.tool_calls, enforcer, m6_hooks, tool_calls_used
-                ):
-                    tool_calls_used += len(response.tool_calls)
-
-                    def _run_one(tc: Any) -> Tuple[str, bool]:
-                        try:
-                            args_p = json.loads(tc.arguments) if isinstance(tc.arguments, str) else tc.arguments
-                            tool_p = self.tool_registry.get(tc.name)
-                            if tool_p is None:
-                                return f"[错误] 工具不存在: {tc.name}", True
-                            # alpha.36 (Bug #1): 并行只读批次分发前先过 required 校验
-                            # （与 hex InprocToolAdapter 同 helper —— 共用
-                            # backend.tools.executor.validate_required_args）。
-                            # 缺 required 时不再让 tool_p.execute(**args_p) 抛
-                            # TypeError 泄漏 Python 内部错误文本。
-                            required_error = validate_required_args(tool_p, args_p)
-                            if required_error is not None:
-                                return required_error, True
-                            result_p = tool_p.execute(**args_p)
-                            if hasattr(result_p, "success") and hasattr(result_p, "content"):
-                                if result_p.success:
-                                    value = (
-                                        result_p.output
-                                        if isinstance(result_p, ToolResult)
-                                        and result_p.output is not None
-                                        else result_p.content
-                                    )
-                                    return json.dumps(value, ensure_ascii=False), False
-                                # error 规范化: str 直通, None 退化为默认文案, 其他类型 JSON 序列化
-                                err_value = result_p.error
-                                normalized = (
-                                    err_value
-                                    if isinstance(err_value, str)
-                                    else (
-                                        "工具执行失败"
-                                        if err_value is None
-                                        else json.dumps(
-                                            err_value, ensure_ascii=False, default=str
-                                        )
-                                    )
-                                )
-                                return (normalized or "工具执行失败"), True
-                            return json.dumps(result_p, ensure_ascii=False, default=str), False
-                        except Exception as exc:  # noqa: BLE001
-                            logger.error(f"并行工具执行失败: {tc.name}, error: {exc}")
-                            return f"[工具错误] {exc}", True
-
-                    for tc_p in response.tool_calls:
-                        yield AgentEvent(
-                            state=AgentState.ACTING,
-                            iteration=i,
-                            tool_call=ToolCallRequest(
-                                id=tc_p.id,
-                                name=tc_p.name,
-                                arguments=json.loads(tc_p.arguments)
-                                if isinstance(tc_p.arguments, str)
-                                else tc_p.arguments,
-                            ),
-                            agent_id=self.agent_id,
-                        )
-
-                    # 切片 A': 并行批次接入中心超时（与 hex InprocToolAdapter 同
-                    # policy.timeout_seconds / 同文案）—— 只读工具挂死不再拖死整轮。
-                    # wait_for 取消的只是 executor future 包装，残留线程无法强杀，
-                    # 但循环立即恢复；超时结果按错误观察事件落盘。
-                    parallel_timeout = getattr(
-                        self.tool_policy, "timeout_seconds", None
-                    )
-
-                    async def _run_one_with_timeout(tc_p, _timeout=parallel_timeout):
-                        fut = asyncio.get_running_loop().run_in_executor(
-                            None, functools.partial(_run_one, tc_p)
-                        )
-                        if _timeout and _timeout > 0:
-                            try:
-                                return await asyncio.wait_for(fut, timeout=_timeout)
-                            except TIMEOUT_EXCEPTIONS:
-                                logger.warning(
-                                    "并行只读批次工具超时: %s（%ss）",
-                                    tc_p.name,
-                                    _timeout,
-                                )
-                                return (tool_timeout_message(_timeout), True)
-                        return await fut
-
-                    results_p = await asyncio.gather(
-                        *(
-                            _run_one_with_timeout(tc_p)
-                            for tc_p in response.tool_calls
-                        )
-                    )
-
-                    for tc_p, (content_p, err_p) in zip(response.tool_calls, results_p):  # noqa: B905 — py3.8 兼容(两侧等长)
-                        args_p = json.loads(tc_p.arguments) if isinstance(tc_p.arguments, str) else tc_p.arguments
-                        yield AgentEvent(
-                            state=AgentState.OBSERVING,
-                            iteration=i,
-                            tool_call=ToolCallRequest(id=tc_p.id, name=tc_p.name, arguments=args_p),
-                            tool_result=ToolCallResult(
-                                tool_call_id=tc_p.id, content=content_p, is_error=err_p
-                            ),
-                            agent_id=self.agent_id,
-                        )
-                        messages.append(
-                            {
-                                "role": "tool",
-                                "tool_call_id": tc_p.id,
-                                "content": cap_result_for_context(content_p),
-                            }
-                        )
-                        # Phase 3: 钩子反馈注入 (并行路径)
-                        parallel_outcome = await run_event_hooks(
-                            m6_hooks,
-                            "post_tool_use",
-                            tc_p.name,
-                            build_payload(
-                                "post_tool_use",
-                                tc_p.name,
-                                args_p,
-                                tool_output=content_p,
-                                is_error=err_p,
-                            ),
-                        )
-                        if parallel_outcome.has_feedback:
-                            severity_label = {
-                                "info": "提示",
-                                "warning": "警告",
-                                "error": "错误",
-                            }.get(parallel_outcome.severity, "提示")
-                            messages.append(
-                                {
-                                    "role": "system",
-                                    "content": (
-                                        f"[钩子反馈·{severity_label}] "
-                                        f"{parallel_outcome.additional_context}"
-                                    ),
-                                }
-                            )
-                        # Phase 2: 工具失败 → error_occurred 钩子 (observe-only)
-                        await self._maybe_fire_error_hook(
-                            m6_hooks, tc_p.name, content_p, err_p
-                        )
-                    # 2026-09 step-by-step: 并行迭代边界，legacy_routes 收到后
-                    # 把当前累加的 reasoning/tool_calls/content 快照成一条 assistant
-                    # 消息，并重置累加器准备下一步。
-                    yield AgentEvent(
-                        state=AgentState.STEP_DONE,
-                        iteration=i,
-                        step_index=i,
-                        agent_id=self.agent_id,
-                    )
-                    continue
                 # ===== B2 分组调度 BEGIN（并发池 + 串行屏障，L6 全批并行为其特例）=====
                 execution_groups = self._plan_execution_groups(
                     response.tool_calls, enforcer, m6_hooks, tool_calls_used
                 )
                 for group_kind, group_tcs in execution_groups:
                     if group_kind == "pool":
-                        tool_calls_used += len(group_tcs)
-                    # ===== L6 并行只读批次 BEGIN (批次 C-3) =====
-                    # 全只读/免审/无钩子的批次并发执行 —— 多文件读/多搜索场景
-                    # 耗时从串行叠加降为最慢单工具。事件与消息仍按原顺序产出,
-                    # 对 LLM 与前端完全透明。不满足严格条件即回退串行。
+                        # ===== B2 并发池分支（源自 L6 全批并行，组内零副作用） =====
+                        # 全只读/免审/无钩子的批次并发执行 —— 多文件读/多搜索场景
+                        # 耗时从串行叠加降为最慢单工具。事件与消息仍按原顺序产出,
+                        # 对 LLM 与前端完全透明。不满足池条件即被规划器切成串行屏障。
                         tool_calls_used += len(group_tcs)
 
                         def _run_one(tc: Any) -> Tuple[str, bool]:
@@ -1983,11 +1830,11 @@ class SageAgent:
                                 tool_p = self.tool_registry.get(tc.name)
                                 if tool_p is None:
                                     return f"[错误] 工具不存在: {tc.name}", True
-                                # alpha.36 (Bug #1): 并行只读批次分发前先过 required 校验
-                                # （与 hex InprocToolAdapter 同 helper —— 共用
-                                # backend.tools.executor.validate_required_args）。
-                                # 缺 required 时不再让 tool_p.execute(**args_p) 抛
-                                # TypeError 泄漏 Python 内部错误文本。
+                                # alpha.36 (Bug #1): 并发池分发前先过 required 校验
+                                # （与 hex InprocToolAdapter / 串行路径同 helper——共用
+                                # backend.tools.executor.validate_required_args），
+                                # 缺 required 时不再让 execute() 抛 TypeError 把 Python
+                                # 内部错误文本泄漏到 LLM 输出。
                                 required_error = validate_required_args(tool_p, args_p)
                                 if required_error is not None:
                                     return required_error, True
@@ -2059,6 +1906,7 @@ class SageAgent:
                             return await fut
 
                         results_p = await asyncio.gather(
+
                             *(
                                 _run_one_with_timeout(tc_p)
                                 for tc_p in group_tcs
@@ -2477,15 +2325,51 @@ class SageAgent:
                                                     output_value, ensure_ascii=False, default=str
                                                 )
                                             else:
-                                                err_value = result.error
-                                                if isinstance(err_value, str):
-                                                    result_content = err_value or "工具执行失败"
-                                                elif err_value is None:
-                                                    result_content = "工具执行失败"
-                                                else:
-                                                    result_content = json.dumps(
-                                                        err_value, ensure_ascii=False, default=str
+                                                # R19-W1：web_fetch 反爬/登录墙拦截时
+                                                # result.content 是结构化 block 载荷
+                                                # （block_reason/blocked_url/suggested_actions）。
+                                                # 失败路径默认只取 error 纯字符串，前端
+                                                # JSON.parse 会抛错、结构化通道断开。此处仅
+                                                # 对该载荷改用 JSON 信封（顶层 metadata 键，
+                                                # 见 useChat.ts 的 parsed.metadata 提取），
+                                                # 前端据此渲染拦截卡片。其余工具保持原样。
+                                                block_payload = (
+                                                    result.content
+                                                    if isinstance(
+                                                        getattr(result, "content", None), dict
                                                     )
+                                                    and result.content.get("block_reason")
+                                                    else None
+                                                )
+                                                if block_payload is not None:
+                                                    result_content = json.dumps(
+                                                        {
+                                                            "content": result.error or "工具执行失败",
+                                                            "metadata": {
+                                                                "blockReason": block_payload.get(
+                                                                    "block_reason"
+                                                                ),
+                                                                "blockedUrl": block_payload.get(
+                                                                    "blocked_url"
+                                                                ),
+                                                                "suggestedActions": block_payload.get(
+                                                                    "suggested_actions", []
+                                                                ),
+                                                            },
+                                                        },
+                                                        ensure_ascii=False,
+                                                        default=str,
+                                                    )
+                                                else:
+                                                    err_value = result.error
+                                                    if isinstance(err_value, str):
+                                                        result_content = err_value or "工具执行失败"
+                                                    elif err_value is None:
+                                                        result_content = "工具执行失败"
+                                                    else:
+                                                        result_content = json.dumps(
+                                                            err_value, ensure_ascii=False, default=str
+                                                        )
                                         else:
                                             is_error = False
                                             result_content = json.dumps(
@@ -2556,32 +2440,6 @@ class SageAgent:
     # M1 工具安全加固: 权限执行辅助
     # ------------------------------------------------------------------
 
-    def _authoritative_plugin_name(self, tool_name: str) -> Optional[str]:
-        """从 bridge 当前发布记录取插件工具的权威插件名。
-
-        R95: 权限闸与审批请求共用同一口径——只有合法插件工具形状才查桥；
-        查不到或桥异常都返回 ``None``，调用方不得按完整工具名切分猜测。
-        """
-        if not is_plugin_tool_name(tool_name):
-            return None
-        try:
-            from backend.plugins.tool_bridge import get_plugin_tool_bridge
-
-            published = get_plugin_tool_bridge().published_tool(tool_name)
-        except Exception as exc:  # noqa: BLE001 — 权威名缺失时按未知身份处理
-            logger.debug("插件工具权威名查询失败 tool=%s: %s", tool_name, exc)
-            return None
-        return published.plugin_name if published is not None else None
-
-    def _check_permission(
-        self, enforcer: Any, tool_name: str, args: Dict[str, Any]
-    ) -> PermissionDecision:
-        """调用 enforcer，并为已发布插件工具附带权威插件身份（R95）。"""
-        plugin_name = self._authoritative_plugin_name(tool_name)
-        if plugin_name is None:
-            return enforcer.check(tool_name, args)
-        return enforcer.check(tool_name, args, plugin_name=plugin_name)
-
     def _office_boundary_resolver(self) -> Optional[str]:
         """从当前会话绑定解析 workspace_root；未绑定返回 None。
 
@@ -2635,6 +2493,34 @@ class SageAgent:
         except Exception as exc:  # noqa: BLE001 — 包装失败保守回落逐次审批
             logger.warning("渐进式授权包装失败，回退逐次审批: %s", exc)
             return base
+
+    def _authoritative_plugin_name(self, tool_name: str) -> Optional[str]:
+        """从 bridge 当前发布记录取插件工具的权威插件名。
+
+        R95/R96 共用同一口径：只有合法插件工具形状才查桥；查
+        不到或桥异常都返回 ``None``，调用方不得按完整工具名
+        切分猜测。权限检查据此 fail-closed，审批请求则不提供
+        整插件记住选项。
+        """
+        if not is_plugin_tool_name(tool_name):
+            return None
+        try:
+            from backend.plugins.tool_bridge import get_plugin_tool_bridge
+
+            published = get_plugin_tool_bridge().published_tool(tool_name)
+        except Exception as exc:  # noqa: BLE001 — 权威名缺失时按未知身份处理
+            logger.debug("插件工具权威名查询失败 tool=%s: %s", tool_name, exc)
+            return None
+        return published.plugin_name if published is not None else None
+
+    def _check_permission(
+        self, enforcer: Any, tool_name: str, args: Dict[str, Any]
+    ) -> PermissionDecision:
+        """调用 enforcer，并为已发布插件工具附带权威插件身份。"""
+        plugin_name = self._authoritative_plugin_name(tool_name)
+        if plugin_name is None:
+            return enforcer.check(tool_name, args)
+        return enforcer.check(tool_name, args, plugin_name=plugin_name)
 
     def _pre_dispatch_gate(
         self,
@@ -2843,9 +2729,9 @@ class SageAgent:
             workspace_root = self._office_boundary_resolver()
         except Exception:  # noqa: BLE001 — 预览是尽力而为
             workspace_root = None
-        # R95: 整插件记住范围只能用 bridge 已发布记录里的权威
-        # 插件名；查不到就保持 None，前端不会提供该选项，路由
-        # 也不会按字符串切分猜测。
+        # R95/R96: 整插件记住范围与权限规则身份都只能用 bridge
+        # 已发布记录里的权威插件名；查不到就保持 None，前端不会
+        # 提供整插件选项，路由也不会按字符串切分猜测。
         plugin_name = self._authoritative_plugin_name(tool_name)
         return ApprovalRequest.create(
             tool_name=tool_name,
