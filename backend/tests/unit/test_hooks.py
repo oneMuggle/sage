@@ -7,7 +7,6 @@ M6 Hooks 子系统单元测试
 
 from __future__ import annotations
 
-import os
 import sys
 import time
 from typing import Any, Dict
@@ -32,13 +31,31 @@ from backend.hooks.runner import (
     validate_modified_args,
 )
 
-pytestmark = [
-    pytest.mark.unit,
-    pytest.mark.skipif(os.name == "nt", reason="hooks 子进程语义在 Windows 不一致（另行批次定性）"),
-]
+pytestmark = pytest.mark.unit
 
 PY = sys.executable
 
+
+def _hook_code(code: str) -> str:
+    """把一段 Python 代码包成跨平台的 hook 命令。
+
+    Windows 的 cmd.exe 不解析单引号, 故 -c 代码必须用双引号包裹; 而双引号内的
+    单引号在 cmd.exe 与 POSIX sh 下都是字面字符, 所以代码里的字符串优先用单引号,
+    两平台通用 (与本文件 user_prompt_submit 用例既有写法同款)。万一代码里仍出现
+    双引号, 按 MSVCRT 与 sh 的共同规则转义为 反斜杠 + 引号。
+    """
+    esc = code.replace('"', '\\"')
+    return f'{PY} -c "{esc}"'
+
+
+def _hook_json(payload: dict) -> str:
+    """构造只输出固定 JSON 的 hook 命令 (子进程 stdout)。
+
+    repr() 优先产生单引号字面量; 当值本身含单引号时 repr 改用双引号, 此时由
+    _hook_code 统一转义, 两种情况都跨平台可用。
+    """
+    lit = repr(payload)
+    return _hook_code(f"import json; print(json.dumps({lit}))")
 
 def _cfg(command: str, event: str = "pre_tool_use", matcher: str = "*", timeout: float = 5.0):
     return HookConfig(event=event, command=command, matcher=matcher, timeout_seconds=timeout)
@@ -53,7 +70,7 @@ def _payload(tool_name: str = "terminal", event: str = "pre_tool_use") -> Dict[s
 
 @pytest.mark.asyncio()
 async def test_allow_decision_parsed():
-    cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow"}}))'"""
+    cmd = _hook_json({"decision": "allow"})
     outcome = await run_hook(_cfg(cmd), _payload())
     assert outcome.decision == DECISION_ALLOW
     assert not outcome.denied
@@ -61,7 +78,7 @@ async def test_allow_decision_parsed():
 
 @pytest.mark.asyncio()
 async def test_deny_decision_honored_with_reason():
-    cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny", "reason": "nope"}}))'"""
+    cmd = _hook_json({"decision": "deny", "reason": "nope"})
     outcome = await run_hook(_cfg(cmd), _payload())
     assert outcome.denied
     assert outcome.reason == "nope"
@@ -69,10 +86,7 @@ async def test_deny_decision_honored_with_reason():
 
 @pytest.mark.asyncio()
 async def test_modify_decision_carries_updated_input():
-    cmd = (
-        f"""{PY} -c 'import json; """
-        f"""print(json.dumps({{"decision": "modify", "updated_input": {{"command": "echo hi"}}}}))'"""
-    )
+    cmd = _hook_json({"decision": "modify", "updated_input": {"command": "echo hi"}})
     outcome = await run_hook(_cfg(cmd), _payload())
     assert outcome.modified
     assert outcome.updated_input == {"command": "echo hi"}
@@ -80,7 +94,7 @@ async def test_modify_decision_carries_updated_input():
 
 @pytest.mark.asyncio()
 async def test_modify_without_updated_input_is_noop():
-    cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "modify"}}))'"""
+    cmd = _hook_json({"decision": "modify"})
     outcome = await run_hook(_cfg(cmd), _payload())
     assert outcome.decision == DECISION_NOOP
     assert not outcome.modified
@@ -88,7 +102,7 @@ async def test_modify_without_updated_input_is_noop():
 
 @pytest.mark.asyncio()
 async def test_unknown_decision_is_noop():
-    cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "explode"}}))'"""
+    cmd = _hook_json({"decision": "explode"})
     outcome = await run_hook(_cfg(cmd), _payload())
     assert outcome.decision == DECISION_NOOP
 
@@ -128,11 +142,11 @@ async def test_empty_stdout_is_silent_allow():
 
 @pytest.mark.asyncio()
 async def test_env_vars_and_stdin_payload_reach_hook():
-    cmd = (
-        f"""{PY} -c 'import json, os, sys; p = json.load(sys.stdin); """
-        f"""print(json.dumps({{"decision": "deny", "reason": """
-        f"""os.environ["SAGE_HOOK_EVENT"] + "/" + os.environ["SAGE_TOOL_NAME"] + "/" """
-        f"""+ p["tool_name"]}}))'"""
+    cmd = _hook_code(
+        "import json, os, sys; p = json.load(sys.stdin); "
+        "print(json.dumps({'decision': 'deny', 'reason': "
+        "os.environ['SAGE_HOOK_EVENT'] + '/' + os.environ['SAGE_TOOL_NAME'] + '/' "
+        "+ p['tool_name']}))"
     )
     outcome = await run_hook(_cfg(cmd), _payload(tool_name="terminal"))
     assert outcome.denied
@@ -161,7 +175,7 @@ def test_matcher_globbing(matcher: str, tool: str, expected: bool):
 @pytest.mark.asyncio()
 async def test_run_event_hooks_skips_non_matching():
     deny = _cfg(
-        f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'""",
+        _hook_json({"decision": "deny"}),
         matcher="other_*",
     )
     outcome = await run_event_hooks([deny], "pre_tool_use", "terminal", _payload())
@@ -170,8 +184,8 @@ async def test_run_event_hooks_skips_non_matching():
 
 @pytest.mark.asyncio()
 async def test_run_event_hooks_deny_short_circuits():
-    deny_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny", "reason": "first"}}))'"""
-    allow_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "allow"}}))'"""
+    deny_cmd = _hook_json({"decision": "deny", "reason": "first"})
+    allow_cmd = _hook_json({"decision": "allow"})
     hooks = [_cfg(deny_cmd), _cfg(allow_cmd)]
     outcome = await run_event_hooks(hooks, "pre_tool_use", "terminal", _payload())
     assert outcome.denied
@@ -181,7 +195,7 @@ async def test_run_event_hooks_deny_short_circuits():
 @pytest.mark.asyncio()
 async def test_run_event_hooks_filters_by_event():
     deny = _cfg(
-        f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'""",
+        _hook_json({"decision": "deny"}),
         event="post_tool_use",
     )
     outcome = await run_event_hooks([deny], "pre_tool_use", "terminal", _payload())
