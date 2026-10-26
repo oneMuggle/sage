@@ -31,6 +31,8 @@ import asyncio
 import contextlib
 from typing import Any, Callable, Coroutine, Optional, Tuple
 
+from backend.utils.py_compat import TIMEOUT_ERRORS
+
 # 操作类型：返回 Any 的异步函数
 FileOperation = Callable[[], Coroutine[Any, Any, Any]]
 
@@ -92,7 +94,7 @@ class FileMutationQueue:
             Exception: 操作执行时的异常
         """
         # 创建 Future 用于等待结果
-        future = asyncio.get_event_loop().create_future()
+        future = asyncio.get_running_loop().create_future()
 
         # 将操作和 Future 加入队列
         await self._queue.put((operation, future))
@@ -121,7 +123,7 @@ class FileMutationQueue:
                 # 标记任务完成
                 self._queue.task_done()
 
-            except (TimeoutError, asyncio.TimeoutError):  # noqa: UP041 — py3.8/3.10: asyncio.TimeoutError 不等于 builtin TimeoutError; 3.11+ 同一类
+            except TIMEOUT_ERRORS:  # py38: wait_for 抛 asyncio.TimeoutError（与本型不同类）
                 # 超时检查 _running，继续循环
                 continue
             except asyncio.CancelledError:

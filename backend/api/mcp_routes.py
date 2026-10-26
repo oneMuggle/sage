@@ -234,7 +234,7 @@ def list_mcp_server_tools(name: str) -> Dict[str, Any]:
 
 @router.post("/mcp/servers/{name}/authorize")
 def authorize_mcp_server(name: str) -> Dict[str, Any]:
-    """r64: HTTP 传输 MCP 服务器的 OAuth 授权收口。
+    """r64: HTTP 传输 MCP 服务器的 OAuth 授权收口（切片 1-3b 组合）。
 
     同步路由（线程池执行）——阻塞等待用户在浏览器完成登录属预期
     （上限 300s）。流程：loopback 回听拿 redirect_uri → webbrowser.open
