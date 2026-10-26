@@ -100,6 +100,11 @@ export interface StreamingState {
   /** r71: attachment_rag_used 载荷写入 */
   rag_citations?: { media_id: string; mode: string }[];
   /**
+   * 2026-10-26: 流开始时间戳（Date.now()），用于首字等待计时器。
+   * ThinkingShimmer 组件读取此字段显示已等待秒数，提升用户感知。
+   */
+  startTime?: number;
+  /**
    * 2026-10-20: LLM 重试可视化。state === 'retry' 时由 setRetryInfo 写入,
    * Message.tsx 读此字段渲染 RetryBanner（带倒计时）。
    * 2026-10-25: 非 retry 状态到达时不再立即清 null，而是延迟 3 秒隐藏
@@ -376,6 +381,7 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
           iteration: 0,
           retryInfo: null,
           retryInfoClearedAt: null,
+          startTime: Date.now(),
         },
         streamingToolCalls: [],
         taskBoard: null,

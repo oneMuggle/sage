@@ -98,6 +98,13 @@ function MessageComponent({
     const slot = s.sessions[message.session_id]?.streaming;
     return slot && slot.messageId === message.id ? (slot.retryInfo ?? null) : null;
   });
+  // 2026-10-26: 首字等待计时器 —— 从流式 store 读取开始时间，传给 ThinkingShimmer
+  // 显示已等待秒数。与 retryInfo 同理，只在当前流式消息且是占位符时读取。
+  const streamingStartTime = useChatStreamStore((s) => {
+    if (!isAssistant || !isStreaming || !message.session_id) return undefined;
+    const slot = s.sessions[message.session_id]?.streaming;
+    return slot && slot.messageId === message.id ? slot.startTime : undefined;
+  });
   // 2026-09-13 P0: 首个 token 到达前 content 是哨兵占位值 — 渲染 shimmer
   // 骨架而非把 "🤔 思考中…" 当 markdown 静态文本展示。agent 中间态文案
   // (思考/调用工具) 会覆盖占位值，覆盖后自动回退 markdown 渲染。
@@ -427,7 +434,7 @@ function MessageComponent({
             {/* Message content with Markdown */}
             {isAssistant ? (
               isThinkingPlaceholder ? (
-                <ThinkingShimmer />
+                <ThinkingShimmer startTime={streamingStartTime} />
               ) : (
                 <div className="max-w-none max-w-3xl mx-auto w-full">
                   {/* P2: 阅读宽度约束 48rem 居中（对标主流 AI 应用），宽屏下
