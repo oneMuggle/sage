@@ -372,6 +372,9 @@ export function useChat() {
         contextReset: opts?.contextReset,
         // 第二轮 C2: 原位重新生成的锚点（后端跳过 user 落库、历史剔除锚点）
         regenerateOf: opts?.regenerateOf,
+        // 2026-10-26: 把用户设置的 llmTotalTimeoutS（秒）转毫秒传入，
+        // 让前端 watchdog 与后端动态超时对齐，避免后端还在重试前端已放弃。
+        watchdogSilenceMs: (settings.llmTotalTimeoutS || 1800) * 1000,
       };
 
       const appendContent = (next: string): void => {
@@ -640,6 +643,13 @@ export function useChat() {
                 useChatStreamStore
                   .getState()
                   .setStreamingMeta(sid, assistantId, { state: evt.state });
+                return;
+              }
+
+              // 2026-10-26: 重试退避等待期间后端每 5s 发的 heartbeat。
+              // watchdog 由 chatApi 层每次 onEvent 前自动喂，此处仅 return 跳过
+              // uiText / content 更新，不渲染任何 UI。
+              if (evt.state === 'heartbeat') {
                 return;
               }
 

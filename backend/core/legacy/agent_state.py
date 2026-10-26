@@ -32,6 +32,9 @@ class AgentState(str, Enum):
     # 次数/上限/原因/等待秒数,前端渲染"重试中"提示 —— 此前重试过程完全
     # 不可见,用户把正在退避等待误认为卡死。
     RETRY = "retry"
+    # 2026-10-26: 重试退避等待期间每 5s 发一次心跳,只喂前端 watchdog,
+    # 前端不渲染 UI。防止长退避(如 30s)期间 watchdog 误触发杀流。
+    HEARTBEAT = "heartbeat"
     # M1 工具安全加固: 工具调用需要用户审批时,在执行前推一个
     # PERMISSION_REQUEST 事件(携带 permission_request 字段),前端渲染
     # 审批对话框并 POST /api/v1/permissions/{request_id}/answer。
