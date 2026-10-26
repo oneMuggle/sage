@@ -4,6 +4,8 @@ import type { AgentProfile, AgentUpdate } from '../../shared/api';
 import {
   describePermission,
   pluginClient,
+  type PluginRecord,
+  type PluginStatus,
   type PublishedPluginTool,
 } from '../../shared/api/pluginClient';
 import { Button } from '../../shared/ui/Button';
@@ -100,6 +102,108 @@ export function toggleAgentToolSelection(
   return entries.filter((entry) => entry !== toolName);
 }
 
+export type StalePluginEntryStatus = 'not-published' | 'uninstalled' | 'missing';
+
+export interface StalePluginToolEntry {
+  entry: string;
+  /** 生命周期权威归属插件名；无记录时为 null（绝不切分条目猜名）。 */
+  pluginName: string | null;
+  status: StalePluginEntryStatus;
+}
+
+/** 与后端 `_is_valid_plugin_name_chars` 同一字符集（R107 镜像）。 */
+function isValidPluginNameChars(value: string): boolean {
+  return value.length > 0 && /^[A-Za-z0-9_.-]+$/.test(value);
+}
+
+/** 与后端 `is_plugin_tool_name` 同口径的形状判定（只判形状）。 */
+function isPluginToolNameShape(name: string): boolean {
+  if (name.includes('*') || !name.startsWith(PLUGIN_TOOL_PREFIX)) return false;
+  if (!isValidPluginNameChars(name)) return false;
+  const rest = name.slice(PLUGIN_TOOL_PREFIX.length);
+  const separator = rest.indexOf('__');
+  return separator > 0 && separator + 2 < rest.length;
+}
+
+/** 与后端 `is_plugin_tool_wildcard` 同口径：只认 plugin__* 与单插件通配。 */
+function isPluginToolWildcardShape(entry: string): boolean {
+  if (entry === `${PLUGIN_TOOL_PREFIX}*`) return true;
+  if (!entry.startsWith(PLUGIN_TOOL_PREFIX) || !entry.endsWith('__*')) return false;
+  const segment = entry.slice(PLUGIN_TOOL_PREFIX.length, -3);
+  return segment.length > 0 && !segment.includes('*') && isValidPluginNameChars(segment);
+}
+
+/**
+ * 条目的生命周期权威归属（镜像后端 `_rule_plugin_owner`）：长名优先
+ * 逐个用权威名构造派生通配/命名空间做结构化比对——`a` 与 `a__b`
+ * 共存时 `plugin__a__b__run` 归更具体的 `a__b`，不按字符串切分猜名。
+ */
+function findPluginEntryOwner(
+  entry: string,
+  records: readonly { name: string; status: PluginStatus }[],
+): { name: string; status: PluginStatus } | undefined {
+  const sorted = [...records].sort((a, b) => b.name.length - a.name.length);
+  for (const record of sorted) {
+    if (!isValidPluginNameChars(record.name)) continue;
+    if (entry === `${PLUGIN_TOOL_PREFIX}${record.name}__*`) return record;
+    const namespace = `${PLUGIN_TOOL_PREFIX}${record.name}__`;
+    if (
+      isPluginToolNameShape(entry) &&
+      entry.startsWith(namespace) &&
+      entry.length > namespace.length
+    ) {
+      return record;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * 找出当前不对任何已发布工具生效的插件形白名单条目（R107）。
+ *
+ * 分类镜像后端 R101 归属标注：`plugin__*` 全局通配、非插件形条目，
+ * 以及与发布快照精确同名/等于某已发布插件派生通配的在效条目都不
+ * 返回。`pluginRecords=null`（名单读不到）→ [] 整体不标注，不把
+ * 「读不到」误报成「无记录」；`publishedTools=null`（快照未知）→
+ * 只给已卸载/无记录，「当前未发布」不猜。标注是只读派生，不写
+ * 任何存储，profile 保存形状不变。
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function findStalePluginToolEntries(
+  entries: readonly string[],
+  publishedTools: readonly { plugin_name: string; tool_name: string }[] | null,
+  pluginRecords: readonly { name: string; status: PluginStatus }[] | null,
+): StalePluginToolEntry[] {
+  if (pluginRecords === null) return [];
+  const publishedToolNames = new Set((publishedTools ?? []).map((tool) => tool.tool_name));
+  const publishedWildcards = new Set(
+    (publishedTools ?? [])
+      .filter((tool) => isValidPluginNameChars(tool.plugin_name))
+      .map((tool) => `${PLUGIN_TOOL_PREFIX}${tool.plugin_name}__*`),
+  );
+  const stale: StalePluginToolEntry[] = [];
+  for (const entry of entries) {
+    if (entry === `${PLUGIN_TOOL_PREFIX}*`) continue;
+    if (!isPluginToolNameShape(entry) && !isPluginToolWildcardShape(entry)) continue;
+    if (publishedToolNames.has(entry) || publishedWildcards.has(entry)) continue;
+    const owner = findPluginEntryOwner(entry, pluginRecords);
+    if (owner === undefined) {
+      stale.push({ entry, pluginName: null, status: 'missing' });
+    } else if (owner.status === 'uninstalled') {
+      stale.push({ entry, pluginName: owner.name, status: 'uninstalled' });
+    } else if (publishedTools !== null) {
+      stale.push({ entry, pluginName: owner.name, status: 'not-published' });
+    }
+  }
+  return stale;
+}
+
+const STALE_STATUS_LABEL: Record<StalePluginEntryStatus, string> = {
+  'not-published': '当前未发布',
+  uninstalled: '插件已已卸载',
+  missing: '插件无记录',
+};
+
 interface EditAgentFormProps {
   agent: AgentProfile;
   form: Partial<AgentUpdate>;
@@ -130,6 +234,7 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
   const [pluginToolsLoading, setPluginToolsLoading] = useState(true);
   const [pluginToolsError, setPluginToolsError] = useState<string | null>(null);
   const [pluginToolsRequestId, setPluginToolsRequestId] = useState(0);
+  const [pluginRecords, setPluginRecords] = useState<PluginRecord[] | null>(null);
   useEffect(() => {
     let cancelled = false;
     setPluginToolsLoading(true);
@@ -147,6 +252,17 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
       .finally(() => {
         if (!cancelled) setPluginToolsLoading(false);
       });
+    // R107：同刷新周期取生命周期名单（未发布条目标注的数据源）；
+    // 失败置 null 整体降级不标注，不新增错误面——读不到只代表
+    // 「不知道」，与 R101「读不到≠无记录」同口径。
+    pluginClient
+      .list()
+      .then((records) => {
+        if (!cancelled) setPluginRecords(records);
+      })
+      .catch(() => {
+        if (!cancelled) setPluginRecords(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -155,6 +271,18 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
   const selectedTools = parseAgentToolsInput(toolsText);
   const handlePluginToolToggle = (toolName: string, selected: boolean) => {
     const nextTools = toggleAgentToolSelection(selectedTools, toolName, selected);
+    setToolsText(formatAgentToolsInput(nextTools));
+    onChange({ ...form, tools: nextTools });
+  };
+
+  // 快照未知（加载中/失败）时传 null：分类只给已卸载/无记录两类。
+  const stalePluginEntries = findStalePluginToolEntries(
+    selectedTools,
+    pluginToolsLoading || pluginToolsError ? null : publishedPluginTools,
+    pluginRecords,
+  );
+  const handleRemoveStaleEntry = (entry: string) => {
+    const nextTools = selectedTools.filter((candidate) => candidate !== entry);
     setToolsText(formatAgentToolsInput(nextTools));
     onChange({ ...form, tools: nextTools });
   };
@@ -305,6 +433,46 @@ export function EditAgentForm({ agent, form, onChange, onSave, onCancel }: EditA
             </div>
           )}
         </div>
+        {stalePluginEntries.length > 0 && (
+          <div
+            className="mt-3 rounded-lg border border-border p-3"
+            data-testid="agent-stale-plugin-entries"
+          >
+            <p className="text-sm font-medium">未发布的插件条目</p>
+            <p className="mt-1 text-xs text-muted">
+              以下条目当前没有对应的已发布工具（插件未启动、已卸载或无记录
+              时不会对任何调用生效）；保留它们只会在插件将来发布同名工具
+              时生效。移除只改上方白名单草稿，仍需保存。
+            </p>
+            <ul className="mt-3 space-y-2">
+              {stalePluginEntries.map((stale) => (
+                <li
+                  key={stale.entry}
+                  className="flex items-center gap-2 text-xs"
+                  data-testid="agent-stale-plugin-entry"
+                >
+                  <code className="flex-1 break-all font-mono">{stale.entry}</code>
+                  <span
+                    className="px-1 border border-border rounded-radius-sm text-muted shrink-0"
+                    data-testid={`agent-stale-plugin-status-${stale.entry}`}
+                  >
+                    {STALE_STATUS_LABEL[stale.status]}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    data-testid={`agent-stale-plugin-remove-${stale.entry}`}
+                    aria-label={`移除 ${stale.entry}`}
+                    onClick={() => handleRemoveStaleEntry(stale.entry)}
+                  >
+                    移除
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-4">
