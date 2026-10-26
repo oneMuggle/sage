@@ -273,6 +273,76 @@ class LLMConfig:
     # 未解析到，按默认常量兜底，不会关闭压缩。
     context_window: Optional[int] = None
 
+    def compute_dynamic_timeout(self, messages: List[Dict[str, Any]]) -> int:
+        """根据模型和上下文长度计算动态超时。
+
+        公式：
+        - base_timeout = 60 秒
+        - context_factor = estimated_tokens / 1000（每 1000 tokens 增加 1 倍）
+        - model_factor = 2.0（GPT-4/o1/o3/DeepSeek R1）或 1.0（其他）
+        - timeout = min(base_timeout * (1 + context_factor) * model_factor, max_timeout)
+
+        Args:
+            messages: 消息列表（已转换格式，包含 role/content）
+
+        Returns:
+            动态超时时间（秒），上限为 llmTotalTimeoutS 或 300 秒
+        """
+        # 导入 token 估算函数
+        try:
+            from backend.chat.compaction import estimate_messages_tokens
+        except ImportError:
+            logger.warning("estimate_messages_tokens 导入失败，回退默认超时")
+            return self.timeout
+
+        # 估算 token 数
+        try:
+            estimated_tokens = estimate_messages_tokens(messages)
+        except Exception:
+            logger.warning("token 估算失败，回退默认超时", exc_info=True)
+            return self.timeout
+
+        # 计算 context_factor：每 1000 tokens 增加 1 倍
+        context_factor = estimated_tokens / 1000.0
+
+        # 计算 model_factor：慢模型（GPT-4/o1/o3/DeepSeek R1）×2
+        model_lower = self.model.lower()
+        is_slow_model = any(
+            marker in model_lower
+            for marker in ("gpt-4", "o1", "o3", "deepseek-r1", "claude-3")
+        )
+        model_factor = 2.0 if is_slow_model else 1.0
+
+        # 计算动态超时
+        base_timeout = 60
+        computed_timeout = base_timeout * (1.0 + context_factor) * model_factor
+
+        # 读取用户配置的最大超时（llmTotalTimeoutS），默认 300 秒
+        max_timeout = 300
+        try:
+            from backend.data.settings_repo import SettingsRepository
+            raw = SettingsRepository().get_json("app_settings") or {}
+            if isinstance(raw, dict):
+                user_max = raw.get("llmTotalTimeoutS")
+                if isinstance(user_max, (int, float)) and user_max > 0:  # noqa: UP038
+                    max_timeout = int(user_max)
+        except Exception:
+            logger.warning("读取 llmTotalTimeoutS 失败，使用默认上限 300s", exc_info=True)
+
+        # 截断到上限
+        final_timeout = min(int(computed_timeout), max_timeout)
+
+        logger.info(
+            "动态超时: model=%s tokens=%d context_factor=%.2f model_factor=%.1f timeout=%ds",
+            self.model,
+            estimated_tokens,
+            context_factor,
+            model_factor,
+            final_timeout,
+        )
+
+        return final_timeout
+
 
 def _capture_price_snapshot(
     endpoint_id: Optional[str], model_id: Optional[str]
@@ -635,6 +705,10 @@ class LLMClient:
             self.config.endpoint_id, self.config.model
         )
 
+        # 2026-10-25: 动态超时调整 — 根据模型和上下文长度计算
+        dynamic_timeout = self.config.compute_dynamic_timeout(body["messages"])
+        client.timeout = httpx.Timeout(dynamic_timeout)
+
         # L3 重试退避: 限流/服务端错误/超时/网络失败按指数退避重试
         # （尊重 retry-after）。请求整体重放安全——非流式,无部分产出。
         max_attempts, base_delay, max_delay = _retry_settings()
@@ -962,6 +1036,10 @@ class LLMClient:
         price_snapshot = _capture_price_snapshot(
             self.config.endpoint_id, self.config.model
         )
+
+        # 2026-10-25: 动态超时调整 — 根据模型和上下文长度计算
+        dynamic_timeout = self.config.compute_dynamic_timeout(body["messages"])
+        client.timeout = httpx.Timeout(dynamic_timeout)
 
         # L3 重试退避（流式版）: 仅在"尚未产出任何增量"时重试——此时重放
         # 安全（调用方没收到过任何事件）;已有增量后失败无法安全重放,按原
