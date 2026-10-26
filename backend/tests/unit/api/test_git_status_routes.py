@@ -14,8 +14,10 @@ import pytest
 from fastapi import HTTPException
 
 from backend.api.git_status_routes import (
+    GitDiffResponse,
     GitStatusResponse,
     _parse_porcelain_line,
+    get_git_diff,
     get_git_status,
 )
 
@@ -152,3 +154,67 @@ def test_status_path_with_spaces(git_repo):
     out = get_git_status(path=str(git_repo))
     paths = [f.path for f in out.files]
     assert "my file.py" in paths
+
+
+# ---------------------------------------------------------------------------
+# get_git_diff（真实仓库）
+# ---------------------------------------------------------------------------
+
+
+def test_diff_modified_file(git_repo):
+    tracked = git_repo / "a.py"
+    tracked.write_text("line1\nline2\n")
+    _git(git_repo, "add", "a.py")
+    _git(git_repo, "commit", "-m", "add a")
+    tracked.write_text("line1\nline2-modified\n")
+    out = get_git_diff(path=str(git_repo), file="a.py")
+    assert isinstance(out, GitDiffResponse)
+    assert out.file == "a.py"
+    assert out.status == "modified"
+    assert out.is_new_file is False
+    assert out.is_deleted is False
+    assert "-line2" in out.diff_text
+    assert "+line2-modified" in out.diff_text
+
+
+def test_diff_untracked_new_file(git_repo):
+    _git(git_repo, "commit", "--allow-empty", "-m", "init")
+    (git_repo / "new.py").write_text("hello\n")
+    out = get_git_diff(path=str(git_repo), file="new.py")
+    assert out.status == "untracked"
+    assert out.is_new_file is True
+    assert "+hello" in out.diff_text
+
+
+def test_diff_deleted_file(git_repo):
+    tracked = git_repo / "gone.py"
+    tracked.write_text("content")
+    _git(git_repo, "add", "gone.py")
+    _git(git_repo, "commit", "-m", "add gone")
+    tracked.unlink()
+    out = get_git_diff(path=str(git_repo), file="gone.py")
+    assert out.status == "deleted"
+    assert out.is_deleted is True
+    assert "-content" in out.diff_text
+
+
+def test_diff_clean_tracked_file_empty(git_repo):
+    tracked = git_repo / "clean.py"
+    tracked.write_text("unchanged")
+    _git(git_repo, "add", "clean.py")
+    _git(git_repo, "commit", "-m", "add clean")
+    out = get_git_diff(path=str(git_repo), file="clean.py")
+    assert out.diff_text == ""
+
+
+def test_diff_path_traversal_rejected(git_repo):
+    _git(git_repo, "commit", "--allow-empty", "-m", "init")
+    with pytest.raises(HTTPException) as excinfo:
+        get_git_diff(path=str(git_repo), file="../../../etc/passwd")
+    assert excinfo.value.status_code == 400
+
+
+def test_diff_nonexistent_dir_404(tmp_path):
+    with pytest.raises(HTTPException) as excinfo:
+        get_git_diff(path=str(tmp_path / "ghost"), file="a.py")
+    assert excinfo.value.status_code == 404
