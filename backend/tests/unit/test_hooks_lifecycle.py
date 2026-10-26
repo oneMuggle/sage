@@ -29,6 +29,27 @@ pytestmark = pytest.mark.unit
 PY = sys.executable
 
 
+def _hook_code(code: str) -> str:
+    """把一段 Python 代码包成跨平台的 hook 命令。
+
+    Windows 的 cmd.exe 不解析单引号, 故 -c 代码必须用双引号包裹; 而双引号内的
+    单引号在 cmd.exe 与 POSIX sh 下都是字面字符, 所以代码里的字符串优先用单引号,
+    两平台通用。万一代码里仍出现双引号, 按 MSVCRT 与 sh 的共同规则转义为
+    反斜杠 + 引号。
+    """
+    esc = code.replace('"', '\\"')
+    return f'{PY} -c "{esc}"'
+
+
+def _hook_json(payload: dict) -> str:
+    """构造只输出固定 JSON 的 hook 命令 (子进程 stdout)。
+
+    repr() 优先产生单引号字面量; 当值本身含单引号时 repr 改用双引号, 此时由
+    _hook_code 统一转义, 两种情况都跨平台可用。
+    """
+    lit = repr(payload)
+    return _hook_code(f"import json; print(json.dumps({lit}))")
+
 def _cfg(command: str, event: str, matcher: str = "*", timeout: float = 5.0) -> HookConfig:
     return HookConfig(event=event, command=command, matcher=matcher, timeout_seconds=timeout)
 
@@ -116,9 +137,7 @@ def test_build_error_payload_attempt_count_only_when_retried():
 
 def test_sync_bridge_runs_hook_without_running_loop():
     """无运行中的事件循环 → 同步桥接正常执行钩子。"""
-    deny_cmd = (
-        f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny", "reason": "blocked"}}))'"""
-    )
+    deny_cmd = _hook_json({"decision": "deny", "reason": "blocked"})
     hooks = [_cfg(deny_cmd, "session_start")]
     payload = build_session_payload("session_start", "s1")
     outcome = run_event_hooks_sync(hooks, "session_start", "", payload)
@@ -135,7 +154,7 @@ def test_sync_bridge_is_noop_inside_running_loop():
     """已有运行中的循环 → 不阻塞, 降级 no-op (fail-open)。"""
 
     async def _inner():
-        deny_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'"""
+        deny_cmd = _hook_json({"decision": "deny"})
         hooks = [_cfg(deny_cmd, "session_start")]
         return run_event_hooks_sync(
             hooks, "session_start", "", build_session_payload("session_start", "s")
@@ -152,7 +171,7 @@ def test_sync_bridge_is_noop_inside_running_loop():
 @pytest.mark.asyncio()
 async def test_lifecycle_hook_does_not_fire_for_tool_events():
     """session_start 钩子不应对 pre_tool_use 生效 (事件名精确匹配)。"""
-    deny_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'"""
+    deny_cmd = _hook_json({"decision": "deny"})
     hooks = [_cfg(deny_cmd, "session_start")]
     outcome = await run_event_hooks(
         hooks, "pre_tool_use", "bash", {"hook_event_name": "pre_tool_use"}
@@ -163,7 +182,7 @@ async def test_lifecycle_hook_does_not_fire_for_tool_events():
 @pytest.mark.asyncio()
 async def test_error_hook_matches_tool_name():
     """error_occurred 钩子的 matcher 可针对特定工具。"""
-    deny_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'"""
+    deny_cmd = _hook_json({"decision": "deny"})
     hooks = [_cfg(deny_cmd, "error_occurred", matcher="bash")]
     matched = await run_event_hooks(hooks, "error_occurred", "bash", {})
     assert matched.denied
@@ -180,7 +199,7 @@ async def test_agent_error_hook_skipped_when_not_error():
     from backend.core.legacy.agent import SageAgent
 
     agent = SageAgent(bare=True)
-    deny_cmd = f"""{PY} -c 'import json; print(json.dumps({{"decision": "deny"}}))'"""
+    deny_cmd = _hook_json({"decision": "deny"})
     hooks = [_cfg(deny_cmd, "error_occurred")]
     # 不抛异常即通过 —— 内部不触发钩子
     await agent._maybe_fire_error_hook(hooks, "bash", "ok output", False)
