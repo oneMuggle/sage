@@ -176,7 +176,8 @@ async def test_steer_endpoint_400_for_blank_and_oversize(monkeypatch):
 async def test_steer_endpoint_persists_steering_row(monkeypatch):
     """插话必须落库 —— run 内注入只活在 agent 内存的 messages 列表，不落库
     则下一轮从 DB 装配历史时这条更正凭空消失（前端气泡也会被对账抹掉）。"""
-    from backend.api import legacy_routes as lr
+    from backend.api import legacy_chat_routes as lcr
+    from backend.api.chat_stream_state import _ACTIVE_STREAMS
     from backend.main import app
 
     saved = []
@@ -186,11 +187,11 @@ async def test_steer_endpoint_persists_steering_row(monkeypatch):
             saved.append(message)
             return message
 
-    monkeypatch.setattr(lr, "MessageRepository", _Repo)
+    monkeypatch.setattr(lcr, "MessageRepository", _Repo)
     agent = SageAgent()
     agent._run_loop_active = True
     monkeypatch.setitem(
-        lr._ACTIVE_STREAMS, "s5", {"agent": agent, "run_id": None, "session_id": "sess-1"}
+        _ACTIVE_STREAMS, "s5", {"agent": agent, "run_id": None, "session_id": "sess-1"}
     )
 
     async with httpx.AsyncClient(
@@ -211,18 +212,19 @@ async def test_steer_endpoint_persists_steering_row(monkeypatch):
 @pytest.mark.asyncio()
 async def test_steer_endpoint_survives_persistence_failure(monkeypatch):
     """落库失败不回滚已生效的注入：插话已在当前 run 排队，端点仍返回 200。"""
-    from backend.api import legacy_routes as lr
+    from backend.api import legacy_chat_routes as lcr
+    from backend.api.chat_stream_state import _ACTIVE_STREAMS
     from backend.main import app
 
     class _BrokenRepo:
         def save(self, message):
             raise RuntimeError("db is locked")
 
-    monkeypatch.setattr(lr, "MessageRepository", _BrokenRepo)
+    monkeypatch.setattr(lcr, "MessageRepository", _BrokenRepo)
     agent = SageAgent()
     agent._run_loop_active = True
     monkeypatch.setitem(
-        lr._ACTIVE_STREAMS, "s6", {"agent": agent, "run_id": None, "session_id": "sess-1"}
+        _ACTIVE_STREAMS, "s6", {"agent": agent, "run_id": None, "session_id": "sess-1"}
     )
 
     async with httpx.AsyncClient(
@@ -252,7 +254,7 @@ async def test_steering_injection_goes_through_ctx_budget_guard(monkeypatch):
     tool_call = LLMToolCall(id="c1", name="calculator", arguments="{}")
     calls = {"n": 0}
 
-    async def _chat(messages, tools=None):
+    async def _chat(messages, tools=None, **kwargs):
         calls["n"] += 1
         if calls["n"] == 1:
             agent.inject_user_message("B" * 2000)
@@ -292,7 +294,7 @@ async def test_no_compaction_without_steering_at_same_budget(monkeypatch):
     tool_call = LLMToolCall(id="c1", name="calculator", arguments="{}")
     calls = {"n": 0}
 
-    async def _chat(messages, tools=None):
+    async def _chat(messages, tools=None, **kwargs):
         calls["n"] += 1
         if calls["n"] == 1:
             return _make_response(content="", tool_calls=[tool_call])
