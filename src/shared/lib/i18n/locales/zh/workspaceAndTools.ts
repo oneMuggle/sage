@@ -426,6 +426,22 @@ export const zhWorkspaceAndTools = {
   'git.refresh': '刷新',
   'git.loading': '加载中…',
   'git.clean': '工作区干净',
+  'git.diff_loading': '加载 diff 中…',
+  'git.diff_load_error': '加载 diff 失败',
+  'git.diff_empty_new': '新文件，无 diff',
+  'git.diff_empty_deleted': '文件已删除',
+  'git.diff_no_changes': '无变化',
+  'git.close': '关闭',
+  'git.copy_branch': '复制当前分支名称',
+  'git.copy_path': '复制路径',
+  'git.copied': '已复制',
+  'git.filter_all': '全部',
+  'git.filter_staged': '暂存',
+  'git.filter_modified': '修改',
+  'git.filter_untracked': '未跟踪',
+  'git.more_actions': '更多操作',
+  'git.copy_all_paths': '复制全部路径',
+  'git.copy_markdown': '复制 Markdown 清单',
 } as const;
 
 export function formatZhWorkspaceAndToolsSummary(): string {
@@ -447,4 +463,3 @@ export function auditZhWorkspaceAndToolsGovernance(): string {
     audited: true,
   });
 }
-

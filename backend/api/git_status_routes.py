@@ -1,10 +1,11 @@
-"""Typed HTTP routes for git status of a workspace directory.
+"""Typed HTTP routes for git status and diff of a workspace directory.
 
 参考 ZCode 的 workspace-file-tree (git status 标记) 设计，
 为 Sage 侧边栏提供轻量级 Git Status 面板数据。
 
 端点:
   GET /api/v1/git/status?path=<workspace_path>
+  GET /api/v1/git/diff?path=<workspace_path>&file=<relative_path>
 
 返回当前分支 + 变更文件列表（modified/staged/untracked/conflicted）。
 非 git 目录返回空列表（不报错），UI 静默降级。
@@ -44,6 +45,23 @@ class GitStatusResponse(BaseModel):
     behind: int = 0
     files: List[GitFileChange] = []
     is_git_repo: bool = True
+
+
+class GitDiffResponse(BaseModel):
+    """Git diff 响应。
+
+    diff_text 为 unified diff 格式文本。
+    对于 untracked 新文件，返回全部内容作为 "new file" diff。
+    对于 deleted 文件，返回全部内容作为删除 diff。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    file: str
+    status: str  # modified | staged | untracked | deleted | conflicted | renamed
+    diff_text: str
+    is_new_file: bool = False
+    is_deleted: bool = False
 
 
 # Porcelain status 字符 → 语义状态映射
@@ -170,4 +188,77 @@ def get_git_status(
         behind=behind,
         files=files,
         is_git_repo=True,
+    )
+
+
+@router.get("/diff", response_model=GitDiffResponse)
+def get_git_diff(
+    path: str = Query(..., min_length=1, description="Workspace directory path"),
+    file: str = Query(..., min_length=1, description="Relative file path within workspace"),
+) -> GitDiffResponse:
+    """获取指定文件相对于 HEAD 的 unified diff。
+
+    - tracked 文件（modified/staged/deleted/conflicted/renamed）：运行 git diff HEAD -- <file>
+    - untracked 新文件：返回全部内容作为 "new file" diff
+    - deleted 文件：返回被删除的内容
+    - 路径穿越保护：file 参数不能逃出 workspace 目录
+    """
+    workspace = Path(path).resolve()
+    if not workspace.is_dir():
+        raise HTTPException(status_code=404, detail=f"Directory not found: {path}")
+
+    # 路径穿越保护
+    target = (workspace / file).resolve()
+    try:
+        target.relative_to(workspace)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="File path escapes workspace")
+
+    # 判断文件状态
+    rc, out = _run_git(str(workspace), ["status", "--porcelain", "--", file])
+    status = "modified"
+    if rc == 0 and out.rstrip():
+        parsed = _parse_porcelain_line(out.rstrip().split("\n")[0])
+        if parsed:
+            status = parsed.status
+
+    is_new = status == "untracked"
+    is_deleted = status == "deleted"
+
+    if is_new:
+        # 新文件：读取全部内容作为 diff
+        try:
+            content = target.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            content = ""
+        lines = content.splitlines()
+        diff_lines = [f"diff --git a/{file} b/{file}", "new file mode 100644", "--- /dev/null", f"+++ b/{file}"]
+        if lines:
+            diff_lines.append(f"@@ -0,0 +1,{len(lines)} @@")
+            diff_lines.extend(f"+{line}" for line in lines)
+        diff_text = "\n".join(diff_lines) + "\n" if diff_lines else ""
+    elif is_deleted:
+        # 已删除文件：显示 HEAD 版本的全部内容作为删除
+        rc2, head_content = _run_git(str(workspace), ["show", f"HEAD:{file}"], timeout=10.0)
+        if rc2 == 0:
+            lines = head_content.splitlines()
+            diff_lines = [f"diff --git a/{file} b/{file}", "deleted file mode 100644", f"--- a/{file}", "+++ /dev/null"]
+            if lines:
+                diff_lines.append(f"@@ -1,{len(lines)} +0,0 @@")
+                diff_lines.extend(f"-{line}" for line in lines)
+            diff_text = "\n".join(diff_lines) + "\n"
+        else:
+            diff_text = ""
+    else:
+        # tracked 文件：git diff HEAD -- <file>
+        rc3, diff_text = _run_git(str(workspace), ["diff", "HEAD", "--", file], timeout=10.0)
+        if rc3 != 0:
+            diff_text = ""
+
+    return GitDiffResponse(
+        file=file,
+        status=status,
+        diff_text=diff_text,
+        is_new_file=is_new,
+        is_deleted=is_deleted,
     )
