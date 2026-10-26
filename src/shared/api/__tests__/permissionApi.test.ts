@@ -18,9 +18,7 @@ vi.mock('../utils', async (importOriginal) => {
 
 import { permissionApi } from '../permissionApi';
 
-beforeEach(() => {
-  mockInvoke.mockReset();
-});
+beforeEach(() => { mockInvoke.mockReset(); });
 
 describe('permissionApi', () => {
   it('getPreset() returns parsed preset state', async () => {
