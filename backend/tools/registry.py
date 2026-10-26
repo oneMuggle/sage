@@ -132,6 +132,10 @@ class ToolRegistry:
                 ``backend.domain.tool_names.tool_name_in_allowlist``);
                 every other entry still matches exactly. R98: wildcard
                 expansion is identity-checked -- only a registered tool
+                carrying its published ``plugin_name`` (the bridge's
+                ``PluginTool``) can match a wildcard entry, and only
+                for that plugin; every other tool matches exact
+                entries only.
 
         Returns:
             包含 name, description, parameters 的字典列表
