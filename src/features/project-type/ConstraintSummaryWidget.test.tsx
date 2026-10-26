@@ -91,6 +91,13 @@ vi.mock('../../shared/api/gitStatusApi', () => ({
       { path: 'README.md', status: 'staged' },
     ],
   }),
+  getGitDiff: vi.fn().mockResolvedValue({
+    file: 'src/index.ts',
+    status: 'modified',
+    diff_text: '',
+    is_new_file: false,
+    is_deleted: false,
+  }),
 }));
 
 const mockListConstraints = vi.mocked(projectApi.listConstraints);
@@ -605,34 +612,15 @@ describe('ConstraintSummaryWidget', () => {
         </I18nProvider>
       </MemoryRouter>,
     );
-    const saveL4Btn = await screen.findByTestId('git-sider-save-l4-btn');
-    fireEvent.click(saveL4Btn);
-    expect(screen.getByTestId('git-sider-save-l4-btn')).toHaveTextContent('已存L4');
-    fireEvent.click(screen.getByTestId('git-sider-save-l3-btn'));
-    expect(screen.getByTestId('git-sider-save-l3-btn')).toHaveTextContent('已存L3');
-    fireEvent.click(screen.getByTestId('git-sider-to-milestone-btn'));
-    expect(screen.getByTestId('git-sider-to-milestone-btn')).toHaveTextContent('已转里程碑');
-    fireEvent.click(screen.getByTestId('git-sider-copy-branch-btn'));
-    fireEvent.click(screen.getByTestId('git-sider-guard-all-btn'));
-    expect(screen.getByTestId('git-sider-guard-all-btn')).toHaveTextContent('已全护栏');
-    fireEvent.click(screen.getByTestId('git-sider-ingest-all-btn'));
-    expect(screen.getByTestId('git-sider-ingest-all-btn')).toHaveTextContent('已全入库');
-    fireEvent.click(screen.getByTestId('git-sider-copy-paths-btn'));
-    fireEvent.click(screen.getByTestId('git-sider-all-to-l3-btn'));
-    expect(screen.getByTestId('git-sider-all-to-l3-btn')).toHaveTextContent('已全存L3');
-    fireEvent.click(screen.getByTestId('git-sider-all-to-milestone-btn'));
-    expect(screen.getByTestId('git-sider-all-to-milestone-btn')).toHaveTextContent('已全建里程碑');
-    fireEvent.click(screen.getByTestId('git-sider-ingest-src/index.ts'));
-    expect(screen.getByTestId('git-sider-ingest-src/index.ts')).toHaveTextContent('已存L4');
-    fireEvent.click(screen.getByTestId('git-sider-guard-src/index.ts'));
-    expect(screen.getByTestId('git-sider-guard-src/index.ts')).toHaveTextContent('已护栏');
-    fireEvent.click(screen.getByTestId('git-sider-l3-src/index.ts'));
-    expect(screen.getByTestId('git-sider-l3-src/index.ts')).toHaveTextContent('已存L3');
-    fireEvent.click(screen.getByTestId('git-sider-milestone-src/index.ts'));
-    expect(screen.getByTestId('git-sider-milestone-src/index.ts')).toHaveTextContent('已建里程碑');
-    fireEvent.click(screen.getByTestId('git-sider-copy-path-src/index.ts'));
-    // workbench row buttons are now inside the ··· dropdown menu;
-    // workbench toolbar L2/L3/L4 buttons have been removed as part of
-    // the workbench simplification (2026-10-24).
+    // VSCode-style git panel: verify branch display, filter chips, and file list
+    await screen.findByText('main');
+    expect(screen.getByTestId('git-status-list')).toBeInTheDocument();
+    // Filter chips should be present
+    expect(screen.getByTestId('git-filter-all')).toBeInTheDocument();
+    expect(screen.getByTestId('git-filter-staged')).toBeInTheDocument();
+    expect(screen.getByTestId('git-filter-modified')).toBeInTheDocument();
+    expect(screen.getByTestId('git-filter-untracked')).toBeInTheDocument();
+    // File list rows, filter chips, and "..." more menu are rendered.
+    // Row-level copy/ingest/guard/L3/milestone buttons removed (VSCode-style simplification).
   });
 });
