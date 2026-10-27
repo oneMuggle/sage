@@ -22,6 +22,8 @@ export interface Session {
   forked_at_message_id?: string | null;
   /** P0-4 (UI 优化方案 2026-09-13): 最后一条 user/assistant 消息预览(截断 80 字符) */
   last_message_preview?: string | null;
+  /** 标题生成尝试次数 (后端 `sessions.title_attempts`)；用于侧栏显示"生成标题中…"过渡态 */
+  title_attempts?: number;
 }
 
 /** M4: POST /sessions/{id}/compact 响应 */

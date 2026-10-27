@@ -54,6 +54,8 @@ EXPECTED_TOP_KEYS = frozenset(
         "llmRetryMaxDelayS",
         # 2026-10-22: 整轮任务 wall-clock 上限（秒）— 0 = 不限；函数式读取
         "llmTotalTimeoutS",
+        # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键）
+        "titleModelId",
     }
 )
 

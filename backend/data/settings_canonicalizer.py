@@ -91,6 +91,8 @@ ALIASES: Dict[str, str] = {
     "llm_retry_base_delay_s": "llmRetryBaseDelayS",
     "llm_retry_max_delay_s": "llmRetryMaxDelayS",
     "llm_total_timeout_s": "llmTotalTimeoutS",
+    # 2026-10-27: 会话标题专用模型 id — 与后端 title_generator.load_title_llm_config 对齐。
+    "title_model_id": "titleModelId",
 }
 
 # AppSettings (src/entities/setting/types.ts) 锁死的白名单
@@ -121,6 +123,10 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         # 2026-10-22: 整轮任务 wall-clock 上限（秒）— 0 = 不限；函数式读取
         # 立即生效，无须重启后端。前端 DEFAULT_SETTINGS = 1800。
         "llmTotalTimeoutS",
+        # 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
+        # 值为模型 id 字符串；留空表示回退到聊天模型。后端
+        # title_generator.load_title_llm_config() 读取此键。
+        "titleModelId",
     }
 )
 LEGAL_ENDPOINT_KEYS: FrozenSet[str] = frozenset(
