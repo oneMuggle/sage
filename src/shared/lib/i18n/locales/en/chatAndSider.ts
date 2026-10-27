@@ -413,9 +413,11 @@ export const enChatAndSider = {
   'settings.global_rules.desc':
     'Cross-workspace system rules stored at ~/.sage/SAGE.md. Injected into every system prompt.',
   'settings.global_rules.loading': 'Loading…',
-  'settings.global_rules.placeholder': 'Write global rules here, e.g. always answer in simplified Chinese.',
+  'settings.global_rules.placeholder':
+    'Write global rules here, e.g. always answer in simplified Chinese.',
   'settings.global_rules.char_count': '{count} characters',
-  'settings.global_rules.over_budget': 'Over the {limit}-character injection budget; will be truncated',
+  'settings.global_rules.over_budget':
+    'Over the {limit}-character injection budget; will be truncated',
   'settings.global_rules.unsaved': 'Unsaved',
   'settings.global_rules.revert': 'Discard changes',
   'settings.global_rules.delete': 'Delete',

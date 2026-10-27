@@ -357,10 +357,7 @@ function describeBackendError(base: string, err: unknown): string {
   return detail ? `${base}: ${detail}` : base;
 }
 
-function describeSaveError(
-  err: unknown,
-  t: (key: TranslationKey) => string,
-): string {
+function describeSaveError(err: unknown, t: (key: TranslationKey) => string): string {
   if (!(err instanceof GlobalRulesError)) {
     return t('settings.global_rules.error.generic');
   }

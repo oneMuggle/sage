@@ -189,9 +189,9 @@ describe('GlobalRulesTab 模板与删除', () => {
       expect(mocks.invoke).toHaveBeenCalledWith('global_rules_delete', undefined);
     });
     await waitFor(() => {
-      expect((screen.getByTestId('settings-global-rules-editor') as HTMLTextAreaElement).value).toBe(
-        '',
-      );
+      expect(
+        (screen.getByTestId('settings-global-rules-editor') as HTMLTextAreaElement).value,
+      ).toBe('');
     });
   });
 });
@@ -245,7 +245,9 @@ describe('GlobalRulesTab 错误处理', () => {
       if (cmd === 'global_rules_save') {
         throw new Error(
           '→ 413: ' +
-            JSON.stringify({ detail: { type: 'content_too_large', message: '内容超过 64KB 上限' } }),
+            JSON.stringify({
+              detail: { type: 'content_too_large', message: '内容超过 64KB 上限' },
+            }),
         );
       }
       return BASE_STATE;
