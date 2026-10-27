@@ -98,7 +98,8 @@
 - [x] 步骤 5：前端 —— `PlanApprovalBar` 接线（reasoning 展示、修订结果同步回 store）；`orchRunClient` / electron 命令透传 `current_plan`
 - [x] 步骤 6：验证 —— 前端 `tsc` + `vitest`；后端 `pytest` + `ruff`；修测试
 - [x] 步骤 6b：code review 复查轮 —— 修 2 HIGH / 4 MEDIUM / 4 LOW（见下方风险表「复查新增」段）
-- [ ] 步骤 7：提交（不推送、不开 PR —— 等用户确认）
+- [x] 步骤 7：提交（本地 commit `b47a0ba57`）→ 推送 + 开 PR #2567
+- [x] 步骤 8：修 CI Architecture 红灯 —— 本功能给 `legacy_routes.py` 净增 57 行，超过 baseline 2455 的棘轮上限。把三个编排计划助手（`PLAN_OVERRIDE_REASONING` / `build_orch_plan_block` / `load_confirmed_plan_items`）原样拆到新模块 `backend/api/orch_plan_block.py`，`legacy_routes.py` 降回 2420 行（门禁计 2421 < 2455），**不改 baseline**（commit `dbf9d052d`）
 
 ## 风险评估与依赖
 
