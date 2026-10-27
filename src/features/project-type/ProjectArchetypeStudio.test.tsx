@@ -99,7 +99,15 @@ const SAMPLE_PROJECT = {
   detectedType: 'business' as const,
 };
 
+const ORIGINAL_CLIPBOARD = navigator.clipboard;
+
 beforeEach(() => {
+  // jsdom 不实现 clipboard.writeText（直接 reject），而复制按钮是先 await 写剪贴板
+  // 再置反馈 flag 的 —— 不 mock 的话"已复制"分支永远走不到。
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    configurable: true,
+  });
   mockList.mockReset();
   mockUpdate.mockReset();
   mockScaffold.mockReset();
@@ -311,6 +319,10 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  Object.defineProperty(navigator, 'clipboard', {
+    value: ORIGINAL_CLIPBOARD,
+    configurable: true,
+  });
 });
 
 describe('ProjectArchetypeStudio', () => {
@@ -339,6 +351,54 @@ describe('ProjectArchetypeStudio', () => {
     expect(screen.getByTestId('archetype-blueprint-detail-research')).toBeInTheDocument();
     expect(screen.getByText('01_literature/')).toBeInTheDocument();
     expect(screen.getByText('03_manuscript/')).toBeInTheDocument();
+  });
+
+  it('cancels pending copy-feedback timers on unmount', async () => {
+    mockList.mockResolvedValueOnce([]);
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      const view = render(
+        <MemoryRouter>
+          <ProjectArchetypeStudio />
+        </MemoryRouter>,
+      );
+
+      // 只统计点击之后登记的定时器 —— 复制反馈的那一个 1500ms timer。
+      // 写剪贴板是 async，反馈 flag（连同 timer）在 await 之后的 microtask 里才置位，
+      // 所以这里必须等 flag 落地，不能同步断言。
+      setTimeoutSpy.mockClear();
+      fireEvent.click(screen.getByTestId('studio-copy-vcs-btn'));
+      await waitFor(() =>
+        expect(screen.getByTestId('studio-copy-vcs-btn')).toHaveTextContent('已复制VCS'),
+      );
+      const scheduledIds = setTimeoutSpy.mock.results.map((result) => result.value);
+      expect(scheduledIds.length).toBeGreaterThan(0);
+
+      clearTimeoutSpy.mockClear();
+      view.unmount();
+
+      const clearedIds = clearTimeoutSpy.mock.calls.map((call) => call[0]);
+      expect(clearedIds.some((id) => scheduledIds.includes(id))).toBe(true);
+    } finally {
+      setTimeoutSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+    }
+  });
+
+  it('still resets the copy feedback flag once the timer fires', async () => {
+    mockList.mockResolvedValueOnce([]);
+    render(
+      <MemoryRouter>
+        <ProjectArchetypeStudio />
+      </MemoryRouter>,
+    );
+
+    const vcsBtn = screen.getByTestId('studio-copy-vcs-btn');
+    fireEvent.click(vcsBtn);
+    await waitFor(() => expect(vcsBtn).toHaveTextContent('已复制VCS'));
+
+    await waitFor(() => expect(vcsBtn).toHaveTextContent('复制 VCS 策略'), { timeout: 3000 });
   });
 
   it('renders overview card with polymorphic widgets and enter-governance button', async () => {

@@ -17,7 +17,7 @@ import {
   FolderPlus,
   ArrowRight,
 } from 'lucide-react';
-import { type ComponentType, useState } from 'react';
+import { type ComponentType, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { projectApi, type ProjectType } from '../../shared/api';
@@ -55,6 +55,24 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
   const [copiedVcs, setCopiedVcs] = useState(false);
   const [createdBlueprintMs, setCreatedBlueprintMs] = useState(false);
   const [copiedPositioning, setCopiedPositioning] = useState(false);
+
+  /**
+   * 复制反馈的延时复位定时器统一登记，卸载时全部取消。
+   *
+   * 三处 `setTimeout(() => setXxx(false), 1500)` 若是"发射后不管"，组件卸载后
+   * pending timer 仍在队列里。jsdom teardown 之后触发会抛
+   * `ReferenceError: window is not defined`，被 vitest 记为 unhandled error ——
+   * 断言全过也会让整个前端 job 以非零退出码收场。
+   */
+  const copyResetTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  useEffect(
+    () => () => {
+      copyResetTimersRef.current.forEach((timer) => clearTimeout(timer));
+      copyResetTimersRef.current.clear();
+    },
+    [],
+  );
 
   const blueprint = ARCHETYPE_BLUEPRINTS[selectedArchetype];
 
@@ -139,7 +157,11 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                     try {
                       await navigator.clipboard?.writeText(blueprint.vcsLabel);
                       setCopiedVcs(true);
-                      setTimeout(() => setCopiedVcs(false), 1500);
+                      const vcsTimer = setTimeout(() => {
+                        copyResetTimersRef.current.delete(vcsTimer);
+                        setCopiedVcs(false);
+                      }, 1500);
+                      copyResetTimersRef.current.add(vcsTimer);
                     } catch {
                       // ignore in test/offline mode
                     }
@@ -153,7 +175,11 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                   data-testid="studio-copy-positioning-btn"
                   onClick={async () => {
                     setCopiedPositioning(true);
-                    setTimeout(() => setCopiedPositioning(false), 1500);
+                    const positioningTimer = setTimeout(() => {
+                      copyResetTimersRef.current.delete(positioningTimer);
+                      setCopiedPositioning(false);
+                    }, 1500);
+                    copyResetTimersRef.current.add(positioningTimer);
                     try {
                       await navigator.clipboard?.writeText(blueprint.positioning);
                     } catch {
@@ -257,7 +283,11 @@ export function ProjectArchetypeStudio({ className }: ProjectArchetypeStudioProp
                   try {
                     await navigator.clipboard?.writeText(activeProject.path);
                     setCopiedActivePath(true);
-                    setTimeout(() => setCopiedActivePath(false), 1500);
+                    const activePathTimer = setTimeout(() => {
+                      copyResetTimersRef.current.delete(activePathTimer);
+                      setCopiedActivePath(false);
+                    }, 1500);
+                    copyResetTimersRef.current.add(activePathTimer);
                   } catch {
                     // ignore in test/offline mode
                   }
