@@ -31,6 +31,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 import yaml
 
 if TYPE_CHECKING:
+    from backend.data.settings_repo import SettingsRepository
+
     from .script_runner import ScriptRunner
 
 from ..registry import SkillRegistry
@@ -264,9 +266,15 @@ def collect_required_bins(dirs: List[Path]) -> List[str]:
     return sorted(required)
 
 
-def build_gating_context_for_dirs(dirs: List[Path]) -> GatingContext:
+def build_gating_context_for_dirs(
+    dirs: List[Path],
+    settings_repo: Optional[SettingsRepository] = None,
+) -> GatingContext:
     """Build a gating snapshot from binaries declared by discovered skills."""
-    return build_gating_context(bin_whitelist=collect_required_bins(dirs))
+    return build_gating_context(
+        bin_whitelist=collect_required_bins(dirs),
+        settings_repo=settings_repo,
+    )
 
 
 class SkillMdHotLoader:

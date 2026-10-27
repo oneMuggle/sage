@@ -81,6 +81,7 @@ class InprocSkillAdapter:
         self._enforcer_factory = enforcer_factory or load_enforcer_from_settings
         # v1: SKILL.md 适配层 (guarded 调用, 失败不破坏 adapter 构造)
         self._script_runner = None
+        self._settings_repo = None  # requires.config 门控注入点 (Task 1)
         skill_dirs = []
         try:
             from backend.adapters.out.skill_script.cli_confirmation import (
@@ -116,10 +117,23 @@ class InprocSkillAdapter:
                     registration_dirs.append(shipped)
                     seen.add(shipped_resolved)
 
+            # requires.config 门控需要 settings 快照 (缺口 #11)。
+            # DB 不可用时降级为"无配置" —— 技能被跳过, 不影响 adapter 构造。
+            try:
+                from backend.data.settings_repo import SettingsRepository
+
+                self._settings_repo = SettingsRepository()
+            except Exception as exc:  # noqa: BLE001 — adapter 构造必须容错
+                logging.getLogger(__name__).warning(
+                    "SkillMd settings repo unavailable: %s", exc
+                )
+
             register_skill_md_skills(
                 self._registry,
                 dirs=[str(p) for p in registration_dirs],
-                gating_ctx=build_gating_context_for_dirs(registration_dirs),
+                gating_ctx=build_gating_context_for_dirs(
+                    registration_dirs, settings_repo=self._settings_repo
+                ),
                 script_runner=self._script_runner,
             )
         except Exception as exc:  # noqa: BLE001 — adapter 构造必须容错
