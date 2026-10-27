@@ -12,6 +12,7 @@
     "backend/core/legacy/llm_client.py": 1274,
     "backend/data/database.py": 2100,
     "backend/data/session_repo.py": 1056,
+    "backend/data/settings_canonicalizer.py": 811,
     "backend/main.py": 1319,
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,
