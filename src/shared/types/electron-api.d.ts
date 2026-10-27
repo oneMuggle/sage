@@ -296,20 +296,8 @@ export interface DiagnosticElectronApiBridge {
     newestTs: string | null;
     sampleUrls: string[];
     version: string;
-  }>;  /** win7: 浏览器环境自检（pages/Diagnostic 的 BrowserEnvironmentSection 依赖） */
-  browserCheck: () => Promise<{
-    platform: string;
-    checks: Array<{
-      id: string;
-      status: 'pass' | 'warn' | 'fail' | 'na';
-      detail: string;
-      fix_hint: string | null;
-    }>;
-    recommended_browser: string;
-    errors: string[];
   }>;
 }
-
 
 export interface ProvidersElectronApiBridge {
   list: () => Promise<ProviderConfigSummary[]>;

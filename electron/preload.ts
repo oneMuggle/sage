@@ -16,6 +16,7 @@
  *                              unavailable on Win7 without UAC workaround)
  */
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import type { RemoteMcpElectronApiBridge, RemoteTunnelState } from '../src/shared/api/remoteMcpApi';
 import type { WindowControlsBridge } from '../src/shared/api/windowControlsClient';
 import type {
   ArenaTokenElectronApiBridge,
@@ -62,6 +63,7 @@ const memoryBridge = {
   delete: (args: Record<string, unknown>) => invokeMemory('delete_memory', args),
   getProfile: () => invokeMemory('get_user_profile'),
   diagnostics: () => invokeMemory('get_memory_diagnostics'),
+  /** win7: 记忆事件订阅（SSE 桥）—— 主进程 memoryEvents 通道 */
   subscribe: (handler: (event: unknown) => void) =>
     electronAPI.listen('memory-events', handler),
   createProfile: (args: Record<string, unknown>) => invokeMemory('create_user_profile', args),
@@ -233,6 +235,17 @@ const electronAPI = {
     importSkillDirectory: (pickedPath: string) =>
       ipcRenderer.invoke('skills:import-directory', pickedPath) as Promise<ImportResult>,
   } satisfies SkillsElectronApiBridge,
+
+  /** Workspace MCP Server (M4): tunnel, emergency stop, copy URL to clipboard. */
+  remoteMcp: {
+    tunnelState: () => ipcRenderer.invoke('remote-mcp:tunnel-state') as Promise<RemoteTunnelState>,
+    startTunnel: () => ipcRenderer.invoke('remote-mcp:tunnel-start') as Promise<RemoteTunnelState>,
+    stopTunnel: () => ipcRenderer.invoke('remote-mcp:tunnel-stop') as Promise<RemoteTunnelState>,
+    emergencyStop: () =>
+      ipcRenderer.invoke('remote-mcp:emergency-stop') as Promise<RemoteTunnelState>,
+    copyUrl: (id: string, options?: { public?: boolean }) =>
+      ipcRenderer.invoke('remote-mcp:copy-url', id, options) as Promise<boolean>,
+  } satisfies RemoteMcpElectronApiBridge,
 
   /**
    * Arena token window control (P3, plan §5.9/§6.2) — backs the DrawTab
@@ -457,18 +470,6 @@ const electronAPI = {
         newestTs: string | null;
         sampleUrls: string[];
         version: string;
-      }>,
-    browserCheck: () =>
-      ipcRenderer.invoke('diagnostic:browser-check') as Promise<{
-        platform: string;
-        checks: Array<{
-          id: string;
-          status: 'pass' | 'warn' | 'fail' | 'na';
-          detail: string;
-          fix_hint: string | null;
-        }>;
-        recommended_browser: string;
-        errors: string[];
       }>,
   } satisfies DiagnosticElectronApiBridge,
 
