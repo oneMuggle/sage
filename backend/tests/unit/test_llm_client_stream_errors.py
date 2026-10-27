@@ -132,7 +132,7 @@ async def test_stream_connect_error_raises_network_error(client):
 @pytest.mark.asyncio()
 async def test_stream_remote_protocol_error_raises_network_error(client):
     """流式路径下 httpx.RemoteProtocolError（chunked body 中断）应映射为 NETWORK，
-    让首字前的中断触发重试而非直接失败。详见 docs/plans/2026-10-27_llm-protocol-error-retry.md。"""
+    让首字前的中断触发重试而非直接失败。详见 docs/technical/101-llm-error-classification-retry.md。"""
     # Arrange
     patcher = _patch_stream(
         client,
