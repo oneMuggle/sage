@@ -1,4 +1,4 @@
-# 2026-09-19: client_message_id 协议 (docs/plans/2026-09-18_client-message-id-r1-plan.md, 同步 #1155)
+# r? 2026-09-19: client_message_id 协议 (docs/plans/2026-09-18_client-message-id-r1-plan.md)
 """ChatRequest.client_message_id 校验与确定性 user id 规则测试。"""
 
 import uuid
@@ -45,10 +45,11 @@ def test_client_message_id_rejects_invalid(bad):
 def test_user_message_id_rule():
     """协议核心: 传 cmid → 确定性 id u-<cmid>; 未传 → UUID。"""
 
-    def derive(client_message_id):
+    def derive(client_message_id, rnd):
         return f"u-{client_message_id}" if client_message_id else str(uuid.uuid4())
 
     cmid = "123e4567-e89b-12d3-a456-426614174000"
-    assert derive(cmid) == f"u-{cmid}"
-    assert derive(cmid) == derive(cmid)  # 确定性
-    uuid.UUID(derive(None))  # 未传时仍是合法 UUID
+    assert derive(cmid, None) == f"u-{cmid}"
+    assert derive(cmid, None) == derive(cmid, None)  # 确定性
+    derived = derive(None, None)
+    uuid.UUID(derived)  # 未传时仍是合法 UUID
