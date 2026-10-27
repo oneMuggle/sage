@@ -88,3 +88,30 @@ main 版在 win7 源码上失败，win7 版必须保留：
   改动面覆盖全套件，需单独评估。
 - `test_browser_tool.py` / `test_credential_vault.py` / `test_web_tool.py` 的 10 个新用例需要
   等对应 win7 功能补齐后再移植，不是简单复制。
+
+## 第二批（4 个文件）
+
+第一批之后重跑 triage（main 又前进），新增可收敛项：
+
+| 文件 | win7 版 | main 版 | 判据 |
+|---|---|---|---|
+| unit/test_chat_steer.py | 8 passed | **12 passed** | 插话落库功能 win7 已具备，main 的 4 个新用例全部通过 |
+| test_update_metadata.py | 8 passed | 8 passed | 去注释 AST 相同 |
+| test_updates_api.py | 7 passed | 7 passed | 去注释 AST 相同 |
+| unit/test_skill_save_tool.py | 10 passed | 10 passed | 去注释 AST 相同 |
+
+合计 37 passed，py3.11 与 py3.8 一致。
+
+第一批之后的分拣结果（27 个 both-changed）：
+
+- **11 个已是 win7 超集**（把 main 的改动并入 win7 后逐字节等于 win7）⇒ 无需动作。
+  含 `conftest.py`、`test_chat_orchestration_stream.py`、`test_chat_stream.py`、
+  `test_settings_route_legacy.py`、`test_session_workspace.py`、`test_agent_tool.py`、
+  `test_chat_dispatcher_topology.py`、`test_hooks.py`、`test_memory_manager.py`、
+  `test_risk.py`、`test_skill_auto_activation.py`。
+- **4 个本批收敛**（上表）。
+- **12 个按证据保留 win7 版**（main 版在 win7 源码上失败，或属 py3.8 下静默跳过测试的写法）。
+
+`conftest.py` 单独核查结论：17 个共有夹具的函数体**逐字相同**，win7 仅多一个
+`_online_network_settings` 夹具（win7 测试默认 fail-closed 离线，需显式 opt-in）
+⇒ 属 win7 超集，无需动作。
