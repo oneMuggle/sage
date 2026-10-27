@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set
 
 from backend.data.project_constraint_repo import CONSTRAINT_TEMPLATES
 from backend.services.llm_json import parse_json
@@ -115,7 +115,7 @@ class ProjectRuleGenerator:
         Returns:
             ``RuleGenerationResult``；LLM 异常时降级但不抛错
         """
-        seen: set[str] = {
+        seen: Set[str] = {
             _normalize(content) for content in (existing_contents or []) if content
         }
         skipped = 0
