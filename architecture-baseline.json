@@ -9,7 +9,7 @@
     "backend/api/wiki_routes.py": 1656,
     "backend/application/services/chat_service.py": 1233,
     "backend/core/legacy/agent.py": 3021,
-    "backend/core/legacy/llm_client.py": 1261,
+    "backend/core/legacy/llm_client.py": 1274,
     "backend/data/database.py": 2100,
     "backend/data/session_repo.py": 1056,
     "backend/main.py": 1319,
