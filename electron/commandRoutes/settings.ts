@@ -37,6 +37,24 @@ export const settingsRoutes: Record<string, CommandRoute> = {
     path: (a) => `/api/v1/preferences/${encodeURIComponent(String(a.key))}`,
   },
 
+  // G1 (2026-10-27): 全局规则（~/.sage/SAGE.md）读写。路径与安全策略全部
+  // 由后端硬编码，渲染进程不传路径；保存失败（422 扫描拦截 / 413 超限）
+  // 经 invoke 错误漏斗带回 status_code 与 detail。
+  global_rules_get: { method: 'GET', path: () => '/api/v1/settings/global-rules' },
+  global_rules_save: {
+    method: 'PUT',
+    path: () => '/api/v1/settings/global-rules',
+    body: (a) => ({ content: a.content }),
+  },
+  global_rules_delete: {
+    method: 'DELETE',
+    path: () => '/api/v1/settings/global-rules',
+  },
+  global_rules_templates: {
+    method: 'GET',
+    path: () => '/api/v1/settings/global-rules/templates',
+  },
+
   // M1 tool security hardening: 工具审批 gate（backend/api/permission_routes.py）。
   // permission_request 流事件到达后,渲染进程弹出 ApprovalDialog;用户点
   // 批准/拒绝 → permissions_answer 应答。pending 端点用于断线重连后补拉。

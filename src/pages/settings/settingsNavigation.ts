@@ -20,6 +20,8 @@ const visibleTabs: readonly SettingsTabKey[] = [
   'providers',
   // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
   'skills',
+  // G1 (2026-10-27): 全局规则 Tab（~/.sage/SAGE.md 读写）
+  'global-rules',
 ];
 
 /** Keep old settings bookmarks, never render an unknown/hidden initial tab. */

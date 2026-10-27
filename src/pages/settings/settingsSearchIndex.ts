@@ -26,7 +26,9 @@ export type SettingsTabKey =
   | 'usage-stats'
   | 'providers'
   // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
-  | 'skills';
+  | 'skills'
+  // G1 (2026-10-27): 全局规则 Tab（~/.sage/SAGE.md 读写）
+  | 'global-rules';
 
 export interface SettingsSearchEntry {
   /** 条目稳定标识 */
@@ -603,6 +605,29 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     label: '技能目录',
     labelEn: 'Skills directory',
     keywords: 'skills_dir 技能 目录 路径 skill.md',
+  },
+
+  // ── 全局规则 (G1 / 2026-10-27) ──
+  {
+    key: 'global_rules',
+    tab: 'global-rules',
+    label: '全局规则',
+    labelEn: 'Global rules',
+    keywords: 'global_rules 全局规则 sage.md 系统提示 system prompt',
+  },
+  {
+    key: 'global_rules_editor',
+    tab: 'global-rules',
+    label: '全局规则编辑器',
+    labelEn: 'Global rules editor',
+    keywords: 'global_rules_editor 编辑 规则 内容',
+  },
+  {
+    key: 'global_rules_templates',
+    tab: 'global-rules',
+    label: '全局规则模板',
+    labelEn: 'Global rules templates',
+    keywords: 'global_rules_templates 模板 套用 中文 安全',
   },
 ];
 
