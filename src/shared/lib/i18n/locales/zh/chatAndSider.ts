@@ -41,6 +41,7 @@ export const zhChatAndSider = {
   'chat.new_session': '+ 新对话',
   'chat.placeholder': '输入消息...',
   'chat.send': '发送',
+  'chat.steering_badge': '已插话 · 在下一个边界生效',
   // Wave 3 C6: 编排模式条
   'chat.orchMode.label': '编排模式',
   'chat.orchMode.auto': '自动（LLM 判定）',

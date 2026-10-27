@@ -233,6 +233,7 @@ export const zhSettingsAndModels = {
 
   // ─── M1 工具审批 ──────────────────
   'permission.title': '工具执行审批',
+  'permission.from_plugin': '所属插件',
   'permission.tool': '工具',
   'permission.args': '参数',
   'permission.risk.safe': '安全',
@@ -429,6 +430,10 @@ export const zhSettingsAndModels = {
   'office.generate.filenamePlaceholder': 'my-document',
   'office.generate.pptTitle': '标题 (仅一张幻灯片)',
   'office.generate.pptBullets': '要点 (每行一个)',
+  'office.generate.pptLayout': '版式',
+  'office.generate.layoutTitleContent': '标题+内容',
+  'office.generate.layoutTitle': '仅标题',
+  'office.generate.layoutBlank': '空白',
   'office.generate.wordTitle': '文档标题',
   'office.generate.wordBody': '正文',
   'office.generate.sheetName': 'Sheet 名',

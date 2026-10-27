@@ -41,6 +41,7 @@ export const enChatAndSider = {
   'chat.new_session': '+ New Chat',
   'chat.placeholder': 'Type a message...',
   'chat.send': 'Send',
+  'chat.steering_badge': 'Steered · applies at the next boundary',
   // Wave 3 C6: orchestration mode bar
   'chat.orchMode.label': 'Orchestration',
   'chat.orchMode.auto': 'Auto (LLM decides)',

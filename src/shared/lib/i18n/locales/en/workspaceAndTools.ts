@@ -280,6 +280,13 @@ export const enWorkspaceAndTools = {
   'office.delivery.lintFail': 'Format issues found',
   'office.delivery.lintSkipped': 'No format spec given, check skipped',
   'office.delivery.lintFailed': 'Check failed',
+  'office.delivery.repair': 'Auto-fix',
+  'office.delivery.repairing': 'Fixing…',
+  'office.delivery.repairDone': 'Fixed {n} rules',
+  'office.delivery.repairOutput': 'Fixed copy saved as {path}',
+  'office.delivery.repairRemaining':
+    '{n} still need manual work (citations / coverage cannot be fixed mechanically)',
+  'office.delivery.repairFailed': 'Auto-fix failed',
   'office.delivery.retry': 'Retry',
   'office.delivery.errors': '{n} errors',
   'office.delivery.warnings': '{n} warnings',
