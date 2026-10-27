@@ -2175,7 +2175,27 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         logger.debug(
                             f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
                         )
-                    if not memory_off:
+                    # Important-1 (win7 Task 6): when lifespan has installed a
+                    # lifecycle manager, use it so memory_written hooks and
+                    # traceability are emitted. Otherwise fall back to the
+                    # async extraction queue.
+                    lifecycle = getattr(request.app.state, "lifecycle", None)
+                    if lifecycle is not None and not memory_off:
+                        try:
+                            await lifecycle.on_turn_complete(
+                                data.session_id,
+                                [
+                                    {"role": "user", "content": data.message},
+                                    {"role": "assistant", "content": done_content},
+                                ],
+                                source_message_id=assistant_db_id,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                f"[REQ {request_id}] lifecycle on_turn_complete failed: {exc}"
+                            )
+                    elif not memory_off:
+                        # 对标 S2: 临时聊天（memory_mode='off'）不提取记忆
                         await _extract_legacy_chat_memory(
                             request_id, data.session_id, data.message, done_content
                         )
