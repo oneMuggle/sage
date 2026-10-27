@@ -217,7 +217,7 @@ export function WorkspaceBranchPicker({ sessionId }: WorkspaceBranchPickerProps)
             <>
               {data && (
                 <div
-                  className="flex flex-wrap items-center justify-between gap-1.5 border-b border-border bg-bg-secondary/40 px-3 py-1.5"
+                  className="flex flex-wrap items-center justify-between gap-1.5 border-b border-border bg-bg-muted/40 px-3 py-1.5"
                   data-testid="workspace-branch-picker-actions"
                 >
                   <span className="text-ui-2xs text-text-tertiary">

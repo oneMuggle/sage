@@ -293,7 +293,7 @@ export function CredentialsSection() {
               <button
                 type="button"
                 data-testid="metrics-refresh-btn"
-                className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary"
+                className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-muted"
                 onClick={refreshMetrics}
               >
                 {t('settings.network.creds.metrics.refresh')}
@@ -301,7 +301,7 @@ export function CredentialsSection() {
               <button
                 type="button"
                 data-testid="metrics-reset-btn"
-                className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary"
+                className="px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-muted"
                 onClick={resetMetrics}
               >
                 {t('settings.network.creds.metrics.reset')}
@@ -388,7 +388,7 @@ export function CredentialsSection() {
             <button
               type="button"
               data-testid="header-save-btn"
-              className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary"
+              className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-muted"
               onClick={addHeaderCred}
             >
               {t('settings.network.creds.add_header.save')}
@@ -426,7 +426,7 @@ export function CredentialsSection() {
               type="submit"
               data-testid="cookie-save-btn"
               disabled={cookieSaving}
-              className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary disabled:opacity-50"
+              className="px-2 py-1 text-xs border border-border rounded-radius-sm hover:bg-bg-muted disabled:opacity-50"
             >
               {t('settings.network.creds.add_cookie.save')}
             </button>
@@ -470,7 +470,7 @@ export function CredentialsSection() {
                 <button
                   type="button"
                   data-testid={`cred-delete-${c.domain}`}
-                  className="ml-auto px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-secondary"
+                  className="ml-auto px-2 py-0.5 text-xs border border-border rounded-radius-sm hover:bg-bg-muted"
                   onClick={() => removeCred(c.domain)}
                 >
                   {t('settings.network.creds.delete')}
