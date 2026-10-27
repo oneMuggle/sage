@@ -79,6 +79,7 @@
 | 98   | [FTS5 vs LIKE 性能基准](./98-memory-fts5-benchmark.md) | 10k 语料实测：FTS5 空命中 85×/中文 32×/低频词 29× 加速，高频英文 token 1.5-2×；recall 差异与 fallback 策略 |
 | 99   | [Agent 上限类错误透出具体上限值](./99-agent-error-limit-details.md) | `<code> (limit=N)` wire format + nonlocal 落库丢失修复 + 前端单一渲染点（聊天内联错误条 / 侧栏 tooltip）+ 兼容性与回滚 |
 | 100  | [自进化可观测性与反馈闭环](./100-self-evolution-observability.md) | P0-1 进化日志结构化（duration/metrics）/ P0-2 偏好注入 user_profile（hermes 冻结语义）/ P0-3 召回反馈落库 + A/B 变体对比 |
+| 101  | [LLM 错误分类与重试](./101-llm-error-classification-retry.md) | httpx 异常→LLMErrorType 分类表 / RemoteProtocolError 归 NETWORK 修复 / 首字后不重试契约 / 重试参数与退避策略 |
 
 ---
 
