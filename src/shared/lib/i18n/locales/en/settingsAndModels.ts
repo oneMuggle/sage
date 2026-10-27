@@ -1,5 +1,16 @@
 // Auto-split domain dictionary (en: settings, models & memory)
 export const enSettingsAndModels = {
+  'settings.zotero.error.generic': 'Connection failed',
+
+  // ─── Settings · Updates ────────────────
+  'updates.strategy': 'Update strategy',
+  'updates.strategy.manual': 'Manual updates',
+  'updates.strategy.manual.desc': 'Confirm each download and installation',
+  'updates.strategy.autoDownload': 'Auto-download, manual install',
+  'updates.strategy.autoDownload.desc': 'Recommended: download quietly, confirm before installing',
+  'updates.strategy.autoInstall': 'Auto-download and install',
+  'updates.strategy.autoInstall.desc':
+    'Most aggressive: install automatically after download, restart to apply',
   'updates.channel': 'Update channel',
   'updates.channel.stable': 'Stable (recommended)',
   'updates.channel.beta': 'Beta (may contain bugs)',
@@ -100,45 +111,41 @@ export const enSettingsAndModels = {
   'sider.project.allowed_paths_saved': 'Saved {count} rule(s)',
   'sider.project.allowed_paths_failed': 'Save failed: {message}',
   'sider.project.allowed_paths_remove': 'Remove rule',
-
-  // ─── P3: Project overview panel ───────────
-  'sider.project.materials_load_failed': 'Failed to load materials: {message}',
-  'sider.project.overview_title': 'Project Overview',
-  'sider.project.overview_description': 'Description',
-  'sider.project.overview_description_placeholder':
-    'Briefly describe this project (goals, stack, etc.)',
-  'sider.project.overview_instructions': 'Instructions',
-  'sider.project.overview_instructions_placeholder':
-    'Project-level system prompt applied to every session (overrides global preferences)',
-  'sider.project.overview_save': 'Save',
-  'sider.project.overview_saving': 'Saving…',
+  // Project overview & materials (M3, 2026-09-18)
+  'sider.project.materials_load_failed': 'Failed to load project materials: {message}',
   'sider.project.overview_saved': 'Project overview saved',
-  'sider.project.overview_save_failed': 'Save failed: {message}',
-  // ─── P3: Materials management panel ───────
-  'sider.project.materials_title': 'Project Materials',
-  'sider.project.materials_loading': 'Loading materials…',
-  'sider.project.materials_empty':
-    'No materials yet. Paste text to add, or save the current answer.',
-  'sider.project.material_input_placeholder': 'Paste Markdown / text as material...',
-  'sider.project.material_add': 'Add',
-  'sider.project.material_add_failed': 'Failed to add material: {message}',
-  'sider.project.material_remove': 'Remove',
-  'sider.project.material_remove_failed': 'Failed to remove material: {message}',
-  'sider.project.material_too_large': 'Material text exceeds the 1 MiB limit; please split it',
-  'sider.project.material_from_message': 'from message #{id}',
-  'sider.project.material_direct': 'manually added',
-  'sider.project.material_status_ready': 'ready',
-  'sider.project.material_status_pending': 'indexing',
-  'sider.project.material_status_failed': 'failed',
-  'sider.project.save_answer': 'Save current answer',
-  'sider.project.save_answer_title':
-    'Save the most recent AI answer in the active session as a project material',
-  'sider.project.save_answer_no_session': 'No active session',
-  'sider.project.save_answer_no_assistant': 'No AI answer in the current session to save',
+  'sider.project.overview_save_failed': 'Failed to save project overview: {message}',
+  'sider.project.material_too_large': 'Material content too large (max 64KB)',
+  'sider.project.material_add_failed': 'Failed to add project material: {message}',
+  'sider.project.material_remove_failed': 'Failed to remove project material: {message}',
+  'sider.project.save_answer_no_session': 'No session currently selected',
+  'sider.project.save_answer_no_assistant': 'No assistant answer in current session',
   'sider.project.save_answer_ok': 'Saved as project material',
-  'sider.project.save_answer_mismatch': 'Current session is not bound to this project',
-  'sider.project.save_answer_not_found': 'Answer message not found',
-  'sider.project.save_answer_failed': 'Save failed: {message}',
+  'sider.project.save_answer_mismatch': 'This session does not belong to the project',
+  'sider.project.save_answer_not_found': 'Message not found',
+  'sider.project.save_answer_failed': 'Failed to save material: {message}',
+  'sider.project.overview_title': 'Project Overview',
+  'sider.project.overview_saving': 'Saving…',
+  'sider.project.overview_save': 'Save',
+  'sider.project.overview_description': 'Project Description',
+  'sider.project.overview_description_placeholder': 'Brief description of project goals…',
+  'sider.project.overview_instructions': 'Project Instructions',
+  'sider.project.overview_instructions_placeholder':
+    'Custom instructions injected into prompts for this project…',
+  'sider.project.materials_title': 'Project Materials',
+  'sider.project.save_answer_title': 'Save current answer as material',
+  'sider.project.save_answer': 'Save current answer',
+  'sider.project.materials_loading': 'Loading materials…',
+  'sider.project.material_from_message': 'From session answer',
+  'sider.project.material_direct': 'Manual entry',
+  'sider.project.material_remove': 'Remove material',
+  'sider.project.materials_empty': 'No materials yet. Add below or save an answer.',
+  'sider.project.material_input_placeholder':
+    'Enter key context, reference material, or conventions…',
+  'sider.project.material_add': 'Add Material',
+  'sider.project.material_status_ready': 'Ready',
+  'sider.project.material_status_pending': 'Processing',
+  'sider.project.material_status_failed': 'Failed',
 
   // ─── Titlebar ─────────────────────
   'titlebar.minimize': 'Minimize',
@@ -246,8 +253,8 @@ export const enSettingsAndModels = {
 
   // ─── M1 tool approval ─────────────
   'permission.title': 'Tool approval required',
-  'permission.from_plugin': 'From plugin',
   'permission.tool': 'Tool',
+  'permission.from_plugin': 'From plugin',
   'permission.args': 'Arguments',
   'permission.risk.safe': 'Safe',
   'permission.risk.suspicious': 'Suspicious',
@@ -268,11 +275,15 @@ export const enSettingsAndModels = {
     'Optional: tell the agent why (it will adjust its approach)',
   'permission.deny_reason.hint': 'The feedback is passed to the model with the denial.',
   'permission.toast.failed': 'Failed to submit approval answer',
-  'permission.subagent_context': 'Orchestration subagent requests approval',
-  'permission.diff': 'Proposed changes',
+  // P0-4: the desktop previously closed the dialog silently once a remote
+  // channel handled the request, leaving high-risk actions with no local audit
+  // anchor. Report the fact honestly; the outcome (approved / denied / timed
+  // out) is not distinguishable from the pending list alone.
   'permission.remote_resolved': 'Approval left the pending queue',
   'permission.remote_resolved.desc':
     '{tool} · risk {risk} · waited {wait} · likely handled remotely or timed out',
+  'permission.subagent_context': 'Orchestration subagent requests approval',
+  'permission.diff': 'Proposed changes',
   'permission.project_allow.button': 'Allow for project',
   'permission.project_allow.tooltip': 'Add this path to the current project allowed paths',
   'permission.project_allow.added': 'Rule {rule} added',
@@ -330,8 +341,6 @@ export const enSettingsAndModels = {
   'settings.permission.rules_hint':
     'Fine-grained rules are created by checking "Remember my choice" during approval; remembered rules can be reviewed and deleted below (deleting restores per-call approval).',
   'settings.permission.load_failed': 'Failed to load permission mode',
-
-  // R97 remembered rules manager
   'settings.permission.rules.title': 'Remembered rules',
   'settings.permission.rules.empty': 'No remembered rules yet',
   'settings.permission.rules.delete': 'Delete',
@@ -470,9 +479,6 @@ export const enSettingsAndModels = {
   'office.generate.button': 'Generate',
   'office.generate.generating': 'Generating...',
   'office.generate.success': 'Generated',
-  'office.generate.failed': 'Generation failed',
-  'office.generate.filenameRequired': 'Please enter a filename',
-  'office.generate.outputPath': 'Generated:',
 };
 
 export function formatEnSettingsAndModelsSummary(): string {

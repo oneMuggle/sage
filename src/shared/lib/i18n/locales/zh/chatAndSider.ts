@@ -74,21 +74,42 @@ export const zhChatAndSider = {
   'chat.stop': '停止',
   'chat.config_warning': '未配置 API 端点或对话模型',
   'chat.config_warning_action': '前往设置',
+  // ─── R19: 网页访问拦截卡片 ───────
+  'chat.blocked.title': '网页访问被拦截',
+  'chat.blocked.target': '目标',
+  'chat.blocked.suggestions': '建议操作',
+  'chat.blocked.reason.antibot_cf': 'Cloudflare 反爬验证',
+  'chat.blocked.reason.antibot_other': '反爬风控拦截',
+  'chat.blocked.reason.login_wall': '需要登录',
+  'chat.blocked.reason.http_4xx': '请求被拒绝',
+  'chat.blocked.reason.http_5xx': '服务端错误',
+  'chat.blocked.reason.timeout': '请求超时',
+  'chat.blocked.reason.dns': '域名解析失败',
+  'chat.blocked.reason.render': '动态渲染失败',
+  'chat.blocked.reason.generic': '访问失败',
+  'chat.blocked.action.open_browser': '用浏览器打开',
+  'chat.blocked.action.configure_credentials': '配置登录凭据',
+  'chat.blocked.action.configure_proxy': '配置代理',
+  'chat.blocked.action.view_docs': '查看文档',
   'chat.loading': '正在加载对话...',
   'chat.welcome': '欢迎使用 Sage',
   'chat.welcome_sub': '开始一段新对话吧',
   'chat.hint':
     'Sage 会记住你的项目信息，无需重复说明上下文 · 支持 Markdown 语法 · 输入 / 呼出命令，@ 引用工作区文件',
+  'chat.rag_citations_toggle': '附件检索溯源',
+  'chat.rag_citations_count': '{n} 个片段命中注入',
+  'chat.rag_citation_source': '来源',
+  'chat.rag_citation_chunk': '片段',
   'chat.memory_applied': '条记忆已应用',
   // R81: 统一参考来源区块（记忆/附件/知识库/网页/工具收编）
   'chat.sources_toggle': '查看本次回答的参考来源',
   'chat.sources_count': '{n} 条参考来源',
   'chat.sources_group_memory': '记忆',
+  'chat.sources_open_memory': '在记忆库中查看这条记忆',
   'chat.sources_group_attachment': '附件检索',
   'chat.sources_group_wiki': '知识库',
   'chat.sources_group_web': '网页',
   'chat.sources_group_tool': '工具',
-  'chat.sources_open_memory': '在记忆库中查看这条记忆',
   // R38: 技能激活展示
   'chat.skills_activated': '个技能已激活',
   'chat.skills_toggle': '查看激活的技能',
@@ -179,24 +200,6 @@ export const zhChatAndSider = {
     '当前对话模型不支持视觉识别，请配置视觉理解模型或更换支持视觉的对话模型',
   'chat.vision_fallback_info': '图片将通过视觉理解模型识别后转为文本描述',
 
-  // ─── 网页拦截卡片 (BlockedCard) ───
-  'chat.blocked.title': '网页访问被拦截',
-  'chat.blocked.target': '目标',
-  'chat.blocked.suggestions': '建议操作',
-  'chat.blocked.reason.antibot_cf': 'Cloudflare 反爬验证',
-  'chat.blocked.reason.antibot_other': '反爬风控拦截',
-  'chat.blocked.reason.login_wall': '需要登录',
-  'chat.blocked.reason.http_4xx': '请求被拒绝',
-  'chat.blocked.reason.http_5xx': '服务端错误',
-  'chat.blocked.reason.timeout': '请求超时',
-  'chat.blocked.reason.dns': '域名解析失败',
-  'chat.blocked.reason.render': '动态渲染失败',
-  'chat.blocked.reason.generic': '访问失败',
-  'chat.blocked.action.open_browser': '用浏览器打开',
-  'chat.blocked.action.configure_credentials': '配置登录凭据',
-  'chat.blocked.action.configure_proxy': '配置代理',
-  'chat.blocked.action.view_docs': '查看文档',
-
   // ─── M4 会话压缩 / 分叉 ───────────
   // LOW-1: 统一口径 —— "before → after 条（removed 条历史已合并为摘要）"
   'chat.compact_success': '上下文已压缩：{before} → {after} 条（{removed} 条历史已合并为摘要）',
@@ -273,9 +276,9 @@ export const zhChatAndSider = {
   'settings.tab.orchestration': '编排',
   'settings.tab.memory': '记忆',
   'settings.tab.network': '网络',
+  'settings.tab.remote-workspaces': '远程工作区',
   'settings.tab.mcp': 'MCP',
   'settings.tab.plugins': '插件',
-  'settings.tab.remote-workspaces': '远程工作区',
   'settings.tab.zotero': '文献库',
   'settings.tab.runtime': '开发环境',
   'settings.tab.providers': '更新源',
@@ -480,18 +483,6 @@ export const zhChatAndSider = {
   'settings.zotero.error.generic': '连接失败',
 
   // ─── 设置页 · 更新 ────────────────
-  'updates.strategy': '更新策略',
-  'updates.strategy.manual': '手动更新',
-  'updates.strategy.manual.desc': '每次更新需我确认下载和安装',
-  'updates.strategy.autoDownload': '自动下载，手动安装',
-  'updates.strategy.autoDownload.desc': '推荐：下载无感，安装前确认',
-  'updates.strategy.autoInstall': '自动下载安装',
-  'updates.strategy.autoInstall.desc': '最激进：下载完成后自动安装，重启后生效',
-  'updates.channel': '更新渠道',
-  'updates.channel.stable': '稳定版（推荐）',
-  'updates.channel.beta': '测试版（可能有 bug）',
-  'updates.channel.alpha': '预览版（最新功能，不稳定）',
-  'updates.checkNow': '立即检查更新',
 } as const;
 
 export function formatZhChatAndSiderSummary(): string {
@@ -513,4 +504,3 @@ export function auditZhChatAndSiderGovernance(): string {
     audited: true,
   });
 }
-

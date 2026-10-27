@@ -74,21 +74,42 @@ export const enChatAndSider = {
   'chat.stop': 'Stop',
   'chat.config_warning': 'API endpoint or chat model not configured',
   'chat.config_warning_action': 'Go to Settings',
+  // ─── R19: web access blocked card ───────
+  'chat.blocked.title': 'Web access blocked',
+  'chat.blocked.target': 'Target',
+  'chat.blocked.suggestions': 'Suggested actions',
+  'chat.blocked.reason.antibot_cf': 'Cloudflare bot check',
+  'chat.blocked.reason.antibot_other': 'Anti-bot protection',
+  'chat.blocked.reason.login_wall': 'Login required',
+  'chat.blocked.reason.http_4xx': 'Request rejected',
+  'chat.blocked.reason.http_5xx': 'Server error',
+  'chat.blocked.reason.timeout': 'Request timed out',
+  'chat.blocked.reason.dns': 'DNS resolution failed',
+  'chat.blocked.reason.render': 'Dynamic render failed',
+  'chat.blocked.reason.generic': 'Access failed',
+  'chat.blocked.action.open_browser': 'Open in browser',
+  'chat.blocked.action.configure_credentials': 'Configure credentials',
+  'chat.blocked.action.configure_proxy': 'Configure proxy',
+  'chat.blocked.action.view_docs': 'View docs',
   'chat.loading': 'Loading conversation...',
   'chat.welcome': 'Welcome to Sage',
   'chat.welcome_sub': 'Start a new conversation',
   'chat.hint':
     'Sage remembers your project context · Supports Markdown · Type / for commands, @ to reference workspace files',
+  'chat.rag_citations_toggle': 'Attachment retrieval citations',
+  'chat.rag_citations_count': '{n} chunks injected',
+  'chat.rag_citation_source': 'source',
+  'chat.rag_citation_chunk': 'chunk',
   'chat.memory_applied': 'memories applied',
   // R81: Unified sources block (memory / attachments / wiki / web / tools)
   'chat.sources_toggle': 'View sources used for this reply',
   'chat.sources_count': '{n} sources',
   'chat.sources_group_memory': 'Memory',
+  'chat.sources_open_memory': 'View this memory in the memory browser',
   'chat.sources_group_attachment': 'Attachments',
   'chat.sources_group_wiki': 'Knowledge base',
   'chat.sources_group_web': 'Web',
   'chat.sources_group_tool': 'Tools',
-  'chat.sources_open_memory': 'View this memory in the memory browser',
   // R38: Skill activation display
   'chat.skills_activated': 'skills activated',
   'chat.skills_toggle': 'View activated skills',
@@ -185,24 +206,6 @@ export const enChatAndSider = {
   'chat.vision_fallback_info':
     'Images will be recognized by the vision model and converted to text descriptions',
 
-  // ─── Blocked web access card (BlockedCard) ───
-  'chat.blocked.title': 'Web access blocked',
-  'chat.blocked.target': 'Target',
-  'chat.blocked.suggestions': 'Suggested actions',
-  'chat.blocked.reason.antibot_cf': 'Cloudflare anti-bot verification',
-  'chat.blocked.reason.antibot_other': 'Anti-bot protection',
-  'chat.blocked.reason.login_wall': 'Login required',
-  'chat.blocked.reason.http_4xx': 'Request denied',
-  'chat.blocked.reason.http_5xx': 'Server error',
-  'chat.blocked.reason.timeout': 'Request timed out',
-  'chat.blocked.reason.dns': 'DNS resolution failed',
-  'chat.blocked.reason.render': 'Dynamic render failed',
-  'chat.blocked.reason.generic': 'Access failed',
-  'chat.blocked.action.open_browser': 'Open in browser',
-  'chat.blocked.action.configure_credentials': 'Configure login credentials',
-  'chat.blocked.action.configure_proxy': 'Configure proxy',
-  'chat.blocked.action.view_docs': 'View documentation',
-
   // ─── M4 session compact / fork ────
   // LOW-1: unified phrasing — "before → after messages (removed merged into summary)"
   'chat.compact_success':
@@ -281,9 +284,9 @@ export const enChatAndSider = {
   'settings.tab.orchestration': 'Orchestration',
   'settings.tab.memory': 'Memory',
   'settings.tab.network': 'Network',
+  'settings.tab.remote-workspaces': 'Remote workspaces',
   'settings.tab.mcp': 'MCP',
   'settings.tab.plugins': 'Plugins',
-  'settings.tab.remote-workspaces': 'Remote workspaces',
   'settings.tab.zotero': 'Library',
   'settings.tab.runtime': 'Dev Environment',
   'settings.tab.providers': 'Update Sources',
@@ -461,7 +464,7 @@ export const enChatAndSider = {
   'settings.mcp.authorize.button': 'Authorize',
   'settings.mcp.authorize.authorizing': 'Authorizing…',
   'settings.mcp.authorize.success':
-    'OAuth authorization complete; tool calls will carry the new credentials.',
+    'OAuth authorization complete; tool calls now carry the new credentials.',
   'settings.mcp.authorize.failed_prefix': 'Authorization failed: ',
   'settings.mcp.authorize.hint': 'Open the browser to finish OAuth login (HTTP transport only)',
   'settings.mcp.authorize.badge': 'OAuth authorized',
@@ -495,17 +498,6 @@ export const enChatAndSider = {
   'settings.zotero.item.no_annotations': 'No annotations',
   'settings.zotero.error.unavailable':
     'Zotero database not found. Please install Zotero or specify the path manually above.',
-  'settings.zotero.error.generic': 'Connection failed',
-
-  // ─── Settings · Updates ────────────────
-  'updates.strategy': 'Update strategy',
-  'updates.strategy.manual': 'Manual updates',
-  'updates.strategy.manual.desc': 'Confirm each download and installation',
-  'updates.strategy.autoDownload': 'Auto-download, manual install',
-  'updates.strategy.autoDownload.desc': 'Recommended: download quietly, confirm before installing',
-  'updates.strategy.autoInstall': 'Auto-download and install',
-  'updates.strategy.autoInstall.desc':
-    'Most aggressive: install automatically after download, restart to apply',
 };
 
 export function formatEnChatAndSiderSummary(): string {
