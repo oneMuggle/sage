@@ -40,7 +40,8 @@
 | R108 | 审批弹窗插件归属可见化（决策时刻横幅 + OS 通知归属，纯前端） | ✅ #2552 |
 | R109 | 已保存权限规则遮蔽标注（被更高优先级规则覆盖的行可见化，纯前端） | ✅ #2557 |
 | R110 | 聊天顶栏弹层标注补齐（审计插件归属 + 会话规则遮蔽，纯前端） | ✅ #2566 |
-| R111 | 聊天历史工具调用插件归属标注（转录通用卡片，纯前端） | 🔄 #2576 |
+| R111 | 聊天历史工具调用插件归属标注（转录通用卡片，纯前端） | ✅ #2576 |
+| R112 | PermissionModeSwitch 供数与导出收口（共享名单 hook + format 下沉，纯前端） | 🔄 #2585 |
 
 ## 2. 交付总账
 
@@ -74,7 +75,8 @@
 | R108 | ApprovalDialog 所属插件横幅 + OS 通知归属后缀（复用 R95 权威 plugin_name）与测试/文档 | #2552 | 待对齐 | ✅ 已交付 |
 | R109 | PermissionRulesManager 遮蔽派生（等值/插件通配覆盖）+ 徽标与测试/文档 | #2557 | 待对齐 | ✅ 已交付 |
 | R110 | permissionInsights 共享派生下沉 + PermissionModeSwitch 审计归属后缀/会话规则遮蔽徽标与测试/文档 | #2566 | 待对齐 | ✅ 已交付 |
-| R111 | usePluginNames 共享名单缓存 + Message 通用卡片归属后缀与测试/文档 | #2576 | 待对齐 | 🔄 |
+| R111 | usePluginNames 共享名单缓存 + Message 通用卡片归属后缀与测试/文档 | #2576 | 待对齐 | ✅ 已交付 |
+| R112 | 弹层改用 usePluginNames + formatPermissionMode* 下沉 permissionInsights 与测试/文档 | #2585 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -667,7 +669,7 @@
   architecture、diff-check、diagnostics 全绿，
   manifest 仍 274，后端零改动。
 
-## 31. R111 交付边界（PR #2576 待合并）
+## 31. R111 交付边界（已合并）
 
 > spec：`2026-10-27_transcript-plugin-owner-r111.md`。
 > R111 是本插件账轮次号，与其它账本的同号计划无关。
@@ -686,5 +688,25 @@
   tsc、ESLint（0 errors，存量 warnings 不变）、
   architecture（Message 768/800）、diff-check、
   diagnostics 全绿，manifest 仍 274，后端零改动。
+
+## 32. R112 交付边界（PR #2585 待合并）
+
+> spec：`2026-10-27_perm-switch-consolidation-r112.md`。
+> R112 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **供数单一事实源**：生命周期名单的读取实现自此只剩
+  共享缓存 hook 一处（转录 R111 + 顶栏审计 R110 两
+  个消费面），弹层打开即出归属、与转录同开合并取数；
+  EditAgentForm 因需完整 records 且随显式刷新取证保
+  留自取。
+- **纯函数归位**：弹层导出格式化随派生函数同置共享
+  层，组件文件只导出组件；导出文本逐字不变，后端零
+  改动（manifest 仍 274）。
+- **本地证据**：PermissionModeSwitch/insights/hook/
+  pluginOwner 与 shadowed+GeneralTab 共 6 文件
+  60 例通过；tsc、ESLint（0/0，弹层文件存量
+  warnings 清零，450→393 行）、architecture、
+  diff-check、diagnostics 全绿，manifest 仍 274，
+  后端零改动。
 
 —— 本账本由插件化循环维护，随轮次追加。

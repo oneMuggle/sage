@@ -5,10 +5,17 @@
 //
 // - findShadowedRules：同列表内被更高优先级规则覆盖、恒不生效的行。
 // - findPluginToolOwner：精确工具名对生命周期权威名的结构化归属。
+// - formatPermissionModeMarkdown/Json：聊天顶栏弹层的模式与审
+//   计导出（R112 自 PermissionModeSwitch 下沉，函数体原样；
+//   与派生同为纯函数，供组件与测试从共享层引用）。
 //
 // 两者都只是渲染期派生，不写任何存储；身份维度只用权威数据源
 // （R101 标注 / 生命周期名单），绝不切分名字猜插件。
-import type { PermissionRuleItem } from '../api/permissionApi';
+import type {
+  AutoApprovalRecord,
+  PermissionPreset,
+  PermissionRuleItem,
+} from '../api/permissionApi';
 
 const PLUGIN_TOOL_PREFIX = 'plugin__';
 
@@ -80,4 +87,57 @@ export function findPluginToolOwner(
     if (toolName.startsWith(namespace) && toolName.length > namespace.length) return name;
   }
   return null;
+}
+
+/** 审计行的时间小帮手（秒级 HH:MM:SS，导出与弹层渲染共用）。 */
+export function formatPermissionAuditTime(ts: number): string {
+  if (!ts) return '';
+  const d = new Date(ts * 1000);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+}
+
+/** 聊天顶栏弹层的模式与自动放行审计导出（Markdown）。 */
+export function formatPermissionModeMarkdown(params: {
+  sessionId: string | null;
+  preset: PermissionPreset;
+  custom: boolean;
+  count: number;
+  items: ReadonlyArray<AutoApprovalRecord>;
+}): string {
+  const lines = [
+    '# 会话权限模式与自动放行审计 (Permission Mode Summary)',
+    '',
+    `- **会话 ID**: ${params.sessionId ? `\`${params.sessionId}\`` : '全局'}`,
+    `- **当前权限预设**: \`${params.preset}\`${params.custom ? ' (自定义)' : ''}`,
+    `- **自动放行次数**: ${params.count}`,
+  ];
+  if (params.items.length === 0) {
+    lines.push('', '_暂无自动放行审计记录_');
+  } else {
+    lines.push('', '## 自动放行审计明细');
+    for (const it of params.items) {
+      lines.push(
+        `- **${it.tool_name}** (\`${it.capability}\`, ${formatPermissionAuditTime(it.created_at)}): ${it.summary || '-'}`,
+      );
+    }
+  }
+  return lines.join('\n');
+}
+
+/** 聊天顶栏弹层的模式与自动放行审计导出（JSON）。 */
+export function formatPermissionModeJson(params: {
+  sessionId: string | null;
+  preset: PermissionPreset;
+  custom: boolean;
+  count: number;
+  items: ReadonlyArray<AutoApprovalRecord>;
+}): string {
+  return JSON.stringify(
+    {
+      exportedAt: new Date().toISOString(),
+      ...params,
+    },
+    null,
+    2,
+  );
 }
