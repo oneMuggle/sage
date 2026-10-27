@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tupl
 from sage_core import SkillResult, SkillSpec
 from sage_core.repositories import SkillPort  # noqa: F401  (structural typing target)
 
+from backend.skills.notifications import get_notification_hub
 from backend.skills.registry import SkillRegistry as _SkillRegistry
 from backend.tools.bash_validation import validate_bash
 from backend.tools.permissions import (
@@ -724,6 +725,9 @@ class InprocSkillAdapter:
         safe_result = dict(result)
         if "base_dir" in safe_result:
             safe_result["base_dir"] = _SAFE_SKILL_PATH
+        # 删除成功后广播通知 (缺口 #6a)。此处无 _scan_lock 持有, publish 只
+        # 追加到有界 buffer + notify, 非阻塞, 不会与扫描互锁。
+        get_notification_hub().publish({"kind": "skill_deleted", "name": name})
         return safe_result
 
     # ========== PR-C: Skills load-new (rescan + import) ==========
@@ -783,14 +787,27 @@ class InprocSkillAdapter:
             # 是累计集合, 不能直接当 total 用 (会把初始化时自动加载的技能重复计入)。
             loaded_names = list(self._skill_md_loader._loaded_this_scan)
             total_loaded = len(loaded_names)
-            return {
+            skipped = list(self._skill_md_loader.skipped)
+            result = {
                 "loaded": [
                     {"name": name, "source": "skillmd", "path": _SAFE_SKILL_PATH}
                     for name in loaded_names
                 ],
-                "skipped": list(self._skill_md_loader.skipped),
+                "skipped": skipped,
                 "total_loaded": total_loaded,
             }
+
+        # 扫描锁已释放后再广播 (缺口 #6a)。publish 只追加有界 buffer + notify,
+        # 不获取 _scan_lock, 因此与非重入扫描锁不会互锁。
+        get_notification_hub().publish(
+            {
+                "kind": "skills_rescanned",
+                "loaded_count": total_loaded,
+                "skipped_count": len(skipped),
+                "total_loaded": total_loaded,
+            }
+        )
+        return result
 
     async def import_skill_mds(self, files: List[Any]) -> Dict[str, List[Dict[str, str]]]:
         """异步包装 SkillMdImporter.import_files()。"""
@@ -808,6 +825,14 @@ class InprocSkillAdapter:
             {**item, "path": _SAFE_SKILL_PATH} if "path" in item else dict(item)
             for item in result.get("imported", [])
         ]
+        # 导入成功后广播通知 (缺口 #6a)。此处不持有 _scan_lock, publish 非阻塞。
+        get_notification_hub().publish(
+            {
+                "kind": "skills_imported",
+                "imported_count": len(safe_result.get("imported", [])),
+                "skipped_count": len(safe_result.get("skipped", [])),
+            }
+        )
         return safe_result
 
     async def import_skill_directory(
@@ -830,6 +855,14 @@ class InprocSkillAdapter:
             {**item, "path": _SAFE_SKILL_PATH} if "path" in item else dict(item)
             for item in result.get("imported", [])
         ]
+        # 目录导入成功后广播通知 (缺口 #6a)。此处不持有 _scan_lock, publish 非阻塞。
+        get_notification_hub().publish(
+            {
+                "kind": "skills_directory_imported",
+                "imported_count": len(safe_result.get("imported", [])),
+                "skipped_count": len(safe_result.get("skipped", [])),
+            }
+        )
         return safe_result
 
     # ========== 扩展序列化 (PR-8 SKILL.md 适配层) ==========
