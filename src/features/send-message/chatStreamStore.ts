@@ -27,6 +27,8 @@ import { create } from 'zustand';
 
 import type {
   AgentEvent,
+  ChatConfig,
+  ChatOfficeRef,
   RetryInfo,
   SubagentLiveEvent,
   SubagentLiveState,
@@ -35,9 +37,53 @@ import type {
   TaskStatusEvent,
   TodoItem,
 } from '../../shared/api';
+import type { AttachmentEmbedConfig } from '../../shared/api/attachmentRagConfig';
 import type { Message, ToolCall } from '../../shared/lib/store';
 
+import type { DeliveryMode } from './deliveryMode';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
+
+/**
+ * 队列条目的发送参数 —— 与 `useChat.sendMessage` 的入参一一对应。
+ * 旧实现（useChat 内的 pendingMessagesRef）只存 content，flush 时图片 /
+ * 附件 / officeRefs / planMode 全部丢失，这里补齐为可重放的完整调用快照。
+ */
+export interface QueuedSendOptions {
+  /** Wave 3: resume 恢复流透传的既有计划 */
+  planOverride?: TaskPlanItem[];
+  /** Wave 3: resume 恢复流透传的 run id */
+  runId?: string;
+  /** PM1: 计划模式 —— 本次 run 只读调研 + 计划产出 */
+  planMode?: boolean;
+  /** 对标 S2: 临时聊天（本轮不读写长期记忆） */
+  memoryDisabled?: boolean;
+  /** R23-D2: 聊天图片输入（base64 data URL，后端限 4 张/单张 5MiB） */
+  images?: string[];
+  /** R37: 已上传附件的 media id 列表 */
+  attachmentMediaIds?: string[];
+  /** r67: 附件检索注入配置（opt-in） */
+  attachmentRag?: { embed: AttachmentEmbedConfig; top_k: number } | null;
+  /** Task 5: 上下文重置 —— 后端在本轮消息前插入 topic_separator 并清空历史窗口 */
+  contextReset?: boolean;
+  /**
+   * P2-a: 投递通道（插话 / 排队 / 打断并发送）。只在**会话已有活跃流**时有
+   * 语义 —— 空闲时正常发送、以及队列 flush 出来的条目都会忽略它。
+   */
+  delivery?: DeliveryMode;
+  /** 重新生成：被替换的 assistant 消息 id（后端用此回滚该轮次） */
+  regenerateOf?: string;
+}
+
+/** 一条待发送消息（会话忙时入队，当前 run 自然结束后 flush） */
+export interface QueuedChatMessage {
+  id: string;
+  sessionId: string;
+  content: string;
+  createdAt: number;
+  officeRefs?: readonly ChatOfficeRef[];
+  orchestrationMode?: ChatConfig['orchestrationMode'];
+  opts?: QueuedSendOptions;
+}
 
 /** 流式消息的临时覆盖层（'🤔 思考中…' + LLM 累积的 content/reasoning） */
 export interface StreamingState {
@@ -49,6 +95,10 @@ export interface StreamingState {
   currentAgentId: string | null;
   /** P2: 当前 ReAct 迭代轮次 */
   iteration: number;
+  /** R17-E 收尾（r71）: memory_used 载荷写入（气泡内可展开） */
+  memory_refs?: { id: string; memory_type: string; preview: string }[];
+  /** r71: attachment_rag_used 载荷写入 */
+  rag_citations?: { media_id: string; mode: string }[];
   /**
    * 2026-10-26: 流开始时间戳（Date.now()），用于首字等待计时器。
    * ThinkingShimmer 组件读取此字段显示已等待秒数，提升用户感知。
@@ -116,9 +166,7 @@ export function mergeLiveEvent(
   event: SubagentLiveEvent,
 ): SubagentLiveState {
   const base = prev ?? emptyLiveState();
-  const events: SubagentLiveEvent[] = [...base.events, event].slice(
-    -LIVE_EVENT_BUFFER_SIZE,
-  );
+  const events: SubagentLiveEvent[] = [...base.events, event].slice(-LIVE_EVENT_BUFFER_SIZE);
   const next: SubagentLiveState = {
     liveStep: event.live_step ?? base.liveStep,
     waitingApproval: base.waitingApproval,
@@ -140,6 +188,15 @@ export interface SessionStreamSlots {
   // P1 todo 接线 (2026-08-21): todo_snapshot 全量快照（agent 自维护清单）。
   todos: TodoItem[];
   /**
+   * 2026-09 step-by-step: 已完成 ReAct 步骤的快照数组（每条对应独立消息气泡）。
+   * - 收到 step_done 事件时,把当前 streaming state 打包成 Message 推入此数组
+   * - 同时重置 streaming.content=THINKING_PLACEHOLDER / streaming.reasoning=''
+   *   / streamingToolCalls=[],以便下一步的 deltas 路由到新的 messageId
+   * - DONE 事件不追加(最后一步走 finishStream 路径)
+   * - startStream / resetAll 时清空
+   */
+  completedSteps: Message[];
+  /**
    * Task 11 (2026-09-17): topic_shifted 事件 — 收到自动话题切换通知时
    * 写入,前端 TopicShiftBanner 展示"恢复完整上下文"入口;用户点恢复
    * 或点关闭时调用 clearShiftInfo 清掉;切会话 / startStream 也会清。
@@ -155,14 +212,17 @@ export interface SessionStreamSlots {
    */
   preflightPhase: 'clarify' | 'scout' | null;
   /**
-   * 2026-09 step-by-step: 已完成 ReAct 步骤的快照数组（每条对应独立消息气泡）。
-   * - 收到 step_done 事件时,把当前 streaming state 打包成 Message 推入此数组
-   * - 同时重置 streaming.content=THINKING_PLACEHOLDER / streaming.reasoning=''
-   *   / streamingToolCalls=[],以便下一步的 deltas 路由到新的 messageId
-   * - DONE 事件不追加(最后一步走 finishStream 路径)
-   * - startStream / resetAll 时清空
+   * U5 队列（2026-09-18 从 useChat 的 component-local ref 迁入）：
+   * 会话忙时用户继续发送的消息在此排队，当前 run 自然结束后 flush。
+   * 放 store 而非 ref 的两个理由：①UI 需要渲染并可操作队列；
+   * ②Chat 页卸载/路由切换不再丢队列。
    */
-  completedSteps: Message[];
+  pendingQueue: QueuedChatMessage[];
+  /**
+   * 队列暂停位：run 以错误/中断收尾时置 true —— 此时自动 flush 只会把
+   * 用户没打算重发的消息推进同一个故障里。UI 显示"已暂停"并等用户恢复。
+   */
+  queuePaused: boolean;
 }
 
 const EMPTY_SLOTS: SessionStreamSlots = {
@@ -173,7 +233,15 @@ const EMPTY_SLOTS: SessionStreamSlots = {
   completedSteps: [],
   shiftInfo: null,
   preflightPhase: null,
+  pendingQueue: [],
+  queuePaused: false,
 };
+
+/** 空槽位工厂：构造/打桩槽位时用它展开，新增字段不会再漏（浅拷贝即可，
+ *  数组字段一律由 action 以不可变方式整体替换，不会被就地改写）。 */
+export function emptySessionSlots(): SessionStreamSlots {
+  return { ...EMPTY_SLOTS };
+}
 
 /** 读取某会话的槽位；无该会话（或 sessionId 为 null）时返回共享空槽位。
  *  共享引用保证 zustand 默认引用相等语义下"无流会话"的选择器结果稳定，
@@ -211,7 +279,12 @@ interface ChatStreamStoreState {
   setStreamingMeta: (
     sessionId: string,
     messageId: string,
-    patch: Partial<Pick<StreamingState, 'state' | 'currentAgentId' | 'iteration'>>,
+    patch: Partial<
+      Pick<
+        StreamingState,
+        'state' | 'currentAgentId' | 'iteration' | 'memory_refs' | 'rag_citations'
+      >
+    >,
   ) => void;
   /**
    * 2026-10-20: 写入 LLM 重试信息。Message.tsx 从 streaming.retryInfo 读
@@ -219,16 +292,6 @@ interface ChatStreamStoreState {
    * setStreamingMeta 自动清 null。
    */
   setRetryInfo: (sessionId: string, messageId: string, info: RetryInfo | null) => void;
-  /**
-   * 2026-09 step-by-step: 把当前 streaming 状态快照为一条已完成的 Message,
-   * 推入 completedSteps。
-   */
-  addCompletedStep: (sessionId: string, messageId: string, message: Message) => void;
-  /**
-   * 2026-09 step-by-step: 完成一步后重置 streaming 为占位态,
-   * 并切换 streaming.messageId 到 newMessageId,让后续 deltas 路由到新消息。
-   */
-  finalizeStep: (sessionId: string, oldMessageId: string, newMessageId: string) => void;
   clearStream: (sessionId: string, messageId: string) => void;
 
   // —— 工具调用 ——
@@ -248,12 +311,45 @@ interface ChatStreamStoreState {
   // —— todo 清单（P1 接线） ——
   setTodos: (sessionId: string, todos: TodoItem[]) => void;
 
+  // —— 2026-09 step-by-step ——
+  /**
+   * 把当前 streaming 状态快照为一条已完成的 Message,推入 completedSteps。
+   * 不重置 streaming —— 由 finalizeStep 配套重置并切换 messageId。
+   * 调用方应保证此时 streaming.messageId === messageId（否则 action 静默 noop）。
+   */
+  addCompletedStep: (sessionId: string, messageId: string, message: Message) => void;
+  /**
+   * 完成一步:push 完成后重置 streaming.content/reasoning/streamingToolCalls 为占位态,
+   * 并切换 streaming.messageId 到 newMessageId,让后续 deltas 路由到新消息。
+   * 配套 addCompletedStep 使用:先 addCompletedStep,再 finalizeStep。
+   */
+  finalizeStep: (sessionId: string, oldMessageId: string, newMessageId: string) => void;
+
   // —— Task 11 (2026-09-17): topic_shifted 横幅态 ——
-  /** 收到 topic_shifted 事件时写入;前端 TopicShiftBanner 立刻可见。 */
+  /** 收到 topic_shifted 事件时写入;前端 TopicShiftBanner 展示"恢复完整上下文"入口;用户点恢复
+   * 或点关闭时调用 clearShiftInfo 清掉;切会话 / startStream 也会清。 */
   setShiftInfo: (
     sessionId: string,
     info: { segmentId: number; reason: string; createdAt: number } | null,
   ) => void;
+
+  // —— U5 待发送队列（按会话隔离） ——
+  /** 入队一条待发送消息，返回落库后的条目（调用方需要 id）。 */
+  enqueueChat: (
+    sessionId: string,
+    message: Omit<QueuedChatMessage, 'id' | 'sessionId' | 'createdAt'>,
+  ) => QueuedChatMessage;
+  removeChatFromQueue: (sessionId: string, id: string) => void;
+  /** 取出并移除（"立即发送"/"编辑"共用）；不存在返回 null。 */
+  takeChatFromQueue: (sessionId: string, id: string) => QueuedChatMessage | null;
+  /** 置顶：把某条排队消息提到队首，改变自动发送顺序。 */
+  moveChatToQueueFront: (sessionId: string, id: string) => void;
+  /** 拖拽排序：把 fromId 这条移动到 toId 当前所在下标；任一侧不存在则 noop。 */
+  reorderChatQueue: (sessionId: string, fromId: string, toId: string) => void;
+  clearChatQueue: (sessionId: string) => void;
+  setChatQueuePaused: (sessionId: string, paused: boolean) => void;
+  /** 弹出队首（run 自然结束后 flush 用）；队列空返回 null。 */
+  shiftChatQueue: (sessionId: string) => QueuedChatMessage | null;
 
   // —— 会话删除时清理槽位，防 Map 泄漏 / 迟到事件复活死会话 ——
   clearSession: (sessionId: string) => void;
@@ -273,7 +369,7 @@ function writeSlots(
   return { ...prev, [sessionId]: { ...slots, ...draft } };
 }
 
-export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
+export const useChatStreamStore = create<ChatStreamStoreState>((set, get) => ({
   sessions: {},
 
   startStream: (sessionId, messageId, opts) =>
@@ -500,6 +596,87 @@ export const useChatStreamStore = create<ChatStreamStoreState>((set) => ({
   // Task 11 (2026-09-17): topic_shifted 横幅态 — 写入后由 TopicShiftBanner 展示
   setShiftInfo: (sessionId, info) =>
     set((prev) => ({ sessions: writeSlots(prev.sessions, sessionId, { shiftInfo: info }) })),
+
+  // —— U5 待发送队列 ——
+  enqueueChat: (sessionId, message) => {
+    const item: QueuedChatMessage = {
+      ...message,
+      id: crypto.randomUUID(),
+      sessionId,
+      createdAt: Date.now(),
+    };
+    set((prev) => ({
+      sessions: writeSlots(prev.sessions, sessionId, {
+        pendingQueue: [...selectSessionSlots(prev, sessionId).pendingQueue, item],
+      }),
+    }));
+    return item;
+  },
+
+  removeChatFromQueue: (sessionId, id) =>
+    set((prev) => {
+      const queue = selectSessionSlots(prev, sessionId).pendingQueue;
+      if (!queue.some((m) => m.id === id)) return prev;
+      return {
+        sessions: writeSlots(prev.sessions, sessionId, {
+          pendingQueue: queue.filter((m) => m.id !== id),
+        }),
+      };
+    }),
+
+  takeChatFromQueue: (sessionId, id) => {
+    const item = selectSessionSlots(get(), sessionId).pendingQueue.find((m) => m.id === id);
+    if (!item) return null;
+    get().removeChatFromQueue(sessionId, id);
+    return item;
+  },
+
+  moveChatToQueueFront: (sessionId, id) =>
+    set((prev) => {
+      const queue = selectSessionSlots(prev, sessionId).pendingQueue;
+      const idx = queue.findIndex((m) => m.id === id);
+      if (idx <= 0) return prev;
+      const next = [...queue];
+      const [item] = next.splice(idx, 1);
+      return { sessions: writeSlots(prev.sessions, sessionId, { pendingQueue: [item, ...next] }) };
+    }),
+
+  /** 拖拽排序：把 fromId 移到 toId 当前所在的位置（落点语义同 dnd-kit arrayMove）。 */
+  reorderChatQueue: (sessionId, fromId, toId) =>
+    set((prev) => {
+      const queue = selectSessionSlots(prev, sessionId).pendingQueue;
+      const from = queue.findIndex((m) => m.id === fromId);
+      const to = queue.findIndex((m) => m.id === toId);
+      if (from < 0 || to < 0 || from === to) return prev;
+      const next = [...queue];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return { sessions: writeSlots(prev.sessions, sessionId, { pendingQueue: next }) };
+    }),
+
+  clearChatQueue: (sessionId) =>
+    set((prev) => ({
+      sessions: writeSlots(prev.sessions, sessionId, { pendingQueue: [], queuePaused: false }),
+    })),
+
+  setChatQueuePaused: (sessionId, paused) =>
+    set((prev) => {
+      const slots = selectSessionSlots(prev, sessionId);
+      if (slots.queuePaused === paused) return prev;
+      return { sessions: writeSlots(prev.sessions, sessionId, { queuePaused: paused }) };
+    }),
+
+  shiftChatQueue: (sessionId) => {
+    const queue = selectSessionSlots(get(), sessionId).pendingQueue;
+    const [next] = queue;
+    if (!next) return null;
+    set((prev) => ({
+      sessions: writeSlots(prev.sessions, sessionId, {
+        pendingQueue: selectSessionSlots(prev, sessionId).pendingQueue.slice(1),
+      }),
+    }));
+    return next;
+  },
 
   updateTaskBoard: (sessionId, _runId, updater) =>
     set((prev) => {

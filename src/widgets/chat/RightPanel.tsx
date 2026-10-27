@@ -25,12 +25,10 @@ import type { ToolCall } from '../../shared/lib/store';
 import { useResizablePanel } from '../../shared/lib/useResizablePanel';
 
 import { ConversationOutline } from './ConversationOutline';
-import { TrajectoryPane } from './TrajectoryPane';
 import { TurnList } from './TurnList';
 import { ArtifactViewer } from './artifacts/ArtifactViewer';
 import { ArtifactsSection } from './artifacts/ArtifactsSection';
 import { ChangesSection } from './changes/ChangesSection';
-import { DocumentPreview } from './preview/DocumentPreview';
 import { ProgressSection } from './progress/ProgressSection';
 
 interface RightPanelProps {
@@ -55,42 +53,20 @@ interface RightPanelProps {
   variant?: 'overlay' | 'push';
 }
 
-const RIGHT_PANEL_TABS: readonly RightPanelTab[] = [
-  'progress',
-  'outline',
-  'trajectory',
-  'changes',
-  'preview',
-  'artifacts',
-];
+const RIGHT_PANEL_TABS: readonly RightPanelTab[] = ['progress', 'outline', 'changes', 'artifacts'];
 
 const TAB_LABELS: Record<RightPanelTab, string> = {
   progress: '进度',
   artifacts: '产物',
   changes: '变更',
   outline: '目录',
-  trajectory: '轨迹',
-  preview: '预览',
 };
 
-/**
- * 宽度档位（right-panel R1 批次 D，对齐 Claude 的小/中/大三档）。
- *
- * 2026-09-29 面板密度调整：320/440/560 在 5 个 Tab + 操作区并排时每个 Tab
- * 只剩 ~30px，「产物 (12)」放不下。档位整体上移到 360/520/720，
- * L 档才有足够宽度铺开变更/预览这类宽内容。
- */
-/** 默认宽度（= S 档；双击拖拽手柄复位也用它） */
-const DEFAULT_PANEL_WIDTH = 360;
-
-/** 拖拽宽度的上下限（放宽后能容纳变更/预览等宽内容，且不会把聊天区挤没） */
-const MIN_PANEL_WIDTH = 280;
-const MAX_PANEL_WIDTH = 900;
-
+/** 宽度档位（right-panel R1 批次 D，对齐 Claude 的小/中/大三档） */
 const WIDTH_PRESETS = [
-  { label: 'S', width: 360 },
-  { label: 'M', width: 520 },
-  { label: 'L', width: 720 },
+  { label: 'S', width: 320 },
+  { label: 'M', width: 440 },
+  { label: 'L', width: 560 },
 ] as const;
 
 interface PanelHeaderProps {
@@ -411,9 +387,9 @@ function RightPanelInner({
     applyWidth,
   } = useResizablePanel({
     storageKey: 'right-panel-width',
-    minWidth: MIN_PANEL_WIDTH,
-    maxWidth: MAX_PANEL_WIDTH,
-    defaultWidth: DEFAULT_PANEL_WIDTH,
+    minWidth: 280,
+    maxWidth: 600,
+    defaultWidth: 320,
     anchor: 'right',
   });
 
@@ -577,17 +553,6 @@ function RightPanelInner({
               onSelect={handleOutlineSelect}
             />
           </>
-        ) : tab === 'trajectory' ? (
-          /* 对标 F3: 模型轨迹——会话级时间线 + 搜索 + 工具 payload */
-          <TrajectoryPane sessionId={sessionId} />
-        ) : tab === 'preview' ? (
-          useRightPanelStore.getState().previewFilePath ? (
-            <DocumentPreview filePath={useRightPanelStore.getState().previewFilePath!} />
-          ) : (
-            <div className="flex items-center justify-center py-8 text-sm text-text-muted">
-              从变更卡片点击「预览」打开文档
-            </div>
-          )
         ) : (
           <ArtifactsSection
             artifacts={artifacts}

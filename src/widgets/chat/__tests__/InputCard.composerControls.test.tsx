@@ -31,6 +31,9 @@ describe('InputCard composerControls slot', () => {
       <InputCard {...base} isLoading onInterrupt={vi.fn()} composerControls={<span>ctl</span>} />,
     );
     expect(screen.getByTestId('composer-controls')).toHaveTextContent('ctl');
-    expect(screen.queryByTestId('chat-send')).toBeNull();
+    // P2-a (PR #1334): 会话忙时仍显示发送按钮（label 改为 send_while_running），
+    // 用户可直接发送进入队列 / 插话通道。
+    const send = screen.getByTestId('chat-send');
+    expect(send).toHaveTextContent('chat.send_while_running');
   });
 });

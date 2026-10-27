@@ -86,13 +86,9 @@ describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () =>
       onToggleRightPanel: noop,
       unseenArtifactCount: 0,
     };
-    const { rerender } = renderWithI18n(
-      <ChatHeaderBar {...baseProps} rightPanelOpen={false} />,
-    );
+    const { rerender } = renderWithI18n(<ChatHeaderBar {...baseProps} rightPanelOpen={false} />);
 
     expect(screen.getByTestId('chat-header-bar')).toHaveAttribute('data-compact', 'false');
-    // Batch 4 (2026-10-23): "新对话" 从顶栏内联按钮移入 SessionSessionMenu 下拉菜单,
-    // 断言目标改为菜单 toggle 按钮（始终可见,aria-label="+ 新建 / 会话操作"）
     expect(screen.getByTestId('session-session-menu-toggle')).toBeInTheDocument();
 
     rerender(
@@ -104,8 +100,6 @@ describe('UI-R2-P0 Chat Header, Activity Panels & Message Reading Polish', () =>
     );
 
     expect(screen.getByTestId('chat-header-bar')).toHaveAttribute('data-compact', 'true');
-    // Batch 4 (2026-10-23): "新对话" 从顶栏内联按钮移入 SessionSessionMenu 下拉菜单,
-    // 断言目标改为菜单 toggle 按钮（始终可见,aria-label="+ 新建 / 会话操作"）
     expect(screen.getByTestId('session-session-menu-toggle')).toBeInTheDocument();
   });
 

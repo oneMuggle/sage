@@ -14,10 +14,13 @@ import { memo, useEffect, useRef } from 'react';
 import type React from 'react';
 
 import { AttachmentUpload } from '../../features/send-message/AttachmentUpload';
+import { deliveryModeFromKey } from '../../features/send-message/deliveryMode';
+import type { DeliveryMode } from '../../features/send-message/deliveryMode';
 import { useEmacsKeybindings } from '../../shared/lib/hooks/useEmacsKeybindings';
 import { useI18n } from '../../shared/lib/i18n';
 
 import { ComposerPlusMenu, type ComposerPlusMenuItem } from './ComposerPlusMenu';
+import { DeliverySendGroup } from './DeliverySendGroup';
 import { FileAttachment } from './FileAttachment';
 import { KnowledgeChip } from './KnowledgeChip';
 import { SlashCommandMenu } from './SlashCommandMenu';
@@ -69,6 +72,12 @@ export interface InputCardProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  /**
+   * P2-a: 按投递通道发送（插话 / 排队 / 打断并发送）。仅在会话有活跃流时有
+   * 语义 —— 空闲时 useChat 会忽略 delivery 直接正常发送，因此 Enter 始终走
+   * 这个回调也不会出错；未提供时（旧调用方）回落到 `onSubmit`。
+   */
+  onSubmitWithMode?: (mode: DeliveryMode) => void;
   /**
    * Task 5 (2026-09-17): "新话题" 按钮回调 —— 上下文重置，不发送消息。
    * 提供时渲染按钮，点击后触发此回调（ChatInput 负责组装 contextReset）。
@@ -160,6 +169,7 @@ function InputCardInner({
   value,
   onChange,
   onSubmit,
+  onSubmitWithMode,
   onNewTopic,
   placeholder = '',
   disabled = false,
@@ -208,6 +218,7 @@ function InputCardInner({
     knowledgeRefs.length > 0 ||
     officeRefs.length > 0 ||
     audioAttachments.length > 0;
+  const sendDisabled = (!value.trim() && !hasAttachments) || disabled;
 
   // U20: Emacs-style editing keys (Ctrl+A/E/K/U/W, Alt+B/F) in the textarea.
   const { ref: emacsRef, handleKeyDown: handleEmacsKeyDown } = useEmacsKeybindings({
@@ -398,7 +409,11 @@ function InputCardInner({
       // set during composition.
       if (e.nativeEvent.isComposing) return;
       e.preventDefault();
-      onSubmit();
+      // P2-a: 修饰键选择投递通道（对标 Claude Code / Codex CLI：键位与可见
+      // 控件并存，绝不自动猜测意图）。无修饰 = 默认通道，语义即插话。
+      const mode = deliveryModeFromKey(e);
+      if (mode && onSubmitWithMode) onSubmitWithMode(mode);
+      else onSubmit();
     }
   };
 
@@ -623,18 +638,19 @@ function InputCardInner({
             {composerControls}
           </div>
         )}
-        {isLoading ? (
-          <button
-            type="button"
-            onClick={onInterrupt}
-            title={t('chat.stop')}
-            className="h-9 px-4 bg-error text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-error/90 transition-colors"
-          >
-            <Square className="w-3.5 h-3.5" />
-          </button>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            {onNewTopic && (
+        <div className="flex items-center gap-1.5">
+          {isLoading ? (
+            <button
+              type="button"
+              onClick={onInterrupt}
+              title={t('chat.stop')}
+              aria-label={t('chat.stop')}
+              className="h-9 w-9 bg-error text-text-inverse border-none rounded-radius-sm text-sm cursor-pointer flex items-center justify-center hover:bg-error/90 transition-colors"
+            >
+              <Square className="w-3.5 h-3.5" />
+            </button>
+          ) : (
+            onNewTopic && (
               <button
                 type="button"
                 data-testid="chat-new-topic"
@@ -645,19 +661,28 @@ function InputCardInner({
                 <Plus className="w-3.5 h-3.5" />
                 <span>新话题</span>
               </button>
-            )}
+            )
+          )}
+          {isLoading && onSubmitWithMode ? (
+            <DeliverySendGroup
+              sendDisabled={sendDisabled}
+              onSubmit={onSubmit}
+              onSubmitWithMode={onSubmitWithMode}
+            />
+          ) : (
             <button
               type="button"
               data-testid="chat-send"
               onClick={onSubmit}
-              disabled={(!value.trim() && !hasAttachments) || disabled}
+              disabled={sendDisabled}
+              title={isLoading ? t('chat.send_while_running') : undefined}
               className="h-9 px-4 bg-primary text-text-inverse border-none rounded-radius-sm text-sm font-medium cursor-pointer flex items-center gap-1.5 hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {t('chat.send')}
+              {isLoading ? t('chat.send_while_running') : t('chat.send')}
               <Send className="w-3.5 h-3.5" />
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {onImageSelect && (
