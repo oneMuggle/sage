@@ -6,10 +6,13 @@
  * 捕获跳转目标。组件文案为硬编码中文。
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { toast } from 'sonner';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getMemoriesMock = vi.fn();
 const getSessionSummariesMock = vi.fn();
+const searchMemoriesMock = vi.fn();
+const deleteMemoryMock = vi.fn();
 const navigateMock = vi.fn();
 
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -21,7 +24,13 @@ vi.mock('../../../shared/api', () => ({
   memoryApi: {
     getMemories: (...args: unknown[]) => getMemoriesMock(...args),
     getSessionSummaries: (...args: unknown[]) => getSessionSummariesMock(...args),
+    searchMemories: (...args: unknown[]) => searchMemoriesMock(...args),
+    deleteMemory: (...args: unknown[]) => deleteMemoryMock(...args),
   },
+}));
+
+vi.mock('sonner', () => ({
+  toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() },
 }));
 
 import { MemoryBrowser } from '../../../widgets/memory/MemoryBrowser';
@@ -58,6 +67,8 @@ beforeEach(() => {
     total: 1,
   });
   getSessionSummariesMock.mockResolvedValue({ items: [], source_breakdown: BREAKDOWN, total: 0 });
+  searchMemoriesMock.mockResolvedValue([]);
+  deleteMemoryMock.mockResolvedValue(undefined);
 });
 
 describe('MemoryBrowser 加载与列表', () => {
@@ -166,5 +177,136 @@ describe('MemoryBrowser 摘要视图', () => {
     await waitFor(() => expect(getSessionSummariesMock).toHaveBeenCalled());
     await screen.findAllByText('会话摘要内容'); // 标题与正文各渲染一次
     expect(screen.getByText('已就绪')).toBeInTheDocument();
+  }, 20000);
+});
+
+/**
+ * P0-1（2026-10-01）：接上此前零调用的 searchMemories / deleteMemory。
+ * PHILOSOPHY.md 把「不可删除：用户无法清除记忆」列为反模式 —— 在此之前
+ * 用户有一条错误记忆时无路可走。
+ */
+describe('MemoryBrowser 搜索（P0-1）', () => {
+  it('输入关键词后防抖并走语义检索', async () => {
+    searchMemoriesMock.mockResolvedValue([mem({ id: 'h1', content: '命中的记忆' })]);
+    renderBrowser();
+    await screen.findAllByText('记忆内容A', {}, { timeout: 5000 });
+
+    fireEvent.change(screen.getByTestId('memory-search-input'), { target: { value: '命中' } });
+
+    await waitFor(() => expect(searchMemoriesMock).toHaveBeenCalledWith('命中', undefined), {
+      timeout: 5000,
+    });
+    expect(await screen.findAllByText('命中的记忆', {}, { timeout: 5000 })).not.toHaveLength(0);
+  }, 20000);
+
+  it('搜索态下类型筛选不收窄为后端不支持的维度', async () => {
+    searchMemoriesMock.mockResolvedValue([mem({ id: 'h1', content: '命中的记忆' })]);
+    renderBrowser();
+    await screen.findAllByText('记忆内容A', {}, { timeout: 5000 });
+
+    fireEvent.click(screen.getByText('工作记忆'));
+    fireEvent.change(screen.getByTestId('memory-search-input'), { target: { value: '命中' } });
+
+    // working 不在 searchMemories 契约内 → 传 undefined 交后端全量匹配，
+    // 不能静默收窄成空结果。
+    await waitFor(() => expect(searchMemoriesMock).toHaveBeenCalledWith('命中', undefined), {
+      timeout: 5000,
+    });
+  }, 20000);
+
+  it('清空搜索后回到分页列表', async () => {
+    searchMemoriesMock.mockResolvedValue([mem({ id: 'h1', content: '命中的记忆' })]);
+    renderBrowser();
+    await screen.findAllByText('记忆内容A', {}, { timeout: 5000 });
+    const input = screen.getByTestId('memory-search-input');
+
+    fireEvent.change(input, { target: { value: '命中' } });
+    await waitFor(() => expect(searchMemoriesMock).toHaveBeenCalled(), { timeout: 5000 });
+
+    fireEvent.change(input, { target: { value: '' } });
+    await waitFor(() => expect(getMemoriesMock).toHaveBeenCalledTimes(2), { timeout: 5000 });
+  }, 20000);
+});
+
+describe('MemoryBrowser 删除（P0-1）', () => {
+  it('两步确认后才调用 deleteMemory 并移除该条', async () => {
+    getMemoriesMock.mockResolvedValue({
+      items: [mem({ id: 'm1', content: '要删的记忆' }), mem({ id: 'm2', content: '保留的记忆' })],
+      source_breakdown: BREAKDOWN,
+      total: 2,
+    });
+    renderBrowser();
+    await screen.findAllByText('要删的记忆', {}, { timeout: 5000 });
+
+    // 第一步：仅进入确认态，不发请求
+    fireEvent.click(screen.getByTestId('memory-delete-m1'));
+    expect(deleteMemoryMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('memory-delete-confirm-m1')).toBeInTheDocument();
+
+    // 第二步：确认后才真正删除
+    fireEvent.click(screen.getByTestId('memory-delete-confirm-m1'));
+    await waitFor(() => expect(deleteMemoryMock).toHaveBeenCalledWith('m1'), { timeout: 5000 });
+    await waitFor(() => expect(screen.queryByText('要删的记忆')).not.toBeInTheDocument(), {
+      timeout: 5000,
+    });
+    expect(screen.getAllByText('保留的记忆').length).toBeGreaterThan(0);
+    expect(toast.success).toHaveBeenCalled();
+  }, 20000);
+
+  it('取消确认不发删除请求', async () => {
+    renderBrowser();
+    await screen.findAllByText('记忆内容A', {}, { timeout: 5000 });
+    fireEvent.click(screen.getByTestId('memory-delete-m1'));
+    fireEvent.click(screen.getByTestId('memory-delete-cancel-m1'));
+    expect(deleteMemoryMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('memory-delete-m1')).toBeInTheDocument();
+  }, 20000);
+
+  it('删除失败时保留该条并明确提示，不静默移除', async () => {
+    deleteMemoryMock.mockRejectedValue(new Error('db locked'));
+    renderBrowser();
+    await screen.findAllByText('记忆内容A', {}, { timeout: 5000 });
+
+    fireEvent.click(screen.getByTestId('memory-delete-m1'));
+    fireEvent.click(screen.getByTestId('memory-delete-confirm-m1'));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled(), { timeout: 5000 });
+    // 关键：失败的行不得从列表消失（PHILOSOPHY「静默失败」反模式）
+    expect(screen.getAllByText('记忆内容A').length).toBeGreaterThan(0);
+  }, 20000);
+});
+
+/** P0-6：从聊天气泡记忆引用深链 /memory?focus=<id> 的定位高亮。 */
+describe('MemoryBrowser 深链定位（P0-6）', () => {
+  beforeEach(() => {
+    getMemoriesMock.mockResolvedValue({
+      items: [mem({ id: 'm1', content: '第一条' }), mem({ id: 'm2', content: '被引用的那条' })],
+      source_breakdown: BREAKDOWN,
+      total: 2,
+    });
+  });
+
+  it('命中 focus 的条目带高亮标记', async () => {
+    renderBrowser({ focusMemoryId: 'm2' });
+    await screen.findAllByText('被引用的那条', {}, { timeout: 5000 });
+
+    const cards = screen.getAllByTestId('memory-episodic-item');
+    const focused = cards.filter((c) => c.getAttribute('data-focused') === 'true');
+    expect(focused).toHaveLength(1);
+    expect(focused[0].textContent).toContain('被引用的那条');
+  }, 20000);
+
+  it('无 focus 参数时不高亮任何条目', async () => {
+    renderBrowser();
+    await screen.findAllByText('被引用的那条', {}, { timeout: 5000 });
+    const cards = screen.getAllByTestId('memory-episodic-item');
+    expect(cards.filter((c) => c.getAttribute('data-focused') === 'true')).toHaveLength(0);
+  }, 20000);
+
+  it('focus 指向不存在的 id 时不高亮、不报错', async () => {
+    renderBrowser({ focusMemoryId: 'nope' });
+    await screen.findAllByText('被引用的那条', {}, { timeout: 5000 });
+    const cards = screen.getAllByTestId('memory-episodic-item');
+    expect(cards.filter((c) => c.getAttribute('data-focused') === 'true')).toHaveLength(0);
   }, 20000);
 });
