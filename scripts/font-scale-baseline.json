@@ -1,5 +1,7 @@
 {
   "comment": "Ratchet baseline for hardcoded text-[Npx] in src/ non-test files (U3). Prefer text-ui-2xs / text-ui-xs / text-ui-sm.",
-  "total": 0,
-  "files": {}
+  "total": 6,
+  "files": {
+    "src/pages/settings/EndpointsTab.tsx": 6
+  }
 }

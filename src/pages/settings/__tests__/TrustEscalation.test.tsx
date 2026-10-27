@@ -12,7 +12,7 @@ vi.mock('../../../shared/api/permissionApi', () => ({
   },
 }));
 
-// 本分支（批次 A2）新增的显式回执读写与本用例无关：隔离掉，避免它的错误提示参与断言。
+// 本分支（批次 A2）新增的显式回执写入与本用例无关：隔离掉，避免它的错误提示参与断言。
 vi.mock('../../../shared/api/settingsClient', () => ({
   settingsClient: {
     getPreference: vi.fn(async () => null),

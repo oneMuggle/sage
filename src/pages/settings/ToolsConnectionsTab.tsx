@@ -35,6 +35,7 @@ function PermissionModeSelector() {
   return (
     <>
       <SettingRow
+        anchor="permission_mode"
         label={t('settings.permission.mode')}
         desc={t(`settings.permission.mode.${preference.value}.desc` as TranslationKey)}
       >
@@ -134,6 +135,7 @@ function TrustEscalationSection(): JSX.Element {
   return (
     <div className="mt-4 border-t border-border pt-3" data-testid="trust-escalation-section">
       <SettingRow
+        anchor="trust_escalation"
         label="渐进式授权（连续批准后自动放行）"
         desc={`你对某个常规操作连续手动批准 ${threshold} 次后，之后同类调用不再逐次弹窗。破坏性命令、写出工作区、无法静态评估的工具仍会逐次询问。`}
       >
@@ -213,6 +215,7 @@ function FallbackModelInput(): JSX.Element {
   return (
     <>
       <SettingRow
+        anchor="fallback_model"
         label="降级模型 (fallback)"
         desc="主模型重试耗尽（限流/服务端错误/超时）后自动切换到此模型；留空 = 不降级。只有保存确认后生效。"
       >

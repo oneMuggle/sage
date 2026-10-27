@@ -18,11 +18,16 @@
  * 子）可一键整组清理：列表后出汇总行，confirmDialog 确
  * 认后调用 delete-orphans；删除集合由后端同口径选出，
  * 前端只负责计数显示。
+ *
+ * R109 起按裁决优先级派生「被遮蔽」标注：后端恒取命中
+ * 规则的最高优先级决定（deny > allow > ask），被同列
+ * 表内更高优先级规则覆盖的行恒不生效，行内徽标提示。
  */
 import { useEffect, useState } from 'react';
 
 import { permissionApi, type PermissionRuleItem } from '../../shared/api/permissionApi';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { findShadowedRules } from '../../shared/lib/permissionInsights';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 export function PermissionRulesManager() {
@@ -98,6 +103,8 @@ export function PermissionRulesManager() {
   const pluginOwners = [...ownerCounts.entries()];
   // R104 孤儿计数同样只读标注：plugin_status=missing 的条数。
   const orphanCount = rules.filter((rule) => rule.plugin_status === 'missing').length;
+  // R109 遮蔽派生：被同列表内更高优先级规则覆盖的行恒不生效。
+  const shadowedRules = findShadowedRules(rules);
   const busy =
     deletingIndex !== null || clearing || deletingPlugin !== null || deletingOrphans;
 
@@ -186,6 +193,18 @@ export function PermissionRulesManager() {
                       ? 'settings.permission.rules.plugin_uninstalled'
                       : 'settings.permission.rules.plugin_missing',
                   )}
+                </span>
+              )}
+              {shadowedRules.has(index) && (
+                <span
+                  className="px-1 border border-border rounded-radius-sm text-warning shrink-0"
+                  data-testid={`permission-rule-shadowed-${index}`}
+                  title={t('settings.permission.rules.shadowed_title').replace(
+                    '{pattern}',
+                    shadowedRules.get(index) ?? '',
+                  )}
+                >
+                  {t('settings.permission.rules.shadowed')}
                 </span>
               )}
               <button

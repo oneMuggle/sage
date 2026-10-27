@@ -1,7 +1,6 @@
 /** Settings 页面 - 网络 Tab（内网 Web 访问，配置走 preferences KV network_policy） */
 import { useEffect, useState } from 'react';
 
-import { BrowserEnvironmentSection } from '../../features/diagnostic/BrowserEnvironmentSection';
 import { settingsClient } from '../../shared/api/settingsClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
 
@@ -587,9 +586,6 @@ export function NetworkTab() {
       </section>
 
       {/* Round 12：网站凭据（browser_cookies 档案 + web_access_config 开关） */}
-      {/* 浏览器环境检测（Phase E3）—— win7 独有能力，main 侧已整体移除，收敛时保留 */}
-      <BrowserEnvironmentSection />
-
       <CredentialsSection />
     </div>
   );

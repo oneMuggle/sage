@@ -2,13 +2,11 @@
  * IPC client for MCP multi-server management (M3).
  *
  * Translates to backend HTTP via Electron preload:
- *   mcp_status           → GET    /api/v1/mcp/status
- *   mcp_servers          → GET    /api/v1/mcp/servers
- *   mcp_server_add       → POST   /api/v1/mcp/servers        (rawBody)
- *   mcp_server_update    → PATCH  /api/v1/mcp/servers/{name}
- *   mcp_server_tools     → GET    /api/v1/mcp/servers/{name}/tools      (r53-B)
- *   mcp_server_authorize → POST   /api/v1/mcp/servers/{name}/authorize  (r64)
- *   mcp_server_delete    → DELETE /api/v1/mcp/servers/{name}
+ *   mcp_status        → GET    /api/v1/mcp/status
+ *   mcp_servers       → GET    /api/v1/mcp/servers
+ *   mcp_server_add    → POST   /api/v1/mcp/servers        (rawBody)
+ *   mcp_server_update → PATCH  /api/v1/mcp/servers/{name}
+ *   mcp_server_delete → DELETE /api/v1/mcp/servers/{name}
  *
  * Responses arrive snake_case (backend contract). Add/update inputs are
  * snake_case by construction: mcp_server_add is a rawBody route, so env
@@ -52,7 +50,7 @@ export interface McpServerConfig {
   enabled: boolean;
   required: boolean;
   timeout_seconds: number;
-  /** R53: 已禁用的工具 id 列表 */
+  // R20-B per-tool 禁用清单（全量替换语义；勾选 UI 的数据源）
   disabled_tools?: string[];
   builtin: boolean;
 }
@@ -73,7 +71,7 @@ export interface UpdateMcpServerChanges {
   disabledTools?: string[];
 }
 
-/** r53-B: per-tool 开关面板的只读载荷 */
+// r53-B: per-tool 开关面板的读取载荷（GET /mcp/servers/{name}/tools）
 export interface McpToolSpec {
   name: string;
   description: string;
@@ -131,12 +129,13 @@ export const mcpClient = {
     return invoke<McpServerToolsReport>('mcp_server_tools', { name });
   },
 
-  async authorizeServer(name: string): Promise<{
-    ok: boolean;
-    server: string;
-    token_type: string;
-    expires_at: number;
-  }> {
+  /**
+   * r64: OAuth 授权（长请求——后端阻塞等待浏览器回调，上限 300s）。
+   * 仅 HTTP 传输服务器可用；成功后 token 入库，Authorization 注入自动生效。
+   */
+  async authorizeServer(
+    name: string,
+  ): Promise<{ ok: boolean; server: string; token_type: string; expires_at: number }> {
     return invoke('mcp_server_authorize', { name });
   },
 
