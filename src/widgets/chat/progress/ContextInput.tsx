@@ -136,7 +136,7 @@ export function ContextInput({
 
   return (
     <div
-      className="px-4 py-3 border-t border-border-primary bg-bg-secondary"
+      className="px-4 py-3 border-t border-border bg-bg-muted"
       data-testid="context-input"
     >
       <div className="text-xs text-text-tertiary mb-2">追加信息</div>
@@ -147,7 +147,7 @@ export function ContextInput({
         </label>
         <select
           id="ctx-message-type"
-          className="flex-1 text-xs bg-bg-primary border border-border-primary rounded px-2 py-1"
+          className="flex-1 text-xs bg-surface border border-border rounded px-2 py-1"
           value={messageType}
           onChange={(e) => setMessageType(e.target.value as MessageType)}
         >
@@ -165,7 +165,7 @@ export function ContextInput({
         </label>
         <select
           id="ctx-apply-mode"
-          className="flex-1 text-xs bg-bg-primary border border-border-primary rounded px-2 py-1"
+          className="flex-1 text-xs bg-surface border border-border rounded px-2 py-1"
           value={applyMode}
           onChange={(e) => setApplyMode(e.target.value as ApplyMode)}
         >
@@ -178,7 +178,7 @@ export function ContextInput({
       </div>
 
       <textarea
-        className="w-full text-xs bg-bg-primary border border-border-primary rounded p-2 resize-y min-h-16 max-h-40"
+        className="w-full text-xs bg-surface border border-border rounded p-2 resize-y min-h-16 max-h-40"
         placeholder="输入补充信息（最多 8 KB）..."
         value={content}
         onChange={(e) => setContent(e.target.value)}

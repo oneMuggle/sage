@@ -280,7 +280,7 @@ export function SidebarProjectList({
                         {project.projectStage && (
                           <span
                             data-testid="project-row-stage-badge"
-                            className="shrink-0 rounded border border-border/60 bg-bg-secondary px-1 py-0.5 text-ui-2xs text-text-secondary"
+                            className="shrink-0 rounded border border-border/60 bg-bg-muted px-1 py-0.5 text-ui-2xs text-text-secondary"
                           >
                             {getArchetypeBlueprint(
                               project.projectType ?? project.detectedType ?? 'coding',

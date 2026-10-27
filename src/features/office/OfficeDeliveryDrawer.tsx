@@ -228,11 +228,11 @@ export function OfficeDeliveryDrawer({
 
   return (
     <div
-      className="fixed inset-y-0 right-0 w-96 bg-bg-primary border-l border-border-primary shadow-lg z-50 flex flex-col"
+      className="fixed inset-y-0 right-0 w-96 bg-surface border-l border-border shadow-lg z-50 flex flex-col"
       data-testid="office-delivery-drawer"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-sm font-medium truncate">{t('office.delivery.title')}</span>
           {decided ? (
@@ -260,7 +260,7 @@ export function OfficeDeliveryDrawer({
 
       <div className="flex-1 overflow-y-auto">
         {/* Lint section */}
-        <div className="px-4 py-3 border-b border-border-primary">
+        <div className="px-4 py-3 border-b border-border">
           <div className="text-xs text-text-tertiary mb-2">{t('office.delivery.lint')}</div>
           {lintState === 'loading' && (
             <div className="text-xs text-text-tertiary">{t('orchestration.loading')}</div>
@@ -336,7 +336,7 @@ export function OfficeDeliveryDrawer({
 
               {/* P0-2: 一键修复。此前只报问题不给修法，闭环断在最后一步。 */}
               {repairReport && (
-                <div className="mt-2 pt-2 border-t border-border-primary" data-testid="lint-repair-report">
+                <div className="mt-2 pt-2 border-t border-border" data-testid="lint-repair-report">
                   <div className="text-xs text-text-secondary">
                     {t('office.delivery.repairDone').replace(
                       '{n}',
@@ -364,7 +364,7 @@ export function OfficeDeliveryDrawer({
                   若把按钮与报告绑在一起，用户点完修复会看到反馈凭空消失，
                   误以为没生效。 */}
               {!lint.ok && (
-                <div className={repairReport ? 'mt-2' : 'mt-2 pt-2 border-t border-border-primary'}>
+                <div className={repairReport ? 'mt-2' : 'mt-2 pt-2 border-t border-border'}>
                   <button
                     type="button"
                     onClick={() => void handleRepair()}
@@ -387,7 +387,7 @@ export function OfficeDeliveryDrawer({
         </div>
 
         {/* Preview section */}
-        <div className="px-4 py-3 border-b border-border-primary">
+        <div className="px-4 py-3 border-b border-border">
           <div className="text-xs text-text-tertiary mb-2">{t('office.delivery.preview')}</div>
           {previewFailed ? (
             <div className="text-xs text-text-tertiary" data-testid="preview-failed">
@@ -410,7 +410,7 @@ export function OfficeDeliveryDrawer({
 
       {/* Decision zone */}
       {!decided && (
-        <div className="px-4 py-3 border-t border-border-primary" data-testid="decision-zone">
+        <div className="px-4 py-3 border-t border-border" data-testid="decision-zone">
           <div className="flex gap-2">
             <button
               type="button"

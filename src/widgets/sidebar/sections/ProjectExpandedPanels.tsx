@@ -421,7 +421,7 @@ export function ProjectMaterialsPanel({
 
       {list && list.length > 0 && (
         <div
-          className="mb-2 px-1.5 py-1 rounded bg-bg-secondary/60 border border-border/40"
+          className="mb-2 px-1.5 py-1 rounded bg-bg-muted/60 border border-border/40"
           data-testid="project-materials-watermark"
         >
           <div className="flex items-center justify-between text-ui-2xs text-text-secondary">
