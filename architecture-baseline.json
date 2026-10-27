@@ -67,6 +67,8 @@
     "src/features/send-message/useChat.ts": 998,
     "src/pages/settings/PluginsTab.tsx": 820,
     "backend/tests/unit/test_design_routes.py": 975,
-    "backend/adapters/out/skill/inproc.py": 848
+    "backend/adapters/out/skill/inproc.py": 848,
+    "backend/api/project_routes.py": 957,
+    "src/features/project-type/MilestoneProgressWidget.test.tsx": 837
   }
 }
