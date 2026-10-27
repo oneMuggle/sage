@@ -1,4 +1,4 @@
-"""r95 — Zotero MCP server 单测（7 工具分发 + JSON 信封 + 错误兜底）。
+"""r95 — Zotero MCP server 单测（9 工具分发 + JSON 信封 + 错误兜底）。
 
 fake client 注入模块单例 ``_client``，不经真实 SQLite。``call_tool``/
 ``list_tools`` 在 MCP 可用与不可用两种安装形态下都是可直接调用的异步函数
@@ -12,6 +12,7 @@ import json
 import pytest
 
 from backend.mcp.servers.zotero import server as zotero_server
+from backend.zotero import service as zotero_service
 
 pytestmark = pytest.mark.unit
 
@@ -36,8 +37,16 @@ class _FakeClient:
         return [{"key": "ITEM1", "title": "A Paper"}]
 
     def get_item(self, item_key):
-        self.calls["get_item"] = item_key
-        return {"key": item_key, "title": "A Paper", "doi": "10.1/xx"}
+        self.calls.setdefault("get_item_calls", []).append(item_key)
+        return {
+            "key": item_key,
+            "title": "A Paper",
+            "doi": "10.1/xx",
+            "authors": [],
+            "tags": [],
+            "date": "2024",
+            "item_type": "journalArticle",
+        }
 
     def get_annotations(self, item_key):
         self.calls["get_annotations"] = item_key
@@ -60,6 +69,19 @@ class _FakeClient:
         }
         return {"item_key": item_key, "text": "chunk-body", "has_more": False}
 
+    def get_related_items(self, item_key):
+        self.calls["related"] = item_key
+        return [
+            {
+                "key": "REL1",
+                "title": "Related Paper",
+                "item_type": "journalArticle",
+                "date": "2023",
+                "authors": [],
+                "tags": [],
+            }
+        ]
+
 
 @pytest.fixture()
 def calls():
@@ -79,7 +101,7 @@ def _text(result) -> str:
 
 
 @pytest.mark.asyncio()
-async def test_list_tools_exposes_seven(fake_client):
+async def test_list_tools_exposes_nine(fake_client):
     tools = await zotero_server.list_tools()
     names = [t.name for t in tools]
     assert names == [
@@ -90,6 +112,8 @@ async def test_list_tools_exposes_seven(fake_client):
         "zotero_list_collections",
         "zotero_get_bibtex",
         "zotero_read_pdf",
+        "zotero_related",
+        "zotero_sync",
     ]
     # 每个工具都带 JSON Schema
     assert all(isinstance(t.inputSchema, dict) and t.inputSchema.get("type") == "object" for t in tools)
@@ -119,7 +143,12 @@ async def test_search_passes_args_and_wraps_envelope(fake_client, calls):
     )
     body = json.loads(_text(out))
     assert calls["search"] == {"query": "paper", "collection_key": "CK1", "tag": "ml", "limit": 5}
-    assert body == {"query": "paper", "total": 1, "results": [{"key": "ITEM1", "title": "A Paper"}]}
+    assert body == {
+        "query": "paper",
+        "mode": "sql",
+        "total": 1,
+        "results": [{"key": "ITEM1", "title": "A Paper"}],
+    }
 
 
 @pytest.mark.asyncio()
@@ -132,11 +161,54 @@ async def test_search_missing_required_arg_falls_into_error_text(fake_client):
 
 
 @pytest.mark.asyncio()
+async def test_search_falls_back_to_sql_when_semantic_return_zero_hits(
+    fake_client, calls, monkeypatch
+):
+    """H4 — 向量库可用但 0 命中时必须退回 SQL LIKE，不能返回空结果。"""
+    async def _empty_semantic(query, limit=20, client=None):
+        return []  # RAG 可用但无命中
+
+    monkeypatch.setattr(zotero_service, "semantic_search", _empty_semantic)
+
+    out = await zotero_server.call_tool("zotero_search", {"query": "obscure term"})
+    body = json.loads(_text(out))
+
+    # 落到 SQL 模式并返回 fake client 的固定命中
+    assert body["mode"] == "sql"
+    assert body["total"] == 1
+    assert body["results"] == [{"key": "ITEM1", "title": "A Paper"}]
+    assert calls["search"]["query"] == "obscure term"
+
+
+@pytest.mark.asyncio()
+async def test_search_falls_back_to_sql_when_semantic_unavailable(
+    fake_client, calls, monkeypatch
+):
+    """向量库不可用（None）走 SQL LIKE —— 既有路径不被 H4 改动破坏。"""
+    async def _unavailable(query, limit=20, client=None):
+        return None
+
+    monkeypatch.setattr(zotero_service, "semantic_search", _unavailable)
+
+    out = await zotero_server.call_tool("zotero_search", {"query": "anything"})
+    body = json.loads(_text(out))
+    assert body["mode"] == "sql"
+
+
+@pytest.mark.asyncio()
 async def test_get_item_returns_raw_item_json(fake_client, calls):
     out = await zotero_server.call_tool("zotero_get_item", {"item_key": "ITEM9"})
     body = json.loads(_text(out))
-    assert calls["get_item"] == "ITEM9"
-    assert body == {"key": "ITEM9", "title": "A Paper", "doi": "10.1/xx"}
+    assert calls["get_item_calls"] == ["ITEM9"]
+    assert body == {
+        "key": "ITEM9",
+        "title": "A Paper",
+        "doi": "10.1/xx",
+        "authors": [],
+        "tags": [],
+        "date": "2024",
+        "item_type": "journalArticle",
+    }
 
 
 @pytest.mark.asyncio()
@@ -187,3 +259,61 @@ async def test_read_pdf_defaults_and_overrides(fake_client, calls):
 async def test_unknown_tool_returns_message(fake_client):
     out = await zotero_server.call_tool("zotero_nonexistent", {})
     assert _text(out) == "Unknown Zotero tool: zotero_nonexistent"
+
+
+@pytest.mark.asyncio()
+async def test_related_merges_zotero_and_wiki_keys(fake_client, calls, monkeypatch):
+    monkeypatch.setattr(
+        zotero_service, "wiki_related_keys",
+        lambda project_path, item_key: ["WIKI1", "REL1"],
+    )
+    out = await zotero_server.call_tool(
+        "zotero_related", {"item_key": "ITEM1", "project_path": "/proj"},
+    )
+    body = json.loads(_text(out))
+    assert calls["related"] == "ITEM1"
+    assert body["item_key"] == "ITEM1"
+    # REL1 来自 Zotero（get_related_items），WIKI1 来自 wiki；REL1 去重（不重复出现）
+    keys = [r["key"] for r in body["related"]]
+    assert "REL1" in keys
+    assert "WIKI1" in keys
+    assert keys.count("REL1") == 1
+    # ITEM1 自身不出现在 related 中
+    assert "ITEM1" not in keys
+
+
+@pytest.mark.asyncio()
+async def test_sync_dispatches_incremental_vs_full(fake_client, monkeypatch):
+    """zotero_sync 工具：force 默认走增量，force=true 走全量。"""
+
+    class _FakeResult:
+        def __init__(self, mode):
+            self.mode = mode
+
+        def to_dict(self):
+            return {"mode": self.mode, "items": 3, "errors": []}
+
+    class _FakeIngestor:
+        def __init__(self):
+            self.calls = []
+
+        async def sync_incremental(self):
+            self.calls.append("incremental")
+            return _FakeResult("incremental")
+
+        async def sync_full(self):
+            self.calls.append("full")
+            return _FakeResult("full")
+
+    ingestor = _FakeIngestor()
+    monkeypatch.setattr(zotero_service, "build_client", lambda: fake_client)
+    monkeypatch.setattr(zotero_service, "build_ingestor", lambda client: ingestor)
+
+    out_default = await zotero_server.call_tool("zotero_sync", {})
+    body_default = json.loads(_text(out_default))
+    assert body_default["mode"] == "incremental"
+
+    out_force = await zotero_server.call_tool("zotero_sync", {"force": True})
+    body_force = json.loads(_text(out_force))
+    assert body_force["mode"] == "full"
+    assert ingestor.calls == ["incremental", "full"]
