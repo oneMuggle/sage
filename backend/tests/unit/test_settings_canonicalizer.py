@@ -841,3 +841,46 @@ def test_to_camel_back_translates_plan_preflight_snake() -> None:
     out = to_camel({"orch": {"plan_preflight_enabled": True, "plan_scout_enabled": False}})
     assert out["orch"]["planPreflightEnabled"] is True
     assert out["orch"]["planScoutEnabled"] is False
+
+
+# --- 2026-10-27: relay 往返丢键回归（CRITICAL + HIGH-2 同源） ---
+
+
+def test_orch_payload_survives_relay_snake_roundtrip() -> None:
+    """模拟 electron relay 的 camelToSnakeKeys → 后端 to_camel → 白名单校验。
+
+    2026-10-27 回归：``maxIterations`` 缺 snake 别名，编排 Tab 每次保存
+    必 400（前端整体 spread 提交 orch 段，必带 maxIterations）。同时
+    ``logTimezone`` / ``useFolderPicker`` 同属该类回归，一并修复。
+    """
+
+    def snake(key: str) -> str:
+        return re.sub(r"([A-Z])", lambda m: "_" + m.group(1).lower(), key)
+
+    def relay(value):
+        if isinstance(value, dict):
+            return {snake(k): relay(v) for k, v in value.items()}
+        return value
+
+    camel_payload = {
+        "orch": {
+            "maxConcurrentSubagents": 4,
+            "maxToolCallsPerRun": 100,
+            "maxScoutIterations": 4,
+            "maxPlannerIterations": 8,
+            "maxIterations": 0,
+        },
+        "logTimezone": "UTC",
+        "wiki": {"useFolderPicker": True},
+    }
+    translated = to_camel(relay(camel_payload))
+
+    # 三处回归键必须翻回 camel
+    assert translated["orch"]["maxIterations"] == 0
+    assert "max_iterations" not in translated["orch"]
+    assert translated["logTimezone"] == "UTC"
+    assert "log_timezone" not in translated
+    assert translated["wiki"]["useFolderPicker"] is True
+    assert "use_folder_picker" not in translated["wiki"]
+    # 整份 payload 必须过白名单（不抛 = 通过）
+    validate_settings_shape(translated)

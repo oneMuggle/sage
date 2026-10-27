@@ -18,6 +18,8 @@ import { SettingRow, Toggle } from './components';
 export interface OrchestrationTabAuditInput {
   planPreflightEnabled: boolean;
   planScoutEnabled: boolean;
+  maxScoutIterations: number;
+  maxPlannerIterations: number;
   maxConcurrentSubagents: number;
   maxRetries: number;
   maxLaneIterations: number;
@@ -33,6 +35,8 @@ export function formatOrchestrationTabAuditSnapshot(input: OrchestrationTabAudit
     `# 编排设置审计快照`,
     `- 拆解前澄清: ${input.planPreflightEnabled ? '开启' : '关闭'}`,
     `- 拆解前侦察: ${input.planScoutEnabled ? '开启' : '关闭'}`,
+    `- 侦察迭代预算: ${input.maxScoutIterations}`,
+    `- Planner 迭代预算: ${input.maxPlannerIterations}（预配置，暂未生效）`,
     `- 最大并发子任务: ${input.maxConcurrentSubagents}`,
     `- 子任务重试次数: ${input.maxRetries}`,
     `- Lane 迭代上限: ${input.maxLaneIterations}`,
@@ -49,6 +53,8 @@ export function formatOrchestrationTabAuditJson(input: OrchestrationTabAuditInpu
     {
       planPreflightEnabled: input.planPreflightEnabled,
       planScoutEnabled: input.planScoutEnabled,
+      maxScoutIterations: input.maxScoutIterations,
+      maxPlannerIterations: input.maxPlannerIterations,
       maxConcurrentSubagents: input.maxConcurrentSubagents,
       maxRetries: input.maxRetries,
       maxLaneIterations: input.maxLaneIterations,
@@ -150,6 +156,8 @@ export function OrchestrationTab() {
     const text = formatOrchestrationTabAuditSnapshot({
       planPreflightEnabled: settings.orch.planPreflightEnabled,
       planScoutEnabled: settings.orch.planScoutEnabled,
+      maxScoutIterations: settings.orch.maxScoutIterations,
+      maxPlannerIterations: settings.orch.maxPlannerIterations,
       maxConcurrentSubagents: settings.orch.maxConcurrentSubagents,
       maxRetries: settings.orch.maxRetries,
       maxLaneIterations: settings.orch.maxLaneIterations,
@@ -206,6 +214,22 @@ export function OrchestrationTab() {
             onChange={(v) => setOrch({ planScoutEnabled: v })}
           />
         </SettingRow>
+        <NumberField
+          label="侦察迭代预算"
+          desc="侦察子代理 ReAct 循环最大轮数; 侦察要快, 默认 4, 至少 1; 不受全局迭代上限影响, 侦察另有时长护栏"
+          dataTestId="orch-max-scout-iterations"
+          value={settings.orch.maxScoutIterations}
+          min={1}
+          onChange={(v) => setOrch({ maxScoutIterations: v })}
+        />
+        <NumberField
+          label="Planner 迭代预算"
+          desc="Planner ReAct 循环最大轮数; 当前 Planner 为单次拆解, 该值预配置, 阶段 2.1 ReAct 接入后生效"
+          dataTestId="orch-max-planner-iterations"
+          value={settings.orch.maxPlannerIterations}
+          min={1}
+          onChange={(v) => setOrch({ maxPlannerIterations: v })}
+        />
       </section>
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">并发与迭代</h3>

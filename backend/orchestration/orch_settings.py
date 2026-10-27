@@ -42,6 +42,21 @@ _RAW_KEYS = {
     "maxIterations": "max_iterations",  # 2026-10-20: primary agent 迭代次数上限
     "planPreflightEnabled": "plan_preflight_enabled",
     "planScoutEnabled": "plan_scout_enabled",
+    # 2026-10-27: 计划前置 / Planner 迭代预算（Scout 立即生效；Planner 为
+    # 阶段 2.1 ReAct 接入后的预配置）。键名与前端 OrchSettings 逐字一致。
+    "maxScoutIterations": "max_scout_iterations",
+    "maxPlannerIterations": "max_planner_iterations",
+}
+
+#: 迭代预算类 int 字段的下界。0/负值会让 ReAct 循环零次执行
+#: (``for i in range(0)``) 立即判定 ``max_iterations_exceeded`` —— 侦察静默
+#: 失效（无异常、无日志），比崩溃更难排查。前端 NumberField 有 ``min={1}``
+#: 守卫，但 API 可绕过 UI 直写，故后端在此钳制。
+#: 注意：``max_iterations``（全局上限）不在此表 —— 其 0 有"按各 agent
+#: 分别设置"的独立语义，不能钳。
+_INT_MIN_BOUNDS = {
+    "max_scout_iterations": 1,
+    "max_planner_iterations": 1,
 }
 
 
@@ -102,6 +117,14 @@ class OrchSettings:
     #: 计划前置 (2026-09-19): 侦察先行单独开关（澄清不受它控制；总闸关闭
     #: 时两者皆停）。侦察有独立墙钟 env ``SAGE_ORCH_SCOUT_TIMEOUT``。
     plan_scout_enabled: bool = True
+    #: 2026-10-27: 侦察子代理的 ReAct 迭代预算。此前硬编码为
+    #: ``plan_preflight.SCOUT_MAX_ITERATIONS``（4）；开放 UI 可调后由
+    #: ``run_plan_preflight`` 透传给 ``_scout``。默认 4 保持既有行为。
+    max_scout_iterations: int = 4
+    #: 2026-10-27: Planner 的 ReAct 迭代预算 —— 预配置。Planner 当前是单次
+    #: ``llm_client.complete``，本值在阶段 2.1 接入只读工具循环后消费。
+    #: 默认 8 为总方案建议值；当前不产生任何运行效果。
+    max_planner_iterations: int = 8
 
 
 def load_orch_settings() -> OrchSettings:
@@ -128,6 +151,15 @@ def load_orch_settings() -> OrchSettings:
         elif isinstance(current, int):
             if not isinstance(value, int) or isinstance(value, bool):
                 continue
+            lower_bound = _INT_MIN_BOUNDS.get(field_name)
+            if lower_bound is not None and value < lower_bound:
+                logger.warning(
+                    "orch 设置 %s=%s 低于下界 %s，已钳制",
+                    field_name,
+                    value,
+                    lower_bound,
+                )
+                value = lower_bound
             settings = replace(settings, **{field_name: value})
         elif isinstance(current, str) and isinstance(value, str):
             settings = replace(settings, **{field_name: _sanitize_scratch_root(value, current)})

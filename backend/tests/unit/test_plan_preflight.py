@@ -284,7 +284,7 @@ async def test_scout_facts_injected_and_truncated(monkeypatch):
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
 
-    async def fake_scout_agent(client, goal):
+    async def fake_scout_agent(client, goal, max_iterations):
         assert "工作区调研任务" in goal  # 侦察目标含用户 message
         return "f" * (plan_preflight.SCOUT_FACTS_MAX_CHARS + 100)
 
@@ -321,7 +321,7 @@ async def test_scout_timeout_degrades(monkeypatch):
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
 
-    async def slow_scout(client, goal):
+    async def slow_scout(client, goal, max_iterations):
         await asyncio.sleep(5)
         return "too late"
 
@@ -338,7 +338,7 @@ async def test_scout_failure_degrades(monkeypatch):
         plan_preflight, "get_question_gate", lambda: UserQuestionGate()
     )
 
-    async def broken_scout(client, goal):
+    async def broken_scout(client, goal, max_iterations):
         raise RuntimeError("scout crashed")
 
     monkeypatch.setattr(plan_preflight, "_run_scout_agent", broken_scout)
@@ -383,6 +383,65 @@ async def test_run_scout_agent_extracts_done_and_cleans_workspace(monkeypatch):
     # 清理拿到的是只读注册表创建的临时工作区（真实 Path），且只清一次
     assert len(cleaned) == 1
     assert cleaned[0] is not None
+
+
+@pytest.mark.asyncio()
+async def test_run_scout_agent_uses_iteration_budget(monkeypatch):
+    """2026-10-27: maxScoutIterations 透传到 run_loop(max_iterations=...)。"""
+    from backend.core.legacy import agent as agent_module
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        "backend.tools.agent_tool._cleanup_subagent_workspace", lambda root: None
+    )
+
+    class FakeSubagent:
+        def __init__(self, *args, **kwargs):
+            self.tool_registry = None
+            self.llm_client = None
+            self._owned_workspace_root = None
+
+        async def run_loop(self, messages, max_iterations=6, **kwargs):
+            captured["max_iterations"] = max_iterations
+
+            class _Ev:
+                state = "done"
+                content = "facts"
+
+            yield _Ev()
+
+    monkeypatch.setattr(agent_module, "SageAgent", FakeSubagent)
+
+    answer = await plan_preflight._run_scout_agent(object(), "目标", 9)
+    assert answer == "facts"
+    assert captured["max_iterations"] == 9
+
+
+@pytest.mark.asyncio()
+async def test_max_scout_iterations_from_settings_flows_to_scout(monkeypatch):
+    """2026-10-27: 设置页 maxScoutIterations 经 run_plan_preflight 传给 _scout。"""
+    client = FakeLLM(json.dumps({"need_clarify": False, "questions": []}))
+    _enable(
+        monkeypatch,
+        client=client,
+        plan_scout_enabled=True,
+        max_scout_iterations=9,
+    )
+    monkeypatch.setattr(
+        plan_preflight, "get_question_gate", lambda: UserQuestionGate()
+    )
+
+    captured: dict = {}
+
+    async def fake_scout(client, message, emit, clarifications, max_iterations=4):
+        captured["max_iterations"] = max_iterations
+        return "facts"
+
+    monkeypatch.setattr(plan_preflight, "_scout", fake_scout)
+
+    result = await plan_preflight.run_plan_preflight("目标", emit=None)
+    assert captured["max_iterations"] == 9
+    assert result == {"scout_facts": "facts"}
 
 
 # ---------------------------------------------------------------------------

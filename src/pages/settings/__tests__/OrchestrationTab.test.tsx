@@ -11,7 +11,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { useSettings } from '../../../features/manage-settings/useSettings';
-import { formatOrchestrationTabAuditJson, formatOrchestrationTabAuditSnapshot, OrchestrationTab } from '../OrchestrationTab';
+import {
+  formatOrchestrationTabAuditJson,
+  formatOrchestrationTabAuditSnapshot,
+  OrchestrationTab,
+} from '../OrchestrationTab';
 
 const mocks = vi.hoisted(() => ({
   updateSettings: vi.fn(),
@@ -179,10 +183,18 @@ describe('OrchestrationTab 部分更新契约', () => {
 // ============================================================================
 
 describe('OrchestrationTab — 计划前置旋钮 (Round 3)', () => {
-  it('澄清/侦察两个开关默认渲染', () => {
+  it('澄清/侦察两个开关与两个迭代预算输入框默认渲染', () => {
     renderTab();
     expect(screen.getByTestId('orch-plan-preflight')).toBeInTheDocument();
     expect(screen.getByTestId('orch-plan-scout')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-max-scout-iterations')).toBeInTheDocument();
+    expect(screen.getByTestId('orch-max-planner-iterations')).toBeInTheDocument();
+  });
+
+  it('侦察/Planner 迭代预算默认值与后端 OrchSettings 对齐', () => {
+    renderTab();
+    expect((screen.getByTestId('orch-max-scout-iterations') as HTMLInputElement).value).toBe('4');
+    expect((screen.getByTestId('orch-max-planner-iterations') as HTMLInputElement).value).toBe('8');
   });
 
   it('澄清开关默认开，关闭走部分更新契约', () => {
@@ -285,6 +297,8 @@ describe('OrchestrationTab profile 迭代上限（主对话循环实际预算）
     const snapshot = formatOrchestrationTabAuditSnapshot({
       planPreflightEnabled: true,
       planScoutEnabled: true,
+      maxScoutIterations: 4,
+      maxPlannerIterations: 8,
       maxConcurrentSubagents: 4,
       maxRetries: 2,
       maxLaneIterations: 8,
@@ -296,11 +310,15 @@ describe('OrchestrationTab profile 迭代上限（主对话循环实际预算）
     expect(snapshot).toContain('# 编排设置审计快照');
     expect(snapshot).toContain('最大并发子任务: 4');
     expect(snapshot).toContain('子代理审批模式: ask');
+    expect(snapshot).toContain('侦察迭代预算: 4');
+    expect(snapshot).toContain('Planner 迭代预算: 8');
 
     const json = JSON.parse(
       formatOrchestrationTabAuditJson({
         planPreflightEnabled: false,
         planScoutEnabled: true,
+        maxScoutIterations: 6,
+        maxPlannerIterations: 12,
         maxConcurrentSubagents: 2,
         maxRetries: 1,
         maxLaneIterations: 5,
@@ -313,6 +331,8 @@ describe('OrchestrationTab profile 迭代上限（主对话循环实际预算）
     expect(json).toEqual({
       planPreflightEnabled: false,
       planScoutEnabled: true,
+      maxScoutIterations: 6,
+      maxPlannerIterations: 12,
       maxConcurrentSubagents: 2,
       maxRetries: 1,
       maxLaneIterations: 5,
@@ -321,5 +341,44 @@ describe('OrchestrationTab profile 迭代上限（主对话循环实际预算）
       worktreeIsolation: true,
       scratchRoot: 'orch_scratch',
     });
+  });
+
+  it('侦察迭代预算修改走部分更新契约（2026-10-27）', () => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-max-scout-iterations'), { target: { value: '6' } });
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        maxScoutIterations: 6,
+        maxPlannerIterations: 8, // 保留其余键（部分更新契约）
+        planPreflightEnabled: true,
+      }),
+    });
+  });
+
+  it('Planner 迭代预算修改走部分更新契约（2026-10-27）', () => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-max-planner-iterations'), {
+      target: { value: '12' },
+    });
+    expect(mocks.updateSettings).toHaveBeenCalledWith({
+      orch: expect.objectContaining({
+        maxPlannerIterations: 12,
+        maxScoutIterations: 4, // 保留其余键（部分更新契约）
+      }),
+    });
+  });
+
+  it('拒绝 0 与负数的迭代预算 — 0 会让 ReAct 循环零次执行直接判定超限', () => {
+    renderTab();
+
+    fireEvent.change(screen.getByTestId('orch-max-scout-iterations'), { target: { value: '0' } });
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByTestId('orch-max-planner-iterations'), {
+      target: { value: '-1' },
+    });
+    expect(mocks.updateSettings).not.toHaveBeenCalled();
   });
 });

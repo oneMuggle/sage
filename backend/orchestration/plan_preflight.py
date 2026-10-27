@@ -49,7 +49,9 @@ DEFAULT_CLARIFY_TIMEOUT_S = 300.0
 SCOUT_TIMEOUT_ENV = "SAGE_ORCH_SCOUT_TIMEOUT"
 DEFAULT_SCOUT_TIMEOUT_S = 120.0
 
-#: 侦察员 ReAct 迭代预算（低于子代理默认 6 —— 侦察要快）。
+#: 侦察员 ReAct 迭代预算默认值（低于子代理默认 6 —— 侦察要快）。
+#: 2026-10-27 起可经 ``OrchSettings.max_scout_iterations``（设置页可调）
+#: 覆盖；本常量仅作缺省兜底。
 SCOUT_MAX_ITERATIONS = 4
 
 #: 事实清单注入 planner context 的截断上限（字符）。
@@ -165,7 +167,13 @@ async def run_plan_preflight(
             result["clarifications"] = clarifications
 
         if settings.plan_scout_enabled:
-            facts = await _scout(client, message, emit, clarifications)
+            facts = await _scout(
+                client,
+                message,
+                emit,
+                clarifications,
+                max_iterations=settings.max_scout_iterations,
+            )
             if facts:
                 result["scout_facts"] = facts
 
@@ -263,6 +271,7 @@ async def _scout(
     message: str,
     emit: Optional[Callable[[Dict[str, Any]], Awaitable[None]]],
     clarifications: List[str],
+    max_iterations: int = SCOUT_MAX_ITERATIONS,
 ) -> str:
     """只读侦察：产出分点事实清单（截断至 SCOUT_FACTS_MAX_CHARS，失败为空）。"""
     await _emit(emit, {"state": "orch_preflight", "phase": "scout"})
@@ -274,7 +283,7 @@ async def _scout(
 
     try:
         facts = await asyncio.wait_for(
-            _run_scout_agent(client, goal), timeout=_scout_timeout_s()
+            _run_scout_agent(client, goal, max_iterations), timeout=_scout_timeout_s()
         )
     except TIMEOUT_ERRORS:
         logger.warning(
@@ -287,7 +296,9 @@ async def _scout(
     return (facts or "").strip()[:SCOUT_FACTS_MAX_CHARS]
 
 
-async def _run_scout_agent(client: Any, goal: str) -> str:
+async def _run_scout_agent(
+    client: Any, goal: str, max_iterations: int = SCOUT_MAX_ITERATIONS
+) -> str:
     """驱动只读侦察子代理到完成，返回最终答案文本。
 
     构建方式与 agent_tool 的子代理一致：``SageAgent(bare=True)`` 跳过记忆
@@ -325,7 +336,7 @@ async def _run_scout_agent(client: Any, goal: str) -> str:
 
     try:
         answer = ""
-        async for event in subagent.run_loop(messages, max_iterations=SCOUT_MAX_ITERATIONS):
+        async for event in subagent.run_loop(messages, max_iterations=max_iterations):
             state = getattr(event, "state", None)
             state_value = getattr(state, "value", state)
             if state_value == "done":
