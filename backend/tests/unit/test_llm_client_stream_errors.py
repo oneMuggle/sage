@@ -130,6 +130,29 @@ async def test_stream_connect_error_raises_network_error(client):
 
 
 @pytest.mark.asyncio()
+async def test_stream_remote_protocol_error_raises_network_error(client):
+    """流式路径下 httpx.RemoteProtocolError（chunked body 中断）应映射为 NETWORK，
+    让首字前的中断触发重试而非直接失败。详见 docs/plans/2026-10-27_llm-protocol-error-retry.md。"""
+    # Arrange
+    patcher = _patch_stream(
+        client,
+        enter_error=httpx.RemoteProtocolError(
+            "peer closed connection without sending complete message body "
+            "(incomplete chunked read)"
+        ),
+    )
+
+    try:
+        # Act / Assert
+        with pytest.raises(LLMError) as exc_info:
+            await _consume(client.chat_stream(_MESSAGES))
+        assert exc_info.value.type == LLMErrorType.NETWORK
+        assert "incomplete chunked read" in exc_info.value.message
+    finally:
+        patcher.stop()
+
+
+@pytest.mark.asyncio()
 async def test_stream_401_raises_auth_failed(client):
     """HTTP 401 应映射为 AUTH_FAILED。"""
     # Arrange
