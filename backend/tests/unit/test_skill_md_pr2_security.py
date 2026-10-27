@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -163,6 +164,7 @@ def test_inproc_rescan_discovers_new_roots_and_updates_runner(tmp_path):
     adapter._script_runner = MagicMock()
     adapter._script_runner._allowed_roots = [old_root]
     adapter._skill_dirs = [old_root]
+    adapter._scan_lock = threading.Lock()
     adapter._skill_md_loader = SkillMdHotLoader(adapter._registry, dirs=[old_root])
 
     with patch(
@@ -206,6 +208,7 @@ def test_inproc_rescan_rebuilds_slash_registry(tmp_path):
     adapter._skill_dirs = []
     adapter._enabled = {}
     adapter._archived = set()
+    adapter._scan_lock = threading.Lock()
     adapter._skill_md_loader = SkillMdHotLoader(adapter._registry, dirs=[])
 
     from backend.skills.skill_md.slash_registry import SlashCommandRegistry

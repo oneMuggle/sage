@@ -8,10 +8,13 @@
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from backend.adapters.out.skill.inproc import InprocSkillAdapter
 from backend.skills.base import BaseSkill, SkillResult, SkillSchema
 from backend.skills.registry import SkillRegistry
 from backend.skills.skill_md.loader import SkillMdHotLoader
@@ -149,7 +152,8 @@ def test_loaded_this_scan_tracking(tmp_path):
 
     # 第二次扫描 (内容未变) → _loaded_this_scan 应该为空 (静默跳过)
     loaded2, _ = loader.scan_and_load()
-    assert "alpha" not in loader._loaded_this_scan or loaded2 == 0
+    assert loaded2 == 0
+    assert loader._loaded_this_scan == []
 
 
 def test_skip_counting_silent_skip_not_counted(tmp_path):
@@ -165,3 +169,73 @@ def test_skip_counting_silent_skip_not_counted(tmp_path):
     # 第二次扫描 — 内容未变, skipped 应该仍然是 0
     _, skipped2 = loader.scan_and_load()
     assert skipped2 == 0, "silent skip must not inflate skipped count"
+
+
+def _make_adapter(tmp_path: Path, initial_dirs: list) -> InprocSkillAdapter:
+    """构造一个持有 persistent loader 的最小 InprocSkillAdapter (绕过 __init__)。"""
+    adapter = InprocSkillAdapter.__new__(InprocSkillAdapter)
+    adapter._registry = SkillRegistry()
+    adapter._settings_repo = None
+    adapter._script_runner = MagicMock()
+    adapter._script_runner._allowed_roots = list(initial_dirs)
+    adapter._skill_dirs = list(initial_dirs)
+    adapter._scan_lock = threading.Lock()
+    adapter._skill_md_loader = SkillMdHotLoader(adapter._registry, dirs=initial_dirs)
+    adapter._skill_md_loader.scan_and_load()
+    return adapter
+
+
+def test_topology_change_reuses_loader_without_false_duplicate(tmp_path):
+    """目录拓扑变化 (新增 B) 时不得重建 loader。
+
+    回归评审 HIGH: 若 rescan 重建 loader, _loaded_paths 丢失, 已加载技能会被
+    误判为 duplicate_skillmd, 且再也无法 hot_reload。
+    """
+    dir_a = tmp_path / "a-skills"
+    dir_b = tmp_path / "b-skills"
+    dir_a.mkdir()
+    dir_b.mkdir()
+    path_a = _write_skill(dir_a, "keepme", "V1")
+    _write_skill(dir_b, "newbie", "N1")
+
+    adapter = _make_adapter(tmp_path, [dir_a])
+    loader = adapter._skill_md_loader
+    assert "keepme" in loader._loaded_paths
+    assert str(path_a) in loader._file_hashes
+
+    with patch(
+        "backend.skills.skill_md.loader.discover_skill_md_dirs",
+        return_value=[dir_a, dir_b],
+    ), patch(
+        "backend.skills.skill_md.loader._discover_shipped_dir",
+        return_value=None,
+    ):
+        result = adapter.rescan_skill_mds()
+
+    # (a) 已加载技能没有被误报为 duplicate_skillmd
+    assert not any(s["name"] == "keepme" for s in result["skipped"])
+    # (b) loader 未被重建: 路径/哈希缓存仍在, 新目录技能被追加
+    assert adapter._skill_md_loader is loader
+    assert "keepme" in loader._loaded_paths
+    assert str(path_a) in loader._file_hashes
+    assert "newbie" in loader._loaded_paths
+
+    # (c) 编辑既有技能后, 下一次 rescan 仍能刷新 registry 中的 body
+    path_a.write_text(
+        "---\nname: keepme\ndescription: keepme skill\n---\nV2\n",
+        encoding="utf-8",
+    )
+    with patch(
+        "backend.skills.skill_md.loader.discover_skill_md_dirs",
+        return_value=[dir_a, dir_b],
+    ), patch(
+        "backend.skills.skill_md.loader._discover_shipped_dir",
+        return_value=None,
+    ):
+        result2 = adapter.rescan_skill_mds()
+
+    skill = adapter._registry.get("keepme")
+    assert isinstance(skill, SkillMdSkill)
+    assert "V2" in skill._doc.body
+    assert "keepme" in [item["name"] for item in result2["loaded"]]
+    assert not any(s["name"] == "keepme" for s in result2["skipped"])

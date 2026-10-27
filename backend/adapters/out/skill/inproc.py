@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tuple, Union
@@ -106,6 +107,9 @@ class InprocSkillAdapter:
         self._script_runner = None
         self._settings_repo = None  # requires.config 门控注入点 (Task 1)
         self._skill_md_loader = None  # 持久持有 loader (缺口 #12): rescan 复用哈希缓存
+        # rescan 在 FastAPI threadpool 中运行; 串行化共享可变状态 (_dirs / _gating_ctx /
+        # loader.skipped / loader._loaded_this_scan) 的读写, 避免并发 rescan 互相污染返回值。
+        self._scan_lock = threading.Lock()
         skill_dirs = []
         try:
             from backend.adapters.out.skill_script.cli_confirmation import (
@@ -165,7 +169,8 @@ class InprocSkillAdapter:
                 ),
                 script_runner=self._script_runner,
             )
-            self._skill_md_loader.scan_and_load()
+            with self._scan_lock:
+                self._skill_md_loader.scan_and_load()
         except Exception as exc:  # noqa: BLE001 — adapter 构造必须容错
             import logging
 
@@ -736,67 +741,56 @@ class InprocSkillAdapter:
         if self._skill_md_loader is None:  # init-time loader 构造失败
             return {"loaded": [], "skipped": [], "total_loaded": 0}
         from backend.skills.skill_md.loader import (
-            SkillMdHotLoader,
             _discover_shipped_dir,
             build_gating_context_for_dirs,
             discover_skill_md_dirs,
         )
 
-        # 目录可能在 adapter 初始化后才由审批/导入流程创建;每次重扫都
-        # 重新发现根目录, 避免永久使用初始化时的快照。
-        skill_dirs = discover_skill_md_dirs()
-        self._skill_dirs = list(skill_dirs)
-        if self._script_runner is not None:
-            self._script_runner._allowed_roots = list(skill_dirs)
+        with self._scan_lock:
+            # 目录可能在 adapter 初始化后才由审批/导入流程创建;每次重扫都
+            # 重新发现根目录, 避免永久使用初始化时的快照。
+            skill_dirs = discover_skill_md_dirs()
+            self._skill_dirs = list(skill_dirs)
+            if self._script_runner is not None:
+                self._script_runner._allowed_roots = list(skill_dirs)
 
-        # 重建 registration_dirs = user + shipped (与 __init__ 同逻辑)
-        registration_dirs = list(skill_dirs)
-        seen = {p.resolve() for p in registration_dirs}
-        shipped = _discover_shipped_dir()
-        if shipped is not None:
-            shipped_resolved = shipped.resolve()
-            if shipped_resolved not in seen:
-                registration_dirs.append(shipped)
-                seen.add(shipped_resolved)
+            # 重建 registration_dirs = user + shipped (与 __init__ 同逻辑)
+            registration_dirs = list(skill_dirs)
+            seen = {p.resolve() for p in registration_dirs}
+            shipped = _discover_shipped_dir()
+            if shipped is not None:
+                shipped_resolved = shipped.resolve()
+                if shipped_resolved not in seen:
+                    registration_dirs.append(shipped)
+                    seen.add(shipped_resolved)
 
-        # 如果目录拓扑变了 (比如新增 shipped fallback), 需要重建 loader;
-        # 否则沿用 persistent loader, 复用哈希缓存。
-        new_dirs_key = sorted(str(p) for p in registration_dirs)
-        old_dirs_key = sorted(str(d) for d in self._skill_md_loader._dirs)
-        if new_dirs_key != old_dirs_key:
-            self._skill_md_loader = SkillMdHotLoader(
-                self._registry,
-                dirs=[Path(p) for p in registration_dirs],
-                gating_ctx=build_gating_context_for_dirs(
-                    registration_dirs, settings_repo=self._settings_repo
-                ),
-                script_runner=self._script_runner,
-            )
-        else:
-            # 复用 persistent loader: _loaded_paths / _file_hashes 保留,
-            # 使 check_for_updates / hot_reload 能识别到文件变化。
+            # 永远复用 persistent loader, 原地更新目录 + 门控快照。
+            # 绝不能重建 loader: 重建会丢掉 _loaded_paths / _file_hashes,
+            # 使 registry 中已加载的 SkillMdSkill 在下次 scan 时因
+            # existing_path is None 被误判为 duplicate_skillmd, 从此再也不
+            # 触发 hot_reload (评审 HIGH)。
             self._skill_md_loader._dirs = [Path(p) for p in registration_dirs]
             self._skill_md_loader._gating_ctx = build_gating_context_for_dirs(
                 registration_dirs, settings_repo=self._settings_repo
             )
 
-        self._skill_md_loader.scan_and_load()
-        self._rebuild_slash_registry()
-        # 返回本次 scan 中**新加载 + 刷新**的名字 (来自 _loaded_this_scan)。
-        # total_loaded 保持"本次 scan 加载数"这一既有 REST/IPC 契约:
-        # 前端 Skills.tsx 用 ``total_loaded > 0`` 决定是否弹出"已加载 N 个技能"
-        # 提示, 幂等 rescan 必须为 0 才不打扰用户。持久 loader 的 _loaded_paths
-        # 是累计集合, 不能直接当 total 用 (会把初始化时自动加载的技能重复计入)。
-        loaded_names = list(self._skill_md_loader._loaded_this_scan)
-        total_loaded = len(loaded_names)
-        return {
-            "loaded": [
-                {"name": name, "source": "skillmd", "path": _SAFE_SKILL_PATH}
-                for name in loaded_names
-            ],
-            "skipped": list(self._skill_md_loader.skipped),
-            "total_loaded": total_loaded,
-        }
+            self._skill_md_loader.scan_and_load()
+            self._rebuild_slash_registry()
+            # 返回本次 scan 中**新加载 + 刷新**的名字 (来自 _loaded_this_scan)。
+            # total_loaded 保持"本次 scan 加载数"这一既有 REST/IPC 契约:
+            # 前端 Skills.tsx 用 ``total_loaded > 0`` 决定是否弹出"已加载 N 个技能"
+            # 提示, 幂等 rescan 必须为 0 才不打扰用户。持久 loader 的 _loaded_paths
+            # 是累计集合, 不能直接当 total 用 (会把初始化时自动加载的技能重复计入)。
+            loaded_names = list(self._skill_md_loader._loaded_this_scan)
+            total_loaded = len(loaded_names)
+            return {
+                "loaded": [
+                    {"name": name, "source": "skillmd", "path": _SAFE_SKILL_PATH}
+                    for name in loaded_names
+                ],
+                "skipped": list(self._skill_md_loader.skipped),
+                "total_loaded": total_loaded,
+            }
 
     async def import_skill_mds(self, files: List[Any]) -> Dict[str, List[Dict[str, str]]]:
         """异步包装 SkillMdImporter.import_files()。"""
