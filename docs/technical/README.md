@@ -80,6 +80,7 @@
 | 99   | [Agent 上限类错误透出具体上限值](./99-agent-error-limit-details.md) | `<code> (limit=N)` wire format + nonlocal 落库丢失修复 + 前端单一渲染点（聊天内联错误条 / 侧栏 tooltip）+ 兼容性与回滚 |
 | 100  | [自进化可观测性与反馈闭环](./100-self-evolution-observability.md) | P0-1 进化日志结构化（duration/metrics）/ P0-2 偏好注入 user_profile（hermes 冻结语义）/ P0-3 召回反馈落库 + A/B 变体对比 |
 | 101  | [LLM 错误分类与重试](./101-llm-error-classification-retry.md) | httpx 异常→LLMErrorType 分类表 / RemoteProtocolError 归 NETWORK 修复 / 首字后不重试契约 / 重试参数与退避策略 |
+| 102  | [全局规则 UI（~/.sage/SAGE.md）](./102-global-rules.md) | G1/P0：设置页读写全局规则文件 / 路径硬编码 + 原子写 + 符号链接拒写 / 扫描 level=all 护栏 / 8000 字符截断 + 64KB 保存上限 / win7 零适配 |
 
 ---
 
