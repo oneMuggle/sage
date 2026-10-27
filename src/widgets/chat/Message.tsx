@@ -6,8 +6,10 @@ import { MediaAttachment } from '../../features/chat/MediaAttachment';
 import { useRightPanelStore } from '../../features/right-panel/rightPanelStore';
 import { useChatStreamStore } from '../../features/send-message/chatStreamStore';
 import { THINKING_PLACEHOLDER } from '../../features/send-message/thinkingPlaceholder';
+import { usePluginNames } from '../../shared/lib/hooks/usePluginNames';
 import { useI18n } from '../../shared/lib/i18n';
 import { hasUnclosedFence, splitStableChunks } from '../../shared/lib/markdownChunks';
+import { findPluginToolOwner } from '../../shared/lib/permissionInsights';
 import type { BlockedAction, Message as MessageType, ToolCall } from '../../shared/lib/store';
 import { normalizeToolCallEnvelope } from '../../shared/lib/toolCallEnvelope';
 
@@ -155,6 +157,9 @@ function MessageComponent({
     }
     return list.map(normalizeToolCallEnvelope);
   }, [message.tool_calls]);
+  // R111: 转录通用卡的插件归属后缀供数（仅带工具调用的消息启用；
+  // 名单经模块级缓存合并取数，读不到则不标）。
+  const pluginNames = usePluginNames(toolCalls.length > 0);
   // R38: 技能激活明细展开态
   const [skillsExpanded, setSkillsExpanded] = useState(false);
   const activatedSkills = message.activated_skills ?? [];
@@ -318,6 +323,7 @@ function MessageComponent({
                 const changePaths = message.session_id ? fileChangePaths(tc) : [];
                 const isBlocked = Boolean(tc.metadata?.blockReason);
                 const SpecializedRenderer = resolveToolRenderer(tc.name);
+                const pluginOwner = findPluginToolOwner(tc.name, pluginNames);
 
                 // Artifact chips / image / media refs — 无论是否使用专用渲染器都渲染
                 const extras = (
@@ -387,6 +393,14 @@ function MessageComponent({
                       <Wrench className="w-3 h-3 text-primary shrink-0" />
                       <ToolCallTitle name={tc.name} args={tc.args} />
                       <span className="font-mono text-ui-xs text-muted">{tc.name}</span>
+                      {pluginOwner ? (
+                        <span
+                          className="text-ui-xs text-muted shrink-0"
+                          data-testid={`tool-call-plugin-owner-${idx}`}
+                        >
+                          {t('permission.from_plugin')}: {pluginOwner}
+                        </span>
+                      ) : null}
                     </div>
                     {/* right-panel R5/R6: 文件修改卡组（<3 个平铺,≥3 个折叠为汇总条） */}
                     {changePaths.length > 0 && (
