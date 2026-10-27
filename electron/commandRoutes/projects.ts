@@ -344,4 +344,31 @@ export const projectRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/projects/${projectId(a)}/ai/materials/${a.materialId}/index`,
   },
+
+  // ---- AI 治理分析 (2026-10-27) ---------------------------------------------
+  projects_sub_types: {
+    method: 'GET',
+    path: () => '/api/v1/projects/sub-types',
+  },
+  projects_profile: {
+    method: 'POST',
+    path: () => '/api/v1/projects/profile',
+    body: (a) => ({ path: a.path }),
+  },
+  projects_analyze: {
+    method: 'POST',
+    path: () => '/api/v1/projects/analyze',
+    body: (a) => ({ path: a.path }),
+  },
+  // RuleGenerationRequest: profile / report 是已确认的原始 dict，project_id 可选（用于去重）。
+  projects_generate_rules: {
+    method: 'POST',
+    path: () => '/api/v1/projects/generate-rules',
+    body: (a) =>
+      pick(a, {
+        profile: ['profile'],
+        report: ['report'],
+        project_id: ['project_id', 'projectId'],
+      }),
+  },
 };

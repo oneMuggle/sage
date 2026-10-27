@@ -25,6 +25,12 @@ export type { TypeDetectionPreviewProps } from './TypeDetectionPreview';
 export { ProjectCreationWizard } from './ProjectCreationWizard';
 export type { ProjectCreationWizardProps } from './ProjectCreationWizard';
 
+export { ProjectAnalysisWizard } from './ProjectAnalysisWizard';
+export type { ProjectAnalysisWizardProps, AnalysisCompletePayload } from './ProjectAnalysisWizard';
+
+export { ProjectAnalysisReport } from './ProjectAnalysisReport';
+export type { ProjectAnalysisReportProps } from './ProjectAnalysisReport';
+
 export { GitStatusWidget } from './GitStatusWidget';
 export type { GitStatusWidgetProps } from './GitStatusWidget';
 
@@ -96,6 +102,8 @@ export function auditProjectTypeFeatureBarrel(): ProjectTypeFeatureBarrelAuditRe
     'MilestoneEditor',
     'TypeDetectionPreview',
     'ProjectCreationWizard',
+    'ProjectAnalysisWizard',
+    'ProjectAnalysisReport',
     'ProjectArchetypeStudio',
     'PolymorphicArchetypeCards',
     'GovernanceRulesPanel',
@@ -106,7 +114,7 @@ export function auditProjectTypeFeatureBarrel(): ProjectTypeFeatureBarrelAuditRe
     module: 'src/features/project-type/index.ts',
     exportedSymbols,
     symbolCount: exportedSymbols.length,
-    exportedAt: '2026-10-22',
+    exportedAt: '2026-10-27',
   };
 }
 

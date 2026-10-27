@@ -77,6 +77,22 @@ import {
   type IndexingStatsWire,
   mapSemanticSearch,
   mapIndexingStats,
+  // AI 治理分析 (2026-10-27)
+  type ProjectAnalyzeWire,
+  type CodebaseProfileWire,
+  type RuleGenerationResultWire,
+  type SubTypesWire,
+  type CodebaseProfile,
+  type ProjectAnalysisResult,
+  type RuleGenerationResult,
+  type SubTypesCatalog,
+  type GenerateRulesOptions,
+  mapCodebaseProfile,
+  mapProjectAnalysis,
+  mapRuleGenerationResult,
+  mapSubTypes,
+  toAnalysisReportWire,
+  toCodebaseProfileWire,
 } from './projectApiTypes';
 /* eslint-enable import/order */
 
@@ -108,6 +124,20 @@ export type {
   SemanticSearchHit,
   SemanticSearchResult,
   IndexingStats,
+  // AI 治理分析 (2026-10-27)
+  SourceSample,
+  GitStats,
+  CodebaseProfile,
+  SuggestedRule,
+  DocRef,
+  AnalysisReport,
+  ProjectAnalysisResult,
+  RuleSource,
+  RuleDraft,
+  RuleGenerationResult,
+  SubTypeDefinition,
+  SubTypesCatalog,
+  GenerateRulesOptions,
 } from './projectApiTypes';
 import type { Session } from './types';
 import { handleApiError } from './utils';
@@ -640,6 +670,8 @@ export const projectApi = {
         confidence: response.confidence,
         // 后端是 {type, weight}[]；UI 把它们当作「检测依据」文案直接拼接 / 渲染。
         signals: response.signals.map((signal) => signal.type),
+        subType: response.sub_type ?? null,
+        techStack: response.tech_stack ?? [],
       };
     } catch (error) {
       throw handleApiError(error);
@@ -654,6 +686,55 @@ export const projectApi = {
         project_type: projectType,
       });
       return mapProject(project);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  // ===== AI 治理分析 (2026-10-27) =====
+
+  /** 拉取两级类型目录（L1 -> L2 子类型定义） */
+  async subTypes(): Promise<SubTypesCatalog> {
+    try {
+      const wire = await invoke<SubTypesWire>('projects_sub_types', {});
+      return mapSubTypes(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 仅采集确定性画像（不调用 LLM，供快速预览） */
+  async profile(path: string): Promise<CodebaseProfile> {
+    try {
+      const wire = await invoke<{ profile: CodebaseProfileWire }>('projects_profile', { path });
+      return mapCodebaseProfile(wire.profile);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /**
+   * 采集画像 + LLM 深度分析。
+   * LLM 未配置或调用失败时后端返回确定性降级报告（`report.llmAvailable === false`），不会抛错。
+   */
+  async analyze(path: string): Promise<ProjectAnalysisResult> {
+    try {
+      const wire = await invoke<ProjectAnalyzeWire>('projects_analyze', { path });
+      return mapProjectAnalysis(wire);
+    } catch (error) {
+      throw handleApiError(error);
+    }
+  },
+
+  /** 基于用户确认的分析报告生成规则草稿（模板 + 项目专属，已去重） */
+  async generateRules(options: GenerateRulesOptions): Promise<RuleGenerationResult> {
+    try {
+      const wire = await invoke<RuleGenerationResultWire>('projects_generate_rules', {
+        profile: toCodebaseProfileWire(options.profile),
+        report: toAnalysisReportWire(options.report),
+        ...(options.projectId !== undefined ? { projectId: options.projectId } : {}),
+      });
+      return mapRuleGenerationResult(wire);
     } catch (error) {
       throw handleApiError(error);
     }

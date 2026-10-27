@@ -59,6 +59,20 @@ export type {
   SemanticSearchHit,
   SemanticSearchResult,
   IndexingStats,
+  // AI 治理分析 (2026-10-27)
+  SourceSample,
+  GitStats,
+  CodebaseProfile,
+  SuggestedRule,
+  DocRef,
+  AnalysisReport,
+  ProjectAnalysisResult,
+  RuleSource,
+  RuleDraft,
+  RuleGenerationResult,
+  SubTypeDefinition,
+  SubTypesCatalog,
+  GenerateRulesOptions,
 } from './projectApi';
 export { officeApi } from './officeApi';
 export { sessionApi } from './sessionApi';
