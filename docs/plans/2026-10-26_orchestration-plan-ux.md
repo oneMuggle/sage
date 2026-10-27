@@ -100,6 +100,8 @@
 - [x] 步骤 6b：code review 复查轮 —— 修 2 HIGH / 4 MEDIUM / 4 LOW（见下方风险表「复查新增」段）
 - [x] 步骤 7：提交（本地 commit `b47a0ba57`）→ 推送 + 开 PR #2567
 - [x] 步骤 8：修 CI Architecture 红灯 —— 本功能给 `legacy_routes.py` 净增 57 行，超过 baseline 2455 的棘轮上限。把三个编排计划助手（`PLAN_OVERRIDE_REASONING` / `build_orch_plan_block` / `load_confirmed_plan_items`）原样拆到新模块 `backend/api/orch_plan_block.py`，`legacy_routes.py` 降回 2420 行（门禁计 2421 < 2455），**不改 baseline**（commit `dbf9d052d`）
+- [x] 步骤 9：修第二个 Architecture 超限项 —— `backend/tests/integration/test_chat_orchestration_stream.py` 被本功能加到 843 行（门禁计数，> 800 全局上限）。把「reasoning 下发」与「确认窗口内改计划回读」两个测试连同私有助手迁到 `test_chat_orchestration_plan_confirm.py`，原文件回落到 710 行（commit `90effbad6`）
+- [x] 步骤 10：修步骤 8 引入的回归 —— `test_chat_dispatcher_budget.py::test_background_guide_documents_snapshot_strategy` 仍扫描 `legacy_routes.py` 源码找 `wait=false` / `提前汇总`，而这些文案已随计划块迁入 `orch_plan_block.py`；改扫描新模块（commit `5460b0186`）
 
 ## 风险评估与依赖
 
