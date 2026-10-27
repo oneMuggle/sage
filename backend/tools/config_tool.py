@@ -57,6 +57,8 @@ _ALLOWED_GENERAL_FIELDS = {
     "llmRetryBaseDelayS",
     "llmRetryMaxDelayS",
     "llmTotalTimeoutS",
+    # 2026-10-27: 会话标题生成专用模型 id —— 空串表示回退到聊天模型。
+    "titleModelId",
 }
 
 _VALID_READ_SECTIONS = {"all", "orch", "agents", "general", "model_selections"}
@@ -155,6 +157,18 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
         )
     if _llm_retry_field_errors:
         return "; ".join(_llm_retry_field_errors)
+    return _validate_title_model_id(updates)
+
+
+def _validate_title_model_id(updates: Dict[str, Any]) -> Optional[str]:
+    """会话标题专用模型 id —— 必须是字符串；空串 = 回退到聊天模型。"""
+    if "titleModelId" not in updates:
+        return None
+    v = updates["titleModelId"]
+    if not isinstance(v, str):
+        return f"titleModelId 必须是字符串，收到: {v!r}"
+    if len(v) > 200:
+        return f"titleModelId 长度不能超过 200，收到: {len(v)}"
     return None
 
 
@@ -313,7 +327,8 @@ class UpdateSageConfigTool(BaseTool):
                             "待更新的参数键值对：\n"
                             "- target='orch' 时允许: maxLaneIterations, maxSubagentIterations, maxConcurrentSubagents, maxRetries 等\n"
                             "- target='agent' 时允许: max_iterations (1~50), temperature, system_prompt, description 等\n"
-                            "- target='general' 时允许: temperature, streaming, autoMemory, confirmDelete 等"
+                            "- target='general' 时允许: temperature, streaming, autoMemory, confirmDelete 等\n"
+                            "- target='general' 时允许: titleModelId (会话标题专用模型 id，空串=回退聊天模型)"
                         ),
                     },
                 },

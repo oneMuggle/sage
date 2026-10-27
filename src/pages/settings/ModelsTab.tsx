@@ -131,9 +131,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         <div>
           <h3 className="text-sm font-semibold text-text">模型选择</h3>
           <p className="text-xs text-muted mt-0.5">
-            {endpointsWithModels.length} 个端点，共{' '}
-            {discoveredModelCount}{' '}
-            个模型
+            {endpointsWithModels.length} 个端点，共 {discoveredModelCount} 个模型
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -206,6 +204,18 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
 
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-text">模型参数</h3>
+        <SettingRow
+          anchor="title_model"
+          label="会话标题模型"
+          desc="生成会话标题时使用的模型（选填）。留空则沿用对话模型；专用小模型通常更快更省"
+        >
+          <TitleModelSelector
+            groupedModels={chatModels}
+            chatEndpointId={chatModel.endpointId}
+            value={settings.titleModelId ?? ''}
+            onChange={(v) => updateSettings({ titleModelId: v })}
+          />
+        </SettingRow>
         <SettingRow
           anchor="max_context"
           label="最大上下文长度"
@@ -344,6 +354,53 @@ function ModelSelector({
         {required && !hasValue && <span className="text-ui-2xs text-error">必填</span>}
       </div>
     </SettingRow>
+  );
+}
+
+interface TitleModelSelectorProps {
+  groupedModels: GroupedModel[];
+  chatEndpointId: string | null;
+  value: string;
+  onChange: (v: string) => void;
+}
+
+/**
+ * 2026-10-27: 会话标题专用模型选择器。
+ *
+ * 与 `ModelSelector` 的区别：存的是**裸模型 id**（`AppSettings.titleModelId`），
+ * 不是 `{endpointId, modelId}` —— 后端 `title_generator.load_title_llm_config`
+ * 复用聊天端点的 base_url / api_key，只覆盖 `model` 字段。
+ *
+ * 因此候选**只列出聊天端点自己已发现的 chat 模型**：换一个端点的模型 id 会
+ * 在同一个 base_url 上找不到。空串表示沿用对话模型（后端 fallback）。
+ */
+function TitleModelSelector({
+  groupedModels,
+  chatEndpointId,
+  value,
+  onChange,
+}: TitleModelSelectorProps) {
+  const candidates = groupedModels.filter((gm) => gm.endpointId === chatEndpointId);
+  const known = candidates.some((gm) => gm.model.id === value);
+  // 用户可能通过 config_tool 写入了一个未在端点发现列表里的模型 id ——
+  // 保留为孤立选项，避免下拉回退到空串时把配置静默抹掉。
+  const orphan = value && !known ? value : null;
+
+  return (
+    <select
+      data-testid="settings-title-model"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
+    >
+      <option value="">-- 沿用对话模型 --</option>
+      {orphan && <option value={orphan}>{orphan}</option>}
+      {candidates.map((gm) => (
+        <option key={gm.model.id} value={gm.model.id}>
+          {gm.model.id}
+        </option>
+      ))}
+    </select>
   );
 }
 

@@ -1,6 +1,6 @@
 # ruff: noqa: UP006, UP007, UP035 — pydantic v1 + Python 3.8 兼容：
 # pydantic v1 resolve_annotations 用 eval() 处理 forward refs，
-# eval 在 Python 3.8 上无法解析 PEP 585 (list[X]) 和 PEP 604 (X | Y)，
+# eval 在 Python 3.8 上无法解析 PEP 585 (List[X]) 和 PEP 604 (X | Y)，
 # 所以本文件保留 typing.List/Optional/Union 写法
 """
 API 路由定义
@@ -17,12 +17,17 @@ import sys
 # 先用这个 producer 端的 fake stream 解决 90% 的视觉体验。
 _STREAMING_CHUNK_SIZE = 6
 _STREAMING_CHUNK_DELAY_S = 0.04
+
+# 标题生成等待上限（秒）：DONE 已先行推送，producer 最多再等这么久让
+# title_updated 事件在 SENTINEL 关闭流之前送达；超时则任务转入后台继续
+# （落库后由前端轮询兜底），不阻塞流收尾过久。
+_TITLE_WAIT_S = 3.0
 import json
 import logging
 import os
 import time
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -48,6 +53,12 @@ from backend.chat.history_context import (
     history_token_budget,
 )
 from backend.chat.sources_extractor import extract_sources_from_tool, merge_sources
+from backend.chat.title_generator import (
+    DEFAULT_TITLE,
+    TitleGenerator,
+    TitleModelFactory,
+    needs_title,
+)
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.llm_total_timeout import llm_total_timeout_or_none
@@ -70,7 +81,6 @@ from backend.orchestration.chat_dispatcher import (
 )
 from backend.ports.llm import ModelCapabilities
 from backend.services.scheduler import get_scheduler_service
-from backend.utils import py_compat
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +126,7 @@ from backend.data.database import (  # noqa: F401 — _SQLITE_LOCK 由测试与�
     _SQLITE_LOCK,
     make_with_db_lock,
 )
+from backend.utils.py_compat import TIMEOUT_ERRORS, to_thread
 
 
 def with_db_lock(func):
@@ -131,9 +142,10 @@ def with_db_lock(func):
 
 
 
-
-
 # ==================== Pydantic 模型 ====================
+
+# C1e (DSH 对标 R27): 13 个 legacy 请求/响应模型迁出至 legacy_models.py
+# （纯物理拆分；本模块再导出保持既有 import 路径——含测试——不变）。
 #: PM1 (round8): 计划模式 system 指令 —— 只读调研 + 结构化计划产出；
 #: 执行被权限门（per-run READ_ONLY）与指令双重约束，批准后由前端衔接。
 #: 计划前置 Round (2026-09-19): 追加"歧义先澄清"——对照 Claude Code plan
@@ -156,9 +168,6 @@ _PLAN_MODE_DIRECTIVE = (
 
 
 
-
-# C1e (DSH 对标 R27): 13 个 legacy 请求/响应模型迁出至 legacy_models.py
-# （纯物理拆分；本模块再导出保持既有 import 路径——含测试——不变）。
 from backend.api.legacy_models import (  # noqa: F401 — 再导出面
     AgentCreate,
     AgentToggle,
@@ -226,17 +235,24 @@ def get_agent() -> SageAgent:
 
 
 
+
+
+
+# 进程内重入护栏（MEDIUM-1 后端兜底）：同一会话并发手动压缩时，两者都会在
+# 对方落盘前通过 should_compact 检查，导致续接消息行重复写入。前端
+# isLoading 守卫是第一道防线，这里是便宜的第二道。
+_compact_in_progress: Set[str] = set()
+
+
 # C2d (DSH 对标 R29): 会话压缩/分叉/检查点/记忆提取五函数 + _safe_log_field
 # 迁出至 chat_session_lifecycle.py（本模块再导出——legacy_session_routes
 # 经 _legacy_routes._persist_compaction 等模块属性访问与测试导入路径不变）。
 from backend.api.chat_session_lifecycle import (  # noqa: F401 — 再导出面
     _auto_checkpoint_if_enabled,
     _build_compaction_llm_callable,
-    _compact_in_progress,
     _extract_legacy_chat_memory,
     _maybe_auto_compact_session,
     _persist_compaction,
-    _run_db_sync,
     _safe_log_field,
 )
 
@@ -372,7 +388,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
     registry: StreamRegistry = request.app.state.streams
 
     # C2: 原位重新生成只允许会话最后一轮 (在占用 stream slot 之前拒绝)
-    if data.regenerate_of and not await _run_db_sync(
+    if data.regenerate_of and not await to_thread(
         answer_versions.AnswerVersionRepository().is_last_turn, data.session_id, data.regenerate_of
     ):
         raise HTTPException(
@@ -446,7 +462,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 刻意 new 一个独立实例而非用下方 producer 内的 session_repo 变量 ——
             # 那个变量在数百行之后才绑定，早期失败路径 finally 会 UnboundLocalError。
             try:
-                await _run_db_sync(
+                await to_thread(
                     SessionRepository().update_run_status, data.session_id, "running"
                 )
             except Exception as status_err:  # noqa: BLE001 — fail-open
@@ -544,7 +560,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             request_id,
                             l11_outcome.reason,
                         )
-                        # 2026-09 (同步 #1100): 失败信封统一 dict {type, message}
+                        # 2026-09: 失败信封统一 dict {type, message};
+                        # reason 来自本地钩子, 非用户敏感内容, 可回显。
                         await entry.queue.put(
                             {
                                 "state": "failed",
@@ -572,20 +589,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 from backend.data.settings_repo import SettingsRepository
                 from backend.services.usage_tracker import usage_tracker as _usage_tracker
 
-                # win7 惯例 (PR A §1.2): 同步 DB 读经 _run_db_sync; today_cost_usd
-                # 内部自带 _SQLITE_LOCK, 不能再包 _run_db_sync(非重入死锁),
-                # 改走裸 executor 线程。
-                _raw_limit = await _run_db_sync(
-                    SettingsRepository().get, "spend_limit_usd"
-                )
+                _raw_limit = SettingsRepository().get("spend_limit_usd")
                 _spend_limit = float(_raw_limit) if _raw_limit and _raw_limit.strip() else 0.0
             except Exception as limit_read_err:
                 logger.debug(f"[REQ {request_id}] 花费限额读取失败(视为不限): {limit_read_err}")
                 _spend_limit = 0.0
             if _spend_limit > 0:
-                _today_cost = await asyncio.get_running_loop().run_in_executor(
-                    None, _usage_tracker.today_cost_usd
-                )
+                _today_cost = _usage_tracker.today_cost_usd()
                 if _today_cost >= _spend_limit:
                     logger.warning(
                         "[REQ %s] 花费限额拦截: today=%.4f USD >= limit=%.2f USD",
@@ -645,11 +655,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 except Exception as pm_exc:  # noqa: BLE001 — 降级不阻塞
                     logger.warning("计划模式只读门注入失败（仅指令约束）: %s", pm_exc)
             # P0 cancellation: register the primary before any blocking await.
+            # session_id 供 /chat/steer 落库插话消息时确定归属会话。
             _ACTIVE_STREAMS[stream_id] = {
                 "agent": agent,
                 "run_id": None,
                 "dispatcher": None,
                 "cancelled": False,
+                "session_id": data.session_id,
             }
 
             # Build system prompt with optional diagram tool guidance
@@ -982,7 +994,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             await asyncio.wait_for(
                                 confirm_event.wait(), timeout=confirm_timeout
                             )
-                        except asyncio.TimeoutError:  # noqa: UP041 — py3.8: asyncio.TimeoutError 不等于 builtin TimeoutError (3.11 才统一)
+                        except TIMEOUT_ERRORS:  # py38: wait_for 抛 asyncio.TimeoutError（与本型不同类）
                             logger.warning(
                                 "编排确认超时 (%ss)，自动取消 run %s",
                                 confirm_timeout,
@@ -1153,13 +1165,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 而非 getattr(agent, "skills", None) (SageAgent 无 skills 属性, 恒 None)。
             # 首次调用 _get_skill_adapter() 会同步扫描文件系统, 用 asyncio.to_thread
             # 包裹避免阻塞事件循环。
-            r38_activated_skill_list: List[Dict] = []
+            r38_activated_skill_list: List[dict] = []
             try:
                 from backend.application.services.chat_service import (
                     _skill_activation_block,
                 )
 
-                r38_skills_port = await py_compat.to_thread(_get_skill_adapter)
+                r38_skills_port = await to_thread(_get_skill_adapter)
                 r38_block, r38_activated_skill_list = _skill_activation_block(
                     data.message or "", r38_skills_port
                 )
@@ -1202,11 +1214,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # ===== R37 文本文档附件注入 BEGIN =====
             # 已上传文本文档（attachment_media_ids）按 id 读全文，截断后并入
             # 尾部 dynamic 块。fail-safe：单条失败跳过，绝不阻断聊天。
-            # R81 (2026-09-19): rag_citations 列与 main 对齐；win7 暂无 r71
-            # RAG 检索（无捕获来源），恒空，待 r66/r71 同步后启用。
+            # R81 (2026-09-19): r71 citations 除推事件外还要随 assistant 行
+            # 落盘（重载后引用区块不丢）；capture 后挂首条 assistant 行。
             r81_rag_citations: list = []
             r81_rag_citations_written = False
             try:
+                from backend.api import chat_attachment_routes as _r66_car
+                from backend.services.attachment_context import (
+                    AttachmentRagOptions,
+                    build_attachment_context,
+                    embed_query_via_http,
+                )
+                from backend.services.attachment_rag import attachment_vector_store_path
                 from backend.services.multimodal.media_store import (
                     MEDIA_ROOT,
                     MediaKind,
@@ -1214,6 +1233,17 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
 
                 r37_store = MediaStore(root=MEDIA_ROOT)
+                # r66: opt-in 检索配置（缺省 = 现状全文截断注入）
+                r66_rag = None
+                if (
+                    isinstance(data.attachment_rag, dict)
+                    and isinstance(data.attachment_rag.get("embed"), dict)
+                ):
+                    r66_rag = AttachmentRagOptions(
+                        embed={str(k): str(v) for k, v in data.attachment_rag["embed"].items()},
+                        top_k=int(data.attachment_rag.get("top_k") or 6),
+                    )
+                r66_store_path = attachment_vector_store_path(MEDIA_ROOT.parent)
                 for r37_mid in data.attachment_media_ids[:10]:
                     try:
                         _r37_loaded = r37_store.load(r37_mid)
@@ -1224,18 +1254,67 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     _r37_ref, r37_bytes = _r37_loaded
                     if _r37_ref.kind != MediaKind.DOCUMENT:
                         continue
+                    # 全文提取（txt 直读；pdf/docx 复用 r39 提取器），不在此截断。
+                    # pdf/docx 提取是秒级同步 CPU 活，放线程池避免卡事件循环（r68）。
                     try:
-                        r37_text = r37_bytes.decode("utf-8")[:100_000]
-                    except UnicodeDecodeError:
+                        _r37_ext = (
+                            (_r37_ref.file_path or "").rsplit(".", 1)[-1].lower()
+                            if "." in (_r37_ref.file_path or "")
+                            else "txt"
+                        )
+                        if _r37_ext in ("pdf", "docx"):
+                            r37_text = await asyncio.get_running_loop().run_in_executor(
+                                None,
+                                _r66_car._extract_document_text,
+                                r37_bytes,
+                                _r37_ext,
+                            )
+                        else:
+                            r37_text = r37_bytes.decode("utf-8")
+                    except Exception:
                         continue
                     if not r37_text.strip():
                         continue
-                    # R81: win7 暂无 r66/r71 附件 RAG 检索注入（超长文档仍全文
-                    # 截断），此处恒为空 —— rag_citations 列与 main 保持 schema
-                    # 对齐，待 r66/r71 同步到 win7 后在此补捕获。
+                    # r66: 注入决策（全文 ≤100k 现状注入；超长且配置 rag →
+                    # 检索 top_k；否则截断前 100k）。fail-safe。
+                    r37_ctx = await build_attachment_context(
+                        r37_mid,
+                        full_text=r37_text,
+                        query=data.message,
+                        rag=r66_rag,
+                        store_path=r66_store_path,
+                        query_embedder=embed_query_via_http if r66_rag else None,
+                    )
+                    if r37_ctx is None:
+                        continue
+                    # r71: RAG 检索注入发生 → 推引用溯源事件（气泡内展示）
+                    if r37_ctx.mode == "rag":
+                        r81_citation = {
+                            "media_id": r37_mid,
+                            "filename": (
+                                (_r37_ref.metadata or {}).get("original_filename")
+                                or r37_mid
+                            ),
+                            "mode": "rag",
+                            "chunks": [
+                                {"index": c.index, "score": round(c.score, 2)}
+                                for c in r37_ctx.chunks
+                            ],
+                        }
+                        r81_rag_citations.append(r81_citation)
+                        try:
+                            entry.queue.put_nowait(
+                                {
+                                    "state": "attachment_rag_used",
+                                    "session_id": data.session_id,
+                                    "citations": [r81_citation],
+                                }
+                            )
+                        except Exception:
+                            logger.debug(f"[REQ {request_id}] rag_used event push failed, ignored")
                     dynamic_context_parts.append(
                         "<attached_document id=" + repr(r37_mid) + ">" + chr(10)
-                        + r37_text + chr(10) + "</attached_document>"
+                        + r37_ctx.text + chr(10) + "</attached_document>"
                     )
             except Exception as r37_att_err:
                 logger.debug(f"[REQ {request_id}] attachment media inject skipped: {r37_att_err}")
@@ -1309,22 +1388,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 降级为无历史的旧行为,绝不阻断聊天。
             repo = MessageRepository()
             try:
-                # win7 惯例 (PR A §1.2): 同步 SQLite I/O 经 _run_db_sync 卸载到
-                # 线程池,避免阻塞事件循环 + 与 _SQLITE_LOCK 守护路径并发冲突。
                 # Task 4 (2026-09-17): 显式上下文重置
                 if data.context_reset:
                     # Task 14 (context-isolation): 记录旧段 id,advance 后只清旧段
                     # 工作记忆,避免 clear() 把其他段一并擦掉破坏段隔离语义。
-                    _old_seg = await _run_db_sync(
-                        repo.get_active_segment_id, data.session_id
-                    )
-                    await _run_db_sync(repo.advance_segment, data.session_id)
+                    _old_seg = repo.get_active_segment_id(data.session_id)
+                    await to_thread(repo.advance_segment, data.session_id)
                     try:
                         _clear_working_segment(agent, data.session_id, _old_seg)
                     except Exception as mem_err:
                         logger.warning("working memory clear_segment failed: %s", mem_err)
 
-                history_rows = await _run_db_sync(
+                history_rows = await to_thread(
                     repo.get_active_segment, data.session_id
                 )
             except Exception as hist_err:
@@ -1333,7 +1408,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 )
                 history_rows = []
             # C2: 原位重新生成 —— 历史剔除锚点 user 消息与旧回答 (事件投影同样剔除)
-            regen_excluded = await _run_db_sync(
+            regen_excluded = await to_thread(
                 answer_versions.regenerate_excluded_ids, data.session_id, data.regenerate_of
             )
             history_rows = answer_versions.drop_excluded(history_rows, regen_excluded)
@@ -1373,15 +1448,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 if is_new:
                     # Task 14 (context-isolation): 记录旧段 id,advance 后清旧段
                     # 工作记忆,与显式 context_reset 路径保持一致清理口径。
-                    _old_seg_auto = await _run_db_sync(
-                        repo.get_active_segment_id, data.session_id
-                    )
-                    new_seg = await _run_db_sync(repo.advance_segment, data.session_id)
+                    _old_seg_auto = repo.get_active_segment_id(data.session_id)
+                    new_seg = await to_thread(repo.advance_segment, data.session_id)
                     try:
                         _clear_working_segment(agent, data.session_id, _old_seg_auto)
                     except Exception as wm_err:
                         logger.warning("working memory clear_segment (auto) failed: %s", wm_err)
-                    history_rows = await _run_db_sync(
+                    history_rows = await to_thread(
                         repo.get_active_segment, data.session_id
                     )
                     try:
@@ -1408,15 +1481,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             try:
                 l13_memory_manager = getattr(agent, "memory_manager", None)
                 if l13_memory_manager is not None and not memory_off:
-                    # win7 惯例 (PR A §1.2): get_context 背后的 episodic 查询
-                    # 直连共享连接, 统一经 _run_db_sync 拿锁, 防跨事务冲突。
-                    active_segment_id = await _run_db_sync(
-                        repo.get_active_segment_id, data.session_id
-                    )
+                    active_segment_id = repo.get_active_segment_id(data.session_id)
                     # R99: get_context_with_hits —— 一次检索同时产出注入文本
                     # 与结构化命中（替代原先独立的 recall() 第二次查询）。
-                    l13_memory, l13_hits = await _run_db_sync(
-                        l13_memory_manager.get_context_with_hits,
+                    l13_memory, l13_hits = l13_memory_manager.get_context_with_hits(
                         limit=10,
                         session_id=data.session_id,
                         segment_id=active_segment_id,
@@ -1542,7 +1610,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # SE2 (DSH 对标 R2): 历史从事件日志投影（"Model-visible ⟺ logged"）。
             # 事件为空且表里有历史（回填竞态/双写缺口）时防御性回退旧表投影。
             try:
-                _session_events = await py_compat.to_thread(
+                _session_events = await to_thread(
                     lambda: _event_repo().get_by_session(data.session_id)
                 )
             except Exception as ev_err:  # noqa: BLE001 — 事件读取失败回退表投影
@@ -1645,12 +1713,6 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 迭代器纯净),由 producer 整合层负责落 user+assistant 消息 + 更新
             # session metadata。每个落盘独立 try/except,失败只 logger.warning
             # 不破坏流。
-            #
-            # PR A §1.2 (win7): 这些调用必须经 ``_run_db_sync`` 包装,否则:
-            # 1) 同步 SQLite I/O 直接跑在事件循环线程,会阻塞其他 SSE/chat handler;
-            # 2) 与 ``_SQLITE_LOCK`` 守护的 compact / fork / watchdog / storage
-            #    adapter 路径并发时,会触发
-            #    "cannot start a transaction within a transaction"。
             message_repo = MessageRepository()
             session_repo = SessionRepository()
             if data.regenerate_of:  # C2: 旧回答在本轮首次落库前归档为版本
@@ -1679,35 +1741,38 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             )
             r81_sources_json: Optional[str] = None
             user_now = int(time.time() * 1000)
-            # client_message_id (同步 #1155): 确定性 user id —— 前端乐观消息
-            # 用同一 id, 对账按 id 精确命中; 未传时维持 UUID。
-            user_message_id = (
-                f"u-{data.client_message_id}"
-                if data.client_message_id
-                else str(uuid.uuid4())
-            )
-            # client_message_id 幂等 (同步 #1196): 同 cmid 重试时复用既有
-            # user 消息 (内容一致), 不再重复落库/触发主键冲突告警。
-            reuse_existing_user = False
-            if data.client_message_id:
-                existing_user = await _run_db_sync(message_repo.get, user_message_id)
-                reuse_existing_user = (
-                    existing_user is not None
-                    and existing_user.content == data.message
+            try:
+                # client_message_id (2026-09): 确定性 user id —— 前端乐观消息
+                # 用同一 id, 对账按 id 精确命中 (同 id 重复落库为同内容覆写,
+                # 天然幂等); 未传时维持 UUID。
+                user_message_id = (
+                    f"u-{data.client_message_id}"
+                    if data.client_message_id
+                    else str(uuid.uuid4())
                 )
-                if reuse_existing_user:
-                    logger.info(
-                        "[REQ %s] client_message_id 幂等复用: %s",
-                        request_id,
-                        user_message_id,
+                # client_message_id 幂等 (2026-09): 同 cmid 重试时复用既有
+                # user 消息 (内容一致), 不再重复落库 —— 避免 INSERT 主键冲突
+                # 告警与重复行。仅在带 cmid 的路径检查 (UUID 路径天然唯一)。
+                reuse_existing = False
+                if data.client_message_id:
+                    existing_user = await to_thread(
+                        message_repo.get, user_message_id
                     )
-            # C2: 原位重新生成沿用锚点 user 消息, 不再落库
-            if data.regenerate_of:
-                user_message_id, reuse_existing_user = data.regenerate_of, True
-            if not reuse_existing_user:
-                try:
-                    await _run_db_sync(
-                        message_repo.save,
+                    reuse_existing = (
+                        existing_user is not None
+                        and existing_user.content == data.message
+                    )
+                    if reuse_existing:
+                        logger.info(
+                            "[REQ %s] client_message_id 幂等复用: %s",
+                            request_id,
+                            user_message_id,
+                        )
+                # C2: 原位重新生成沿用锚点 user 消息, 不再落库
+                if data.regenerate_of:
+                    user_message_id, reuse_existing = data.regenerate_of, True
+                if not reuse_existing:
+                    message_repo.save(
                         DbMessage(
                             id=user_message_id,
                             session_id=data.session_id,
@@ -1715,18 +1780,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             content=data.message,
                             activated_skills=r38_activated_skills_json,
                             created_at=user_now,
-                        ),
+                        )
                     )
-                except Exception as db_err:
-                    logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
+            except Exception as db_err:
+                logger.warning(f"[REQ {request_id}] 用户消息持久化失败: {db_err}")
 
             done_reasoning: Optional[str] = None
-
-            # alpha.36 (Bug #4): 累积本次 run 的工具调用,持久化到 assistant 消息的
-            # tool_calls 字段。用户切会话再切回时,前端 loadMessages 从 DB 读到
-            # tool_calls 就能恢复中间步骤(否则只有最终 content,中间信息全丢)。
-            # 形状对齐前端 ToolCall: {id, name, args, result?}
-            accumulated_tool_calls: List[Dict[str, Any]] = []
 
             # L2 真流式 (2026-09-06): run_loop 在 THINKING 段实时发 CONTENT_DELTA
             # 事件时置位 —— 此时 DONE.content 已实时下发过,不再做假切块,
@@ -1737,6 +1796,8 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 内容落盘（DONE 才落盘的旧语义会留下无回复的悬空 user 消息，
             # 已渲染内容重载即丢）。
             streamed_partial_parts: List[str] = []
+            # 2026-09 step-by-step: 当前迭代的 tool_calls 累积,STEP_DONE 时落盘并重置
+            accumulated_tool_calls: list = []
 
             # R81 统一参考来源: OBSERVING 事件里的检索类工具命中（web_search/
             # web_fetch/wiki_search/wiki_answer/MCP）解析成结构化来源,done 前
@@ -1754,6 +1815,15 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 确保前端 onDone 时 loadSessions() 能读到已更新的标题。
             done_event = None
 
+            # 2026-09 step-by-step: 本次 run 已落盘为 assistant 行的中间 step 数
+            # (STEP_DONE 触发,不含最终 DONE 行)。message_count 增量 =
+            # 1 (user) + steps_completed (中间 step) + 1 (最终 done)。
+            steps_completed: int = 0
+            # 2026-09 step-by-step: 追踪最近一次 agent 事件 — RT7 中断落盘 partial
+            # 行时,partial 内容是"当前 step 的累加器",step_index 需对齐这次事件的
+            # iteration 范围。
+            last_evt = None
+
             # P0-2 (2026-08-20): registration is created immediately after agent.
             # Keep the same entry and only refresh late-bound fields here.
             stream_entry = _ACTIVE_STREAMS.get(stream_id)
@@ -1769,34 +1839,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 elif stream_entry.get("cancelled") and dispatcher is not None:
                     dispatcher.cancel()
 
-            # 从 settings 读 profile 迭代上限（用户可配），不回退到 profile 硬编码值
-            from backend.orchestration.orch_settings import load_orch_settings
-            _orch = load_orch_settings()
-            _profile_name = agent.profile.get("name", "primary") if agent.profile else "primary"
-            # Win7 适配: 全局迭代上限 >0 时覆盖 per-agent 细分值；
-            # =0 时回落 per-agent 各自设置 (primary/coder/reviewer/writer)。
-            if _orch.max_iterations > 0:
-                _profile_max_iter = _orch.max_iterations
-            else:
-                _profile_max_iter = {
-                    "primary": _orch.max_primary_iterations,
-                    "coder": _orch.max_coder_iterations,
-                    "reviewer": _orch.max_reviewer_iterations,
-                    "writer": _orch.max_writer_iterations,
-                }.get(_profile_name, _orch.max_primary_iterations)
-
             # Wall-clock timeout: 包裹 agent.run_loop() 防止 LLM API hang
             # 导致 session 永远 running。默认 600s，可通过环境变量覆盖。
             _producer_started_at = time.monotonic()
-
-            # 2026-09 step-by-step: 本次 run 已落盘为 assistant 行的中间 step 数
-            # (STEP_DONE 触发,不含最终 DONE 行)。message_count 增量 =
-            # 1 (user) + steps_completed (中间 step) + 1 (最终 done)。
-            steps_completed: int = 0
-            # 2026-09 step-by-step: 追踪最近一次 agent 事件 — RT7 中断落盘 partial
-            # 行时,partial 内容是"当前 step 的累加器",step_index 需对齐这次事件的
-            # iteration 范围。
-            last_evt = None
 
             async def _consume_run_loop():
                 """Execute agent.run_loop() with event processing.
@@ -1804,20 +1849,18 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 Extracted to enable asyncio.wait_for() wall-clock timeout.
                 Mutates enclosing scope via nonlocal.
                 """
-                nonlocal done_content, run_outcome, done_reasoning
-                nonlocal streamed_content_delta, done_event
-                nonlocal accumulated_tool_calls, streamed_partial_parts
-                nonlocal r38_memory_refs_written, r81_rag_citations_written
-                nonlocal r81_pushed_sources_len
-                nonlocal steps_completed, last_evt
+                nonlocal last_evt, streamed_content_delta, done_content
+                nonlocal done_event, run_outcome, done_reasoning
+                nonlocal steps_completed, accumulated_tool_calls
+                nonlocal streamed_partial_parts, r38_memory_refs_written
+                nonlocal r81_rag_citations_written, r81_pushed_sources_len
                 # 2026-10-22: _producer_error 在 _consume_run_loop 内赋值,
                 # 缺 nonlocal 会创建函数局部变量,外层 finally 读到的仍是 None →
                 # sessions.last_error 降级为 "运行失败" 而非真实原因。
                 nonlocal _producer_error
 
                 async for evt in agent.run_loop(
-                    messages, llm_config=llm_config, session_id=data.session_id,
-                    max_iterations=_profile_max_iter,
+                    messages, llm_config=llm_config, session_id=data.session_id
                 ):
                     # 2026-09 step-by-step: 追踪最近一次事件 → RT7 partial 落盘时取
                     # step_index 用。中断发生在 for 循环中,loop 变量 evt 仍存最后一次值,
@@ -2046,23 +2089,27 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # LLMError 走 except 分支,此块不执行 (无 assistant 可保存)。
             if done_content:
                 assistant_now = int(time.time() * 1000)
-                assistant_message_id: Optional[str] = None
+                assistant_persisted = False
+                assistant_db_id = str(uuid.uuid4())
                 # R81: 本轮工具来源此时已收集完毕,序列化一次供终稿行落库。
                 if r81_turn_sources:
                     r81_sources_json = json.dumps(
                         r81_turn_sources, ensure_ascii=False
                     )
                 try:
-                    saved = await _run_db_sync(
-                        message_repo.save,
+                    message_repo.save(
                         DbMessage(
-                            id=str(uuid.uuid4()),
+                            id=assistant_db_id,
                             session_id=data.session_id,
                             role="assistant",
                             content=done_content,
                             reasoning_content=done_reasoning,
                             # alpha.36 (Bug #4): 持久化工具调用中间信息,
                             # 切会话再切回时前端 loadMessages 能恢复。
+                            # 2026-09 step-by-step: 最终步骤 LLM 通常不再发工具调用,
+                            # accumulated_tool_calls 已被前序 STEP_DONE 重置,这里
+                            # 落盘通常为 None。仅在 LLM 在终稿同时含 tool_call 的
+                            # 边界 case 下才会有值,语义上仍正确(那就是该步的 tool calls)。
                             tool_calls=(
                                 json.dumps(accumulated_tool_calls, ensure_ascii=False)
                                 if accumulated_tool_calls
@@ -2091,32 +2138,27 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             generation_stats=getattr(done_event, "generation_stats_json", None),
                             created_at=assistant_now,
                             model=(llm_config.get("model") if llm_config else "local"),
-                        ),
+                        )
                     )
-                    assistant_message_id = getattr(saved, "id", None)
+                    assistant_persisted = True
                     if r38_memory_refs_json and not r38_memory_refs_written:
                         r38_memory_refs_written = True
                     if r81_rag_citations_json and not r81_rag_citations_written:
                         r81_rag_citations_written = True
                 except Exception as db_err:
                     logger.warning(f"[REQ {request_id}] 助手消息持久化失败: {db_err}")
-                sess = None
                 # WS-C P0-2: 统一记忆写入路径 — assistant 落盘**成功后**才触发
                 # 提取（落盘失败则跳过, 避免产生无对应消息的脏记忆）。
                 # best-effort + autoMemory 开关, 失败只 warning, 不影响流。
-                if assistant_message_id is not None:
+                if assistant_persisted:
                     # ===== L11 stop 钩子 (批次 C-2, observe-only) =====
                     # run 正常结束通知; deny/modify 无语义, 一律忽略。
                     try:
+                        import backend.data.settings_repo as _settings_repo_mod
                         from backend.hooks.config import load_hooks as _load_hooks_fn
                         from backend.hooks.runner import run_event_hooks as _run_hooks_fn
 
-                        def _load_stop_hooks():
-                            from backend.data.settings_repo import SettingsRepository
-
-                            return _load_hooks_fn(SettingsRepository())
-
-                        _stop_hooks = await _run_db_sync(_load_stop_hooks)
+                        _stop_hooks = _load_hooks_fn(_settings_repo_mod.SettingsRepository())
                         if _stop_hooks:
                             _capped = done_content[:4096]
                             await _run_hooks_fn(
@@ -2133,29 +2175,10 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         logger.debug(
                             f"[REQ {request_id}] stop hooks skipped: {l11_stop_err}"
                         )
-                try:
-                    sess = await _run_db_sync(session_repo.get, data.session_id)
-                except Exception as db_err:
-                    logger.warning(f"[REQ {request_id}] 会话读取失败: {db_err}")
-                if sess is not None:
-                    try:
-                        await _run_db_sync(
-                            session_repo.update,
-                            data.session_id,
-                            last_message_at=assistant_now,
-                            # 2026-09 step-by-step: 多步 run 产生 (steps_completed+1)
-                            # 条 assistant 行 (中间 step + 最终 done) 加 1 条 user 行,
-                            # 共 steps_completed+2 条新增消息 (C2 重新生成不落 user 行: +1)。
-                            message_count=sess.message_count
-                            + steps_completed
-                            + (1 if data.regenerate_of else 2),
-                        )
-                    except Exception as db_err:
-                        logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
-                # Important-1 (win7 Task 6): when lifespan has installed a lifecycle
-                # manager, use it so memory_written hooks and traceability are
-                # emitted. Otherwise fall back to the async extraction queue.
-                if assistant_message_id is not None:
+                    # Important-1 (win7 Task 6): when lifespan has installed a
+                    # lifecycle manager, use it so memory_written hooks and
+                    # traceability are emitted. Otherwise fall back to the
+                    # async extraction queue.
                     lifecycle = getattr(request.app.state, "lifecycle", None)
                     if lifecycle is not None and not memory_off:
                         try:
@@ -2165,7 +2188,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                     {"role": "user", "content": data.message},
                                     {"role": "assistant", "content": done_content},
                                 ],
-                                source_message_id=assistant_message_id,
+                                source_message_id=assistant_db_id,
                             )
                         except Exception as exc:
                             logger.warning(
@@ -2176,11 +2199,32 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         await _extract_legacy_chat_memory(
                             request_id, data.session_id, data.message, done_content
                         )
+                # win7 分支同款防御 (回流): sess 先初始化为 None。否则
+                # session_repo.get 抛错时 except 吞掉后, 下方标题生成判断行
+                # `if done_event and sess` 触发 UnboundLocalError, 一路冒穿
+                # producer —— 用户在内容已全部生成后收到 state=failed,
+                # DONE 事件/标题/session_updated 全部丢失。
+                sess = None
+                try:
+                    sess = session_repo.get(data.session_id)
+                    if sess is not None:
+                        session_repo.update(
+                            data.session_id,
+                            last_message_at=assistant_now,
+                            # 2026-09 step-by-step: 多步 run 产生 (steps_completed+1)
+                            # 条 assistant 行 (中间 step + 最终 done) 加 1 条 user 行,
+                            # 共 steps_completed+2 条新增消息 (C2 重新生成不落 user 行: +1)。
+                            message_count=sess.message_count
+                            + steps_completed
+                            + (1 if data.regenerate_of else 2),
+                        )
+                except Exception as db_err:
+                    logger.warning(f"[REQ {request_id}] 会话更新失败: {db_err}")
 
-                # 推送暂存的 DONE 事件先行 —— 2026-09 修复 (同步 #1100):
-                # 标题生成内部自带 3 次退避重试, 最长可拖 15s+, 此前阻塞在
-                # DONE 之前, 内容已生成完用户仍在转圈。现 DONE 立即推送,
-                # 标题转后台任务生成, 完成后落库并补发 title_updated。
+                # 推送暂存的 DONE 事件先行 —— 2026-09 修复: 标题生成内部
+                # 自带 3 次退避重试, 最长可拖 15s+, 此前阻塞在 DONE 之前,
+                # 用户盯着已生成完的内容转圈。现 DONE 立即推送, 标题转后台
+                # 任务生成; 完成后落库 (侧栏在下次自然刷新时呈现)。
                 # R81: DONE 之前推送 sources_used —— 前端在收到 DONE 收尾前
                 # 就能把参考来源挂到 assistant 气泡上（与 memory_used 同为
                 # 增强信息, 非空才推）。R83: 这里是全量兜底推送 —— 覆盖无
@@ -2201,49 +2245,63 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         )
                 if done_event:
                     done_payload = done_event.to_dict()
-                    # 同步 #1155: DONE 附带 assistant 消息服务端 id
-                    if assistant_message_id is not None:
-                        done_payload["message_id"] = assistant_message_id
-                    # 同步 #1196: 首轮对话标题将在后台生成 —— 提示前端稍后
-                    # 补刷侧栏 (2026-09)。
-                    if sess is not None and sess.message_count <= 2:
+                    # client_message_id (2026-09): DONE 附带 assistant 消息的
+                    # 服务端 id, 前端据此把乐观占位 id 替换为真实 id —— 对账
+                    # 按 id 精确命中, 根治重复显示。
+                    if assistant_persisted:
+                        done_payload["message_id"] = assistant_db_id
+                    # 标题尚未就绪（占位值且未达重试上限）时提示前端补刷侧栏。
+                    if sess is not None and needs_title(sess):
                         done_payload["title_pending"] = True
                     await entry.queue.put(done_payload)
 
-                # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
-                if done_event and sess and sess.message_count <= 2:
+                # 标题自动生成：只要标题仍是占位值且未达重试上限，每轮都可
+                # 尝试（旧逻辑仅 message_count<=2 的两轮触发，一旦失败永不
+                # 重试 —— 长对话长期停在「新对话」）。DONE 已先行推送，此处
+                # 最多等 _TITLE_WAIT_S 让 title_updated 在 SENTINEL 关闭流前
+                # 送达；超时则任务转入后台继续，落库后由前端轮询兜底。
+                if done_event and sess is not None and needs_title(sess):
 
                     async def _generate_title() -> None:
+                        attempts = (sess.title_attempts or 0) + 1
                         try:
-                            from backend.chat.title_generator import TitleGenerator
-                            from backend.orchestration.llm_factory import (
-                                build_llm_client_from_settings,
+                            title_client = TitleModelFactory.build()
+                            title = await TitleGenerator(title_client).generate(
+                                data.message, done_content
                             )
-
-                            title_client = build_llm_client_from_settings()
-                            if title_client:
-                                title = await TitleGenerator(title_client).generate(
-                                    data.message, done_content
-                                )
-                                if title:
-                                    # PR A §1.2: 标题更新同样需经 ``_run_db_sync``
-                                    # 走 ``_SQLITE_LOCK``,与本会话其他写入串行化。
-                                    await _run_db_sync(
-                                        session_repo.update, data.session_id, title=title
-                                    )
-                                    await entry.queue.put(
-                                        {
-                                            "type": "session_updated",
-                                            "subtype": "title_updated",
-                                            "title": title,
-                                        }
-                                    )
-                        except Exception as e:
+                        except Exception as e:  # noqa: BLE001 — 任何故障都不影响流收尾
                             logger.warning(
                                 f"[REQ {request_id}] 标题生成失败: {e}"
                             )
+                            title = DEFAULT_TITLE
+                        try:
+                            # 无论成功与否都计一次尝试，避免失败会话每轮重试。
+                            session_repo.update(
+                                data.session_id,
+                                title=title,
+                                title_attempts=attempts,
+                            )
+                        except Exception as db_err:
+                            logger.warning(
+                                f"[REQ {request_id}] 标题落库失败: {db_err}"
+                            )
+                            return
+                        # 占位标题不推事件（UI 无变化）；流已关闭则无人消费。
+                        if title != DEFAULT_TITLE and entry.status in (
+                            "pending",
+                            "running",
+                        ):
+                            await entry.queue.put(
+                                {
+                                    "type": "session_updated",
+                                    "subtype": "title_updated",
+                                    "session_id": data.session_id,
+                                    "title": title,
+                                }
+                            )
 
-                    asyncio.create_task(_generate_title())
+                    title_task = asyncio.create_task(_generate_title())
+                    await asyncio.wait({title_task}, timeout=_TITLE_WAIT_S)
         except LLMError as e:
             logger.warning(
                 f"[REQ {request_id}] /chat/stream LLM error: "
@@ -2282,9 +2340,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 partial_text = "".join(streamed_partial_parts).strip()
                 if partial_text:
                     try:
-                        # 落盘走与 DONE 持久化同一把 _SQLITE_LOCK（_run_db_sync）。
-                        await _run_db_sync(
-                            message_repo.save,
+                        message_repo.save(
                             DbMessage(
                                 id=str(uuid.uuid4()),
                                 session_id=data.session_id,
@@ -2293,6 +2349,9 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 reasoning_content=None,
                                 # alpha.36 (Bug #4): 中断时也持久化已累积的工具调用,
                                 # 切会话再切回能看到中断前已发生的工具步骤。
+                                # 2026-09 step-by-step: 累加器已在 STEP_DONE 时重置,
+                                # 这里只含"当前未完成 step"的 tool calls(等价于
+                                # 旧行为的"最后一次 STEP_DONE 后的剩余部分")。
                                 tool_calls=(
                                     json.dumps(accumulated_tool_calls, ensure_ascii=False)
                                     if accumulated_tool_calls
@@ -2317,7 +2376,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                                 ),
                                 created_at=int(time.time() * 1000),
                                 model=(llm_config.get("model") if llm_config else "local"),
-                            ),
+                            )
                         )
                         await entry.queue.put(
                             {"state": "partial_persisted", "content": partial_text}
@@ -2350,7 +2409,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         str(_exc_info[1]) if _exc_info and _exc_info[0] else "运行失败"
                     )
             try:
-                await _run_db_sync(
+                await to_thread(
                     SessionRepository().update_run_status,
                     data.session_id,
                     _terminal_status,

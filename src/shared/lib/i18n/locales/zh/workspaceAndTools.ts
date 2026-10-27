@@ -392,6 +392,7 @@ export const zhWorkspaceAndTools = {
   // ─── U4' 会话管理收尾 (对标增强第五轮批次 A) ─────
   'session.rename': '重命名会话',
   'session.rename_failed': '重命名失败：{message}',
+  'session.title_generating': '✨ 生成标题中…',
   'sidebar.search_sessions': '搜索会话',
   'sidebar.no_match': '无匹配会话',
 

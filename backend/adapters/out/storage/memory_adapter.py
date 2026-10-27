@@ -38,6 +38,7 @@ class _SessionState:
     """单会话的内存状态。"""
 
     title: str = ""
+    title_attempts: int = 0
     messages: List[Message] = field(default_factory=list)
 
 
@@ -94,6 +95,7 @@ class MemoryStorageAdapter:
         return {
             "id": session_id,
             "title": state.title,
+            "title_attempts": state.title_attempts,
             "message_count": len(state.messages),
         }
 
@@ -106,6 +108,8 @@ class MemoryStorageAdapter:
             return 0
         if "title" in fields and fields["title"] is not None:
             state.title = fields["title"]
+        if "title_attempts" in fields and fields["title_attempts"] is not None:
+            state.title_attempts = int(fields["title_attempts"])
         return 1
 
     async def delete_session(self, session_id: str) -> int:

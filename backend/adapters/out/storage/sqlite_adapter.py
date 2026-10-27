@@ -179,6 +179,7 @@ class SqliteStorageAdapter:
             {
                 "id": s.id,
                 "title": s.title,
+                "title_attempts": s.title_attempts,
                 "message_count": s.message_count,
                 "created_at": s.created_at,
                 "updated_at": s.updated_at,
@@ -229,6 +230,7 @@ class SqliteStorageAdapter:
         return {
             "id": s.id,
             "title": s.title,
+            "title_attempts": s.title_attempts,
             "message_count": s.message_count,
             "created_at": s.created_at,
             "updated_at": s.updated_at,
@@ -253,6 +255,8 @@ class SqliteStorageAdapter:
         kwargs: Dict[str, Any] = {}
         if "title" in fields and fields["title"] is not None:
             kwargs["title"] = fields["title"]
+        if "title_attempts" in fields and fields["title_attempts"] is not None:
+            kwargs["title_attempts"] = int(fields["title_attempts"])
         if "is_pinned" in fields and fields["is_pinned"] is not None:
             kwargs["is_pinned"] = 1 if fields["is_pinned"] else 0
         with _SQLITE_LOCK:

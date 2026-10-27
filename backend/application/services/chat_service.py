@@ -40,6 +40,7 @@ from backend.chat.empty_response_guard import (
     EMPTY_RESPONSE_SYSTEM_PROMPT,
     empty_response_max_retries,
 )
+from backend.chat.title_generator import needs_title as _needs_title
 from backend.domain.wake import Wake, WakeKind, to_utc_iso
 
 # Optional memory types (for backward compatibility)
@@ -601,17 +602,19 @@ class ChatService:
                 # 8) 压缩工作记忆 (Memory Integration)
                 await self._compress_working_memory(session_id, span)
 
-            # 9) 标题自动生成：首轮对话后 (message_count <= 2)
+            # 9) 标题自动生成：首轮对话后
             try:
                 session_data = await self.storage.get_session(session_id)
-                if session_data and session_data.get("message_count", 0) <= 2:
+                if session_data and _needs_title(session_data):
                     from backend.chat.title_generator import TitleGenerator
 
                     title = await TitleGenerator(self.llm).generate(
                         user_message.content or "", response.content or ""
                     )
-                    if title:
-                        await self.storage.update_session(session_id, title=title)
+                    attempts = int(session_data.get("title_attempts") or 0) + 1
+                    await self.storage.update_session(
+                        session_id, title=title, title_attempts=attempts
+                    )
             except Exception as e:
                 logger.warning(f"标题生成失败: {e}")
 

@@ -696,6 +696,17 @@ async def lifespan(app: FastAPI):
     logger.info("TodoReminderScheduler started")
     _startup_mark("todo_reminder_scheduler")
 
+    # 标题回补：延迟 30s 后台补齐历史未命名会话（失败不影响启动）
+    from backend.scheduler.title_backfill import TitleBackfill
+
+    title_backfill = TitleBackfill(
+        session_repo=SessionRepository(),
+        message_repo=MessageRepository(),
+    )
+    title_backfill.schedule()
+    app.state.title_backfill = title_backfill
+    logger.info("TitleBackfill 已调度（启动 30s 后回补未命名会话）")
+
     # R19-B: SQLite 自动备份 —— 启动时后台线程备份一次（fail-safe, 不阻塞
     # 启动）+ 每日 03:10 定时备份（独立于 evolution 任务, 只做整库在线复制）。
     def _startup_backup() -> None:
@@ -1186,6 +1197,13 @@ async def lifespan(app: FastAPI):
             app.state.todo_reminder_scheduler.stop()
         except Exception as exc:  # noqa: BLE001 — shutdown must not raise
             logger.warning("TodoReminderScheduler stop failed: %s", exc)
+
+    # Phase 8c: cancel pending title backfill
+    if hasattr(app.state, "title_backfill") and app.state.title_backfill is not None:
+        try:
+            await app.state.title_backfill.stop()
+        except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+            logger.warning("TitleBackfill stop failed: %s", exc)
 
     # M1/M2 审批/提问闸口：关闭时重置全局单例。否则 TestClient（或多次
     # lifespan 启停）之后 `_global_gate` 残留装配——后续 agent 循环对

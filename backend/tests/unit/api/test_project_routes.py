@@ -294,13 +294,7 @@ def test_detect_type_on_empty_dir(client, tmp_path: Path) -> None:
     d = tmp_path / "empty-proj"
     d.mkdir()
     body = client.post("/projects/detect-type", json={"path": str(d)}).json()
-    assert set(body) == {
-        "project_type",
-        "confidence",
-        "signals",
-        "sub_type",
-        "tech_stack",
-    }
+    assert set(body) == {"project_type", "confidence", "signals", "sub_type", "tech_stack"}
     assert isinstance(body["confidence"], float)
 
 

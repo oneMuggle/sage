@@ -702,6 +702,11 @@ class Database:
             cursor.execute("ALTER TABLE sessions ADD COLUMN last_error TEXT")
         if "last_run_at" not in session_columns:
             cursor.execute("ALTER TABLE sessions ADD COLUMN last_run_at INTEGER")
+        # 2026-10-27: 标题生成重试计数。用于区分"未尝试"与"已放弃"。
+        # SQLite 不支持 ALTER COLUMN 修改 nullability，保留 title NOT NULL，
+        # 用 title == '新对话' AND title_attempts == 0 作为"未生成"信号。
+        if "title_attempts" not in session_columns:
+            cursor.execute("ALTER TABLE sessions ADD COLUMN title_attempts INTEGER DEFAULT 0")
         conn.commit()
 
         # 情景记忆表

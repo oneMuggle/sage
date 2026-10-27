@@ -267,6 +267,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'model chat vision embedding tts asr image 模型选择',
   },
   {
+    key: 'title_model',
+    tab: 'models',
+    label: '会话标题模型',
+    labelEn: 'Session title model',
+    keywords: 'titlemodelid 标题 会话标题 专用模型 title session name',
+  },
+  {
     key: 'max_context',
     tab: 'models',
     label: '最大上下文长度',

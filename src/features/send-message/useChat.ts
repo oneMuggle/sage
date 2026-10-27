@@ -639,9 +639,14 @@ export function useChat() {
             onEvent: (evt) => {
               if (finished) return;
               // 会话标题更新事件 (producer 在 DONE 前推送)
-              // 立即刷新侧栏会话列表, 这样 DONE 到达时标题已可见
+              // 精确更新单个会话标题，避免全量 reload 抖动
               if (evt.type === 'session_updated') {
-                void useStore.getState().loadSessions();
+                if (evt.subtype === 'title_updated' && evt.title) {
+                  useStore.getState().updateSession(sid, { title: evt.title });
+                } else {
+                  // 其它 session_updated 子类型仍走全量刷新
+                  void useStore.getState().loadSessions();
+                }
                 return;
               }
 
