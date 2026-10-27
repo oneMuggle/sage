@@ -13,6 +13,7 @@
 import type { UpdateChannel, UpdateConfig, UpdateStrategy } from '../../../electron/updateConfig';
 import type { UpdateStateChangedEvent } from '../../../electron/updateIpc';
 import type { CheckResult } from '../../../electron/updateManager';
+import type { RemoteMcpElectronApiBridge } from '../api/remoteMcpApi';
 import type {
   JournalFillFromContentRequest,
   JournalFillFromContentResponse,
@@ -33,6 +34,7 @@ export interface MemoryElectronApiBridge {
   delete: (args: Record<string, unknown>) => Promise<unknown>;
   getProfile: () => Promise<unknown>;
   diagnostics: () => Promise<unknown>;
+  /** win7: 记忆事件订阅（SSE 桥）—— 主进程 memoryEvents 通道 */
   subscribe: (handler: (event: unknown) => void) => Promise<UnlistenFn | null>;
   createProfile: (args: Record<string, unknown>) => Promise<unknown>;
   updateProfile: (args: Record<string, unknown>) => Promise<unknown>;
@@ -294,7 +296,7 @@ export interface DiagnosticElectronApiBridge {
     newestTs: string | null;
     sampleUrls: string[];
     version: string;
-  }>;
+  }>;  /** win7: 浏览器环境自检（pages/Diagnostic 的 BrowserEnvironmentSection 依赖） */
   browserCheck: () => Promise<{
     platform: string;
     checks: Array<{
@@ -307,6 +309,7 @@ export interface DiagnosticElectronApiBridge {
     errors: string[];
   }>;
 }
+
 
 export interface ProvidersElectronApiBridge {
   list: () => Promise<ProviderConfigSummary[]>;
@@ -413,6 +416,8 @@ export interface ElectronAPI {
   ): Promise<UnlistenFn>;
   windowControls: WindowControlsBridge;
   skills: SkillsElectronApiBridge;
+  /** Workspace MCP Server (M4) — optional: absent in web / older preloads. */
+  remoteMcp?: RemoteMcpElectronApiBridge;
   arenaToken: ArenaTokenElectronApiBridge;
   office: OfficeElectronApiBridge;
   media: MediaElectronApiBridge;

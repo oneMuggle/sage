@@ -1,5 +1,4 @@
 export { RetryButton } from './RetryButton';
-export type { RetryButtonProps } from './RetryButton';
 
 export function auditRetryButtonBarrelGovernance(
   state: {
