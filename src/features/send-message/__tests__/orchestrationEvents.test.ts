@@ -57,9 +57,64 @@ describe('applyOrchestrationEventToBoard — R35', () => {
     expect(board?.plan).toHaveLength(1);
   });
 
+  // 编排 UX 修复 (2026-10-26): NDJSON 重放对同一 run 的 task_plan 不再覆盖
+  // 已有任务板 —— 用户在计划卡里的 goal 编辑或自然语言修订已经写回 store，
+  // 重放的事件携带的是原始 plan（新数组引用但内容没变），无条件重建会把用户
+  // 改动静默冲掉。不同 run 的 task_plan 仍正常替换（取消后开新 run 的场景）。
+  it('task_plan 同 run 重放不覆盖已有任务板（用户编辑存活）', () => {
+    const originalPlan = [{ task_id: 't1', agent_id: 'researcher', goal: '原始目标' }];
+    applyOrchestrationEventToBoard(
+      evt({ state: 'task_plan', run_id: 'orch-1', plan: originalPlan }),
+      SID,
+    );
+    // 用户编辑：改 store 里的 plan —— 模拟 PlanCard 修订结果回写
+    useChatStreamStore
+      .getState()
+      .updateTaskBoard(SID, 'orch-1', (prev) =>
+        prev ? { ...prev, plan: [{ ...prev.plan[0], goal: '用户改过的目标' }] } : prev,
+      );
+    // 重放：同一 run 的新 task_plan（renderer reload / 切会话切回会触发）
+    const replayedPlan = [{ task_id: 't1', agent_id: 'researcher', goal: '原始目标' }];
+    expect(replayedPlan).not.toBe(slots().taskBoard!.plan); // 引用不同，模拟重放
+    applyOrchestrationEventToBoard(
+      evt({ state: 'task_plan', run_id: 'orch-1', plan: replayedPlan }),
+      SID,
+    );
+    expect(slots().taskBoard!.plan[0].goal).toBe('用户改过的目标');
+  });
+
+  it('task_plan 不同 run 仍替换旧任务板', () => {
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'task_plan',
+        run_id: 'orch-1',
+        plan: [{ task_id: 't1', agent_id: 'r', goal: 'GA' }],
+      }),
+      SID,
+    );
+    applyOrchestrationEventToBoard(
+      evt({
+        state: 'task_plan',
+        run_id: 'orch-NEW',
+        plan: [{ task_id: 't2', agent_id: 'r', goal: 'GB' }],
+      }),
+      SID,
+    );
+    const board = slots().taskBoard!;
+    expect(board.runId).toBe('orch-NEW');
+    expect(board.plan[0].goal).toBe('GB');
+  });
+
   it('task_status 合并状态并聚合进度', () => {
     applyOrchestrationEventToBoard(
-      evt({ state: 'task_plan', run_id: 'orch-2', plan: [{ task_id: 'a', agent_id: 'r', goal: 'GA' }, { task_id: 'b', agent_id: 'r', goal: 'GB' }] }),
+      evt({
+        state: 'task_plan',
+        run_id: 'orch-2',
+        plan: [
+          { task_id: 'a', agent_id: 'r', goal: 'GA' },
+          { task_id: 'b', agent_id: 'r', goal: 'GB' },
+        ],
+      }),
       SID,
     );
     applyOrchestrationEventToBoard(
@@ -75,7 +130,11 @@ describe('applyOrchestrationEventToBoard — R35', () => {
 
   it('跨 run 的 task_status 不串扰', () => {
     applyOrchestrationEventToBoard(
-      evt({ state: 'task_plan', run_id: 'orch-3', plan: [{ task_id: 'x', agent_id: 'r', goal: 'GX' }] }),
+      evt({
+        state: 'task_plan',
+        run_id: 'orch-3',
+        plan: [{ task_id: 'x', agent_id: 'r', goal: 'GX' }],
+      }),
       SID,
     );
     applyOrchestrationEventToBoard(
@@ -88,7 +147,11 @@ describe('applyOrchestrationEventToBoard — R35', () => {
 
   it('task_progress 覆盖 5 元组', () => {
     applyOrchestrationEventToBoard(
-      evt({ state: 'task_plan', run_id: 'orch-4', plan: [{ task_id: 'x', agent_id: 'r', goal: 'GX' }] }),
+      evt({
+        state: 'task_plan',
+        run_id: 'orch-4',
+        plan: [{ task_id: 'x', agent_id: 'r', goal: 'GX' }],
+      }),
       SID,
     );
     applyOrchestrationEventToBoard(
@@ -135,11 +198,14 @@ describe('applyOrchestrationEventToBoard — R35', () => {
 
   it('approval_mode / todo_snapshot / artifact_created 被消费', () => {
     expect(
-      applyOrchestrationEventToBoard(evt({ state: 'approval_mode', run_id: 'r1', mode: 'auto' }), SID),
+      applyOrchestrationEventToBoard(
+        evt({ state: 'approval_mode', run_id: 'r1', mode: 'auto' }),
+        SID,
+      ),
     ).toBe(true);
-    expect(
-      applyOrchestrationEventToBoard(evt({ state: 'todo_snapshot', todos: [] }), SID),
-    ).toBe(true);
+    expect(applyOrchestrationEventToBoard(evt({ state: 'todo_snapshot', todos: [] }), SID)).toBe(
+      true,
+    );
     expect(
       applyOrchestrationEventToBoard(
         evt({
@@ -291,10 +357,7 @@ describe('applyOrchestrationEventToBoard — orch_preflight (Round 3)', () => {
 
   it('scout 阶段覆盖 clarify', () => {
     useChatStreamStore.getState().setPreflightPhase(SID, 'clarify');
-    applyOrchestrationEventToBoard(
-      evt({ state: 'orch_preflight', preflight_phase: 'scout' }),
-      SID,
-    );
+    applyOrchestrationEventToBoard(evt({ state: 'orch_preflight', preflight_phase: 'scout' }), SID);
     expect(slots().preflightPhase).toBe('scout');
   });
 
@@ -314,10 +377,7 @@ describe('applyOrchestrationEventToBoard — orch_preflight (Round 3)', () => {
 
   it('无 phase 载荷的 orch_preflight 不消费（防御畸形事件）', () => {
     useChatStreamStore.getState().setPreflightPhase(SID, null);
-    const handled = applyOrchestrationEventToBoard(
-      evt({ state: 'orch_preflight' }),
-      SID,
-    );
+    const handled = applyOrchestrationEventToBoard(evt({ state: 'orch_preflight' }), SID);
     expect(handled).toBe(false);
     expect(slots().preflightPhase).toBeNull();
   });
@@ -339,16 +399,30 @@ describe('restoreRunToBoard — 历史 run 恢复 (RD20)', () => {
     ],
     tasks: [
       {
-        task_id: 'a', agent_id: 'primary', goal: 'GA', status: 'done',
-        error: null, output_preview: '结果A', retry_count: 0,
-        started_at: 1_000_100, finished_at: 1_000_600,
-        used_tokens: 4321, duration_ms: 500,
+        task_id: 'a',
+        agent_id: 'primary',
+        goal: 'GA',
+        status: 'done',
+        error: null,
+        output_preview: '结果A',
+        retry_count: 0,
+        started_at: 1_000_100,
+        finished_at: 1_000_600,
+        used_tokens: 4321,
+        duration_ms: 500,
       },
       {
-        task_id: 'b', agent_id: 'primary', goal: 'GB', status: 'failed',
-        error: 'boom', output_preview: null, retry_count: 1,
-        started_at: 1_000_700, finished_at: 1_000_900,
-        used_tokens: 0, duration_ms: 200,
+        task_id: 'b',
+        agent_id: 'primary',
+        goal: 'GB',
+        status: 'failed',
+        error: 'boom',
+        output_preview: null,
+        retry_count: 1,
+        started_at: 1_000_700,
+        finished_at: 1_000_900,
+        used_tokens: 0,
+        duration_ms: 200,
       },
     ],
   } as unknown as OrchRunDetail;
@@ -370,9 +444,7 @@ describe('restoreRunToBoard — 历史 run 恢复 (RD20)', () => {
   });
 
   it('无任务的 run 返回 null', () => {
-    expect(
-      restoreRunToBoard({ ...baseRun, tasks: [], plan: [] }),
-    ).toBeNull();
+    expect(restoreRunToBoard({ ...baseRun, tasks: [], plan: [] })).toBeNull();
   });
 });
 
@@ -383,14 +455,32 @@ describe('restoreRunToBoard — 历史 run 恢复 (RD20)', () => {
 describe('restoreRunToBoard — retry_of 映射 (RT26)', () => {
   it('终态任务带 retry_of → 恢复后保留', () => {
     const run: OrchRunDetail = {
-      run_id: 'orch-rt26', session_id: SID, status: 'failed',
-      created_at: 1_000, plan: [], original_request: '',
+      run_id: 'orch-rt26',
+      session_id: SID,
+      status: 'failed',
+      created_at: 1_000,
+      plan: [],
+      original_request: '',
       tasks: [
-        { task_id: 'a', agent_id: 'primary', goal: 'GA', status: 'done',
-          error: null, output_preview: 'OK', retry_count: 0 },
-        { task_id: 'b', agent_id: 'primary', goal: 'GB', status: 'done',
-          error: null, output_preview: 'ok', retry_count: 0,
-          retry_of: 't0' },
+        {
+          task_id: 'a',
+          agent_id: 'primary',
+          goal: 'GA',
+          status: 'done',
+          error: null,
+          output_preview: 'OK',
+          retry_count: 0,
+        },
+        {
+          task_id: 'b',
+          agent_id: 'primary',
+          goal: 'GB',
+          status: 'done',
+          error: null,
+          output_preview: 'ok',
+          retry_count: 0,
+          retry_of: 't0',
+        },
       ],
     } as unknown as OrchRunDetail;
     const restored = restoreRunToBoard(run);
@@ -400,9 +490,8 @@ describe('restoreRunToBoard — retry_of 映射 (RT26)', () => {
   });
 
   it('formats restored board summary and JSON (Phase P110)', async () => {
-    const { formatRestoredBoardSummary, formatRestoredBoardJson } = await import(
-      '../orchestrationEvents'
-    );
+    const { formatRestoredBoardSummary, formatRestoredBoardJson } =
+      await import('../orchestrationEvents');
     expect(formatRestoredBoardSummary(null)).toBe('empty');
     const run: OrchRunDetail = {
       run_id: 'orch-p110',

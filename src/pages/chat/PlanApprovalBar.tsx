@@ -1,9 +1,11 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { PlanCard } from '../../components/PlanCard';
 import type { TaskBoardState } from '../../features/send-message/chatStreamStore';
+import { useChatStreamStore } from '../../features/send-message/chatStreamStore';
 import { orchRunClient } from '../../shared/api/orchRunClient';
+import type { TaskPlanItem } from '../../shared/api/types';
 import type { Message as MessageType } from '../../shared/lib/store';
 
 export interface PlanApprovalBarProps {
@@ -34,6 +36,50 @@ export function PlanApprovalBar({
   onCancelRun,
 }: PlanApprovalBarProps) {
   const planOrchBusyRef = useRef(false);
+  const [revising, setRevising] = useState(false);
+  const reviseBusyRef = useRef(false);
+
+  // 编排计划卡片 UX (2026-10-26): 自然语言修订（问题 3）—— 用户不必在
+  // "开始执行 / 取消" 之间二选一。currentItems 由 PlanCard 传入，是用户在
+  // textarea 里改过但尚未落库的计划；拿它（而不是 store 里的旧 plan）当
+  // 修订基线，后端"未提及任务原样保留"才不会把用户的 goal 编辑还原掉。
+  // current_plan 非空 → 后端走修订 prompt，只改用户提到的任务。
+  const handleRevise = async (instruction: string, currentItems: TaskPlanItem[]) => {
+    const board = taskBoard;
+    if (!board) return;
+    // 并发守卫：抛错而非静默 return —— PlanCard 的 catch 会 toast 并保留
+    // 用户输入，静默 return 会让它误以为成功而清空 textarea。
+    if (reviseBusyRef.current) {
+      throw new Error('上一次计划修订仍在进行中，请稍候');
+    }
+    reviseBusyRef.current = true;
+    setRevising(true);
+    try {
+      const { items, reasoning } = await orchRunClient.planItemsFromText(instruction, currentItems);
+      if (items.length === 0) {
+        throw new Error('LLM 未能根据修订说明生成任务');
+      }
+      // 修订 reasoning 为空时不覆盖库里有价值的原始规划思路。
+      await orchRunClient.updatePlan(board.runId, items, reasoning || undefined);
+      if (currentSessionId) {
+        useChatStreamStore.getState().updateTaskBoard(currentSessionId, board.runId, (prev) =>
+          prev
+            ? {
+                ...prev,
+                plan: items,
+                reasoning: reasoning || prev.reasoning,
+                // task_progress 的 total 是修订前的旧值，而前端聚合只增不
+                // 减 —— 5 项计划修订成 2 项后会一直显示"0/5"却只有 2 行。
+                progress: prev.progress ? { ...prev.progress, total: items.length } : prev.progress,
+              }
+            : prev,
+        );
+      }
+    } finally {
+      reviseBusyRef.current = false;
+      setRevising(false);
+    }
+  };
 
   return (
     <>
@@ -139,6 +185,9 @@ export function PlanApprovalBar({
             plan={taskBoard.plan}
             locked={false}
             needConfirm={true}
+            reasoning={taskBoard.reasoning}
+            onRevise={(instruction, currentItems) => handleRevise(instruction, currentItems)}
+            revising={revising}
             onCancel={() => void onCancelRun(taskBoard.runId)}
           />
         </div>

@@ -223,7 +223,7 @@ def test_background_guide_documents_snapshot_strategy():
     from backend.api.legacy_routes import _PLAN_MODE_DIRECTIVE  # noqa: F401 — 常量面健全
 
     src = inspect.getsource(
-        __import__("backend.api.legacy_routes", fromlist=["x"])
+        __import__("backend.api.orch_plan_block", fromlist=["x"])
     )
     assert "wait=false" in src
     assert "提前汇总" in src

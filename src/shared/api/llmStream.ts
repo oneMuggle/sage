@@ -46,6 +46,8 @@ export interface TaskPlanEvent {
   state: 'task_plan';
   run_id: string;
   plan: TaskPlanItem[];
+  // 编排计划卡片 UX (2026-10-26): 与 types/chatAndEventTypes.ts 双处一致。
+  reasoning?: string;
 }
 
 export type TaskStatusValue = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
