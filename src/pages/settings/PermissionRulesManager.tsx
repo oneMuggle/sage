@@ -27,40 +27,8 @@ import { useEffect, useState } from 'react';
 
 import { permissionApi, type PermissionRuleItem } from '../../shared/api/permissionApi';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { findShadowedRules } from '../../shared/lib/permissionInsights';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
-
-/** 裁决优先级（后端恒为 deny > allow > ask，见 permissions.py）。 */
-const DECISION_RANK: Record<string, number> = { deny: 3, allow: 2, ask: 1 };
-
-/**
- * R109 已保存规则遮蔽派生：返回被同列表内更高优先级规则覆盖的
- * 规则下标 → 覆盖方 pattern。后端裁决恒取命中的最高优先级决定，
- * 故被覆盖的低优先级行恒不胜出、实际不会生效。覆盖只认严格可
- * 证的三类：pattern 等值；覆盖方为 `plugin__*`；覆盖方为由本行
- * 权威 `plugin_name` 标注（R101）结构化派生的
- * `plugin__<name>__*`（只做等值比对，不切分本行 pattern 猜名；
- * 与 R107 前端派生同口径）。一般 fnmatch 包含关系不判，故所示
- * 恒真、至多漏标；无归属标注的行只判等值。
- */
-// eslint-disable-next-line react-refresh/only-export-components
-export function findShadowedRules(rules: PermissionRuleItem[]): Map<number, string> {
-  const shadowed = new Map<number, string>();
-  rules.forEach((rule, index) => {
-    const rank = DECISION_RANK[rule.decision] ?? 0;
-    const coverPatterns: string[] = [rule.tool_pattern];
-    if (rule.plugin_name) {
-      coverPatterns.push('plugin__*', `plugin__${rule.plugin_name}__*`);
-    }
-    const covering = rules.find(
-      (other, otherIndex) =>
-        otherIndex !== index &&
-        (DECISION_RANK[other.decision] ?? 0) > rank &&
-        coverPatterns.includes(other.tool_pattern),
-    );
-    if (covering) shadowed.set(index, covering.tool_pattern);
-  });
-  return shadowed;
-}
 
 export function PermissionRulesManager() {
   const { t } = useI18n();

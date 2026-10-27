@@ -14,6 +14,7 @@ const listSessionRememberedRules = vi.fn();
 const deleteSessionRememberedRule = vi.fn();
 const clearSessionRememberedRules = vi.fn();
 const confirmDialogMock = vi.fn();
+const pluginListMock = vi.fn();
 const toastSuccess = vi.fn();
 const toastError = vi.fn();
 
@@ -36,6 +37,12 @@ vi.mock('../../../shared/api/permissionApi', async () => {
 
 vi.mock('../../../shared/ui/ConfirmDialog/confirmService', () => ({
   confirmDialog: (...a: unknown[]) => confirmDialogMock(...a),
+}));
+
+vi.mock('../../../shared/api/pluginClient', () => ({
+  pluginClient: {
+    list: (...a: unknown[]) => pluginListMock(...a),
+  },
 }));
 
 vi.mock('sonner', () => ({
@@ -61,6 +68,7 @@ beforeEach(() => {
   deleteSessionRememberedRule.mockReset().mockResolvedValue([]);
   clearSessionRememberedRules.mockReset().mockResolvedValue([]);
   confirmDialogMock.mockReset().mockResolvedValue(true);
+  pluginListMock.mockReset().mockResolvedValue([]);
   toastSuccess.mockReset();
   toastError.mockReset();
   getSessionAutoApprovals.mockReset().mockResolvedValue({
@@ -233,5 +241,83 @@ describe('PermissionModeSwitch', () => {
       }),
     );
     expect(parsed.preset).toBe('auto');
+  });
+
+  const PLUGIN_AUDIT_ITEM = {
+    seq: 7,
+    session_id: 's1',
+    tool_name: 'plugin__demo__echo',
+    capability: 'execute',
+    mode: 'workspace_write',
+    reason: 'rule_allow',
+    summary: '',
+    created_at: 1_700_000_000,
+  };
+
+  it('annotates audit items with their owning plugin (R110)', async () => {
+    getSessionAutoApprovals.mockResolvedValue({
+      session_id: 's1',
+      count: 1,
+      total: 1,
+      items: [PLUGIN_AUDIT_ITEM],
+    });
+    pluginListMock.mockResolvedValue([{ name: 'demo' }]);
+    renderSwitch('s1');
+    const badge = await screen.findByTestId('auto-approval-badge');
+    await act(async () => {
+      fireEvent.click(badge);
+    });
+    const owner = await screen.findByTestId('auto-approval-plugin-7');
+    expect(owner).toHaveTextContent('所属插件: demo');
+    expect(pluginListMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no attribution when the plugin list cannot be loaded (R110)', async () => {
+    getSessionAutoApprovals.mockResolvedValue({
+      session_id: 's1',
+      count: 1,
+      total: 1,
+      items: [PLUGIN_AUDIT_ITEM],
+    });
+    pluginListMock.mockRejectedValue(new Error('backend down'));
+    renderSwitch('s1');
+    const badge = await screen.findByTestId('auto-approval-badge');
+    await act(async () => {
+      fireEvent.click(badge);
+    });
+    expect(await screen.findByTestId('auto-approval-item')).toBeInTheDocument();
+    expect(screen.queryByTestId('auto-approval-plugin-7')).toBeNull();
+  });
+
+  it('marks session rules shadowed by a higher-precedence rule (R110)', async () => {
+    getSessionAutoApprovals.mockResolvedValue({
+      session_id: 's1',
+      count: 0,
+      total: 0,
+      items: [],
+    });
+    listSessionRememberedRules.mockResolvedValue([
+      {
+        tool_pattern: 'plugin__demo__echo',
+        decision: 'allow',
+        plugin_name: 'demo',
+        plugin_status: null,
+      },
+      {
+        tool_pattern: 'plugin__demo__*',
+        decision: 'deny',
+        plugin_name: 'demo',
+        plugin_status: null,
+      },
+    ]);
+    renderSwitch('s1');
+    const badge = await screen.findByTestId('auto-approval-badge');
+    await act(async () => {
+      fireEvent.click(badge);
+    });
+    const shadowed = await screen.findByTestId('session-rule-shadowed-0');
+    expect(shadowed).toHaveTextContent('被遮蔽');
+    expect(shadowed.getAttribute('title')).toContain('plugin__demo__*');
+    expect(screen.queryByTestId('session-rule-shadowed-1')).toBeNull();
   });
 });
