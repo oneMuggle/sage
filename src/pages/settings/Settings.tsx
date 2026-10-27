@@ -25,6 +25,7 @@ import { BasicTab } from './BasicTab';
 import { EffectiveSettingsSummary } from './EffectiveSettingsSummary';
 import { EndpointsTab } from './EndpointsTab';
 import { GeneralTab } from './GeneralTab';
+import { GlobalRulesTab } from './GlobalRulesTab';
 import { McpTab } from './McpTab';
 import { MemorySettingsTab } from './MemorySettingsTab';
 import { ModelsTab } from './ModelsTab';
@@ -130,6 +131,8 @@ export function Settings() {
   }
   // T-3/T-4: 技能设置 Tab（脚本执行开关 + 技能目录）
   tabs.push({ key: 'skills', label: t('settings.tab.skills' as TranslationKey) });
+  // G1 (2026-10-27): 全局规则 Tab（~/.sage/SAGE.md 读写）
+  tabs.push({ key: 'global-rules', label: t('settings.tab.global-rules' as TranslationKey) });
 
   // 设置项级搜索：命中项列表 + 其所属 tab（导航区仍按 tab 名过滤）
   const matchedItems = useMemo(() => searchSettings(searchQuery), [searchQuery]);
@@ -338,6 +341,7 @@ export function Settings() {
             {activeTab === 'usage-stats' && <UsageStatsTab />}
             {activeTab === 'providers' && ENABLE_UPDATE_PROVIDERS_UI() && <ProvidersManager />}
             {activeTab === 'skills' && <SkillsTab />}
+            {activeTab === 'global-rules' && <GlobalRulesTab />}
           </div>
         </div>
       </div>
