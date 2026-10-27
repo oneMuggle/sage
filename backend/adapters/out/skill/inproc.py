@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from pathlib import Path
@@ -42,6 +43,28 @@ from backend.tools.permissions import (
 # Client-facing skill responses use a logical placeholder instead of exposing
 # filesystem locations. Internal loaders and file operations retain real paths.
 _SAFE_SKILL_PATH = "."
+
+
+def normalize_skill_content(content: Any) -> str:
+    """把技能返回的 content 统一成 str。
+
+    技能实现的 content 可能是 dict / list / 数字 / None —— 直接透传给
+    前端会让渲染端拿到非字符串。统一序列化成可读文本:
+      - str → 原样返回
+      - None → ""
+      - dict / list / tuple → JSON (ensure_ascii=False, indent=2, default=str)
+      - 其他 → str()
+    """
+    if isinstance(content, str):
+        return content
+    if content is None:
+        return ""
+    if isinstance(content, (dict, list, tuple)):
+        try:
+            return json.dumps(content, ensure_ascii=False, indent=2, default=str)
+        except (TypeError, ValueError):
+            return str(content)
+    return str(content)
 
 if TYPE_CHECKING:
     from backend.skills.skill_md.auto_activation import AutoActivationResult
@@ -254,7 +277,7 @@ class InprocSkillAdapter:
         # (success / content / metadata / error),直接构造 domain 版本
         return SkillResult(
             success=raw.success,
-            content=raw.content,
+            content=normalize_skill_content(raw.content),
             metadata=dict(raw.metadata),
             error=raw.error,
         )
@@ -581,7 +604,7 @@ class InprocSkillAdapter:
         # 路由层需要的是 backend.domain.skill.SkillResult,字段同构,直接构造
         return SkillResult(
             success=result.success,
-            content=result.content,
+            content=normalize_skill_content(result.content),
             metadata=dict(result.metadata),
             error=result.error,
         )
