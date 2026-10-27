@@ -312,7 +312,7 @@ export function GitStatusSection({ collapsed, onToggleCollapsed }: GitStatusSect
                     className={`rounded px-1.5 py-0.5 text-ui-2xs transition-colors ${
                       filterCategory === item.id
                         ? 'bg-primary text-primary-foreground'
-                        : 'bg-bg-secondary text-text-muted hover:text-text'
+                        : 'bg-bg-muted text-text-muted hover:text-text'
                     }`}
                   >
                     {t(item.labelKey)}
