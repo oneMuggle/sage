@@ -173,7 +173,8 @@ def test_search_knowledge_explicit_scope_passthrough(monkeypatch):
     # win7 行为基线（P9）：project_path 单值直接作为 project_root，
     # 结果按 path/title/snippet(截断 200) 映射
     def fake_search(project_root, query, limit):
-        assert str(project_root) == "/w/a"
+        # Windows 上 str(Path("/w/a")) 是 "\\w\\a"，故用 as_posix() 做平台无关比较
+        assert project_root.as_posix() == "/w/a"
         assert query == "kw"
         assert limit == 5
         return _SearchResponse([_Doc("wiki/x.md", "XA", "s" * 300)])

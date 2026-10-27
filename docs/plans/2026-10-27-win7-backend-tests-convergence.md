@@ -115,3 +115,61 @@ main 版在 win7 源码上失败，win7 版必须保留：
 `conftest.py` 单独核查结论：17 个共有夹具的函数体**逐字相同**，win7 仅多一个
 `_online_network_settings` 夹具（win7 测试默认 fail-closed 离线，需显式 opt-in）
 ⇒ 属 win7 超集，无需动作。
+
+## 第三批：no-base 分拣与 3 个红修复
+
+`backend/tests` 里 42 个 `no-base`（无共同祖先）按**归一化内容**重算，而不是按 blob sha：
+
+| 判定 | 数量 | 处理 |
+|---|---|---|
+| 仅 EOL 差异（内容逐字节相同，只是 CRLF/LF 存储不同） | 8 | 无需动作 |
+| 仅注释差异 | 11 | 无需动作 |
+| 模块级有差异（imports / `pytestmark` 等） | 10 | 逐个看，多为 win7 的网络夹具适配 |
+| win7 缺测试 | 4 | 逐个实测 |
+| win7 多测试 | 8 | win7 领先，保留 |
+
+**教训**：`git hash-object` 会走 autocrlf 清洗，`--no-filters` 才是存储字节。main 的某些 blob
+本身就是 CRLF，与 win7 的 LF blob sha 不同但内容相同 —— 按 sha 判 parity 会把这类全误报为分歧。
+
+### 本轮处理（3 个文件）
+
+| 文件 | 处理 | 依据 |
+|---|---|---|
+| `unit/test_skills_dir_policy.py` | 取 main | win7 是 main 的严格子集；main 版 19 passed，win7 版 12（含 1 红） |
+| `unit/test_subprocess_util_windows_safe.py` | 取 main | main 把平台参数化的 `test_helper_drops_nonblock_matches_platform[posix]`（Windows 上恒红）换成平台无关的 `test_drop_nonblock_helper_removes_attribute_on_any_platform` |
+| `unit/api/test_search_routes.py` | 保留 win7，改断言 | 见下 |
+
+### 一处按仓库原则做的修法选择
+
+`test_search_knowledge_explicit_scope_passthrough` 在 win7 上是既有红，原因是：
+
+```python
+assert str(project_root) == "/w/a"   # Windows 上 str(Path("/w/a")) 是 "\\w\\a"
+```
+
+main 的处理是**把这个测试删掉**。但它是 win7 的行为基线（P9：`project_path` 单值 → `project_root`，
+结果按 path/title/snippet 截断 200 映射），删掉等于丢覆盖。按既定判据「改断言让它在 Windows 成立
+= 真修复」，改为：
+
+```python
+assert project_root.as_posix() == "/w/a"
+```
+
+`as_posix()` 是仓库既有惯例（19 个文件，含 `harness/cli/harness_export.py:170` 的
+`(str(root), root.as_posix())` 双形态写法）。
+
+### 未取的 3 个
+
+- `unit/api/test_prompt_routes.py`：main 的 2 个新用例在 win7 上失败（功能缺失），且 main 删掉了 win7 的
+  `test_list_sorts_by_updated_at_desc`。
+- `unit/api/test_search_routes.py` 的 main 版：会删掉 2 个 win7 单根语义的通过用例，只保留多根语义。
+- `integration/test_web_access_journey.py`：main 版缺 win7 的 `pytestmark usefixtures("_online_network_settings")`，
+  在 win7 上 2 failed。
+
+### 验证
+
+```
+这 3 个文件   py3.11 36 passed / py3.8 36 passed（改前为 30 passed + 3 failed）
+py38 闸门     Scanned 1852 files; 0 with violations; 0 total
+ruff          All checks passed
+```
