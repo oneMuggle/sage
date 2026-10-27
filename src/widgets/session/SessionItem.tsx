@@ -246,7 +246,13 @@ export function SessionItem({
               className="flex-1 min-w-0 text-sm font-medium bg-bg-hover border border-primary rounded px-1 py-0 focus:outline-none"
             />
           ) : (
-            <span className="truncate flex-1 min-w-0">{session.title}</span>
+            <span className="truncate flex-1 min-w-0">
+              {session.title === '新对话' &&
+              session.message_count > 0 &&
+              (session.title_attempts ?? 0) === 0
+                ? t('session.title_generating')
+                : session.title}
+            </span>
           )}
           {/* U4': 双击标题进入 inline 重命名 */}
           {onRename && !renaming && (
