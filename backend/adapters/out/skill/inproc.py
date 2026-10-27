@@ -105,6 +105,7 @@ class InprocSkillAdapter:
         # v1: SKILL.md 适配层 (guarded 调用, 失败不破坏 adapter 构造)
         self._script_runner = None
         self._settings_repo = None  # requires.config 门控注入点 (Task 1)
+        self._skill_md_loader = None  # 持久持有 loader (缺口 #12): rescan 复用哈希缓存
         skill_dirs = []
         try:
             from backend.adapters.out.skill_script.cli_confirmation import (
@@ -114,6 +115,7 @@ class InprocSkillAdapter:
                 SubprocessSandboxAdapter,
             )
             from backend.skills.skill_md.loader import (
+                SkillMdHotLoader,
                 _discover_shipped_dir,
                 build_gating_context_for_dirs,
                 discover_skill_md_dirs,
@@ -126,7 +128,9 @@ class InprocSkillAdapter:
                 confirmer=ConfiguredScriptConfirmationAdapter.from_environment(),
                 allowed_roots=list(skill_dirs),
             )
-            from backend.skills import register_skill_md_skills
+            from backend.skills import (
+                register_skill_md_skills,  # noqa: F401  (kept for other callers)
+            )
 
             # Build registration dirs = user roots + shipped fallback (dedup by resolved path).
             # Shipped is registered (so e.g. academic-search becomes visible) but MUST NOT
@@ -151,14 +155,17 @@ class InprocSkillAdapter:
                     "SkillMd settings repo unavailable: %s", exc
                 )
 
-            register_skill_md_skills(
+            # 持久持有 loader (缺口 #12): rescan 时复用同一 loader 实例,
+            # 使 _file_hashes / _loaded_paths 跨调用保留, 才能真正触发 hot_reload。
+            self._skill_md_loader = SkillMdHotLoader(
                 self._registry,
-                dirs=[str(p) for p in registration_dirs],
+                dirs=[Path(p) for p in registration_dirs],
                 gating_ctx=build_gating_context_for_dirs(
                     registration_dirs, settings_repo=self._settings_repo
                 ),
                 script_runner=self._script_runner,
             )
+            self._skill_md_loader.scan_and_load()
         except Exception as exc:  # noqa: BLE001 — adapter 构造必须容错
             import logging
 
@@ -717,7 +724,7 @@ class InprocSkillAdapter:
     # ========== PR-C: Skills load-new (rescan + import) ==========
 
     def rescan_skill_mds(self) -> Dict[str, Any]:
-        """重扫 SAGE_SKILLS_DIR / ~/.sage/skills / ./skills, 增量加载新 SKILL.md。
+        """重扫 SAGE_SKILLS_DIR / ~/.sage/skills / ./skills, 增量加载/刷新 SKILL.md。
 
         Returns:
             {
@@ -726,39 +733,69 @@ class InprocSkillAdapter:
                 "total_loaded": int,
             }
         """
-
-        if self._skill_importer is None:  # init-time import failed
+        if self._skill_md_loader is None:  # init-time loader 构造失败
             return {"loaded": [], "skipped": [], "total_loaded": 0}
         from backend.skills.skill_md.loader import (
             SkillMdHotLoader,
+            _discover_shipped_dir,
             build_gating_context_for_dirs,
             discover_skill_md_dirs,
         )
 
-        # 目录可能在 adapter 初始化后才由审批/导入流程创建；每次重扫都
-        # 重新发现根目录，避免永久使用初始化时的快照。
+        # 目录可能在 adapter 初始化后才由审批/导入流程创建;每次重扫都
+        # 重新发现根目录, 避免永久使用初始化时的快照。
         skill_dirs = discover_skill_md_dirs()
         self._skill_dirs = list(skill_dirs)
         if self._script_runner is not None:
-            # 与扫描使用同一份已发现根目录，保持脚本路径校验的安全边界同步。
             self._script_runner._allowed_roots = list(skill_dirs)
 
-        loader = SkillMdHotLoader(
-            self._registry,
-            dirs=list(skill_dirs),
-            gating_ctx=build_gating_context_for_dirs(list(skill_dirs)),
-            script_runner=self._script_runner,
-        )
-        loaded_count, _ = loader.scan_and_load()
+        # 重建 registration_dirs = user + shipped (与 __init__ 同逻辑)
+        registration_dirs = list(skill_dirs)
+        seen = {p.resolve() for p in registration_dirs}
+        shipped = _discover_shipped_dir()
+        if shipped is not None:
+            shipped_resolved = shipped.resolve()
+            if shipped_resolved not in seen:
+                registration_dirs.append(shipped)
+                seen.add(shipped_resolved)
+
+        # 如果目录拓扑变了 (比如新增 shipped fallback), 需要重建 loader;
+        # 否则沿用 persistent loader, 复用哈希缓存。
+        new_dirs_key = sorted(str(p) for p in registration_dirs)
+        old_dirs_key = sorted(str(d) for d in self._skill_md_loader._dirs)
+        if new_dirs_key != old_dirs_key:
+            self._skill_md_loader = SkillMdHotLoader(
+                self._registry,
+                dirs=[Path(p) for p in registration_dirs],
+                gating_ctx=build_gating_context_for_dirs(
+                    registration_dirs, settings_repo=self._settings_repo
+                ),
+                script_runner=self._script_runner,
+            )
+        else:
+            # 复用 persistent loader: _loaded_paths / _file_hashes 保留,
+            # 使 check_for_updates / hot_reload 能识别到文件变化。
+            self._skill_md_loader._dirs = [Path(p) for p in registration_dirs]
+            self._skill_md_loader._gating_ctx = build_gating_context_for_dirs(
+                registration_dirs, settings_repo=self._settings_repo
+            )
+
+        self._skill_md_loader.scan_and_load()
         self._rebuild_slash_registry()
-        # Fresh loader per call: _loaded_paths only contains THIS call's loads.
+        # 返回本次 scan 中**新加载 + 刷新**的名字 (来自 _loaded_this_scan)。
+        # total_loaded 保持"本次 scan 加载数"这一既有 REST/IPC 契约:
+        # 前端 Skills.tsx 用 ``total_loaded > 0`` 决定是否弹出"已加载 N 个技能"
+        # 提示, 幂等 rescan 必须为 0 才不打扰用户。持久 loader 的 _loaded_paths
+        # 是累计集合, 不能直接当 total 用 (会把初始化时自动加载的技能重复计入)。
+        loaded_names = list(self._skill_md_loader._loaded_this_scan)
+        total_loaded = len(loaded_names)
         return {
             "loaded": [
                 {"name": name, "source": "skillmd", "path": _SAFE_SKILL_PATH}
-                for name in loader._loaded_paths
+                for name in loaded_names
             ],
-            "skipped": loader.skipped,
-            "total_loaded": loaded_count,
+            "skipped": list(self._skill_md_loader.skipped),
+            "total_loaded": total_loaded,
         }
 
     async def import_skill_mds(self, files: List[Any]) -> Dict[str, List[Dict[str, str]]]:

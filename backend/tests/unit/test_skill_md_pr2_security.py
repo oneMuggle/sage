@@ -86,10 +86,10 @@ def test_production_adapter_builds_fail_closed_script_runner(tmp_path, monkeypat
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))  # Windows expanduser 读 USERPROFILE
     monkeypatch.chdir(Path(__file__).resolve().parents[2])
-    with patch("backend.skills.register_skill_md_skills") as register:
+    with patch("backend.skills.skill_md.loader.SkillMdHotLoader.scan_and_load"):
         adapter = InprocSkillAdapter(registry=SkillRegistry())
 
-    runner = register.call_args.kwargs["script_runner"]
+    runner = adapter._script_runner
     assert isinstance(runner, ScriptRunner)
     assert isinstance(runner._sandbox, SubprocessSandboxAdapter)
     allowed_roots = {Path(root).resolve() for root in runner._allowed_roots}
@@ -137,14 +137,15 @@ def test_production_script_confirmation_ignores_malformed_allowlist(monkeypatch,
 def test_production_adapter_injects_configured_confirmation(monkeypatch, tmp_path):
     monkeypatch.setenv("SAGE_SKILLS_DIR", str(tmp_path))
     monkeypatch.setenv("SAGE_SKILL_SCRIPT_ALLOWLIST", "skill:demo")
-    with patch("backend.skills.register_skill_md_skills") as register:
+    with patch("backend.skills.skill_md.loader.SkillMdHotLoader.scan_and_load"):
         adapter = InprocSkillAdapter(registry=SkillRegistry())
 
     confirmer = adapter._script_runner._confirmer
     assert isinstance(confirmer, ConfiguredScriptConfirmationAdapter)
     assert asyncio.run(confirmer.confirm("demo", tmp_path / "run.py", ())) is True
     assert asyncio.run(confirmer.confirm("not-approved", tmp_path / "run.py", ())) is False
-    assert register.call_args.kwargs["script_runner"] is adapter._script_runner
+    # Same runner is wired into the persistent loader the adapter holds.
+    assert adapter._skill_md_loader._script_runner is adapter._script_runner
 
 
 def test_inproc_rescan_discovers_new_roots_and_updates_runner(tmp_path):
@@ -158,14 +159,19 @@ def test_inproc_rescan_discovers_new_roots_and_updates_runner(tmp_path):
     adapter = InprocSkillAdapter.__new__(InprocSkillAdapter)
     adapter._registry = SkillRegistry()
     adapter._skill_importer = object()
+    adapter._settings_repo = None
     adapter._script_runner = MagicMock()
     adapter._script_runner._allowed_roots = [old_root]
     adapter._skill_dirs = [old_root]
+    adapter._skill_md_loader = SkillMdHotLoader(adapter._registry, dirs=[old_root])
 
     with patch(
         "backend.skills.skill_md.loader.discover_skill_md_dirs",
         return_value=[old_root, new_root],
-    ) as discover:
+    ) as discover, patch(
+        "backend.skills.skill_md.loader._discover_shipped_dir",
+        return_value=None,
+    ):
         result = adapter.rescan_skill_mds()
 
     discover.assert_called_once_with()
@@ -195,10 +201,12 @@ def test_inproc_rescan_rebuilds_slash_registry(tmp_path):
     adapter = InprocSkillAdapter.__new__(InprocSkillAdapter)
     adapter._registry = SkillRegistry()
     adapter._skill_importer = object()
+    adapter._settings_repo = None
     adapter._script_runner = None
     adapter._skill_dirs = []
     adapter._enabled = {}
     adapter._archived = set()
+    adapter._skill_md_loader = SkillMdHotLoader(adapter._registry, dirs=[])
 
     from backend.skills.skill_md.slash_registry import SlashCommandRegistry
 
@@ -207,6 +215,8 @@ def test_inproc_rescan_rebuilds_slash_registry(tmp_path):
 
     with patch(
         "backend.skills.skill_md.loader.discover_skill_md_dirs", return_value=[root]
+    ), patch(
+        "backend.skills.skill_md.loader._discover_shipped_dir", return_value=None
     ):
         result = adapter.rescan_skill_mds()
 
