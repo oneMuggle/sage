@@ -9,6 +9,9 @@
 // R106: 同一徽记/弹层可查看并撤销本会话「仅本次会话记住」的规则
 // (GET/POST /permissions/session/{id}/remembered-rules*)，刷新节奏与审计一致；
 // 徽记在自动批准 0 次但存在会话规则时也出现（会话 deny 不产生放行记录）。
+// R110: 弹层打开时取一次生命周期名单，给审计逐条标注所属插件
+// （权威名结构化归属，读不到整体不标）；会话规则复用共享遮蔽
+// 派生标注被同列表更高优先级规则覆盖的行。两者只读、不进导出。
 
 import { ChevronDown, ShieldAlert, ShieldCheck, ShieldHalf, Zap } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -22,7 +25,9 @@ import {
   type PermissionPreset,
   type PermissionRuleItem,
 } from '../../shared/api/permissionApi';
+import { pluginClient } from '../../shared/api/pluginClient';
 import { useI18n, type TranslationKey } from '../../shared/lib/i18n';
+import { findPluginToolOwner, findShadowedRules } from '../../shared/lib/permissionInsights';
 import { confirmDialog } from '../../shared/ui/ConfirmDialog/confirmService';
 
 const PRESET_ICON = {
@@ -98,6 +103,7 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
   const [sessionRules, setSessionRules] = useState<PermissionRuleItem[]>([]);
   const [sessionRulesFailed, setSessionRulesFailed] = useState(false);
   const [sessionRulesBusy, setSessionRulesBusy] = useState(false);
+  const [pluginNames, setPluginNames] = useState<string[] | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const streamingMessageId = useChatStreamStore((s) =>
@@ -152,6 +158,30 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
     }, 30_000);
     return () => window.clearInterval(timer);
   }, [sessionId, loadAudit, loadSessionRules]);
+
+  // R110: 审计归属的数据源——只在弹层打开时取一次生命周期名单
+  // （不进轮询节奏）；失败置 null 整体不标（读不到≠无归属）。
+  useEffect(() => {
+    if (!auditOpen) return;
+    let cancelled = false;
+    pluginClient
+      .list()
+      .then((records) => {
+        if (!cancelled) setPluginNames(records.map((record) => record.name));
+      })
+      .catch(() => {
+        if (!cancelled) setPluginNames(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auditOpen]);
+
+  // R110: 会话规则遮蔽（与持久侧 R109 同源）与审计归属派生。
+  const shadowedSessionRules = findShadowedRules(sessionRules);
+  const auditPluginOwners = new Map(
+    items.map((it) => [it.seq, findPluginToolOwner(it.tool_name, pluginNames)] as const),
+  );
 
   useEffect(() => {
     const prev = prevStreamingIdRef.current;
@@ -356,6 +386,18 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
                           )}
                         </span>
                       )}
+                      {shadowedSessionRules.has(index) && (
+                        <span
+                          className="px-1 rounded bg-bg-hover text-ui-xs text-warning shrink-0"
+                          data-testid={`session-rule-shadowed-${index}`}
+                          title={t('settings.permission.rules.shadowed_title').replace(
+                            '{pattern}',
+                            shadowedSessionRules.get(index) ?? '',
+                          )}
+                        >
+                          {t('settings.permission.rules.shadowed')}
+                        </span>
+                      )}
                       <button
                         type="button"
                         data-testid={`session-rule-revoke-${index}`}
@@ -382,6 +424,14 @@ export function PermissionModeSwitch({ sessionId, placement = 'top' }: Permissio
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-text">{it.tool_name}</span>
                     <span className="px-1 rounded bg-bg-hover text-ui-xs text-text-secondary">{it.capability}</span>
+                    {auditPluginOwners.get(it.seq) ? (
+                      <span
+                        className="text-ui-xs text-text-secondary shrink-0"
+                        data-testid={`auto-approval-plugin-${it.seq}`}
+                      >
+                        {t('permission.from_plugin')}: {auditPluginOwners.get(it.seq)}
+                      </span>
+                    ) : null}
                     <span className="ml-auto text-ui-xs text-text-secondary">{formatTime(it.created_at)}</span>
                   </div>
                   {it.summary && (

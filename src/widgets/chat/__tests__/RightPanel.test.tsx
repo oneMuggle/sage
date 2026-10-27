@@ -81,21 +81,20 @@ describe('RightPanel', () => {
 
   it('switches to Artifacts tab via store', () => {
     render(<RightPanel {...props} />);
-    fireEvent.click(screen.getByRole('button', { name: /产物/ }));
+    fireEvent.click(screen.getByRole("button", { name: /产物/ }));
     expect(useRightPanelStore.getState().tab).toBe('artifacts');
     expect(screen.getByText(/暂无产物/)).toBeInTheDocument();
   });
 
-  // P0-3 (UI 优化方案 2026-09-12): 左边缘拖拽手柄存在 + 默认宽度
-  // 2026-09-29 面板密度调整：默认宽度 320 → 360（5 个 Tab 不再挤在一起）
+  // P0-3 (UI 优化方案 2026-09-12): 左边缘拖拽手柄存在 + 默认宽度 320px
   it('renders resize handle with default width', () => {
     render(<RightPanel {...props} variant="push" />);
     const handle = screen.getByTestId('right-panel-resize-handle');
     expect(handle).toBeInTheDocument();
-    // 默认 360px (localStorage 无持久化值)；push 模式下结构为 aside → 内容容器 → 手柄
+    // 默认 320px (localStorage 无持久化值)；push 模式下结构为 aside → 内容容器 → 手柄
     const aside = handle.parentElement?.parentElement;
     expect(aside?.getAttribute('data-testid')).toBe('right-panel');
-    expect(aside?.style.width).toBe('360px');
+    expect(aside?.style.width).toBe('320px');
   });
 
   describe('close button (right-panel R1: 写 store)', () => {
@@ -113,7 +112,7 @@ describe('RightPanel', () => {
 
     it('clicking close button in Artifacts tab closes panel', () => {
       render(<RightPanel {...props} />);
-      fireEvent.click(screen.getByRole('button', { name: /产物/ }));
+      fireEvent.click(screen.getByRole("button", { name: /产物/ }));
       fireEvent.click(screen.getByRole('button', { name: '关闭右侧面板' }));
       expect(useRightPanelStore.getState().open).toBe(false);
     });
@@ -139,9 +138,8 @@ describe('RightPanel', () => {
       vi.mocked(useArtifactContent).mockReturnValue({
         content: { ok: true, kind: 'markdown', content: '# Hello' },
         loading: false,
-        // win7 分支签名差异：useArtifactContent 额外返回 refresh
         refresh: vi.fn(),
-      } as never);
+      });
       const { useArtifacts } = await import('../../../features/artifacts/useArtifacts');
       vi.mocked(useArtifacts).mockReturnValue({
         artifacts: arts,
@@ -189,9 +187,10 @@ describe('RightPanel', () => {
 
     it('applies width presets and persists', () => {
       render(<RightPanel {...props} />);
+      // 宽度档位按钮已收进「选项」浮层（2026-09-29）
       fireEvent.click(screen.getByTestId('right-panel-options-toggle'));
       fireEvent.click(screen.getByTestId('right-panel-preset-L'));
-      expect(localStorage.getItem('right-panel-width')).toBe('720');
+      expect(localStorage.getItem('right-panel-width')).toBe('560');
     });
 
     it('overlay variant (窄屏) 不显示最大化按钮', () => {
@@ -200,65 +199,21 @@ describe('RightPanel', () => {
     });
   });
 
-  // 2026-09-29 面板密度调整：档位 + 自动展开开关从 Tab 行平铺收进「选项」浮层
-  describe('right-panel 面板密度: 选项浮层', () => {
-    it('档位按钮默认收起，点开浮层后可见', () => {
-      render(<RightPanel {...props} />);
-      expect(screen.queryByTestId('right-panel-preset-L')).not.toBeInTheDocument();
-      fireEvent.click(screen.getByTestId('right-panel-options-toggle'));
-      expect(screen.getByTestId('right-panel-preset-S')).toBeInTheDocument();
-      expect(screen.getByTestId('right-panel-preset-M')).toBeInTheDocument();
-      expect(screen.getByTestId('right-panel-preset-L')).toBeInTheDocument();
-    });
-
-    it('点浮层外收起', () => {
-      render(<RightPanel {...props} />);
-      fireEvent.click(screen.getByTestId('right-panel-options-toggle'));
-      expect(screen.getByTestId('right-panel-preset-L')).toBeInTheDocument();
-      fireEvent.mouseDown(document.body);
-      expect(screen.queryByTestId('right-panel-preset-L')).not.toBeInTheDocument();
-    });
-
-    it('Esc 收起浮层', () => {
-      render(<RightPanel {...props} />);
-      fireEvent.click(screen.getByTestId('right-panel-options-toggle'));
-      expect(screen.getByTestId('right-panel-preset-L')).toBeInTheDocument();
-      fireEvent.keyDown(document, { key: 'Escape' });
-      expect(screen.queryByTestId('right-panel-preset-L')).not.toBeInTheDocument();
-    });
-
-    it('应用档位后浮层自动收起', () => {
-      render(<RightPanel {...props} />);
-      fireEvent.click(screen.getByTestId('right-panel-options-toggle'));
-      fireEvent.click(screen.getByTestId('right-panel-preset-M'));
-      expect(localStorage.getItem('right-panel-width')).toBe('520');
-      expect(screen.queryByTestId('right-panel-preset-M')).not.toBeInTheDocument();
-    });
-
-    it('默认档位（360=S）在浮层内高亮', () => {
-      render(<RightPanel {...props} />);
-      fireEvent.click(screen.getByTestId('right-panel-options-toggle'));
-      expect(screen.getByTestId('right-panel-preset-S')).toHaveAttribute('aria-pressed', 'true');
-      expect(screen.getByTestId('right-panel-preset-L')).toHaveAttribute('aria-pressed', 'false');
-    });
-  });
-
   describe('right-panel R1 批次 B: 产物自动唤起开关', () => {
-    // 2026-09-29: 开关从顶栏铃铛按钮移入「选项」浮层，需先展开浮层
-    it('auto-open toggle only on artifacts tab, flips localStorage flag', () => {
+    it('bell toggle only on artifacts tab, flips localStorage flag', () => {
       render(<RightPanel {...props} />);
-      fireEvent.click(screen.getByRole('button', { name: /产物/ }));
       expect(screen.queryByTestId('right-panel-auto-open-toggle')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /产物/ }));
+      // 自动唤起开关已收进「选项」浮层（2026-09-29），需先打开浮层
       fireEvent.click(screen.getByTestId('right-panel-options-toggle'));
-      const row = screen.getByTestId('right-panel-auto-open-toggle');
-      expect(row).toBeInTheDocument();
-      fireEvent.click(row);
+      const bell = screen.getByTestId('right-panel-auto-open-toggle');
+      expect(bell).toBeInTheDocument();
+      fireEvent.click(bell);
       expect(localStorage.getItem('right-panel-auto-open')).toBe('0');
-      fireEvent.click(row);
+      fireEvent.click(bell);
       expect(localStorage.getItem('right-panel-auto-open')).toBe('1');
     });
   });
-
   // 2026-09-29 面板密度调整: 详情页保留 Tab 行（此前是死胡同）
   describe('right-panel 面板密度: 产物详情页保留 Tab 行', () => {
     async function renderWithArtifactSelected() {
@@ -281,12 +236,12 @@ describe('RightPanel', () => {
       });
     }
 
-    it('详情页仍渲染 5 个 Tab', async () => {
+    it('详情页仍渲染 4 个 Tab', async () => {
       await renderWithArtifactSelected();
       expect(screen.getByRole('button', { name: '返回' })).toBeInTheDocument();
       expect(screen.getByText('进度')).toBeInTheDocument();
       expect(screen.getByText('目录')).toBeInTheDocument();
-      expect(screen.getByText('预览')).toBeInTheDocument();
+      expect(screen.getByText('变更')).toBeInTheDocument();
     });
 
     it('详情页高亮「产物」Tab', async () => {
@@ -391,11 +346,17 @@ describe('RightPanel — 轮次导航（U1 对标）', () => {
   });
 });
 
-// 对标 F3（ZCode ModelTrajectoryPane）：轨迹 Tab 渲染会话级模型轨迹。
+// 对标 F3（ZCode ModelTrajectoryPane）：轨迹作为进度 Tab 的 sub-tab 渲染。
 // useConversationTrajectory 从 store.messages 派生——灌入 user+assistant 消息后
-// 断言「轨迹」Tab 点击后条目出现（搜索/展开细节由 TrajectoryPane 自身测试覆盖）。
-describe('RightPanel — 轨迹 Tab（F3 对标）', () => {
-  it('轨迹 Tab 渲染模型轨迹条目', () => {
+// 断言「进度」Tab 内「完整轨迹」sub-tab 点击后条目出现
+// （搜索/展开细节由 TrajectoryPane 自身测试覆盖）。
+describe('RightPanel — 轨迹 sub-tab（F3 对标，UI 优化 2026-10-14）', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetStore();
+  });
+
+  it('进度 Tab 内「完整轨迹」sub-tab 渲染模型轨迹条目', () => {
     const now = Date.now();
     useStore.setState({
       messages: [
@@ -416,8 +377,13 @@ describe('RightPanel — 轨迹 Tab（F3 对标）', () => {
       ] as never,
     });
 
+    // 确保面板打开且 Tab 为 progress
+    useRightPanelStore.getState().setOpen(true);
+    useRightPanelStore.getState().setTab('progress');
+
     render(<RightPanel {...props} sessionId="sess_001" />);
-    fireEvent.click(screen.getByText('轨迹'));
+    // 进度 Tab 默认已激活；点击「完整轨迹」sub-tab
+    fireEvent.click(screen.getByTestId('progress-subtab-trajectory'));
 
     expect(screen.getByTestId('trajectory-pane')).toBeInTheDocument();
     expect(screen.getAllByTestId('trajectory-entry')).toHaveLength(2);

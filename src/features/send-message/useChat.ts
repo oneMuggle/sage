@@ -4,13 +4,7 @@ import { toast } from 'sonner';
 import { usePermissionState } from '../../entities/permission/permissionState';
 import { useQuestionState } from '../../entities/question/questionState';
 import { resolveEndpoint } from '../../entities/setting/types';
-import {
-  ApiException,
-  type ChatConfig,
-  type ChatOfficeRef,
-  type TaskPlanItem,
-} from '../../shared/api';
-import type { AttachmentEmbedConfig } from '../../shared/api/attachmentRagConfig';
+import { ApiException, type ChatConfig, type ChatOfficeRef } from '../../shared/api';
 import type { GenerationStats } from '../../shared/api/types';
 import { agentStateToText } from '../../shared/lib/agentStateMapping';
 import {
@@ -31,16 +25,45 @@ import {
   cancelSessionStream,
   deleteSessionCascade,
   inferProviderFromBaseUrl,
-  type PendingChatMessage,
   type TaskBoard,
   useChatReattachAndBtw,
 } from './chatStreamRuntime';
-import { selectSessionSlots, useChatStreamStore } from './chatStreamStore';
+import {
+  selectSessionSlots,
+  useChatStreamStore,
+  type QueuedChatMessage,
+  type QueuedSendOptions,
+} from './chatStreamStore';
+import { DEFAULT_DELIVERY_MODE, type DeliveryMode } from './deliveryMode';
+import { steerActiveOrchTask } from './orchSteer';
 import { applyOrchestrationEventToBoard } from './orchestrationEvents';
 import { notifySession, shouldNotify } from './sessionNotify';
 import { THINKING_PLACEHOLDER } from './thinkingPlaceholder';
 
 export { cancelSessionStream, deleteSessionCascade, type TaskBoard };
+
+/**
+ * 插话（steering）副本的落位锚点：本轮第一条 assistant 气泡的 id。
+ *
+ * 一轮 = 最后一条"真实用户消息"（非 steering）之后的连续 assistant 行。插话
+ * 在 DB 里的 created_at 早于本轮 assistant 行，本地副本必须落在同一相对位置，
+ * 否则流末对账会看到气泡跳位。找不到锚点（本轮还没有 assistant 行）时返回
+ * undefined，调用方退回 append。
+ */
+export function steeringAnchorId(messages: readonly Message[]): string | undefined {
+  let start = 0;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m.role === 'user' && m.subtype !== 'steering') {
+      start = i + 1;
+      break;
+    }
+  }
+  for (let i = start; i < messages.length; i += 1) {
+    if (messages[i].role === 'assistant') return messages[i].id;
+  }
+  return undefined;
+}
 
 export function useChat() {
   // S3 (2026-09-06) 多会话并行: "在流中"状态从 hook 级单布尔改为 **按会话**
@@ -62,45 +85,52 @@ export function useChat() {
   const { settings } = useSettings();
 
   // U5 (对标增强第二轮批次 B): 流式中用户继续发送 → 入队,当前回复自然
-  // 结束(onDone)后自动发送。错误/中断路径不自动 flush——连续失败场景
-  // 自动重发只会重复报错。S3: 队列按会话隔离,A 队列的消息不会在 B 的
-  // 流结束后被误发。
-  //
-  // P1-6: 补 `id` + state 镜像 —— 队列原本只活在 ref 里,唯一的用户可见
-  // 信号是一条 4 秒即逝的 toast。连续发 3 条时用户既看不到队列、也撤不掉,
-  // 更严重的是错误/中断路径不 flush → 这些消息变成"僵尸队列"静默滞留,
-  // 可能在很久之后被下一条正常流意外带发。透明可控原则要求队列常驻可见。
-  const pendingMessagesRef = useRef<PendingChatMessage[]>([]);
-  // ref 仍是 sendMessage / onDone 读写的真相来源（异步回调里读 state 会拿到
-  // 陈旧快照）；state 只服务渲染。两侧必须经 setPending 同步，禁止直改 ref。
-  const [pendingMessages, setPendingMessages] = useState<PendingChatMessage[]>([]);
-  const setPending = useCallback((next: PendingChatMessage[]): void => {
-    pendingMessagesRef.current = next;
-    setPendingMessages(next);
-  }, []);
-  /** 撤回单条已排队消息（不发送、不留痕）。 */
-  const cancelPending = useCallback(
-    (id: string): void => {
-      setPending(pendingMessagesRef.current.filter((p) => p.id !== id));
-    },
-    [setPending],
-  );
-  /** 清空某会话的排队消息（不发送、不留痕）。 */
-  const clearPendingForSession = useCallback(
-    (sid: string): void => {
-      setPending(pendingMessagesRef.current.filter((p) => p.sid !== sid));
-    },
-    [setPending],
-  );
+  // 结束(onDone)后自动发送。队列实体在 chatStreamStore(按会话隔离，
+  // 2026-09-18 从本 hook 的 ref 迁入 —— ref 版本既不可见也会在 Chat 页
+  // 卸载时丢失)。错误/中断路径不自动 flush:连续失败场景自动重发只会
+  // 重复报错,改为置暂停位让 UI 显式提示"继续/清空"。
   const sendMessageRef = useRef<typeof sendMessage | null>(null);
+
+  /** 弹出该会话队首并重放完整发送参数；队列暂停或空队列时为 no-op。 */
+  const flushNextQueued = useCallback((sid: string): void => {
+    const slots = selectSessionSlots(useChatStreamStore.getState(), sid);
+    if (slots.queuePaused || slots.pendingQueue.length === 0) return;
+    const next = useChatStreamStore.getState().shiftChatQueue(sid);
+    if (!next) return;
+    // 短暂让位,避免与上一轮的收尾渲染竞争
+    window.setTimeout(() => {
+      void sendMessageRef.current?.(
+        next.content,
+        next.sessionId,
+        next.officeRefs,
+        next.orchestrationMode,
+        next.opts,
+      );
+    }, 300);
+  }, []);
+
+  /** run 异常收尾时挂起队列 —— 剩余消息留在队列里等用户显式继续。 */
+  const pauseQueueIfPending = useCallback((sid: string): void => {
+    const slots = selectSessionSlots(useChatStreamStore.getState(), sid);
+    if (slots.pendingQueue.length > 0) {
+      useChatStreamStore.getState().setChatQueuePaused(sid, true);
+    }
+  }, []);
 
   // 流式当前 assistant 消息的内容覆盖 (派生 messages 的最后一条) —— 2026-08-19
   // 搬到 chatStreamStore(独立 zustand),跨路由切换保留,避免 Chat 页卸载后
   // widget 看到 '🤔 思考中…' 占位符看不到真实 LLM 进度。
   // S2: 读当前会话的槽位 —— 切到会话 B 就看 B 的实时进度(A 的流在后台
   // 继续累积,切回 A 时内容完整可见)。
-  const { streaming, streamingToolCalls, taskBoard, completedSteps, preflightPhase } =
-    useChatStreamStore((s) => selectSessionSlots(s, currentSessionId));
+  const {
+    streaming,
+    streamingToolCalls,
+    taskBoard,
+    completedSteps,
+    preflightPhase,
+    pendingQueue,
+    queuePaused,
+  } = useChatStreamStore((s) => selectSessionSlots(s, currentSessionId));
 
   // Phase 6: /btw 补充消息状态(component-local,与流式 chat 无关)
   const [isBtwStreaming, setIsBtwStreaming] = useState(false);
@@ -201,55 +231,118 @@ export function useChat() {
     currentSessionId,
   ]);
 
+  /**
+   * P2-c (2026-09-20): 会话忙时的唯一投递入口。
+   *
+   * 三条通道 × 两种 run 形态在这里收口：插话对普通 chat 流走
+   * `chatApi.steer`，对编排 run 走 `steerActiveOrchTask`（同一后端 steer 端点，
+   * 与任务详情抽屉的 ContextInput 同路）。此前编排模式在聊天框里只能排队，
+   * 分流逻辑散在调用方。任何插话失败都回退排队 —— 投递降级不该丢消息。
+   *
+   * @returns 'handled' 这条已有去处；'proceed' 门面已停掉当前 run（打断并发送），
+   *          调用方继续走真实发送路径。
+   */
+  const deliverWhileBusy = useCallback(
+    async (
+      sid: string,
+      content: string,
+      officeRefs?: readonly ChatOfficeRef[],
+      orchestrationMode?: ChatConfig['orchestrationMode'],
+      opts?: QueuedSendOptions,
+    ): Promise<'handled' | 'proceed'> => {
+      // 缺省 steer：与既有"忙时先尝试插话"语义保持向后兼容。
+      const delivery: DeliveryMode = opts?.delivery ?? DEFAULT_DELIVERY_MODE;
+      const streamStore = useChatStreamStore.getState();
+
+      const enqueue = (): void => {
+        // U5: 忙时不再丢弃消息——完整 payload 入队（含图片/附件/officeRefs，
+        // 旧实现只存 content 导致 flush 时附件全丢）,当前回复自然结束后自动发送
+        streamStore.enqueueChat(sid, { content, officeRefs, orchestrationMode, opts });
+        toast.info('已加入队列,当前回复完成后自动发送');
+      };
+
+      // 插话必须回显：此前只弹 toast，用户在会话里看不到自己说过什么，
+      // 也无法判断哪条更正生效了。落位必须在本轮 assistant 气泡**之前**：
+      // DB 里 steering 行的 created_at 早于 assistant 行，append 到占位气泡
+      // 下方会让气泡在流末 loadMessages 对账时从"回复下面"跳到"回复上面"。
+      const echoSteering = (tip: string): void => {
+        addMessage(
+          {
+            id: crypto.randomUUID(),
+            session_id: sid,
+            role: 'user',
+            content,
+            created_at: Date.now(),
+            subtype: 'steering',
+          },
+          steeringAnchorId(useStore.getState().messages),
+        );
+        toast.info(tip);
+      };
+
+      if (delivery === 'interrupt') {
+        // 打断并发送：与队列面板"立即发送"同一套时序 —— 取消会走
+        // finishStream(flushQueue=false) 把队列置暂停，而用户此刻的意图明确
+        // 是"这条现在就发"，因此随后显式解除暂停并穿透到真实发送路径。
+        await cancelSessionStream(sid);
+        useChatStreamStore.getState().setChatQueuePaused(sid, false);
+        return 'proceed';
+      }
+
+      if (delivery === 'queue') {
+        enqueue();
+        return 'handled';
+      }
+
+      if (orchestrationMode) {
+        const runId = selectSessionSlots(streamStore, sid).taskBoard?.runId;
+        // RT5 (round7): 会话忙时先尝试 steering —— 用户补充指示注入当前 run，
+        // 而不是只能排队成"下一个新 run"。
+        if (await steerActiveOrchTask(runId, content)) {
+          // 编排 steer 只写 run 的上下文，不在 chat 消息表落 steering 行，
+          // 所以这条乐观副本由 mergeLoadedMessages 按"服务端没有"保留在会话内，
+          // 硬刷新后消失 —— 与抽屉里的 ContextInput 现状一致。
+          echoSteering('已插话，已转达给编排任务，将在下一个执行边界生效');
+          return 'handled';
+        }
+        enqueue();
+        return 'handled';
+      }
+
+      const activeStreamId = activeHandleRef.current.get(sid)?.streamId;
+      if (activeStreamId && (await chatApi.steer(activeStreamId, content))) {
+        // 后端同内容落一行 subtype='steering'，流结束对账时按 (role, content)
+        // 认领这条本地乐观副本。
+        echoSteering('已插话，将在下一迭代边界生效');
+        return 'handled';
+      }
+      // steer 失败（流已结束 / 不在运行窗口）回退既有队列语义。
+      enqueue();
+      return 'handled';
+    },
+    [addMessage],
+  );
+
   const sendMessage = useCallback(
     async (
       content: string,
       sessionId?: string,
       officeRefs?: readonly ChatOfficeRef[],
       orchestrationMode?: ChatConfig['orchestrationMode'],
-      opts?: {
-        planOverride?: TaskPlanItem[];
-        runId?: string;
-        planMode?: boolean;
-        /** 对标 S2: 临时聊天（本轮不读写长期记忆） */
-        memoryDisabled?: boolean;
-        /** R23-D2: 聊天图片输入（base64 data URL，≤4 张/单张 5MiB） */
-        images?: string[];
-        attachmentMediaIds?: string[];
-        /** r67: 附件检索注入配置（opt-in） */
-        attachmentRag?: { embed: AttachmentEmbedConfig; top_k: number } | null;
-        /**
-         * Task 5 (2026-09-17): 上下文重置 —— 后端在本轮消息前插入
-         * topic_separator 并清空 LLM 历史窗口。
-         */
-        contextReset?: boolean;
-        /** 第二轮 C2: 原位重新生成 —— 锚点 user 消息 id；不再追加 user 消息 */
-        regenerateOf?: string;
-      },
+      opts?: QueuedSendOptions,
     ) => {
       const sid = sessionId ?? currentSessionId;
       if (!sid) return;
-      // S3: 守卫按会话 —— 只有**同一会话**已有流在跑时才入队;其它会话
+      // S3: 守卫按会话 —— 只有**同一会话**已有流在跑时才走投递门面;其它会话
       // 的流与本会话无关,不再被 isLoading 全局守卫误伤。
       if (activeSidsRef.current.has(sid)) {
-        // RT5 (round7): 会话忙时先尝试 steering —— 用户补充指示注入当前
-        // run（下一迭代边界生效），而不是只能排队成"下一个新 run"。
-        // 仅普通聊天路径注入；编排模式的转向走 orch steering（ContextInput），
-        // steer 失败（流已结束/不在运行窗口）回退既有队列语义。
-        if (!orchestrationMode) {
-          const activeStreamId = activeHandleRef.current.get(sid)?.streamId;
-          if (activeStreamId && (await chatApi.steer(activeStreamId, content))) {
-            toast.info('已转达，将在下一迭代边界生效');
-            return;
-          }
-        }
-        // U5: 忙时不再丢弃消息——入队,当前回复自然结束后自动发送
-        setPending([
-          ...pendingMessagesRef.current,
-          { id: crypto.randomUUID(), content, sid, orchestrationMode },
-        ]);
-        toast.info('已加入队列,当前回复完成后自动发送');
-        return;
+        // P2-a: 会话忙时的三条投递通道（插话 / 排队 / 打断并发送），由用户在
+        // 分体发送按钮或修饰键上显式选择 —— 调研结论是不做任何自动猜测。
+        if (
+          (await deliverWhileBusy(sid, content, officeRefs, orchestrationMode, opts)) === 'handled'
+        )
+          return;
+        // 'proceed' = 打断并发送，会话已清空，穿透到下面的真实发送路径。
       }
 
       // 安全网: 清理该会话的遗留流(React StrictMode 双调用 / 双击等极端
@@ -523,23 +616,10 @@ export function useChat() {
         // （loadMessages 每次直查 get_messages，无缓存问题）。
         void useStore.getState().loadMessages(sid);
         // U5 + S3: 流自然结束后发送**该会话**队列中的下一条(短暂让位,避免与
-        // 收尾渲染竞争)。其它会话的队列不受影响。
-        if (flushQueue) {
-          const pending = pendingMessagesRef.current;
-          const idx = pending.findIndex((p) => p.sid === sid);
-          if (idx >= 0) {
-            const next = pending[idx];
-            setPending([...pending.slice(0, idx), ...pending.slice(idx + 1)]);
-            window.setTimeout(() => {
-              void sendMessageRef.current?.(
-                next.content,
-                next.sid,
-                undefined,
-                next.orchestrationMode,
-              );
-            }, 300);
-          }
-        }
+        // 收尾渲染竞争)。其它会话的队列不受影响。异常收尾则挂起队列,
+        // 剩余消息留在面板上等用户"继续"或"清空"。
+        if (flushQueue) flushNextQueued(sid);
+        else pauseQueueIfPending(sid);
       };
       // S3: 注册本会话句柄（HIGH-4: interrupt 经句柄触发 finishStream 清理）
       const streamHandle: ActiveStreamHandle = {
@@ -747,10 +827,13 @@ export function useChat() {
       chatEndpoint,
       settings,
       addMessage,
+      deliverWhileBusy,
       updateMessage,
       replaceMessageId,
       markStreamActive,
       markStreamIdle,
+      flushNextQueued,
+      pauseQueueIfPending,
     ],
   );
   // U5: 队列 flush 用 ref 取最新 sendMessage(避免闭包捕获旧 isLoading)
@@ -765,6 +848,75 @@ export function useChat() {
   const interrupt = useCallback(async () => {
     if (currentSessionId != null) await cancelSessionStream(currentSessionId);
   }, [currentSessionId]);
+
+  // —— U5 队列操作（面向 PendingQueuePanel，均作用于当前会话） ——
+  const removeQueuedMessage = useCallback(
+    (id: string) => {
+      if (currentSessionId) useChatStreamStore.getState().removeChatFromQueue(currentSessionId, id);
+    },
+    [currentSessionId],
+  );
+
+  const moveQueuedMessageToFront = useCallback(
+    (id: string) => {
+      if (currentSessionId)
+        useChatStreamStore.getState().moveChatToQueueFront(currentSessionId, id);
+    },
+    [currentSessionId],
+  );
+
+  /** 拖拽落点：把 fromId 这条移动到 toId 当前所在下标。 */
+  const reorderQueuedMessages = useCallback(
+    (fromId: string, toId: string) => {
+      if (currentSessionId)
+        useChatStreamStore.getState().reorderChatQueue(currentSessionId, fromId, toId);
+    },
+    [currentSessionId],
+  );
+
+  const clearQueuedMessages = useCallback(() => {
+    if (currentSessionId) useChatStreamStore.getState().clearChatQueue(currentSessionId);
+  }, [currentSessionId]);
+
+  /** 取出并移除一条排队消息（供 UI 回填输入框改写后再发）。 */
+  const editQueuedMessage = useCallback(
+    (id: string): QueuedChatMessage | null =>
+      currentSessionId
+        ? useChatStreamStore.getState().takeChatFromQueue(currentSessionId, id)
+        : null,
+    [currentSessionId],
+  );
+
+  /** 立即发送：取消当前流，把这条从队列里摘出来抢先发出。 */
+  const sendQueuedMessageNow = useCallback(
+    async (id: string) => {
+      if (!currentSessionId) return;
+      const store = useChatStreamStore.getState();
+      const item = store.takeChatFromQueue(currentSessionId, id);
+      if (!item) return;
+      if (activeSidsRef.current.has(currentSessionId)) {
+        // 取消会走 finishStream(flushQueue=false) → 把队列置暂停；
+        // 用户此刻的意图明确是"继续发"，因此随后显式解除。
+        await cancelSessionStream(currentSessionId);
+        useChatStreamStore.getState().setChatQueuePaused(currentSessionId, false);
+      }
+      void sendMessageRef.current?.(
+        item.content,
+        item.sessionId,
+        item.officeRefs,
+        item.orchestrationMode,
+        item.opts,
+      );
+    },
+    [currentSessionId],
+  );
+
+  /** 解除暂停；会话已空闲时立刻发出队首（run 结束会自动接力发下一条）。 */
+  const resumeQueuedMessages = useCallback(() => {
+    if (!currentSessionId) return;
+    useChatStreamStore.getState().setChatQueuePaused(currentSessionId, false);
+    if (!activeSidsRef.current.has(currentSessionId)) flushNextQueued(currentSessionId);
+  }, [currentSessionId, flushNextQueued]);
 
   const loadMessagesCallback = useCallback(
     async (sessionId: string) => {
@@ -822,15 +974,17 @@ export function useChat() {
     preflightPhase,
     /** PM2: 清除计划批准状态（批准执行或忽略时调用） */
     clearPlanApproval: useCallback(() => setPlanApprovalFor(null), []),
-    /**
-     * P1-6: 已排队待发的消息（跨会话混合）—— 供 UI 常驻展示与撤回。
-     * 队列会在当前回复结束后自动连发，用户必须能在真正发出去之前反悔。
-     */
-    pendingMessages,
-    /** P1-6: 撤回单条排队消息（不发送、不留痕） */
-    cancelPending,
-    /** P1-6: 清空某会话的排队消息（不发送、不留痕） */
-    clearPendingForSession,
+    /** U5: 当前会话的待发送队列（可见 + 可操作） */
+    pendingQueue,
+    /** U5: 队列是否因上一轮错误/中断而暂停自动发送 */
+    queuePaused,
+    removeQueuedMessage,
+    moveQueuedMessageToFront,
+    reorderQueuedMessages,
+    clearQueuedMessages,
+    editQueuedMessage,
+    sendQueuedMessageNow,
+    resumeQueuedMessages,
     reattachActiveStream,
   };
 }

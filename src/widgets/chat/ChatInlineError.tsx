@@ -5,8 +5,7 @@
 
 interface ChatInlineErrorProps {
   error: string;
-  /** 缺省时不渲染「重试」按钮（release/win7 线沿用无重试的既有行为） */
-  onRetry?: () => void;
+  onRetry: () => void;
   onClose: () => void;
 }
 
@@ -21,16 +20,14 @@ export function ChatInlineError({ error, onRetry, onClose }: ChatInlineErrorProp
         <p className="text-xs text-text-secondary break-all">{error}</p>
       </div>
       <div className="flex gap-1.5 shrink-0">
-        {onRetry && (
-          <button
-            type="button"
-            data-testid="chat-error-retry"
-            onClick={onRetry}
-            className="text-xs px-2 py-1 rounded bg-primary text-text-inverse hover:bg-primary-hover"
-          >
-            重试
-          </button>
-        )}
+        <button
+          type="button"
+          data-testid="chat-error-retry"
+          onClick={onRetry}
+          className="text-xs px-2 py-1 rounded bg-primary text-text-inverse hover:bg-primary-hover"
+        >
+          重试
+        </button>
         <button
           type="button"
           onClick={onClose}

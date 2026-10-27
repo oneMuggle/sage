@@ -14,12 +14,13 @@ import { formatQuoteBlock } from './selectionQuote';
 export interface QuoteDraftInjection {
   text: string;
   nonce: number;
-  mode: 'append';
+  mode: 'append' | 'replace';
 }
 
 export function useQuoteDraft(): {
   quotedDraft: QuoteDraftInjection | null;
   quoteText: (text: string) => void;
+  setDraftText: (text: string) => void;
 } {
   const [quotedDraft, setQuotedDraft] = useState<QuoteDraftInjection | null>(null);
 
@@ -33,7 +34,12 @@ export function useQuoteDraft(): {
     setQuotedDraft({ text: formatQuoteBlock(text), nonce: Date.now(), mode: 'append' });
   }, []);
 
-  return { quotedDraft, quoteText };
+  /** 直接把输入框内容替换为指定文本（编辑队列消息时使用）。 */
+  const setDraftText = useCallback((text: string) => {
+    setQuotedDraft({ text, nonce: Date.now(), mode: 'replace' });
+  }, []);
+
+  return { quotedDraft, quoteText, setDraftText };
 }
 
 export function formatQuoteDraftInjectionSummary(draft: QuoteDraftInjection | null): string {
