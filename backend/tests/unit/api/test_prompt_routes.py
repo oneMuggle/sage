@@ -99,15 +99,17 @@ def test_delete_hit_and_miss(kv):
     assert resp.status_code == 404
 
 
-def test_list_sorts_by_updated_at_desc(kv):
-    # win7 行为基线：list 按更新时间新→旧（main 侧为存储序 + reorder
-    # 端点，见 R42；win7 前端无拖拽排序 UI，行为保持 updated_at 排序）
-    _seed(kv, [
-        {"id": "old", "name": "A", "updated_at": 100},
-        {"id": "new", "name": "B", "updated_at": 200},
-    ])
-    out = pr.list_templates()["templates"]
-    assert [t["id"] for t in out] == ["new", "old"]
+def test_reorder_and_append_missing(kv):
+    _seed(kv, [{"id": "a", "name": "A"}, {"id": "b", "name": "B"},
+               {"id": "c", "name": "C"}])
+    assert pr.reorder_templates(pr.ReorderIn(ordered_ids=["c", "a"])) == {"ok": True}
+    assert [t["id"] for t in kv.store["prompt_templates"]] == ["c", "a", "b"]
+
+
+def test_reorder_extra_ids_ignored(kv):
+    _seed(kv, [{"id": "a", "name": "A"}])
+    pr.reorder_templates(pr.ReorderIn(ordered_ids=["ghost", "a", "zzz"]))
+    assert [t["id"] for t in kv.store["prompt_templates"]] == ["a"]
 
 
 def test_export_envelope(kv):
