@@ -17,13 +17,7 @@ beforeEach(() => {
 
 describe('mcpClient', () => {
   it('status() invokes mcp_status with empty payload', async () => {
-    const report = {
-      generated_at: 1,
-      all_ready: true,
-      degraded: false,
-      failed_required: false,
-      servers: [],
-    };
+    const report = { generated_at: 1, all_ready: true, degraded: false, failed_required: false, servers: [] };
     mockInvoke.mockResolvedValueOnce(report);
     const r = await mcpClient.status();
     expect(mockInvoke).toHaveBeenCalledWith('mcp_status', {});
@@ -32,15 +26,8 @@ describe('mcpClient', () => {
 
   it('listServers() unwraps servers array', async () => {
     const cfg = {
-      name: 'fs',
-      command: 'python',
-      url: null,
-      args: [],
-      env: {},
-      enabled: true,
-      required: false,
-      timeout_seconds: 30,
-      builtin: false,
+      name: 'fs', command: 'python', url: null, args: [], env: {},
+      enabled: true, required: false, timeout_seconds: 30, builtin: false,
     };
     mockInvoke.mockResolvedValueOnce({ servers: [cfg] });
     const r = await mcpClient.listServers();
@@ -51,11 +38,7 @@ describe('mcpClient', () => {
   it('addServer() sends snake_case rawBody payload with defaults', async () => {
     mockInvoke.mockResolvedValueOnce({ ok: true, name: 'fs', state: 'discovering' });
     const r = await mcpClient.addServer({
-      name: 'fs',
-      command: 'python',
-      url: null,
-      args: ['-m', 'server'],
-      required: false,
+      name: 'fs', command: 'python', url: null, args: ['-m', 'server'], required: false,
     });
     expect(mockInvoke).toHaveBeenCalledWith('mcp_server_add', {
       name: 'fs',
@@ -72,12 +55,8 @@ describe('mcpClient', () => {
   it('addServer() includes url/headers only when provided', async () => {
     mockInvoke.mockResolvedValueOnce({ ok: true, name: 'http-mcp', state: 'discovering' });
     await mcpClient.addServer({
-      name: 'http-mcp',
-      command: '',
-      url: 'https://mcp.example/v1',
-      headers: { Authorization: 'Bearer x' },
-      args: [],
-      required: true,
+      name: 'http-mcp', command: '', url: 'https://mcp.example/v1',
+      headers: { Authorization: 'Bearer x' }, args: [], required: true,
     });
     const payload = mockInvoke.mock.calls[0][1];
     expect(payload.url).toBe('https://mcp.example/v1');
@@ -88,9 +67,7 @@ describe('mcpClient', () => {
   it('updateServer() maps camelCase changes to snake_case', async () => {
     mockInvoke.mockResolvedValueOnce({ ok: true, name: 'fs', state: 'ready' });
     await mcpClient.updateServer('fs', {
-      enabled: false,
-      timeoutSeconds: 60,
-      disabledTools: ['t1', 't2'],
+      enabled: false, timeoutSeconds: 60, disabledTools: ['t1', 't2'],
     });
     expect(mockInvoke).toHaveBeenCalledWith('mcp_server_update', {
       name: 'fs',
@@ -102,9 +79,7 @@ describe('mcpClient', () => {
 
   it('serverTools() passes name', async () => {
     mockInvoke.mockResolvedValueOnce({
-      server: 'fs',
-      state: 'ready',
-      tools: [{ name: 'search', description: 'd' }],
+      server: 'fs', state: 'ready', tools: [{ name: 'search', description: 'd' }],
       disabled_tools: [],
     });
     const r = await mcpClient.serverTools('fs');
@@ -113,12 +88,7 @@ describe('mcpClient', () => {
   });
 
   it('authorizeServer() passes name (long OAuth request)', async () => {
-    mockInvoke.mockResolvedValueOnce({
-      ok: true,
-      server: 'http-mcp',
-      token_type: 'bearer',
-      expires_at: 99,
-    });
+    mockInvoke.mockResolvedValueOnce({ ok: true, server: 'http-mcp', token_type: 'bearer', expires_at: 99 });
     const r = await mcpClient.authorizeServer('http-mcp');
     expect(mockInvoke).toHaveBeenCalledWith('mcp_server_authorize', { name: 'http-mcp' });
     expect(r.token_type).toBe('bearer');

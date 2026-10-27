@@ -12,7 +12,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DensityProvider } from '../../../entities/density/useDensity';
 import { FontProvider } from '../../../entities/font/useFontSettings';
 import { DEFAULT_SETTINGS } from '../../../entities/setting/types';
 import { I18nProvider } from '../../../shared/lib/i18n';
@@ -111,11 +110,9 @@ vi.mock('../../../entities/font/fontStorage', () => ({
 function renderTab(resetSettings = vi.fn()): void {
   render(
     <I18nProvider>
-      <DensityProvider>
-        <FontProvider>
-          <GeneralTab resetSettings={resetSettings} />
-        </FontProvider>
-      </DensityProvider>
+      <FontProvider>
+        <GeneralTab resetSettings={resetSettings} />
+      </FontProvider>
     </I18nProvider>,
   );
 }

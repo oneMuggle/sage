@@ -51,6 +51,7 @@ export function ContextTurnLimitSelect(): JSX.Element {
 
   return (
     <SettingRow
+      anchor="context_turn_limit"
       label="上下文轮数限制"
       desc="限制每次发送给模型的最近对话轮数（1 轮 = 1 次用户输入 + 1 次助手回复）。无限制 = 发送全部历史"
     >
