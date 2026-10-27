@@ -16,8 +16,6 @@ TDD RED: 本文件先写失败测试, 再在 backend/chat/project_context.py 实
 
 from __future__ import annotations
 
-from typing import Optional
-
 import pytest
 
 from backend.chat.project_context import (
@@ -34,9 +32,7 @@ pytestmark = [pytest.mark.unit]
 
 
 def _project(
-    *,
-    description: Optional[str] = None,
-    instructions: Optional[str] = None,
+    *, description: str | None = None, instructions: str | None = None
 ) -> object:
     """轻量 duck-typed 替身 (不依赖真实 Project 构造以隔离单元测试)。"""
 
