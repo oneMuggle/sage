@@ -41,7 +41,8 @@
 | R109 | 已保存权限规则遮蔽标注（被更高优先级规则覆盖的行可见化，纯前端） | ✅ #2557 |
 | R110 | 聊天顶栏弹层标注补齐（审计插件归属 + 会话规则遮蔽，纯前端） | ✅ #2566 |
 | R111 | 聊天历史工具调用插件归属标注（转录通用卡片，纯前端） | ✅ #2576 |
-| R112 | PermissionModeSwitch 供数与导出收口（共享名单 hook + format 下沉，纯前端） | 🔄 #2585 |
+| R112 | PermissionModeSwitch 供数与导出收口（共享名单 hook + format 下沉，纯前端） | ✅ #2585 |
+| R113 | 转录工具组折叠头插件归属（纯前端） | 🔄 #2589 |
 
 ## 2. 交付总账
 
@@ -76,7 +77,8 @@
 | R109 | PermissionRulesManager 遮蔽派生（等值/插件通配覆盖）+ 徽标与测试/文档 | #2557 | 待对齐 | ✅ 已交付 |
 | R110 | permissionInsights 共享派生下沉 + PermissionModeSwitch 审计归属后缀/会话规则遮蔽徽标与测试/文档 | #2566 | 待对齐 | ✅ 已交付 |
 | R111 | usePluginNames 共享名单缓存 + Message 通用卡片归属后缀与测试/文档 | #2576 | 待对齐 | ✅ 已交付 |
-| R112 | 弹层改用 usePluginNames + formatPermissionMode* 下沉 permissionInsights 与测试/文档 | #2585 | 待对齐 | 🔄 |
+| R112 | 弹层改用 usePluginNames + formatPermissionMode* 下沉 permissionInsights 与测试/文档 | #2585 | 待对齐 | ✅ 已交付 |
+| R113 | Message 工具组组头归属后缀与测试/文档 | #2589 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -689,7 +691,7 @@
   architecture（Message 768/800）、diff-check、
   diagnostics 全绿，manifest 仍 274，后端零改动。
 
-## 32. R112 交付边界（PR #2585 待合并）
+## 32. R112 交付边界（已合并）
 
 > spec：`2026-10-27_perm-switch-consolidation-r112.md`。
 > R112 是本插件账轮次号，与其它账本的同号计划无关。
@@ -708,5 +710,21 @@
   warnings 清零，450→393 行）、architecture、
   diff-check、diagnostics 全绿，manifest 仍 274，
   后端零改动。
+
+## 33. R113 交付边界（PR #2589 待合并）
+
+> spec：`2026-10-27_tool-group-plugin-owners-r113.md`。
+> R113 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **转录可见性收官**：折叠组头补上去重归属后，转录的
+  折叠态与展开态都能一眼看出插件参与，与审批
+  （R108）/审计（R110）/逐卡（R111）口径一致。
+- **零新增取数**：复用 R111 已在 Message 作用域内的
+  名单与归属派生；后端零改动（manifest 仍 274）。
+- **本地证据**：Message 全组 12 文件 62 例与定
+  向三套件 20 例通过；tsc、ESLint（0 errors，存
+  量 warnings 不变）、architecture（Message
+  787/800）、diff-check、diagnostics 全绿，
+  manifest 仍 274，后端零改动。
 
 —— 本账本由插件化循环维护，随轮次追加。

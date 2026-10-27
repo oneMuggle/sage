@@ -17,6 +17,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from backend.services.llm_json import parse_json
+
 logger = logging.getLogger(__name__)
 
 # 30 分钟缓存 TTL（毫秒）
@@ -307,25 +309,12 @@ class ProjectAdvisor:
 
     def _parse_response(self, raw: str, project_id: str) -> AdviceResult:
         """解析 LLM 响应为 AdviceResult。"""
-        cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip())
-        cleaned = re.sub(r"\s*```$", "", cleaned).strip()
-
         try:
-            obj = json.loads(cleaned)
-        except json.JSONDecodeError:
-            start = cleaned.find("{")
-            end = cleaned.rfind("}")
-            if start != -1 and end != -1 and end > start:
-                try:
-                    obj = json.loads(cleaned[start : end + 1])
-                except json.JSONDecodeError as exc:
-                    raise RuntimeError(
-                        f"LLM 响应无法解析为 JSON (project={project_id}): {exc}"
-                    ) from exc
-            else:
-                raise RuntimeError(
-                    f"LLM 响应中未找到 JSON (project={project_id})"
-                )
+            obj = parse_json(raw)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"LLM 响应中未找到 JSON (project={project_id}): {exc}"
+            ) from exc
 
         health_score = int(obj.get("health_score", 50))
         health_score = max(0, min(100, health_score))

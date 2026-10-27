@@ -68,6 +68,23 @@ ALIASES: Dict[str, str] = {
     "run_wall_clock_limit_minutes": "runWallClockLimitMinutes",
     "subagent_task_timeout_s": "subagentTaskTimeoutS",
     "max_retry_of_chains": "maxRetryOfChains",
+    # 2026-10-27: 工具预算 + 计划前置迭代预算。maxToolCallsPerRun 早于本
+    # 日期进入 OrchSettings/UI，但白名单与 ALIASES 均漏加，导致编排段
+    # 任一保存 400（前端静默吞错）；本次一并补齐。
+    "max_tool_calls_per_run": "maxToolCallsPerRun",
+    "max_scout_iterations": "maxScoutIterations",
+    "max_planner_iterations": "maxPlannerIterations",
+    # 2026-10-27 (code review 复现): relay 往返丢键 —— electron 的
+    # camelToSnakeKeys 把前端 camelCase 键整体转 snake, ALIASES 缺别名时
+    # to_camel 翻不回 camel → validate_settings_shape 报 400, 前端
+    # saveSettings 的 catch{} 静默吞掉, 用户无感知。
+    # - maxIterations: 编排 Tab 每次保存都整体 spread 提交 orch 段
+    #   (含该键) → 编排段任一保存必 400, 本次两个新旋钮也因此无法落库。
+    # - logTimezone / useFolderPicker: 通用 Tab / Wiki Tab 保存 400
+    #   (同类 pre-existing 回归, 一并补齐)。
+    "max_iterations": "maxIterations",
+    "log_timezone": "logTimezone",
+    "use_folder_picker": "useFolderPicker",
     # 2026-10-25: LLM 重试参数 — 前端发送 camelCase，但某些中间层可能转成 snake_case，
     # 需要 ALIASES 映射回 camelCase 以通过白名单校验。
     "llm_retry_max_attempts": "llmRetryMaxAttempts",
@@ -186,6 +203,13 @@ LEGAL_ORCH_KEYS: FrozenSet[str] = frozenset(
         "runWallClockLimitMinutes",
         "subagentTaskTimeoutS",
         "maxRetryOfChains",
+        # 2026-10-20 全局迭代上限 (0=按各 agent 分别设置)
+        "maxIterations",
+        # 2026-10-27: 单 run 工具调用上限 (已在 OrchSettings/UI/ALIASES, 白名单
+        # 漏加 → 编排段任一保存 400) + 计划前置/Planner 迭代预算。
+        "maxToolCallsPerRun",
+        "maxScoutIterations",
+        "maxPlannerIterations",
     }
 )
 

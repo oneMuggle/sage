@@ -125,6 +125,14 @@ export interface OrchSettings {
   planPreflightEnabled: boolean; // true
   // Round 1: 侦察先行单独开关（澄清不受它控制；总闸关闭时两者皆停）。
   planScoutEnabled: boolean; // true
+  // 2026-10-27: 侦察子代理 ReAct 迭代预算（立即生效，透传 run_loop）。
+  // 与后端 ``OrchSettings.max_scout_iterations`` camelCase 对齐；默认 4
+  // 与 plan_preflight.SCOUT_MAX_ITERATIONS 一致。
+  maxScoutIterations: number; // 4
+  // 2026-10-27: Planner 迭代预算 —— 预配置。Planner 当前为单次拆解，
+  // 阶段 2.1 接入 ReAct 工具循环后消费。与后端
+  // ``OrchSettings.max_planner_iterations`` camelCase 对齐。
+  maxPlannerIterations: number; // 8
 }
 
 /** All application settings */
@@ -228,6 +236,8 @@ export const DEFAULT_ORCH_SETTINGS: OrchSettings = {
   maxIterations: 25, // 2026-10-20: primary agent 迭代次数上限
   planPreflightEnabled: true,
   planScoutEnabled: true,
+  maxScoutIterations: 4, // 2026-10-27: 侦察 ReAct 预算（立即生效）
+  maxPlannerIterations: 8, // 2026-10-27: Planner ReAct 预算（预配置）
 };
 
 /** 系统 IANA 时区探测；不可用 / 返回空时回退 'Asia/Shanghai'（历史默认）。 */

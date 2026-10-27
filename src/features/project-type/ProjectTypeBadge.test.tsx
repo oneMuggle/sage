@@ -154,6 +154,8 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
           detectedType: 'research',
           confidence: 0.88,
           signals: ['发现 .bib 与 .tex 文件'],
+          subType: null,
+          techStack: [],
         }}
         selectedType="coding"
         onApplyDetectedType={onApply}
@@ -180,6 +182,8 @@ describe('TypeDetectionPreview & ProjectTypeSelector (Phase P29)', () => {
       detectedType: 'business',
       confidence: 0.55,
       signals: ['发现合同模板目录'],
+      subType: null,
+      techStack: [],
     });
     const onSelect = vi.fn();
 
@@ -274,10 +278,14 @@ describe('StudioProfileTabPanel & KnowledgeExtractionPanel (Phase P29)', () => {
     fireEvent.click(screen.getByTestId('studio-profile-batch-milestone-btn'));
     expect(screen.getByTestId('studio-profile-to-milestone-e-1')).toHaveTextContent('已转里程碑');
     fireEvent.click(screen.getByTestId('studio-profile-seed-presets-btn'));
-    expect(screen.getByTestId('studio-profile-seed-presets-btn')).toHaveTextContent('已写入推荐画像');
+    expect(screen.getByTestId('studio-profile-seed-presets-btn')).toHaveTextContent(
+      '已写入推荐画像',
+    );
     fireEvent.click(screen.getByTestId('studio-profile-pillar-fill-all-btn'));
     fireEvent.click(screen.getByTestId('studio-profile-seed-pillars-btn'));
-    expect(screen.getByTestId('studio-profile-seed-pillars-btn')).toHaveTextContent('已写入支柱 L3');
+    expect(screen.getByTestId('studio-profile-seed-pillars-btn')).toHaveTextContent(
+      '已写入支柱 L3',
+    );
     fireEvent.click(screen.getByTestId('studio-profile-copy-draft-btn'));
     fireEvent.click(screen.getByTestId('studio-profile-clear-draft-btn'));
   });
@@ -386,7 +394,9 @@ describe('SemanticSearchPanel & WikiGenerationPanel (Phase P31)', () => {
     const filterInput = await screen.findByTestId('wiki-preview-filter-input');
     fireEvent.click(screen.getByTestId('wiki-save-symbols-profile-btn'));
     await waitFor(() => {
-      expect(screen.getByTestId('wiki-save-symbols-profile-btn')).toHaveTextContent('已沉淀符号至 L3');
+      expect(screen.getByTestId('wiki-save-symbols-profile-btn')).toHaveTextContent(
+        '已沉淀符号至 L3',
+      );
     });
     fireEvent.click(screen.getByTestId('wiki-symbol-to-milestone-0'));
     expect(screen.getByTestId('wiki-symbol-to-milestone-0')).toHaveTextContent('已建里程碑');

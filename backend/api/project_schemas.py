@@ -151,6 +151,10 @@ class ProjectTypeDetectResponse(BaseModel):
     project_type: Optional[str]
     confidence: float
     signals: List[DetectionSignalModel]
+    # L2 子类型 key，None 表示仅识别到 L1
+    sub_type: Optional[str] = None
+    # 技术栈标记（package.json / pyproject.toml 等解析结果）
+    tech_stack: List[str] = Field(default_factory=list)
 
 
 class ConstraintCreateRequest(BaseModel):
@@ -427,3 +431,169 @@ class ProjectDiagnoseResponse(BaseModel):
     hooks_count: int = 0
     hooks_trusted: bool = False
     recommendations: List[str] = Field(default_factory=list)
+
+
+# ── AI 治理分析 schemas (2026-10-27) ─────────────────────────────────────────
+
+
+class ProjectAnalyzeRequest(BaseModel):
+    """POST /projects/analyze 或 /projects/profile 的请求体。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=1024)
+
+
+class SourceSampleModel(BaseModel):
+    """画像中的单个源码采样。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    language: str
+    lines: int
+    content: str
+
+
+class GitStatsModel(BaseModel):
+    """画像中的 Git 统计信息。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    is_repo: bool
+    current_branch: Optional[str] = None
+    commit_count: int = 0
+    recent_commit_count: int = 0
+    branch_count: int = 0
+    last_commit_at: Optional[str] = None
+    dirty_files: int = 0
+
+
+class CodebaseProfileModel(BaseModel):
+    """项目代码库画像。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    root: str
+    level1_type: Optional[str] = None
+    sub_type: Optional[str] = None
+    tech_stack: List[str] = Field(default_factory=list)
+    frameworks: List[str] = Field(default_factory=list)
+    build_commands: List[str] = Field(default_factory=list)
+    test_frameworks: List[str] = Field(default_factory=list)
+    lint_configs: List[str] = Field(default_factory=list)
+    ci_workflows: List[str] = Field(default_factory=list)
+    existing_rule_files: List[str] = Field(default_factory=list)
+    directory_layout: List[str] = Field(default_factory=list)
+    source_samples: List[SourceSampleModel] = Field(default_factory=list)
+    git_stats: GitStatsModel
+    vcs_mode: str = "unknown"
+
+
+class ProjectProfileResponse(BaseModel):
+    """POST /projects/profile 的响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile: CodebaseProfileModel
+
+
+class SuggestedRuleModel(BaseModel):
+    """分析报告中的单条规则建议。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    template_key: str
+    label: str
+    reason: str
+    confidence: float
+    category: str
+    content: str
+    trigger_pattern: str
+    priority: int
+
+
+class DocRefModel(BaseModel):
+    """分析报告中引用的文档。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    reason: str
+    path: str
+
+
+class AnalysisReportModel(BaseModel):
+    """LLM 深度分析报告。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    level1_type: str
+    sub_type: Optional[str] = None
+    confidence: float = 0.0
+    tech_stack: List[str] = Field(default_factory=list)
+    architecture_summary: str = ""
+    suggested_rules: List[SuggestedRuleModel] = Field(default_factory=list)
+    governance_recommendations: List[str] = Field(default_factory=list)
+    stage_recommendation: Optional[str] = None
+    sage_md_draft: str = ""
+    docs_refs: List[DocRefModel] = Field(default_factory=list)
+    llm_available: bool = True
+    raw_json: Optional[str] = None
+
+
+class ProjectAnalyzeResponse(BaseModel):
+    """POST /projects/analyze 的响应：画像 + 分析报告。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile: CodebaseProfileModel
+    report: AnalysisReportModel
+
+
+class RuleDraftModel(BaseModel):
+    """规则草稿（待用户确认后落库）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category: str
+    content: str
+    trigger_pattern: str
+    priority: int
+    source: str
+    template_key: str = ""
+    reason: str = ""
+
+
+class RuleGenerationRequest(BaseModel):
+    """POST /projects/generate-rules 的请求体。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile: Dict[str, Any]
+    report: Dict[str, Any]
+    project_id: Optional[str] = Field(
+        default=None,
+        max_length=64,
+        description="若提供，将与项目已有约束去重",
+    )
+
+
+class RuleGenerationResultModel(BaseModel):
+    """POST /projects/generate-rules 的响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    rules: List[RuleDraftModel] = Field(default_factory=list)
+    milestones: List[Dict[str, str]] = Field(default_factory=list)
+    llm_available: bool = True
+    skipped_duplicates: int = 0
+
+
+class SubTypesResponse(BaseModel):
+    """GET /projects/sub-types 的响应。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    level1_types: List[str]
+    sub_types: Dict[str, List[Dict[str, Any]]]
