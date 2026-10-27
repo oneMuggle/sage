@@ -84,6 +84,13 @@ class SettingsRepository:
             # 见 backend/api/zotero_routes.py —— 写入 POST /zotero/path, 读取
             # _get_configured_db_path, 环境变量 ZOTERO_DB_PATH 优先级兜底）
             "zotero_db_path",
+            # 2026-10-27 feat/zotero-llm-visible: Zotero 索引同步状态
+            # (JSON: {"last_sync_ts", "items", "wiki_pages", "errors"})
+            # 读取/写入口径见 backend/zotero/ingest.py:SyncStateStore
+            "zotero_sync_state",
+            # 2026-10-27 feat/zotero-llm-visible: 进入 wiki 沉淀的 Zotero tag
+            # (缺省 = "sage:wiki")。读取口径见 backend/zotero/wiki_export.py
+            "zotero_wiki_tag",
             # T-3: 技能脚本执行开关（"1" 开启 / "0" 或缺省 = 关闭，fail-closed）。
             # 读取口径见 backend/skills/skill_md/script_policy.py
             "allow_skill_scripts",

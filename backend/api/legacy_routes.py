@@ -1033,6 +1033,20 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             except Exception:
                 pass  # Graceful fallback if diagram module unavailable
 
+            try:
+                from backend.core.zotero_prompt import (
+                    ZOTERO_TOOL_PROMPT,
+                    registry_has_zotero_tool,
+                )
+
+                # 2026-10-27 feat/zotero-llm-visible: 与 drawio 同模式，
+                # 前缀扫描 mcp__zotero__*，服务器增删工具不会静默关闭注入。
+                _zotero_registry = getattr(agent, "tool_registry", None)
+                if _zotero_registry and registry_has_zotero_tool(_zotero_registry):
+                    system_content += ZOTERO_TOOL_PROMPT
+            except Exception:
+                logger.debug("zotero tool prompt injection skipped", exc_info=True)
+
             # ===== M6 PROJECT CONTEXT BEGIN =====
             # SAGE.md/CLAUDE.md 向上发现 → 注入 system prompt。仅当会话已
             # 绑定 workspace 时注入; 任何失败静默跳过 (见 backend/chat/

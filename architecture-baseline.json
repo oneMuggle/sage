@@ -1,7 +1,7 @@
 {
   "version": 1,
   "files": {
-    "backend/agents/profiles.py": 1030,
+    "backend/agents/profiles.py": 1042,
     "backend/api/legacy_routes.py": 2455,
     "backend/api/llm_proxy_routes.py": 1171,
     "backend/api/orchestration_router.py": 807,
@@ -13,7 +13,7 @@
     "backend/data/database.py": 2100,
     "backend/data/session_repo.py": 1056,
     "backend/data/settings_canonicalizer.py": 811,
-    "backend/main.py": 1319,
+    "backend/main.py": 1338,
     "backend/mcp/pool.py": 915,
     "backend/office/edit.py": 1297,
     "backend/office/excel.py": 1003,
@@ -47,7 +47,7 @@
     "backend/tools/office_create_tool.py": 1580,
     "backend/tools/web_tool.py": 1514,
     "backend/wiki/files.py": 927,
-    "backend/zotero/client.py": 818,
+    "backend/zotero/client.py": 1171,
     "electron/__tests__/commands.test.ts": 1191,
     "electron/main.ts": 2731,
     "electron/tests/updateIntegration.test.ts": 865,

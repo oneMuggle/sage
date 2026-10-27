@@ -125,6 +125,7 @@ from backend.api.wiki_routes import router as wiki_router
 from backend.api.workspace_routes import router as workspace_router
 from backend.api.worktree_routes import router as worktree_router
 from backend.api.zotero_routes import router as zotero_router
+from backend.api.zotero_sync_routes import router as zotero_sync_router
 from backend.application.services.chat_service import ChatService
 from backend.application.services.wake_store import get_wake_store
 from backend.data.database import Database, get_database
@@ -519,6 +520,16 @@ async def lifespan(app: FastAPI):
     app.state.scheduler = scheduler_service
     logger.info("SchedulerService 已初始化并启动（%d 个任务）", len(scheduler_service.list_tasks()))
     _startup_mark("scheduler")
+
+    # Zotero 启动期后台增量同步（方案 §3.8）：
+    # 仅在已有水位时跑增量；首次不同步（避免大库首索引卡启动 / 意外嵌入费用），
+    # 首次需用户在 设置 → Zotero 手动点「立即同步」。异常吞掉，不影响启动。
+    try:
+        from backend.api.zotero_sync_routes import run_background_sync
+
+        app.state.zotero_sync_task = asyncio.create_task(run_background_sync())
+    except Exception:
+        logger.exception("zotero background sync task creation failed (ignored)")
 
     # PR-C §5.1: 把 5 个 evolution 任务挂到 lifespan,按 cron 自动跑
     # (memory_pruning / memory_consolidation / daily_summary /
@@ -929,6 +940,11 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # noqa: BLE001 — shutdown must not raise
             logger.warning("TodoReminderScheduler stop failed: %s", exc)
 
+    # Zotero 启动期后台同步任务：未跑完就取消（shutdown 不得挂起）
+    zotero_sync_task = getattr(app.state, "zotero_sync_task", None)
+    if zotero_sync_task is not None and not zotero_sync_task.done():
+        zotero_sync_task.cancel()
+
     # M1/M2 审批/提问闸口：关闭时重置全局单例。否则 TestClient（或多次
     # lifespan 启停）之后 `_global_gate` 残留装配——后续 agent 循环对
     # EXECUTE 工具调用会把审批挂起直到 300s 超时，测试间互相污染。
@@ -1216,6 +1232,9 @@ app.include_router(mcp_router, prefix="/api/v1")
 
 # Zotero: read-only library access for settings UI (status / search / items / collections)
 app.include_router(zotero_router, prefix="/api/v1/zotero")
+
+# Zotero 同步控制路由：sync 与 sync-status（并发锁 + 启动增量）
+app.include_router(zotero_sync_router, prefix="/api/v1/zotero")
 
 # LLM trace diagnostic preview (settings page card)
 app.include_router(diagnostic_router, prefix="/api/v1")

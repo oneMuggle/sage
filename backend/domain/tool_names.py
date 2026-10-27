@@ -26,7 +26,9 @@
   legacy_routes 编排模式下按会话动态注册；
 - ``update_pending_task`` / ``cancel_pending_task`` / ``add_task_to_plan``：
   同上（re-plan 工具族，tools/replan_tool.py，与 dispatch 同一 tool-toggle 门）；
-- MCP 工具：外部服务器运行期提供。
+- MCP 工具：外部服务器运行期提供，命名 ``mcp__<server>__<tool>``；
+  合法形状的引用（精确名与 ``mcp__*`` / ``mcp__<server>__*`` 通配）
+  由本模块下方识别，启动期校验不告警。
 - 进程外插件工具（R90）：动态名字 ``plugin__<plugin>__<capability>``
   不在内置清单内；其命名空间前缀、形状识别与 profile 白名单匹配
   （含 R92 受限通配）定义于本模块下方，启动期校验把合法形状的插件
@@ -346,18 +348,112 @@ def is_plugin_tool_reference(entry: Any) -> bool:
     return is_plugin_tool_name(entry) or is_plugin_tool_wildcard(entry)
 
 
+# ---------------------------------------------------------------------------
+# MCP 工具名字语义（Zotero 可见性修复 ①）
+#
+# MCP 服务器运行期提供工具，名字由客户端加命名空间前缀：
+# ``mcp__<server>__<tool>``。历史上 profile 白名单只认精确名与插件
+# 受限通配，导致 ``mcp__*`` 一律被拒 —— Zotero / drawio 等 MCP 工具对
+# LLM 完全不可见（drawio 的 prompt 注入因此长期是死代码）。
+#
+# 口径与插件通配一致：只承认 ``mcp__*``（全部服务器）与
+# ``mcp__<server>__*``（单个服务器）两种写法，其余含 ``*`` 的条目不
+# 展开（fail-closed）。server 段不允许含 ``__``，保证「按第一个 ``__``
+# 切分」的解析无歧义。
+# ---------------------------------------------------------------------------
+
+#: MCP 工具的 LLM 命名空间前缀（单一来源）。
+MCP_TOOL_PREFIX = "mcp__"
+
+
+def _is_valid_mcp_server_name(value: str) -> bool:
+    """MCP 服务器名允许 ASCII 字母、数字、``_`` 与 ``-``。"""
+    if not value:
+        return False
+    for char in value:
+        if (
+            "a" <= char <= "z"
+            or "A" <= char <= "Z"
+            or "0" <= char <= "9"
+            or char in "_-"
+        ):
+            continue
+        return False
+    return True
+
+
+def _split_mcp_tool_name(name: str):
+    """把 ``mcp__<server>__<tool>`` 拆成 ``(<server>, <tool>)``；非法返回 None。"""
+    remainder = name[len(MCP_TOOL_PREFIX) :]
+    server_segment, separator, tool_segment = remainder.partition("__")
+    if not separator or not server_segment or not tool_segment:
+        return None
+    if "__" in server_segment or not _is_valid_mcp_server_name(server_segment):
+        return None
+    return server_segment, tool_segment
+
+
+def is_mcp_tool_name(name: Any) -> bool:
+    """``name`` 是否呈合法 MCP 工具形状（只判形状，不判服务器是否在线）。"""
+    if not isinstance(name, str) or "*" in name:
+        return False
+    if not name.startswith(MCP_TOOL_PREFIX):
+        return False
+    return _split_mcp_tool_name(name) is not None
+
+
+def mcp_tool_wildcard_prefix(entry: Any) -> Optional[str]:
+    """解析 MCP 受限通配，合法时返回待匹配的命名空间前缀。
+
+    只承认 ``mcp__*``（全部服务器）与 ``mcp__<server>__*``（单个
+    服务器）；其它含 ``*`` 的写法返回 ``None``，由调用方按精确字符串
+    处理（匹配不到合法工具名，fail-closed）。
+    """
+    if not isinstance(entry, str):
+        return None
+    if entry == MCP_TOOL_PREFIX + "*":
+        return MCP_TOOL_PREFIX
+    if not entry.startswith(MCP_TOOL_PREFIX) or not entry.endswith("__*"):
+        return None
+    server_segment = entry[len(MCP_TOOL_PREFIX) : -3]
+    if not _is_valid_mcp_server_name(server_segment):
+        return None
+    return entry[:-1]
+
+
+def is_mcp_tool_wildcard(entry: Any) -> bool:
+    """``entry`` 是否为承认的 MCP 工具通配条目。"""
+    return mcp_tool_wildcard_prefix(entry) is not None
+
+
+def is_mcp_tool_reference(entry: Any) -> bool:
+    """``entry`` 是否为合法形状的 MCP 工具引用（精确名或受限通配）。"""
+    return is_mcp_tool_name(entry) or is_mcp_tool_wildcard(entry)
+
+
+def mcp_tool_wildcard_matches(tool_name: Any, entry: Any) -> bool:
+    """``entry``（MCP 通配）是否命中 ``tool_name``。"""
+    prefix = mcp_tool_wildcard_prefix(entry)
+    if prefix is None or not is_mcp_tool_name(tool_name):
+        return False
+    if prefix == MCP_TOOL_PREFIX:
+        return True
+    return tool_name.startswith(prefix) and len(tool_name) > len(prefix)
+
+
 def tool_name_in_allowlist(
     tool_name: Any,
     allowed_tools: Optional[Iterable[Any]],
     plugin_name: Optional[str] = None,
 ) -> bool:
-    """profile 白名单单一匹配口径（精确名 + R92 插件受限通配）。
+    """profile 白名单单一匹配口径（精确名 + 插件/MCP 受限通配）。
 
     - ``allowed_tools is None``：无白名单限制（保持既有语义）；
     - 空可迭代对象：不放行任何工具（保持既有语义）；
-    - 普通条目精确匹配，不要求插件身份；仅 ``plugin__*`` 与
-      ``plugin__<plugin>__*`` 做通配，其余含 ``*`` 的条目不展开；
-    - R98：受限通配不再按完整工具名字符串前缀命中。插件名与
+    - 普通条目精确匹配，不要求插件身份；仅 ``plugin__*`` /
+      ``plugin__<plugin>__*`` 与 ``mcp__*`` / ``mcp__<server>__*``
+      做通配，其余含 ``*`` 的条目不展开；
+    - R98：插件受限通配不再按完整工具名字符串前缀命中。插件名与
       capability 名都可含 ``__``，同一字符串可能对应不同
       结构化身份（``plugin__a__b__c`` 可能是插件 ``a__b`` 的
       工具）；通配命中以调用方给出的权威 ``plugin_name``
@@ -366,6 +462,9 @@ def tool_name_in_allowlist(
       ``PermissionRule.matches`` 同口径。身份缺失、非法或
       不匹配时通配不命中（fail-closed），调用方不得按完整
       工具名切分猜测插件名；
+    - MCP 工具名自带 ``mcp__<server>__<tool>`` 结构，服务器段就是
+      权威身份，无需外部 ``plugin_name``；``mcp__*`` 放行全部
+      MCP 工具，``mcp__<server>__*`` 只放行该服务器；
     - 显式白名单下非字符串工具名不放行，坏条目不能放宽整个白名单。
     """
     if allowed_tools is None:
@@ -373,7 +472,9 @@ def tool_name_in_allowlist(
     if not isinstance(tool_name, str):
         return False
     for entry in allowed_tools:
-        if entry == tool_name:
+        # 精确名与 MCP 受限通配互斥（通配必含 ``*``），合并成一个分支
+        # 以保持 return 语句数在 ruff PLR0911 上限内。
+        if entry == tool_name or mcp_tool_wildcard_matches(tool_name, entry):
             return True
         if not is_plugin_tool_wildcard(entry):
             continue
@@ -396,6 +497,7 @@ __all__ = [
     "FILE_TOOLS",
     "GIT_TOOLS",
     "JOURNAL_TOOLS",
+    "MCP_TOOL_PREFIX",
     "MEMORY_TOOLS",
     "MULTIMODAL_TOOLS",
     "OFFICE_TOOLS",
@@ -413,9 +515,14 @@ __all__ = [
     "WEB_FETCH_TOOLS",
     "WEB_SEARCH_TOOLS",
     "WEB_TOOLS",
+    "is_mcp_tool_name",
+    "is_mcp_tool_reference",
+    "is_mcp_tool_wildcard",
     "is_plugin_tool_name",
     "is_plugin_tool_reference",
     "is_plugin_tool_wildcard",
+    "mcp_tool_wildcard_matches",
+    "mcp_tool_wildcard_prefix",
     "plugin_tool_belongs_to_plugin",
     "plugin_tool_wildcard_for_plugin",
     "plugin_tool_wildcard_prefix",
