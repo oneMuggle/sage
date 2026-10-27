@@ -543,7 +543,7 @@ class LLMClient:
         # 与 backend/tools/http_factory.py 的 RETRYABLE_EXCEPTIONS 口径一致。
         # httpx 0.26 MRO：RemoteProtocolError/ReadError/WriteError 都是 TransportError
         # 子类，但不是 ConnectError 子类，因此必须单列分支（不会落入上条 ConnectError）。
-        if isinstance(exc, (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)):
+        if isinstance(exc, (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)):  # noqa: UP038
             logger.error(f"LLM 流传输中断: {exc}")
             raise LLMError(LLMErrorType.NETWORK, f"LLM 连接中断: {exc}")
         if isinstance(exc, httpx.HTTPStatusError):
