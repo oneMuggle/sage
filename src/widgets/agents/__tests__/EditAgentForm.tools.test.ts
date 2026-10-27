@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   findPluginToolWildcardCover,
+  findStalePluginToolEntries,
   formatAgentToolsInput,
   parseAgentToolsInput,
   pluginToolSelectionState,
@@ -146,5 +147,72 @@ describe('EditAgentForm running plugin tool helpers (R94/R98)', () => {
         false,
       ),
     ).toEqual(entries);
+  });
+});
+
+describe('findStalePluginToolEntries (R107)', () => {
+  const records = [
+    { name: 'demo', status: 'enabled' as const },
+    { name: 'gone', status: 'uninstalled' as const },
+    { name: 'a', status: 'installed' as const },
+    { name: 'a__b', status: 'installed' as const },
+  ];
+  const published = [{ plugin_name: 'demo', tool_name: 'plugin__demo__hello' }];
+
+  it('returns nothing when the lifecycle index is unavailable', () => {
+    expect(findStalePluginToolEntries(['plugin__ghost__run'], published, null)).toEqual([]);
+  });
+
+  it('skips the global wildcard, builtin names and invalid plugin shapes', () => {
+    expect(
+      findStalePluginToolEntries(
+        ['plugin__*', 'read_file', 'plugin__demo*', 'plugin__demo__'],
+        published,
+        records,
+      ),
+    ).toEqual([]);
+  });
+
+  it('skips live entries (exact published name and derived wildcard)', () => {
+    expect(
+      findStalePluginToolEntries(['plugin__demo__hello', 'plugin__demo__*'], published, records),
+    ).toEqual([]);
+  });
+
+  it('classifies missing / uninstalled / not-published in entry order', () => {
+    expect(
+      findStalePluginToolEntries(
+        ['plugin__ghost__run', 'plugin__gone__*', 'plugin__demo__other', 'plugin__a__*'],
+        published,
+        records,
+      ),
+    ).toEqual([
+      { entry: 'plugin__ghost__run', pluginName: null, status: 'missing' },
+      { entry: 'plugin__gone__*', pluginName: 'gone', status: 'uninstalled' },
+      { entry: 'plugin__demo__other', pluginName: 'demo', status: 'not-published' },
+      { entry: 'plugin__a__*', pluginName: 'a', status: 'not-published' },
+    ]);
+  });
+
+  it('resolves ownership longest-name-first for __ plugin names', () => {
+    expect(findStalePluginToolEntries(['plugin__a__b__c'], [], records)).toEqual([
+      { entry: 'plugin__a__b__c', pluginName: 'a__b', status: 'not-published' },
+    ]);
+    expect(findStalePluginToolEntries(['plugin__a__b__*'], [], records)).toEqual([
+      { entry: 'plugin__a__b__*', pluginName: 'a__b', status: 'not-published' },
+    ]);
+  });
+
+  it('keeps only index-derived classes when the runtime snapshot is unknown', () => {
+    expect(
+      findStalePluginToolEntries(
+        ['plugin__ghost__run', 'plugin__gone__run', 'plugin__demo__other'],
+        null,
+        records,
+      ),
+    ).toEqual([
+      { entry: 'plugin__ghost__run', pluginName: null, status: 'missing' },
+      { entry: 'plugin__gone__run', pluginName: 'gone', status: 'uninstalled' },
+    ]);
   });
 });
