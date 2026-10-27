@@ -110,4 +110,18 @@ export const integrationRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/zotero/path?path=${encodeURIComponent(String(a.path ?? ''))}`,
   },
+  // Sync layer (M5): index the whole library into the vector store and,
+  // when project_path is given, sink tag-marked items into wiki/zotero/.
+  zotero_sync: {
+    method: 'POST',
+    path: () => '/api/v1/zotero/sync',
+    body: (a) => ({
+      force: Boolean(a.force),
+      project_path: a.project_path ?? null,
+    }),
+  },
+  zotero_sync_status: {
+    method: 'GET',
+    path: () => '/api/v1/zotero/sync-status',
+  },
 };

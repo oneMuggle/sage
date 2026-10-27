@@ -70,4 +70,65 @@ describe('zoteroClient', () => {
     mockInvoke.mockRejectedValueOnce(raw);
     await expect(zoteroClient.status()).rejects.toBe(raw);
   });
+
+  it('sync() 缺省 force=false、project_path=null', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      items: 3, chunks: 3, dim: 1024, last_sync_ts: 'ts',
+      skipped: false, elapsed_ms: 12, errors: [],
+    });
+    await zoteroClient.sync();
+    expect(mockInvoke).toHaveBeenCalledWith('zotero_sync', {
+      force: false, project_path: null,
+    });
+  });
+
+  it('sync() 透传 force 与 projectPath', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      items: 3, chunks: 3, dim: 1024, last_sync_ts: 'ts',
+      skipped: false, elapsed_ms: 12, errors: [],
+      wiki: { items_exported: 1, authors_exported: 2, errors: [] },
+    });
+    const r = await zoteroClient.sync({ force: true, projectPath: '/tmp/proj' });
+    expect(mockInvoke).toHaveBeenCalledWith('zotero_sync', {
+      force: true, project_path: '/tmp/proj',
+    });
+    expect(r.wiki?.items_exported).toBe(1);
+  });
+
+  it('syncStatus() 空载荷调用 zotero_sync_status', async () => {
+    mockInvoke.mockResolvedValueOnce({
+      last_sync_ts: null, last_sync_at: null, item_count: 0, wiki_page_count: 0,
+      embedding_configured: false, vector_dim: null, sync_in_progress: false, errors: [],
+    });
+    const r = await zoteroClient.syncStatus();
+    expect(mockInvoke).toHaveBeenCalledWith('zotero_sync_status', {});
+    expect(r.embedding_configured).toBe(false);
+  });
+
+  it('getWikiTag() 读取 preferences KV，空值回退默认', async () => {
+    mockInvoke.mockResolvedValueOnce({ value: null });
+    await expect(zoteroClient.getWikiTag()).resolves.toBe('sage:wiki');
+    expect(mockInvoke).toHaveBeenCalledWith('get_preference', { key: 'zotero_wiki_tag' });
+  });
+
+  it('getWikiTag() 返回已配置值', async () => {
+    mockInvoke.mockResolvedValueOnce({ value: 'custom:tag' });
+    await expect(zoteroClient.getWikiTag()).resolves.toBe('custom:tag');
+  });
+
+  it('setWikiTag() 写入 preferences KV，空串回退默认', async () => {
+    mockInvoke.mockResolvedValueOnce(null);
+    await zoteroClient.setWikiTag('   ');
+    expect(mockInvoke).toHaveBeenCalledWith('set_preference', {
+      key: 'zotero_wiki_tag', value: 'sage:wiki', value_type: 'string', category: 'general',
+    });
+  });
+
+  it('setWikiTag() 保存去空格后的标签', async () => {
+    mockInvoke.mockResolvedValueOnce(null);
+    await zoteroClient.setWikiTag('  mine:wiki  ');
+    expect(mockInvoke).toHaveBeenCalledWith('set_preference', {
+      key: 'zotero_wiki_tag', value: 'mine:wiki', value_type: 'string', category: 'general',
+    });
+  });
 });
