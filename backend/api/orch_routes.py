@@ -12,6 +12,7 @@ ResumeResponse)。
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException, Query
@@ -60,6 +61,9 @@ class SessionRunsResponse(BaseModel):
 
 class PlanUpdateRequest(BaseModel):
     plan: List[Dict[str, Any]] = Field()  # ≥1 行守卫
+    # 修订通道（2026-10-26）：前端"应用修订"拿到的新 reasoning 随之落库；
+    # 为 None 时保留库里原有 reasoning（仅编辑 goal 不应清空规划思路）。
+    reasoning: Optional[str] = None
 
     @field_validator("plan")
     @classmethod
@@ -313,7 +317,15 @@ def update_plan(run_id: str, body: PlanUpdateRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=404, detail="run not found")
     if run.dispatched_at is not None or run.status != "running":
         raise HTTPException(status_code=409, detail="plan locked after dispatch")
-    run.plan_json = json.dumps({"tasks": body.plan, "reasoning": ""}, ensure_ascii=False)
+    existing_reasoning = ""
+    try:
+        prev = json.loads(run.plan_json or "{}")
+        if isinstance(prev, dict) and isinstance(prev.get("reasoning"), str):
+            existing_reasoning = prev["reasoning"]
+    except (json.JSONDecodeError, TypeError):
+        pass
+    reasoning = body.reasoning if body.reasoning is not None else existing_reasoning
+    run.plan_json = json.dumps({"tasks": body.plan, "reasoning": reasoning}, ensure_ascii=False)
     repo.upsert(run)
     return {"ok": True, "run_id": run_id, "plan": body.plan}
 
@@ -487,6 +499,20 @@ def confirm_run(run_id: str) -> ConfirmRunResponse:
 #: 计划文本上限 —— /plan 产出的 markdown 实际远小于此；防病态输入。
 PLAN_TEXT_MAX_CHARS = 20000
 
+#: 修订通道 current_plan 上限（条目数）—— 与 planner 的 MAX_PLAN_TASKS 同级。
+#: 该字段会被 json.dumps 直接拼进 prompt，不设上限时一个病态 body 能撑出
+#: 百万 token 的 prompt。
+MAX_CURRENT_PLAN_ITEMS = 16
+
+#: 计划 prompt 占位符。单遍替换（re.sub + 查表）而不是链式 .replace() ——
+#: 后者会让注入值里的花括号字面量（goal 含 "{text}"）被后续替换污染。
+_PLAN_PLACEHOLDER_RE = re.compile(r"\{(text|max_tasks|current_plan)\}")
+
+
+def _fill_plan_prompt(template: str, values: Dict[str, str]) -> str:
+    """单遍占位符替换 —— 只扫描模板本身，注入值不会被二次扫描。"""
+    return _PLAN_PLACEHOLDER_RE.sub(lambda m: values[m.group(1)], template)
+
 #: 计划文本结构化 prompt。要求 goal 自包含（子代理执行者看不到计划全文），
 #: agent_hint 取种子角色；清洗交给 ``sanitize_llm_plan_tasks``（与 Planner
 #: 同款纪律：≤8 任务、depends 只引更早任务、非法 hint 丢弃）。
@@ -505,8 +531,32 @@ _PLAN_ITEMS_PROMPT = """你是编排计划结构化助手。以下是一份用�
 {{"tasks": [{{"id": "t1", "title": "短标题", "description": "自包含目标", "depends_on": [], "parent_task_id": null, "agent_hint": "researcher"}}], "reasoning": "拆解策略说明"}}"""
 
 
+#: 计划修订 prompt（2026-10-26）。给定当前计划 + 用户自然语言修订说明，
+#: 输出完整计划。未提及的任务要求原样保留 —— 否则用户改一行会丢掉其余细节。
+_PLAN_REVISION_PROMPT = """你是编排计划修订助手。下面是一份正在等待确认的编排计划，以及用户的修订说明。请按修订说明输出修订后的完整任务列表。
+
+当前计划（JSON）:
+{current_plan}
+
+修订说明:
+{text}
+
+要求:
+1. 只改动修订说明涉及的任务；未提及的任务必须原样保留（description 与依赖关系逐字不变）。
+2. 每个任务的 description 必须自包含——执行者只能看到它，看不到本计划全文；把该步骤做什么/涉及对象/预期产出写清楚，并给出可检验的完成定义（验收标准）。
+3. agent_hint 从这些角色中选最合适的一个（无法确定则省略）: researcher / coder / writer / reviewer / memory_manager
+4. depends_on 只引用更早任务的 id（t1、t2…）；任务总数不超过 {max_tasks} 个。
+5. 可选 parent_task_id 表示所属父任务，只引用更早任务的 id；它只影响归属和展示，不创建执行依赖。
+
+只返回 JSON（无 markdown 围栏、无多余文本）:
+{"tasks": [{"id": "t1", "title": "短标题", "description": "自包含目标", "depends_on": [], "parent_task_id": null, "agent_hint": "researcher"}], "reasoning": "本次修订做了什么"}"""
+
+
 class PlanItemsRequest(BaseModel):
     text: str = Field(min_length=1, max_length=PLAN_TEXT_MAX_CHARS)
+    # 修订通道（2026-10-26）：非空时走修订 prompt（当前计划 + 修订说明），
+    # 为空时保持原「计划文本 → 任务列表」语义（向后兼容）。
+    current_plan: Optional[List[Dict[str, Any]]] = None
 
 
 class PlanItem(BaseModel):
@@ -573,6 +623,14 @@ async def plan_items(body: PlanItemsRequest) -> PlanItemsResponse:
     from backend.orchestration.llm_factory import build_llm_client_from_settings
     from backend.orchestration.planner import MAX_PLAN_TASKS
 
+    if body.current_plan is not None and len(body.current_plan) > MAX_CURRENT_PLAN_ITEMS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"current_plan 条目过多（上限 {MAX_CURRENT_PLAN_ITEMS}）"
+            ),
+        )
+
     client = build_llm_client_from_settings()
     if client is None:
         raise HTTPException(
@@ -580,9 +638,20 @@ async def plan_items(body: PlanItemsRequest) -> PlanItemsResponse:
             detail="no_llm_configured: 计划结构化需要已配置的 LLM 端点",
         )
 
-    prompt = _PLAN_ITEMS_PROMPT.replace("{text}", body.text).replace(
-        "{max_tasks}", str(MAX_PLAN_TASKS)
-    )
+    if body.current_plan:
+        prompt = _fill_plan_prompt(
+            _PLAN_REVISION_PROMPT,
+            {
+                "current_plan": json.dumps(body.current_plan, ensure_ascii=False),
+                "max_tasks": str(MAX_PLAN_TASKS),
+                "text": body.text,
+            },
+        )
+    else:
+        prompt = _fill_plan_prompt(
+            _PLAN_ITEMS_PROMPT,
+            {"text": body.text, "max_tasks": str(MAX_PLAN_TASKS)},
+        )
     try:
         raw = await client.complete(prompt)
     except Exception as exc:  # noqa: BLE001 — 上游错误原样透出给前端 toast

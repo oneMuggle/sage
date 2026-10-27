@@ -644,6 +644,11 @@ async def test_override_path_skips_decompose_and_preserves_task_id():
     assert tp_event["queued"] == 1
     # override 也算 multi：dispatch 工具必注册
     assert "dispatch_subagents" in registered_tools
+    # LOW-2 回归：plan_override 哨兵不外泄。plan_json 里它是后端内部占位
+    # （区分"没有真实推理"与"推理为空串"），但 task_plan 事件的 reasoning 会
+    # 被前端 PlanCard 的"规划思路"折叠区原文展示给用户 —— 内部标记必须过滤
+    # 成空串（前端据此不渲染该区块）。
+    assert plan_event["reasoning"] == ""
 
 
 @pytest.mark.asyncio()

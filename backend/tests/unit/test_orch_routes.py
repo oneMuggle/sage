@@ -85,6 +85,49 @@ def test_update_plan_min_one_item_validation(client):
     assert r.status_code == 422
 
 
+def test_update_plan_preserves_reasoning_when_body_omits_it(client):
+    """仅编辑 goal 不应清空规划思路 —— reasoning 缺省时沿用库里的值。"""
+    repo = OrchRunRepository()
+    repo.upsert(OrchRun(
+        run_id="orch-reasoning-keep", session_id="s-1", status="running",
+        created_at=1000,
+        plan_json=json.dumps(
+            {"tasks": [], "reasoning": "先调研后写作"}, ensure_ascii=False
+        ),
+    ))
+    r = client.post(
+        "/api/v1/orch/runs/orch-reasoning-keep/plan",
+        json={"plan": [{"task_id": "t1", "agent_id": "primary", "goal": "g"}]},
+    )
+    assert r.status_code == 200
+    updated = repo.get("orch-reasoning-keep")
+    assert updated is not None
+    assert json.loads(updated.plan_json)["reasoning"] == "先调研后写作"
+
+
+def test_update_plan_accepts_explicit_reasoning(client):
+    """修订通道：前端拿到的新 reasoning 随计划一并落库。"""
+    repo = OrchRunRepository()
+    repo.upsert(OrchRun(
+        run_id="orch-reasoning-new", session_id="s-1", status="running",
+        created_at=1000,
+        plan_json=json.dumps(
+            {"tasks": [], "reasoning": "旧思路"}, ensure_ascii=False
+        ),
+    ))
+    r = client.post(
+        "/api/v1/orch/runs/orch-reasoning-new/plan",
+        json={
+            "plan": [{"task_id": "t1", "agent_id": "primary", "goal": "g"}],
+            "reasoning": "把第 2 项拆成两步",
+        },
+    )
+    assert r.status_code == 200
+    updated = repo.get("orch-reasoning-new")
+    assert updated is not None
+    assert json.loads(updated.plan_json)["reasoning"] == "把第 2 项拆成两步"
+
+
 # Fix #3 (2026-09-06): 用户确认端点测试
 
 

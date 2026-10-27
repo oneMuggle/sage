@@ -121,6 +121,9 @@ export interface StreamingState {
 export interface TaskBoardState {
   runId: string;
   plan: TaskPlanItem[];
+  // 编排计划卡片 UX (2026-10-26): LLM 的规划思路（为什么这样拆解）——
+  // task_plan 事件透传，PlanCard 折叠展示；修订后由前端回写覆盖。
+  reasoning?: string;
   statuses: Record<string, TaskStatusEvent>;
   progress?: {
     total: number;
