@@ -229,6 +229,8 @@ describe('project type, sessions and git status over the real bridge', () => {
             project_type: 'coding',
             confidence: 0.9,
             signals: [{ type: 'package.json exists', weight: 0.5 }],
+            sub_type: null,
+            tech_stack: [],
           },
         })),
       },
@@ -237,6 +239,8 @@ describe('project type, sessions and git status over the real bridge', () => {
       detectedType: 'coding',
       confidence: 0.9,
       signals: ['package.json exists'],
+      subType: null,
+      techStack: [],
     });
   });
 
