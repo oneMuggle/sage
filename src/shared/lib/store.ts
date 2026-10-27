@@ -43,6 +43,8 @@ export interface Session {
     source: string;
     is_fallback: boolean;
   } | null;
+  /** 标题生成尝试次数 (后端 `sessions.title_attempts`)；用于侧栏显示"生成标题中…"过渡态 */
+  title_attempts?: number;
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）

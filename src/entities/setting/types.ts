@@ -245,6 +245,10 @@ export interface AppSettings {
   // Task 9 (2026-10-28) 智能路由模式。缺省 = manual（保持现有行为不变）。
   routing: RoutingSettings;
 
+  // 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
+  // 留空表示回退到聊天模型；后端 title_generator.load_title_llm_config 读取。
+  titleModelId: string;
+
   // 演示模式开关 (2026-08-27): 启用后 Electron main 进程跳过 Python 后端
   // spawn, 前端可走 /demo 路由录屏. 关闭时回到正常 LLM 调用路径.
   demoMode: boolean;
@@ -378,6 +382,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   // Task 9 (2026-10-28) 智能路由模式。默认 manual（保持与引入前行为一致）。
   routing: { mode: 'manual' },
+
+  // 2026-10-27: 会话标题专用模型默认留空 —— 回退到聊天模型。
+  titleModelId: '',
 
   // 演示模式: 默认关闭. 开启后 main 进程跳过 Python 后端启动.
   demoMode: false,
