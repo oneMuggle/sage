@@ -9,13 +9,11 @@ agent.run_loop() STEP_DONE 事件验证 (2026-09 step-by-step)
 4. 单步纯文本(无工具调用):无 STEP_DONE
 5. STEP_DONE.step_index 与 iteration 对齐
 6. to_dict() 序列化包含 step_index 字段
-
-win7 适配: 类型注解用 typing.List / typing.Optional(win7 跑 Py3.8)。
 """
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -28,27 +26,18 @@ from backend.tools.base import ToolResult
 pytestmark = pytest.mark.unit
 
 
-def _make_response(
-    content: str = "", tool_calls: Optional[List[LLMToolCall]] = None
-) -> LLMResponse:
+def _make_response(content: str = "", tool_calls: list = None) -> LLMResponse:
     return LLMResponse(
         content=content,
         tool_calls=tool_calls or [],
     )
 
 
-def _make_tool_call(
-    call_id: str, name: str = "list_dir", args: str = '{"expression": "1+1"}'
-) -> LLMToolCall:
+def _make_tool_call(call_id: str, name: str = "list_dir", args: str = '{"expression": "1+1"}') -> LLMToolCall:
     return LLMToolCall(id=call_id, name=name, arguments=args)
 
 
-def _patch_tool_registry(
-    agent: SageAgent,
-    success: bool = True,
-    content=None,
-    error: Optional[str] = None,
-):
+def _patch_tool_registry(agent: SageAgent, success: bool = True, content=None, error: str | None = None):
     """给 agent.tool_registry.get 装一个总是返回成功 ToolResult 的 mock。"""
     mock_tool = MagicMock()
     mock_tool.execute = MagicMock(
@@ -97,9 +86,7 @@ async def test_run_loop_yields_one_step_done_after_single_tool_iteration():
     events = await _collect_events(agent, [{"role": "user", "content": "hi"}])
 
     step_dones = _step_done_events(events)
-    assert len(step_dones) == 1, (
-        f"expected exactly 1 STEP_DONE, got {len(step_dones)}: {[e.state for e in events]}"
-    )
+    assert len(step_dones) == 1, f"expected exactly 1 STEP_DONE, got {len(step_dones)}: {[e.state for e in events]}"
     # step_index 与 iteration 对齐
     assert step_dones[0].step_index == 0
     assert step_dones[0].iteration == 0
@@ -129,9 +116,7 @@ async def test_run_loop_yields_step_done_per_iteration_in_multi_step_run():
     events = await _collect_events(agent, [{"role": "user", "content": "x"}])
 
     step_dones = _step_done_events(events)
-    assert len(step_dones) == 2, (
-        f"expected 2 STEP_DONE, got {len(step_dones)}: {[e.state for e in events]}"
-    )
+    assert len(step_dones) == 2, f"expected 2 STEP_DONE, got {len(step_dones)}: {[e.state for e in events]}"
     # step_index 严格按 0, 1 递增
     assert [e.step_index for e in step_dones] == [0, 1]
     assert [e.iteration for e in step_dones] == [0, 1]
@@ -215,9 +200,7 @@ async def test_step_done_step_index_aligns_with_iteration():
     )
     _patch_tool_registry(agent)
 
-    events = await _collect_events(
-        agent, [{"role": "user", "content": "x"}], max_iterations=10
-    )
+    events = await _collect_events(agent, [{"role": "user", "content": "x"}], max_iterations=10)
 
     step_dones = _step_done_events(events)
     assert len(step_dones) == 3
