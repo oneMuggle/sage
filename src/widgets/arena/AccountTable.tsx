@@ -4,6 +4,7 @@
  * 纯展示 + 行内动作回调。状态徽标用「色点 + 文字」组合，不只靠颜色。
  */
 import type { ArenaAccount } from '../../entities/arena';
+import { TwoStepDelete } from '../sidebar/TwoStepDelete';
 
 interface AccountTableProps {
   accounts: ArenaAccount[];
@@ -96,15 +97,17 @@ export function AccountTable({
                     </button>
                   )}
                   <span className="mx-1 text-border">|</span>
-                  <button
-                    type="button"
+                  {/* P1-8: 两步确认取代 window.confirm —— 原生弹窗与项目内
+                      两步确认惯例（SessionItem / MemoryItem）不一致，且无法
+                      在弹窗里展示账号 email 供核对。 */}
+                  <TwoStepDelete
+                    onConfirm={() => onDelete(account)}
                     disabled={busy}
+                    label={`删除账号 ${account.email}`}
+                    armedLabel="确认删除?"
                     data-testid={`account-delete-${account.id}`}
-                    onClick={() => onDelete(account)}
                     className="text-error hover:underline disabled:opacity-50"
-                  >
-                    删除
-                  </button>
+                  />
                 </td>
               </tr>
             );
