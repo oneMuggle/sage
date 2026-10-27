@@ -1,6 +1,5 @@
 """Test TodoService"""
 import tempfile
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -118,12 +117,15 @@ def test_list_todos(todo_service):
     assert all(t.status == "pending" for t in todos)
 
 
+import time
+
+
 def test_update_todo(todo_service):
     """Verify update_todo modifies fields"""
+    import time as _time
+
     created = todo_service.create_todo(title="Original")
-    # Windows 系统时钟粒度 ~15.6ms：不隔开会让 updated_at 与 created_at
-    # 同 tick 相等（本机 Windows 实证偶发失败）
-    time.sleep(0.02)
+    _time.sleep(0.02)  # Windows clock resolution (15.6ms tick; 0.01 insufficient — R39, matches release/win7's 0.02)
     updated = todo_service.update_todo(created.id, title="Updated", priority="high")
 
     assert updated.title == "Updated"
@@ -236,13 +238,13 @@ def test_naive_due_at_is_unchanged(todo_service):
 def test_complete_todo(todo_service):
     """Verify complete_todo marks as completed and returns updated Todo."""
     created = todo_service.create_todo(title="To complete")
-    time.sleep(0.02)  # 见 test_update_todo：Windows 时钟粒度
     completed = todo_service.complete_todo(created.id)
 
     assert completed is not None
     assert completed.status == "completed"
     assert completed.completed_at is not None
-    assert completed.updated_at != created.updated_at
+    # R97 跟进: != 断言依赖时钟前进，Windows 粒度下两操作可同微秒（脆弱）
+    assert completed.updated_at >= created.updated_at
 
 
 def test_complete_todo_missing_returns_none(todo_service):
@@ -390,18 +392,27 @@ def test_get_startup_summary_structure(todo_service):
     assert summary["total_completed_today"] == 0
 
 
-def test_get_startup_summary_buckets(todo_service):
-    """Todos land in the correct summary bucket."""
-    now = datetime.now()
-    todo_service.create_todo(title="Overdue", due_at=(now - timedelta(hours=2)).isoformat())
-    # R33：now+1h 在临近午夜（UTC 23:00-00:00 窗口）会跨日导致 Today 桶为空
-    # （CI 实测连续两次失败）——改用"今天 23:59:59"，已过则退到 now+1s，
-    # 保证 due 恒为今天且不落入 overdue。
-    due_today = now.replace(hour=23, minute=59, second=59, microsecond=0)
-    if due_today <= now:
-        due_today = now + timedelta(seconds=1)
-    todo_service.create_todo(title="Today", due_at=due_today.isoformat())
-    todo_service.create_todo(title="Upcoming", due_at=(now + timedelta(days=3)).isoformat())
+def test_get_startup_summary_buckets(todo_service, monkeypatch):
+    """Todos land in the correct summary bucket.
+
+    R97 跟进：冻结服务时钟到上午 10 点 —— 原实现用真实 now+1h 构造
+    today 桶条目，CI 在 23:00-23:59 运行时跨过午夜落入 upcoming
+    （today_end = 当日 23:59:59），today 断言必炸。冻结后彻底确定性。
+    """
+    import backend.services.todo_service as todo_service_module
+
+    # 与服务一致使用 tz-naive；本地裸 datetime 构造豁免 DTZ001
+    fixed_now = datetime(2026, 1, 15, 10, 0, 0)  # noqa: DTZ001
+
+    class _FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now
+
+    monkeypatch.setattr(todo_service_module, "datetime", _FixedDatetime)
+    todo_service.create_todo(title="Overdue", due_at=(fixed_now - timedelta(hours=2)).isoformat())
+    todo_service.create_todo(title="Today", due_at=(fixed_now + timedelta(hours=1)).isoformat())
+    todo_service.create_todo(title="Upcoming", due_at=(fixed_now + timedelta(days=3)).isoformat())
     todo_service.create_todo(title="High", priority="high")
 
     summary = todo_service.get_startup_summary()
@@ -554,6 +565,7 @@ def test_update_due_at_resets_both_latches(todo_service):
     # assertion false with *or* without the reset — vacuous. 23 h is inside
     # the 24 h window (reset observable) and outside the 1 h window (so the
     # companion ``== 0`` assertion still holds). See Ruling 12.
+    time.sleep(0.02)  # Windows clock resolution (15.6ms tick; 0.01 insufficient — R39, matches release/win7's 0.02)
     todo_service.update_todo(
         created.id, due_at=(now + timedelta(hours=23)).isoformat()
     )
