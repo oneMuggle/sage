@@ -1,5 +1,8 @@
 // Auto-split domain dictionary (en: workspace, office & tools)
 export const enWorkspaceAndTools = {
+  'office.generate.failed': 'Generation failed',
+  'office.generate.filenameRequired': 'Please enter a filename',
+  'office.generate.outputPath': 'Generated:',
   'office.generate.size': 'Size:',
   'office.preview.empty': 'Select a file to preview',
   'office.preview.emptyPresentation': 'Empty presentation (0 slides)',
@@ -280,6 +283,9 @@ export const enWorkspaceAndTools = {
   'office.delivery.lintFail': 'Format issues found',
   'office.delivery.lintSkipped': 'No format spec given, check skipped',
   'office.delivery.lintFailed': 'Check failed',
+  // P0-2 (2026-10-01): repair closes the lint → fix → recheck loop. Semantic
+  // issues (citations / coverage) cannot be fixed mechanically, so report
+  // "fixed" and "still needs a human" separately instead of claiming a pass.
   'office.delivery.repair': 'Auto-fix',
   'office.delivery.repairing': 'Fixing…',
   'office.delivery.repairDone': 'Fixed {n} rules',
@@ -287,6 +293,7 @@ export const enWorkspaceAndTools = {
   'office.delivery.repairRemaining':
     '{n} still need manual work (citations / coverage cannot be fixed mechanically)',
   'office.delivery.repairFailed': 'Auto-fix failed',
+  'office.delivery.repairRetry': 'Retry fix',
   'office.delivery.retry': 'Retry',
   'office.delivery.errors': '{n} errors',
   'office.delivery.warnings': '{n} warnings',

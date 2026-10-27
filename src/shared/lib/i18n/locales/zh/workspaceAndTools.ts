@@ -1,5 +1,9 @@
 // Auto-split domain dictionary (zh: workspace, office & tools)
 export const zhWorkspaceAndTools = {
+  'office.preview.emptyPresentation': '空演示文稿(0 张幻灯片)',
+  'office.preview.slidePrefix': '第 ',
+  'office.preview.slideSuffix': ' 页',
+  'office.preview.paragraphCount': '个段落',
   'office.preview.tableCount': '个表格',
   'office.preview.imageCount': '个图片',
   'office.preview.notes': '备注:',
@@ -270,12 +274,15 @@ export const zhWorkspaceAndTools = {
   'office.delivery.lintFail': '存在格式问题',
   'office.delivery.lintSkipped': '未指定格式规范，已跳过检查',
   'office.delivery.lintFailed': '检查失败',
+  // P0-2 (2026-10-01): 自动修复闭环。语义类问题（引用/覆盖）无法机械
+  // 修复，故如实区分"已修复"与"仍需人工处理"，不谎称全部通过。
   'office.delivery.repair': '一键修复',
   'office.delivery.repairing': '修复中…',
   'office.delivery.repairDone': '已修复 {n} 条规则',
   'office.delivery.repairOutput': '修复版已另存为 {path}',
   'office.delivery.repairRemaining': '仍有 {n} 条需人工处理（引用 / 覆盖等语义类问题无法机械修复）',
   'office.delivery.repairFailed': '自动修复失败',
+  'office.delivery.repairRetry': '重试修复',
   'office.delivery.retry': '重试',
   'office.delivery.errors': '错误 {n}',
   'office.delivery.warnings': '警告 {n}',

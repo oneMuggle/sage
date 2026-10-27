@@ -1,5 +1,17 @@
 // Auto-split domain dictionary (zh: settings, models & memory)
 export const zhSettingsAndModels = {
+  'updates.strategy': '更新策略',
+  'updates.strategy.manual': '手动更新',
+  'updates.strategy.manual.desc': '每次更新需我确认下载和安装',
+  'updates.strategy.autoDownload': '自动下载，手动安装',
+  'updates.strategy.autoDownload.desc': '推荐：下载无感，安装前确认',
+  'updates.strategy.autoInstall': '自动下载安装',
+  'updates.strategy.autoInstall.desc': '最激进：下载完成后自动安装，重启后生效',
+  'updates.channel': '更新渠道',
+  'updates.channel.stable': '稳定版（推荐）',
+  'updates.channel.beta': '测试版（可能有 bug）',
+  'updates.channel.alpha': '预览版（最新功能，不稳定）',
+  'updates.checkNow': '立即检查更新',
   'updates.checking': '正在检查...',
   'updates.upToDate': '当前已是最新版本',
   'updates.available': '发现新版本 {version}',
@@ -93,42 +105,39 @@ export const zhSettingsAndModels = {
   'sider.project.allowed_paths_saved': '已保存 {count} 条规则',
   'sider.project.allowed_paths_failed': '保存失败：{message}',
   'sider.project.allowed_paths_remove': '移除规则',
-
-  // P3: 项目概览面板
-  'sider.project.materials_load_failed': '加载资料失败：{message}',
-  'sider.project.overview_title': '项目概览',
-  'sider.project.overview_description': '项目说明',
-  'sider.project.overview_description_placeholder': '简要描述这个项目（目标、技术栈等）',
-  'sider.project.overview_instructions': '项目指令',
-  'sider.project.overview_instructions_placeholder':
-    '对所有会话生效的项目级系统提示（优先级高于全局偏好）',
-  'sider.project.overview_save': '保存',
-  'sider.project.overview_saving': '保存中…',
+  // 项目概览与资料 (M3, 2026-09-18)
+  'sider.project.materials_load_failed': '加载项目资料失败：{message}',
   'sider.project.overview_saved': '项目概览已保存',
-  'sider.project.overview_save_failed': '保存失败：{message}',
-  // P3: 资料管理面板
-  'sider.project.materials_title': '项目资料',
-  'sider.project.materials_loading': '正在加载资料…',
-  'sider.project.materials_empty': '暂无资料。可粘贴文本/添加，或保存当前回答。',
-  'sider.project.material_input_placeholder': '粘贴 Markdown / 文本作为资料...',
-  'sider.project.material_add': '添加',
-  'sider.project.material_add_failed': '添加资料失败：{message}',
-  'sider.project.material_remove': '移除',
-  'sider.project.material_remove_failed': '移除资料失败：{message}',
-  'sider.project.material_too_large': '资料文本超过 1 MiB 上限，请拆分为多条',
-  'sider.project.material_from_message': '来自消息 #{id}',
-  'sider.project.material_direct': '手动添加',
-  'sider.project.material_status_ready': '已就绪',
-  'sider.project.material_status_pending': '索引中',
-  'sider.project.material_status_failed': '失败',
-  'sider.project.save_answer': '保存当前回答',
-  'sider.project.save_answer_title': '把当前 active 会话中最后一条 AI 回答保存为项目资料',
-  'sider.project.save_answer_no_session': '当前没有 active 会话',
-  'sider.project.save_answer_no_assistant': '当前会话中没有 AI 回答可保存',
+  'sider.project.overview_save_failed': '保存项目概览失败：{message}',
+  'sider.project.material_too_large': '资料内容过长（上限 64KB）',
+  'sider.project.material_add_failed': '添加项目资料失败：{message}',
+  'sider.project.material_remove_failed': '移除项目资料失败：{message}',
+  'sider.project.save_answer_no_session': '当前未选中会话',
+  'sider.project.save_answer_no_assistant': '当前会话暂无助手回答',
   'sider.project.save_answer_ok': '已保存为项目资料',
-  'sider.project.save_answer_mismatch': '当前会话未绑定到该项目',
-  'sider.project.save_answer_not_found': '回答消息不存在',
-  'sider.project.save_answer_failed': '保存失败：{message}',
+  'sider.project.save_answer_mismatch': '该会话不属于此项目，无法保存',
+  'sider.project.save_answer_not_found': '消息不存在',
+  'sider.project.save_answer_failed': '保存资料失败：{message}',
+  'sider.project.overview_title': '项目概览',
+  'sider.project.overview_saving': '保存中…',
+  'sider.project.overview_save': '保存',
+  'sider.project.overview_description': '项目描述',
+  'sider.project.overview_description_placeholder': '一句话描述项目目标与定位…',
+  'sider.project.overview_instructions': '项目指令',
+  'sider.project.overview_instructions_placeholder': '为该项目设定的专属提示词（注入提示词开头）…',
+  'sider.project.materials_title': '项目资料',
+  'sider.project.save_answer_title': '保存当前回答为资料',
+  'sider.project.save_answer': '保存当前回答',
+  'sider.project.materials_loading': '加载资料中…',
+  'sider.project.material_from_message': '来自会话回答',
+  'sider.project.material_direct': '手动录入',
+  'sider.project.material_remove': '移除资料',
+  'sider.project.materials_empty': '暂无项目资料，可在下方录入或一键保存回答',
+  'sider.project.material_input_placeholder': '输入关键上下文、参考资料或约定…',
+  'sider.project.material_add': '添加资料',
+  'sider.project.material_status_ready': '就绪',
+  'sider.project.material_status_pending': '处理中',
+  'sider.project.material_status_failed': '失败',
 
   // ─── 标题栏 ──────────────────────────
   'titlebar.minimize': '最小化',
@@ -233,8 +242,8 @@ export const zhSettingsAndModels = {
 
   // ─── M1 工具审批 ──────────────────
   'permission.title': '工具执行审批',
-  'permission.from_plugin': '所属插件',
   'permission.tool': '工具',
+  'permission.from_plugin': '所属插件',
   'permission.args': '参数',
   'permission.risk.safe': '安全',
   'permission.risk.suspicious': '可疑',
@@ -243,7 +252,8 @@ export const zhSettingsAndModels = {
   'permission.remember_scope.legend': '记住范围',
   'permission.remember_scope.tool': '仅此工具',
   'permission.remember_scope.plugin': '整个插件（包含未来新增工具）',
-  'permission.remember_scope.plugin_warning': '将对该插件的全部工具生效，请确认你信任这个插件。',
+  'permission.remember_scope.plugin_warning':
+    '将对该插件的全部工具生效，请确认你信任这个插件。',
   'permission.remember_duration.legend': '记住时长',
   'permission.remember_duration.permanent': '永久记住',
   'permission.remember_duration.session': '仅本次会话',
@@ -253,11 +263,13 @@ export const zhSettingsAndModels = {
   'permission.deny_reason.placeholder': '可选：告诉模型为什么拒绝（它会据此调整方案）',
   'permission.deny_reason.hint': '反馈会随拒绝决议传给模型。',
   'permission.toast.failed': '审批应答失败',
+  // P0-4: 远程渠道（Telegram/Discord/Slack）处理后桌面端原本静默关窗，
+  // 高危操作失去唯一的本地审计锚点。这里如实回执「已离开待批队列」，
+  // 但不猜测结果（批准/拒绝/超时在前端不可区分）。
+  'permission.remote_resolved': '该审批已离开待批队列',
+  'permission.remote_resolved.desc': '{tool} · 风险 {risk} · 已等待 {wait} · 可能已在远程渠道处理或已超时',
   'permission.subagent_context': '编排子任务请求审批',
   'permission.diff': '将写入的变更',
-  'permission.remote_resolved': '该审批已离开待批队列',
-  'permission.remote_resolved.desc':
-    '{tool} · 风险 {risk} · 已等待 {wait} · 可能已在远程渠道处理或已超时',
   'permission.project_allow.button': '项目级允许',
   'permission.project_allow.tooltip': '将此路径加入当前项目的允许访问列表',
   'permission.project_allow.added': '已添加规则 {rule}',
@@ -312,8 +324,6 @@ export const zhSettingsAndModels = {
   'settings.permission.rules_hint':
     '细粒度规则由审批时勾选"记住我的选择"生成；已记住的规则可在下方查看并逐条删除（删除后恢复逐次审批）。',
   'settings.permission.load_failed': '读取权限模式失败',
-
-  // R97 已记住规则管理
   'settings.permission.rules.title': '已记住的规则',
   'settings.permission.rules.empty': '暂无已记住的规则',
   'settings.permission.rules.delete': '删除',
@@ -453,10 +463,6 @@ export const zhSettingsAndModels = {
   'office.generate.outputPath': '已生成:',
   'office.generate.size': '大小:',
   'office.preview.empty': '选择一个文件以预览',
-  'office.preview.emptyPresentation': '空演示文稿(0 张幻灯片)',
-  'office.preview.slidePrefix': '第 ',
-  'office.preview.slideSuffix': ' 页',
-  'office.preview.paragraphCount': '个段落',
 } as const;
 
 export function formatZhSettingsAndModelsSummary(): string {
