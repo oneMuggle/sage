@@ -75,11 +75,11 @@ export function SubagentDetailDrawer({ open, onClose }: SubagentDetailDrawerProp
 
   return (
     <div
-      className="absolute inset-y-0 right-0 w-96 bg-bg-primary border-l border-border-primary shadow-lg z-50 flex flex-col"
+      className="absolute inset-y-0 right-0 w-96 bg-surface border-l border-border shadow-lg z-50 flex flex-col"
       data-testid="subagent-detail-drawer"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">{task.agent_id ?? 'unknown'}</span>
           <span className="text-xs text-text-tertiary">{task.task_id.slice(0, 12)}</span>
@@ -113,7 +113,7 @@ export function SubagentDetailDrawer({ open, onClose }: SubagentDetailDrawerProp
           经 selectTask meta 传入；orch 运行视图无此数据时自然不渲染）。 */}
       {(selectedTaskMeta?.used_tokens ?? 0) > 0 || (selectedTaskMeta?.duration_ms ?? 0) > 0 ? (
         <div
-          className="px-4 py-2 border-b border-border-primary text-xs text-text-secondary flex gap-3"
+          className="px-4 py-2 border-b border-border text-xs text-text-secondary flex gap-3"
           data-testid="drawer-task-stats"
         >
           {(selectedTaskMeta?.used_tokens ?? 0) > 0 && (
@@ -126,7 +126,7 @@ export function SubagentDetailDrawer({ open, onClose }: SubagentDetailDrawerProp
       ) : null}
 
       {/* Current step */}
-      <div className="px-4 py-3 border-b border-border-primary">
+      <div className="px-4 py-3 border-b border-border">
         <div className="text-xs text-text-tertiary mb-1">当前步骤</div>
         {task.current_step_id ? (
           <div className="text-sm">{task.current_step_id.slice(0, 16)}</div>

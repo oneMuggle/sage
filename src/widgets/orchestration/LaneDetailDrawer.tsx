@@ -164,11 +164,11 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
 
   return (
     <div
-      className="fixed inset-y-0 right-0 w-96 bg-bg-primary border-l border-border-primary shadow-lg z-50 flex flex-col"
+      className="fixed inset-y-0 right-0 w-96 bg-surface border-l border-border shadow-lg z-50 flex flex-col"
       data-testid="lane-detail-drawer"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
           <span className="font-mono text-xs text-text-tertiary truncate">{lane.lane_id}</span>
           <span className="text-xs px-2 py-0.5 rounded bg-bg-hover text-text-secondary shrink-0">
@@ -190,7 +190,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
 
       <div className="flex-1 overflow-y-auto">
         {/* Delivery package */}
-        <div className="px-4 py-3 border-b border-border-primary">
+        <div className="px-4 py-3 border-b border-border">
           <div className="text-xs text-text-tertiary mb-2">{t('orchestration.drawer.delivery')}</div>
           <div className="flex items-center gap-2 mb-2" data-testid="acceptance-state">
             {acceptedAt !== null ? (
@@ -261,7 +261,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
         </div>
 
         {/* Acceptance checks */}
-        <div className="px-4 py-3 border-b border-border-primary">
+        <div className="px-4 py-3 border-b border-border">
           <div className="text-xs text-text-tertiary mb-2">{t('orchestration.drawer.checks')}</div>
           {checks === null ? (
             <div className="text-xs text-text-tertiary">{t('orchestration.loading')}</div>
@@ -300,7 +300,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
 
         {/* Review verdict (A4: dispatcher 写回，无复核则整段隐藏) */}
         {reviewVerdict !== null && (
-          <div className="px-4 py-3 border-b border-border-primary">
+          <div className="px-4 py-3 border-b border-border">
             <div className="text-xs text-text-tertiary mb-2">
               {t('orchestration.drawer.review')}
             </div>
@@ -324,7 +324,7 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
         )}
 
         {/* Change summary (diff --stat from the acceptance event) */}
-        <div className="px-4 py-3 border-b border-border-primary">
+        <div className="px-4 py-3 border-b border-border">
           <div className="text-xs text-text-tertiary mb-2">{t('orchestration.drawer.diff')}</div>
           {diffSummary === null ? (
             <div className="text-xs text-text-tertiary">{t('orchestration.loading')}</div>
@@ -360,14 +360,14 @@ export function LaneDetailDrawer({ lane, open, onClose }: LaneDetailDrawerProps)
 
       {/* Decision zone */}
       {canDecide && (
-        <div className="px-4 py-3 border-t border-border-primary" data-testid="decision-zone">
+        <div className="px-4 py-3 border-t border-border" data-testid="decision-zone">
           <input
             type="text"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder={t('orchestration.drawer.reasonPlaceholder')}
             disabled={busy}
-            className="w-full text-sm px-2 py-1.5 rounded border border-border-primary bg-bg-primary mb-2 disabled:opacity-50"
+            className="w-full text-sm px-2 py-1.5 rounded border border-border bg-surface mb-2 disabled:opacity-50"
             data-testid="decision-reason"
           />
           {error && (
