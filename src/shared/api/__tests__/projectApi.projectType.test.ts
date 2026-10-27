@@ -58,6 +58,8 @@ describe('projectApi.detectType', () => {
       confidence: 0.9,
       // The UI joins these into a sentence / renders each as a list item: they must be strings.
       signals: ['package.json exists', 'tsconfig.json exists'],
+      subType: null,
+      techStack: [],
     });
   });
 
@@ -67,6 +69,8 @@ describe('projectApi.detectType', () => {
       detectedType: 'personal',
       confidence: 0,
       signals: [],
+      subType: null,
+      techStack: [],
     });
   });
 });

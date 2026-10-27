@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 
@@ -511,6 +511,8 @@ def detect_project_type_route(request: ProjectTypeDetectRequest) -> ProjectTypeD
             project_type=result.project_type,
             confidence=result.confidence,
             signals=[DetectionSignalModel(type=s.type, weight=s.weight) for s in result.signals],
+            sub_type=result.sub_type,
+            tech_stack=list(result.tech_stack),
         )
     except OSError as exc:
         raise _error(400, "path_error", f"路径错误: {exc}") from exc
@@ -763,6 +765,192 @@ def get_project_diagnose(project_id: str) -> ProjectDiagnoseResponse:
     project = _get_project_or_404(project_id)
     data = inspect_project_runtime_and_hooks(project.id, project.path)
     return ProjectDiagnoseResponse(**data)
+
+
+
+# ── AI 治理分析路由 (2026-10-27) ─────────────────────────────────────────────
+
+
+from backend.api.project_schemas import (
+    AnalysisReportModel,
+    CodebaseProfileModel,
+    ProjectAnalyzeRequest,
+    ProjectAnalyzeResponse,
+    ProjectProfileResponse,
+    RuleGenerationRequest,
+    RuleGenerationResultModel,
+    SubTypesResponse,
+)
+from backend.services.project_analysis_agent import (
+    AnalysisReport,
+    DocRef,
+    ProjectAnalysisAgent,
+    SuggestedRule,
+)
+from backend.services.project_profiler import (
+    CodebaseProfile,
+    GitStats,
+    SourceSample,
+    profile_project,
+)
+from backend.services.project_rule_generator import ProjectRuleGenerator
+from backend.services.project_subtypes import sub_types_payload
+
+
+def _profile_from_dict(d: Dict[str, Any]) -> CodebaseProfile:
+    """把前端传回的 profile dict 反序列化为数据类。"""
+    samples = [
+        SourceSample(
+            path=str(s.get("path", "")),
+            language=str(s.get("language", "")),
+            lines=int(s.get("lines", 0)),
+            content="",
+        )
+        for s in (d.get("source_samples") or [])
+    ]
+    gs = d.get("git_stats") or {}
+    return CodebaseProfile(
+        root=str(d.get("root", "")),
+        level1_type=d.get("level1_type"),
+        sub_type=d.get("sub_type"),
+        tech_stack=list(d.get("tech_stack") or []),
+        frameworks=list(d.get("frameworks") or []),
+        build_commands=list(d.get("build_commands") or []),
+        test_frameworks=list(d.get("test_frameworks") or []),
+        lint_configs=list(d.get("lint_configs") or []),
+        ci_workflows=list(d.get("ci_workflows") or []),
+        existing_rule_files=list(d.get("existing_rule_files") or []),
+        directory_layout=list(d.get("directory_layout") or []),
+        source_samples=samples,
+        git_stats=GitStats(
+            is_repo=bool(gs.get("is_repo", False)),
+            current_branch=gs.get("current_branch"),
+            commit_count=int(gs.get("commit_count", 0) or 0),
+            recent_commit_count=int(gs.get("recent_commit_count", 0) or 0),
+            branch_count=int(gs.get("branch_count", 0) or 0),
+            last_commit_at=gs.get("last_commit_at"),
+            dirty_files=int(gs.get("dirty_files", 0) or 0),
+        ),
+        vcs_mode=str(d.get("vcs_mode", "unknown")),
+    )
+
+
+def _report_from_dict(d: Dict[str, Any]) -> AnalysisReport:
+    """把前端传回的 report dict 反序列化为数据类。"""
+    rules = [
+        SuggestedRule(
+            template_key=str(r.get("template_key", "")),
+            label=str(r.get("label", "")),
+            reason=str(r.get("reason", "")),
+            confidence=float(r.get("confidence", 0.0) or 0.0),
+            category=str(r.get("category", "coding_style") or "coding_style"),
+            content=str(r.get("content", "")),
+            trigger_pattern=str(r.get("trigger_pattern", "always") or "always"),
+            priority=int(r.get("priority", 5) or 5),
+        )
+        for r in (d.get("suggested_rules") or [])
+    ]
+    refs = [
+        DocRef(
+            title=str(ref.get("title", "")),
+            reason=str(ref.get("reason", "")),
+            path=str(ref.get("path", "")),
+        )
+        for ref in (d.get("docs_refs") or [])
+    ]
+    return AnalysisReport(
+        level1_type=str(d.get("level1_type", "coding")),
+        sub_type=d.get("sub_type"),
+        confidence=float(d.get("confidence", 0.0) or 0.0),
+        tech_stack=list(d.get("tech_stack") or []),
+        architecture_summary=str(d.get("architecture_summary", "")),
+        suggested_rules=rules,
+        governance_recommendations=list(d.get("governance_recommendations") or []),
+        stage_recommendation=d.get("stage_recommendation"),
+        sage_md_draft=str(d.get("sage_md_draft", "")),
+        docs_refs=refs,
+        llm_available=bool(d.get("llm_available", True)),
+    )
+
+
+@router.get("/sub-types", response_model=SubTypesResponse)
+def list_sub_types() -> SubTypesResponse:
+    """返回所有 L1 -> L2 子类型定义（供前端渲染两级选择器）。"""
+    payload = sub_types_payload()
+    return SubTypesResponse(
+        level1_types=list(payload["level1_types"]),
+        sub_types=payload["sub_types"],
+    )
+
+
+@router.post("/profile", response_model=ProjectProfileResponse)
+def collect_project_profile(request: ProjectAnalyzeRequest) -> ProjectProfileResponse:
+    """仅采集确定性画像（不调 LLM，供调试/快速预览）。"""
+    try:
+        path = Path(request.path).expanduser().resolve()
+        if not path.is_dir():
+            raise _error(400, "path_not_directory", "路径不存在或不是目录")
+    except OSError as exc:
+        raise _error(400, "path_error", f"路径错误: {exc}") from exc
+    profile = profile_project(path)
+    return ProjectProfileResponse(
+        profile=CodebaseProfileModel(**profile.to_dict(include_source_content=False))
+    )
+
+
+@router.post("/analyze", response_model=ProjectAnalyzeResponse)
+async def analyze_project(request: ProjectAnalyzeRequest) -> ProjectAnalyzeResponse:
+    """采集画像 + LLM 深度分析 → 治理报告。LLM 缺失时返回确定性降级版本（200）。"""
+    try:
+        path = Path(request.path).expanduser().resolve()
+        if not path.is_dir():
+            raise _error(400, "path_not_directory", "路径不存在或不是目录")
+    except OSError as exc:
+        raise _error(400, "path_error", f"路径错误: {exc}") from exc
+
+    profile = profile_project(path)
+    agent = ProjectAnalysisAgent()
+    report = await agent.analyze(profile)
+
+    profile_dict = profile.to_dict(include_source_content=False)
+    report_dict = report.to_dict()
+    return ProjectAnalyzeResponse(
+        profile=CodebaseProfileModel(**profile_dict),
+        report=AnalysisReportModel(**report_dict),
+    )
+
+
+@router.post("/generate-rules", response_model=RuleGenerationResultModel)
+async def generate_rules_from_report(
+    request: RuleGenerationRequest,
+) -> RuleGenerationResultModel:
+    """基于已确认的分析报告生成约束草稿（含里程碑推荐）。"""
+    try:
+        profile = _profile_from_dict(request.profile)
+        report = _report_from_dict(request.report)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _error(400, "invalid_payload", f"请求体字段缺失或类型错误: {exc}") from exc
+
+    existing_contents: Optional[List[str]] = None
+    if request.project_id:
+        project = ProjectRepository().get(request.project_id)
+        if project is not None:
+            existing_contents = [
+                c.content for c in ProjectConstraintRepository().list_by_project(request.project_id)
+            ]
+
+    try:
+        generator = ProjectRuleGenerator()
+        result = await generator.generate(profile, report, existing_contents)
+    except Exception as exc:
+        logger.warning("ProjectRuleGenerator 构造失败: %s", exc)
+        return RuleGenerationResultModel(
+            rules=[],
+            milestones=[],
+            llm_available=False,
+            skipped_duplicates=0,
+        )
+    return RuleGenerationResultModel(**result.to_dict())
 
 
 __all__ = ["router"]

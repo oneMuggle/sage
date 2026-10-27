@@ -166,6 +166,10 @@ export interface ProjectTypeDetectionResult {
   detectedType: ProjectType;
   confidence: number;
   signals: string[];
+  /** L2 子类型 key，null 表示仅识别到 L1 */
+  subType: string | null;
+  /** 技术栈标记（package.json / pyproject.toml 等解析结果） */
+  techStack: string[];
 }
 
 /** POST /projects/{id}/open 响应：复用最近会话时 created=false */
@@ -483,6 +487,8 @@ export interface ProjectTypeDetectWire {
   project_type: string | null;
   confidence: number;
   signals: Array<{ type: string; weight: number }>;
+  sub_type?: string | null;
+  tech_stack?: string[];
 }
 
 export function mapConstraint(c: ConstraintWire): ProjectConstraint {
@@ -934,6 +940,443 @@ export function mapIndexingStats(w: IndexingStatsWire): IndexingStats {
     embedderDims: w.embedder_dims,
   };
 }
+// ── AI 治理分析 (2026-10-27) ────────────────────────────────────────────────
+
+/** 画像中的单个源码采样（wire）。响应不回传 content，故可为空串 */
+export interface SourceSampleWire {
+  path: string;
+  language: string;
+  lines: number;
+  content: string;
+}
+
+/** 画像中的 Git 统计（wire） */
+export interface GitStatsWire {
+  is_repo: boolean;
+  current_branch: string | null;
+  commit_count: number;
+  recent_commit_count: number;
+  branch_count: number;
+  last_commit_at: string | null;
+  dirty_files: number;
+}
+
+/** 代码库确定性画像（wire） */
+export interface CodebaseProfileWire {
+  root: string;
+  level1_type: string | null;
+  sub_type: string | null;
+  tech_stack: string[];
+  frameworks: string[];
+  build_commands: string[];
+  test_frameworks: string[];
+  lint_configs: string[];
+  ci_workflows: string[];
+  existing_rule_files: string[];
+  directory_layout: string[];
+  source_samples: SourceSampleWire[];
+  git_stats: GitStatsWire;
+  vcs_mode: string;
+}
+
+/** 分析报告中的单条规则建议（wire） */
+export interface SuggestedRuleWire {
+  template_key: string;
+  label: string;
+  reason: string;
+  confidence: number;
+  category: string;
+  content: string;
+  trigger_pattern: string;
+  priority: number;
+}
+
+/** 分析报告引用的文档（wire） */
+export interface DocRefWire {
+  title: string;
+  reason: string;
+  path: string;
+}
+
+/** LLM 深度分析报告（wire） */
+export interface AnalysisReportWire {
+  level1_type: string;
+  sub_type: string | null;
+  confidence: number;
+  tech_stack: string[];
+  architecture_summary: string;
+  suggested_rules: SuggestedRuleWire[];
+  governance_recommendations: string[];
+  stage_recommendation: string | null;
+  sage_md_draft: string;
+  docs_refs: DocRefWire[];
+  llm_available: boolean;
+  raw_json: string | null;
+}
+
+/** POST /projects/analyze 响应（wire） */
+export interface ProjectAnalyzeWire {
+  profile: CodebaseProfileWire;
+  report: AnalysisReportWire;
+}
+
+/** 规则草稿（wire） */
+export interface RuleDraftWire {
+  category: string;
+  content: string;
+  trigger_pattern: string;
+  priority: number;
+  source: string;
+  template_key: string;
+  reason: string;
+}
+
+/** 规则生成结果（wire） */
+export interface RuleGenerationResultWire {
+  rules: RuleDraftWire[];
+  milestones: Array<Record<string, string>>;
+  llm_available: boolean;
+  skipped_duplicates: number;
+}
+
+/** 单个 L2 子类型定义（wire） */
+export interface SubTypeDefinitionWire {
+  key: string;
+  label: string;
+  description: string;
+  suggested_templates: string[];
+  stage: string | null;
+  doc_topics: string[];
+}
+
+/** GET /projects/sub-types 响应（wire） */
+export interface SubTypesWire {
+  level1_types: string[];
+  sub_types: Record<string, SubTypeDefinitionWire[]>;
+}
+
+/** 源码采样（camelCase） */
+export interface SourceSample {
+  path: string;
+  language: string;
+  lines: number;
+  content: string;
+}
+
+/** Git 统计（camelCase） */
+export interface GitStats {
+  isRepo: boolean;
+  currentBranch: string | null;
+  commitCount: number;
+  recentCommitCount: number;
+  branchCount: number;
+  lastCommitAt: string | null;
+  dirtyFiles: number;
+}
+
+/** 代码库画像（camelCase） */
+export interface CodebaseProfile {
+  root: string;
+  level1Type: ProjectType | null;
+  subType: string | null;
+  techStack: string[];
+  frameworks: string[];
+  buildCommands: string[];
+  testFrameworks: string[];
+  lintConfigs: string[];
+  ciWorkflows: string[];
+  existingRuleFiles: string[];
+  directoryLayout: string[];
+  sourceSamples: SourceSample[];
+  gitStats: GitStats;
+  vcsMode: string;
+}
+
+/** 规则建议（camelCase） */
+export interface SuggestedRule {
+  templateKey: string;
+  label: string;
+  reason: string;
+  confidence: number;
+  category: string;
+  content: string;
+  triggerPattern: string;
+  priority: number;
+}
+
+/** 文档引用（camelCase） */
+export interface DocRef {
+  title: string;
+  reason: string;
+  path: string;
+}
+
+/** LLM 深度分析报告（camelCase） */
+export interface AnalysisReport {
+  level1Type: ProjectType;
+  subType: string | null;
+  confidence: number;
+  techStack: string[];
+  architectureSummary: string;
+  suggestedRules: SuggestedRule[];
+  governanceRecommendations: string[];
+  stageRecommendation: string | null;
+  sageMdDraft: string;
+  docsRefs: DocRef[];
+  /** false 表示报告来自确定性降级路径（未配置 LLM 或调用失败） */
+  llmAvailable: boolean;
+  rawJson: string | null;
+}
+
+/** 分析结果：画像 + 报告（camelCase） */
+export interface ProjectAnalysisResult {
+  profile: CodebaseProfile;
+  report: AnalysisReport;
+}
+
+/** 规则来源：模板规则 / 项目专属规则 */
+export type RuleSource = 'template' | 'ai_custom';
+
+/** 规则草稿（camelCase） */
+export interface RuleDraft {
+  category: string;
+  content: string;
+  triggerPattern: string;
+  priority: number;
+  source: RuleSource;
+  templateKey: string;
+  reason: string;
+}
+
+/** 规则生成结果（camelCase） */
+export interface RuleGenerationResult {
+  rules: RuleDraft[];
+  milestones: Array<Record<string, string>>;
+  llmAvailable: boolean;
+  skippedDuplicates: number;
+}
+
+/** L2 子类型定义（camelCase） */
+export interface SubTypeDefinition {
+  key: string;
+  label: string;
+  description: string;
+  suggestedTemplates: string[];
+  stage: string | null;
+  docTopics: string[];
+}
+
+/** 两级类型目录（camelCase） */
+export interface SubTypesCatalog {
+  level1Types: ProjectType[];
+  subTypes: Record<string, SubTypeDefinition[]>;
+}
+
+/** `generateRules()` 入参：用户在向导中确认后的画像与报告 */
+export interface GenerateRulesOptions {
+  profile: CodebaseProfile;
+  report: AnalysisReport;
+  /** 提供时后端会与该项目的已有约束去重 */
+  projectId?: string;
+}
+
+const LEVEL1_PROJECT_TYPES: ProjectType[] = ['coding', 'research', 'business', 'personal'];
+
+/**
+ * 后端/LLM 返回的类型字符串可能越界，收敛到四值 union。
+ * 与 detectType() 的既有降级口径保持一致（未知 → personal）。
+ */
+function toProjectType(value: string | null | undefined): ProjectType {
+  return LEVEL1_PROJECT_TYPES.includes(value as ProjectType) ? (value as ProjectType) : 'personal';
+}
+
+export function mapSourceSample(w: SourceSampleWire): SourceSample {
+  return { path: w.path, language: w.language, lines: w.lines, content: w.content };
+}
+
+export function mapGitStats(w: GitStatsWire): GitStats {
+  return {
+    isRepo: w.is_repo,
+    currentBranch: w.current_branch,
+    commitCount: w.commit_count,
+    recentCommitCount: w.recent_commit_count,
+    branchCount: w.branch_count,
+    lastCommitAt: w.last_commit_at,
+    dirtyFiles: w.dirty_files,
+  };
+}
+
+export function mapCodebaseProfile(w: CodebaseProfileWire): CodebaseProfile {
+  return {
+    root: w.root,
+    level1Type: w.level1_type === null ? null : toProjectType(w.level1_type),
+    subType: w.sub_type,
+    techStack: w.tech_stack,
+    frameworks: w.frameworks,
+    buildCommands: w.build_commands,
+    testFrameworks: w.test_frameworks,
+    lintConfigs: w.lint_configs,
+    ciWorkflows: w.ci_workflows,
+    existingRuleFiles: w.existing_rule_files,
+    directoryLayout: w.directory_layout,
+    sourceSamples: w.source_samples.map(mapSourceSample),
+    gitStats: mapGitStats(w.git_stats),
+    vcsMode: w.vcs_mode,
+  };
+}
+
+export function mapSuggestedRule(w: SuggestedRuleWire): SuggestedRule {
+  return {
+    templateKey: w.template_key,
+    label: w.label,
+    reason: w.reason,
+    confidence: w.confidence,
+    category: w.category,
+    content: w.content,
+    triggerPattern: w.trigger_pattern,
+    priority: w.priority,
+  };
+}
+
+export function mapDocRef(w: DocRefWire): DocRef {
+  return { title: w.title, reason: w.reason, path: w.path };
+}
+
+export function mapAnalysisReport(w: AnalysisReportWire): AnalysisReport {
+  return {
+    level1Type: toProjectType(w.level1_type),
+    subType: w.sub_type,
+    confidence: w.confidence,
+    techStack: w.tech_stack,
+    architectureSummary: w.architecture_summary,
+    suggestedRules: w.suggested_rules.map(mapSuggestedRule),
+    governanceRecommendations: w.governance_recommendations,
+    stageRecommendation: w.stage_recommendation,
+    sageMdDraft: w.sage_md_draft,
+    docsRefs: w.docs_refs.map(mapDocRef),
+    llmAvailable: w.llm_available,
+    rawJson: w.raw_json,
+  };
+}
+
+export function mapProjectAnalysis(w: ProjectAnalyzeWire): ProjectAnalysisResult {
+  return {
+    profile: mapCodebaseProfile(w.profile),
+    report: mapAnalysisReport(w.report),
+  };
+}
+
+export function mapRuleDraft(w: RuleDraftWire): RuleDraft {
+  return {
+    category: w.category,
+    content: w.content,
+    triggerPattern: w.trigger_pattern,
+    priority: w.priority,
+    source: w.source === 'ai_custom' ? 'ai_custom' : 'template',
+    templateKey: w.template_key,
+    reason: w.reason,
+  };
+}
+
+export function mapRuleGenerationResult(w: RuleGenerationResultWire): RuleGenerationResult {
+  return {
+    rules: w.rules.map(mapRuleDraft),
+    milestones: w.milestones,
+    llmAvailable: w.llm_available,
+    skippedDuplicates: w.skipped_duplicates,
+  };
+}
+
+export function mapSubTypeDefinition(w: SubTypeDefinitionWire): SubTypeDefinition {
+  return {
+    key: w.key,
+    label: w.label,
+    description: w.description,
+    suggestedTemplates: w.suggested_templates,
+    stage: w.stage,
+    docTopics: w.doc_topics,
+  };
+}
+
+export function mapSubTypes(w: SubTypesWire): SubTypesCatalog {
+  const subTypes: Record<string, SubTypeDefinition[]> = {};
+  for (const [level1, defs] of Object.entries(w.sub_types)) {
+    subTypes[level1] = defs.map(mapSubTypeDefinition);
+  }
+  return {
+    level1Types: w.level1_types.map(toProjectType),
+    subTypes,
+  };
+}
+
+/**
+ * 反向映射：camelCase 画像 -> wire dict。
+ * `/projects/generate-rules` 接收原始 snake_case dict（后端 `_profile_from_dict` 口径），
+ * 这里把用户可能改动过的画像还原后再提交。
+ */
+export function toCodebaseProfileWire(p: CodebaseProfile): CodebaseProfileWire {
+  return {
+    root: p.root,
+    level1_type: p.level1Type,
+    sub_type: p.subType,
+    tech_stack: p.techStack,
+    frameworks: p.frameworks,
+    build_commands: p.buildCommands,
+    test_frameworks: p.testFrameworks,
+    lint_configs: p.lintConfigs,
+    ci_workflows: p.ciWorkflows,
+    existing_rule_files: p.existingRuleFiles,
+    directory_layout: p.directoryLayout,
+    source_samples: p.sourceSamples.map((s) => ({
+      path: s.path,
+      language: s.language,
+      lines: s.lines,
+      content: s.content,
+    })),
+    git_stats: {
+      is_repo: p.gitStats.isRepo,
+      current_branch: p.gitStats.currentBranch,
+      commit_count: p.gitStats.commitCount,
+      recent_commit_count: p.gitStats.recentCommitCount,
+      branch_count: p.gitStats.branchCount,
+      last_commit_at: p.gitStats.lastCommitAt,
+      dirty_files: p.gitStats.dirtyFiles,
+    },
+    vcs_mode: p.vcsMode,
+  };
+}
+
+/** 反向映射：camelCase 分析报告 -> wire dict */
+export function toAnalysisReportWire(r: AnalysisReport): AnalysisReportWire {
+  return {
+    level1_type: r.level1Type,
+    sub_type: r.subType,
+    confidence: r.confidence,
+    tech_stack: r.techStack,
+    architecture_summary: r.architectureSummary,
+    suggested_rules: r.suggestedRules.map((rule) => ({
+      template_key: rule.templateKey,
+      label: rule.label,
+      reason: rule.reason,
+      confidence: rule.confidence,
+      category: rule.category,
+      content: rule.content,
+      trigger_pattern: rule.triggerPattern,
+      priority: rule.priority,
+    })),
+    governance_recommendations: r.governanceRecommendations,
+    stage_recommendation: r.stageRecommendation,
+    sage_md_draft: r.sageMdDraft,
+    docs_refs: r.docsRefs.map((ref) => ({
+      title: ref.title,
+      reason: ref.reason,
+      path: ref.path,
+    })),
+    llm_available: r.llmAvailable,
+    raw_json: r.rawJson,
+  };
+}
+
 export function auditProjectApiTypesGovernance(): string {
   return JSON.stringify({
     module: 'project-api-types',
