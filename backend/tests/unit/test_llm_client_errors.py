@@ -133,6 +133,39 @@ async def test_connect_error_raises_network_error(client):
 
 
 @pytest.mark.asyncio()
+async def test_remote_protocol_error_raises_network_error(client):
+    """httpx.RemoteProtocolError（chunked body 中断）应映射为 NETWORK 并触发重试，
+    而非落到 UNKNOWN 直接失败——见 docs/plans/2026-10-27_llm-protocol-error-retry.md。"""
+    with patch.object(client, "_get_client") as mock_get_client:
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(
+            side_effect=httpx.RemoteProtocolError(
+                "peer closed connection without sending complete message body "
+                "(incomplete chunked read)"
+            )
+        )
+        mock_get_client.return_value = mock_http
+
+        with pytest.raises(LLMError) as exc_info:
+            await client.chat([{"role": "user", "content": "hi"}])
+        assert exc_info.value.type == LLMErrorType.NETWORK
+        assert "incomplete chunked read" in exc_info.value.message
+
+
+@pytest.mark.asyncio()
+async def test_read_error_raises_network_error(client):
+    """httpx.ReadError（响应体读取中断）同样归入 NETWORK。"""
+    with patch.object(client, "_get_client") as mock_get_client:
+        mock_http = AsyncMock()
+        mock_http.post = AsyncMock(side_effect=httpx.ReadError("read aborted"))
+        mock_get_client.return_value = mock_http
+
+        with pytest.raises(LLMError) as exc_info:
+            await client.chat([{"role": "user", "content": "hi"}])
+        assert exc_info.value.type == LLMErrorType.NETWORK
+
+
+@pytest.mark.asyncio()
 async def test_parsing_error_raises_parsing_error_type(client):
     """响应 JSON 解析失败时映射为 PARSING。"""
     import json
