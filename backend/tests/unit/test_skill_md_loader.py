@@ -33,20 +33,6 @@ from backend.skills.skill_md.validation import (
 pytestmark = pytest.mark.unit
 
 
-@pytest.fixture(autouse=True)
-def stub_skills_dir_preference(monkeypatch):
-    """默认屏蔽 skills_dir preference, 避免真实 DB 的自定义目录影响断言。
-
-    返回被替换的 stub, 需要覆盖 preference 的用例可自行再 monkeypatch。
-    """
-
-    def _no_preference(*_args, **_kwargs):
-        return None
-
-    monkeypatch.setattr(skill_md_loader, "read_skills_dir_preference", _no_preference)
-    return _no_preference
-
-
 # =====================================================================
 # helpers
 # =====================================================================
@@ -62,10 +48,8 @@ def _write_skill_md(
     skill_dir = parent / name
     skill_dir.mkdir(parents=True, exist_ok=True)
     path = skill_dir / "SKILL.md"
-    # Windows 上禁用 \n → \r\n 翻译，保证磁盘字节与断言一致
-    # （py3.8 的 Path.write_text 无 newline= 参数，走 open()）
-    with path.open("w", encoding="utf-8", newline="") as fh:
-        fh.write(
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(
             f"---\n"
             f"name: {name}\n"
             f"description: test {name}\n"
@@ -80,8 +64,8 @@ def _write_bad_skill_md(parent: Path, name: str, text: str) -> Path:
     skill_dir = parent / name
     skill_dir.mkdir(parents=True, exist_ok=True)
     path = skill_dir / "SKILL.md"
-    with path.open("w", encoding="utf-8", newline="") as fh:  # py3.8: write_text 无 newline=
-        fh.write(text)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
     return path
 
 
@@ -552,8 +536,8 @@ def test_hot_reload_on_body_change(tmp_path):
     loader.scan_and_load()
 
     # 改 body
-    with path.open("w", encoding="utf-8", newline="") as fh:  # py3.8: write_text 无 newline=
-        fh.write("---\nname: alpha\ndescription: test alpha\n---\nNEW body\n")
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write("---\nname: alpha\ndescription: test alpha\n---\nNEW body\n")
 
     assert loader.check_for_updates() == ["alpha"]
     assert loader.hot_reload("alpha") is True
