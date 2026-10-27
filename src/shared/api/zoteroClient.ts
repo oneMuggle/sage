@@ -8,6 +8,10 @@
  *   zotero_annotations  → GET  /api/v1/zotero/items/{item_key}/annotations
  *   zotero_collections  → GET  /api/v1/zotero/collections?parent_key=
  *   zotero_set_path     → POST /api/v1/zotero/path?path=
+ *   zotero_sync         → POST /api/v1/zotero/sync          body {force, project_path}
+ *   zotero_sync_status  → GET  /api/v1/zotero/sync-status
+ *
+ * Wiki tag is a plain preferences KV (`zotero_wiki_tag`), not a Zotero route.
  *
  * All methods throw on IPC failure; ZoteroTab surfaces errors inline.
  */
@@ -76,6 +80,42 @@ export interface ZoteroAnnotation {
   date_added: string | null;
 }
 
+/** Outcome of the wiki-sinking half of a sync (backend `wiki_export.py`). */
+export interface ZoteroSyncWikiResult {
+  items_exported?: number;
+  authors_exported?: number;
+  errors?: string[];
+  /** Set when the whole wiki export failed (e.g. project path missing). */
+  error?: string;
+}
+
+/** `POST /api/v1/zotero/sync` response. */
+export interface ZoteroSyncResult {
+  items: number;
+  chunks: number;
+  dim: number;
+  last_sync_ts: string | null;
+  skipped: boolean;
+  elapsed_ms: number;
+  errors: string[];
+  wiki?: ZoteroSyncWikiResult;
+}
+
+/** `GET /api/v1/zotero/sync-status` response. */
+export interface ZoteroSyncStatus {
+  last_sync_ts: string | null;
+  last_sync_at: string | null;
+  item_count: number;
+  wiki_page_count: number;
+  embedding_configured: boolean;
+  vector_dim: number | null;
+  sync_in_progress: boolean;
+  errors: string[];
+}
+
+/** Zotero tag whose items are sunk into wiki pages; mirrors backend default. */
+export const DEFAULT_WIKI_TAG = 'sage:wiki';
+
 // ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
@@ -110,6 +150,42 @@ export const zoteroClient = {
 
   async setPath(path: string): Promise<{ ok: boolean; db_path: string }> {
     return invoke<{ ok: boolean; db_path: string }>('zotero_set_path', { path });
+  },
+
+  /**
+   * Run the index-layer sync.
+   *
+   * `force` rebuilds from scratch; default is incremental (watermark based).
+   * `projectPath` additionally sinks tag-marked items into `<project>/wiki/zotero/`.
+   * Omit it to index only — the backend skips wiki export without a project root.
+   */
+  async sync(options: { force?: boolean; projectPath?: string | null } = {}): Promise<ZoteroSyncResult> {
+    return invoke<ZoteroSyncResult>('zotero_sync', {
+      force: options.force ?? false,
+      project_path: options.projectPath ?? null,
+    });
+  },
+
+  async syncStatus(): Promise<ZoteroSyncStatus> {
+    return invoke<ZoteroSyncStatus>('zotero_sync_status', {});
+  },
+
+  /** Read the wiki-sinking tag; falls back to `sage:wiki` when unset. */
+  async getWikiTag(): Promise<string> {
+    const pref = await invoke<{ value: string | null } | null>('get_preference', {
+      key: 'zotero_wiki_tag',
+    });
+    return (pref?.value ?? '').trim() || DEFAULT_WIKI_TAG;
+  },
+
+  /** Persist the wiki-sinking tag; empty input resets to the default. */
+  async setWikiTag(tag: string): Promise<void> {
+    await invoke('set_preference', {
+      key: 'zotero_wiki_tag',
+      value: tag.trim() || DEFAULT_WIKI_TAG,
+      value_type: 'string',
+      category: 'general',
+    });
   },
 };
 
