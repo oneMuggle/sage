@@ -85,10 +85,14 @@ ValueError: unknown orch field 'maxToolCallsPerRun'
   - 检出 **MEDIUM-1**：UI desc "调整范围 1-20" 无 `max` 强制
   - 检出 **MEDIUM-2**：后端不钳 0 / 负值 → 侦察静默失效
 - [x] **步骤 8**：本地验证（pytest + vitest + tsc + lint）
-  - pytest：128 + N passed（contract + unit 含新增 relay 往返 + clamp 守卫）
-  - vitest：28 + N passed
+  - pytest：202 passed（contract + unit 含新增 relay 往返 + clamp 守卫）
+  - vitest：28 passed
   - tsc --noEmit：无类型错误
-  - ruff：无新增告警
+  - ruff：全绿（顺手修了 pre-existing 的 I001 import 排序 + PLR1714 set 成员判断）
+- [x] **步骤 9**：提交 + PR
+  - commit：`fix(settings): repair orch tab 400 regression + add scout/planner iteration knobs`
+  - PR：[#2592](https://github.com/oneMuggle/sage/pull/2592)（base: `release/win7`）
+  - 合并后需 cherry-pick 到 `main`（白名单回归双分支都受影响）
 
 ## 5. 风险评估与依赖
 
