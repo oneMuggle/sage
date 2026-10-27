@@ -1,15 +1,22 @@
-"""项目类型自动检测（项目类型分类系统，2026-09-24）。
+"""项目类型自动检测（项目类型分类系统，2026-09-24；两级分类增强 2026-10-27）。
 
 扫描目录内容推断项目类型（coding/research/business/personal）。
 检测规则基于文件特征信号，按权重累加得出最终类型。
+
+2026-10-27 增强：L1 四类判定逻辑完全保留；新增 L2 子类型判定与技术栈提取，
+子类型依赖依赖清单内容（package.json / pyproject.toml 等）而非目录结构猜测。
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
+
+from backend.services.project_subtypes import match_sub_type
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +36,16 @@ class DetectionResult:
     project_type: Optional[str]  # "coding"|"research"|"business"|"personal"|None
     confidence: float = 0.0  # 0.0-1.0
     signals: List[DetectionSignal] = field(default_factory=list)
+    sub_type: Optional[str] = None  # L2 子类型 key，None 表示仅识别到 L1
+    tech_stack: List[str] = field(default_factory=list)  # 技术栈标记
 
     def to_dict(self) -> dict:
         return {
             "project_type": self.project_type,
             "confidence": self.confidence,
             "signals": [{"type": s.type, "weight": s.weight} for s in self.signals],
+            "sub_type": self.sub_type,
+            "tech_stack": list(self.tech_stack),
         }
 
 
@@ -82,6 +93,282 @@ def _count_pattern(path: Path, pattern: str) -> int:
         return 0
 
 
+# ── 技术栈提取（2026-10-27） ────────────────────────────────────────────────
+
+#: 依赖清单文件 → 解析器标识
+_MANIFEST_FILES = (
+    "package.json",
+    "pyproject.toml",
+    "requirements.txt",
+    "Cargo.toml",
+    "go.mod",
+    "pom.xml",
+)
+
+#: 目录/文件名中出现的业务与科研关键词，命中即作为技术栈标记
+_NAME_KEYWORD_MARKERS = {
+    "合同": "合同",
+    "协议": "协议",
+    "公文": "公文",
+    "请示": "请示",
+    "报告": "报告",
+    "立卷": "立卷",
+    "案卷": "案卷",
+    "归档": "归档",
+    "密级": "密级",
+    "演示": "演示",
+    "汇报": "汇报",
+    "路演": "路演",
+    "卡片": "卡片",
+    "双链": "双链",
+    "日志": "日志",
+    "复盘": "复盘",
+    "任务": "任务",
+    "计划": "计划",
+    "课程": "课程",
+    "学习": "学习",
+    "基金": "基金",
+    "申请书": "申请书",
+    "申报书": "申报书",
+    "综述": "综述",
+    "实验记录": "实验记录",
+    "nsfc": "nsfc",
+}
+
+
+def _read_text(path: Path, max_bytes: int = 256 * 1024) -> str:
+    """安全读取文本文件，失败返回空串。"""
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            return handle.read(max_bytes)
+    except (OSError, PermissionError):
+        return ""
+
+
+def _parse_package_json(path: Path) -> List[str]:
+    """提取 package.json 中的依赖名。"""
+    raw = _read_text(path)
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    names: List[str] = []
+    for field_name in ("dependencies", "devDependencies", "peerDependencies"):
+        deps = data.get(field_name)
+        if isinstance(deps, dict):
+            names.extend(str(name) for name in deps)
+    return names
+
+
+def _parse_pyproject(path: Path) -> List[str]:
+    """提取 pyproject.toml 中的依赖名（PEP 621 与 Poetry 两种写法）。"""
+    raw = _read_text(path)
+    if not raw:
+        return []
+    names: List[str] = []
+
+    # PEP 621: dependencies = ["fastapi>=0.1", ...]
+    for match in re.finditer(
+        r"^\s*dependencies\s*=\s*\[(.*?)\]",
+        raw,
+        re.DOTALL | re.MULTILINE,
+    ):
+        for item in re.findall(r"[\"']([^\"']+)[\"']", match.group(1)):
+            names.append(_strip_version_spec(item))
+
+    # Poetry: [tool.poetry.dependencies]  fastapi = "^0.1"
+    in_poetry = False
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("["):
+            in_poetry = stripped.replace(" ", "") == "[tool.poetry.dependencies]"
+            continue
+        if not in_poetry or "=" not in stripped or stripped.startswith("#"):
+            continue
+        name = stripped.split("=", 1)[0].strip()
+        if name and name != "python":
+            names.append(name.lower())
+
+    return names
+
+
+def _strip_version_spec(requirement: str) -> str:
+    """从 PEP 508 依赖串中提取包名。"""
+    name = requirement.strip()
+    for sep in ("[", ";", "<", ">", "=", "!", "~", " "):
+        name = name.split(sep, 1)[0]
+    return name.strip().lower()
+
+
+def _parse_requirements_txt(path: Path) -> List[str]:
+    """提取 requirements.txt 中的包名。"""
+    raw = _read_text(path)
+    names: List[str] = []
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(("#", "-")):
+            continue
+        names.append(_strip_version_spec(stripped))
+    return names
+
+
+def _parse_cargo_toml(path: Path) -> List[str]:
+    """提取 Cargo.toml [dependencies] 段的 crate 名。"""
+    raw = _read_text(path)
+    if not raw:
+        return []
+    names: List[str] = []
+    in_deps = False
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("["):
+            in_deps = stripped.replace(" ", "") in ("[dependencies]", "[dev-dependencies]")
+            continue
+        if not in_deps or "=" not in stripped or stripped.startswith("#"):
+            continue
+        name = stripped.split("=", 1)[0].strip()
+        if name:
+            names.append(name.lower())
+    return names
+
+
+def _parse_go_mod(path: Path) -> List[str]:
+    """提取 go.mod require 段的模块名。"""
+    raw = _read_text(path)
+    if not raw:
+        return []
+    names: List[str] = []
+    in_require = False
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("require"):
+            remainder = stripped[len("require") :].strip()
+            if remainder.startswith("("):
+                in_require = True
+                continue
+            if remainder:
+                names.append(remainder.split()[0].lower())
+            continue
+        if stripped.startswith(")"):
+            in_require = False
+            continue
+        if in_require and stripped and not stripped.startswith("//"):
+            names.append(stripped.split()[0].lower())
+    return names
+
+
+def _parse_pom_xml(path: Path) -> List[str]:
+    """提取 pom.xml 中的 artifactId。"""
+    raw = _read_text(path)
+    if not raw:
+        return []
+    return [m.lower() for m in re.findall(r"<artifactId>([^<]+)</artifactId>", raw)]
+
+
+_MANIFEST_PARSERS = {
+    "package.json": _parse_package_json,
+    "pyproject.toml": _parse_pyproject,
+    "requirements.txt": _parse_requirements_txt,
+    "cargo.toml": _parse_cargo_toml,
+    "go.mod": _parse_go_mod,
+    "pom.xml": _parse_pom_xml,
+}
+
+
+def _parse_manifest(path: Path) -> List[str]:
+    """按文件名分派到对应解析器。"""
+    parser = _MANIFEST_PARSERS.get(path.name.lower())
+    return parser(path) if parser else []
+
+
+def _scan_name_markers(path: Path) -> List[str]:
+    """扫描顶层目录名与文件名，提取业务/科研关键词标记。"""
+    markers: List[str] = []
+    try:
+        entries = list(path.iterdir())
+    except (OSError, PermissionError):
+        return markers
+    for entry in entries[:200]:
+        name = entry.name.lower()
+        for keyword in _NAME_KEYWORD_MARKERS:
+            if keyword in name and keyword not in markers:
+                markers.append(keyword)
+    return markers
+
+
+def detect_tech_stack(path: Path) -> List[str]:
+    """提取项目的技术栈标记。
+
+    标记来源：依赖清单解析（package.json / pyproject.toml / requirements.txt /
+    Cargo.toml / go.mod / pom.xml）+ 文件类型标记（latex / bibtex / jupyter 等）
+    + 目录与文件名关键词（合同 / 公文 / 卡片等）。
+
+    Args:
+        path: 项目目录
+
+    Returns:
+        去重后的技术栈标记列表（小写）
+    """
+    if not path.is_dir():
+        return []
+
+    markers: List[str] = []
+    seen = set()
+
+    def _add(value: str) -> None:
+        normalized = value.strip().lower()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            markers.append(normalized)
+
+    for manifest_name in _MANIFEST_FILES:
+        manifest = path / manifest_name
+        if not manifest.is_file():
+            continue
+        for dep in _parse_manifest(manifest):
+            _add(dep)
+
+    # 文件类型标记
+    if _count_pattern(path, "*.tex") > 0:
+        _add("latex")
+    if _count_pattern(path, "*.bib") > 0:
+        _add("bibtex")
+    if _count_pattern(path, "*.ipynb") > 0:
+        _add("jupyter")
+        _add("notebook")
+
+    for keyword in _scan_name_markers(path):
+        _add(keyword)
+
+    return markers
+
+
+def detect_sub_type(
+    path: Path,
+    level1_type: Optional[str],
+    tech_stack: Optional[List[str]] = None,
+) -> Optional[str]:
+    """判定 L2 子类型。
+
+    Args:
+        path: 项目目录
+        level1_type: 已判定的 L1 类型，用于跨形态过滤
+        tech_stack: 已提取的技术栈标记；为 None 时现场提取
+
+    Returns:
+        子类型 key；无法判定时返回 None（只知 L1，不臆测）
+    """
+    markers = tech_stack if tech_stack is not None else detect_tech_stack(path)
+    if not markers:
+        return None
+    definition = match_sub_type(markers, level1_type)
+    return definition.key if definition else None
+
+
 def detect_project_type(path: Path) -> DetectionResult:
     """根据目录内容推断项目类型。
 
@@ -101,7 +388,6 @@ def detect_project_type(path: Path) -> DetectionResult:
 
     signals: List[DetectionSignal] = []
     scores = {"coding": 0.0, "research": 0.0, "business": 0.0}
-
     # 检查编码项目的强信号
     for filename, weight in CODING_STRONG_SIGNALS:
         check_path = path / filename
@@ -141,11 +427,12 @@ def detect_project_type(path: Path) -> DetectionResult:
 
     # 选最高分的类型
     if not scores or max(scores.values()) < 0.2:
-        # 无明显特征，返回 None
+        # 无明显特征，返回 None（但仍带回技术栈，供上层参考）
         return DetectionResult(
             project_type=None,
             confidence=0.0,
             signals=signals,
+            tech_stack=detect_tech_stack(path),
         )
 
     best_type = max(scores, key=scores.get)  # type: ignore[arg-type]
@@ -154,10 +441,16 @@ def detect_project_type(path: Path) -> DetectionResult:
     # 置信度 = 分数归一化到 0-1（上限 0.95）
     confidence = min(best_score / 1.0, 0.95)
 
+    # L2 子类型与技术栈（内容解析失败时 sub_type 为 None，只知 L1）
+    tech_stack = detect_tech_stack(path)
+    sub_type = detect_sub_type(path, best_type, tech_stack)
+
     return DetectionResult(
         project_type=best_type,
         confidence=round(confidence, 2),
         signals=signals,
+        sub_type=sub_type,
+        tech_stack=tech_stack,
     )
 
 
@@ -183,5 +476,7 @@ __all__ = [
     "DetectionResult",
     "DetectionSignal",
     "detect_project_type",
+    "detect_sub_type",
+    "detect_tech_stack",
     "detect_vcs_mode",
 ]

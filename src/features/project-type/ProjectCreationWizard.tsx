@@ -10,8 +10,8 @@ import { useState } from 'react';
 
 import {
   projectApi,
+  type ProjectAnalysisResult,
   type ProjectType,
-  type ProjectTypeDetectionResult,
   type ProjectSummary,
 } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
@@ -24,8 +24,8 @@ import {
   DialogFooter,
 } from '../../shared/ui/Dialog/Dialog';
 
-import { TypeDetectionPreview } from './TypeDetectionPreview';
-import { ARCHETYPE_BLUEPRINTS, getArchetypeBlueprint } from './archetypeBlueprints';
+import { ProjectAnalysisWizard, type AnalysisCompletePayload } from './ProjectAnalysisWizard';
+import { getArchetypeBlueprint } from './archetypeBlueprints';
 
 export interface ProjectCreationWizardProps {
   /** 是否打开向导 */
@@ -36,9 +36,12 @@ export interface ProjectCreationWizardProps {
   onSuccess?: (project: ProjectSummary) => void;
 }
 
-type WizardStep = 'folder' | 'type' | 'confirm';
+type WizardStep = 'folder' | 'analysis' | 'confirm';
 
-const WIZARD_ALLOWED_PATH_PRESETS: Record<ProjectType, Array<{ label: string; pattern: string }>> = {
+const WIZARD_ALLOWED_PATH_PRESETS: Record<
+  ProjectType,
+  Array<{ label: string; pattern: string }>
+> = {
   coding: [
     { label: '跨仓共享 SDK 目录', pattern: '../shared-sdk/**' },
     { label: '公共 API 契约规范库', pattern: '~/Documents/APISpecs/**' },
@@ -65,7 +68,8 @@ const WIZARD_GOAL_PRESETS: Record<
     {
       label: '全栈工程研发',
       description: '企业级前后端软件工程研发与自动化测试交付',
-      instructions: '遵循 TypeScript 与 Python 严格类型门禁，所有代码改动需同步补充单元测试与架构边界校验。',
+      instructions:
+        '遵循 TypeScript 与 Python 严格类型门禁，所有代码改动需同步补充单元测试与架构边界校验。',
     },
     {
       label: '重构与性能优化',
@@ -77,19 +81,22 @@ const WIZARD_GOAL_PRESETS: Record<
     {
       label: '公文与制度汇编',
       description: '党政公文、请示报告与管理制度立卷编制及归档',
-      instructions: '严格遵循 GB/T 9704 公文格式规范，所有事实陈述与引用条款必须关联 sources/ 受控底稿。',
+      instructions:
+        '严格遵循 GB/T 9704 公文格式规范，所有事实陈述与引用条款必须关联 sources/ 受控底稿。',
     },
     {
       label: '合同审查与招投标',
       description: '商务合同合规审校、招投标响应文件编制与风险核查',
-      instructions: '所有金额须同时标注人民币大写与阿拉伯数字，严禁模糊兜底承诺，逐条核验权责对等性。',
+      instructions:
+        '所有金额须同时标注人民币大写与阿拉伯数字，严禁模糊兜底承诺，逐条核验权责对等性。',
     },
   ],
   research: [
     {
       label: '实证与算法论文',
       description: '学术论文撰述、定量对比实验与可复现消融分析',
-      instructions: '采用严谨客观的学术被动语态，所有文献引用必须真实可查，固定并记录全部实验随机种子。',
+      instructions:
+        '采用严谨客观的学术被动语态，所有文献引用必须真实可查，固定并记录全部实验随机种子。',
     },
     {
       label: '领域文献综述',
@@ -101,12 +108,14 @@ const WIZARD_GOAL_PRESETS: Record<
     {
       label: '双链卡片知识库',
       description: '跨学科读书笔记、概念卡片沉淀与长期知识网络构建',
-      instructions: '优先提炼原子化概念卡片并建立 [[双向链接]]，每次总结控制在 3 条以内高信息密度结论。',
+      instructions:
+        '优先提炼原子化概念卡片并建立 [[双向链接]]，每次总结控制在 3 条以内高信息密度结论。',
     },
     {
       label: '目标规划与周期复盘',
       description: '季度/周度OKR追踪、日常习惯复盘与下一步行动清单管理',
-      instructions: '聚焦可执行、可量化的下一步行动项（Next Actions），协助识别拖延瓶颈并给出拆解建议。',
+      instructions:
+        '聚焦可执行、可量化的下一步行动项（Next Actions），协助识别拖延瓶颈并给出拆解建议。',
     },
   ],
 };
@@ -118,10 +127,10 @@ export function ProjectCreationWizard({
 }: ProjectCreationWizardProps) {
   const [step, setStep] = useState<WizardStep>('folder');
   const [folderPath, setFolderPath] = useState<string>('');
-  const [detecting, setDetecting] = useState(false);
-  const [detectionResult, setDetectionResult] = useState<ProjectTypeDetectionResult | null>(null);
-  const [detectionError, setDetectionError] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<ProjectType | null>(null);
+  const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<ProjectAnalysisResult | null>(null);
+  const [adoptedRecommendations, setAdoptedRecommendations] = useState<string[]>([]);
   const [autoScaffold, setAutoScaffold] = useState<boolean>(true);
   const [selectedTemplateKeys, setSelectedTemplateKeys] = useState<string[]>([]);
   const [selectedAllowedPaths, setSelectedAllowedPaths] = useState<string[]>([]);
@@ -136,10 +145,10 @@ export function ProjectCreationWizard({
   const resetWizard = () => {
     setStep('folder');
     setFolderPath('');
-    setDetecting(false);
-    setDetectionResult(null);
-    setDetectionError(null);
     setSelectedType(null);
+    setSelectedSubType(null);
+    setAnalysisResult(null);
+    setAdoptedRecommendations([]);
     setAutoScaffold(true);
     setSelectedTemplateKeys([]);
     setSelectedAllowedPaths([]);
@@ -176,33 +185,25 @@ export function ProjectCreationWizard({
     }
   };
 
-  const handleNextToType = async () => {
+  const handleNextToAnalysis = () => {
     if (!folderPath) return;
-
-    setStep('type');
-    setDetecting(true);
-    setDetectionError(null);
-
-    try {
-      const result = await projectApi.detectType(folderPath);
-      setDetectionResult(result);
-      if (result.confidence >= 0.7) {
-        setSelectedType(result.detectedType);
-      } else {
-        setSelectedType('business');
-      }
-    } catch (err) {
-      setDetectionError(err instanceof Error ? err.message : '检测失败');
-      setSelectedType('business');
-    } finally {
-      setDetecting(false);
-    }
+    setStep('analysis');
   };
 
-  const handleNextToConfirm = () => {
-    const bp = getArchetypeBlueprint(selectedType);
-    setSelectedTemplateKeys(bp.subTemplates.map((t) => t.key));
-    setVcsMode(bp.defaultVcsMode);
+  const handleCompleteAnalysis = (payload: AnalysisCompletePayload) => {
+    setSelectedType(payload.selectedType);
+    setSelectedSubType(payload.selectedSubType);
+    setAnalysisResult(payload.analysisResult);
+    setAdoptedRecommendations(payload.adoptedRecommendations);
+    // 用 payload 里启用的规则键初始化预设模板（若为空则退回 archetype 默认全选）
+    if (payload.enabledRuleKeys.length > 0) {
+      setSelectedTemplateKeys(payload.enabledRuleKeys);
+    } else {
+      const bp = getArchetypeBlueprint(payload.selectedType);
+      setSelectedTemplateKeys(bp.subTemplates.map((t) => t.key));
+    }
+    const bpForVcs = getArchetypeBlueprint(payload.selectedType);
+    setVcsMode(bpForVcs.defaultVcsMode);
     setStep('confirm');
   };
 
@@ -264,13 +265,20 @@ export function ProjectCreationWizard({
       }
       if (selectedAllowedPaths.length > 0 && typeof projectApi.updateAllowedPaths === 'function') {
         try {
-          const allowedPaths = await projectApi.updateAllowedPaths(project.id, selectedAllowedPaths);
+          const allowedPaths = await projectApi.updateAllowedPaths(
+            project.id,
+            selectedAllowedPaths,
+          );
           project = { ...project, allowedPaths };
         } catch {
           // ignore allowed paths update error
         }
       }
-      if (autoScaffold && vcsMode === 'builtin' && typeof projectApi.createCheckpoint === 'function') {
+      if (
+        autoScaffold &&
+        vcsMode === 'builtin' &&
+        typeof projectApi.createCheckpoint === 'function'
+      ) {
         try {
           await projectApi.createCheckpoint(project.id, '项目初始化基线快照');
         } catch {
@@ -295,7 +303,8 @@ export function ProjectCreationWizard({
           <DialogTitle>创建多形态项目</DialogTitle>
           <DialogDescription>
             {step === 'folder' && '步骤 1/3：选择项目主工作区文件夹（支持本地输入或浏览选择）'}
-            {step === 'type' && '步骤 2/3：确认项目形态（代码工程 / 一般档案 / 科学研究 / 个人空间）'}
+            {step === 'analysis' &&
+              '步骤 2/3：AI 分析项目形态（代码工程 / 一般档案 / 科学研究 / 个人空间）并给出治理建议'}
             {step === 'confirm' && '步骤 3/3：确认项目信息并初始化推荐组织结构'}
           </DialogDescription>
         </DialogHeader>
@@ -325,52 +334,13 @@ export function ProjectCreationWizard({
             </div>
           )}
 
-          {/* Step 2: 选择项目类型 */}
-          {step === 'type' && (
-            <div className="space-y-4">
-              <TypeDetectionPreview
-                result={detectionResult}
-                loading={detecting}
-                error={detectionError}
-                selectedType={selectedType}
-                onApplyDetectedType={setSelectedType}
-              />
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  选择项目形态（决定目录结构、VCS 快照模式与 AI 上下文护栏）
-                </label>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {Object.values(ARCHETYPE_BLUEPRINTS).map((bp) => {
-                    const active = (selectedType ?? detectionResult?.detectedType ?? 'business') === bp.type;
-                    return (
-                      <button
-                        key={bp.type}
-                        type="button"
-                        disabled={detecting}
-                        onClick={() => setSelectedType(bp.type)}
-                        data-testid={`wizard-archetype-${bp.type}`}
-                        className={`rounded-lg border p-3 text-left transition-colors ${
-                          active
-                            ? 'border-primary bg-primary/10 text-foreground'
-                            : 'border-border bg-surface hover:bg-surface-hover text-muted-foreground'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-semibold text-foreground">{bp.label}</span>
-                          <span className="rounded bg-background/80 px-1.5 py-0.5 text-ui-2xs text-muted-foreground">
-                            {bp.vcsLabel}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-ui-2xs text-muted-foreground line-clamp-2">
-                          {bp.positioning}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+          {/* Step 2: AI 治理分析向导 */}
+          {step === 'analysis' && (
+            <ProjectAnalysisWizard
+              path={folderPath}
+              onBack={() => setStep('folder')}
+              onComplete={handleCompleteAnalysis}
+            />
           )}
 
           {/* Step 3: 确认信息与组织脚手架 */}
@@ -386,14 +356,25 @@ export function ProjectCreationWizard({
                     type="button"
                     data-testid="wizard-copy-summary-md-btn"
                     onClick={() => {
+                      const subTypeLabel = selectedSubType ?? '未指定';
+                      const confidenceLine = analysisResult
+                        ? `${Math.round(analysisResult.report.confidence * 100)}%`
+                        : 'N/A';
+                      const recsLine =
+                        adoptedRecommendations.length > 0
+                          ? adoptedRecommendations.join('；')
+                          : '无';
                       const md = [
                         `# 项目立项初始化摘要`,
                         `- **路径**: \`${folderPath}\``,
                         `- **项目形态**: ${blueprint.label} (${blueprint.type})`,
+                        `- **子类型**: ${subTypeLabel}`,
+                        `- **检测置信度**: ${confidenceLine}`,
                         `- **VCS 模式**: ${vcsMode}`,
                         `- **L2 目标**: ${projectDescription || '未填写'}`,
                         `- **L2 系统指令**: ${projectInstructions || '未填写'}`,
                         `- **预设规则包**: ${selectedTemplateKeys.join(', ') || '无'}`,
+                        `- **采纳治理建议**: ${recsLine}`,
                         `- **L5 只读白名单**: ${selectedAllowedPaths.join(', ') || '无'}`,
                       ].join('\n');
                       try {
@@ -416,6 +397,24 @@ export function ProjectCreationWizard({
                       {blueprint.label} ({blueprint.type})
                     </span>
                   </div>
+                  {selectedSubType && (
+                    <div>
+                      <span className="text-xs font-medium text-muted-foreground">子类型：</span>
+                      <span className="ml-1 text-sm font-semibold text-foreground">
+                        {selectedSubType}
+                      </span>
+                    </div>
+                  )}
+                  {analysisResult && (
+                    <div>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        检测置信度：
+                      </span>
+                      <span className="ml-1 text-sm font-semibold text-foreground">
+                        {Math.round(analysisResult.report.confidence * 100)}%
+                      </span>
+                    </div>
+                  )}
                   <div>
                     <span className="text-xs font-medium text-muted-foreground">版本控制：</span>
                     <select
@@ -485,7 +484,9 @@ export function ProjectCreationWizard({
                   <div className="space-y-1">
                     <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
                       <Sparkles className="h-4 w-4 text-primary" />
-                      <span>一键初始化「{blueprint.label}」推荐组织结构（幂等、不覆盖已有文件）</span>
+                      <span>
+                        一键初始化「{blueprint.label}」推荐组织结构（幂等、不覆盖已有文件）
+                      </span>
                     </div>
                     <p className="text-xs text-muted-foreground">{blueprint.sageMdHint}</p>
                   </div>
@@ -684,37 +685,21 @@ export function ProjectCreationWizard({
               <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)}>
                 取消
               </Button>
-              <Button type="button" onClick={handleNextToType} disabled={!folderPath || detecting}>
+              <Button type="button" onClick={handleNextToAnalysis} disabled={!folderPath}>
                 下一步
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </>
           )}
 
-          {step === 'type' && (
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setStep('folder')}
-                disabled={detecting}
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                上一步
-              </Button>
-              <Button type="button" onClick={handleNextToConfirm} disabled={detecting}>
-                下一步
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </>
-          )}
+          {step === 'analysis' && null /* ProjectAnalysisWizard 自带导航按钮 */}
 
           {step === 'confirm' && (
             <>
               <Button
                 type="button"
                 variant="ghost"
-                onClick={() => setStep('type')}
+                onClick={() => setStep('analysis')}
                 disabled={creating}
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />

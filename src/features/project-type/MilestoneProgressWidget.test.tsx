@@ -30,6 +30,52 @@ vi.mock('../../shared/api', () => ({
       detectedType: 'research',
       confidence: 0.9,
       signals: ['papers/', 'references.bib'],
+      subType: null,
+      techStack: [],
+    }),
+    subTypes: vi.fn().mockResolvedValue({
+      level1Types: ['coding', 'research', 'business', 'personal'],
+      subTypes: {},
+    }),
+    analyze: vi.fn().mockResolvedValue({
+      profile: {
+        root: '/workspace/research-lab',
+        level1Type: 'research',
+        subType: null,
+        techStack: [],
+        frameworks: [],
+        buildCommands: [],
+        testFrameworks: [],
+        lintConfigs: [],
+        ciWorkflows: [],
+        existingRuleFiles: [],
+        directoryLayout: [],
+        sourceSamples: [],
+        gitStats: {
+          isRepo: false,
+          currentBranch: null,
+          commitCount: 0,
+          recentCommitCount: 0,
+          branchCount: 0,
+          lastCommitAt: null,
+          dirtyFiles: 0,
+        },
+        vcsMode: 'builtin',
+      },
+      report: {
+        level1Type: 'research',
+        subType: null,
+        confidence: 0.9,
+        techStack: [],
+        architectureSummary: '',
+        suggestedRules: [],
+        governanceRecommendations: [],
+        stageRecommendation: null,
+        sageMdDraft: '',
+        docsRefs: [],
+        llmAvailable: true,
+        rawJson: null,
+      },
     }),
     register: vi.fn().mockResolvedValue({
       id: 'proj-wiz-1',
@@ -300,10 +346,14 @@ describe('MilestoneProgressWidget', () => {
     fireEvent.change(pathInput, { target: { value: '/workspace/research-lab' } });
     fireEvent.click(screen.getByRole('button', { name: /下一步/ }));
 
+    // Step 2: AI 治理分析向导（Step 11 接入）
     await waitFor(() => {
-      expect(screen.getByTestId('wizard-archetype-research')).toBeInTheDocument();
+      expect(screen.getByTestId('project-analysis-wizard')).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /下一步/ }));
+    await waitFor(() => {
+      expect(screen.getByTestId('analysis-l1-research')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('analysis-next-btn'));
 
     const presetBtn = await screen.findByTestId('wizard-goal-preset-0');
     fireEvent.click(presetBtn);
