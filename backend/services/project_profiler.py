@@ -22,7 +22,7 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Union
 
 from backend.services.git_integration import _run_git
 from backend.services.project_type_detector import (
@@ -663,7 +663,7 @@ def _collect_git_stats(root: Path) -> GitStats:
 # ── 对外入口 ────────────────────────────────────────────────────────────────
 
 
-def profile_project(root: str | Path) -> CodebaseProfile:
+def profile_project(root: Union[str, Path]) -> CodebaseProfile:
     """采集项目代码库画像。
 
     Args:

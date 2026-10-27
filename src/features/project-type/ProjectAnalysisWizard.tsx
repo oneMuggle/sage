@@ -33,8 +33,8 @@ import {
 } from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
 
-import { ARCHETYPE_BLUEPRINTS } from './archetypeBlueprints';
 import { ProjectAnalysisReport } from './ProjectAnalysisReport';
+import { ARCHETYPE_BLUEPRINTS } from './archetypeBlueprints';
 
 export interface AnalysisCompletePayload {
   /** 用户最终选定的 L1 类型 */

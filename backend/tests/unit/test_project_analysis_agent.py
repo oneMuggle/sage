@@ -62,7 +62,7 @@ def test_agent_without_llm_is_unavailable() -> None:
     assert _agent_without_llm().available is False
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_fallback_when_llm_unavailable() -> None:
     report = await _agent_without_llm().analyze(_profile())
     assert report.llm_available is False
@@ -73,7 +73,7 @@ async def test_fallback_when_llm_unavailable() -> None:
     assert report.governance_recommendations
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_fallback_when_llm_raises() -> None:
     llm = AsyncMock()
     llm.complete = AsyncMock(side_effect=RuntimeError("network down"))
@@ -83,7 +83,7 @@ async def test_fallback_when_llm_raises() -> None:
     assert report.suggested_rules
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_fallback_when_llm_returns_invalid_json() -> None:
     agent = ProjectAnalysisAgent(llm_client=_llm_returning("not json at all"))
     report = await agent.analyze(_profile())
@@ -91,7 +91,7 @@ async def test_fallback_when_llm_returns_invalid_json() -> None:
     assert report.suggested_rules
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_fallback_rules_come_from_templates() -> None:
     report = await _agent_without_llm().analyze(_profile(tech_stack=["python"]))
     template_keys = {r.template_key for r in report.suggested_rules}
@@ -101,13 +101,13 @@ async def test_fallback_rules_come_from_templates() -> None:
         assert rule.reason
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_fallback_recommends_ci_when_missing() -> None:
     report = await _agent_without_llm().analyze(_profile(ci_workflows=[]))
     assert any("CI" in rec for rec in report.governance_recommendations)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_fallback_stage_depends_on_commit_count() -> None:
     report = await _agent_without_llm().analyze(
         _profile(git_stats=GitStats(is_repo=True, commit_count=100))
@@ -118,7 +118,7 @@ async def test_fallback_stage_depends_on_commit_count() -> None:
 # ── LLM 正常路径 ────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_llm_response_parsed() -> None:
     payload = json.dumps(
         {
@@ -160,7 +160,7 @@ async def test_llm_response_parsed() -> None:
     assert report.docs_refs[0].path.endswith("15-quality-gates.md")
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_llm_fenced_json_parsed() -> None:
     payload = "```json\n" + json.dumps({"architecture_summary": "OK"}) + "\n```"
     agent = ProjectAnalysisAgent(llm_client=_llm_returning(payload))
@@ -169,7 +169,7 @@ async def test_llm_fenced_json_parsed() -> None:
     assert report.architecture_summary == "OK"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_confidence_and_priority_clamped() -> None:
     payload = json.dumps(
         {
@@ -192,7 +192,7 @@ async def test_confidence_and_priority_clamped() -> None:
     assert report.suggested_rules[0].priority == 10
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_invalid_stage_recommendation_dropped() -> None:
     payload = json.dumps({"stage_recommendation": "unknown_phase"})
     agent = ProjectAnalysisAgent(llm_client=_llm_returning(payload))
