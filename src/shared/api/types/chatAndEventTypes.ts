@@ -88,7 +88,16 @@ export type WorkspaceSearchKind =
   | 'office-ppt'
   | 'office-word'
   | 'office-excel'
-  | 'office-pdf';
+  | 'office-pdf'
+  // allowed_paths 搜索结果（与 main 对齐）：与上述 kind 同构但带 `allowed-` 前缀，
+  // 前端据此区分「workspace 内」与「allowed_paths 只读」。后端
+  // backend/api/workspace_routes.py 已按 kind="allowed-" + (doc_type or "file")
+  // 产出，本联合此前漏登。
+  | 'allowed-file'
+  | 'allowed-ppt'
+  | 'allowed-word'
+  | 'allowed-excel'
+  | 'allowed-pdf';
 
 export interface WorkspaceSearchResult {
   name: string;

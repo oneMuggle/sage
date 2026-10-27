@@ -53,6 +53,8 @@ export interface OfficePptSlideContent {
 export interface OfficePptReadResult {
   summary: OfficeDocumentSummary;
   slides: OfficePptSlideContent[];
+  // Round 52：core properties 回读（无属性为 null）
+  metadata?: WordMetadataSpec | null;
 }
 
 export interface OfficeWordParagraphContent {
@@ -91,6 +93,10 @@ export interface OfficeWordReadResult {
    * Backend: WordImagePreview in backend/office/models.py.
    */
   image_previews?: OfficeWordImagePreview[];
+  // Round 57：脚注文本清单（无脚注为空表）
+  footnotes?: string[];
+  // Round 59：尾注文本清单（无尾注为空表）
+  endnotes?: string[];
 }
 
 /** One Word comment (backend WordCommentContent). */
@@ -282,6 +288,8 @@ export interface OfficePptGenerateRequest {
   workspace_path: string;
   filename: string;
   slides: PptSlideSpec[];
+  // Round 52：文档核心属性（与 Word/Excel 对称）
+  metadata?: WordMetadataSpec;
 }
 
 export interface WordParagraphSpec {
@@ -307,6 +315,26 @@ export interface WordPageSetupSpec {
   size?: 'A4' | 'letter';
   orientation?: 'portrait' | 'landscape';
   margins_cm?: WordPageMarginsSpec;
+  // Round 53：节内页码格式/起始号（论文前置罗马页码场景）
+  page_number_format?:
+    | 'decimal'
+    | 'upperRoman'
+    | 'lowerRoman'
+    | 'upperLetter'
+    | 'lowerLetter';
+  page_number_start?: number;
+  // Round 58：该节脚注编号每节重排（分章脚注场景）
+  footnote_restart_each_section?: boolean;
+}
+
+/**
+ * Round 26/37：分节横排（宽表/财务页场景）。
+ * backend/office/models.py WordSectionBreakSpec 对应。
+ */
+export interface WordSectionBreakSpec {
+  /** 该 0-based 段落下标起进入新节 */
+  start_paragraph: number;
+  page_setup: WordPageSetupSpec;
 }
 
 export interface WordBodyStyleSpec {
@@ -332,6 +360,15 @@ export interface WordHeaderFooterSpec {
   page_number?: boolean;
 }
 
+/**
+ * Round 42：图目录/表目录设置（TOF 域 `TOC \c "图|表"`）。
+ * backend/office/models.py WordIndexSpec 对应。
+ */
+export interface WordIndexSpec {
+  heading_text?: string;
+  placeholder_text?: string;
+}
+
 // 目录域设置（Round 13）：TOC 域由渲染器按标题样式生成（打开后更新域）。
 // Backend counterpart: WordTocSpec in backend/office/models.py。
 export interface WordTocSpec {
@@ -354,12 +391,17 @@ export interface WordFormatSpec {
   bibliography?: BibliographySpec;
   // Round 13：目录域（None = 不插入目录）
   toc?: WordTocSpec;
+  // Round 42：图目录/表目录（TOF 域，收录 SEQ 题注）
+  figure_index?: WordIndexSpec;
+  table_index?: WordIndexSpec;
   // Round 33：首页不同页眉页脚（封面页场景）
   first_page_different?: boolean;
   first_page_header?: WordHeaderFooterSpec;
   first_page_footer?: WordHeaderFooterSpec;
   // Round 34：奇偶页不同页眉页脚（书籍排版场景）
   odd_even_pages?: boolean;
+  // Round 26/37：分节横排（宽表/财务页场景）
+  section_breaks?: WordSectionBreakSpec[];
   even_page_header?: WordHeaderFooterSpec;
   even_page_footer?: WordHeaderFooterSpec;
 }
@@ -426,6 +468,8 @@ export interface WordTableSpec {
   header_repeat?: boolean;
   column_widths_cm?: number[];
   merges?: WordCellMergeSpec[];
+  // Round 36：表头行样式（加粗+浅灰底+居中）
+  header_style?: boolean;
 }
 
 // Word 格式 Linter（Round 10）：对照 FormatSpec 校验 docx。
@@ -494,6 +538,19 @@ export interface OfficeWordLintRequest {
   max_size_bytes?: number;
 }
 
+/**
+ * Round 49：文档核心属性（core properties，期刊/公文归档要求）。
+ * backend/office/models.py WordMetadataSpec 对应。
+ */
+export interface WordMetadataSpec {
+  author?: string;
+  subject?: string;
+  /** 关键词（分号分隔） */
+  keywords?: string;
+  comments?: string;
+  category?: string;
+}
+
 export interface OfficeWordGenerateRequest {
   /** P7: 进度追踪任务 id（前端 uuid；GET /office/progress/{id} 轮询） */
   task_id?: string;
@@ -509,6 +566,8 @@ export interface OfficeWordGenerateRequest {
   // Round 9 引用体系：结构化文献 + 引用样式
   references?: ReferenceSpec[];
   citation_style?: 'gbt7714' | 'apa';
+  // Round 49：文档核心属性（core properties）
+  metadata?: WordMetadataSpec;
 }
 
 export interface ExcelSheetSpec {
