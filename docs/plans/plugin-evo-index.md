@@ -39,7 +39,8 @@
 | R107 | Agent 白名单未发布插件条目标注与就地移除（纯前端） | ✅ #2545 |
 | R108 | 审批弹窗插件归属可见化（决策时刻横幅 + OS 通知归属，纯前端） | ✅ #2552 |
 | R109 | 已保存权限规则遮蔽标注（被更高优先级规则覆盖的行可见化，纯前端） | ✅ #2557 |
-| R110 | 聊天顶栏弹层标注补齐（审计插件归属 + 会话规则遮蔽，纯前端） | 🔄 |
+| R110 | 聊天顶栏弹层标注补齐（审计插件归属 + 会话规则遮蔽，纯前端） | ✅ #2566 |
+| R111 | 聊天历史工具调用插件归属标注（转录通用卡片，纯前端） | 🔄 #2576 |
 
 ## 2. 交付总账
 
@@ -72,7 +73,8 @@
 | R107 | EditAgentForm 未发布插件条目分类标注（发布快照+生命周期名单前端镜像 R101）+ 就地移除与测试/文档 | #2545 | 待对齐 | ✅ 已交付 |
 | R108 | ApprovalDialog 所属插件横幅 + OS 通知归属后缀（复用 R95 权威 plugin_name）与测试/文档 | #2552 | 待对齐 | ✅ 已交付 |
 | R109 | PermissionRulesManager 遮蔽派生（等值/插件通配覆盖）+ 徽标与测试/文档 | #2557 | 待对齐 | ✅ 已交付 |
-| R110 | permissionInsights 共享派生下沉 + PermissionModeSwitch 审计归属后缀/会话规则遮蔽徽标与测试/文档 | #2566 | 待对齐 | 🔄 |
+| R110 | permissionInsights 共享派生下沉 + PermissionModeSwitch 审计归属后缀/会话规则遮蔽徽标与测试/文档 | #2566 | 待对齐 | ✅ 已交付 |
+| R111 | usePluginNames 共享名单缓存 + Message 通用卡片归属后缀与测试/文档 | #2576 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -644,7 +646,7 @@
   101 例通过；tsc、ESLint、architecture、diff-check、
   diagnostics 全绿，manifest 仍 274，后端零改动。
 
-## 30. R110 交付边界（PR #2566 待合并）
+## 30. R110 交付边界（已合并）
 
 > spec：`2026-10-27_perm-popover-annotations-r110.md`。
 > R110 是本插件账轮次号，与其它账本的同号计划无关。
@@ -664,5 +666,25 @@
   ESLint（0 errors，存量 warnings 不变）、
   architecture、diff-check、diagnostics 全绿，
   manifest 仍 274，后端零改动。
+
+## 31. R111 交付边界（PR #2576 待合并）
+
+> spec：`2026-10-27_transcript-plugin-owner-r111.md`。
+> R111 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **历史可见化收官**：聊天转录通用卡片标注插件工
+  具的所属插件，口径与审计（R110）/审批
+  （R108）同一权威归属；至此用户能看到工具名字
+  的全部界面都带归属。
+- **热路径收敛**：名单经模块级缓存 hook 供数（在
+  途合并 + TTL + 内容未变不换引用），只动通用卡
+  标题行；memo 比较、专用渲染器、导出串零改动，
+  后端零改动（manifest 仍 274）。
+- **本地证据**：新 hook 套件、Message.pluginOwner
+  与 Message 既有全组及 permissionInsights/
+  PermissionModeSwitch 共 14 文件 74 例通过；
+  tsc、ESLint（0 errors，存量 warnings 不变）、
+  architecture（Message 768/800）、diff-check、
+  diagnostics 全绿，manifest 仍 274，后端零改动。
 
 —— 本账本由插件化循环维护，随轮次追加。
