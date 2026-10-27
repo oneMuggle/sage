@@ -59,14 +59,13 @@ def test_read_capped_output_skips_missing_os_nonblock(tmp_path, monkeypatch):
     assert truncated is False
 
 
-@pytest.mark.parametrize("os_name", ["posix", "nt"])
-def test_helper_drops_nonblock_matches_platform(monkeypatch, os_name):
-    """Sanity: ``hasattr(os, "O_NONBLOCK")`` is the contract the production
-    code relies on. On POSIX CI the flag is present; the monkeypatch only
-    removes it on simulated Windows so the two tests above can run there too.
+def test_drop_nonblock_helper_removes_attribute_on_any_platform(monkeypatch):
+    """``_drop_nonblock`` must succeed on every platform — on POSIX it removes
+    the attribute, on Windows it is a no-op because the attribute is already
+    absent. Both branches exercise the contract the production code relies on.
     """
-    if os_name == "nt":
-        _drop_nonblock(monkeypatch)
-        assert not hasattr(os, "O_NONBLOCK")
-    else:
-        assert hasattr(os, "O_NONBLOCK")
+    # Whether ``os.O_NONBLOCK`` was present before the helper ran depends on
+    # the host (POSIX: present; Windows: absent). After the helper, it must
+    # always be gone.
+    _drop_nonblock(monkeypatch)
+    assert not hasattr(os, "O_NONBLOCK")

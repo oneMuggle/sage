@@ -3,11 +3,12 @@
 覆盖 ``backend/skills/skill_md/skills_dir_policy.py`` 的读取与校验口径，
 以及 ``SkillMdImporter._resolve_skills_dir()`` 的优先级链：
 
-    显式参数 > preference "skills_dir" > SAGE_SKILLS_DIR env > ~/.sage/skills
+    显式参数 > SAGE_SKILLS_DIR env > preference "skills_dir" > ~/.sage/skills
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -58,9 +59,25 @@ def test_empty_value_is_none():
     assert read_skills_dir_preference(_FakeRepo("")) is None
 
 
-def test_absolute_path_is_returned():
-    """绝对路径 → 原样返回（不做 mkdir，交给调用方）。"""
-    assert read_skills_dir_preference(_FakeRepo("/opt/skills")) == Path("/opt/skills")
+@pytest.mark.parametrize("value", [123, ["skills"], {"skills_dir": "skills"}])
+def test_non_string_value_falls_back(value: object):
+    """损坏的非字符串 preference → None，不把 TypeError 升级成启动失败。"""
+    assert read_skills_dir_preference(_FakeRepo(value)) is None
+
+
+def test_absolute_path_is_returned(tmp_path: Path):
+    """宿主原生绝对路径 → 原样返回（不做 mkdir，交给调用方）。"""
+    skills_dir = tmp_path / "skills"
+
+    assert read_skills_dir_preference(_FakeRepo(str(skills_dir))) == skills_dir
+    assert not skills_dir.exists()
+
+
+def test_absolute_path_with_posix_separators_is_returned(tmp_path: Path):
+    """宿主原生绝对路径的正斜杠表示仍按宿主路径解析。"""
+    skills_dir = tmp_path / "skills"
+
+    assert read_skills_dir_preference(_FakeRepo(skills_dir.as_posix())) == skills_dir
 
 
 def test_user_home_is_expanded():
@@ -76,9 +93,18 @@ def test_relative_path_is_rejected():
     assert read_skills_dir_preference(_FakeRepo("relative/skills")) is None
 
 
-def test_parent_traversal_is_rejected():
+@pytest.mark.skipif(os.name != "nt", reason="Windows drive-relative 路径语义")
+@pytest.mark.parametrize("value", ["/opt/skills", r"\opt\skills", "C:skills"])
+def test_windows_partial_absolute_paths_are_rejected(value: str):
+    """无盘符 root-relative / drive-relative 都依赖当前盘状态，必须回退。"""
+    assert read_skills_dir_preference(_FakeRepo(value)) is None
+
+
+def test_parent_traversal_is_rejected(tmp_path: Path):
     """含 ``..`` 段的路径 → None（路径穿越防御）。"""
-    assert read_skills_dir_preference(_FakeRepo("/opt/../etc/skills")) is None
+    traversal = tmp_path / "skills" / ".." / "escape"
+
+    assert read_skills_dir_preference(_FakeRepo(str(traversal))) is None
 
 
 def test_repo_failure_falls_back():
