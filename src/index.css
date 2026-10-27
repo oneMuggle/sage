@@ -157,14 +157,7 @@
   --sidebar-width: 240px;
   --header-height: 48px;
 
-  /* Density (comfortable defaults) */
-  --density-msg-gap: 16px;
-  --density-msg-py: 10px;
-  --density-msg-px: 14px;
-  --density-setting-row-py: 12px;
-  --density-sidebar-item-py: 8px;
-
-  /* ZCode-inspired semantic UI tokens */
+  /* ZCode-inspired surface hierarchy (DESIGN.md §2) */
   --ui-font-size: var(--font-size-ui, 14px);
   --color-ui-page: #ffffff;
   --color-ui-page-rgb: 255 255 255;
@@ -327,14 +320,6 @@
   --color-ui-fg-rgb: 241 245 249;
   --color-ui-subtle: #94a3b8;
   --color-ui-subtle-rgb: 148 163 184;
-}
-
-[data-density='compact'] {
-  --density-msg-gap: 8px;
-  --density-msg-py: 6px;
-  --density-msg-px: 10px;
-  --density-setting-row-py: 8px;
-  --density-sidebar-item-py: 4px;
 }
 
 body {
