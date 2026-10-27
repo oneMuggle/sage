@@ -135,7 +135,7 @@ async def test_connect_error_raises_network_error(client):
 @pytest.mark.asyncio()
 async def test_remote_protocol_error_raises_network_error(client):
     """httpx.RemoteProtocolError（chunked body 中断）应映射为 NETWORK 并触发重试，
-    而非落到 UNKNOWN 直接失败——见 docs/plans/2026-10-27_llm-protocol-error-retry.md。"""
+    而非落到 UNKNOWN 直接失败——见 docs/technical/101-llm-error-classification-retry.md。"""
     with patch.object(client, "_get_client") as mock_get_client:
         mock_http = AsyncMock()
         mock_http.post = AsyncMock(
