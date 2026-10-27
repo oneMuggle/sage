@@ -280,8 +280,8 @@ class ZoteroClient:
 
     def iter_items_for_index(
         self,
-        since_ts: str | None = None,
-    ) -> Iterator[dict[str, Any]]:
+        since_ts: Optional[str] = None,
+    ) -> Iterator[Dict[str, Any]]:
         """Yield index-ready records for every user-facing item.
 
         Excludes Zotero internal types (attachment / note / annotation).
@@ -500,7 +500,7 @@ class ZoteroClient:
     # Relations
     # ------------------------------------------------------------------
 
-    def get_related_items(self, item_key: str) -> list[dict[str, Any]]:
+    def get_related_items(self, item_key: str) -> List[Dict[str, Any]]:
         """Return items linked to ``item_key`` via Zotero's related-items UI.
 
         Zotero stores each direction as a row of
@@ -534,7 +534,7 @@ class ZoteroClient:
             (f"%/items/{item_key}", item_id),
         )
 
-        keys: list[str] = []
+        keys: List[str] = []
         for row in outgoing:
             keys.append(str(row["object"]).rsplit("/", 1)[-1])
         for row in incoming:
@@ -542,8 +542,8 @@ class ZoteroClient:
             if other:
                 keys.append(other)
 
-        seen: set[str] = set()
-        related: list[dict[str, Any]] = []
+        seen: Set[str] = set()
+        related: List[Dict[str, Any]] = []
         for key in keys:
             if not key or key == item_key or key in seen:
                 continue
@@ -554,7 +554,7 @@ class ZoteroClient:
                 continue
         return related
 
-    def _relation_columns(self) -> set[str]:
+    def _relation_columns(self) -> Set[str]:
         """Column names of ``itemRelations``; empty set when table missing."""
         try:
             rows = self._execute("PRAGMA table_info(itemRelations)", ())
@@ -563,7 +563,7 @@ class ZoteroClient:
             return set()
         return {str(row["name"]) for row in rows}
 
-    def _safe_related_query(self, query: str, params: tuple) -> list[sqlite3.Row]:
+    def _safe_related_query(self, query: str, params: tuple) -> List[sqlite3.Row]:
         """Run a relations query, treating schema drift as "no relations"."""
         try:
             return self._execute(query, params)
@@ -647,8 +647,8 @@ class ZoteroClient:
 
     def annotations_by_parent(
         self,
-        parent_item_ids: list[int],
-    ) -> dict[int, list[dict[str, Any]]]:
+        parent_item_ids: List[int],
+    ) -> Dict[int, List[Dict[str, Any]]]:
         """Batch-fetch annotations grouped by their bibliographic parent.
 
         Annotations hang off attachments, which in turn hang off the
@@ -699,13 +699,13 @@ class ZoteroClient:
             """,
             tuple(anno_ids),
         )
-        fields_by_anno: dict[int, dict[str, str]] = {}
+        fields_by_anno: Dict[int, Dict[str, str]] = {}
         for row in field_rows:
             fields_by_anno.setdefault(row["itemID"], {})[row["fieldName"]] = row[
                 "value"
             ]
 
-        grouped: dict[int, list[dict[str, Any]]] = {}
+        grouped: Dict[int, List[Dict[str, Any]]] = {}
         for row in rows:
             fields = fields_by_anno.get(row["itemID"], {})
             grouped.setdefault(row["parent_id"], []).append(
