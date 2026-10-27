@@ -7,6 +7,17 @@
 // API 模块
 export { agentsApi } from './agentsApi';
 export { chatApi } from './chatApi';
+export {
+  globalRulesApi,
+  GlobalRulesError,
+  GLOBAL_RULES_CHAR_LIMIT,
+  GLOBAL_RULES_MAX_BYTES,
+} from './globalRulesApi';
+export type {
+  GlobalRulesState,
+  GlobalRulesTemplate,
+  GlobalRulesDeleteResult,
+} from './globalRulesApi';
 export { knowledgeApi } from './knowledgeApi';
 export { learnApi } from './learnApi';
 export { memoryApi } from './memoryApi';

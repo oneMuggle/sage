@@ -272,6 +272,13 @@ from backend.api.legacy_settings_routes import (  # noqa: F401 — 经 include �
 
 router.include_router(legacy_settings_routes_router)
 
+# G1 (2026-10-27): 全局规则 (~/.sage/SAGE.md) 读写端点。
+from backend.api.global_rules_routes import (  # noqa: F401 — 经 include 挂载
+    router as global_rules_routes_router,
+)
+
+router.include_router(global_rules_routes_router)
+
 
 # C2g (DSH 对标 R32): 非流式聊天/attach/interrupt/steer/进化/learn 端点迁出至
 # legacy_chat_routes.py（纯物理拆分，路径/行为零变更；include 模式同前）。

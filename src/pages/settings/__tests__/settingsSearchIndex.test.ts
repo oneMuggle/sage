@@ -31,6 +31,7 @@ describe('SETTINGS_SEARCH_INDEX 不变量', () => {
       'models', 'orchestration', 'memory', 'network', 'mcp', 'plugins', 'remote-workspaces', 'zotero',
       'runtime', 'evolution', 'updates', 'providers', 'usage-stats',
       'skills',
+      'global-rules',
     ]);
     for (const e of SETTINGS_SEARCH_INDEX) {
       expect(knownTabs.has(e.tab), `tab of ${e.key}`).toBe(true);
