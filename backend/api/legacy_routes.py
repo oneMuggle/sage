@@ -35,6 +35,11 @@ from backend.api.chat_stream_registry import (
     StreamEntry,
     StreamRegistry,
 )
+from backend.api.orch_plan_block import (
+    PLAN_OVERRIDE_REASONING,
+    build_orch_plan_block,
+    load_confirmed_plan_items,
+)
 from backend.api.orch_routes import router as orch_routes_router
 from backend.chat.executors import resolve_attachments
 from backend.chat.history_context import (
@@ -276,102 +281,6 @@ from backend.api.legacy_chat_routes import (  # noqa: F401 — include 挂载 + 
 )
 
 router.include_router(legacy_chat_routes_router)
-
-
-
-
-
-
-
-
-#: override 路径（"按计划执行（编排）"）没有 decompose 阶段的 LLM 推理，
-#: plan_json 的 reasoning 用这个哨兵占位。它是后端内部标记而非给人看的文字
-#: —— task_plan 事件下发给前端前必须过滤成空串，否则 PlanCard 的"规划思路"
-#: 折叠区会把 plan_override 原文当拆解思路展示给用户。
-_PLAN_OVERRIDE_REASONING = "plan_override"
-
-
-def _build_orch_plan_block(plan_items: List[Dict[str, Any]]) -> str:
-    """编排计划块 —— 注入 conductor system prompt 的"已确认计划"段落。
-
-    必须在确认门控**之后**调用：计划卡在确认窗口内可被 update_plan 改写
-    （用户编辑 goal / 自然语言修订），提前注入会让 conductor 执行过期计划。
-    """
-    plan_block = "\n".join(
-        f"- {i}. [{it.get('agent_id', 'primary')}] {it.get('goal', '')}"
-        for i, it in enumerate(plan_items, 1)
-    )
-    return (
-        "\n\n以下为已确认的任务计划，请调用 dispatch_subagents "
-        "工具并行执行这些子任务（可合并/调整）。不要复述计划，直接执行。\n"
-        + plan_block
-        # 进度可视化 P0-2 后置 (2026-08-12): 强化"必须全量执行完
-        # 才汇总"约束。dispatch_subagents 每次调用可能只派发部分
-        # 子任务（分批/合并），若聚合头只反映"本批已收到 X/X"，
-        # LLM 可能误以为全部完成而提前总结。这里显式给出总数 N，
-        # 要求必须等到 N 个全部有结果才输出最终汇总。
-        + "\n\n必须执行完计划中的全部"
-        + str(len(plan_items))
-        + " 个子任务，等到所有子任务都返回结果后，才能输出最终汇总。"
-        "若本次 dispatch 只执行了部分子任务，请继续调用工具执行剩余任务，"
-        "不要提前给出结论。"
-        # RT11 (round7): 失败处理指令 —— 此前 conductor 只被告知
-        # "必须全部执行完"，失败子任务无任何再规划指引，唯一出路
-        # 是 LLM 对聚合文本的自由裁量。
-        + "\n\n子任务失败时的处理方式：阅读该任务的失败原因文本，"
-        "判断是可修复错误（参数不当、依赖文件缺失、路径错误等）还是"
-        "不可行任务。可修复的，调整 goal 描述或改派更合适的 agent 重新"
-        "派发该工作（可派发新任务，或用 retry_of 重派并继承现场）；"
-        "不可行的，在最终汇总中说明原因。"
-        "不要原样重派已经失败的同一任务。"
-        # BD4 (round15): 后台工作流指引 —— background=true 派发后
-        # 立即返回，期间可先做其他工作，再 collect_subagents 收取。
-        # BD5 (round16): 补充非阻塞快照与提前汇总策略。
-        + "\n\n当某些子任务耗时较长而你希望先推进其他工作时，可在 "
-        "dispatch_subagents 传 background=true 后台派发（立即返回），"
-        "期间执行你自己的其他工具调用，之后调用 collect_subagents "
-        "获取聚合结果；collect 超时只表示还没跑完，任务板仍在推进，"
-        "可再次 collect。"
-        "collect 可传 wait=false 立即获取各子任务当前状态与结果"
-        "预览快照——若已有信息足以支撑最终结论，可据此提前汇总，"
-        "无需等待全部子任务完成。"
-        # RP1 (round34, 2026-09-19): re-plan 工具族指引 ——
-        # 此前 conductor 只能靠上段"失败处理指令"做任务级微调，
-        # 无法主动调整计划结构（改目标/取消/加任务）。
-        + "\n\n发现原计划不再适用时可主动调整计划，有三个工具："
-        "\n- update_pending_task：修改尚未派发任务的 goal 或执行"
-        "角色，参数 task_id 必填、goal 与 agent_id 至少给一个。"
-        "\n- cancel_pending_task：取消不再需要的任务，参数 task_id "
-        "必填、reason 可选。未派发的直接移出计划，已派发仍在排队的"
-        "会被跳过，运行中的会被软中断；取消后请勿重派该任务。"
-        "\n- add_task_to_plan：把新发现的工作加入计划，参数 task_id "
-        "/ goal / agent_id 必填，depends_on 可选且只能引用已存在的"
-        "task_id。添加后调用 dispatch_subagents 派发即可执行。"
-        "\n任务失败时不要原样重派 —— 先判断该改目标、换角色、取消，"
-        "还是补充新任务。"
-    )
-
-
-def _load_confirmed_plan_items(run_id: str) -> Optional[List[Dict[str, Any]]]:
-    """确认门控通过后回读权威计划 —— 计划卡编辑/修订已落库。
-
-    返回 None 表示读库失败或计划为空，调用方回落内存 plan_items（原行为）。
-    """
-    try:
-        from backend.data.orch_run_repo import OrchRunRepository
-
-        run = OrchRunRepository().get(run_id)
-        if run is None or not run.plan_json:
-            return None
-        raw = json.loads(run.plan_json)
-        tasks = raw.get("tasks") if isinstance(raw, dict) else None
-        if not isinstance(tasks, list):
-            return None
-        items = [dict(t) for t in tasks if isinstance(t, dict) and t.get("task_id")]
-        return items or None
-    except Exception as exc:  # noqa: BLE001 — 回读失败不影响主流程
-        logger.warning("确认后回读计划失败 run=%s err=%s", run_id, exc)
-        return None
 
 
 @router.post("/chat/stream")
@@ -992,7 +901,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 计划块注入延后到确认门控之后 —— 用户在计划卡确认前的
                     # goal 编辑 / 自然语言修订会经 update_plan 落库，若在此处
                     # 注入，conductor 将拿到过期计划（见门控后的
-                    # _build_orch_plan_block 调用）。
+                    # build_orch_plan_block 调用）。
                     # 计划先行：子 agent 跑之前先推 task_plan（可展示、可取消）
                     # Wave 2 P1-4: 首次 dispatch 前把 run + plan 落库,供 resume 端点重建。
                     # 失败降级（logger.warning）,绝不阻塞聊天。
@@ -1001,7 +910,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # plan.reasoning（可为空串）。避免 override 路径直接引用
                     # 未定义的 plan 抛 NameError。
                     reasoning = (
-                        _PLAN_OVERRIDE_REASONING
+                        PLAN_OVERRIDE_REASONING
                         if data.plan_override
                         else (plan.reasoning if plan else "")
                     )
@@ -1029,7 +938,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                             # 宁可给空串（前端不渲染该区块）也别把内部标记
                             # 当规划思路展示。
                             "reasoning": (
-                                "" if reasoning == _PLAN_OVERRIDE_REASONING else reasoning
+                                "" if reasoning == PLAN_OVERRIDE_REASONING else reasoning
                             ),
                         }
                     )
@@ -1095,12 +1004,12 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 自然语言修订已落库（POST /orch/runs/{id}/plan），conductor
                     # 的 system prompt 与 dispatcher 的任务计数必须反映最终计划。
                     # 读库失败或计划为空时回落内存 plan_items（原行为）。
-                    confirmed_items = _load_confirmed_plan_items(run_id)
+                    confirmed_items = load_confirmed_plan_items(run_id)
                     if confirmed_items:
                         plan_items = confirmed_items
                         if dispatcher is not None:
                             dispatcher.total_tasks = len(plan_items)
-                    system_content += _build_orch_plan_block(plan_items)
+                    system_content += build_orch_plan_block(plan_items)
             try:
                 from backend.core.diagram_prompt import (
                     DIAGRAM_TOOL_PROMPT,

@@ -1,4 +1,4 @@
-"""确认门控后回读权威计划 —— legacy_routes._load_confirmed_plan_items 单测。
+"""确认门控后回读权威计划 —— orch_plan_block.load_confirmed_plan_items 单测。
 
 覆盖 plan 回读的每条兜底分支（调用方据 None 回落内存 plan_items，原行为）：
 1. 正常读库 → 返回计划条目；
@@ -15,7 +15,7 @@ import json
 
 import pytest
 
-from backend.api.legacy_routes import _load_confirmed_plan_items
+from backend.api.orch_plan_block import load_confirmed_plan_items
 from backend.data import database as db_mod
 from backend.data.orch_run_repo import OrchRun, OrchRunRepository
 
@@ -57,7 +57,7 @@ def test_returns_confirmed_items(repo: OrchRunRepository) -> None:
             ensure_ascii=False,
         ),
     )
-    items = _load_confirmed_plan_items("orch-ok")
+    items = load_confirmed_plan_items("orch-ok")
     assert items is not None
     assert [it["task_id"] for it in items] == ["t1", "t2"]
     assert items[0]["goal"] == "改过的目标"
@@ -66,17 +66,17 @@ def test_returns_confirmed_items(repo: OrchRunRepository) -> None:
 
 
 def test_returns_none_when_run_missing(repo: OrchRunRepository) -> None:
-    assert _load_confirmed_plan_items("orch-nope") is None
+    assert load_confirmed_plan_items("orch-nope") is None
 
 
 def test_returns_none_when_plan_json_empty(repo: OrchRunRepository) -> None:
     _insert(repo, "orch-empty", "")
-    assert _load_confirmed_plan_items("orch-empty") is None
+    assert load_confirmed_plan_items("orch-empty") is None
 
 
 def test_returns_none_on_malformed_json(repo: OrchRunRepository) -> None:
     _insert(repo, "orch-bad-json", "{不是 JSON")
-    assert _load_confirmed_plan_items("orch-bad-json") is None
+    assert load_confirmed_plan_items("orch-bad-json") is None
 
 
 @pytest.mark.parametrize(
@@ -90,7 +90,7 @@ def test_returns_none_on_malformed_json(repo: OrchRunRepository) -> None:
 )
 def test_returns_none_on_unexpected_shape(repo: OrchRunRepository, plan_json: str) -> None:
     _insert(repo, "orch-shape", plan_json)
-    assert _load_confirmed_plan_items("orch-shape") is None
+    assert load_confirmed_plan_items("orch-shape") is None
 
 
 def test_filters_junk_entries_but_keeps_valid_ones(repo: OrchRunRepository) -> None:
@@ -110,7 +110,7 @@ def test_filters_junk_entries_but_keeps_valid_ones(repo: OrchRunRepository) -> N
             ensure_ascii=False,
         ),
     )
-    items = _load_confirmed_plan_items("orch-junk")
+    items = load_confirmed_plan_items("orch-junk")
     assert items is not None
     assert [it["task_id"] for it in items] == ["t2"]
 
@@ -121,7 +121,7 @@ def test_returns_none_when_all_entries_filtered_out(repo: OrchRunRepository) -> 
         "orch-all-junk",
         json.dumps({"tasks": ["t1", {"goal": "no id"}]}, ensure_ascii=False),
     )
-    assert _load_confirmed_plan_items("orch-all-junk") is None
+    assert load_confirmed_plan_items("orch-all-junk") is None
 
 
 def test_returns_none_when_repo_read_raises(repo: OrchRunRepository, monkeypatch) -> None:
@@ -136,4 +136,4 @@ def test_returns_none_when_repo_read_raises(repo: OrchRunRepository, monkeypatch
         raise RuntimeError("db locked")
 
     monkeypatch.setattr(OrchRunRepository, "get", _explode)
-    assert _load_confirmed_plan_items("orch-boom") is None
+    assert load_confirmed_plan_items("orch-boom") is None
