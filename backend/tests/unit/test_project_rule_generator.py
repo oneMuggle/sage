@@ -74,7 +74,7 @@ def _agent_without_llm() -> ProjectRuleGenerator:
 # ── 模板规则 ────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_template_rules_emitted() -> None:
     report = _report(
         suggested_rules=[
@@ -97,7 +97,7 @@ async def test_template_rules_emitted() -> None:
     assert template_rules[0].content == "使用双引号字符串"
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_ai_custom_template_key_skipped_in_template_pass() -> None:
     report = _report(
         suggested_rules=[
@@ -120,7 +120,7 @@ async def test_ai_custom_template_key_skipped_in_template_pass() -> None:
 # ── 去重 ────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_duplicate_with_existing_content_skipped() -> None:
     report = _report(
         suggested_rules=[
@@ -143,7 +143,7 @@ async def test_duplicate_with_existing_content_skipped() -> None:
     assert result.skipped_duplicates == 1
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_duplicate_within_result_skipped() -> None:
     """两条内容相同的模板规则只保留一条。"""
     rule = SuggestedRule(
@@ -162,7 +162,7 @@ async def test_duplicate_within_result_skipped() -> None:
     assert result.skipped_duplicates == 1
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_whitespace_normalized_dedup() -> None:
     report = _report(
         suggested_rules=[
@@ -187,7 +187,7 @@ async def test_whitespace_normalized_dedup() -> None:
 # ── 专属规则 ────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_custom_rules_from_llm() -> None:
     payload = json.dumps(
         {
@@ -211,7 +211,7 @@ async def test_custom_rules_from_llm() -> None:
     assert custom[0].priority == 9
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_custom_rules_fallback_when_llm_errors() -> None:
     llm = AsyncMock()
     llm.complete = AsyncMock(side_effect=RuntimeError("boom"))
@@ -221,7 +221,7 @@ async def test_custom_rules_fallback_when_llm_errors() -> None:
     assert [r for r in result.rules if r.source == SOURCE_AI_CUSTOM]
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_custom_rules_fallback_when_llm_unavailable() -> None:
     result = await _agent_without_llm().generate(_profile(), _report())
     assert result.llm_available is False
@@ -230,7 +230,7 @@ async def test_custom_rules_fallback_when_llm_unavailable() -> None:
     assert all(r.content for r in custom)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_heuristic_custom_rules_follow_tech_stack() -> None:
     result = await _agent_without_llm().generate(
         _profile(tech_stack=["python", "pytest"], lint_configs=["ruff.toml"]),
@@ -244,14 +244,14 @@ async def test_heuristic_custom_rules_follow_tech_stack() -> None:
 # ── 里程碑 ──────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_milestones_from_blueprint() -> None:
     result = await _agent_without_llm().generate(_profile(), _report())
     assert result.milestones
     assert all("title" in m for m in result.milestones)
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio()
 async def test_milestones_empty_for_unknown_type() -> None:
     result = await _agent_without_llm().generate(
         _profile(), _report(level1_type="unknown_type")
