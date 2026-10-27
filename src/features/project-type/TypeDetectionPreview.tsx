@@ -9,9 +9,10 @@
 import { Sparkles, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
-import type { ProjectType, ProjectTypeDetectionResult } from '../../shared/api';
+import type { ProjectType, ProjectTypeDetectionResult, SubTypesCatalog } from '../../shared/api';
 
 import { getArchetypeBlueprint } from './archetypeBlueprints';
+import { resolveSubTypeLabel } from './subTypeCatalog';
 
 export interface TypeDetectionPreviewProps {
   /** 检测结果，null 表示未检测或检测中 */
@@ -22,6 +23,8 @@ export interface TypeDetectionPreviewProps {
   error?: string | null;
   /** 当前选中的类型（用于高亮匹配项） */
   selectedType?: ProjectType | null;
+  /** 两级类型目录（用于把 L2 sub_type 解析为可读标签） */
+  subTypes?: SubTypesCatalog | null;
   /** 一键应用检测到的项目类型回调 */
   onApplyDetectedType?: (type: ProjectType) => void;
   /** 自定义 className */
@@ -47,6 +50,7 @@ export function TypeDetectionPreview({
   loading = false,
   error = null,
   selectedType,
+  subTypes = null,
   onApplyDetectedType,
   className,
 }: TypeDetectionPreviewProps) {
@@ -153,6 +157,39 @@ export function TypeDetectionPreview({
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {(result.subType || result.techStack.length > 0) && (
+        <div className="mt-2 space-y-1" data-testid="detection-fine-grained">
+          {result.subType && (
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">检测子类型：</span>
+              <span
+                className="rounded bg-primary/10 px-1.5 py-0.5 text-ui-2xs font-medium text-primary"
+                data-testid="detection-subtype"
+              >
+                {resolveSubTypeLabel(result.subType, subTypes)}
+              </span>
+              <span className="font-mono text-ui-2xs text-muted-foreground">{result.subType}</span>
+            </div>
+          )}
+          {result.techStack.length > 0 && (
+            <div
+              className="flex flex-wrap items-center gap-1 text-xs"
+              data-testid="detection-tech-stack"
+            >
+              <span className="text-muted-foreground">技术栈：</span>
+              {result.techStack.map((tech) => (
+                <span
+                  key={tech}
+                  className="rounded border border-border bg-muted/40 px-1.5 py-0.5 font-mono text-ui-2xs text-foreground"
+                >
+                  {tech}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

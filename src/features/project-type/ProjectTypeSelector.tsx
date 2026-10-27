@@ -6,9 +6,14 @@
  */
 
 import { Code, BookOpen, Briefcase, User, Sparkles, RefreshCw, Copy, Check } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 
-import { projectApi, type ProjectType, type ProjectTypeDetectionResult } from '../../shared/api';
+import {
+  projectApi,
+  type ProjectType,
+  type ProjectTypeDetectionResult,
+  type SubTypesCatalog,
+} from '../../shared/api';
 import { Button } from '../../shared/ui/Button';
 import {
   Dialog,
@@ -20,12 +25,16 @@ import {
 } from '../../shared/ui/Dialog/Dialog';
 
 import { getArchetypeBlueprint } from './archetypeBlueprints';
+import { resolveSubTypeLabel } from './subTypeCatalog';
 
 export interface ProjectTypeSelectorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectPath: string;
+  /** 选择 L1 类型（保持既有签名） */
   onSelect: (type: ProjectType) => void;
+  /** 选择 L2 子类型（可选，未提供时仅回传 L1） */
+  onSelectSubType?: (type: ProjectType, subType: string | null) => void;
   onCancel?: () => void;
 }
 
@@ -73,9 +82,12 @@ export function ProjectTypeSelector({
   onOpenChange,
   projectPath,
   onSelect,
+  onSelectSubType,
   onCancel,
 }: ProjectTypeSelectorProps) {
   const [selectedType, setSelectedType] = useState<ProjectType | null>(null);
+  const [selectedSubType, setSelectedSubType] = useState<string | null>(null);
+  const [subTypes, setSubTypes] = useState<SubTypesCatalog | null>(null);
   const [detection, setDetection] = useState<ProjectTypeDetectionResult | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [copiedDetection, setCopiedDetection] = useState(false);
@@ -86,6 +98,23 @@ export function ProjectTypeSelector({
   const [copiedVcs, setCopiedVcs] = useState(false);
   const [copiedPositioning, setCopiedPositioning] = useState(false);
 
+  // 拉取两级类型目录（L2 子类型网格）
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const catalog = await projectApi.subTypes();
+        if (!cancelled) setSubTypes(catalog);
+      } catch {
+        // 目录拉取失败不阻塞 L1 选择
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   const runDetection = useCallback(async () => {
     if (!projectPath || typeof projectApi?.detectType !== 'function') return;
     setDetecting(true);
@@ -94,6 +123,7 @@ export function ProjectTypeSelector({
       setDetection(result);
       if (result.confidence >= 0.7) {
         setSelectedType(result.detectedType);
+        setSelectedSubType(result.subType ?? null);
       }
     } catch {
       // 检测失败时不阻塞用户
@@ -108,9 +138,21 @@ export function ProjectTypeSelector({
     void runDetection();
   }, [open, projectPath, runDetection]);
 
+  const handleSelectType = useCallback((type: ProjectType) => {
+    setSelectedType(type);
+    // 切 L1 时清空 L2（避免跨 L1 残留）
+    setSelectedSubType(null);
+  }, []);
+
+  const subTypeOptions = useMemo(() => {
+    if (!selectedType || !subTypes) return [];
+    return subTypes.subTypes[selectedType] ?? [];
+  }, [selectedType, subTypes]);
+
   const handleSelect = () => {
     if (selectedType) {
       onSelect(selectedType);
+      onSelectSubType?.(selectedType, selectedSubType);
       onOpenChange(false);
     }
   };
@@ -177,7 +219,10 @@ export function ProjectTypeSelector({
                     <button
                       type="button"
                       data-testid="selector-apply-detected-btn"
-                      onClick={() => setSelectedType(detection.detectedType)}
+                      onClick={() => {
+                        setSelectedType(detection.detectedType);
+                        setSelectedSubType(detection.subType ?? null);
+                      }}
                       className="rounded border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20"
                     >
                       采用检测结果
@@ -194,6 +239,12 @@ export function ProjectTypeSelector({
                         '# 项目类型检测摘要',
                         `- **检测类型**：${label} (${detection.detectedType})`,
                         `- **置信度**：${Math.round(detection.confidence * 100)}%`,
+                        detection.subType
+                          ? `- **检测子类型**：${resolveSubTypeLabel(detection.subType, subTypes)}`
+                          : '',
+                        detection.techStack.length > 0
+                          ? `- **技术栈**：${detection.techStack.join('、')}`
+                          : '',
                         detection.signals.length > 0
                           ? `- **检测依据**：${detection.signals.join('、')}`
                           : '',
@@ -234,6 +285,37 @@ export function ProjectTypeSelector({
                   </button>
                 </div>
               </div>
+              {(detection.subType || detection.techStack.length > 0) && (
+                <div className="mt-2 space-y-1" data-testid="selector-detection-fine-grained">
+                  {detection.subType && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="text-muted-foreground">检测子类型：</span>
+                      <span
+                        className="rounded bg-primary/10 px-1.5 py-0.5 text-ui-2xs font-medium text-primary"
+                        data-testid="selector-detection-subtype"
+                      >
+                        {resolveSubTypeLabel(detection.subType, subTypes)}
+                      </span>
+                    </div>
+                  )}
+                  {detection.techStack.length > 0 && (
+                    <div
+                      className="flex flex-wrap items-center gap-1 text-xs"
+                      data-testid="selector-detection-tech-stack"
+                    >
+                      <span className="text-muted-foreground">技术栈：</span>
+                      {detection.techStack.map((tech) => (
+                        <span
+                          key={tech}
+                          className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-ui-2xs text-foreground"
+                        >
+                          {tech}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {detection.signals.length > 0 && (
                 <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-text-secondary">
                   <span>检测依据：{detection.signals.slice(0, 3).join('、')}</span>
@@ -273,7 +355,7 @@ export function ProjectTypeSelector({
                   key={type.value}
                   type="button"
                   data-testid={`selector-option-${type.value}`}
-                  onClick={() => setSelectedType(type.value)}
+                  onClick={() => handleSelectType(type.value)}
                   className={`relative flex flex-col items-start gap-2 rounded-lg border-2 p-4 text-left transition-all ${
                     isSelected
                       ? 'border-primary bg-primary/5 shadow-sm'
@@ -307,127 +389,175 @@ export function ProjectTypeSelector({
             })}
           </div>
 
-          {selectedType && (() => {
-            const activeBp = getArchetypeBlueprint(selectedType);
-            return (
+          {/* L2 子类型网格（仅在目录加载且该 L1 有子类型时显示） */}
+          {selectedType && subTypeOptions.length > 0 && (
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                项目子类型（更精确的治理路径）
+              </label>
               <div
-                className="space-y-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs"
-                data-testid="selector-selected-summary"
+                className="grid grid-cols-1 gap-1.5 sm:grid-cols-2"
+                data-testid="selector-l2-grid"
               >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium text-foreground">
-                    已选治理形态：{activeBp.label} · 推荐版本保护：{activeBp.vcsLabel}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">
-                      {activeBp.directories.length} 个标准目录 · {activeBp.recommendedMilestones.length} 个推荐里程碑
-                    </span>
+                <button
+                  type="button"
+                  data-testid="selector-l2-none"
+                  onClick={() => setSelectedSubType(null)}
+                  className={`rounded-lg border p-2 text-left text-xs transition-colors ${
+                    selectedSubType === null
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border bg-surface hover:bg-surface-hover text-muted-foreground'
+                  }`}
+                >
+                  <span className="font-medium">仅使用形态级分类</span>
+                  <span className="ml-1 text-ui-2xs text-muted-foreground">（不指定子类型）</span>
+                </button>
+                {subTypeOptions.map((sub) => {
+                  const active = selectedSubType === sub.key;
+                  return (
                     <button
+                      key={sub.key}
                       type="button"
-                      data-testid="selector-suite-toggle-btn"
-                      onClick={() => setShowSuiteDetails((v) => !v)}
-                      className="rounded border border-primary/30 bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+                      data-testid={`selector-l2-${sub.key}`}
+                      onClick={() => setSelectedSubType(sub.key)}
+                      className={`rounded-lg border p-2 text-left text-xs transition-colors ${
+                        active
+                          ? 'border-primary bg-primary/10 text-foreground'
+                          : 'border-border bg-surface hover:bg-surface-hover text-muted-foreground'
+                      }`}
                     >
-                      {showSuiteDetails ? '收起治理清单' : '预览治理清单'}
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles className="h-3 w-3 text-primary" />
+                        <span className="font-medium">{sub.label}</span>
+                      </div>
+                      <p className="mt-0.5 text-ui-2xs text-muted-foreground line-clamp-2">
+                        {sub.description}
+                      </p>
                     </button>
-                  </div>
-                </div>
-                {showSuiteDetails && (
-                  <div
-                    className="border-t border-primary/20 pt-1.5 text-ui-2xs text-muted-foreground space-y-1"
-                    data-testid="selector-suite-details"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span>
-                        工作区定位：{activeBp.positioning}
-                      </span>
-                      <button
-                        type="button"
-                        data-testid="selector-copy-positioning-btn"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard?.writeText(activeBp.positioning);
-                            setCopiedPositioning(true);
-                            setTimeout(() => setCopiedPositioning(false), 1500);
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }}
-                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                      >
-                        {copiedPositioning ? '已复制定位' : '复制工作区定位'}
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span>
-                        版本保护策略：{activeBp.vcsLabel}
-                      </span>
-                      <button
-                        type="button"
-                        data-testid="selector-copy-vcs-btn"
-                        onClick={async () => {
-                          try {
-                            await navigator.clipboard?.writeText(activeBp.vcsLabel);
-                            setCopiedVcs(true);
-                            setTimeout(() => setCopiedVcs(false), 1500);
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }}
-                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                      >
-                        {copiedVcs ? '已复制版本保护' : '复制版本保护'}
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span>
-                        阶段管线：{activeBp.stages.map((s) => s.label).join(' → ')}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span>
-                        标准目录：{activeBp.directories.map((d) => `${d}/`).join(' · ')}
-                      </span>
-                      <button
-                        type="button"
-                        data-testid="selector-copy-dirs-btn"
-                        onClick={async () => {
-                          const md = activeBp.directories.map((d) => `${d}/`).join('\n');
-                          try {
-                            await navigator.clipboard?.writeText(md);
-                            setCopiedDirs(true);
-                            setTimeout(() => setCopiedDirs(false), 1500);
-                          } catch {
-                            // ignore in test/offline mode
-                          }
-                        }}
-                        className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
-                      >
-                        {copiedDirs ? '已复制目录' : '复制标准目录'}
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span>
-                        细分规范包：{activeBp.subTemplates.map((t) => t.label).join(' · ')}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span>
-                        推荐里程碑：{activeBp.recommendedMilestones.map((m) => m.title).join(' → ')}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span>
-                        护栏支柱：{activeBp.contextPillars.join(' · ')}
-                      </span>
-                    </div>
-                    <div className="flex justify-end gap-1.5 pt-0.5">
-                    </div>
-                  </div>
-                )}
+                  );
+                })}
               </div>
-            );
-          })()}
+            </div>
+          )}
+
+          {selectedType &&
+            (() => {
+              const activeBp = getArchetypeBlueprint(selectedType);
+              return (
+                <div
+                  className="space-y-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-xs"
+                  data-testid="selector-selected-summary"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-medium text-foreground">
+                      已选治理形态：{activeBp.label} · 推荐版本保护：{activeBp.vcsLabel}
+                      {selectedSubType
+                        ? ` · 子类型：${resolveSubTypeLabel(selectedSubType, subTypes)}`
+                        : ''}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground">
+                        {activeBp.directories.length} 个标准目录 ·{' '}
+                        {activeBp.recommendedMilestones.length} 个推荐里程碑
+                      </span>
+                      <button
+                        type="button"
+                        data-testid="selector-suite-toggle-btn"
+                        onClick={() => setShowSuiteDetails((v) => !v)}
+                        className="rounded border border-primary/30 bg-background px-1.5 py-0.5 text-ui-2xs font-medium text-primary hover:bg-primary/10"
+                      >
+                        {showSuiteDetails ? '收起治理清单' : '预览治理清单'}
+                      </button>
+                    </div>
+                  </div>
+                  {showSuiteDetails && (
+                    <div
+                      className="border-t border-primary/20 pt-1.5 text-ui-2xs text-muted-foreground space-y-1"
+                      data-testid="selector-suite-details"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>工作区定位：{activeBp.positioning}</span>
+                        <button
+                          type="button"
+                          data-testid="selector-copy-positioning-btn"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard?.writeText(activeBp.positioning);
+                              setCopiedPositioning(true);
+                              setTimeout(() => setCopiedPositioning(false), 1500);
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }}
+                          className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                        >
+                          {copiedPositioning ? '已复制定位' : '复制工作区定位'}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>版本保护策略：{activeBp.vcsLabel}</span>
+                        <button
+                          type="button"
+                          data-testid="selector-copy-vcs-btn"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard?.writeText(activeBp.vcsLabel);
+                              setCopiedVcs(true);
+                              setTimeout(() => setCopiedVcs(false), 1500);
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }}
+                          className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                        >
+                          {copiedVcs ? '已复制版本保护' : '复制版本保护'}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>阶段管线：{activeBp.stages.map((s) => s.label).join(' → ')}</span>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>
+                          标准目录：{activeBp.directories.map((d) => `${d}/`).join(' · ')}
+                        </span>
+                        <button
+                          type="button"
+                          data-testid="selector-copy-dirs-btn"
+                          onClick={async () => {
+                            const md = activeBp.directories.map((d) => `${d}/`).join('\n');
+                            try {
+                              await navigator.clipboard?.writeText(md);
+                              setCopiedDirs(true);
+                              setTimeout(() => setCopiedDirs(false), 1500);
+                            } catch {
+                              // ignore in test/offline mode
+                            }
+                          }}
+                          className="rounded border border-border bg-background px-1.5 py-0.5 text-ui-2xs text-foreground hover:bg-muted"
+                        >
+                          {copiedDirs ? '已复制目录' : '复制标准目录'}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>
+                          细分规范包：{activeBp.subTemplates.map((t) => t.label).join(' · ')}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>
+                          推荐里程碑：
+                          {activeBp.recommendedMilestones.map((m) => m.title).join(' → ')}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>护栏支柱：{activeBp.contextPillars.join(' · ')}</span>
+                      </div>
+                      <div className="flex justify-end gap-1.5 pt-0.5"></div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
         </div>
 
         <DialogFooter>
