@@ -110,7 +110,10 @@ export const orchestrationRoutes: Record<string, CommandRoute> = {
   orchestration_update_plan: {
     method: 'POST',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/plan`,
-    body: (a) => ({ plan: a.plan }),
+    // 编排计划卡片 UX (2026-10-26): reasoning 随计划一并落库（修订通道）
+    // —— 缺省时后端沿用库里已有值，故只在调用方显式提供时才带该键。
+    body: (a) =>
+      a.reasoning === undefined ? { plan: a.plan } : { plan: a.plan, reasoning: a.reasoning },
   },
   // Fix #3 (2026-09-06): 用户确认编排计划 → 唤醒 producer 开始执行。
   orchestration_confirm_run: {
@@ -128,6 +131,11 @@ export const orchestrationRoutes: Record<string, CommandRoute> = {
   orchestration_plan_items: {
     method: 'POST',
     path: () => '/api/v1/orch/plan-items',
-    body: (a) => ({ text: a.text }),
+    // current_plan 非空 → 后端走修订 prompt（只改用户提到的任务，
+    // 其余原样保留）；缺省 → 首次拆解语义不变。
+    body: (a) =>
+      a.current_plan === undefined
+        ? { text: a.text }
+        : { text: a.text, current_plan: a.current_plan },
   },
 };

@@ -146,6 +146,68 @@ async def test_plan_items_structures_approved_plan(monkeypatch):
     assert "学习指南" in body["items"][1]["goal"]
 
 
+class RecordingLLM:
+    def __init__(self, response: str):
+        self._response = response
+        self.prompts: list[str] = []
+
+    async def complete(self, prompt: str) -> str:
+        self.prompts.append(prompt)
+        return self._response
+
+
+@pytest.mark.asyncio()
+async def test_plan_items_with_current_plan_uses_revision_prompt():
+    """current_plan 非空 → 修订语义：当前计划与修订说明都进入 prompt。"""
+    llm = RecordingLLM(_valid_llm_response())
+    current_plan = [
+        {"task_id": "t1", "agent_id": "researcher", "goal": "调研量化交易资料"},
+        {"task_id": "t2", "agent_id": "writer", "goal": "整理学习指南"},
+    ]
+    with patch(
+        "backend.orchestration.llm_factory.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            resp = await ac.post(
+                PLAN_ITEMS_PATH,
+                json={"text": "把第 2 项拆成两步", "current_plan": current_plan},
+            )
+
+    assert resp.status_code == 200, resp.text
+    assert len(llm.prompts) == 1
+    prompt = llm.prompts[0]
+    assert "编排计划修订助手" in prompt
+    assert "调研量化交易资料" in prompt
+    assert "整理学习指南" in prompt
+    assert "把第 2 项拆成两步" in prompt
+    assert "未提及的任务必须原样保留" in prompt
+    assert "{current_plan}" not in prompt
+    assert "{max_tasks}" not in prompt
+    assert "{text}" not in prompt
+
+
+@pytest.mark.asyncio()
+async def test_plan_items_without_current_plan_keeps_first_time_prompt():
+    """current_plan 缺省 → 首次拆解语义不变（向后兼容）。"""
+    llm = RecordingLLM(_valid_llm_response())
+    with patch(
+        "backend.orchestration.llm_factory.build_llm_client_from_settings",
+        return_value=llm,
+    ):
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            resp = await ac.post(PLAN_ITEMS_PATH, json={"text": "1. 调研 2. 整理"})
+
+    assert resp.status_code == 200, resp.text
+    prompt = llm.prompts[0]
+    assert "编排计划结构化助手" in prompt
+    assert "编排计划修订助手" not in prompt
+
+
 @pytest.mark.asyncio()
 async def test_plan_items_503_without_llm(monkeypatch):
     monkeypatch.delenv("SAGE_ORCH_PLAN_PREFLIGHT", raising=False)
@@ -202,3 +264,40 @@ async def test_plan_items_422_on_pathological_input():
         too_long = await ac.post(PLAN_ITEMS_PATH, json={"text": "x" * 20001})
     assert empty.status_code == 422
     assert too_long.status_code == 422
+
+
+@pytest.mark.asyncio()
+async def test_plan_items_422_on_current_plan_overflow():
+    """修订通道 current_plan 上限（MEDIUM-4）：它会被 json.dumps 直接拼进
+    prompt，不设上限时一个病态 body 能撑出百万 token 的 prompt。
+
+    上限用显式运行时校验而非 pydantic Field(max_items=...) —— pydantic v1 的
+    list 约束参数名是 max_items、v2 是 max_length，写字段约束会踩双版本差异。
+    """
+    from backend.api.orch_routes import MAX_CURRENT_PLAN_ITEMS
+
+    overflow = [
+        {"task_id": f"t{i}", "agent_id": "primary", "goal": f"g{i}"}
+        for i in range(MAX_CURRENT_PLAN_ITEMS + 1)
+    ]
+    with patch(
+        "backend.orchestration.llm_factory.build_llm_client_from_settings",
+        return_value=FakeLLM(_valid_llm_response()),
+    ):
+        async with httpx.AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as ac:
+            at_limit = await ac.post(
+                PLAN_ITEMS_PATH,
+                json={
+                    "text": "改一下",
+                    "current_plan": overflow[:MAX_CURRENT_PLAN_ITEMS],
+                },
+            )
+            over = await ac.post(
+                PLAN_ITEMS_PATH, json={"text": "改一下", "current_plan": overflow}
+            )
+    # 边界值本身合法（真实计划最多 ~10 项）
+    assert at_limit.status_code == 200, at_limit.text
+    assert over.status_code == 422
+    assert "current_plan" in over.json()["detail"]
