@@ -125,14 +125,8 @@ class TestSuccessPath:
         store = _make_store()
 
         tool = SkillSaveTool()
-        with patch(
-                "backend.tools.skill_save_tool.get_review_service",
-                return_value=service,
-            ):
-            with patch(
-                    "backend.tools.skill_save_tool.get_skill_draft_store",
-                    return_value=store,
-                ):
+        with patch( "backend.tools.skill_save_tool.get_review_service", return_value=service, ):  # noqa: SIM117 — py38 不支持括号多上下文 with
+            with patch( "backend.tools.skill_save_tool.get_skill_draft_store", return_value=store, ):
                 result = tool.execute(
                     name="academic-search-cnki",
                     description="CNKI 学术检索",
@@ -165,14 +159,8 @@ class TestSuccessPath:
             seq.append(_ok_call(f"later_tool_{i}"))
 
         tool = SkillSaveTool()
-        with patch(
-                "backend.tools.skill_save_tool.get_review_service",
-                return_value=service,
-            ):
-            with patch(
-                    "backend.tools.skill_save_tool.get_skill_draft_store",
-                    return_value=store,
-                ):
+        with patch( "backend.tools.skill_save_tool.get_review_service", return_value=service, ):  # noqa: SIM117 — py38 不支持括号多上下文 with
+            with patch( "backend.tools.skill_save_tool.get_skill_draft_store", return_value=store, ):
                 result = tool.execute(
                     name="academic-search-cnki",
                     description="CNKI 学术检索",
@@ -194,14 +182,8 @@ class TestSuccessPath:
         store = _make_store()
 
         tool = SkillSaveTool()
-        with patch(
-                "backend.tools.skill_save_tool.get_review_service",
-                return_value=service,
-            ):
-            with patch(
-                    "backend.tools.skill_save_tool.get_skill_draft_store",
-                    return_value=store,
-                ):
+        with patch( "backend.tools.skill_save_tool.get_review_service", return_value=service, ):  # noqa: SIM117 — py38 不支持括号多上下文 with
+            with patch( "backend.tools.skill_save_tool.get_skill_draft_store", return_value=store, ):
                 tool.execute(
                     name="academic-search-cnki",
                     description="CNKI 学术检索",
@@ -229,14 +211,8 @@ class TestFailureModes:
         store = _make_store()
 
         tool = SkillSaveTool()
-        with patch(
-                "backend.tools.skill_save_tool.get_review_service",
-                return_value=service,
-            ):
-            with patch(
-                    "backend.tools.skill_save_tool.get_skill_draft_store",
-                    return_value=store,
-                ):
+        with patch( "backend.tools.skill_save_tool.get_review_service", return_value=service, ):  # noqa: SIM117 — py38 不支持括号多上下文 with
+            with patch( "backend.tools.skill_save_tool.get_skill_draft_store", return_value=store, ):
                 result = tool.execute(
                     name="academic-search-cnki",
                     description="CNKI 学术检索",
@@ -258,14 +234,8 @@ class TestFailureModes:
         store.insert = Mock(side_effect=RuntimeError("sqlite locked"))
 
         tool = SkillSaveTool()
-        with patch(
-                "backend.tools.skill_save_tool.get_review_service",
-                return_value=service,
-            ):
-            with patch(
-                    "backend.tools.skill_save_tool.get_skill_draft_store",
-                    return_value=store,
-                ):
+        with patch( "backend.tools.skill_save_tool.get_review_service", return_value=service, ):  # noqa: SIM117 — py38 不支持括号多上下文 with
+            with patch( "backend.tools.skill_save_tool.get_skill_draft_store", return_value=store, ):
                 result = tool.execute(
                     name="academic-search-cnki",
                     description="CNKI 学术检索",
