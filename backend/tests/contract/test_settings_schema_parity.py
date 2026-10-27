@@ -125,13 +125,15 @@ def test_legal_model_selections_obj_keys_is_stable() -> None:
 
 
 def test_legal_orch_keys_is_stable() -> None:
-    """LEGAL_ORCH_KEYS 必须与前端 OrchSettings interface 19 键逐字同步.
+    """LEGAL_ORCH_KEYS 必须与前端 OrchSettings interface 23 键逐字同步.
 
     历史事故两次: 2026-09 漏 worktreeIsolation / subagentApprovalMode /
     runTokenBudget, RD15 后又漏 runWallClockLimitMinutes /
     subagentTaskTimeoutS / maxRetryOfChains, 均导致编排段任一保存 400
     且被前端静默吞掉。Round 3 (2026-09-19) 补计划前置开关
-    planPreflightEnabled / planScoutEnabled。新增 orch 键时此处与
+    planPreflightEnabled / planScoutEnabled。2026-10-27 补 maxToolCallsPerRun
+    (同款回归: UI/OrchSettings 已有, 白名单漏加) 与 Scout/Planner 迭代预算
+    maxScoutIterations / maxPlannerIterations。新增 orch 键时此处与
     canonicalizer 必须同改。
     """
     assert frozenset(
@@ -158,6 +160,10 @@ def test_legal_orch_keys_is_stable() -> None:
             "maxWriterIterations",
             # 2026-10-20 全局迭代上限 (Win7 适配: 0=按各 agent 分别设置)
             "maxIterations",
+            # 2026-10-27 工具预算 + 计划前置/Planner 迭代预算
+            "maxToolCallsPerRun",
+            "maxScoutIterations",
+            "maxPlannerIterations",
         }
     ) == LEGAL_ORCH_KEYS
 
@@ -181,6 +187,37 @@ def test_aliases_camel_side_subset_of_legal_keys() -> None:
     aliases_camel_side = frozenset(ALIASES.values())
     missing = aliases_camel_side - all_legal_camel
     assert not missing, f"ALIASES camel side not in LEGAL_*_KEYS: {missing}"
+
+
+def test_legal_keys_survive_relay_snake_roundtrip() -> None:
+    """白名单里的多词 camel 键必须在 ALIASES 有 snake 别名.
+
+    Electron relay 的 ``camelToSnakeKeys``（electron/invoke.ts）把前端
+    camelCase 键整体转 snake 后再 POST/PUT；后端 ``to_camel`` 只认
+    ``ALIASES`` 里显式登记的 snake→camel 对。缺别名时键翻不回 camel，
+    ``validate_settings_shape`` 报 400，而前端 ``saveSettings`` 的
+    ``catch {}`` 会静默吞掉 —— 用户看到"改了没生效"。
+
+    历史事故（2026-10-27）：``maxIterations`` / ``logTimezone`` /
+    ``useFolderPicker`` 三键漏加别名。编排 Tab 每次保存都整体 spread 提交
+    orch 段（含 maxIterations），故编排段任一保存必 400，两个新增的迭代
+    预算旋钮也因此无法落库。本守卫把"漏加即回归"变成机械可检。
+    """
+
+    def snake(key: str) -> str:
+        return re.sub(r"([A-Z])", lambda m: "_" + m.group(1).lower(), key)
+
+    for legal in (
+        LEGAL_TOP_KEYS,
+        LEGAL_ENDPOINT_KEYS,
+        LEGAL_MODEL_SELECTION_KEYS,
+        LEGAL_MODEL_SELECTIONS_KEYS,
+        LEGAL_DISCOVERED_MODEL_KEYS,
+        LEGAL_WIKI_KEYS,
+        LEGAL_ORCH_KEYS,
+    ):
+        missing = {k for k in legal if snake(k) != k and snake(k) not in ALIASES}
+        assert not missing, f"缺 snake 别名（relay 往返后 400）: {sorted(missing)}"
 
 
 def test_aliases_is_bijective() -> None:

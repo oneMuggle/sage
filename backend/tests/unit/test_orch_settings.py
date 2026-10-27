@@ -112,3 +112,61 @@ def test_max_subagent_iterations_bad_value_falls_back():
         }
         s = load_orch_settings()
     assert s.max_subagent_iterations == 10  # alpha.36 (Bug #2): 6 → 10
+
+
+# ---------------------------------------------------------------------------
+# 2026-10-27 — 计划前置 / Planner 迭代预算旋钮
+# ---------------------------------------------------------------------------
+
+
+def test_iteration_budgets_default_values():
+    """无 app_settings → Scout 4 / Planner 8（既有硬编码行为 + 总方案建议值）。"""
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = None
+        s = load_orch_settings()
+    assert s.max_scout_iterations == 4
+    assert s.max_planner_iterations == 8
+
+
+def test_iteration_budgets_override():
+    """app_settings.orch 的 camelCase 键覆盖生效，且互不影响。"""
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {"maxScoutIterations": 2, "maxPlannerIterations": 12}
+        }
+        s = load_orch_settings()
+    assert s.max_scout_iterations == 2
+    assert s.max_planner_iterations == 12
+    # 同段其他键不受影响
+    assert s.max_subagent_iterations == 10
+
+
+def test_iteration_budgets_bad_value_falls_back():
+    """坏类型（str / bool）只回落该键，不污染整段。"""
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {
+                "maxScoutIterations": "2",
+                "maxPlannerIterations": True,
+                "maxRetries": 5,
+            }
+        }
+        s = load_orch_settings()
+    assert s.max_scout_iterations == 4
+    assert s.max_planner_iterations == 8
+    assert s.max_retries == 5
+
+
+def test_iteration_budgets_clamped_to_lower_bound():
+    """0 / 负值被钳到 1 —— 0 会让 ReAct 循环零次执行直接判定超限。
+
+    前端 NumberField 有 ``min={1}`` 守卫，但 API 可绕过 UI 直写脏数据；
+    后端在此兜底，避免侦察静默失效（无异常、无日志、比崩溃更难排查）。
+    """
+    with patch("backend.orchestration.orch_settings.SettingsRepository") as repo_cls:
+        repo_cls.return_value.get_json.return_value = {
+            "orch": {"maxScoutIterations": 0, "maxPlannerIterations": -3}
+        }
+        s = load_orch_settings()
+    assert s.max_scout_iterations == 1
+    assert s.max_planner_iterations == 1
