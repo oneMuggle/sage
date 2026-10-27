@@ -13,7 +13,15 @@ const GROUPS = [
     id: 'tools',
     zh: '工具与安全',
     en: 'Tools and safety',
-    keys: ['tools-connections', 'mcp', 'plugins', 'orchestration', 'evolution', 'skills', 'global-rules'],
+    keys: [
+      'tools-connections',
+      'mcp',
+      'plugins',
+      'orchestration',
+      'evolution',
+      'skills',
+      'global-rules',
+    ],
   },
   {
     id: 'network',

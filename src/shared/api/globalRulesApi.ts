@@ -143,9 +143,7 @@ export const globalRulesApi = {
   },
 
   async save(content: string): Promise<GlobalRulesState> {
-    return normalizeGlobalRulesState(
-      await call<unknown>('global_rules_save', { content }),
-    );
+    return normalizeGlobalRulesState(await call<unknown>('global_rules_save', { content }));
   },
 
   async remove(): Promise<GlobalRulesDeleteResult> {
