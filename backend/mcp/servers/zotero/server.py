@@ -1,17 +1,20 @@
 """Zotero MCP Server — expose local Zotero library to LLM agents.
 
 Read-only access to a local Zotero SQLite database via MCP tools.
-The LLM can search for references, retrieve item metadata, read
-annotations, list collections, export BibTeX, and read PDF fulltext.
+The LLM can search for references (semantic + keyword), retrieve item
+metadata, read annotations, page through PDF fulltext, list collections,
+export BibTeX, follow related items, and trigger a library re-index.
 
-Tools exposed (7):
+Tools exposed (9):
   - zotero_status: health check + library stats
-  - zotero_search: search by title/abstract/author
+  - zotero_search: semantic (vector) search, SQL LIKE fallback
   - zotero_get_item: full metadata for one item
   - zotero_get_annotations: PDF annotations for an item
   - zotero_list_collections: flat collection list
   - zotero_get_bibtex: BibTeX export for multiple items
   - zotero_read_pdf: chunked PDF fulltext (user-invoked)
+  - zotero_related: related items (Zotero relations + wiki graph)
+  - zotero_sync: rebuild/refresh the semantic index
 """
 
 from __future__ import annotations
@@ -20,6 +23,8 @@ import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+
+from backend.zotero import service as zotero_service
 
 logger = logging.getLogger(__name__)
 
@@ -124,16 +129,19 @@ async def list_tools() -> List[Tool]:
         Tool(
             name="zotero_search",
             description=(
-                "Search the Zotero library by title, abstract, or author name. "
-                "Returns a summary of matching items including key, title, date, "
-                "authors, tags, and item type. Optionally filter by collection or tag."
+                "Search the Zotero library. By default uses semantic (vector) search "
+                "over titles, abstracts and PDF annotations — good for topic questions "
+                "like 'papers about X'. Falls back to keyword (SQL LIKE) search when "
+                "the semantic index is unavailable. Pass semantic=false to force keyword "
+                "search; collection_key/tag filters always use keyword search. "
+                "Returns key, title, date, authors, tags and item type."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Search text (matched against title, abstract, and author names, case-insensitive)",
+                        "description": "Search text (semantic query or keyword, case-insensitive)",
                     },
                     "collection_key": {
                         "type": "string",
@@ -147,6 +155,14 @@ async def list_tools() -> List[Tool]:
                         "type": "integer",
                         "description": "Maximum number of results (default: 20)",
                         "default": 20,
+                    },
+                    "semantic": {
+                        "type": "boolean",
+                        "description": (
+                            "Use semantic vector search when available (default: true). "
+                            "Ignored when collection_key or tag is given."
+                        ),
+                        "default": True,
                     },
                 },
                 "required": ["query"],
@@ -260,6 +276,61 @@ async def list_tools() -> List[Tool]:
                 "required": ["item_key"],
             },
         ),
+        Tool(
+            name="zotero_related",
+            description=(
+                "Find items related to a given Zotero item. Merges Zotero's own "
+                "'Related' links (itemRelations) with wiki pages that cite the item "
+                "(when project_path is provided). Use this to expand a reading thread "
+                "or find follow-up papers. Returns full metadata for each related item."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "item_key": {
+                        "type": "string",
+                        "description": "The Zotero item key (e.g. 'ABCD1234')",
+                    },
+                    "project_path": {
+                        "type": "string",
+                        "description": (
+                            "Optional: workspace root whose wiki/ pages are also "
+                            "searched for related literature"
+                        ),
+                    },
+                },
+                "required": ["item_key"],
+            },
+        ),
+        Tool(
+            name="zotero_sync",
+            description=(
+                "Rebuild or refresh the Zotero semantic search index. "
+                "Incremental by default (only items modified since the last sync); "
+                "force=true re-embeds the whole library (slow, costs embedding tokens). "
+                "Normally unnecessary — Sage syncs on startup and from settings. "
+                "Optionally also export tagged items to the workspace wiki "
+                "(wiki/zotero/*.md) when project_path is provided."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "force": {
+                        "type": "boolean",
+                        "description": "Full rebuild instead of incremental (default: false)",
+                        "default": False,
+                    },
+                    "project_path": {
+                        "type": "string",
+                        "description": (
+                            "Optional: workspace root; when provided, items carrying "
+                            "the wiki tag (default 'sage:wiki') are also written as "
+                            "wiki pages under wiki/zotero/."
+                        ),
+                    },
+                },
+            },
+        ),
     ]
 
 
@@ -286,6 +357,10 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]: 
             return await _zotero_get_bibtex(arguments)
         elif name == "zotero_read_pdf":
             return await _zotero_read_pdf(arguments)
+        elif name == "zotero_related":
+            return await _zotero_related(arguments)
+        elif name == "zotero_sync":
+            return await _zotero_sync(arguments)
         else:
             return [TextContent(type="text", text=f"Unknown Zotero tool: {name}")]
     except Exception as exc:
@@ -319,24 +394,137 @@ async def _zotero_status() -> List[TextContent]:
     return [TextContent(type="text", text=json.dumps(health, indent=2, ensure_ascii=False))]
 
 
+def _json_result(payload: Dict[str, Any]) -> List[TextContent]:
+    """Wrap a payload as a single pretty-printed JSON text content."""
+    return [
+        TextContent(
+            type="text",
+            text=json.dumps(payload, indent=2, ensure_ascii=False),
+        )
+    ]
+
+
+def _authors_text(item: Dict[str, Any]) -> str:
+    """Join creator entries into ``"Last First, Last First"``."""
+    names: List[str] = []
+    for author in item.get("authors") or []:
+        if isinstance(author, dict):
+            name = " ".join(
+                part
+                for part in (author.get("lastName"), author.get("firstName"))
+                if part
+            ).strip()
+        else:
+            name = str(author).strip()
+        if name:
+            names.append(name)
+    return ", ".join(names)
+
+
+def _hydrate_hit(client: Any, hit: Dict[str, Any]) -> Dict[str, Any]:
+    """Fill a semantic hit with full metadata; keep the vector summary on failure."""
+    entry = dict(hit)
+    try:
+        item = client.get_item(str(hit.get("key") or ""))
+    except Exception:  # noqa: BLE001 — 元数据补全是尽力而为
+        return entry
+    entry["item_type"] = item.get("item_type") or hit.get("item_type", "")
+    entry["title"] = item.get("title") or hit.get("title", "")
+    entry["date"] = item.get("date", "")
+    entry["authors"] = _authors_text(item) or hit.get("authors", "")
+    entry["tags"] = item.get("tags") or []
+    return entry
+
+
 async def _zotero_search(args: Dict[str, Any]) -> List[TextContent]:
-    """Search items by title/abstract/author."""
+    """Semantic search first, SQL LIKE fallback when the index is unavailable."""
     client = _get_client()
     query = args["query"]
     collection_key = args.get("collection_key")
     tag = args.get("tag")
     limit = args.get("limit", 20)
+    semantic = bool(args.get("semantic", True))
+
+    # 集合 / 标签过滤只有 SQL 侧支持 → 有过滤条件时直接走关键词检索
+    if semantic and not collection_key and not tag:
+        hits = await zotero_service.semantic_search(query, limit=limit, client=client)
+        # 向量库不可用（None）或零命中（[]）都退回 SQL LIKE —— 部分索引
+        # 或全新查询在向量空间无近邻时，SQL LIKE 仍能靠标题/作者字面命中
+        if hits:
+            results = [_hydrate_hit(client, hit) for hit in hits]
+            return _json_result(
+                {
+                    "query": query,
+                    "mode": "semantic",
+                    "total": len(results),
+                    "results": results,
+                }
+            )
+        if hits is None:
+            logger.info("zotero semantic search unavailable; falling back to SQL LIKE")
+        else:
+            logger.info(
+                "zotero semantic search returned 0 hits; falling back to SQL LIKE"
+            )
+
     results = client.search(query, collection_key=collection_key, tag=tag, limit=limit)
-    return [
-        TextContent(
-            type="text",
-            text=json.dumps(
-                {"query": query, "total": len(results), "results": results},
-                indent=2,
-                ensure_ascii=False,
-            ),
-        )
-    ]
+    return _json_result(
+        {"query": query, "mode": "sql", "total": len(results), "results": results}
+    )
+
+
+async def _zotero_related(args: Dict[str, Any]) -> List[TextContent]:
+    """Related items: Zotero itemRelations ∪ wiki co-citation graph."""
+    client = _get_client()
+    item_key = args["item_key"]
+    project_path = args.get("project_path")
+
+    related: List[Dict[str, Any]] = list(client.get_related_items(item_key))
+    seen = {str(item.get("key") or "") for item in related}
+    seen.add(item_key)
+
+    for key in zotero_service.wiki_related_keys(project_path, item_key):
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            related.append(client.get_item(key))
+        except Exception:  # noqa: BLE001 — 单条缺失不影响整体结果
+            continue
+
+    return _json_result(
+        {"item_key": item_key, "total": len(related), "related": related}
+    )
+
+
+async def _zotero_sync(args: Dict[str, Any]) -> List[TextContent]:
+    """Refresh the semantic index (incremental by default); optionally wiki-export."""
+    from pathlib import Path
+
+    client = _get_client()
+    ingestor = zotero_service.build_ingestor(client)
+    if bool(args.get("force", False)):
+        result = await ingestor.sync_full()
+    else:
+        result = await ingestor.sync_incremental()
+
+    payload = result.to_dict()
+
+    project_path = args.get("project_path")
+    if project_path:
+        try:
+            from backend.zotero.wiki_export import export_wiki
+
+            root = Path(project_path)
+            if not root.is_dir():
+                payload["wiki"] = {"error": f"project_path is not a directory: {project_path}"}
+            else:
+                wiki_result = export_wiki(client, root)
+                payload["wiki"] = wiki_result.to_dict()
+        except Exception as exc:  # noqa: BLE001 - wiki 沉淀失败不影响主同步
+            payload["wiki"] = {"error": str(exc)}
+
+    return _json_result(payload)
 
 
 async def _zotero_get_item(args: Dict[str, Any]) -> List[TextContent]:
