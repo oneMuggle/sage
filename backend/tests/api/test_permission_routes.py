@@ -34,12 +34,15 @@ def gate():
     reset_permission_gate()
 
 
-def _pending_request(tool_name: str = "bash") -> ApprovalRequest:
+def _pending_request(
+    tool_name: str = "bash", plugin_name: str | None = None
+) -> ApprovalRequest:
     return ApprovalRequest.create(
         tool_name=tool_name,
         args={"command": "ls"},
         risk="suspicious",
         message="prompt 模式需要确认",
+        plugin_name=plugin_name,
     )
 
 
@@ -248,6 +251,53 @@ async def test_remember_appends_to_existing_rules(gate, client):
     ]
 
 
+async def test_remember_deduplicates_identical_rule(gate, client):
+    """R99: 完全相同的 (tool_pattern, decision) 已存在 → 不重复落一条。"""
+    # Arrange
+    repo = SettingsRepository()
+    repo.set_json(SETTINGS_KEY_RULES, [{"tool_pattern": "bash", "decision": "allow"}])
+    req = _pending_request("bash")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    # Act
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={"approved": True, "remember": True},
+    )
+    await holder
+
+    # Assert
+    assert resp.json() == {"ok": True}
+    assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
+        PermissionRule("bash", "allow")
+    ]
+
+
+async def test_remember_different_decision_not_deduplicated(gate, client):
+    """R99: 同 pattern 不同 decision 不是重复，照常追加（冲突由求值优先级裁决）。"""
+    # Arrange
+    repo = SettingsRepository()
+    repo.set_json(SETTINGS_KEY_RULES, [{"tool_pattern": "bash", "decision": "deny"}])
+    req = _pending_request("bash")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    # Act
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={"approved": True, "remember": True},
+    )
+    await holder
+
+    # Assert
+    assert resp.json() == {"ok": True}
+    assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
+        PermissionRule("bash", "deny"),
+        PermissionRule("bash", "allow"),
+    ]
+
+
 async def test_no_remember_does_not_touch_settings(gate, client):
     """remember=false (默认) → settings 不变。"""
     # Arrange
@@ -332,6 +382,161 @@ async def test_remember_with_exact_tool_name_still_persisted(gate, client):
 
 
 # ---------------------------------------------------------------------------
+# R95 按插件记住审批决定
+# ---------------------------------------------------------------------------
+
+
+async def test_remember_plugin_scope_persists_restricted_allow_rule(
+    gate, client
+):
+    """权威 plugin_name + plugin 范围 → 单插件受限 allow 规则。"""
+    req = _pending_request("plugin__demo__hello", plugin_name="demo")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    pending = await client.get("/api/v1/permissions/pending")
+    assert pending.json()[0]["plugin_name"] == "demo"
+
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={
+            "approved": True,
+            "remember": True,
+            "remember_scope": "plugin",
+        },
+    )
+    answer = await holder
+
+    assert resp.json() == {"ok": True}
+    assert answer.approved is True
+    rules = parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES))
+    assert rules == [PermissionRule("plugin__demo__*", "allow")]
+
+
+async def test_remember_plugin_scope_deduplicates_derived_rule(gate, client):
+    """R99: 整插件派生规则已存在时再次记住 → 仍只有一条。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES,
+        [{"tool_pattern": "plugin__demo__*", "decision": "allow"}],
+    )
+    req = _pending_request("plugin__demo__hello", plugin_name="demo")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={
+            "approved": True,
+            "remember": True,
+            "remember_scope": "plugin",
+        },
+    )
+    await holder
+
+    assert resp.json() == {"ok": True}
+    rules = parse_rules(repo.get_json(SETTINGS_KEY_RULES))
+    assert rules == [PermissionRule("plugin__demo__*", "allow")]
+
+
+async def test_remember_plugin_scope_persists_restricted_deny_rule(
+    gate, client
+):
+    """整插件拒绝与批准共用范围语义，落 deny。"""
+    req = _pending_request("plugin__demo__hello", plugin_name="demo")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={
+            "approved": False,
+            "remember": True,
+            "remember_scope": "plugin",
+        },
+    )
+    answer = await holder
+
+    assert resp.json() == {"ok": True}
+    assert answer.approved is False
+    rules = parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES))
+    assert rules == [PermissionRule("plugin__demo__*", "deny")]
+
+
+async def test_remember_tool_scope_keeps_exact_plugin_tool_rule(gate, client):
+    """显式 tool 范围仍只记当前完整插件工具名。"""
+    req = _pending_request("plugin__demo__hello", plugin_name="demo")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={
+            "approved": True,
+            "remember": True,
+            "remember_scope": "tool",
+        },
+    )
+    await holder
+
+    assert resp.json() == {"ok": True}
+    rules = parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES))
+    assert rules == [PermissionRule("plugin__demo__hello", "allow")]
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "plugin_name"),
+    [
+        ("plugin__demo__hello", None),
+        ("plugin__demo__hello", "other"),
+        ("plugin__demo__hello", "de mo"),
+        ("bash", "demo"),
+    ],
+)
+async def test_remember_plugin_scope_without_authoritative_match_not_persisted(
+    gate, client, tool_name, plugin_name
+):
+    """插件名缺失/不匹配时本次应答生效，但不猜测、不落任何规则。"""
+    req = _pending_request(tool_name, plugin_name=plugin_name)
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={
+            "approved": True,
+            "remember": True,
+            "remember_scope": "plugin",
+        },
+    )
+    answer = await holder
+
+    assert resp.json() == {"ok": True}
+    assert answer.approved is True
+    assert parse_rules(SettingsRepository().get_json(SETTINGS_KEY_RULES) or []) == []
+
+
+async def test_invalid_remember_scope_returns_422(gate, client):
+    """范围是封闭枚举，未知值不能被静默当作精确或整插件。"""
+    req = _pending_request("plugin__demo__hello", plugin_name="demo")
+    holder = asyncio.create_task(gate.request(req, timeout=5.0))
+    await asyncio.sleep(0.01)
+
+    resp = await client.post(
+        f"/api/v1/permissions/{req.request_id}/answer",
+        json={
+            "approved": True,
+            "remember": True,
+            "remember_scope": "all-plugins",
+        },
+    )
+
+    assert resp.status_code == 422
+    gate.answer(req.request_id, approved=False)
+    await holder
+
+
+# ---------------------------------------------------------------------------
 # FIX-4: 审批路由 Origin 守卫
 # ---------------------------------------------------------------------------
 
@@ -405,3 +610,221 @@ async def test_get_pending_with_file_origin_passes(gate, client):
     # Assert
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+# ---------------------------------------------------------------------------
+# R97 已保存规则的查看与逐条删除
+# ---------------------------------------------------------------------------
+
+
+async def test_list_rules_empty_when_unset(client):
+    """未保存任何规则 → 空列表（不是 404/500）。"""
+    resp = await client.get("/api/v1/permissions/rules")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "rules": []}
+
+
+async def test_list_rules_returns_effective_rules_and_skips_invalid(client):
+    """列表口径与 parse_rules 一致：非法条目不展示、有效条目保序。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES,
+        [
+            {"tool_pattern": "read_file", "decision": "allow"},
+            {"tool_pattern": 123, "decision": "allow"},
+            "junk",
+            {"tool_pattern": "bash", "decision": "bogus"},
+            {"tool_pattern": "plugin__demo__*", "decision": "deny"},
+        ],
+    )
+
+    resp = await client.get("/api/v1/permissions/rules")
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "ok": True,
+        "rules": [
+            {"tool_pattern": "read_file", "decision": "allow", "plugin_name": None, "plugin_status": None},
+            {"tool_pattern": "plugin__demo__*", "decision": "deny", "plugin_name": None, "plugin_status": "missing"},
+        ],
+    }
+
+
+async def test_delete_rule_removes_one_and_returns_updated_list(client):
+    """R99: 按内容只删一条（重复规则逐条删），写回并返回最新列表。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES,
+        [
+            {"tool_pattern": "bash", "decision": "allow"},
+            {"tool_pattern": "bash", "decision": "allow"},
+            {"tool_pattern": "write_file", "decision": "ask"},
+        ],
+    )
+
+    resp = await client.post(
+        "/api/v1/permissions/rules/delete",
+        json={"tool_pattern": "bash", "decision": "allow"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "ok": True,
+        "rules": [
+            {"tool_pattern": "bash", "decision": "allow", "plugin_name": None, "plugin_status": None},
+            {"tool_pattern": "write_file", "decision": "ask", "plugin_name": None, "plugin_status": None},
+        ],
+    }
+    assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
+        PermissionRule("bash", "allow"),
+        PermissionRule("write_file", "ask"),
+    ]
+
+
+async def test_delete_rule_targets_content_not_list_position(client):
+    """R99: 删除以内容为准，列表位置变化不会删错规则（含 ask 规则可删）。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES,
+        [
+            {"tool_pattern": "bash", "decision": "deny"},
+            {"tool_pattern": "read_file", "decision": "allow"},
+            {"tool_pattern": "write_file", "decision": "ask"},
+        ],
+    )
+
+    resp = await client.post(
+        "/api/v1/permissions/rules/delete",
+        json={"tool_pattern": "write_file", "decision": "ask"},
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "ok": True,
+        "rules": [
+            {"tool_pattern": "bash", "decision": "deny", "plugin_name": None, "plugin_status": None},
+            {"tool_pattern": "read_file", "decision": "allow", "plugin_name": None, "plugin_status": None},
+        ],
+    }
+    assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
+        PermissionRule("bash", "deny"),
+        PermissionRule("read_file", "allow"),
+    ]
+
+
+async def test_delete_rule_not_found_returns_400_and_keeps_storage(client):
+    """无完全一致的规则（pattern 或 decision 不符）→ 400，存储不被改写。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES, [{"tool_pattern": "bash", "decision": "deny"}]
+    )
+
+    for body in (
+        {"tool_pattern": "bash", "decision": "allow"},
+        {"tool_pattern": "read_file", "decision": "deny"},
+        {"tool_pattern": "*", "decision": "deny"},
+    ):
+        resp = await client.post(
+            "/api/v1/permissions/rules/delete", json=body
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {"ok": False, "error": "rule not found"}
+
+    assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
+        PermissionRule("bash", "deny")
+    ]
+
+
+async def test_delete_rule_rejects_extra_body_fields(client):
+    """删除端点不接受额外字段（extra=forbid → 422）。"""
+    resp = await client.post(
+        "/api/v1/permissions/rules/delete",
+        json={"tool_pattern": "bash", "decision": "allow", "hacker_field": 1},
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_delete_rule_rejects_legacy_index_body(client):
+    """R99: 旧的下标请求体不再被接受（422）。"""
+    resp = await client.post(
+        "/api/v1/permissions/rules/delete",
+        json={"index": 0},
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_delete_rule_with_evil_origin_returns_403(client):
+    """第三方网页 Origin 删除规则 → 403，存储不变。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES, [{"tool_pattern": "bash", "decision": "allow"}]
+    )
+
+    resp = await client.post(
+        "/api/v1/permissions/rules/delete",
+        json={"tool_pattern": "bash", "decision": "allow"},
+        headers={"Origin": "https://evil.com"},
+    )
+
+    assert resp.status_code == 403
+    assert resp.json() == {"ok": False, "error": "forbidden_origin"}
+    assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
+        PermissionRule("bash", "allow")
+    ]
+
+
+# ---------------------------------------------------------------------------
+# R100 已保存规则一键清空
+# ---------------------------------------------------------------------------
+
+
+async def test_clear_rules_empties_storage_and_returns_empty_list(client):
+    """R100: 清空写入空列表并返回空 rules；无效存量条目随之一并消失。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES,
+        [
+            {"tool_pattern": "bash", "decision": "deny"},
+            {"tool_pattern": 123, "decision": "allow"},
+            {"tool_pattern": "plugin__demo__*", "decision": "allow"},
+        ],
+    )
+
+    resp = await client.post("/api/v1/permissions/rules/clear")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "rules": []}
+    assert repo.get_json(SETTINGS_KEY_RULES) == []
+    listed = await client.get("/api/v1/permissions/rules")
+    assert listed.json() == {"ok": True, "rules": []}
+
+
+async def test_clear_rules_is_idempotent_when_empty(client):
+    """R100: 本无规则时清空仍返回 ok，不报错。"""
+    resp = await client.post("/api/v1/permissions/rules/clear")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "rules": []}
+    assert SettingsRepository().get_json(SETTINGS_KEY_RULES) == []
+
+
+async def test_clear_rules_with_evil_origin_returns_403(client):
+    """第三方网页 Origin 清空规则 → 403，存储不变。"""
+    repo = SettingsRepository()
+    repo.set_json(
+        SETTINGS_KEY_RULES, [{"tool_pattern": "bash", "decision": "allow"}]
+    )
+
+    resp = await client.post(
+        "/api/v1/permissions/rules/clear",
+        headers={"Origin": "https://evil.com"},
+    )
+
+    assert resp.status_code == 403
+    assert resp.json() == {"ok": False, "error": "forbidden_origin"}
+    assert parse_rules(repo.get_json(SETTINGS_KEY_RULES)) == [
+        PermissionRule("bash", "allow")
+    ]
