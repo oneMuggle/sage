@@ -4,7 +4,8 @@ export type Tier = 'fast' | 'balanced' | 'powerful';
 
 export interface RoutingPreference {
   preferred_tier?: Tier | null;
-  locked_model?: string | null;
+  /** 锁定的模型对象；后端直接把它当作 selected_model 返回（非 model id 字符串）。 */
+  locked_model?: EffectiveModel | null;
 }
 
 export interface RouteRequest {
