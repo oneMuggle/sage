@@ -198,6 +198,10 @@ export interface AppSettings {
   // 与后端 SettingsPayload.llmTotalTimeoutS 对齐；后端函数式读取，改后立即生效。
   llmTotalTimeoutS: number; // 1800
 
+  // 2026-10-28: LLM 代理上游超时（秒）。后端 llm_proxy_routes._proxy_timeout_seconds()
+  // 函数式读取，改后下一次上游请求即生效。范围 5–1800，见 config_tool 校验。
+  llmProxyTimeoutS: number; // 60
+
   // 演示模式开关 (2026-08-27): 启用后 Electron main 进程跳过 Python 后端
   // spawn, 前端可走 /demo 路由录屏. 关闭时回到正常 LLM 调用路径.
   demoMode: boolean;
@@ -313,6 +317,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
   // 2026-10-22: 整轮任务 wall-clock 默认上限（秒）= 2 × subagentTaskTimeoutS 默认 900s。
   llmTotalTimeoutS: 1800,
+
+  // 2026-10-28: LLM 代理上游超时默认 60s（保持历史行为，与后端
+  // PROXY_TIMEOUT_SECONDS 一致）。
+  llmProxyTimeoutS: 60,
 
   // 演示模式: 默认关闭. 开启后 main 进程跳过 Python 后端启动.
   demoMode: false,

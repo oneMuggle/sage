@@ -556,7 +556,10 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => Promise<voi
       <section>
         <h3 className="text-sm font-semibold text-text mb-3">外观</h3>
         <FontSettingsSection />
-        <SettingRow label="流式输出" desc="逐字显示 AI 回复，而非等待全部生成完成">
+        <SettingRow
+          label="流式输出"
+          desc="开启时逐字显示 AI 回复；关闭后改为等待完整回复一次性返回，此时需同步调大「LLM 代理超时」以免长回复被中断。"
+        >
           <Toggle value={settings.streaming} onChange={(v) => updateSettings({ streaming: v })} />
         </SettingRow>
       </section>
@@ -610,11 +613,7 @@ export function GeneralTab({ resetSettings }: { resetSettings: () => Promise<voi
         >
           <Toggle value={settings.autoMemory} onChange={(v) => updateSettings({ autoMemory: v })} />
         </SettingRow>
-        <SettingRow
-          anchor="confirmDelete"
-          label="确认后再删除记忆"
-          desc="删除记忆前弹出确认对话框"
-        >
+        <SettingRow anchor="confirmDelete" label="确认后再删除记忆" desc="删除记忆前弹出确认对话框">
           <Toggle
             value={settings.confirmDelete}
             onChange={(v) => updateSettings({ confirmDelete: v })}

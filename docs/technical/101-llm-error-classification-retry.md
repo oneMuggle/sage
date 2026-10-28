@@ -198,3 +198,73 @@ return min(base_delay * (2 ** (attempt - 1)), max_delay)
 分类链：任何 `httpx.TransportError` 子类的网络层失败都应归 `NETWORK`，
 否则会落进 `UNKNOWN` 而静默跳过重试。分类口径以
 `backend/tools/http_factory.py` 的 `RETRYABLE_EXCEPTIONS` 为参照。
+
+## 代理上游超时（2026-10-28）
+
+### 背景
+
+`backend/api/llm_proxy_routes.py` 的 LLM 反向代理在转发上游模型请求时，
+把 httpx 的 read timeout **硬编码为 60 秒**。`httpx.Timeout(60)` 的语义是
+「两次收到字节之间的最大间隔」，流式响应只要字节持续流动就不会触发
+（Win7 实测成功请求最长 238s），但企业网关偶发 >60s 不出字即被切断，
+前端报「LLM 连接中断：incomplete chunked read」。
+
+### 可配置化
+
+新增 `app_settings.llmProxyTimeoutS`（UI 位置：设置 → 基础 → LLM 代理超时），
+读取优先级：
+
+```
+app_settings.llmProxyTimeoutS  >  env SAGE_LLM_PROXY_TIMEOUT_S  >  默认 60s
+```
+
+| 属性 | 值 |
+| --- | --- |
+| 键名 | `llmProxyTimeoutS` |
+| 后端默认 | 60 |
+| UI 范围 | 5–1800 秒 |
+| 生效时机 | 每次上游请求（next-request） |
+| 非法值处理 | 一律回退上一级，永不抛错 |
+
+实现函数 `backend/api/llm_proxy_routes.py` 的 `_proxy_timeout_seconds()`，
+两处 `httpx.Timeout(PROXY_TIMEOUT_SECONDS)` 已改为函数调用。
+
+### 与流式开关的耦合
+
+关闭「流式输出」后，上游改为走 `LLMClient.chat()`（非流式），
+完整响应返回前没有任何字节——`httpx` 的 read timeout 必须大于
+**整段生成耗时**。UI 文案已明确提示：关闭流式后建议把代理超时调到 300 秒以上。
+
+## 流式输出开关（2026-10-28 修复）
+
+### 死设置修复
+
+`app_settings.streaming` 此前是「死设置」——前端只做持久化、展示、审计快照，
+后端只白名单化并注入给 LLM 的配置摘要，**没有任何代码消费它**。用户关闭
+「流式输出」后上游仍收到 `stream: true`。
+
+修复：`backend/core/legacy/agent.py` 新增模块级函数
+`_streaming_enabled_from_settings()`，`SageAgent._should_stream()` 在 env 判定后、
+`stream_unsupported` 判定前插入设置读取分支。
+
+### 优先级
+
+```
+env SAGE_LLM_STREAMING ∈ {0,false,off,no}  → 禁用（调试/测试用，最高优先级）
+app_settings.streaming === false           → 禁用（本次新增）
+llm_client.stream_unsupported === True     → 禁用（失败后自动回退）
+其余                                       → 启用
+```
+
+读取失败一律回退为启用，避免配置库异常把整条聊天链路降级成非流式。
+
+## 续写能力现状
+
+「续写」（Resumable Streaming / Continue-After-Disconnect）在协议层**不支持**：
+
+1. OpenAI 兼容 SSE 协议不带事件 ID（`Last-Event-ID`），无法定位断点
+2. 上游网关（Ollama / LM Studio / Higress / 企业网关）无 replay buffer
+3. LLM 自回归生成无法从中间 token 续采样（需 KV cache 持久化 + 续采样接口）
+
+当前架构下，正确的解法是**延长超时**（本次改动）而非续写。如需续写能力，
+需上游模型/网关全链路改造，不在 Sage 单侧可控范围。
