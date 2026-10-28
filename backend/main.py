@@ -1258,6 +1258,11 @@ app.include_router(chat_attachment_router, prefix="/api/v1")
 # Model catalog: candidate review, overrides, snapshot import/export, OpenRouter sync
 app.include_router(build_model_catalog_router(), prefix="/api/v1/model-catalog")
 
+# Smart model routing: POST /api/v1/routing/route
+from backend.api.routing_routes import build_router as build_routing_router
+
+app.include_router(build_routing_router())
+
 # Arena automation: account pool management (feature-flagged via arena_automation.yaml)
 from backend.api.arena_routes import router as arena_router
 
