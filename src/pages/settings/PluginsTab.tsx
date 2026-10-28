@@ -18,7 +18,10 @@ import {
   type PermissionsConfirmationPayload,
   type PluginEvent,
   type PluginRecord,
+<<<<<<< HEAD
   type PluginStatus,
+=======
+>>>>>>> origin/main
 } from '../../shared/api/pluginClient';
 import { useI18n } from '../../shared/lib/i18n';
 
@@ -30,6 +33,7 @@ import {
   type PluginRuntimeAction,
 } from './PluginRuntimePanel';
 import { Toggle } from './components';
+<<<<<<< HEAD
 
 type StatusFilter = '' | PluginStatus;
 
@@ -84,11 +88,25 @@ function formatTime(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
+=======
+import {
+  errorMessage,
+  formatTime,
+  getPluginEventLabel,
+  getPluginStatusLabels,
+  getPluginsTabCopy,
+  isRecord,
+  MANIFEST_TEMPLATE,
+  STATUS_BADGE_CLASSES,
+  type StatusFilter,
+} from './pluginsTabModel';
+>>>>>>> origin/main
 
 export function PluginsTab() {
   const { locale } = useI18n();
   const en = locale === 'en';
 
+<<<<<<< HEAD
   const copy = {
     title: en ? 'Plugins' : '插件',
     refresh: en ? 'Refresh' : '刷新',
@@ -183,6 +201,13 @@ export function PluginsTab() {
         };
     return labels[event] ?? event;
   };
+=======
+  const copy = getPluginsTabCopy(en);
+
+  const statusLabel = getPluginStatusLabels(en);
+
+  const eventLabel = (event: string): string => getPluginEventLabel(en, event);
+>>>>>>> origin/main
 
   const [plugins, setPlugins] = useState<PluginRecord[]>([]);
   const [recentLogs, setRecentLogs] = useState<PluginEvent[]>([]);

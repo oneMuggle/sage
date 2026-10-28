@@ -213,6 +213,7 @@ def _clean_cookie(item: Dict[str, Any], default_domain: str) -> Optional[Dict[st
     return cleaned
 
 
+<<<<<<< HEAD
 def normalize_cookie_for_cdp(cookie: Dict[str, Any]) -> Dict[str, Any]:
     """归一化 cookie 字段以兼容 Chrome/Firefox CDP ``Storage.setCookies``。
 
@@ -239,6 +240,8 @@ def normalize_cookie_for_cdp(cookie: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+=======
+>>>>>>> origin/main
 def save_credential(
     domain: str,
     cookies: List[Dict[str, Any]],
@@ -770,12 +773,17 @@ def merge_cdp_cookies(
             cleaned_input["secure"] = True
         if item.get("httpOnly"):
             cleaned_input["httpOnly"] = True
+<<<<<<< HEAD
         same_site = item.get("sameSite")
         if same_site:
             cleaned_input["sameSite"] = str(same_site)
         else:
             # Firefox CDP 可能省略 sameSite，默认为 "Lax"（RFC 6265bis 默认值）
             cleaned_input["sameSite"] = "Lax"
+=======
+        if item.get("sameSite"):
+            cleaned_input["sameSite"] = str(item.get("sameSite"))
+>>>>>>> origin/main
         cleaned = _clean_cookie(cleaned_input, domain)
         if cleaned is None:
             continue
@@ -821,6 +829,50 @@ def delete_credential(domain: str, repo: Optional[Any] = None) -> bool:
     del vault[domain]
     _save_vault(store, vault)
     return True
+
+
+def find_credential_for_host(hostname: str, repo: Optional[Any] = None) -> Optional[str]:
+    """为给定 hostname 查找最匹配的凭据档案 domain。
+
+    遍历所有档案，用 ``cookie_domain_matches()`` 判定匹配；多候选时取域名最长者
+    （最具体匹配）。跳过已过期档案。无匹配返回 ``None``。
+
+    供 ``web_fetch`` 在未显式传 ``credential_domain`` 时自动推断使用。
+    """
+    hostname = (hostname or "").strip().lower()
+    if not hostname:
+        return None
+    store = _get_repo(repo)
+    vault = _load_vault(store)
+    now = time.time()
+
+    best_match: Optional[str] = None
+    best_len = -1
+
+    for domain, entry in vault.items():
+        if not cookie_domain_matches(hostname, domain):
+            continue
+        # 检查是否过期
+        kind = _entry_kind(entry)
+        if kind == KIND_HEADER:
+            expires_at = entry.get("expires_at") if isinstance(entry, dict) else None
+            if isinstance(expires_at, (int, float)) and expires_at > 0 and expires_at / 1000 <= now:
+                continue  # 已过期
+        else:
+            cookies = _decrypt_cookies(entry, domain) if isinstance(entry, dict) else None
+            if not cookies:
+                continue
+            usable, _ = _split_cookies(cookies, None, now)
+            if not usable:
+                continue  # 全部过期
+
+        # 取最具体匹配（域名最长）
+        domain_clean = domain.lstrip(".").rstrip(".")
+        if len(domain_clean) > best_len:
+            best_len = len(domain_clean)
+            best_match = domain
+
+    return best_match
 
 
 def list_credentials(repo: Optional[Any] = None) -> List[Dict[str, Any]]:

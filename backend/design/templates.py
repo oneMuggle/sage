@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Dict, List
+=======
+>>>>>>> origin/main
 
 from backend.design.errors import DesignTemplateNotFoundError
 from backend.design.models import DesignTemplate
@@ -47,6 +50,7 @@ class DesignTemplateRegistry:
     def __init__(self, content_dir: Path) -> None:
         self._content_dir = content_dir
         self._templates_dir = content_dir / "templates"
+<<<<<<< HEAD
         self._cache: Dict[str, DesignTemplate] = {}
 
     def list_templates(self) -> List[DesignTemplate]:
@@ -54,6 +58,15 @@ class DesignTemplateRegistry:
         if not self._templates_dir.exists():
             return []
         templates: List[DesignTemplate] = []
+=======
+        self._cache: dict[str, DesignTemplate] = {}
+
+    def list_templates(self) -> list[DesignTemplate]:
+        """List all available templates."""
+        if not self._templates_dir.exists():
+            return []
+        templates: list[DesignTemplate] = []
+>>>>>>> origin/main
         for kind_dir in sorted(self._templates_dir.iterdir()):
             if not kind_dir.is_dir():
                 continue
@@ -67,7 +80,11 @@ class DesignTemplateRegistry:
                     )
         return templates
 
+<<<<<<< HEAD
     def list_templates_by_kind(self, kind: str) -> List[DesignTemplate]:
+=======
+    def list_templates_by_kind(self, kind: str) -> list[DesignTemplate]:
+>>>>>>> origin/main
         """List templates filtered by kind (prototype or deck)."""
         return [t for t in self.list_templates() if t.kind == kind]
 
@@ -116,7 +133,11 @@ class DesignTemplateRegistry:
             else None
         )
 
+<<<<<<< HEAD
         assets: Dict[str, str] = {}
+=======
+        assets: dict[str, str] = {}
+>>>>>>> origin/main
         assets_dir = template_dir / "assets"
         if assets_dir.exists():
             for asset_file in assets_dir.rglob("*"):
@@ -125,7 +146,11 @@ class DesignTemplateRegistry:
                     and asset_file.suffix in (".css", ".js")
                 ):
                     # assets key 是模板逻辑路径（供 bundling 引用匹配），统一 POSIX 分隔符，
+<<<<<<< HEAD
                     # 否则 Windows 下 key 为 "assets\\..." 与模板内引用对不齐。
+=======
+                    # 否则 Windows 下 key 为 "assets\..." 与模板内引用对不齐。
+>>>>>>> origin/main
                     rel_path = asset_file.relative_to(template_dir).as_posix()
                     assets[rel_path] = asset_file.read_text(
                         encoding="utf-8"

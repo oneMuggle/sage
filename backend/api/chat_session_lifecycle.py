@@ -11,17 +11,30 @@ legacy_session_routes 经 ``_legacy_routes._persist_compaction`` 等模块
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 import asyncio
+=======
+>>>>>>> origin/main
 import json
 import logging
 import time
 import uuid
+<<<<<<< HEAD
 from typing import Any, Dict, List, Optional, Set
 
 from backend.chat.compaction import compact_messages, should_compact
 from backend.data.database import _SQLITE_LOCK, get_database
 from backend.data.session_repo import Message as DbMessage, MessageRepository
 from backend.memory import get_memory_manager
+=======
+from typing import Any, Dict, List, Optional
+
+from backend.chat.compaction import compact_messages, should_compact
+from backend.data.database import get_database
+from backend.data.session_repo import Message as DbMessage, MessageRepository
+from backend.memory import get_memory_manager
+from backend.utils.py_compat import to_thread
+>>>>>>> origin/main
 
 logger = logging.getLogger(__name__)
 
@@ -173,9 +186,13 @@ def _persist_compaction(
     return after
 
 
+<<<<<<< HEAD
 async def _maybe_auto_compact_session(
     session_id: str, llm_config: Optional[Dict]
 ) -> Optional[Dict[str, int]]:
+=======
+async def _maybe_auto_compact_session(session_id: str, llm_config: Optional[Dict]) -> Dict[str, int] | None:
+>>>>>>> origin/main
     """聊天请求层的自动压缩钩子（M4）。
 
     在 run_loop 之前检查会话历史：达到压缩阈值时先压缩再继续。
@@ -189,6 +206,7 @@ async def _maybe_auto_compact_session(
     本函数**可以抛 CompactionError / 其他异常**——调用方（producer）
     统一 try/except：压缩失败只记日志，绝不阻塞聊天。
 
+<<<<<<< HEAD
     重入保护（PR A §1.2 cherry-pick from main #294）与返回值说明：
     自动压缩路径也必须在 ``_compact_in_progress`` 中登记，与手动 compact
     互斥。压缩成功时返回 ``{"before": int, "after": int, "removed": int}``；
@@ -203,13 +221,26 @@ async def _maybe_auto_compact_session(
         )
         return None
 
+=======
+    Returns:
+        压缩成功时返回 ``{"before": int, "after": int, "removed": int}``；
+        未达到阈值或无 LLM 配置时返回 ``None``。
+    """
+>>>>>>> origin/main
     message_repo = MessageRepository()
     # Task 12 (context-isolation): 压缩只对当前 segment 起作用——
     # 历史 segment 已被 advance_segment() 封存成 topic_separator + 摘要续接,
     # 旧 segment 的对话本来就不会再注入本轮 LLM 请求, 没有压缩必要.
     # 用 get_by_session 会把多个 segment 一起塞进 LLM 摘要 prompt, 浪费 token
     # 且破坏"segment 间互相隔离"的口径.
+<<<<<<< HEAD
     messages = await _run_db_sync(message_repo.get_active_segment, session_id)
+=======
+    # 2026-09 修复: producer 是 async task, 全量历史读是秒级同步 IO,
+    # 直接跑在事件循环上会冻结所有并发流的 NDJSON attach 与 HTTP 路由。
+    # py_compat.to_thread: py3.8 无 asyncio.to_thread（win7 同步预铺）
+    messages = await to_thread(lambda: message_repo.get_active_segment(session_id))
+>>>>>>> origin/main
     if not should_compact(messages):
         return None
 
@@ -226,6 +257,7 @@ async def _maybe_auto_compact_session(
         )
         return None
 
+<<<<<<< HEAD
     # 二次检查 + 占位：should_compact 检查与 LLM 调用之间，并发请求
     # 可能已进入压缩流程（``_compact_in_progress`` 已被占用）。
     if _compact_in_progress_add(session_id) is False:
@@ -264,6 +296,23 @@ def _compact_in_progress_add(session_id: str) -> bool:
 
 
 def _auto_checkpoint_if_enabled(session_id: str) -> Optional[str]:
+=======
+    before_count = len(messages)
+    new_messages, removed_count = await compact_messages(messages, llm_complete)
+    after = await to_thread(
+        lambda: _persist_compaction(session_id, messages, new_messages, removed_count)
+    )
+    logger.info(
+        "[M4] session=%s 自动压缩完成: removed=%s after=%s",
+        _safe_log_field(session_id),
+        removed_count,
+        after,
+    )
+    return {"before": before_count, "after": after, "removed": removed_count}
+
+
+def _auto_checkpoint_if_enabled(session_id: str) -> str | None:
+>>>>>>> origin/main
     """round5 批次 B-2: 发送前自动快照（偏好 "auto_checkpoint" 缺省/"1" 时）。
 
     在 run 开始前为会话绑定的工作区打一份 checkpoint，提供"整轮改动
@@ -383,6 +432,7 @@ async def _extract_legacy_chat_memory(
             f"[REQ {request_id}] legacy 记忆提取失败(忽略, 不影响聊天): {exc}"
         )
 # ===== WS-C P0-2 END =====
+<<<<<<< HEAD
 
 
 async def _run_db_sync(func, *args, **kwargs):
@@ -404,3 +454,5 @@ async def _run_db_sync(func, *args, **kwargs):
 # 对方落盘前通过 should_compact 检查，导致续接消息行重复写入。前端
 # isLoading 守卫是第一道防线，这里是便宜的第二道。
 _compact_in_progress: Set[str] = set()
+=======
+>>>>>>> origin/main

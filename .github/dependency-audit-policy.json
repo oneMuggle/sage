@@ -108,7 +108,11 @@
       "affected_path": "node_modules/extract-zip",
       "actual_reachability": "conditionally reachable only in npm/electron archive install toolchain",
       "controls": "Do not expose archive extraction to runtime input; trusted lockfile/package source, CI artifact checks, and upgrade review",
+<<<<<<< HEAD
       "notes": "no-fixed-version-upstream: OSV 对 GHSA-jmr9-qjv8-65gv 与 GHSA-7pqw-9j4j-h8q3 均未给出任何 fixed 版本（上游 extract-zip 停在 2.0.1）。该包是 electron-builder 的传递依赖，只在 npm run electron:build 解包时使用，不进任何发布产物，运行时不可达。无修复可用，只能等上游发版。"
+=======
+      "notes": "no-fixed-version-upstream: OSV 对 GHSA-jmr9-qjv8-65gv 与 GHSA-7pqw-9j4j-h8q3 均未给出任何fixed 版本（上游 extract-zip 停在 2.0.1）。该包是 electron-builder 的传递依赖，只在 npm run electron:build 解包时使用，不进任何发布产物，运行时不可达。无可用修复，只能靠上游发版；维持 accepted-risk 并按季度复审。"
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -121,11 +125,16 @@
       "affected_path": "node_modules/extract-zip",
       "actual_reachability": "not reachable at runtime; only electron@21.4.4's install script extracts the Electron binary zip during npm ci of the trusted lockfile. No patched extract-zip release exists (package unmaintained, <=2.0.1 all affected), resolved only by the scheduled Electron upgrade",
       "controls": "zip-slip (CVE-2026-19693): extraction never processes untrusted archives - registry tarballs from the pinned lockfile only; CI artifact checks; no runtime API exposure; Electron upgrade review tracks removal",
+<<<<<<< HEAD
       "notes": "no-fixed-version-upstream: OSV 对 GHSA-jmr9-qjv8-65gv 与 GHSA-7pqw-9j4j-h8q3 均未给出任何 fixed 版本（上游 extract-zip 停在 2.0.1）。该包是 electron-builder 的传递依赖，只在 npm run electron:build 解包时使用，不进任何发布产物，运行时不可达。无修复可用，只能等上游发版。"
+=======
+      "notes": "no-fixed-version-upstream: OSV 对 GHSA-jmr9-qjv8-65gv 与 GHSA-7pqw-9j4j-h8q3 均未给出任何fixed 版本（上游 extract-zip 停在 2.0.1）。该包是 electron-builder 的传递依赖，只在 npm run electron:build 解包时使用，不进任何发布产物，运行时不可达。无可用修复，只能靠上游发版；维持 accepted-risk 并按季度复审。"
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
       "review_by": "2027-01-01",
+<<<<<<< HEAD
       "source": "pip",
       "package": "python-multipart",
       "package_version": "0.0.9",
@@ -322,6 +331,8 @@
     {
       "owner": "Sage maintainers",
       "review_by": "2027-01-01",
+=======
+>>>>>>> origin/main
       "source": "pip",
       "package": "protobuf",
       "package_version": "4.25.9",
@@ -331,7 +342,11 @@
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
       "exception": "temporary exception pending compatible dependency upgrade",
+<<<<<<< HEAD
       "notes": "main-track-parity: 本条 affected_path 属于 main Python 3.11 生产路径，权威副本在 main 分支的 .github/dependency-audit-policy.json（已随 PR 一并处理），此处仅为 两轨对照保留。protobuf 在 main 轨的处置见该文件同名条目的 notes。"
+=======
+      "notes": "blocked-on-opentelemetry-proto-pin: opentelemetry-proto 1.27.0 声明 protobuf<5.0,>=3.19，修复 PYSEC-2026-1805 需 protobuf>=5.29.6，等价于同时升级 opentelemetry-api/sdk/exporter 三件套。OTel 链路是线上可观测性主干，本轮不冒这个风险；待 OTel 单独升级时一并修复。"
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -345,7 +360,11 @@
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
       "exception": "temporary exception pending compatible dependency upgrade",
+<<<<<<< HEAD
       "notes": "main-track-parity: 本条 affected_path 属于 main Python 3.11 生产路径，权威副本在 main 分支的 .github/dependency-audit-policy.json（已随 PR 一并处理），此处仅为 两轨对照保留。starlette 在 main 轨的处置见该文件同名条目的 notes。"
+=======
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -359,7 +378,11 @@
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
       "exception": "temporary exception pending compatible dependency upgrade",
+<<<<<<< HEAD
       "notes": "main-track-parity: 本条 affected_path 属于 main Python 3.11 生产路径，权威副本在 main 分支的 .github/dependency-audit-policy.json（已随 PR 一并处理），此处仅为 两轨对照保留。starlette 在 main 轨的处置见该文件同名条目的 notes。"
+=======
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -373,7 +396,11 @@
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
       "exception": "temporary exception pending compatible dependency upgrade",
+<<<<<<< HEAD
       "notes": "main-track-parity: 本条 affected_path 属于 main Python 3.11 生产路径，权威副本在 main 分支的 .github/dependency-audit-policy.json（已随 PR 一并处理），此处仅为 两轨对照保留。starlette 在 main 轨的处置见该文件同名条目的 notes。"
+=======
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -387,7 +414,11 @@
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
       "exception": "temporary exception pending compatible dependency upgrade",
+<<<<<<< HEAD
       "notes": "main-track-parity: 本条 affected_path 属于 main Python 3.11 生产路径，权威副本在 main 分支的 .github/dependency-audit-policy.json（已随 PR 一并处理），此处仅为 两轨对照保留。starlette 在 main 轨的处置见该文件同名条目的 notes。"
+=======
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -401,7 +432,11 @@
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
       "exception": "temporary exception pending compatible dependency upgrade",
+<<<<<<< HEAD
       "notes": "main-track-parity: 本条 affected_path 属于 main Python 3.11 生产路径，权威副本在 main 分支的 .github/dependency-audit-policy.json（已随 PR 一并处理），此处仅为 两轨对照保留。starlette 在 main 轨的处置见该文件同名条目的 notes。"
+=======
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -415,7 +450,11 @@
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
       "exception": "temporary exception pending compatible dependency upgrade",
+<<<<<<< HEAD
       "notes": "main-track-parity: 本条 affected_path 属于 main Python 3.11 生产路径，权威副本在 main 分支的 .github/dependency-audit-policy.json（已随 PR 一并处理），此处仅为 两轨对照保留。starlette 在 main 轨的处置见该文件同名条目的 notes。"
+=======
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -429,7 +468,169 @@
       "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
       "controls": "request size and rate limits, safe path handling, constrained form parsing, endpoint validation, monitoring, and prompt upgrade review",
       "exception": "temporary exception pending compatible dependency upgrade",
+<<<<<<< HEAD
       "notes": "main-track-parity: 本条 affected_path 属于 main Python 3.11 生产路径，权威副本在 main 分支的 .github/dependency-audit-policy.json（已随 PR 一并处理），此处仅为 两轨对照保留。starlette 在 main 轨的处置见该文件同名条目的 notes。"
+=======
+      "notes": "blocked-on-fastapi-httpx-framework-jump: fastapi 0.109 硬依赖 starlette>=0.35,<0.36，修复全部 7 条需 starlette>=1.3.1，等价于 fastapi 0.109->0.14x + httpx 0.26->0.28 的核心框架跃迁。该跃迁本轮明确不在范围内（回归面覆盖整个 backend 套件，且与多个在飞会话冲突），故本轮只复审续期、不动版本。计划见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 2。"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "fast-uri",
+      "package_version": "3.1.6",
+      "advisory": "GHSA-58mr-gqgx-xq4g",
+      "advisory_url": "https://github.com/advisories/GHSA-58mr-gqgx-xq4g",
+      "affected_path": "node_modules/fast-uri",
+      "actual_reachability": "conditionally reachable; transitive URI parser in the API framework tree, no route feeds untrusted input to fast-uri directly",
+      "controls": "transitive dependency; upgrade tracked via lockfile refresh review; no direct runtime API exposure; quarterly npm audit review",
+      "exception": "temporary exception pending compatible dependency upgrade"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "fast-uri",
+      "package_version": "3.1.6",
+      "advisory": "GHSA-qw65-cvwx-89v3",
+      "advisory_url": "https://github.com/advisories/GHSA-qw65-cvwx-89v3",
+      "affected_path": "node_modules/fast-uri",
+      "actual_reachability": "conditionally reachable; transitive URI parser in the API framework tree, no route feeds untrusted input to fast-uri directly",
+      "controls": "transitive dependency; upgrade tracked via lockfile refresh review; no direct runtime API exposure; quarterly npm audit review",
+      "exception": "temporary exception pending compatible dependency upgrade"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "electron",
+      "package_version": "21.4.4",
+      "advisory": "GHSA-9qh4-3jw8-366w",
+      "advisory_url": "https://github.com/advisories/GHSA-9qh4-3jw8-366w",
+      "affected_path": "node_modules/electron",
+      "actual_reachability": "reachable; mitigated in app layer; accepted residual risk",
+      "controls": "<webview> Node integration in workers: Sage never uses <webview>; electron/webContentsHardening.ts blocks will-attach-webview on every webContents; contextIsolation, nodeIntegration:false, IPC sender validation; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); upstream fixes only in >=41.10.4/41.10.6 (no Win7 support); quarterly npm audit review"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "electron",
+      "package_version": "21.4.4",
+      "advisory": "GHSA-gr2m-v5gq-v685",
+      "advisory_url": "https://github.com/advisories/GHSA-gr2m-v5gq-v685",
+      "affected_path": "node_modules/electron",
+      "actual_reachability": "reachable; mitigated in app layer; accepted residual risk",
+      "controls": "sandbox not inherited by window.open popups: webContentsHardening.ts denies all popups by default (http(s) -> OS browser); arena login partition gets only sandboxed, preload-less, node-less popups; contextIsolation, nodeIntegration:false, IPC sender validation; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); upstream fixes only in >=41.10.4/41.10.6 (no Win7 support); quarterly npm audit review"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "electron",
+      "package_version": "21.4.4",
+      "advisory": "GHSA-hq2x-r82h-9wj4",
+      "advisory_url": "https://github.com/advisories/GHSA-hq2x-r82h-9wj4",
+      "affected_path": "node_modules/electron",
+      "actual_reachability": "reachable; mitigated in app layer; accepted residual risk",
+      "controls": "sandbox not inherited by link/target=_blank popups (OpenURLFromTab): same global setWindowOpenHandler deny as GHSA-gr2m; contextIsolation, nodeIntegration:false, IPC sender validation; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); upstream fixes only in >=41.10.4/41.10.6 (no Win7 support); quarterly npm audit review"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "npm",
+      "package": "electron",
+      "package_version": "21.4.4",
+      "advisory": "GHSA-j84w-jfhq-vhvj",
+      "advisory_url": "https://github.com/advisories/GHSA-j84w-jfhq-vhvj",
+      "affected_path": "node_modules/electron",
+      "actual_reachability": "reachable; mitigated in app layer; accepted residual risk",
+      "controls": "cross-origin reads via file/HTTP protocol handlers: sage-file protocol is non-privileged and restricted to workspace roots + allowed_paths allowlist (electron/sageFileProtocol.ts); contextIsolation, nodeIntegration:false, IPC sender validation; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); upstream fixes only in >=41.10.4/41.10.6 (no Win7 support); quarterly npm audit review"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "pip",
+      "package": "python-multipart",
+      "package_version": "0.0.20",
+      "advisory": "PYSEC-2026-1852",
+      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-1852",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
+      "controls": "Win7 LTS uses python-multipart 0.0.20, the latest Python 3.8-compatible release; this advisory is fixed only in 0.0.22 or later; request size and rate limits, constrained form parsing, endpoint validation, and quarterly review through EOL 2027-12-13",
+      "exception": "temporary exception pending a Python 3.8-compatible patched release or Win7 LTS EOL",
+      "notes": "py38-ceiling: python-multipart 修复需要 >=0.0.31，而 0.0.20 是最后一个声明 requires_python 允许 3.8 的版本。release/win7 的依赖契约锁 Python 3.8（Win7 LTS，EOL 2027-12-13），本轨不存在可用的修复版本——不是未做，是无解。待 Win7 LTS EOL 后随 Python 3.10+ 切换一并修复（见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 4）。本轨已在 py38 上限 0.0.20。"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "pip",
+      "package": "python-multipart",
+      "package_version": "0.0.20",
+      "advisory": "PYSEC-2026-3038",
+      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-3038",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
+      "controls": "Win7 LTS uses python-multipart 0.0.20, the latest Python 3.8-compatible release; this advisory is fixed only in 0.0.26 or later; request size and rate limits, constrained form parsing, endpoint validation, and quarterly review through EOL 2027-12-13",
+      "exception": "temporary exception pending a Python 3.8-compatible patched release or Win7 LTS EOL",
+      "notes": "py38-ceiling: python-multipart 修复需要 >=0.0.31，而 0.0.20 是最后一个声明 requires_python 允许 3.8 的版本。release/win7 的依赖契约锁 Python 3.8（Win7 LTS，EOL 2027-12-13），本轨不存在可用的修复版本——不是未做，是无解。待 Win7 LTS EOL 后随 Python 3.10+ 切换一并修复（见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 4）。本轨已在 py38 上限 0.0.20。"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "pip",
+      "package": "python-multipart",
+      "package_version": "0.0.20",
+      "advisory": "PYSEC-2026-3037",
+      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-3037",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
+      "controls": "Win7 LTS uses python-multipart 0.0.20, the latest Python 3.8-compatible release; this advisory is fixed only in 0.0.30 or later; request size and rate limits, constrained form parsing, endpoint validation, and quarterly review through EOL 2027-12-13",
+      "exception": "temporary exception pending a Python 3.8-compatible patched release or Win7 LTS EOL",
+      "notes": "py38-ceiling: python-multipart 修复需要 >=0.0.31，而 0.0.20 是最后一个声明 requires_python 允许 3.8 的版本。release/win7 的依赖契约锁 Python 3.8（Win7 LTS，EOL 2027-12-13），本轨不存在可用的修复版本——不是未做，是无解。待 Win7 LTS EOL 后随 Python 3.10+ 切换一并修复（见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 4）。本轨已在 py38 上限 0.0.20。"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "pip",
+      "package": "python-multipart",
+      "package_version": "0.0.20",
+      "advisory": "PYSEC-2026-3036",
+      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-3036",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
+      "controls": "Win7 LTS uses python-multipart 0.0.20, the latest Python 3.8-compatible release; this advisory is fixed only in 0.0.30 or later; request size and rate limits, constrained form parsing, endpoint validation, and quarterly review through EOL 2027-12-13",
+      "exception": "temporary exception pending a Python 3.8-compatible patched release or Win7 LTS EOL",
+      "notes": "py38-ceiling: python-multipart 修复需要 >=0.0.31，而 0.0.20 是最后一个声明 requires_python 允许 3.8 的版本。release/win7 的依赖契约锁 Python 3.8（Win7 LTS，EOL 2027-12-13），本轨不存在可用的修复版本——不是未做，是无解。待 Win7 LTS EOL 后随 Python 3.10+ 切换一并修复（见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 4）。本轨已在 py38 上限 0.0.20。"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "pip",
+      "package": "python-multipart",
+      "package_version": "0.0.20",
+      "advisory": "PYSEC-2026-3040",
+      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-3040",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
+      "controls": "Win7 LTS uses python-multipart 0.0.20, the latest Python 3.8-compatible release; this advisory is fixed only in 0.0.31 or later; request size and rate limits, constrained form parsing, endpoint validation, and quarterly review through EOL 2027-12-13",
+      "exception": "temporary exception pending a Python 3.8-compatible patched release or Win7 LTS EOL",
+      "notes": "py38-ceiling: python-multipart 修复需要 >=0.0.31，而 0.0.20 是最后一个声明 requires_python 允许 3.8 的版本。release/win7 的依赖契约锁 Python 3.8（Win7 LTS，EOL 2027-12-13），本轨不存在可用的修复版本——不是未做，是无解。待 Win7 LTS EOL 后随 Python 3.10+ 切换一并修复（见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 4）。本轨已在 py38 上限 0.0.20。"
+    },
+    {
+      "owner": "Sage maintainers",
+      "review_by": "2027-01-01",
+      "source": "pip",
+      "package": "python-multipart",
+      "package_version": "0.0.20",
+      "advisory": "PYSEC-2026-3039",
+      "advisory_url": "https://osv.dev/vulnerability/PYSEC-2026-3039",
+      "affected_path": "Win7 LTS Python 3.8 production path",
+      "actual_reachability": "conditional based on vulnerable API/configuration; production dependency is installed",
+      "controls": "Win7 LTS uses python-multipart 0.0.20, the latest Python 3.8-compatible release; this advisory is fixed only in 0.0.27 or later; request size and rate limits, constrained form parsing, endpoint validation, and quarterly review through EOL 2027-12-13",
+      "exception": "temporary exception pending a Python 3.8-compatible patched release or Win7 LTS EOL",
+      "notes": "py38-ceiling: python-multipart 修复需要 >=0.0.31，而 0.0.20 是最后一个声明 requires_python 允许 3.8 的版本。release/win7 的依赖契约锁 Python 3.8（Win7 LTS，EOL 2027-12-13），本轨不存在可用的修复版本——不是未做，是无解。待 Win7 LTS EOL 后随 Python 3.10+ 切换一并修复（见 docs/plans/2026-09-15_cve-expiry-2026-10-01-review.md Phase 4）。本轨已在 py38 上限 0.0.20。"
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -927,6 +1128,7 @@
       "owner": "Sage maintainers",
       "review_by": "2027-01-01",
       "source": "npm",
+<<<<<<< HEAD
       "package": "electron",
       "package_version": "21.4.4",
       "advisory": "GHSA-9qh4-3jw8-366w",
@@ -970,6 +1172,17 @@
       "affected_path": "node_modules/electron",
       "actual_reachability": "reachable; mitigated in app layer; accepted residual risk",
       "controls": "cross-origin reads via file/HTTP protocol handlers: sage-file protocol is non-privileged and restricted to workspace roots + allowed_paths allowlist (electron/sageFileProtocol.ts); contextIsolation, nodeIntegration:false, IPC sender validation; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); upstream fixes only in >=41.10.4/41.10.6 (no Win7 support); quarterly npm audit review"
+=======
+      "package": "braces",
+      "package_version": "3.0.3",
+      "advisory": "GHSA-vfj7-8cjw-p6xm",
+      "advisory_url": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+      "affected_path": "node_modules/braces",
+      "actual_reachability": "build-time reachable through Tailwind CSS 3; absent from the production audit graph; potential denial of service during build/test pattern processing, not shipped runtime",
+      "controls": "keep the package-lock pin; do not use the build-time dependency to process untrusted runtime patterns; track an upstream braces fix or a separately tested Tailwind CSS 4 migration; quarterly npm audit review",
+      "exception": "temporary exception pending a compatible upstream fix or separately reviewed major-version migration",
+      "notes": "2026-10-05 triage: npm view reports braces latest as 3.0.3 and no braces@3.0.4; the CI npm audit report offers tailwindcss@4.3.3 as a semver-major remediation. Keep this time-bounded and re-evaluate by 2027-01-01."
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -1097,6 +1310,7 @@
       "notes": "py38-ceiling: GHSA alias published in OSV for existing Pillow 10.4.0 advisories on the Win7 Python 3.8 track."
     },
     {
+<<<<<<< HEAD
       "owner": "Sage maintainers",
       "review_by": "2027-01-01",
       "source": "pip",
@@ -1403,6 +1617,48 @@
       "controls": "Pillow 10.4.0 is the last Python 3.8-compatible release on PyPI; fixes require Pillow >=11/12 on Python >=3.9; upload size limits, MIME type validation, image dimension caps, sandboxing, quarterly review through Win7 LTS EOL 2027-12-13",
       "exception": "temporary exception pending Win7 LTS EOL or upstream backport to a Py3.8-compatible release",
       "notes": "py38-ceiling: GHSA alias published in OSV for existing Pillow 10.4.0 advisories on the Win7 Python 3.8 track."
+=======
+        "owner": "Sage maintainers",
+        "review_by": "2027-01-01",
+        "source": "pip",
+        "package": "opentelemetry-api",
+        "package_version": "1.27.0",
+        "advisory": "GHSA-xcq7-p3pf-p88h",
+        "advisory_url": "https://osv.dev/vulnerability/GHSA-xcq7-p3pf-p88h",
+        "affected_path": "main Python 3.11 production path",
+        "actual_reachability": "transitive dependency via chromadb telemetry instrumentation; Sage disables anonymized telemetry and does not expose untrusted OpenTelemetry context propagation headers",
+        "controls": "Chroma telemetry disabled in local embedded client; no external OTLP collector or untrusted W3C traceparent/baggage ingestion exposed; scheduled lockfile bump in next dependency maintenance window",
+        "exception": "temporary exception pending transitive opentelemetry-api pin bump in requirements.lock",
+        "notes": "main-py311: newly published GHSA-xcq7-p3pf-p88h on opentelemetry-api 1.27.0."
+    },
+    {
+        "owner": "Sage maintainers",
+        "review_by": "2027-01-01",
+        "source": "npm",
+        "package": "dompurify",
+        "package_version": "3.4.15",
+        "advisory": "GHSA-cg2g-xh64-v4q7",
+        "advisory_url": "https://github.com/advisories/GHSA-cg2g-xh64-v4q7",
+        "affected_path": "node_modules/dompurify",
+        "actual_reachability": "transitive dependency via mermaid SVG/HTML label sanitization; Sage renders assistant markdown in a CSP-restricted Electron renderer with contextIsolation=true and nodeIntegration=false",
+        "controls": "strict Electron CSP, contextIsolation=true, sandboxed iframe preview without network/Node access, and scheduled lockfile bump when patched dompurify is released",
+        "exception": "temporary exception pending upstream dompurify patch release and package-lock.json bump",
+        "notes": "npm-dompurify: newly published GHSA-cg2g-xh64-v4q7 on dompurify 3.4.15."
+    },
+    {
+        "owner": "Sage maintainers",
+        "review_by": "2027-01-01",
+        "source": "npm",
+        "package": "dompurify",
+        "package_version": "3.4.15",
+        "advisory": "GHSA-mrv2-3pqr-j5jr",
+        "advisory_url": "https://github.com/advisories/GHSA-mrv2-3pqr-j5jr",
+        "affected_path": "node_modules/dompurify",
+        "actual_reachability": "transitive dependency via mermaid SVG/HTML label sanitization; Sage renders assistant markdown in a CSP-restricted Electron renderer with contextIsolation=true and nodeIntegration=false",
+        "controls": "strict Electron CSP, contextIsolation=true, sandboxed iframe preview without network/Node access, and scheduled lockfile bump when patched dompurify is released",
+        "exception": "temporary exception pending upstream dompurify patch release and package-lock.json bump",
+        "notes": "npm-dompurify: newly published GHSA-mrv2-3pqr-j5jr on dompurify 3.4.15."
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -1413,6 +1669,7 @@
       "advisory": "GHSA-5x8w-8jj5-q52h",
       "advisory_url": "https://osv.dev/vulnerability/GHSA-5x8w-8jj5-q52h",
       "affected_path": "Win7 LTS Python 3.8 production path",
+<<<<<<< HEAD
       "actual_reachability": "NOT reachable on this track (verified by import probe on both conda envs): the vulnerable FlashPix (FPX) JPEG-tile decoder lives in PIL.FpxImagePlugin, which imports the OPTIONAL dependency olefile. Neither backend/requirements-py38.txt nor backend/requirements.txt installs olefile, so `from PIL import FpxImagePlugin` raises ModuleNotFoundError: No module named 'olefile' on pillow 10.4.0 (py38 track) and 12.3.0 (v2 track), and 'FPX' never registers in Image.OPEN -- Image.open() cannot reach the decoder even for a crafted OLE2-magic upload, so the no-user-interaction RCE path is closed by the absent optional dependency.",
       "controls": "Pillow 10.4.0 is the last Python 3.8-compatible release on PyPI; THIS advisory's first_patched_version is 13.0.0, whose pyproject.toml declares requires-python = \">=3.11\" -- unreachable from a track locked to Python 3.8 (Win7 LTS, EOL 2027-12-13). HARD CONSTRAINT: olefile must NOT be added to either requirements file; installing it would make FpxImagePlugin importable and turn this currently-unreachable advisory into reachable RCE on untrusted uploads. Other standing controls also apply: upload size limits, MIME type validation (no untrusted image types), image dimension caps, Pillow sandboxing (subprocess isolation for raw decode), quarterly review through Win7 LTS EOL 2027-12-13.",
       "exception": "temporary exception pending Win7 LTS EOL or upstream backport to a Py3.8-compatible release",
@@ -1487,6 +1744,12 @@
       "controls": "strict Electron CSP, contextIsolation=true, sandboxed iframe preview without network/Node access, and scheduled lockfile bump when patched dompurify is released",
       "exception": "temporary exception pending upstream dompurify patch release and package-lock.json bump",
       "notes": "npm-dompurify: newly published GHSA-mrv2-3pqr-j5jr on dompurify 3.4.15."
+=======
+      "actual_reachability": "image decode/encode reachable via user file uploads (attachment pipeline); conditional based on input format",
+      "controls": "Pillow 10.4.0 is the last Python 3.8-compatible release on PyPI; the fix requires Pillow 11.x+ (Python >=3.9); upload size limits, MIME type validation (no untrusted image types), sandboxed raw decode, image dimension caps, and quarterly review through Win7 LTS EOL 2027-12-13",
+      "exception": "temporary exception pending Win7 LTS EOL or upstream backport to a Py3.8-compatible release",
+      "notes": "py38-ceiling: pillow 修复需要 Py3.9+ 版本，10.4.0 是最后一个声明 requires_python 允许 3.8 的版本。release/win7 的依赖契约锁 Python 3.8（Win7 LTS，EOL 2027-12-13），本轨不存在可用的修复版本——不是未做，是无解。待 Win7 LTS EOL 后随 Python 3.10+ 切换一并修复。"
+>>>>>>> origin/main
     },
     {
       "owner": "Sage maintainers",
@@ -1499,6 +1762,7 @@
       "affected_path": "node_modules/electron",
       "actual_reachability": "reachable; accepted risk",
       "controls": "Electron main-process isolation, contextIsolation, sandboxing, IPC validation, no arbitrary cwd execution; Win7 LTS long-term support decision (2026-09-15) pins electron@21.4.4 until Win7 LTS EOL (2027-12-13); quarterly npm audit review"
+<<<<<<< HEAD
     },
     {
       "owner": "Sage maintainers",
@@ -1653,6 +1917,8 @@
       "controls": "Pillow 10.4.0 is the ceiling on Python 3.8 (Pillow 11+ requires Python >=3.9); local document processing, no untrusted remote image ingestion; quarterly audit review through Win7 LTS EOL 2027-12-13",
       "exception": "temporary exception pending Win7 LTS EOL or upstream Pillow patch compatible with Python 3.8",
       "notes": "py38-ceiling: Pillow 10.4.0 is the ceiling on Python 3.8 for the Win7 LTS track."
+=======
+>>>>>>> origin/main
     }
   ]
 }

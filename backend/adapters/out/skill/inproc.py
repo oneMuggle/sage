@@ -61,7 +61,11 @@ def normalize_skill_content(content: Any) -> str:
         return content
     if content is None:
         return ""
+<<<<<<< HEAD
     if isinstance(content, (dict, list, tuple)):
+=======
+    if isinstance(content, (dict, list, tuple)):  # noqa: UP038
+>>>>>>> origin/main
         try:
             return json.dumps(content, ensure_ascii=False, indent=2, default=str)
         except (TypeError, ValueError):

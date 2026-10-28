@@ -346,9 +346,12 @@ def create_default_agents() -> List[AgentProfile]:
                 "browser_cookies",
                 "browser_close",
                 "browser_login",
+<<<<<<< HEAD
                 # win7 保留 memory_save —— researcher 查到资料后必须能落地为记忆,
                 # 否则下次 session 找不到（PR #396 knowledge persistence 闭环）。
                 "memory_save",
+=======
+>>>>>>> origin/main
             ],
             memory_access=["episodic", "semantic"],
             model_config=AgentModelConfig(model="gpt-4", temperature=0.5),

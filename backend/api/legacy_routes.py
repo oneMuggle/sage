@@ -53,12 +53,15 @@ from backend.chat.history_context import (
     history_token_budget,
 )
 from backend.chat.sources_extractor import extract_sources_from_tool, merge_sources
+<<<<<<< HEAD
 from backend.chat.title_generator import (
     DEFAULT_TITLE,
     TitleGenerator,
     TitleModelFactory,
     needs_title,
 )
+=======
+>>>>>>> origin/main
 from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.core.legacy.llm_total_timeout import llm_total_timeout_or_none
@@ -2431,6 +2434,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                     # 按 id 精确命中, 根治重复显示。
                     if assistant_persisted:
                         done_payload["message_id"] = assistant_db_id
+<<<<<<< HEAD
                     # 标题尚未就绪（占位值且未达重试上限）时提示前端补刷侧栏。
                     if sess is not None and needs_title(sess):
                         done_payload["title_pending"] = True
@@ -2483,6 +2487,46 @@ async def chat_stream_create(data: ChatRequest, request: Request):
 
                     title_task = asyncio.create_task(_generate_title())
                     await asyncio.wait({title_task}, timeout=_TITLE_WAIT_S)
+=======
+                    # 2026-09: 首轮对话的标题在后台生成 (DONE 先行) ——
+                    # 提示前端稍后补刷侧栏, 以呈现后台生成的标题。
+                    if sess is not None and sess.message_count <= 2:
+                        done_payload["title_pending"] = True
+                    await entry.queue.put(done_payload)
+
+                # 标题自动生成：首轮对话后 (message_count 从 0 → 2)。
+                # 后台任务生成 —— 不阻塞 producer 收尾 (SENTINEL/运行态落库),
+                # 标题完成后落库并补发 title_updated 事件。
+                if done_event and sess and sess.message_count <= 2:
+
+                    async def _generate_title() -> None:
+                        try:
+                            from backend.chat.title_generator import TitleGenerator
+                            from backend.orchestration.llm_factory import (
+                                build_llm_client_from_settings,
+                            )
+
+                            title_client = build_llm_client_from_settings()
+                            if title_client:
+                                title = await TitleGenerator(title_client).generate(
+                                    data.message, done_content
+                                )
+                                if title:
+                                    session_repo.update(data.session_id, title=title)
+                                    await entry.queue.put(
+                                        {
+                                            "type": "session_updated",
+                                            "subtype": "title_updated",
+                                            "title": title,
+                                        }
+                                    )
+                        except Exception as e:
+                            logger.warning(
+                                f"[REQ {request_id}] 标题生成失败: {e}"
+                            )
+
+                    asyncio.create_task(_generate_title())
+>>>>>>> origin/main
         except LLMError as e:
             logger.warning(
                 f"[REQ {request_id}] /chat/stream LLM error: "

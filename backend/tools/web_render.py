@@ -550,10 +550,14 @@ def refresh_credentials(  # noqa: PLR0911 — 各失败路径独立 return，扁
         if not target_id:
             return False, []
         if inject:
+<<<<<<< HEAD
             from .credential_vault import normalize_cookie_for_cdp
 
             normalized_inject = [normalize_cookie_for_cdp(c) for c in inject]
             cdp_command(session, "Storage.setCookies", {"cookies": normalized_inject})
+=======
+            cdp_command(session, "Storage.setCookies", {"cookies": inject})
+>>>>>>> origin/main
         apply_stealth(session, target_id, command=cdp_command)
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)
         if result.get("errorText"):
@@ -673,12 +677,16 @@ def render_page(
         # 重定向自动按域携带）。注入失败走 RenderError——显式带凭据渲染却
         # 拿到未登录正文会误导调用方。
         if credential_cookies:
+<<<<<<< HEAD
             from .credential_vault import normalize_cookie_for_cdp
 
             normalized_cookies = [
                 normalize_cookie_for_cdp(c) for c in credential_cookies
             ]
             cdp_command(session, "Storage.setCookies", {"cookies": normalized_cookies})
+=======
+            cdp_command(session, "Storage.setCookies", {"cookies": credential_cookies})
+>>>>>>> origin/main
         # AB4：文档创建前注入 stealth（失败不阻断渲染）
         apply_stealth(session, target_id, command=cdp_command)
         result = cdp_command(session, "Page.navigate", {"url": url}, target_id=target_id)

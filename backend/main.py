@@ -11,7 +11,11 @@ import time
 import uuid
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Any, Callable, Dict, List, Optional, Tuple
+=======
+from typing import Any, Callable, Dict, Optional, Tuple
+>>>>>>> origin/main
 
 # ── Startup diagnostic timer (module-level) ───────────────────────────────
 # 2026-09-10 (slow-startup incident): record monotonic start BEFORE any
@@ -133,7 +137,11 @@ from backend.api.zotero_routes import router as zotero_router
 from backend.api.zotero_sync_routes import router as zotero_sync_router
 from backend.application.services.chat_service import ChatService
 from backend.application.services.wake_store import get_wake_store
+<<<<<<< HEAD
 from backend.data.database import _SQLITE_LOCK, get_database
+=======
+from backend.data.database import Database, get_database
+>>>>>>> origin/main
 from backend.data.session_repo import MessageRepository, SessionRepository
 from backend.domain.wake import Wake
 from backend.memory import get_memory_manager
@@ -323,13 +331,17 @@ def _build_chat_service(lifecycle=None) -> ChatService:
         metrics=PrometheusMetricAdapter(),
         events=FileEventAdapter(),
         memory=memory_adapter,  # MemoryPort for memory integration
+<<<<<<< HEAD
         lifecycle=lifecycle,  # Task 4 / Gap A — optional MemoryLifecycleManager
+=======
+>>>>>>> origin/main
         tool_policy=tool_policy,  # M2: UI 可调工具预算
         wake_store=get_wake_store(),  # A4: 会话挂起 / 唤醒注册
         context_window_resolver=_resolve_default_context_window,  # UX-IA R2-D 注入预算
     )
 
 
+<<<<<<< HEAD
 def _build_lifecycle_extractor():
     """生产用的记忆事实提取器 — LLM 驱动（与 legacy ``_extract_and_store_memory``
     同级），而非 keyword-only 降级。
@@ -345,6 +357,8 @@ def _build_lifecycle_extractor():
     return MemoryExtractor(llm_client=HttpxLLMAdapter())
 
 
+=======
+>>>>>>> origin/main
 def _resolve_default_context_window() -> Optional[int]:
     """hex 路径的有效窗口：按已保存设置解析（与 legacy 同一实现）；失败返回 None。"""
     try:
@@ -361,6 +375,11 @@ async def lifespan(app: FastAPI):
     # Local desktop capability: resolve the token before serving any sensitive route.
     # The value is intentionally never logged or returned by the health endpoint.
     initialize_local_auth_token()
+
+    # R84: 已采用的 fileized harness lock 必须在任何 DB/恢复副作用前通过。
+    from backend.application.kernel.harness_files import assert_adopted_harness_files_valid
+
+    assert_adopted_harness_files_valid()
 
     # R21-A: 应用待恢复备份（必须在 init_db 之前 —— 原子替换主库文件后
     # 再建连接，避免旧 WAL 污染恢复出的库）。fail-safe，不阻塞启动。
@@ -420,6 +439,15 @@ async def lifespan(app: FastAPI):
             )
     except Exception:
         logger.exception("session event backfill failed (ignored)")
+<<<<<<< HEAD
+=======
+        # A3: 显式 rollback 避免未回滚事务在 SQLite WAL 模式下持有 RESERVED 锁，
+        # 阻塞后续所有数据库操作（database is locked 连锁故障）。
+        try:
+            db.get_connection().rollback()
+        except Exception:
+            logger.error("rollback failed after backfill error", exc_info=True)
+>>>>>>> origin/main
     # Task 4: load builtin seed data if catalog is empty (no network access)
     # fail-safe — must not crash startup if seed parsing or DB write fails
     try:
@@ -430,6 +458,14 @@ async def lifespan(app: FastAPI):
             logger.info("Loaded %d builtin seed records", seed_count)
     except Exception:
         logger.exception("builtin seed failed (ignored)")
+<<<<<<< HEAD
+=======
+        # A3: 同上,显式 rollback 防止事务锁污染
+        try:
+            db.get_connection().rollback()
+        except Exception:
+            logger.error("rollback failed after seed error", exc_info=True)
+>>>>>>> origin/main
     if __name__ == "__main__":
         _elapsed_db = time.monotonic() - _startup_t0
         print(  # noqa: T201
@@ -678,6 +714,16 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("zotero background sync task creation failed (ignored)")
 
+    # Zotero 启动期后台增量同步（方案 §3.8）：
+    # 仅在已有水位时跑增量；首次不同步（避免大库首索引卡启动 / 意外嵌入费用），
+    # 首次需用户在 设置 → Zotero 手动点「立即同步」。异常吞掉，不影响启动。
+    try:
+        from backend.api.zotero_sync_routes import run_background_sync
+
+        app.state.zotero_sync_task = asyncio.create_task(run_background_sync())
+    except Exception:
+        logger.exception("zotero background sync task creation failed (ignored)")
+
     # PR-C §5.1: 把 5 个 evolution 任务挂到 lifespan,按 cron 自动跑
     # (memory_pruning / memory_consolidation / daily_summary /
     #  preference_learning / importance_reevaluation)。读 config.yaml
@@ -707,6 +753,7 @@ async def lifespan(app: FastAPI):
     logger.info("TodoReminderScheduler started")
     _startup_mark("todo_reminder_scheduler")
 
+<<<<<<< HEAD
     # 标题回补：延迟 30s 后台补齐历史未命名会话（失败不影响启动）
     from backend.scheduler.title_backfill import TitleBackfill
 
@@ -718,6 +765,8 @@ async def lifespan(app: FastAPI):
     app.state.title_backfill = title_backfill
     logger.info("TitleBackfill 已调度（启动 30s 后回补未命名会话）")
 
+=======
+>>>>>>> origin/main
     # R19-B: SQLite 自动备份 —— 启动时后台线程备份一次（fail-safe, 不阻塞
     # 启动）+ 每日 03:10 定时备份（独立于 evolution 任务, 只做整库在线复制）。
     def _startup_backup() -> None:
@@ -823,6 +872,76 @@ async def lifespan(app: FastAPI):
                 )
                 logger.info("Arena 自动化已启用（账号池 + 注册辅助，db=%s）", _arena_db)
                 _startup_mark("arena")
+        else:
+            logger.info("Arena 自动化未启用（arena_automation.yaml enabled=false）")
+    except Exception:  # noqa: BLE001 — 装配失败不阻塞启动
+        logger.exception("Arena 自动化装配失败（忽略）")
+
+    # Design Studio 装配（LLM 驱动的 HTML 原型 / 演示稿生成）。fail-safe：
+    # 失败只降级设计子系统，绝不拖垮聊天主链路。
+    try:
+        from backend.data.design_repo import DesignRepo
+        from backend.design.design_studio import DesignStudio
+        from backend.design.generator import DesignGenerator
+        from backend.design.systems import DesignSystemRegistry
+        from backend.design.templates import DesignTemplateRegistry
+        from backend.orchestration.llm_factory import build_llm_client_from_settings
+
+        # 同 scheduled_tasks / arena 的约定：优先写 SAGE_USER_DATA_DIR，
+        # 回退到 <cwd>/backend/data（打包后 Program Files 下不可写）。
+        _design_content_dir = Path(__file__).parent / "design" / "content"
+        _design_workspace = (
+            Path(os.environ.get("SAGE_USER_DATA_DIR") or "backend/data") / "workspace"
+        )
+        # H1: check for unconfigured LLM before constructing DesignStudio
+        _llm_client = build_llm_client_from_settings()
+        if _llm_client is None:
+            logger.warning("DesignStudio: LLM client not configured, skipping assembly")
+            raise RuntimeError("LLM client not configured")
+        design_studio = DesignStudio(
+            repo=DesignRepo(db.get_connection()),
+            generator=DesignGenerator(llm_client=_llm_client),
+            systems=DesignSystemRegistry(_design_content_dir),
+            templates=DesignTemplateRegistry(_design_content_dir),
+            workspace_dir=_design_workspace,
+        )
+        app.state.design_studio = design_studio
+        # Expose design_studio to tools via module-level getter
+        from backend.design import init_design_studio
+        init_design_studio(design_studio)
+        _startup_mark("design_studio")
+    except Exception:  # noqa: BLE001 — 装配失败不阻塞启动
+        logger.exception("DesignStudio 装配失败（ignored）")
+        try:
+            db.get_connection().rollback()
+        except Exception:
+            logger.error("rollback failed after design studio error", exc_info=True)
+
+    # Arena 自动化装配（feature flag 默认关）：账号池 + 单账号注册辅助。
+    # 修复既有缺口：arena 路由早已挂载但 init_arena_service 从未被调用，
+    # 端点恒 503。enabled=false 时保持 403 语义（路由侧 _config 为 None）。
+    try:
+        from backend.api.arena_routes import (
+            init_arena_service,
+            init_registration_service,
+        )
+        from backend.config.arena_automation import load_arena_automation_config
+        from backend.services.arena_accounts import get_or_create_master_key
+
+        _arena_cfg = load_arena_automation_config()
+        if _arena_cfg.enabled:
+            _arena_dir = os.environ.get("SAGE_USER_DATA_DIR") or "backend/data"
+            _arena_db = str(Path(_arena_dir) / "arena_accounts.sqlite")
+            _arena_service = init_arena_service(
+                db_path=_arena_db,
+                encryption_key=get_or_create_master_key(),
+                config=_arena_cfg,
+            )
+            init_registration_service(
+                config=_arena_cfg, account_service=_arena_service
+            )
+            logger.info("Arena 自动化已启用（账号池 + 注册辅助，db=%s）", _arena_db)
+            _startup_mark("arena")
         else:
             logger.info("Arena 自动化未启用（arena_automation.yaml enabled=false）")
     except Exception:  # noqa: BLE001 — 装配失败不阻塞启动
@@ -1079,6 +1198,7 @@ async def lifespan(app: FastAPI):
     try:
         from backend.api.hex_routes import get_chat_service
 
+<<<<<<< HEAD
         # 2026-09 修复 (同步 #957): 覆盖工厂此前每请求新建 ChatService ——
         # prompt 快照缓存跨请求永不命中。注入单例访问器。
         if __name__ == "__main__":
@@ -1161,6 +1281,65 @@ async def lifespan(app: FastAPI):
             logger.info("worktree 对账: 处理 %d 条失效登记", swept)
     except Exception:  # noqa: BLE001 — 对账失败不得阻塞启动
         logger.warning("worktree 对账失败（忽略）", exc_info=True)
+=======
+    # 2026-09 修复: 覆盖工厂此前每个请求都新建 ChatService —— prompt
+    # 快照缓存(_system_prompt_snapshots)跨请求永不命中, app.state 上的
+    # 单例反而无人使用。注入单例访问器。
+    app.state.chat_service = _build_chat_service()
+    app.dependency_overrides[get_chat_service] = lambda: app.state.chat_service
+    # B1 (P11): MemoryAdapter 全局暴露 —— embedder select API 热重载用。
+    # MemoryAdapter 在 _build_chat_service 内构造, 经 ChatService.memory 可达。
+    app.state.memory_adapter = getattr(app.state.chat_service, "memory", None)
+
+    # M7 (2026-10-21): Harness 自进化埋点装配——工具/技能每次调用写入
+    # harness_components 累积 effectiveness 指标（usage_count / success_rate
+    # / avg_latency_ms），供 GET /api/v1/harness/components 消费。
+    # 装配顺序：必须在 harness_routes 挂载之前（依赖覆盖工厂依赖注入）。
+    try:
+        from backend.adapters.out.harness import SqliteHarnessAdapter
+        from backend.application.services.harness_recorder import (
+            HarnessRecorder,
+            install_recorder,
+        )
+        from backend.application.services.harness_service import HarnessService
+
+        install_recorder(HarnessRecorder(HarnessService(SqliteHarnessAdapter())))
+        logger.info("harness recorder 已装配（工具/技能 effectiveness 埋点）")
+    except Exception as exc:  # noqa: BLE001 — 埋点装配失败不得阻塞启动
+        logger.warning("harness recorder 装配失败（埋点变 no-op）: %s", exc)
+    # Phase 2: 后台构建标签共现图谱（daemon thread，不阻塞启动）
+    # build-then-swap 模式：图谱未完成前 retrieve() 走 2 路（keyword+vector），
+    # 完成后自动升级为 3 路（keyword+vector+tag_graph）。
+    if app.state.memory_adapter is not None:
+        try:
+            from backend.memory.tag_graph import build_tag_graph_async
+
+            build_tag_graph_async(
+                app.state.memory_adapter.memory_manager.episodic,
+                app.state.memory_adapter.memory_manager.semantic,
+            )
+        except Exception as exc:  # noqa: BLE001 — 图谱构建失败不阻塞启动
+            logger.warning("[tag_graph] 异步构建触发失败: %s", exc)
+    logger.info(
+        "ChatService 已装配 (runtime 与 hex /chat 共享); API_MODE=%s (路由挂载见模块级常量)",
+        API_MODE,
+    )
+>>>>>>> origin/main
+
+    # 浏览器一次性目录的启动兜底清扫（与下方 _shutdown_browser_sessions 对称）：
+    # 进程被硬杀时 shutdown 钩子不会执行，遗留目录靠下次启动按 mtime 回收。
+    _startup_browser_temp_sweep()
+
+    # worktree 模式 (2026-09-18): 启动对账——登记为 active 但目录已被外部
+    # 删除的会话 worktree → 标 discarded + prune 主仓 + 悬空绑定退回主仓。
+    try:
+        from backend.api.worktree_routes import sweep_registered_worktrees
+
+        swept = sweep_registered_worktrees(get_database().get_connection())
+        if swept:
+            logger.info("worktree 对账: 处理 %d 条失效登记", swept)
+    except Exception:  # noqa: BLE001 — 对账失败不得阻塞启动
+        logger.warning("worktree 对账失败（忽略）", exc_info=True)
 
     if __name__ == "__main__":
         _elapsed_lifespan = time.monotonic() - _startup_t0
@@ -1186,7 +1365,10 @@ async def lifespan(app: FastAPI):
     _shutdown_bash_sessions()
     _shutdown_browser_sessions()
     _shutdown_repl_cleanups()
+<<<<<<< HEAD
     _shutdown_plugin_hosts()
+=======
+>>>>>>> origin/main
     # Arena：停观测泵 + 关账号池 SQLite 连接（best-effort，见 arena_routes）
     try:
         from backend.api.arena_routes import shutdown_arena_services
@@ -1217,6 +1399,7 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # noqa: BLE001 — shutdown must not raise
             logger.warning("TodoReminderScheduler stop failed: %s", exc)
 
+<<<<<<< HEAD
     # Phase 8c: cancel pending title backfill
     if hasattr(app.state, "title_backfill") and app.state.title_backfill is not None:
         try:
@@ -1224,6 +1407,8 @@ async def lifespan(app: FastAPI):
         except Exception as exc:  # noqa: BLE001 — shutdown must not raise
             logger.warning("TitleBackfill stop failed: %s", exc)
 
+=======
+>>>>>>> origin/main
     # Zotero 启动期后台同步任务：未跑完就取消（shutdown 不得挂起）
     zotero_sync_task = getattr(app.state, "zotero_sync_task", None)
     if zotero_sync_task is not None and not zotero_sync_task.done():
@@ -1287,6 +1472,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # noqa: BLE001 — shutdown must not raise
         logger.warning("MCP client shutdown failed: %s", exc)
 
+<<<<<<< HEAD
     # Task 4 / Gap A — stop the session-end watchdog so its 60 s
     # asyncio.sleep loop doesn't outlive the process.
     if hasattr(app.state, "session_watchdog") and app.state.session_watchdog is not None:
@@ -1294,6 +1480,15 @@ async def lifespan(app: FastAPI):
         with suppress(asyncio.CancelledError, Exception):  # noqa: BLE001
             await app.state.session_watchdog
         logger.info("Session-end watchdog 已停止")
+=======
+    # R83: stop out-of-process plugin workers held by the global host.
+    try:
+        from backend.plugins.host import shutdown_plugin_hosts
+
+        shutdown_plugin_hosts()
+    except Exception as exc:  # noqa: BLE001 — shutdown must not raise
+        logger.warning("Plugin host shutdown failed: %s", exc)
+>>>>>>> origin/main
 
 
 async def _periodic_stream_sweeper(registry: StreamRegistry, interval_s: float = 60.0) -> None:
@@ -1356,6 +1551,7 @@ async def settings_validation_exception_handler(
         (request.method, request.url.path.rstrip("/"))
     )
     if fixed_content is not None:
+<<<<<<< HEAD
         # settings PUT: 额外提取字段路径以对齐 legacy_routes.py handler 的
         # ``field`` 键约定 (test_put_settings_prevalidation_error_is_fixed_and_non_echoing
         # 断言 detail 必须含 ``field``). 字段路径形如 ('body', 'endpoints', 0, 'protocol')
@@ -1374,6 +1570,10 @@ async def settings_validation_exception_handler(
             fixed_content = {**fixed_content}
             fixed_content["detail"] = {**fixed_content.get("detail", {}), "field": field}
         return JSONResponse(status_code=422, content=fixed_content)
+=======
+        return JSONResponse(status_code=422, content=fixed_content)
+
+>>>>>>> origin/main
     from fastapi.exception_handlers import request_validation_exception_handler
 
     return await request_validation_exception_handler(request, exc)
@@ -1455,6 +1655,11 @@ app.include_router(permission_router, prefix="/api/v1")
 app.include_router(web_access_router, prefix="/api/v1")
 # M6 生态扩展 Phase 1: /api/v1/hooks/builtins 内置钩子元数据 (设置页"推荐 Hook")
 app.include_router(hooks_router, prefix="/api/v1")
+<<<<<<< HEAD
+=======
+# R82: /api/v1/plugins 插件生命周期记录 REST（代码托管留待 R83）
+app.include_router(plugin_router, prefix="/api/v1")
+>>>>>>> origin/main
 # M2 part B: /api/v1/questions/{pending, <id>/answer}（AskUserQuestion）
 app.include_router(question_router, prefix="/api/v1")
 app.include_router(build_orchestration_router(), prefix="/api/v1")
@@ -1492,6 +1697,10 @@ app.include_router(search_router, prefix="/api/v1")
 
 # Workspace MCP Server 管理端点: /api/v1/remote-mcp/*（受 local_auth 保护；
 # MCP 监听器本身在独立端口 127.0.0.1:8767，默认关闭）
+<<<<<<< HEAD
+=======
+# 见 docs/plans/2026-09-26-workspace-mcp-server.md
+>>>>>>> origin/main
 from backend.remote_mcp.admin_routes import router as remote_mcp_router  # noqa: E402
 
 app.include_router(remote_mcp_router, prefix="/api/v1")
@@ -1557,10 +1766,13 @@ from backend.api.v1.design_routes import router as design_router
 
 app.include_router(design_router, prefix="/api/v1")
 
+<<<<<<< HEAD
 # Plugins: /api/v1/plugins/{status,invoke,install,...}
 app.include_router(plugin_router, prefix="/api/v1")
 
 
+=======
+>>>>>>> origin/main
 
 @app.get("/health/proof")
 async def health_proof(request: Request):
@@ -1628,6 +1840,7 @@ if __name__ == "__main__":
     _log_tz = os.environ.get("SAGE_LOG_TIMEZONE", "UTC")
     set_log_timezone(_log_tz)
 
+<<<<<<< HEAD
     # uvicorn 0.27 的 uvicorn.error logger 无自带 handlers, 依赖 propagate=True
     # 传播到 uvicorn logger 的 "default" handler (stderr). 但 setup_logging() 已
     # 替换根 logger handlers, 且 Windows 上 Electron 子进程 stderr 捕获依赖
@@ -1644,6 +1857,10 @@ if __name__ == "__main__":
         _uv_err.addHandler(_stderr_handler)
     _uv_err.propagate = True  # 保留向 uvicorn logger 传播
 
+=======
+    # uvicorn 自带 logger 默认 WARNING 且无 handler;显式放行到 INFO 并传播到
+    # 根 logger,否则 log_config=None 后 access log 会被 uvicorn 自身级别过滤。
+>>>>>>> origin/main
     for _name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         logging.getLogger(_name).setLevel(logging.INFO)
 

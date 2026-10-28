@@ -202,10 +202,13 @@ export interface AppSettings {
   // 函数式读取，改后下一次上游请求即生效。范围 5–1800，见 config_tool 校验。
   llmProxyTimeoutS: number; // 60
 
+<<<<<<< HEAD
   // 2026-10-27: 会话标题生成专用模型 id（顶层扁平键，与 chatModel 同风格）。
   // 留空表示回退到聊天模型；后端 title_generator.load_title_llm_config 读取。
   titleModelId: string;
 
+=======
+>>>>>>> origin/main
   // 演示模式开关 (2026-08-27): 启用后 Electron main 进程跳过 Python 后端
   // spawn, 前端可走 /demo 路由录屏. 关闭时回到正常 LLM 调用路径.
   demoMode: boolean;
@@ -326,9 +329,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // PROXY_TIMEOUT_SECONDS 一致）。
   llmProxyTimeoutS: 60,
 
+<<<<<<< HEAD
   // 2026-10-27: 会话标题专用模型默认留空 —— 回退到聊天模型。
   titleModelId: '',
 
+=======
+>>>>>>> origin/main
   // 演示模式: 默认关闭. 开启后 main 进程跳过 Python 后端启动.
   demoMode: false,
 

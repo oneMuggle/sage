@@ -1,6 +1,7 @@
 {
   "version": 1,
   "files": {
+<<<<<<< HEAD
     "backend/agents/profiles.py": 1067,
     "backend/api/legacy_routes.py": 2654,
     "backend/api/llm_proxy_routes.py": 1217,
@@ -19,12 +20,35 @@
     "backend/office/edit.py": 1297,
     "backend/office/excel.py": 1003,
     "backend/office/models.py": 1562,
+=======
+    "backend/agents/profiles.py": 1064,
+    "backend/api/legacy_routes.py": 2609,
+    "backend/api/llm_proxy_routes.py": 1216,
+    "backend/api/orchestration_router.py": 807,
+    "backend/api/permission_routes.py": 855,
+    "backend/api/wiki_routes.py": 1656,
+    "backend/application/services/chat_service.py": 1233,
+    "backend/core/legacy/agent.py": 3063,
+    "backend/core/legacy/llm_client.py": 1274,
+    "backend/data/database.py": 2100,
+    "backend/data/session_repo.py": 1070,
+    "backend/data/settings_canonicalizer.py": 834,
+    "backend/main.py": 1350,
+    "backend/mcp/pool.py": 915,
+    "backend/office/edit.py": 1297,
+    "backend/office/excel.py": 1003,
+    "backend/office/models.py": 1531,
+>>>>>>> origin/main
     "backend/office/staging_quarantine.py": 1383,
     "backend/office/template_library.py": 1230,
     "backend/office/tool_service.py": 1017,
     "backend/office/word.py": 1591,
     "backend/orchestration/chat_dispatcher.py": 2418,
+<<<<<<< HEAD
     "backend/scheduler/evolution.py": 1845,
+=======
+    "backend/scheduler/evolution.py": 1587,
+>>>>>>> origin/main
     "backend/services/usage_tracker.py": 959,
     "backend/tests/api/test_permission_routes.py": 831,
     "backend/tests/integration/test_llm_proxy_routes.py": 1154,
@@ -34,15 +58,25 @@
     "backend/tests/unit/services/test_run_trace_resolver.py": 833,
     "backend/tests/unit/test_agent_run_loop.py": 1216,
     "backend/tests/unit/test_branch_summarizer.py": 857,
+<<<<<<< HEAD
     "backend/tests/unit/test_chat_dispatcher.py": 1065,
+=======
+    "backend/tests/unit/test_chat_dispatcher.py": 1064,
+>>>>>>> origin/main
     "backend/tests/unit/test_credential_vault.py": 1341,
     "backend/tests/unit/test_settings_canonicalizer.py": 844,
     "backend/tests/unit/test_skill_md_importer.py": 806,
     "backend/tests/unit/test_skill_md_script_runner.py": 824,
     "backend/tests/unit/test_web_tool.py": 1833,
+<<<<<<< HEAD
     "backend/tools/browser_cdp.py": 994,
     "backend/tools/browser_tool.py": 1395,
     "backend/tools/credential_vault.py": 942,
+=======
+    "backend/tools/browser_cdp.py": 992,
+    "backend/tools/browser_tool.py": 1395,
+    "backend/tools/credential_vault.py": 909,
+>>>>>>> origin/main
     "backend/tools/download_tool.py": 1116,
     "backend/tools/office_analyze_tool.py": 981,
     "backend/tools/office_create_tool.py": 1580,
@@ -50,14 +84,22 @@
     "backend/wiki/files.py": 927,
     "backend/zotero/client.py": 1171,
     "electron/__tests__/commands.test.ts": 1191,
+<<<<<<< HEAD
     "electron/main.ts": 2947,
     "electron/tests/updateIntegration.test.ts": 869,
     "electron/tests/updateManager.test.ts": 1813,
     "electron/updateManager.ts": 1498,
+=======
+    "electron/main.ts": 2751,
+    "electron/tests/updateIntegration.test.ts": 865,
+    "electron/tests/updateManager.test.ts": 1776,
+    "electron/updateManager.ts": 1493,
+>>>>>>> origin/main
     "packages/drawio-mcp-server/src/xml-validation.ts": 950,
     "tests/electron/test_stub_backend.py": 896,
     "backend/api/arena_routes.py": 873,
     "backend/services/arena_draw_engine.py": 1054,
+<<<<<<< HEAD
     "backend/tools/web_render.py": 824,
     "backend/api/project_ai_routes.py": 862,
     "src/shared/api/projectApi.ts": 1112,
@@ -66,11 +108,28 @@
     "src/features/send-message/__tests__/useChat.streamingAndGates.test.ts": 844,
     "src/features/send-message/chatStreamStore.ts": 829,
     "src/features/send-message/useChat.ts": 1006,
+=======
+    "backend/tools/web_render.py": 816,
+    "backend/api/project_ai_routes.py": 859,
+    "src/shared/api/projectApi.ts": 1112,
+    "src/shared/api/projectApiTypes.ts": 1387,
+    "src/widgets/chat/ChatInput.tsx": 886,
+    "src/features/send-message/useChat.ts": 998,
+    "src/features/send-message/__tests__/useChat.streamingAndGates.test.ts": 844,
+    "src/features/send-message/chatStreamStore.ts": 829,
+    "src/features/send-message/useChat.ts": 1001,
+>>>>>>> origin/main
     "src/pages/settings/PluginsTab.tsx": 820,
     "backend/tests/unit/test_design_routes.py": 975,
     "backend/adapters/out/skill/inproc.py": 949,
     "backend/api/project_routes.py": 957,
     "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
+<<<<<<< HEAD
     "backend/tools/config_tool.py": 983
   }
 }
+=======
+    "backend/tools/config_tool.py": 968
+  }
+}
+>>>>>>> origin/main

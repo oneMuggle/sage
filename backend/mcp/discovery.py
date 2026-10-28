@@ -17,7 +17,11 @@ import json
 import logging
 import os
 from pathlib import Path
+<<<<<<< HEAD
 from typing import Any, Dict, List, Optional, Set, Union
+=======
+from typing import Any, Dict, List, Optional, Union
+>>>>>>> origin/main
 
 from pydantic import BaseModel, Field
 
@@ -67,7 +71,11 @@ class McpServerDiscoveryService:
         "mcp.json",
     ]
 
+<<<<<<< HEAD
     def __init__(self, workspace_dir: Optional[[Path, str]] = None) -> None:
+=======
+    def __init__(self, workspace_dir: Optional[Union[Path, str]] = None) -> None:
+>>>>>>> origin/main
         """
         Initialize discovery service.
 
@@ -75,7 +83,11 @@ class McpServerDiscoveryService:
             workspace_dir: Optional workspace directory to scan
         """
         self._workspace_dir = Path(workspace_dir) if workspace_dir else None
+<<<<<<< HEAD
         self._cache: Dict[str, DiscoveredMcpServer] = {}
+=======
+        self._cache: dict[str, DiscoveredMcpServer] = {}
+>>>>>>> origin/main
         self._cache_valid = False
 
     @property
@@ -83,7 +95,11 @@ class McpServerDiscoveryService:
         """Get workspace directory."""
         return self._workspace_dir
 
+<<<<<<< HEAD
     def discover_all(self, use_cache: bool = True) -> List[DiscoveredMcpServer]:
+=======
+    def discover_all(self, use_cache: bool = True) -> list[DiscoveredMcpServer]:
+>>>>>>> origin/main
         """
         Discover all MCP servers from all sources.
 
@@ -119,7 +135,11 @@ class McpServerDiscoveryService:
 
     def discover_workspace_servers(
         self, workspace_dir: Union[Path, str]
+<<<<<<< HEAD
     ) -> List[DiscoveredMcpServer]:
+=======
+    ) -> list[DiscoveredMcpServer]:
+>>>>>>> origin/main
         """
         Discover MCP servers from workspace configuration files.
 
@@ -155,7 +175,11 @@ class McpServerDiscoveryService:
 
         return discovered
 
+<<<<<<< HEAD
     def _parse_config_file(self, config_path: Path) -> List[DiscoveredMcpServer]:
+=======
+    def _parse_config_file(self, config_path: Path) -> list[DiscoveredMcpServer]:
+>>>>>>> origin/main
         """
         Parse MCP configuration file.
 
@@ -199,7 +223,11 @@ class McpServerDiscoveryService:
         return discovered
 
     def _parse_server_config(
+<<<<<<< HEAD
         self, name: str, config: Dict[str, Any]
+=======
+        self, name: str, config: dict[str, Any]
+>>>>>>> origin/main
     ) -> DiscoveredMcpServer:
         """
         Parse a single server configuration.
@@ -222,7 +250,11 @@ class McpServerDiscoveryService:
             description=config.get("description", ""),
         )
 
+<<<<<<< HEAD
     def discover_environment_servers(self) -> List[DiscoveredMcpServer]:
+=======
+    def discover_environment_servers(self) -> list[DiscoveredMcpServer]:
+>>>>>>> origin/main
         """
         Discover MCP servers from environment variables.
 
@@ -236,7 +268,11 @@ class McpServerDiscoveryService:
             List of DiscoveredMcpServer
         """
         discovered = []
+<<<<<<< HEAD
         server_names: Set[str] = set()
+=======
+        server_names: set[str] = set()
+>>>>>>> origin/main
 
         # Scan environment for MCP_SERVER_* variables
         for key in os.environ:
@@ -292,7 +328,11 @@ class McpServerDiscoveryService:
         self._cache_valid = False
         logger.debug("MCP 发现缓存已失效")
 
+<<<<<<< HEAD
     def list_server_names(self) -> List[str]:
+=======
+    def list_server_names(self) -> list[str]:
+>>>>>>> origin/main
         """
         List all discovered server names.
 

@@ -23,6 +23,10 @@ JSON 字符串而无人发现，导致 ``doctor`` 静默误报
 from __future__ import annotations
 
 import json
+<<<<<<< HEAD
+=======
+import os
+>>>>>>> origin/main
 import sys
 from pathlib import Path
 from typing import Any, Dict
@@ -191,6 +195,13 @@ def test_exec_nonzero_exit_marks_success_false():
 # --- doctor ↔ probe 绑定回归 ---
 
 
+<<<<<<< HEAD
+=======
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="runtime_probe PATH 扫描在 Windows conda 环境下探测不到运行时（产品缺口，另行修复）",
+)
+>>>>>>> origin/main
 def test_doctor_runtime_env_does_not_false_alarm():
     """doctor 直接读 probe 的 content，content 一旦不是 dict 就会误报 CRITICAL。"""
     check_result = RuntimeEnvCheck().run()

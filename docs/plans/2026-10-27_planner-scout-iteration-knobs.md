@@ -92,7 +92,18 @@ ValueError: unknown orch field 'maxToolCallsPerRun'
 - [x] **步骤 9**：提交 + PR
   - commit：`fix(settings): repair orch tab 400 regression + add scout/planner iteration knobs`
   - PR：[#2592](https://github.com/oneMuggle/sage/pull/2592)（base: `release/win7`）
+<<<<<<< HEAD
   - 合并后需 cherry-pick 到 `main`（白名单回归双分支都受影响）
+=======
+- [x] **步骤 10**：CI 监控 + 合并（release/win7）
+  - Architecture check 初版失败（两个 baselined 文件行数增长） → 拆分新测试到 `test_settings_relay_roundtrip.py` + ratchet 基线 802→823
+  - CI 第二轮全绿（Architecture check / Backend py38 / Frontend / Electron × 2 / Smoke）
+  - Squash 合并：`76f8091`（2026-10-27 09:08:58 UTC）；远程分支已删除
+- [x] **步骤 11**：cherry-pick 到 `main`
+  - 冲突适配：main 无 win7 专属 4 个 profile 迭代上限键 → 仅同步 6 条 ALIASES + 4 个白名单键；`max_subagent_iterations` 断言按 main 的 6（win7 是 10）；基线按 main 行数 ratchet（`settings_canonicalizer.py`: 811）
+  - 本地验证：pytest 195 passed / vitest 18 passed / tsc 无错误 / ruff 全绿 / baseline 无增长
+  - PR：[#2598](https://github.com/oneMuggle/sage/pull/2598)，CI 全绿后 squash 合并：`0736a6da9`
+>>>>>>> origin/main
 
 ## 5. 风险评估与依赖
 

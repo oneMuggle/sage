@@ -760,9 +760,12 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_episodic_scope_project
             ON memories_episodic(scope, project_key)
         """)
+<<<<<<< HEAD
 
         # win7-only（Task 4 / Gap A）：补 source_turn_id 等三列，见 _migrate_memory_traceability。
         _migrate_memory_traceability(conn)
+=======
+>>>>>>> origin/main
 
         # 技能定义不再由 SQLite ``skills`` 表承载。
         # 当前实现从 SkillRegistry / SKILL.md 文件加载；故新数据库不得创建

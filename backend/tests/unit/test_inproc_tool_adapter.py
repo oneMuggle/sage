@@ -249,6 +249,7 @@ def test_default_registry_is_used_when_none_provided() -> None:
     names = {t.name for t in adapter.list_tools()}
     # 至少包含 builtin 工具 (list_dir 永远在, 不依赖 MCP)
     assert "list_dir" in names
+<<<<<<< HEAD
     # Missing preferences are fail-closed; local tools remain available.
     assert "web_search" not in names
 
@@ -257,6 +258,25 @@ def test_default_registry_is_used_when_none_provided() -> None:
 def test_explicit_online_registry_includes_network_tools() -> None:
     names = {t.name for t in InprocToolAdapter().list_tools()}
     assert {"list_dir", "web_search", "web_fetch", "http_download"} <= names
+
+
+def test_default_registry_propagates_scheduler_getter() -> None:
+    """自建 registry 时把 scheduler getter 传给三件调度工具。"""
+    def getter() -> None:
+        return None
+
+    adapter = InprocToolAdapter(scheduler_service_getter=getter)
+
+    for name in (
+        "schedule_task",
+        "list_scheduled_tasks",
+        "cancel_scheduled_task",
+    ):
+        assert adapter._registry.get(name)._service_getter is getter
+=======
+    # web_search 也是 builtin
+    assert "web_search" in names
+>>>>>>> origin/main
 
 
 def test_default_registry_propagates_scheduler_getter() -> None:

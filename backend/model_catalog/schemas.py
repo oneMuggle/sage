@@ -1,12 +1,17 @@
 """Validated, side-effect-free model catalog value contracts."""
+<<<<<<< HEAD
 from __future__ import annotations
 
 import math
+=======
+
+>>>>>>> origin/main
 import re
 from datetime import datetime
 from decimal import Decimal
 from typing import Dict, List, Literal, Optional
 
+<<<<<<< HEAD
 from pydantic import BaseModel, Field, StrictStr
 
 from backend.compat.win7.pydantic_compat import field_validator
@@ -64,6 +69,26 @@ class CatalogValue(BaseModel):
         if not isinstance(other, CatalogValue):
             return NotImplemented
         return type(self) is type(other) and self.__dict__ == other.__dict__
+=======
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictStr
+from typing_extensions import Annotated  # py38: typing.Annotated 是 3.9+
+
+
+def _nonblank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("value must not be blank")
+    return value
+
+
+NonblankString = Annotated[StrictStr, AfterValidator(_nonblank)]
+PositiveInteger = Annotated[int, Field(strict=True, gt=0)]
+NonnegativeInteger = Annotated[int, Field(strict=True, ge=0)]
+UnitPrice = Annotated[Decimal, Field(ge=0, allow_inf_nan=False)]
+
+
+class CatalogValue(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, protected_namespaces=())
+>>>>>>> origin/main
 
 
 class ModelKey(CatalogValue):
@@ -72,6 +97,7 @@ class ModelKey(CatalogValue):
     provider: NonblankString
     model_id: NonblankString
 
+<<<<<<< HEAD
     @field_validator("provider", "model_id")
     @classmethod
     def _nonblank(cls, v: str) -> str:
@@ -79,6 +105,8 @@ class ModelKey(CatalogValue):
             raise ValueError("value must not be blank")
         return v
 
+=======
+>>>>>>> origin/main
 
 class EndpointKey(CatalogValue):
     """The same model ID on different endpoints is a distinct identity."""
@@ -86,6 +114,7 @@ class EndpointKey(CatalogValue):
     endpoint_id: NonblankString
     model_id: NonblankString
 
+<<<<<<< HEAD
     @field_validator("endpoint_id", "model_id")
     @classmethod
     def _nonblank(cls, v: str) -> str:
@@ -93,10 +122,13 @@ class EndpointKey(CatalogValue):
             raise ValueError("value must not be blank")
         return v
 
+=======
+>>>>>>> origin/main
 
 class Price(CatalogValue):
     """USD per million tokens. Pydantic serializes Decimal as JSON strings."""
 
+<<<<<<< HEAD
     input_per_million: Optional[UnitPrice] = Field(None, ge=0)
     output_per_million: Optional[UnitPrice] = Field(None, ge=0)
     currency: Literal["USD"] = "USD"
@@ -119,12 +151,23 @@ class ContextLimits(CatalogValue):
     @classmethod
     def _no_bool(cls, v: object) -> object:
         return _reject_bool_and_float(v)
+=======
+    input_per_million: Optional[UnitPrice] = None
+    output_per_million: Optional[UnitPrice] = None
+    currency: Literal["USD"] = "USD"
+
+
+class ContextLimits(CatalogValue):
+    native: Optional[PositiveInteger] = None
+    service: Optional[PositiveInteger] = None
+>>>>>>> origin/main
 
 
 class LayerValues(CatalogValue):
     limits: ContextLimits
     price: Price
     source: NonblankString
+<<<<<<< HEAD
     revision: NonnegativeInteger = Field(..., strict=True, ge=0)
 
     @field_validator("source")
@@ -141,17 +184,33 @@ class LayerValues(CatalogValue):
 
 
 def _validate_utc_timestamp(value: str) -> str:
+=======
+    revision: NonnegativeInteger
+
+
+def _utc_timestamp(value: str) -> str:
+>>>>>>> origin/main
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z", value):
         raise ValueError("timestamp must be UTC RFC3339 ending in Z")
     datetime.fromisoformat(value.replace("Z", "+00:00"))
     return value
 
 
+<<<<<<< HEAD
+=======
+UtcTimestamp = Annotated[StrictStr, AfterValidator(_utc_timestamp)]
+
+
+>>>>>>> origin/main
 class CandidateModel(CatalogValue):
     """Source-only candidate; endpoint credentials are deliberately not accepted."""
 
     model_key: ModelKey
+<<<<<<< HEAD
     native: Optional[PositiveInteger] = Field(None, strict=True, gt=0)
+=======
+    native: Optional[PositiveInteger] = None
+>>>>>>> origin/main
     price: Price = Field(default_factory=Price)
     capabilities: Optional[Dict[str, bool]] = None
     architecture: Optional[NonblankString] = None
@@ -160,6 +219,7 @@ class CandidateModel(CatalogValue):
     source_updated_at: Optional[UtcTimestamp] = None
     pricing_scope: NonblankString
 
+<<<<<<< HEAD
     @field_validator("source", "pricing_scope")
     @classmethod
     def _nonblank(cls, v: str) -> str:
@@ -190,11 +250,18 @@ class CandidateModel(CatalogValue):
 class EndpointPatch(CatalogValue):
     native: Optional[PositiveInteger] = Field(None, strict=True, gt=0)
     service: Optional[PositiveInteger] = Field(None, strict=True, gt=0)
+=======
+
+class EndpointPatch(CatalogValue):
+    native: Optional[PositiveInteger] = None
+    service: Optional[PositiveInteger] = None
+>>>>>>> origin/main
     price: Price = Field(default_factory=Price)
     capabilities: Optional[Dict[str, bool]] = None
     architecture: Optional[NonblankString] = None
     quantization: Optional[NonblankString] = None
 
+<<<<<<< HEAD
     @field_validator("architecture", "quantization")
     @classmethod
     def _nonblank(cls, v: Optional[str]) -> Optional[str]:
@@ -216,6 +283,12 @@ class OverrideRecord(CatalogValue):
     @classmethod
     def _no_bool_revision(cls, v: object) -> object:
         return _reject_bool_and_float(v)
+=======
+
+class OverrideRecord(CatalogValue):
+    patch: EndpointPatch = Field(default_factory=EndpointPatch)
+    revision: NonnegativeInteger = 0
+>>>>>>> origin/main
 
 
 class ProbeRecord(CatalogValue):
@@ -226,6 +299,7 @@ class ProbeRecord(CatalogValue):
     error: Optional[str] = None
     base_url: Optional[str] = None  # endpoint URL at probe time; enables staleness detection
 
+<<<<<<< HEAD
     @field_validator("adapter")
     @classmethod
     def _nonblank_adapter(cls, v: str) -> str:
@@ -237,6 +311,12 @@ class ProbeRecord(CatalogValue):
 class SnapshotDiff(CatalogValue):
     id: NonblankString
     base_revision: NonnegativeInteger = Field(..., strict=True, ge=0)
+=======
+
+class SnapshotDiff(CatalogValue):
+    id: str
+    base_revision: NonnegativeInteger
+>>>>>>> origin/main
     before: Optional[CandidateModel]
     after: CandidateModel
     candidate: CandidateModel
@@ -244,6 +324,7 @@ class SnapshotDiff(CatalogValue):
     classification: Literal["new", "updated", "conflict", "unchanged"]
     status: Literal["pending", "applied", "ignored"]
 
+<<<<<<< HEAD
     @field_validator("id")
     @classmethod
     def _nonblank_id(cls, v: str) -> str:
@@ -256,14 +337,20 @@ class SnapshotDiff(CatalogValue):
     def _no_bool_base_rev(cls, v: object) -> object:
         return _reject_bool_and_float(v)
 
+=======
+>>>>>>> origin/main
 
 class EffectiveModel(CatalogValue):
     limits: ContextLimits
     price: Price
     provenance: Dict[str, str]
+<<<<<<< HEAD
     revision: NonnegativeInteger = Field(0, strict=True, ge=0)
 
     @field_validator("revision", mode="before")
     @classmethod
     def _no_bool_revision(cls, v: object) -> object:
         return _reject_bool_and_float(v)
+=======
+    revision: NonnegativeInteger = 0
+>>>>>>> origin/main

@@ -241,12 +241,21 @@ class TestDownloadCredential:
 
     def test_cookie_attached_on_download(self, tmp_path, repo):
         save_credential(".example.com", _COOKIES, repo=repo)
+<<<<<<< HEAD
         with patch_vault_repo(repo):
             with respx.mock(base_url="https://www.example.com") as mock:
                 route = mock.get("/a.pdf").mock(return_value=Response(200, content=b"%PDF-1.4 fake"))
                 result = self._tool(tmp_path).execute(
                     url="https://www.example.com/a.pdf", credential_domain=".example.com"
                 )
+=======
+        with patch_vault_repo(repo):  # noqa: SIM117 — py38 不支持括号多上下文 with
+            with respx.mock(base_url="https://www.example.com") as mock:
+                route = mock.get("/a.pdf").mock(return_value=Response(200, content=b"%PDF-1.4 fake"))
+                result = self._tool(tmp_path).execute(
+                url="https://www.example.com/a.pdf", credential_domain=".example.com"
+            )
+>>>>>>> origin/main
 
         assert result.success is True
         assert route.calls.last.request.headers["Cookie"] == "SID=s3cret; AUTH=token1"
@@ -1282,3 +1291,62 @@ class TestEncryptedFlag:
         )
         records = credential_vault.list_credentials(repo=repo)
         assert records[0]["encrypted"] is False
+<<<<<<< HEAD
+=======
+
+
+# ---------- find_credential_for_host (简化登录流程) ----------
+
+
+class TestFindCredentialForHost:
+    """find_credential_for_host: hostname → 最匹配凭据档案 domain 的推断。"""
+
+    def test_exact_domain_match(self, repo):
+        from backend.tools.credential_vault import find_credential_for_host
+
+        save_credential(".example.com", _COOKIES, repo=repo)
+        assert find_credential_for_host("example.com", repo=repo) == ".example.com"
+        assert find_credential_for_host("www.example.com", repo=repo) == ".example.com"
+
+    def test_subdomain_matches_parent_archive(self, repo):
+        from backend.tools.credential_vault import find_credential_for_host
+
+        save_credential(".agnes-ai.com", _COOKIES, repo=repo)
+        assert find_credential_for_host("platfm.agnes-ai.com", repo=repo) == ".agnes-ai.com"
+        assert find_credential_for_host("api.platfm.agnes-ai.com", repo=repo) == ".agnes-ai.com"
+
+    def test_most_specific_match_wins(self, repo):
+        from backend.tools.credential_vault import find_credential_for_host
+
+        save_credential(".agnes-ai.com", _COOKIES, repo=repo)
+        save_credential(
+            "platfm.agnes-ai.com",
+            [{"name": "X", "value": "v", "domain": "platfm.agnes-ai.com", "path": "/"}],
+            repo=repo,
+        )
+        # platfm.agnes-ai.com 有更具体的档案 → 优先返回
+        assert (
+            find_credential_for_host("platfm.agnes-ai.com", repo=repo) == "platfm.agnes-ai.com"
+        )
+        # 其他子域仍匹配泛域
+        assert find_credential_for_host("other.agnes-ai.com", repo=repo) == ".agnes-ai.com"
+
+    def test_no_match_returns_none(self, repo):
+        from backend.tools.credential_vault import find_credential_for_host
+
+        save_credential(".example.com", _COOKIES, repo=repo)
+        assert find_credential_for_host("other.com", repo=repo) is None
+        assert find_credential_for_host("notexample.com", repo=repo) is None
+
+    def test_empty_or_blank_hostname(self, repo):
+        from backend.tools.credential_vault import find_credential_for_host
+
+        save_credential(".example.com", _COOKIES, repo=repo)
+        assert find_credential_for_host("", repo=repo) is None
+        assert find_credential_for_host(None, repo=repo) is None  # type: ignore[arg-type]
+
+    def test_empty_vault_returns_none(self, repo):
+        from backend.tools.credential_vault import find_credential_for_host
+
+        assert find_credential_for_host("example.com", repo=repo) is None
+>>>>>>> origin/main

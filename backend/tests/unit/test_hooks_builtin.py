@@ -13,6 +13,10 @@
 from __future__ import annotations
 
 import json
+<<<<<<< HEAD
+=======
+import sys
+>>>>>>> origin/main
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -33,7 +37,14 @@ from backend.hooks.runner import (
     run_hook,
 )
 
+<<<<<<< HEAD
 pytestmark = pytest.mark.unit
+=======
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(sys.platform == "win32", reason="hooks shell 引用在 Windows cmd.exe 下不兼容（产品缺口）"),
+]
+>>>>>>> origin/main
 
 
 def _pre(tool: str, tool_input: Dict[str, Any]) -> Dict[str, Any]:

@@ -63,9 +63,12 @@ const memoryBridge = {
   delete: (args: Record<string, unknown>) => invokeMemory('delete_memory', args),
   getProfile: () => invokeMemory('get_user_profile'),
   diagnostics: () => invokeMemory('get_memory_diagnostics'),
+<<<<<<< HEAD
   /** win7: 记忆事件订阅（SSE 桥）—— 主进程 memoryEvents 通道 */
   subscribe: (handler: (event: unknown) => void) =>
     electronAPI.listen('memory-events', handler),
+=======
+>>>>>>> origin/main
   createProfile: (args: Record<string, unknown>) => invokeMemory('create_user_profile', args),
   updateProfile: (args: Record<string, unknown>) => invokeMemory('update_user_profile', args),
   deleteProfile: (args: Record<string, unknown>) => invokeMemory('delete_user_profile', args),

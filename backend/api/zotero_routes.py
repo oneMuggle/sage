@@ -28,11 +28,19 @@ router = APIRouter(tags=["zotero"])
 
 # Lazy singleton — instantiated on first request to avoid startup cost when
 # Zotero is not used. Re-created when db_path changes (see /path POST).
+<<<<<<< HEAD
 _client: Optional[Any] = None
 _client_db_path: Optional[str] = None
 
 
 def _get_configured_db_path() -> Optional[str]:
+=======
+_client: Any | None = None
+_client_db_path: str | None = None
+
+
+def _get_configured_db_path() -> str | None:
+>>>>>>> origin/main
     """Return the user-configured Zotero DB path, if any.
 
     r94 修复后本函数与 MCP 侧曾各写一份解析逻辑（settings_repo → env），
@@ -45,7 +53,11 @@ def _get_configured_db_path() -> Optional[str]:
     return resolve_zotero_db_path() or None
 
 
+<<<<<<< HEAD
 def _get_client(db_path_override: Optional[str] = None) -> Any:
+=======
+def _get_client(db_path_override: str | None = None) -> Any:
+>>>>>>> origin/main
     """Return (or create) the ZoteroClient singleton.
 
     Raises HTTPException(503) if the database is not found or locked.

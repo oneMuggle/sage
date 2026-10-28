@@ -93,7 +93,11 @@ class ToolRegistry:
         """
         return [tool.schema for tool in self._tools.values()]
 
+<<<<<<< HEAD
     def list_names(self) -> List[str]:
+=======
+    def list_names(self) -> builtins.List[str]:
+>>>>>>> origin/main
         """
         列出所有已注册工具的名称
 
@@ -106,7 +110,11 @@ class ToolRegistry:
         self,
         context: Optional[ToolExecutionContext] = None,
         allowed_tools: Optional[List[str]] = None,
+<<<<<<< HEAD
     ) -> List[Dict[str, Any]]:
+=======
+    ) -> builtins.List[Dict[str, Any]]:
+>>>>>>> origin/main
         """
         获取适合 LLM 调用的工具 Schema 列表
 

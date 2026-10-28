@@ -2,7 +2,11 @@
 import type { UpdateProvider, NormalisedRelease, ProviderChannel } from './base';
 import type { GithubConfig } from '../providerConfig';
 import { ProviderError } from './genericHttp';
+<<<<<<< HEAD
 import { fetchUpdate as fetchCompat } from '../request';
+=======
+import { fetchCompat } from '../../fetchCompat';
+>>>>>>> origin/main
 
 const CHANNELS: ProviderChannel[] = [
   { id: 'stable', label: 'Stable', description: '正式版（pre=false）' },

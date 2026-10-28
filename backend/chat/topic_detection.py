@@ -26,7 +26,12 @@ DEFAULT_SIMILARITY_THRESHOLD = 0.35
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     if not a or not b or len(a) != len(b):
         return 0.0
+<<<<<<< HEAD
     dot = sum(x * y for x, y in zip(a, b))
+=======
+    # zip strict= 形参是 3.10+，py38 不支持——noqa 防 B905 autofix 回填
+    dot = sum(x * y for x, y in zip(a, b))  # noqa: B905
+>>>>>>> origin/main
     na = sum(x * x for x in a) ** 0.5
     nb = sum(x * x for x in b) ** 0.5
     if na == 0 or nb == 0:

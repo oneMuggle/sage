@@ -81,8 +81,12 @@
 | 100  | [自进化可观测性与反馈闭环](./100-self-evolution-observability.md) | P0-1 进化日志结构化（duration/metrics）/ P0-2 偏好注入 user_profile（hermes 冻结语义）/ P0-3 召回反馈落库 + A/B 变体对比 |
 | 101  | [LLM 错误分类与重试](./101-llm-error-classification-retry.md) | httpx 异常→LLMErrorType 分类表 / RemoteProtocolError 归 NETWORK 修复 / 首字后不重试契约 / 重试参数与退避策略 / 代理超时可配置（llmProxyTimeoutS）/ 流式开关真正生效 |
 | 102  | [全局规则 UI（~/.sage/SAGE.md）](./102-global-rules.md) | G1/P0：设置页读写全局规则文件 / 路径硬编码 + 原子写 + 符号链接拒写 / 扫描 level=all 护栏 / 8000 字符截断 + 64KB 保存上限 / win7 零适配 |
+<<<<<<< HEAD
 | 104  | [Zotero → LLM 集成](./104-zotero-llm-integration.md) | 四层可见性阻断修复（白名单/路径/prompt/索引）/ ZoteroIngestor 向量索引 + 语义检索降级 / wiki 沉淀与零改动图谱 / 设置页同步面板 |
 | 107  | [会话标题生成机制](./107-session-title-generation.md) | 标题 LLM 生成流程 / `title_attempts` 计数器 / 启动回补调度器 / 专用标题模型配置 |
+=======
+| 103  | [Zotero → LLM 集成](./103-zotero-llm-integration.md) | 四层可见性阻断修复（白名单/路径/prompt/索引）/ ZoteroIngestor 向量索引 + 语义检索降级 / wiki 沉淀与零改动图谱 / 设置页同步面板 |
+>>>>>>> origin/main
 | 108  | [Plan Mode 增强](./108-plan-mode-enhancement.md) | 复杂度分类（simple/medium/complex）/ 执行模式推荐（single/multi/ask_user）/ scout_deep 深度调研 + ResearchSummaryCard / confirm_marker 规则引擎 + 步骤级确认（continue/skip/abort） |
 
 ---
