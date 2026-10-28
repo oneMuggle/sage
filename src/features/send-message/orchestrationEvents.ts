@@ -44,6 +44,38 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
     return true;
   }
 
+  // 2026-10-28 (Plan Mode 增强): 计划模式收尾时的执行模式推荐 ——
+  // 事件在 DONE 之前到达，写入独立槽位供 PlanApprovalBar 展示
+  // "推荐 + 可覆盖"。mode 缺失或非法时不消费该事件（走默认分支）。
+  if (evt.state === 'plan_execution_mode' && evt.execution_mode) {
+    const mode = evt.execution_mode;
+    if (mode === 'single' || mode === 'multi' || mode === 'ask_user') {
+      board.setExecutionModeRecommendation(sid, {
+        mode,
+        confidence:
+          typeof evt.execution_mode_confidence === 'number' ? evt.execution_mode_confidence : 0,
+        reasoning: evt.execution_mode_reasoning ?? '',
+      });
+      return true;
+    }
+  }
+
+  // 2026-10-28 (Plan Mode 增强 Phase 2): 复杂任务深度调研结果 ——
+  // scout_deep 完成后推送，写入独立槽位供 ResearchSummaryCard 渲染。
+  // research_report 缺失时不消费该事件（走默认分支）。
+  if (evt.state === 'research_complete' && evt.research_report) {
+    board.setResearchReport(sid, evt.research_report);
+    return true;
+  }
+
+  // 2026-10-28 (Plan Mode 增强 Phase 3): 自动确认点 ——
+  // plan 执行到标记为 auto_confirm 的步骤时推送，写入独立槽位供
+  // StepConfirmDialog 渲染。step_confirm 载荷缺失时不消费该事件。
+  if (evt.state === 'awaiting_step_confirm' && evt.step_confirm) {
+    board.setStepConfirm(sid, evt.step_confirm);
+    return true;
+  }
+
   // right-panel R5: 写文件工具落盘 → 变更列表防抖刷新（徽标实时化，
   // 不再依赖手动刷新/重进面板）。防抖合并一轮连续写入的多条事件。
   if (evt.state === 'workspace_changed') {
@@ -89,13 +121,14 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
         [taskId]:
           incoming.status === 'running' ? { ...incoming, runningSince: Date.now() } : incoming,
       };
-      const counts = { done: 0, running: 0, queued: 0, failed: 0, cancelled: 0 };
+      const counts = { done: 0, running: 0, queued: 0, failed: 0, cancelled: 0, skipped: 0 };
       for (const st of Object.values(nextStatuses)) {
         if (st.status === 'done') counts.done++;
         else if (st.status === 'running') counts.running++;
         else if (st.status === 'queued') counts.queued++;
         else if (st.status === 'failed') counts.failed++;
         else if (st.status === 'cancelled') counts.cancelled++;
+        else if (st.status === 'skipped') counts.skipped++;
       }
       const total = Math.max(prev.progress?.total ?? 0, Object.keys(nextStatuses).length);
       return {
@@ -124,6 +157,9 @@ export function applyOrchestrationEventToBoard(evt: AgentEvent, sid: string): bo
               queued: tp.queued ?? 0,
               failed: tp.failed ?? 0,
               cancelled: tp.cancelled ?? 0,
+              // 2026-10-28 (Plan Mode 增强 Phase 3): 步骤确认跳过数。
+              // 旧后端不携带 → 0，避免进度条把 skipped 算进 in_flight。
+              skipped: tp.skipped ?? 0,
             },
           }
         : prev,
@@ -220,7 +256,17 @@ export function restoreRunToBoard(run: OrchRunDetail): {
   type PlanItem = TaskBoardState['plan'][number];
   const plan = run.plan as unknown as PlanItem[];
   const statuses: TaskBoardState['statuses'] = {};
-  const progress = { total: 0, done: 0, running: 0, queued: 0, failed: 0, cancelled: 0 };
+  // 2026-10-28 (Plan Mode 增强 Phase 3): skipped 与实时 board 的 progress
+  // 形状保持一致 —— 缺字段会让恢复出来的完成率把跳过项算成未完成。
+  const progress = {
+    total: 0,
+    done: 0,
+    running: 0,
+    queued: 0,
+    failed: 0,
+    cancelled: 0,
+    skipped: 0,
+  };
   progress.total = run.tasks.length;
   let endedAt: number | null = null;
   for (const task of run.tasks) {

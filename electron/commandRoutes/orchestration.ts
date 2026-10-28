@@ -122,6 +122,15 @@ export const orchestrationRoutes: Record<string, CommandRoute> = {
     method: 'POST',
     path: (a) => `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id))}/confirm`,
   },
+  // Phase 3 (2026-10-28): 步骤确认 —— 用户在 StepConfirmDialog 选择
+  // continue/skip/abort，dispatcher 据此推进或中止当前 run。
+  // body {task_id, action}；409 无 pending 确认；404 run 未激活。
+  orchestration_step_confirm: {
+    method: 'POST',
+    path: (a) =>
+      `/api/v1/orch/runs/${encodeURIComponent(String(a.run_id ?? a.runId))}/step-confirm`,
+    body: (a) => ({ task_id: a.task_id, action: a.action }),
+  },
   // RV2 (round8): 只重跑失败任务 —— 返回 {session_id, goal, plan_override}，
   // 前端经 chatStream planOverride 通道重发。
   orchestration_rerun_failed: {
