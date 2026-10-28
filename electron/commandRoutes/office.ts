@@ -75,21 +75,22 @@ export const officeRoutes: Record<string, CommandRoute> = {
     path: () => '/api/v1/office/templates/thumbnail',
   },
 
-
   // Office document features (Phase 1.3, plan §4.1.3 step 14).
   // 5 routes for Phase 1.2 backend (3 read + list + delete).
   // Generate endpoints (ppt_generate, word_generate, excel_generate)
   // deferred to Phase 1.4 follow-up PR.
   office_ppt_read: { method: 'POST', path: () => '/api/v1/office/ppt/read' },
-  // P0-2 (2026-10-01): 一键修复 —— 对应 backend POST /office/word/repair。
-  // 默认写 <stem>-repaired.docx，overwrite=true 时原子替换原文件并带回 remaining。
-  office_word_repair: { method: 'POST', path: () => '/api/v1/office/word/repair' },
   office_word_read: { method: 'POST', path: () => '/api/v1/office/word/read' },
   office_excel_read: { method: 'POST', path: () => '/api/v1/office/excel/read' },
   // A4b: Word 交付包格式校验 —— POST /office/word/lint。
   // NOTE: WordLintRequest is extra="forbid" — officeApi.lintWord must send
   // ONLY workspacePath + filePath + formatSpec (+ optional maxSizeBytes).
   office_word_lint: { method: 'POST', path: () => '/api/v1/office/word/lint' },
+  // P0-2 (2026-10-01): Word 格式自动修复 —— POST /office/word/repair。
+  // 后端 repair_docx 默认写 <stem>-repaired.docx，overwrite=true 时原子替换原
+  // 文件，并自动复检把 remaining 带回。接线前该端点全仓零调用，"一键修复"
+  // 在 UI 上不存在（只报问题不给修法）。
+  office_word_repair: { method: 'POST', path: () => '/api/v1/office/word/repair' },
   // Office parity batch 1 (item 1.2): PDF read/generate.
   // Backend: backend/api/office_routes.py:495-508 (POST /pdf/read, POST /pdf/generate).
   // NOTE: PdfReadRequest is extra="forbid" — officeApi.readPdf must send
@@ -226,6 +227,7 @@ export const officeRoutes: Record<string, CommandRoute> = {
       return body;
     },
   },
+
   // Journal template subsystem (Task 7, 2026-09-10). 5 routes for
   // backend/api/office_routes.py::journal_router (mounted at
   // /api/v1/office/journal/*). The renderer parses a .docx template into

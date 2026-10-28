@@ -153,12 +153,6 @@ const DOC_TYPE_LEGACY_EXTENSIONS: Partial<Record<OfficeDocType, readonly string[
   ppt: ['ppt'],
 };
 
-/** Legacy extension (no dot) this docType accepts on import, if any. */
-export function legacyExtensionForDocType(docType: OfficeDocType): string | null {
-  const list = DOC_TYPE_LEGACY_EXTENSIONS[docType];
-  return list && list.length > 0 ? list[0] : null;
-}
-
 /** Whether `ext` is a legacy extension importable for this docType. */
 export function isLegacyExtensionForDocType(docType: OfficeDocType, ext: string): boolean {
   return DOC_TYPE_LEGACY_EXTENSIONS[docType]?.includes(ext.toLowerCase()) ?? false;

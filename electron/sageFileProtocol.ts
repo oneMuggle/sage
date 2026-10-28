@@ -80,11 +80,6 @@ export function unregisterAllowedPaths(projectId: string): boolean {
   return allowedPathsByProject.delete(projectId);
 }
 
-/** 获取当前注册表快照（测试/诊断用）。 */
-export function getRegisteredRoots(): ReadonlySet<string> {
-  return workspaceRoots;
-}
-
 /** P22: 获取项目级 allowed_paths 快照（测试用）。 */
 export function getAllowedPathsByProject(): ReadonlyMap<string, ReadonlyArray<string>> {
   return allowedPathsByProject;
