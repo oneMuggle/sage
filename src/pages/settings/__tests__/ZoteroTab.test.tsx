@@ -13,8 +13,13 @@ const searchMock = vi.fn();
 const getItemMock = vi.fn();
 const getAnnotationsMock = vi.fn();
 const setPathMock = vi.fn();
+const syncMock = vi.fn();
+const syncStatusMock = vi.fn();
+const getWikiTagMock = vi.fn();
+const setWikiTagMock = vi.fn();
 
 vi.mock('../../../shared/api/zoteroClient', () => ({
+  DEFAULT_WIKI_TAG: 'sage:wiki',
   zoteroClient: {
     status: (...args: unknown[]) => statusMock(...args),
     listCollections: (...args: unknown[]) => listCollectionsMock(...args),
@@ -22,6 +27,10 @@ vi.mock('../../../shared/api/zoteroClient', () => ({
     getItem: (...args: unknown[]) => getItemMock(...args),
     getAnnotations: (...args: unknown[]) => getAnnotationsMock(...args),
     setPath: (...args: unknown[]) => setPathMock(...args),
+    sync: (...args: unknown[]) => syncMock(...args),
+    syncStatus: (...args: unknown[]) => syncStatusMock(...args),
+    getWikiTag: (...args: unknown[]) => getWikiTagMock(...args),
+    setWikiTag: (...args: unknown[]) => setWikiTagMock(...args),
   },
 }));
 
@@ -65,6 +74,17 @@ beforeEach(() => {
   getItemMock.mockResolvedValue(DETAIL);
   getAnnotationsMock.mockResolvedValue([ANNOTATION]);
   setPathMock.mockResolvedValue({ ok: true, db_path: '' });
+  // M5 同步面板挂载时会拉取状态与 wiki tag，必须给出解析值
+  syncMock.mockResolvedValue({
+    items: 0, chunks: 0, dim: 0, last_sync_ts: null,
+    skipped: false, elapsed_ms: 0, errors: [],
+  });
+  syncStatusMock.mockResolvedValue({
+    last_sync_ts: null, last_sync_at: null, item_count: 0, wiki_page_count: 0,
+    embedding_configured: true, vector_dim: null, sync_in_progress: false, errors: [],
+  });
+  getWikiTagMock.mockResolvedValue('sage:wiki');
+  setWikiTagMock.mockResolvedValue(undefined);
 });
 
 afterEach(() => {

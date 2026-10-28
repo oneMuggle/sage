@@ -523,6 +523,34 @@ export const enChatAndSider = {
   'settings.zotero.item.no_annotations': 'No annotations',
   'settings.zotero.error.unavailable':
     'Zotero database not found. Please install Zotero or specify the path manually above.',
+  'settings.zotero.sync.title': 'Index & sync',
+  'settings.zotero.sync.desc':
+    'Index item metadata and annotations into the local vector store for semantic retrieval; items carrying the wiki tag are sunk into wiki pages.',
+  'settings.zotero.sync.indexed': 'Indexed items',
+  'settings.zotero.sync.wiki_pages': 'wiki pages',
+  'settings.zotero.sync.last_sync': 'Last sync',
+  'settings.zotero.sync.never': 'Never synced',
+  'settings.zotero.sync.sync_now': 'Sync now',
+  'settings.zotero.sync.syncing': 'Syncing…',
+  'settings.zotero.sync.rebuild': 'Full rebuild',
+  'settings.zotero.sync.rebuild_hint':
+    'A full rebuild re-embeds every item; the first index may take several minutes.',
+  'settings.zotero.sync.done': 'Sync complete',
+  'settings.zotero.sync.skipped': 'Sync skipped: embedding model is not configured',
+  'settings.zotero.sync.failed': 'Sync failed',
+  'settings.zotero.sync.embedding_missing':
+    'Configure an embedding model in Settings → Models first',
+  'settings.zotero.sync.project_missing':
+    'No knowledge-base project open: this run only builds the index. Open a project to sink wiki pages.',
+  'settings.zotero.sync.wiki_exported': 'wiki sinking',
+  'settings.zotero.sync.wiki_authors': 'Author pages',
+  'settings.zotero.sync.busy': 'A sync is already running, please retry later',
+  'settings.zotero.sync.error_count': 'Errors',
+  'settings.zotero.wiki_tag.label': 'Wiki sinking tag',
+  'settings.zotero.wiki_tag.hint':
+    'Only Zotero items carrying this tag are sunk into wiki pages.',
+  'settings.zotero.wiki_tag.save': 'Save tag',
+  'settings.zotero.wiki_tag.saved': 'Tag saved',
 };
 
 export function formatEnChatAndSiderSummary(): string {

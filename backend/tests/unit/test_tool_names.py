@@ -15,6 +15,7 @@ from backend.domain.tool_names import (
     ALL_BUILTIN_TOOL_NAMES,
     EXEC_TOOLS,
     PLUGIN_TOOL_PREFIX,
+    is_mcp_tool_reference,
     is_plugin_tool_name,
     is_plugin_tool_reference,
     is_plugin_tool_wildcard,
@@ -46,12 +47,28 @@ def test_exec_tools_trio_shape():
 
 
 def test_profile_seeds_within_known_names():
-    """全部默认 agent 种子白名单 ⊆ 已知名集合（防种子里的拼写漂移回归）。"""
+    """全部默认 agent 种子白名单 ⊆ 已知名集合（防种子里的拼写漂移回归）。
+
+    2026-10-27 feat/zotero-llm-visible: 动态引用（MCP ``mcp__*`` 通配、
+    R92 插件通配）不进静态清单；它们在 domain/tool_names.py 通过形状
+    校验视为已知。断言时排除这些合法动态引用，仍对拼写漂移保持敏感。
+    """
     from backend.agents.profiles import create_default_agents
 
     for agent in create_default_agents():
         unknown = set(agent.tools) - set(ALL_BUILTIN_TOOL_NAMES)
-        assert not unknown, f"{agent.id} 引用未注册名: {unknown}"
+        dynamic = {
+            t for t in unknown
+            if is_mcp_tool_reference(t) or is_plugin_tool_reference(t)
+        }
+        static_unknown = unknown - dynamic
+        assert not static_unknown, (
+            f"{agent.id} 引用未注册名: {static_unknown}"
+        )
+        assert dynamic == {
+            t for t in dynamic
+            if is_mcp_tool_reference(t) or is_plugin_tool_reference(t)
+        }, f"{agent.id} 的合法动态引用应全部经形状校验: {dynamic}"
 
 
 _PLUGIN_TOOL = "plugin__demo__hello"

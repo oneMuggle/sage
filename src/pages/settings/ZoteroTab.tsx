@@ -8,6 +8,7 @@
  * - 搜索框(防抖 300ms,可验证连通性;支持 tag 过滤)
  * - 搜索结果列表(点击展开详情 + PDF 批注)
  * - 常用 tag chips 快速筛选
+ * - 索引与同步面板(M5):ZoteroSyncPanel(增量同步 / 完整重建 / wiki 沉淀标签)
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -20,6 +21,8 @@ import {
   type ZoteroStatus,
 } from '../../shared/api/zoteroClient';
 import { useI18n } from '../../shared/lib/i18n';
+
+import { ZoteroSyncPanel } from './zotero/ZoteroSyncPanel';
 
 const DEBOUNCE_MS = 300;
 const TOP_TAGS_LIMIT = 12;
@@ -334,6 +337,9 @@ export function ZoteroTab() {
           <p className="mt-1 text-xs text-green-400">{t('settings.zotero.path.saved')}</p>
         )}
       </div>
+
+      {/* Index & sync (M5) */}
+      <ZoteroSyncPanel connected={connected} />
 
       {/* Search + results (only when connected) */}
       {connected && (

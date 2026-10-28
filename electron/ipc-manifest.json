@@ -282,6 +282,8 @@
     "zotero_item": { "method": "GET", "path": "/api/v1/zotero/items/{item_key}" },
     "zotero_search": { "method": "GET", "path": "/api/v1/zotero/search" },
     "zotero_set_path": { "method": "POST", "path": "/api/v1/zotero/path" },
-    "zotero_status": { "method": "GET", "path": "/api/v1/zotero/status" }
+    "zotero_status": { "method": "GET", "path": "/api/v1/zotero/status" },
+    "zotero_sync": { "method": "POST", "path": "/api/v1/zotero/sync" },
+    "zotero_sync_status": { "method": "GET", "path": "/api/v1/zotero/sync-status" }
   }
 }
