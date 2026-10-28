@@ -75,7 +75,6 @@ async def test_web_search_sources_flow_event_and_persistence(client):
             tool_call=ToolCallRequest(id="tc-1", name="web_search", arguments={"query": "sage"}),
             tool_result=ToolCallResult(tool_call_id="tc-1", content=WEB_RESULT_CONTENT, is_error=False),
         )
-        # STEP_DONE 边界:R83 增量推送在此触发 sources_used 事件。
         yield AgentEvent(state=AgentState.STEP_DONE, iteration=0, step_index=0)
         yield AgentEvent(state=AgentState.THINKING, iteration=1)
         yield AgentEvent(state=AgentState.DONE, iteration=1, content="根据搜索结果回答")
