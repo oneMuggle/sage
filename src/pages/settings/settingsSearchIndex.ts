@@ -123,6 +123,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
     keywords: 'llmtotaltimeouts llm total timeout 整轮 任务 总耗时 上限 超时 秒 不限',
   },
   {
+    key: 'llmProxyTimeoutS',
+    tab: 'basic',
+    label: 'LLM 代理超时（秒）',
+    labelEn: 'LLM proxy timeout (s)',
+    keywords: 'llmproxytimeouts proxy timeout 代理 超时 秒 卡住 不出字 网关 慢',
+  },
+  {
     key: 'timezone',
     tab: 'basic',
     label: 'IANA 时区',
