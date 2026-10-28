@@ -627,6 +627,23 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                 agent_id=data.agent_id or "primary",
                 scheduler_service_getter=get_scheduler_service,
             )
+            # 2026-10-28: 输出长度 —— 请求自带端点配置时, 上方 llm_config 直接由
+            # request 字段组装(不经 load_llm_config_for_chat), 全局 maxOutputTokens
+            # 与 profile max_tokens 需在此单独并入; agent 刚创建, profile 才可读。
+            if llm_config is not None:
+                from backend.orchestration.llm_factory import resolve_max_output_tokens
+
+                _profile_cfg = (agent.profile or {}).get("model_config")
+                _profile_max_tokens = (
+                    _profile_cfg.get("max_tokens")
+                    if isinstance(_profile_cfg, dict)
+                    else None
+                )
+                _resolved_max_output = resolve_max_output_tokens(
+                    profile_max_tokens=_profile_max_tokens
+                )
+                if _resolved_max_output is not None:
+                    llm_config["max_tokens"] = _resolved_max_output
             # Task 8 (2026-10-15): 前端推断的 capabilities 覆盖后端 provider 推断。
             # 前端从 discoveredModels 查找，比后端 heuristic 更准确（用户选了哪个模型）。
             if data.capabilities:
@@ -1548,6 +1565,13 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             # 解析不到时保持缺省，run_ctx_budget_tokens 回退默认常量。
             if llm_config is not None and effective_window:
                 llm_config["context_window"] = int(effective_window)
+                # 2026-10-28: 输出上限不能吃掉整个窗口 —— prompt + max_tokens
+                # 超过模型长度时上游 vLLM 直接 400。留 512 token 给 prompt 起步。
+                _max_out = llm_config.get("max_tokens")
+                if isinstance(_max_out, int) and _max_out > 0:
+                    _window_cap = max(int(effective_window) - 512, 512)
+                    if _max_out > _window_cap:
+                        llm_config["max_tokens"] = _window_cap
             # UX-IA R2-B: 注入上下文统一预算——超出时按优先级截断低优先级块
             # （资料 → 记忆 → 技能 → 概览 → 约束 → SAGE.md），而非整块丢弃;
             # 窗口未知 / 未超预算 / 异常时原样放行。详见 backend/chat/context_budget.py。
@@ -1563,7 +1587,19 @@ async def chat_stream_create(data: ChatRequest, request: Request):
             l9_reserve: Optional[int] = None
             try:
                 if effective_window:
-                    from backend.chat.context_breakdown import measure_request_reserve
+                    from backend.chat.context_breakdown import (
+                        DEFAULT_OUTPUT_RESERVE_TOKENS,
+                        measure_request_reserve,
+                    )
+
+                    # 2026-10-28: 输出预算与 llm_config.max_tokens 对齐 —— 用户调大
+                    # 输出上限后，历史预算必须多留同样多的空间，否则 prompt 溢出。
+                    _output_reserve = (
+                        llm_config.get("max_tokens")
+                        if llm_config is not None
+                        and isinstance(llm_config.get("max_tokens"), int)
+                        else DEFAULT_OUTPUT_RESERVE_TOKENS
+                    )
 
                     l9_trailing = (
                         "\n\n".join(dynamic_context_parts)
@@ -1585,6 +1621,7 @@ async def chat_stream_create(data: ChatRequest, request: Request):
                         trailing_system=l9_trailing,
                         user_content=l9_user_content,
                         tools=agent.get_available_tools(),
+                        output_reserve=_output_reserve,
                     )
             except Exception as reserve_err:  # noqa: BLE001 — 实测失败回退默认
                 logger.debug(

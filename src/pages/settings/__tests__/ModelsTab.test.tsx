@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_SETTINGS, type ModelCapability } from '../../../entities/setting/types';
@@ -41,6 +41,19 @@ describe('ModelsTab context controls', () => {
   it('disables the fixed context input in automatic mode', () => {
     render(<ModelsTab settings={settings} updateSettings={vi.fn()} />);
     expect(screen.getByTestId('settings-max-context')).toBeDisabled();
+  });
+
+  it('renders max output tokens and writes it back on change', () => {
+    const updateSettings = vi.fn();
+    render(<ModelsTab settings={settings} updateSettings={updateSettings} />);
+
+    const input = screen.getByTestId('settings-max-output-tokens');
+    expect(input).toHaveValue(4096);
+    expect(input).toHaveAttribute('min', '512');
+    expect(input).toHaveAttribute('max', '32768');
+
+    fireEvent.change(input, { target: { value: '8192' } });
+    expect(updateSettings).toHaveBeenCalledWith({ maxOutputTokens: 8192 });
   });
 
   it('uses the corrected Temperature description', () => {
