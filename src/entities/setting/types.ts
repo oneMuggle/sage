@@ -165,6 +165,10 @@ export interface AppSettings {
   // Task 5 (2026-09-15): auto context window from catalog resolution.
   // false = use maxContext as manual fixed value; true = resolve from catalog.
   autoContext: boolean;
+  // 2026-10-28: 单次回答最大生成 token 数（输出长度上限）。
+  // 与后端 SettingsPayload.maxOutputTokens 对齐；优先级：
+  // 智能体 profile.model_config.max_tokens > 本值 > 4096 默认。
+  maxOutputTokens: number;
   temperature: number;
 
   // Task 1 (2026-08-23): IANA 时区 — 用户报告时区与本地不一致时排查用.
@@ -281,6 +285,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // 默认走 catalog 自动解析上下文窗口（后端 modelWindows 默认口径一致）;
   // 只有 autoContext=false 时 maxContext 才作为固定上限生效。
   autoContext: true,
+  // 2026-10-28: 默认 4096，与后端 LLMConfig.max_tokens 默认值一致；
+  // 用户可在 设置 → 模型 调大（512–32768）。
+  maxOutputTokens: 4096,
   temperature: 0.7,
 
   // Task 1 (2026-08-23): 时区默认 = 系统 IANA 时区（浏览器探测）, 探测失败

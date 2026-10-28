@@ -131,6 +131,11 @@ class SettingsPayload(BaseModel):
     modelSelections: Optional[dict] = None  # noqa: N815
     maxContext: Optional[int] = None  # noqa: N815
     autoContext: Optional[bool] = None  # noqa: N815
+    # ----- 输出长度 (2026-10-28) -----
+    # LLM 单次回答最大生成 token 数；None = 使用 4096 默认。有效范围 512–32768。
+    # 覆盖 LLMConfig.max_tokens 默认值；聊天链路按优先级：
+    # ChatRequest.max_tokens > profile.model_config.max_tokens > maxOutputTokens > 4096
+    maxOutputTokens: Optional[int] = None  # noqa: N815
     temperature: Optional[float] = None
     # Task 1 (2026-08-23): IANA timezone 字符串 — 校验下沉到 canonicalizer.
     timezone: Optional[str] = None
@@ -187,6 +192,11 @@ class LegacySettingsPayload(BaseModel):
     modelSelections: Optional[dict] = None  # noqa: N815
     maxContext: Optional[int] = None  # noqa: N815
     autoContext: Optional[bool] = None  # noqa: N815
+    # ----- 输出长度 (2026-10-28) -----
+    # LLM 单次回答最大生成 token 数；None = 使用 4096 默认。有效范围 512–32768。
+    # 覆盖 LLMConfig.max_tokens 默认值；聊天链路按优先级：
+    # ChatRequest.max_tokens > profile.model_config.max_tokens > maxOutputTokens > 4096
+    maxOutputTokens: Optional[int] = None  # noqa: N815
     temperature: Optional[float] = None
     # Task 1 (2026-08-23): IANA timezone 字符串 — 校验下沉到 canonicalizer.
     timezone: Optional[str] = None

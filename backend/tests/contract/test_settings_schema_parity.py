@@ -37,6 +37,8 @@ EXPECTED_TOP_KEYS = frozenset(
         "streaming",
         "autoMemory",
         "autoContext",  # Task 5 (2026-09-15): context window resolver toggle
+        # 2026-10-28: 输出长度上限（单次回答最大生成 token 数）
+        "maxOutputTokens",
         "confirmDelete",
         "endpoints",
         "modelSelections",

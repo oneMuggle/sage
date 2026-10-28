@@ -131,9 +131,7 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
         <div>
           <h3 className="text-sm font-semibold text-text">模型选择</h3>
           <p className="text-xs text-muted mt-0.5">
-            {endpointsWithModels.length} 个端点，共{' '}
-            {discoveredModelCount}{' '}
-            个模型
+            {endpointsWithModels.length} 个端点，共 {discoveredModelCount} 个模型
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -239,6 +237,22 @@ export function ModelsTab({ settings, updateSettings }: EndpointsTabProps) {
               {settings.autoContext ? '自动 (目录优先)' : '固定 (使用上方值)'}
             </span>
           </label>
+        </SettingRow>
+        <SettingRow
+          anchor="max_output_tokens"
+          label="最大输出长度"
+          desc="单次回答允许生成的最大 token 数；调大可减少长回答被截断，但会占用更多上下文窗口"
+        >
+          <input
+            type="number"
+            data-testid="settings-max-output-tokens"
+            min={512}
+            max={32768}
+            step={512}
+            value={settings.maxOutputTokens}
+            onChange={(e) => updateSettings({ maxOutputTokens: Number(e.target.value) })}
+            className="px-2 py-1 border border-border rounded-radius-sm text-xs font-mono bg-surface text-text"
+          />
         </SettingRow>
         <SettingRow
           anchor="temperature"

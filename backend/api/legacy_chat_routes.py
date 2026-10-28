@@ -37,7 +37,10 @@ from backend.core.errors import LLMError
 from backend.core.legacy.agent import SageAgent
 from backend.data.database import get_database, make_with_db_lock
 from backend.data.session_repo import Message as DbMessage, MessageRepository, SessionRepository
-from backend.orchestration.llm_factory import load_llm_config_for_chat
+from backend.orchestration.llm_factory import (
+    load_llm_config_for_chat,
+    resolve_max_output_tokens,
+)
 from backend.scheduler import get_evolution_logs
 from backend.services.scheduler import get_scheduler_service
 from backend.skills.review_queue import get_review_queue
@@ -98,13 +101,26 @@ async def chat(
         )
         # G5 (2026-09-06): 请求未显式带端点配置时，用「全局端点 + 会话覆盖/
         # profile 模型」解析 —— 会话里切换模型不影响其他会话与全局设置。
+        _profile_model_config = (agent.profile or {}).get("model_config")
+        _profile_model_config = (
+            _profile_model_config if isinstance(_profile_model_config, dict) else {}
+        )
         if llm_config is None:
-            profile_model = (
-                (agent.profile or {}).get("model_config") or {}
-            ).get("model")
+            profile_model = _profile_model_config.get("model")
             llm_config = load_llm_config_for_chat(
-                session_id=data.session_id, profile_model=profile_model
+                session_id=data.session_id,
+                profile_model=profile_model,
+                # 2026-10-28: profile 显式 max_tokens 作为输出长度次高优先级
+                profile_max_tokens=_profile_model_config.get("max_tokens"),
             )
+        else:
+            # 2026-10-28: 请求自带端点配置时不经过 load_llm_config_for_chat，
+            # 输出长度需在此单独解析（profile > 全局 maxOutputTokens > 默认）。
+            _resolved_max_output = resolve_max_output_tokens(
+                profile_max_tokens=_profile_model_config.get("max_tokens")
+            )
+            if _resolved_max_output is not None:
+                llm_config["max_tokens"] = _resolved_max_output
         result = await agent.chat(data.session_id, data.message, llm_config=llm_config)
 
         # agent.chat() may return a structured error dict (Task 6 refactor) instead of raising
