@@ -392,17 +392,21 @@ class TestBuildPrompt:
 class TestExtract:
     @pytest.mark.asyncio()
     async def test_extract_calls_llm(self, extractor, mock_llm):
-        with patch.object(
-            extractor, "_load_project", return_value=MagicMock(
-                project_type="coding",
-                description="test",
-                path="/tmp/test",
-            )
-        ), patch.object(
-            extractor, "_load_messages",
-            return_value=[{"id": "m1", "role": "user", "content": "hi"}],
-        ), patch.object(
-            extractor, "_get_existing_profile_entries", return_value=[]
+        with (
+            patch.object(
+                extractor, "_load_project", return_value=MagicMock(
+                    project_type="coding",
+                    description="test",
+                    path="/tmp/test",
+                )
+            ),
+            patch.object(
+                extractor, "_load_messages",
+                return_value=[{"id": "m1", "role": "user", "content": "hi"}],
+            ),
+            patch.object(
+                extractor, "_get_existing_profile_entries", return_value=[]
+            ),
         ):
             result = await extractor.extract(
                 project_id="proj-1",
@@ -415,14 +419,17 @@ class TestExtract:
 
     @pytest.mark.asyncio()
     async def test_extract_empty_messages(self, extractor):
-        with patch.object(
-            extractor, "_load_project", return_value=MagicMock(
-                project_type="coding",
-                description="test",
-                path="/tmp/test",
-            )
-        ), patch.object(
-            extractor, "_load_messages", return_value=[]
+        with (
+            patch.object(
+                extractor, "_load_project", return_value=MagicMock(
+                    project_type="coding",
+                    description="test",
+                    path="/tmp/test",
+                )
+            ),
+            patch.object(
+                extractor, "_load_messages", return_value=[]
+            ),
         ):
             result = await extractor.extract(
                 project_id="proj-1",
@@ -447,17 +454,21 @@ class TestExtract:
         extractor._llm.complete = AsyncMock(
             side_effect=Exception("LLM timeout")
         )
-        with patch.object(  # noqa: SIM117
-            extractor, "_load_project", return_value=MagicMock(
-                project_type="coding",
-                description="test",
-                path="/tmp/test",
-            )
-        ), patch.object(
-            extractor, "_load_messages",
-            return_value=[{"id": "m1", "role": "user", "content": "hi"}],
-        ), patch.object(
-            extractor, "_get_existing_profile_entries", return_value=[]
+        with (  # noqa: SIM117
+            patch.object(
+                extractor, "_load_project", return_value=MagicMock(
+                    project_type="coding",
+                    description="test",
+                    path="/tmp/test",
+                )
+            ),
+            patch.object(
+                extractor, "_load_messages",
+                return_value=[{"id": "m1", "role": "user", "content": "hi"}],
+            ),
+            patch.object(
+                extractor, "_get_existing_profile_entries", return_value=[]
+            ),
         ):
             with pytest.raises(RuntimeError, match="LLM 调用失败"):
                 await extractor.extract(
