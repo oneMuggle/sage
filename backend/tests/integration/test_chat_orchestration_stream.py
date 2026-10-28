@@ -660,11 +660,14 @@ async def test_multi_mode_passes_preflight_context_to_planner(monkeypatch):
         "scout_facts": "1. 工作区含 backend/ 目录",
     }
 
-    async def fake_preflight(message, emit=None):
-        return preflight_context
-
     captured: dict = {}
     inner_decompose = _mock_plan()
+
+    async def fake_preflight(message, emit=None, session_id=None):
+        # 2026-10-28 Plan Mode 增强 Phase 2：调用方传入 session_id 供
+        # scout_deep 定位会话工作区 —— 测试替身必须与真实签名对齐。
+        captured["preflight_session_id"] = session_id
+        return preflight_context
 
     async def _decompose_capture(message, context=None):
         captured["context"] = context
@@ -705,4 +708,7 @@ async def test_multi_mode_passes_preflight_context_to_planner(monkeypatch):
     assert "task_plan" in states, f"multi 必出 task_plan: {states}"
     assert captured["context"] == preflight_context, (
         "preflight 产出必须透传 decompose_request 的 context 参数"
+    )
+    assert captured["preflight_session_id"] == "s", (
+        "preflight 必须拿到会话 id（scout_deep 定位会话工作区）"
     )
