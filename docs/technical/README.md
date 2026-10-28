@@ -79,7 +79,7 @@
 | 98   | [FTS5 vs LIKE 性能基准](./98-memory-fts5-benchmark.md) | 10k 语料实测：FTS5 空命中 85×/中文 32×/低频词 29× 加速，高频英文 token 1.5-2×；recall 差异与 fallback 策略 |
 | 99   | [Agent 上限类错误透出具体上限值](./99-agent-error-limit-details.md) | `<code> (limit=N)` wire format + nonlocal 落库丢失修复 + 前端单一渲染点（聊天内联错误条 / 侧栏 tooltip）+ 兼容性与回滚 |
 | 100  | [自进化可观测性与反馈闭环](./100-self-evolution-observability.md) | P0-1 进化日志结构化（duration/metrics）/ P0-2 偏好注入 user_profile（hermes 冻结语义）/ P0-3 召回反馈落库 + A/B 变体对比 |
-| 101  | [LLM 错误分类与重试](./101-llm-error-classification-retry.md) | httpx 异常→LLMErrorType 分类表 / RemoteProtocolError 归 NETWORK 修复 / 首字后不重试契约 / 重试参数与退避策略 |
+| 101  | [LLM 错误分类与重试](./101-llm-error-classification-retry.md) | httpx 异常→LLMErrorType 分类表 / RemoteProtocolError 归 NETWORK 修复 / 首字后不重试契约 / 重试参数与退避策略 / 代理超时可配置（llmProxyTimeoutS）/ 流式开关真正生效 |
 | 102  | [全局规则 UI（~/.sage/SAGE.md）](./102-global-rules.md) | G1/P0：设置页读写全局规则文件 / 路径硬编码 + 原子写 + 符号链接拒写 / 扫描 level=all 护栏 / 8000 字符截断 + 64KB 保存上限 / win7 零适配 |
 | 103  | [Zotero → LLM 集成](./103-zotero-llm-integration.md) | 四层可见性阻断修复（白名单/路径/prompt/索引）/ ZoteroIngestor 向量索引 + 语义检索降级 / wiki 沉淀与零改动图谱 / 设置页同步面板 |
 | 108  | [Plan Mode 增强](./108-plan-mode-enhancement.md) | 复杂度分类（simple/medium/complex）/ 执行模式推荐（single/multi/ask_user）/ scout_deep 深度调研 + ResearchSummaryCard / confirm_marker 规则引擎 + 步骤级确认（continue/skip/abort） |

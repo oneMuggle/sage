@@ -56,6 +56,8 @@ EXPECTED_TOP_KEYS = frozenset(
         "llmRetryMaxDelayS",
         # 2026-10-22: 整轮任务 wall-clock 上限（秒）— 0 = 不限；函数式读取
         "llmTotalTimeoutS",
+        # 2026-10-28: LLM 代理上游超时（秒）— 替代 llm_proxy_routes 硬编码 60s。
+        "llmProxyTimeoutS",
     }
 )
 

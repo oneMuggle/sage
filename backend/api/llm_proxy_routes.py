@@ -92,7 +92,13 @@ PROXY_INTERNAL_HEADERS: FrozenSet[str] = frozenset(
     {"x-llm-provider-url", "x-sage-local-authorization"}
 )
 
+# 代理上游超时（秒）。2026-10-28 起可由 app_settings.llmProxyTimeoutS 配置。
+# 语义提醒：httpx.Timeout 的 read 段是「两次收到字节之间的最大间隔」——
+# 流式响应只要字节持续流动就不会触发；非流式响应必须等完整生成结束，
+# 因此关闭「流式输出」后该值应大于预期生成耗时（建议 300s+）。
 PROXY_TIMEOUT_SECONDS: float = 60.0
+PROXY_TIMEOUT_MIN_SECONDS: float = 5.0
+PROXY_TIMEOUT_MAX_SECONDS: float = 1800.0
 DNS_TIMEOUT_SECONDS: float = 5.0
 DNS_MAX_CONCURRENCY: int = 16
 _DNS_EXECUTOR = ThreadPoolExecutor(
@@ -254,6 +260,45 @@ class _FixedIPNetworkBackend(httpcore.AsyncNetworkBackend):
         await self._delegate.sleep(seconds)
 
 
+def _proxy_timeout_seconds() -> float:
+    """读代理上游超时：app_settings > env > 默认 60s。
+
+    优先级：
+    1. ``app_settings.llmProxyTimeoutS``（前端「LLM 代理超时」设置）
+    2. 环境变量 ``SAGE_LLM_PROXY_TIMEOUT_S``（调试/测试覆盖）
+    3. ``PROXY_TIMEOUT_SECONDS``（60s，历史行为）
+
+    任何解析失败都回退上一级，永不抛错——超时配置不能成为请求失败的原因。
+    """
+    try:
+        from backend.data.settings_repo import SettingsRepository
+
+        raw = SettingsRepository().get_json("app_settings") or {}
+        value = raw.get("llmProxyTimeoutS") if isinstance(raw, dict) else None
+        # bool 是 int 子类，必须先排除；py3.8 不支持 int | float 联合语法。
+        if (
+            not isinstance(value, bool)
+            and isinstance(value, (int, float))  # noqa: UP038 — 保持 Py3.8 兼容
+            and value >= PROXY_TIMEOUT_MIN_SECONDS
+        ):
+            # 设置值优先于环境变量，命中即返回（与 llm_total_timeout 一致）。
+            return min(float(value), PROXY_TIMEOUT_MAX_SECONDS)
+    except (ImportError, OSError, ValueError, TypeError):
+        pass  # 读配置失败回退 env/默认
+
+    raw_env = os.environ.get("SAGE_LLM_PROXY_TIMEOUT_S", "").strip()
+    if raw_env:
+        try:
+            value = float(raw_env)
+        except ValueError:
+            logger.warning("env SAGE_LLM_PROXY_TIMEOUT_S=%r 非法,忽略", raw_env)
+        else:
+            if value >= PROXY_TIMEOUT_MIN_SECONDS:
+                return min(value, PROXY_TIMEOUT_MAX_SECONDS)
+
+    return PROXY_TIMEOUT_SECONDS
+
+
 def _client_for_resolved_address(address: str) -> httpx.AsyncClient:
     # Build through AsyncClient so respx and other transport instrumentation keep
     # working.  Mutate only the pinned httpcore pool's backend afterwards.
@@ -262,7 +307,7 @@ def _client_for_resolved_address(address: str) -> httpx.AsyncClient:
             "Unsupported httpcore version: fixed-IP transport unavailable"
         )
     client = httpx.AsyncClient(
-        timeout=httpx.Timeout(PROXY_TIMEOUT_SECONDS),
+        timeout=httpx.Timeout(_proxy_timeout_seconds()),
         trust_env=False,
     )
     transport = getattr(client, "_transport", None)
@@ -920,7 +965,7 @@ async def _proxy_streaming(
         _client_for_resolved_address(resolved_address)
         if resolved_address is not None
         else httpx.AsyncClient(
-            timeout=httpx.Timeout(PROXY_TIMEOUT_SECONDS),
+            timeout=httpx.Timeout(_proxy_timeout_seconds()),
             trust_env=False,
         )
     )

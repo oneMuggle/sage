@@ -21,6 +21,7 @@ export interface BasicTabAuditInput {
   llmRetryBaseDelayS: number;
   llmRetryMaxDelayS: number;
   llmTotalTimeoutS: number;
+  llmProxyTimeoutS: number;
   timezone: string;
   logTimezone: string;
   demoMode: boolean;
@@ -35,6 +36,7 @@ export function formatBasicTabAuditSnapshot(input: BasicTabAuditInput): string {
     `- 退避基数(秒): ${input.llmRetryBaseDelayS}`,
     `- 最大退避(秒): ${input.llmRetryMaxDelayS}`,
     `- LLM 任务上限(秒): ${input.llmTotalTimeoutS === 0 ? '不限' : input.llmTotalTimeoutS}`,
+    `- LLM 代理超时(秒): ${input.llmProxyTimeoutS}`,
     `- IANA 时区: ${input.timezone || '默认'}`,
     `- 日志时区: ${input.logTimezone || 'UTC'}`,
     `- 演示模式: ${input.demoMode ? '开启' : '关闭'}`,
@@ -50,6 +52,7 @@ export function formatBasicTabAuditJson(input: BasicTabAuditInput): string {
       llmRetryBaseDelayS: input.llmRetryBaseDelayS,
       llmRetryMaxDelayS: input.llmRetryMaxDelayS,
       llmTotalTimeoutS: input.llmTotalTimeoutS,
+      llmProxyTimeoutS: input.llmProxyTimeoutS,
       timezone: input.timezone || 'Asia/Shanghai',
       logTimezone: input.logTimezone || 'UTC',
       demoMode: input.demoMode,
@@ -125,6 +128,23 @@ export function BasicTab() {
   const { settings, updateSettings } = useSettings();
   const [copiedAudit, setCopiedAudit] = useState(false);
   const [inputHistorySize, setInputHistorySizeState] = useState(getInputHistorySize());
+  const [proxyTimeoutDraft, setProxyTimeoutDraft] = useState(
+    String(settings.llmProxyTimeoutS),
+  );
+
+  useEffect(() => {
+    setProxyTimeoutDraft(String(settings.llmProxyTimeoutS));
+  }, [settings.llmProxyTimeoutS]);
+
+  // 失焦提交：逐键 clamp 会把 300 改成 500，且无法清空重输。
+  const commitProxyTimeout = (): void => {
+    const raw = parseInt(proxyTimeoutDraft, 10);
+    const v = Number.isFinite(raw)
+      ? Math.max(5, Math.min(1800, raw))
+      : settings.llmProxyTimeoutS;
+    setProxyTimeoutDraft(String(v));
+    if (v !== settings.llmProxyTimeoutS) updateSettings({ llmProxyTimeoutS: v });
+  };
 
   /* v8 ignore start */
   const handleCopyAudit = async () => {
@@ -134,6 +154,7 @@ export function BasicTab() {
       llmRetryBaseDelayS: settings.llmRetryBaseDelayS,
       llmRetryMaxDelayS: settings.llmRetryMaxDelayS,
       llmTotalTimeoutS: settings.llmTotalTimeoutS,
+      llmProxyTimeoutS: settings.llmProxyTimeoutS,
       timezone: settings.timezone,
       logTimezone: settings.logTimezone,
       demoMode: settings.demoMode,
@@ -174,7 +195,7 @@ export function BasicTab() {
         <SettingRow
           anchor="streaming"
           label="流式输出"
-          desc="逐字显示 AI 回复，而非等待全部生成完成"
+          desc="开启时逐字显示 AI 回复。关闭后改为等待完整回复一次性返回；此时上游要整段生成完毕才回包，请同步调大下方「LLM 代理超时」，否则长回复会被超时中断。"
         >
           <Toggle value={settings.streaming} onChange={(v) => updateSettings({ streaming: v })} />
         </SettingRow>
@@ -278,6 +299,26 @@ export function BasicTab() {
               const v = Math.max(0, parseInt(e.target.value, 10) || 0);
               updateSettings({ llmTotalTimeoutS: v });
             }}
+            className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
+          />
+        </SettingRow>
+      </section>
+      <section>
+        <h3 className="text-sm font-semibold text-text mb-3">LLM 代理超时</h3>
+        <SettingRow
+          anchor="llmProxyTimeoutS"
+          label="上游读超时（秒）"
+          desc="代理转发到模型端点时，两次收到字节之间的最大等待时间。企业网关偶发卡顿超过该值会触发「LLM 连接中断」；关闭流式输出后应设为大于整段生成耗时（建议 300 以上）。范围 5–1800，改后下一次请求生效。"
+        >
+          <input
+            type="number"
+            data-testid="settings-llm-proxy-timeout"
+            min={5}
+            max={1800}
+            step={5}
+            value={proxyTimeoutDraft}
+            onChange={(e) => setProxyTimeoutDraft(e.target.value)}
+            onBlur={commitProxyTimeout}
             className="w-20 px-2 py-1 text-xs border border-border rounded-radius-sm bg-bg text-text focus:outline-none focus:border-primary"
           />
         </SettingRow>
