@@ -374,6 +374,18 @@ export function SessionItem({
               <span className="flex-shrink-0 text-muted/80">{session.message_count} 条</span>
             </>
           )}
+          {/* 2026-10-28: 性能统计 - 会话用时展示 */}
+          {session.duration_minutes != null && session.duration_minutes > 0 && (
+            <>
+              <span className="text-muted/40 flex-shrink-0">·</span>
+              <span className="flex-shrink-0 text-muted/80 flex items-center gap-0.5">
+                <Clock className="w-2.5 h-2.5" />
+                {session.duration_minutes < 60
+                  ? `${session.duration_minutes}分钟`
+                  : `${Math.floor(session.duration_minutes / 60)}小时${session.duration_minutes % 60 > 0 ? `${session.duration_minutes % 60}分` : ''}`}
+              </span>
+            </>
+          )}
         </p>
         {/* S5: mini 进度条 —— 编排 5 元组 / todo 完成度（仅运行中显示） */}
         {isLive && (progress != null || todoTotal > 0) && (

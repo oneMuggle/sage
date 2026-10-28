@@ -5,7 +5,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { SessionUsage } from '../../../shared/api/usageApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { formatSessionUsageJson, formatSessionUsageMarkdown, SessionUsageBadge } from '../SessionUsageBadge';
+import {
+  formatSessionUsageJson,
+  formatSessionUsageMarkdown,
+  SessionUsageBadge,
+} from '../SessionUsageBadge';
 
 const mockFetch = vi.fn<(sessionId: string) => Promise<SessionUsage>>();
 
