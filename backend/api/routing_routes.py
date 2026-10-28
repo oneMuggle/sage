@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.model_catalog.schemas import EffectiveModel
@@ -57,12 +57,17 @@ def build_router(catalog_repository=None) -> APIRouter:
             repo = CatalogRepository(get_database())
 
         engine = RoutingEngine(repo)
-        result: RoutingResult = engine.route(
-            task_type=request.task_type,
-            context_length=request.context_length,
-            required_capabilities=request.required_capabilities,
-            user_preference=request.user_preference,
-        )
+        try:
+            result: RoutingResult = engine.route(
+                task_type=request.task_type,
+                context_length=request.context_length,
+                required_capabilities=request.required_capabilities,
+                user_preference=request.user_preference,
+            )
+        except ValueError as exc:
+            # No model can satisfy the requested constraints: a client-actionable
+            # condition, not a server error.
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         return RoutingResponse(
             selected_model=result.selected_model,

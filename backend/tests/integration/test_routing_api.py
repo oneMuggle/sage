@@ -150,3 +150,19 @@ class TestRoutingApi:
             json={"task_type": "chat"},
         )
         assert response.status_code == 422
+
+    def test_route_422_when_no_model_matches(self, client):
+        """An unsatisfiable context length is a client error, not a 500."""
+        response = client.post(
+            "/api/v1/routing/route",
+            json={
+                "task_type": "code_generation",
+                "context_length": 999_999,
+                "required_capabilities": [],
+            },
+        )
+
+        assert response.status_code == 422
+        detail = response.json()["detail"]
+        assert isinstance(detail, str)
+        assert detail
