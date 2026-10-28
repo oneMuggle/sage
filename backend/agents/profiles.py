@@ -155,6 +155,11 @@ _PRIMARY_SEED_TOOLS = (
     # SCHEDULE_TOOLS / CONFIG_TOOLS 同模式 coordinator-only，子代理白名单
     # 严禁纳入。
     *TODO_TOOLS,
+    # 2026-10-28 feat/add-ask-user-to-primary: 需求澄清工具 —— primary 作为
+    # coordinator 在任务不明确时主动向用户提问（至多 2 个问题），避免歧义导致
+    # 返工。READ 级零副作用，与 Claude AskUserQuestion 对齐。此前仅 ppt-maker
+    # profile 可见，用户抱怨"LLM 遇到问题不方便与我交互"。
+    "ask_user_question",
     # 2026-10-13 OpenDesign 集成 (Task 13): Design Studio 五件套 —— 两个目录
     # 查询件 (READ) + 三个产件 (WRITE_LOCAL, 落 HTML 到工作区)。primary 作为
     # coordinator 代用户「查可用设计系统/模板 → 生成 → 反馈迭代 → 导出」。

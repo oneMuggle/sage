@@ -85,3 +85,21 @@ def test_primary_and_researcher_profiles_include_browser_login():
     assert "browser_login" in defaults["researcher"].tools
     assert "browser_login" in defaults["coder"].tools
 
+
+def test_primary_profile_includes_ask_user_question():
+    """primary (coordinator) 的 seed 白名单必须包含 ask_user_question。
+
+    2026-10-28: 此前该工具仅在 ppt-maker profile 中可见，用户抱怨
+    "LLM 遇到问题不方便与我交互"。将其加入 _PRIMARY_SEED_TOOLS，
+    让默认 primary agent 也能在任务不明确时主动向用户提问。
+    """
+    from backend.agents.profiles import _PRIMARY_SEED_TOOLS, create_default_agents
+
+    assert "ask_user_question" in _PRIMARY_SEED_TOOLS, (
+        "primary 白名单缺 ask_user_question — LLM 无法主动向用户提问澄清需求"
+    )
+
+    defaults = {a.id: a for a in create_default_agents()}
+    assert "ask_user_question" in defaults["primary"].tools
+
+
