@@ -206,12 +206,15 @@ class TestRetrieveTagGraphIntegration:
         mock_memory_manager.semantic = Mock()
         mock_memory_manager.semantic.get_by_id.return_value = None
 
-        with patch(
-            "backend.memory.tag_graph.get_tag_graph",
-            return_value=mock_graph,
-        ), patch(
-            "backend.adapters.out.memory.adapter._extract_query_tags",
-            return_value=["python"],
+        with (
+            patch(
+                "backend.memory.tag_graph.get_tag_graph",
+                return_value=mock_graph,
+            ),
+            patch(
+                "backend.adapters.out.memory.adapter._extract_query_tags",
+                return_value=["python"],
+            ),
         ):
             context = await adapter.retrieve("Python", "session-1", limit=5)
 
@@ -236,12 +239,15 @@ class TestRetrieveTagGraphIntegration:
         mock_graph = Mock()
         mock_graph.total_memories = 0
 
-        with patch(
-            "backend.memory.tag_graph.get_tag_graph",
-            return_value=mock_graph,
-        ), patch(
-            "backend.adapters.out.memory.adapter._extract_query_tags",
-            return_value=["python"],
+        with (
+            patch(
+                "backend.memory.tag_graph.get_tag_graph",
+                return_value=mock_graph,
+            ),
+            patch(
+                "backend.adapters.out.memory.adapter._extract_query_tags",
+                return_value=["python"],
+            ),
         ):
             context = await adapter.retrieve("test", "session-1", limit=5)
 
