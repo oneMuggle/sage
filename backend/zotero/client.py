@@ -20,7 +20,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, Iterator, List, Optional, Set
 
 from backend.zotero.exceptions import (
     ZoteroCollectionNotFoundError,
@@ -275,6 +275,96 @@ class ZoteroClient:
         return results
 
     # ------------------------------------------------------------------
+    # Indexing iterator
+    # ------------------------------------------------------------------
+
+    def iter_items_for_index(
+        self,
+        since_ts: Optional[str] = None,
+    ) -> Iterator[Dict[str, Any]]:
+        """Yield index-ready records for every user-facing item.
+
+        Excludes Zotero internal types (attachment / note / annotation).
+        Unlike :meth:`search`, the returned shape is index-oriented:
+        ``authors`` is a list of ``"First Last"`` names (not a joined
+        string) so chunk rendering stays lossless.
+
+        Parameters
+        ----------
+        since_ts:
+            Optional timestamp watermark. Only items with
+            ``dateModified >= since_ts`` are yielded. ``>=`` (rather than
+            ``>``) is deliberate: Zotero timestamps have second
+            granularity, so ``>`` would silently drop every item sharing
+            the newest second. Re-indexing that boundary item is
+            harmless because the vector store upsert is idempotent.
+        """
+        base_sql = """
+            SELECT
+                i.itemID,
+                i.key,
+                it.typeName AS item_type,
+                COALESCE(
+                    (SELECT idv.value FROM itemData id
+                     JOIN fields f ON id.fieldID = f.fieldID
+                     JOIN itemDataValues idv ON id.valueID = idv.valueID
+                     WHERE id.itemID = i.itemID AND f.fieldName = 'title'
+                     LIMIT 1),
+                    ''
+                ) AS title,
+                COALESCE(
+                    (SELECT idv.value FROM itemData id
+                     JOIN fields f ON id.fieldID = f.fieldID
+                     JOIN itemDataValues idv ON id.valueID = idv.valueID
+                     WHERE id.itemID = i.itemID AND f.fieldName = 'date'
+                     LIMIT 1),
+                    ''
+                ) AS date,
+                COALESCE(
+                    (SELECT idv.value FROM itemData id
+                     JOIN fields f ON id.fieldID = f.fieldID
+                     JOIN itemDataValues idv ON id.valueID = idv.valueID
+                     WHERE id.itemID = i.itemID AND f.fieldName = 'abstractNote'
+                     LIMIT 1),
+                    ''
+                ) AS abstract,
+                COALESCE(
+                    (SELECT idv.value FROM itemData id
+                     JOIN fields f ON id.fieldID = f.fieldID
+                     JOIN itemDataValues idv ON id.valueID = idv.valueID
+                     WHERE id.itemID = i.itemID AND f.fieldName = 'DOI'
+                     LIMIT 1),
+                    ''
+                ) AS doi,
+                i.dateModified
+            FROM items i
+            JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
+            WHERE i.itemTypeID NOT IN (14, 15, 16)
+        """
+        if since_ts:
+            rows = self._execute(
+                base_sql + " AND i.dateModified >= ? ORDER BY i.dateModified ASC",
+                (since_ts,),
+            )
+        else:
+            rows = self._execute(base_sql + " ORDER BY i.dateModified ASC")
+
+        for row in rows:
+            yield {
+                "itemID": row["itemID"],
+                "key": row["key"],
+                "item_type": row["item_type"],
+                "title": row["title"],
+                "date": row["date"],
+                "abstract": row["abstract"],
+                "doi": row["doi"],
+                "authors": self._item_author_names(row["itemID"]),
+                "tags": self._item_tag_names(row["itemID"]),
+                "collections": self._item_collection_names(row["itemID"]),
+                "dateModified": row["dateModified"],
+            }
+
+    # ------------------------------------------------------------------
     # Item retrieval
     # ------------------------------------------------------------------
 
@@ -407,6 +497,86 @@ class ZoteroClient:
         }
 
     # ------------------------------------------------------------------
+    # Relations
+    # ------------------------------------------------------------------
+
+    def get_related_items(self, item_key: str) -> List[Dict[str, Any]]:
+        """Return items linked to ``item_key`` via Zotero's related-items UI.
+
+        Zotero stores each direction as a row of
+        ``itemRelations(itemID, predicateID, object)`` where ``object`` is
+        ``"<libraryID>/items/<KEY>"``. Older schemas name the middle column
+        ``relationPredicateID``; some stripped-down databases (and our test
+        fixture) have no ``itemRelations`` table at all — both cases return
+        an empty list instead of raising, because related-items is a
+        best-effort enrichment, never a hard requirement.
+
+        Returns:
+            List of item dicts (same shape as :meth:`get_item`), outgoing
+            links first, then incoming ones, de-duplicated by key.
+        """
+        item_id = self._item_id_by_key(item_key)
+
+        columns = self._relation_columns()
+        if not columns:
+            return []
+        pred_col = "predicateID" if "predicateID" in columns else "relationPredicateID"
+
+        # 出边：本条目 → object；入边：object 指向本条目且谓词相同的行
+        outgoing = self._safe_related_query(
+            "SELECT object FROM itemRelations WHERE itemID = ?",
+            (item_id,),
+        )
+        incoming = self._safe_related_query(
+            "SELECT itemID FROM itemRelations "
+            f"WHERE object LIKE ? AND {pred_col} IN "  # noqa: S608 — 列名为白名单常量
+            "(SELECT {col} FROM itemRelations WHERE itemID = ?)".format(col=pred_col),
+            (f"%/items/{item_key}", item_id),
+        )
+
+        keys: List[str] = []
+        for row in outgoing:
+            keys.append(str(row["object"]).rsplit("/", 1)[-1])
+        for row in incoming:
+            other = self._safe_key_by_item_id(int(row["itemID"]))
+            if other:
+                keys.append(other)
+
+        seen: Set[str] = set()
+        related: List[Dict[str, Any]] = []
+        for key in keys:
+            if not key or key == item_key or key in seen:
+                continue
+            seen.add(key)
+            try:
+                related.append(self.get_item(key))
+            except (ZoteroItemNotFoundError, ZoteroDatabaseLockedError):
+                continue
+        return related
+
+    def _relation_columns(self) -> Set[str]:
+        """Column names of ``itemRelations``; empty set when table missing."""
+        try:
+            rows = self._execute("PRAGMA table_info(itemRelations)", ())
+        except sqlite3.OperationalError as exc:
+            logger.debug("itemRelations unavailable: %s", exc)
+            return set()
+        return {str(row["name"]) for row in rows}
+
+    def _safe_related_query(self, query: str, params: tuple) -> List[sqlite3.Row]:
+        """Run a relations query, treating schema drift as "no relations"."""
+        try:
+            return self._execute(query, params)
+        except sqlite3.OperationalError as exc:
+            logger.debug("itemRelations query failed: %s", exc)
+            return []
+
+    def _safe_key_by_item_id(self, item_id: int) -> str:
+        """Item key for an internal itemID; empty string when not found."""
+        row = self._execute_one("SELECT key FROM items WHERE itemID = ?", (item_id,))
+        return str(row["key"]) if row else ""
+
+    # ------------------------------------------------------------------
     # Annotations
     # ------------------------------------------------------------------
 
@@ -474,6 +644,83 @@ class ZoteroClient:
             )
 
         return annotations
+
+    def annotations_by_parent(
+        self,
+        parent_item_ids: List[int],
+    ) -> Dict[int, List[Dict[str, Any]]]:
+        """Batch-fetch annotations grouped by their bibliographic parent.
+
+        Annotations hang off attachments, which in turn hang off the
+        bibliographic item. This performs two queries for the whole batch
+        instead of one attachment walk per item, so full-library indexing
+        stays linear.
+
+        Returns
+        -------
+        dict
+            Mapping of bibliographic ``itemID`` -> list of annotation dicts
+            (same shape as :meth:`get_annotations` entries).
+        """
+        if not parent_item_ids:
+            return {}
+
+        anno_type_row = self._execute_one(
+            "SELECT itemTypeID FROM itemTypes WHERE typeName = 'annotation'", ()
+        )
+        if anno_type_row is None:
+            return {}
+        anno_type_id = anno_type_row["itemTypeID"]
+
+        placeholders = ",".join("?" * len(parent_item_ids))
+        rows = self._execute(
+            f"""
+            SELECT a.itemID, a.key, a.dateModified, att.parentItemID AS parent_id
+            FROM items a
+            JOIN itemAttachments att ON att.itemID = a.parentItemID
+            WHERE a.itemTypeID = ?
+              AND att.parentItemID IN ({placeholders})
+            ORDER BY a.dateModified ASC
+            """,
+            (anno_type_id, *parent_item_ids),
+        )
+        if not rows:
+            return {}
+
+        anno_ids = [r["itemID"] for r in rows]
+        anno_placeholders = ",".join("?" * len(anno_ids))
+        field_rows = self._execute(
+            f"""
+            SELECT id.itemID, f.fieldName, idv.value
+            FROM itemData id
+            JOIN fields f ON id.fieldID = f.fieldID
+            JOIN itemDataValues idv ON id.valueID = idv.valueID
+            WHERE id.itemID IN ({anno_placeholders})
+            """,
+            tuple(anno_ids),
+        )
+        fields_by_anno: Dict[int, Dict[str, str]] = {}
+        for row in field_rows:
+            fields_by_anno.setdefault(row["itemID"], {})[row["fieldName"]] = row[
+                "value"
+            ]
+
+        grouped: Dict[int, List[Dict[str, Any]]] = {}
+        for row in rows:
+            fields = fields_by_anno.get(row["itemID"], {})
+            grouped.setdefault(row["parent_id"], []).append(
+                {
+                    "key": row["key"],
+                    "type": fields.get("annotationType", "note"),
+                    "text": fields.get("annotationText", ""),
+                    "comment": fields.get("annotationComment", ""),
+                    "color": fields.get("annotationColor", ""),
+                    "pageLabel": fields.get("annotationPageLabel", ""),
+                    "sortIndex": fields.get("annotationSortIndex", ""),
+                    "dateModified": row["dateModified"],
+                }
+            )
+        return grouped
 
     # ------------------------------------------------------------------
     # Collections
@@ -647,6 +894,112 @@ class ZoteroClient:
             (tag_name,),
         )
         return {r["itemID"] for r in rows}
+
+    def _item_collection_names(self, item_id: int) -> List[str]:
+        """Return sorted collection names containing the given item."""
+        rows = self._execute(
+            """
+            SELECT c.collectionName
+            FROM collectionItems ci
+            JOIN collections c ON ci.collectionID = c.collectionID
+            WHERE ci.itemID = ?
+            ORDER BY c.collectionName
+            """,
+            (item_id,),
+        )
+        return [r["collectionName"] for r in rows]
+
+    def _item_author_names(self, item_id: int) -> List[str]:
+        """Return creator names in ``"First Last"`` order for the given item.
+
+        Single-field creators (institutions, e.g. ``lastName`` only) are
+        returned as-is rather than padded with a blank first name.
+        """
+        rows = self._execute(
+            """
+            SELECT c.firstName, c.lastName
+            FROM itemCreators ic
+            JOIN creators c ON ic.creatorID = c.creatorID
+            WHERE ic.itemID = ?
+            ORDER BY ic.orderIndex
+            """,
+            (item_id,),
+        )
+        names: List[str] = []
+        for row in rows:
+            first = (row["firstName"] or "").strip()
+            last = (row["lastName"] or "").strip()
+            if first and last:
+                names.append(f"{first} {last}")
+            elif last:
+                names.append(last)
+            elif first:
+                names.append(first)
+        return names
+
+    def _item_tag_names(self, item_id: int) -> List[str]:
+        """Return tag names attached to the given item (insertion order)."""
+        rows = self._execute(
+            """
+            SELECT t.name FROM itemTags it
+            JOIN tags t ON it.tagID = t.tagID
+            WHERE it.itemID = ?
+            """,
+            (item_id,),
+        )
+        return [r["name"] for r in rows]
+
+    def items_by_tag(self, tag_name: str) -> List[Dict[str, Any]]:
+        """Return summaries for every item carrying ``tag_name``.
+
+        Used by the wiki export layer (M4): only items explicitly tagged for
+        wiki sedimentation (default ``sage:wiki``) are rendered to markdown.
+        No limit — the tagged set is expected to be small relative to the
+        whole library.
+        """
+        ids = self._tag_item_ids(tag_name)
+        if not ids:
+            return []
+        placeholders = ",".join("?" * len(ids))
+        rows = self._execute(
+            f"""
+            SELECT DISTINCT
+                i.itemID,
+                i.key,
+                it.typeName AS item_type,
+                COALESCE(
+                    (SELECT idv.value FROM itemData id
+                     JOIN fields f ON id.fieldID = f.fieldID
+                     JOIN itemDataValues idv ON id.valueID = idv.valueID
+                     WHERE id.itemID = i.itemID AND f.fieldName = 'title'
+                     LIMIT 1),
+                    ''
+                ) AS title,
+                COALESCE(
+                    (SELECT idv.value FROM itemData id
+                     JOIN fields f ON id.fieldID = f.fieldID
+                     JOIN itemDataValues idv ON id.valueID = idv.valueID
+                     WHERE id.itemID = i.itemID AND f.fieldName = 'date'
+                     LIMIT 1),
+                    ''
+                ) AS date,
+                COALESCE(
+                    (SELECT idv.value FROM itemData id
+                     JOIN fields f ON id.fieldID = f.fieldID
+                     JOIN itemDataValues idv ON id.valueID = idv.valueID
+                     WHERE id.itemID = i.itemID AND f.fieldName = 'abstractNote'
+                     LIMIT 1),
+                    ''
+                ) AS abstract,
+                i.dateModified
+            FROM items i
+            JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
+            WHERE i.itemID IN ({placeholders})
+            ORDER BY i.dateModified DESC
+            """,
+            tuple(ids),
+        )
+        return [self._row_to_summary(row) for row in rows]
 
     def _row_to_summary(self, row: sqlite3.Row) -> Dict[str, Any]:
         """Convert a search result row to a summary dict."""

@@ -516,6 +516,31 @@ export const zhChatAndSider = {
   'settings.zotero.error.unavailable':
     '未找到 Zotero 数据库。请确认 Zotero 已安装，或在上方手动指定路径。',
   'settings.zotero.error.generic': '连接失败',
+  'settings.zotero.sync.title': '索引与同步',
+  'settings.zotero.sync.desc':
+    '把文献元数据与批注写入本地向量库，供 LLM 语义检索；带标记标签的文献会沉淀为 wiki 页面。',
+  'settings.zotero.sync.indexed': '已索引文献',
+  'settings.zotero.sync.wiki_pages': 'wiki 页面',
+  'settings.zotero.sync.last_sync': '上次同步',
+  'settings.zotero.sync.never': '尚未同步',
+  'settings.zotero.sync.sync_now': '立即同步',
+  'settings.zotero.sync.syncing': '同步中…',
+  'settings.zotero.sync.rebuild': '完整重建',
+  'settings.zotero.sync.rebuild_hint': '完整重建会重新嵌入全部文献，首次索引可能耗时数分钟。',
+  'settings.zotero.sync.done': '同步完成',
+  'settings.zotero.sync.skipped': '同步已跳过：embedding 模型未配置',
+  'settings.zotero.sync.failed': '同步失败',
+  'settings.zotero.sync.embedding_missing': '请先在 设置 → 模型 配置 embedding 模型',
+  'settings.zotero.sync.project_missing':
+    '未打开知识库项目：本次仅建立索引，wiki 沉淀需先打开一个项目。',
+  'settings.zotero.sync.wiki_exported': 'wiki 沉淀',
+  'settings.zotero.sync.wiki_authors': '作者页',
+  'settings.zotero.sync.busy': '已有同步正在进行，请稍后再试',
+  'settings.zotero.sync.error_count': '错误',
+  'settings.zotero.wiki_tag.label': 'Wiki 沉淀标签',
+  'settings.zotero.wiki_tag.hint': '带有该 Zotero 标签的文献才会沉淀为 wiki 页面。',
+  'settings.zotero.wiki_tag.save': '保存标签',
+  'settings.zotero.wiki_tag.saved': '标签已保存',
 
   // ─── 设置页 · 更新 ────────────────
 } as const;

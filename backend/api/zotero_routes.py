@@ -17,7 +17,6 @@ message instead of a generic 500.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -34,17 +33,16 @@ _client_db_path: Optional[str] = None
 
 
 def _get_configured_db_path() -> Optional[str]:
-    """Return the user-configured Zotero DB path from settings_repo, if any."""
-    try:
-        # r94 修复: 原来的 backend.services.settings_repo.SettingsRepo 模块不存在
-        # (实际是 backend.data.settings_repo.SettingsRepository), import 静默失败
-        # 导致设置页配置的路径永远读不到, 只剩环境变量兜底。
-        from backend.data.settings_repo import SettingsRepository
+    """Return the user-configured Zotero DB path, if any.
 
-        repo = SettingsRepository()
-        return repo.get("zotero_db_path") or os.environ.get("ZOTERO_DB_PATH")
-    except Exception:
-        return os.environ.get("ZOTERO_DB_PATH")
+    r94 修复后本函数与 MCP 侧曾各写一份解析逻辑（settings_repo → env），
+    2026-10-27 起统一收敛到 ``backend.zotero.paths.resolve_zotero_db_path``，
+    避免 UI 与 MCP 子进程读到不同的库。保留本包装函数是因为测试与调用
+    点均按此名导入，且空字符串需转成 ``None`` 以维持「未配置」语义。
+    """
+    from backend.zotero.paths import resolve_zotero_db_path
+
+    return resolve_zotero_db_path() or None
 
 
 def _get_client(db_path_override: Optional[str] = None) -> Any:

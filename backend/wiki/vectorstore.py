@@ -33,6 +33,26 @@ class SearchHit:
     score: float  # 余弦相似度
 
 
+def read_stored_dim(storage_path: Path) -> Optional[int]:
+    """读取向量库文件记录的维度；文件缺失/不可读 → None。
+
+    调用方据此在不知道模型维度的情况下打开既有库（如附件库、文献库）。
+    """
+    try:
+        data = json.loads(storage_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    dim = data.get("dim")
+    if dim is None:
+        return None
+    try:
+        return int(dim)
+    except (TypeError, ValueError):
+        return None
+
+
 class VectorStore:
     """JSON 向量存储。"""
 
@@ -122,6 +142,43 @@ class VectorStore:
                 vector=vector,
             )
             self.records.append(record)
+
+        self._rebuild_index()
+        self._flush()
+
+    def upsert_pages(
+        self, pages: Dict[str, List[Tuple[int, str, List[float]]]]
+    ) -> None:
+        """批量插入或更新多个页面的向量，只落盘一次。
+
+        :meth:`upsert_chunks` 每页一次 flush；全库索引场景（上千文献）
+        逐页写会把不断变大的 JSON 反复序列化，写放大到 O(n²)。
+        本方法把待写页面合并后一次替换 + 一次 flush，语义与逐页
+        upsert 一致（维度校验 + delete-then-insert 幂等替换）。
+
+        Args:
+            pages: page_path -> [(chunk_index, content, vector), ...]
+        """
+        for chunks in pages.values():
+            for _, _, vec in chunks:
+                if len(vec) != self.dim:
+                    raise ValueError(f"向量维度不匹配: 期望 {self.dim}, 实际 {len(vec)}")
+
+        replaced = set(pages)
+        if replaced:
+            self.records = [r for r in self.records if r.page_path not in replaced]
+
+        for page_path, chunks in pages.items():
+            for chunk_idx, content, vector in chunks:
+                self.records.append(
+                    ChunkRecord(
+                        id=f"{page_path}::{chunk_idx}",
+                        page_path=page_path,
+                        chunk_index=chunk_idx,
+                        content=content,
+                        vector=vector,
+                    )
+                )
 
         self._rebuild_index()
         self._flush()

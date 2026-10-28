@@ -261,7 +261,16 @@ def builtin_server_configs() -> List[ServerConfig]:
         )
     if zotero_server_entry.exists():
         zotero_env: Dict[str, str] = {}
-        zotero_db_path = os.environ.get("ZOTERO_DB_PATH", "")
+        # 2026-10-27 feat/zotero-llm-visible: 设置页配置的路径优先于环境变量。
+        # 此前这里只读 env，用户从 UI 选的 DB 永远传不到 MCP 子进程 ——
+        # 工具虽注册成功，读的却是默认位置/空路径，Zotero 对 LLM 形同不可见。
+        # lazy import：config 在启动期被 import，避免把 data 层拉进模块加载链。
+        try:
+            from backend.zotero.paths import resolve_zotero_db_path
+
+            zotero_db_path = resolve_zotero_db_path()
+        except Exception:  # noqa: BLE001 — 配置构建不可因路径解析失败而失败
+            zotero_db_path = os.environ.get("ZOTERO_DB_PATH", "")
         if zotero_db_path:
             zotero_env["ZOTERO_DB_PATH"] = zotero_db_path
         servers.append(

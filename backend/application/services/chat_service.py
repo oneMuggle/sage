@@ -639,6 +639,16 @@ class ChatService:
         from backend.agents.profiles import build_system_base
 
         system_content = build_system_base()
+        # 2026-10-27 feat/zotero-llm-visible: list_tools() 只调一次，
+        # drawio / zotero 两段注入共用同一份工具名快照（否则同一 turn 里
+        # 会对注册表重复遍历，也违反 test_chat_service_snapshot 的
+        # "list_tools 恰好调用一次" 断言）。
+        tool_names: List[str] = []
+        try:
+            if self.tools:
+                tool_names = [tool.name for tool in self.tools.list_tools()]
+        except Exception:  # noqa: BLE001
+            logger.debug("tool registry snapshot failed", exc_info=True)
         try:
             from backend.core.diagram_prompt import (
                 DIAGRAM_TOOL_PROMPT,
@@ -646,13 +656,21 @@ class ChatService:
             )
 
             # Check if diagram tools are available in the tool registry
-            if self.tools and any(
-                tool.name.startswith(DRAWIO_TOOL_PREFIX)
-                for tool in self.tools.list_tools()
-            ):
+            if any(name.startswith(DRAWIO_TOOL_PREFIX) for name in tool_names):
                 system_content += DIAGRAM_TOOL_PROMPT
         except Exception:  # noqa: BLE001
             logger.debug("diagram tool prompt injection skipped", exc_info=True)
+        try:
+            from backend.core.zotero_prompt import (
+                ZOTERO_TOOL_PREFIX,
+                ZOTERO_TOOL_PROMPT,
+            )
+
+            # 2026-10-27 feat/zotero-llm-visible: 与上面 diagram 注入同模式。
+            if any(name.startswith(ZOTERO_TOOL_PREFIX) for name in tool_names):
+                system_content += ZOTERO_TOOL_PROMPT
+        except Exception:  # noqa: BLE001
+            logger.debug("zotero tool prompt injection skipped", exc_info=True)
         return system_content
 
     def _apply_context_budget(self, system_content: str, query: str) -> str:

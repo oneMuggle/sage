@@ -31,6 +31,7 @@ from backend.domain.tool_names import (
     SYMBOL_TOOLS,
     TODO_TOOLS,
     WEB_FETCH_TOOLS,
+    is_mcp_tool_reference,
     is_plugin_tool_reference,
 )
 
@@ -160,6 +161,13 @@ _PRIMARY_SEED_TOOLS = (
     # 与 TODO_TOOLS / SCHEDULE_TOOLS / CONFIG_TOOLS 同模式 coordinator-only,
     # 子代理白名单严禁纳入。
     *DESIGN_TOOLS,
+    # 2026-10-27 feat/zotero-llm-visible: MCP 工具命名空间通配。primary 作为
+    # 用户交互入口，必须能看见运行期注册的 MCP 工具（Zotero 文献库 /
+    # drawio 图表等）—— 此前白名单只认内置精确名与插件通配，``mcp__*``
+    # 一律被拒，MCP 工具对 LLM 完全不可见。工具执行仍走 PermissionEngine
+    # 风险分级，通配只放宽「可见性」不绕过审批。子代理白名单不加
+    # （最小权限；需要时由 primary 委派能力而非直接暴露 MCP）。
+    "mcp__*",
 )
 
 # coder：bash 三件齐备（同上）。2026-09-03 PR #381 把 TerminalTool 重写为
@@ -791,11 +799,13 @@ def validate_profile_tools(repo: Optional[Any] = None) -> int:
 
     未注册名对 LLM 本就不可见（``get_schemas_for_llm`` 只遍历已注册工具），
     所以只 warning 不改库 —— 剔除会误伤引用 MCP 等动态工具的自定义
-    profile。MCP / ``dispatch_subagents`` / ``wiki_*`` 等动态名字会产生
-    告警噪音，属预期（见 domain/tool_names.py 模块注释）。R92 起合法
-    形状的插件引用（``plugin__<plugin>__<capability>`` 精确名与
-    ``plugin__*`` / ``plugin__<plugin>__*`` 通配）视为已知动态引用
-    不告警；无效通配写法仍按未注册名告警。
+    profile。``dispatch_subagents`` / ``wiki_*`` 等动态名字会产生告警
+    噪音，属预期（见 domain/tool_names.py 模块注释）。R92 起合法形状的
+    插件引用（``plugin__<plugin>__<capability>`` 精确名与 ``plugin__*`` /
+    ``plugin__<plugin>__*`` 通配）视为已知动态引用不告警；2026-10-27 起
+    MCP 引用（``mcp__<server>__<tool>`` 精确名与 ``mcp__*`` /
+    ``mcp__<server>__*`` 通配）同样视为已知动态引用。无效通配写法仍按
+    未注册名告警。
 
     Returns:
         告警的 profile 数（测试断言用）。
@@ -808,7 +818,9 @@ def validate_profile_tools(repo: Optional[Any] = None) -> int:
         unknown = [
             t
             for t in (profile.get("tools") or [])
-            if t not in known and not is_plugin_tool_reference(t)
+            if t not in known
+            and not is_plugin_tool_reference(t)
+            and not is_mcp_tool_reference(t)
         ]
         if unknown:
             warned += 1
