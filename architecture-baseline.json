@@ -69,6 +69,7 @@
     "backend/tests/unit/test_design_routes.py": 975,
     "backend/adapters/out/skill/inproc.py": 949,
     "backend/api/project_routes.py": 957,
-    "src/features/project-type/MilestoneProgressWidget.test.tsx": 837
+    "src/features/project-type/MilestoneProgressWidget.test.tsx": 837,
+    "backend/tools/config_tool.py": 933
   }
 }
