@@ -125,6 +125,9 @@ export const chatApi = {
       apiKey: config?.apiKey ?? null,
       apiUrl: config?.apiUrl ?? null,
       model: config?.model ?? null,
+      // Task 7 (2026-10-28) 智能路由任务类型。未设置时**省略**该键 ——
+      // stream.test.ts 对整个 body 做精确断言，null 会破坏它。
+      ...(config?.taskType ? { taskType: config.taskType } : {}),
       capabilities: config?.capabilities ?? null,
       maxContext: config?.maxContext ?? null,
       // Task 5 (2026-09-15): auto-context resolution flag.
