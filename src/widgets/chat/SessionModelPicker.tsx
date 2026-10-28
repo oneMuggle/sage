@@ -221,10 +221,11 @@ export function SessionModelPicker({ sessionId, placement = 'top' }: SessionMode
   useEffect(() => {
     // 面板关闭时不发请求（现有 9 个手动模式用例不会多出网络调用）。
     if (!autoMode || !routingOpen) return;
-    // 覆盖读取完成前不下结论，避免先打出 routeModel 再发现会话已锁定。
-    if (sessionId && !loaded) return;
+    // 先清掉上一个会话的预览，再去等覆盖读取完成。
     setRoutePreview(null);
     setRouteError(false);
+    // 覆盖读取完成前不下结论，避免先打出 routeModel 再发现会话已锁定。
+    if (sessionId && !loaded) return;
     // R23/R28: 已锁定会话 → 只提示，不预览。
     if (override) return;
     if (!chatEndpointId) return;
@@ -260,6 +261,9 @@ export function SessionModelPicker({ sessionId, placement = 'top' }: SessionMode
 
   const doSwitch = (value: string): void => {
     if (!sessionId || saving) return;
+    // R26: 自动模式绝不写 override —— 包括手动模式遗留的 P1-3 确认按钮
+    // （运行中把 routing.mode 切到 auto 时，旧警告仍可能留在页面上）。
+    if (autoMode) return;
     setSaving(true);
     sessionApi
       .setModelOverride(sessionId, value)
@@ -410,7 +414,7 @@ export function SessionModelPicker({ sessionId, placement = 'top' }: SessionMode
       {override && (
         <span className="text-ui-xs text-amber-600 dark:text-amber-400 shrink-0">覆盖</span>
       )}
-      {pendingSwitch && (
+      {!autoMode && pendingSwitch && (
         <span
           className={`absolute right-0 ${warningPos} z-40 w-80 rounded-radius-md border border-warning/40 bg-surface p-2.5 shadow-lg flex flex-wrap items-center gap-1.5 text-ui-xs text-warning`}
           data-testid="model-switch-warning"

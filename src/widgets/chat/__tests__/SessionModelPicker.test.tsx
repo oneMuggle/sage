@@ -277,7 +277,9 @@ describe('SessionModelPicker 智能路由自动模式 + tier 分组', () => {
     });
 
     await waitFor(() => {
-      expect(mockRouteModel).toHaveBeenCalled();
+      expect(mockRouteModel).toHaveBeenLastCalledWith(
+        expect.objectContaining({ task_type: 'analysis' }),
+      );
     });
     expect(mockSetModelOverride).not.toHaveBeenCalled();
   });
@@ -398,6 +400,28 @@ describe('SessionModelPicker 智能路由自动模式 + tier 分组', () => {
 
     const error = await screen.findByTestId('routing-preview-error');
     expect(error.textContent).toContain('路由预览不可用');
+    expect(mockSetModelOverride).not.toHaveBeenCalled();
+  });
+
+  it('运行中切到自动模式后，遗留的 P1-3 确认按钮不再出现、不再写 override', async () => {
+    mockGetEffective.mockResolvedValue({ limits: { native: 8000, service: null } });
+    mockFetchSessionUsage.mockResolvedValue({ last_prompt_tokens: 7000 });
+
+    const { rerender } = render(<SessionModelPicker sessionId="s1" />);
+    await waitFor(() => {
+      expect(screen.getByTestId('session-model-picker')).not.toBeDisabled();
+    });
+    fireEvent.change(screen.getByTestId('session-model-picker'), {
+      target: { value: 'llama3:8b' },
+    });
+    await screen.findByTestId('model-switch-warning');
+
+    // 设置同步在会话进行中切到自动模式（R26：自动模式绝不写 override）。
+    mockSettings.routing.mode = 'auto';
+    rerender(<SessionModelPicker sessionId="s1" />);
+
+    expect(screen.queryByTestId('model-switch-confirm')).toBeNull();
+    expect(screen.queryByTestId('model-switch-warning')).toBeNull();
     expect(mockSetModelOverride).not.toHaveBeenCalled();
   });
 });
