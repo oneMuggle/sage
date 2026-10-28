@@ -222,7 +222,7 @@ class TestFindKnowledgeGaps:
 def _write_page(root, name: str, title: str, page_type: str, links: List[str]) -> None:
     body = "\n".join(f"参见 [[{t}]] 的相关内容。" for t in links)
     (root / "wiki").mkdir(exist_ok=True)
-    # py38 的 Path.write_text 无 newline 形参，open() 双版本兼容
+    # Path.write_text 的 newline 形参是 3.10+；open() 双版本兼容
     with open(root / "wiki" / name, "w", encoding="utf-8", newline="") as f:
         f.write(f"---\ntitle: {title}\npage_type: {page_type}\n---\n# {title}\n{body}\n")
 
