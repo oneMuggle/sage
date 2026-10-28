@@ -320,10 +320,6 @@ export function SessionModelPicker({ sessionId, placement = 'top' }: SessionMode
 
   const previewModelName = routePreview?.selected_model.model_key?.model_id ?? null;
 
-  /* v8 ignore start */
-
-  /* v8 ignore stop */
-
   return (
     <div
       className="relative flex items-center gap-1.5"
