@@ -11,7 +11,13 @@ vi.mock('../../../shared/api/settingsClient', () => ({
   },
 }));
 
-import { loadSettings, mergeWithDefaults, resetPreferencesToDefaults, resetSettings, saveSettings } from '../storage';
+import {
+  loadSettings,
+  mergeWithDefaults,
+  resetPreferencesToDefaults,
+  resetSettings,
+  saveSettings,
+} from '../storage';
 import type { AppSettings } from '../types';
 import { DEFAULT_SETTINGS, SETTINGS_STORAGE_KEY } from '../types';
 
@@ -345,7 +351,8 @@ describe('mergeWithDefaults (endpoints / modelSelections deepMerge)', () => {
   });
 
   it('formats app settings storage summary and JSON (Phase P108)', async () => {
-    const { formatAppSettingsStorageSummary, formatAppSettingsStorageJson } = await import('../storage');
+    const { formatAppSettingsStorageSummary, formatAppSettingsStorageJson } =
+      await import('../storage');
     const merged = mergeWithDefaults({
       streaming: true,
       modelSelections: {
@@ -353,7 +360,9 @@ describe('mergeWithDefaults (endpoints / modelSelections deepMerge)', () => {
         chatModel: { endpointId: 'ep-1', modelId: 'gpt-4o' },
       },
     });
-    expect(formatAppSettingsStorageSummary(merged)).toBe('endpoints=0 · chat=gpt-4o · streaming=true');
+    expect(formatAppSettingsStorageSummary(merged)).toBe(
+      'endpoints=0 · chat=gpt-4o · streaming=true',
+    );
     const parsed = JSON.parse(formatAppSettingsStorageJson(merged));
     expect(parsed.endpointCount).toBe(0);
     expect(parsed.chatModel).toEqual({ endpointId: 'ep-1', modelId: 'gpt-4o' });
