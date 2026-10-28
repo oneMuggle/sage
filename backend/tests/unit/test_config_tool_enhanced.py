@@ -4,8 +4,6 @@
 """
 from __future__ import annotations
 
-import pytest
-
 from backend.tools.config_tool import (
     ReadSageConfigTool,
     UpdateSageConfigTool,

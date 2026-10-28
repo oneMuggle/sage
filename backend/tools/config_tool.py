@@ -177,7 +177,7 @@ def _validate_general_updates(updates: Dict[str, Any]) -> Optional[str]:
 # 2026-10-28: endpoint 和 model_selection 验证函数
 
 
-def _validate_endpoint_updates(updates: Dict[str, Any]) -> Optional[str]:
+def _validate_endpoint_updates(updates: Dict[str, Any]) -> Optional[str]:  # noqa: PLR0911
     """验证 endpoint 字段（create/update 时调用）。"""
     # protocol 枚举校验
     if "protocol" in updates:
@@ -582,7 +582,7 @@ class UpdateSageConfigTool(BaseTool):
 
     # ===== 2026-10-28 新增辅助方法 =====
 
-    def _handle_endpoint_action(
+    def _handle_endpoint_action(  # noqa: PLR0911
         self,
         action: Optional[str],
         endpoint_id: Optional[str],
