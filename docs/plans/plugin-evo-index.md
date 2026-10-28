@@ -45,7 +45,8 @@
 | R113 | 转录工具组折叠头插件归属（纯前端） | ✅ #2589 |
 | R114 | 编排任务树实时行（等待审批徽章+事件行）插件归属（纯前端） | ✅ #2614 |
 | R115 | Hook 执行历史行插件归属（纯前端） | ✅ #2618 |
-| R116 | PluginsTab 纯数据/纯函数抽离 pluginsTabModel（纯重构） | 🔄 #2621 |
+| R116 | PluginsTab 纯数据/纯函数抽离 pluginsTabModel（纯重构） | ✅ #2621 |
+| R117 | Message 审计辅助抽离 messageAudit（纯重构，清 react-refresh 警告） | 🔄 #2623 |
 
 ## 2. 交付总账
 
@@ -84,7 +85,8 @@
 | R113 | Message 工具组组头归属后缀与测试/文档 | #2589 | 待对齐 | ✅ 已交付 |
 | R114 | TaskTreeSection 归属后缀（门控供数）与测试/文档 | #2614 | 待对齐 | ✅ 已交付 |
 | R115 | HookHistoryPanel 归属后缀（门控供数）与测试/文档 | #2618 | 待对齐 | ✅ 已交付 |
-| R116 | pluginsTabModel 新模块 + PluginsTab 改导入与文档 | #2621 | 待对齐 | 🔄 |
+| R116 | pluginsTabModel 新模块 + PluginsTab 改导入与文档 | #2621 | 待对齐 | ✅ 已交付 |
+| R117 | messageAudit 新模块 + Message 删尾与测试改导入、文档 | #2623 | 待对齐 | 🔄 |
 
 ## 3. R78 交付边界
 
@@ -765,7 +767,7 @@
   diagnostics 全绿，manifest 284（他人推进，
   本轮后端零改动）。
 
-## 36. R116 交付边界（PR #2621 待合并）
+## 36. R116 交付边界（已合并）
 
 > spec：`2026-10-28_plugins-tab-model-r116.md`。
 > R116 是本插件账轮次号，与其它账本的同号计划无关。
@@ -779,5 +781,21 @@
   量多重集机械校验（126 个全等）；PluginsTab
   819 → 686 行；tsc、ESLint（0/0）、architecture、
   diff-check、diagnostics 全绿，后端零改动。
+
+## 37. R117 交付边界（PR #2623 待合并）
+
+> spec：`2026-10-28_message-audit-extract-r117.md`。
+> R117 是本插件账轮次号，与其它账本的同号计划无关。
+
+- **卫生续轮**：继 R116 把审计格式化纯函数自转录组
+  件尾部抽离至同目录模块，组件文件回到单一导出并清
+  除其仅有的 react-refresh 存量警告；归属标注语义
+  与渲染行为逐字不变。
+- **本地证据**：基线 ESLint 实测 Message.tsx 恰 2
+  条 react-refresh 警告（769/774 行），抽离后 0/0；
+  两函数 19 行逐字节全等；chat 全目录 131 文件
+  647 例通过；Message.tsx 787 → 768 行；tsc、
+  architecture、diff-check、diagnostics 全绿，后
+  端零改动。
 
 —— 本账本由插件化循环维护，随轮次追加。

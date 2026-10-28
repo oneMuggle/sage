@@ -245,7 +245,7 @@ describe('ToolCallResultDefensiveRender', () => {
   });
 
   it('formats Message audit summary and JSON (Phase P119)', async () => {
-    const { formatMessageAuditSummary, formatMessageAuditJson } = await import('../Message');
+    const { formatMessageAuditSummary, formatMessageAuditJson } = await import('../messageAudit');
     const msg: MessageType = {
       id: 'm1',
       session_id: 's1',
