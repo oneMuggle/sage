@@ -76,7 +76,23 @@ if TYPE_CHECKING:  # 仅类型标注用，避免 core → ports 的运行期导�
 
 #: M2b 审查加固: 连续未应答提问上限。超时软结果使循环继续, 若无此限,
 #: 被操纵/犯错的 LLM 可循环提问持续骚扰用户。超限后直接返回错误结果。
+#: 注意：实际值由 OrchSettings 动态配置驱动，此常量仅作为 fail-safe 默认。
 MAX_CONSECUTIVE_UNANSWERED_QUESTIONS = 3
+
+
+def _load_max_consecutive_unanswered() -> int:
+    """从 OrchSettings 加载连续未应答提问上限。
+
+    Fail-safe：读取失败回落硬编码常量 MAX_CONSECUTIVE_UNANSWERED_QUESTIONS。
+    """
+    try:
+        from backend.orchestration.orch_settings import load_orch_settings
+
+        orch = load_orch_settings()
+        return orch.max_consecutive_unanswered_questions
+    except Exception:  # noqa: BLE001 — 读配置失败回落硬编码默认
+        logger.debug("max_consecutive_unanswered_questions 读取失败，回落默认值", exc_info=True)
+        return MAX_CONSECUTIVE_UNANSWERED_QUESTIONS
 
 #: ``run_loop`` 的迭代兜底值——仅在既没显式传 ``max_iterations``、
 #: profile 也没有该键时生效（profile 加载失败等降级路径）。
@@ -2187,13 +2203,15 @@ class SageAgent:
                         if tc.name == ASK_USER_QUESTION_TOOL_NAME:
                             ask_handled = True
                             validation_error = validate_ask_user_args(args)
+                            # 动态加载连续未应答上限（每次检查都读，支持运行时调整）
+                            max_unanswered = _load_max_consecutive_unanswered()
                             if (
                                 self._consecutive_unanswered
-                                >= MAX_CONSECUTIVE_UNANSWERED_QUESTIONS
+                                >= max_unanswered
                             ):
                                 # 审查加固: 防 LLM 循环提问骚扰用户
                                 result_content = (
-                                    f"[错误] 已连续 {MAX_CONSECUTIVE_UNANSWERED_QUESTIONS} "
+                                    f"[错误] 已连续 {max_unanswered} "
                                     "次提问未获应答，停止提问，请直接推进任务"
                                 )
                                 is_error = True

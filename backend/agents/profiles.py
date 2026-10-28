@@ -155,6 +155,12 @@ _PRIMARY_SEED_TOOLS = (
     # SCHEDULE_TOOLS / CONFIG_TOOLS 同模式 coordinator-only，子代理白名单
     # 严禁纳入。
     *TODO_TOOLS,
+    # 2026-10-28 feat/add-ask-user-to-primary: 需求澄清工具 —— primary 作为
+    # coordinator 在任务不明确时主动向用户提问（问题数上限见设置页
+    # 「编排 → 提问限制」），避免歧义导致返工。READ 级零副作用，与 Claude
+    # AskUserQuestion 对齐。此前仅 ppt-maker profile 可见，用户抱怨"LLM
+    # 遇到问题不方便与我交互"。
+    "ask_user_question",
     # 2026-10-13 OpenDesign 集成 (Task 13): Design Studio 五件套 —— 两个目录
     # 查询件 (READ) + 三个产件 (WRITE_LOCAL, 落 HTML 到工作区)。primary 作为
     # coordinator 代用户「查可用设计系统/模板 → 生成 → 反馈迭代 → 导出」。
@@ -964,11 +970,27 @@ _TODO_GUIDANCE_PROMPT = (
 #: 的需求歧义全靠模型自觉。与 _TODO_GUIDANCE_PROMPT 同模式：未拿到
 #: ask_user_question 工具的子代理看到文本也无工具可调，无副作用。
 #: 编排路径的结构化澄清前置见 backend.orchestration.plan_preflight。
-_CLARIFY_GUIDANCE_PROMPT = (
+#: 注意：2026-10-28 起问题数由 OrchSettings 动态配置驱动。
+_CLARIFY_GUIDANCE_PROMPT_TEMPLATE = (
     "\n\n需求澄清：接到多步骤或高投入任务，且关键约束（范围、交付格式、"
-    "验收标准）不明确时，先用 ask_user_question 向用户澄清（至多 2 个问题），"
+    "验收标准）不明确时，先用 ask_user_question 向用户澄清（至多 {max_questions} 个问题），"
     "得到回答后再动手；用户未回答则选择合理默认值，并在产出中写明关键假设。"
 )
+
+
+def _build_clarify_guidance() -> str:
+    """动态构建需求澄清指引，插入可配置的问题数。
+
+    Fail-safe：读取 OrchSettings 失败回落默认值 2（与原硬编码一致）。
+    """
+    try:
+        from backend.orchestration.orch_settings import load_orch_settings
+
+        orch = load_orch_settings()
+        max_questions = orch.max_clarify_questions_in_prompt
+    except Exception:  # noqa: BLE001 — 读配置失败回落默认
+        max_questions = 2
+    return _CLARIFY_GUIDANCE_PROMPT_TEMPLATE.format(max_questions=max_questions)
 
 
 #: 2026-09-17: 代码执行能力声明 —— 此前 repl/execute_code/bash 虽在白名单，
@@ -1030,7 +1052,7 @@ def build_system_base() -> str:
         base
         + _OFFICE_CREATE_CAPABILITY_PROMPT
         + _TODO_GUIDANCE_PROMPT
-        + _CLARIFY_GUIDANCE_PROMPT
+        + _build_clarify_guidance()
         + _CODE_EXECUTION_CAPABILITY_PROMPT
         + _CONFIG_CAPABILITY_PROMPT
         + format_agents_for_prompt()

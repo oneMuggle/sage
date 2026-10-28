@@ -42,6 +42,12 @@ _RAW_KEYS = {
     # 阶段 2.1 ReAct 接入后的预配置）。键名与前端 OrchSettings 逐字一致。
     "maxScoutIterations": "max_scout_iterations",
     "maxPlannerIterations": "max_planner_iterations",
+    # 2026-10-28: ask_user_question 工具的可配置限制。键名与前端 OrchSettings 逐字一致。
+    "maxConsecutiveUnansweredQuestions": "max_consecutive_unanswered_questions",
+    "minOptionsPerQuestion": "min_options_per_question",
+    "maxOptionsPerQuestion": "max_options_per_question",
+    "maxClarifyQuestionsInPrompt": "max_clarify_questions_in_prompt",
+    "maxClarifyQuestionsPerRound": "max_clarify_questions_per_round",
 }
 
 #: 迭代预算类 int 字段的下界。0/负值会让 ReAct 循环零次执行
@@ -53,6 +59,12 @@ _RAW_KEYS = {
 _INT_MIN_BOUNDS = {
     "max_scout_iterations": 1,
     "max_planner_iterations": 1,
+    # 2026-10-28: ask_user_question 限制的下界。0/负值无意义。
+    "max_consecutive_unanswered_questions": 1,
+    "min_options_per_question": 1,
+    "max_options_per_question": 1,
+    "max_clarify_questions_in_prompt": 1,
+    "max_clarify_questions_per_round": 1,
 }
 
 
@@ -111,6 +123,17 @@ class OrchSettings:
     #: ``llm_client.complete``，本值在阶段 2.1 接入只读工具循环后消费。
     #: 默认 8 为总方案建议值；当前不产生任何运行效果。
     max_planner_iterations: int = 8
+    # 2026-10-28: ask_user_question 工具的可配置限制。
+    #: 连续未应答提问上限。超过后 agent 停止提问并直接推进任务。默认 3。
+    max_consecutive_unanswered_questions: int = 3
+    #: 每次提问的最小选项数。默认 2。
+    min_options_per_question: int = 2
+    #: 每次提问的最大选项数。默认 4。
+    max_options_per_question: int = 4
+    #: 系统提示中的澄清问题数引导（软限制）。默认 2。
+    max_clarify_questions_in_prompt: int = 2
+    #: 计划前置澄清步骤每轮最多提问数。默认 3。
+    max_clarify_questions_per_round: int = 3
 
 
 def load_orch_settings() -> OrchSettings:
