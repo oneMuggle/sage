@@ -38,6 +38,8 @@ export interface Session {
   last_run_at?: number | null;
   /** P0-4 (UI 优化方案 2026-09-13): 最后一条 user/assistant 消息预览(截断 80 字符) */
   last_message_preview?: string | null;
+  /** 2026-10-28: 性能统计 - 会话总用时（分钟），从创建到最后一次消息 */
+  duration_minutes?: number | null;
 }
 
 // 工具调用结构（与后端 AgentEvent 保持一致）

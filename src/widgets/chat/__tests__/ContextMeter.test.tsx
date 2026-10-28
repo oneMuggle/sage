@@ -33,6 +33,10 @@ function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
     // so ContextMeter mirrors the request's actual cap.
     effective_context_window: 200_000,
     last_context_breakdown: null,
+    // 2026-10-28: 性能统计字段
+    avg_latency_ms: null,
+    p95_latency_ms: null,
+    max_latency_ms: null,
     ...overrides,
   };
 }

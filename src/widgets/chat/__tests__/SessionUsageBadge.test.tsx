@@ -5,7 +5,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { SessionUsage } from '../../../shared/api/usageApi';
 import { I18nProvider } from '../../../shared/lib/i18n';
-import { formatSessionUsageJson, formatSessionUsageMarkdown, SessionUsageBadge } from '../SessionUsageBadge';
+import {
+  formatSessionUsageJson,
+  formatSessionUsageMarkdown,
+  SessionUsageBadge,
+} from '../SessionUsageBadge';
 
 const mockFetch = vi.fn<(sessionId: string) => Promise<SessionUsage>>();
 
@@ -31,6 +35,10 @@ function usageFixture(overrides: Partial<SessionUsage>): SessionUsage {
     last_cached_tokens: null,
     last_at_ms: null,
     effective_context_window: null,
+    // 2026-10-28: 性能统计字段
+    avg_latency_ms: null,
+    p95_latency_ms: null,
+    max_latency_ms: null,
     ...overrides,
   };
 }
