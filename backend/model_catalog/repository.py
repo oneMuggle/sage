@@ -300,18 +300,28 @@ class CatalogRepository:
                 update={"model_key": model_key, "capabilities": capabilities}
             )
 
-    def list_effective_models(self) -> List[EffectiveModel]:
-        """Resolve every bound endpoint into an EffectiveModel.
+    def list_effective_models(self, endpoint_id: Optional[str] = None) -> List[EffectiveModel]:
+        """Resolve bound endpoints into EffectiveModel instances.
 
         Each distinct ``(endpoint_id, model_id)`` in ``model_catalog_bindings``
         is resolved through :meth:`resolve`.  Results are de-duplicated by
         ``model_key`` so a model bound to several endpoints appears once.
+
+        When *endpoint_id* is provided, only bindings for that endpoint are
+        considered; unscoped calls (``None``) return every bound model.
         """
         with _SQLITE_LOCK:
             conn = self.db.get_connection()
-            rows = conn.execute(
-                "SELECT DISTINCT endpoint_id, model_id FROM model_catalog_bindings"
-            ).fetchall()
+            if endpoint_id is None:
+                rows = conn.execute(
+                    "SELECT DISTINCT endpoint_id, model_id FROM model_catalog_bindings"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT DISTINCT endpoint_id, model_id FROM model_catalog_bindings "
+                    "WHERE endpoint_id = ?",
+                    (endpoint_id,),
+                ).fetchall()
         models: List[EffectiveModel] = []
         seen = set()
         for row in rows:

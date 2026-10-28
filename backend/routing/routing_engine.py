@@ -109,6 +109,7 @@ class RoutingEngine:
         context_length: int,
         required_capabilities: Optional[List[str]] = None,
         user_preference: Optional[RoutingPreference] = None,
+        endpoint_id: Optional[str] = None,
     ) -> RoutingResult:
         """Select the best model for the given task requirements.
 
@@ -126,6 +127,9 @@ class RoutingEngine:
             context_length: Minimum required context window in tokens.
             required_capabilities: Capabilities the model must support.
             user_preference: Optional user preferences.
+            endpoint_id: When provided, restrict selection to models bound
+                to this endpoint.  ``None`` (default) keeps whole-catalog
+                behaviour, byte-identical to earlier versions.
 
         Returns:
             A ``RoutingResult`` with the selected model, a reason string, and
@@ -134,7 +138,7 @@ class RoutingEngine:
         Raises:
             ValueError: If no available model satisfies the requirements.
         """
-        available_models = self._get_available_models()
+        available_models = self._get_available_models(endpoint_id)
 
         # 1. Filter by context length
         filtered = [
@@ -181,9 +185,18 @@ class RoutingEngine:
 
     # -- internals ----------------------------------------------------------
 
-    def _get_available_models(self) -> List[EffectiveModel]:
-        """Return the models currently reachable through the catalog."""
-        return self.catalog.list_effective_models()
+    def _get_available_models(
+        self, endpoint_id: Optional[str] = None
+    ) -> List[EffectiveModel]:
+        """Return the models currently reachable through the catalog.
+
+        When *endpoint_id* is ``None`` the catalog is queried without
+        arguments so that test fakes whose ``list_effective_models`` takes
+        no parameters continue to work.
+        """
+        if endpoint_id is None:
+            return self.catalog.list_effective_models()
+        return self.catalog.list_effective_models(endpoint_id=endpoint_id)
 
     @staticmethod
     def _select_by_tier(

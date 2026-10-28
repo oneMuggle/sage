@@ -24,12 +24,14 @@ missing keys, snake_case residue) yields ``None`` rather than raising.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 # Default model when an endpoint has no discovered models recorded.
 DEFAULT_MODEL = "gpt-3.5-turbo"
+
+from backend.routing.routing_engine import RoutingEngine  # noqa: E402
 
 
 def load_llm_config_from_settings() -> Optional[Dict[str, Any]]:
@@ -355,3 +357,49 @@ def load_llm_config_for_chat(
     if profile_value is not None and profile_value != _PROFILE_MAX_TOKENS_PLACEHOLDER:
         merged["max_tokens"] = profile_value
     return merged
+
+
+# ---------------------------------------------------------------------------
+# Task 5: endpoint-scoped advisory routing helper
+# ---------------------------------------------------------------------------
+
+def resolve_routed_chat_model(
+    task_type: str,
+    context_length: int = 4096,
+    required_capabilities: Optional[List[str]] = None,
+    endpoint_id: Optional[str] = None,
+    catalog_repository: Optional[Any] = None,
+) -> Optional[str]:
+    """Return the catalog-selected model id for *task_type*, or ``None``.
+
+    Advisory overlay on top of the settings-derived model: callers keep their
+    existing model whenever this returns ``None``.
+
+    ``endpoint_id`` scopes selection to one endpoint. This matters because the
+    factory pairs a model id with exactly one endpoint's credentials; a model
+    bound to a different endpoint would be sent to the wrong host with the
+    wrong key. Callers that already resolved an endpoint (e.g. via
+    ``load_llm_config_from_settings()["endpoint_id"]``) should pass it.
+
+    Fail-safe: any catalog/routing failure returns ``None`` instead of raising.
+    """
+    try:
+        repo = catalog_repository
+        if repo is None:
+            from backend.data.database import get_database
+            from backend.model_catalog.repository import CatalogRepository
+
+            repo = CatalogRepository(get_database())
+        result = RoutingEngine(repo).route(
+            task_type=task_type,
+            context_length=context_length,
+            required_capabilities=required_capabilities,
+            endpoint_id=endpoint_id,
+        )
+    except Exception as exc:  # fail-safe by design: routing is optional
+        logger.debug(
+            "llm_factory: routing unavailable (%s); keeping settings model", exc
+        )
+        return None
+    model_key = result.selected_model.model_key
+    return model_key.model_id if model_key is not None else None
