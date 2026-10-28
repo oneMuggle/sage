@@ -28,6 +28,8 @@ ALIASES: Dict[str, str] = {
     "model_selections": "modelSelections",
     "max_context": "maxContext",
     "auto_context": "autoContext",
+    # 2026-10-28: 输出长度上限（单次回答最大生成 token 数）
+    "max_output_tokens": "maxOutputTokens",
     "auto_memory": "autoMemory",
     "confirm_delete": "confirmDelete",
     # modelSelections 子层
@@ -115,6 +117,9 @@ LEGAL_TOP_KEYS: FrozenSet[str] = frozenset(
         "maxContext",
         # Task 5 (2026-09-15): auto context window toggle.
         "autoContext",
+        # 2026-10-28: 输出长度上限（单次回答最大生成 token 数）— 前端默认 4096,
+        # 透传后端覆盖 LLMConfig.max_tokens 默认值。
+        "maxOutputTokens",
         "temperature",
         # Task 1 (2026-08-23): IANA timezone, 默认 Asia/Shanghai, 后端 zoneinfo 校验
         "timezone",
