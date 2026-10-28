@@ -16,6 +16,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from backend.domain.execution_conditions import (
+    ExecutionCondition,
+    TriggerMode,
+)
+
 
 class GoalStatus(str, Enum):
     """目标状态"""
@@ -237,6 +242,10 @@ class Goal:
     degradation_level: DegradationLevel = DegradationLevel.NONE
     last_error: Optional[str] = None       # 最后错误信息
 
+    # 触发模式与执行条件（闲时延迟执行）
+    trigger_mode: TriggerMode = TriggerMode.IMMEDIATE  # 立即/条件触发
+    execution_conditions: List[ExecutionCondition] = field(default_factory=list)
+
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
         return {
@@ -257,6 +266,8 @@ class Goal:
             "completion_percentage": self.completion_percentage,
             "degradation_level": self.degradation_level.value,
             "last_error": self.last_error,
+            "trigger_mode": self.trigger_mode.value,
+            "execution_conditions": [c.to_dict() for c in self.execution_conditions],
         }
 
     @classmethod
@@ -280,4 +291,9 @@ class Goal:
             completion_percentage=data.get("completion_percentage", 0.0),
             degradation_level=DegradationLevel(data.get("degradation_level", "none")),
             last_error=data.get("last_error"),
+            trigger_mode=TriggerMode(data.get("trigger_mode", "immediate")),
+            execution_conditions=[
+                ExecutionCondition.from_dict(c)
+                for c in data.get("execution_conditions", [])
+            ],
         )
